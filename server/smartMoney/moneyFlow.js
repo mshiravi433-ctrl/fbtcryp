@@ -32,6 +32,7 @@ import {
 import {
   dexPairsForTokens,
   dexTokenProfiles,
+  dexTokenBoosts,
   bsAddressCounters,
   bsTokenTransfers
 } from './dataSources.js';
@@ -80,7 +81,7 @@ function labelEvent(e) {
 export async function labelledEvents({ minUsd = FLOORS.whaleUsd, since = 0 } = {}) {
   try {
     const { value } = await withCache(`sm:events:${minUsd}:${since}`, 45_000, () =>
-      fetchWhales({ minUsd, since, limit: 200 })
+      fetchWhales({ minUsd, since, limit: 200 }), { swr: true }
     );
     const events = (value?.events || []).map(labelEvent);
     return { events, partial: value?.partial, pricedCount: value?.pricedCount, total: value?.total, sourceUp: true };
@@ -280,81 +281,24 @@ async function rpcCall(url, method, params) {
  * Scan recent blocks for V2-fork Mint (LP added) / Burn (LP removed) logs
  * emitted by pairs of known factories. Pair tokens are read by eth_call so the
  * event can be named and valued. This is REAL liquidity movement, key-free.
+ *
+ * PERFORMANCE CONTRACT: the old version walked the 7 chains SEQUENTIALLY and
+ * made a DexScreener request PER LOG — a cold call could take minutes, which
+ * blew straight through the client's timeout and painted the whole Smart
+ * Money page as «اتصال برقرار نیست». Now every chain scans in parallel under
+ * its own deadline, logs are capped per chain, and each chain prices all its
+ * pairs through ONE batched DexScreener request.
  */
 export async function liquidityEvents({ minUsd = FLOORS.liquidityEventUsd, windowBlocks = 20 } = {}) {
+  const perChain = await Promise.allSettled(
+    EVM_CHAIN_ORDER.map((chainId) => deadline(
+      scanChainLiquidity(chainId, { minUsd, windowBlocks }),
+      12_000
+    ))
+  );
   const out = [];
-  for (const chainId of EVM_CHAIN_ORDER) {
-    const cfg = EVM_CHAINS[chainId];
-    const rpcs = cfg?.rpc?.length ? cfg.rpc : [];
-    /*
-     * Same endpoint fallback as the whale scan (whales.js): one dead public
-     * RPC used to cost the chain its ENTIRE liquidity feed. Walk the list;
-     * an endpoint that answers (even with zero Mint/Burn logs in the window)
-     * is a valid result and stops the walk. The per-pair eth_calls below run
-     * on the endpoint that produced the logs.
-     */
-    let logs = null;
-    let goodRpc = null;
-    for (const rpc of rpcs) {
-      try {
-        const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
-        const latest = Number(BigInt(latestHex));
-        const from = Math.max(0, latest - windowBlocks);
-        let got = null;
-        try {
-          got = await rpcCall(rpc, 'eth_getLogs', [{
-            fromBlock: '0x' + from.toString(16),
-            toBlock: '0x' + latest.toString(16),
-            topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-          }]);
-        } catch {
-          got = await rpcCall(rpc, 'eth_getLogs', [{
-            fromBlock: '0x' + Math.max(0, latest - 4).toString(16),
-            toBlock: '0x' + latest.toString(16),
-            topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-          }]);
-        }
-        if (!Array.isArray(got)) got = [];
-        logs = got;
-        goodRpc = rpc;
-        break;
-      } catch {
-        logs = null;
-        goodRpc = null; // this endpoint unreachable — try the next one
-      }
-    }
-    if (!goodRpc) continue; // every endpoint for this chain failed
-    for (const log of logs) {
-      const pair = String(log.address || '').toLowerCase();
-      // Confirm the pair belongs to a known factory by reading token0/token1.
-      const token0 = await pairToken(goodRpc, pair, '0x0dfe1681');
-      const token1 = await pairToken(goodRpc, pair, '0xd21220a7');
-      if (!token0 || !token1) continue;
-      const isMint = log.topics?.[0] === PAIR_TOPICS.Mint;
-      const pairRes = await dexPairsForTokens([token0, token1]);
-      const pool = (pairRes.pairs || []).find((p) => p.pairAddress === pair) || pairRes.pairs?.[0];
-      const valueUsd = pool?.liquidityUsd ?? null;
-      if (valueUsd != null && valueUsd < minUsd) continue;
-      out.push({
-        id: `${chainId}:${log.transactionHash}:${log.logIndex}`,
-        chainId,
-        chainShort: cfg.short,
-        chainColor: cfg.color,
-        kind: isMint ? 'LP_ADDED' : 'LP_REMOVED',
-        pair,
-        token0,
-        token1,
-        symbols: [pool?.baseToken?.symbol, pool?.quoteToken?.symbol].filter(Boolean).join(' / ') || `${shortAddr(token0)}/${shortAddr(token1)}`,
-        dex: pool?.dexId || null,
-        liquidityUsd: valueUsd != null ? Math.round(valueUsd) : null,
-        impact: valueUsd == null ? 'UNKNOWN' : valueUsd > 2_000_000 ? 'HIGH' : valueUsd > 500_000 ? 'MEDIUM' : 'LOW',
-        hash: log.transactionHash,
-        blockNumber: Number(BigInt(log.blockNumber)),
-        timestamp: Date.now(),
-        explorerTx: `${cfg.explorer}/tx/${log.transactionHash}`,
-        explorerPool: `${cfg.explorer}/address/${pair}`
-      });
-    }
+  for (const r of perChain) {
+    if (r.status === 'fulfilled' && Array.isArray(r.value)) out.push(...r.value);
   }
   out.sort((a, b) => (b.liquidityUsd || 0) - (a.liquidityUsd || 0));
   return {
@@ -363,6 +307,114 @@ export async function liquidityEvents({ minUsd = FLOORS.liquidityEventUsd, windo
     at: Date.now(),
     events: out.slice(0, 40)
   };
+}
+
+/** Race a promise against a deadline; the timer never outlives the race. */
+function deadline(promise, ms) {
+  let timer;
+  const gate = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('DEADLINE')), ms); });
+  return Promise.race([promise, gate]).finally(() => clearTimeout(timer));
+}
+
+const MAX_LIQUIDITY_LOGS_PER_CHAIN = 10;
+
+async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
+  const cfg = EVM_CHAINS[chainId];
+  const rpcs = cfg?.rpc?.length ? cfg.rpc : [];
+  /*
+   * Same endpoint fallback as the whale scan (whales.js): one dead public
+   * RPC used to cost the chain its ENTIRE liquidity feed. Walk the list;
+   * an endpoint that answers (even with zero Mint/Burn logs in the window)
+   * is a valid result and stops the walk. The per-pair eth_calls below run
+   * on the endpoint that produced the logs.
+   */
+  let logs = null;
+  let goodRpc = null;
+  for (const rpc of rpcs) {
+    try {
+      const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
+      const latest = Number(BigInt(latestHex));
+      const from = Math.max(0, latest - windowBlocks);
+      let got = null;
+      try {
+        got = await rpcCall(rpc, 'eth_getLogs', [{
+          fromBlock: '0x' + from.toString(16),
+          toBlock: '0x' + latest.toString(16),
+          topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
+        }]);
+      } catch {
+        got = await rpcCall(rpc, 'eth_getLogs', [{
+          fromBlock: '0x' + Math.max(0, latest - 4).toString(16),
+          toBlock: '0x' + latest.toString(16),
+          topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
+        }]);
+      }
+      if (!Array.isArray(got)) got = [];
+      logs = got;
+      goodRpc = rpc;
+      break;
+    } catch {
+      logs = null;
+      goodRpc = null; // this endpoint unreachable — try the next one
+    }
+  }
+  if (!goodRpc) return []; // every endpoint for this chain failed
+
+  // Cap the per-chain work: the largest events carry the signal; a page
+  // render does not need every micro Mint/Burn in the window.
+  const capped = logs.slice(0, MAX_LIQUIDITY_LOGS_PER_CHAIN);
+
+  // Resolve token0/token1 for the UNIQUE pairs, in parallel.
+  const pairAddrs = [...new Set(capped.map((l) => String(l.address || '').toLowerCase()).filter(Boolean))];
+  const pairTokens = new Map(); // pair → {token0, token1}
+  await Promise.all(pairAddrs.map(async (pair) => {
+    const [token0, token1] = await Promise.all([
+      pairToken(goodRpc, pair, '0x0dfe1681'),
+      pairToken(goodRpc, pair, '0xd21220a7')
+    ]);
+    if (token0 && token1) pairTokens.set(pair, { token0, token1 });
+  }));
+
+  // ONE batched DexScreener request for every token this chain touched.
+  const tokenSet = new Set();
+  for (const { token0, token1 } of pairTokens.values()) { tokenSet.add(token0); tokenSet.add(token1); }
+  const pairRes = tokenSet.size ? await dexPairsForTokens([...tokenSet]) : { pairs: [] };
+  const poolByAddress = new Map();
+  for (const p of pairRes.pairs || []) {
+    if (p.pairAddress) poolByAddress.set(p.pairAddress, p);
+  }
+
+  const out = [];
+  for (const log of capped) {
+    const pair = String(log.address || '').toLowerCase();
+    const toks = pairTokens.get(pair);
+    if (!toks) continue;
+    const isMint = log.topics?.[0] === PAIR_TOPICS.Mint;
+    const pool = poolByAddress.get(pair)
+      || (pairRes.pairs || []).find((p) => p.baseToken?.address === toks.token0 || p.baseToken?.address === toks.token1);
+    const valueUsd = pool?.liquidityUsd ?? null;
+    if (valueUsd != null && valueUsd < minUsd) continue;
+    out.push({
+      id: `${chainId}:${log.transactionHash}:${log.logIndex}`,
+      chainId,
+      chainShort: cfg.short,
+      chainColor: cfg.color,
+      kind: isMint ? 'LP_ADDED' : 'LP_REMOVED',
+      pair,
+      token0: toks.token0,
+      token1: toks.token1,
+      symbols: [pool?.baseToken?.symbol, pool?.quoteToken?.symbol].filter(Boolean).join(' / ') || `${shortAddr(toks.token0)}/${shortAddr(toks.token1)}`,
+      dex: pool?.dexId || null,
+      liquidityUsd: valueUsd != null ? Math.round(valueUsd) : null,
+      impact: valueUsd == null ? 'UNKNOWN' : valueUsd > 2_000_000 ? 'HIGH' : valueUsd > 500_000 ? 'MEDIUM' : 'LOW',
+      hash: log.transactionHash,
+      blockNumber: Number(BigInt(log.blockNumber)),
+      timestamp: Date.now(),
+      explorerTx: `${cfg.explorer}/tx/${log.transactionHash}`,
+      explorerPool: `${cfg.explorer}/address/${pair}`
+    });
+  }
+  return out;
 }
 
 async function pairToken(rpc, pair, selector) {
@@ -377,9 +429,27 @@ async function pairToken(rpc, pair, selector) {
 
 export async function earlyTokens({ limit = 12 } = {}) {
   const { value } = await withCache('sm:early-tokens', TTL.earlyTokens, async () => {
-    const profiles = await dexTokenProfiles();
+    /*
+     * Two independent keyless seeds instead of one: the token-profiles feed
+     * alone goes quiet for stretches, which used to blank the whole Early
+     * Detection panel. Boosted tokens are ALSO freshly-listed real tokens on
+     * DexScreener — both seeds are then verified against real pairs below,
+     * so nothing unverified is ever shown.
+     */
+    const [profiles, boosts] = await Promise.all([
+      dexTokenProfiles(),
+      dexTokenBoosts().catch(() => [])
+    ]);
+    const seen = new Set();
+    const seeds = [];
+    for (const p of [...profiles, ...boosts]) {
+      const key = `${p.chain}:${p.tokenAddress}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      seeds.push(p);
+    }
     // Keep the freshest profiles; enrich in batches.
-    const fresh = profiles.slice(0, 40);
+    const fresh = seeds.slice(0, 60);
     const byChain = new Map();
     for (const p of fresh) {
       const list = byChain.get(p.chain) || [];
@@ -468,12 +538,19 @@ export async function freshWallets({ minCapitalUsd = FRESH.minCapitalUsd } = {})
       }
     }
     // Verify freshness cheaply: tx count must be very low (new wallet).
+    // Cap and parallelize the Blockscout checks — the old sequential loop
+    // took (candidates × network RTT) and could stall the whole overview.
+    const toCheck = [...candidates.values()]
+      .filter((c) => c.movedUsd >= minCapitalUsd)
+      .sort((a, b) => b.movedUsd - a.movedUsd)
+      .slice(0, 12);
+    const counterRows = await Promise.all(
+      toCheck.map((c) => bsAddressCounters(c.chainId, c.address).catch(() => ({ txCount: null })))
+    );
     const checked = [];
-    for (const c of candidates.values()) {
-      if (c.movedUsd < minCapitalUsd) continue;
-      // eslint-disable-next-line no-await-in-loop
-      const counters = await bsAddressCounters(c.chainId, c.address);
-      const txCount = counters.txCount ?? null;
+    for (let i = 0; i < toCheck.length; i += 1) {
+      const c = toCheck[i];
+      const txCount = counterRows[i].txCount ?? null;
       if (txCount != null && txCount > 50) continue; // not fresh
       checked.push({
         address: c.address,

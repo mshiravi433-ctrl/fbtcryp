@@ -1143,6 +1143,20 @@ console.log('\n▸ probing the Smart Money intelligence layer…');
 }
 
 /*
+ * SMART MONEY — the LIVE direction. The probe above proves the layer fails
+ * closed when upstreams are dark; this one proves data actually FLOWS when
+ * they answer (mocked upstreams, real modules): ingestion → labelling →
+ * aggregation → HTTP routes report dataStatus 'live' with non-zero metrics,
+ * and the price fallback chain (CoinGecko → CryptoCompare → Coinbase →
+ * stablecoin peg) keeps whale events priced through a market-data outage.
+ */
+console.log('\n▸ probing the Smart Money live pipeline…');
+{
+  const rows = (await import('./smart-money-live-probe.mjs')).default;
+  report('smart money live pipeline', rows);
+}
+
+/*
  * QR CAMERA LIFECYCLE.
  *
  * Wiring check #32 proves the dependency array was written correctly. It

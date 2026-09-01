@@ -29,6 +29,37 @@ const UPSTREAM_TIMEOUT_MS = 8000;
 // expensive for the public RPC and will get rate-limited if we push it.
 const RPC_BLOCK_WINDOW = Number(process.env.WHALE_BLOCK_WINDOW || 15);
 
+/*
+ * Approximate seconds-per-block per chain. The old code hardcoded 3s for
+ * EVERY chain, so an Ethereum event 10 blocks back (~2 minutes) was stamped
+ * ~30 seconds old, and window math (24h vs previous 24h) drifted. Real block
+ * cadence differs by 40x across the supported chains.
+ */
+const BLOCK_TIME_MS = {
+  1: 12_000,     // Ethereum
+  56: 3_000,     // BNB Smart Chain
+  137: 2_200,    // Polygon
+  42161: 300,    // Arbitrum One
+  8453: 2_000,   // Base
+  10: 2_000,     // Optimism
+  43114: 2_000   // Avalanche C-Chain
+};
+
+/*
+ * Per-chain log-scan window (blocks) sized to cover a similar slice of wall
+ * time (~2-3 minutes) on each chain instead of 15 blocks everywhere — which
+ * was 3 minutes on Ethereum but 4.5 SECONDS on Arbitrum, leaving the fast
+ * chains almost always "empty". WHALE_BLOCK_WINDOW still overrides all.
+ */
+const CHAIN_BLOCK_WINDOW = {
+  1: 15, 56: 50, 137: 60, 42161: 240, 8453: 60, 10: 60, 43114: 60
+};
+
+function blockWindowFor(chainId) {
+  if (process.env.WHALE_BLOCK_WINDOW) return RPC_BLOCK_WINDOW;
+  return CHAIN_BLOCK_WINDOW[chainId] || RPC_BLOCK_WINDOW;
+}
+
 // Per-chain explorer endpoints (Etherscan-compatible). Each entry, when its
 // key is present, activates the explorer fast path.
 const EXPLORERS = {
@@ -185,17 +216,28 @@ async function fetchWhalesRpc(chainId, minValueUsd, priceLookup) {
   // Every endpoint for this chain failed. Re-throw so `fetchWhales` records
   // it in `failedChains` / `partial: true` — the same observability the
   // single-endpoint days had. Other chains continue (allSettled).
-  throw lastErr || new Error('ALL_RPC_ENDPOINTS_FAILED');
+  throw lastErr || new Error("ALL_RPC_ENDPOINTS_FAILED");
 }
 
 async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known) {
+  /*
+   * THE BUG THAT BLANKED SMART MONEY: this function referenced `cfg`
+   * (chain metadata for chainShort/name/color) without defining it. A chain
+   * whose getLogs came back EMPTY sailed through, but the moment a chain
+   * returned real Transfer logs the first `events.push({ chainShort:
+   * cfg.short … })` threw ReferenceError, the whole chain was recorded as
+   * "failed", and the feed stayed empty forever — the more on-chain
+   * activity, the harder it failed. That is why «هیچ اتصالی برقرار نیست».
+   */
+  const cfg = EVM_CHAINS[chainId];
   const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
   const latest = Number(BigInt(latestHex));
-  const fromBlock = Math.max(0, latest - RPC_BLOCK_WINDOW);
+  const windowBlocks = blockWindowFor(chainId);
+  const fromBlock = Math.max(0, latest - windowBlocks);
   const toBlock = latest;
 
   // ERC-20 Transfer logs across the whole window. Some public RPCs cap this
-  // range; we retry with a smaller window on failure.
+  // range; we retry with progressively smaller windows on failure.
   let logs = [];
   try {
     logs = await rpcCall(rpc, 'eth_getLogs', [{
@@ -204,15 +246,23 @@ async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known)
       topics: [TRANSFER_TOPIC]
     }]);
   } catch {
-    // Try a tighter 3-block window
+    // Try a half-size window, then a tight 3-block window.
     try {
       logs = await rpcCall(rpc, 'eth_getLogs', [{
-        fromBlock: '0x' + Math.max(0, latest - 3).toString(16),
+        fromBlock: '0x' + Math.max(0, latest - Math.max(3, Math.floor(windowBlocks / 2))).toString(16),
         toBlock: '0x' + toBlock.toString(16),
         topics: [TRANSFER_TOPIC]
       }]);
-    } catch (e) {
-      throw e; // this endpoint cannot serve logs — let the caller try the next
+    } catch {
+      try {
+        logs = await rpcCall(rpc, 'eth_getLogs', [{
+          fromBlock: '0x' + Math.max(0, latest - 3).toString(16),
+          toBlock: '0x' + toBlock.toString(16),
+          topics: [TRANSFER_TOPIC]
+        }]);
+      } catch (e) {
+        throw e; // this endpoint cannot serve logs — let the caller try the next
+      }
     }
   }
   if (!Array.isArray(logs)) logs = [];
@@ -336,21 +386,24 @@ async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known)
         });
       }
     }
-    // Attach timestamp to ERC-20 events from same latest block; older blocks are
-    // approximated using 3-second block time (good enough for "X minutes ago").
+    // Attach timestamp to ERC-20 events from same latest block; older blocks
+    // are approximated using the chain's real block cadence (BLOCK_TIME_MS) —
+    // good enough for "X minutes ago" and for window math.
+    const blockMs = BLOCK_TIME_MS[chainId] || 3000;
     for (const e of events) {
       if (!e.timestamp) {
         const diff = latest - e.blockNumber;
-        e.timestamp = ts - diff * 3000;
+        e.timestamp = ts - diff * blockMs;
       }
     }
   } catch {
     // fall through; ERC-20 events will still carry approximate timestamps
     const now = Date.now();
+    const blockMs = BLOCK_TIME_MS[chainId] || 3000;
     for (const e of events) {
       if (!e.timestamp) {
         const diff = latest - e.blockNumber;
-        e.timestamp = now - diff * 3000;
+        e.timestamp = now - diff * blockMs;
       }
     }
   }
@@ -360,33 +413,58 @@ async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known)
 
 /* -------- explorer fast path (when API key is present) -------- */
 
-async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
+/*
+ * The old query sent `module=account&action=tokentx` with NO address or
+ * contract filter — the Etherscan family rejects that ("Missing address"),
+ * so the fast path silently returned [] even with a key configured. Now we
+ * ask for the recent transfers of the chain's curated high-volume tokens
+ * (USDT/USDC/…) — dense, real whale flow, two requests per chain max.
+ *
+ * Etherscan V2 note: one ETHERSCAN_API_KEY now serves every supported chain
+ * through https://api.etherscan.io/v2/api?chainid=N — used automatically as
+ * the fallback when a chain-specific key is absent.
+ */
+async function explorerRequestUrl(chainId) {
   const exp = EXPLORERS[chainId];
-  if (!exp) return [];
-  const key = process.env[exp.keyEnv];
-  if (!key) return [];
+  const ownKey = exp ? process.env[exp.keyEnv] : null;
+  if (ownKey) return { api: exp.api, key: ownKey, chainParam: '' };
+  const v2Key = process.env.ETHERSCAN_API_KEY;
+  if (v2Key) return { api: 'https://api.etherscan.io/v2/api', key: v2Key, chainParam: `&chainid=${chainId}` };
+  return null;
+}
+
+async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
+  const conf = await explorerRequestUrl(chainId);
+  if (!conf) return [];
   const cfg = EVM_CHAINS[chainId];
   const known = knownTokenMap(chainId);
 
-  // Pull last 100 token transfers. We filter by value below using USD price,
-  // because the explorer does not let us query by fiat value.
-  const url = `${exp.api}?module=account&action=tokentx&page=1&offset=100&sort=desc&apikey=${encodeURIComponent(key)}`;
-  const { signal, done } = ctrlTimeout();
-  let body;
-  try {
-    const res = await fetch(url, { signal, headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`explorer ${res.status}`);
-    body = await res.json();
-  } catch {
-    return [];
-  } finally {
-    done();
-  }
-  if (body?.status !== '1' || !Array.isArray(body.result)) return [];
+  // Query the curated tokens with on-chain contracts (max 2 to protect the
+  // key's rate limit) — stablecoins carry the densest whale flow.
+  const contracts = (TOKENS[chainId] ?? []).filter((t) => t.address).slice(0, 2);
+  if (!contracts.length) return [];
+
+  const pages = await Promise.allSettled(contracts.map(async (tok) => {
+    const url = `${conf.api}?module=account&action=tokentx&contractaddress=${tok.address}` +
+      `&page=1&offset=100&sort=desc&apikey=${encodeURIComponent(conf.key)}${conf.chainParam}`;
+    const { signal, done } = ctrlTimeout();
+    try {
+      const res = await fetch(url, { signal, headers: { accept: 'application/json' } });
+      if (!res.ok) throw new Error(`explorer ${res.status}`);
+      const body = await res.json();
+      if (body?.status !== '1' || !Array.isArray(body.result)) return [];
+      return body.result;
+    } finally {
+      done();
+    }
+  }));
+  const rows = [];
+  for (const p of pages) if (p.status === 'fulfilled') rows.push(...p.value);
+  if (!rows.length) return [];
 
   const seen = new Set();
   const out = [];
-  for (const tx of body.result) {
+  for (const tx of rows) {
     const contract = String(tx.contractAddress || '').toLowerCase();
     const token = known.get(contract) ?? {
       symbol: (tx.tokenSymbol || '???').toUpperCase().slice(0, 10),
@@ -455,24 +533,89 @@ async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
 
 /* -------- prices -------- */
 
-/**
- * Coinlore keyless price fallback — used ONLY when CoinGecko cannot answer
- * (public rate limit, network blip). Same ids in, same shape out
- * (`id → { [vsCcy]: number }`), values are the live `price` field.
- * Coinlore already serves this codebase's global-stats fallback in
- * providers.js, so no new upstream relationship is introduced.
+/*
+ * PRICE FALLBACK CHAIN — keyless sources that answer with different rate
+ * limits and different IP reputations, tried in order. The old fallback
+ * called `api.coinlore.net/api/prices/v2/ids/<coingecko-ids>` — an endpoint
+ * that does not exist (Coinlore keys tickers by NUMERIC id) — so the moment
+ * CoinGecko rate-limited, the "fallback" 404ed too, every event lost its
+ * USD value, and the whole Smart Money page reported `unavailable`.
  */
-async function fetchCoinlorePrices(ids, vsCcy = 'usd') {
-  const res = await fetch(`https://api.coinlore.net/api/prices/v2/ids/${ids.join(',')}`, {
-    headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' },
-    signal: AbortSignal.timeout(10_000)
-  });
-  if (!res.ok) throw new Error(`coinlore ${res.status}`);
+
+/** CoinGecko id → ticker symbol for the symbol-keyed fallback sources. */
+const CG_TO_SYMBOL = {
+  ethereum: 'ETH',
+  bitcoin: 'BTC',
+  tether: 'USDT',
+  'usd-coin': 'USDC',
+  dai: 'DAI',
+  binancecoin: 'BNB',
+  'matic-network': 'POL',
+  'avalanche-2': 'AVAX',
+  arbitrum: 'ARB',
+  optimism: 'OP',
+  'pancakeswap-token': 'CAKE',
+  'staked-ether': 'STETH'
+};
+
+/**
+ * Major USD stablecoins. Used ONLY as the last-resort backstop so that the
+ * bulk of whale flow (USDT/USDC/DAI transfers) stays priced through a full
+ * market-data outage. $1.00 is the definitional value of these assets; a
+ * de-peg deep enough to distort a whale feed is front-page news, and the
+ * response still carries `priceSource` so the UI can disclose the basis.
+ */
+const PEGGED_USD = { tether: 1, 'usd-coin': 1, dai: 1 };
+
+/** CryptoCompare keyless multi-price. `{ ETH: { USD: 4300 } }` shape in. */
+async function fetchCryptoComparePrices(ids, vsCcy = 'usd') {
+  const bySymbol = new Map(); // SYMBOL → [cgId, ...]
+  for (const id of ids) {
+    const sym = CG_TO_SYMBOL[id];
+    if (!sym) continue;
+    const list = bySymbol.get(sym) || [];
+    list.push(id);
+    bySymbol.set(sym, list);
+  }
+  if (!bySymbol.size) return {};
+  const fsyms = [...bySymbol.keys()].join(',');
+  const tsym = vsCcy.toUpperCase();
+  const res = await fetch(
+    `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${encodeURIComponent(fsyms)}&tsyms=${encodeURIComponent(tsym)}`,
+    { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+  );
+  if (!res.ok) throw new Error(`cryptocompare ${res.status}`);
   const body = await res.json();
   const out = {};
-  for (const [id, row] of Object.entries(body?.data || {})) {
-    const p = Number(row?.price);
-    if (Number.isFinite(p) && p > 0) out[id] = { [vsCcy]: p };
+  for (const [sym, cgIds] of bySymbol) {
+    const p = Number(body?.[sym]?.[tsym]);
+    if (!Number.isFinite(p) || p <= 0) continue;
+    for (const id of cgIds) out[id] = { [vsCcy]: p };
+  }
+  return out;
+}
+
+/**
+ * Coinbase keyless exchange-rates fallback — ONE request returns every rate
+ * against USD; invert to get USD prices. Coinbase's public API allows very
+ * generous keyless rates and (unlike some exchange APIs) answers from US
+ * serverless IPs.
+ */
+async function fetchCoinbasePrices(ids, vsCcy = 'usd') {
+  if (vsCcy !== 'usd') return {}; // rates are only meaningful against USD here
+  const res = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD', {
+    headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000)
+  });
+  if (!res.ok) throw new Error(`coinbase ${res.status}`);
+  const body = await res.json();
+  const rates = body?.data?.rates || {};
+  const out = {};
+  for (const id of ids) {
+    const sym = CG_TO_SYMBOL[id];
+    if (!sym) continue;
+    const r = Number(rates[sym]);
+    if (!Number.isFinite(r) || r <= 0) continue;
+    out[id] = { [vsCcy]: 1 / r };
   }
   return out;
 }
@@ -486,10 +629,11 @@ async function fetchCoinlorePrices(ids, vsCcy = 'usd') {
  * `fetchWhales`, `labelledEvents` swallowed it, and EVERY whale-based number
  * on the Smart Money page went to zero — «خیلی از داده‌ها کار نمی‌کند».
  *
- * Now: retry once, fall back to Coinlore, and if even that fails keep the
- * pipeline alive with unpriced events (huge-amount transfers still surface)
- * and flag `ok: false` so the response carries `pricesOutage: true` and the
- * UI can say "no data" instead of "zero activity".
+ * Now: CoinGecko (retried once) → CryptoCompare → Coinbase, then the pegged
+ * stablecoin backstop fills any gap for USDT/USDC/DAI so the dominant share
+ * of whale flow stays priced through a full market-data outage. Only when
+ * literally nothing priced anything does the response carry
+ * `pricesOutage: true` so the UI says "no data" instead of "zero activity".
  */
 async function priceLookupFor(vsCcy) {
   // Use the existing providers.js simple-price fetch so keys stay server-side
@@ -518,19 +662,43 @@ async function priceLookupFor(vsCcy) {
   }
   if (!prices) {
     try {
-      const lore = await fetchCoinlorePrices(ids, vsCcy);
-      if (lore && Object.keys(lore).length) { prices = lore; source = 'coinlore'; }
-    } catch { /* fall through: unpriced, flagged */ }
+      const cc = await fetchCryptoComparePrices(ids, vsCcy);
+      if (cc && Object.keys(cc).length) { prices = cc; source = 'cryptocompare'; }
+    } catch { /* try the next source */ }
   }
-  const map = prices || {};
+  if (!prices) {
+    try {
+      const cb = await fetchCoinbasePrices(ids, vsCcy);
+      if (cb && Object.keys(cb).length) { prices = cb; source = 'coinbase'; }
+    } catch { /* fall through to the pegged backstop */ }
+  }
+
+  const map = prices ? { ...prices } : {};
+  // Backstop: fill any stablecoin gap at the definitional $1 peg so USDT/
+  // USDC/DAI whale flow (most of it) survives a market-data outage.
+  if (vsCcy === 'usd') {
+    for (const [id, usd] of Object.entries(PEGGED_USD)) {
+      if (ids.includes(id) && map[id]?.[vsCcy] == null) map[id] = { ...(map[id] || {}), [vsCcy]: usd };
+    }
+  }
+  const anyPrice = Object.keys(map).length > 0;
   return {
     lookup: (cgId) => map[cgId]?.[vsCcy] ?? null,
-    ok: !!prices,
-    source: source || 'none'
+    ok: anyPrice,
+    source: source || (anyPrice ? 'pegged-stables' : 'none')
   };
 }
 
 /* -------- public entry -------- */
+
+/** Race a promise against a deadline (timer is cleared either way). */
+function withDeadline(promise, ms, tag = 'UPSTREAM') {
+  let timer;
+  const gate = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${tag}_TIMEOUT`)), ms);
+  });
+  return Promise.race([promise, gate]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Fetch a page of whale events across supported chains.
@@ -557,16 +725,19 @@ export async function fetchWhales({
 
   const { lookup: priceLookup, ok: pricesOk, source: priceSource } = await priceLookupFor(vs);
 
-  // Fetch chains in parallel; tolerate partial failure per chain.
+  // Fetch chains in parallel; tolerate partial failure per chain. Each chain
+  // gets a hard deadline: walking 3 RPC endpoints × (blockNumber + getLogs +
+  // retries) could otherwise take >60s for ONE dead chain — longer than the
+  // client (and a serverless function) is willing to wait for ALL of them.
   const results = await Promise.allSettled(
-    selectedIds.map(async (cid) => {
+    selectedIds.map((cid) => withDeadline((async () => {
       // Prefer explorer fast-path when configured; fall back to RPC logs.
       try {
         const fast = await fetchWhalesExplorer(cid, minUsd, priceLookup);
         if (fast.length) return fast;
       } catch { /* ignore */ }
       return fetchWhalesRpc(cid, minUsd, priceLookup);
-    })
+    })(), 15_000, `CHAIN_${cid}`))
   );
 
   const failures = [];
