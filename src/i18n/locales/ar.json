@@ -372,7 +372,8 @@
       "overview": "Overview",
       "liquidity": "Liquidity",
       "history": "History",
-      "practice": "تجريبي"
+      "practice": "تجريبي",
+      "solana": "محفظة سولانا"
     },
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
@@ -2403,7 +2404,11 @@
       "ios": "آيفون: لا تسمح Apple للتطبيقات بالتخاطب بهذه الطريقة، لذا افتح هذه الصفحة داخل متصفح المحفظة نفسه عبر الزر أعلاه.",
       "app": "تطبيق أندرويد الخاص بنا: مثل آيفون — استخدم الزر أعلاه لفتح الصفحة داخل متصفح المحفظة."
     },
-    "notSolana": "لا تلصق عنوانًا يبدأ بـ 0x هنا. هذا عنوان إيثيريوم، وعنوان سولانا لا يشبهه أبدًا — من 32 إلى 44 حرفًا ورقمًا بدون 0x. الإرسال بصيغة خاطئة لا يمكن التراجع عنه."
+    "notSolana": "لا تلصق عنوانًا يبدأ بـ 0x هنا. هذا عنوان إيثيريوم، وعنوان سولانا لا يشبهه أبدًا — من 32 إلى 44 حرفًا ورقمًا بدون 0x. الإرسال بصيغة خاطئة لا يمكن التراجع عنه.",
+    "balance": "رصيد سولانا",
+    "manageWallet": "إدارة المحفظة",
+    "swapNeedsWallet": "يلزم ربط محفظة سولانا للتبديل. اربطها من صفحة المحفظة — التبديل ينفذ الأسعار والتوقيع فقط.",
+    "manageSwapWallet": "إدارة المحفظة"
   },
   "install": {
     "title": "ثبّت FBT Swap",
@@ -3154,7 +3159,7 @@
       "why": "لماذا"
     },
     "network": {
-      "walletVerification": "تحقق المحفظة وتعدد السلاسل",
+      "walletVerification": "التحقق من المحفظة وتعدد السلاسل",
       "walletNotConnected": "لا محفظة متصلة — التحقق بانتظار محفظة حقيقية.",
       "walletVerified": "تم التحقق من المحفظة على السلسلة الحالية",
       "walletUnverified": "المحفظة متصلة — فشلت بعض الفحوص",
@@ -3173,7 +3178,11 @@
         "rpc-reachable": "لم يرد RPC",
         "balance-fetched": "الرصيد غير متاح",
         "no-raw-credentials": "بيانات اعتماد خام في المدخل"
-      }
+      },
+      "walletBothVerified": "تم التحقق من محفظة EVM و Solana",
+      "walletSomeVerified": "تم التحقق من محفظة واحدة — اربط الأخرى لبلوغ تغطية ١٠٠٪",
+      "solanaAddress": "عنوان سولانا",
+      "solanaChain": "شبكة سولانا"
     },
     "execControls": {
       "title": "أدوات التنفيذ",
@@ -3290,6 +3299,14 @@
         "security": "قواعد الحفظ والـ preimage مُتحقق منها",
         "wallet": "المحفظة متصلة على شبكة مهيأة"
       }
+    },
+    "brain": {
+      "walletTitle": "اتصالات المحفظة",
+      "walletReadOnly": "ربط للقراءة فقط — لا يُنشأ أي توقيع هنا",
+      "walletActive": "اتصال محفظة EVM و Solana نشط",
+      "walletOneActive": "محفظة واحدة نشطة — اربط الأخرى من صفحة المحفظة",
+      "walletManage": "إدارة المحفظة",
+      "notConnectedShort": "غير متصل"
     }
   },
   "verdict": {

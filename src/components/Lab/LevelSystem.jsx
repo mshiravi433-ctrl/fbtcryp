@@ -3,7 +3,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { LabBack, Panel, Row, Notice } from './Shared';
+import { LabBack, Panel, Row, Notice, labLevelName } from './Shared';
 import { levelFromXp, useLabStore } from '../../store/useLabStore';
 
 const BADGES = [
@@ -53,7 +53,7 @@ export default function LevelSystem({ onBack }) {
       <LabBack onBack={onBack} title={`🏆 ${t('lab2.screens.level.title')}`} sub={t('lab2.level.badgesEarned', { earned: earnedCount, total: BADGES.length })} />
 
       <Panel title={t('lab2.level.level')}>
-        <Row label={t('lab2.level.currentLevel')} value={`${lvl.lvl} · ${t(`lab2.levelNames.${lvl.nameKey}`, lvl.name)}`} />
+        <Row label={t('lab2.level.currentLevel')} value={`${lvl.lvl} · ${labLevelName(t, lvl)}`} />
         <Row label={t('lab2.level.xp')} value={<span className="lab2-num">{xp.toLocaleString()} / {lvl.nextXp.toLocaleString()}</span>} />
         <Row label={t('lab2.level.progressToNext')} value={<span className="lab2-num">{lvl.pct}%</span>} />
       </Panel>
