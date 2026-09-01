@@ -48,6 +48,22 @@ import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
 import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
+import {
+  chainTokens,
+  crossChainHealth,
+  getQuote as crossChainGetQuote,
+  getRoutes as crossChainGetRoutes,
+  getTransferStatus,
+  resolveToken as crossChainResolveToken,
+  supportedChains as crossChainSupportedChains
+} from './crossChain.js';
+import {
+  createTransaction as createCrossChainTransaction,
+  getTransaction as getCrossChainTransaction,
+  listTransactions as listCrossChainTransactions,
+  recordIntent as recordCrossChainIntent,
+  updateTransaction as updateCrossChainTransaction
+} from './crossChainStore.js';
 import { wallexUpstream, createWallexOrderLimiter } from './wallex.js';
 import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
@@ -1752,15 +1768,28 @@ app.get('/api/intents/v1/venue-health', async (_req, res) => {
   return res.json(venueHealthStatus());
 });
 
-/* ── Wave 1: Bridge Quote (read-only) ─────────────────────────────────── */
+/* ── Bridge quote for the Intent OS desk (REAL — LI.FI via crossChain.js) ──
+ *
+ * Was a hard-coded object; see the header of server/intentBridgeQuote.js for
+ * exactly what it used to return and why that was worse than no endpoint. It
+ * now shares the engine with /api/cross-chain/* and /bridge, so the number the
+ * Intent OS tab shows is the number the bridge page would execute.
+ */
 app.get('/api/intents/v1/bridge-quote', async (req, res) => {
-  const quote = await getBridgeQuote({
-    fromChain: Number(req.query.fromChain) || 421614,
-    toChain: Number(req.query.toChain) || 42161,
-    amount: req.query.amount || '1000000',
-    token: req.query.token || 'USDC'
+  const result = await getBridgeQuote({
+    fromChain: req.query.fromChain,
+    toChain: req.query.toChain,
+    amount: req.query.amount,
+    token: req.query.token,
+    fromToken: req.query.fromToken,
+    toToken: req.query.toToken,
+    fromAddress: req.query.fromAddress,
+    toAddress: req.query.toAddress,
+    slippage: req.query.slippage
   });
-  return res.json(quote);
+  if (!result.ok) return crossChainError(res, result);
+  res.set('cache-control', 'no-store');
+  return res.json(result);
 });
 
 app.get('/api/intents/v1/bridge-status', (_req, res) => {
@@ -3946,6 +3975,261 @@ app.get('/api/bridge/quote', async (req, res) => {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
+
+/* ─────────────── the shared cross-chain surface (/api/cross-chain) ─────────
+ *
+ * ONE service for the bridge page AND the Intent OS cross-chain desk. Before
+ * this, Intent OS had its own endpoint answering with a hard-coded rate while
+ * the bridge page talked to LI.FI — two systems, one of them fictional.
+ *
+ * Everything below is read-through to server/crossChain.js (LI.FI) plus a
+ * transaction ledger in server/crossChainStore.js. The server never signs and
+ * never holds funds: it returns a transactionRequest the user's wallet signs,
+ * then tracks the resulting hashes.
+ */
+
+const crossChainError = (res, result, fallbackStatus = 502) => {
+  const map = {
+    SAME_CHAIN: 400,
+    BAD_AMOUNT: 400,
+    BAD_FROM_CHAIN: 400,
+    BAD_TO_CHAIN: 400,
+    BAD_FROM_TOKEN: 400,
+    BAD_TO_TOKEN: 400,
+    BAD_FROM_ADDRESS: 400,
+    BAD_SOLANA_ADDRESS: 400,
+    BAD_EVM_ADDRESS: 400,
+    EVM_ADDRESS_ON_SOLANA: 400,
+    SOLANA_ADDRESS_ON_EVM: 400,
+    DESTINATION_REQUIRED: 400,
+    BAD_SLIPPAGE: 400,
+    BAD_TX_HASH: 400,
+    UNSUPPORTED_CHAIN: 400,
+    TOKEN_REQUIRED: 400,
+    TOKEN_NOT_ON_CHAIN: 404,
+    NOT_FOUND: 404,
+    NO_ROUTE: 404,
+    AMOUNT_TOO_LOW: 422,
+    ILLEGAL_TRANSITION: 409,
+    WALLET_REQUIRED: 400,
+    PROVIDER_RATE_LIMITED: 429,
+    UPSTREAM_TIMEOUT: 504
+  };
+  return res.status(map[result?.code] || fallbackStatus).json({
+    error: result?.code || 'CROSS_CHAIN_FAILED',
+    detail: result?.detail ?? null,
+    ...(result?.from ? { from: result.from, to: result.to } : {})
+  });
+};
+
+/* The chain selector's source of truth: LI.FI's live list ∩ chains this
+   wallet can actually sign for. Never a hard-coded menu. */
+app.get('/api/cross-chain/chains', async (_req, res) => {
+  const result = await crossChainSupportedChains();
+  if (!result.ok) return crossChainError(res, result, 503);
+  res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1800');
+  return res.json({ schema: 'fbt.cross-chain-chains.v1', chains: result.chains, provider: result.provider });
+});
+
+/* Token registry for one chain — used by the token picker's search. */
+app.get('/api/cross-chain/tokens', async (req, res) => {
+  const result = await chainTokens(req.query.chain, { search: req.query.q, limit: req.query.limit });
+  if (!result.ok) return crossChainError(res, result, 503);
+  res.set('cache-control', 'public, max-age=120, s-maxage=120');
+  return res.json({ schema: 'fbt.cross-chain-tokens.v1', tokens: result.tokens, provider: result.provider });
+});
+
+/* Resolve a symbol to the real contract on a chain (spec §10: no invented
+   route to a token the destination chain does not have). */
+app.get('/api/cross-chain/resolve-token', async (req, res) => {
+  const result = await crossChainResolveToken(req.query.chain, req.query.token);
+  if (!result.ok) return crossChainError(res, result, 503);
+  return res.json({ schema: 'fbt.cross-chain-token.v1', token: result.token });
+});
+
+/* One executable quote, normalised and EXPIRING. */
+app.get('/api/cross-chain/quote', async (req, res) => {
+  const result = await crossChainGetQuote({
+    fromChain: req.query.fromChain,
+    toChain: req.query.toChain,
+    fromToken: req.query.fromToken,
+    toToken: req.query.toToken,
+    fromAmount: req.query.fromAmount,
+    fromAddress: req.query.fromAddress,
+    toAddress: req.query.toAddress,
+    slippage: req.query.slippage,
+    preferTool: req.query.preferTool,
+    order: req.query.order
+  });
+  if (!result.ok) return crossChainError(res, result);
+  /* Never cached: a quote is a price with a 60-second life. A CDN copy of it
+     would be a stale rate presented as live — the exact failure this whole
+     rework exists to remove. */
+  res.set('cache-control', 'no-store');
+  return res.json({ schema: 'fbt.cross-chain-quote.v1', quote: result.quote });
+});
+
+/* Every route the provider offers, ranked by the shared scorer. */
+app.get('/api/cross-chain/routes', async (req, res) => {
+  const result = await crossChainGetRoutes({
+    fromChain: req.query.fromChain,
+    toChain: req.query.toChain,
+    fromToken: req.query.fromToken,
+    toToken: req.query.toToken,
+    fromAmount: req.query.fromAmount,
+    fromAddress: req.query.fromAddress,
+    toAddress: req.query.toAddress,
+    slippage: req.query.slippage,
+    order: req.query.order
+  });
+  if (!result.ok) return crossChainError(res, result);
+  res.set('cache-control', 'no-store');
+  return res.json({
+    schema: 'fbt.cross-chain-routes.v1',
+    requestId: result.requestId,
+    routes: result.routes,
+    best: result.best,
+    provider: result.provider
+  });
+});
+
+/* The ledger. A row is created when the user's wallet has actually produced a
+   signature or a hash — never when a quote is merely displayed. */
+app.post('/api/cross-chain/transactions', async (req, res) => {
+  const body = req.body || {};
+  const result = await createCrossChainTransaction({
+    walletAddress: body.walletAddress,
+    fromChain: body.fromChain,
+    toChain: body.toChain,
+    fromToken: body.fromToken,
+    toToken: body.toToken,
+    fromTokenSymbol: body.fromTokenSymbol,
+    toTokenSymbol: body.toTokenSymbol,
+    fromTokenDecimals: body.fromTokenDecimals,
+    toTokenDecimals: body.toTokenDecimals,
+    fromAmount: body.fromAmount,
+    expectedAmount: body.expectedAmount,
+    provider: body.provider,
+    tool: body.tool,
+    toolName: body.toolName,
+    routeId: body.routeId,
+    quoteId: body.quoteId,
+    intentId: body.intentId,
+    source: body.source,
+    destinationAddress: body.destinationAddress,
+    sourceTxHash: body.sourceTxHash,
+    gasCostUsd: body.gasCostUsd,
+    bridgeFeeUsd: body.bridgeFeeUsd,
+    protocolFeeUsd: body.protocolFeeUsd,
+    totalCostUsd: body.totalCostUsd,
+    estimatedTime: body.estimatedTime
+  });
+  if (!result.ok) return crossChainError(res, result, 400);
+  return res.status(201).json({ schema: 'fbt.cross-chain-transaction.v1', transaction: result.transaction });
+});
+
+/*
+ * Status. The client asks; the SERVER re-reads the bridge and applies the
+ * state machine. A browser cannot post COMPLETED — see crossChainStore.js.
+ */
+app.get('/api/cross-chain/transactions/:id/status', async (req, res) => {
+  const record = await getCrossChainTransaction(req.params.id);
+  if (!record) return crossChainError(res, { code: 'NOT_FOUND' }, 404);
+
+  if (!record.sourceTxHash || ['COMPLETED', 'FAILED'].includes(record.executionStatus)) {
+    return res.json({ schema: 'fbt.cross-chain-transaction.v1', transaction: record, polled: false });
+  }
+
+  const live = await getTransferStatus({
+    txHash: record.sourceTxHash,
+    fromChain: record.fromChain,
+    toChain: record.toChain,
+    tool: record.tool
+  });
+  if (!live.ok) {
+    /* A provider hiccup is NOT a failed transfer. The stored row is returned
+       untouched with the reason attached, so the UI keeps showing "in
+       progress" instead of inventing an outcome. */
+    return res.json({
+      schema: 'fbt.cross-chain-transaction.v1',
+      transaction: record,
+      polled: true,
+      providerError: live.code
+    });
+  }
+
+  const updated = await updateCrossChainTransaction(record.id, {
+    executionStatus: live.status.status,
+    destinationTxHash: live.status.destinationTxHash,
+    actualAmount: live.status.actualAmount,
+    providerStatus: live.status.providerStatus,
+    providerSubstatus: live.status.providerSubstatus,
+    failureReason: live.status.status === 'FAILED' ? (live.status.substatusMessage || live.status.providerSubstatus || 'BRIDGE_FAILED') : null,
+    tool: live.status.tool
+  });
+  return res.json({
+    schema: 'fbt.cross-chain-transaction.v1',
+    transaction: updated.ok ? updated.transaction : record,
+    polled: true,
+    provider: live.provider,
+    explorer: {
+      source: live.status.sourceExplorer,
+      destination: live.status.destinationExplorer
+    }
+  });
+});
+
+/*
+ * Cancel. Honest about what a bridge can and cannot undo: once a source
+ * transaction is on chain nothing here can recall it, so cancellation is only
+ * accepted BEFORE broadcast and is recorded as a failure with a reason rather
+ * than a fictional "cancelled" success.
+ */
+app.post('/api/cross-chain/transactions/:id/cancel', async (req, res) => {
+  const record = await getCrossChainTransaction(req.params.id);
+  if (!record) return crossChainError(res, { code: 'NOT_FOUND' }, 404);
+  if (record.sourceTxHash) {
+    return res.status(409).json({
+      error: 'ALREADY_BROADCAST',
+      detail: 'a submitted source transaction cannot be cancelled from here',
+      transaction: record
+    });
+  }
+  const updated = await updateCrossChainTransaction(record.id, {
+    executionStatus: 'FAILED',
+    cancelled: true,
+    failureReason: 'USER_CANCELLED',
+    note: 'cancelled before broadcast'
+  });
+  if (!updated.ok) return crossChainError(res, updated, 409);
+  return res.json({ schema: 'fbt.cross-chain-transaction.v1', transaction: updated.transaction });
+});
+
+/* Real history for one wallet — the same rows both surfaces render. */
+app.get('/api/cross-chain/history', async (req, res) => {
+  const wallet = String(req.query.wallet || '').trim();
+  if (!wallet) return crossChainError(res, { code: 'WALLET_REQUIRED' }, 400);
+  const rows = await listCrossChainTransactions(wallet, { limit: req.query.limit });
+  res.set('cache-control', 'no-store');
+  return res.json({ schema: 'fbt.cross-chain-history.v1', wallet, transactions: rows });
+});
+
+/* The user's stated intent, kept next to the transaction that served it. */
+app.post('/api/cross-chain/intents', async (req, res) => {
+  const record = await recordCrossChainIntent(req.body || {});
+  return res.status(201).json({ schema: 'fbt.cross-chain-intent.v1', intent: record });
+});
+
+/*
+ * Provider health. If this says the provider is down, the UI shows nothing
+ * rather than a stale rate (spec §29).
+ */
+app.get('/api/health/cross-chain', async (req, res) => {
+  const report = await crossChainHealth({ deep: req.query.deep !== '0' });
+  res.set('cache-control', 'public, max-age=15, s-maxage=15');
+  return res.status(report.ok ? 200 : 503).json(report);
+});
+
 
 /* ───────────────────────── Wallex (Iranians-only tab) ──────────────────────
    Whitelisted proxy for the buy/sell tab that only Persian-language users
