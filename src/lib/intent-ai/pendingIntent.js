@@ -17,6 +17,7 @@ export const PENDING_INTENT_KEY = 'fbt.ai.os.pending-intent.v1';
 
 export const PENDING_STATUSES = Object.freeze([
   'WAITING_FOR_WALLET',
+  'NEEDS_USER_INPUT',
   'READY',
   'EXECUTING',
   'COMPLETED',
@@ -50,7 +51,10 @@ export function createPendingIntent({
   status = 'WAITING_FOR_WALLET',
   conversationId = null,
   plan = null,
+  actionPlan = null,
+  resolvedContext = null,
   locale = null,
+  expiresInMs = 15 * 60_000,
   now = nowMs()
 } = {}) {
   const message = String(originalMessage || '').slice(0, MAX_MESSAGE).trim();
@@ -68,6 +72,12 @@ export function createPendingIntent({
       conversationId: conversationId ? String(conversationId).slice(0, 64) : null,
       locale: locale ? String(locale).slice(0, 8) : null,
       planId: plan?.id ? String(plan.id).slice(0, 64) : null,
+      /* The whole resolved plan rides along: Confirm continues THIS intent
+         (confirmIntent(intentId, actionPlanId)) instead of re-parsing "OK". */
+      actionPlan: actionPlan || null,
+      actionPlanId: actionPlan?.intentId ? String(actionPlan.intentId).slice(0, 64) : null,
+      resolvedContext: resolvedContext || null,
+      expiresAt: now + Math.max(60_000, Number(expiresInMs) || 0),
       createdAt: now,
       updatedAt: now
     })
@@ -81,11 +91,12 @@ export function transitionPendingIntent(intent, nextStatus, { now = nowMs(), rea
   const next = String(nextStatus || '').toUpperCase();
   if (!PENDING_STATUSES.includes(next)) return { ok: false, code: 'STATUS_INVALID' };
   const allowed = {
-    WAITING_FOR_WALLET: ['READY', 'FAILED'],
-    READY: ['EXECUTING', 'WAITING_FOR_WALLET', 'FAILED'],
+    WAITING_FOR_WALLET: ['READY', 'NEEDS_USER_INPUT', 'FAILED'],
+    NEEDS_USER_INPUT: ['READY', 'WAITING_FOR_WALLET', 'NEEDS_USER_INPUT', 'FAILED'],
+    READY: ['EXECUTING', 'WAITING_FOR_WALLET', 'NEEDS_USER_INPUT', 'FAILED'],
     EXECUTING: ['COMPLETED', 'FAILED'],
     COMPLETED: [],
-    FAILED: ['READY', 'WAITING_FOR_WALLET']
+    FAILED: ['READY', 'WAITING_FOR_WALLET', 'NEEDS_USER_INPUT']
   };
   if (!allowed[intent.status]?.includes(next)) {
     return { ok: false, code: 'ILLEGAL_TRANSITION', from: intent.status, to: next };
@@ -121,6 +132,7 @@ export function loadPendingIntent(storage = defaultStorage()) {
     if (!parsed || parsed.schema !== PENDING_INTENT_SCHEMA) return null;
     if (!PENDING_STATUSES.includes(parsed.status)) return null;
     if (!parsed.originalMessage) return null;
+    if (Number.isFinite(Number(parsed.expiresAt)) && Number(parsed.expiresAt) < nowMs()) return null;
     return parsed;
   } catch {
     return null;

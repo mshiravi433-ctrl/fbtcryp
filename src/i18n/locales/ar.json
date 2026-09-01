@@ -4808,5 +4808,26 @@
       "UNKNOWN": "لم تتم المعاملة."
     },
     "rateUnknown": "السعر المباشر غير متاح الآن"
+  },
+  "intentAIOS": {
+    "hello": "مرحباً! أنا Intent AI. حدثني عن محفظتك أو السوق أو أي هدف مالي.",
+    "noReply": "لم أتمكن من تجهيز إجابة.",
+    "automationCreated": "تم حفظ الأتمتة وهي نشطة في المجدول. كل تنفيذ ما زال يتطلب توقيعك.",
+    "goalCreated": "تم إنشاء الهدف المالي وربطه بـ Financial OS.",
+    "actions": "الإجراءات",
+    "autosTitle": "الأتمتة النشطة",
+    "confirm": "تأكيد وتنفيذ",
+    "connectWallet": "ربط المحفظة",
+    "drawerNote": "هذه الأزرار اختصارات فقط؛ الذكاء الاصطناعي يعمل بشكل مستقل عنها.",
+    "edit": "تعديل",
+    "header": "Intent AI",
+    "live": "مباشر",
+    "manage": "إدارة",
+    "placeholder": "اسأل Intent AI…",
+    "readyTitle": "✦ جاهز للتنفيذ",
+    "send": "إرسال",
+    "solanaConnect": "ربط محفظة Solana",
+    "suggestions": "اقتراحات ذات صلة",
+    "working": "جارٍ التنفيذ…"
   }
 }

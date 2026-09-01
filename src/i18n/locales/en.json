@@ -7187,5 +7187,26 @@
     "whaleDisclaimer": "Wallets are ranked by observed large-transfer volume across supported chains. Exchange labels come only from the curated registry; unknown counterparties stay unlabelled.",
     "earlyNote": "Early tokens are flagged for observation with explicit risk. Young, low-liquidity tokens are high risk by definition. Smart-money interest is NEVER an automatic buy recommendation.",
     "tokenDisclaimer": "Observed on-chain behaviour only — not investment advice, not a buy signal."
+  },
+  "intentAIOS": {
+    "hello": "Hi — I am Intent AI. Tell me about your wallet, the market, or any financial goal.",
+    "noReply": "I could not put an answer together.",
+    "automationCreated": "The automation is saved and active in the scheduler. Every run still needs your signature.",
+    "goalCreated": "The financial goal was created and connected to the Financial OS.",
+    "actions": "Actions",
+    "autosTitle": "ACTIVE AUTOMATIONS",
+    "confirm": "Confirm & run",
+    "connectWallet": "Connect wallet",
+    "drawerNote": "These buttons are only shortcuts; the AI works independently of them.",
+    "edit": "Edit",
+    "header": "Intent AI",
+    "live": "Live",
+    "manage": "Manage",
+    "placeholder": "Ask Intent AI…",
+    "readyTitle": "✦ Ready to run",
+    "send": "Send",
+    "solanaConnect": "Connect Solana wallet",
+    "suggestions": "Related suggestions",
+    "working": "Running…"
   }
 }

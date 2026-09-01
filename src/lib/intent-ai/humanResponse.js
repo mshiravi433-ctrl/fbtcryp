@@ -14,10 +14,12 @@ import { classifyUserIntent, intentIsExecutable, intentRequiresWallet } from './
 import { planRebalance, change24hFromMarket } from './rebalanceEngine.js';
 import { humanizeError } from './errorHumanizer.js';
 import { createPendingIntent } from './pendingIntent.js';
+import { buildActionPlan, isExecutionReady } from './contextResolver.js';
+import { narrateReadyPlan, narrateMissingInformation } from './planNarrator.js';
 
 export const AI_RESPONSE_SCHEMA = 'fbt.ai-response.v1';
 
-export const UI_TYPES = Object.freeze(['TEXT', 'ACTION_CARD', 'RESULT_CARD', 'CONNECT_WALLET']);
+export const UI_TYPES = Object.freeze(['TEXT', 'ACTION_CARD', 'RESULT_CARD', 'CONNECT_WALLET', 'CHOICE']);
 
 const LEAK = [
   /Prepared\s+\d+\s+real\s+action\(s\)\.?/gi,
@@ -279,7 +281,9 @@ export function formatHumanResponse({
   context = {},
   locale = 'fa',
   resumed = false,
-  suggestions = []
+  suggestions = [],
+  intentId = null,
+  resolvedHints = null
 } = {}) {
   const lang = langOf(locale);
   const userIntent = classifyUserIntent(message, classification || orchestrateOut?.classification);
@@ -372,24 +376,65 @@ export function formatHumanResponse({
   }
 
   if (intentIsExecutable(kind)) {
-    const action = actionFromPlan(orchestrateOut?.plan, kind) || {
-      type: kind,
-      asset: orchestrateOut?.classification?.utterance?.assets?.[0]?.symbol || null,
-      amount: orchestrateOut?.plan?.capitalUsd ?? null
+    /* ------------------------------------------------------------------
+       Read the wallet BEFORE writing a confirmation (spec §2 / §10).
+       The old code emitted "جزئیات را آماده کردم" for an action whose
+       asset/amount/chain were still null, and /execute then answered
+       "جزئیات این درخواست برای اجرا کامل نیست". A confirmation is now only
+       produced for a plan that is genuinely ready.
+       ------------------------------------------------------------------ */
+    const planned = actionFromPlan(orchestrateOut?.plan, kind);
+    /* The orchestrator's legs are a guess (it reports from/to inverted often
+       enough to matter). Only what the user said or tapped is authoritative. */
+    const weakHints = {
+      sourceAsset: planned?.from || null,
+      targetAsset: planned?.to || null,
+      asset: planned?.asset || orchestrateOut?.classification?.utterance?.assets?.[0]?.symbol || null
     };
-    const intro = lang === 'fa'
-      ? (kind === 'DCA'
+    const hints = { ...(resolvedHints || {}) };
+
+    if (kind === 'DCA' || kind === 'GOAL') {
+      const action = planned || { type: kind, asset: hints.asset || weakHints.asset, amount: hints.amount };
+      const intro = lang === 'fa'
         ? 'برنامه خرید دوره‌ای را آماده کردم. اگر تأیید کنید، به‌عنوان خودکار ثبت می‌شود — هر اجرا همچنان به امضای شما نیاز دارد.'
-        : 'جزئیات را آماده کردم. اگر موافق باشید اجرا را با امضای کیف پول شروع می‌کنم.')
-      : (kind === 'DCA'
-        ? 'I prepared a recurring buy. Confirming records the schedule — every run still needs your signature.'
-        : 'I prepared the details. Confirm and I will start with a wallet signature.');
+        : 'I prepared a recurring buy. Confirming records the schedule — every run still needs your signature.';
+      return finalize({
+        message: intro,
+        intent: { type: kind, status: 'READY' },
+        ui: { type: 'ACTION_CARD' },
+        card: formatSwapCard(action, lang),
+        actions: [action],
+        suggestions: suggestionLabels(suggestions, lang)
+      });
+    }
+
+    const plan = buildActionPlan({ intentId: intentId || null, type: kind, message, context, hints, weakHints });
+
+    if (!isExecutionReady(plan)) {
+      const ask = narrateMissingInformation(plan, { locale: lang });
+      const pending = plan.status === 'NEEDS_WALLET'
+        ? createPendingIntent({ originalMessage: message, intentType: kind, status: 'WAITING_FOR_WALLET', locale })
+        : null;
+      return finalize({
+        message: ask.message,
+        intent: { type: kind, status: plan.status },
+        ui: ask.ui,
+        choices: ask.choices,
+        choiceKind: ask.choiceKind || null,
+        actionPlan: plan,
+        pendingIntent: pending?.ok ? pending.intent : null,
+        suggestions: suggestionLabels(suggestions, lang)
+      });
+    }
+
+    const narrated = narrateReadyPlan(plan, { locale: lang });
     return finalize({
-      message: intro,
+      message: narrated.message,
       intent: { type: kind, status: 'READY' },
       ui: { type: 'ACTION_CARD' },
-      card: formatSwapCard(action, lang),
-      actions: [action],
+      card: narrated.card,
+      actions: plan.actions,
+      actionPlan: plan,
       suggestions: suggestionLabels(suggestions, lang)
     });
   }
@@ -528,6 +573,11 @@ function finalize(payload) {
     card: payload.card || null,
     rebalance: payload.rebalance || null,
     pendingIntent: payload.pendingIntent || null,
+    /* The resolved ActionPlan travels with the reply so Confirm can continue
+       THIS intent by id instead of re-parsing the word "OK" (spec §26). */
+    actionPlan: payload.actionPlan || null,
+    choices: Array.isArray(payload.choices) ? payload.choices : [],
+    choiceKind: payload.choiceKind || null,
     retry: payload.retry === true
   };
 }
