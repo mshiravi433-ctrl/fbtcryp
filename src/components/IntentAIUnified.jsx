@@ -798,24 +798,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   // Task continuity: if user left and came back, offer resume
   useEffect(() => {
-    const last = getLastActiveTask();
-    if (last && last.status === 'PENDING' && Date.now() - last.createdAt < 30 * 60 * 1000) {
-      // Offer resume if within 30min
-      setMessages(prev => {
-        if (prev.some(m => m.taskId === last.id)) return prev;
-        return [...prev, {
-          id: makeId(),
-          role: 'ai',
-          content: locale.startsWith('fa')
-            ? `یک کار ناتمام داری: ${last.intent}. ادامه بدهم؟`
-            : `You have an unfinished task: ${last.intent}. Resume?`,
-          kind: 'assistant',
-          ui: { type: 'TEXT' },
-          taskId: last.id,
-          task
-        }];
-      });
-    }
+    try {
+      const last = getLastActiveTask();
+      if (last && last.status === 'PENDING' && Date.now() - last.createdAt < 30 * 60 * 1000) {
+        setMessages(prev => {
+          if (prev.some(m => m.taskId === last.id)) return prev;
+          return [...prev, {
+            id: makeId(),
+            role: 'ai',
+            content: locale.startsWith('fa')
+              ? `یک کار ناتمام داری: ${last.intent}. ادامه بدهم؟`
+              : `You have an unfinished task: ${last.intent}. Resume?`,
+            kind: 'assistant',
+            ui: { type: 'TEXT' },
+            taskId: last.id,
+            task: last
+          }];
+        });
+      }
+    } catch {}
   }, [locale]);
 
   const handleSubmit = useCallback((e) => {

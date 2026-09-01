@@ -68,8 +68,16 @@ export function getDebugLogs({ limit = 50 } = {}) {
   return debugLogs.slice(-limit).reverse();
 }
 
+export function getDebugHistory(opts = {}) {
+  return getDebugLogs(opts);
+}
+
 export function clearDebugLogs() {
   debugLogs.length = 0;
+}
+
+export function clearDebugHistory() {
+  return clearDebugLogs();
 }
 
 // Enable debug in window
