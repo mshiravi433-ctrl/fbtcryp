@@ -1,9 +1,7 @@
 /**
- * FBT INTENT OS — Performance
+ * FBT INTENT OS — Performance Layer
  * Spec §36: Lazy Context, Tool Routing, Caching, Parallel Reads, Event-driven
  */
-
-export const PERF_SCHEMA = 'fbt.perf.v1';
 
 const cache = new Map();
 const CACHE_TTL = 30_000;
@@ -26,84 +24,99 @@ export function clearCache() {
   cache.clear();
 }
 
-/**
- * Parallel reads example (Spec §36)
- * const [wallet, portfolio, market] = await Promise.all([
- *   walletService.getContext(),
- *   portfolioService.getSummary(),
- *   marketService.getRelevantData()
- * ]);
- */
-export async function parallelFetch(tasks = {}) {
+// Parallel reads helper
+export async function parallelReads(tasks = {}) {
   const keys = Object.keys(tasks);
   const promises = keys.map(k => {
-    const fn = tasks[k];
-    if (typeof fn === 'function') {
-      return fn().then(v => ({ key: k, value: v, ok: true })).catch(e => ({ key: k, error: e.message, ok: false }));
+    try {
+      const fn = tasks[k];
+      return typeof fn === 'function' ? fn() : Promise.resolve(fn);
+    } catch (e) {
+      return Promise.resolve({ ok: false, error: e.message });
     }
-    return Promise.resolve({ key: k, value: fn, ok: true });
   });
   
-  const results = await Promise.all(promises);
+  const results = await Promise.allSettled(promises);
   const out = {};
   
-  for (const r of results) {
-    out[r.key] = r.ok ? r.value : { ok: false, error: r.error, dataStatus: 'unavailable' };
-  }
+  results.forEach((r, i) => {
+    const key = keys[i];
+    if (r.status === 'fulfilled') out[key] = r.value;
+    else out[key] = { ok: false, error: r.reason?.message || 'FAILED' };
+  });
   
   return out;
 }
 
-/**
- * Lazy context — only fetch what's needed for intent
- */
-export function getRequiredContextKeys(intentType) {
-  const type = String(intentType || '').toUpperCase();
+// Lazy context — only fetch what needed
+export function createLazyContext({ walletService, portfolioService, marketService } = {}) {
+  let walletCache = null;
+  let portfolioCache = null;
+  let marketCache = null;
   
-  if (['WALLET_BALANCE'].includes(type)) return ['wallet', 'balances'];
-  if (['PORTFOLIO_ANALYSIS', 'REBALANCE'].includes(type)) return ['wallet', 'portfolio', 'balances'];
-  if (['MARKET_ANALYSIS', 'MARKET_CONTEXT'].includes(type)) return ['market', 'news'];
-  if (['YIELD_DISCOVERY', 'FARM', 'LEND'].includes(type)) return ['wallet', 'portfolio', 'yields'];
-  if (['SWAP', 'BUY', 'SELL', 'BRIDGE'].includes(type)) return ['wallet', 'portfolio', 'balances', 'market'];
-  if (['NEWS_SEARCH'].includes(type)) return ['news'];
-  if (['OPEN_CALM', 'PLAY_MUSIC'].includes(type)) return [];
-  if (['NAVIGATION'].includes(type)) return [];
-  if (['SMART_MONEY', 'WHALE'].includes(type)) return ['market', 'smartMoney'];
-  if (['INVESTMENT_PLAN', 'GOAL'].includes(type)) return ['wallet', 'portfolio', 'market', 'yields'];
-  
-  return ['wallet', 'portfolio', 'market'];
+  return {
+    async getWallet() {
+      if (walletCache) return walletCache;
+      if (walletService?.getContext) {
+        walletCache = await walletService.getContext();
+        return walletCache;
+      }
+      return null;
+    },
+    
+    async getPortfolio() {
+      if (portfolioCache) return portfolioCache;
+      if (portfolioService?.getSummary) {
+        portfolioCache = await portfolioService.getSummary();
+        return portfolioCache;
+      }
+      return null;
+    },
+    
+    async getMarket() {
+      if (marketCache) return marketCache;
+      if (marketService?.getRelevantData) {
+        marketCache = await marketService.getRelevantData();
+        return marketCache;
+      }
+      return null;
+    },
+    
+    // Parallel fetch for financial agent
+    async getFinancialContext() {
+      const [wallet, portfolio, market] = await Promise.all([
+        this.getWallet().catch(() => null),
+        this.getPortfolio().catch(() => null),
+        this.getMarket().catch(() => null)
+      ]);
+      return { wallet, portfolio, market };
+    },
+    
+    clear() {
+      walletCache = null;
+      portfolioCache = null;
+      marketCache = null;
+    }
+  };
 }
 
-export async function buildLazyContext({ intentType, services = {}, walletState = null } = {}) {
-  const keys = getRequiredContextKeys(intentType);
-  const cacheKey = `lazy:${intentType}:${walletState?.address || 'anon'}`;
-  
-  const cached = getCached(cacheKey);
-  if (cached) return cached;
-  
-  const tasks = {};
-  
-  if (keys.includes('wallet') && services.walletService?.getContext) {
-    tasks.wallet = () => services.walletService.getContext();
-  }
-  if (keys.includes('portfolio') && services.portfolioService?.getSummary) {
-    tasks.portfolio = () => services.portfolioService.getSummary();
-  }
-  if (keys.includes('market') && services.marketService?.getRelevantData) {
-    tasks.market = () => services.marketService.getRelevantData();
-  }
-  if (keys.includes('balances') && services.walletService?.getBalances) {
-    tasks.balances = () => services.walletService.getBalances({ address: walletState?.address });
-  }
-  if (keys.includes('yields') && services.yieldService?.discover) {
-    tasks.yields = () => services.yieldService.discover({});
-  }
-  if (keys.includes('news') && services.newsService?.search) {
-    tasks.news = () => services.newsService.search({ query: 'crypto', limit: 5 });
-  }
-  
-  const result = await parallelFetch(tasks);
-  setCached(cacheKey, result);
-  
-  return result;
+// Debounce for proactive suggestions
+export function debounce(fn, delay = 300) {
+  let timer = null;
+  return (...args) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+// Throttle
+export function throttle(fn, limit = 1000) {
+  let inThrottle = false;
+  return (...args) => {
+    if (!inThrottle) {
+      fn(...args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
 }

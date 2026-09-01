@@ -174,13 +174,23 @@ const INTENT_PATTERNS = [
     ]
   },
   {
+    type: 'FARM',
+    weight: 6,
+    patterns: [
+      /صفحه.*فارم|فارم.*باز کن|صفحه.*فارم.*باز/i,
+      /farm.*page|open.*farm/i,
+      /فارم.*را.*باز|فارم.*باز/i
+    ]
+  },
+  {
     type: 'WHALE',
     weight: 5,
     patterns: [
       /نهنگ.*خرید|نهنگ‌ها.*خرید|whale.*buy/i,
       /whale.*tracking|نهنگ.*چی/i,
-      /نهنگ‌ها|نهنگ|whale/i,
-      /ببین.*نهنگ|نهنگ.*می‌خر/i
+      /نهنگ‌ها.*چه.*می‌خرند|نهنگ.*می‌خرند|ببین.*نهنگ/i,
+      /whale.*buying|what.*whale.*buy/i,
+      /نهنگ/i
     ]
   },
   {
@@ -193,12 +203,22 @@ const INTENT_PATTERNS = [
     ]
   },
   {
+    type: 'CONTINUE',
+    weight: 7,
+    patterns: [
+      /همان.*کاری.*گفتیم|همان.*کار.*که.*گفتیم|همان.*کاری.*که.*گفتیم/i,
+      /همان.*کاری.*که.*گفتیم.*ادامه|ادامه.*بده.*همان|همان.*را.*ادامه/i,
+      /continue.*previous|resume.*previous/i,
+      /ادامه.*بده/i
+    ]
+  },
+  {
     type: 'EXECUTE_CURRENT',
     weight: 5,
     patterns: [
       /این.*را.*اجرا|اجراش.*کن|همین.*را.*انجام/i,
       /execute.*this|run.*this|do.*it/i,
-      /ادامه.*بده|همین.*کار/i
+      /همین.*کار.*اجرا/i
     ]
   },
   {
@@ -215,23 +235,6 @@ const INTENT_PATTERNS = [
     patterns: [
       /جزئیات.*بیشتر|بیشتر.*بررسی|دقیق.*بررسی/i,
       /more.*details|details.*more/i
-    ]
-  },
-  {
-    type: 'CONTINUE',
-    weight: 6,
-    patterns: [
-      /ادامه.*بده|همان.*کاری.*گفتیم|ادامه.*کار/i,
-      /continue|resume|go.*on/i,
-      /همان.*کاری.*گفتیم|کاری.*گفتیم.*ادامه/i
-    ]
-  },
-  {
-    type: 'FARM',
-    weight: 6,
-    patterns: [
-      /صفحه.*فارم|فارم.*باز کن|farm.*open/i,
-      /فارم.*را.*باز|باز.*فارم/i
     ]
   }
 ];

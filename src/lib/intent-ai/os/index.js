@@ -1,8 +1,8 @@
 /**
- * FBT INTENT OS — Universal AI Operating Agent
+ * FBT INTENT OS — Universal AI Operating Agent — Main Index
  * ---------------------------------------------------------------------------
  * Spec §38 Final Universal Architecture
- *
+ * 
  *                     USER
  *                       │
  *                       ▼
@@ -40,8 +40,6 @@
  *                       │
  *                       ▼
  *                HUMAN RESPONSE
- *
- * Goal: FBT Intent OS = AI Brain + Memory + Context + Tools + Agents + App Control + Wallet + Protocols + Execution + Verification
  */
 
 // Core
@@ -49,48 +47,38 @@ export * from './appCapabilities.js';
 export * from './toolRegistry.js';
 export * from './intentUnderstanding.js';
 export * from './contextEngine.js';
-export * from './eventBus.js';
-export * from './serviceAdapters.js';
-export * from './appIntegration.js';
-export * from './performance.js';
-export * from './proactiveAgent.js';
-
-// Memory
-export * as memoryEngine from './memoryEngine.js';
-export * as actionMemory from './actionMemory.js';
 export * from './memoryEngine.js';
 export * from './actionMemory.js';
-
-// Agents
-export * as navigationAgent from './agents/navigationAgent.js';
-export * as mediaAgent from './agents/mediaAgent.js';
-export * as walletAgent from './agents/walletAgent.js';
-export * as portfolioAgent from './agents/portfolioAgent.js';
-export * as marketAgent from './agents/marketAgent.js';
-export * as tradingAgent from './agents/tradingAgent.js';
-export * as yieldAgent from './agents/yieldAgent.js';
-export * as researchAgent from './agents/researchAgent.js';
-export * as riskAgent from './agents/riskAgent.js';
-export * as executionAgent from './agents/executionAgent.js';
-export * as intentAgent from './agents/intentAgent.js';
-
-// Orchestration
+export * from './eventBus.js';
 export * from './agentLoop.js';
 export * from './orchestrator.js';
 export * from './suggestionEngine.js';
 export * from './taskContinuity.js';
 export * from './financialAgent.js';
-export * from './humanResponse.js';
-export * from './walletContext.js';
 export * from './observability.js';
+export * from './humanResponse.js';
 export * from './security.js';
+export * from './performance.js';
 export * from './debugDashboard.js';
 
-import { understandIntent } from './intentUnderstanding.js';
+// Agents
+export * from './agents/intentAgent.js';
+export * from './agents/navigationAgent.js';
+export * from './agents/mediaAgent.js';
+export * from './agents/walletAgent.js';
+export * from './agents/portfolioAgent.js';
+export * from './agents/marketAgent.js';
+export * from './agents/tradingAgent.js';
+export * from './agents/yieldAgent.js';
+export * from './agents/researchAgent.js';
+export * from './agents/riskAgent.js';
+export * from './agents/executionAgent.js';
+
+// Unified OS Class
 import { buildContext, updateContext, getCurrentPageContext } from './contextEngine.js';
-import { resolveToolsForIntent, getTool } from './toolRegistry.js';
-import { searchMemory, getAllMemory, addWorkingMemory, addSessionMemory, addLongTermMemory, createMemory, extractPreferenceFromMessage } from './memoryEngine.js';
-import { saveActionMemory, createActionMemory } from './actionMemory.js';
+import { understandIntent, extractNavigationIntent, runAcceptanceTests } from './intentUnderstanding.js';
+import { resolveToolsForIntent, getRelevantToolsForMessage, validateToolInput, getTool } from './toolRegistry.js';
+import { createIntentAgent } from './agents/intentAgent.js';
 import { createNavigationAgent } from './agents/navigationAgent.js';
 import { createMediaAgent } from './agents/mediaAgent.js';
 import { createWalletAgent } from './agents/walletAgent.js';
@@ -101,299 +89,276 @@ import { createYieldAgent } from './agents/yieldAgent.js';
 import { createResearchAgent } from './agents/researchAgent.js';
 import { createRiskAgent } from './agents/riskAgent.js';
 import { createExecutionAgent, createVerificationAgent, createSelfHealing } from './agents/executionAgent.js';
-import { createIntentAgent } from './agents/intentAgent.js';
-import { createAgentLoop } from './agentLoop.js';
-import { createOrchestrator } from './orchestrator.js';
-import { getSuggestionsForIntent } from './suggestionEngine.js';
-import { createTask, saveTask, updateTaskStatus, getLastActiveTask } from './taskContinuity.js';
 import { createFinancialAgent } from './financialAgent.js';
-import { formatResponse, stripInternalLeaks } from './humanResponse.js';
-import { createProactiveAgent } from './proactiveAgent.js';
-import { buildUniversalWalletContext } from './walletContext.js';
+import { createOrchestrator } from './orchestrator.js';
+import { createAgentLoop } from './agentLoop.js';
+import { buildHumanResponse, stripInternalLeaks } from './humanResponse.js';
+import { getSuggestionsForIntent, getSuggestionsForMessage } from './suggestionEngine.js';
+import { createTask, saveTask, getActiveTasks, getLastActiveTask, resumeTask, updateTaskStatus } from './taskContinuity.js';
+import { searchMemory, addWorkingMemory, addSessionMemory, addLongTermMemory, createMemory, extractPreferenceFromMessage } from './memoryEngine.js';
+import { createActionMemory, saveActionMemory } from './actionMemory.js';
 import { logTask } from './observability.js';
-import { captureDebug } from './debugDashboard.js';
-import { emitEvent, dispatchAction, actionBus } from './eventBus.js';
-import { createRealServices } from './serviceAdapters.js';
+import { logDebug, createDebugTrace } from './debugDashboard.js';
+import { emitEvent, onEvent, dispatchAction, registerActionHandler } from './eventBus.js';
+import { sanitizeForAI, assertNoSecrets } from './security.js';
 
-/**
- * Create full Intent OS instance
- * Wired to real services, not mocks (per final instruction)
- */
+export const INTENT_OS_SCHEMA = 'fbt.intent-os.v2';
+export const INTENT_OS_VERSION = '2.0.0';
+
 export function createIntentOS({
   services = {},
   navigation = null,
-  walletState = null,
-  currentPage = '/',
-  locale = 'fa',
-  eventBus = null
+  audioService = null,
+  walletService = null,
+  eventBus = null,
+  locale = 'fa'
 } = {}) {
-  // Use real services if not provided
-  const realServices = Object.keys(services).length ? services : createRealServices({ wallet: walletState });
-
-  // Agents with real services
-  const navAgent = createNavigationAgent({ navigateFn: navigation?.navigate, eventBus: eventBus || { emit: emitEvent } });
-  const medAgent = createMediaAgent({ audioService: realServices.audio || realServices.audioService, navigation, eventBus: eventBus || { emit: emitEvent } });
-  const walAgent = createWalletAgent({ walletService: realServices.wallet || realServices.walletService, solanaService: realServices.solana, eventBus: eventBus || { emit: emitEvent } });
-  const portAgent = createPortfolioAgent({ portfolioService: realServices.portfolio || realServices.portfolioService, riskService: realServices.risk, marketService: realServices.market || realServices.marketService, eventBus: eventBus || { emit: emitEvent } });
-  const mktAgent = createMarketAgent({ marketService: realServices.market || realServices.marketService, signalsService: realServices.signals || realServices.signalsService, smartMoneyService: realServices.smartMoney || realServices.smartMoneyService, whaleService: realServices.whale || realServices.whaleService, eventBus: eventBus || { emit: emitEvent } });
-  const tradeAgent = createTradingAgent({ swapService: realServices.swap || realServices.swapService, bridgeService: realServices.bridge || realServices.bridgeService, ordersService: realServices.orders || realServices.ordersService, eventBus: eventBus || { emit: emitEvent } });
-  const yldAgent = createYieldAgent({ yieldService: realServices.yield || realServices.yieldService, farmService: realServices.farm || realServices.farmService, lendingService: realServices.lending || realServices.lendingService, eventBus: eventBus || { emit: emitEvent } });
-  const resAgent = createResearchAgent({ newsService: realServices.news || realServices.newsService, marketService: realServices.market || realServices.marketService, eventBus: eventBus || { emit: emitEvent } });
-  const rskAgent = createRiskAgent({ riskService: realServices.risk || realServices.riskService, eventBus: eventBus || { emit: emitEvent } });
-  const intAgent = createIntentAgent();
-  const execAgent = createExecutionAgent({ toolRegistry: { getTool, resolveToolsForIntent }, actionBus, eventBus: eventBus || { emit: emitEvent } });
-  const verifyAgent = createVerificationAgent();
-  const finAgent = createFinancialAgent({ portfolioAgent: portAgent, riskAgent: rskAgent, marketAgent: mktAgent, yieldAgent: yldAgent, tradingAgent: tradeAgent });
-  const proactive = createProactiveAgent({ eventBus: eventBus || { emit: emitEvent } });
+  // Create agents with dependencies
+  const intentAgent = createIntentAgent();
+  const navAgent = createNavigationAgent({ navigateFn: navigation?.navigate, eventBus: { emit: emitEvent } });
+  const mediaAgent = createMediaAgent({ audioService, navigation, eventBus: { emit: emitEvent } });
+  const walletAgent = createWalletAgent({ walletService, eventBus: { emit: emitEvent } });
+  const portfolioAgent = createPortfolioAgent({ portfolioService: services.portfolioService, riskService: services.riskService });
+  const marketAgent = createMarketAgent({ marketService: services.marketService, signalsService: services.signalsService, smartMoneyService: services.smartMoneyService, whaleService: services.whaleService });
+  const tradingAgent = createTradingAgent({ swapService: services.swapService, bridgeService: services.bridgeService });
+  const yieldAgent = createYieldAgent({ yieldService: services.yieldService, farmService: services.farmService, lendingService: services.lendingService });
+  const researchAgent = createResearchAgent({ newsService: services.newsService, marketService: services.marketService });
+  const riskAgent = createRiskAgent({ riskService: services.riskService });
+  const executionAgent = createExecutionAgent({ toolRegistry: { getTool }, actionBus: { dispatch: dispatchAction } });
+  const verificationAgent = createVerificationAgent();
+  const selfHealing = createSelfHealing({ executionAgent, toolRegistry: { getToolsByCapability: () => [] } });
+  const financialAgent = createFinancialAgent({ portfolioAgent, riskAgent, marketAgent, yieldAgent, tradingAgent });
   
   const agents = {
-    'intent-agent': intAgent,
+    'intent-agent': intentAgent,
     'navigation-agent': navAgent,
-    'media-agent': medAgent,
-    'wallet-agent': walAgent,
-    'portfolio-agent': portAgent,
-    'market-agent': mktAgent,
-    'trading-agent': tradeAgent,
-    'yield-agent': yldAgent,
-    'research-agent': resAgent,
-    'risk-agent': rskAgent,
-    'execution-agent': execAgent,
-    'verification-agent': verifyAgent,
-    'financial-agent': finAgent
+    'media-agent': mediaAgent,
+    'wallet-agent': walletAgent,
+    'portfolio-agent': portfolioAgent,
+    'market-agent': marketAgent,
+    'trading-agent': tradingAgent,
+    'yield-agent': yieldAgent,
+    'research-agent': researchAgent,
+    'risk-agent': riskAgent,
+    'execution-agent': executionAgent,
+    'verification-agent': verificationAgent,
+    'financial-agent': financialAgent
   };
   
-  const orchestrator = createOrchestrator({ agents, toolRegistry: { resolveToolsForIntent, getTool }, eventBus: eventBus || { emit: emitEvent } });
-  const loop = createAgentLoop({
-    intentAgent: intAgent,
-    contextEngine: { updateContext },
-    orchestrator,
-    executionAgent: execAgent,
-    verificationAgent: verifyAgent,
-    memoryEngine: { searchMemory, saveActionMemory },
-    eventBus: eventBus || { emit: emitEvent }
-  });
+  const orchestrator = createOrchestrator({ agents, toolRegistry: { resolveToolsForIntent, getTool }, eventBus: { emit: emitEvent } });
+  const agentLoop = createAgentLoop({ intentAgent, contextEngine: { updateContext }, orchestrator, executionAgent, verificationAgent, memoryEngine: { searchMemory, saveActionMemory }, eventBus: { emit: emitEvent } });
   
   return {
-    // Core
-    understandIntent,
-    buildContext,
-    resolveToolsForIntent,
-    getTool,
-    
-    // Agents
+    version: INTENT_OS_VERSION,
+    schema: INTENT_OS_SCHEMA,
     agents,
     orchestrator,
-    loop,
-    proactive,
-    execAgent,
-    verifyAgent,
-    finAgent,
+    agentLoop,
     
-    // Services
-    services: realServices,
-    
-    // Memory
-    memory: {
-      search: searchMemory,
-      getAll: getAllMemory,
-      addWorking: addWorkingMemory,
-      addSession: addSessionMemory,
-      addLongTerm: addLongTermMemory,
-      create: createMemory,
-      extractPreference: extractPreferenceFromMessage,
-      saveAction: saveActionMemory,
-      createAction: createActionMemory
-    },
-    
-    // Tasks
-    tasks: {
-      create: createTask,
-      save: saveTask,
-      updateStatus: updateTaskStatus,
-      getLastActive: getLastActiveTask
-    },
-    
-    // Wallet
-    buildWalletContext: buildUniversalWalletContext,
-    
-    // Response
-    formatResponse,
-    stripInternalLeaks,
-    getSuggestions: getSuggestionsForIntent,
-    
-    // Observability
-    logTask,
-    captureDebug,
-    
-    // Event & Action Bus
-    emitEvent,
-    dispatchAction,
-    actionBus,
-    
-    // Main entry: USER → INTENT AI → ... → HUMAN RESPONSE
-    async process({ message, context = {}, services: svc = {} } = {}) {
+    // Main entry: User Intent → Understand → Context → Plan → Execute → Verify → Memory → Response
+    async process({ message, currentPage = '/', walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc = services } = {}) {
       const start = Date.now();
-      const mergedServices = { ...realServices, ...svc };
+      const currentLocale = loc || locale;
       
-      // 1. Build context (Spec §6) — parallel, lazy, cached
-      const fullContext = await buildContext({
-        currentPage: context.currentPage || currentPage,
-        currentRoute: context.currentRoute || currentPage,
-        walletState: context.walletState || walletState,
-        portfolioState: context.portfolioState || null,
-        conversation: context.conversation || [],
-        memory: context.memory || [],
-        services: mergedServices,
-        locale: context.locale || locale,
-        userId: context.userId || null,
-        sessionId: context.sessionId || null
-      });
-      
-      // 2. Understand intent
-      const intent = understandIntent(message, fullContext);
-      
-      // 3. Memory retrieval (topK 8)
-      const memories = searchMemory({ query: `${intent.type} ${message}`, topK: 8 });
-      fullContext.relevantMemories = memories;
-      
-      // 4. Check for preference learning
-      const pref = extractPreferenceFromMessage(message);
-      if (pref) {
-        addLongTermMemory(pref);
-      }
-      
-      // 5. Task continuity — check if this is "execute this" referring to current page
-      const pageCtx = getCurrentPageContext(fullContext.currentPage);
-      const lastTask = getLastActiveTask();
-      if ((intent.type === 'EXECUTE_CURRENT' || intent.type === 'CONTINUE') && lastTask) {
-        fullContext.lastTask = lastTask;
-      }
-      fullContext.currentPageMeta = pageCtx;
-      
-      // 6. Orchestrate
-      const plan = await orchestrator.plan({ intent, context: fullContext });
-      
-      // 7. Execute via agent loop if needed
-      let result = null;
-      let loopResult = null;
-      
-      if (plan.actions.length > 0) {
-        if (plan.requiresConfirmation) {
-          result = {
-            ok: true,
-            status: 'NEEDS_CONFIRMATION',
-            plan,
-            intent,
-            requiresConfirmation: true
-          };
-        } else {
-          loopResult = await loop.run({ message, context: fullContext, services: mergedServices });
-          result = loopResult.result || loopResult;
-        }
-      } else {
-        const agentResults = {};
-        for (const agentId of plan.agents) {
-          const agent = agents[agentId];
-          if (agent?.handleIntent) {
-            try {
-              const res = await agent.handleIntent(intent, fullContext);
-              agentResults[agentId] = res;
-            } catch (e) {
-              agentResults[agentId] = { ok: false, error: e.message };
-            }
-          }
-        }
-        result = { ok: true, agentResults, intent, plan, analysis: true };
-      }
-      
-      // 8. Verification if financial
-      let verification = null;
-      if (result?.txHash || result?.result?.txHash) {
-        verification = await verifyAgent.verifyTransaction({
-          txHash: result.txHash || result.result.txHash,
-          expected: plan.expected
+      try {
+        assertNoSecrets({ message }, 'user-message');
+        
+        // 1. PERCEIVE + UNDERSTAND
+        const intent = understandIntent(message, { currentPage, wallet: walletState });
+        
+        // 2. CONTEXT ENGINE — parallel reads
+        const context = await buildContext({
+          currentPage,
+          currentRoute: currentPage,
+          walletState,
+          portfolioState,
+          conversation,
+          memory: searchMemory({ query: message, topK: 8 }),
+          services: svc,
+          locale: currentLocale
         });
+        
+        // 3. Memory preference extraction
+        const pref = extractPreferenceFromMessage(message);
+        if (pref) addLongTermMemory(pref);
+        
+        // 4. PLAN via orchestrator
+        const plan = await orchestrator.plan({ intent, context });
+        
+        // 5. EXECUTE if read-only or navigation/media (no confirmation)
+        let executionResult = null;
+        let verification = null;
+        
+        if (plan.readOnly || intent.type === 'NAVIGATION' || intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC' || intent.type === 'NEWS_SEARCH') {
+          // Direct execution for navigation/media/read-only
+          if (intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
+            executionResult = await navAgent.handleIntent(intent, context);
+            if (executionResult.ok && executionResult.route && navigation?.navigate) {
+              await navigation.navigate({ route: executionResult.route });
+            }
+          } else if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
+            executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
+          } else {
+            // Read-only analysis — gather from agents
+            const agentResults = {};
+            for (const agentId of plan.agents) {
+              const agent = agents[agentId];
+              if (agent?.handleIntent) {
+                try {
+                  const res = await agent.handleIntent(intent, context);
+                  agentResults[agentId] = res;
+                } catch {}
+              }
+            }
+            executionResult = { ok: true, agentResults, analysis: true };
+          }
+        } else {
+          // Financial — plan ready, needs confirmation
+          executionResult = { ok: true, planReady: true, requiresConfirmation: true };
+        }
+        
+        // 6. VERIFY if execution happened
+        if (executionResult?.ok && !executionResult.planReady) {
+          verification = await verificationAgent.verify({
+            expected: plan.expected,
+            actual: executionResult,
+            actionId: plan.planId
+          });
+        }
+        
+        // 7. HUMAN RESPONSE
+        const human = buildHumanResponse({
+          intent,
+          context,
+          results: executionResult || {},
+          plan,
+          locale: currentLocale
+        });
+        
+        // 8. SUGGESTIONS — dynamic contextual
+        const suggestions = getSuggestionsForIntent(intent.type, { ...context, lastIntentType: intent.type }, intent.entities);
+        
+        // 9. TASK CONTINUITY
+        const task = createTask({ intent, plan, context });
+        saveTask(task);
+        
+        // 10. OBSERVABILITY
+        const latency = Date.now() - start;
+        logTask({
+          taskId: task.id,
+          intent,
+          tools: plan.tools?.map(t => t.id) || [],
+          latency,
+          status: executionResult?.ok ? (executionResult.planReady ? 'AWAITING_CONFIRMATION' : 'COMPLETED') : 'FAILED',
+          errors: executionResult?.ok ? [] : [executionResult?.error || 'FAILED'],
+          provider: plan.tools?.[0]?.id || null,
+          result: executionResult,
+          context
+        });
+        
+        // 11. DEBUG TRACE
+        const debugTrace = createDebugTrace({
+          intent,
+          context,
+          agents: plan.agents,
+          tools: plan.tools,
+          plan,
+          execution: { result: executionResult },
+          memory: context.memory,
+          latency,
+          errors: executionResult?.ok ? [] : [executionResult?.error]
+        });
+        logDebug(debugTrace);
+        
+        // 12. ACTION MEMORY
+        const actionMem = createActionMemory({
+          intent: intent.type,
+          tools: plan.tools?.map(t => t.id) || [],
+          inputs: plan.actions?.[0]?.input || {},
+          result: executionResult,
+          status: executionResult?.ok ? (executionResult.planReady ? 'awaiting_confirmation' : 'completed') : 'failed',
+          duration: latency,
+          route: currentPage
+        });
+        saveActionMemory(actionMem);
+        
+        // 13. WORKING MEMORY
+        addWorkingMemory(createMemory({
+          type: 'conversation',
+          content: `${message} → ${intent.type}`,
+          importance: 0.6,
+          metadata: { intent: intent.type, route: currentPage }
+        }));
+        
+        return {
+          ok: true,
+          intent,
+          context,
+          plan,
+          execution: executionResult,
+          verification,
+          human,
+          suggestions,
+          task,
+          debug: debugTrace,
+          latency,
+          message: stripInternalLeaks(human.message),
+          ui: human.ui,
+          card: human.card,
+          requiresConfirmation: human.requiresConfirmation || plan.requiresConfirmation,
+          navigated: human.navigated || executionResult?.route || null
+        };
+        
+      } catch (err) {
+        const latency = Date.now() - start;
+        logTask({
+          taskId: `err_${Date.now()}`,
+          intent: { type: 'ERROR' },
+          latency,
+          status: 'FAILED',
+          errors: [err.message],
+          context: { currentPage }
+        });
+        
+        return {
+          ok: false,
+          error: err.message,
+          latency,
+          message: locale.startsWith('fa') || /[آ-ی]/.test(message)
+            ? 'متأسفانه مشکلی پیش آمد. لطفاً دوباره تلاش کنید.'
+            : 'Something went wrong. Please try again.',
+          ui: { type: 'TEXT' }
+        };
       }
-      
-      // 9. Human response (no leaks)
-      const human = formatResponse({ intent, context: fullContext, result: { ...result, ...result?.agentResults }, locale: fullContext.locale });
-      
-      // 10. Suggestions — contextual, not static
-      const suggestions = getSuggestionsForIntent(intent.type, fullContext, intent.entities);
-      
-      // 11. Save to memory
-      const actionMem = createActionMemory({
-        intent: intent.type,
-        tools: plan.tools?.map(t => t.id) || [],
-        inputs: plan.actions?.[0]?.input || {},
-        result,
-        status: result?.ok ? 'completed' : 'failed',
-        duration: Date.now() - start,
-        route: fullContext.currentPage
-      });
-      saveActionMemory(actionMem);
-      
-      addWorkingMemory(createMemory({
-        type: 'conversation',
-        content: `${message} → ${intent.type}`,
-        importance: 0.6,
-        metadata: { intent: intent.type, resultOk: result?.ok }
-      }));
-      
-      // 12. Observability
-      const latency = Date.now() - start;
-      logTask({
-        taskId: plan.planId,
-        intent,
-        tools: plan.tools,
-        latency,
-        status: result?.ok ? 'COMPLETED' : 'FAILED',
-        errors: result?.error ? [result.error] : [],
-        result,
-        context: fullContext
-      });
-      
-      captureDebug({
-        taskId: plan.planId,
-        intent,
-        context: fullContext,
-        agents: plan.agents,
-        tools: plan.tools,
-        executionGraph: plan.actions,
-        memoryUsed: memories,
-        latency,
-        errors: result?.error ? [result.error] : [],
-        result
-      });
-      
-      // 13. Proactive check
-      const opps = proactive.checkForOpportunities({
-        goals: fullContext.activeGoals || [],
-        portfolio: fullContext.portfolio,
-        market: fullContext.market,
-        context: fullContext
-      });
-      
-      return {
-        ok: true,
-        intent,
-        plan,
-        result,
-        verification,
-        response: human,
-        suggestions,
-        context: fullContext,
-        memories,
-        opportunities: opps,
-        latency,
-        taskId: plan.planId
-      };
-    }
+    },
+    
+    // Acceptance tests
+    runAcceptanceTests,
+    
+    // Utilities
+    getTool,
+    resolveToolsForIntent,
+    getRelevantToolsForMessage,
+    validateToolInput,
+    searchMemory,
+    getActiveTasks,
+    getLastActiveTask,
+    resumeTask,
+    emitEvent,
+    onEvent,
+    stripInternalLeaks
   };
 }
 
-// Default singleton for easy import
-export const intentOS = createIntentOS();
+// Singleton for app-wide use
+let singleton = null;
 
-// Convenience: formatHumanResponse alias for compatibility
-export { formatResponse as formatHumanResponse };
+export function getIntentOS(opts = {}) {
+  if (singleton && !opts.forceNew) return singleton;
+  singleton = createIntentOS(opts);
+  return singleton;
+}
+
+export function resetIntentOS() {
+  singleton = null;
+}

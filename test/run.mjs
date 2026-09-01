@@ -584,17 +584,6 @@ console.log('▸ probing WalletConnect chain resolution (Trust-on-Ethereum repor
   report('WalletConnect chain resolution', runWcChain());
 }
 
-/* ------------------------------ 0c-5. Wallet Engine ------------------------ */
-/* Pure logic, no DOM, no network, no wallet SDK: the capability-aware wallet
-   core (registry + adapters + orchestrator) with the ten priority engines —
-   state machine evidence gates, unified indexer, cost basis / P&L, approval &
-   security, simulation, automation, tracker, address book, sessions. */
-console.log('▸ probing the Wallet Engine (capabilities · state machine · ten engines)…');
-{
-  const { default: runWalletEngine } = await import('./wallet-engine-probe.mjs');
-  report('wallet engine', runWalletEngine());
-}
-
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered

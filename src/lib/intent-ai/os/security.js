@@ -1,157 +1,100 @@
 /**
- * FBT INTENT OS — Security & Performance
- * Spec §37 + §36
- * AI must not see Private Key, Seed Phrase, etc.
+ * FBT INTENT OS — Security Layer
+ * Spec §37: Never see Private Key, Seed Phrase, Recovery Phrase, Raw Secret
  * Only Wallet Address, Balance, Public Position
+ * Signature always by wallet
  */
 
-export const SECURITY_SCHEMA = 'fbt.security.v1';
-
-const FORBIDDEN_KEYS = Object.freeze([
+const FORBIDDEN_KEYS = [
   'privateKey',
   'private_key',
   'seedPhrase',
   'seed_phrase',
   'mnemonic',
-  'secret',
-  'password',
   'recoveryPhrase',
   'recovery_phrase',
+  'secret',
+  'password',
+  'apiSecret',
+  'api_secret',
   'rawSecret',
-  'raw_secret',
-  'keystore',
-  'privateKeyHex',
-  'passphrase'
-]);
+  'raw_secret'
+];
 
 const FORBIDDEN_PATTERNS = [
-  /0x[a-fA-F0-9]{64}/,
-  /[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+\s+[a-z]+/
+  /private\s*key/i,
+  /seed\s*phrase/i,
+  /recovery\s*phrase/i,
+  /mnemonic/i
 ];
 
 export function containsForbiddenData(obj) {
-  if (!obj || typeof obj !== 'object') {
-    if (typeof obj === 'string') {
-      for (const pat of FORBIDDEN_PATTERNS) {
-        if (pat.test(obj) && obj.length > 50) return true;
-      }
-      return false;
-    }
-    return false;
+  if (!obj || typeof obj !== 'object') return false;
+  
+  const str = JSON.stringify(obj);
+  for (const key of FORBIDDEN_KEYS) {
+    if (str.toLowerCase().includes(key.toLowerCase())) return true;
   }
-  if (Array.isArray(obj)) {
-    return obj.some(containsForbiddenData);
-  }
-  for (const key of Object.keys(obj)) {
-    const lower = key.toLowerCase();
-    if (FORBIDDEN_KEYS.some(f => lower.includes(f.toLowerCase()))) return true;
-    if (containsForbiddenData(obj[key])) return true;
+  for (const pat of FORBIDDEN_PATTERNS) {
+    if (pat.test(str)) return true;
   }
   return false;
 }
 
 export function sanitizeForAI(data) {
-  if (!data || typeof data !== 'object') return data;
-  if (Array.isArray(data)) return data.map(sanitizeForAI);
-  const out = {};
-  for (const [key, value] of Object.entries(data)) {
-    const lower = key.toLowerCase();
-    if (FORBIDDEN_KEYS.some(f => lower.includes(f.toLowerCase()))) continue;
-    out[key] = typeof value === 'object' && value !== null ? sanitizeForAI(value) : value;
+  if (!data) return data;
+  if (typeof data === 'string') return data;
+  
+  if (Array.isArray(data)) {
+    return data.map(sanitizeForAI);
   }
-  return out;
-}
-
-export function sanitizeForLogging(obj) {
-  if (!obj || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitizeForLogging);
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    const lower = k.toLowerCase();
-    if (FORBIDDEN_KEYS.some(fk => lower.includes(fk.toLowerCase()))) {
-      out[k] = '[REDACTED]';
-    } else if (v && typeof v === 'object') {
-      out[k] = sanitizeForLogging(v);
-    } else {
-      out[k] = v;
+  
+  if (typeof data === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(data)) {
+      const lower = k.toLowerCase();
+      if (FORBIDDEN_KEYS.some(fk => lower.includes(fk.toLowerCase()))) {
+        continue; // Skip forbidden
+      }
+      if (typeof v === 'object' && v !== null) {
+        if (containsForbiddenData(v)) continue;
+        out[k] = sanitizeForAI(v);
+      } else {
+        out[k] = v;
+      }
     }
+    return out;
   }
-  return out;
+  
+  return data;
 }
 
-export function assertNoPrivateData(context) {
-  if (containsForbiddenData(context)) {
-    throw new Error('SECURITY_VIOLATION: Private key material detected');
+export function assertNoSecrets(data, context = 'unknown') {
+  if (containsForbiddenData(data)) {
+    console.error(`[Security] Forbidden data detected in ${context} — blocked`);
+    throw new Error('SECURITY_VIOLATION: Raw secret detected');
   }
   return true;
 }
 
-export function assertNoSecrets(context) {
-  return assertNoPrivateData(context);
-}
-
-export function getSafeWalletContext(wallet) {
-  if (!wallet) return null;
+// Wallet signing — always via wallet, never AI
+export function createSigningRequest({ action, walletAddress, chainId } = {}) {
+  if (!walletAddress) throw new Error('NO_WALLET_ADDRESS');
+  
   return {
-    connected: Boolean(wallet.connected),
-    canSign: Boolean(wallet.canSign),
-    evmAddresses: wallet.evmAddresses || [],
-    solanaAddresses: wallet.solanaAddresses || [],
-    address: wallet.address ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : null,
-    chains: wallet.chains || [],
-    balances: (wallet.balances || []).map(b => ({
-      symbol: b.symbol,
-      amount: b.amount,
-      valueUsd: b.valueUsd,
-      chainId: b.chainId
-    })),
-    totalValueUsd: wallet.totalValueUsd || null
+    action,
+    walletAddress,
+    chainId,
+    requiresWalletSignature: true,
+    signedBy: 'wallet', // Never AI
+    timestamp: Date.now()
   };
 }
 
-// Performance: Lazy context, caching, parallel reads (Spec §36)
-export function createLazyContext(loader) {
-  let cached = null;
-  let loading = null;
-  return {
-    async get() {
-      if (cached) return cached;
-      if (loading) return loading;
-      loading = (async () => {
-        try {
-          cached = await loader();
-          return cached;
-        } finally {
-          loading = null;
-        }
-      })();
-      return loading;
-    },
-    clear() { cached = null; },
-    isCached() { return Boolean(cached); }
-  };
-}
-
-export function parallelWithLimit(tasks, limit = 4) {
-  return new Promise((resolve) => {
-    const results = new Array(tasks.length);
-    let running = 0;
-    let idx = 0;
-    let completed = 0;
-    const runNext = () => {
-      if (completed === tasks.length) { resolve(results); return; }
-      while (running < limit && idx < tasks.length) {
-        const currentIdx = idx;
-        const task = tasks[currentIdx];
-        idx += 1;
-        running += 1;
-        Promise.resolve()
-          .then(() => typeof task === 'function' ? task() : task)
-          .then(res => { results[currentIdx] = { ok: true, value: res }; })
-          .catch(err => { results[currentIdx] = { ok: false, error: err.message }; })
-          .finally(() => { running -= 1; completed += 1; runNext(); });
-      }
-    };
-    runNext();
-  });
-}
+export const SECURITY_RULES = Object.freeze({
+  aiCannotSign: true,
+  aiCannotSeePrivateKey: true,
+  aiCannotSeeSeedPhrase: true,
+  walletSignsAlways: true,
+  onlyPublicData: ['address', 'balance', 'positions', 'holdings', 'orders']
+});

@@ -1,96 +1,92 @@
 /**
  * FBT INTENT OS — AI Dashboard Internal (Debug View)
- * Spec §35: Intent, Context, Selected Agent, Selected Tools, Execution Graph, Memory Used, API Calls, Latency, Errors, Final Result
- * For Developer/Admin only, not shown to user
+ * Spec §35: For Developer/Admin, not shown to user
+ * Intent, Context, Selected Agent, Selected Tools, Execution Graph, Memory Used, API Calls, Latency, Errors, Final Result
  */
 
 export const DEBUG_SCHEMA = 'fbt.debug-dashboard.v1';
 
-const debugStore = {
-  lastTask: null,
-  history: [],
-  maxHistory: 50
-};
+const debugLogs = [];
+const MAX_LOGS = 100;
 
-export function captureDebug({ taskId, intent, context, agents, tools, executionGraph, memoryUsed, apiCalls, latency, errors, result } = {}) {
-  const entry = {
+export function logDebug(entry) {
+  const log = {
+    id: `dbg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`,
     schema: DEBUG_SCHEMA,
-    taskId,
     timestamp: Date.now(),
     iso: new Date().toISOString(),
-    intent: intent ? { type: intent.type, confidence: intent.confidence, entities: intent.entities } : null,
+    ...entry
+  };
+  
+  debugLogs.push(log);
+  if (debugLogs.length > MAX_LOGS) debugLogs.shift();
+  
+  // Only log in dev
+  if (typeof window !== 'undefined' && window.__FBT_DEBUG__) {
+    console.log('[IntentOS Debug]', log);
+  }
+  
+  return log;
+}
+
+export function createDebugTrace({ intent, context, agents, tools, plan, execution, memory, latency, errors } = {}) {
+  return {
+    schema: DEBUG_SCHEMA,
+    intent: intent?.type || intent,
+    intentDetail: intent,
     context: context ? {
       currentPage: context.currentPage,
       hasWallet: context.hasWallet,
       totalValueUsd: context.totalValueUsd,
-      chainCount: context.connectedChains?.length || 0,
-      memoryCount: context.memory?.length || 0
+      chainCount: context.connectedChains?.length || 0
     } : null,
     selectedAgents: agents || [],
     selectedTools: (tools || []).map(t => typeof t === 'string' ? t : (t.id || t.toolId)),
-    executionGraph: executionGraph || [],
-    memoryUsed: (memoryUsed || []).map(m => ({ id: m.id, type: m.type, content: m.content?.slice(0, 100) })),
-    apiCalls: apiCalls || [],
+    executionGraph: plan ? {
+      planId: plan.planId,
+      actionCount: plan.actions?.length || 0,
+      requiresConfirmation: plan.requiresConfirmation,
+      readOnly: plan.readOnly
+    } : null,
+    memoryUsed: memory ? {
+      count: Array.isArray(memory) ? memory.length : Object.keys(memory).length,
+      types: Array.isArray(memory) ? [...new Set(memory.map(m => m.type))] : []
+    } : null,
+    apiCalls: execution?.apiCalls || [],
     latency,
     errors: errors || [],
-    finalResult: result ? { ok: result.ok, status: result.status, hasTx: Boolean(result.txHash || result.signature) } : null
-  };
-  
-  debugStore.lastTask = entry;
-  debugStore.history.push(entry);
-  if (debugStore.history.length > debugStore.maxHistory) debugStore.history.shift();
-  
-  if (typeof console !== 'undefined' && (import.meta?.env?.DEV || process.env.NODE_ENV === 'development')) {
-    console.group(`[IntentOS Debug] ${taskId} ${intent?.type || 'UNKNOWN'}`);
-    console.log('Intent:', entry.intent);
-    console.log('Agents:', entry.selectedAgents);
-    console.log('Tools:', entry.selectedTools);
-    console.log('Execution Graph:', entry.executionGraph);
-    console.log('Latency:', latency);
-    console.log('Result:', entry.finalResult);
-    if (errors?.length) console.warn('Errors:', errors);
-    console.groupEnd();
-  }
-  
-  return entry;
-}
-
-export function getLastDebug() {
-  return debugStore.lastTask;
-}
-
-export function getDebugHistory({ limit = 20 } = {}) {
-  return debugStore.history.slice(-limit).reverse();
-}
-
-export function clearDebugHistory() {
-  debugStore.history = [];
-  debugStore.lastTask = null;
-}
-
-export function getDebugStats() {
-  const history = debugStore.history;
-  const total = history.length;
-  const byIntent = {};
-  let totalLatency = 0;
-  let errors = 0;
-  for (const entry of history) {
-    const type = entry.intent?.type || 'UNKNOWN';
-    byIntent[type] = (byIntent[type] || 0) + 1;
-    if (entry.latency) totalLatency += entry.latency;
-    if (entry.errors?.length) errors += entry.errors.length;
-  }
-  return {
-    total,
-    byIntent,
-    avgLatency: total ? Math.round(totalLatency / total) : null,
-    totalErrors: errors,
-    lastTaskAt: debugStore.lastTask?.timestamp || null
+    finalResult: execution?.result ? {
+      ok: execution.result.ok,
+      status: execution.result.status,
+      hasTx: Boolean(execution.result.txHash)
+    } : null,
+    timestamp: Date.now()
   };
 }
 
-// Compatibility aliases for old code
-export const logDebugEntry = captureDebug;
-export function createDebugView({ intent, context, selectedAgents, selectedTools, executionGraph, memoryUsed, apiCalls, latency, errors, finalResult } = {}) {
-  return captureDebug({ intent, context, agents: selectedAgents, tools: selectedTools, executionGraph, memoryUsed, apiCalls, latency, errors, result: finalResult });
+export function getDebugLogs({ limit = 50 } = {}) {
+  return debugLogs.slice(-limit).reverse();
+}
+
+export function clearDebugLogs() {
+  debugLogs.length = 0;
+}
+
+// Enable debug in window
+export function enableDebug() {
+  if (typeof window !== 'undefined') {
+    window.__FBT_DEBUG__ = true;
+    window.__FBT_INTENT_OS_DEBUG__ = {
+      getLogs: getDebugLogs,
+      clear: clearDebugLogs,
+      logs: debugLogs
+    };
+    console.log('[IntentOS] Debug enabled. Access via window.__FBT_INTENT_OS_DEBUG__');
+  }
+}
+
+export function disableDebug() {
+  if (typeof window !== 'undefined') {
+    window.__FBT_DEBUG__ = false;
+  }
 }

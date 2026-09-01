@@ -1,8 +1,8 @@
 /**
  * FBT INTENT OS — Human Response Layer V2
- * ---------------------------------------------------------------------------
- * Spec §25: Never show internal fields like PORTFOLIO, Prepared 1 action(s), tool_call, etc.
- * Human talking, not machinery.
+ * Spec §25 + §37 Security
+ * Never show internal fields: PORTFOLIO, Prepared 1 action(s), tool_call, etc.
+ * Human-friendly, no private keys, no internal state
  */
 
 const LEAK_PATTERNS = [
@@ -16,27 +16,47 @@ const LEAK_PATTERNS = [
   /\btool_call\b/gi,
   /\baction_id\b/gi,
   /\bIntent:\s*[A-Z_]+\.?\s*/g,
+  /\bPORTFOLIO\b/g,
+  /\bREBALANCE\b/g,
+  /\bAUTOMATION_CREATE\b/g,
+  /\bSTABLE_SHIELD\b/g,
+  /\bYIELD_SWEEP\b/g,
+  /\/portfolio\b/gi,
+  /\/intent-ai\b/gi,
+  /\/swap\b/gi,
   /handoffRoute/gi,
   /execution object/gi,
   /backend error/gi,
   /internal state/gi,
   /executor/gi,
   /router_state/gi,
-  /tool_call_id/gi
+  /tool_registry/gi,
+  /action_bus/gi,
+  /\b[A-Z_]{2,}_[A-Z_]+\b/g, // ALL_CAPS internal codes but allow common words
 ];
 
-const ALLOW_CODES = new Set(['ETH', 'BTC', 'SOL', 'USDC', 'USDT', 'BNB', 'ARB', 'MATIC', 'AVAX', 'DCA', 'APY', 'TVL']);
+const ALLOWED_CAPS = new Set(['ETH', 'BTC', 'SOL', 'USDC', 'USDT', 'BNB', 'ARB', 'OK', 'USD']);
 
 export function stripInternalLeaks(text) {
   let out = String(text || '');
+  
   for (const re of LEAK_PATTERNS) {
-    out = out.replace(re, (match) => {
-      const upper = match.trim().toUpperCase();
-      if (ALLOW_CODES.has(upper)) return match;
-      if (/[آ-ی]/.test(out) && upper.length <= 5) return match;
-      return '';
-    });
+    // Skip allowed caps
+    if (re.source.includes('[A-Z_]{2,}')) {
+      out = out.replace(re, (match) => {
+        if (ALLOWED_CAPS.has(match.trim())) return match;
+        // Keep if it's a token symbol in context
+        if (/^[A-Z]{2,6}$/.test(match.trim()) && match.trim().length <= 6) {
+          // Check if it's likely a token vs internal code (internal codes have underscore)
+          if (!match.includes('_')) return match;
+        }
+        return '';
+      });
+    } else {
+      out = out.replace(re, '');
+    }
   }
+  
   return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -48,267 +68,239 @@ function langOf(locale) {
 function money(n) {
   if (!Number.isFinite(Number(n))) return '—';
   const abs = Math.abs(Number(n));
-  return abs >= 100 ? `$${Math.round(abs).toLocaleString('en-US')}` : `$${(Math.round(abs * 100) / 100).toLocaleString('en-US')}`;
+  const formatted = abs >= 100
+    ? Math.round(abs).toLocaleString('en-US')
+    : (Math.round(abs * 100) / 100).toLocaleString('en-US');
+  return `$${formatted}`;
 }
 
-function pct(n) {
-  if (!Number.isFinite(Number(n))) return '—';
-  return `${Math.round(Number(n) * 10) / 10}%`;
-}
-
-export function formatPortfolioResponse({ analysis, locale = 'fa' } = {}) {
-  const lang = langOf(locale);
-  if (!analysis || !analysis.ok) {
-    return lang === 'fa' ? 'نتوانستم پرتفوی را بخوانم. لطفاً کیف پول را متصل کنید.' : 'I could not read the portfolio. Please connect your wallet.';
-  }
-  const total = analysis.totalValueUsd;
-  const largest = analysis.largest;
-  const allocation = analysis.allocation || [];
-  if (lang === 'fa') {
-    const lines = ['پرتفوی شما را بررسی کردم.', '', `ارزش فعلی: ${money(total)}`, ''];
-    if (largest) lines.push(`بیشترین سهم: ${largest.symbol} — ${pct(allocation.find(a => a.symbol === largest.symbol)?.pct)}`);
-    if (allocation.length) {
-      lines.push('', 'ترکیب:');
-      allocation.slice(0, 5).forEach(a => lines.push(`${a.symbol.padEnd(6, ' ')} ${pct(a.pct)}`));
-    }
-    if (analysis.riskLevel === 'high') lines.push('', '⚠️ تمرکز بالا — پیشنهاد می‌کنم متعادل‌سازی کنید.');
-    return lines.join('\n');
-  } else {
-    const lines = ['I checked your portfolio.', '', `Current value: ${money(total)}`, ''];
-    if (largest) lines.push(`Largest holding: ${largest.symbol} — ${pct(allocation.find(a => a.symbol === largest.symbol)?.pct)}`);
-    return lines.join('\n');
-  }
-}
-
-export function formatYieldResponse({ opportunities, locale = 'fa' } = {}) {
-  const lang = langOf(locale);
-  const list = opportunities?.opportunities || opportunities || [];
-  if (!list.length) {
-    return lang === 'fa' ? 'در حال حاضر فرصت Yield مناسبی پیدا نکردم.' : 'No suitable yield opportunities found at the moment.';
-  }
-  const top = list.slice(0, 3);
-  if (lang === 'fa') {
-    const lines = ['بهترین فرصت‌های سود را پیدا کردم:', ''];
-    top.forEach((o, i) => lines.push(`${i + 1}. ${o.protocol || o.symbol || 'Pool'} — ${o.apy ? `${o.apy}% APY` : ''} ${o.risk ? `(ریسک: ${o.risk})` : ''}`));
-    lines.push('', 'آیا می‌خواهید یکی را اجرا کنم؟');
-    return lines.join('\n');
-  } else {
-    const lines = ['Found best yield opportunities:', ''];
-    top.forEach((o, i) => lines.push(`${i + 1}. ${o.protocol || o.symbol} — ${o.apy ? `${o.apy}% APY` : ''}`));
-    return lines.join('\n');
-  }
-}
-
-export function formatInvestmentPlan({ strategy, locale = 'fa' } = {}) {
-  const lang = langOf(locale);
-  if (!strategy) {
-    return lang === 'fa' ? 'نتوانستم برنامه سرمایه‌گذاری بسازم.' : 'Could not build investment plan.';
-  }
-  const alloc = strategy.allocation || [];
-  if (lang === 'fa') {
-    const lines = ['پرتفوی شما را بررسی کردم و یک برنامه مناسب پیدا کردم.', '', `استراتژی: ${strategy.type || 'متنوع'}`, `رشد تخمینی: ${strategy.estimatedGrowth || '—'}`, '', 'ترکیب پیشنهادی:'];
-    alloc.forEach(a => lines.push(`• ${a.asset} — ${a.pct}% ${a.reason ? `(${a.reason})` : ''}`));
-    if (strategy.reasoning?.length) {
-      lines.push('', 'دلیل:');
-      strategy.reasoning.forEach(r => lines.push(`- ${r}`));
-    }
-    lines.push('', 'اگر تأیید کنید، برنامه را اجرا می‌کنم.');
-    return lines.join('\n');
-  } else {
-    const lines = ['I reviewed your portfolio and found a suitable plan.', '', `Strategy: ${strategy.type}`, `Estimated growth: ${strategy.estimatedGrowth || '—'}`, '', 'Proposed allocation:'];
-    alloc.forEach(a => lines.push(`• ${a.asset} — ${a.pct}% ${a.reason ? `(${a.reason})` : ''}`));
-    return lines.join('\n');
-  }
-}
-
-export function formatResponse({ intent, context = {}, result = null, locale = 'fa', error = null } = {}) {
+/**
+ * Build human response from agent results
+ * Spec §25: Show person talking, not machinery
+ */
+export function buildHumanResponse({ intent, context = {}, results = {}, plan = null, locale = 'fa' } = {}) {
   const lang = langOf(locale);
   const type = intent?.type || 'GENERAL';
   
-  if (error || result?.ok === false) {
-    const errCode = error?.code || result?.error || 'UNKNOWN';
-    if (errCode === 'WALLET_REQUIRED' || errCode === 'NO_WALLET') {
-      return {
-        message: lang === 'fa' ? 'برای انجام این کار باید ابتدا کیف پولتان را متصل کنید.' : 'I need your wallet connected to do this.',
-        ui: { type: 'CONNECT_WALLET' }
-      };
-    }
-    if (errCode === 'TOOL_NOT_FOUND') {
-      return {
-        message: lang === 'fa' ? 'این قابلیت در حال حاضر در دسترس نیست.' : 'This capability is not available right now.',
-        ui: { type: 'TEXT' }
-      };
-    }
-  }
-  
+  // Navigation responses — direct, no confirmation
   if (type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
-    const route = result?.route || intent?.navigation?.route || '/news';
-    const name = route.replace('/', '');
-    return {
-      message: lang === 'fa' ? `حتماً، صفحه ${name} را باز کردم.` : `Done, opened ${name} page.`,
-      ui: { type: 'TEXT' },
-      navigated: route
+    const route = results.route || plan?.actions?.[0]?.input?.route || '/news';
+    const routeNames = {
+      '/news': lang === 'fa' ? 'اخبار' : 'News',
+      '/farm': lang === 'fa' ? 'فارم' : 'Farm',
+      '/wallet': lang === 'fa' ? 'کیف پول' : 'Wallet',
+      '/portfolio': lang === 'fa' ? 'پرتفوی' : 'Portfolio',
+      '/market': lang === 'fa' ? 'بازار' : 'Market',
+      '/swap': lang === 'fa' ? 'سواپ' : 'Swap',
+      '/bridge': lang === 'fa' ? 'بریج' : 'Bridge'
     };
-  }
-  
-  if (type === 'OPEN_CALM' || type === 'PLAY_MUSIC') {
-    return {
-      message: lang === 'fa' ? 'حتماً، یک موسیقی آرامش‌بخش برایت پخش کردم.' : 'Sure, I started a relaxing track for you.',
-      ui: { type: 'TEXT' },
-      playing: true
-    };
-  }
-  
-  if (type === 'PORTFOLIO_ANALYSIS') {
-    const analysis = result?.analysis || result?.agentResults?.['portfolio-agent']?.analysis || result;
-    if (!analysis || analysis.ok === false) {
-      return {
-        message: lang === 'fa' ? 'برای تحلیل دقیق پرتفوی باید موجودی زنده را بخوانم. لطفاً کیف پول را متصل کنید.' : 'I need a live wallet read to analyze your portfolio.',
-        ui: { type: 'CONNECT_WALLET' }
-      };
-    }
-    const total = analysis.totalValueUsd ? money(analysis.totalValueUsd) : '—';
-    const largest = analysis.largest ? `${analysis.largest.symbol} — ${Math.round(analysis.allocation?.find(a => a.symbol === analysis.largest.symbol)?.pct || 0)}%` : '';
+    const name = routeNames[route] || route;
+    
     if (lang === 'fa') {
       return {
-        message: `پرتفوی شما را بررسی کردم.\n\nارزش فعلی: ${total}${largest ? `\nبیشترین سهم: ${largest}` : ''}\n\n${analysis.riskLevel ? `سطح ریسک: ${analysis.riskLevel}` : ''}`,
+        message: `حتماً، صفحه ${name} را باز کردم.`,
         ui: { type: 'TEXT' },
-        data: analysis
+        navigated: route
+      };
+    } else {
+      return {
+        message: `Sure, opened ${name} page.`,
+        ui: { type: 'TEXT' },
+        navigated: route
       };
     }
-    return {
-      message: `I checked your portfolio.\n\nCurrent value: ${total}${largest ? `\nLargest: ${largest}` : ''}`,
-      ui: { type: 'TEXT' },
-      data: analysis
-    };
   }
   
+  // Media responses
+  if (type === 'OPEN_CALM' || type === 'PLAY_MUSIC') {
+    if (lang === 'fa') {
+      return {
+        message: 'حتماً، یک موسیقی آرامش‌بخش برایت پخش کردم.',
+        ui: { type: 'TEXT' },
+        playing: true,
+        mood: results.mood || 'relax'
+      };
+    } else {
+      return {
+        message: 'Sure, I started a relaxing track for you.',
+        ui: { type: 'TEXT' },
+        playing: true,
+        mood: results.mood || 'relax'
+      };
+    }
+  }
+  
+  // Portfolio analysis
+  if (type === 'PORTFOLIO_ANALYSIS') {
+    const portfolio = context.portfolio || results.portfolio || results.analysis;
+    const total = portfolio?.totalValueUsd || context.totalValueUsd || null;
+    const holdings = portfolio?.holdings || [];
+    
+    if (!total && !holdings.length) {
+      if (lang === 'fa') {
+        return {
+          message: 'پرتفوی شما را بررسی کردم اما موجودی خوانده‌شده‌ای ندارم. لطفاً کیف پول را متصل کنید تا تحلیل دقیق ببینیم.',
+          ui: { type: 'CONNECT_WALLET' }
+        };
+      } else {
+        return {
+          message: 'I checked your portfolio but have no balances yet. Connect wallet for detailed analysis.',
+          ui: { type: 'CONNECT_WALLET' }
+        };
+      }
+    }
+    
+    const largest = holdings.length ? [...holdings].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0))[0] : null;
+    
+    if (lang === 'fa') {
+      const parts = ['پرتفوی شما را بررسی کردم.'];
+      if (total) parts.push(`\n\nارزش فعلی: ${money(total)}`);
+      if (largest) parts.push(`\nبیشترین سهم: ${largest.symbol} — ${money(largest.valueUsd)}`);
+      if (portfolio?.concentration && portfolio.concentration > 50) {
+        parts.push(`\n\n⚠️ تمرکز بالا روی ${largest?.symbol}: ${portfolio.concentration.toFixed(1)}% — پیشنهاد می‌کنم متعادل کنید.`);
+      }
+      parts.push('\n\nاگر بخواهید می‌توانم برنامه بهینه‌سازی پیشنهاد بدهم.');
+      return {
+        message: parts.join(''),
+        ui: { type: 'TEXT' },
+        portfolio
+      };
+    } else {
+      const parts = ['I reviewed your portfolio.'];
+      if (total) parts.push(`\n\nCurrent value: ${money(total)}`);
+      if (largest) parts.push(`\nLargest: ${largest.symbol} — ${money(largest.valueUsd)}`);
+      parts.push('\n\nI can suggest optimization if you want.');
+      return {
+        message: parts.join(''),
+        ui: { type: 'TEXT' },
+        portfolio
+      };
+    }
+  }
+  
+  // Wallet balance
   if (type === 'WALLET_BALANCE') {
-    const balances = result?.balances?.balances || result?.balances || context.wallet?.balances || [];
+    const balances = context.wallet?.balances || results.balances?.balances || [];
     if (!balances.length) {
       return {
-        message: lang === 'fa' ? 'موجودی خوانده‌شده‌ای ندارم. کیف پول را متصل کنید.' : 'No balances found. Please connect your wallet.',
-        ui: { type: 'CONNECT_WALLET' }
-      };
-    }
-    const lines = balances.slice(0, 8).map(b => `${b.symbol} — ${b.amount}${b.valueUsd ? ` (${money(b.valueUsd)})` : ''}`).join('\n');
-    return {
-      message: lang === 'fa' ? `موجودی فعلی‌تان:\n\n${lines}` : `Current balances:\n\n${lines}`,
-      ui: { type: 'TEXT' },
-      data: { balances }
-    };
-  }
-  
-  if (type === 'YIELD_DISCOVERY') {
-    const opps = result?.yieldOpportunities?.opportunities || result?.opportunities || result?.agentResults?.['yield-agent']?.yieldOpportunities?.opportunities || [];
-    if (!opps.length) {
-      return {
-        message: lang === 'fa' ? 'در حال حاضر فرصت Yield مناسبی پیدا نکردم. بازار را دوباره بررسی می‌کنم.' : 'No yield opportunities found right now.',
+        message: lang === 'fa' ? 'موجودی خوانده‌شده‌ای ندارم. کیف پول متصل است؟' : 'No balances read yet. Is wallet connected?',
         ui: { type: 'TEXT' }
       };
     }
-    const top = opps.slice(0, 3).map(o => `${o.protocol || o.symbol} — ${o.apy ? `${o.apy}%` : '—'} APY`).join('\n');
+    
+    const lines = balances.slice(0, 10).map(b => `${b.symbol}: ${b.amount} ${b.valueUsd ? `(${money(b.valueUsd)})` : ''}`);
     return {
-      message: lang === 'fa' ? `بهترین فرصت‌های سود را پیدا کردم:\n\n${top}\n\nاگر بخواهید می‌توانم جزئیات بیشتری نشان دهم.` : `Found best yield opportunities:\n\n${top}`,
+      message: lang === 'fa' ? `موجودی فعلی:\n\n${lines.join('\n')}` : `Current balances:\n\n${lines.join('\n')}`,
       ui: { type: 'TEXT' },
-      data: { opportunities: opps }
+      balances
     };
   }
   
-  if (type === 'INVESTMENT_PLAN') {
-    const strategy = result?.strategy || result?.agentResults?.['financial-agent']?.strategy || result;
-    if (!strategy || !strategy.allocation) {
+  // Yield discovery
+  if (type === 'YIELD_DISCOVERY' || type === 'FARM' || type === 'INVESTMENT_PLAN') {
+    const opps = results.yieldOpportunities?.opportunities || results.yieldOpportunities || [];
+    const best = Array.isArray(opps) ? opps.slice(0, 3) : [];
+    
+    if (!best.length) {
       return {
-        message: lang === 'fa' ? 'پرتفوی شما را بررسی کردم و یک برنامه مناسب پیدا کردم.' : 'I checked your portfolio and found a suitable plan.',
+        message: lang === 'fa'
+          ? 'فرصت‌های سود را بررسی کردم. در حال حاضر داده زنده در دسترس نیست، اما می‌توانم پرتفوی شما را تحلیل کنم و پیشنهاد بدهم.'
+          : 'I checked yield opportunities. Live data unavailable, but I can analyze your portfolio and suggest.',
         ui: { type: 'TEXT' }
       };
     }
-    const alloc = strategy.allocation?.map(a => `${a.asset} — ${a.pct}%`).join('\n') || '';
+    
+    if (lang === 'fa') {
+      const lines = best.map(o => `${o.protocol || o.symbol}: ${o.apy ? `${o.apy.toFixed(2)}% APY` : ''} ${o.risk ? `(${o.risk})` : ''}`);
+      return {
+        message: `بهترین فرصت‌های سود:\n\n${lines.join('\n')}\n\nمی‌خواهید یکی را اجرا کنیم؟`,
+        ui: { type: 'TEXT' },
+        opportunities: best
+      };
+    } else {
+      const lines = best.map(o => `${o.protocol || o.symbol}: ${o.apy ? `${o.apy.toFixed(2)}% APY` : ''}`);
+      return {
+        message: `Best yield opportunities:\n\n${lines.join('\n')}\n\nWant to execute one?`,
+        ui: { type: 'TEXT' },
+        opportunities: best
+      };
+    }
+  }
+  
+  // Swap / Buy / Sell / Bridge — needs confirmation
+  if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'].includes(type)) {
+    const action = plan?.actions?.[0] || results.action || {};
+    const from = action.input?.fromSymbol || action.from || 'USDC';
+    const to = action.input?.toSymbol || action.to || 'ETH';
+    const amount = action.input?.amount || '100';
+    
     if (lang === 'fa') {
       return {
-        message: `برنامه سرمایه‌گذاری شما آماده است.\n\nنوع: ${strategy.type}\nتخمین رشد: ${strategy.estimatedGrowth || '—'}\n\nتخصیص پیشنهادی:\n${alloc}\n\n${strategy.reasoning?.[0] || ''}`,
-        ui: { type: 'TEXT' },
-        data: strategy
+        message: `بررسی کردم:\n\n${amount} ${from} → ${to}\n\nاگر تأیید کنید، امضا را از کیف پول می‌گیرم و اجرا می‌کنم.`,
+        ui: { type: 'ACTION_CARD' },
+        card: {
+          title: '✦ آماده اجرا',
+          headline: `${amount} ${from} → ${to}`,
+          from,
+          to,
+          amount,
+          confirmLabel: 'تأیید و اجرا',
+          editLabel: 'ویرایش'
+        },
+        requiresConfirmation: true,
+        action
+      };
+    } else {
+      return {
+        message: `Checked:\n\n${amount} ${from} → ${to}\n\nConfirm and I'll request wallet signature.`,
+        ui: { type: 'ACTION_CARD' },
+        card: {
+          title: '✦ Ready to run',
+          headline: `${amount} ${from} → ${to}`,
+          from,
+          to,
+          amount,
+          confirmLabel: 'Confirm & run',
+          editLabel: 'Edit'
+        },
+        requiresConfirmation: true,
+        action
       };
     }
-    return {
-      message: `Your investment plan is ready.\n\nType: ${strategy.type}\nEst. growth: ${strategy.estimatedGrowth || '—'}\n\nAllocation:\n${alloc}`,
-      ui: { type: 'TEXT' },
-      data: strategy
-    };
   }
   
-  if (['SWAP', 'BUY', 'SELL', 'BRIDGE'].includes(type)) {
-    const action = result?.action || result?.agentResults?.['trading-agent']?.action || result;
-    const from = action?.from || action?.fromSymbol || '';
-    const to = action?.to || action?.toSymbol || '';
-    const amount = action?.amount || '';
-    if (action?.quote?.ok === false) {
+  // Market, Smart Money, Whale
+  if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE'].includes(type)) {
+    if (lang === 'fa') {
       return {
-        message: lang === 'fa' ? 'نتوانستم قیمت مناسبی پیدا کنم. لطفاً دوباره تلاش کنید.' : 'Could not get a quote. Please try again.',
+        message: 'بازار را بررسی کردم. داده‌های زنده را در صفحه مربوطه می‌توانید ببینید. می‌خواهید تحلیل عمیق‌تری بدهم؟',
+        ui: { type: 'TEXT' }
+      };
+    } else {
+      return {
+        message: 'I checked the market. You can see live data on the relevant page. Want deeper analysis?',
         ui: { type: 'TEXT' }
       };
     }
-    return {
-      message: lang === 'fa' ? `جزئیات را آماده کردم:\n\n${amount} ${from}${to ? ` → ${to}` : ''}\n\nاگر موافق باشید اجرا را با امضای کیف پول شروع می‌کنم.` : `Prepared details:\n\n${amount} ${from}${to ? ` → ${to}` : ''}\n\nConfirm to start execution with wallet signature.`,
-      ui: { type: 'ACTION_CARD' },
-      card: {
-        title: lang === 'fa' ? '✦ آماده اجرا' : '✦ Ready to run',
-        headline: `${amount} ${from}${to ? ` → ${to}` : ''}`,
-        confirmLabel: lang === 'fa' ? 'تأیید و اجرا' : 'Confirm & run'
-      },
-      action
-    };
   }
   
-  if (type === 'MARKET_ANALYSIS' || type === 'MARKET_CONTEXT') {
+  // Default general
+  if (lang === 'fa') {
     return {
-      message: lang === 'fa' ? 'بازار را بررسی کردم. اطلاعات به‌روز را در صفحه بازار می‌توانید ببینید.' : 'I checked the market. You can see live data on the market page.',
+      message: 'متوجه شدم. پرتفوی و بازار را بررسی کردم. چطور می‌توانم کمکت کنم؟',
+      ui: { type: 'TEXT' }
+    };
+  } else {
+    return {
+      message: 'Got it. I checked portfolio and market. How can I help?',
       ui: { type: 'TEXT' }
     };
   }
-  
-  if (type === 'SMART_MONEY') {
-    return {
-      message: lang === 'fa' ? 'Smart Money را بررسی کردم. کیف پول‌های هوشمند را در صفحه مربوطه ببینید.' : 'Checked Smart Money. See smart wallets on the dedicated page.',
-      ui: { type: 'TEXT' }
-    };
-  }
-  
-  if (type === 'WHALE') {
-    return {
-      message: lang === 'fa' ? 'فعالیت نهنگ‌ها را بررسی کردم. آخرین جابجایی‌های بزرگ را نمایش می‌دهم.' : 'Checked whale activity. Showing recent large movements.',
-      ui: { type: 'TEXT' }
-    };
-  }
-  
-  if (type === 'GOAL') {
-    return {
-      message: lang === 'fa' ? 'برای هدف سه ساله‌ات برنامه ساختم. پرتفوی را بررسی کردم و بهترین مسیر را پیشنهاد می‌دهم.' : 'I built a plan for your 3-year goal.',
-      ui: { type: 'TEXT' }
-    };
-  }
-  
-  return {
-    message: lang === 'fa' ? 'پرتفوی شما را بررسی کردم و یک برنامه مناسب پیدا کردم.' : 'I checked your portfolio and prepared a plan.',
-    ui: { type: 'TEXT' }
-  };
 }
 
-// Compatibility aliases
-export const formatHumanResponse = formatResponse;
-export const formatExecutionProgress = (progress, locale = 'fa') => {
-  if (!progress) return '';
-  const lang = locale?.startsWith('en') ? 'en' : 'fa';
-  return lang === 'fa' ? `در حال اجرا… ${progress.index || 1}/${progress.total || 1}` : `Running… ${progress.index || 1}/${progress.total || 1}`;
-};
-export const formatExecutionResult = (result, locale = 'fa') => {
-  if (!result) return '';
-  const lang = locale?.startsWith('en') ? 'en' : 'fa';
-  if (result.ok) return lang === 'fa' ? 'با موفقیت انجام شد.' : 'Successfully completed.';
-  return lang === 'fa' ? 'عملیات ناموفق بود.' : 'Operation failed.';
-};
-export function formatConnectThanks(locale = 'fa') {
+export function formatConnectThanks(locale) {
   const lang = langOf(locale);
-  return lang === 'fa' ? 'ممنون، کیف پول متصل شد.' : 'Thanks, wallet connected.';
+  return lang === 'fa'
+    ? 'ممنون، کیف پول متصل شد. درخواست قبلی‌تان را ادامه می‌دهم.'
+    : 'Thanks — wallet connected. Continuing your previous request.';
 }
