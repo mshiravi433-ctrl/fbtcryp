@@ -330,7 +330,10 @@ import {
   createGoal,
   financialGoalMeta,
   getGoal,
+  goalAnalyze,
   goalProgress,
+  goalSimulate,
+  goalWhatIf,
   listGoals,
   ownerFromRequest,
   parseGoalFromText,
@@ -1730,6 +1733,85 @@ app.get('/api/v1/financial-goals/:id/progress', async (req, res) => {
   if (!result.ok) return goalFail(res, result.code);
   res.set('cache-control', 'private, no-store');
   return res.json({ data: { goal: result.goal, progress: result.progress }, meta: { ...financialGoalMeta(), scope: who.via } });
+});
+
+/*
+ * GOAL ENGINE — ANALYZE. The one call the Plan tab renders: outlook
+ * (probability + range + data quality), goal health, evidence, the three risk
+ * strategies and the futures ceiling. Absolutely nothing here executes — the
+ * only execution path remains the Intent OS draft reviewed and signed by the
+ * user. Server-owned numbers only, and a dead feed is reported as dead.
+ */
+app.post('/api/v1/financial-goals/:id/analyze', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalAnalyze(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      plan: result.plan,
+      outlook: result.outlook,
+      health: result.health,
+      evidence: result.evidence,
+      strategies: result.strategies,
+      futures: result.futures
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, market: result.market, executed: false, nextStep: 'REVIEW_AND_SIGN_IN_INTENT_OS' }
+  });
+});
+
+/*
+ * GOAL ENGINE — WHAT-IF. Recompute the outlook after one change (a market
+ * shock or a monthly-contribution delta). Returns before/after + delta, all
+ * under the same assumption band as the base plan. No execution, no forecast.
+ */
+app.post('/api/v1/financial-goals/:id/what-if', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalWhatIf(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      kind: result.kind,
+      change: result.change,
+      before: result.before,
+      after: result.after,
+      delta: result.delta,
+      warnings: result.warnings,
+      note: result.note
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, executed: false, assumptionBased: true }
+  });
+});
+
+/*
+ * GOAL ENGINE — SIMULATOR. The monthly-contribution → target-probability
+ * table the slider renders. Server computed, same engine as the base plan.
+ */
+app.post('/api/v1/financial-goals/:id/simulate', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalSimulate(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      targetAmount: result.targetAmount,
+      currentValueUsd: result.currentValueUsd,
+      baseMonthlyUsd: result.baseMonthlyUsd,
+      baseProbabilityPct: result.baseProbabilityPct,
+      rows: result.rows,
+      assumptions: result.assumptions,
+      warnings: result.warnings,
+      note: result.note
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, executed: false, assumptionBased: true }
+  });
 });
 
 /* ── Phases 121–130: Intent OS output locales ───────────────────────────── */

@@ -24,12 +24,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   approveGoal,
+  analyzeGoal,
   buildPlan as buildPlanRequest,
   createGoal,
   goalProgress,
   listGoals,
   pauseGoal,
-  readGoalSentence
+  readGoalSentence,
+  simulateGoal as simulateGoalRequest,
+  whatIfGoal
 } from '../lib/financialGoals';
 import { handOffToIntentOS } from '../lib/financialGoalIntent';
 import { ALLOCATION_ASSETS, RISK_PROFILES } from '../lib/financialGoalEngine';
@@ -44,6 +47,7 @@ const STATUS_TONE = {
   AT_RISK: 'is-bad',
   PAUSED: 'is-idle'
 };
+const STRATEGY_LABEL = { conservative: 'Conservative', moderate: 'Balanced', aggressive: 'Aggressive' };
 
 const money = (value, currency = 'USD') => {
   const amount = Number(value);
@@ -96,6 +100,14 @@ export default function FinancialGoals({ onOpenCompose = null }) {
   const [error, setError] = useState(null);
   const [handoff, setHandoff] = useState(null);
   const [scope, setScope] = useState(null);   // 'telegram' | 'device'
+  /* Goal Engine surfaces: outlook · health · evidence · strategies · futures */
+  const [engine, setEngine] = useState(null);        // { outlook, health, evidence, strategies, futures }
+  const [whatif, setWhatif] = useState(null);        // last what-if result
+  const [simulator, setSimulator] = useState(null);  // last simulator result
+  const [selectedStrategy, setSelectedStrategy] = useState('moderate');
+  const [whatifBusy, setWhatifBusy] = useState(null);
+  const [simBusy, setSimBusy] = useState(null);
+  const [simValue, setSimValue] = useState(0);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -180,7 +192,65 @@ export default function FinancialGoals({ onOpenCompose = null }) {
     }
     setActive({ goal: result.data.goal, plan: result.data.plan });
     setHandoff(null);
+    await runAnalyze(result.data.goal.id);
   }, []);
+
+  /* The Goal Engine one-call analysis: probability · range · health ·
+     evidence · strategies · futures. Server-owned, execution-free. */
+  const runAnalyze = useCallback(async (goalId, currentValueUsd = null) => {
+    const result = await analyzeGoal(goalId, currentValueUsd === null ? {} : { currentValueUsd });
+    if (!alive.current) return;
+    if (result.ok) {
+      setEngine(result.data || null);
+      setError(null);
+    } else {
+      // Non-blocking: the plan card still renders from buildPlan; the engine
+      // cards simply stay absent rather than showing a fabricated number.
+      setEngine((current) => current ? { ...current, error: result.code } : null);
+    }
+  }, []);
+
+  const runWhatIf = async (change) => {
+    if (!active?.goal) return;
+    setWhatifBusy(change.type);
+    setError(null);
+    const result = await whatIfGoal(active.goal.id, { change });
+    if (!alive.current) return;
+    setWhatifBusy(null);
+    if (!result.ok) {
+      setError(result.code);
+      return;
+    }
+    setWhatif(result.data || null);
+  };
+
+  const runSimulator = async (candidates) => {
+    if (!active?.goal) return;
+    setSimBusy('run');
+    setError(null);
+    const result = await simulateGoalRequest(active.goal.id, { candidates });
+    if (!alive.current) return;
+    setSimBusy(null);
+    if (!result.ok) {
+      setError(result.code);
+      return;
+    }
+    setSimulator(result.data || null);
+  };
+
+  const pickSimValue = async (value) => {
+    setSimValue(value);
+    await runSimulator([0, 250, 500, 750, 1000, 1500]);
+  };
+
+  /* Load the monthly → probability table once per goal so the Forecast card
+     is useful the moment a plan opens, not just after a click. */
+  useEffect(() => {
+    if (active?.goal && !simulator) {
+      runSimulator([0, 250, 500, 750, 1000, 1500]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.goal?.id]);
 
   const openGoal = async (goal) => {
     setActive({ goal, plan: null });
@@ -422,6 +492,105 @@ export default function FinancialGoals({ onOpenCompose = null }) {
             </div>
           </section>
 
+          {/* ── GOAL HEALTH ─────────────────────────────────────────────── */}
+          {engine?.health && (
+            <section className="fg-card" data-testid="fg-goal-health">
+              <div className="fg-card-head">
+                <strong>{t('intentOS.goals.healthTitle', { defaultValue: 'GOAL HEALTH' })}</strong>
+                <span className={`fg-chip ${STATUS_TONE[engine.health.status] || ''}`}>
+                  {t(`intentOS.goals.status.${engine.health.status}`, { defaultValue: engine.health.status })}
+                </span>
+              </div>
+              <div className="fg-health-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={engine.health.healthPct}>
+                <span style={{ width: `${engine.health.healthPct}%` }} />
+              </div>
+              <div className="fg-health-value">{engine.health.healthPct}%</div>
+              <div className="fg-metrics">
+                <div className="fg-metric">
+                  <small>{t('intentOS.goals.healthProb', { defaultValue: 'Goal Probability' })}</small>
+                  <b>{engine.health.probabilityPct === null ? '—' : `${engine.health.probabilityPct}%`}</b>
+                </div>
+                <div className="fg-metric">
+                  <small>{t('intentOS.goals.healthBehind', { defaultValue: 'Behind Schedule' })}</small>
+                  <b>{engine.health.behindPct > 0 ? `${engine.health.behindPct}%` : '0%'}</b>
+                </div>
+              </div>
+              {engine.health.suggestions && engine.health.suggestions.length > 0 && (
+                <div className="fg-health-suggestions" data-testid="fg-health-suggestions">
+                  <strong className="fg-sub">{t('intentOS.goals.healthSuggest', { defaultValue: 'Suggested adjustment' })}</strong>
+                  {engine.health.suggestions.map((suggestion) => (
+                    <p key={suggestion.kind}>
+                      {suggestion.kind === 'increaseMonthly' && t('intentOS.goals.healthAddMonthly', { defaultValue: 'Increase contribution by {{amount}}/month.', amount: money(suggestion.detail, active.goal.currency) })}
+                      {suggestion.kind === 'reduceTarget' && t('intentOS.goals.healthReduceTarget', { defaultValue: 'Reduce the target by {{amount}}.', amount: money(suggestion.detail, active.goal.currency) })}
+                      {suggestion.kind === 'extendTimeline' && t('intentOS.goals.healthExtend', { defaultValue: 'Extend the timeline by {{months}} month(s).', months: suggestion.detail })}
+                      {suggestion.kind === 'reviewPlan' && t('intentOS.goals.healthReview', { defaultValue: 'Review the plan settings.' })}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── PROFIT PLAN: probability, range, strategies, futures ────── */}
+          {engine?.outlook && (
+            <section className="fg-card" data-testid="fg-profit-plan">
+              <div className="fg-card-head">
+                <strong>{t('intentOS.goals.profitPlan', { defaultValue: 'PROFIT PLAN' })}</strong>
+                <small>{t('intentOS.goals.assumptionNote', { defaultValue: 'assumption-based, not a forecast' })}</small>
+              </div>
+              <div className="fg-probability">
+                <div className="fg-probability-value">
+                  <b>{engine.outlook.probabilityPct === null ? '—' : `${engine.outlook.probabilityPct}%`}</b>
+                  <small>{t('intentOS.goals.goalProbability', { defaultValue: 'Goal Probability' })}</small>
+                </div>
+                <div className="fg-probability-bar" aria-hidden="true">
+                  <i style={{ width: `${engine.outlook.probabilityPct || 0}%` }} />
+                </div>
+              </div>
+              <div className="fg-range">
+                <div><small>{t('intentOS.goals.scenario.bear', { defaultValue: 'Bear' })}</small><b>{money(engine.outlook.range.bear, active.goal.currency)}</b></div>
+                <div><small>{t('intentOS.goals.scenario.base', { defaultValue: 'Base' })}</small><b>{money(engine.outlook.range.base, active.goal.currency)}</b></div>
+                <div><small>{t('intentOS.goals.scenario.bull', { defaultValue: 'Bull' })}</small><b>{money(engine.outlook.range.bull, active.goal.currency)}</b></div>
+              </div>
+
+              {engine.strategies?.rows?.length > 0 && (
+                <div className="fg-strategies" data-testid="fg-strategies">
+                  <strong className="fg-sub">{t('intentOS.goals.strategies', { defaultValue: 'Choose your risk' })}</strong>
+                  <div className="fg-strategy-grid">
+                    {engine.strategies.rows.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className={`fg-strategy ${selectedStrategy === row.id ? 'is-on' : ''}`}
+                        onClick={() => setSelectedStrategy(row.id)}
+                        data-testid={`fg-strategy-${row.id}`}
+                      >
+                        <strong>{t(`intentOS.goals.strategy.${row.id}`, { defaultValue: STRATEGY_LABEL[row.id] })}</strong>
+                        <span>{t('intentOS.goals.expectedReturn', { defaultValue: 'Expected Return' })} <b>{pct(row.expectedReturnPct)}</b></span>
+                        <span>{t('intentOS.goals.maxDrawdown', { defaultValue: 'Max Drawdown' })} <b>{pct(row.maxDrawdownPct)}</b></span>
+                        <span>{t('intentOS.goals.goalProbability', { defaultValue: 'Goal Probability' })} <b>{row.probabilityPct === null ? '—' : `${row.probabilityPct}%`}</b></span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {engine.futures && (
+                <div className="fg-futures" data-testid="fg-futures">
+                  <strong className="fg-sub">{t('intentOS.goals.futuresExposure', { defaultValue: 'Futures Exposure' })}</strong>
+                  <div className="fg-metrics">
+                    <div className="fg-metric"><small>{t('intentOS.goals.futuresRec', { defaultValue: 'Recommended' })}</small><b>{pct(engine.futures.recommendedPct)}</b></div>
+                    <div className="fg-metric"><small>{t('intentOS.goals.futuresMax', { defaultValue: 'Maximum Allowed' })}</small><b>{pct(engine.futures.maximumPct)}</b></div>
+                    <div className="fg-metric"><small>{t('intentOS.goals.futuresRisk', { defaultValue: 'Risk Contribution' })}</small><b>{engine.futures.riskContribution}</b></div>
+                  </div>
+                  {engine.futures.warning && (
+                    <p className={`fg-warn ${engine.futures.reducesProbability ? '' : 'fg-warn-soft'}`}>{engine.futures.warning}</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           {busy === 'plan' && (
             <p className="fg-note" role="status">{t('intentOS.goals.building', { defaultValue: 'Building…' })}</p>
           )}
@@ -542,6 +711,93 @@ export default function FinancialGoals({ onOpenCompose = null }) {
                   )}
                 </section>
               )}
+
+              {/* ── FORECAST: what-if & simulator ───────────────────────── */}
+              <section className="fg-card" data-testid="fg-forecast">
+                <div className="fg-card-head">
+                  <strong>{t('intentOS.goals.forecast', { defaultValue: 'FORECAST' })}</strong>
+                  <small>{t('intentOS.goals.forecastNote', { defaultValue: 'what-if · under the same assumption band' })}</small>
+                </div>
+
+                <div className="fg-whatif">
+                  <strong className="fg-sub">{t('intentOS.goals.whatIf', { defaultValue: 'What if…' })}</strong>
+                  <div className="fg-whatif-grid">
+                    <button type="button" className="fg-mini" onClick={() => runWhatIf({ type: 'market-shock', asset: 'crypto', changePct: -30 })} disabled={whatifBusy === 'market-shock'} data-testid="fg-whatif-crypto">
+                      {t('intentOS.goals.whatIfCrypto', { defaultValue: 'Crypto −30%' })}
+                    </button>
+                    <button type="button" className="fg-mini" onClick={() => runWhatIf({ type: 'market-shock', asset: 'crypto', changePct: 30 })} disabled={whatifBusy === 'market-shock'} data-testid="fg-whatif-crypto-up">
+                      {t('intentOS.goals.whatIfCryptoUp', { defaultValue: 'Crypto +30%' })}
+                    </button>
+                    <button type="button" className="fg-mini" onClick={() => runWhatIf({ type: 'monthly-delta', deltaUsd: 500 })} disabled={whatifBusy === 'monthly-delta'} data-testid="fg-whatif-monthly">
+                      {t('intentOS.goals.whatIfMonthly', { defaultValue: 'Contribution +500/mo' })}
+                    </button>
+                  </div>
+
+                  {whatifBusy && (
+                    <p className="fg-note" role="status">{t('intentOS.goals.computing', { defaultValue: 'Computing…' })}</p>
+                  )}
+                  {whatif && (
+                    <div className="fg-whatif-result" data-testid="fg-whatif-result">
+                      <div className="fg-metrics">
+                        <div className="fg-metric">
+                          <small>{t('intentOS.goals.before', { defaultValue: 'Before' })}</small>
+                          <b>{whatif.before?.probabilityPct === null || whatif.before?.probabilityPct === undefined ? '—' : `${whatif.before.probabilityPct}%`}</b>
+                        </div>
+                        <div className="fg-metric">
+                          <small>{t('intentOS.goals.after', { defaultValue: 'After' })}</small>
+                          <b>{whatif.after?.probabilityPct === null || whatif.after?.probabilityPct === undefined ? '—' : `${whatif.after.probabilityPct}%`}</b>
+                        </div>
+                        <div className={`fg-metric ${whatif.delta?.probabilityPct < 0 ? 'is-warn' : 'is-good'}`}>
+                          <small>{t('intentOS.goals.delta', { defaultValue: 'Δ' })}</small>
+                          <b>{whatif.delta?.probabilityPct === undefined ? '—' : `${whatif.delta.probabilityPct >= 0 ? '+' : ''}${whatif.delta.probabilityPct}%`}</b>
+                        </div>
+                      </div>
+                      {whatif.warnings?.length > 0 && (
+                        <p className="fg-warn">{whatif.warnings.join(' · ')}</p>
+                      )}
+                      <p className="fg-note">{whatif.note || t('intentOS.goals.assumptionNote', { defaultValue: 'assumption-based, not a forecast' })}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="fg-simulator">
+                  <strong className="fg-sub">{t('intentOS.goals.simulator', { defaultValue: 'Monthly contribution' })}</strong>
+                  <div className="fg-sim-grid">
+                    {[0, 250, 500, 750, 1000, 1500].map((candidate) => (
+                      <button
+                        key={candidate}
+                        type="button"
+                        className={`fg-chip ${simValue === candidate ? 'is-on' : ''}`}
+                        onClick={() => pickSimValue(candidate)}
+                        disabled={simBusy === 'run'}
+                        data-testid={`fg-sim-${candidate}`}
+                      >
+                        {t('intentOS.goals.simMonthly', { defaultValue: '{{amount}}', amount: money(candidate, active.goal.currency) })}
+                        {simulator?.rows?.find((r) => r.monthlyUsd === candidate) && (
+                          <em>{simulator.rows.find((r) => r.monthlyUsd === candidate).probabilityPct}%</em>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {simBusy && <p className="fg-note" role="status">{t('intentOS.goals.computing', { defaultValue: 'Computing…' })}</p>}
+                  {simulator?.rows && simulator.rows.length > 1 && (
+                    <div className="fg-sim-table" data-testid="fg-sim-table">
+                      {simulator.rows.map((row) => (
+                        <div key={row.monthlyUsd} className="fg-sim-row">
+                          <span>{money(row.monthlyUsd)}</span>
+                          <div className="fg-alloc-bar" aria-hidden="true"><i style={{ width: `${row.probabilityPct}%` }} /></div>
+                          <b>{row.probabilityPct}%</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {simulator?.rows?.length === 1 && (
+                    <p className="fg-note" data-testid="fg-sim-single">
+                      {t('intentOS.goals.simSingle', { defaultValue: 'Contribution {{amount}} → {{probability}}% chance of hitting the target.', amount: money(simulator.rows[0].monthlyUsd), probability: simulator.rows[0].probabilityPct })}
+                    </p>
+                  )}
+                </div>
+              </section>
 
               <section className="fg-honest">
                 <strong>{t('intentOS.goals.honestHead', { defaultValue: 'Honest notes' })}</strong>

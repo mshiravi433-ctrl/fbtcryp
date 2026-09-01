@@ -83,6 +83,18 @@ export const pauseGoal = (id, paused = true) =>
 export const goalProgress = (id, currentValueUsd = null) =>
   call(`${BASE}/${encodeURIComponent(id)}/progress${currentValueUsd === null || currentValueUsd === '' ? '' : `?currentValueUsd=${encodeURIComponent(currentValueUsd)}`}`);
 
+/** The Goal Engine one-call surface: outlook · health · evidence · strategies · futures. */
+export const analyzeGoal = (id, body = {}) =>
+  call(`${BASE}/${encodeURIComponent(id)}/analyze`, { method: 'POST', body });
+
+/** What-if: market shock or contribution delta → before/after outlook + delta. */
+export const whatIfGoal = (id, body = {}) =>
+  call(`${BASE}/${encodeURIComponent(id)}/what-if`, { method: 'POST', body });
+
+/** Simulator: monthly contribution → target probability rows. */
+export const simulateGoal = (id, body = {}) =>
+  call(`${BASE}/${encodeURIComponent(id)}/simulate`, { method: 'POST', body });
+
 /**
  * Read a typed sentence into form fields, on the device, with no model in the
  * loop — so nothing the user types into the goal box is ever sent to an AI.

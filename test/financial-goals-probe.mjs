@@ -448,6 +448,7 @@ const near = (a, b, eps = 0.01) => Number.isFinite(a) && Math.abs(a - b) <= eps;
   const client = readFileSync('src/lib/financialGoals.js', 'utf8');
   const handoff = readFileSync('src/lib/financialGoalIntent.js', 'utf8');
   const page = readFileSync('src/pages/IntentOS.jsx', 'utf8');
+  const app = readFileSync('server/app.js', 'utf8');
 
   t('the goals screen is rendered on the plan tab', /<FinancialGoals/.test(page) && /tab === 'plan'/.test(page));
   t('the legacy profit planner is still reachable', /<ProfitPlanner/.test(page));
@@ -455,6 +456,17 @@ const near = (a, b, eps = 0.01) => Number.isFinite(a) && Math.abs(a - b) <= eps;
   t('the UI holds no hardcoded Persian or Arabic string', !/[\u0600-\u06FF]/.test(component));
   t('the hand-off compiles through the EXISTING Intent OS compiler', /compileIntent\(/.test(handoff) && /saveCompiledIntent\(/.test(handoff));
   t('the hand-off never signs or broadcasts', !/sendTransaction|signTransaction|broadcast/.test(handoff));
+  t('the client exposes the goal-engine one-call surface', /analyzeGoal\s*=/.test(client) && /whatIfGoal\s*=/.test(client) && /simulateGoal\s*=/.test(client));
+  t('the HTTP app wires the goal-engine routes', /:id\/analyze/.test(app) && /:id\/what-if/.test(app) && /:id\/simulate/.test(app));
+  t('the plan tab renders the GOAL HEALTH card', /fg-goal-health/.test(component));
+  t('the plan tab renders the PROFIT PLAN (strategies + futures) card', /fg-profit-plan/.test(component) && /fg-strategies/.test(component) && /fg-futures/.test(component));
+  t('the plan tab renders the FORECAST (what-if + simulator) card', /fg-forecast/.test(component) && /fg-whatif/.test(component) && /fg-sim-table/.test(component));
+  t('new goal-engine strings exist in English and Persian', (() => {
+    const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
+    const fa = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8'));
+    const keys = ['healthTitle', 'profitPlan', 'strategies', 'futuresExposure', 'forecast', 'whatIf', 'simulator'];
+    return keys.every((k) => en.intentOS.goals[k] && fa.intentOS.goals[k]);
+  })());
   t('the client sends no secret anywhere', !/privateKey|seedPhrase|mnemonic|apiKey/i.test(client));
   t('the server module reads no credential', !/privateKey|seedPhrase|mnemonic/i.test(serverModule));
   t('the server module has no execution path', !/sendTransaction|ethers\.Wallet|broadcastTransaction/.test(serverModule));
