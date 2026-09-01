@@ -5,6 +5,14 @@
 # copy-paste.
 set -euo pipefail
 
+# Where this script lives. `set -u` is on, so a variable that is only defined in
+# the *caller* (ci/build-both.sh) is a hard failure, not an empty string — which
+# is exactly how a guard call added here once killed every build with
+# `HERE: unbound variable` at line 81. Each script declares what it uses.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+cd "$ROOT"
+
 # ---------------------------------------------------------------------------
 # fail <<'MSG'
 #
@@ -78,7 +86,11 @@ fi
 # APK that silently never gets built — the build log buried it, the release page
 # just stayed empty. The guard adds the flag npm would have added.
 # ---------------------------------------------------------------------------
-node "$HERE/lock-platform-guard.mjs"
+if [ -f "$HERE/lock-platform-guard.mjs" ]; then
+  node "$HERE/lock-platform-guard.mjs"
+else
+  echo "  (lockfile platform guard not found next to this script — continuing without it)"
+fi
 
 echo "▸ installing dependencies"
 # Annotated rather than bare: one platform-locked nested package (see
@@ -273,8 +285,17 @@ fi
 mkdir -p "$SDK_ROOT" 2>/dev/null || true
 printf 'yes\n' | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
 for pkg in "platform-tools" "platforms;android-${COMPILE_SDK}" "build-tools;${COMPILE_SDK}.0.0"; do
-  name="${pkg%%;*}"
-  if [ -d "$SDK_ROOT/$pkg" ] || ls -d "$SDK_ROOT/$name"*/ >/dev/null 2>&1; then
+  # Match the exact directory the package owns, not merely its parent: "a
+  # platforms dir exists" says nothing about android-35 being in it, and the
+  # whole point of this preflight is the specific level compileSdkVersion asks
+  # for. Anything looser reports "already installed" and lets Gradle die later.
+  case "$pkg" in
+    platform-tools) want="$SDK_ROOT/platform-tools" ;;
+    'platforms;'*) want="$SDK_ROOT/platforms/${pkg#*;}" ;;
+    'build-tools;'*) want="$SDK_ROOT/build-tools/${pkg#*;}" ;;
+    *) want="$SDK_ROOT/$pkg" ;;
+  esac
+  if [ -d "$want" ]; then
     echo "  ✓ $pkg already installed"
     continue
   fi
