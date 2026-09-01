@@ -1167,7 +1167,8 @@
   },
   "intentOS": {
     "tab": {
-      "history": "Geçmiş"
+      "history": "Geçmiş",
+      "brain": "Beyin"
     }
   }
 }

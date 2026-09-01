@@ -1167,7 +1167,8 @@
   },
   "intentOS": {
     "tab": {
-      "history": "История"
+      "history": "История",
+      "brain": "Мозг"
     }
   }
 }

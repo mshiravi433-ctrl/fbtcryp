@@ -39,6 +39,7 @@ import {
 } from '../lib/intent-ai/workflowProgress.js';
 import ProfitPlanner from '../components/ProfitPlanner';
 import FinancialGoals from '../components/FinancialGoals';
+import CentralBrainPanel from '../components/CentralBrainPanel';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import IntentTxHistory from '../components/IntentTxHistory';
 import { useWallet } from '../context/WalletContext';
@@ -54,7 +55,7 @@ import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'history', 'agents', 'strategies', 'network'];
+const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'history', 'agents', 'strategies', 'network', 'brain'];
 /* Which registry each tab reads. Only these two tabs fetch a catalog. */
 const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
@@ -2209,6 +2210,12 @@ export default function IntentOS() {
             <div><h3>{t('intentOS.network.aiTitle')}</h3><p>{t('intentOS.network.aiBody')}</p></div>
           </section>
           <p className="ios-honesty-note">{t('intentOS.network.safetyNotice')}</p>
+        </motion.div>
+      )}
+
+      {tab === 'brain' && (
+        <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <CentralBrainPanel />
         </motion.div>
       )}
     </PageTransition>

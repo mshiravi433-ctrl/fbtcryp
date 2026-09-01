@@ -92,7 +92,7 @@ export const aiAppendMemory = (memory) => call('/v1/ai/memory', { method: 'POST'
 
 export const aiCreateGoal = (goal) => call('/v1/ai/goal', { method: 'POST', body: goal });
 
-export function buildClientContext({ wallet, portfolio, balances, orders, positions, intents, automations, activity, memorySummary } = {}) {
+export function buildClientContext({ wallet, portfolio, balances, orders, positions, intents, automations, activity, memorySummary, page } = {}) {
   return {
     wallet: wallet || null,
     portfolio: portfolio || null,
@@ -102,7 +102,16 @@ export function buildClientContext({ wallet, portfolio, balances, orders, positi
     activeIntents: intents || [],
     activeAutomations: automations || [],
     recentActivity: activity || [],
-    conversationSummary: memorySummary || ''
+    conversationSummary: memorySummary || '',
+    /* Page awareness (§7): route/module/tab/selected asset flow to the
+       central brain with every turn. */
+    ...(page ? {
+      currentRoute: page.route || null,
+      currentModule: page.module || null,
+      currentTab: page.tab || null,
+      selectedAsset: page.selectedAsset || null,
+      selectedNetwork: page.selectedNetwork || null
+    } : {})
   };
 }
 

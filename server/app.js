@@ -171,6 +171,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
+import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
@@ -5155,6 +5156,17 @@ app.use('/api/ai', aiCommandRoutes);
  * the execute endpoint returns a real venue/wallet hand-off.
  */
 app.use('/api/v1/ai', aiIntentOSRoutes);
+
+/* ---------------------- FBT CENTRAL INTELLIGENCE OS ------------------------ */
+/*
+ * The central brain (§45): Wallet, Swap, Bridge, Lending, Futures, dYdX,
+ * Portfolio, Goals, News, Signals… are limbs of ONE system. The frontend
+ * talks to a single gateway — /api/intent, /api/system/*, /api/tools/* —
+ * and the brain answers from REAL module state, never from an LLM guess.
+ * Mounted after express.json and the rate limiter; adapters self-register.
+ */
+installCentralOS();
+app.use('/api', centralRouter);
 
 /* ------------------------------ lending BFF --------------------------------- */
 /*

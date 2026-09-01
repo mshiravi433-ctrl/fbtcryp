@@ -178,7 +178,8 @@ export async function run(container) {
     /* ═══════════ 4. EVERY TAB BUTTON ACTUALLY SWITCHES ═══════════ */
     await mountAt('#/intent');
     const tabNames = qa('.ios-tabs button').map((b) => b.textContent.trim());
-    t('all nine tabs are rendered', tabNames.length === 9);
+    /* The Central Intelligence OS added a tenth "Brain" tab (§45). */
+    t('all ten tabs are rendered', tabNames.length === 10);
 
     for (const btn of qa('.ios-tabs button')) {
       const name = btn.textContent.trim();
@@ -186,7 +187,10 @@ export async function run(container) {
       await act(async () => { await sleep(10); });
       t(`tab “${name}” becomes active`, activeTab() === name);
     }
-    // After cycling we should be on the last tab (network) with real content.
+    // After cycling we are on the last tab (brain); hop back to network
+    // (index 8 — TABS order is fixed) and assert its protocol sections render.
+    await act(async () => { click(qa('.ios-tabs button')[8]); });
+    await act(async () => { await sleep(20); });
     t('network tab renders its protocol sections', qa('.ios-auction-status').length >= 3);
     // Each tab's real surface is present (not a blank panel). TABS order ==
     // button order in the tab bar.
@@ -199,7 +203,8 @@ export async function run(container) {
       ['history', '[data-testid="intent-tx-history"]'],
       ['agents', '.ios-network-hero'],
       ['strategies', '.ios-network-hero'],
-      ['network', '.ios-auction-status']
+      ['network', '.ios-auction-status'],
+      ['brain', '[data-testid="central-brain-panel"]']
     ];
     const tabButtons = qa('.ios-tabs button');
     for (let i = 0; i < contentMarkers.length; i += 1) {

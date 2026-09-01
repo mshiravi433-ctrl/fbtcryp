@@ -50,6 +50,7 @@ import {
   aiExecutionResult,
   aiConfirm
 } from '../lib/aiIntentClient';
+import { centralIngest } from '../lib/centralClient.js';
 import WalletConnectSheet from './WalletConnectSheet';
 import {
   createPendingIntent,
@@ -282,9 +283,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       conversationSummary: memorySummary || '',
       currentPage,
       currentRoute: currentPage,
-      currentTab: getCurrentPageContext(currentPage)?.tab || 'overview'
+      currentTab: getCurrentPageContext(currentPage)?.tab || 'overview',
+      currentModule: getCurrentPageContext(currentPage)?.page || null
     };
   }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign, currentPage]);
+
+  /*
+   * CENTRAL INTELLIGENCE SYNC — keep the central brain warm with the same
+   * wallet/portfolio/page truth the chat uses (§5/§7/§17). Fire-and-forget:
+   * the brain re-reads on demand if this hop fails.
+   */
+  useEffect(() => {
+    try { centralIngest(aiContext); } catch { /* never block the UI on sync */ }
+  }, [aiContext]);
 
   const rememberPending = useCallback((intentOrMessage, intentType = 'GENERAL') => {
     if (intentOrMessage && intentOrMessage.schema === 'fbt.ai-pending-intent.v1') {

@@ -4325,7 +4325,8 @@
       "strategies": "Strategy",
       "plan": "Goals",
       "crosschain": "Cross-chain",
-      "history": "History"
+      "history": "History",
+      "brain": "Brain"
     },
     "compose": {
       "choose": "Choose an outcome",

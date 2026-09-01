@@ -1160,7 +1160,8 @@
   },
   "intentOS": {
     "tab": {
-      "history": "历史"
+      "history": "历史",
+      "brain": "Brain"
     }
   }
 }
