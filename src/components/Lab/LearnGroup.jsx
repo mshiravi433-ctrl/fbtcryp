@@ -11,24 +11,18 @@ const CARDS = [
   {
     id: 'challenges',
     icon: '🎯',
-    title: 'Challenges',
-    sub: 'Market scenarios',
     glow: 'magenta',
     Component: Challenges
   },
   {
     id: 'lessons',
     icon: '🧠',
-    title: 'Lessons',
-    sub: 'Learn by doing',
     glow: 'amber',
     Component: Lesson
   },
   {
     id: 'risk',
     icon: '🛡️',
-    title: 'Risk Trainer',
-    sub: 'Size, stop, R:R',
     glow: 'cyan',
     Component: RiskTrainer
   }
@@ -48,7 +42,7 @@ export default function LearnGroup({ activeChild, onSelectChild }) {
     <div className="lab2-group">
       <div className="lab2-group-title">
         <span className="lab2-group-emoji">🎓</span>
-        {t('lab2.learn', 'Learn')}
+        {t('lab2.learn')}
       </div>
       <div className="lab2-grid">
         {CARDS.map((card) => (
@@ -56,12 +50,12 @@ export default function LearnGroup({ activeChild, onSelectChild }) {
             key={card.id}
             className="lab2-card"
             onClick={() => onSelectChild(card.id)}
-            aria-label={card.title}
+            aria-label={t(`lab2.cards.${card.id}.title`)}
           >
             <div className={`lab2-card-glow ${card.glow}`} />
             <div className="lab2-card-icon">{card.icon}</div>
-            <div className="lab2-card-title">{card.title}</div>
-            <div className="lab2-card-sub">{card.sub}</div>
+            <div className="lab2-card-title">{t(`lab2.cards.${card.id}.title`)}</div>
+            <div className="lab2-card-sub">{t(`lab2.cards.${card.id}.sub`)}</div>
           </button>
         ))}
       </div>

@@ -1,49 +1,33 @@
 /**
  * Investment Simulator — pick a portfolio mix, watch it run for 1d / 1w / 1m / 3m / 1y.
- *
- * ─── WHY IT'S DIFFERENT FROM THE EXISTING Invest.jsx ───────────────────────
- * The main `Invest.jsx` is a *yield-product* simulator: fixed APRs, fixed
- * durations, the virtual NX balance is debited and grows. It's a "what does
- * 14% APR over 30 days look like" tool.
- *
- * Lab's investment simulator is a *market-portfolio* tool. The user picks
- * BTC/ETH/USDC/Gold/Stocks allocations, then the price engine walks each
- * coin's synthetic series for the chosen horizon and reports the actual
- * portfolio value. It teaches diversification and asset allocation, not
- * yield products.
- *
- * ─── HORIZON TOGGLE ───────────────────────────────────────────────────────
- * 1D / 1W / 1M / 3M / 1Y maps to {1, 7, 30, 90, 365} day windows. The
- * results are deterministic — same mix, same horizon, same answer every
- * time. That is the point: the user can A/B test portfolios without
- * "luck" creeping in.
  */
 
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { LabBack, AICoach, Panel, Row, Notice, Sparkline } from './Shared';
-import { comparePortfolios, runBacktest } from '../../lib/lab/engine';
+import { comparePortfolios } from '../../lib/lab/engine';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
 const HORIZONS = [
-  { key: '1d', label: '1 Day', days: 1 },
-  { key: '1w', label: '1 Week', days: 7 },
-  { key: '1m', label: '1 Month', days: 30 },
-  { key: '3m', label: '3 Months', days: 90 },
-  { key: '1y', label: '1 Year', days: 365 }
+  { key: '1d', days: 1 },
+  { key: '1w', days: 7 },
+  { key: '1m', days: 30 },
+  { key: '3m', days: 90 },
+  { key: '1y', days: 365 }
 ];
 
 const ASSETS = [
-  { key: 'BTC', name: 'Bitcoin', color: '#f7931a' },
-  { key: 'ETH', name: 'Ethereum', color: '#627eea' },
-  { key: 'SOL', name: 'Solana', color: '#14f195' },
-  { key: 'USDC', name: 'USDC (stable)', color: '#2775ca' },
-  { key: 'GOLD', name: 'Gold', color: '#d4af37' },
-  { key: 'STOCKS', name: 'S&P 500', color: '#00ff9d' }
+  { key: 'BTC', color: '#f7931a' },
+  { key: 'ETH', color: '#627eea' },
+  { key: 'SOL', color: '#14f195' },
+  { key: 'USDC', color: '#2775ca' },
+  { key: 'GOLD', color: '#d4af37' },
+  { key: 'STOCKS', color: '#00ff9d' }
 ];
 
 export default function InvestmentSim({ onBack }) {
+  const { t } = useTranslation();
   const { haptic } = useTelegram();
   const balance = useLabStore((s) => s.balance);
   const openPortfolio = useLabStore((s) => s.openPortfolio);
@@ -79,11 +63,6 @@ export default function InvestmentSim({ onBack }) {
     if (total === 0) return;
     haptic?.('success');
     openPortfolio({ name, allocations: { ...allocations }, seed: Date.now() % 1000 });
-    // Build the same view result locally
-    const r = runBacktest(
-      { rsiBelow: 30, sizePct: 10, stopLoss: 5, takeProfit: 15 },
-      { days: horizon.days, seed: 42, initialCash: 10000 }
-    );
     // Use comparePortfolios so the result has the "Portfolio value" line.
     const cp = comparePortfolios(allocations, { BTC: 100 }, horizon.days, 7);
     setResult({
@@ -102,26 +81,26 @@ export default function InvestmentSim({ onBack }) {
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="💰 Investment Simulator" sub="Build a portfolio. Run it over time. Compare." />
+      <LabBack onBack={onBack} title={`💰 ${t('lab2.screens.invest.title')}`} sub={t('lab2.screens.invest.sub')} />
 
-      <Panel title="Capital">
-        <Row label="Available virtual balance" value={`$${balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
+      <Panel title={t('lab2.invest.capital')}>
+        <Row label={t('lab2.invest.availableBalance')} value={<span className="lab2-num">${balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>} />
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             className="lab2-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Portfolio name"
+            placeholder={t('lab2.invest.portfolioName')}
             style={{ flex: 1 }}
           />
         </div>
       </Panel>
 
-      <Panel title="Allocation">
+      <Panel title={t('lab2.invest.allocation')}>
         {ASSETS.map((a) => (
           <div key={a.key} className="lab2-alloc">
             <div className="lab2-alloc-icon" style={{ background: a.color }}>{a.key.slice(0, 2)}</div>
-            <div className="lab2-alloc-name">{a.name}</div>
+            <div className="lab2-alloc-name">{t(`lab2.assets.${a.key}`)}</div>
             <input
               type="range"
               min="0"
@@ -132,23 +111,23 @@ export default function InvestmentSim({ onBack }) {
               className="lab2-slider"
               style={{ width: 100 }}
             />
-            <div className="lab2-alloc-pct">{(allocations[a.key] || 0).toFixed(0)}%</div>
+            <div className="lab2-alloc-pct lab2-num">{(allocations[a.key] || 0).toFixed(0)}%</div>
           </div>
         ))}
         <div className="lab2-row">
-          <span>Total</span>
+          <span>{t('lab2.invest.total')}</span>
           <strong style={{ color: total === 100 ? 'var(--up)' : 'var(--rgb-5)' }}>
-            {total.toFixed(0)}% {total !== 100 && '(tap Run to normalise)'}
+            <span className="lab2-num">{total.toFixed(0)}%</span> {total !== 100 && `(${t('lab2.invest.tapRunToNormalise')})`}
           </strong>
         </div>
         {total !== 100 && (
           <button className="lab2-btn ghost full" onClick={normalize}>
-            Normalise to 100%
+            {t('lab2.invest.normalise')}
           </button>
         )}
       </Panel>
 
-      <Panel title="Time horizon">
+      <Panel title={t('lab2.invest.timeHorizon')}>
         <div className="lab2-defi-tabs">
           {HORIZONS.map((h) => (
             <button
@@ -156,52 +135,50 @@ export default function InvestmentSim({ onBack }) {
               className={`lab2-defi-tab ${horizon.key === h.key ? 'active' : ''}`}
               onClick={() => setHorizon(h)}
             >
-              {h.label}
+              {t(`lab2.invest.horizons.${h.key}`)}
             </button>
           ))}
         </div>
       </Panel>
 
       <button className="lab2-btn primary full" onClick={run} disabled={total === 0}>
-        ▶ Run Simulation
+        ▶ {t('lab2.invest.runSimulation')}
       </button>
 
       {result && (
         <>
-          <Panel title={`Result over ${horizon.label.toLowerCase()}`}>
-            <Row label="Final value" value={`$${Number(result.finalValue).toLocaleString('en-US', { maximumFractionDigits: 2 })}`} />
-            <Row label="Return" value={`${result.returnPct >= 0 ? '+' : ''}${result.returnPct}%`} valueClass={result.returnPct >= 0 ? 'pos' : 'neg'} />
-            <Row label="Max drawdown" value={`${result.drawdown}%`} valueClass="neg" />
-            <Row label="vs 100% BTC" value={`${result.bench >= 0 ? '+' : ''}${result.bench}%`} />
+          <Panel title={`${t('lab2.invest.resultOver', { horizon: t(`lab2.invest.horizons.${horizon.key}`).toLowerCase() })}`}>
+            <Row label={t('lab2.invest.finalValue')} value={<span className="lab2-num">${Number(result.finalValue).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>} />
+            <Row label={t('lab2.invest.return')} value={<span className="lab2-num">{result.returnPct >= 0 ? '+' : ''}{result.returnPct}%</span>} valueClass={result.returnPct >= 0 ? 'pos' : 'neg'} />
+            <Row label={t('lab2.invest.maxDrawdown')} value={<span className="lab2-num">{result.drawdown}%</span>} valueClass="neg" />
+            <Row label={t('lab2.invest.vsBtc')} value={<span className="lab2-num">{result.bench >= 0 ? '+' : ''}{result.bench}%</span>} />
             <Sparkline data={result.series} />
           </Panel>
           <AICoach
             message={
               result.returnPct > result.bench
-                ? 'Your mix beat 100% BTC. Diversification paid off.'
+                ? t('lab2.invest.coachBeatBtc')
                 : result.returnPct > 0
-                ? 'Positive, but BTC would have done better. Sometimes concentration wins.'
-                : 'Down period. If your drawdown stayed under 30%, the strategy held up.'
+                ? t('lab2.invest.coachPositive')
+                : t('lab2.invest.coachDown')
             }
           />
         </>
       )}
 
       {portfolios.length > 0 && (
-        <Panel title="Saved portfolios">
+        <Panel title={t('lab2.invest.savedPortfolios')}>
           {portfolios.slice(0, 5).map((p) => (
             <div key={p.id} className="lab2-row">
               <span>{p.name}</span>
-              <strong>{new Date(p.startedAt).toLocaleDateString()}</strong>
+              <strong className="lab2-num">{new Date(p.startedAt).toLocaleDateString()}</strong>
             </div>
           ))}
         </Panel>
       )}
 
       <Notice icon="📊">
-        Diversification does not promise higher returns — it promises lower drawdowns.
-        A 60/40 BTC/ETH mix often beats 100% BTC on a risk-adjusted basis even when
-        it lags on raw return.
+        {t('lab2.invest.notice')}
       </Notice>
     </div>
   );

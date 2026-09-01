@@ -1,25 +1,23 @@
 /**
  * Level / Progress — the user-facing summary of their training.
- * XP, current level, accuracy / win rate / discipline across all the
- * Lab sub-screens. It is the "stats screen" that makes the user feel
- * like their practice is going somewhere.
  */
 
+import { useTranslation } from 'react-i18next';
 import { LabBack, Panel, Row, Notice } from './Shared';
-import { levelFromXp } from '../../store/useLabStore';
-import { useLabStore } from '../../store/useLabStore';
+import { levelFromXp, useLabStore } from '../../store/useLabStore';
 
 const BADGES = [
-  { id: 'predictor', name: 'Predictor', icon: '🔮', desc: 'Make 10 predictions' },
-  { id: 'trader', name: 'Trader', icon: '📈', desc: 'Open 5 paper trades' },
-  { id: 'graduate', name: 'Graduate', icon: '🎓', desc: 'Complete 5 lessons' },
-  { id: 'strategist', name: 'Strategist', icon: '🧪', desc: 'Run 3 strategy backtests' },
-  { id: 'riskpro', name: 'Risk Pro', icon: '🛡️', desc: 'Hit 90+ Risk Mgmt Score on 3 trades' },
-  { id: 'defi', name: 'DeFi Curious', icon: '🏦', desc: 'Try all 5 DeFi primitives' },
-  { id: 'master', name: 'Market Master', icon: '👑', desc: 'Reach Level 10' }
+  { id: 'predictor', icon: '🔮' },
+  { id: 'trader', icon: '📈' },
+  { id: 'graduate', icon: '🎓' },
+  { id: 'strategist', icon: '🧪' },
+  { id: 'riskpro', icon: '🛡️' },
+  { id: 'defi', icon: '🏦' },
+  { id: 'master', icon: '👑' }
 ];
 
 export default function LevelSystem({ onBack }) {
+  const { t } = useTranslation();
   const xp = useLabStore((s) => s.xp);
   const lessonsDone = useLabStore((s) => s.lessonsDone);
   const predictionsCount = useLabStore((s) => s.predictionsCount);
@@ -52,28 +50,28 @@ export default function LevelSystem({ onBack }) {
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="🏆 Your Lab Level" sub={`${earnedCount}/${BADGES.length} badges earned`} />
+      <LabBack onBack={onBack} title={`🏆 ${t('lab2.screens.level.title')}`} sub={t('lab2.level.badgesEarned', { earned: earnedCount, total: BADGES.length })} />
 
-      <Panel title="Level">
-        <Row label="Current level" value={`${lvl.lvl} · ${lvl.name}`} />
-        <Row label="XP" value={`${xp.toLocaleString()} / ${lvl.nextXp.toLocaleString()}`} />
-        <Row label="Progress to next" value={`${lvl.pct}%`} />
+      <Panel title={t('lab2.level.level')}>
+        <Row label={t('lab2.level.currentLevel')} value={`${lvl.lvl} · ${t(`lab2.levelNames.${lvl.nameKey}`, lvl.name)}`} />
+        <Row label={t('lab2.level.xp')} value={<span className="lab2-num">{xp.toLocaleString()} / {lvl.nextXp.toLocaleString()}</span>} />
+        <Row label={t('lab2.level.progressToNext')} value={<span className="lab2-num">{lvl.pct}%</span>} />
       </Panel>
 
-      <Panel title="Discipline scores">
-        <Row label="Prediction accuracy" value={`${accuracy}%`} valueClass={accuracy >= 60 ? 'pos' : ''} />
-        <Row label="Trade win rate" value={`${winRate}%`} valueClass={winRate >= 55 ? 'pos' : ''} />
-        <Row label="Strategies backtested" value={strategies.length} />
-        <Row label="Challenge wins" value={challenges} />
-        <Row label="Lessons completed" value={`${lessonsDone}`} />
+      <Panel title={t('lab2.level.disciplineScores')}>
+        <Row label={t('lab2.level.predictionAccuracy')} value={<span className="lab2-num">{accuracy}%</span>} valueClass={accuracy >= 60 ? 'pos' : ''} />
+        <Row label={t('lab2.level.tradeWinRate')} value={<span className="lab2-num">{winRate}%</span>} valueClass={winRate >= 55 ? 'pos' : ''} />
+        <Row label={t('lab2.level.strategiesBacktested')} value={<span className="lab2-num">{strategies.length}</span>} />
+        <Row label={t('lab2.level.challengeWins')} value={<span className="lab2-num">{challenges}</span>} />
+        <Row label={t('lab2.level.lessonsCompleted')} value={<span className="lab2-num">{lessonsDone}</span>} />
       </Panel>
 
-      <Panel title="Badges">
+      <Panel title={t('lab2.level.badges')}>
         {BADGES.map((b) => (
           <div key={b.id} className="lab2-row">
             <span style={{ opacity: earned[b.id] ? 1 : 0.4 }}>
-              {b.icon} <strong style={{ color: earned[b.id] ? 'var(--text-1)' : 'var(--text-3)' }}>{b.name}</strong>
-              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>{b.desc}</span>
+              {b.icon} <strong style={{ color: earned[b.id] ? 'var(--text-1)' : 'var(--text-3)' }}>{t(`lab2.level.badgesList.${b.id}.name`)}</strong>
+              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>{t(`lab2.level.badgesList.${b.id}.desc`)}</span>
             </span>
             <strong style={{ color: earned[b.id] ? 'var(--up)' : 'var(--text-3)' }}>
               {earned[b.id] ? '✓' : '🔒'}
@@ -83,9 +81,7 @@ export default function LevelSystem({ onBack }) {
       </Panel>
 
       <Notice icon="⭐">
-        XP is awarded for practice, not for profit. A losing trade with a
-        disciplined setup earns more XP than a winning trade with no stop
-        loss — because the discipline is what compounds over a career.
+        {t('lab2.level.notice')}
       </Notice>
     </div>
   );

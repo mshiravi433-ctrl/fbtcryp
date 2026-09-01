@@ -56,8 +56,8 @@ export function LabHeader() {
         <div className="lab2-level-badge">{lvl.lvl}</div>
         <div className="lab2-level-info">
           <div className="lab2-level-name">
-            <strong>{lvl.name}</strong>
-            <span>{totalXp.toLocaleString()} / {lvl.nextXp.toLocaleString()} XP</span>
+            <strong>{t(`lab2.levelNames.${lvl.nameKey}`, lvl.name)}</strong>
+            <span>{t('lab2.xpRange', { cur: totalXp.toLocaleString(), next: lvl.nextXp.toLocaleString() })}</span>
           </div>
           <div className="lab2-bar">
             <motion.div
@@ -74,9 +74,10 @@ export function LabHeader() {
 }
 
 export function LabBack({ onBack, title, sub }) {
+  const { t } = useTranslation();
   return (
     <div className="lab2-screen-head">
-      <button className="lab2-back" onClick={onBack} aria-label="back">←</button>
+      <button className="lab2-back" onClick={onBack} aria-label={t('common.back', 'Back')}>←</button>
       <div>
         <div className="lab2-screen-title">{title}</div>
         {sub && <div className="lab2-screen-sub">{sub}</div>}
@@ -85,13 +86,15 @@ export function LabBack({ onBack, title, sub }) {
   );
 }
 
-export function AICoach({ name = 'AI Coach', message, emoji = '🤖' }) {
+export function AICoach({ name, message, emoji = '🤖' }) {
+  const { t } = useTranslation();
   if (!message) return null;
+  const coachName = name ?? t('lab2.aiCoach');
   return (
     <div className="lab2-coach">
       <div className="lab2-coach-avatar">{emoji}</div>
       <div className="lab2-coach-body">
-        <div className="lab2-coach-name">{name}</div>
+        <div className="lab2-coach-name">{coachName}</div>
         <div className="lab2-coach-msg">{message}</div>
       </div>
     </div>

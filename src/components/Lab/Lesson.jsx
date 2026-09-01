@@ -1,25 +1,18 @@
 /**
  * Interactive Lessons — "Learning by Doing" quizzes.
- *
- * Each lesson is one question with four options. The user picks one, gets
- * instant feedback, and the lesson is marked complete (one shot — the spec
- * is explicit that re-doing a lesson should not give more XP, because the
- * point is to learn, not to grind).
- *
- * Why one question per lesson and not a longer quiz: the spec calls for
- * bite-sized "Learning by Doing" units. A long quiz feels like homework; a
- * single good question with a good explanation feels like a useful coffee
- * break.
+ * Each lesson is one question with four options.
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LabBack, AICoach, Panel, Row, Notice } from './Shared';
+import { LabBack, Panel, Row, Notice } from './Shared';
 import { LESSONS } from '../../lib/lab/scenarios';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
 export default function Lesson({ onBack }) {
+  const { t } = useTranslation();
   const { haptic } = useTelegram();
   const completeLesson = useLabStore((s) => s.completeLesson);
   const lessonState = useLabStore((s) => s.lessons);
@@ -32,6 +25,10 @@ export default function Lesson({ onBack }) {
   const active = LESSONS.find((l) => l.id === activeId) ?? LESSONS[0];
   const isDone = lessonState.completed.includes(active.id);
   const bestScore = lessonState.scores[active.id] ?? 0;
+
+  const question = t(`lab2.lessons.${active.id}.question`);
+  const options = t(`lab2.lessons.${active.id}.options`, { returnObjects: true }) || [];
+  const explanation = t(`lab2.lessons.${active.id}.explanation`);
 
   const handle = (idx) => {
     if (revealed) return;
@@ -54,14 +51,14 @@ export default function Lesson({ onBack }) {
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="🧠 Lessons" sub="Bite-sized. One question, one lesson." />
+      <LabBack onBack={onBack} title={`🧠 ${t('lab2.screens.lessons.title')}`} sub={t('lab2.screens.lessons.sub')} />
 
-      <Panel title="Progress">
-        <Row label="Completed" value={`${lessonState.completed.length} / ${LESSONS.length}`} />
-        <Row label="Total XP" value={xp.toLocaleString()} />
+      <Panel title={t('lab2.lesson.progress')}>
+        <Row label={t('lab2.level.lessonsCompleted')} value={<span className="lab2-num">{lessonState.completed.length} / {LESSONS.length}</span>} />
+        <Row label={t('lab2.lesson.totalXp')} value={<span className="lab2-num">{xp.toLocaleString()}</span>} />
       </Panel>
 
-      <Panel title="Pick a lesson">
+      <Panel title={t('lab2.lesson.pick')}>
         <div className="lab2-defi-tabs">
           {LESSONS.map((l) => {
             const done = lessonState.completed.includes(l.id);
@@ -71,19 +68,19 @@ export default function Lesson({ onBack }) {
                 className={`lab2-defi-tab ${activeId === l.id ? 'active' : ''}`}
                 onClick={() => { setActiveId(l.id); setSelected(null); setRevealed(false); }}
               >
-                {done ? '✓ ' : ''}{l.icon} {l.title}
+                {done ? '✓ ' : ''}{l.icon} {t(`lab2.lessons.${l.id}.title`)}
               </button>
             );
           })}
         </div>
       </Panel>
 
-      <Panel title={`${active.icon} ${active.title}`}>
+      <Panel title={`${active.icon} ${t(`lab2.lessons.${active.id}.title`)}`}>
         <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 500, marginBottom: 10 }}>
-          {active.question}
+          {question}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {active.options.map((opt, idx) => {
+          {options.map((opt, idx) => {
             const isCorrect = idx === active.correct;
             const isPicked = selected === idx;
             let cls = 'lab2-quiz-option';
@@ -106,15 +103,15 @@ export default function Lesson({ onBack }) {
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
             <ResultInline
               correct={selected === active.correct}
-              explanation={active.explanation}
+              explanation={explanation}
               score={selected === active.correct ? 100 : 25}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
               <button className="lab2-btn ghost full" onClick={() => { setSelected(null); setRevealed(false); }}>
-                Try again
+                {t('lab2.tryAgain')}
               </button>
               <button className="lab2-btn primary full" onClick={next}>
-                Next lesson →
+                {t('lab2.nextLesson')} <span className="lab2-arrow">→</span>
               </button>
             </div>
           </motion.div>
@@ -123,8 +120,7 @@ export default function Lesson({ onBack }) {
 
       {isDone && (
         <Notice icon="🏆">
-          You have already completed this lesson (best score: {bestScore}%).
-          You can review the explanation any time.
+          {t('lab2.lesson.alreadyDone', { score: bestScore })}
         </Notice>
       )}
     </div>
@@ -132,12 +128,13 @@ export default function Lesson({ onBack }) {
 }
 
 function ResultInline({ correct, explanation, score }) {
+  const { t } = useTranslation();
   return (
     <div className={`lab2-result ${correct ? 'win' : 'loss'}`}>
       <div className="lab2-result-emoji">{correct ? '✅' : '❌'}</div>
-      <div className="lab2-result-title">{correct ? 'Correct' : 'Not quite'}</div>
-      <div className="lab2-result-sub">Score: {score}/100</div>
-      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 8, textAlign: 'left' }}>
+      <div className="lab2-result-title">{correct ? t('lab2.lesson.correct') : t('lab2.lesson.notQuite')}</div>
+      <div className="lab2-result-sub lab2-num">{t('lab2.lesson.score', { score })}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 8, textAlign: 'start' }}>
         {explanation}
       </div>
     </div>

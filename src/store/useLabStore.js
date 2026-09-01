@@ -34,18 +34,18 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
    Curve: 250, 500, 750, ... The label and badge name follow the spec:
    Beginner → Trader → Analyst → Strategist → Portfolio Manager → Market Master. */
 const LEVEL_TABLE = [
-  { lvl: 1, name: 'Beginner', xp: 0 },
-  { lvl: 2, name: 'Beginner', xp: 250 },
-  { lvl: 3, name: 'Trader', xp: 600 },
-  { lvl: 4, name: 'Trader', xp: 1100 },
-  { lvl: 5, name: 'Trader', xp: 1800 },
-  { lvl: 6, name: 'Analyst', xp: 2700 },
-  { lvl: 7, name: 'Analyst', xp: 3800 },
-  { lvl: 8, name: 'Strategist', xp: 5200 },
-  { lvl: 9, name: 'Strategist', xp: 7000 },
-  { lvl: 10, name: 'Portfolio Manager', xp: 9200 },
-  { lvl: 11, name: 'Portfolio Manager', xp: 11800 },
-  { lvl: 12, name: 'Market Master', xp: 15000 }
+  { lvl: 1, name: 'Beginner', nameKey: 'beginner', xp: 0 },
+  { lvl: 2, name: 'Beginner', nameKey: 'beginner', xp: 250 },
+  { lvl: 3, name: 'Trader', nameKey: 'trader', xp: 600 },
+  { lvl: 4, name: 'Trader', nameKey: 'trader', xp: 1100 },
+  { lvl: 5, name: 'Trader', nameKey: 'trader', xp: 1800 },
+  { lvl: 6, name: 'Analyst', nameKey: 'analyst', xp: 2700 },
+  { lvl: 7, name: 'Analyst', nameKey: 'analyst', xp: 3800 },
+  { lvl: 8, name: 'Strategist', nameKey: 'strategist', xp: 5200 },
+  { lvl: 9, name: 'Strategist', nameKey: 'strategist', xp: 7000 },
+  { lvl: 10, name: 'Portfolio Manager', nameKey: 'portfolioManager', xp: 9200 },
+  { lvl: 11, name: 'Portfolio Manager', nameKey: 'portfolioManager', xp: 11800 },
+  { lvl: 12, name: 'Market Master', nameKey: 'marketMaster', xp: 15000 }
 ];
 
 export function levelFromXp(xp) {
