@@ -305,6 +305,70 @@
   margin-top: 13px;
 }
 
+.iaos-alloc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .55);
+  border: 1px solid rgba(148, 163, 184, .16);
+}
+
+.iaos-alloc-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.iaos-alloc-row strong {
+  color: #e0e7ff;
+  letter-spacing: .04em;
+}
+
+.iaos-alloc-row span {
+  color: rgba(226, 232, 240, .78);
+}
+
+.iaos-exec-meta {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: rgba(148, 163, 184, .88);
+}
+
+.iaos-connect-btn {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.iaos-progress {
+  align-self: stretch;
+  padding: 10px 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 211, 238, .28);
+  background: rgba(8, 47, 73, .45);
+  color: #a5f3fc;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.iaos-result-hash {
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: rgba(167, 243, 208, .9);
+  word-break: break-all;
+}
+
+.iaos-kind-connect .iaos-bubble,
+.iaos-kind-result .iaos-bubble {
+  border-color: rgba(52, 211, 153, .3);
+  background: rgba(52, 211, 153, .09);
+}
+
 .iaos-btn {
   flex: 1;
   border: 1px solid transparent;
@@ -583,8 +647,27 @@
 :root[data-theme='light'] .iaos-auto-row strong,
 :root[data-theme='light'] .iaos-exec-line strong,
 :root[data-theme='light'] .iaos-drawer-head h2,
-:root[data-theme='light'] .iaos-title h1 {
+:root[data-theme='light'] .iaos-title h1,
+:root[data-theme='light'] .iaos-alloc-row strong {
   color: #132238;
+}
+
+:root[data-theme='light'] .iaos-alloc {
+  background: rgba(248, 250, 252, .96);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+:root[data-theme='light'] .iaos-progress {
+  background: rgba(236, 254, 255, .96);
+  border-color: rgba(6, 182, 212, .22);
+  color: #0e7490;
+}
+
+:root[data-theme='light'] .iaos-kind-connect .iaos-bubble,
+:root[data-theme='light'] .iaos-kind-result .iaos-bubble {
+  border-color: rgba(16, 185, 129, .22);
+  background: rgba(236, 253, 245, .96);
+  color: #047857;
 }
 
 :root[data-theme='light'] .iaos-auto-row span,
