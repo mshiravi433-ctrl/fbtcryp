@@ -399,6 +399,40 @@ function suggestion(id) {
 }
 
 function suggestionsFor({ message = '', intent = 'GENERAL', context = {} } = {}) {
+  // Try new dynamic suggestion engine first (Spec §17 contextual)
+  try {
+    // Use require-style dynamic import sync fallback — we have the module cached
+    // For server, we try to load the new engine via dynamic import if available
+    // But to keep sync, we implement contextual logic here directly mirroring new engine
+    const text = String(message || '').toLowerCase();
+    
+    // New contextual suggestions (Spec §17)
+    if (text.includes('سود') || text.includes('بیشتر') || /yield|farm/i.test(text)) {
+      return [
+        { id: 'yield', label: 'Yieldهای مناسب', prompt: 'بهترین Yield را پیدا کن' },
+        { id: 'dca', label: 'DCA', prompt: 'یک برنامه DCA بساز' },
+        { id: 'rebalance', label: 'Portfolio Rebalance', prompt: 'پرتفوی من را متعادل کن' },
+        { id: 'risk_return', label: 'Risk/Return Comparison', prompt: 'مقایسه ریسک و بازده' }
+      ].slice(0, MAX_SUGGESTIONS);
+    }
+    if (text.includes('eth') || /eth/i.test(text)) {
+      return [
+        { id: 'buy_eth', label: 'Buy ETH', prompt: 'ETH بخر' },
+        { id: 'swap_eth', label: 'Swap', prompt: 'ETH Swap' },
+        { id: 'cross_eth', label: 'Cross-chain', prompt: 'ETH Bridge' },
+        { id: 'dca_eth', label: 'DCA ETH', prompt: 'برای ETH DCA بساز' }
+      ].slice(0, MAX_SUGGESTIONS);
+    }
+    if (text.includes('بازار') || /market/i.test(text)) {
+      return [
+        { id: 'market_overview', label: 'Market Overview', prompt: 'بازار را بررسی کن' },
+        { id: 'smart_money', label: 'Smart Money', prompt: 'Smart Money را بررسی کن' },
+        { id: 'whale', label: 'Whale Activity', prompt: 'ببین نهنگ‌ها چه می‌خرند' },
+        { id: 'signals', label: 'Signals', prompt: 'سیگنال‌های امروز' }
+      ].slice(0, MAX_SUGGESTIONS);
+    }
+  } catch {}
+
   const text = String(message || '').toLowerCase();
   const out = [];
   const push = (id) => { if (out.length < MAX_SUGGESTIONS) out.push(suggestion(id)); };
@@ -626,6 +660,70 @@ router.post('/chat', async (req, res) => {
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
   const context = await buildAIContext(req, req.body || {});
   const locale = safe(req.body?.locale, 5) || null;
+
+  // ── Universal Intent OS: try new intent understanding first (navigation, media, balance, portfolio, yield, etc.) ──
+  let universalIntent = null;
+  try {
+    const { understandIntent: uniUnderstand } = await import('../src/lib/intent-ai/os/intentUnderstanding.js');
+    universalIntent = uniUnderstand(message, { currentPage: req.body?.context?.currentPage || '/', wallet: context.wallet, portfolio: context.portfolio });
+  } catch {}
+
+  // Handle navigation and media locally without LLM — no confirmation needed (Spec §26)
+  if (universalIntent && ['NAVIGATION', 'NEWS_SEARCH', 'OPEN_CALM', 'PLAY_MUSIC'].includes(universalIntent.type)) {
+    const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    let route = '/';
+    let humanMessage = '';
+    const isFa = String(locale || '').toLowerCase().startsWith('fa') || /[آ-ی]/.test(message);
+
+    if (universalIntent.type === 'NEWS_SEARCH' || (universalIntent.navigation && universalIntent.navigation.route === '/news')) {
+      route = '/news';
+      humanMessage = isFa ? 'حتماً، صفحه اخبار را باز کردم.' : 'Sure, opened News page.';
+    } else if (universalIntent.type === 'OPEN_CALM' || universalIntent.type === 'PLAY_MUSIC') {
+      route = '/explore';
+      humanMessage = isFa ? 'حتماً، یک موسیقی آرامش‌بخش برایت پخش کردم.' : 'Sure, I started a relaxing track for you.';
+    } else if (universalIntent.navigation) {
+      route = universalIntent.navigation.route;
+      humanMessage = isFa ? `حتماً، صفحه ${route} را باز کردم.` : `Sure, opened ${route} page.`;
+    } else {
+      // Generic navigation
+      const { extractNavigationIntent } = await import('../src/lib/intent-ai/os/intentUnderstanding.js').catch(() => ({ extractNavigationIntent: () => null }));
+      const nav = universalIntent.navigation || (extractNavigationIntent ? extractNavigationIntent(message) : null);
+      route = nav?.route || '/';
+      humanMessage = isFa ? `حتماً، صفحه ${route} را باز کردم.` : `Sure, opened ${route} page.`;
+    }
+
+    const reply = {
+      text: humanMessage,
+      message: humanMessage,
+      intent: { type: universalIntent.type, confidence: universalIntent.confidence },
+      confidence: universalIntent.confidence,
+      ui: { type: 'TEXT' },
+      card: null,
+      actions: [{ type: 'NAVIGATION', route }],
+      suggestions: [
+        { id: 'market', label: isFa ? 'بازار' : 'Market', prompt: isFa ? 'بازار را بررسی کن' : 'Check market' },
+        { id: 'portfolio', label: isFa ? 'پرتفوی' : 'Portfolio', prompt: isFa ? 'پرتفوی من را تحلیل کن' : 'Analyze my portfolio' }
+      ],
+      rebalance: null,
+      pendingIntent: null,
+      intentId,
+      actionPlan: null,
+      choices: [],
+      executed: true,
+      broadcasts: false,
+      requiresUserSignature: false,
+      navigation: { route }
+    };
+
+    return res.json({
+      ok: true,
+      schema: 'fbt.ai-chat.v1',
+      reply,
+      context,
+      at: nowMs()
+    });
+  }
+
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
     ? { intent: String(req.body.prior.intent).toUpperCase(), surface: req.body.prior.surface || null }
     : null;
