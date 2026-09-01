@@ -70,7 +70,22 @@ fi
 node "$HERE/lock-platform-guard.mjs"
 
 echo "▸ installing dependencies"
-npm ci
+# Annotated rather than bare: one platform-locked nested package (see
+# ci/lock-platform-guard.mjs) used to end every run here with three unreadable lines
+# and an empty release page. If the install fails again, the reason belongs where
+# the failure is actually looked at, not forty log lines down.
+npm ci || fail <<MSG
+npm ci failed, and nothing else in this build can run until the dependency tree is
+installable on a Linux runner.
+
+If the lines above mention EBADPLATFORM / Unsupported platform, a platform-specific
+native package is recorded as a REQUIRED dependency (typically the shrinkwrapped
+ganache -> fsevents entry). Fix with:  node ci/lock-platform-guard.mjs
+then commit package-lock.json (the guard runs above, so a NEW failure of that shape
+means a different package started pinning a platform-only dependency).
+If it says EUSAGE instead, package.json and package-lock.json disagree: run
+npm install locally and commit the regenerated lockfile.
+MSG
 
 echo "▸ building web bundle"
 if [ -z "${VITE_API_BASE:-}" ]; then
@@ -200,7 +215,65 @@ EFFECTIVE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.g
 echo "▸ building versionCode=${EFFECTIVE_CODE} versionName=${EFFECTIVE_NAME}"
 
 echo "▸ syncing Capacitor"
-npx cap sync android
+npx cap sync android || fail <<MSG
+\`npx cap sync android\` failed. It only copies dist/ into the Android project and
+refreshes the plugin list, so the usual causes are: dist/ missing (the build step
+above would have failed first), a Capacitor plugin in package.json without an
+android/ folder, or an @capacitor/android and CLI version mismatch. Compare
+\`npx cap doctor\` output against android/capacitor.settings.gradle.
+MSG
+
+# ---------------------------------------------------------------------------
+# ANDROID SDK PREFLIGHT — make sure the platform Gradle is about to compile
+# against really exists here.
+#
+# setup-android@v3 installs the command-line tools and accepts licenses, but it
+# only adds what its \`packages:\` input says, and this workflow says nothing. Gradle
+# then either auto-downloads (until a license or a network says no) or fails with
+# "Failed to find target with hash string 'android:35'" buried in a log nobody
+# opens from a phone. Bumping compileSdkVersion in android/variables.gradle without
+# touching CI was enough to break every APK build in this repository.
+#
+# So read the SDK level the project actually asks for and install exactly that.
+# Nothing here is hardcoded, so the two cannot drift apart.
+# ---------------------------------------------------------------------------
+COMPILE_SDK="$(sed -nE 's/[[:space:]]*compileSdkVersion[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' android/variables.gradle | head -1)"
+COMPILE_SDK="${COMPILE_SDK:-35}"
+echo "▸ android SDK preflight (compileSdk ${COMPILE_SDK})"
+SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-${HOME}/android-sdk}}"
+SDKMANAGER="$(command -v sdkmanager || true)"
+if [ -z "$SDKMANAGER" ] && [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+  SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+fi
+if [ -z "$SDKMANAGER" ]; then
+  fail <<MSG
+No \`sdkmanager\` on PATH and $SDK_ROOT has no cmdline-tools/latest/bin/sdkmanager.
+
+Gradle cannot build an Android project without the SDK command-line tools. The
+workflow is expected to run android-actions/setup-android@v3 before this script -
+if that step is green and this still fires, the runner image moved the SDK and
+ANDROID_HOME needs to be exported (set it in the workflow, or point
+ANDROID_HOME at the installed SDK root).
+MSG
+fi
+mkdir -p "$SDK_ROOT" 2>/dev/null || true
+printf 'yes\n' | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
+for pkg in "platform-tools" "platforms;android-${COMPILE_SDK}" "build-tools;${COMPILE_SDK}.0.0"; do
+  name="${pkg%%;*}"
+  if [ -d "$SDK_ROOT/$pkg" ] || ls -d "$SDK_ROOT/$name"*/ >/dev/null 2>&1; then
+    echo "  ✓ $pkg already installed"
+    continue
+  fi
+  echo "  ▸ installing $pkg"
+  printf 'yes\n' | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$pkg" > /tmp/sdkmanager.log 2>&1 \
+    || echo "     ⚠ sdkmanager reported a problem with $pkg (see the last lines of /tmp/sdkmanager.log below)"
+done
+if [ ! -d "$SDK_ROOT/platforms/android-${COMPILE_SDK}" ]; then
+  echo "  ⚠ android-${COMPILE_SDK} still missing under $SDK_ROOT/platforms — Gradle will produce the authoritative error"
+  tail -5 /tmp/sdkmanager.log 2>/dev/null || true
+else
+  echo "  ✓ platforms/android-${COMPILE_SDK} ready"
+fi
 
 chmod +x android/gradlew
 cd android
@@ -366,7 +439,26 @@ MSG
 else
   echo "▸ no keystore supplied — building debug APK"
   echo "  (debug builds install fine for testing but cannot go on Google Play)"
-  ./gradlew assembleDebug --no-daemon --stacktrace
+  # The signed branch reports Gradle failures through fail(); this one used to end
+  # with a bare "Process completed with exit code 1", which is exactly the shape
+  # every broken APK run here had. Same treatment: the first real line, as an
+  # annotation, in the summary a person actually reads on a phone.
+  if ! ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/gradle-debug.log 2>&1; then
+    tail -45 /tmp/gradle-debug.log || true
+    WENT="$(grep -A 4 'What went wrong' /tmp/gradle-debug.log 2>/dev/null | head -6 | tr '\n' ' ' | tr -s ' ')"
+    fail <<MSG
+Gradle failed while building the DEBUG APK (no keystore secret is set, so this is
+the unsigned variant). Gradle's own words:
+${WENT:-not found in the tail above — read the log}
+
+In this repository the frequent causes are, in order: a missing SDK platform or
+build-tools for compileSdk ${COMPILE_SDK:-?} (this script installs them just
+above, so look for the sdkmanager lines), an AGP/Gradle pair that stopped matching
+(android/build.gradle vs gradle-wrapper.properties), or a Capacitor plugin that
+needs a higher compileSdkVersion than android/variables.gradle declares.
+MSG
+  fi
+  tail -5 /tmp/gradle-debug.log 2>/dev/null || true
   BUILT="app/build/outputs/apk/debug/app-debug.apk"
   OUT="app-debug.apk"
 fi
