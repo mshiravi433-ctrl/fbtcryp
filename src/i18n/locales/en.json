@@ -7196,6 +7196,7 @@
     "noHistory": "Full history is still indexing for this wallet on the keyless path. Connect an explorer API key on the server for complete scores and P&L.",
     "errorWallet": "Could not load wallet intelligence.",
     "errorOverview": "Could not load smart money data.",
+    "dataSourceOffline": "The live on-chain data source is not answering right now, so the numbers below stay empty instead of showing zeros. It usually recovers in a minute.",
     "retry": "Retry",
     "tokenUnavailable": "Token intelligence is currently unavailable for this contract.",
     "tokenNoDex": "No active DEX pairs were found for this contract, so flow/liquidity signals are not available.",
@@ -7353,8 +7354,6 @@
     "drawerNote": "These buttons are only shortcuts; the assistant works without them.",
     "solanaConnect": "Connect Solana wallet",
     "readyTitle": "Ready to execute",
-    "readyToConfirm": "Ready — confirm to continue",
-    "opensScreen": "Opens the {{screen}} screen for the signature",
     "working": "Working…",
     "confirm": "Confirm",
     "edit": "Edit",
@@ -7363,58 +7362,6 @@
     "executionReady": "Ready to execute. Taking you to the real execution screen for the wallet signature.",
     "executionBlocked": "It is queued in Wallet — your signature is still needed.",
     "executionFailed": "That did not go through. The transaction was not completed.",
-    "topic": {
-      "TRADE": "Trade",
-      "EARN": "Earn",
-      "PORTFOLIO": "Portfolio",
-      "PROTECT": "Protect",
-      "RESEARCH": "Research",
-      "AUTOMATION": "Automation",
-      "GENERAL": "Assistant"
-    },
-    "reply": {
-      "action": "I can {{verb}} {{subject}} {{chain}} {{venue}}. Check it and confirm — your wallet signs, and nothing moves before that.",
-      "analysis": "Here is what I found. Nothing needs signing for this one.",
-      "blocked": "I cannot prepare that right now — {{why}}.",
-      "amountOf": "${{amount}} of {{asset}}",
-      "assetOnly": "{{asset}}",
-      "onChain": "on {{chain}}",
-      "viaVenue": "via {{venue}}",
-      "verb": {
-        "SWAP": "swap",
-        "BRIDGE": "move across chains",
-        "SEND": "send",
-        "BUY": "buy",
-        "SELL": "sell",
-        "DEPOSIT": "deposit",
-        "YIELD_SWEEP": "move idle funds into yield",
-        "STABLE_SHIELD": "move into stablecoins",
-        "REVOKE_APPROVAL": "revoke a risky approval",
-        "STOP_LOSS": "set a stop-loss",
-        "FUTURES_OPEN": "open a futures position",
-        "FUTURES": "open a futures position",
-        "DCA": "set up a recurring buy",
-        "AUTOMATION_CREATE": "set up an automation",
-        "GOAL": "create a financial goal",
-        "REBALANCE": "rebalance your portfolio",
-        "LEND": "lend",
-        "FARM": "farm",
-        "STOCK": "trade a tokenised stock",
-        "DEFAULT": "prepare that"
-      },
-      "blockedBy": {
-        "EMERGENCY_STOP": "the emergency stop is on",
-        "NO_ACTIONS": "there is nothing to execute in that request — it is analysis",
-        "MODE_NOT_ALLOWED": "the assistant is in analysis-only mode",
-        "SURFACE_DISABLED": "that kind of action is switched off in your settings",
-        "CHAIN_NOT_ALLOWED": "that network is not in your allowed list",
-        "PER_TX_LIMIT": "it is above your per-transaction limit",
-        "DAILY_LIMIT": "it would pass your daily limit",
-        "RISK_LIMIT": "the risk score is above your limit",
-        "SIMULATION_BLOCKED": "the simulation flagged it as unsafe",
-        "WALLET_REQUIRED": "no wallet is connected that can sign",
-        "DEFAULT": "a safety check did not pass"
-      }
-    }
+    "connectWallet": "Connect wallet"
   }
 }

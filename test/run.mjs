@@ -491,6 +491,12 @@ console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
   if (Array.isArray(upgradeResults)) report('intent-ai phase 201-207 upgrades', upgradeResults);
 }
 
+console.log('▸ probing FBT Intent OS — human layer · pending resume · receipt-gated execution…');
+{
+  const { default: humanRows } = await import('./intent-ai/intent-os-human-layer-probe.mjs');
+  if (Array.isArray(humanRows)) report('intent-os human layer', humanRows);
+}
+
 console.log('▸ probing the Financial OS — Financial Goals (engine · storage · API · wiring)…');
 {
   const { default: goalRows } = await import('./financial-goals-probe.mjs');

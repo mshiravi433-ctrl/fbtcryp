@@ -48,6 +48,12 @@ import {
   AI_CONTROL_CHAINS
 } from '../src/lib/intent-ai/commandCenter.js';
 import { listAiTools, AI_TOOL_SCHEMA } from '../src/lib/intent-ai/aiToolRegistry.js';
+import { formatHumanResponse, formatExecutionResult, stripInternalLeaks } from '../src/lib/intent-ai/humanResponse.js';
+import { classifyUserIntent } from '../src/lib/intent-ai/intentKinds.js';
+import { planRebalance } from '../src/lib/intent-ai/rebalanceEngine.js';
+import { createPendingIntent, transitionPendingIntent } from '../src/lib/intent-ai/pendingIntent.js';
+import { humanizeError } from '../src/lib/intent-ai/errorHumanizer.js';
+import { createExecutionPlan, toExecutionResult } from '../src/lib/intent-ai/executionStateMachine.js';
 import { checkScheduleAuthorization } from './intentScheduler.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
 import { aiConfigured, classifyIntentWithModel } from './ai.js';
@@ -517,6 +523,30 @@ function validateAction(shaped, context = {}) {
   };
 }
 
+async function readPending(owner) {
+  const row = await storeGet(`ai:pending:v1:${owner}`, null);
+  return row && row.schema === 'fbt.ai-pending-intent.v1' ? row : null;
+}
+
+async function writePending(owner, intent) {
+  await storeSet(`ai:pending:v1:${owner}`, intent || null);
+  return intent;
+}
+
+function logInternal(label, payload) {
+  try {
+    const safePayload = {
+      intent: payload?.intent || payload?.plan?.intent || null,
+      actionType: payload?.action?.type || payload?.actions?.[0]?.type || null,
+      reason: payload?.reason || payload?.verdict?.reason || null,
+      chain: payload?.chainId || payload?.action?.chainId || null,
+      txHash: payload?.txHash || null,
+      status: payload?.status || null
+    };
+    console.info(`[intent-os] ${label}`, safePayload);
+  } catch { /* logging must never break the reply */ }
+}
+
 async function readAutomations(owner) {
   const rows = await storeGet(`ai:automations:v1:${owner}`, []);
   return Array.isArray(rows) ? rows.map(normalizeAutomation).filter(Boolean) : [];
@@ -561,111 +591,6 @@ export function createDurableAutomation(input = {}, now = nowMs()) {
     updatedAt: now
   };
   return { ok: true, automation: autom };
-}
-
-/* ------------------------- the human-language reply ------------------------ */
-
-/*
- * ─── WHY THE REPLY IS BUILT HERE AND NOT INTERPOLATED AT THE CALL SITE ──────
- * The chat answer is the only part of Intent OS a person reads word for word.
- * Everything the planner needs internally — the intent enum, the action count,
- * the plan id, the hand-off route, the verdict code — is machinery, and every
- * one of them used to end up on screen. These two functions are the boundary:
- * `summariseReply` keeps the machinery in a structured object the UI can
- * localise, and `replyText` renders the English sentence. Nothing else in this
- * file writes user-facing prose.
- */
-
-const CHAIN_NAMES = Object.freeze({
-  1: 'Ethereum', 10: 'Optimism', 56: 'BNB Chain', 137: 'Polygon', 146: 'Sonic',
-  8453: 'Base', 42161: 'Arbitrum', 43114: 'Avalanche', 59144: 'Linea', 501: 'Solana'
-});
-
-/** A plan leg described the way a person would say it. */
-const ACTION_PHRASE = Object.freeze({
-  SWAP: 'swap',
-  BRIDGE: 'move across chains',
-  SEND: 'send',
-  BUY: 'buy',
-  SELL: 'sell',
-  DEPOSIT: 'deposit',
-  YIELD_SWEEP: 'move idle funds into yield',
-  STABLE_SHIELD: 'move into stablecoins',
-  REVOKE_APPROVAL: 'revoke a risky approval',
-  STOP_LOSS: 'set a stop-loss',
-  FUTURES_OPEN: 'open a futures position',
-  DCA: 'set up a recurring buy',
-  AUTOMATION_CREATE: 'set up an automation',
-  GOAL: 'create a financial goal',
-  REBALANCE: 'rebalance the portfolio',
-  LEND: 'lend',
-  FARM: 'farm',
-  STOCK: 'trade a tokenised stock'
-});
-
-/** Why a plan cannot be prepared, in words rather than in codes. */
-const BLOCK_PHRASE = Object.freeze({
-  EMERGENCY_STOP: 'the emergency stop is on',
-  NO_ACTIONS: 'there is nothing to execute in that request — it is analysis',
-  MODE_NOT_ALLOWED: 'the assistant is in analysis-only mode',
-  SURFACE_DISABLED: 'that kind of action is switched off in your settings',
-  CHAIN_NOT_ALLOWED: 'that network is not in your allowed list',
-  PER_TX_LIMIT: 'it is above your per-transaction limit',
-  DAILY_LIMIT: 'it would pass your daily limit',
-  RISK_LIMIT: 'the risk score is above your limit',
-  SIMULATION_BLOCKED: 'the simulation flagged it as unsafe',
-  WALLET_REQUIRED: 'no wallet is connected that can sign'
-});
-
-/**
- * Reduce an orchestration result to the few facts a reply needs.
- *
- * Deliberately shallow: the full plan and verdict still travel in the
- * response for callers that want them, but nothing in here has to be read to
- * write a sentence, which is what stops the internals leaking again.
- */
-function summariseReply(out) {
-  const actions = Array.isArray(out?.plan?.actions) ? out.plan.actions : [];
-  const primary = actions[0] || null;
-  const blocked = out?.verdict?.ok === false;
-  return {
-    kind: blocked ? 'blocked' : (primary ? 'action' : 'analysis'),
-    topic: String(out?.plan?.intent || 'GENERAL').toUpperCase(),
-    hasAction: Boolean(primary),
-    /* Only what a sentence needs. No actionId, no plan id, no route. */
-    action: primary
-      ? {
-        type: String(primary.type || '').toUpperCase(),
-        asset: primary.asset || null,
-        from: primary.from || null,
-        amountUsd: primary.amount != null && primary.amount !== '' ? String(primary.amount) : null,
-        chainId: primary.chainId ?? null,
-        chainName: primary.chainId != null ? (CHAIN_NAMES[Number(primary.chainId)] || null) : null,
-        venue: primary.venue || null
-      }
-      : null,
-    blockedBy: blocked ? String(out?.verdict?.reason || '') || null : null
-  };
-}
-
-/** The English sentence. Localised copy is built client-side from `summary`. */
-function replyText(summary) {
-  if (!summary) return 'I could not prepare an answer for that.';
-  if (summary.kind === 'blocked') {
-    const why = BLOCK_PHRASE[summary.blockedBy] || 'a safety check did not pass';
-    return `I cannot prepare that right now — ${why}.`;
-  }
-  if (summary.kind === 'analysis') {
-    return 'Here is what I found. Nothing needs signing for this one.';
-  }
-  const a = summary.action || {};
-  const verb = ACTION_PHRASE[a.type] || 'prepare that';
-  const amount = a.amountUsd ? `$${a.amountUsd} of ` : '';
-  const asset = a.asset ? `${amount}${a.asset}` : (amount ? amount.trim() : '');
-  const where = a.chainName ? ` on ${a.chainName}` : '';
-  const venue = a.venue ? ` via ${a.venue}` : '';
-  const what = asset ? `${verb} ${asset}${where}${venue}` : `${verb}${where}${venue}`;
-  return `I can ${what}. Check it and confirm — your wallet signs, nothing moves before that.`;
 }
 
 /* --------------------------------- routes --------------------------------- */
@@ -725,37 +650,44 @@ router.post('/chat', async (req, res) => {
   };
 
   const out = orchestrate({ message, surface: req.body?.surface || null, context: ctx });
-  const financialGoals = Array.isArray(context.financialGoals) ? context.financialGoals : [];
   const goalDetected = /goal|هدف|دو برابر|double|triple|دوبل/i.test(message) && (context.portfolio?.totalValueUsd != null || /goal|هدف|دو برابر|double/i.test(message));
-  /*
-   * ─── THE REPLY IS A SENTENCE, NOT A DEBUG LINE ────────────────────────────
-   * This used to answer literally:
-   *
-   *     Intent: PORTFOLIO. Prepared 1 real action(s).
-   *
-   * which is the planner's internal vocabulary printed at a person. `summary`
-   * is the structured version the client localises into its twelve languages;
-   * `text` is the English sentence for any caller that only reads text (the
-   * API is public). Neither carries an intent enum, an action count, an
-   * actionId, a routeId or a tool call.
-   */
-  const replySummary = summariseReply(out);
-  const reply = {
-    text: replyText(replySummary),
-    summary: replySummary,
-    intent: out.plan.intent,
-    confidence: out.plan.confidence,
+  const resumed = req.body?.resume === true;
+  const suggestions = suggestionsFor({ message, intent: out.plan.intent, context });
+  const human = formatHumanResponse({
+    message,
+    classification,
+    orchestrateOut: out,
+    context,
+    locale: locale || 'fa',
+    resumed,
+    suggestions
+  });
+  logInternal('chat', {
+    intent: human.intent,
     plan: out.plan,
     verdict: out.verdict,
-    stages: out.stages.stages,
-    thinking: out.thinking,
-    suggestions: suggestionsFor({ message, intent: out.plan.intent, context }),
-    actions: out.plan.actions || [],
+    actions: human.actions
+  });
+
+  if (human.pendingIntent) {
+    await writePending(ownerFor(req), human.pendingIntent);
+  }
+
+  const reply = {
+    text: stripInternalLeaks(human.message),
+    message: stripInternalLeaks(human.message),
+    intent: human.intent,
+    confidence: out.plan.confidence,
+    ui: human.ui,
+    card: human.card,
+    actions: human.actions,
+    suggestions: human.suggestions,
+    rebalance: human.rebalance || null,
+    pendingIntent: human.pendingIntent || null,
     goalDetected,
-    goalHint: goalDetected ? 'POST /api/v1/ai/goal with this conversation to create a real goal' : null,
     executed: false,
     broadcasts: false,
-    requiresUserSignature: true
+    requiresUserSignature: human.ui?.type === 'ACTION_CARD'
   };
 
   const safeSummary = safe(message, 240);
@@ -785,30 +717,101 @@ router.post('/chat', async (req, res) => {
 router.post('/execute', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const context = await buildAIContext(req, body);
-  const action = body.action || (body.plan?.actions?.[0]) || body;
-  const validator = validateAction(action, context);
-  if (!validator.ok) {
-    return res.status(validator.reason === 'WALLET_REQUIRED' ? 412 : 400).json({
+  const locale = safe(body.locale, 5) || 'fa';
+  const rawActions = Array.isArray(body.actions) && body.actions.length
+    ? body.actions
+    : (body.action ? [body.action] : (body.plan?.actions || []));
+  const message = String(body.message || '');
+  const userIntent = classifyUserIntent(message, null);
+  const kind = String(body.intentType || userIntent.type || rawActions[0]?.type || 'SWAP').toUpperCase();
+
+  if (!context.wallet?.connected) {
+    const pending = createPendingIntent({
+      originalMessage: message || kind,
+      intentType: kind,
+      status: 'WAITING_FOR_WALLET',
+      locale
+    });
+    if (pending.ok) await writePending(ownerFor(req), pending.intent);
+    const human = humanizeError('WALLET_REQUIRED', { locale });
+    logInternal('execute', { status: 'WALLET_REQUIRED', intent: kind });
+    return res.status(412).json({
       ok: false,
-      status: validator.reason === 'WALLET_REQUIRED' ? 'WALLET_REQUIRED' : 'INVALID_ACTION',
-      reason: validator.reason,
-      detail: validator.detail || null,
-      suggestions: suggestionsFor({ message: String(body.message || ''), intent: 'GENERAL', context })
+      schema: 'fbt.ai-execute.v1',
+      status: 'WALLET_REQUIRED',
+      success: false,
+      message: human.message,
+      ui: { type: 'CONNECT_WALLET' },
+      pendingIntent: pending.ok ? pending.intent : null,
+      execution: { success: false, status: 'WALLET_REQUIRED' }
+    });
+  }
+
+  let actions = rawActions;
+  let rebalance = body.rebalance || null;
+  if (kind === 'REBALANCE' || kind === 'REBALANCE_PORTFOLIO') {
+    rebalance = planRebalance({
+      holdings: context.portfolio?.holdings || [],
+      balances: context.balances || [],
+      target: body.target || null
+    });
+    if (!rebalance.ok) {
+      const human = humanizeError(rebalance.code || 'EMPTY_PORTFOLIO', { locale });
+      return res.status(409).json({
+        ok: false,
+        schema: 'fbt.ai-execute.v1',
+        status: 'FAILED',
+        success: false,
+        message: human.message,
+        ui: { type: 'TEXT' },
+        execution: { success: false, status: 'FAILED', error: { code: rebalance.code || 'EMPTY_PORTFOLIO' } }
+      });
+    }
+    actions = rebalance.trades;
+  }
+
+  if (!actions.length) {
+    const human = humanizeError('VALIDATION_FAILED', { locale });
+    return res.status(400).json({
+      ok: false,
+      schema: 'fbt.ai-execute.v1',
+      status: 'FAILED',
+      success: false,
+      message: human.message,
+      ui: { type: 'TEXT' },
+      execution: { success: false, status: 'FAILED', error: { code: 'VALIDATION_FAILED' } }
+    });
+  }
+
+  const validator = validateAction(actions[0], context);
+  if (!validator.ok && validator.reason !== 'WALLET_REQUIRED') {
+    const human = humanizeError(validator.reason, { locale });
+    logInternal('execute', { status: validator.reason, intent: kind });
+    return res.status(400).json({
+      ok: false,
+      schema: 'fbt.ai-execute.v1',
+      status: 'FAILED',
+      success: false,
+      message: human.message,
+      ui: { type: human.ui === 'CONNECT_WALLET' ? 'CONNECT_WALLET' : 'TEXT' },
+      execution: { success: false, status: 'FAILED', error: { code: validator.reason, message: validator.detail } }
     });
   }
 
   const synthesizedPlan = {
     id: `os_${nowMs().toString(36)}`,
-    intent: validator.type,
+    intent: kind,
     surface: 'ask',
-    actions: [{
-      type: validator.type,
-      asset: validator.asset,
-      amount: validator.amount != null ? String(validator.amount) : null,
-      chainId: validator.chainId,
-      handoffRoute: validator.handoffRoute,
-      parameters: validator.parameters
-    }],
+    actions: actions.map((a) => ({
+      type: a.type || validator.type,
+      asset: a.asset || a.to || validator.asset,
+      from: a.from || null,
+      to: a.to || null,
+      amount: a.amount != null ? String(a.amount) : (validator.amount != null ? String(validator.amount) : null),
+      amountUsd: a.amountUsd ?? validator.amount,
+      chainId: a.chainId ?? validator.chainId,
+      parameters: a.parameters || validator.parameters
+    })),
     capitalUsd: validator.amount
   };
   const verdict = validateExecution(synthesizedPlan, {
@@ -819,32 +822,114 @@ router.post('/execute', async (req, res) => {
   });
   const stages = executionStageLedger(synthesizedPlan, verdict, {
     wallet: context.wallet,
-    simulation: context.market?.dataStatus === 'live' ? { ok: true } : null,
+    simulation: null,
     quote: null
   });
 
-  if (!verdict.ok) {
+  if (!verdict.ok && verdict.reason && verdict.reason !== 'WALLET_REQUIRED' && verdict.reason !== 'APPROVAL_REQUIRED') {
+    const human = humanizeError(verdict.reason, { locale });
+    logInternal('execute', { status: 'BLOCKED', reason: verdict.reason, intent: kind });
     return res.status(409).json({
       ok: false,
-      status: 'BLOCKED',
-      reason: verdict.reason,
-      detail: verdict.reasonDetail,
-      checks: verdict.checks.filter((c) => c.status === 'fail'),
-      stages: stages.stages
+      schema: 'fbt.ai-execute.v1',
+      status: 'FAILED',
+      success: false,
+      message: human.message,
+      ui: { type: 'TEXT' },
+      execution: { success: false, status: 'FAILED', error: { code: verdict.reason, message: verdict.reasonDetail } }
     });
+  }
+
+  /* The server NEVER signs and NEVER reports CONFIRMED. It returns an
+     execution plan the wallet-side runtime must walk. No receipt → no success. */
+  const execPlan = createExecutionPlan({
+    intentId: synthesizedPlan.id,
+    actions: synthesizedPlan.actions
+  });
+  const unsigned = toExecutionResult(execPlan);
+  logInternal('execute', { status: 'PLAN_READY', intent: kind, action: synthesizedPlan.actions[0] });
+
+  const existing = await readPending(ownerFor(req));
+  if (existing && existing.status !== 'COMPLETED') {
+    const moved = transitionPendingIntent(existing, existing.status === 'WAITING_FOR_WALLET' ? 'READY' : 'EXECUTING');
+    if (moved.ok) await writePending(ownerFor(req), moved.intent);
   }
 
   return res.json({
     ok: true,
     schema: 'fbt.ai-execute.v1',
-    status: context.wallet.connected && context.wallet.canSign ? 'HANDOFF_READY' : 'WALLET_SIGNATURE_REQUIRED',
+    status: 'PLAN_READY',
+    success: false,
+    message: locale && String(locale).toLowerCase().startsWith('en')
+      ? 'The plan is ready. Sign each transaction in your wallet — I will only call it done after the chain confirms.'
+      : 'برنامه آماده است. هر معامله را در کیف پول امضا کنید — فقط بعد از تأیید زنجیره آن را انجام‌شده اعلام می‌کنم.',
+    ui: { type: 'ACTION_CARD' },
     action: validator,
+    actions: synthesizedPlan.actions,
+    rebalance,
+    plan: execPlan,
+    execution: { ...unsigned, success: false, status: 'PENDING' },
     requiresConfirmation: true,
     requiresUserSignature: true,
-    handoff: { route: validator.handoffRoute, type: validator.type, asset: validator.asset, chainId: validator.chainId },
     stages: stages.stages,
-    verdict,
     at: nowMs()
+  });
+});
+
+router.post('/resume', async (req, res) => {
+  const owner = ownerFor(req);
+  const pending = await readPending(owner);
+  if (!pending) return res.json({ ok: true, schema: 'fbt.ai-pending.v1', pending: null });
+  const context = await buildAIContext(req, req.body || {});
+  if (context.wallet?.connected && pending.status === 'WAITING_FOR_WALLET') {
+    const moved = transitionPendingIntent(pending, 'READY');
+    if (moved.ok) await writePending(owner, moved.intent);
+    return res.json({
+      ok: true,
+      schema: 'fbt.ai-pending.v1',
+      pending: moved.ok ? moved.intent : pending,
+      originalMessage: pending.originalMessage,
+      resume: true
+    });
+  }
+  return res.json({ ok: true, schema: 'fbt.ai-pending.v1', pending, originalMessage: pending.originalMessage, resume: false });
+});
+
+router.post('/execution-result', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const locale = safe(body.locale, 5) || 'fa';
+  const result = body.execution || body.result || body;
+  if (result?.success === true && result?.status === 'CONFIRMED') {
+    const hasReceipt = Boolean(result.txHash || (Array.isArray(result.txHashes) && result.txHashes.length) || result.receipt);
+    if (!hasReceipt) {
+      const human = humanizeError('CONFIRMATION_FAILED', { locale });
+      logInternal('execution-result', { status: 'NO_RECEIPT' });
+      return res.status(409).json({
+        ok: false,
+        success: false,
+        status: 'FAILED',
+        message: human.message,
+        execution: { success: false, status: 'FAILED', error: { code: 'NO_RECEIPT' } }
+      });
+    }
+  }
+  const formatted = formatExecutionResult({ result, rebalance: body.rebalance || null, locale });
+  const owner = ownerFor(req);
+  const pending = await readPending(owner);
+  if (pending) {
+    const next = result?.success === true ? 'COMPLETED' : (result?.status === 'USER_REJECTED' ? 'FAILED' : 'FAILED');
+    const moved = transitionPendingIntent(pending, next === 'COMPLETED' ? 'COMPLETED' : 'FAILED');
+    if (moved.ok) await writePending(owner, moved.intent);
+  }
+  logInternal('execution-result', { status: formatted.execution?.status, txHash: result?.txHash });
+  return res.json({
+    ok: formatted.execution?.success === true,
+    schema: 'fbt.ai-execution-result.v1',
+    message: formatted.message,
+    ui: formatted.ui,
+    card: formatted.card,
+    execution: formatted.execution,
+    retry: formatted.retry === true
   });
 });
 
