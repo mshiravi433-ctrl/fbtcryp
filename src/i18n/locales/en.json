@@ -7363,5 +7363,18 @@
     "executionBlocked": "It is queued in Wallet — your signature is still needed.",
     "executionFailed": "That did not go through. The transaction was not completed.",
     "connectWallet": "Connect wallet"
+  },
+  "lab2": {
+    "title": "Lab",
+    "subtitle": "Practice without real money",
+    "virtualBalance": "Virtual Balance",
+    "practiceOnly": "Practice only — not real money",
+    "level": "Level",
+    "accuracy": "Accuracy",
+    "rank": "Rank",
+    "practice": "Practice",
+    "learn": "Learn",
+    "advanced": "Advanced",
+    "more": "More tools"
   }
 }

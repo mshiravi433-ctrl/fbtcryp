@@ -1,0 +1,783 @@
+/* ==========================================================================
+   LAB v2 — Financial Simulation Center
+   --------------------------------------------------------------------------
+   Layered on top of lab-modern.css (Predict/Invest) and wallet-modern.css.
+   New classes use the `lab2-` prefix so they never collide with the original
+   ones — the existing screens stay exactly as they were, and the new ones
+   pick up the more "arcade" look that the spec calls for.
+   ========================================================================== */
+
+.lab2 {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 100px; /* breathing room above the bottom nav */
+}
+
+/* ─── Header: balance + level strip ─────────────────────────────────────── */
+
+.lab2-header {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(145deg, rgba(0, 229, 255, 0.08), rgba(124, 77, 255, 0.08), rgba(255, 45, 149, 0.06));
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lab2-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, var(--rgb-1), var(--rgb-2), var(--rgb-3), transparent 70%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.30;
+  pointer-events: none;
+}
+
+.lab2-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.lab2-balance-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+.lab2-balance {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(120deg, var(--rgb-1), var(--rgb-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+}
+
+.lab2-balance-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.lab2-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: right;
+}
+
+.lab2-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lab2-stat-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* ─── Level progress bar ────────────────────────────────────────────────── */
+
+.lab2-level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lab2-level-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--rgb-2), var(--rgb-3));
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(124, 77, 255, 0.4);
+}
+
+.lab2-level-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lab2-level-name {
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.lab2-level-name strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.lab2-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.lab2-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+/* ─── Group sections (3 main buckets) ──────────────────────────────────── */
+
+.lab2-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab2-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-3);
+  margin: 8px 0 2px;
+  padding-left: 4px;
+}
+
+.lab2-group-title .lab2-group-emoji {
+  font-size: 16px;
+}
+
+.lab2-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 380px) {
+  .lab2-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.lab2-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  color: var(--text-1);
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+  min-height: 110px;
+}
+
+.lab2-card:hover, .lab2-card:active {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025));
+}
+
+.lab2-card-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.lab2-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.2;
+}
+
+.lab2-card-sub {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.3;
+  margin-top: auto;
+}
+
+.lab2-card-glow {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.20;
+  top: -40px;
+  right: -40px;
+  pointer-events: none;
+}
+
+.lab2-card-glow.cyan { background: var(--rgb-1); }
+.lab2-card-glow.violet { background: var(--rgb-2); }
+.lab2-card-glow.magenta { background: var(--rgb-3); }
+.lab2-card-glow.mint { background: var(--rgb-4); }
+.lab2-card-glow.amber { background: var(--rgb-5); }
+
+/* ─── Inner screen (when a card is opened) ──────────────────────────────── */
+
+.lab2-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 2px;
+}
+
+.lab2-screen-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.lab2-back {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-1);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.lab2-screen-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.lab2-screen-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ─── Tabs inside a screen ──────────────────────────────────────────────── */
+
+.lab2-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lab2-tabs::-webkit-scrollbar { display: none; }
+
+.lab2-tab {
+  flex: 1;
+  min-width: fit-content;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.lab2-tab.active {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #000;
+  font-weight: 600;
+}
+
+/* ─── Generic lab card / panel ──────────────────────────────────────────── */
+
+.lab2-panel {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lab2-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lab2-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.lab2-row + .lab2-row {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.lab2-row strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.lab2-row .pos { color: var(--up); }
+.lab2-row .neg { color: var(--down); }
+
+/* ─── Buttons ───────────────────────────────────────────────────────────── */
+
+.lab2-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #000;
+}
+
+.lab2-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.lab2-btn:active:not(:disabled) { transform: scale(0.98); }
+
+.lab2-btn.primary {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #000;
+}
+
+.lab2-btn.buy {
+  background: linear-gradient(135deg, var(--up), #00d488);
+  color: #000;
+}
+
+.lab2-btn.sell {
+  background: linear-gradient(135deg, var(--down), #ff6b8b);
+  color: #fff;
+}
+
+.lab2-btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.lab2-btn.full { width: 100%; }
+
+/* ─── Choice grid (scenarios) ───────────────────────────────────────────── */
+
+.lab2-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 380px) {
+  .lab2-choices { grid-template-columns: 1fr; }
+}
+
+.lab2-choice {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.lab2-choice:hover { background: rgba(255, 255, 255, 0.06); }
+.lab2-choice.selected {
+  border-color: var(--rgb-1);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+/* ─── Quiz options ──────────────────────────────────────────────────────── */
+
+.lab2-quiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-1);
+  font-size: 12px;
+  width: 100%;
+}
+
+.lab2-quiz-option:hover { background: rgba(255, 255, 255, 0.06); }
+
+.lab2-quiz-option.correct {
+  border-color: var(--up);
+  background: rgba(0, 255, 157, 0.10);
+}
+
+.lab2-quiz-option.wrong {
+  border-color: var(--down);
+  background: rgba(255, 59, 107, 0.10);
+}
+
+.lab2-quiz-letter {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ─── AI Coach box ──────────────────────────────────────────────────────── */
+
+.lab2-coach {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(124, 77, 255, 0.12), rgba(255, 45, 149, 0.08));
+  border: 1px solid rgba(124, 77, 255, 0.30);
+  border-radius: 14px;
+}
+
+.lab2-coach-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rgb-2), var(--rgb-3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.lab2-coach-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.lab2-coach-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rgb-2);
+  margin-bottom: 2px;
+}
+
+.lab2-coach-msg {
+  font-size: 12px;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+
+/* ─── Mini sparkline / chart ────────────────────────────────────────────── */
+
+.lab2-spark {
+  height: 60px;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.10), transparent);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.lab2-spark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ─── Number input ──────────────────────────────────────────────────────── */
+
+.lab2-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.lab2-input:focus { border-color: var(--rgb-1); }
+
+.lab2-input-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ─── Slider ────────────────────────────────────────────────────────────── */
+
+.lab2-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  outline: none;
+}
+
+.lab2-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.4);
+}
+
+.lab2-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.4);
+}
+
+/* ─── Allocation rows (investment sim) ──────────────────────────────────── */
+
+.lab2-alloc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.lab2-alloc-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lab2-alloc-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.lab2-alloc-pct {
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ─── Compare side-by-side (Portfolio A vs B) ───────────────────────────── */
+
+.lab2-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.lab2-compare-side {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lab2-compare-side.a { border-color: rgba(0, 229, 255, 0.30); }
+.lab2-compare-side.b { border-color: rgba(255, 45, 149, 0.30); }
+
+.lab2-compare-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+
+.lab2-compare-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* ─── Leaderboard list ──────────────────────────────────────────────────── */
+
+.lab2-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lab2-lb-row.you {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.10), rgba(124, 77, 255, 0.10));
+  border-color: rgba(0, 229, 255, 0.30);
+}
+
+.lab2-lb-rank {
+  width: 24px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.lab2-lb-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.lab2-lb-xp {
+  font-size: 12px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* ─── DeFi tab strip ────────────────────────────────────────────────────── */
+
+.lab2-defi-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.lab2-defi-tabs::-webkit-scrollbar { display: none; }
+
+.lab2-defi-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lab2-defi-tab.active {
+  background: linear-gradient(135deg, var(--rgb-4), var(--rgb-1));
+  color: #000;
+  font-weight: 600;
+}
+
+/* ─── Banner / notice (light) ──────────────────────────────────────────── */
+
+.lab2-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 179, 0, 0.06);
+  border: 1px solid rgba(255, 179, 0, 0.20);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.lab2-notice-icon { flex-shrink: 0; }
+
+/* ─── Empty state ───────────────────────────────────────────────────────── */
+
+.lab2-empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ─── Result reveal (after a trade / scenario) ──────────────────────────── */
+
+.lab2-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  gap: 8px;
+}
+
+.lab2-result-emoji { font-size: 36px; }
+.lab2-result-title { font-size: 16px; font-weight: 700; }
+.lab2-result-sub { font-size: 12px; color: var(--text-2); }
+
+.lab2-result.win { border-color: rgba(0, 255, 157, 0.30); }
+.lab2-result.loss { border-color: rgba(255, 59, 107, 0.30); }
+.lab2-result.neutral { border-color: rgba(255, 255, 255, 0.10); }

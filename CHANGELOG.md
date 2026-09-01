@@ -1,3 +1,57 @@
+# Unreleased — Lab v2: Financial Simulation Center
+
+- The **Lab** screen at `/lab` is now a full **Financial Simulation Center** with
+  nine practice modules grouped under three buckets (Practice · Learn ·
+  Advanced) plus three standalone tools (Compare · My Level · Leaderboard).
+  All modules run on a dedicated `useLabStore` persisted to `localStorage`
+  under `fbt-lab-v1` — the server never sees a Lab row, which keeps the
+  free-tier hosting quota out of the red.
+- **The nine modules:**
+  - **Practice**: Prediction (with an AI heuristic you are scored against),
+    Paper Trading (with stop loss / take profit / risk score),
+    Investment Simulator (build a portfolio, run it over 1D/1W/1M/3M/1Y).
+  - **Learn**: Market Challenges (5 scenarios: crash, bull, hack, rates,
+    liquidation), Interactive Lessons (8 quizzes with explanations),
+    Risk Trainer (live R:R + position-size calculator).
+  - **Advanced**: Strategy Lab (rule-based strategy + deterministic
+    backtest with Sharpe / drawdown), DeFi Lab (lend / borrow / LP / farm /
+    stake, including the classic IL formula for a 50/50 pool),
+    What-If (basket of shocks applied to a portfolio).
+  - **Tools**: Compare Portfolios (A vs B side by side),
+    Level System (XP, level, badges),
+    Leaderboard (your row interleaved with calibration rows).
+- **The math is in one place** (`src/lib/lab/engine.js`): backtest, R:R,
+  Sharpe, max drawdown, impermanent loss, what-if impact. All pure
+  functions, no React, no network. Any screen that needs a number goes
+  through this module, so two screens that show the same trade agree.
+- **Deterministic by design.** The backtest engine and the price-series
+  generator both use seeded pseudo-random walks, so re-running a strategy
+  with the same rules gives the same numbers. The "AI prediction"
+  heuristic on the Prediction card is a short-vs-long MA, reproducible
+  per coin.
+- **Hybrid data.** Live prices come from CoinGecko when the network is
+  available; on failure the app falls back to a deterministic minute-bucketed
+  walk around a known base price. The user sees live numbers in good
+  conditions and "good enough" numbers in bad conditions, with no
+  UI-level error state in either case.
+- **Routing** mirrors the existing screens: the active group is `?tab=`,
+  the active child is `?child=`, the active tool is `?tool=`. The Android
+  back button walks the URL history, and a deep link can land on a
+  specific card.
+- **Files added:**
+  `src/store/useLabStore.js`,
+  `src/lib/lab/{engine,scenarios,marketData}.js`,
+  `src/components/Lab/{Shared,PracticeGroup,LearnGroup,AdvancedGroup,
+   PredictionCard,PaperTrade,InvestmentSim,Challenges,Lesson,
+   RiskTrainer,StrategyLab,DeFiSim,WhatIf,ComparePortfolios,
+   LevelSystem,Leaderboard}.jsx`,
+  `src/styles/lab-v2.css`. The `src/pages/Lab.jsx` was rewritten to
+  host the new layout; the older `Predict` and `Invest` pages still
+  exist for the SPECULATION_ENABLED betting product and are untouched.
+- **No regressions in the existing build.** The new Lab bundle ships as
+  `Lab-*.js` (77 kB raw / 23 kB gzip) and the SSR smoke tests in
+  `scripts/lab-tests/` pass 41/41 assertions.
+
 # Unreleased — Financial OS: the Profit-plan tab becomes Financial Goals
 
 - The «برنامه سود» tab is now a **Personal Financial OS**. The user states a
