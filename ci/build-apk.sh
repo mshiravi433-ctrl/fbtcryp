@@ -30,6 +30,17 @@ fail() {
 }
 
 # ---------------------------------------------------------------------------
+# note <text> — a checkpoint that survives an unreadable log.
+#
+# `::notice` gets its own line on the run's summary page, so a long build can be
+# read as a sequence of facts (deps installed, bundle built, assets synced, SDK
+# ready) without opening the log at all. When a run dies somewhere, the last
+# notice that DID arrive is the boundary of what worked — the difference between a
+# two-minute diagnosis and a two-day one, a price this repository has already paid.
+# ---------------------------------------------------------------------------
+note() { printf '::notice title=%s::%s\n' "$1" "$2"; }
+
+# ---------------------------------------------------------------------------
 # Toolchain preflight.
 #
 # AGP 8.7 requires JDK 17 or newer and Gradle 8.9+. The checked-in workflow
@@ -74,6 +85,7 @@ echo "▸ installing dependencies"
 # ci/lock-platform-guard.mjs) used to end every run here with three unreadable lines
 # and an empty release page. If the install fails again, the reason belongs where
 # the failure is actually looked at, not forty log lines down.
+note "npm ci" "installing dependencies with node $(node -v)"
 npm ci || fail <<MSG
 npm ci failed, and nothing else in this build can run until the dependency tree is
 installable on a Linux runner.
@@ -87,6 +99,7 @@ If it says EUSAGE instead, package.json and package-lock.json disagree: run
 npm install locally and commit the regenerated lockfile.
 MSG
 
+note "npm ci" "dependencies installed"
 echo "▸ building web bundle"
 if [ -z "${VITE_API_BASE:-}" ]; then
   echo "  ⚠  VITE_API_BASE is not set."
@@ -214,6 +227,7 @@ EFFECTIVE_CODE="$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gr
 EFFECTIVE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.gradle | head -1)"
 echo "▸ building versionCode=${EFFECTIVE_CODE} versionName=${EFFECTIVE_NAME}"
 
+note "web bundle" "dist is $(du -sh dist 2>/dev/null | cut -f1 || echo missing), $(ls dist/assets 2>/dev/null | wc -l | tr -d ' ') asset files"
 echo "▸ syncing Capacitor"
 npx cap sync android || fail <<MSG
 \`npx cap sync android\` failed. It only copies dist/ into the Android project and
@@ -275,6 +289,7 @@ else
   echo "  ✓ platforms/android-${COMPILE_SDK} ready"
 fi
 
+note "android sdk" "compileSdk ${COMPILE_SDK:-?}; platforms: $(ls "$SDK_ROOT/platforms" 2>/dev/null | tr '\n' ' ' || echo none); build-tools: $(ls "$SDK_ROOT/build-tools" 2>/dev/null | tr '\n' ' ' || echo none)"
 chmod +x android/gradlew
 cd android
 
@@ -496,6 +511,7 @@ if [ "$SRC" != "$STABLE_DIR/app-debug.apk" ]; then
   cp "$SRC" "$STABLE_DIR/app-debug.apk"
 fi
 
+note "apk" "$(du -h "$SRC" | cut -f1) written to $SRC"
 echo "✓ APK built: $(du -h "$SRC" | cut -f1) → out/$OUT"
 
 # Copy the Play-ready bundle out too, when one was produced.
