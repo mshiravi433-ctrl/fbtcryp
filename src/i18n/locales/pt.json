@@ -1167,7 +1167,8 @@
   },
   "intentOS": {
     "tab": {
-      "history": "Histórico"
+      "history": "Histórico",
+      "brain": "Cérebro"
     }
   }
 }

@@ -45,6 +45,7 @@
     "test:navigation": "node test/intent-ai/chat-navigation-probe.mjs",
     "test:financial-goals": "node test/financial-goals-probe.mjs",
     "test:cross-chain": "node test/cross-chain-probe.mjs",
+    "test:central-os": "node test/central-os-probe.mjs",
     "ops:drill": "node scripts/run-ops-drills.mjs",
     "ops:external-providers": "node scripts/run-external-providers.mjs",
     "stage3:probe": "node scripts/run-ops-drills.mjs",
