@@ -52,6 +52,7 @@ censored.
 - [فازهای ۱۶ تا ۲۰ — Adapters، On-chain Policy، Proof، Security و Launch](docs/INTENT-AI-PHASE16-FA.md) · [۱۷](docs/INTENT-AI-PHASE17-FA.md) · [۱۸](docs/INTENT-AI-PHASE18-FA.md) · [۱۹](docs/INTENT-AI-PHASE19-FA.md) · [۲۰](docs/INTENT-AI-PHASE20-FA.md)
 - [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
 - [Financial OS — Financial Goals: goal → required return → allocation → Intent OS → monitoring](docs/FINANCIAL-GOALS.md) · [فارسی](docs/FINANCIAL-GOALS-FA.md)
+- [Wallet Engine — معماری Wallet Core (Orchestrator + EVM/Solana/BTC adapters)، موتور قابلیت، ماشین حالت و ده موتور اولویت‌دار](docs/WALLET-ENGINE-FA.md) · [EN](docs/WALLET-ENGINE.md)
 
 ### Public guides
 
