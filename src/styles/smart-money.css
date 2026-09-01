@@ -3,10 +3,30 @@
  * Glass/aurora surface consistent with the rest of FBT. Mobile-first.
  * ───────────────────────────────────────────────────────────────────────── */
 
+/*
+ * THE PAGE BOX — SAME GEOMETRY AS EVERY OTHER PAGE.
+ * ---------------------------------------------------------------------------
+ * Reported: «صفحه smart money به چپ صفحه کشیده شده و وسط نیست؛ اندازه صفحه
+ * را درست کن». The old box carried its own `max-width: 860px` (wider than
+ * the 520–760px app shell the whole app uses) plus a second layer of
+ * horizontal padding (14px on top of .page's 16px) and a 96px bottom pad
+ * the shell already provides. On wide screens that wider, offset box read
+ * as a page stretched toward the left edge instead of the centred column
+ * every other screen sits in.
+ *
+ * Now .sm-page is a plain passthrough: the surrounding .page (inside the
+ * centred .app-shell) is the single source of width and inset, exactly like
+ * Market, Settings, Wallet and the rest. `min-width: 0` + `overflow-x: clip`
+ * are the final guard: no child (tab rail, metric grid, mono address) can
+ * ever widen the column again — clip, not hidden, so no scroll container is
+ * introduced and sticky behaviour elsewhere is untouched.
+ */
 .sm-page {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 12px 14px 96px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .sm-hero {
@@ -127,6 +147,11 @@
   margin-bottom: 14px;
 }
 .sm-metric {
+  /* min-width: 0 — a 1fr grid cell defaults to min-width: auto, so a long
+     value ("$999.99B") would widen the cell and stretch the whole row past
+     the page box. With min-width: 0 the text truncates inside the card. */
+  min-width: 0;
+  overflow: hidden;
   border-radius: 16px;
   padding: 13px;
   background: rgba(255, 255, 255, 0.045);
@@ -195,6 +220,8 @@
 /* Early token card */
 .sm-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 .sm-early-card {
+  min-width: 0; /* grid cell: a wide symbol/liquidity value must not stretch the card */
+  overflow: hidden;
   border-radius: 16px;
   padding: 13px;
   background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
