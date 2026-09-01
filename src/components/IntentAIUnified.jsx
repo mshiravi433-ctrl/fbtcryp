@@ -1,19 +1,12 @@
 /**
  * FBT INTENT AI — the unified AI OS chat surface.
  * ---------------------------------------------------------------------------
- * This is the single intelligent interface for all of FBT. It is deliberately
- * NOT a dashboard of agents, buttons and policies: it is a conversation with a
- * live wallet / portfolio / market context, dynamic suggestions (never fixed
- * quick-reply chips), a [ + Actions ] drawer (the actions are helpers, not the
- * product) and a real execution card that either hands the transaction to the
- * actual venue/wallet flow or creates a real automation / goal.
- *
- * No policy editor, no L1/L2/L3 selector, no artificial $100/$500/$1000 caps.
- * Wallet signature, validation and the wallet/security flow are the only
- * boundaries that still exist.
+ * Conversation only. The engine's plan/verdict/intent labels stay in the log.
+ * Confirm walks the wallet-side execution runtime (quote → sign → receipt).
+ * No receipt → no success. Connecting a wallet resumes the pending intent
+ * instead of sending the user to /wallet to retype.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useWallet } from '../context/WalletContext';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
@@ -27,19 +20,31 @@ import {
   aiMemory,
   aiPauseAutomation,
   aiDeleteAutomation,
-  aiRunAutomation
+  aiRunAutomation,
+  aiExecutionResult
 } from '../lib/aiIntentClient';
+import WalletConnectSheet from './WalletConnectSheet';
+import {
+  createPendingIntent,
+  savePendingIntent,
+  resumePendingIntent,
+  loadPendingIntent,
+  clearPendingIntent
+} from '../lib/intent-ai/pendingIntent.js';
+import {
+  formatConnectThanks,
+  formatExecutionProgress,
+  formatExecutionResult,
+  stripInternalLeaks
+} from '../lib/intent-ai/humanResponse.js';
+import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
+import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
+import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v1';
 const MAX_SUGGESTIONS = 4;
 const DEFAULT_CHAIN = 42161;
-
-const EXECUTABLE_ACTION_TYPES = new Set([
-  'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'FUTURES', 'FARM', 'LEND',
-  'STOCK', 'DCA', 'AUTOMATION_CREATE', 'GOAL', 'REBALANCE',
-  'DEPOSIT', 'YIELD_SWEEP', 'STABLE_SHIELD', 'REVOKE_APPROVAL', 'STOP_LOSS'
-]);
 
 const ACTION_ITEMS = Object.freeze([
   { id: 'swap', label: 'Swap', prompt: 'می‌خواهم یک Swap انجام دهم.' },
@@ -62,9 +67,19 @@ function makeId() {
   catch { return `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 }
 
+function visibleText(reply, fallback) {
+  const raw = reply?.message || reply?.text || fallback || '';
+  return stripInternalLeaks(raw) || fallback || '';
+}
+
+function isRebalanceKind(type) {
+  const t = String(type || '').toUpperCase();
+  return t === 'REBALANCE' || t === 'REBALANCE_PORTFOLIO';
+}
+
 export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const locale = i18n?.language || 'fa';
   const wallet = useWallet();
   const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
   const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
@@ -73,7 +88,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     id: makeId(),
     role: 'ai',
     content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
-    kind: 'hello'
+    kind: 'hello',
+    ui: { type: 'TEXT' }
   }]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState([]);
@@ -81,6 +97,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingExecution, setPendingExecution] = useState(null);
   const [executing, setExecuting] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [walletSheetOpen, setWalletSheetOpen] = useState(false);
   const [memorySummary, setMemorySummary] = useState('');
   const [automations, setAutomations] = useState([]);
   const [autosOpen, setAutosOpen] = useState(false);
@@ -99,6 +117,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   });
   const threadRef = useRef(null);
   const busyRef = useRef(false);
+  const resumeLock = useRef(false);
+  const sendRef = useRef(null);
 
   const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
   const solanaAddressLive = solana.address || solanaAddress();
@@ -125,7 +145,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       dataStatus: 'client'
     }));
     const balances = [...solRows, ...evmRows];
-    const holdings = [...solRows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.valueUsd) || null })), ...rows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.value) || null }))];
+    const holdings = [
+      ...solRows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.valueUsd) || null, amount: Number(r.amount) || null })),
+      ...rows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.value) || null, amount: Number(r.amount) || null }))
+    ];
     const totalValueUsd = Number(multi?.totalValue) || 0;
     const solTotal = solRows.reduce((s, r) => s + (Number(r.valueUsd) || 0), 0);
     return {
@@ -151,46 +174,87 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
   }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign]);
 
-  const sendMessage = useCallback(async (rawText) => {
+  const rememberPending = useCallback((intentOrMessage, intentType = 'GENERAL') => {
+    if (intentOrMessage && intentOrMessage.schema === 'fbt.ai-pending-intent.v1') {
+      savePendingIntent(intentOrMessage);
+      return;
+    }
+    const made = createPendingIntent({
+      originalMessage: String(intentOrMessage || ''),
+      intentType,
+      status: 'WAITING_FOR_WALLET',
+      conversationId,
+      locale
+    });
+    if (made.ok) savePendingIntent(made.intent);
+  }, [conversationId, locale]);
+
+  const sendMessage = useCallback(async (rawText, opts = {}) => {
     const message = String(rawText || '').trim();
     if (!message || busyRef.current) return null;
     busyRef.current = true;
-    setInput('');
-    setMessages((prev) => [...prev, { id: makeId(), role: 'user', content: message, kind: 'user' }]);
+    if (!opts.skipUserBubble) {
+      setInput('');
+      setMessages((prev) => [...prev, { id: makeId(), role: 'user', content: message, kind: 'user' }]);
+    }
     setThinking([...THINKING]);
     setSuggestions([]);
     try {
-      const res = await aiChat({ message, conversationId, context: aiContext });
+      const res = await aiChat({ message, conversationId, context: aiContext, resume: opts.resume === true });
       if (res?.ok !== true) {
-        throw new Error(res?.error || 'AI_UNAVAILABLE');
+        const code = res?.status === 412 || res?.status === 'WALLET_REQUIRED' ? 'WALLET_REQUIRED' : (res?.error || res?.status || 'NETWORK_FAILED');
+        const human = humanizeError(code, { locale });
+        const connect = human.ui === 'CONNECT_WALLET' || res?.ui?.type === 'CONNECT_WALLET';
+        if (connect) rememberPending(res?.pendingIntent || message, res?.intent?.type || 'GENERAL');
+        setMessages((prev) => [...prev, {
+          id: makeId(),
+          role: 'ai',
+          content: visibleText(res, human.message),
+          kind: connect ? 'connect' : 'error',
+          ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
+        }]);
+        return true;
       }
       const reply = res.reply || {};
+      const uiType = reply.ui?.type || 'TEXT';
+      const thanks = opts.resume ? formatConnectThanks(locale) : '';
+      const body = visibleText(reply, t('intentAIOS.noReply', { defaultValue: 'نتوانستم پاسخی آماده کنم.' }));
       const nextMessage = {
         id: makeId(),
         role: 'ai',
-        content: reply.text || t('intentAIOS.noReply', { defaultValue: 'نتوانستم پاسخی آماده کنم.' }),
-        kind: reply.plan?.intent ? 'assistant' : 'assistant',
-        plan: reply.plan || null,
-        verdict: reply.verdict || null,
-        action: reply.actions?.[0] || null,
-        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : [],
-        goalDetected: reply.goalDetected === true
+        content: thanks ? `${thanks}\n\n${body}` : body,
+        kind: uiType === 'CONNECT_WALLET' ? 'connect' : (uiType === 'RESULT_CARD' ? 'result' : 'assistant'),
+        ui: reply.ui || { type: 'TEXT' },
+        card: reply.card || null,
+        actions: Array.isArray(reply.actions) ? reply.actions : [],
+        rebalance: reply.rebalance || null,
+        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : []
       };
       setMessages((prev) => [...prev, nextMessage]);
       setSuggestions(nextMessage.suggestions.slice(0, MAX_SUGGESTIONS));
       if (res.context?.conversationSummary) setMemorySummary(res.context.conversationSummary);
-      const firstAction = reply.plan?.actions?.[0];
-      if (firstAction && reply.verdict?.ok === true && EXECUTABLE_ACTION_TYPES.has(String(firstAction.type || '').toUpperCase())) {
-        setPendingExecution({ plan: reply.plan, action: firstAction, message, suggestion: null });
+      if (reply.pendingIntent) rememberPending(reply.pendingIntent);
+      if (uiType === 'CONNECT_WALLET') rememberPending(reply.pendingIntent || message, reply.intent?.type);
+      if (uiType === 'ACTION_CARD') {
+        setPendingExecution({
+          action: reply.actions?.[0] || { type: reply.intent?.type || 'SWAP' },
+          actions: reply.actions || [],
+          message,
+          card: reply.card,
+          rebalance: reply.rebalance,
+          intentType: reply.intent?.type || reply.actions?.[0]?.type
+        });
+      } else {
+        setPendingExecution(null);
       }
-      /* A separate suggestions call is not needed: the chat response already
-         carries the dynamic suggestions, shaped from this exact context. */
     } catch (err) {
+      const human = humanizeError('NETWORK_FAILED', { locale });
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: t('intentAIOS.error', { defaultValue: 'اتصال به Intent AI برقرار نشد. دوباره تلاش کن.' }),
+        content: human.message,
         kind: 'error',
+        ui: { type: 'TEXT' },
         error: String(err?.message || '')
       }]);
       setSuggestions([]);
@@ -199,8 +263,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       busyRef.current = false;
     }
     return true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiContext, conversationId, t]);
+  }, [aiContext, conversationId, t, locale, rememberPending]);
+
+  sendRef.current = sendMessage;
 
   const sendSuggested = useCallback((s) => {
     if (!s?.prompt) return;
@@ -215,11 +280,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     void sendMessage(prompt);
   }, [sendMessage]);
 
+  const openWalletSheet = useCallback((message, intentType) => {
+    if (message) rememberPending(message, intentType);
+    setWalletSheetOpen(true);
+  }, [rememberPending]);
+
   const confirmExecution = useCallback(async () => {
     if (!pendingExecution || executing) return;
-    const { plan, action, message } = pendingExecution;
-    const type = String(action?.type || '').toUpperCase();
+    const { action, message, actions, rebalance, intentType } = pendingExecution;
+    const type = String(intentType || action?.type || '').toUpperCase();
+    if (!walletConnected) {
+      openWalletSheet(message, type);
+      return;
+    }
     setExecuting(true);
+    setProgress({ index: 1, total: Math.max(1, (actions || []).length), status: 'VALIDATING' });
     try {
       if (type === 'DCA' || type === 'AUTOMATION_CREATE') {
         const made = await aiCreateAutomation({
@@ -234,13 +309,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: t('intentAIOS.automationCreated', { defaultValue: 'برنامه خودکار ثبت شد و در Scheduler فعال است.' }),
+          content: t('intentAIOS.automationCreated', { defaultValue: 'برنامه خودکار ثبت شد و در Scheduler فعال است. هر اجرا همچنان به امضای شما نیاز دارد.' }),
           kind: 'automation',
+          ui: { type: 'RESULT_CARD' },
           automation: made.automation || null
         }]);
         const list = await aiAutomations();
         setAutomations(list?.ok ? list.automations : []);
-      } else if (type === 'GOAL') {
+        clearPendingIntent();
+        return;
+      }
+      if (type === 'GOAL') {
         const made = await aiCreateGoal({ message });
         if (made?.ok !== true) throw new Error(made?.error || 'GOAL_FAILED');
         setMessages((prev) => [...prev, {
@@ -248,50 +327,141 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           role: 'ai',
           content: t('intentAIOS.goalCreated', { defaultValue: 'هدف مالی ایجاد شد و به Financial OS وصل شد.' }),
           kind: 'goal',
+          ui: { type: 'RESULT_CARD' },
           goal: made.goal || null
         }]);
-      } else {
-        const res = await aiExecute({ action, message, wallet: aiContext.wallet, context: aiContext });
-        if (res?.ok !== true) throw new Error(res?.error || 'EXECUTION_FAILED');
-        const route = res?.handoff?.route || null;
+        clearPendingIntent();
+        return;
+      }
+
+      const prepared = await aiExecute({
+        action,
+        actions,
+        message,
+        intentType: type,
+        rebalance,
+        wallet: aiContext.wallet,
+        context: aiContext
+      });
+      if (prepared?.status === 'WALLET_REQUIRED' || prepared?.ui?.type === 'CONNECT_WALLET') {
+        openWalletSheet(message, type);
+        const human = humanizeError('WALLET_REQUIRED', { locale });
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: route
-            ? t('intentAIOS.executionReady', { defaultValue: 'عملیات آماده اجراست. به صفحه اجرای واقعی می‌رویم تا امضای کیف پول انجام شود.' })
-            : t('intentAIOS.executionBlocked', { defaultValue: 'اجرا در صف Wallet باقی ماند؛ امضا لازم است.' }),
-          kind: 'execution-ready',
-          handoff: res.handoff || null,
-          status: res.status || null
+          content: prepared?.message || human.message,
+          kind: 'connect',
+          ui: { type: 'CONNECT_WALLET' }
         }]);
-        if (route) navigate(route);
+        return;
       }
-    } catch (err) {
+      if (prepared?.ok === false && prepared?.status !== 'PLAN_READY') {
+        const human = humanizeError(prepared?.execution?.error?.code || prepared?.status || 'UNKNOWN', { locale });
+        setMessages((prev) => [...prev, {
+          id: makeId(),
+          role: 'ai',
+          content: prepared?.message || human.message,
+          kind: 'error',
+          ui: prepared?.ui || { type: 'TEXT' }
+        }]);
+        return;
+      }
+
+      /* Server returned a plan, not a result. The wallet signs here.
+         HANDOFF_READY / a route is never treated as success. */
+      const hooks = {
+        ...buildBrowserHooks(wallet),
+        onProgress: (info) => {
+          setProgress({
+            index: info.index || 1,
+            total: info.total || 1,
+            status: info.status || info.action?.status,
+            from: info.action?.from,
+            to: info.action?.to
+          });
+        }
+      };
+      const walletSnap = {
+        connected: walletConnected,
+        canSign: walletCanSign,
+        address: wallet?.address || null,
+        evmAddresses: aiContext.wallet.evmAddresses,
+        chainId: wallet?.chainId || defaultChainId
+      };
+      const plannedActions = (prepared?.actions?.length ? prepared.actions : actions) || [action];
+      let result;
+      if (isRebalanceKind(type)) {
+        result = await runRebalance({
+          holdings: aiContext.portfolio?.holdings,
+          balances: aiContext.balances,
+          target: rebalance?.target || prepared?.rebalance?.target,
+          hooks,
+          wallet: walletSnap
+        });
+      } else {
+        result = await runExecutionPlan({
+          actions: plannedActions,
+          hooks,
+          wallet: walletSnap
+        });
+      }
+      if (result?.success === true && result?.status === 'CONFIRMED' && !result?.noop) {
+        const hashes = result.txHashes || (result.txHash ? [result.txHash] : []);
+        if (!hashes.length) {
+          result = {
+            ...result,
+            success: false,
+            status: 'FAILED',
+            error: { code: 'NO_RECEIPT', message: 'NO_RECEIPT' }
+          };
+        }
+      }
+      const formatted = formatExecutionResult({
+        result,
+        rebalance: result?.rebalance || rebalance || prepared?.rebalance,
+        locale
+      });
+      try { await aiExecutionResult({ execution: formatted.execution || result, rebalance, locale }); } catch { /* reporting is best-effort */ }
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: t('intentAIOS.executionFailed', { defaultValue: '✦ اجرا انجام نشد. تراکنش تکمیل نشده است.' }),
+        content: formatted.message,
+        kind: formatted.execution?.success ? 'result' : 'error',
+        ui: formatted.ui,
+        card: formatted.card,
+        execution: formatted.execution
+      }]);
+      if (formatted.execution?.success) clearPendingIntent();
+    } catch (err) {
+      const human = humanizeError(err?.code || err?.message || 'UNKNOWN', { locale });
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: human.message,
         kind: 'error',
-        error: String(err?.message || '')
+        ui: { type: human.ui === 'CONNECT_WALLET' ? 'CONNECT_WALLET' : 'TEXT' }
       }]);
     } finally {
       setPendingExecution(null);
       setExecuting(false);
+      setProgress(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingExecution, executing, aiContext, navigate, t]);
+  }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet]);
 
   const editExecution = useCallback(() => {
-    if (!pendingExecution?.action?.type) return;
+    if (!pendingExecution) return;
     const promptMap = {
-      SWAP: `می‌خواهم ${pendingExecution.action.amount || ''} ${pendingExecution.action.asset || ''} را تبدیل کنم.`,
-      BRIDGE: `می‌خواهم ${pendingExecution.action.asset || ''} را Bridge کنم.`,
-      SEND: `می‌خواهم ${pendingExecution.action.asset || ''} ارسال کنم.`,
-      DCA: `هر هفته ${pendingExecution.action.amount || '100'} دلار ${pendingExecution.action.asset || 'BTC'} بخر.`,
-      AUTOMATION_CREATE: `هر هفته ${pendingExecution.action.amount || '100'} دلار ${pendingExecution.action.asset || 'BTC'} بخر.`,
-      GOAL: 'می‌خواهم هدف مالی بسازم.'
+      SWAP: `می‌خواهم ${pendingExecution.action?.amount || ''} ${pendingExecution.action?.asset || pendingExecution.action?.from || ''} را تبدیل کنم.`,
+      BRIDGE: `می‌خواهم ${pendingExecution.action?.asset || ''} را Bridge کنم.`,
+      SEND: `می‌خواهم ${pendingExecution.action?.asset || ''} ارسال کنم.`,
+      DCA: `هر هفته ${pendingExecution.action?.amount || '100'} دلار ${pendingExecution.action?.asset || 'BTC'} بخر.`,
+      AUTOMATION_CREATE: `هر هفته ${pendingExecution.action?.amount || '100'} دلار ${pendingExecution.action?.asset || 'BTC'} بخر.`,
+      GOAL: 'می‌خواهم هدف مالی بسازم.',
+      REBALANCE: 'پرتفوی من را متعادل کن.',
+      REBALANCE_PORTFOLIO: 'پرتفوی من را متعادل کن.'
     };
-    setInput(promptMap[pendingExecution.action.type] || pendingExecution.action.type);
+    const type = String(pendingExecution.intentType || pendingExecution.action?.type || '');
+    setInput(promptMap[type] || pendingExecution.message || type);
     setPendingExecution(null);
   }, [pendingExecution]);
 
@@ -329,7 +499,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     try {
       if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
     } catch { /* no-op */ }
-  }, [messages, thinking]);
+  }, [messages, thinking, progress, pendingExecution]);
+
+  /* After the wallet connects, resume the original request. Never force a retype. */
+  useEffect(() => {
+    if (!walletConnected) {
+      resumeLock.current = false;
+      return;
+    }
+    if (resumeLock.current) return;
+    const existing = loadPendingIntent();
+    if (!existing || existing.status === 'COMPLETED' || existing.status === 'FAILED') return;
+    const resumed = resumePendingIntent();
+    if (!resumed.ok || !resumed.originalMessage) return;
+    resumeLock.current = true;
+    void sendRef.current?.(resumed.originalMessage, { resume: true, skipUserBubble: true });
+  }, [walletConnected]);
 
   const handleSubmit = useCallback((e) => {
     e?.preventDefault?.();
@@ -353,8 +538,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (row.status === 'ACTIVE' || row.active) {
       await aiPauseAutomation(row.id);
     } else {
-      /* Re-activate is not the same as a fake completed run: it only resumes
-         the schedule, the next run still requires a wallet signature. */
       const made = await aiCreateAutomation({
         type: row.kind === 'rebalance' ? 'REBALANCE' : 'DCA',
         asset: row.asset || 'BTC',
@@ -370,14 +553,40 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const runAutomationNow = useCallback(async (row) => {
     if (!row) return;
     const run = await aiRunAutomation(row.id);
-    if (run?.ok && run.handoff?.route) navigate(run.handoff.route);
-  }, [navigate]);
+    if (run?.ok && run.action) {
+      setPendingExecution({
+        action: run.action,
+        actions: [run.action],
+        message: `${row.kind || row.type} ${row.asset || ''}`.trim(),
+        intentType: run.action.type,
+        card: {
+          title: t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' }),
+          kind: run.action.type,
+          confirmLabel: t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }),
+          editLabel: t('intentAIOS.edit', { defaultValue: 'ویرایش' })
+        }
+      });
+    }
+  }, [t]);
 
   const deleteAutomationRow = useCallback(async (row) => {
     if (!row) return;
     await aiDeleteAutomation(row.id);
     await refreshAutomations();
   }, [refreshAutomations]);
+
+  const progressLine = progress
+    ? formatExecutionProgress({
+      index: progress.index,
+      total: progress.total,
+      status: progress.status,
+      from: progress.from,
+      to: progress.to,
+      locale
+    })
+    : null;
+
+  const card = pendingExecution?.card || null;
 
   return (
     <div className="iaos-page">
@@ -423,14 +632,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <div key={m.id} className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
               <div className="iaos-bubble">
                 <div className="iaos-msg-text">{m.content}</div>
-                {m.plan && m.verdict ? (
-                  <div className="iaos-plan">
-                    <div className="iaos-plan-intent">{m.plan.intent}</div>
-                    <div className="iaos-plan-meta">
-                      <span>{m.plan.actions?.length} {t('intentAIOS.actions', { defaultValue: 'action(s)' })}</span>
-                      <span>{m.verdict?.ok ? t('intentAIOS.prepared', { defaultValue: 'Prepared' }) : `Blocked · ${m.verdict.reason || ''}`}</span>
-                    </div>
-                  </div>
+                {m.ui?.type === 'CONNECT_WALLET' ? (
+                  <button
+                    type="button"
+                    className="iaos-btn iss-solid iaos-connect-btn"
+                    data-testid="intent-ai-connect-wallet"
+                    onClick={() => openWalletSheet(pendingExecution?.message || loadPendingIntent()?.originalMessage, pendingExecution?.intentType)}
+                  >
+                    {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
+                  </button>
+                ) : null}
+                {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
+                  <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
                 ) : null}
               </div>
             </div>
@@ -443,19 +656,44 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </div>
           ) : null}
 
+          {progressLine ? (
+            <div className="iaos-progress" data-testid="intent-ai-progress" role="status">
+              {progressLine}
+            </div>
+          ) : null}
+
           {pendingExecution ? (
-            <div className="iaos-exec-card" role="group">
-              <div className="iaos-exec-title">{t('intentAIOS.readyTitle', { defaultValue: '✦ Ready to execute' })}</div>
-              <div className="iaos-exec-line">
-                <strong>{pendingExecution.action?.type}</strong>
-                <span>{pendingExecution.action?.amount || ''} {pendingExecution.action?.asset || ''}</span>
+            <div className="iaos-exec-card" role="group" data-testid="intent-ai-action-card">
+              <div className="iaos-exec-title">
+                {card?.title || t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' })}
               </div>
-              <div className="iaos-exec-route">{pendingExecution.action?.handoffRoute || ''}</div>
+              {card?.headline ? <div className="iaos-exec-line">{card.headline}</div> : null}
+              {Array.isArray(card?.rows) && card.rows.length ? (
+                <div className="iaos-alloc" data-testid="intent-ai-allocation">
+                  {card.rows.map((row) => (
+                    <div key={row.symbol} className="iaos-alloc-row">
+                      <strong>{row.symbol}</strong>
+                      <span>{Number.isFinite(Number(row.fromPct)) ? `${row.fromPct}%` : '—'} → {Number.isFinite(Number(row.toPct)) ? `${row.toPct}%` : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {card?.tradeCount != null ? (
+                <div className="iaos-exec-meta">
+                  {locale?.startsWith?.('en')
+                    ? `${card.tradeCount} trade(s)${card.estimatedFeeUsd != null ? ` · fee ~ $${card.estimatedFeeUsd}` : ''}`
+                    : `${card.tradeCount} معامله${card.estimatedFeeUsd != null ? ` · کارمزد حدود $${card.estimatedFeeUsd}` : ''}`}
+                </div>
+              ) : null}
               <div className="iaos-exec-actions">
-                <button type="button" className="iaos-btn iss-solid" onClick={confirmExecution} disabled={executing}>
-                  {executing ? t('intentAIOS.working', { defaultValue: 'Working…' }) : t('intentAIOS.confirm', { defaultValue: 'Confirm' })}
+                <button type="button" className="iaos-btn iss-solid" onClick={confirmExecution} disabled={executing} data-testid="intent-ai-confirm">
+                  {executing
+                    ? t('intentAIOS.working', { defaultValue: 'در حال اجرا…' })
+                    : (card?.confirmLabel || t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }))}
                 </button>
-                <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>{t('intentAIOS.edit', { defaultValue: 'Edit' })}</button>
+                <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>
+                  {card?.editLabel || t('intentAIOS.edit', { defaultValue: 'ویرایش' })}
+                </button>
               </div>
             </div>
           ) : null}
@@ -515,6 +753,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         </div>
       ) : null}
+
+      <WalletConnectSheet open={walletSheetOpen} onClose={() => setWalletSheetOpen(false)} />
     </div>
   );
 }

@@ -1403,4 +1403,14 @@ export {
   surfaceForIntent
 } from './commandCenter.js';
 
+/* ── Intent OS human layer (chat formatter, pending resume, live rebalance, wallet runtime) ── */
+export { USER_INTENTS, WALLET_REQUIRED_INTENTS, EXECUTABLE_INTENTS, classifyUserIntent, intentRequiresWallet, intentIsExecutable } from './intentKinds.js';
+export { createPendingIntent, transitionPendingIntent, savePendingIntent, loadPendingIntent, clearPendingIntent, resumePendingIntent, PENDING_INTENT_SCHEMA, PENDING_INTENT_KEY } from './pendingIntent.js';
+export { planRebalance, normalizeHoldings, DEFAULT_REBALANCE_TARGET, REBALANCE_PLAN_SCHEMA } from './rebalanceEngine.js';
+export { createExecutionPlan, advanceAction, toExecutionResult, isSuccessfulReceipt, EXECUTION_RESULT_SCHEMA } from './executionStateMachine.js';
+export { humanizeError, normalizeErrorCode } from './errorHumanizer.js';
+export { createEvmAdapter, createSolanaAdapter, adapterForChain, chainKind, normalizeReceipt } from './chainAdapters.js';
+export { formatHumanResponse, formatExecutionResult, formatExecutionProgress, formatConnectThanks, stripInternalLeaks, AI_RESPONSE_SCHEMA, UI_TYPES } from './humanResponse.js';
+export { runAction, runExecutionPlan, runRebalance } from './executionRuntime.js';
+
 export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';
