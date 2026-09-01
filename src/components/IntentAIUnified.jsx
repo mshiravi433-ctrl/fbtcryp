@@ -57,6 +57,83 @@ const ACTION_ITEMS = Object.freeze([
 
 const THINKING = ['Thinking…', 'Reading portfolio…', 'Checking market…', 'Building plan…'];
 
+/*
+ * ─── NOTHING INTERNAL REACHES THE BUBBLE ────────────────────────────────────
+ * The chat used to print the planner's own vocabulary at the user:
+ *
+ *     Intent: PORTFOLIO. Prepared 1 real action(s).
+ *
+ * The server now sends a sentence plus a structured `summary`, so the normal
+ * path is clean. This scrub is the second line of defence for text that comes
+ * from somewhere else — a model completion, an older server, an error string.
+ * It removes the machine tokens rather than the whole message: a user who
+ * loses the answer learns nothing, a user who loses "actionId: 0x…" loses
+ * nothing.
+ */
+const DEBUG_TOKEN_PATTERNS = [
+  /\bIntent:\s*[A-Z_]{3,}\.?\s*/g,
+  /\bPrepared\s+\d+\s+(?:real\s+)?action\(s\)\.?/gi,
+  /\bNo executable action prepared[^.]*\.?/gi,
+  /\b(?:actionId|routeId|planId|quoteId|conversationId|traceId)\s*[:=]\s*[^\s,;)]+/gi,
+  /\btool_call\b[^\s]*/gi,
+  /\bblocked\s*[:=]\s*(?:true|false)/gi,
+  /\b(?:TRADE|EARN|PORTFOLIO|PROTECT|RESEARCH|AUTOMATION|GENERAL)\b(?=\s*[.·|]|$)/g
+];
+
+function scrubMachineTokens(text) {
+  let out = String(text ?? '');
+  for (const re of DEBUG_TOKEN_PATTERNS) out = out.replace(re, ' ');
+  return tidy(out);
+}
+
+const tidy = (s) => String(s ?? '')
+  .replace(/\s{2,}/g, ' ')
+  .replace(/\s+([.,!?؛،])/g, '$1')
+  .trim();
+
+/**
+ * The assistant's answer, in the user's language.
+ *
+ * The server sends both a finished English sentence and the structured
+ * `summary` it was built from. The summary is preferred because it is the
+ * only way this screen can answer in the other eleven languages; `text` is the
+ * fallback for an older server, and it goes through the scrub first.
+ */
+function humanReply(reply, t) {
+  const s = reply?.summary;
+  if (!s) {
+    return scrubMachineTokens(reply?.text) || t('intentAIOS.noReply');
+  }
+  if (s.kind === 'blocked') {
+    return tidy(t('intentAIOS.reply.blocked', {
+      why: t(`intentAIOS.reply.blockedBy.${s.blockedBy}`, {
+        defaultValue: t('intentAIOS.reply.blockedBy.DEFAULT')
+      })
+    }));
+  }
+  if (s.kind === 'analysis' || !s.action) return t('intentAIOS.reply.analysis');
+
+  const a = s.action;
+  const subject = a.asset
+    ? (a.amountUsd
+      ? t('intentAIOS.reply.amountOf', { amount: a.amountUsd, asset: a.asset })
+      : t('intentAIOS.reply.assetOnly', { asset: a.asset }))
+    : '';
+  return tidy(t('intentAIOS.reply.action', {
+    verb: t(`intentAIOS.reply.verb.${a.type}`, { defaultValue: t('intentAIOS.reply.verb.DEFAULT') }),
+    subject,
+    chain: a.chainName ? t('intentAIOS.reply.onChain', { chain: a.chainName }) : '',
+    venue: a.venue ? t('intentAIOS.reply.viaVenue', { venue: a.venue }) : ''
+  }));
+}
+
+/** '/bridge' → 'Bridge'. A screen name is human; a route id is not. */
+function screenName(route) {
+  const seg = String(route || '').split('?')[0].split('/').filter(Boolean).pop();
+  if (!seg) return null;
+  return seg.charAt(0).toUpperCase() + seg.slice(1);
+}
+
 function makeId() {
   try { return crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
   catch { return `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
@@ -72,7 +149,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [messages, setMessages] = useState(() => [{
     id: makeId(),
     role: 'ai',
-    content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
+    content: t('intentAIOS.hello'),
     kind: 'hello'
   }]);
   const [input, setInput] = useState('');
@@ -168,7 +245,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const nextMessage = {
         id: makeId(),
         role: 'ai',
-        content: reply.text || t('intentAIOS.noReply', { defaultValue: 'نتوانستم پاسخی آماده کنم.' }),
+        content: humanReply(reply, t),
         kind: reply.plan?.intent ? 'assistant' : 'assistant',
         plan: reply.plan || null,
         verdict: reply.verdict || null,
@@ -189,7 +266,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: t('intentAIOS.error', { defaultValue: 'اتصال به Intent AI برقرار نشد. دوباره تلاش کن.' }),
+        content: t('intentAIOS.error'),
         kind: 'error',
         error: String(err?.message || '')
       }]);
@@ -234,7 +311,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: t('intentAIOS.automationCreated', { defaultValue: 'برنامه خودکار ثبت شد و در Scheduler فعال است.' }),
+          content: t('intentAIOS.automationCreated'),
           kind: 'automation',
           automation: made.automation || null
         }]);
@@ -246,7 +323,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: t('intentAIOS.goalCreated', { defaultValue: 'هدف مالی ایجاد شد و به Financial OS وصل شد.' }),
+          content: t('intentAIOS.goalCreated'),
           kind: 'goal',
           goal: made.goal || null
         }]);
@@ -258,8 +335,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           id: makeId(),
           role: 'ai',
           content: route
-            ? t('intentAIOS.executionReady', { defaultValue: 'عملیات آماده اجراست. به صفحه اجرای واقعی می‌رویم تا امضای کیف پول انجام شود.' })
-            : t('intentAIOS.executionBlocked', { defaultValue: 'اجرا در صف Wallet باقی ماند؛ امضا لازم است.' }),
+            ? t('intentAIOS.executionReady')
+            : t('intentAIOS.executionBlocked'),
           kind: 'execution-ready',
           handoff: res.handoff || null,
           status: res.status || null
@@ -270,7 +347,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: t('intentAIOS.executionFailed', { defaultValue: '✦ اجرا انجام نشد. تراکنش تکمیل نشده است.' }),
+        content: t('intentAIOS.executionFailed'),
         kind: 'error',
         error: String(err?.message || '')
       }]);
@@ -385,19 +462,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         <header className="iaos-header">
           <div className="iaos-title">
             <span className="iaos-mark" aria-hidden="true">✦</span>
-            <h1>{t('intentAIOS.header', { defaultValue: 'Intent AI' })}</h1>
+            <h1>{t('intentAIOS.header')}</h1>
           </div>
           <span className="iaos-live" data-on={walletConnected ? 'true' : 'false'} title={walletConnected ? 'Wallet connected' : 'Wallet not connected'}>
-            <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
+            <i aria-hidden="true" /> {t('intentAIOS.live')}
           </span>
         </header>
 
         {automations.length ? (
           <div className="iaos-autos" data-testid="intent-ai-active-automations">
             <div className="iaos-autos-head">
-              <span>{t('intentAIOS.autosTitle', { defaultValue: 'ACTIVE AUTOMATIONS' })}</span>
+              <span>{t('intentAIOS.autosTitle')}</span>
               <button type="button" className="iaos-autos-manage" onClick={() => setAutosOpen((v) => !v)}>
-                {t('intentAIOS.manage', { defaultValue: 'Manage' })}
+                {t('intentAIOS.manage')}
               </button>
             </div>
             <div className="iaos-autos-list">
@@ -425,10 +502,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 <div className="iaos-msg-text">{m.content}</div>
                 {m.plan && m.verdict ? (
                   <div className="iaos-plan">
-                    <div className="iaos-plan-intent">{m.plan.intent}</div>
+                    {/*
+                      The topic, translated — not `m.plan.intent`, which is the
+                      planner's enum ("PORTFOLIO") and meant nothing to anyone
+                      reading it. The action count is gone with it: how many
+                      legs a plan has is not news to a person, and "Prepared 1
+                      action(s)" was the single most machine-sounding line on
+                      the screen.
+                    */}
+                    <div className="iaos-plan-intent">
+                      {t(`intentAIOS.topic.${m.plan.intent}`, { defaultValue: t('intentAIOS.topic.GENERAL') })}
+                    </div>
                     <div className="iaos-plan-meta">
-                      <span>{m.plan.actions?.length} {t('intentAIOS.actions', { defaultValue: 'action(s)' })}</span>
-                      <span>{m.verdict?.ok ? t('intentAIOS.prepared', { defaultValue: 'Prepared' }) : `Blocked · ${m.verdict.reason || ''}`}</span>
+                      <span>
+                        {m.verdict?.ok
+                          ? t('intentAIOS.readyToConfirm')
+                          : t(`intentAIOS.reply.blockedBy.${m.verdict?.reason || 'DEFAULT'}`, {
+                            defaultValue: t('intentAIOS.reply.blockedBy.DEFAULT')
+                          })}
+                      </span>
                     </div>
                   </div>
                 ) : null}
@@ -445,17 +537,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
           {pendingExecution ? (
             <div className="iaos-exec-card" role="group">
-              <div className="iaos-exec-title">{t('intentAIOS.readyTitle', { defaultValue: '✦ Ready to execute' })}</div>
+              <div className="iaos-exec-title">{t('intentAIOS.readyTitle')}</div>
               <div className="iaos-exec-line">
-                <strong>{pendingExecution.action?.type}</strong>
+                <strong>
+                  {t(`intentAIOS.reply.verb.${String(pendingExecution.action?.type || '').toUpperCase()}`, {
+                    defaultValue: t('intentAIOS.reply.verb.DEFAULT')
+                  })}
+                </strong>
                 <span>{pendingExecution.action?.amount || ''} {pendingExecution.action?.asset || ''}</span>
               </div>
-              <div className="iaos-exec-route">{pendingExecution.action?.handoffRoute || ''}</div>
+              {/* Where it lands, by name. The raw route was an internal id. */}
+              {screenName(pendingExecution.action?.handoffRoute) ? (
+                <div className="iaos-exec-route">
+                  {t('intentAIOS.opensScreen', { screen: screenName(pendingExecution.action.handoffRoute) })}
+                </div>
+              ) : null}
               <div className="iaos-exec-actions">
                 <button type="button" className="iaos-btn iss-solid" onClick={confirmExecution} disabled={executing}>
-                  {executing ? t('intentAIOS.working', { defaultValue: 'Working…' }) : t('intentAIOS.confirm', { defaultValue: 'Confirm' })}
+                  {executing ? t('intentAIOS.working') : t('intentAIOS.confirm')}
                 </button>
-                <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>{t('intentAIOS.edit', { defaultValue: 'Edit' })}</button>
+                <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>{t('intentAIOS.edit')}</button>
               </div>
             </div>
           ) : null}
@@ -463,7 +564,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         {suggestions.length ? (
           <div className="iaos-suggestions">
-            <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions', { defaultValue: 'پیشنهادهای مرتبط' })}</div>
+            <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions')}</div>
             <div className="iaos-suggestions-row">
               {suggestions.map((s) => (
                 <button key={s.id} type="button" className="iaos-suggestion" onClick={() => sendSuggested(s)}>
@@ -476,31 +577,31 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         {solana.available && !solanaAddressLive ? (
           <button type="button" className="iaos-solana-connect" onClick={connectWalletIfNeeded}>
-            {t('intentAIOS.solanaConnect', { defaultValue: 'اتصال کیف پول Solana' })}
+            {t('intentAIOS.solanaConnect')}
           </button>
         ) : null}
 
         <form className="iaos-composer" onSubmit={handleSubmit}>
-          <button type="button" className="iaos-action-btn" onClick={() => setDrawerOpen(true)} aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
-            + {t('intentAIOS.actions', { defaultValue: 'Actions' })}
+          <button type="button" className="iaos-action-btn" onClick={() => setDrawerOpen(true)} aria-label={t('intentAIOS.actions')}>
+            + {t('intentAIOS.actions')}
           </button>
           <input
             className="iaos-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
-            aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
+            placeholder={t('intentAIOS.placeholder')}
+            aria-label={t('intentAIOS.placeholder')}
             enterKeyHint="send"
           />
-          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinking.length > 0}>➤</button>
+          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send')} disabled={!input.trim() || thinking.length > 0}>➤</button>
         </form>
       </div>
 
       {drawerOpen ? (
-        <div className="iaos-overlay" role="dialog" aria-modal="true" aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
+        <div className="iaos-overlay" role="dialog" aria-modal="true" aria-label={t('intentAIOS.actions')}>
           <div className="iaos-drawer">
             <div className="iaos-drawer-head">
-              <h2>{t('intentAIOS.actions', { defaultValue: 'Actions' })}</h2>
+              <h2>{t('intentAIOS.actions')}</h2>
               <button type="button" className="iaos-close" onClick={() => setDrawerOpen(false)} aria-label="Close">✕</button>
             </div>
             <div className="iaos-drawer-grid">
@@ -511,7 +612,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 </button>
               ))}
             </div>
-            <p className="iaos-drawer-note">{t('intentAIOS.drawerNote', { defaultValue: 'این دکمه‌ها فقط میانبر هستند؛ AI مستقل از آن‌ها کار می‌کند.' })}</p>
+            <p className="iaos-drawer-note">{t('intentAIOS.drawerNote')}</p>
           </div>
         </div>
       ) : null}

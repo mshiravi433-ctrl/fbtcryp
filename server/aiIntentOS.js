@@ -563,6 +563,111 @@ export function createDurableAutomation(input = {}, now = nowMs()) {
   return { ok: true, automation: autom };
 }
 
+/* ------------------------- the human-language reply ------------------------ */
+
+/*
+ * ─── WHY THE REPLY IS BUILT HERE AND NOT INTERPOLATED AT THE CALL SITE ──────
+ * The chat answer is the only part of Intent OS a person reads word for word.
+ * Everything the planner needs internally — the intent enum, the action count,
+ * the plan id, the hand-off route, the verdict code — is machinery, and every
+ * one of them used to end up on screen. These two functions are the boundary:
+ * `summariseReply` keeps the machinery in a structured object the UI can
+ * localise, and `replyText` renders the English sentence. Nothing else in this
+ * file writes user-facing prose.
+ */
+
+const CHAIN_NAMES = Object.freeze({
+  1: 'Ethereum', 10: 'Optimism', 56: 'BNB Chain', 137: 'Polygon', 146: 'Sonic',
+  8453: 'Base', 42161: 'Arbitrum', 43114: 'Avalanche', 59144: 'Linea', 501: 'Solana'
+});
+
+/** A plan leg described the way a person would say it. */
+const ACTION_PHRASE = Object.freeze({
+  SWAP: 'swap',
+  BRIDGE: 'move across chains',
+  SEND: 'send',
+  BUY: 'buy',
+  SELL: 'sell',
+  DEPOSIT: 'deposit',
+  YIELD_SWEEP: 'move idle funds into yield',
+  STABLE_SHIELD: 'move into stablecoins',
+  REVOKE_APPROVAL: 'revoke a risky approval',
+  STOP_LOSS: 'set a stop-loss',
+  FUTURES_OPEN: 'open a futures position',
+  DCA: 'set up a recurring buy',
+  AUTOMATION_CREATE: 'set up an automation',
+  GOAL: 'create a financial goal',
+  REBALANCE: 'rebalance the portfolio',
+  LEND: 'lend',
+  FARM: 'farm',
+  STOCK: 'trade a tokenised stock'
+});
+
+/** Why a plan cannot be prepared, in words rather than in codes. */
+const BLOCK_PHRASE = Object.freeze({
+  EMERGENCY_STOP: 'the emergency stop is on',
+  NO_ACTIONS: 'there is nothing to execute in that request — it is analysis',
+  MODE_NOT_ALLOWED: 'the assistant is in analysis-only mode',
+  SURFACE_DISABLED: 'that kind of action is switched off in your settings',
+  CHAIN_NOT_ALLOWED: 'that network is not in your allowed list',
+  PER_TX_LIMIT: 'it is above your per-transaction limit',
+  DAILY_LIMIT: 'it would pass your daily limit',
+  RISK_LIMIT: 'the risk score is above your limit',
+  SIMULATION_BLOCKED: 'the simulation flagged it as unsafe',
+  WALLET_REQUIRED: 'no wallet is connected that can sign'
+});
+
+/**
+ * Reduce an orchestration result to the few facts a reply needs.
+ *
+ * Deliberately shallow: the full plan and verdict still travel in the
+ * response for callers that want them, but nothing in here has to be read to
+ * write a sentence, which is what stops the internals leaking again.
+ */
+function summariseReply(out) {
+  const actions = Array.isArray(out?.plan?.actions) ? out.plan.actions : [];
+  const primary = actions[0] || null;
+  const blocked = out?.verdict?.ok === false;
+  return {
+    kind: blocked ? 'blocked' : (primary ? 'action' : 'analysis'),
+    topic: String(out?.plan?.intent || 'GENERAL').toUpperCase(),
+    hasAction: Boolean(primary),
+    /* Only what a sentence needs. No actionId, no plan id, no route. */
+    action: primary
+      ? {
+        type: String(primary.type || '').toUpperCase(),
+        asset: primary.asset || null,
+        from: primary.from || null,
+        amountUsd: primary.amount != null && primary.amount !== '' ? String(primary.amount) : null,
+        chainId: primary.chainId ?? null,
+        chainName: primary.chainId != null ? (CHAIN_NAMES[Number(primary.chainId)] || null) : null,
+        venue: primary.venue || null
+      }
+      : null,
+    blockedBy: blocked ? String(out?.verdict?.reason || '') || null : null
+  };
+}
+
+/** The English sentence. Localised copy is built client-side from `summary`. */
+function replyText(summary) {
+  if (!summary) return 'I could not prepare an answer for that.';
+  if (summary.kind === 'blocked') {
+    const why = BLOCK_PHRASE[summary.blockedBy] || 'a safety check did not pass';
+    return `I cannot prepare that right now — ${why}.`;
+  }
+  if (summary.kind === 'analysis') {
+    return 'Here is what I found. Nothing needs signing for this one.';
+  }
+  const a = summary.action || {};
+  const verb = ACTION_PHRASE[a.type] || 'prepare that';
+  const amount = a.amountUsd ? `$${a.amountUsd} of ` : '';
+  const asset = a.asset ? `${amount}${a.asset}` : (amount ? amount.trim() : '');
+  const where = a.chainName ? ` on ${a.chainName}` : '';
+  const venue = a.venue ? ` via ${a.venue}` : '';
+  const what = asset ? `${verb} ${asset}${where}${venue}` : `${verb}${where}${venue}`;
+  return `I can ${what}. Check it and confirm — your wallet signs, nothing moves before that.`;
+}
+
 /* --------------------------------- routes --------------------------------- */
 
 router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA, tools: listAiTools(), at: nowMs() }));
@@ -622,8 +727,22 @@ router.post('/chat', async (req, res) => {
   const out = orchestrate({ message, surface: req.body?.surface || null, context: ctx });
   const financialGoals = Array.isArray(context.financialGoals) ? context.financialGoals : [];
   const goalDetected = /goal|هدف|دو برابر|double|triple|دوبل/i.test(message) && (context.portfolio?.totalValueUsd != null || /goal|هدف|دو برابر|double/i.test(message));
+  /*
+   * ─── THE REPLY IS A SENTENCE, NOT A DEBUG LINE ────────────────────────────
+   * This used to answer literally:
+   *
+   *     Intent: PORTFOLIO. Prepared 1 real action(s).
+   *
+   * which is the planner's internal vocabulary printed at a person. `summary`
+   * is the structured version the client localises into its twelve languages;
+   * `text` is the English sentence for any caller that only reads text (the
+   * API is public). Neither carries an intent enum, an action count, an
+   * actionId, a routeId or a tool call.
+   */
+  const replySummary = summariseReply(out);
   const reply = {
-    text: `Intent: ${out.plan.intent}. ${out.plan.actions?.length ? `Prepared ${out.plan.actions.length} real action(s).` : 'No executable action prepared; this is analysis.'}`,
+    text: replyText(replySummary),
+    summary: replySummary,
     intent: out.plan.intent,
     confidence: out.plan.confidence,
     plan: out.plan,

@@ -47,9 +47,19 @@ export default async function run() {
   t('catalog client never writes', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(catalogClient));
   t('Intent OS hero links to the assistant, not a catalog execute', /navigate\('\/intent-ai'\)/.test(intentOs));
 
-  // Route exists for the panel.
+  // Route exists for the AI surface.
+  /*
+   * `/intent-ai` renders IntentAIUnified now — the single chat surface that
+   * replaced the panel-with-tabs. IntentAIPanel is still the module every
+   * assertion above reads, because the gate/venue/reconcile logic lives there;
+   * what changed is which component the route mounts. Asserting the literal
+   * "IntentAIPanel" in App.jsx checked the old wiring and would keep failing
+   * on a perfectly reachable screen, so the check is on the route and on the
+   * component the route actually mounts.
+   */
   const appSrc = readFileSync('src/App.jsx', 'utf8');
-  t('panel has a route', /path="\/intent-ai"/.test(appSrc) && /IntentAIPanel/.test(appSrc));
+  t('panel has a route',
+    /path="\/intent-ai"/.test(appSrc) && /(IntentAIPanel|IntentAIUnified)/.test(appSrc));
 
   // Locale key parity is maintained (fa/ar carry the new keys). Just check the new namespace.
   for (const code of ['fa', 'ar']) {

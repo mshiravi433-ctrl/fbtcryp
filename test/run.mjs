@@ -1066,6 +1066,17 @@ console.log('\n▸ probing the execution-observation empirical trainer…');
   report('execution-observation model', execObsRows);
 }
 
+/* Real HTTP + module coverage for the shared cross-chain engine: LI.FI
+   normalisation, multi-route ranking, the lifecycle state machine (no fake
+   COMPLETED), the ledger/history, the health endpoint, and the wiring proof
+   that the Bridge page and the Intent OS «میان‌زنجیره‌ای» tab run through ONE
+   service. The provider is stubbed at the network boundary only. */
+console.log('\n▸ probing the shared cross-chain engine (quotes · routes · execution · history)…');
+{
+  const crossChainRows = (await import('./cross-chain-probe.mjs')).default;
+  report('cross-chain', crossChainRows);
+}
+
 /* Real HTTP coverage for the learning core: opt-in enforcement (401), the
    dedicated event rate limiter (429), the in-memory params hot path (<1 ms),
    and the honest not-configured shapes when Blob is off. */
