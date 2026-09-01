@@ -19,6 +19,34 @@ import '../styles/smart-money.css';
 
 const TABS = ['overview', 'whales', 'wallets', 'tokens', 'flows', 'alerts'];
 
+/*
+ * LAST-GOOD OVERVIEW CACHE.
+ * «وقتی هم میزنی اتصال مجدد هیچ داده‌ای نشان نمی‌دهد» — when a refresh
+ * failed there was literally nothing on screen, even though the SAME device
+ * had rendered live data a minute earlier. Real data we already showed the
+ * user is strictly better than an empty error state, so the last successful
+ * overview is kept in localStorage and hydrated on mount; the offline banner
+ * still appears on top of it whenever the live refresh is failing.
+ */
+const LAST_GOOD_KEY = 'fbt.sm.overview.v1';
+
+function readLastGood() {
+  try {
+    const raw = localStorage.getItem(LAST_GOOD_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Stale beyond 24h is more misleading than helpful.
+    if (!parsed?.at || Date.now() - parsed.at > 24 * 3600_000) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function writeLastGood(d) {
+  try {
+    if (d && d.dataStatus === 'live') localStorage.setItem(LAST_GOOD_KEY, JSON.stringify(d));
+  } catch { /* storage full/blocked — cache is best-effort */ }
+}
+
 function ConfBar({ value, signal }) {
   const color = signal === 'DISTRIBUTION' ? '#ff5c7a' : '#2ee6a8';
   return (
@@ -43,7 +71,7 @@ export default function SmartMoney() {
   const { haptic } = useTelegram();
   const [tab, setTab] = useState('overview');
   const [window, setWindow] = useState('24h');
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => readLastGood());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
@@ -65,6 +93,7 @@ export default function SmartMoney() {
     try {
       const d = await fetchOverview(win, ctrl.signal);
       setData(d);
+      writeLastGood(d);
     } catch (e) {
       if (e.message !== 'ABORTED') setError(e.message);
     } finally {
@@ -81,7 +110,12 @@ export default function SmartMoney() {
       const chain = c.chain === 'solana' ? 'solana' : 1;
       navigate(`/smart-money/wallet/${chain}/${c.address}`);
     } else if (c.kind === 'tx') {
-      window.open(c.chain === 'solana'
+      /*
+       * NOT `window.open` — the component's `window` state (the '24h' string)
+       * shadows the global here, so `window.open(...)` was a TypeError and tx
+       * search silently did nothing.
+       */
+      globalThis.open(c.chain === 'solana'
         ? `https://solscan.io/tx/${c.address}`
         : `https://etherscan.io/tx/${c.address}`, '_blank');
     } else if (c.kind === 'symbol') {
@@ -95,12 +129,17 @@ export default function SmartMoney() {
 
   const m = data?.metrics;
   /*
-   * dataStatus 'unavailable' means the upstream stream (RPC/explorer/price
-   * sources) answered nothing — NOT that on-chain activity is zero. The old
-   * render painted "0" and "$0" everywhere, which read as working data.
-   * Now an unavailable stream shows one honest banner + "—", with retry.
+   * dataStatus 'unavailable' means EVERY source answered nothing — NOT that
+   * on-chain activity is zero. The old render painted "0" and "$0"
+   * everywhere, which read as working data. Now an unavailable stream shows
+   * one honest banner + "—", with retry.
+   *
+   * `streamStatus` (new) tracks only the whale-transfer stream that feeds
+   * the metric tiles; when it is down but other sections are live, the tiles
+   * show "—" while early tokens / liquidity keep rendering real data.
    */
   const offline = data?.dataStatus === 'unavailable';
+  const streamDown = offline || (data?.streamStatus ?? data?.dataStatus) === 'unavailable';
 
   return (
     <PageTransition>
@@ -161,8 +200,8 @@ export default function SmartMoney() {
             {loading && !data && <Spinner />}
             {error && !data && <Empty>{t('sm.errorOverview')}<br /><span className="faint">{error}</span></Empty>}
 
-            {/* Honest offline banner — see the `offline` flag above. */}
-            {data && offline && (
+            {/* Honest offline banner — see the `streamDown` flag above. */}
+            {data && streamDown && (
               <div className="sm-section sm-offline">
                 <span className="msg">⚠️ {t('sm.dataSourceOffline')}</span>
                 <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(window)}>{t('sm.retry')}</button>
@@ -174,34 +213,34 @@ export default function SmartMoney() {
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.whaleActivity')}</div>
-                    <div className="val">{offline ? '—' : m?.whaleActivity?.value ?? '—'}</div>
-                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{offline ? '—' : fmtPct(m?.whaleActivity?.changePct)}</div>
+                    <div className="val">{streamDown ? '—' : m?.whaleActivity?.value ?? '—'}</div>
+                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{streamDown ? '—' : fmtPct(m?.whaleActivity?.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.accumulation')}</div>
-                    <div className="val sm-up">{offline ? '—' : fmtUsd(m?.accumulation?.valueUsd)}</div>
-                    <div className="chg sm-up">{offline ? '—' : fmtPct(m?.accumulation?.changePct)}</div>
+                    <div className="val sm-up">{streamDown ? '—' : fmtUsd(m?.accumulation?.valueUsd)}</div>
+                    <div className="chg sm-up">{streamDown ? '—' : fmtPct(m?.accumulation?.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.distribution')}</div>
-                    <div className="val sm-down">{offline ? '—' : fmtUsd(m?.distribution?.valueUsd)}</div>
-                    <div className="chg sm-down">{offline ? '—' : fmtPct(m?.distribution?.changePct)}</div>
+                    <div className="val sm-down">{streamDown ? '—' : fmtUsd(m?.distribution?.valueUsd)}</div>
+                    <div className="chg sm-down">{streamDown ? '—' : fmtPct(m?.distribution?.changePct)}</div>
                   </div>
                 </div>
 
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeInflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{offline ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{streamDown ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeOutflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{offline ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{streamDown ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.netFlow')}</div>
                     <div className={`val ${(m?.netFlow?.value || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>
-                      {offline ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
+                      {streamDown ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
                     </div>
                   </div>
                 </div>
@@ -227,7 +266,7 @@ export default function SmartMoney() {
 
                 {/* Money flow quick view — hidden while offline: a 0/0 bar
                     reads as "no flow", which is exactly what we are NOT sure of. */}
-                {!offline && <FlowSummary flows={data.flows} onMore={() => setTab('flows')} t={t} />}
+                {!streamDown && <FlowSummary flows={data.flows} onMore={() => setTab('flows')} t={t} />}
 
                 {/* Early detection */}
                 <div className="sm-section">

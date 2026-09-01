@@ -25,10 +25,28 @@ export function setCached(key, value, ttlMs) {
  * Returns cached data if fresh; otherwise fetches (deduplicated) and caches.
  * If the fetch fails but we hold stale data, the stale copy is served — a
  * slightly old price beats a 500 on a mobile client.
+ *
+ * `opts.swr` (stale-while-revalidate): when a stale copy exists, return it
+ * IMMEDIATELY and refresh in the background instead of making the caller
+ * wait out a full upstream rebuild. This is what keeps heavy aggregate
+ * endpoints (Smart Money overview) answering in milliseconds on a warm
+ * instance instead of re-walking seven chains inline.
  */
-export async function withCache(key, ttlMs, producer) {
+export async function withCache(key, ttlMs, producer, opts) {
+  const swr = !!(opts && opts.swr === true);
   const hit = getCached(key);
   if (hit && !hit.stale) return { value: hit.value, cached: true, stale: false };
+
+  if (hit && swr) {
+    if (!inflight.has(key)) {
+      const bg = (async () => producer())();
+      inflight.set(key, bg);
+      bg.then((v) => setCached(key, v, ttlMs))
+        .catch(() => { /* keep serving stale; next request retries */ })
+        .finally(() => inflight.delete(key));
+    }
+    return { value: hit.value, cached: true, stale: true };
+  }
 
   if (inflight.has(key)) return { value: await inflight.get(key), cached: false, stale: false };
 

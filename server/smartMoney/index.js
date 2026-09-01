@@ -45,8 +45,16 @@ const compactUsd = (n) => {
  * flow windows and let the client switch without a refetch.
  */
 export async function getOverview({ window: winKey = '24h' } = {}) {
-  const { value } = await withCache(`sm:overview:${winKey}`, TTL.overview, () => buildOverview(winKey));
+  const { value } = await withCache(`sm:overview:${winKey}`, TTL.overview, () => buildOverview(winKey), { swr: true });
   return value;
+}
+
+/** Resolve `p` or fall back to null at the deadline — a slow sub-feed must
+ *  never hold the whole overview past the client's patience. */
+function within(p, ms) {
+  let timer;
+  const gate = new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms); });
+  return Promise.race([p, gate]).finally(() => clearTimeout(timer));
 }
 
 async function buildOverview(winKey) {
@@ -114,17 +122,33 @@ async function buildOverview(winKey) {
   }).sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd)).slice(0, 10);
 
   const [early, fresh, liquidity, whales] = await Promise.all([
-    earlyTokens({ limit: 8 }).catch(() => null),
-    freshWallets().catch(() => null),
-    liquidityEvents({ windowBlocks: 8 }).catch(() => null),
-    whaleBoard().catch(() => null)
+    within(earlyTokens({ limit: 8 }).catch(() => null), 10_000),
+    within(freshWallets().catch(() => null), 10_000),
+    within(liquidityEvents({ windowBlocks: 8 }).catch(() => null), 12_000),
+    within(whaleBoard().catch(() => null), 12_000)
   ]);
+
+  /*
+   * `dataStatus` drives the page-level «اتصال برقرار نیست» banner, so it must
+   * mean "EVERYTHING is dark", not "the whale stream is momentarily quiet".
+   * The old `events.length ? live : unavailable` blanked a page that had
+   * live early-token, liquidity and flow data. The whale-stream-specific
+   * state now travels separately as `streamStatus` so the metric tiles can
+   * show honest em-dashes while the live sections keep rendering.
+   */
+  const anyLive =
+    events.length > 0 ||
+    (early?.tokens?.length || 0) > 0 ||
+    (liquidity?.events?.length || 0) > 0 ||
+    (whales?.wallets?.length || 0) > 0 ||
+    (fresh?.wallets?.length || 0) > 0;
 
   return {
     schema: 'fbt.smart-money-overview.v1',
     at: Date.now(),
     window: winKey,
-    dataStatus: events.length ? 'live' : 'unavailable',
+    dataStatus: anyLive ? 'live' : 'unavailable',
+    streamStatus: events.length ? 'live' : 'unavailable',
     partial: !!partial,
     coverage: {
       events: events.length,
@@ -175,5 +199,5 @@ export async function getExchanges() {
 
 /** Liquidity feed (cached a touch longer than overview). */
 export function getLiquidityEvents(opts) {
-  return withCache('sm:liquidity', TTL.liquidity, () => liquidityEvents(opts));
+  return withCache('sm:liquidity', TTL.liquidity, () => liquidityEvents(opts), { swr: true });
 }

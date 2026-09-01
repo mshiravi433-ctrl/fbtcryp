@@ -10,7 +10,14 @@
 import { apiBase } from './apiBase.js';
 
 const BASE = `${apiBase()}/v1/smart-money`;
-const TIMEOUT_MS = 12_000;
+/*
+ * 30s, not 12s: a COLD serverless instance building the overview for the
+ * first time legitimately needs 10-20s (seven chains + prices + DexScreener).
+ * With 12s the client aborted exactly when the server was about to answer,
+ * the user saw «اتصال برقرار نیست», pressed retry, hit another cold cache,
+ * and aborted again — an infinite "no connection" loop over a working API.
+ */
+const TIMEOUT_MS = 30_000;
 
 export const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
 export const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -85,11 +92,11 @@ export const fetchFreshWallets = (signal) => getJson('/fresh-wallets', { signal 
 
 export function fetchWallet(chain, address, signal) {
   const c = chain === 'solana' ? 'solana' : chain;
-  return getJson(`/wallet/${c}/${encodeURIComponent(address)}`, { signal, timeout: 15_000 });
+  return getJson(`/wallet/${c}/${encodeURIComponent(address)}`, { signal, timeout: 30_000 });
 }
 
 export function fetchToken(chainId, address, window = '24h', signal) {
-  return getJson(`/token/${chainId}/${encodeURIComponent(address)}?window=${window}`, { signal, timeout: 15_000 });
+  return getJson(`/token/${chainId}/${encodeURIComponent(address)}?window=${window}`, { signal, timeout: 30_000 });
 }
 
 export const fetchAlerts = (identity, signal) =>
