@@ -43,6 +43,7 @@ import CentralBrainPanel from '../components/CentralBrainPanel';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import IntentTxHistory from '../components/IntentTxHistory';
 import { useWallet } from '../context/WalletContext';
+import { getSolanaBalance, solanaAddress, solanaWalletAvailable } from '../lib/solanaWallet';
 import {
   ensureLifecycle,
   expireIfDue,
@@ -1227,7 +1228,29 @@ export default function IntentOS() {
 
   /* ── Phases 131–140: wallet & multichain verification. ────────────────── */
   const wallet = useWallet();
+  const [solanaAddr, setSolanaAddr] = useState(() => solanaAddress());
+  const [solanaBalance, setSolanaBalance] = useState(null);
   const [checksumVerify, setChecksumVerify] = useState(null);
+
+  /* The Solana provider writes to window and is not React state; listen to the
+     same lightweight event the wallet page and swap use. */
+  useEffect(() => {
+    const onWalletChange = (event) => setSolanaAddr(event?.detail?.address || solanaAddress() || null);
+    window.addEventListener('solana:wallet-change', onWalletChange);
+    return () => window.removeEventListener('solana:wallet-change', onWalletChange);
+  }, []);
+
+  /* Read-only Solana balance probe for the same fail-closed verification. A
+     wallet that cannot answer an RPC balance read is reported unverified. */
+  useEffect(() => {
+    if (!solanaAddr) { setSolanaBalance(null); return undefined; }
+    let alive = true;
+    getSolanaBalance(solanaAddr)
+      .then((v) => { if (alive) setSolanaBalance(v); })
+      .catch(() => { if (alive) setSolanaBalance(null); });
+    return () => { alive = false; };
+  }, [solanaAddr]);
+
   useEffect(() => {
     let cancelled = false;
     import('ethers')
@@ -1245,8 +1268,9 @@ export default function IntentOS() {
     const providerKind = wallet.mode === 'injected' ? 'injected'
       : wallet.mode === 'wc' ? 'walletconnect'
         : wallet.mode === 'local' ? 'embedded' : 'none';
-    const supportedChains = EVM_CHAIN_ORDER;
-    const entry = wallet.address
+    /* EVM + Solana are separate namespaces and both are read-only here. */
+    const supportedChains = [...EVM_CHAIN_ORDER, 101];
+    const evmEntry = wallet.address
       ? verifyWalletChain({
         address: wallet.address,
         chainId: wallet.chainId,
@@ -1258,19 +1282,33 @@ export default function IntentOS() {
         balanceProbe: () => (wallet.nativeBalance !== undefined && wallet.nativeBalance !== null ? Number(wallet.nativeBalance) : null)
       })
       : null;
+    const solanaEntry = solanaAddr
+      ? verifyWalletChain({
+        address: solanaAddr,
+        chainId: 101,
+        chainName: 'Solana',
+        providerKind: solanaWalletAvailable() ? 'injected' : 'embedded',
+        supportedChains,
+        rpcProbe: () => Boolean(solanaAddr),
+        balanceProbe: () => (solanaBalance === null ? null : Number(solanaBalance))
+      })
+      : null;
+    const entries = [
+      evmEntry && evmEntry.verified ? { chainId: evmEntry.chainId, verified: true } : null,
+      solanaEntry && solanaEntry.verified ? { chainId: solanaEntry.chainId, verified: true } : null
+    ].filter(Boolean);
     return {
-      connected: Boolean(wallet.address),
-      entry,
-      coverage: multichainCoverage({
-        entries: entry && entry.verified ? [{ chainId: entry.chainId, verified: true }] : [],
-        supportedChains
-      }),
+      connected: Boolean(wallet.address || solanaAddr),
+      evmEntry,
+      solanaEntry,
+      entry: evmEntry || solanaEntry,
+      coverage: multichainCoverage({ entries, supportedChains }),
       posture: walletSecurityPosture({
         rawCredentialsToAgents: false,
         executionRequiresWalletConfirmation: true
       })
     };
-  }, [wallet.address, wallet.chainId, wallet.mode, wallet.isConnected, wallet.nativeBalance, checksumVerify]);
+  }, [wallet.address, wallet.chainId, wallet.mode, wallet.isConnected, wallet.nativeBalance, checksumVerify, solanaAddr, solanaBalance]);
   return (
     <PageTransition className="page ios-page">
       <motion.section className="ios-hero" variants={riseIn} initial="hidden" animate="show">
@@ -1909,28 +1947,35 @@ export default function IntentOS() {
                 <strong>
                   {!walletVerification.connected
                     ? t('intentOS.network.walletNotConnected', { defaultValue: 'No wallet connected — verification waits for a real wallet.' })
-                    : walletVerification.entry?.verified
-                      ? t('intentOS.network.walletVerified', { defaultValue: 'Wallet verified on the current chain' })
-                      : t('intentOS.network.walletUnverified', { defaultValue: 'Wallet connected — some checks failed' })}
+                    : walletVerification.evmEntry?.verified && walletVerification.solanaEntry?.verified
+                      ? t('intentOS.network.walletBothVerified', { defaultValue: 'EVM + Solana wallets verified' })
+                      : walletVerification.evmEntry?.verified || walletVerification.solanaEntry?.verified
+                        ? t('intentOS.network.walletSomeVerified', { defaultValue: 'One wallet verified — the other still requires connection' })
+                        : t('intentOS.network.walletUnverified', { defaultValue: 'Wallet connected — some checks failed' })}
                 </strong>
               </div>
-              <span className={`ios-status ${walletVerification.entry?.verified ? 'eligible' : 'unavailable'}`}>
-                {walletVerification.entry?.verified
+              <span className={`ios-status ${walletVerification.evmEntry?.verified || walletVerification.solanaEntry?.verified ? 'eligible' : 'unavailable'}`}>
+                {walletVerification.evmEntry?.verified || walletVerification.solanaEntry?.verified
                   ? t('intentOS.network.verified', { defaultValue: 'verified' })
                   : t('intentOS.network.unverified', { defaultValue: 'unverified' })}
               </span>
             </div>
             <div className="ios-network-metrics">
-              <span><b>{walletVerification.connected ? wallet.address.slice(0, 10) + '…' : '—'}</b>{t('intentOS.network.walletAddress', { defaultValue: 'address' })}</span>
-              <span><b>{walletVerification.entry?.chainId ?? '—'}</b>{t('intentOS.network.walletChain', { defaultValue: 'chain' })}</span>
+              <span><b>{walletVerification.evmEntry ? (wallet.address || '').slice(0, 10) + '…' : '—'}</b>{t('intentOS.network.walletAddress', { defaultValue: 'EVM address' })}</span>
+              <span><b>{walletVerification.evmEntry?.chainId ?? '—'}</b>{t('intentOS.network.walletChain', { defaultValue: 'EVM chain' })}</span>
+              <span><b>{walletVerification.solanaEntry ? (solanaAddr || '').slice(0, 10) + '…' : '—'}</b>{t('intentOS.network.solanaAddress', { defaultValue: 'Solana address' })}</span>
+              <span><b>{walletVerification.solanaEntry?.chainId ?? '—'}</b>{t('intentOS.network.solanaChain', { defaultValue: 'Solana chain' })}</span>
               <span><b>{walletVerification.coverage.coverage === null ? '—' : `${walletVerification.coverage.coverage}%`}</b>{t('intentOS.network.walletCoverage', { defaultValue: 'multichain coverage' })}</span>
               <span><b>{walletVerification.posture.ok ? t('intentOS.network.verified') : t('intentOS.network.unverified')}</b>{t('intentOS.network.walletBoundary', { defaultValue: 'AI credential boundary' })}</span>
             </div>
-            {walletVerification.entry && walletVerification.entry.failed.length > 0 && (
+            {(walletVerification.evmEntry?.failed?.length || walletVerification.solanaEntry?.failed?.length) ? (
               <div className="ios-rail-statusline">
-                {walletVerification.entry.failed.map((id) => t(`intentOS.network.check.${id}`, { defaultValue: id })).join(' · ')}
+                {[
+                  ...(walletVerification.evmEntry?.failed || []),
+                  ...(walletVerification.solanaEntry?.failed || [])
+                ].map((id) => t(`intentOS.network.check.${id}`, { defaultValue: id })).join(' · ')}
               </div>
-            )}
+            ) : null}
             <p>{t('intentOS.network.walletVerifyNote', { defaultValue: 'Verification is per-chain and fail-closed: address format, chain membership, provider, RPC answer and balance must all check out. Raw credentials never reach any AI agent.' })}</p>
           </section>
 
@@ -2215,7 +2260,51 @@ export default function IntentOS() {
 
       {tab === 'brain' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <CentralBrainPanel />
+          {/* Active wallet surface. The brain does not keep a private key and
+              never signs; the connection is made on the Wallet page and the
+              brain reflects the live EVM + Solana namespace from there. */}
+          <section className="ios-auction-status" data-testid="intent-os-brain-wallet">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.brain.walletTitle', { defaultValue: 'Wallet connections' })}</span>
+                <strong>
+                  {!walletVerification.connected
+                    ? t('intentOS.network.walletNotConnected', { defaultValue: 'No wallet connected' })
+                    : walletVerification.evmEntry?.verified && walletVerification.solanaEntry?.verified
+                      ? t('intentOS.brain.walletActive', { defaultValue: 'EVM + Solana wallet connections are active' })
+                      : t('intentOS.brain.walletOneActive', { defaultValue: 'One wallet is active — connect the other from the Wallet page' })}
+                </strong>
+              </div>
+              <span className={`ios-status ${walletVerification.evmEntry?.verified || walletVerification.solanaEntry?.verified ? 'eligible' : 'unavailable'}`}>
+                {walletVerification.evmEntry?.verified || walletVerification.solanaEntry?.verified ? t('intentOS.network.verified') : t('intentOS.network.unverified')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span className={walletVerification.evmEntry?.verified ? '' : 'ios-network-metric-off'}>
+                <b>{walletVerification.evmEntry ? (wallet.address || '').slice(0, 8) + '…' : t('intentOS.brain.notConnectedShort')}</b>
+                {t('intentOS.network.walletAddress', { defaultValue: 'EVM' })}
+              </span>
+              <span className={walletVerification.solanaEntry?.verified ? '' : 'ios-network-metric-off'}>
+                <b>{walletVerification.solanaEntry ? (solanaAddr || '').slice(0, 8) + '…' : t('intentOS.brain.notConnectedShort')}</b>
+                {t('intentOS.network.solanaAddress', { defaultValue: 'Solana' })}
+              </span>
+              <span>
+                <b>{walletVerification.coverage.coverage === null ? '—' : `${walletVerification.coverage.coverage}%`}</b>
+                {t('intentOS.network.walletCoverage', { defaultValue: 'coverage' })}
+              </span>
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => navigate('/wallet?tab=real')}>
+                {walletVerification.evmEntry?.verified ? t('intentOS.brain.walletManage') : t('wallet.connect')} · EVM
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => navigate('/wallet?tab=solana')}>
+                {walletVerification.solanaEntry?.verified ? t('intentOS.brain.walletManage') : t('wallet.connect')} · Solana
+              </button>
+            </div>
+          </section>
+          <div style={{ marginTop: 12 }}>
+            <CentralBrainPanel />
+          </div>
         </motion.div>
       )}
     </PageTransition>

@@ -13,6 +13,22 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLabStore } from '../../store/useLabStore';
 
+/**
+ * Level name with a real fallback.
+ *
+ * The Lab store stores a `nameKey` (beginner/trader/…). If a locale does not
+ * contain that key yet, react-i18next would otherwise paint the raw key (for
+ * example `lab2.levelNames.level2`) next to a Persian sentence. This helper
+ * prefers the translated string, then the store's display name, then a plain
+ * human string — never a key.
+ */
+export function labLevelName(t, level) {
+  const key = `lab2.levelNames.${level?.nameKey || 'beginner'}`;
+  const translated = t(key, { defaultValue: '' });
+  if (translated && translated !== '' && !translated.startsWith('lab2.')) return translated;
+  return level?.name || t('lab2.levelNames.beginner', 'Beginner');
+}
+
 export function LabHeader() {
   const { t } = useTranslation();
   const balance = useLabStore((s) => s.balance);
@@ -56,7 +72,7 @@ export function LabHeader() {
         <div className="lab2-level-badge">{lvl.lvl}</div>
         <div className="lab2-level-info">
           <div className="lab2-level-name">
-            <strong>{t(`lab2.levelNames.${lvl.nameKey}`, lvl.name)}</strong>
+            <strong>{labLevelName(t, lvl)}</strong>
             <span>{t('lab2.xpRange', { cur: totalXp.toLocaleString(), next: lvl.nextXp.toLocaleString() })}</span>
           </div>
           <div className="lab2-bar">

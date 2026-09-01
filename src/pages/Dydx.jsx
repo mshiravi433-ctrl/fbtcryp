@@ -246,11 +246,6 @@ export default function Dydx() {
             {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
           </select>
 
-          {market && <div className="row-between" style={{ margin: '12px 0' }}>
-            <div><div className="faint">{t('dydx.oraclePrice')}</div><div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div></div>
-            <div style={{ textAlign: 'end' }}><div className="faint">{t('dydx.openInterest')}</div><div className="mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div></div>
-          </div>}
-
           {/*
             ─── THE MARKET HAD NO HISTORY AT ALL ──────────────────────────────
             Reported as: "does the dYdX market not need a chart?" It did not
@@ -262,6 +257,9 @@ export default function Dydx() {
             screen uses. When it is unreachable the chart says so; it never
             draws a flat line at zero, because a flat line reads as "price has
             not moved" and that is a claim about the market, not about us.
+
+            The chart is placed first so the price shape is the first thing a
+            user reads after choosing a market.
           */}
           <div className="dydx-chart" data-testid="dydx-chart">
             <div className="dydx-chart-head">
@@ -290,7 +288,7 @@ export default function Dydx() {
             </div>
             <TrendChart
               points={candlePoints}
-              height={104}
+              height={132}
               up={candleChange >= 0}
               loading={candlesLoading}
               emptyLabel={candlesLoading ? '' : t('dydx.chartUnavailable', { defaultValue: 'The dYdX indexer did not return candles for this market.' })}
@@ -310,6 +308,11 @@ export default function Dydx() {
               </div>
             )}
           </div>
+
+          {market && <div className="row-between" style={{ margin: '12px 0' }}>
+            <div><div className="faint">{t('dydx.oraclePrice')}</div><div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div></div>
+            <div style={{ textAlign: 'end' }}><div className="faint">{t('dydx.openInterest')}</div><div className="mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div></div>
+          </div>}
 
           <div className="dir-switch">
             <button

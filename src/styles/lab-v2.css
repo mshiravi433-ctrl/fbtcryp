@@ -171,7 +171,15 @@
 }
 
 .lab2-group-title .lab2-group-emoji {
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .lab2-grid {
@@ -180,7 +188,9 @@
   gap: 10px;
 }
 
-@media (max-width: 380px) {
+/* Two columns on any phone/galaxy width: three long emoji cards side by side
+   is what made icons crowd into the text and look "faded into each other". */
+@media (max-width: 560px) {
   .lab2-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -208,8 +218,15 @@
 }
 
 .lab2-card-icon {
-  font-size: 26px;
+  font-size: 24px;
   line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .lab2-card-title {
@@ -755,7 +772,17 @@
   line-height: 1.4;
 }
 
-.lab2-notice-icon { flex-shrink: 0; }
+.lab2-notice-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 
 /* ─── Empty state ───────────────────────────────────────────────────────── */
 
@@ -780,7 +807,16 @@
   gap: 8px;
 }
 
-.lab2-result-emoji { font-size: 36px; }
+.lab2-result-emoji {
+  font-size: 32px;
+  line-height: 1;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 .lab2-result-title { font-size: 16px; font-weight: 700; }
 .lab2-result-sub { font-size: 12px; color: var(--text-2); }
 
