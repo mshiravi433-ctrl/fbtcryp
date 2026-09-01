@@ -50,6 +50,25 @@ else
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Lockfile platform guard, BEFORE `npm ci`.
+#
+# Every CI run on a Linux runner was dying thirty seconds in, long before Gradle
+# could produce anything, on:
+#
+#   npm error code EBADPLATFORM
+#   npm error notsup Unsupported platform for fsevents@2.3.2:
+#         wanted {"os":"darwin"} (current: {"os":"linux"})
+#
+# That is a macOS-only file watcher recorded inside `ganache`'s shrinkwrapped
+# lockfile as a REQUIRED nested package; npm's own resolver would have marked the
+# same thing `optional` had it not come out of a shrinkwrap. A required package
+# that cannot exist on this platform is a hard error, and a hard error here is an
+# APK that silently never gets built — the build log buried it, the release page
+# just stayed empty. The guard adds the flag npm would have added.
+# ---------------------------------------------------------------------------
+node "$HERE/lock-platform-guard.mjs"
+
 echo "▸ installing dependencies"
 npm ci
 
