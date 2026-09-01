@@ -21,7 +21,7 @@
     "deploy:workflow": "node scripts/deploy-workflow.mjs",
     "test:feerouter": "node scripts/test-feerouter.mjs",
     "android:sync": "VITE_ENABLE_SPECULATION=false npm run build && npx cap sync android",
-    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
@@ -182,7 +182,11 @@
     "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs",
     "rehearse:flash-liquidity": "node scripts/rehearse-flash-liquidity.mjs",
     "test:phase153": "node test/intent-ai/phase153-cross-chain-live-probe.mjs",
-    "test:wallex": "node test/wallex-proxy-probe.mjs"
+    "test:wallex": "node test/wallex-proxy-probe.mjs",
+    "test:central-brain": "node test/intent-ai/ci-brain-turns-probe.mjs && node test/intent-ai/ci-brain-http-probe.mjs",
+    "test:central-brain-turns": "node test/intent-ai/ci-brain-turns-probe.mjs",
+    "test:central-brain-http": "node test/intent-ai/ci-brain-http-probe.mjs",
+    "verify:apk-lock": "node ci/lock-platform-guard.mjs --check"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

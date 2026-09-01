@@ -19,6 +19,12 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
+/* The central brain's turn probe: every §42 scenario (A–J) against the real
+   engines with only the external boundary faked. It belongs in `npm test`
+   because the failure it catches — a confident answer built on unread data — is a
+   product failure, not a subsystem detail. The HTTP half is its own script
+   (`npm run test:central-brain-http`) since it boots the whole 286-route server. */
+import './intent-ai/ci-brain-turns-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe
@@ -1006,6 +1012,64 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   }
 
   report('store-safe build', rows);
+}
+
+/*
+ * THE LOCKFILE GUARD'S OWN TESTS, inside `npm test`.
+ *
+ * ci/lock-platform-guard.mjs is the reason `npm ci` survives a Linux runner at
+ * all: package-lock.json records fsevents (a macOS-only package, nested under the
+ * shrinkwrapped ganache entry) as REQUIRED, and npm treats a required dependency
+ * it cannot install on this platform as a fatal EBADPLATFORM. Its failure mode is
+ * therefore not a red test — it is an APK that silently stops being built, on a
+ * run whose only symptom is "Process completed with exit code 1".
+ *
+ * A check that only runs when someone remembers to point `node --test` at a
+ * specific file is a check that will not have run by the time the release page is
+ * empty. So the guard's tests are invoked from the same command a person types
+ * before pushing, and the exit code is what decides ✓/✗ — no parsing of colours,
+ * no assumptions about the reporter.
+ */
+console.log('\n▸ verifying the lockfile platform guard…');
+{
+  const rows = [];
+  const { readFileSync } = await import('node:fs');
+  const runGuardTests = () => {
+    try {
+      const out = execFileSync(
+        process.execPath,
+        ['--test', 'test/ci-lockfile-platform-guard.test.mjs'],
+        { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }
+      );
+      return { ok: true, out };
+    } catch (e) {
+      return { ok: false, out: `${e.stdout || ''}${e.stderr || ''}${e.message || ''}` };
+    }
+  };
+  const t = runGuardTests();
+  const passed = (t.out.match(/^ok \d+ -/gm) || []).length;
+  const notPassed = (t.out.match(/^not ok \d+ -/gm) || []).length;
+  // A green run whose reporter changed shape must not read as a broken guard, so
+  // the count is asserted against the file's own declarations as well.
+  const declared = (readFileSync('test/ci-lockfile-platform-guard.test.mjs', 'utf8').match(/^test\(/gm) || []).length;
+  rows.push(['the guard tests run green under node --test', t.ok && notPassed === 0]);
+  rows.push([`all of them are counted, none silently skipped (${passed} passed, ${declared} declared)`, passed >= 6 && notPassed === 0 && declared >= 6]);
+
+  const check = (() => {
+    try {
+      execFileSync(process.execPath, ['ci/lock-platform-guard.mjs', '--check'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+      });
+      return { ok: true, out: '' };
+    } catch (e) {
+      return { ok: false, out: `${e.stdout || ''}${e.stderr || ''}` };
+    }
+  })();
+  // The assertion that actually protects the build: main's own lockfile must pass
+  // the mode CI runs before `npm ci`.
+  rows.push(['package-lock.json passes --check on this platform' + (check.ok ? '' : ` — ${check.out.trim().split('\n')[0]}`), check.ok]);
+  report('lockfile platform guard', rows);
 }
 
 /*

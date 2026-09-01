@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { TelegramProvider } from './context/TelegramContext';
 import { WalletProvider } from './context/WalletContext';
+import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
@@ -486,6 +487,17 @@ export default function App() {
   return (
     <TelegramProvider>
       <WalletProvider>
+        {/*
+          THE CENTRAL BRAIN, MOUNTED ONCE, ABOVE THE ROUTER — and that position is
+          the feature. The Intent OS is a per-USER session (thread, shared state,
+          the open confirmation card), not a per-page one: «انجامش بده» typed on
+          /swap has to resolve against the intent raised on /portfolio. A provider
+          inside a page unmounts on navigation and takes the conversation with it,
+          which is exactly the failure the old per-page context engine never escaped.
+          It sits inside WalletProvider because the page context it pushes to the
+          server includes which wallet is connected (§7).
+        */}
+        <CentralBrainProvider>
         <RgbBackground />
         {/*
           THE LIFTED GALAXY — the starfield behind the whole first-run flow.
@@ -510,6 +522,7 @@ export default function App() {
           lock screen — all of which replace `screen` entirely.
         */}
         <InstallPrompt />
+        </CentralBrainProvider>
       </WalletProvider>
     </TelegramProvider>
   );
