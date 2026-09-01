@@ -506,6 +506,12 @@ console.log('▸ probing FBT Intent OS — execution flow (context → resolve �
   if (Array.isArray(confirmRows)) report('intent-os confirm (http)', confirmRows);
 }
 
+console.log('▸ probing FBT Intent OS — execution-first system prompt contract (v2.0)…');
+{
+  const { default: contractRows } = await import('./intent-ai/execution-first-v2-probe.mjs');
+  if (Array.isArray(contractRows)) report('intent-os execution-first v2.0', contractRows);
+}
+
 console.log('▸ probing the Financial OS — Financial Goals (engine · storage · API · wiring)…');
 {
   const { default: goalRows } = await import('./financial-goals-probe.mjs');

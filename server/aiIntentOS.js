@@ -64,6 +64,13 @@ import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { ownerFromRequest, listGoals, createGoal, parseGoalFromText } from './financialGoals.js';
 import { withCache } from './cache.js';
+import {
+  INTENT_OS_PROMPT_VERSION,
+  INTENT_OS_CONTRACT,
+  INTENT_OS_RULES,
+  EXECUTION_CHAIN,
+  buildSystemPrompt
+} from '../src/lib/intent-ai/os/systemPrompt.js';
 
 const router = Router();
 
@@ -597,6 +604,21 @@ export function createDurableAutomation(input = {}, now = nowMs()) {
 
 /* --------------------------------- routes --------------------------------- */
 
+/* The execution-first system prompt is part of the public backend contract
+   (spec §49): the frontend renders what the backend states, so the governing
+   spec must be queryable rather than hard-coded into a UI guess. */
+router.get('/system-prompt', (_req, res) => res.json({
+  ok: true,
+  schema: 'fbt.intent-os.system-prompt.v1',
+  version: INTENT_OS_PROMPT_VERSION,
+  executionChain: EXECUTION_CHAIN,
+  rules: INTENT_OS_RULES,
+  contract: INTENT_OS_CONTRACT,
+  systemPrompt: buildSystemPrompt({ locale: 'fa' }),
+  systemPromptEn: buildSystemPrompt({ locale: 'en' }),
+  at: nowMs()
+}));
+
 router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA, tools: listAiTools(), at: nowMs() }));
 
 router.post('/context', async (req, res) => {
@@ -695,6 +717,12 @@ router.post('/chat', async (req, res) => {
   const reply = {
     text: stripInternalLeaks(human.message),
     message: stripInternalLeaks(human.message),
+    /* The governing behavior contract (execution-first spec v2.0) travels with
+       the reply so the frontend renders state instead of guessing it (§49). */
+    contract: {
+      version: INTENT_OS_PROMPT_VERSION,
+      executionChain: EXECUTION_CHAIN
+    },
     intent: human.intent,
     confidence: out.plan.confidence,
     ui: human.ui,
