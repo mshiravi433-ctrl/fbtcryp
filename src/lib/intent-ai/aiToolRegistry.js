@@ -22,7 +22,24 @@ export const AI_TOOLS = Object.freeze([
   Object.freeze({ id: 'getBridgeQuote', kind: 'quote', scope: 'bridge', route: '/bridge', live: true }),
   Object.freeze({ id: 'executeBridge', kind: 'execute', scope: 'bridge', route: '/bridge', live: true, requiresSignature: true }),
   Object.freeze({ id: 'sendTransaction', kind: 'execute', scope: 'send', route: '/wallet', live: true, requiresSignature: true }),
-  Object.freeze({ id: 'getFarmOpportunities', kind: 'read', scope: 'farm', route: '/v1/ai/context', live: true }),
+  Object.freeze({ id: 'getFarmOpportunities', kind: 'read', scope: 'farm', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'farm', kind: 'read', scope: 'farm', route: '/farm', live: true }),
+  Object.freeze({ id: 'farm_analysis', kind: 'read', scope: 'farm', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'farm_scan', kind: 'read', scope: 'farm', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'farm_recommend', kind: 'read', scope: 'farm', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'pool', kind: 'read', scope: 'pool', route: '/farm?tab=pools', live: true }),
+  Object.freeze({ id: 'pool_analysis', kind: 'read', scope: 'pool', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'yield', kind: 'read', scope: 'yield', route: '/farm', live: true }),
+  Object.freeze({ id: 'yield_compare', kind: 'read', scope: 'yield', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'yield_optimize', kind: 'read', scope: 'yield', route: '/api/yields', live: true }),
+  Object.freeze({ id: 'yield_strategy', kind: 'read', scope: 'yield', route: '/farm?tab=strategies', live: true }),
+  // Registered execution intents remain explicitly unavailable until a
+  // protocol adapter can prepare, simulate and verify real calldata.
+  ...['farm_deposit', 'farm_withdraw', 'farm_claim', 'farm_compound', 'pool_add_liquidity',
+    'pool_remove_liquidity', 'pool_stake', 'pool_unstake'].map((id) => Object.freeze({
+      id, kind: 'execute', scope: id.startsWith('pool_') ? 'pool' : 'farm', route: '/farm?tab=pools',
+      live: false, status: 'UNAVAILABLE', requiresSignature: true, requiresVerifiedAdapter: true
+    })),
   Object.freeze({ id: 'getLendingOpportunities', kind: 'read', scope: 'lending', route: '/loan', live: true }),
   Object.freeze({ id: 'getFuturesMarkets', kind: 'read', scope: 'futures', route: '/perp', live: true }),
   Object.freeze({ id: 'getStockMarkets', kind: 'read', scope: 'stocks', route: '/stocks', live: true }),

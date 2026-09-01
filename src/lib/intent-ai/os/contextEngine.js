@@ -280,7 +280,24 @@ export async function updateContext(context, result) {
  * AI must know where user is, so "this" "execute it" refers to current page action
  */
 export function getCurrentPageContext(route) {
-  const r = String(route || '/');
+  const r = String(route || '/').split('?')[0];
+
+  // Farm publishes its selected pool and current tab into this session-scoped
+  // context. Follow-up phrases such as “this one” can therefore resolve the
+  // pool without copying wallet state or inventing a second Farm wallet.
+  if (r === '/farm' && typeof sessionStorage !== 'undefined') {
+    try {
+      const farm = JSON.parse(sessionStorage.getItem('fbt:farm-context') || 'null');
+      if (farm?.page === 'farm') {
+        return {
+          page: 'farm', tab: farm.tab || 'recommended', selectedPool: farm.selectedPool || null,
+          network: farm.network || null, walletState: farm.walletState || 'read-only',
+          previousIntent: farm.previousIntent || null, pendingAction: farm.pendingAction || null,
+          canExecute: ['browse', 'analyze', 'compare']
+        };
+      }
+    } catch { /* optional session context; fall through to route defaults */ }
+  }
   
   // Map routes to capabilities
   const pageMap = {
@@ -289,7 +306,7 @@ export function getCurrentPageContext(route) {
     '/swap': { page: 'swap', tab: 'swap', canExecute: ['swap', 'quote'] },
     '/bridge': { page: 'bridge', tab: 'bridge', canExecute: ['bridge', 'quote'] },
     '/market': { page: 'market', tab: 'overview', canExecute: ['view', 'analyze'] },
-    '/farm': { page: 'farming', tab: 'pools', canExecute: ['stake', 'unstake'] },
+    '/farm': { page: 'farm', tab: 'recommended', selectedPool: null, canExecute: ['browse', 'analyze', 'compare'] },
     '/loan': { page: 'lending', tab: 'supply', canExecute: ['supply', 'borrow'] },
     '/signals': { page: 'signals', tab: 'list', canExecute: ['view'] },
     '/smart-money': { page: 'smart-money', tab: 'overview', canExecute: ['track'] },

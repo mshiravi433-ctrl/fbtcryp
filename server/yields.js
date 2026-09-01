@@ -247,6 +247,10 @@ export function normalizePool(p) {
      */
     apyMean30d: Number.isFinite(Number(p.apyMean30d)) ? Math.round(Number(p.apyMean30d) * 10) / 10 : null,
     tvlUsd: Math.round(Number(p.tvlUsd) || 0),
+    volumeUsd1d: Number.isFinite(Number(p.volumeUsd1d)) ? Math.round(Number(p.volumeUsd1d)) : null,
+    apr: Number.isFinite(base) ? Math.round(base * 10) / 10 : null,
+    rewardApr: Number.isFinite(reward) ? Math.round(reward * 10) / 10 : null,
+    underlyingTokens: Array.isArray(p.underlyingTokens) ? p.underlyingTokens.slice(0, 3) : [],
     stablecoin: Boolean(p.stablecoin),
     ilRisk: p.ilRisk === 'yes',
     exposure: p.exposure ?? null,
@@ -322,7 +326,11 @@ export async function fetchYields() {
     return p.apy * (0.5 + 0.5 * realShare) * sizeFactor;
   };
 
-  const ranked = eligible.sort((a, b) => score(b) - score(a)).slice(0, 40);
+  const updatedAt = new Date().toISOString();
+  const ranked = eligible
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 40)
+    .map((pool) => ({ ...pool, source: 'defillama', updatedAt, freshness: 'FRESH' }));
 
   return {
     pools: ranked,
