@@ -7180,6 +7180,7 @@
     "noHistory": "Full history is still indexing for this wallet on the keyless path. Connect an explorer API key on the server for complete scores and P&L.",
     "errorWallet": "Could not load wallet intelligence.",
     "errorOverview": "Could not load smart money data.",
+    "dataSourceOffline": "The live on-chain data source is not answering right now, so the numbers below stay empty instead of showing zeros. It usually recovers in a minute.",
     "retry": "Retry",
     "tokenUnavailable": "Token intelligence is currently unavailable for this contract.",
     "tokenNoDex": "No active DEX pairs were found for this contract, so flow/liquidity signals are not available.",

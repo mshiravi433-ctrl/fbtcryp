@@ -8,53 +8,68 @@
  * adding new chains or well-known tokens.
  */
 
+/*
+ * RPC ENDPOINT FALLBACKS
+ * ---------------------------------------------------------------------------
+ * Each chain lists MORE THAN ONE public endpoint, tried in order. A single
+ * public RPC is a single point of failure: when that one host rate-limits
+ * (429) or drops, `eth_blockNumber`/`eth_getLogs` throw and the WHOLE chain
+ * disappears from the whale feed and the liquidity scanner — which is how
+ * «خیلی از داده‌های صفحهٔ پول هوشمند کار نمی‌کند» happened in the field.
+ * With a fallback list, one dead host costs us nothing: the next endpoint
+ * answers and the chain stays in the feed.
+ *
+ * All entries are long-lived, keyless public endpoints (official chain
+ * endpoints first, then PublicNode and dRPC). Adding a new chain? Add at
+ * least two endpoints, official first.
+ */
 export const EVM_CHAINS = {
   56: {
     id: 56, short: 'BSC', name: 'BNB Smart Chain',
     native: { symbol: 'BNB', decimals: 18, coingeckoId: 'binancecoin' },
-    rpc: ['https://bsc-rpc.publicnode.com'],
+    rpc: ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://binance.llamarpc.com'],
     explorer: 'https://bscscan.com',
     color: '#f0b90b'
   },
   1: {
     id: 1, short: 'ETH', name: 'Ethereum',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://eth.llamarpc.com'],
+    rpc: ['https://eth.llamarpc.com', 'https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     explorer: 'https://etherscan.io',
     color: '#627eea'
   },
   137: {
     id: 137, short: 'POL', name: 'Polygon',
     native: { symbol: 'POL', decimals: 18, coingeckoId: 'matic-network' },
-    rpc: ['https://polygon-rpc.com'],
+    rpc: ['https://polygon-rpc.com', 'https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
     explorer: 'https://polygonscan.com',
     color: '#8247e5'
   },
   42161: {
     id: 42161, short: 'ARB', name: 'Arbitrum One',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://arb1.arbitrum.io/rpc'],
+    rpc: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.drpc.org'],
     explorer: 'https://arbiscan.io',
     color: '#28a0f0'
   },
   8453: {
     id: 8453, short: 'BASE', name: 'Base',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://mainnet.base.org'],
+    rpc: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.drpc.org'],
     explorer: 'https://basescan.org',
     color: '#0052ff'
   },
   10: {
     id: 10, short: 'OP', name: 'Optimism',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://mainnet.optimism.io'],
+    rpc: ['https://mainnet.optimism.io', 'https://optimism-rpc.publicnode.com', 'https://optimism.drpc.org'],
     explorer: 'https://optimistic.etherscan.io',
     color: '#ff0420'
   },
   43114: {
     id: 43114, short: 'AVAX', name: 'Avalanche',
     native: { symbol: 'AVAX', decimals: 18, coingeckoId: 'avalanche-2' },
-    rpc: ['https://api.avax.network/ext/bc/C/rpc'],
+    rpc: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche-c-chain-rpc.publicnode.com', 'https://avalanche.drpc.org'],
     explorer: 'https://snowtrace.io',
     color: '#e84142'
   }

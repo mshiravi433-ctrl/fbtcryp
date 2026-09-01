@@ -285,60 +285,75 @@ export async function liquidityEvents({ minUsd = FLOORS.liquidityEventUsd, windo
   const out = [];
   for (const chainId of EVM_CHAIN_ORDER) {
     const cfg = EVM_CHAINS[chainId];
-    const rpc = cfg?.rpc?.[0];
-    if (!rpc) continue;
+    const rpcs = cfg?.rpc?.length ? cfg.rpc : [];
+    /*
+     * Same endpoint fallback as the whale scan (whales.js): one dead public
+     * RPC used to cost the chain its ENTIRE liquidity feed. Walk the list;
+     * an endpoint that answers (even with zero Mint/Burn logs in the window)
+     * is a valid result and stops the walk. The per-pair eth_calls below run
+     * on the endpoint that produced the logs.
+     */
     let logs = null;
-    try {
-      const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
-      const latest = Number(BigInt(latestHex));
-      const from = Math.max(0, latest - windowBlocks);
+    let goodRpc = null;
+    for (const rpc of rpcs) {
       try {
-        logs = await rpcCall(rpc, 'eth_getLogs', [{
-          fromBlock: '0x' + from.toString(16),
-          toBlock: '0x' + latest.toString(16),
-          topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-        }]);
+        const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
+        const latest = Number(BigInt(latestHex));
+        const from = Math.max(0, latest - windowBlocks);
+        let got = null;
+        try {
+          got = await rpcCall(rpc, 'eth_getLogs', [{
+            fromBlock: '0x' + from.toString(16),
+            toBlock: '0x' + latest.toString(16),
+            topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
+          }]);
+        } catch {
+          got = await rpcCall(rpc, 'eth_getLogs', [{
+            fromBlock: '0x' + Math.max(0, latest - 4).toString(16),
+            toBlock: '0x' + latest.toString(16),
+            topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
+          }]);
+        }
+        if (!Array.isArray(got)) got = [];
+        logs = got;
+        goodRpc = rpc;
+        break;
       } catch {
-        logs = await rpcCall(rpc, 'eth_getLogs', [{
-          fromBlock: '0x' + Math.max(0, latest - 4).toString(16),
-          toBlock: '0x' + latest.toString(16),
-          topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-        }]);
+        logs = null;
+        goodRpc = null; // this endpoint unreachable — try the next one
       }
-      if (!Array.isArray(logs)) continue;
-      for (const log of logs) {
-        const pair = String(log.address || '').toLowerCase();
-        // Confirm the pair belongs to a known factory by reading token0/token1.
-        const token0 = await pairToken(rpc, pair, '0x0dfe1681');
-        const token1 = await pairToken(rpc, pair, '0xd21220a7');
-        if (!token0 || !token1) continue;
-        const isMint = log.topics?.[0] === PAIR_TOPICS.Mint;
-        const pairRes = await dexPairsForTokens([token0, token1]);
-        const pool = (pairRes.pairs || []).find((p) => p.pairAddress === pair) || pairRes.pairs?.[0];
-        const valueUsd = pool?.liquidityUsd ?? null;
-        if (valueUsd != null && valueUsd < minUsd) continue;
-        out.push({
-          id: `${chainId}:${log.transactionHash}:${log.logIndex}`,
-          chainId,
-          chainShort: cfg.short,
-          chainColor: cfg.color,
-          kind: isMint ? 'LP_ADDED' : 'LP_REMOVED',
-          pair,
-          token0,
-          token1,
-          symbols: [pool?.baseToken?.symbol, pool?.quoteToken?.symbol].filter(Boolean).join(' / ') || `${shortAddr(token0)}/${shortAddr(token1)}`,
-          dex: pool?.dexId || null,
-          liquidityUsd: valueUsd != null ? Math.round(valueUsd) : null,
-          impact: valueUsd == null ? 'UNKNOWN' : valueUsd > 2_000_000 ? 'HIGH' : valueUsd > 500_000 ? 'MEDIUM' : 'LOW',
-          hash: log.transactionHash,
-          blockNumber: Number(BigInt(log.blockNumber)),
-          timestamp: Date.now(),
-          explorerTx: `${cfg.explorer}/tx/${log.transactionHash}`,
-          explorerPool: `${cfg.explorer}/address/${pair}`
-        });
-      }
-    } catch {
-      continue; // chain unreachable — degrade silently, surface others
+    }
+    if (!goodRpc) continue; // every endpoint for this chain failed
+    for (const log of logs) {
+      const pair = String(log.address || '').toLowerCase();
+      // Confirm the pair belongs to a known factory by reading token0/token1.
+      const token0 = await pairToken(goodRpc, pair, '0x0dfe1681');
+      const token1 = await pairToken(goodRpc, pair, '0xd21220a7');
+      if (!token0 || !token1) continue;
+      const isMint = log.topics?.[0] === PAIR_TOPICS.Mint;
+      const pairRes = await dexPairsForTokens([token0, token1]);
+      const pool = (pairRes.pairs || []).find((p) => p.pairAddress === pair) || pairRes.pairs?.[0];
+      const valueUsd = pool?.liquidityUsd ?? null;
+      if (valueUsd != null && valueUsd < minUsd) continue;
+      out.push({
+        id: `${chainId}:${log.transactionHash}:${log.logIndex}`,
+        chainId,
+        chainShort: cfg.short,
+        chainColor: cfg.color,
+        kind: isMint ? 'LP_ADDED' : 'LP_REMOVED',
+        pair,
+        token0,
+        token1,
+        symbols: [pool?.baseToken?.symbol, pool?.quoteToken?.symbol].filter(Boolean).join(' / ') || `${shortAddr(token0)}/${shortAddr(token1)}`,
+        dex: pool?.dexId || null,
+        liquidityUsd: valueUsd != null ? Math.round(valueUsd) : null,
+        impact: valueUsd == null ? 'UNKNOWN' : valueUsd > 2_000_000 ? 'HIGH' : valueUsd > 500_000 ? 'MEDIUM' : 'LOW',
+        hash: log.transactionHash,
+        blockNumber: Number(BigInt(log.blockNumber)),
+        timestamp: Date.now(),
+        explorerTx: `${cfg.explorer}/tx/${log.transactionHash}`,
+        explorerPool: `${cfg.explorer}/address/${pair}`
+      });
     }
   }
   out.sort((a, b) => (b.liquidityUsd || 0) - (a.liquidityUsd || 0));
