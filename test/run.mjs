@@ -18,6 +18,7 @@
 import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
+import './lending-engine-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe
@@ -1109,6 +1110,15 @@ console.log('\n▸ probing the learning telemetry API…');
 {
   const learningApiRows = (await import('./learning-api-probe.mjs')).default;
   report('learning telemetry API', learningApiRows);
+}
+
+/* Real HTTP coverage for the lending BFF: the build-only guarantee (no signer
+   in the backend), the contract-address allowlist, idempotency headers and
+   the circuit breaker's read-only ladder — asserted over the wire. */
+console.log('\n▸ probing the lending BFF (read-only gates · idempotency · allowlist)…');
+{
+  const lendingRows = (await import('./lending-bff-probe.mjs')).default;
+  report('lending BFF', lendingRows);
 }
 
 /*
