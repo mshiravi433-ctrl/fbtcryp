@@ -43,6 +43,7 @@
     "test:later-phase": "node test/intent-ai/later-phase-probe.mjs",
     "test:navigation": "node test/intent-ai/chat-navigation-probe.mjs",
     "test:financial-goals": "node test/financial-goals-probe.mjs",
+    "test:goal-engine": "node test/financial-goal-engine-probe.mjs",
     "test:cross-chain": "node test/cross-chain-probe.mjs",
     "ops:drill": "node scripts/run-ops-drills.mjs",
     "ops:external-providers": "node scripts/run-external-providers.mjs",

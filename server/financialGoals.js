@@ -49,11 +49,18 @@ import {
   LIMITS,
   RISK_PROFILES,
   buildGoalIntent,
+  buildGoalOutlook,
   buildPlan,
+  buildRiskStrategies,
+  futuresExposure,
+  goalHealth,
   monitorGoal,
   normaliseCurrency,
   normaliseRiskProfile,
   parseGoalFromText,
+  planEvidence,
+  simulateGoal,
+  simulateWhatIf,
   validateAllocation,
   yearsBetween
 } from '../src/lib/financialGoalEngine.js';
@@ -496,6 +503,102 @@ export async function goalProgress(owner, goalId, { currentValueUsd = null, now 
     now
   });
   return { ok: true, goal: publicGoal(found.goal), progress: report };
+}
+
+/* -------------------------------------------------------------------------- */
+/* GOAL ENGINE — analyze / what-if / simulate (the server-owned numbers)      */
+/* -------------------------------------------------------------------------- */
+
+/** The latest stored plan, or build one on the spot. Every engine surface is
+ *  fed the SAME plan the UI sees, so a what-if can never disagree with the
+ *  base card. */
+async function planForAnalysis(owner, goalId, { currentValueUsd = null, now = Date.now() } = {}) {
+  const found = await findGoal(owner, goalId);
+  if (!found.ok) return found;
+  const stored = await latestPlan(owner, goalId);
+  if (stored) return { ok: true, goal: publicGoal(found.goal), plan: publicPlan(stored), market: stored.market ?? null };
+  const built = await buildGoalPlan(owner, goalId, { currentValueUsd }, { now });
+  if (!built.ok) return built;
+  const market = await marketSnapshot({ now });
+  return { ok: true, goal: built.goal, plan: built.plan, market };
+}
+
+const snapshotsFrom = (events) => events
+  .filter((row) => row.type === 'VALUE_SNAPSHOT')
+  .map((row) => ({ at: row.at, valueUsd: row.data?.valueUsd }));
+
+/**
+ * The one-call Goal Engine surface the Plan tab renders: outlook (probability
+ * + range + data quality), goal health, evidence ("why this plan?"), the three
+ * risk strategies and the futures exposure ceiling. Nothing here executes.
+ */
+export async function goalAnalyze(owner, goalId, input = {}, { now = Date.now() } = {}) {
+  const built = await planForAnalysis(owner, goalId, { currentValueUsd: num(input.currentValueUsd), now });
+  if (!built.ok) return built;
+  const value = num(input.currentValueUsd);
+  const events = await listEvents(owner, goalId);
+  const snapshots = snapshotsFrom(events);
+  const assumptions = input.assumptions && typeof input.assumptions === 'object' ? input.assumptions : {};
+  const outlook = buildGoalOutlook({ goal: built.goal, plan: built.plan, currentValueUsd: value, assumptions, now });
+  const health = goalHealth({ goal: built.goal, plan: built.plan, currentValueUsd: value, snapshots, assumptions, now });
+  const evidence = planEvidence({ goal: built.goal, plan: built.plan, now });
+  const strategies = buildRiskStrategies({ goal: built.goal, plan: built.plan, currentValueUsd: value, assumptions, now });
+  const futures = futuresExposure({
+    riskProfile: built.goal.riskProfile,
+    probabilityPct: null,
+    baseProbabilityPct: outlook.probabilityPct
+  });
+  return {
+    ok: true,
+    goal: built.goal,
+    plan: built.plan,
+    outlook,
+    health,
+    evidence,
+    strategies,
+    futures,
+    market: built.market
+  };
+}
+
+/** Recompute the outlook after one change. Returns before/after + delta. */
+export async function goalWhatIf(owner, goalId, input = {}, { now = Date.now() } = {}) {
+  const found = await findGoal(owner, goalId);
+  if (!found.ok) return found;
+  const built = await planForAnalysis(owner, goalId, { currentValueUsd: num(input.currentValueUsd), now });
+  if (!built.ok) return built;
+  const assumptions = input.assumptions && typeof input.assumptions === 'object' ? input.assumptions : {};
+  const result = simulateWhatIf({
+    goal: built.goal,
+    plan: built.plan,
+    change: input.change,
+    currentValueUsd: num(input.currentValueUsd),
+    monthlyContribution: num(input.monthlyContribution),
+    assumptions,
+    now
+  });
+  if (result.warnings?.includes('unknownChange') || result.warnings?.includes('invalidShock')) {
+    return fail('BAD_WHATIF_CHANGE');
+  }
+  return { ok: true, ...result };
+}
+
+/** The simulator: monthly contribution → target probability, server-computed. */
+export async function goalSimulate(owner, goalId, input = {}, { now = Date.now() } = {}) {
+  const found = await findGoal(owner, goalId);
+  if (!found.ok) return found;
+  const built = await planForAnalysis(owner, goalId, { currentValueUsd: num(input.currentValueUsd), now });
+  if (!built.ok) return built;
+  const assumptions = input.assumptions && typeof input.assumptions === 'object' ? input.assumptions : {};
+  const result = simulateGoal({
+    goal: built.goal,
+    plan: built.plan,
+    candidates: input.candidates ?? input.monthlyCandidates,
+    currentValueUsd: num(input.currentValueUsd),
+    assumptions,
+    now
+  });
+  return { ok: true, ...result };
 }
 
 /* -------------------------------------------------------------------------- */

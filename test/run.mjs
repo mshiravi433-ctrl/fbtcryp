@@ -512,6 +512,12 @@ console.log('▸ probing the Financial OS — Financial Goals (engine · storage
   if (Array.isArray(goalRows)) report('financial goals', goalRows);
 }
 
+console.log('▸ probing the Financial OS — Goal Engine (outlook · probability · what-if · simulator · health · evidence)…');
+{
+  const { default: engineRows } = await import('./financial-goal-engine-probe.mjs');
+  if (Array.isArray(engineRows)) report('financial goal engine', engineRows);
+}
+
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 console.log('▸ probing the free Upstash durable-store fallback…');
 {
