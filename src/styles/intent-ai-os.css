@@ -764,3 +764,17 @@
     max-width: 620px;
   }
 }
+
+/* Option chips: the assistant asks once, with tappable answers. */
+.iaos-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.iaos-choice {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+}

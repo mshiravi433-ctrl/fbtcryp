@@ -164,6 +164,16 @@ const RULES = Object.freeze([
     weight: 3,
     words: ['swap', 'convert', 'exchange'],
     stems: ['تبدیل', 'معاوضه', 'سواپ']
+  },
+  {
+    /* The acceptance sentence of the spec: «100 USDC دارم، ETH می‌خواهم».
+       It names no verb from the lists above, yet it is unambiguously a buy.
+       "I have X, I want Y" / "X می‌خواهم" is a first-class trade utterance —
+       treating it as GENERAL is what pushed the user into a retype loop. */
+    kind: 'BUY',
+    weight: 3,
+    words: ['i want ', 'i need ', 'get me ', 'i have '],
+    stems: ['می‌خواهم', 'ميخواهم', 'میخواهم', 'می خواهم', 'لازم دارم']
   }
 ]);
 

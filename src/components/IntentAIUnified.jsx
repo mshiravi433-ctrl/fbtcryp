@@ -21,7 +21,8 @@ import {
   aiPauseAutomation,
   aiDeleteAutomation,
   aiRunAutomation,
-  aiExecutionResult
+  aiExecutionResult,
+  aiConfirm
 } from '../lib/aiIntentClient';
 import WalletConnectSheet from './WalletConnectSheet';
 import {
@@ -38,6 +39,7 @@ import {
   stripInternalLeaks
 } from '../lib/intent-ai/humanResponse.js';
 import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
+import { isExecutionReady } from '../lib/intent-ai/contextResolver.js';
 import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
 import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
@@ -200,7 +202,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setThinking([...THINKING]);
     setSuggestions([]);
     try {
-      const res = await aiChat({ message, conversationId, context: aiContext, resume: opts.resume === true });
+      const res = await aiChat({
+        message,
+        conversationId,
+        context: aiContext,
+        resume: opts.resume === true,
+        hints: opts.hints || null
+      });
       if (res?.ok !== true) {
         const code = res?.status === 412 || res?.status === 'WALLET_REQUIRED' ? 'WALLET_REQUIRED' : (res?.error || res?.status || 'NETWORK_FAILED');
         const human = humanizeError(code, { locale });
@@ -228,6 +236,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         card: reply.card || null,
         actions: Array.isArray(reply.actions) ? reply.actions : [],
         rebalance: reply.rebalance || null,
+        choices: Array.isArray(reply.choices) ? reply.choices : [],
+        choiceKind: reply.choiceKind || null,
+        intentId: reply.intentId || null,
+        intentType: reply.intent?.type || null,
         suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : []
       };
       setMessages((prev) => [...prev, nextMessage]);
@@ -242,6 +254,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           message,
           card: reply.card,
           rebalance: reply.rebalance,
+          actionPlan: reply.actionPlan || null,
+          intentId: reply.intentId || null,
           intentType: reply.intent?.type || reply.actions?.[0]?.type
         });
       } else {
@@ -334,15 +348,66 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         return;
       }
 
-      const prepared = await aiExecute({
-        action,
-        actions,
-        message,
-        intentType: type,
-        rebalance,
-        wallet: aiContext.wallet,
-        context: aiContext
-      });
+      /* Confirm continues THIS intent by id (spec §26). The confirmation word
+         is never sent back through the parser, so it can no longer come back
+         as "your request is incomplete". */
+      const intentId = pendingExecution.intentId || null;
+      let prepared = null;
+      if (intentId) {
+        const continued = await aiConfirm({
+          intentId,
+          actionPlanId: pendingExecution.actionPlan?.intentId || null,
+          intentType: type,
+          conversationId,
+          context: aiContext
+        });
+        if (continued?.ok && continued.status === 'PLAN_READY') {
+          prepared = { ...continued, ok: true, status: 'PLAN_READY' };
+        } else if (continued?.ok && continued.status && continued.status !== 'PLAN_READY') {
+          /* The plan needs one more real answer — keep the intent alive and
+             ask with options rather than dropping the request. */
+          setMessages((prev) => [...prev, {
+            id: makeId(),
+            role: 'ai',
+            content: continued.message,
+            kind: continued.ui?.type === 'CONNECT_WALLET' ? 'connect' : 'assistant',
+            ui: continued.ui || { type: 'TEXT' },
+            choices: continued.choices || [],
+            choiceKind: continued.choiceKind || null,
+            intentId,
+            intentType: type
+          }]);
+          if (continued.ui?.type === 'CONNECT_WALLET') openWalletSheet(message, type);
+          return;
+        }
+      }
+      if (!prepared) {
+        prepared = await aiExecute({
+          action,
+          actions,
+          actionPlan: pendingExecution.actionPlan || null,
+          intentId,
+          message,
+          intentType: type,
+          rebalance,
+          wallet: aiContext.wallet,
+          context: aiContext
+        });
+      }
+      if (prepared?.ok === true && prepared?.status && prepared.status !== 'PLAN_READY' && prepared.success !== true) {
+        setMessages((prev) => [...prev, {
+          id: makeId(),
+          role: 'ai',
+          content: prepared.message,
+          kind: prepared.ui?.type === 'CONNECT_WALLET' ? 'connect' : 'assistant',
+          ui: prepared.ui || { type: 'TEXT' },
+          choices: prepared.choices || [],
+          choiceKind: prepared.choiceKind || null,
+          intentId,
+          intentType: type
+        }]);
+        return;
+      }
       if (prepared?.status === 'WALLET_REQUIRED' || prepared?.ui?.type === 'CONNECT_WALLET') {
         openWalletSheet(message, type);
         const human = humanizeError('WALLET_REQUIRED', { locale });
@@ -388,7 +453,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         evmAddresses: aiContext.wallet.evmAddresses,
         chainId: wallet?.chainId || defaultChainId
       };
-      const plannedActions = (prepared?.actions?.length ? prepared.actions : actions) || [action];
+      const plannedActions = (prepared?.actionPlan?.actions?.length
+        ? prepared.actionPlan.actions
+        : (prepared?.actions?.length ? prepared.actions : actions)) || [action];
       let result;
       if (isRebalanceKind(type)) {
         result = await runRebalance({
@@ -431,7 +498,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         card: formatted.card,
         execution: formatted.execution
       }]);
-      if (formatted.execution?.success) clearPendingIntent();
+      if (formatted.execution?.success) {
+        clearPendingIntent();
+        /* Spec §20: confirmed on-chain → refresh wallet, balances, portfolio
+           and the AI context so the next answer already knows the new state. */
+        try { await multi?.refresh?.(); } catch { /* the next poll will catch up */ }
+        setSolanaTick((v) => v + 1);
+        try {
+          const list = await aiAutomations();
+          if (list?.ok) setAutomations(list.automations || []);
+        } catch { /* best effort */ }
+      }
     } catch (err) {
       const human = humanizeError(err?.code || err?.message || 'UNKNOWN', { locale });
       setMessages((prev) => [...prev, {
@@ -446,7 +523,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setExecuting(false);
       setProgress(null);
     }
-  }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet]);
+  }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet, conversationId, multi]);
+
+  /* A tapped option (wallet / asset / amount) resolves the SAME intent — it is
+     appended as a hint, never a brand new request the user has to restate. */
+  const chooseOption = useCallback((msg, choice) => {
+    if (!choice) return;
+    const hints = {};
+    if (msg?.choiceKind === 'WALLET') hints.walletAddress = choice.value;
+    else if (msg?.choiceKind === 'SOURCE_ASSET') { hints.sourceAsset = choice.value; hints.chainId = choice.chainId ?? null; }
+    else if (msg?.choiceKind === 'TARGET_ASSET') hints.targetAsset = choice.value;
+    else if (msg?.choiceKind === 'AMOUNT') hints.amountExpression = choice.value;
+    const original = loadPendingIntent()?.originalMessage || msg?.originalMessage || '';
+    const followUp = msg?.choiceKind === 'AMOUNT'
+      ? `${original} ${choice.value}`.trim()
+      : original || choice.label;
+    void sendRef.current?.(followUp, { hints, skipUserBubble: false });
+  }, []);
 
   const editExecution = useCallback(() => {
     if (!pendingExecution) return;
@@ -641,6 +734,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                   >
                     {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
                   </button>
+                ) : null}
+                {Array.isArray(m.choices) && m.choices.length ? (
+                  <div className="iaos-choices" data-testid="intent-ai-choices">
+                    {m.choices.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="iaos-btn iss-ghost iaos-choice"
+                        onClick={() => chooseOption(m, c)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
                 ) : null}
                 {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
                   <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>

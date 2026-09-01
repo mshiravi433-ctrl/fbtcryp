@@ -67,10 +67,16 @@ const payload = (extra = {}) => ({
 export const aiContext = (context = {}) => call('/v1/ai/context', { method: 'POST', body: payload(context) });
 export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
   call('/v1/ai/suggestions', { method: 'POST', body: payload({ message, conversationId, context, prior }) });
-export const aiChat = ({ message, surface, conversationId, aiControl, prior, context, resume } = {}) =>
-  call('/v1/ai/chat', { method: 'POST', body: payload({ message, surface, conversationId, aiControl, prior, context, resume }) });
-export const aiExecute = ({ action, actions, plan, message, conversationId, aiControl, dailyVolumeUsd, wallet, context, intentType, rebalance, target } = {}) =>
-  call('/v1/ai/execute', { method: 'POST', body: payload({ action, actions, plan, message, conversationId, aiControl, dailyVolumeUsd, wallet, context, intentType, rebalance, target }) });
+export const aiChat = ({ message, surface, conversationId, aiControl, prior, context, resume, hints } = {}) =>
+  call('/v1/ai/chat', { method: 'POST', body: payload({ message, surface, conversationId, aiControl, prior, context, resume, hints }) });
+/**
+ * Confirm continues an intent BY ID. It never sends the confirmation word
+ * back through the parser (spec §26).
+ */
+export const aiConfirm = ({ intentId, actionPlanId, intentType, context, hints, conversationId } = {}) =>
+  call('/v1/ai/confirm', { method: 'POST', body: payload({ intentId, actionPlanId, intentType, context, hints, conversationId }) });
+export const aiExecute = ({ action, actions, plan, actionPlan, intentId, hints, message, conversationId, aiControl, dailyVolumeUsd, wallet, context, intentType, rebalance, target } = {}) =>
+  call('/v1/ai/execute', { method: 'POST', body: payload({ action, actions, plan, actionPlan, intentId, hints, message, conversationId, aiControl, dailyVolumeUsd, wallet, context, intentType, rebalance, target }) });
 export const aiResume = (context = {}) => call('/v1/ai/resume', { method: 'POST', body: payload(context) });
 export const aiExecutionResult = (body = {}) => call('/v1/ai/execution-result', { method: 'POST', body: payload(body) });
 

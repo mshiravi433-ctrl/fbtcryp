@@ -497,6 +497,14 @@ console.log('▸ probing FBT Intent OS — human layer · pending resume · rece
   if (Array.isArray(humanRows)) report('intent-os human layer', humanRows);
 }
 
+console.log('▸ probing FBT Intent OS — execution flow (context → resolve → ONE confirmation → confirm-by-id)…');
+{
+  const { default: flowRows } = await import('./intent-ai/intent-os-execution-flow-probe.mjs');
+  if (Array.isArray(flowRows)) report('intent-os execution flow', flowRows);
+  const { default: confirmRows } = await import('./intent-ai/intent-os-confirm-http-probe.mjs');
+  if (Array.isArray(confirmRows)) report('intent-os confirm (http)', confirmRows);
+}
+
 console.log('▸ probing the Financial OS — Financial Goals (engine · storage · API · wiring)…');
 {
   const { default: goalRows } = await import('./financial-goals-probe.mjs');

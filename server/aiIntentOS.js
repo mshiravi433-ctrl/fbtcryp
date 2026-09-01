@@ -52,6 +52,8 @@ import { formatHumanResponse, formatExecutionResult, stripInternalLeaks } from '
 import { classifyUserIntent } from '../src/lib/intent-ai/intentKinds.js';
 import { planRebalance } from '../src/lib/intent-ai/rebalanceEngine.js';
 import { createPendingIntent, transitionPendingIntent } from '../src/lib/intent-ai/pendingIntent.js';
+import { buildActionPlan, isExecutionReady } from '../src/lib/intent-ai/contextResolver.js';
+import { narrateMissingInformation, narrateReadyPlan } from '../src/lib/intent-ai/planNarrator.js';
 import { humanizeError } from '../src/lib/intent-ai/errorHumanizer.js';
 import { createExecutionPlan, toExecutionResult } from '../src/lib/intent-ai/executionStateMachine.js';
 import { checkScheduleAuthorization } from './intentScheduler.js';
@@ -650,6 +652,7 @@ router.post('/chat', async (req, res) => {
   };
 
   const out = orchestrate({ message, surface: req.body?.surface || null, context: ctx });
+  const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const goalDetected = /goal|هدف|دو برابر|double|triple|دوبل/i.test(message) && (context.portfolio?.totalValueUsd != null || /goal|هدف|دو برابر|double/i.test(message));
   const resumed = req.body?.resume === true;
   const suggestions = suggestionsFor({ message, intent: out.plan.intent, context });
@@ -660,7 +663,9 @@ router.post('/chat', async (req, res) => {
     context,
     locale: locale || 'fa',
     resumed,
-    suggestions
+    suggestions,
+    intentId,
+    resolvedHints: req.body?.hints && typeof req.body.hints === 'object' ? req.body.hints : null
   });
   logInternal('chat', {
     intent: human.intent,
@@ -669,9 +674,23 @@ router.post('/chat', async (req, res) => {
     actions: human.actions
   });
 
-  if (human.pendingIntent) {
-    await writePending(ownerFor(req), human.pendingIntent);
+  /* One pending intent per turn, carrying the resolved plan. Confirm then
+     continues THIS intent by id — it never re-parses the word "OK". */
+  let pendingIntent = human.pendingIntent || null;
+  if (!pendingIntent && (human.actionPlan || human.ui?.type === 'ACTION_CARD' || human.ui?.type === 'CHOICE')) {
+    const made = createPendingIntent({
+      originalMessage: message,
+      intentType: human.intent?.type || 'GENERAL',
+      status: human.ui?.type === 'ACTION_CARD' ? 'READY' : 'NEEDS_USER_INPUT',
+      conversationId: safe(req.body?.conversationId, 64) || null,
+      actionPlan: human.actionPlan || null,
+      locale
+    });
+    if (made.ok) pendingIntent = { ...made.intent, id: intentId };
+  } else if (pendingIntent && human.actionPlan) {
+    pendingIntent = { ...pendingIntent, id: intentId, actionPlan: human.actionPlan, actionPlanId: human.actionPlan.intentId || null };
   }
+  if (pendingIntent) await writePending(ownerFor(req), pendingIntent);
 
   const reply = {
     text: stripInternalLeaks(human.message),
@@ -683,7 +702,12 @@ router.post('/chat', async (req, res) => {
     actions: human.actions,
     suggestions: human.suggestions,
     rebalance: human.rebalance || null,
-    pendingIntent: human.pendingIntent || null,
+    pendingIntent: pendingIntent || null,
+    intentId,
+    actionPlan: human.actionPlan || null,
+    actionPlanId: human.actionPlan?.intentId || null,
+    choices: human.choices || [],
+    choiceKind: human.choiceKind || null,
     goalDetected,
     executed: false,
     broadcasts: false,
@@ -748,6 +772,7 @@ router.post('/execute', async (req, res) => {
   }
 
   let actions = rawActions;
+  let resolvedPlan = null;
   let rebalance = body.rebalance || null;
   if (kind === 'REBALANCE' || kind === 'REBALANCE_PORTFOLIO') {
     rebalance = planRebalance({
@@ -770,17 +795,58 @@ router.post('/execute', async (req, res) => {
     actions = rebalance.trades;
   }
 
+  /* ------------------------------------------------------------------
+     No legs on the request is NOT "your request is incomplete". The wallet,
+     the balances and the conversation usually already answer it. Resolve
+     first (spec §1/§8); only a genuinely unanswerable question is asked, and
+     it is asked with options, never as a dead end.
+     ------------------------------------------------------------------ */
   if (!actions.length) {
-    const human = humanizeError('VALIDATION_FAILED', { locale });
-    return res.status(400).json({
-      ok: false,
-      schema: 'fbt.ai-execute.v1',
-      status: 'FAILED',
-      success: false,
-      message: human.message,
-      ui: { type: 'TEXT' },
-      execution: { success: false, status: 'FAILED', error: { code: 'VALIDATION_FAILED' } }
-    });
+    const carried = body.actionPlan && typeof body.actionPlan === 'object' ? body.actionPlan : null;
+    const stored = await readPending(ownerFor(req));
+    /* A stored plan may only be reused for the SAME intent. Matching by
+       nothing at all made a fresh "نصف USDC" request silently execute the
+       previous "100 USDC" plan. */
+    const sameIntent = Boolean(stored)
+      && stored.actionPlan?.ready === true
+      && (
+        (body.intentId && stored.id && String(body.intentId) === String(stored.id))
+        || (!message && stored.originalMessage)
+        || (message && stored.originalMessage === message)
+      );
+    const reuse = carried?.ready === true ? carried : (sameIntent ? stored.actionPlan : null);
+    if (reuse && Array.isArray(reuse.actions) && reuse.actions.length) {
+      actions = reuse.actions;
+      resolvedPlan = reuse;
+    } else {
+      const resolved = buildActionPlan({
+        intentId: body.intentId || stored?.id || null,
+        type: kind,
+        message: message || stored?.originalMessage || '',
+        context,
+        hints: body.hints && typeof body.hints === 'object' ? body.hints : {}
+      });
+      if (isExecutionReady(resolved)) {
+        actions = resolved.actions;
+        resolvedPlan = resolved;
+      } else {
+        const ask = narrateMissingInformation(resolved, { locale });
+        logInternal('execute', { status: resolved.status, intent: kind });
+        return res.status(200).json({
+          ok: true,
+          schema: 'fbt.ai-execute.v1',
+          status: resolved.status,
+          success: false,
+          message: ask.message,
+          ui: ask.ui,
+          choices: ask.choices,
+          choiceKind: ask.choiceKind || null,
+          actionPlan: resolved,
+          requiresConfirmation: false,
+          execution: { success: false, status: resolved.status }
+        });
+      }
+    }
   }
 
   const validator = validateAction(actions[0], context);
@@ -866,6 +932,7 @@ router.post('/execute', async (req, res) => {
     ui: { type: 'ACTION_CARD' },
     action: validator,
     actions: synthesizedPlan.actions,
+    actionPlan: resolvedPlan,
     rebalance,
     plan: execPlan,
     execution: { ...unsigned, success: false, status: 'PENDING' },
@@ -873,6 +940,96 @@ router.post('/execute', async (req, res) => {
     requiresUserSignature: true,
     stages: stages.stages,
     at: nowMs()
+  });
+});
+
+/**
+ * Continue an intent the user already approved.
+ *
+ * The "OK" bug (spec §26): tapping Confirm used to send the literal text "OK"
+ * back through the parser, which of course found no asset and answered
+ * "جزئیات این درخواست برای اجرا کامل نیست". Confirm now addresses the stored
+ * intent by id and re-validates its plan against fresh context — it never
+ * re-parses the confirmation word.
+ */
+router.post('/confirm', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const owner = ownerFor(req);
+  const locale = safe(body.locale, 5) || 'fa';
+  const stored = await readPending(owner);
+  const intentId = safe(body.intentId, 64) || null;
+  if (!stored || (intentId && stored.id && String(stored.id) !== intentId)) {
+    return res.status(404).json({
+      ok: false,
+      schema: 'fbt.ai-confirm.v1',
+      status: 'INTENT_NOT_FOUND',
+      success: false,
+      message: locale.startsWith('en')
+        ? 'That request has expired. Tell me the goal again and I will rebuild it.'
+        : 'این درخواست منقضی شده است. دوباره بگویید تا برنامه را بسازم.'
+    });
+  }
+  if (stored.status === 'COMPLETED') {
+    return res.status(409).json({ ok: false, schema: 'fbt.ai-confirm.v1', status: 'ALREADY_COMPLETED', success: false });
+  }
+
+  const context = await buildAIContext(req, body);
+  const kind = String(stored.intentType || body.intentType || 'SWAP').toUpperCase();
+  /* Re-resolve against fresh context: balances move between the card and the
+     tap. The stored plan supplies the choices the user already made. */
+  const hints = {
+    ...(stored.actionPlan?.ready ? {
+      sourceAsset: stored.actionPlan.source?.token || null,
+      targetAsset: stored.actionPlan.destination?.token || null,
+      amount: stored.actionPlan.source?.amount ?? null
+    } : {}),
+    ...(body.hints && typeof body.hints === 'object' ? body.hints : {})
+  };
+  const plan = buildActionPlan({
+    intentId: stored.id || intentId,
+    type: kind,
+    message: stored.originalMessage || '',
+    context,
+    hints
+  });
+
+  if (!isExecutionReady(plan)) {
+    const ask = narrateMissingInformation(plan, { locale });
+    const moved = transitionPendingIntent(stored, plan.status === 'NEEDS_WALLET' ? 'WAITING_FOR_WALLET' : 'NEEDS_USER_INPUT');
+    await writePending(owner, moved.ok ? { ...moved.intent, actionPlan: plan } : { ...stored, actionPlan: plan });
+    return res.json({
+      ok: true,
+      schema: 'fbt.ai-confirm.v1',
+      status: plan.status,
+      success: false,
+      message: ask.message,
+      ui: ask.ui,
+      choices: ask.choices,
+      choiceKind: ask.choiceKind || null,
+      intentId: stored.id || intentId,
+      actionPlan: plan
+    });
+  }
+
+  const moved = transitionPendingIntent(stored, stored.status === 'READY' ? 'EXECUTING' : 'READY');
+  await writePending(owner, moved.ok ? { ...moved.intent, actionPlan: plan } : { ...stored, actionPlan: plan });
+  const narrated = narrateReadyPlan(plan, { locale });
+  const execPlan = createExecutionPlan({ intentId: plan.intentId || stored.id, actions: plan.actions });
+  logInternal('confirm', { status: 'PLAN_READY', intent: kind, action: plan.actions[0] });
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-confirm.v1',
+    status: 'PLAN_READY',
+    success: false,
+    message: narrated.message,
+    ui: { type: 'ACTION_CARD' },
+    card: narrated.card,
+    intentId: stored.id || intentId,
+    actionPlan: plan,
+    actions: plan.actions,
+    plan: execPlan,
+    execution: { ...toExecutionResult(execPlan), success: false, status: 'PENDING' },
+    requiresUserSignature: true
   });
 });
 
