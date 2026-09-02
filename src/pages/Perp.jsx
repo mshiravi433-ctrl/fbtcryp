@@ -17,6 +17,16 @@ import SegIndicator from '../components/SegIndicator';
 import lazyRetry from '../lib/lazyRetry';
 
 const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
+/*
+ * ─── THE THIRD TAB: ON-CHAIN ────────────────────────────────────────────────
+ * Futures Engine v3. Perpetual (this overview) · dYdX (client-signed session)
+ * · On-Chain (server-built unsigned calldata against audited perp contracts,
+ * signed in the user's wallet). Same lazy pattern as dYdX, same feature flag:
+ * the store builds ship neither leveraged tab.
+ */
+const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
+
+const TAB_LABEL_KEY = { overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
 
 /**
  * Perpetual futures.
@@ -94,8 +104,19 @@ export default function Perp() {
   const { haptic, tg } = useTelegram();
   const { data: coins, loading } = useMarkets(60);
 
-  const [perpTab, setPerpTab] = useState('overview');
-  const PERP_TABS = SPECULATION_ENABLED ? ['overview', 'dydx'] : ['overview'];
+  /*
+   * Deep link: /perp?tab=onchain (the Intent OS hands futures_* drafts here
+   * and names the tab). Unknown values fall back to the overview.
+   */
+  const initialTab = (() => {
+    try {
+      const raw = String(window.location.hash || '').split('?')[1] || '';
+      const wanted = new URLSearchParams(raw).get('tab');
+      return SPECULATION_ENABLED && ['dydx', 'onchain'].includes(wanted) ? wanted : 'overview';
+    } catch { return 'overview'; }
+  })();
+  const [perpTab, setPerpTab] = useState(initialTab);
+  const PERP_TABS = SPECULATION_ENABLED ? ['overview', 'dydx', 'onchain'] : ['overview'];
 
   const [selected, setSelected] = useState('bitcoin');
 
@@ -104,6 +125,16 @@ export default function Perp() {
     [coins]
   );
   const coin = perpCoins.find((c) => c.id === selected) ?? perpCoins[0];
+  /*
+   * ─── THE INDEX CARD IS REAL OR IT SAYS SO ──────────────────────────────
+   * `getMarkets` keeps the ordinary Market screen usable offline with a
+   * deterministic snapshot, and marks every such row `offline` /
+   * `dataProvenance: 'offline'`. That snapshot must never sit under a
+   * "-PERP · Index price" label with a sparkline: a leveraged screen shows a
+   * live number or an honest "market data temporarily unavailable" — never a
+   * synthetic price that looks like one (Futures Engine v3 rule).
+   */
+  const indexOffline = coin?.offline === true || coin?.dataProvenance === 'offline';
 
   /*
    * ─── THESE LINKS USED TO EARN NOTHING ───────────────────────────────────
@@ -148,7 +179,7 @@ export default function Perp() {
             style={{ isolation: 'isolate' }}
           >
             {perpTab === k && <SegIndicator id="perp-tab" />}
-            {k === 'overview' ? t('perp.tab.overview', { defaultValue: 'نمای کلی' }) : t('stocks.tab.dydx')}
+            {t(TAB_LABEL_KEY[k])}
           </button>
         ))}
       </div>
@@ -156,6 +187,10 @@ export default function Perp() {
       {perpTab === 'dydx' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyDydx && <LazyDydx />}
+        </Suspense>
+      ) : perpTab === 'onchain' ? (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          {LazyOnchain && <LazyOnchain />}
         </Suspense>
       ) : (
         <>
@@ -197,6 +232,11 @@ export default function Perp() {
 
       {loading ? (
         <div className="skel" style={{ height: 150 }} />
+      ) : coin && indexOffline ? (
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" data-testid="perp-index-unavailable">
+          <div className="faint">{coin.symbol}-PERP · {t('perp.indexPrice')}</div>
+          <p className="notice" style={{ marginTop: 8 }}>{t('perp.marketDataUnavailable')}</p>
+        </motion.section>
       ) : coin ? (
         <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
           <div className="sheen" />

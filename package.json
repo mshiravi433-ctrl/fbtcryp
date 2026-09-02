@@ -48,6 +48,7 @@
     "test:goal-engine": "node test/financial-goal-engine-probe.mjs",
     "test:cross-chain": "node test/cross-chain-probe.mjs",
     "test:central-os": "node test/central-os-probe.mjs",
+    "test:futures": "node test/futures-engine-probe.mjs && node test/futures-bff-run.mjs",
     "ops:drill": "node scripts/run-ops-drills.mjs",
     "ops:external-providers": "node scripts/run-external-providers.mjs",
     "stage3:probe": "node scripts/run-ops-drills.mjs",
