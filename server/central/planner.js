@@ -86,10 +86,14 @@ export function planForIntent(intentType, { entities = {}, state = null, page = 
     case 'FUTURES_OPEN':
     case 'FUTURES_CLOSE':
       return [
-        step('futures', 'read', { description: 'perp market state', optional: true }),
+        step('futures', 'read', { params: { asset }, description: 'perp market state + provider status', optional: true }),
         step('portfolio', 'read', { description: 'portfolio exposure (§24: futures risk includes the current book)', optional: true }),
         step('risk', 'read', { optional: true }),
-        step('futures', 'quote', { permission: 'EXECUTE', params: { asset }, description: 'position preview (needs confirmation)' })
+        /* The preview is a REAL quote: live market, fee breakdown, risk verdict,
+           route decision and an honest executable flag — never bare arithmetic.
+           Optional so a missing size becomes a question, not a failed intent. */
+        step('futures', 'quote', { params: { asset, amountUsd: entities.amountUsd, leverage: entities.leverage, side: entities.side, action: intentType === 'FUTURES_CLOSE' ? 'close' : 'open' }, description: 'position preview: market · fee · risk · route', optional: true }),
+        step('futures', 'prepare', { permission: 'EXECUTE', params: { asset, amountUsd: entities.amountUsd, leverage: entities.leverage, side: entities.side }, description: 'build unsigned position tx (needs confirmation)' })
       ];
     case 'DYDX_ORDER':
       return [

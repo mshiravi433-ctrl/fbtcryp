@@ -35,7 +35,10 @@ const cleanAmount = (value) => {
  *
  *   swap   → /swap?from=…&to=…&amount=…&chain=…
  *   bridge → /bridge?fromChain=…&toChain=…&token=…&amount=…
- *   futures_*           → /perp
+ *   futures_*           → /perp?tab=onchain&market=…&side=…&collateral=…&leverage=…
+ *                         (Futures Engine v3: the On-Chain tab pre-fills the
+ *                         draft and the user still walks the review → confirm
+ *                         → sign gate there; a URL never executes anything)
  *   farm_*              → /farm
  *   lend, borrow, repay → /loan
  *   send                → /wallet?tab=send
@@ -45,8 +48,8 @@ const cleanAmount = (value) => {
  * dead USDT → USDT quote.
  */
 const VENUE_ROUTES = Object.freeze({
-  futures_open: '/perp',
-  futures_close: '/perp',
+  futures_open: '/perp?tab=onchain',
+  futures_close: '/perp?tab=onchain&panel=positions',
   farm_deposit: '/farm',
   farm_withdraw: '/farm',
   lend_supply: '/loan',
@@ -84,6 +87,24 @@ export function draftHandoffRoute({ plan, drafts } = {}) {
     if (order.fromSymbol) params.set('token', order.fromSymbol);
     if (amount) params.set('amount', amount);
     return `/bridge?${params.toString()}`;
+  }
+  /*
+   * Futures drafts carry the leg the chat resolved (market, side, collateral,
+   * leverage). Handing them over as query params means the On-Chain tab opens
+   * on the right market with the same numbers — and nothing more: the quote,
+   * the fee breakdown and the risk verdict are re-derived by the backend
+   * there, and the user confirms before any signature.
+   */
+  if (order.kind === 'futures_open') {
+    const params = new URLSearchParams({ tab: 'onchain' });
+    if (order.fromSymbol && order.fromSymbol !== 'USDC' && order.fromSymbol !== 'USD') params.set('market', order.fromSymbol);
+    else if (order.toSymbol) params.set('market', order.toSymbol);
+    const side = String(order.side || order.direction || order.route?.side || '').toLowerCase();
+    if (side === 'long' || side === 'short') params.set('side', side);
+    const collateral = cleanAmount(order.amountUsd ?? order.amountIn);
+    if (collateral) params.set('collateral', collateral);
+    if (Number.isFinite(Number(order.leverage)) && Number(order.leverage) >= 1) params.set('leverage', String(order.leverage));
+    return `/perp?${params.toString()}`;
   }
   /* The other executable venues have a real screen, reached by its name. */
   if (VENUE_ROUTES[order.kind]) return VENUE_ROUTES[order.kind];

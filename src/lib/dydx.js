@@ -72,10 +72,15 @@ export async function getDydxMarkets() {
       .filter((m) => m.ticker && Number.isFinite(m.oraclePrice) && m.oraclePrice > 0);
     return { markets, live: markets.length > 0 };
   } catch {
-    /* Offline catalogue — the engine stays alive (and honestly labelled)
-       when the indexer proxy is unreachable. */
-    const fallback = (await import('./dydxOffline.js')).offlineDydxMarkets();
-    return { markets: fallback.markets, live: false, offline: true };
+    /*
+     * ─── NO OFFLINE CATALOGUE ─────────────────────────────────────────────
+     * Futures Engine v3 rule: no fabricated markets, prices or funding on a
+     * leveraged screen, ever. An unreachable indexer is reported as exactly
+     * that (`unavailable: true`, empty list) and the page shows its honest
+     * "indexer unavailable — orders disabled" state instead of a demo list a
+     * user could mistake for a market.
+     */
+    return { markets: [], live: false, unavailable: true };
   }
 }
 
@@ -106,13 +111,12 @@ export async function getDydxCandles(ticker, resolution = '1HOUR', limit = 96) {
       resolution: body?.resolution || resolution
     };
   } catch {
-    /* Offline candles, labelled offline, so the chart teaches the product
-       instead of rendering a dead flat line while the indexer is down. */
-    const fallback = (await import('./dydxOffline.js')).offlineDydxCandles(safe, resolution, Number(limit) || 96);
+    /* No synthetic candles either: an empty series makes the chart say
+       "indexer did not return candles" — a claim about us, not the market. */
     return {
-      candles: fallback,
+      candles: [],
       live: false,
-      offline: true,
+      unavailable: true,
       ticker: safe,
       resolution
     };

@@ -14,7 +14,8 @@
 import { withCache } from '../cache.js';
 import { fetchMarkets, fetchGlobal, fetchSimplePrices } from '../providers.js';
 import { fetchYields } from '../yields.js';
-import { fetchPerpMarkets, annualiseFunding } from '../perp.js';
+import { fetchPerpMarkets } from '../perp.js';
+import { futuresRead, futuresQuote, futuresPrepare, futuresSimulate, futuresHealth, futuresCapabilities } from '../futures/intentAdapter.js';
 import { fetchDydxMarkets, fetchDydxAccount } from '../dydx.js';
 import { fetchAvantisEquities } from '../avantis.js';
 import { fetchOstiumPrices } from '../ostium.js';
@@ -251,32 +252,44 @@ export function installAdapters() {
   registerModule({ id: 'liquidity', label: 'Liquidity Pools', permissionLevel: 'READ', declares: ['capability', 'tool', 'state', 'health', 'read'], operations: { read: () => yieldsRead('lp'), healthCheck: yieldsHealth, capabilities: () => ({ status: 'AVAILABLE', operations: ['read'] }) } });
   registerModule({ id: 'staking', label: 'Staking', permissionLevel: 'READ', declares: ['capability', 'tool', 'state', 'health', 'read'], operations: { read: () => yieldsRead('staking'), healthCheck: yieldsHealth, capabilities: () => ({ status: 'AVAILABLE', operations: ['read'] }) } });
 
-  /* ── futures (perp venues) ─────────────────────────────────────────────── */
+  /* ── futures (Futures Engine v3: registry · router · fee · risk) ───────── */
+  /*
+   * The quote used to be `amount × leverage` computed here with no market,
+   * no fee and no risk — a number that looked like a preview and was not one.
+   * It now comes from the Futures Engine's intent adapter: a live market read,
+   * the fee breakdown the UI shows, the risk verdict, the route decision and
+   * an honest `executable` flag per provider. `prepare` builds the same
+   * UNSIGNED calldata the On-Chain tab signs; the server never signs.
+   */
   registerModule({
     id: 'futures', label: 'Futures / Perps', permissionLevel: 'EXECUTE', dependsOn: ['markets', 'portfolio'],
-    declares: ['capability', 'tool', 'state', 'health', 'read', 'quote', 'verify', 'error', 'recovery', 'events', 'permissions'],
+    declares: ['capability', 'tool', 'state', 'health', 'read', 'quote', 'prepare', 'simulate', 'execute', 'verify', 'error', 'recovery', 'fallback', 'events', 'permissions'],
     operations: {
-      read: async () => {
+      read: async (input) => {
+        const engine = await futuresRead(input || {}).catch(() => null);
+        if (engine?.ok && engine.rows?.length) return engine;
+        /* Fallback: the funding comparison feed (read-only) — labelled as such. */
         try {
           const { value } = await withCache('central:perp', 3 * 60_000, fetchPerpMarkets);
-          const rows = (value?.tickers || []).slice(0, 30).map((t) => ({
-            asset: t.asset || t.symbol, venue: t.venue, lastPrice: t.lastPrice ?? null,
-            fundingRatePct: t.fundingRatePct ?? null, fundingAprPct: t.fundingRatePct != null ? annualiseFunding(t.fundingRatePct, t.fundingIntervalHours ?? 8) : null,
-            openInterestUsd: t.openInterestUsd ?? null, volume24hUsd: t.volume24hUsd ?? null
-          }));
-          return rows.length ? live({ rows }) : unavailable('EMPTY_PERP_DATA');
-        } catch (err) { return unavailable(String(err?.message || 'PERP_FAILED').slice(0, 120)); }
+          const rows = Object.entries(value?.assets || {}).flatMap(([symbol, group]) => (Array.isArray(group?.markets) ? group.markets : Array.isArray(group) ? group : []).slice(0, 5).map((t) => ({
+            asset: symbol, venue: t.venue, lastPrice: t.price ?? null, fundingAprPct: t.fundingApr ?? null, openInterestUsd: t.openInterestUsd ?? null, volume24hUsd: t.volume24hUsd ?? null, custody: t.custody
+          }))).slice(0, 30);
+          return rows.length ? live({ rows, providers: engine?.providers || [], executableProviders: engine?.executableProviders || [], source: 'funding-comparison' }) : (engine || unavailable('EMPTY_PERP_DATA'));
+        } catch (err) { return engine || unavailable(String(err?.message || 'PERP_FAILED').slice(0, 120)); }
       },
-      quote: async (input) => {
-        const notional = Number(input?.amountUsd || 0) * Number(input?.leverage || 1);
-        return live({ notionalUsd: notional, leverage: Number(input?.leverage || 1), marginUsd: Number(input?.amountUsd || 0) });
+      quote: (input, ctx) => futuresQuote(input || {}, ctx || {}),
+      prepare: (input, ctx) => futuresPrepare(input || {}, ctx || {}),
+      simulate: (input, ctx) => futuresSimulate(input || {}, ctx || {}),
+      execute: async () => ({ ok: false, status: 'POLICY', error: 'UNSIGNED_EXECUTION_ATTEMPT', detail: 'FBT server never signs or broadcasts; the On-Chain tab hands the prepared unsigned transaction to the user wallet.' }),
+      verify: async (input) => {
+        const id = String(input?.executionId || '');
+        if (!id) return live({ verified: false, note: 'pass executionId (from prepare) and txHash to verify on-chain' });
+        const { getExecution } = await import('../futures/ledger.js');
+        const rec = await getExecution(id);
+        return rec ? live({ verified: rec.state === 'COMPLETED', state: rec.state, txHash: rec.txHash, verification: rec.verification }) : unavailable('EXECUTION_NOT_FOUND');
       },
-      verify: async (_i, ctx) => live({ verified: (ctx?.clientData?.positions || []).length >= 0, positions: ctx?.clientData?.positions?.length || 0 }),
-      healthCheck: async () => {
-        try { const { value } = await withTimeout(withCache('central:perp', 3 * 60_000, fetchPerpMarkets), 9000, 'perp'); return value?.tickers?.length ? { ok: true, status: 'AVAILABLE' } : { ok: false, status: 'DEGRADED' }; }
-        catch { return { ok: false, status: 'DEGRADED', reason: 'TIMEOUT' }; }
-      },
-      capabilities: () => ({ status: 'AVAILABLE', operations: ['read', 'quote'] })
+      healthCheck: futuresHealth,
+      capabilities: futuresCapabilities
     }
   });
 

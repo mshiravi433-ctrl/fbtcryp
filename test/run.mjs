@@ -19,6 +19,10 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
+/* Futures Engine v3: provider status derivation, the fee ceiling, the risk
+   engine's liquidation model, the router's "never on FBT revenue" law, the
+   tx state machine and the server encoder pinned to the SDK golden vectors. */
+import './futures-engine-probe.mjs';
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a
@@ -856,6 +860,25 @@ const { run: runIntentOSWiring } = await import('./.out/intentos/intentos-wiring
 report('Intent OS wiring (loan hand-off · tabs · URL sync · AI draft hand-off)', await runIntentOSWiring(document.getElementById('r')));
 
 
+/* ------------------- 4c1. the Futures → On-Chain tab, end to end ---------- */
+/*
+ * Futures Engine v3: the third Futures tab talks only to /api/v1/futures.
+ * The probe stubs that BFF (registry, markets, quote, prepare, execute,
+ * verify) plus an EIP-1193 wallet, and checks that every value the tab shows
+ * (provider status, fee breakdown, risk verdict, positions) is the backend's
+ * number, that the READ_ONLY / UNAVAILABLE states render honestly with no
+ * trade button, that the confirmation preview gates the signature, that the
+ * calldata the wallet is asked to sign is the backend's unsigned tx byte for
+ * byte, that a USER_REJECTED signature is never retried, and that the Persian
+ * tab strip carries the three labels in the right order.
+ */
+console.log('\n▸ building the Futures on-chain suite…');
+npx(['vite', 'build', '-c', 'test/vite.futures.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runFuturesOnchain } = await import('./.out/futures/futures-onchain-probe.js');
+report('futures on-chain tab (backend truth · read-only states · confirm gate · signed calldata · fa)', await runFuturesOnchain(document.getElementById('r')));
+
+
 /* --------------------------- 5. store-safe build -------------------------- */
 /*
  * Two separate guarantees are checked here, and they are not the same thing:
@@ -1171,6 +1194,16 @@ console.log('\n▸ probing the lending BFF (read-only gates · idempotency · al
 {
   const lendingRows = (await import('./lending-bff-probe.mjs')).default;
   report('lending BFF', lendingRows);
+}
+
+/* Real HTTP coverage for the futures BFF: the provider registry's six-word
+   status vocabulary, no CEX, honest UNAVAILABLE when the venue feed is down,
+   Idempotency-Key + wallet gates on every write route, server-side fee truth
+   and the unsigned/allowlisted invariants of anything /prepare returns. */
+console.log('\n▸ probing the futures BFF (registry · fee truth · idempotency · unsigned)…');
+{
+  const futuresRows = (await import('./futures-bff-probe.mjs')).default;
+  report('futures BFF', futuresRows);
 }
 
 /*

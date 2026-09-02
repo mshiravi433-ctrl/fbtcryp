@@ -47,7 +47,6 @@ export default function Dydx() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [live, setLive] = useState(false);
-  const [marketsOffline, setMarketsOffline] = useState(false);
   const [ticker, setTicker] = useState('BTC-USD');
   const [side, setSide] = useState('buy');
   const [size, setSize] = useState('');
@@ -66,7 +65,6 @@ export default function Dydx() {
   const [resolution, setResolution] = useState('4HOURS');
   const [candles, setCandles] = useState([]);
   const [candlesLoading, setCandlesLoading] = useState(false);
-  const [candlesOffline, setCandlesOffline] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -76,13 +74,11 @@ export default function Dydx() {
       .then((r) => {
         if (!alive) return;
         setCandles(r?.candles || []);
-        setCandlesOffline(r?.offline === true);
         setCandlesLoading(false);
       })
       .catch(() => {
         if (!alive) return;
         setCandles([]);
-        setCandlesOffline(false);
         setCandlesLoading(false);
       });
     return () => { alive = false; };
@@ -105,7 +101,6 @@ export default function Dydx() {
       if (!alive) return;
       setMarkets(r.markets);
       setLive(r.live);
-      setMarketsOffline(r.offline === true);
     });
     load();
     const id = setInterval(load, 20_000);
@@ -234,13 +229,7 @@ export default function Dydx() {
 
       {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
-          {!live && marketsOffline && (
-            <div className="feed-offline-note" style={{ marginBottom: 12 }}>
-              <span className="pulse-dot" aria-hidden="true" />
-              {t('dydx.offlineNotice')}
-            </div>
-          )}
-          {!live && !marketsOffline && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+          {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
           <label className="field-label">{t('dydx.market')}</label>
           <select value={market?.ticker || ''} onChange={(e) => setTicker(e.target.value)}>
             {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
@@ -264,9 +253,9 @@ export default function Dydx() {
           <div className="dydx-chart" data-testid="dydx-chart">
             <div className="dydx-chart-head">
               <span className="faint">
-                {candlesOffline
-                  ? t('dydx.chartDemo')
-                  : t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })}
+                {candlesLoading || candles.length > 1
+                  ? t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })
+                  : t('futures.chartUnavailableShort')}
               </span>
               <div className="dydx-chart-res">
                 {[
@@ -300,11 +289,7 @@ export default function Dydx() {
                 <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>
                   {candleChange >= 0 ? '+' : ''}{candleChange.toFixed(2)}%
                 </span>
-                <span className="faint">
-                  {candlesOffline
-                    ? t('dydx.chartDemoSource')
-                    : t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}
-                </span>
+                <span className="faint">{t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}</span>
               </div>
             )}
           </div>

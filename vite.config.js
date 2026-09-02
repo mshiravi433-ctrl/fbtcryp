@@ -37,8 +37,10 @@ function stripDisabledLocaleCopy() {
    */
 
   /* Top-level namespaces to drop, and the nav labels that point at them. */
-  const drop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives'];
-  const navDrop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives'];
+  /* `futures` is the Futures Engine v3 namespace (the On-Chain tab); it is
+     gated by the same flag as `perp`/`dydx`/`ostium` and stripped with them. */
+  const drop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives', 'futures'];
+  const navDrop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives', 'futures'];
 
   return {
     name: 'strip-disabled-locale-copy',

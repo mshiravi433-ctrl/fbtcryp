@@ -151,8 +151,16 @@ export default function run() {
     .map((f) => f.replace('.jsx', ''));
   // Guide/Onboarding/Welcome are rendered directly by App, not via a route.
   const routedDirectly = ['Guide', 'Onboarding', 'Welcome'];
+  /*
+   * Tab pages: rendered by a hub page's segmented control rather than by a
+   * <Route>. The hub must lazy-import them — asserted per hub below (§ Futures
+   * Engine), so a tab file that nothing imports is still caught as dead.
+   */
+  const tabPages = { FuturesOnchain: 'Perp' };
   const unimported = pageFiles.filter(
-    (p) => !routedDirectly.includes(p) && !app.includes(`pages/${p}'`)
+    (p) => !routedDirectly.includes(p)
+      && !app.includes(`pages/${p}'`)
+      && !(tabPages[p] && read(`src/pages/${tabPages[p]}.jsx`).includes(`import('./${p}')`))
   );
   t(
     `no page file is orphaned${unimported.length ? ` — dead: ${unimported.join(', ')}` : ''}`,
@@ -612,8 +620,15 @@ export default function run() {
     // separately below; a bare prefix must not fail the "every call is routed"
     // check for the same reason a route *prefix* is never a route.
     const prefixes = new Set(['v1/smart-money', 'v1/buy-sell']);
+    /*
+     * Mounted routers: `app.use('/api/v1/futures', futuresRouter())` declares a
+     * whole subtree in one line. The subtree's own routes are asserted by the
+     * router's HTTP probe (test/futures-bff-probe.mjs); here the MOUNT is what
+     * must exist, so a client prefix under a mount is routed by construction.
+     */
+    const mounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*[a-zA-Z]+Router\(\)/g)].map(([, p]) => p);
     const unrouted = [...called].filter(
-      (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p))
+      (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p)) && !mounted.some((m) => p === m || p.startsWith(`${m}/`))
     );
     // Explicit coverage for the On-Chain Intelligence Layer surface: every
     // route must really be declared in server/app.js (the grep below would
@@ -4836,10 +4851,13 @@ export default function run() {
     t('the server does not leave the bypass fiat routes mounted', !/\/api\/fiat/.test(appSrc));
     t('the browser keeps order capabilities in session storage only',
       /sessionStorage/.test(client) && !/localStorage/.test(client));
-    t('the provider fail-closes without an official callback and settlement contract',
-      /PROVIDER_REQUIRES_INTEGRATION/.test(service) && /OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED/.test(service));
-    t('the webhook endpoint exposes the same honest 503 blocker without calling a provider handler',
-      /app\.post\('\/api\/v1\/buy-sell\/webhooks/.test(appSrc) && !/handleBuySellProviderWebhook\(/.test(appSrc));
+    t('the provider fail-closes until the legitimate Ramp production credential exists',
+      /PROVIDER_REQUIRES_INTEGRATION/.test(service) && /RAMP_HOST_API_KEY_REQUIRED/.test(read('server/providers/rampNetwork.js'))
+      && /RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED/.test(read('server/providers/rampNetwork.js')));
+    t('the webhook endpoint verifies the provider ECDSA signature over the raw body',
+      /app\.post\('\/api\/v1\/buy-sell\/webhooks/.test(appSrc) && /handleBuySellProviderWebhook\(/.test(appSrc)
+      && /express\.raw/.test(appSrc) && /x-body-signature/.test(appSrc)
+      && /verifyRampWebhookSignature/.test(service) && /WEBHOOK_SIGNATURE_INVALID/.test(service));
     t('blockchain verification requires a receipt, destination, exact amount and confirmations',
       /eth_getTransactionReceipt/.test(service) && /RECIPIENT_MISMATCH/.test(service)
       && /AMOUNT_MISMATCH/.test(service) && /TX_CONFIRMING/.test(service));
@@ -12687,6 +12705,155 @@ export default function run() {
     t('chip content is centred inside the chip',
       /\.ia-setup-card \.ia-level \{[^}]*justify-items: center/.test(css)
       && /\.ia-setup-card \.ia-modes > \.ia-mode \{[^}]*text-align: center/.test(css));
+  }
+
+  /* ---- Futures Engine v3: three tabs, one BFF, no fake numbers ------------ */
+  /*
+   * Spec "FBT FUTURES ENGINE — PRODUCTION UPGRADE v3.0". The failure class this
+   * guards is the one the spec names outright: "a button that does nothing is
+   * NOT an implemented feature". Every layer has to be reachable from the one
+   * above it — tab → page → client → mount → router → adapter → engine — and
+   * the honesty properties (backend fee truth, no offline catalogue, i18n) are
+   * pinned as source facts.
+   */
+  {
+    const perp = read('src/pages/Perp.jsx');
+    const tab = read('src/pages/FuturesOnchain.jsx');
+    const client = read('src/lib/futuresClient.js');
+    const server = read('server/app.js');
+    const router = read('server/futures/router.js');
+    const registry = read('server/futures/registry.js');
+    const adapter = read('server/futures/adapters/ostium.js');
+    const enL = JSON.parse(read('src/i18n/locales/en.json'));
+    const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    /* the tab joins the SAME segmented control, in the same array, same indicator */
+    t('the Futures page has exactly three tabs: overview · dydx · onchain',
+      /PERP_TABS = SPECULATION_ENABLED \? \['overview', 'dydx', 'onchain'\]/.test(perp));
+    t('the On-Chain tab renders through the same SegIndicator id as the others',
+      (perp.match(/<SegIndicator id="perp-tab" \/>/g) || []).length === 1 && /TAB_LABEL_KEY\[k\]/.test(perp));
+    t('the tab labels are i18n keys, not literals',
+      /onchain: 'perp\.tab\.onchain'/.test(perp) && /overview: 'perp\.tab\.perpetual'/.test(perp) && !/'آن‌چین'|"On-Chain"/.test(perp));
+    t('the On-Chain tab is lazy-loaded behind the same speculation flag as dYdX',
+      /LazyOnchain = SPECULATION_ENABLED \? lazyRetry\(\(\) => import\('\.\/FuturesOnchain'\)\)/.test(perp) && /<LazyOnchain \/>/.test(perp));
+    t('the tab labels exist in English and Persian',
+      hasKey(enL, 'perp.tab.onchain') && hasKey(enL, 'perp.tab.perpetual') && faL.perp.tab.onchain === 'آن‌چین' && faL.perp.tab.perpetual === 'پرپچوال');
+
+    /* page → client → mount → router → adapter → engine */
+    t('the tab reads and writes ONLY through the futures client',
+      /from '\.\.\/lib\/futuresClient'/.test(tab) && !/fetch\(/.test(tab));
+    t('the client calls the published /api/v1/futures surface',
+      /`\$\{API_BASE\}\/v1\/futures`/.test(client) && /'\/providers'/.test(client) && /'\/quote'/.test(client) && /'\/prepare'/.test(client) && /'\/verify'/.test(client));
+    t('the client keeps no offline catalogue or saved price',
+      (() => { const code = client.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''); return !/offline|Offline|FALLBACK_|mockData|demo|localStorage\.setItem\((?!DEVICE_KEY)/.test(code); })());
+    t('the server mounts the futures router', /app\.use\('\/api\/v1\/futures', futuresRouter\(\)\)/.test(server) && /from '\.\/futures\/router\.js'/.test(server));
+    for (const route of ['/providers', '/health', '/markets', '/candles', '/funding', '/open-interest', '/positions/:wallet', '/account/:wallet', '/fees', '/fees/ledger', '/executions/:wallet']) {
+      t(`GET ${route} is declared in the router`, router.includes(`router.get('${route}'`));
+    }
+    for (const route of ['/quote', '/risk', '/prepare', '/execute', '/simulate', '/verify']) {
+      t(`POST ${route} is declared in the router`, router.includes(`router.post('${route}'`));
+    }
+    t('position management routes cover increase · decrease · close · tp · sl',
+      /\['increase', 'decrease', 'close', 'tp', 'sl'\]/.test(router) && /router\.post\(`\/positions\/:id\/\$\{action\}`/.test(router));
+    t('the router builds through the Ostium adapter and the pure engine',
+      /from '\.\/adapters\/ostium\.js'/.test(router) && /from '\.\.\/\.\.\/src\/lib\/futures-engine\/index\.js'/.test(router));
+
+    /* honesty properties */
+    t('the backend never signs or broadcasts (no signer, no private key, no sendTransaction)',
+      !/sendTransaction|new Wallet\(|Wallet\.fromPhrase|privateKey\b(?!s: 'never-held')|PRIVATE_KEY|signTransaction|sendRawTransaction/.test(router + adapter + registry));
+    t('every prepared transaction is marked unsigned and wallet-only',
+      /signed: false, broadcast: false, capabilities: \{ sign: 'wallet-only', broadcast: 'wallet-only' \}/.test(router));
+    t('every built target is allowlist-checked before it leaves the server',
+      /OSTIUM_ALLOWED_TARGETS\.includes/.test(router) && /CONTRACT_MISMATCH/.test(router));
+    t('write routes require an Idempotency-Key', (router.match(/IDEMPOTENCY_KEY_REQUIRED/g) || []).length >= 2);
+    t('the fee breakdown is computed server-side by the shared engine, not in the tab',
+      /computeFeeBreakdown\(/.test(router) && !/computeFeeBreakdown|\* bps|\/ 10_000|\/ 10000/.test(tab));
+    t('the calldata carries the SAME bps the breakdown states', /buildOpen\(o, wallet, feeDraft\.fbt\.bps\)/.test(router));
+    t('the tab shows UNAVAILABLE / READ_ONLY from the registry rather than guessing',
+      /futures-provider-status/.test(tab) && /readOnlyNotice/.test(tab) && /unavailableNotice/.test(tab));
+    t('the tab never draws a saved chart: candles come from the BFF or say unavailable',
+      /getFuturesCandles\(/.test(tab) && /chartUnavailable/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
+    t('the tab reports every hash and rejection back to /verify',
+      (tab.match(/verifyFutures\(/g) || []).length >= 3 && /status: 'REJECTED'/.test(tab));
+    t('the confirmation preview shows fee, risk, liquidation distance and route from /prepare',
+      /futures-confirm/.test(tab) && /prepared\.fee\.fbt\.feeUsd/.test(tab) && /prepared\.risk\.liquidationDistancePct/.test(tab) && /prepared\.route\?\.providerId/.test(tab));
+    /* Rendered strings only — a Persian example inside a code comment is
+       documentation, not a hardcoded UI string. */
+    t('the tab has no hardcoded Persian', !/[\u0600-\u06ff]/.test(tab.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
+    t('the tab has no "guaranteed profit" language in any locale',
+      !/guarantee(d)? profit|risk[- ]free|100% win/i.test(JSON.stringify(enL.futures)) && !/سود تضمینی|بدون ریسک/.test(JSON.stringify(faL.futures)));
+
+    /* every static key the tab uses resolves in en AND fa */
+    const tabKeys = [...tab.matchAll(/(?<![A-Za-z])t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missingTab = [...new Set(tabKeys)].filter((k) => !hasKey(enL, k) || !hasKey(faL, k));
+    t(`every On-Chain tab key resolves in en and fa (${new Set(tabKeys).size} checked)${missingTab.length ? ` — missing: ${missingTab.slice(0, 4).join(', ')}` : ''}`, missingTab.length === 0);
+    for (const prefix of ['futures.status.', 'futures.err.', 'futures.risk.', 'futures.progress.', 'futures.manage.', 'futures.warn.', 'futures.block.']) {
+      const enKeys = Object.keys(enL.futures[prefix.split('.')[1]] || {});
+      t(`templated ${prefix}* keys exist in Persian (${enKeys.length})`, enKeys.length > 0 && enKeys.every((k) => hasKey(faL, `${prefix}${k}`)));
+    }
+    t('the spec\'s Persian fallbacks are the exact sentences',
+      faL.futures.readOnlyNotice === 'این بازار در حال حاضر فقط برای مشاهده در دسترس است.'
+      && faL.futures.err.NOT_CONFIGURED === 'این قابلیت هنوز برای محیط Production پیکربندی نشده است.');
+
+    /* the registry: derived status, no CEX, config can only reduce availability */
+    t('the registry derives status from probes and flags, never declares AVAILABLE',
+      /resolveProviderStatus\(/.test(registry) && !/status:\s*'AVAILABLE'/.test(registry));
+    t('no centralized exchange trading API exists in the futures backend',
+      !/binance\.com|bybit\.com|kucoin\.com|mexc\.com|api-key|X-MBX-APIKEY/i.test(router + adapter + registry));
+    t('FUTURES_* events are part of the central vocabulary', /'FUTURES_ORDER_PREPARED'/.test(read('server/central/constants.js')) && /'FUTURES_FEE_RECORDED'/.test(read('server/central/constants.js')));
+
+    /* Intent OS: futures capability is real, honest and confirmation-gated */
+    const adapters = read('server/central/adapters.js');
+    const pipeline = read('server/central/pipeline.js');
+    t('the central futures module is backed by the engine adapter, not bare arithmetic',
+      /from '\.\.\/futures\/intentAdapter\.js'/.test(adapters) && !/const notional = Number\(input\?\.amountUsd \|\| 0\) \* Number\(input\?\.leverage \|\| 1\)/.test(adapters));
+    t('the central futures module refuses to execute (server never signs)', /execute: async \(\) => \(\{ ok: false, status: 'POLICY', error: 'UNSIGNED_EXECUTION_ATTEMPT'/.test(adapters));
+    t('an ambiguous futures sentence becomes a QUESTION, never an order',
+      /function futuresIntent/.test(pipeline) && /questionResponse\(text, missing/.test(pipeline));
+    t('the pipeline uses the exact Persian read-only fallback',
+      pipeline.includes('این بازار در حال حاضر فقط برای مشاهده در دسترس است.') && pipeline.includes('این قابلیت هنوز برای محیط Production پیکربندی نشده است.'));
+    t('the understanding engine extracts leverage and side',
+      /export function extractLeverage/.test(read('server/central/understanding.js')) && /export function extractSide/.test(read('server/central/understanding.js')));
+
+    /*
+     * ─── THE OLDER TWO TABS OBEY THE SAME RULE ─────────────────────────────
+     * The dYdX and Ostium clients used to swap in a fabricated catalogue and a
+     * synthetic price series whenever their upstream was unreachable. That is
+     * exactly the "fake markets / fake candles" the spec forbids on a leverage
+     * screen, and the READ_ONLY/UNAVAILABLE states exist so it is never
+     * needed. Both fallback modules are deleted; an unreachable upstream is
+     * reported as `unavailable: true` with an empty list.
+     */
+    const dydxLib = read('src/lib/dydx.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const ostLib = read('src/lib/ostium.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    t('the fabricated dYdX and Ostium offline catalogues are gone from the repository',
+      !existsSync('src/lib/dydxOffline.js') && !existsSync('src/lib/ostiumOffline.js'));
+    t('the dYdX client reports an unreachable indexer as unavailable, never as demo markets',
+      !/dydxOffline|offlineDydx/.test(dydxLib) && /markets: \[\], live: false, unavailable: true/.test(dydxLib) && /candles: \[\],\s*live: false,\s*unavailable: true/.test(dydxLib));
+    t('the Ostium client reports an unreachable feed as unavailable, never as demo pairs',
+      !/ostiumOffline|offlineOstium/.test(ostLib) && /pairs: \[\],\s*live: false,\s*generatedAt: null,\s*unavailable: true/.test(ostLib));
+    const ostPage = read('src/pages/Ostium.jsx');
+    const dydxPage = read('src/pages/Dydx.jsx');
+    t('the Ostium chart draws only session-observed live mids — no synthetic series',
+      !/ostiumDemoSeries|chartDemo/.test(ostPage) && /sessionPoints\.length >= 2 \? sessionPoints : \[\]/.test(ostPage));
+    t('the dYdX page has no "sample chart" path left', !/chartDemo|candlesOffline|marketsOffline/.test(dydxPage));
+    t('the "what is this pair" knowledge survived the deletion in its own module',
+      existsSync('src/lib/assetKnowledge.js') && /from '\.\.\/lib\/assetKnowledge'/.test(ostPage));
+    t('the Perpetual overview never puts the offline market snapshot under an index-price label',
+      /indexOffline = coin\?\.offline === true \|\| coin\?\.dataProvenance === 'offline'/.test(perp) && /perp\.marketDataUnavailable/.test(perp)
+      && typeof enL.perp.marketDataUnavailable === 'string' && typeof faL.perp.marketDataUnavailable === 'string');
+
+    /* Intent OS → On-Chain tab hand-off: pre-fill only, never execute */
+    const route = read('src/components/IntentAIRoute.jsx');
+    t('futures drafts hand off into the On-Chain tab with the resolved leg as query params',
+      /futures_open: '\/perp\?tab=onchain'/.test(route) && /order\.kind === 'futures_open'/.test(route) && /params\.set\('leverage'/.test(route) && /params\.set\('collateral'/.test(route));
+    t('the On-Chain tab reads the hand-off, clamps leverage to 50 and applies it once',
+      /function readPrefill/.test(tab) && /Math\.min\(leverage, 50\)/.test(tab) && /prefillApplied\.current = true/.test(tab));
+    t('a hand-off URL can never sign: prepare/execute are only reachable from the review and confirm buttons',
+      !/useEffect\([^)]*prepareFutures/.test(tab) && !/useEffect\([^)]*executeFutures/.test(tab));
+    const caps = read('src/lib/intent-ai/os/appCapabilities.js');
+    t('the client capability registry routes futures to the On-Chain tab and lists only real futures_* actions',
+      /id: 'futures',[\s\S]{0,400}?route: '\/perp\?tab=onchain'/.test(caps) && /'futures\.setTakeProfit'/.test(caps) && /'FUTURES_ORDER_PREPARED'/.test(caps));
   }
 
   return rows;

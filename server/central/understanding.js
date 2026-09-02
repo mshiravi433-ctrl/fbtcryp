@@ -131,7 +131,7 @@ export function classifyMessage(message) {
   if (has('هدف', 'به ۱۰۰', 'به 100', 'می‌خواهم برس', 'میخواهم برس', 'هدفم', 'goal')) {
     return has('پیشرفت', 'چقدر نزدیک', 'وضعیت هدف', 'progress') ? 'GOAL_PROGRESS' : 'GOAL_CREATE';
   }
-  if (has('فیوچرز', 'آتی', 'پوزیشن', 'لوریج', 'اهرم', 'futures', 'perp'))
+  if (has('فیوچرز', 'آتی', 'پوزیشن', 'لوریج', 'اهرم', 'futures', 'perp', 'leverage', /\b\d+(?:\.\d+)?x\b/, 'لانگ', 'شورت', /\b(go|open|take)\s+(a\s+)?(long|short)\b/, /\b(long|short)\s+(position|on)\b/))
     return has('بستن', 'ببند', 'خارج', 'close') ? 'FUTURES_CLOSE' : 'FUTURES_OPEN';
   if (has('dydx', 'دای‌دکس', 'دای دکس', 'اردر')) return 'DYDX_ORDER';
   if (has('سیگنال', 'سیگنال‌ها', 'سیگنالها', 'سیگنالی', 'سیگنال بده', 'سیگنال بازار', 'سیگنال داریم', 'سیگنالی هست', 'سیگنا', 'سیگنالی برای', 'سیگنال‌های')) return 'SIGNALS_BRIEF';
@@ -142,6 +142,25 @@ export function classifyMessage(message) {
   if (has('تراکنش', 'وضعیت تراکنش', 'تراکنشم', 'tx', 'transaction status', 'hash', 'هش تراکنش')) return 'TRANSACTION_STATUS';
   if (has('برو به', 'صفحه', 'باز کن', 'نمایش بده', 'بریم به', 'باز کردن', 'open ', 'navigate', 'go to')) return 'NAVIGATION';
   return 'GENERIC';
+}
+
+/** "اهرم ۵" / "5x" / "leverage 10" / "۱۰ برابر" → 5 / 10. */
+export function extractLeverage(text) {
+  const t = toEnDigits(String(text || ''));
+  const m = t.match(/(?:اهرم|لوریج|leverage)\s*[:=]?\s*(\d+(?:\.\d+)?)/i)
+    || t.match(/(\d+(?:\.\d+)?)\s*(?:x|×|X|برابر)(?![a-z])/)
+    || t.match(/(\d+(?:\.\d+)?)\s*(?:اهرم|لوریج)/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 && n <= 1000 ? n : null;
+}
+
+/** long / short from either language; null when the sentence does not say. */
+export function extractSide(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\b(short|sell)\b|شورت|فروش استقراضی|روی نزول|نزولی بگیر/.test(t)) return 'short';
+  if (/\b(long|buy)\b|لانگ|روی صعود|صعودی بگیر/.test(t)) return 'long';
+  return null;
 }
 
 function extractRecipient(text) {
@@ -159,7 +178,9 @@ export function extractEntities(message) {
     amountUsd: extractAmount(message),
     percent: extractPercent(message),
     targetAsset: extractTargetAsset(message),
-    recipient: extractRecipient(message)
+    recipient: extractRecipient(message),
+    leverage: extractLeverage(message),
+    side: extractSide(message)
   };
 }
 

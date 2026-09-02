@@ -57,6 +57,7 @@ import {
   listAssets as buySellAssets,
   listNetworks as buySellNetworks,
   cancelBuySellOrder,
+  handleBuySellProviderWebhook,
   verifyBuySellOrder
 } from './buySell.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
@@ -185,6 +186,7 @@ import aiIntentOSRoutes from './aiIntentOS.js';
 import { createCentralIntelligence } from './ci/api.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
+import { futuresRouter } from './futures/router.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
@@ -398,19 +400,22 @@ const app = express();
 app.disable('x-powered-by');
 
 /*
- * This reserved callback endpoint is registered before JSON parsing so it
- * cannot fall through to another application handler. Callback handling is
- * disabled: no undocumented signature/header or payload is accepted.
+ * Provider settlement webhook. Registered before JSON parsing so the raw body
+ * is available for signature verification (Ramp signs the exact JSON payload
+ * with its ECDSA key — X-Body-Signature). The handler itself is fail-closed:
+ * without the configured Ramp public key, nothing is parsed as settlement.
  */
-app.post('/api/v1/buy-sell/webhooks/:provider', express.raw({ type: 'application/json', limit: '32kb' }), (_req, res) => {
+app.post('/api/v1/buy-sell/webhooks/:provider', express.raw({ type: 'application/json', limit: '32kb' }), (req, res) => {
   res.set('cache-control', 'no-store');
-  /* No guessed signature header, payload field, or return parameter is accepted.
-     This stays a deliberately visible integration blocker until an official
-     provider callback and settlement-attestation contract is implemented. */
-  return res.status(503).json({
-    error: 'PROVIDER_REQUIRES_INTEGRATION',
-    detail: 'OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'
-  });
+  return Promise.resolve()
+    .then(() => handleBuySellProviderWebhook({
+      providerId: req.params.provider,
+      rawBody: req.body,
+      signature: req.get('x-body-signature'),
+      query: req.query
+    }))
+    .then((out) => res.status(Number(out?.status) || 200).json(out?.body ?? {}))
+    .catch(() => res.status(503).json({ error: 'WEBHOOK_UNAVAILABLE' }));
 });
 
 /*
@@ -4807,7 +4812,7 @@ function sendBuySell(res, operation) {
 app.get('/api/v1/buy-sell/providers', (_req, res) =>
   sendBuySell(res, async () => ({ status: 200, body: await getBuySellCapabilities() })));
 app.get('/api/v1/buy-sell/assets', (req, res) =>
-  sendBuySell(res, async () => ({ status: 200, body: await buySellAssets({ side: req.query.side }) })));
+  sendBuySell(res, async () => ({ status: 200, body: await buySellAssets({ side: req.query.side, fiatCurrency: req.query.fiatCurrency || 'USD' }) })));
 app.get('/api/v1/buy-sell/networks', (req, res) =>
   sendBuySell(res, async () => ({ status: 200, body: await buySellNetworks({ asset: req.query.asset, side: req.query.side }) })));
 app.post('/api/v1/buy-sell/eligibility', (req, res) =>
@@ -5234,6 +5239,18 @@ app.use('/api', centralRouter);
  * bands, alert rules and circuit-breaker ladder run in the UI and here.
  */
 app.use('/api/lending', lendingRouter());
+
+/* ------------------------------ futures BFF -------------------------------- */
+/*
+ * FBT Futures Engine v3 (spec: FUTURES ENGINE — PRODUCTION UPGRADE). The
+ * read/quote/risk/prepare/verify API behind the Futures page's three tabs
+ * (Perpetual · dYdX · On-Chain) and the Intent OS futures_* capabilities.
+ * Same contract as the lending BFF: every POST returns UNSIGNED calldata for
+ * the user's wallet, every fee is computed here (never in the browser), every
+ * provider status is derived from live probes, and every value the UI shows
+ * has a backend source. No signer, no key, no CEX trading API exists here.
+ */
+app.use('/api/v1/futures', futuresRouter());
 
 /* ------------------------------ order watch -------------------------------- */
 /*

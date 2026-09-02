@@ -52,6 +52,28 @@ export function fetchOstiumPrices() {
   return request('/v1/prices');
 }
 
+/**
+ * OHLC candles from the same keyless builder API (`POST /v1/ohlc`), the exact
+ * request shape @ostium/builder-sdk 0.7.0 sends. Resolutions are the API's own
+ * vocabulary; anything else is refused here rather than forwarded.
+ */
+export const OSTIUM_OHLC_RESOLUTIONS = Object.freeze(['1', '5', '15', '60', '240', '1D']);
+
+export function fetchOstiumOhlc({ pair, fromTimestampSeconds, toTimestampSeconds, resolution = '60' } = {}) {
+  const raw = String(pair || '').toUpperCase();
+  if (!/^[A-Z0-9]{1,12}-[A-Z0-9]{1,12}$/.test(raw)) throw upstreamError('BAD_OSTIUM_PAIR', 400);
+  const res = String(resolution || '60');
+  if (!OSTIUM_OHLC_RESOLUTIONS.includes(res)) throw upstreamError('BAD_OSTIUM_RESOLUTION', 400);
+  const from = Math.floor(Number(fromTimestampSeconds));
+  const to = Math.floor(Number(toTimestampSeconds));
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= from) throw upstreamError('BAD_OSTIUM_RANGE', 400);
+  return request('/v1/ohlc', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pair: raw, fromTimestampSeconds: from, toTimestampSeconds: to, resolution: res })
+  });
+}
+
 export function fetchOstiumSubgraph({ query, variables = {} } = {}) {
   if (typeof query !== 'string' || query.trim().length === 0 || query.length > 40_000) {
     throw upstreamError('BAD_OSTIUM_QUERY', 400);

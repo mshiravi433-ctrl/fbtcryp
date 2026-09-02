@@ -127,11 +127,25 @@ export const APP_CAPABILITIES = Object.freeze([
   Object.freeze({
     id: 'futures',
     name: 'Futures',
-    description: 'Perpetual futures, leverage trading',
-    route: '/perp',
-    actions: ['futures.open', 'futures.close', 'futures.setLeverage'],
-    queries: ['futures.markets', 'futures.positions', 'futures.orders', 'futures.history'],
-    events: ['futures.positionOpened', 'futures.positionClosed'],
+    description: 'Perpetual futures — Perpetual overview, dYdX session, On-Chain (Ostium) engine',
+    route: '/perp?tab=onchain',
+    /* Futures Engine v3: every action here is backed by /api/v1/futures/* and
+       the On-Chain tab. Nothing is listed that the backend cannot do. */
+    actions: [
+      'futures.open', 'futures.close', 'futures.increase', 'futures.decrease',
+      'futures.setTakeProfit', 'futures.setStopLoss', 'futures.setLeverage', 'futures.quote'
+    ],
+    queries: [
+      'futures.markets', 'futures.providers', 'futures.positions', 'futures.funding',
+      'futures.openInterest', 'futures.fees', 'futures.risk', 'futures.health', 'futures.history'
+    ],
+    /* Exactly the names src/lib/futures-engine/events.js emits. */
+    events: [
+      'FUTURES_QUOTE_UPDATED', 'FUTURES_RISK_UPDATED', 'FUTURES_ORDER_PREPARED',
+      'FUTURES_ORDER_SUBMITTED', 'FUTURES_ORDER_CONFIRMED', 'FUTURES_ORDER_FAILED',
+      'FUTURES_POSITION_OPENED', 'FUTURES_POSITION_UPDATED', 'FUTURES_POSITION_CLOSED',
+      'FUTURES_TP_SL_UPDATED', 'FUTURES_FEE_RECORDED', 'FUTURES_PROVIDER_HEALTH_CHANGED'
+    ],
     category: 'trading',
     requiresWallet: true
   }),

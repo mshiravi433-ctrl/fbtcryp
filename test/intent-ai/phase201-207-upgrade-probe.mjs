@@ -108,7 +108,7 @@ try {
   const routeSrc = readFileSync(new URL('../../src/components/IntentAIRoute.jsx', import.meta.url), 'utf8');
   check('farm/lend/borrow/futures drafts route to their own screens',
     /farm_deposit: '\/farm'/.test(routeSrc) && /lend_supply: '\/loan'/.test(routeSrc)
-    && /borrow: '\/loan'/.test(routeSrc) && /futures_open: '\/perp'/.test(routeSrc));
+    && /borrow: '\/loan'/.test(routeSrc) && /futures_open: '\/perp\?tab=onchain'/.test(routeSrc));
   check('send drafts route to the wallet screen', /order\.kind === 'send'/.test(routeSrc) && /tab: 'send'/.test(routeSrc));
 
   /* ---------------- the first-party catalog entries (static) ---------------- */

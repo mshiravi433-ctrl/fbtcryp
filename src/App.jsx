@@ -299,6 +299,8 @@ function AnimatedRoutes() {
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/solana" element={<SolanaSwap />} />
             <Route path="/buy" element={<Buy />} />
+            {/* Ramp Hosted Mode finalUrl return target. */}
+            <Route path="/order/result/:orderId" element={<Buy />} />
             <Route path="/smart-wallet" element={<SmartWallet />} />
             <Route path="/smart-money" element={<SmartMoney />} />
             <Route path="/smart-money/wallet/:chain/:address" element={<SmartMoneyWallet />} />
