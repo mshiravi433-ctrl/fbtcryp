@@ -8239,5 +8239,17 @@
       "OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED": "The provider’s official signed callback and settlement-attestation contract is required before activation."
     },
     "fbtFeeUnavailable": "FBT trading fee: $0.00"
+  },
+  "profileBadge": {
+    "title": "Notifications",
+    "label": "Profile",
+    "unread": "{{n}} unread notifications",
+    "empty": "No notifications yet.",
+    "notice": "Notice",
+    "open": "Open",
+    "justNow": "just now",
+    "minAgo": "{{n}}m ago",
+    "hourAgo": "{{n}}h ago",
+    "dayAgo": "{{n}}d ago"
   }
 }

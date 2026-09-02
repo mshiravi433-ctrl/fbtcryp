@@ -129,11 +129,34 @@ export const useAppStore = create(
       /* ---------------- notifications ---------------- */
       notify(key, kind = 'info', values = {}) {
         const item = { id: uid(), key, kind, values, at: Date.now() };
-        set((s) => ({ notifications: [item, ...s.notifications].slice(0, 30) }));
+        set((s) => ({
+          notifications: [item, ...s.notifications].slice(0, 30),
+          /* Toasts vanish after ~3s; the inbox keeps what they said, so the
+             settings avatar's bell has something real to open. Errors are
+             excluded — a failed action is feedback, not news. */
+          inbox: kind === 'error' ? s.inbox : [{ ...item, read: false }, ...(s.inbox || [])].slice(0, 20)
+        }));
         return item.id;
       },
       dismiss(id) {
         set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) }));
+      },
+
+      /* ---------------- notification inbox (persisted, read/unread) -------
+         Feeds the settings-avatar bell: unread items flip the avatar from the
+         brand logo to a bell; opening the popup marks them read and the logo
+         returns. `link` is an in-app route the item can navigate to. */
+      inbox: [],
+      pushInbox({ key = null, title = null, body = null, kind = 'info', link = null, values = {} } = {}) {
+        const item = { id: uid(), key, title, body, kind, link, values, at: Date.now(), read: false };
+        set((s) => ({ inbox: [item, ...(s.inbox || [])].slice(0, 20) }));
+        return item.id;
+      },
+      markInboxRead() {
+        set((s) => ({ inbox: (s.inbox || []).map((n) => (n.read ? n : { ...n, read: true })) }));
+      },
+      clearInbox() {
+        set({ inbox: [] });
       },
 
       /* ---------------- verified buy / sell order references ---------------- */
@@ -369,6 +392,7 @@ export const useAppStore = create(
           bets: [],
           quests: {},
           notifications: [],
+          inbox: [],
           points: 0,
           pointsLog: []
         });

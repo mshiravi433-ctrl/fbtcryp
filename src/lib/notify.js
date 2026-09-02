@@ -304,6 +304,24 @@ export async function requestNotificationPermission() {
 }
 
 export function showLocalNotification(title, options = {}) {
+  /*
+   * Mirror every notification into the in-app inbox FIRST, before any
+   * permission gate: the settings-avatar bell must light up even when the OS
+   * permission is denied or unsupported — the user asked the badge to be the
+   * place where «نوع نوتیفیکیشن، علت و لینک» is always reachable. Lazy import
+   * so this lib stays usable in non-React contexts (service worker helpers).
+   */
+  try {
+    import('../store/useAppStore').then(({ useAppStore }) => {
+      useAppStore.getState().pushInbox({
+        title: String(title || ''),
+        body: options?.body ? String(options.body) : null,
+        kind: 'info',
+        link: typeof options?.data?.url === 'string' && options.data.url.startsWith('/') ? options.data.url : null
+      });
+    }).catch(() => {});
+  } catch { /* inbox mirror is best-effort */ }
+
   if (!notificationsSupported()) return null;
   /*
    * Guarded before the global is touched. This line used to read

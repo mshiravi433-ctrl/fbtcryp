@@ -38,7 +38,7 @@ import { langMeta } from '../i18n/languages';
 import { CURRENCIES, currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
-import ActivationDashboard from '../components/ActivationDashboard';
+import ProfileBadge from '../components/ProfileBadge';
 import {
   getNotifySettings,
   notificationPermission,
@@ -624,12 +624,9 @@ export default function Settings() {
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(500px 180px at 20% 0%, rgba(0,229,255,0.12), transparent 70%), radial-gradient(400px 160px at 90% 100%, rgba(124,77,255,0.10), transparent 70%)', pointerEvents: 'none' }} />
         <div className="row-between" style={{ position: 'relative', gap: 12 }}>
           <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-            <div
-              className="settings-avatar"
-              style={{ background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))' }}
-            >
-              {s.username ? s.username[0].toUpperCase() : '✦'}
-            </div>
+            {/* Brand logo in an animated ring; flips to a bell when unread
+                notifications exist — see components/ProfileBadge.jsx. */}
+            <ProfileBadge />
             <div>
               <div style={{ fontWeight: 900, fontSize: 15 }}>
                 {s.username || t('profile.usernameUnset')}
@@ -1469,13 +1466,14 @@ export default function Settings() {
         </div>
       </Sheet>
 
-      {/* ---------------- Intent AI activation (Phases 10–100) ----------- */}
-      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="intent-ai-activation-section">
-        <p className="section-label" style={{ marginBottom: 8 }}>
-          {t('intentAI.activation.title', 'Intent AI Activation')}
-        </p>
-        <ActivationDashboard />
-      </motion.section>
+      {/*
+        The 21-kind evidence dashboard is GONE from settings on purpose: it
+        described the legacy activation curriculum that predates the current
+        Intent OS and only produced stale "blocked/pending" noise here. The
+        assistant no longer gates on it (see server/intentSandboxEvidence.js);
+        operators who need the raw evidence state still have the
+        /api/intents/v1/phase-status and evidence-status endpoints.
+      */}
 
       {/* ---------------- sync ---------------- */}
       {firebaseConfigured && (

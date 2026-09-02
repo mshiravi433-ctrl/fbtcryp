@@ -8239,5 +8239,17 @@
       "OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED": "پیش از فعال‌سازی، قرارداد رسمی callback امضاشده و تأیید تسویهٔ ارائه‌دهنده لازم است."
     },
     "fbtFeeUnavailable": "کارمزد معاملاتی FBT: ۰٫۰۰ دلار"
+  },
+  "profileBadge": {
+    "title": "اعلان‌ها",
+    "label": "پروفایل",
+    "unread": "{{n}} اعلان خوانده‌نشده",
+    "empty": "هنوز اعلانی نیست.",
+    "notice": "اعلان",
+    "open": "باز کن",
+    "justNow": "همین حالا",
+    "minAgo": "{{n}} دقیقه پیش",
+    "hourAgo": "{{n}} ساعت پیش",
+    "dayAgo": "{{n}} روز پیش"
   }
 }

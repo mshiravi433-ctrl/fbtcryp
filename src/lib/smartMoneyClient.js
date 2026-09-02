@@ -153,6 +153,32 @@ export function timeAgo(ts) {
   return `${d}d ago`;
 }
 
+/**
+ * DexScreener chain SLUG → our numeric EVM chain id.
+ * The early-token feed reports `chain` as a slug ('ethereum', 'bsc', 'base'…)
+ * while every intelligence route takes the NUMERIC id. The Analyze button
+ * used to hardcode chain 1 for all of them, so a Base or BSC token opened an
+ * Ethereum token page whose data could never match — the "link to the data"
+ * simply pointed at the wrong chain.
+ */
+export const DEX_CHAIN_IDS = Object.freeze({
+  ethereum: 1,
+  bsc: 56,
+  polygon: 137,
+  arbitrum: 42161,
+  base: 8453,
+  optimism: 10,
+  avalanche: 43114,
+  linea: 59144,
+  sonic: 146
+});
+
+/** Numeric chain id for a DexScreener slug, or null when we cannot serve an
+ *  on-chain intel page for it (e.g. solana tokens from the early feed). */
+export function chainIdForSlug(slug) {
+  return DEX_CHAIN_IDS[String(slug || '').toLowerCase()] ?? null;
+}
+
 /** Default EVM chain for an address lookup (Ethereum mainnet). */
 export const DEFAULT_CHAIN = 1;
 export const CHAIN_OPTIONS = [
