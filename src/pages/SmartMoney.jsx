@@ -8,7 +8,8 @@ import { IconChevronLeft, IconSearch, IconBell } from '../components/Icons';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
   fetchEarlyTokens, fetchFreshWallets, fetchExchanges,
-  fmtUsd, fmtPct, shortAddr, timeAgo, classifyQuery, CHAIN_OPTIONS
+  fmtUsd, fmtPct, shortAddr, timeAgo, classifyQuery, CHAIN_OPTIONS,
+  chainIdForSlug
 } from '../lib/smartMoneyClient';
 import { trackWallet } from '../lib/smartMoneyWatch';
 import { useTelegram } from '../context/TelegramContext';
@@ -298,8 +299,12 @@ export default function SmartMoney() {
                 {data.liquidityEvents?.events?.length > 0 && (
                   <div className="sm-section">
                     <h3>⚠️ {t('sm.liquidityMovement')}</h3>
+                    {/* NOT `window.open` — the component's `window` state (the
+                        '24h' string) shadows the global here, exactly like the
+                        tx-search bug above; tapping a liquidity row silently
+                        did nothing. */}
                     {data.liquidityEvents.events.slice(0, 6).map((e) => (
-                      <div key={e.id} className="sm-row" onClick={() => e.explorerTx && window.open(e.explorerTx, '_blank')}>
+                      <div key={e.id} className="sm-row" onClick={() => e.explorerTx && globalThis.open(e.explorerTx, '_blank')}>
                         <div className="sym">{e.kind === 'LP_ADDED' ? '+' : '−'}</div>
                         <div className="mid">
                           <div className="name">{e.symbols}</div>
@@ -371,18 +376,33 @@ function EarlyGrid({ tokens, navigate, t }) {
   if (!tokens?.length) return <Empty>{t('sm.noEarly')}</Empty>;
   return (
     <div className="sm-card-grid">
-      {tokens.map((tk) => (
-        <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
-          <div className="tk">{tk.symbol} <span className="faint" style={{ fontSize: 10 }}>· {tk.chain}</span></div>
-          <div className="meta">
-            <div><div className="k">{t('sm.age')}</div><div className="v">{tk.ageHours}h</div></div>
-            <div><div className="k">{t('sm.liquidity')}</div><div className="v">{fmtUsd(tk.liquidityUsd)}</div></div>
-            <div><div className="k">{t('sm.volume24')}</div><div className="v">{fmtUsd(tk.volumeH24)}</div></div>
-            <div><div className="k">{t('sm.risk')}</div><div className={`v sm-risk-${tk.risk}`}>{tk.risk}</div></div>
+      {tokens.map((tk) => {
+        /*
+         * «ارتباط با بعضی از داده‌ها وجود ندارد» — Analyze hardcoded chain 1,
+         * so a Base/BSC/Arbitrum token opened an Ethereum intel page whose
+         * pairs and holders could never match. The DexScreener slug is mapped
+         * to the real chain id; a chain we cannot serve (e.g. solana profile
+         * feed rows) opens the token's DexScreener page instead of a dead
+         * in-app page that pretends the data is missing.
+         */
+        const chainId = chainIdForSlug(tk.chain);
+        const open = () => {
+          if (chainId) navigate(`/smart-money/token/${chainId}/${tk.address}`);
+          else globalThis.open(`https://dexscreener.com/${tk.chain}/${tk.address}`, '_blank');
+        };
+        return (
+          <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
+            <div className="tk">{tk.symbol} <span className="faint" style={{ fontSize: 10 }}>· {tk.chain}</span></div>
+            <div className="meta">
+              <div><div className="k">{t('sm.age')}</div><div className="v">{tk.ageHours}h</div></div>
+              <div><div className="k">{t('sm.liquidity')}</div><div className="v">{fmtUsd(tk.liquidityUsd)}</div></div>
+              <div><div className="k">{t('sm.volume24')}</div><div className="v">{fmtUsd(tk.volumeH24)}</div></div>
+              <div><div className="k">{t('sm.risk')}</div><div className={`v sm-risk-${tk.risk}`}>{tk.risk}</div></div>
+            </div>
+            <button className="sm-btn" onClick={open}>{t('sm.analyze')}</button>
           </div>
-          <button className="sm-btn" onClick={() => navigate(`/smart-money/token/1/${tk.address}`)}>{t('sm.analyze')}</button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -540,7 +560,14 @@ function AlertsTab({ navigate, t }) {
       {!alerts ? <Spinner /> : alerts.length === 0 ? (
         <Empty>{t('sm.noAlerts')}<br /><span className="faint">{t('sm.noAlertsBody')}</span></Empty>
       ) : alerts.map((a) => (
-        <div key={a.id} className="sm-alert">
+        /* An alert names a wallet (chain + address) — it now LINKS to that
+           wallet's intelligence page instead of being a dead row. */
+        <div
+          key={a.id}
+          className="sm-alert"
+          style={a.chain && a.address ? { cursor: 'pointer' } : undefined}
+          onClick={() => a.chain && a.address && navigate(`/smart-money/wallet/${a.chain}/${a.address}`)}
+        >
           <div className="ico">🐋</div>
           <div className="body">
             <div className="t">{a.title}</div>

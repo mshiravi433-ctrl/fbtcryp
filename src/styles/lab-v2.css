@@ -725,12 +725,22 @@
 
 /* ─── DeFi tab strip ────────────────────────────────────────────────────── */
 
+/*
+ * Scenario / lesson chip strip.
+ * Reported broken: «ایکون‌ها داخل هم رفته و حروف ناخوانا شده» — eight chips in
+ * a non-wrapping flex row were SHRINKING (flex-shrink default 1) down to the
+ * global 44px button minimum, so every chip's emoji and Persian label were
+ * painted on top of each other. Two fixes, both structural:
+ *   · chips never shrink below their own content (flex: 0 0 auto);
+ *   · the strip WRAPS onto extra rows instead of hiding chips behind a
+ *     scrollbar nobody can see — every scenario/lesson is visible and tappable
+ *     at its real size.
+ */
 .lab2-defi-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
   padding-bottom: 4px;
-  scrollbar-width: none;
 }
 
 .lab2-defi-tabs::-webkit-scrollbar { display: none; }
@@ -739,7 +749,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
   min-height: 34px;
+  min-width: 0;
+  max-width: 100%;
   padding: 6px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
@@ -747,6 +761,7 @@
   color: var(--text-2);
   font-size: 11px;
   font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
   white-space: nowrap;
 }

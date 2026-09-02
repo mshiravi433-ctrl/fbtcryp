@@ -56,7 +56,11 @@ export function LabHeader() {
         <div className="lab2-stats">
           <div className="lab2-stat">
             <div className="lab2-stat-val">{lvl.lvl}</div>
-            <div>{t('lab2.level', 'Level')}</div>
+            {/* `lab2.level` is an OBJECT namespace (currentLevel, xp, …); asking
+                i18next for it painted the literal error string
+                "key 'lab2.level (fa)' returned an object instead of string"
+                in place of the word «سطح». The string lives one level deeper. */}
+            <div>{t('lab2.level.level', 'Level')}</div>
           </div>
           <div className="lab2-stat">
             <div className="lab2-stat-val">{accuracy}%</div>

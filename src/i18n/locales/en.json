@@ -8551,5 +8551,17 @@
       "UNKNOWN": "Something went wrong. Nothing was sent without your signature."
     },
     "riskNotice": "Perpetuals are leveraged derivatives. A move against you can liquidate all of your collateral, and most retail leveraged traders lose money. Nothing here is a profit guarantee."
+  },
+  "profileBadge": {
+    "title": "Notifications",
+    "label": "Profile",
+    "unread": "{{n}} unread notifications",
+    "empty": "No notifications yet.",
+    "notice": "Notice",
+    "open": "Open",
+    "justNow": "just now",
+    "minAgo": "{{n}}m ago",
+    "hourAgo": "{{n}}h ago",
+    "dayAgo": "{{n}}d ago"
   }
 }

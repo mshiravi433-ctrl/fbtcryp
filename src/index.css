@@ -10609,6 +10609,160 @@ button.switch:disabled { cursor: not-allowed; opacity: .55; }
   box-shadow: 0 8px 18px rgba(0,229,255,0.18);
   flex: 0 0 42px;
 }
+
+/* ─── Settings profile badge: logo + animated ring + notification bell ──────
+   The ring is a conic gradient on its own layer animated with TRANSFORM ONLY
+   (rotate), so the browser composites it on the GPU — no layout, no repaint,
+   no measurable cost. It pauses under reduced motion. */
+.profile-badge-wrap { position: relative; flex: 0 0 auto; }
+
+.profile-badge {
+  position: relative;
+  inline-size: 46px;
+  block-size: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.profile-badge-ring {
+  position: absolute;
+  inset: -40%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--rgb-1, #00e5ff),
+    var(--rgb-2, #7c4dff),
+    var(--rgb-3, #ff2d95),
+    var(--rgb-1, #00e5ff)
+  );
+  animation: profile-badge-spin 4s linear infinite;
+  z-index: 0;
+}
+
+.profile-badge.has-unread .profile-badge-ring {
+  background: conic-gradient(
+    from 0deg,
+    #ffb300,
+    var(--rgb-3, #ff2d95),
+    #ffb300
+  );
+  animation-duration: 2s;
+}
+
+@keyframes profile-badge-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-badge-ring { animation: none; }
+}
+
+.profile-badge-core {
+  position: relative;
+  z-index: 1;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 50%;
+  background: var(--bg-void, #05060a);
+  display: grid;
+  place-items: center;
+  color: var(--text-1);
+  overflow: hidden;
+}
+
+.profile-badge-core img { border-radius: 50%; display: block; }
+
+.profile-badge-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--rgb-3, #ff2d95);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+}
+
+.profile-badge-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-start: 0;
+  z-index: 60;
+  width: min(300px, 78vw);
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--bg-1, rgba(10, 12, 20, 0.97));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.profile-badge-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+button.profile-badge-pop-close {
+  min-width: 28px;
+  min-height: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.profile-badge-empty {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+button.profile-badge-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 0;
+  padding: 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+}
+
+button.profile-badge-item:hover { background: rgba(255, 255, 255, 0.05); }
+button.profile-badge-item.is-unread { background: rgba(0, 229, 255, 0.06); }
+
+.profile-badge-item-ico { flex: 0 0 auto; font-size: 14px; line-height: 1.4; }
+.profile-badge-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.profile-badge-item-title { font-size: 12px; font-weight: 600; line-height: 1.4; }
+.profile-badge-item-sub { font-size: 11px; color: var(--text-2); line-height: 1.4; }
+.profile-badge-item-meta { font-size: 10px; color: var(--text-3); }
+.profile-badge-item-link { color: var(--rgb-1, #00e5ff); }
 button.settings-quick-action {
   inline-size: 32px;
   min-inline-size: 32px;
