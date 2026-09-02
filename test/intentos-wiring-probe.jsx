@@ -178,8 +178,15 @@ export async function run(container) {
     /* ═══════════ 4. EVERY TAB BUTTON ACTUALLY SWITCHES ═══════════ */
     await mountAt('#/intent');
     const tabNames = qa('.ios-tabs button').map((b) => b.textContent.trim());
-    /* The Central Intelligence OS added a tenth "Brain" tab (§45). */
-    t('all ten tabs are rendered', tabNames.length === 10);
+    /*
+     * Nine tabs. It used to be ten: the «Memory Wallet» tab was deleted, not
+     * renamed — its two switches set limits the Smart Wallet policy owns
+     * (one of them, quiet hours, nothing ever read), and the rules now live in
+     * one place. This assertion is the guard that the tab stays gone.
+     */
+    t('all nine tabs are rendered', tabNames.length === 9);
+    t('the memory tab is gone for good', !/memory/i.test(tabNames.join(' ')));
+    t('no tab advertises the deleted memory surface', !q('.ios-memory-hero'));
 
     for (const btn of qa('.ios-tabs button')) {
       const name = btn.textContent.trim();
@@ -188,8 +195,8 @@ export async function run(container) {
       t(`tab “${name}” becomes active`, activeTab() === name);
     }
     // After cycling we are on the last tab (brain); hop back to network
-    // (index 8 — TABS order is fixed) and assert its protocol sections render.
-    await act(async () => { click(qa('.ios-tabs button')[8]); });
+    // (index 7 — TABS order is fixed) and assert its protocol sections render.
+    await act(async () => { click(qa('.ios-tabs button')[7]); });
     await act(async () => { await sleep(20); });
     t('network tab renders its protocol sections', qa('.ios-auction-status').length >= 3);
     // Each tab's real surface is present (not a blank panel). TABS order ==
@@ -198,7 +205,6 @@ export async function run(container) {
       ['compose', '.ios-template-grid'],
       ['plan', '.pp-card, .ios-content section'],
       ['crosschain', '.icc-desk, .ios-content section'],
-      ['memory', '.ios-memory-hero'],
       ['proofs', '.ios-proof-intro'],
       ['history', '[data-testid="intent-tx-history"]'],
       ['agents', '.ios-network-hero'],
@@ -213,6 +219,53 @@ export async function run(container) {
       await act(async () => { await sleep(20); });
       const found = q(marker);
       t(`tab “${name}” renders its real surface (${marker})`, Boolean(found));
+    }
+
+    /* ═══════════ 4b. THE TWO COLLAPSIBLE BOXES ═══════════ */
+    /*
+     * Reported (fa): «برنامه سودِ صرافی‌ها یک خط ساده‌ست» and the same about
+     * «پروتکل‌های تسویه پیشرفته». Both are real panels, so the fix is a box
+     * that looks like one — and this is the test that they are still the same
+     * live components inside it, not a decorative shell.
+     */
+    await act(async () => {
+      window.location.hash = '#/intent?tab=plan';
+      window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+    });
+    await act(async () => { await sleep(30); });
+    const venueBox = q('[data-testid="venue-plan-box"]');
+    t('the venue plan is a disclosure card, not a bare line',
+      !!venueBox && venueBox.tagName === 'DETAILS' && /fbt-disclosure/.test(venueBox.className));
+    t('the venue box explains what is inside before it is opened',
+      /read-only|never executes/i.test(venueBox.querySelector('.fbt-disclosure-sub')?.textContent || ''));
+    t('the venue box starts closed', Boolean(venueBox) && venueBox.open === false);
+    if (venueBox) {
+      await act(async () => { click(venueBox.querySelector('summary')); });
+      await act(async () => { await sleep(20); });
+      t('opening the venue box reveals the live venue planner',
+        venueBox.open === true && !!q('[data-testid="intent-os-planner"]'));
+      t('the venue planner is the same wired form (build button present)',
+        !!q('[data-testid="profit-plan-build"]'));
+    }
+
+    await act(async () => {
+      window.location.hash = '#/intent?tab=crosschain';
+      window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+    });
+    await act(async () => { await sleep(40); });
+    const advBox = q('[data-testid="cross-chain-advanced"]');
+    t('advanced settlement is a collapsible box on the cross-chain desk',
+      !!advBox && advBox.tagName === 'DETAILS' && /fbt-disclosure/.test(advBox.className));
+    t('the closed box already states how many settlement modes are ready',
+      /\d of 2 modes ready/.test(advBox?.querySelector('.fbt-disclosure-badge')?.textContent || ''));
+    if (advBox) {
+      await act(async () => { click(advBox.querySelector('summary')); });
+      await act(async () => { await sleep(20); });
+      const fields = advBox.querySelectorAll('select, input').length;
+      t('opening it exposes the working sequential planner (six controls)',
+        advBox.open === true && fields >= 6);
+      t('the box carries a real availability chip, not a promise',
+        /sequential settlement|htlc/i.test(advBox.textContent || ''));
     }
 
     /* ═══════════ 5. URL-DRIVEN TAB CHANGES WITHOUT REMOUNT ═══════════ */

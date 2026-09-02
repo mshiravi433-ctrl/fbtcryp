@@ -45,6 +45,7 @@ import Docs from '../src/pages/Docs.jsx';
 import Developers from '../src/pages/Developers.jsx';
 import Audit from '../src/pages/Audit.jsx';
 import SmartWallet from '../src/pages/SmartWallet.jsx';
+import SmartMoneyWallet from '../src/pages/SmartMoneyWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
 import IntentOS from '../src/pages/IntentOS.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
@@ -266,6 +267,100 @@ export async function run(container) {
   await mount('Developers', <Developers />);
   await mount('Audit (security)', <Audit />);
   await mount('SmartWallet', <SmartWallet />);
+
+  /*
+   * ─── THE TWO SCREENS THE REPORT SITS ON ──────────────────────────────────
+   * «بارگیری هوش کیف‌پول ممکن نشد… HTTP 502» and «دو گزینهٔ هوشمندسازی کیف
+   * غلط است». The server half is covered by test/smart-money-probe.mjs; this
+   * is the page half: what a PARTIAL payload must look like, and the fact
+   * that the wallet rules now live on the Smart Wallet page instead of a
+   * second editor inside Intent OS.
+   */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tap = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+  {
+    const root = createRoot(container);
+    container.innerHTML = '';
+    try {
+      await act(async () => { root.render(<Wrap><SmartWallet /></Wrap>); });
+      await act(async () => { await sleep(40); });
+      const box = container.querySelector('[data-testid="smart-wallet-intent-rules"]');
+      out.push(['the smart wallet page carries the Intent OS rules box', Boolean(box)]);
+      out.push(['the rules box is a closed disclosure, not a second settings screen',
+        Boolean(box) && box.tagName === 'DETAILS' && box.open === false]);
+      if (box) {
+        /* jsdom does not implement the <summary> activation behaviour, so the
+           open is driven the way the browser would leave it. */
+        await act(async () => { box.open = true; await sleep(20); });
+        const controls = box.querySelectorAll('select, input').length;
+        out.push(['the rules box edits the four real rules plus the proof switch', controls >= 4 && /proof/i.test(box.textContent || '')]);
+        const text = (box.textContent || '').replace(/\s+/g, ' ');
+        out.push(['the box names both ceilings and the stricter one', (text.match(/\$\d+/g) || []).length >= 2 && /stricter|hard-blocks/i.test(text)]);
+        out.push(['the confirmation floor is named as non-negotiable', /confirmation/i.test(text)]);
+        out.push(['the box never claims to sign or send', !/will execute|auto-sign|automatically executes/i.test(text)]);
+        out.push(['the rules box promises nothing about signing', !/automatically executes/i.test(text)]);
+      }
+    } finally {
+      await act(async () => root.unmount());
+      container.innerHTML = '';
+    }
+  }
+
+  {
+    const realFetch = globalThis.fetch;
+    const D = 86_400_000;
+    const PARTIAL = {
+      dataStatus: 'partial', chain: 1, chainKind: 'evm', address: '0xf977814e90da44bfa03b6295a0616a897c410e98',
+      firstSeen: Date.now() - 300 * D, ageMs: 300 * D, isFresh: false,
+      txCount: null, txCountSource: null, portfolioUsd: 100,
+      holdings: [
+        { token: '0xa0b8', symbol: 'DAI', amount: 100, valueUsd: 100, priceUsd: 1, liquidityUsd: 9_000_000 },
+        { token: '0xdead', symbol: '???', amount: 1, valueUsd: null, priceUsd: null, liquidityUsd: null }
+      ],
+      activity: [],
+      pnl: {
+        dataStatus: 'partial', reason: 'NO_CLOSED_TRADES', realizedUsd: null, unrealizedUsd: 50,
+        totalUsd: 50, winRate: null, closedTrades: 0, best: null, worst: null
+      },
+      smartMoney: { score: 0, coverage: 0, factors: {} },
+      reputation: { score: 0, coverage: 0, factors: {} },
+      risk: { score: 0, band: 'LOW', coverage: 0, factors: {}, reasons: { plus: [], minus: [] } },
+      tags: [],
+      sources: { history: 'unavailable', nativeTxs: 'unavailable', balances: 'live', pricing: 'live', counters: 'unavailable' }
+    };
+    globalThis.fetch = async () => new Response(JSON.stringify(PARTIAL), {
+      status: 200, headers: { 'content-type': 'application/json' }
+    });
+    const root = createRoot(container);
+    container.innerHTML = '';
+    const errorsBefore = errors.length;
+    try {
+      await act(async () => {
+        root.render(
+          <Wrap>
+            <SmartMoneyWallet embedded chainProp={1} addressProp="0xF977814e90dA44bFA03b6295A0616A897c410E98" />
+          </Wrap>
+        );
+      });
+      await act(async () => { await sleep(80); });
+      const text = () => (container.textContent || '').replace(/\s+/g, ' ');
+      out.push(['the wallet page renders a partial payload without throwing', errors.length === errorsBefore && text().length > 0]);
+      out.push(['the dead sources are named on the page', /did not answer|پاسخ ندادند/i.test(text()) && /history/.test(text())]);
+      out.push(['partial P&L is described as partial', /Only open positions are priced|no closed buy/i.test(text())]);
+      out.push(['an unreadable activity feed is not called "no activity"', /could not be read/i.test(text())]);
+      out.push(['an unknown transaction count never renders as zero', /Unknown/i.test(text()) && !/null transactions|0 transactions/i.test(text())]);
+      out.push(['a score with no coverage renders as a dash, not a verdict', (container.querySelectorAll('.sm-score .n').length === 3
+        && [...container.querySelectorAll('.sm-score .n')].every((n) => n.textContent.trim() === '—'))]);
+      out.push(['the portfolio only claims a number it could price', /\$100/.test(text())]);
+      out.push(['an unpriced token is flagged as unverified metadata', /1 of these tokens/i.test(text())]);
+      out.push(['the degraded state offers to try again', [...container.querySelectorAll('button')].some((b) => /retry/i.test(b.textContent || ''))]);
+    } finally {
+      await act(async () => root.unmount());
+      globalThis.fetch = realFetch;
+      container.innerHTML = '';
+    }
+  }
   await mount('Portfolio', <Portfolio />);
   await mount('IntentOS', <IntentOS />);
 

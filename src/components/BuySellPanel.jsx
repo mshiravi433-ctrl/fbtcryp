@@ -415,6 +415,17 @@ export default function BuySellPanel({ initialOrderId = null }) {
     setStep(Math.max(0, Math.min(STEPS.length - 1, next)));
   };
   const nextStep = () => { if (stepValid[step]) go(step + 1); };
+  /*
+   * «I typed the amount and there was no next button»: on a numeric field the
+   * keyboard's own action key (Enter / «بعدی») is where a phone user looks
+   * first, and it used to do nothing at all. Enter now advances exactly when
+   * the printed Next button would be enabled — never past a gate.
+   */
+  const advanceOnEnter = (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    nextStep();
+  };
   const prevStep = () => go(step - 1);
 
   /* WHY A DISABLED BUTTON IS NEVER LEFT SILENT.
@@ -563,6 +574,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                           type="text" inputMode="decimal" placeholder="0.00" autoComplete="off"
                           value={sell ? cryptoAmount : fiatAmount}
                           onChange={amountChanged(sell ? setCryptoAmount : setFiatAmount)}
+                          onKeyDown={advanceOnEnter}
                           aria-label={sell ? t('buySell.youSell') : t('buySell.youPay')}
                         />
                         {sell
@@ -590,6 +602,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                         <input
                           value={walletAddress}
                           onChange={walletChanged}
+                          onKeyDown={advanceOnEnter}
                           placeholder="0x…" spellCheck={false} autoCapitalize="none" autoCorrect="off" dir="ltr"
                           aria-label={sell ? t('buySell.sourceWallet') : t('buySell.destinationWallet')}
                         />
@@ -686,8 +699,16 @@ export default function BuySellPanel({ initialOrderId = null }) {
                 <div className="bsw-nav">
                   <button type="button" className="btn btn-ghost bsw-back" disabled={step === 0} onClick={prevStep}>{t('buySell.wizard.back')}</button>
                   {step < STEPS.length - 1 ? (
-                    <button type="button" className="btn btn-primary bsw-next" disabled={!stepValid[step]} onClick={nextStep}>
-                      {t('buySell.wizard.next')} <IconChevronRight width={16} height={16} />
+                    <button
+                      type="button"
+                      className={`btn btn-primary bsw-next${stepValid[step] ? ' is-ready' : ''}`}
+                      disabled={!stepValid[step]}
+                      onClick={nextStep}
+                    >
+                      {stepValid[step]
+                        ? t('buySell.wizard.nextTo', { step: t(`buySell.wizard.steps.${STEPS[step + 1]}`) })
+                        : t('buySell.wizard.next')}{' '}
+                      <IconChevronRight width={16} height={16} />
                     </button>
                   ) : (
                     <button

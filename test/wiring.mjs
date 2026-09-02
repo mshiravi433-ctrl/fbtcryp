@@ -655,6 +655,53 @@ export default function run() {
       `every smart-money route is wired in the server${missingSmRoutes.length ? ` — missing: ${missingSmRoutes.join(', ')}` : ''}`,
       missingSmRoutes.length === 0
     );
+
+    /*
+     * ─── THE OTHER HALF OF EACH HONEST-DEGRADATION CONTRACT ────────────────
+     * A server that answers 200-with-partial-data is only half the fix: the
+     * page has to READ the fields. These greps are here because a missing
+     * branch is invisible in a render test as long as the fixture happens to
+     * carry the happy path — and the happy path is exactly what the user was
+     * NOT getting. Reported (fa): «پنل P&L میگوید نیاز به تاریخچه تراکنش از
+     * ایندکسر دارد» while the wallet route had real closed round-trips to show.
+     */
+    const walletPage = read('src/pages/SmartMoneyWallet.jsx');
+    for (const [label, needle] of [
+      ['partial P&L (open positions only) has its own sentence', "pnl?.dataStatus === 'partial'"],
+      ['a dead history source is called that, not "no history"', "pnl.reason === 'NO_HISTORY'"],
+      ['the sources that did not answer are named on screen', 'sm.offlineSources'],
+      ['an unreadable feed is not reported as "no activity"', 'sm.activityBlocked'],
+      ['the empty state offers a retry', 'onClick={() => load(chainId)}'],
+      ['an unknown transaction count is never shown as zero', 'sm.evidenceLine'],
+      ['a score with no evidence behind it renders as unknown', 'shownScore(']
+    ]) {
+      t(`wallet page: ${label}`, walletPage.includes(needle));
+    }
+
+    /* The rules moved, once, and must stay moved: one owner per setting. */
+    const intentOsSrc = read('src/pages/IntentOS.jsx');
+    const smartWalletSrc = read('src/pages/SmartWallet.jsx');
+    t('Intent OS no longer renders a Memory Wallet tab', !/\{tab === 'memory'/.test(intentOsSrc));
+    t('Intent OS no longer offers to "make the wallet smart"', !/makeSmart|smartMode/i.test(intentOsSrc));
+    t('the smart wallet page owns the Intent OS rules', smartWalletSrc.includes('saveIntentMemory') && smartWalletSrc.includes('loadIntentMemory'));
+    t('the smart wallet derives the strictest ceiling instead of guessing', /effectivePerIntentUsd/.test(smartWalletSrc));
+    t('the brain advertises the Intent OS tabs that actually exist', /'\/intent': \{[\s\S]{0,400}?'compose', 'plan', 'crosschain', 'proofs', 'history', 'agents', 'strategies', 'network', 'brain'/s.test(read('src/lib/central/context.js')));
+
+    /* Two panels the user called «یک خط ساده»: both must be real boxes. */
+    t('the venue profit plan is a disclosure card', /<DisclosureCard[\s\S]{0,400}?testId="venue-plan-box"/.test(intentOsSrc));
+    t('the advanced settlement desk is a disclosure card', /<DisclosureCard[\s\S]{0,400}?testId="cross-chain-advanced"/.test(read('src/components/IntentCrossChainPanel.jsx')));
+    t('the disclosure card is styled as a card, not a sentence', /\.fbt-disclosure-head/.test(read('src/styles/intent-os.css')));
+
+    /* The catalog: a listing that cannot be followed is a screenshot. */
+    const catalogSrc = read('src/lib/ecosystemCatalog.js');
+    t('the catalog client keeps the listing homepage', /homepage: httpsOnly\(row\.homepage\)/.test(catalogSrc));
+    t('the catalog client keeps the Telegram provenance marker', /publisherRef: row\.ownerRef === 'telegram-user'/.test(catalogSrc));
+    t('a stale certification is explained on the card', /intentOS\.catalog\.certStale/.test(intentOsSrc) && /certificationStale/.test(catalogSrc));
+
+    /* The buy/sell gate: Enter is the other Next button. */
+    const wizardSrc = read('src/components/BuySellPanel.jsx');
+    t('the wizard advances on Enter', /const advanceOnEnter = /.test(wizardSrc) && (wizardSrc.match(/onKeyDown=\{advanceOnEnter\}/g) || []).length >= 2);
+    t('the enabled Next names the step it goes to', /buySell\.wizard\.nextTo/.test(wizardSrc));
     t(
       `every /api path the client calls is routed${unrouted.length ? ` — unrouted: ${unrouted.join(', ')}` : ''}`,
       unrouted.length === 0

@@ -77,7 +77,18 @@ export const PAGE_MAP = Object.freeze({
   '/smart-money': { module: 'signals', tabs: ['overview', 'tokens', 'wallets'], intents: ['flow', 'signals'] },
   '/orders': { module: 'transactions', tabs: ['open', 'history'], intents: ['orders', 'cancel'] },
   '/transactions': { module: 'transactions', tabs: ['history'], intents: ['history', 'status'] },
-  '/intent': { module: 'intent-os', tabs: ['chat', 'automations', 'memory'], intents: ['chat', 'plan'] },
+  /*
+   * These tab ids are what /intent actually renders (src/pages/IntentOS.jsx
+   * TABS). The map used to advertise 'chat'/'automations'/'memory', so the
+   * brain could only ever name a tab that did not exist — and 'memory' has
+   * now been removed from the page for good, which this line would have
+   * silently kept alive.
+   */
+  '/intent': {
+    module: 'intent-os',
+    tabs: ['compose', 'plan', 'crosschain', 'proofs', 'history', 'agents', 'strategies', 'network', 'brain'],
+    intents: ['chat', 'plan']
+  },
   '/intent-ai': { module: 'intent-os', tabs: ['chat'], intents: ['chat'] },
   '/vault': { module: 'staking', tabs: ['overview'], intents: ['deposit', 'withdraw'] },
   '/predict': { module: 'prediction', tabs: ['markets'], intents: ['forecast'] },

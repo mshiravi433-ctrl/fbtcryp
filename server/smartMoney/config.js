@@ -28,6 +28,26 @@ export const WINDOWS = {
   D30: 30 * 24 * 60 * 60_000
 };
 
+/**
+ * chainId → the id the DEX aggregator uses for the same chain.
+ *
+ * WHY A MAP AND NOT A GUESS: `/latest/dex/tokens/<address>` answers across
+ * EVERY chain, and the same contract address legitimately exists on several
+ * (USDC on Ethereum and on Base, for instance). Without this key a Base
+ * wallet's balance could be valued with an Ethereum pool's price. A chain
+ * that is not listed here gets no price at all rather than a borrowed one.
+ */
+export const DEX_SLUGS = {
+  1: 'ethereum',
+  10: 'optimism',
+  56: 'bsc',
+  137: 'polygon',
+  8453: 'base',
+  42161: 'arbitrum',
+  43114: 'avalanche',
+  solana: 'solana'
+};
+
 export const WINDOW_KEYS = {
   '1h': WINDOWS.H1,
   '4h': WINDOWS.H4,

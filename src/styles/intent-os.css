@@ -2903,6 +2903,92 @@
 .fg-honest ul { margin: 0; padding-inline-start: 16px; display: flex; flex-direction: column; gap: 5px; }
 .fg-honest li { font-size: 10px; line-height: 1.75; color: var(--text-2, #9aa4bf); }
 
+/* ── DisclosureCard: the shared collapsible box ────────────────────────────
+ * A <details> that reads like a card instead of a stray sentence. Used by the
+ * venue profit plan (goals tab) and the advanced settlement protocols
+ * (cross-chain tab) — the two panels whose content was real and whose
+ * affordance was invisible.
+ */
+.fbt-disclosure {
+  margin: 12px 0 0;
+  border: 1px solid var(--line, rgba(255, 255, 255, .08));
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012));
+  overflow: hidden;
+  transition: border-color .18s ease, background .18s ease;
+}
+.fbt-disclosure:hover { border-color: rgba(255, 255, 255, .18); }
+.fbt-disclosure[open] {
+  border-color: rgba(157, 123, 255, .34);
+  background: linear-gradient(180deg, rgba(157, 123, 255, .06), rgba(255, 255, 255, .015));
+}
+.fbt-disclosure > .fbt-disclosure-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 13px;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.fbt-disclosure > .fbt-disclosure-head::-webkit-details-marker { display: none; }
+.fbt-disclosure > .fbt-disclosure-head:focus-visible {
+  outline: 2px solid var(--ios-violet, #9d7bff); outline-offset: -2px; border-radius: 14px;
+}
+.fbt-disclosure[open] > .fbt-disclosure-head { border-bottom: 1px solid var(--line, rgba(255, 255, 255, .08)); }
+
+.fbt-disclosure-icon {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  border-radius: 9px;
+  border: 1px solid rgba(157, 123, 255, .3);
+  background: rgba(157, 123, 255, .12);
+  color: var(--ios-violet, #9d7bff);
+  font-size: 13px; line-height: 1;
+}
+.fbt-disclosure-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.fbt-disclosure-title {
+  font: 700 10.5px/1.3 var(--font-mono, monospace);
+  text-transform: uppercase; letter-spacing: .6px; color: var(--text-1, #e8ecf8);
+}
+.fbt-disclosure-sub { font-size: 10.5px; line-height: 1.55; color: var(--text-3, #6a7590); }
+.fbt-disclosure-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px; border-radius: 99px;
+  border: 1px solid var(--line, rgba(255, 255, 255, .1));
+  font: 700 9px/1.4 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .4px;
+  color: var(--text-3, #6a7590); background: rgba(255, 255, 255, .04);
+  white-space: nowrap;
+}
+.fbt-disclosure-badge.is-good { color: var(--ios-mint, #65f5bc); border-color: rgba(101, 245, 188, .34); background: rgba(101, 245, 188, .09); }
+.fbt-disclosure-badge.is-warn { color: #ffd36b; border-color: rgba(255, 211, 107, .34); background: rgba(255, 211, 107, .09); }
+.fbt-disclosure-caret {
+  flex: 0 0 auto; margin-inline-start: 2px;
+  color: var(--text-3, #6a7590); font-size: 11px; line-height: 1;
+  transition: transform .2s ease, color .2s ease;
+}
+.fbt-disclosure[open] > .fbt-disclosure-head .fbt-disclosure-caret { transform: rotate(180deg); color: var(--ios-violet, #9d7bff); }
+.fbt-disclosure-body { padding: 12px 13px 14px; animation: fbtDisclosureIn .2s ease both; }
+.fbt-disclosure-body > .ios-planner { margin-top: 0; }
+
+/* Listing links on the catalog cards: the project's own page, and the way
+   back to the owner's listings. Both were missing from the stylesheet, which
+   is a polite way of saying they were invisible. */
+.ios-catalog-link {
+  color: var(--ios-cyan, #42e8ff);
+  font: 700 10.5px/1.5 var(--font-mono, monospace);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(66, 232, 255, .3);
+  transition: color .15s ease, border-color .15s ease;
+  overflow-wrap: anywhere;
+}
+.ios-catalog-link:hover,
+.ios-catalog-link:focus-visible { color: #b7f4ff; border-bottom-color: rgba(66, 232, 255, .7); }
+@keyframes fbtDisclosureIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .fbt-disclosure-body { animation: none; }
+  .fbt-disclosure-caret { transition: none; }
+}
+
 /* The legacy multi-venue profit plan stays reachable, but it is no longer the
    headline: the goal flow owns this tab now. */
 .fg-venue-plan { margin-top: 4px; border-radius: 12px; border: 1px solid var(--line, rgba(255, 255, 255, .08)); background: rgba(255, 255, 255, .02); }

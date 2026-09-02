@@ -155,6 +155,15 @@
    is exactly how a gated Next got reported as a missing button. Keep a gated
    action clearly visible; the printed reason above it explains the state. */
 .bsw-next:disabled, .bsw-back:disabled { opacity: 1; filter: grayscale(1) brightness(.72); }
+/* The other half of "where is the next button": an ENABLED one has to look
+   like it is the point of the screen. The gated state stays visibly gated
+   (grey, with the reason printed above it) and the ready state glows. */
+.bsw-next.is-ready {
+  box-shadow: 0 10px 26px rgba(0, 230, 150, .22);
+  animation: bswNextIn 0.35s ease;
+}
+@keyframes bswNextIn { from { transform: translateY(2px); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bsw-next.is-ready { animation: none; } }
 /* Keyless escape hatch under the tracked flow's primary action: the route to
    the destination site that works even when the credentialed rail stalls. */
 .bsw-guided-fallback { display: flex; width: 100%; justify-content: center; margin-top: 9px; min-height: 38px; font-size: 12px; color: var(--text-2); border: 1px dashed rgba(255,255,255,.18); border-radius: 12px; }

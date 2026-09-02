@@ -155,4 +155,7 @@
 /* ── HTLC readiness checklist ────────────────────────────────────────────── */
 .icc-checklist { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .icc-checklist li { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-2); }
-.icc-advanced > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; }
+/* The box is a DisclosureCard now, so the card owns the header typography;
+   these two lines are left only for the un-cased fallback (no card styles). */
+.icc-advanced > summary { cursor: pointer; }
+.icc-advanced.fbt-disclosure > .fbt-disclosure-head { font-size: inherit; font-weight: inherit; }

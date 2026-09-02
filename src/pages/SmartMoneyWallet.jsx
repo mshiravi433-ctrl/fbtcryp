@@ -56,7 +56,18 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
       const d = await fetchWallet(c === 'solana' ? 'solana' : Number(c) || 1, address);
       setData(d);
     } catch (e) {
-      setError(e.message);
+      /*
+       * The client surfaces `HTTP 502 {"error":"WALLET_INTEL_UNAVAILABLE",...}`.
+       * Dumping that raw line on a Persian screen is neither readable nor
+       * useful, so the status code is kept and the payload detail dropped
+       * unless it says something a human could act on.
+       */
+      const msg = String(e?.message || '');
+      const status = msg.match(/^HTTP\s(\d+)/)?.[1] || null;
+      const detail = msg.match(/"detail"\s*:\s*"([^"]{3,120})"/)?.[1] || null;
+      const err = new Error(detail || (status ? `HTTP ${status}` : msg) || 'SMART_MONEY_FAILED');
+      err.status = e?.status ?? (status ? Number(status) : undefined);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -78,6 +89,17 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
 
   const pnl = data?.pnl;
   const risk = data?.risk;
+  /*
+   * A score nobody measured must not render as a zero. The server reports
+   * `coverage` precisely so this page can tell "low" from "unknown".
+   */
+  const shownScore = (s) => (s && s.coverage > 0 ? s.score : null);
+  const src = data?.sources || {};
+  const deadSources = Object.entries(src).filter(([, v]) => v !== 'live').map(([k]) => k);
+  const historyLive = !Object.keys(src).length || src.history === 'live';
+  const holdingsList = data?.holdings || [];
+  const holdingsPriced = holdingsList.some((h) => h.valueUsd != null);
+  const unverifiedTokens = holdingsList.filter((h) => h.symbol === '???').length;
 
   return (
     <PageTransition>
@@ -113,7 +135,17 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
 
         {error && !loading && (
           <div className="sm-section sm-empty">
-            {t('sm.errorWallet')}<br /><span className="faint">{error}</span>
+            {t('sm.errorWallet')}
+            <br />
+            <span className="faint">
+              {/* 502 here means an upstream indexer was down, not that the
+                  address is wrong — say so, it is the difference between
+                  "try again in a second" and "this wallet is broken". */}
+              {error.status === 429 ? t('sm.rateLimited')
+                : error.status >= 500 || error.status == null ? t('sm.dataSourceOffline')
+                : t('sm.errorWalletDetail')}
+              {error.message ? ` (${error.message})` : ''}
+            </span>
             <div style={{ marginTop: 12 }}><button className="sm-btn" onClick={() => load(chainId)}>{t('sm.retry')}</button></div>
           </div>
         )}
@@ -121,8 +153,23 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
         {data && !loading && (
           <>
             {data.dataStatus !== 'live' && (
-              <div className="sm-section sm-empty" style={{ padding: '12px 14px' }}>
-                {t('sm.noHistory')}
+              <div className="sm-section sm-empty" style={{ padding: '12px 14px', textAlign: 'start' }}>
+                {deadSources.length === Object.keys(src).length && Object.keys(src).length > 0
+                  ? t('sm.dataSourceOffline')
+                  : t('sm.noHistory')}
+                {deadSources.length > 0 && (
+                  <div className="faint" style={{ fontSize: 11, marginTop: 6 }}>
+                    {t('sm.offlineSources', { list: deadSources.join(' · ') })}
+                  </div>
+                )}
+                {/*
+                  * Retry has to be reachable from the empty state too: the old
+                  * page only offered it on a thrown error, so a wallet that
+                  * answered 200-with-nothing looked permanent.
+                  */}
+                <div style={{ marginTop: 10 }}>
+                  <button className="sm-btn" onClick={() => load(chainId)}>{t('sm.retry')}</button>
+                </div>
               </div>
             )}
 
@@ -138,31 +185,45 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
               )}
 
               <div className="sm-scores">
-                <ScoreRing value={data.smartMoney?.score ?? null} color="#7c7dff" label={t('sm.smartScore')} />
-                <ScoreRing value={data.reputation?.score ?? null} color="#00e5ff" label={t('sm.reputation')} />
+                <ScoreRing value={shownScore(data.smartMoney)} color="#7c7dff" label={t('sm.smartScore')} />
+                <ScoreRing value={shownScore(data.reputation)} color="#00e5ff" label={t('sm.reputation')} />
                 <ScoreRing
-                  value={risk?.score ?? null}
-                  color={RISK_COLORS[risk?.band] || '#888'}
+                  value={shownScore(risk)}
+                  color={risk?.coverage > 0 ? (RISK_COLORS[risk?.band] || '#888') : '#888'}
                   label={t('sm.risk')}
                 />
               </div>
-              {risk?.band && (
+              {risk?.band && risk?.coverage > 0 && (
                 <div className="faint" style={{ fontSize: 11, textAlign: 'center', marginTop: -8, marginBottom: 10 }}>
                   <b className={`sm-risk-${risk.band}`}>{t(`sm.riskBand.${risk.band}`)}</b>
                   {' · '}{t('sm.coverage', { n: Math.round((risk.coverage || 0) * 100) })}
                 </div>
               )}
+              {/*
+                * The evidence line: what this page could actually observe.
+                * Age and transaction count come from the wallet route; an
+                * unknown count says so instead of showing 0, which would read
+                * as "this wallet has never transacted".
+               */}
+              <div className="faint" style={{ fontSize: 11, textAlign: 'center', marginTop: risk?.coverage > 0 ? -4 : 2, marginBottom: 10 }}>
+                {t('sm.evidenceLine', {
+                  txs: data.txCount != null ? data.txCount : t('sm.unknown'),
+                  age: data.ageMs != null ? timeAgo(Date.now() - data.ageMs) : t('sm.unknown')
+                })}
+              </div>
 
               {/* Key stats */}
               <div className="sm-metrics">
                 <div className="sm-metric">
                   <div className="lab">{t('sm.portfolio')}</div>
-                  <div className="val">{fmtUsd(data.portfolioUsd)}</div>
+                  <div className="val">
+                    {holdingsPriced ? fmtUsd(data.portfolioUsd) : t('sm.unknown')}
+                  </div>
                 </div>
                 <div className="sm-metric">
                   <div className="lab">{t('sm.totalPnl')}</div>
                   <div className={`val ${pnl?.totalUsd > 0 ? 'sm-up' : pnl?.totalUsd < 0 ? 'sm-down' : ''}`}>
-                    {fmtUsd(pnl?.totalUsd)}
+                    {pnl?.totalUsd != null ? fmtUsd(pnl.totalUsd) : '—'}
                   </div>
                 </div>
                 <div className="sm-metric">
@@ -181,6 +242,12 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                   <div className="mid"><div className="name">{t('sm.unrealized')}</div></div>
                   <div className={`right usd ${pnl?.unrealizedUsd > 0 ? 'sm-up' : 'sm-down'}`}>{fmtUsd(pnl?.unrealizedUsd)}</div>
                 </div>
+                {pnl?.closedTrades > 0 && (
+                  <div className="sm-row" style={{ cursor: 'default' }}>
+                    <div className="mid"><div className="name">{t('sm.closedTrades')}</div><div className="sub">{t('sm.closedTradesSub')}</div></div>
+                    <div className="right"><div className="usd">{pnl.closedTrades}</div></div>
+                  </div>
+                )}
                 {pnl?.best && (
                   <div className="sm-row" style={{ cursor: 'default' }}>
                     <div className="mid"><div className="name">{t('sm.bestTrade')}</div><div className="sub">{pnl.best.symbol}</div></div>
@@ -193,7 +260,19 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                     <div className="right usd sm-down">{fmtUsd(pnl.worst.pnlUsd)}</div>
                   </div>
                 )}
-                {pnl?.dataStatus === 'unavailable' && <div className="sm-empty" style={{ padding: '8px 0' }}>{t('sm.pnlUnavailable')}</div>}
+                {/*
+                  * Three honest states, not one: prices loaded but no round-trip
+                  * closed inside the fetched window («partial») is a different
+                  * sentence from the history source being dead.
+                 */}
+                {pnl?.dataStatus === 'partial' && (
+                  <div className="sm-empty" style={{ padding: '8px 0' }}>{t('sm.pnlPartial')}</div>
+                )}
+                {pnl?.dataStatus === 'unavailable' && (
+                  <div className="sm-empty" style={{ padding: '8px 0' }}>
+                    {pnl.reason === 'NO_HISTORY' ? t('sm.pnlNoHistory') : t('sm.pnlUnavailable')}
+                  </div>
+                )}
               </div>
 
               {/* Risk reasons */}
@@ -219,13 +298,27 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                       </span>
                     ))}
                   </div>
+                  {unverifiedTokens > 0 && (
+                    <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+                      {t('sm.unverifiedTokens', { n: unverifiedTokens })}
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Recent activity */}
               <div className="sm-section">
                 <h3>{t('sm.recentActivity')}</h3>
-                {data.activity?.length === 0 && <div className="sm-empty">{t('sm.noActivity')}</div>}
+                {data.activity?.length === 0 && (
+                  <div className="sm-empty">
+                    {/*
+                      * "No activity" and "we could not read any" are different
+                      * sentences; saying the first when the indexer was down is
+                      * how this page used to look confidently empty.
+                     */}
+                    {historyLive ? t('sm.noActivity') : t('sm.activityBlocked')}
+                  </div>
+                )}
                 {data.activity?.slice(0, 20).map((a) => (
                   <div key={a.id} className="sm-row" onClick={() => a.hash && navigate(`/smart-money`)}>
                     <div className="mid">

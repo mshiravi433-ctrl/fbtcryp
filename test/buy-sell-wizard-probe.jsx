@@ -163,6 +163,14 @@ export async function run(container) {
     await act(async () => { await sleep(420); });
   };
   const enter = async (el, value) => { await act(async () => { type(el, value); await sleep(20); }); };
+  /* The keyboard's own action key, the way a phone sends it. */
+  const press = async (el, key = 'Enter') => {
+    await act(async () => {
+      el.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await sleep(20);
+    });
+    await act(async () => { await sleep(420); });
+  };
 
   try {
     /* ── A. the no-registration (guided) provider state ───────────────────── */
@@ -179,6 +187,7 @@ export async function run(container) {
     await enter(amountInput, '100');
     t('typing an amount ungates the forward action', nextBtn().disabled === false);
     t('...and clears the printed reason', !blocked());
+    t('the ready label says WHICH step it goes to', /wallet|کیف/i.test(nextBtn().textContent));
 
     await click(nextBtn());
     t('the forward action actually advances to the wallet step', activeStep() === 1);
@@ -213,6 +222,27 @@ export async function run(container) {
     await click(backBtn());
     t('Back still works from the review step', activeStep() === 2);
 
+    await act(async () => { root.unmount(); });
+
+    /* ── A2. Enter is the other Next button ─────────────────────────────────
+     * «بعد از وارد کردن مبلغ دکمه مرحله بعد وجود نداره» — the button was
+     * there, but a phone user who taps the keyboard's action key expected the
+     * flow to move. Enter now advances when the step is valid and refuses when
+     * it is not; that is the whole assertion set here.
+     */
+    root = await mount(CONFIG_REQUIRED);
+    const amountField = container.querySelector('.bsw-amount input');
+    await press(amountField);
+    t('Enter on an empty amount does not walk past the gate', activeStep() === 0);
+    await enter(amountField, '100');
+    await press(container.querySelector('.bsw-amount input'));
+    t('Enter on a valid amount advances exactly like the button', activeStep() === 1);
+    const walletField = container.querySelector('.bsw-wallet input');
+    await press(walletField);
+    t('Enter on an empty wallet field stays put', activeStep() === 1);
+    await enter(container.querySelector('.bsw-wallet input'), WALLET);
+    await press(container.querySelector('.bsw-wallet input'));
+    t('Enter advances from the wallet step too', activeStep() === 2);
     await act(async () => { root.unmount(); });
 
     /* ── B. the configured, order-tracked provider state ──────────────────── */
