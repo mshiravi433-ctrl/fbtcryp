@@ -8,6 +8,7 @@
  */
 
 import { APP_CAPABILITIES, getHierarchyForIntent } from './appCapabilities.js';
+import { buySellService } from '../../buySell.js';
 
 export const TOOL_SCHEMA = 'fbt.ai-tool.v1';
 
@@ -78,6 +79,78 @@ const TOOLS = [
     requiresConfirmation: false,
     supportedChains: [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144],
     route: '/swap'
+  },
+  {
+    id: 'buySell.capabilities',
+    name: 'Get Buy / Sell Availability',
+    description: 'Inspect provider availability, settlement verification, and supported checkout mode',
+    category: 'trading',
+    capabilities: ['buy_crypto', 'sell_crypto', 'provider_health', 'read'],
+    inputSchema: { type: 'object', properties: {} },
+    execute: async () => buySellService.getCapabilities(),
+    readOnly: true,
+    requiresWallet: false,
+    requiresConfirmation: false,
+    route: '/buy'
+  },
+  {
+    id: 'buySell.buy_quote',
+    name: 'Get Fiat Buy Quote',
+    description: 'Get a current provider quote for direct wallet settlement; never uses a stale estimate',
+    category: 'trading',
+    capabilities: ['buy_quote', 'buy_asset', 'quote', 'buy_crypto'],
+    inputSchema: {
+      type: 'object',
+      required: ['asset', 'network', 'fiatCurrency', 'fiatAmount', 'walletAddress', 'country', 'paymentMethod'],
+      properties: {
+        asset: { type: 'string' }, network: { type: 'string' }, fiatCurrency: { type: 'string' },
+        fiatAmount: { type: 'number' }, walletAddress: { type: 'string' }, country: { type: 'string' }, paymentMethod: { type: 'string' }
+      }
+    },
+    execute: async (input) => buySellService.getQuote({ ...input, side: 'BUY' }),
+    readOnly: true,
+    requiresWallet: true,
+    requiresConfirmation: false,
+    route: '/buy'
+  },
+  {
+    id: 'buySell.sell_quote',
+    name: 'Get Fiat Sell Quote',
+    description: 'Inspect approved off-ramp availability. It never redirects to an exchange when unavailable.',
+    category: 'trading',
+    capabilities: ['sell_quote', 'sell_asset', 'sell_crypto', 'quote'],
+    inputSchema: { type: 'object', properties: { asset: { type: 'string' }, network: { type: 'string' } } },
+    execute: async () => ({ ok: false, error: 'SELL_UNAVAILABLE', route: '/buy' }),
+    readOnly: true,
+    requiresWallet: true,
+    requiresConfirmation: false,
+    route: '/buy'
+  },
+  {
+    id: 'buySell.checkout',
+    name: 'Open Confirmed Buy Checkout',
+    description: 'Requires an explicit user confirmation in Buy / Sell before any hosted payment session can be created',
+    category: 'trading',
+    capabilities: ['buy_crypto', 'checkout', 'payment_status', 'settlement_status', 'transaction_status'],
+    inputSchema: { type: 'object', properties: { orderId: { type: 'string' } } },
+    execute: async () => buySellService.createCheckout(),
+    readOnly: false,
+    requiresWallet: true,
+    requiresConfirmation: true,
+    route: '/buy'
+  },
+  {
+    id: 'buySell.status',
+    name: 'Get Buy / Sell Status',
+    description: 'Read payment, settlement and blockchain-verification status for a prepared order',
+    category: 'trading',
+    capabilities: ['buy_status', 'sell_status', 'payment_status', 'settlement_status', 'transaction_status'],
+    inputSchema: { type: 'object', required: ['orderId'], properties: { orderId: { type: 'string' } } },
+    execute: async ({ orderId }) => buySellService.getOrderStatus(orderId),
+    readOnly: true,
+    requiresWallet: false,
+    requiresConfirmation: false,
+    route: '/buy'
   },
   {
     id: 'swap.execute',
@@ -563,6 +636,14 @@ export function getRelevantToolsForMessage(message, context = {}) {
   }
   if (text.includes('سود') || text.includes('yield') || text.includes('فارم') || text.includes('farm')) {
     return resolveToolsForIntent('YIELD_DISCOVERY', context);
+  }
+  /* Fiat buy/sell goes through the native review surface. Keep this before
+     swap matching so "buy USDT with card" never becomes a crypto swap. */
+  if (text.includes('cash out') || text.includes('off-ramp') || text.includes('offramp') || text.includes('sell to bank') || text.includes('فروش') || text.includes('برداشت بانکی')) {
+    return resolveToolsForIntent('SELL', context);
+  }
+  if (text.includes('buy') || text.includes('on-ramp') || text.includes('onramp') || text.includes('card') || text.includes('bank') || text.includes('visa') || text.includes('sepa') || text.includes('خرید') || text.includes('کارت')) {
+    return resolveToolsForIntent('BUY', context);
   }
   if (text.includes('swap') || text.includes('تبدیل') || text.includes('معاوضه')) {
     return resolveToolsForIntent('SWAP', context);

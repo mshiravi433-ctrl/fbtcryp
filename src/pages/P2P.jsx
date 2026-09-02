@@ -35,7 +35,7 @@ import BoardPanel from '../components/BoardPanel';
  * RestrictionsSheet existed to answer "which of the three desks may freeze
  * me" — a question created by the directory itself. With the directory gone
  * the question is gone: the remaining desk asks for no identity check to
- * trade at all. The sheet itself is NOT deleted: FiatPanel still renders it
+ * trade at all. The sheet remains as P2P safety information, not a fiat-ramp control.
  * (its card-rail content stays accurate for the partner's return), and the
  * screens probe still mounts it. Removing it here is cutting a lookup whose
  * premises no longer exist on this page, not deleting safety information.

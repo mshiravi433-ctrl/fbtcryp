@@ -17,7 +17,7 @@ export const MODULES = Object.freeze([
   'farming', 'liquidity', 'staking', 'futures', 'dydx', 'stocks', 'etf',
   'funds', 'forex', 'commodities', 'rwa', 'crypto', 'signals', 'news',
   'events', 'alerts', 'goals', 'profit-plan', 'prediction', 'lab', 'risk',
-  'forecast', 'transactions', 'notifications'
+  'forecast', 'transactions', 'notifications', 'buy-sell'
 ]);
 
 /** §8 — capability statuses. The AI must never claim what is not true. */
@@ -48,6 +48,9 @@ export const EVENT_TYPES = Object.freeze([
   'SWAP_COMPLETED', 'BRIDGE_COMPLETED', 'LOAN_CREATED', 'LOAN_REPAID',
   'LIQUIDATION_RISK_CHANGED', 'SIGNAL_CHANGED', 'NEWS_RECEIVED',
   'GOAL_PROGRESS_CHANGED', 'TRANSACTION_CONFIRMED', 'STATE_REFRESHED',
+  'BUY_CREATED', 'QUOTE_READY', 'CHECKOUT_STARTED', 'PAYMENT_CONFIRMED', 'SETTLEMENT_STARTED',
+  'TX_DETECTED', 'TX_CONFIRMED', 'BUY_COMPLETED', 'SELL_CREATED', 'SELL_COMPLETED',
+  'PAYMENT_FAILED', 'SETTLEMENT_FAILED', 'VERIFICATION_FAILED',
   'INTENT_RECEIVED', 'INTENT_COMPLETED', 'INTENT_FAILED', 'TOOL_EXECUTED',
   'TOOL_FAILED', 'RECOVERY_TRIGGERED', 'SECURITY_STOP', 'CAPABILITY_CHANGED'
 ]);

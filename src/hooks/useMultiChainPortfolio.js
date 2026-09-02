@@ -13,6 +13,7 @@ import { getBalances } from '../lib/swap';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { vsOf } from '../lib/currency';
 import { useMarkets } from './useMarket';
+import { onEvent } from '../lib/intent-ai/os/eventBus';
 
 /**
  * Build normalized holdings for a single chain. Does not throw: failed RPCs
@@ -163,6 +164,10 @@ export function useMultiChainPortfolio(wallet) {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [load]);
+
+  /* A verified hosted-checkout settlement is not added to a local balance.
+     It causes this same RPC-backed portfolio reader to fetch the wallet again. */
+  useEffect(() => onEvent('buySell.completed', () => { void load(); }), [load]);
 
   // Aggregate view
   const aggregated = useMemo(() => {
