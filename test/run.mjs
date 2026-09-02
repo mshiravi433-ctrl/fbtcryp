@@ -229,6 +229,22 @@ console.log('▸ probing the wallet risk / verification helpers…');
   report('wallet risk helpers', await runRisk());
 }
 
+/* --------------------- 0a-2b. Explore / Security intel contract ------------ */
+/**
+ * The intelligence stack (Explore + Security Center) ships one honesty
+ * contract across three layers — server scoring, route payloads, browser UI.
+ * This probe pins it offline: the scoring engine's exact table (including
+ * "null, not 100" for no evidence), the no-block rule enforced as key-shape
+ * and copy checks, a client-path→registered-route map so no button can call
+ * an endpoint that does not exist, and EN/FA locale coverage for every new
+ * string the pages render.
+ */
+console.log('▸ probing the explore / security intel contract…');
+{
+  const { default: runIntel } = await import('./explore-security-probe.mjs');
+  report('explore / security probe', await runIntel());
+}
+
 /* --------------------- 0a-3. FBT Intent AI — Phase 1 Foundation ---------- */
 /* Pure logic, no DOM and no network: intent parser, permission levels,
    policy model, Guardian, Strategy Agent, Execution Orchestrator, Draft

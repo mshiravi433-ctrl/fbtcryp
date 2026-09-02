@@ -43,7 +43,7 @@ import Shop from '../src/pages/Shop.jsx';
 import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
 import Developers from '../src/pages/Developers.jsx';
-import Audit from '../src/pages/Audit.jsx';
+import Security from '../src/pages/Security.jsx';
 import SmartWallet from '../src/pages/SmartWallet.jsx';
 import SmartMoneyWallet from '../src/pages/SmartMoneyWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
@@ -265,7 +265,7 @@ export async function run(container) {
    * they are precisely the files most likely to carry a fresh dead reference.
    */
   await mount('Developers', <Developers />);
-  await mount('Audit (security)', <Audit />);
+  await mount('Security Center (offline)', <Security />);
   await mount('SmartWallet', <SmartWallet />);
 
   /*

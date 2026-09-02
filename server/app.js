@@ -188,6 +188,15 @@ import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { futuresRouter } from './futures/router.js';
 import { fetchTokenRisk } from './tokenRisk.js';
+/*
+ * EXPLORE + SECURITY CENTER — the blockchain-intelligence and
+ * security-intelligence routes (server/explorerData.js +
+ * server/securityIntel.js behind one mounter). Deliberately independent of
+ * the Intent OS layer: these two pages must keep working with it removed,
+ * and nothing in these routes can sign, block or alter a transaction — they
+ * are GET-only by construction. See the mounter's header for the contract.
+ */
+import { registerExploreRoutes, registerSecurityRoutes } from './exploreSecurityRoutes.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
 import {
@@ -4747,6 +4756,13 @@ app.get('/api/coin-venue/:id', async (req, res) => {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
+
+/* ------------------- EXPLORE + SECURITY CENTER (v1) ------------------------ */
+/* Mounted here — right after the market/token read routes they share data
+ * sources with — so both groups inherit the same rate limiting and error
+ * shapes as the rest of the read-only API. They add no execution paths. */
+registerExploreRoutes(app);
+registerSecurityRoutes(app);
 
 /* ------------------------- THORChain native swaps ------------------------- */
 /*
