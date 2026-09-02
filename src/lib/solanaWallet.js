@@ -291,6 +291,12 @@ export function getMwaWallet() {
     && w?.features?.['standard:connect']) ?? null;
 }
 
+/** The connected MWA account object (Wallet Standard), or null. Exposed so the
+    Drift/Solana execution path can pass it to signAndSendTransaction features. */
+export function mwaAccountInfo() {
+  return mwaAccount ?? null;
+}
+
 export async function connectSolana() {
   const provider = getSolanaProvider();
 

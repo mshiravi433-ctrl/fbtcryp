@@ -1752,7 +1752,11 @@ export default function run() {
        */
       const pkgName = key.split('node_modules/').pop() ?? '';
       const short = pkgName.includes('/') ? pkgName.split('/').pop() : pkgName;
-      const expected = `${short}-${entry.version}.tgz`;
+      /* Aliased deps ("foo": "npm:bar@1.2.3") install under the alias key but
+         resolve the REAL package's tarball — derive the filename from the
+         lockfile "name" field (the real package) when it differs from the key. */
+      const realShort = entry.name && entry.name.includes('/') ? entry.name.split('/').pop() : (entry.name || short);
+      const expected = `${realShort}-${entry.version}.tgz`;
       if (tarball !== expected) {
         mismatched.push(`${key}: expected ${expected}, resolved ${tarball}`);
       }

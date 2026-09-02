@@ -121,7 +121,45 @@ try {
   t('quote with zero collateral is INVALID_INPUT or a provider error, never a number', quoteBad.json?.ok === false);
 
   const pos = await get(`/api/v1/futures/positions/${WALLET}`);
-  t('positions are never cached and never invented', pos.headers.get('cache-control') === 'no-store' && (pos.status === 200 ? Array.isArray(pos.json.data.positions) : pos.json?.error?.code === 'PROVIDER_UNAVAILABLE'));
+  /* The default on-chain venue is Drift (Solana): its read-only adapter answers
+     PROVIDER_READ_ONLY — an honest refusal, never an invented position list. */
+  t('positions are never cached and never invented', pos.headers.get('cache-control') === 'no-store' && (pos.status === 200 ? Array.isArray(pos.json.data.positions) : ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY'].includes(pos.json?.error?.code)));
+
+  /* Drift (Solana) is the on-chain tab venue: markets/candles/fees must answer
+     live data or an honest provider error — never an Ostium-shaped payload. */
+  const driftProviders = await get('/api/v1/futures/providers');
+  const driftRow = driftProviders.json?.data?.providers?.find((p) => p.providerId === 'drift');
+  t('Drift is registered for the on-chain tab on Solana', driftRow && driftRow.chainName === 'Solana' && driftRow.tab === 'onchain');
+  const driftMarkets = await get('/api/v1/futures/markets?provider=drift');
+  t('Drift markets answer live crypto perps or an honest provider error', driftMarkets.status === 200
+    ? driftMarkets.json.data.markets.every((m) => m.category === 'crypto' && m.mid > 0)
+    : driftMarkets.json?.ok === false);
+  const driftFees = await get('/api/v1/futures/fees?provider=drift&collateral=100&leverage=10&market=0');
+  t('Drift fee preview uses Drift venue fees (no Ostium oracle flat fee)', driftFees.status === 200
+    ? driftFees.json.data.fee.protocol.flatUsd === 0 && (driftFees.json.data.fee.protocol.bps === 5 || driftFees.json.data.fee.protocol.bps === null)
+    : driftFees.json?.ok === false);
+  /* Drift order path: the server builds NO calldata and holds no key. With a
+     live feed it returns a client-builds payload (empty transactions[],
+     clientSign.buildsInTab, Solana program id); with the feed down in CI it
+     refuses honestly with the provider health — never an EVM unsigned tx. */
+  const SOL_WALLET = 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd';
+  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_drift_prep_01' });
+  const d = driftPrepare.json?.data;
+  t('Drift /prepare returns the client-builds-tx payload or an honest refusal',
+    driftPrepare.json?.ok === true
+      ? d.clientSign?.family === 'solana' && d.clientSign?.buildsInTab === true
+        && Array.isArray(d.transactions) && d.transactions.length === 0
+        && d.market?.marketIndex === 0 && d.state === 'PREPARED'
+        && d.clientSign?.program === 'dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'
+      : ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY', 'FEED_STALE'].includes(driftPrepare.json?.error?.code));
+  const driftBadWallet = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: 'not-a-wallet' }, { 'idempotency-key': 'fut_probe_drift_badw_01' });
+  t('Drift /prepare rejects a wallet that is neither an EVM nor a Solana address', driftBadWallet.status === 400 && driftBadWallet.json?.error?.code === 'WALLET_NOT_CONNECTED');
+  /* An EVM-shaped hash must never be accepted as a Drift receipt: the unknown
+     execution still 404s first, but a well-formed id + Solana record would
+     hit isSolanaSignature; here we pin that the route never fabricates a
+     confirmation for a non-existent execution regardless of hash shape. */
+  const driftVerify = await post('/api/v1/futures/verify', { executionId: 'fut_exec_00000000-0000-0000-0000-000000000000', txHash: `${'1'.repeat(87)}` });
+  t('verify of an unknown execution still 404s even with a Solana-shaped signature', driftVerify.status === 404);
   const posBad = await get('/api/v1/futures/positions/not-a-wallet');
   t('positions for a malformed wallet are INVALID_INPUT', posBad.status === 400);
   const verify = await post('/api/v1/futures/verify', { executionId: 'fut_exec_00000000-0000-0000-0000-000000000000', txHash: `0x${'1'.repeat(64)}` });

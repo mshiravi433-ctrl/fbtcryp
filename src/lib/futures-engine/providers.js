@@ -20,6 +20,11 @@
  * Centralised exchanges (Binance/Bybit/KuCoin/MEXC…) are deliberately absent:
  * the product rule is no CEX trading APIs, and a catalogue entry is the first
  * step toward one.
+ *
+ * The On-Chain tab of the Futures engine shows Drift (Solana) ONLY — that is
+ * the venue FBT is integrating. Ostium (Arbitrum) serves stocks/RWA in its own
+ * Stocks tab; it is kept in the catalogue for the registry/ledger but is not
+ * part of the on-chain futures page.
  */
 
 export const PROVIDER_STATUS = Object.freeze({
@@ -38,6 +43,7 @@ export const EXECUTABLE_STATUSES = Object.freeze([PROVIDER_STATUS.AVAILABLE, PRO
 export const EXECUTION_MODEL = Object.freeze({
   ONCHAIN_UNSIGNED_TX: 'ONCHAIN_UNSIGNED_TX',
   CLIENT_SIGNED_SESSION: 'CLIENT_SIGNED_SESSION',
+  CLIENT_BUILDS_TX: 'CLIENT_BUILDS_TX',
   NOT_BUILT: 'NOT_BUILT'
 });
 
@@ -91,7 +97,9 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       supportsLimitOrders: false,
       supportsReduceOnly: true
     }),
-    tab: 'onchain'
+    /* Ostium lives in the Stocks tab (src/pages/Ostium.jsx); it is not part of
+       the on-chain futures screen, which shows Drift (Solana) only. */
+    tab: null
   }),
   dydx: Object.freeze({
     id: 'dydx',
@@ -170,24 +178,41 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     capabilities: flags(),
     tab: null
   }),
-  /* The Solana-family adapter shape. Same interface as the EVM ones; activated
-     only when a Drift order path is built and configured. It never touches the
-     Solana swap/wallet screens. */
+  /* Drift (Solana) — the venue of the On-Chain futures tab. The public Data
+     API feeds live markets/prices/funding/OI/candles (READ), and the browser
+     builds + signs real Drift transactions with @drift-labs/sdk and the user's
+     own Solana wallet (FBT never holds a key). The server never signs for
+     Solana; it provides quote/risk/fee truth and verifies receipts on chain. */
   drift: Object.freeze({
     id: 'drift',
     name: 'Drift',
     family: 'solana',
-    chainId: null,
+    chainId: 'solana:mainnet',
     chainName: 'Solana',
     custody: 'onchain',
     collateral: 'USDC',
-    execution: EXECUTION_MODEL.NOT_BUILT,
-    fbtFeeModel: 'none',
-    fbtFeeChargedOn: null,
+    execution: EXECUTION_MODEL.CLIENT_BUILDS_TX,
+    fbtFeeModel: 'referrer-on-fill',
+    fbtFeeChargedOn: 'fill',
     venueFeeCapBps: 20,
     markets: ['crypto'],
-    capabilities: flags(),
-    tab: null
+    capabilities: flags({
+      canReadMarkets: true,
+      canReadFunding: true,
+      canReadOpenInterest: true,
+      canReadPositions: true,
+      canQuote: true,
+      canPrepare: true,
+      canExecute: true,
+      canManagePositions: true,
+      supportsTakeProfit: true,
+      supportsStopLoss: true,
+      supportsPartialClose: true,
+      supportsCollateralAdjust: true,
+      supportsLimitOrders: true,
+      supportsReduceOnly: true
+    }),
+    tab: 'onchain'
   })
 });
 
@@ -225,8 +250,12 @@ export function resolveProviderStatus({
   }
   if (!dataLive) return { status: PROVIDER_STATUS.UNAVAILABLE, reason: 'FEED_UNAVAILABLE' };
   if (execution === EXECUTION_MODEL.CLIENT_SIGNED_SESSION) {
+    /* dYdX signs inside its OWN tab via an in-memory session, so the on-chain
+       tab can only read it. */
     return { status: PROVIDER_STATUS.READ_ONLY, reason: 'EXECUTES_IN_OWN_TAB' };
   }
+  /* CLIENT_BUILDS_TX (Drift) builds and signs in THIS tab with the user's own
+     wallet, so a live feed means it is genuinely tradeable here. */
   if (recentErrors >= 5) return { status: PROVIDER_STATUS.READ_ONLY, reason: 'ERROR_BUDGET_EXHAUSTED' };
   if (dataStale || recentErrors >= 2) return { status: PROVIDER_STATUS.DEGRADED, reason: dataStale ? 'FEED_STALE' : 'RECENT_ERRORS' };
   return { status: PROVIDER_STATUS.AVAILABLE, reason: null };

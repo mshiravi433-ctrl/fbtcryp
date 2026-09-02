@@ -1092,5 +1092,16 @@
       "history": "Histórico",
       "brain": "Cérebro"
     }
+  },
+  "futures": {
+    "onchain": {
+      "title": "Futuros on-chain · Drift na Solana",
+      "subtitle": "Perpétuos de cripto na Drift — a DEX de livro de ordens on-chain da Solana. Preços, gráfico e taxas ao vivo; sua carteira assina, a FBT nunca guarda fundos."
+    },
+    "driftNote": "A Drift é o único protocolo on-chain nesta tela. Mercados, preços, funding e o gráfico são lidos ao vivo pela API pública de dados da Drift; a execução de ordens será ativada em breve.",
+    "protocolAvailableSoon": "Em breve",
+    "chain": {
+      "solana": "Solana"
+    }
   }
 }
