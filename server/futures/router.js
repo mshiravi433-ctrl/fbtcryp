@@ -39,6 +39,7 @@ import {
 } from '../../src/lib/futures-engine/index.js';
 import { listProviders, probeProvider, noteProviderError, noteProviderSuccess, fbtFeeRecipient, fbtFeeOverrideBps } from './registry.js';
 import * as ostium from './adapters/ostium.js';
+import * as drift from './adapters/drift.js';
 import {
   claimFuturesIdempotency, saveFuturesIdempotency, createExecution, getExecution, updateExecution,
   listExecutionsForWallet, appendFeeRecord, listFeeRecords, feeSummary, ledgerDurable
@@ -58,9 +59,18 @@ const cleanWallet = (w) => { try { return isAddress(w) ? getAddress(w) : null; }
 const providerOf = (id) => PROVIDER_CATALOGUE[String(id || '').toLowerCase()] || null;
 const ownerFor = (req) => (req?.tgUser?.id ? `tg:${req.tgUser.id}` : String(req.get?.('x-fbt-device') || req.ip || 'anon').slice(0, 64));
 
-/* Only Ostium has a server-side order path today. The adapter table makes the
-   next venue a registration, not a rewrite. */
-const ADAPTERS = { ostium };
+/* Ostium has a server-side EVM order path (Stocks). Drift (Solana) has a live
+   READ path — markets/prices/funding/OI/candles — but no order path yet, so its
+   adapter answers data and the venue stays READ_ONLY. The table makes adding
+   Drift execution a registration, not a rewrite. */
+const ADAPTERS = { ostium, drift };
+
+/* Per-adapter fee + collateral constants. Kept out of the generic flow so each
+   venue reports its OWN numbers rather than inheriting another's. */
+const ADAPTER_CONSTS = {
+  ostium: { minCollateralUsd: ostium.OSTIUM_MIN_COLLATERAL_USD, flatFeeUsd: ostium.OSTIUM_ORACLE_FEE_USD, venueCapBps: ostium.OSTIUM_VENUE_FEE_CAP_BPS },
+  drift: { minCollateralUsd: drift.DRIFT_MIN_COLLATERAL_USD, flatFeeUsd: 0, venueCapBps: drift.DRIFT_VENUE_FEE_CAP_BPS }
+};
 
 async function statusGate(providerId, { needExecute = false } = {}) {
   const p = providerOf(providerId);
@@ -75,41 +85,44 @@ async function statusGate(providerId, { needExecute = false } = {}) {
   return { ok: true, provider: p, health };
 }
 
-/** Network fee in USD from a gas estimate (null when either half is unknown). */
-async function networkFeeUsd(est) {
+/** Network fee in USD from a gas estimate (EVM venues; null when unknown). */
+async function networkFeeUsd(est, providerId = 'ostium') {
+  if (providerId !== 'ostium') return null; // Solana network fee is not estimated on the read path
   if (!est?.ok || est.feeWei == null) return null;
   const eth = await ostium.ethUsd(fetchSimplePrices);
   if (eth == null) return null;
   return (Number(est.feeWei) / 1e18) * eth;
 }
 
-function feeFor({ market, collateralUsd, leverage, networkFee, policyId }) {
+function feeFor({ providerId = 'drift', market, collateralUsd, leverage, networkFee, policyId }) {
+  const c = ADAPTER_CONSTS[providerId] || ADAPTER_CONSTS.drift;
   return computeFeeBreakdown({
     collateralUsd, leverage,
     protocolFeeBps: market?.openFeeBps ?? null,
-    protocolFlatUsd: ostium.OSTIUM_ORACLE_FEE_USD,
+    protocolFlatUsd: c.flatFeeUsd,
     networkFeeUsd: networkFee,
     policyId: FEE_POLICY_IDS.includes(String(policyId || '').toUpperCase()) ? String(policyId).toUpperCase() : 'STANDARD',
     overrideBps: fbtFeeOverrideBps(),
-    venueCapBps: ostium.OSTIUM_VENUE_FEE_CAP_BPS,
+    venueCapBps: c.venueCapBps,
     recipient: fbtFeeRecipient(),
-    chargedOn: 'open'
+    chargedOn: providerId === 'drift' ? 'fill' : 'open'
   });
 }
 
 /** Everything a quote needs, from real reads. Shared by /quote, /prepare, /simulate. */
 async function assembleOrder(body, { wallet, requireWallet = false }) {
-  const providerId = String(body.provider || body.providerId || 'ostium').toLowerCase();
+  const providerId = String(body.provider || body.providerId || 'drift').toLowerCase();
   const gate = await statusGate(providerId, { needExecute: requireWallet });
   if (!gate.ok) return { ok: false, ...gate };
   const adapter = ADAPTERS[providerId];
   if (!adapter) return { ok: false, status: 409, code: 'PROVIDER_READ_ONLY', health: gate.health };
+  const adapterConsts = ADAPTER_CONSTS[providerId] || ADAPTER_CONSTS.ostium;
 
   const side = body.side === 'short' ? 'short' : 'long';
   const collateralUsd = num(body.collateralUsd ?? body.collateral);
   const leverage = num(body.leverage);
   if (collateralUsd == null || collateralUsd <= 0 || leverage == null || leverage <= 0) return { ok: false, status: 400, code: 'INVALID_INPUT', detail: 'collateralUsd and leverage must be positive numbers' };
-  if (collateralUsd < adapter.OSTIUM_MIN_COLLATERAL_USD) return { ok: false, status: 400, code: 'BELOW_MIN', detail: `minimum collateral is ${adapter.OSTIUM_MIN_COLLATERAL_USD} USDC` };
+  if (collateralUsd < adapterConsts.minCollateralUsd) return { ok: false, status: 400, code: 'BELOW_MIN', detail: `minimum collateral is ${adapterConsts.minCollateralUsd} USDC` };
 
   const found = await adapter.findMarket(body.market || body.marketId);
   if (found.error) { noteProviderError(providerId, 'MARKETS'); return { ok: false, status: 503, code: 'PROVIDER_UNAVAILABLE', detail: found.error, health: gate.health }; }
@@ -126,7 +139,9 @@ async function assembleOrder(body, { wallet, requireWallet = false }) {
   const slippageBps = Math.max(1, Math.min(500, Math.round(num(body.slippageBps) ?? 25)));
 
   let account = null;
-  if (wallet) {
+  /* Read-only venues (Drift) have no wallet account path; quotes and fees still
+     compute from the live market read, with the button honest about view-only. */
+  if (wallet && gate.provider.execution !== 'NOT_BUILT') {
     account = await adapter.readAccount(wallet);
     if (!account.ok) account = null;
   }
@@ -145,7 +160,7 @@ async function assembleOrder(body, { wallet, requireWallet = false }) {
   const candidates = [{
     providerId, status: gate.health.status, capabilities: gate.provider.capabilities,
     isMarketOpen: market.isMarketOpen, maxLeverage: effectiveMax, protocolFeeBps: market.openFeeBps,
-    protocolFlatUsd: adapter.OSTIUM_ORACLE_FEE_USD, networkFeeUsd: null, spreadBps: market.spreadBps,
+    protocolFlatUsd: adapterConsts.flatFeeUsd, networkFeeUsd: null, spreadBps: market.spreadBps,
     openInterestUsd: market.openInterestUsd, fundingAprPct: fundingForSide, dataAgeMs: gate.health.dataAgeMs, supportsMarket: true
   }];
   const route = selectVenue(candidates, { notionalUsd: collateralUsd * leverage, leverage, needTp: takeProfit != null && takeProfit > 0, needSl: stopLoss != null && stopLoss > 0 });
@@ -182,7 +197,7 @@ export function futuresRouter() {
 
   /* ── market data ───────────────────────────────────────────────────── */
   router.get('/markets', async (req, res) => {
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const gate = await statusGate(providerId);
     if (!gate.ok) return fail(res, gate.status, gate.code, { provider: gate.health || null });
     const adapter = ADAPTERS[providerId];
@@ -214,7 +229,7 @@ export function futuresRouter() {
   });
 
   router.get('/candles', async (req, res) => {
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     const out = await adapter.readCandles({ marketRef: req.query.market, resolution: req.query.resolution, limit: req.query.limit });
@@ -224,7 +239,7 @@ export function futuresRouter() {
   });
 
   router.get('/funding', async (req, res) => {
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     try {
@@ -235,7 +250,7 @@ export function futuresRouter() {
   });
 
   router.get('/open-interest', async (req, res) => {
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     try {
@@ -249,7 +264,7 @@ export function futuresRouter() {
   router.get('/positions/:wallet', async (req, res) => {
     const wallet = cleanWallet(req.params.wallet);
     if (!wallet) return fail(res, 400, 'INVALID_INPUT', { detail: 'wallet' });
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     res.set('cache-control', 'no-store');
@@ -262,7 +277,7 @@ export function futuresRouter() {
   router.get('/account/:wallet', async (req, res) => {
     const wallet = cleanWallet(req.params.wallet);
     if (!wallet) return fail(res, 400, 'INVALID_INPUT', { detail: 'wallet' });
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     res.set('cache-control', 'no-store');
@@ -273,7 +288,7 @@ export function futuresRouter() {
 
   /* ── fees (GET preview) ────────────────────────────────────────────── */
   router.get('/fees', async (req, res) => {
-    const providerId = String(req.query.provider || 'ostium').toLowerCase();
+    const providerId = String(req.query.provider || 'drift').toLowerCase();
     const adapter = ADAPTERS[providerId];
     if (!adapter) return fail(res, 409, 'PROVIDER_READ_ONLY');
     const collateralUsd = num(req.query.collateral ?? req.query.collateralUsd);
@@ -281,7 +296,7 @@ export function futuresRouter() {
     if (collateralUsd == null || leverage == null) return fail(res, 400, 'INVALID_INPUT', { detail: 'collateral and leverage required' });
     let market = null;
     if (req.query.market) market = (await adapter.findMarket(req.query.market)).market;
-    const fee = feeFor({ market, collateralUsd, leverage, networkFee: null, policyId: req.query.policy });
+    const fee = feeFor({ providerId, market, collateralUsd, leverage, networkFee: null, policyId: req.query.policy });
     if (!fee) return fail(res, 400, 'INVALID_INPUT');
     return ok(res, { provider: providerId, market: market?.symbol || null, fee, policies: FEE_POLICY_IDS }, { schema: SCHEMA('fees'), note: 'network fee is estimated at /simulate; totals are null until every component is known' });
   });
@@ -299,7 +314,7 @@ export function futuresRouter() {
     const wallet = req.body?.wallet ? cleanWallet(req.body.wallet) : null;
     const o = await assembleOrder(req.body || {}, { wallet });
     if (!o.ok) return fail(res, o.status || 400, o.code, { requestId, detail: o.detail || null, provider: o.health || null });
-    const fee = feeFor({ market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+    const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
     publish('FUTURES_QUOTE_UPDATED', { requestId, providerId: o.providerId, marketId: o.market.marketId }, { source: 'futures-router' });
     return ok(res, {
       requestId, provider: o.providerId, providerStatus: o.health.status,
@@ -354,7 +369,7 @@ export function futuresRouter() {
     if (o.account.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd) return fail(res, 400, 'INSUFFICIENT_BALANCE', { requestId, balanceUsd: o.account.balanceUsd });
 
     const needsApproval = o.account.allowanceUsd != null && o.account.allowanceUsd + 1e-9 < o.collateralUsd;
-    const feeDraft = feeFor({ market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+    const feeDraft = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
     if (!feeDraft) return fail(res, 400, 'INVALID_INPUT', { requestId });
 
     let unsigned;
@@ -371,10 +386,10 @@ export function futuresRouter() {
     let simulation = { attempted: false, ok: null, gas: null, networkFeeUsd: null, code: needsApproval ? 'APPROVAL_REQUIRED_FIRST' : null };
     if (!needsApproval) {
       const est = await o.adapter.estimateGas({ from: wallet, to: unsigned.to, data: unsigned.data });
-      simulation = { attempted: true, ok: est.ok, gas: est.ok ? est.gas : null, gasPriceWei: est.ok ? est.gasPriceWei : null, networkFeeUsd: await networkFeeUsd(est), code: est.ok ? null : est.code };
+      simulation = { attempted: true, ok: est.ok, gas: est.ok ? est.gas : null, gasPriceWei: est.ok ? est.gasPriceWei : null, networkFeeUsd: await networkFeeUsd(est, o.providerId), code: est.ok ? null : est.code };
       if (!est.ok && mode === 'execute') return fail(res, 422, 'SIMULATION_FAILED', { requestId, detail: est.detail || null });
     }
-    const fee = feeFor({ market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: simulation.networkFeeUsd, policyId: o.policyId });
+    const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: simulation.networkFeeUsd, policyId: o.policyId });
     const approval = needsApproval ? o.adapter.buildApprove({ amountUsd: o.collateralUsd }) : null;
 
     const execution = await createExecution({
@@ -418,7 +433,7 @@ export function futuresRouter() {
     if (!wallet) return fail(res, 400, 'WALLET_NOT_CONNECTED', { requestId });
     const o = await assembleOrder(req.body || {}, { wallet, requireWallet: true });
     if (!o.ok) return fail(res, o.status || 400, o.code, { requestId, detail: o.detail || null });
-    const feeDraft = feeFor({ market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+    const feeDraft = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
     let unsigned;
     try {
       unsigned = buildOpen(o, wallet, feeDraft?.fbt.bps ?? 0);
@@ -426,8 +441,8 @@ export function futuresRouter() {
     const needsApproval = o.account?.allowanceUsd != null && o.account.allowanceUsd + 1e-9 < o.collateralUsd;
     if (needsApproval) return ok(res, { requestId, simulated: false, code: 'APPROVAL_REQUIRED_FIRST', needsApproval: true, risk: o.risk }, { schema: SCHEMA('simulate') });
     const est = await o.adapter.estimateGas({ from: wallet, to: unsigned.to, data: unsigned.data });
-    const netFee = await networkFeeUsd(est);
-    const fee = feeFor({ market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: netFee, policyId: o.policyId });
+    const netFee = await networkFeeUsd(est, o.providerId);
+    const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: netFee, policyId: o.policyId });
     return ok(res, { requestId, simulated: est.ok, gas: est.ok ? est.gas : null, networkFeeUsd: netFee, code: est.ok ? null : est.code, detail: est.ok ? null : est.detail, fee, risk: o.risk, needsApproval: false }, { schema: SCHEMA('simulate') });
   });
 
@@ -542,7 +557,7 @@ export function futuresRouter() {
 
     const finalTx = txs[txs.length - 1];
     const est = txs.length === 1 ? await adapter.estimateGas({ from: wallet, to: finalTx.to, data: finalTx.data }) : { ok: false, code: 'APPROVAL_REQUIRED_FIRST' };
-    const netFee = await networkFeeUsd(est);
+    const netFee = await networkFeeUsd(est, providerId);
     /* Management actions carry no FBT fee (Ostium charges the builder on OPEN only). */
     const fee = computeFeeBreakdown({ collateralUsd: position.collateralUsd, leverage: position.leverage, protocolFeeBps: 0, protocolFlatUsd: action === 'close' || action === 'decrease' ? adapter.OSTIUM_ORACLE_FEE_USD : 0, networkFeeUsd: netFee, policyId: 'ZERO', venueCapBps: 0, recipient: fbtFeeRecipient(), chargedOn: 'none' });
     const execution = await createExecution({ requestId, intentId, idempotencyKey: idemKey, owner, wallet, providerId, marketId: market.marketId, symbol: market.symbol, action, side: position.side, collateralUsd: position.collateralUsd, leverage: position.leverage, notionalUsd: position.notionalUsd, fee, risk: null, route: null, unsignedTx: finalTx, positionId: position.positionId });

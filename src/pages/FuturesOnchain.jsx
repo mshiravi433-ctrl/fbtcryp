@@ -26,7 +26,7 @@ import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import TrendChart from '../components/TrendChart';
-import { IconExternal, IconShield, IconTrend } from '../components/Icons';
+import { IconShield, IconTrend } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -40,21 +40,19 @@ import { useFuturesStore, emitFuturesEvent } from '../lib/futures-engine/store';
 import { mapFuturesError } from '../lib/futures-engine/errors';
 import { createFuturesTxMachine, FUTURES_TX_STATE } from '../lib/futures-engine/stateMachine';
 
-const CATEGORY_ORDER = ['Crypto', 'Commodities', 'Forex', 'Indices', 'Stocks', 'ETFs'];
+/* The on-chain futures tab is Drift (Solana) and ONLY Drift. Ostium and the
+   other venues live elsewhere (Stocks tab / their own tabs); this screen never
+   lists a protocol comparison. */
+const ONCHAIN_PROVIDER_ID = 'drift';
+const CATEGORY_ORDER = ['Crypto'];
 const friendlyCategory = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v.includes('crypto')) return 'Crypto';
-  if (v.includes('commod')) return 'Commodities';
-  if (v.includes('forex') || v.includes('fx')) return 'Forex';
-  if (v.includes('indice') || v.includes('index')) return 'Indices';
-  if (v.includes('stock') || v.includes('equit')) return 'Stocks';
-  if (v.includes('etf')) return 'ETFs';
   return 'Other';
 };
 const RESOLUTIONS = [['15', '15m'], ['60', '1h'], ['240', '4h'], ['1D', '1d']];
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
 const STATUS_TONE = { AVAILABLE: 'pill-up', DEGRADED: 'pill-neutral', READ_ONLY: 'pill-neutral', UNAVAILABLE: 'pill-down', MAINTENANCE: 'pill-down', BLOCKED: 'pill-down' };
-const EXPLORERS = { 42161: 'https://arbiscan.io/tx/' };
 
 const errCode = (e) => mapFuturesError(e).code;
 const isBps = (v) => Number.isFinite(Number(v));
@@ -106,7 +104,7 @@ export default function FuturesOnchain() {
 
   const [providers, setProviders] = useState([]);
   const [providersLoading, setProvidersLoading] = useState(true);
-  const [providerId, setProviderId] = useState('ostium');
+  const [providerId] = useState(ONCHAIN_PROVIDER_ID);
   const [markets, setMarkets] = useState([]);
   const [marketsState, setMarketsState] = useState({ loading: true, live: false, stale: false, code: null });
   const [category, setCategory] = useState('Crypto');
@@ -148,19 +146,14 @@ export default function FuturesOnchain() {
   const executable = Boolean(provider?.executable);
   const readOnly = provider && !executable;
 
-  /* ── providers (registry) ────────────────────────────────────────────── */
-  const providerIdRef = useRef(providerId);
-  providerIdRef.current = providerId;
+  /* ── provider (registry) — Drift only; the registry just tells us status ── */
   const loadProviders = useCallback(async () => {
     const res = await getFuturesProviders();
     const rows = res.ok ? res.data.providers : [];
-    setProviders(rows);
-    store.setProviders(rows, res.ok ? 'live' : 'unavailable');
-    /* Prefer the first executable venue; fall back to any venue with a server adapter. */
-    if (rows.length && !rows.some((p) => p.providerId === providerIdRef.current)) {
-      const first = rows.find((p) => p.executable) || rows.find((p) => p.execution === 'ONCHAIN_UNSIGNED_TX') || rows[0];
-      if (first) setProviderId(first.providerId);
-    }
+    /* This tab presents Drift (Solana) and no other venue. */
+    const drift = rows.filter((p) => p.providerId === ONCHAIN_PROVIDER_ID);
+    setProviders(drift);
+    store.setProviders(drift, res.ok ? 'live' : 'unavailable');
     setProvidersLoading(false);
   }, [store]);
 
@@ -425,19 +418,27 @@ export default function FuturesOnchain() {
     }
   };
 
-  const buttonLabel = !wallet.isConnected
-    ? t('futures.connect')
-    : provider?.chainId && wallet.chainId !== provider.chainId
-      ? t('futures.switchNetwork', { chain: provider.chainName })
-      : readOnly
-        ? t('futures.readOnlyButton')
+  /* A read-only venue (Drift's Solana order path is not built yet) stays a
+     "View only" gate whether or not a wallet is connected — connecting never
+     flips a NOT_BUILT venue into tradeable, so the button must not imply it. */
+  const buttonLabel = readOnly
+    ? t('futures.readOnlyButton')
+    : !wallet.isConnected
+      ? t('futures.connect')
+      : provider?.chainId && wallet.chainId !== provider.chainId
+        ? t('futures.switchNetwork', { chain: provider.chainName })
         : needsApproval
           ? t('futures.approveAndReview')
           : t('futures.review');
   const canReview = !busy && executable && market && quote && !risk?.blocked && !insufficient && !quoting;
 
-  const statusLabel = (p) => t(`futures.status.${p.status}`, { defaultValue: p.status });
-  const reasonLabel = (p) => (p.reason ? t(`futures.reason.${p.reason}`, { defaultValue: p.reason }) : '');
+  const statusLabel = (p) => (p ? t(`futures.status.${p.status}`, { defaultValue: p.status }) : '');
+  const reasonLabel = (p) => (p?.reason ? t(`futures.reason.${p.reason}`, { defaultValue: p.reason }) : '');
+  const chainLabel = (p) => {
+    if (!p) return 'Solana';
+    if (p.family === 'solana') return t('futures.chain.solana', { defaultValue: p.chainName || 'Solana' });
+    return p.chainName || '';
+  };
 
   return (
     <PageTransition>
@@ -445,16 +446,9 @@ export default function FuturesOnchain() {
         <div className="derivatives-aurora" aria-hidden="true" />
 
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div className="derivatives-title"><span className="derivatives-title-glow">{t('futures.onchain.title')}</span></div>
-              <p className="derivatives-subtitle">{t('futures.onchain.subtitle')}</p>
-            </div>
-            {provider && (
-              <span className={`pill ${STATUS_TONE[provider.status] || 'pill-neutral'}`} style={{ alignSelf: 'flex-start' }} data-testid="futures-provider-status">
-                {statusLabel(provider)}
-              </span>
-            )}
+          <div>
+            <div className="derivatives-title"><span className="derivatives-title-glow">{t('futures.onchain.title')}</span></div>
+            <p className="derivatives-subtitle">{t('futures.onchain.subtitle')}</p>
           </div>
         </motion.section>
 
@@ -462,39 +456,33 @@ export default function FuturesOnchain() {
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
         </motion.div>
 
-        {/* ── providers / multi-protocol comparison ─────────────────────── */}
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <p className="section-label" style={{ marginBottom: 8 }}>{t('futures.providers')}</p>
-          {providersLoading && !providers.length ? <div className="skel" style={{ height: 64 }} /> : !providers.length ? (
-            <p className="notice">{t('futures.providersUnavailable')}</p>
-          ) : (
-            <div className="stack" style={{ gap: 8 }}>
-              {providers.filter((p) => p.execution !== 'CLIENT_SIGNED_SESSION').map((p) => (
-                <button
-                  key={p.providerId}
-                  type="button"
-                  className="wallet-option"
-                  aria-pressed={p.providerId === providerId}
-                  onClick={() => { setProviderId(p.providerId); haptic?.('light'); }}
-                  style={{ borderColor: p.providerId === providerId ? 'rgba(0,229,255,0.35)' : undefined }}
-                  data-testid={`futures-provider-${p.providerId}`}
-                >
-                  <span className="wallet-badge" style={{ color: p.executable ? 'var(--rgb-1)' : 'var(--text-3)' }}>{p.name.slice(0, 3).toUpperCase()}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{p.name} <span className="faint">· {p.chainName}</span></span>
-                    <span className="set-row-sub">{p.executable ? t('futures.providerExecutable', { count: p.marketCount }) : reasonLabel(p) || t('futures.providerNotExecutable')}</span>
-                  </span>
-                  <span className={`pill ${STATUS_TONE[p.status] || 'pill-neutral'}`}>{statusLabel(p)}</span>
-                </button>
-              ))}
+        {/* ── the venue: Drift on Solana (the only on-chain protocol) ────── */}
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }} data-testid="futures-venue-card">
+          {providersLoading && !providers.length ? <div className="skel" style={{ height: 76 }} /> : (
+            <div className="wallet-option" style={{ borderColor: 'rgba(0,229,255,0.35)', cursor: 'default' }}>
+              <span className="wallet-badge" style={{ color: executable ? 'var(--rgb-1)' : 'var(--text-3)' }}>DRF</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>
+                  {provider?.name || 'Drift'} <span className="faint">· {chainLabel(provider)}</span>
+                  {!executable && <span className="pill pill-neutral" style={{ marginInlineStart: 8 }}>{t('futures.protocolAvailableSoon')}</span>}
+                </span>
+                <span className="set-row-sub">
+                  {executable
+                    ? t('futures.providerExecutable', { count: provider?.marketCount ?? 0 })
+                    : reasonLabel(provider) || t('futures.providerNotExecutable')}
+                </span>
+              </span>
+              <span className={`pill ${STATUS_TONE[provider?.status] || 'pill-down'}`} data-testid="futures-provider-status">
+                {provider ? statusLabel(provider) : t('futures.status.UNAVAILABLE', { defaultValue: 'Unavailable' })}
+              </span>
             </div>
           )}
-          <p className="faint" style={{ marginTop: 8 }}>{t('futures.routerNote')}</p>
+          <p className="faint" style={{ marginTop: 10 }}>{t('futures.driftNote')}</p>
         </motion.section>
 
         {readOnly && (
           <p className="notice" style={{ marginTop: 12 }} data-testid="futures-readonly-notice">
-            {provider.status === 'READ_ONLY' ? t('futures.readOnlyNotice') : t('futures.unavailableNotice', { reason: reasonLabel(provider) })}
+            {provider?.status === 'READ_ONLY' ? t('futures.readOnlyNotice') : t('futures.unavailableNotice', { reason: reasonLabel(provider) })}
           </p>
         )}
 
@@ -652,7 +640,7 @@ export default function FuturesOnchain() {
               {insufficient && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t('futures.err.INSUFFICIENT_BALANCE')}</p>}
               {error && <p className="notice notice-danger" style={{ marginTop: 9 }} data-testid="futures-error">{t(`futures.err.${error}`, { defaultValue: error })}</p>}
 
-              <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={wallet.isConnected && !canReview} onClick={openReview} data-testid="futures-review">
+              <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={readOnly || (wallet.isConnected && !canReview)} onClick={openReview} data-testid="futures-review">
                 {busy ? t('common.loading') : buttonLabel}
               </button>
               <p className="faint" style={{ marginTop: 7 }}>{t('futures.exactApproval')}</p>
@@ -670,11 +658,6 @@ export default function FuturesOnchain() {
         {lastTx && (
           <div className="notice" style={{ marginTop: 16 }} data-testid="futures-last-tx">
             <strong>{t(`futures.txState.${lastTx.state}`, { defaultValue: lastTx.state })}</strong>
-            {EXPLORERS[lastTx.chainId] && (
-              <a className="row" style={{ gap: 6, marginTop: 7 }} href={`${EXPLORERS[lastTx.chainId]}${lastTx.hash}`} target="_blank" rel="noopener noreferrer">
-                {t('futures.viewTransaction')} <IconExternal width={14} height={14} />
-              </a>
-            )}
           </div>
         )}
 

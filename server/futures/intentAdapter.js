@@ -19,6 +19,7 @@
  */
 import { listProviders, probeProvider, fbtFeeRecipient, fbtFeeOverrideBps } from './registry.js';
 import * as ostium from './adapters/ostium.js';
+import * as drift from './adapters/drift.js';
 import { PROVIDER_STATUS, computeFeeBreakdown, assessFuturesRisk, selectVenue, PROVIDER_CATALOGUE } from '../../src/lib/futures-engine/index.js';
 
 export const FA = Object.freeze({
@@ -47,9 +48,10 @@ export async function futuresRead(input = {}) {
   let markets = [];
   let marketsLive = false;
   try {
-    const mk = await ostium.readMarkets();
+    /* The on-chain futures tab is Drift (Solana) only. */
+    const mk = await drift.readMarkets();
     marketsLive = mk.live;
-    markets = mk.markets.slice(0, 40).map((m) => ({ providerId: 'ostium', marketId: m.marketId, symbol: m.symbol, mid: m.mid, maxLeverage: m.maxLeverage, fundingAprPct: m.fundingAprPct, openInterestUsd: m.openInterestUsd, isMarketOpen: m.isMarketOpen, category: m.category }));
+    markets = mk.markets.slice(0, 40).map((m) => ({ providerId: 'drift', marketId: m.marketId, symbol: m.symbol, mid: m.mid, maxLeverage: m.maxLeverage, fundingAprPct: m.fundingAprPct, openInterestUsd: m.openInterestUsd, isMarketOpen: m.isMarketOpen, category: m.category }));
   } catch { /* honest empty */ }
   const asset = String(input?.asset || '').toUpperCase();
   const rows = asset ? markets.filter((m) => m.symbol.startsWith(`${asset}/`)) : markets;
@@ -67,7 +69,7 @@ export async function futuresRead(input = {}) {
  * confirmation. Requires asset + amount + leverage; asks otherwise.
  */
 export async function futuresQuote(input = {}, ctx = {}) {
-  const providerId = String(input.provider || 'ostium').toLowerCase();
+  const providerId = String(input.provider || 'drift').toLowerCase();
   const health = await probeProvider(providerId);
   if (!health) return refuse('POLICY', 'MARKET_NOT_LISTED', 'unknown provider');
   if (health.status === PROVIDER_STATUS.BLOCKED) return refuse('SAFE_STOP', 'PROVIDER_BLOCKED', FA.READ_ONLY, { securityStop: true });
@@ -77,7 +79,7 @@ export async function futuresQuote(input = {}, ctx = {}) {
   const leverage = num(input.leverage) ?? null;
   if (collateralUsd == null || leverage == null) return refuse('QUESTION', 'SIZE_REQUIRED', FA.ASK_SIZE, { question: FA.ASK_SIZE, missing: [collateralUsd == null ? 'amountUsd' : null, leverage == null ? 'leverage' : null].filter(Boolean) });
 
-  const found = await ostium.findMarket(marketRef);
+  const found = await drift.findMarket(marketRef);
   if (found.error) return refuse('PROVIDER_ERROR', 'PROVIDER_UNAVAILABLE', found.error, { userMessage: health.status === PROVIDER_STATUS.READ_ONLY ? FA.READ_ONLY : null });
   if (!found.market) return refuse('POLICY', 'MARKET_NOT_LISTED', `${marketRef} is not listed on ${providerId}`);
   const market = found.market;
@@ -86,7 +88,7 @@ export async function futuresQuote(input = {}, ctx = {}) {
 
   const wallet = ctx?.clientData?.wallet?.evmAddresses?.[0] || ctx?.clientData?.wallet?.address || input.wallet || null;
   let account = null;
-  if (wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) { const a = await ostium.readAccount(wallet); if (a.ok) account = a; }
+  /* Drift's Solana order path is not built; the quote is a read-only preview. */
 
   const risk = assessFuturesRisk({
     providerId, side, collateralUsd, leverage, maxLeverage: effectiveMax, entryPrice: side === 'long' ? market.ask : market.bid,
@@ -95,12 +97,12 @@ export async function futuresQuote(input = {}, ctx = {}) {
     isMarketOpen: market.isMarketOpen, spreadBps: market.spreadBps
   });
   const fee = computeFeeBreakdown({
-    collateralUsd, leverage, protocolFeeBps: market.openFeeBps, protocolFlatUsd: ostium.OSTIUM_ORACLE_FEE_USD, networkFeeUsd: null,
-    policyId: 'STANDARD', overrideBps: fbtFeeOverrideBps(), venueCapBps: ostium.OSTIUM_VENUE_FEE_CAP_BPS, recipient: fbtFeeRecipient(), chargedOn: 'open'
+    collateralUsd, leverage, protocolFeeBps: market.openFeeBps, protocolFlatUsd: 0, networkFeeUsd: null,
+    policyId: 'STANDARD', overrideBps: fbtFeeOverrideBps(), venueCapBps: drift.DRIFT_VENUE_FEE_CAP_BPS, recipient: fbtFeeRecipient(), chargedOn: 'fill'
   });
   const route = selectVenue([{
     providerId, status: health.status, capabilities: PROVIDER_CATALOGUE[providerId]?.capabilities, isMarketOpen: market.isMarketOpen, maxLeverage: effectiveMax,
-    protocolFeeBps: market.openFeeBps, protocolFlatUsd: ostium.OSTIUM_ORACLE_FEE_USD, networkFeeUsd: null, spreadBps: market.spreadBps, openInterestUsd: market.openInterestUsd,
+    protocolFeeBps: market.openFeeBps, protocolFlatUsd: 0, networkFeeUsd: null, spreadBps: market.spreadBps, openInterestUsd: market.openInterestUsd,
     fundingAprPct: market.fundingAprPct, dataAgeMs: health.dataAgeMs, supportsMarket: true
   }], { notionalUsd: collateralUsd * leverage, leverage });
 

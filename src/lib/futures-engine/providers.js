@@ -20,6 +20,11 @@
  * Centralised exchanges (Binance/Bybit/KuCoin/MEXC…) are deliberately absent:
  * the product rule is no CEX trading APIs, and a catalogue entry is the first
  * step toward one.
+ *
+ * The On-Chain tab of the Futures engine shows Drift (Solana) ONLY — that is
+ * the venue FBT is integrating. Ostium (Arbitrum) serves stocks/RWA in its own
+ * Stocks tab; it is kept in the catalogue for the registry/ledger but is not
+ * part of the on-chain futures page.
  */
 
 export const PROVIDER_STATUS = Object.freeze({
@@ -91,7 +96,9 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       supportsLimitOrders: false,
       supportsReduceOnly: true
     }),
-    tab: 'onchain'
+    /* Ostium lives in the Stocks tab (src/pages/Ostium.jsx); it is not part of
+       the on-chain futures screen, which shows Drift (Solana) only. */
+    tab: null
   }),
   dydx: Object.freeze({
     id: 'dydx',
@@ -170,9 +177,11 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     capabilities: flags(),
     tab: null
   }),
-  /* The Solana-family adapter shape. Same interface as the EVM ones; activated
-     only when a Drift order path is built and configured. It never touches the
-     Solana swap/wallet screens. */
+  /* Drift (Solana) — the venue of the On-Chain futures tab. The public Data
+     API feeds live markets/prices/funding/OI/candles (READ), so the tab shows
+     real chart + fees; the Solana order path is not built yet, so
+     execution stays NOT_BUILT and the registry honestly reports READ_ONLY /
+     UNAVAILABLE. It never touches the Solana swap/wallet screens. */
   drift: Object.freeze({
     id: 'drift',
     name: 'Drift',
@@ -182,12 +191,27 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     custody: 'onchain',
     collateral: 'USDC',
     execution: EXECUTION_MODEL.NOT_BUILT,
-    fbtFeeModel: 'none',
-    fbtFeeChargedOn: null,
+    fbtFeeModel: 'builder-code-on-fill',
+    fbtFeeChargedOn: 'fill',
     venueFeeCapBps: 20,
     markets: ['crypto'],
-    capabilities: flags(),
-    tab: null
+    capabilities: flags({
+      canReadMarkets: true,
+      canReadFunding: true,
+      canReadOpenInterest: true,
+      canReadPositions: false,
+      canQuote: true,
+      canPrepare: false,
+      canExecute: false,
+      canManagePositions: false,
+      supportsTakeProfit: true,
+      supportsStopLoss: true,
+      supportsPartialClose: true,
+      supportsCollateralAdjust: false,
+      supportsLimitOrders: true,
+      supportsReduceOnly: true
+    }),
+    tab: 'onchain'
   })
 });
 

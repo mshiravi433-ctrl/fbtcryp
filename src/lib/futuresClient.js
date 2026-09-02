@@ -52,14 +52,14 @@ async function call(path, { method = 'GET', body = null, headers = {}, timeout =
 /* ── reads ──────────────────────────────────────────────────────────────── */
 export const getFuturesProviders = () => call('/providers');
 export const getFuturesHealth = () => call('/health');
-export const getFuturesMarkets = (provider = 'ostium') => call(`/markets?provider=${encodeURIComponent(provider)}`);
-export const getFuturesCandles = ({ provider = 'ostium', market, resolution = '60', limit = 96 } = {}) =>
+export const getFuturesMarkets = (provider = 'drift') => call(`/markets?provider=${encodeURIComponent(provider)}`);
+export const getFuturesCandles = ({ provider = 'drift', market, resolution = '60', limit = 96 } = {}) =>
   call(`/candles?provider=${encodeURIComponent(provider)}&market=${encodeURIComponent(market)}&resolution=${encodeURIComponent(resolution)}&limit=${Number(limit) || 96}`);
-export const getFuturesFunding = (provider = 'ostium') => call(`/funding?provider=${encodeURIComponent(provider)}`);
-export const getFuturesOpenInterest = (provider = 'ostium') => call(`/open-interest?provider=${encodeURIComponent(provider)}`);
-export const getFuturesPositions = (wallet, provider = 'ostium') => call(`/positions/${encodeURIComponent(wallet)}?provider=${encodeURIComponent(provider)}`);
-export const getFuturesAccount = (wallet, provider = 'ostium') => call(`/account/${encodeURIComponent(wallet)}?provider=${encodeURIComponent(provider)}`);
-export const getFuturesFeePreview = ({ provider = 'ostium', collateralUsd, leverage, market = null, policy = null } = {}) =>
+export const getFuturesFunding = (provider = 'drift') => call(`/funding?provider=${encodeURIComponent(provider)}`);
+export const getFuturesOpenInterest = (provider = 'drift') => call(`/open-interest?provider=${encodeURIComponent(provider)}`);
+export const getFuturesPositions = (wallet, provider = 'drift') => call(`/positions/${encodeURIComponent(wallet)}?provider=${encodeURIComponent(provider)}`);
+export const getFuturesAccount = (wallet, provider = 'drift') => call(`/account/${encodeURIComponent(wallet)}?provider=${encodeURIComponent(provider)}`);
+export const getFuturesFeePreview = ({ provider = 'drift', collateralUsd, leverage, market = null, policy = null } = {}) =>
   call(`/fees?provider=${encodeURIComponent(provider)}&collateral=${encodeURIComponent(collateralUsd)}&leverage=${encodeURIComponent(leverage)}${market ? `&market=${encodeURIComponent(market)}` : ''}${policy ? `&policy=${encodeURIComponent(policy)}` : ''}`);
 export const getFuturesExecutions = (wallet) => call(`/executions/${encodeURIComponent(wallet)}`);
 export const getFuturesFeeLedger = (wallet = null) => call(`/fees/ledger${wallet ? `?wallet=${encodeURIComponent(wallet)}` : ''}`);
@@ -86,7 +86,7 @@ export const verifyFutures = ({ executionId, txHash = null, status = null }) =>
   call('/verify', { method: 'POST', body: { executionId, txHash, status }, timeout: 20_000 });
 
 /** Position management: increase | decrease | close | tp | sl. */
-export function manageFuturesPosition({ positionId, action, wallet, provider = 'ostium', value = null, closePercent = null, amountUsd = null, slippageBps = null, nonce = '' }) {
+export function manageFuturesPosition({ positionId, action, wallet, provider = 'drift', value = null, closePercent = null, amountUsd = null, slippageBps = null, nonce = '' }) {
   const idempotencyKey = makeFuturesIdempotencyKey({
     action, wallet, providerId: provider, marketId: positionId, side: action, collateralUsd: amountUsd ?? closePercent ?? value ?? '', leverage: '', positionId, nonce
   });

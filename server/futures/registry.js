@@ -12,7 +12,7 @@
  * a venue to AVAILABLE without a live feed and a built order path.
  *
  * Environment:
- *   FUTURES_PROVIDERS_ENABLED   comma list; default "ostium,dydx" (others READ_ONLY/UNAVAILABLE)
+ *   FUTURES_PROVIDERS_ENABLED   comma list; default "drift,ostium,dydx" (others READ_ONLY/UNAVAILABLE)
  *   FUTURES_PROVIDERS_MAINTENANCE / FUTURES_PROVIDERS_BLOCKED   comma lists
  *   FUTURES_FBT_FEE_RECIPIENT   EVM address the Ostium builder fee is paid to
  *   FUTURES_FBT_FEE_BPS         override for the STANDARD policy (0–10)
@@ -24,6 +24,7 @@ import {
 import { withTimeout } from '../central/errorEngine.js';
 import { publish } from '../central/eventBus.js';
 import * as ostium from './adapters/ostium.js';
+import * as drift from './adapters/drift.js';
 import { fetchDydxMarkets } from '../dydx.js';
 import { withCache } from '../cache.js';
 
@@ -66,6 +67,7 @@ export function providerConfigured(providerId) {
   if (p.execution === EXECUTION_MODEL.NOT_BUILT) return false;
   if (providerId === 'ostium') return Boolean(fbtFeeRecipient());
   if (providerId === 'dydx') return true; // executes in its own tab via the client session
+  if (providerId === 'drift') return true; // read feed configured; the Solana order path is NOT_BUILT
   return false;
 }
 
@@ -81,6 +83,16 @@ async function probeOstium() {
   }
 }
 
+async function probeDrift() {
+  try {
+    const mk = await withTimeout(drift.readMarkets(), 9000, 'drift-markets');
+    const h = drift.healthFromMarkets(mk);
+    return { ...h, marketCount: mk.markets.length, readAt: mk.readAt, detail: null };
+  } catch (err) {
+    return { dataLive: false, dataStale: false, marketCount: 0, readAt: null, detail: String(err?.message || 'DRIFT_UNREACHABLE').slice(0, 80) };
+  }
+}
+
 async function probeDydx() {
   try {
     const { value, stale } = await withTimeout(withCache('futures:dydx:markets', 30_000, fetchDydxMarkets), 9000, 'dydx-markets');
@@ -91,7 +103,7 @@ async function probeDydx() {
   }
 }
 
-const PROBES = { ostium: probeOstium, dydx: probeDydx };
+const PROBES = { ostium: probeOstium, drift: probeDrift, dydx: probeDydx };
 
 export async function probeProvider(providerId, { force = false } = {}) {
   const p = PROVIDER_CATALOGUE[providerId];
@@ -99,7 +111,7 @@ export async function probeProvider(providerId, { force = false } = {}) {
   const cached = healthCache.get(providerId);
   if (!force && cached && Date.now() - cached.at < HEALTH_CACHE_MS) return cached.result;
 
-  const enabled = list('FUTURES_PROVIDERS_ENABLED', 'ostium,dydx').includes(providerId);
+  const enabled = list('FUTURES_PROVIDERS_ENABLED', 'drift,ostium,dydx').includes(providerId);
   const maintenance = list('FUTURES_PROVIDERS_MAINTENANCE').includes(providerId);
   const blocked = list('FUTURES_PROVIDERS_BLOCKED').includes(providerId) || FORBIDDEN_PROVIDER_IDS.includes(providerId);
   const probe = PROBES[providerId] ? await PROBES[providerId]() : { dataLive: false, dataStale: false, marketCount: 0, readAt: null, detail: 'NO_PROBE' };

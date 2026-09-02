@@ -121,7 +121,25 @@ try {
   t('quote with zero collateral is INVALID_INPUT or a provider error, never a number', quoteBad.json?.ok === false);
 
   const pos = await get(`/api/v1/futures/positions/${WALLET}`);
-  t('positions are never cached and never invented', pos.headers.get('cache-control') === 'no-store' && (pos.status === 200 ? Array.isArray(pos.json.data.positions) : pos.json?.error?.code === 'PROVIDER_UNAVAILABLE'));
+  /* The default on-chain venue is Drift (Solana): its read-only adapter answers
+     PROVIDER_READ_ONLY — an honest refusal, never an invented position list. */
+  t('positions are never cached and never invented', pos.headers.get('cache-control') === 'no-store' && (pos.status === 200 ? Array.isArray(pos.json.data.positions) : ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY'].includes(pos.json?.error?.code)));
+
+  /* Drift (Solana) is the on-chain tab venue: markets/candles/fees must answer
+     live data or an honest provider error — never an Ostium-shaped payload. */
+  const driftProviders = await get('/api/v1/futures/providers');
+  const driftRow = driftProviders.json?.data?.providers?.find((p) => p.providerId === 'drift');
+  t('Drift is registered for the on-chain tab on Solana', driftRow && driftRow.chainName === 'Solana' && driftRow.tab === 'onchain');
+  const driftMarkets = await get('/api/v1/futures/markets?provider=drift');
+  t('Drift markets answer live crypto perps or an honest provider error', driftMarkets.status === 200
+    ? driftMarkets.json.data.markets.every((m) => m.category === 'crypto' && m.mid > 0)
+    : driftMarkets.json?.ok === false);
+  const driftFees = await get('/api/v1/futures/fees?provider=drift&collateral=100&leverage=10&market=0');
+  t('Drift fee preview uses Drift venue fees (no Ostium oracle flat fee)', driftFees.status === 200
+    ? driftFees.json.data.fee.protocol.flatUsd === 0 && (driftFees.json.data.fee.protocol.bps === 5 || driftFees.json.data.fee.protocol.bps === null)
+    : driftFees.json?.ok === false);
+  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: WALLET }, { 'idempotency-key': 'fut_probe_drift_ro_01' });
+  t('Drift refuses /prepare while the Solana order path is not built (READ_ONLY)', driftPrepare.json?.ok === false && ['PROVIDER_READ_ONLY', 'PROVIDER_UNAVAILABLE'].includes(driftPrepare.json?.error?.code));
   const posBad = await get('/api/v1/futures/positions/not-a-wallet');
   t('positions for a malformed wallet are INVALID_INPUT', posBad.status === 400);
   const verify = await post('/api/v1/futures/verify', { executionId: 'fut_exec_00000000-0000-0000-0000-000000000000', txHash: `0x${'1'.repeat(64)}` });
