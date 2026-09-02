@@ -31,10 +31,11 @@ export function createWalletAgent({ walletService = null, solanaService = null, 
       };
     },
     
-    async getBalances({ address = null, chainId = null } = {}) {
+    async getBalances({ address = null, chainId = null, services = null } = {}) {
       try {
-        if (walletService?.getBalances) {
-          return await walletService.getBalances({ address, chainId });
+        const ws = services?.walletService || walletService;
+        if (ws?.getBalances) {
+          return await ws.getBalances({ address, chainId });
         }
         // Fallback to mock from context
         return { ok: true, balances: [], dataStatus: 'unavailable' };
@@ -91,8 +92,9 @@ export function createWalletAgent({ walletService = null, solanaService = null, 
     
     async handleIntent(intent, context = {}) {
       const wallet = context.wallet || await this.getContext(context.walletState);
+      const connected = Boolean(wallet?.connected || wallet?.isConnected || wallet?.address || wallet?.connectionStatus === 'CONNECTED' || wallet?.connectionStatus === 'HYDRATING');
       
-      if (!wallet.connected) {
+      if (!connected) {
         return {
           ok: false,
           requiresWallet: true,
@@ -102,7 +104,10 @@ export function createWalletAgent({ walletService = null, solanaService = null, 
       }
       
       if (intent.type === 'WALLET_BALANCE') {
-        const balances = await this.getBalances();
+        const balances = await this.getBalances({
+          address: wallet.address,
+          services: context.services
+        });
         return { ok: true, balances, wallet };
       }
       

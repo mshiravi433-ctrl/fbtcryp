@@ -16,6 +16,7 @@ import {
 } from '../lib/wcTimeout';
 import { purgeWcStorage } from '../lib/wcStorage';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
+import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
 
 /*
  * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
@@ -1399,6 +1400,26 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       restoreWcSession,
+      attachLocal,
+      attachCreatedLocal,
+      unlockLocal,
+      lock,
+      forgetLocalWallet,
+      disconnect,
+      switchChain,
+      refreshBalance,
+      getReadProvider,
+      getReadProviders
+    ]
+  );
+
+  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+}
+
+export const useWallet = () => useContext(WalletContext) ?? {};
+
+export const shortAddress = (a, size = 4) => (a ? `${a.slice(0, 2 + size)}…${a.slice(-size)}` : '');
+ession,
       attachLocal,
       attachCreatedLocal,
       unlockLocal,

@@ -73,7 +73,10 @@ import '../styles/intent-ai-os.css';
 
 // NEW OS — Universal
 import { getIntentOS } from '../lib/intent-ai/os/index.js';
-import { getCurrentPageContext } from '../lib/intent-ai/os/contextEngine.js';
+import { getCurrentPageContext, clearContextCache } from '../lib/intent-ai/os/contextEngine.js';
+import { createRealServices } from '../lib/intent-ai/os/serviceAdapters.js';
+import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
+import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
 import { getLastActiveTask, resumeTask as resumeTaskFn, getActiveTasks } from '../lib/intent-ai/os/taskContinuity.js';
 import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
@@ -166,49 +169,66 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return () => { try { unsub(); } catch {} };
   }, [navigate, currentPage]);
 
-  // Initialize OS with real services
-  const intentOS = useMemo(() => {
-    if (osRef.current) return osRef.current;
+  const liveModuleServices = useMemo(() => {
+    const holdings = (multi?.rows || []).map((r) => ({
+      symbol: r.symbol,
+      chainId: r.chainId,
+      valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
+      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
+      address: r.address || null
+    }));
+    const balances = holdings.map((h) => ({ ...h, value: h.valueUsd }));
+    const walletSnap = {
+      connected: Boolean(wallet?.isConnected && wallet?.address),
+      isConnected: Boolean(wallet?.isConnected && wallet?.address),
+      canSign: Boolean(wallet?.address && !wallet?.locked),
+      address: wallet?.address || null,
+      chainId: wallet?.chainId || null,
+      balances,
+      evmAddresses: wallet?.address ? [wallet.address] : []
+    };
+    const portfolioSnap = {
+      dataStatus: multi?.loading ? 'pending' : (holdings.length ? 'live' : 'unavailable'),
+      freshness: multi?.loading ? 'PENDING' : 'FRESH',
+      hydrating: Boolean(walletSnap.connected && multi?.loading),
+      totalValueUsd: Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null,
+      holdings,
+      partial: multi?.partial === true
+    };
+    const real = createRealServices({ wallet: walletSnap, portfolio: portfolioSnap });
+    real.walletService = {
+      ...real.walletService,
+      getContext: async () => walletSnap,
+      getBalances: async () => ({
+        ok: true,
+        balances,
+        dataStatus: multi?.loading ? 'pending' : (balances.length ? 'live' : (walletSnap.connected ? 'pending' : 'unavailable'))
+      })
+    };
+    real.portfolioService = {
+      ...real.portfolioService,
+      getSummary: async () => portfolioSnap,
+      analyze: async ({ holdings: h } = {}) => {
+        const list = h || holdings;
+        const priced = (list || []).filter((x) => Number.isFinite(Number(x.valueUsd)));
+        const total = priced.reduce((s, x) => s + Number(x.valueUsd), 0);
+        const sorted = [...(list || [])].sort((a, b) => (Number(b.valueUsd) || 0) - (Number(a.valueUsd) || 0));
+        return {
+          ok: true,
+          totalValueUsd: priced.length ? total : null,
+          holdings: list,
+          largest: sorted[0] || null,
+          concentration: sorted[0] && total ? (Number(sorted[0].valueUsd) / total) * 100 : null,
+          dataStatus: list?.length ? 'live' : 'unavailable'
+        };
+      }
+    };
+    return real;
+  }, [wallet, multi]);
 
+  const intentOS = useMemo(() => {
     const os = getIntentOS({
-      services: {
-        walletService: {
-          getContext: async () => ({
-            connected: Boolean(wallet?.isConnected && wallet?.address),
-            canSign: Boolean(wallet?.address && !wallet?.locked),
-            evmAddresses: wallet?.address ? [wallet.address] : [],
-            chains: wallet?.chainId ? [wallet.chainId] : []
-          }),
-          getBalances: async () => ({ ok: true, balances: multi?.rows || [], dataStatus: multi?.rows?.length ? 'live' : 'unavailable' })
-        },
-        portfolioService: {
-          getSummary: async () => ({
-            dataStatus: multi?.rows?.length ? 'live' : 'unavailable',
-            totalValueUsd: Number(multi?.totalValue) || 0,
-            holdings: (multi?.rows || []).map(r => ({ symbol: r.symbol, chainId: r.chainId, valueUsd: Number(r.value) || 0, amount: Number(r.amount) || 0 }))
-          }),
-          analyze: async ({ holdings }) => {
-            const total = (holdings || []).reduce((s, h) => s + (Number(h.valueUsd) || 0), 0);
-            const sorted = [...(holdings || [])].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0));
-            return { ok: true, totalValueUsd: total, holdings, largest: sorted[0], concentration: sorted[0] ? (sorted[0].valueUsd / total) * 100 : 0, dataStatus: 'live' };
-          }
-        },
-        marketService: {
-          getOverview: async () => ({ ok: true, dataStatus: 'live', overview: 'Market data' }),
-          getRelevantData: async () => ({ ok: true, dataStatus: 'live' })
-        },
-        newsService: {
-          search: async ({ query }) => {
-            try {
-              const { fetchNews } = await import('../lib/news.js');
-              const news = await fetchNews();
-              return { ok: true, news: Array.isArray(news) ? news.slice(0, 10) : [], query, dataStatus: 'live' };
-            } catch {
-              return { ok: true, news: [], dataStatus: 'unavailable' };
-            }
-          }
-        }
-      },
+      services: liveModuleServices,
       navigation: {
         navigate: async ({ route, params } = {}) => {
           const r = typeof route === 'string' ? route : route?.route;
@@ -224,10 +244,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       },
       locale
     });
-
+    os.setServices(liveModuleServices);
     osRef.current = os;
     return os;
-  }, [wallet, multi, navigate, locale]);
+  }, [liveModuleServices, navigate, locale]);
 
   const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
   const solanaAddressLive = solana.address || solanaAddress();
@@ -242,35 +262,48 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       symbol: r.symbol,
       chain: r.chainId ?? null,
       chainId: r.chainId ?? null,
-      amount: Number(r.amount) || 0,
-      valueUsd: Number(r.value) || null,
+      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
+      valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
       dataStatus: 'client'
     }));
     const solRows = (solanaRows || []).map((r) => ({
       symbol: r.symbol,
       chain: r.chainId ?? null,
       chainId: r.chainId ?? null,
-      amount: Number(r.amount) || 0,
-      valueUsd: Number(r.valueUsd) || null,
+      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
+      valueUsd: Number.isFinite(Number(r.valueUsd)) ? Number(r.valueUsd) : null,
       dataStatus: 'client'
     }));
     const balances = [...solRows, ...evmRows];
     const holdings = [
-      ...solRows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.valueUsd) || null, amount: Number(r.amount) || null })),
-      ...rows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: Number(r.value) || null, amount: Number(r.amount) || null }))
+      ...solRows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: r.valueUsd, amount: r.amount })),
+      ...rows.map((r) => ({
+        symbol: r.symbol,
+        chainId: r.chainId ?? null,
+        valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
+        amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null
+      }))
     ];
-    const totalValueUsd = Number(multi?.totalValue) || 0;
+    const evmTotal = Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null;
     const solTotal = solRows.reduce((s, r) => s + (Number(r.valueUsd) || 0), 0);
+    const hydrating = Boolean(walletConnected && Boolean(multi?.loading));
     return {
       wallet: {
         connected: walletConnected,
+        isConnected: walletConnected,
         canSign: walletCanSign,
+        address: wallet?.address || null,
+        chainId: wallet?.chainId || null,
+        hydrating,
+        connectionStatus: hydrating ? 'HYDRATING' : (walletConnected ? 'CONNECTED' : 'DISCONNECTED'),
         evmAddresses: wallet?.address ? [wallet.address] : [],
         solanaAddresses: solanaAddressLive ? [solanaAddressLive] : []
       },
       portfolio: {
-        dataStatus: canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable',
-        totalValueUsd: totalValueUsd || solTotal || null,
+        dataStatus: hydrating ? 'pending' : (canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable'),
+        freshness: hydrating ? 'PENDING' : 'FRESH',
+        hydrating,
+        totalValueUsd: evmTotal != null ? evmTotal + solTotal : (solTotal || null),
         holdings,
         partial: multi?.partial === true
       },
@@ -295,7 +328,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    */
   useEffect(() => {
     try { centralIngest(aiContext); } catch { /* never block the UI on sync */ }
-  }, [aiContext]);
+    try {
+      setCentralWalletState(snapshotFromAppWallet(wallet, {
+        solanaAddress: solanaAddressLive,
+        tokenBalances: aiContext.balances,
+        hydrating: aiContext.wallet?.hydrating,
+        canSign: walletCanSign,
+        source: 'intent-os-ui'
+      }));
+      patchSharedState('portfolio', aiContext.portfolio, {
+        source: 'intent-os-ui',
+        freshness: aiContext.portfolio?.freshness || 'FRESH'
+      });
+    } catch { /* shared state is best-effort */ }
+  }, [aiContext, wallet, solanaAddressLive, walletCanSign]);
+
+  useEffect(() => {
+    clearContextCache();
+  }, [wallet?.address, wallet?.chainId, walletConnected]);
 
   const rememberPending = useCallback((intentOrMessage, intentType = 'GENERAL') => {
     if (intentOrMessage && intentOrMessage.schema === 'fbt.ai-pending-intent.v1') {
@@ -333,9 +383,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         connected: walletConnected,
         isConnected: walletConnected,
         address: wallet?.address || null,
+        solanaAddress: solanaAddressLive || null,
         canSign: walletCanSign,
         balances: aiContext.balances,
-        chains: wallet?.chainId ? [wallet.chainId] : []
+        tokenBalances: aiContext.balances,
+        chains: wallet?.chainId ? [wallet.chainId] : [],
+        chainId: wallet?.chainId || null,
+        hydrating: aiContext.wallet?.hydrating,
+        connectionStatus: aiContext.wallet?.connectionStatus,
+        nativeBalance: wallet?.nativeBalance ?? null
       };
 
       const osResult = await intentOS.process({
@@ -345,11 +401,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         portfolioState: aiContext.portfolio,
         conversation: messages.map(m => ({ role: m.role, content: m.content })).slice(-10),
         locale,
-        services: {}
+        services: liveModuleServices
       });
 
       // If local OS handled it completely (read-only, nav, media) — use it directly
       const isLocalHandled = osResult.ok && (
+        osResult.intent?.readOnly === true ||
+        osResult.execution?.handoff === true ||
+        Boolean(osResult.navigated) ||
         osResult.intent?.type === 'NAVIGATION' ||
         osResult.intent?.type === 'NEWS_SEARCH' ||
         osResult.intent?.type === 'OPEN_CALM' ||
@@ -360,6 +419,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         osResult.intent?.type === 'MARKET_CONTEXT' ||
         osResult.intent?.type === 'SMART_MONEY' ||
         osResult.intent?.type === 'WHALE' ||
+        osResult.intent?.type === 'YIELD_DISCOVERY' ||
+        osResult.intent?.type === 'INVESTMENT_PLAN' ||
+        osResult.intent?.type === 'FARM' ||
+        osResult.intent?.type === 'LEND' ||
+        osResult.intent?.type === 'ANALYZE_TOKEN' ||
         (osResult.plan?.readOnly && !osResult.requiresConfirmation)
       );
 
@@ -479,7 +543,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       busyRef.current = false;
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive]);
 
   sendRef.current = sendMessage;
 

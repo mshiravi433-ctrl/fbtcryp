@@ -398,6 +398,71 @@ export const APP_CAPABILITIES = Object.freeze([
     category: 'system'
   }),
   Object.freeze({
+    id: 'p2p',
+    name: 'P2P',
+    description: 'Peer-to-peer transfer and matching',
+    route: '/p2p',
+    actions: ['p2p.open', 'p2p.send'],
+    queries: ['p2p.status'],
+    events: ['p2p.opened'],
+    category: 'trading',
+    requiresWallet: true
+  }),
+  Object.freeze({
+    id: 'dydx',
+    name: 'dYdX',
+    description: 'dYdX perpetuals session',
+    route: '/dydx',
+    actions: ['dydx.open', 'dydx.trade'],
+    queries: ['dydx.markets', 'dydx.positions'],
+    events: ['dydx.opened'],
+    category: 'trading',
+    requiresWallet: true
+  }),
+  Object.freeze({
+    id: 'ostium',
+    name: 'Ostium',
+    description: 'Ostium on-chain perps',
+    route: '/ostium',
+    actions: ['ostium.open', 'ostium.trade'],
+    queries: ['ostium.markets'],
+    events: ['ostium.opened'],
+    category: 'trading',
+    requiresWallet: true
+  }),
+  Object.freeze({
+    id: 'horizon',
+    name: 'Global Horizon',
+    description: 'Forex, funds, RWA and global pairs',
+    route: '/invest',
+    actions: ['horizon.open', 'horizon.invest'],
+    queries: ['horizon.markets'],
+    events: ['horizon.opened'],
+    category: 'investment'
+  }),
+  Object.freeze({
+    id: 'rewards',
+    name: 'Rewards',
+    description: 'Points and rewards',
+    route: '/rewards',
+    actions: ['rewards.open'],
+    queries: ['rewards.balance'],
+    events: ['rewards.opened'],
+    category: 'system'
+  }),
+  Object.freeze({
+    id: 'solana-swap',
+    name: 'Solana Swap',
+    description: 'Solana token swap',
+    route: '/solana',
+    actions: ['solana.swap', 'solana.addToken'],
+    queries: ['solana.tokens'],
+    events: ['solana.swapped'],
+    category: 'trading',
+    requiresWallet: true,
+    supportedChains: [501]
+  }),
+  Object.freeze({
     id: 'calm',
     name: 'Calm / Relaxation',
     description: 'Calm, relaxation, music, meditation',
@@ -443,10 +508,10 @@ export function findCapabilityForAction(actionId) {
 export const CAPABILITY_HIERARCHY = Object.freeze({
   wallet: ['wallet', 'evm-wallet', 'solana-wallet'],
   portfolio: ['portfolio', 'rebalancing', 'financial-goals'],
-  trading: ['buy-sell', 'swap', 'bridge', 'cross-chain', 'orders', 'futures', 'stocks'],
+  trading: ['buy-sell', 'swap', 'solana-swap', 'bridge', 'cross-chain', 'orders', 'futures', 'stocks', 'p2p', 'dydx', 'ostium'],
   defi: ['lending', 'borrowing', 'farming', 'yield', 'staking', 'dca'],
   market: ['market', 'tokens', 'signals', 'smart-money', 'whale-tracking'],
-  investment: ['dca', 'rebalancing', 'financial-goals', 'yield', 'farming'],
+  investment: ['dca', 'rebalancing', 'financial-goals', 'yield', 'farming', 'horizon'],
   content: ['news', 'explore', 'nft', 'signals'],
   commerce: ['gift-cards', 'sim', 'travel', 'hotels'],
   system: ['settings', 'notifications', 'intent-os', 'ai-agents'],
@@ -456,9 +521,10 @@ export const CAPABILITY_HIERARCHY = Object.freeze({
 export function getHierarchyForIntent(intentType) {
   const t = String(intentType || '').toUpperCase();
   if (['PORTFOLIO_ANALYSIS', 'REBALANCE', 'ANALYZE_PORTFOLIO'].includes(t)) return ['portfolio', 'market'];
-  if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'].includes(t)) return ['trading', 'wallet'];
-  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'STAKING'].includes(t)) return ['defi', 'investment'];
-  if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE'].includes(t)) return ['market', 'content'];
+  if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'P2P', 'DYDX', 'FUTURES'].includes(t)) return ['trading', 'wallet'];
+  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'BORROW', 'STAKING'].includes(t)) return ['defi', 'investment'];
+  if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE', 'SIGNALS', 'ANALYZE_TOKEN'].includes(t)) return ['market', 'content'];
+  if (['STOCKS', 'HORIZON', 'FOREX', 'RWA'].includes(t)) return ['investment', 'trading'];
   if (['NEWS_SEARCH', 'MARKET_CONTEXT'].includes(t)) return ['content', 'market'];
   if (['OPEN_CALM', 'PLAY_MUSIC'].includes(t)) return ['media', 'system'];
   if (['NAVIGATION'].includes(t)) return ['system'];

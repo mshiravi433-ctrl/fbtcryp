@@ -95,11 +95,10 @@ export function createOrchestrator({
             readOnly: true
           });
         }
-      } else if (['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'RISK_ANALYSIS', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE'].includes(type)) {
-        // Read-only analysis — collect from agents
-        // No executable action, just context gathering
+      } else if (['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'RISK_ANALYSIS', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'ANALYZE_TOKEN', 'FARM', 'LEND', 'STAKING'].includes(type)) {
+        // Read-only analysis — collect from agents + real tools
         actions.length = 0;
-      } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'REBALANCE', 'FARM', 'LEND', 'DCA', 'GOAL'].includes(type)) {
+      } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'REBALANCE', 'DCA', 'GOAL'].includes(type)) {
         // Financial — needs quote + confirmation
         const tradingTools = tools.filter(t => !t.readOnly && t.requiresConfirmation);
         const primary = tradingTools[0] || tools[0];
@@ -171,7 +170,7 @@ export function createOrchestrator({
         agentsList.push('research-agent', 'navigation-agent');
       } else if (['OPEN_CALM', 'PLAY_MUSIC'].includes(type)) {
         agentsList.push('media-agent', 'navigation-agent');
-      } else if (['NAVIGATION'].includes(type)) {
+      } else if (['NAVIGATION', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA', 'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'ADD_TOKEN', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS', 'INTENT_OS', 'WALLET_CONNECT', 'WALLET_DISCONNECT', 'SWITCH_NETWORK', 'BORROW'].includes(type)) {
         agentsList.push('navigation-agent');
       } else if (['WALLET_BALANCE'].includes(type)) {
         agentsList.push('wallet-agent', 'portfolio-agent');

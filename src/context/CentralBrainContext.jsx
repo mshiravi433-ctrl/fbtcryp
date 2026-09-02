@@ -51,6 +51,7 @@ const REFRESH_EVENTS = new Set([
 ]);
 
 const MAX_TURNS = 40;
+const REFRESH_DEBOUNCE_MS = 400;
 
 function currentRoute() {
   if (typeof window === 'undefined') return { pathname: '/', search: '' };

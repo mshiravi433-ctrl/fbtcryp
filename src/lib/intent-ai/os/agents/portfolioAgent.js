@@ -103,8 +103,15 @@ export function createPortfolioAgent({ portfolioService = null, riskService = nu
     async handleIntent(intent, context = {}) {
       const wallet = context.wallet;
       const portfolio = context.portfolio;
+      const svc = context.services?.portfolioService || portfolioService;
       
       if (intent.type === 'PORTFOLIO_ANALYSIS') {
+        if (svc?.analyze && portfolio?.holdings?.length) {
+          try {
+            const analysis = await svc.analyze({ holdings: portfolio.holdings, detailed: true });
+            return { ok: true, analysis, portfolio };
+          } catch { /* fall through to local */ }
+        }
         const analysis = await this.analyze({ wallet, holdings: portfolio?.holdings });
         return { ok: true, analysis, portfolio };
       }

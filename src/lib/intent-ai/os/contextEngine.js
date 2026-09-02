@@ -7,10 +7,22 @@
  * Lazy, caching, parallel reads, event-driven updates.
  */
 
+import { getCentralWalletState, isWalletConnected, mergeWalletSnapshots } from './centralWalletState.js';
+import { getOperationalSlots, setPageContextState } from './sharedState.js';
+import { onEvent, EVENTS } from './eventBus.js';
+
 export const CONTEXT_SCHEMA = 'fbt.ai-context.v1';
 
-const CACHE_TTL = 30_000; // 30s
+const CACHE_TTL = 8_000;
 const cache = new Map();
+
+try {
+  onEvent(EVENTS.WALLET_CONNECTED, () => clearContextCache());
+  onEvent(EVENTS.WALLET_DISCONNECTED, () => clearContextCache());
+  onEvent(EVENTS.WALLET_ACCOUNT_CHANGED, () => clearContextCache());
+  onEvent(EVENTS.WALLET_NETWORK_CHANGED, () => clearContextCache());
+  onEvent(EVENTS.PORTFOLIO_UPDATED, () => clearContextCache());
+} catch { /* listeners are optional at import time */ }
 
 function getCached(key) {
   const entry = cache.get(key);
@@ -49,10 +61,20 @@ export async function buildContext({
 } = {}) {
   const now = Date.now();
   const route = currentRoute || currentPage;
+  const central = getCentralWalletState();
+  const liveWallet = mergeWalletSnapshots(walletState, central);
 
-  // Try cache for expensive reads
-  const cacheKey = `ctx:${userId || 'anon'}:${route}:${walletState?.address || ''}`;
+  const cacheKey = `ctx:${userId || 'anon'}:${route}:${liveWallet?.address || ''}:${liveWallet?.connectionStatus || ''}`;
   const cached = getCached(cacheKey);
+  if (cached && isWalletConnected(liveWallet) === Boolean(cached.hasWallet)) {
+    return {
+      ...cached,
+      walletState: liveWallet,
+      timestamp: now,
+      cached: true,
+      operational: getOperationalSlots()
+    };
+  }
   
   // Parallel reads for performance (Spec §36)
   const [
@@ -63,8 +85,8 @@ export async function buildContext({
     preferences,
     activeGoals
   ] = await Promise.all([
-    resolveWalletContext(walletState, services),
-    resolvePortfolioContext(portfolioState, services, walletState),
+    resolveWalletContext(liveWallet, services),
+    resolvePortfolioContext(portfolioState, services, liveWallet),
     resolveMarketContext(services),
     resolveRecentActions(services, userId),
     resolvePreferences(services, userId),
@@ -83,11 +105,13 @@ export async function buildContext({
     
     // Wallet layer (Spec §20 Universal Wallet Context)
     wallet,
-    walletState,
+    walletState: liveWallet,
     
     // Portfolio
     portfolio,
     portfolioState,
+    operational: getOperationalSlots(),
+    services,
     
     // Market
     market,
@@ -103,17 +127,18 @@ export async function buildContext({
     
     // Derived
     connectedChains: wallet?.chains || [],
-    hasWallet: Boolean(wallet?.connected),
+    hasWallet: isWalletConnected(wallet) || Boolean(wallet?.connected),
     canSign: Boolean(wallet?.canSign),
-    totalValueUsd: portfolio?.totalValueUsd || 0,
+    totalValueUsd: Number.isFinite(Number(portfolio?.totalValueUsd)) ? Number(portfolio.totalValueUsd) : null,
     
     // Performance meta
     builtAt: now,
     cached: Boolean(cached)
   };
 
-  // Cache for next call
-  if (wallet?.connected) {
+  try { setPageContextState({ page: currentPage, route, walletConnected: context.hasWallet }); } catch { /* page context is best-effort */ }
+
+  if (context.hasWallet && portfolio?.freshness !== 'PENDING') {
     setCached(cacheKey, context);
   }
 
@@ -121,62 +146,50 @@ export async function buildContext({
 }
 
 async function resolveWalletContext(walletState, services) {
-  if (!walletState) {
-    return {
-      connected: false,
-      canSign: false,
-      evmAddresses: [],
-      solanaAddresses: [],
-      chains: [],
-      balances: [],
-      tokens: [],
-      nfts: [],
-      positions: { lending: [], borrowing: [], farming: [], staking: [] },
-      orders: [],
-      futures: []
-    };
-  }
+  const central = getCentralWalletState();
+  const live = mergeWalletSnapshots(walletState, central);
+  const connected = isWalletConnected(live) || Boolean(live?.connected || live?.isConnected);
 
-  // If walletState already has full data, use it
-  if (walletState.balances || walletState.tokens) {
-    return {
-      connected: Boolean(walletState.connected || walletState.isConnected),
-      canSign: walletState.canSign !== false && Boolean(walletState.address || walletState.solanaAddress),
-      evmAddresses: walletState.evmAddresses || (walletState.address ? [walletState.address] : []),
-      solanaAddresses: walletState.solanaAddresses || (walletState.solanaAddress ? [walletState.solanaAddress] : []),
-      chains: walletState.chains || [],
-      balances: walletState.balances || [],
-      tokens: walletState.tokens || [],
-      nfts: walletState.nfts || [],
-      positions: walletState.positions || { lending: [], borrowing: [], farming: [], staking: [] },
-      orders: walletState.orders || [],
-      futures: walletState.futures || [],
-      address: walletState.address || walletState.evmAddresses?.[0] || null,
-      solanaAddress: walletState.solanaAddress || walletState.solanaAddresses?.[0] || null
-    };
-  }
+  const base = {
+    connected,
+    connectionStatus: live.connectionStatus || (connected ? 'CONNECTED' : 'DISCONNECTED'),
+    hydrating: Boolean(live.hydrating || live.connectionStatus === 'HYDRATING'),
+    canSign: live.canSign !== false && Boolean(live.address || live.solanaAddress),
+    evmAddresses: live.evmAddresses || (live.address ? [live.address] : []),
+    solanaAddresses: live.solanaAddresses || (live.solanaAddress ? [live.solanaAddress] : []),
+    chains: live.chains || (live.chainId ? [live.chainId] : []),
+    balances: live.balances || live.tokenBalances || [],
+    tokens: live.tokens || [],
+    nfts: live.nfts || [],
+    positions: live.positions || { lending: [], borrowing: [], farming: [], staking: [] },
+    orders: live.orders || [],
+    futures: live.futures || [],
+    address: live.address || live.evmAddresses?.[0] || null,
+    solanaAddress: live.solanaAddress || live.solanaAddresses?.[0] || null,
+    chainId: live.chainId ?? null,
+    nativeBalance: live.nativeBalance ?? null,
+    freshness: live.freshness || (connected ? 'FRESH' : 'NONE'),
+    lastUpdated: live.lastUpdated || Date.now()
+  };
 
-  // Try to fetch via services if available
+  if (base.balances.length || base.tokens.length) return base;
+
   try {
     if (services.walletService?.getContext) {
       const ctx = await services.walletService.getContext();
-      return ctx;
+      if (ctx) {
+        return {
+          ...base,
+          ...ctx,
+          connected: Boolean(ctx.connected || base.connected),
+          address: ctx.address || base.address,
+          balances: ctx.balances || base.balances
+        };
+      }
     }
-  } catch {}
+  } catch { /* service miss is not a disconnect */ }
 
-  return {
-    connected: Boolean(walletState.connected || walletState.isConnected),
-    canSign: Boolean(walletState.address),
-    evmAddresses: walletState.address ? [walletState.address] : [],
-    solanaAddresses: [],
-    chains: [],
-    balances: [],
-    tokens: [],
-    nfts: [],
-    positions: { lending: [], borrowing: [], farming: [], staking: [] },
-    orders: [],
-    futures: []
-  };
+  return base;
 }
 
 async function resolvePortfolioContext(portfolioState, services, walletState) {
@@ -190,27 +203,32 @@ async function resolvePortfolioContext(portfolioState, services, walletState) {
     }
   } catch {}
 
-  // Fallback: build from wallet balances
-  if (walletState?.balances) {
-    const holdings = walletState.balances.map(b => ({
+  const balances = walletState?.balances || walletState?.tokenBalances;
+  if (Array.isArray(balances) && balances.length) {
+    const holdings = balances.map((b) => ({
       symbol: b.symbol,
       chainId: b.chainId,
-      valueUsd: b.valueUsd || b.value || 0,
-      amount: b.amount || 0
+      valueUsd: Number.isFinite(Number(b.valueUsd ?? b.value)) ? Number(b.valueUsd ?? b.value) : null,
+      amount: b.amount ?? null
     }));
-    const total = holdings.reduce((s, h) => s + (h.valueUsd || 0), 0);
+    const priced = holdings.filter((h) => Number.isFinite(Number(h.valueUsd)));
+    const total = priced.reduce((s, h) => s + Number(h.valueUsd), 0);
     return {
       dataStatus: holdings.length ? 'live' : 'unavailable',
-      totalValueUsd: total,
+      totalValueUsd: priced.length ? total : null,
       holdings,
-      partial: false
+      partial: priced.length < holdings.length,
+      freshness: walletState?.hydrating ? 'PENDING' : 'FRESH'
     };
   }
 
+  const connected = isWalletConnected(walletState);
   return {
-    dataStatus: 'unavailable',
+    dataStatus: connected ? 'pending' : 'unavailable',
     totalValueUsd: null,
     holdings: [],
+    hydrating: Boolean(connected),
+    freshness: connected ? 'PENDING' : 'NONE',
     partial: false
   };
 }
@@ -319,7 +337,14 @@ export function getCurrentPageContext(route) {
     '/orders': { page: 'orders', tab: 'active', canExecute: ['cancel'] },
     '/perp': { page: 'futures', tab: 'markets', canExecute: ['open', 'close'] },
     '/stocks': { page: 'stocks', tab: 'markets', canExecute: ['trade'] },
-    '/earn': { page: 'yield', tab: 'opportunities', canExecute: ['deposit'] }
+    '/earn': { page: 'yield', tab: 'opportunities', canExecute: ['deposit'] },
+    '/solana': { page: 'solana-swap', tab: 'swap', canExecute: ['swap', 'addToken'] },
+    '/invest': { page: 'horizon', tab: 'markets', canExecute: ['invest'] },
+    '/dydx': { page: 'dydx', tab: 'markets', canExecute: ['trade'] },
+    '/ostium': { page: 'ostium', tab: 'markets', canExecute: ['trade'] },
+    '/p2p': { page: 'p2p', tab: 'send', canExecute: ['send'] },
+    '/rewards': { page: 'rewards', tab: 'points', canExecute: ['view'] },
+    '/buy': { page: 'buy-sell', tab: 'buy', canExecute: ['buy', 'sell'] }
   };
   
   return pageMap[r] || { page: 'general', tab: 'overview', canExecute: [] };

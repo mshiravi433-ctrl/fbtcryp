@@ -6,6 +6,8 @@
  * Maps natural language → structured intent types.
  */
 
+import { aliasChainId, aliasToken, wantsPageOpen } from './moduleRouter.js';
+
 export const INTENT_TYPES = Object.freeze([
   'PORTFOLIO_ANALYSIS',
   'MARKET_ANALYSIS',
@@ -36,6 +38,21 @@ export const INTENT_TYPES = Object.freeze([
   'ORDERS',
   'REBALANCE',
   'ANALYZE_TOKEN',
+  'SIGNALS',
+  'P2P',
+  'DYDX',
+  'HORIZON',
+  'FOREX',
+  'RWA',
+  'BTC_WALLET',
+  'WALLET_CONNECT',
+  'WALLET_DISCONNECT',
+  'SWITCH_NETWORK',
+  'ADD_TOKEN',
+  'NOTIFICATIONS',
+  'SETTINGS',
+  'REWARDS',
+  'INTENT_OS',
   'EXECUTE_CURRENT',
   'CANCEL',
   'CONTINUE',
@@ -55,7 +72,8 @@ const INTENT_PATTERNS = [
       /سبد.*تحلیل|تحلیل.*سبد/i,
       /portfolio.*analysis|analyze.*portfolio/i,
       /why.*portfolio.*down|portfolio.*down/i,
-      /عملکرد.*پرتفوی|وضعیت.*پرتفوی/i
+      /عملکرد.*پرتفوی|وضعیت.*پرتفوی/i,
+      /پرتفوی\s*من|پرتفویم|my portfolio|پرتفوی\s*\?/i
     ]
   },
   {
@@ -65,6 +83,7 @@ const INTENT_PATTERNS = [
       /موجودی.*بررسی|بررسی.*موجودی/i,
       /موجودی.*من|موجودیم/i,
       /چقدر.*دارم|دارایی.*من/i,
+      /موجودی.*چقدر|چقدر.*موجودی/i,
       /balance|how much.*have|my balance/i,
       /کیف پول.*موجودی|موجودی.*کیف/i
     ]
@@ -76,8 +95,9 @@ const INTENT_PATTERNS = [
       /سود.*بیشتر|بیشتر.*سود/i,
       /جایی.*بگذار.*سود|سود.*بگذار/i,
       /بهترین.*سود|سود.*بهترین/i,
+      /فرصت\s*سود|فرصت‌های\s*سود|فرصت های سود|profit opportunit/i,
       /yield|best.*apy|highest.*yield/i,
-      /سرمایه.*سود|پول.*سود/i
+      /سرمایه.*سود|پول.*سود|کجا.*سود/i
     ]
   },
   {
@@ -133,7 +153,7 @@ const INTENT_PATTERNS = [
   },
   {
     type: 'REBALANCE',
-    weight: 5,
+    weight: 8,
     patterns: [
       /متعادل.*کن|پرتفوی.*متعادل/i,
       /rebalance|re-balance/i,
@@ -144,8 +164,8 @@ const INTENT_PATTERNS = [
     type: 'SWAP',
     weight: 4,
     patterns: [
-      /تبدیل.*کن|معاوضه|سواپ/i,
-      /swap|convert.*to/i,
+      /تبدیل.*کن|معاوضه|سواپ|تبدیل ارز/i,
+      /swap|convert.*to|convert /i,
       /USDC.*ETH|ETH.*USDC/i
     ]
   },
@@ -179,7 +199,8 @@ const INTENT_PATTERNS = [
     patterns: [
       /صفحه.*فارم|فارم.*باز کن|صفحه.*فارم.*باز/i,
       /farm.*page|open.*farm/i,
-      /فارم.*را.*باز|فارم.*باز/i
+      /فارم.*را.*باز|فارم.*باز/i,
+      /از فارم|خرید از فارم|استخر/i
     ]
   },
   {
@@ -236,29 +257,192 @@ const INTENT_PATTERNS = [
       /جزئیات.*بیشتر|بیشتر.*بررسی|دقیق.*بررسی/i,
       /more.*details|details.*more/i
     ]
+  },
+  {
+    type: 'SIGNALS',
+    weight: 7,
+    patterns: [
+      /سیگنال|signals?/i,
+      /آینده.*توکن|آینده.*ارز|outlook|پیش.?بینی.*قیمت/i,
+      /پیگیری از شبکه.?سیگنال|شبکه سیگنال/i
+    ]
+  },
+  {
+    type: 'SEND',
+    weight: 7,
+    patterns: [
+      /بفرست|ارسال کن|ارسال.*آدرس|send (to|token)|transfer to/i,
+      /به .*آدرس.*بفرست|واریز به/i
+    ]
+  },
+  {
+    type: 'BRIDGE',
+    weight: 7,
+    patterns: [
+      /از شبکه.*به شبکه|ببر.*شبکه|منتقل.*شبکه/i,
+      /بریج|بریدج|پل.*زنجیره|bridge|cross.?chain/i
+    ]
+  },
+  {
+    type: 'BORROW',
+    weight: 6,
+    patterns: [
+      /وام بگیر|وام گرفتن|borrow/i,
+      /قرض بگیر|اعتبار بگیر/i
+    ]
+  },
+  {
+    type: 'LEND',
+    weight: 6,
+    patterns: [
+      /وام بده|سپرده.?گذار|لند کن|supply.*aave|lend /i
+    ]
+  },
+  {
+    type: 'STOCKS',
+    weight: 6,
+    patterns: [
+      /سهام|توکن شرکتی|xstock|stocks?/i
+    ]
+  },
+  {
+    type: 'HORIZON',
+    weight: 7,
+    patterns: [
+      /افق جهانی|horizon/i,
+      /فارکس|forex|جفت.?ارز|صندوق|commodit|طلا|نفت/i,
+      /rwa|real.?world|توکنی.?ز/i
+    ]
+  },
+  {
+    type: 'DYDX',
+    weight: 7,
+    patterns: [
+      /dydx|دی.?وای.?دی.?ایکس/i
+    ]
+  },
+  {
+    type: 'FUTURES',
+    weight: 6,
+    patterns: [
+      /پرپچوال|perpetual|فیوچرز|futures|perp/i,
+      /فیوچرز سولانا|solana perp/i
+    ]
+  },
+  {
+    type: 'P2P',
+    weight: 6,
+    patterns: [
+      /p2p|پی.?تو.?پی|همتا به همتا/i
+    ]
+  },
+  {
+    type: 'ORDERS',
+    weight: 7,
+    patterns: [
+      /سفارش خودکار|سفارش حد|limit order|auto.?order/i,
+      /خودت ایجاد کنی.*سفارش|شرط.*سفارش/i
+    ]
+  },
+  {
+    type: 'NOTIFICATIONS',
+    weight: 7,
+    patterns: [
+      /نوتیفیکیشن|اعلان|alert|notification|خبرم کن|هشدار/i
+    ]
+  },
+  {
+    type: 'BTC_WALLET',
+    weight: 7,
+    patterns: [
+      /والت بیت.?کوین|کیف پول بیت|btc wallet|bitcoin wallet|چک.*بیت.?کوین/i
+    ]
+  },
+  {
+    type: 'WALLET_DISCONNECT',
+    weight: 7,
+    patterns: [
+      /بستن والت|والت را ببند|والت.*ببند|قطع.*کیف|disconnect wallet|خارج شو.*کیف/i
+    ]
+  },
+  {
+    type: 'WALLET_CONNECT',
+    weight: 6,
+    patterns: [
+      /اتصال کیف|وصل.*کیف|connect wallet/i
+    ]
+  },
+  {
+    type: 'SWITCH_NETWORK',
+    weight: 7,
+    patterns: [
+      /تعویض شبکه|عوض.*شبکه|switch network|change network/i
+    ]
+  },
+  {
+    type: 'ADD_TOKEN',
+    weight: 7,
+    patterns: [
+      /اضافه کردن توکن|افزودن توکن|توکن.*اضافه|اضافه.*توکن|import token|add token/i
+    ]
+  },
+  {
+    type: 'REWARDS',
+    weight: 6,
+    patterns: [
+      /امتیازها|امتیاز من|rewards|پاداش/i
+    ]
+  },
+  {
+    type: 'SETTINGS',
+    weight: 5,
+    patterns: [
+      /تنظیمات|settings/i
+    ]
+  },
+  {
+    type: 'INTENT_OS',
+    weight: 6,
+    patterns: [
+      /تب.*intent|intent os|اینتنت/i
+    ]
+  },
+  {
+    type: 'SMART_MONEY',
+    weight: 7,
+    patterns: [
+      /کیف پول بزرگ|رفتار کیف پول|smart.?money|اسمارت مانی/i
+    ]
   }
 ];
 
 // Navigation intent extraction
 const NAV_TARGETS = [
   { route: '/news', keywords: ['اخبار', 'news'], type: 'NEWS_SEARCH' },
-  { route: '/farm', keywords: ['فارم', 'farm'], type: 'FARM' },
-  { route: '/wallet', keywords: ['کیف پول', 'wallet'], type: 'NAVIGATION' },
+  { route: '/farm', keywords: ['فارم', 'farm', 'استخر'], type: 'FARM' },
+  { route: '/wallet', keywords: ['کیف پول', 'والت', 'wallet'], type: 'NAVIGATION' },
   { route: '/portfolio', keywords: ['پرتفوی', 'portfolio', 'سبد'], type: 'PORTFOLIO_ANALYSIS' },
   { route: '/market', keywords: ['بازار', 'market'], type: 'MARKET_ANALYSIS' },
   { route: '/swap', keywords: ['سواپ', 'swap'], type: 'SWAP' },
-  { route: '/bridge', keywords: ['بریج', 'bridge'], type: 'BRIDGE' },
-  { route: '/signals', keywords: ['سیگنال', 'signals'], type: 'MARKET_ANALYSIS' },
-  { route: '/smart-money', keywords: ['smart money', 'هوشمند'], type: 'SMART_MONEY' },
+  { route: '/solana', keywords: ['سواپ سولانا', 'solana swap'], type: 'SWAP' },
+  { route: '/bridge', keywords: ['بریج', 'bridge', 'پل'], type: 'BRIDGE' },
+  { route: '/signals', keywords: ['سیگنال', 'signals'], type: 'SIGNALS' },
+  { route: '/smart-money', keywords: ['smart money', 'هوشمند', 'اسمارت'], type: 'SMART_MONEY' },
   { route: '/loan', keywords: ['وام', 'lending', 'loan'], type: 'LEND' },
-  { route: '/earn', keywords: ['earn', 'سود', 'yield'], type: 'YIELD_DISCOVERY' },
+  { route: '/earn', keywords: ['earn', 'yield'], type: 'YIELD_DISCOVERY' },
   { route: '/explore', keywords: ['explore', 'کاوش'], type: 'MARKET_CONTEXT' },
   { route: '/nft', keywords: ['nft', 'ان اف تی'], type: 'NAVIGATION' },
   { route: '/shop', keywords: ['shop', 'فروشگاه', 'گیفت', 'gift'], type: 'NAVIGATION' },
-  { route: '/settings', keywords: ['تنظیمات', 'settings'], type: 'NAVIGATION' },
-  { route: '/orders', keywords: ['سفارش', 'orders'], type: 'ORDERS' },
-  { route: '/perp', keywords: ['فیوچرز', 'futures', 'perp'], type: 'FUTURES' },
+  { route: '/settings', keywords: ['تنظیمات', 'settings'], type: 'SETTINGS' },
+  { route: '/orders', keywords: ['سفارش خودکار', 'سفارش', 'orders'], type: 'ORDERS' },
+  { route: '/perp', keywords: ['فیوچرز', 'futures', 'perp', 'پرپچوال'], type: 'FUTURES' },
+  { route: '/dydx', keywords: ['dydx'], type: 'DYDX' },
   { route: '/stocks', keywords: ['سهام', 'stocks'], type: 'STOCKS' },
+  { route: '/invest', keywords: ['افق جهانی', 'فارکس', 'forex', 'جفت ارز'], type: 'HORIZON' },
+  { route: '/p2p', keywords: ['p2p', 'پی تو پی'], type: 'P2P' },
+  { route: '/rewards', keywords: ['امتیاز', 'rewards', 'پاداش'], type: 'REWARDS' },
+  { route: '/intent', keywords: ['اینتنت', 'intent os'], type: 'INTENT_OS' },
+  { route: '/buy', keywords: ['خرید و فروش'], type: 'BUY' },
   { route: '/calm', keywords: ['آرامش', 'calm', 'relax'], type: 'OPEN_CALM' }
 ];
 
@@ -333,9 +517,28 @@ export function understandIntent(message, context = {}) {
         type: 'EXECUTE_CURRENT',
         confidence: 0.85,
         entities,
+        raw: text,
         contextRef: context.currentPage,
         matched: [],
         isFollowUp: true
+      };
+    }
+
+    const slots = context.operational || {};
+    if (/(بخرش|بفروشش|بخر|فروش|تبدیل|انجام بده)/i.test(text) && (slots.asset || entities.token)) {
+      const op = /فروش|sell/i.test(text) ? 'SELL' : (/تبدیل|swap/i.test(text) ? 'SWAP' : 'BUY');
+      return {
+        ok: true,
+        type: op,
+        confidence: 0.8,
+        entities: {
+          ...entities,
+          token: entities.token || slots.asset,
+          amount: entities.amount || entities.amountUsd || slots.amount
+        },
+        raw: text,
+        isFollowUp: true,
+        matched
       };
     }
 
@@ -344,6 +547,7 @@ export function understandIntent(message, context = {}) {
       type: 'GENERAL',
       confidence: 0.3,
       entities,
+      raw: text,
       matched,
       shouldAsk: false
     };
@@ -356,47 +560,93 @@ export function understandIntent(message, context = {}) {
     type: top[0],
     confidence: Math.round(confidence * 100) / 100,
     entities,
+    raw: text,
     matched,
     navigation: nav,
     isFollowUp: /(این|همین|this|it)/i.test(text),
-    requiresWallet: ['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'REBALANCE', 'FARM', 'LEND', 'DCA'].includes(top[0]),
-    readOnly: ['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC', 'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE'].includes(top[0])
+    requiresWallet: ['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'REBALANCE', 'FARM', 'LEND', 'BORROW', 'DCA'].includes(top[0]),
+    readOnly: [
+      'PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC',
+      'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
+      'FARM', 'LEND', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
+      'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS',
+      'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
+      'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'
+    ].includes(top[0]),
+    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS'].includes(top[0])
   };
 }
 
 function extractEntities(text) {
   const entities = {};
 
-  // Amounts: 100 USDC, $100, ۱۰۰ دلار
-  const amountMatch = text.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s*(USDC|USDT|ETH|BTC|SOL|USD|\$|دلار)/i);
+  const raw = String(text || '');
+
+  const amountMatch = raw.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s*(USDC|USDT|ETH|BTC|SOL|USD|\$|دلار|تتر)/i);
   if (amountMatch) {
     entities.amount = amountMatch[1].replace(/,/g, '');
-    entities.amountSymbol = amountMatch[2];
+    entities.amountSymbol = aliasToken(amountMatch[2]) || amountMatch[2];
   }
 
-  // Dollar amounts
-  const dollarMatch = text.match(/\$?\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)?/i);
+  const dollarMatch = raw.match(/(?:\$|usd|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)/i);
   if (dollarMatch && !entities.amount) {
-    entities.amountUsd = dollarMatch[1].replace(/,/g, '');
+    entities.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
   }
 
-  // Tokens
+  const tokens = [];
+  const aliasHits = ['تتر', 'اتریوم', 'اتر', 'بیت‌کوین', 'بیت کوین', 'بیتکوین', 'سولانا', 'بایننس'];
+  for (const a of aliasHits) {
+    if (raw.includes(a)) {
+      const t = aliasToken(a);
+      if (t) tokens.push(t);
+    }
+  }
   const tokenRegex = /\b(ETH|BTC|SOL|USDC|USDT|BNB|ARB|MATIC|AVAX|OP|DAI)\b/gi;
-  const tokens = [...text.matchAll(tokenRegex)].map(m => m[1].toUpperCase());
-  if (tokens.length) {
-    entities.tokens = [...new Set(tokens)];
-    if (tokens.length >= 2) {
-      entities.fromToken = tokens[0];
-      entities.toToken = tokens[1];
+  for (const m of raw.matchAll(tokenRegex)) tokens.push(m[1].toUpperCase());
+  const uniq = [...new Set(tokens)];
+  if (uniq.length) {
+    entities.tokens = uniq;
+    if (uniq.length >= 2) {
+      entities.fromToken = uniq[0];
+      entities.toToken = uniq[1];
     } else {
-      entities.token = tokens[0];
+      entities.token = uniq[0];
     }
   }
 
-  // Chain names
-  const chainRegex = /\b(ethereum|arbitrum|base|optimism|bsc|bnb|polygon|avalanche|solana)\b/gi;
-  const chains = [...text.matchAll(chainRegex)].map(m => m[1].toLowerCase());
-  if (chains.length) entities.chains = chains;
+  const toPrep = /(?:به|به سمت|تبدیل به)\s*([A-Za-z]{2,10}|تتر|اتریوم|سولانا|بیت.?کوین)/i.exec(raw);
+  if (toPrep) {
+    const dest = aliasToken(toPrep[1]) || String(toPrep[1]).toUpperCase();
+    if (dest) {
+      entities.toToken = dest;
+      if (entities.token && entities.token !== dest) entities.fromToken = entities.fromToken || entities.token;
+    }
+  }
+
+  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
+  const foundChains = [];
+  for (const w of chainWords) {
+    const lower = raw.toLowerCase();
+    const j = raw.indexOf(w) >= 0 ? raw.indexOf(w) : lower.indexOf(w.toLowerCase());
+    if (j >= 0) foundChains.push({ w, j, id: aliasChainId(w) });
+  }
+  foundChains.sort((a, b) => a.j - b.j);
+  const chains = foundChains.map((c) => c.w.toLowerCase());
+  const chainIds = foundChains.map((c) => c.id).filter(Boolean);
+  if (chains.length) entities.chains = [...new Set(chains)];
+  if (chainIds.length) {
+    const uniqueIds = [...new Set(chainIds)];
+    entities.chainIds = uniqueIds;
+    entities.network = uniqueIds[0];
+    if (uniqueIds.length > 1) {
+      entities.fromChain = uniqueIds[0];
+      entities.toChain = uniqueIds[1];
+      entities.destinationNetwork = uniqueIds[1];
+    }
+  }
+
+  const evmAddr = raw.match(/0x[a-fA-F0-9]{40}/);
+  if (evmAddr) entities.toAddress = evmAddr[0];
 
   // Timeframes
   const timeMatch = text.match(/(\d+)\s*(سال|ماه|روز|year|month|day)/i);
@@ -405,9 +655,12 @@ function extractEntities(text) {
   }
 
   // Risk
-  if (/ریسک.*کم|low.*risk|محافظه/i.test(text)) entities.riskTolerance = 'low';
-  else if (/ریسک.*متوسط|medium.*risk/i.test(text)) entities.riskTolerance = 'medium';
-  else if (/ریسک.*زیاد|high.*risk|تهاجمی/i.test(text)) entities.riskTolerance = 'high';
+  if (/ریسک.*کم|low.*risk|محافظه/i.test(raw)) entities.riskTolerance = 'low';
+  else if (/ریسک.*متوسط|medium.*risk/i.test(raw)) entities.riskTolerance = 'medium';
+  else if (/ریسک.*زیاد|high.*risk|تهاجمی/i.test(raw)) entities.riskTolerance = 'high';
+
+  if (/solana|سولانا/i.test(raw)) entities.venue = 'solana';
+  else if (/evm|اتریوم|آربیتروم|بیس/i.test(raw)) entities.venue = 'evm';
 
   return entities;
 }
