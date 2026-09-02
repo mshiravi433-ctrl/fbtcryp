@@ -72,6 +72,12 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
           APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
+          # ci/release-notes.mjs stamps the `latest` release page with the version
+          # and SHA-256 of what was just built. GitHub does not hand a script a
+          # token by itself — it has to be mapped, exactly like the keystore
+          # secrets above. Leave it out and nothing fails: the download page just
+          # keeps whatever notes a human wrote last.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Upload whatever was produced. `if-no-files-found: ignore` on the AAB
       # keeps unsigned (debug) runs from failing the job.
