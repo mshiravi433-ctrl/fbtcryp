@@ -8140,7 +8140,7 @@
     "quoteExpired": "Quote expired — refresh required",
     "reviewTitle": "Review before payment",
     "reviewBody": " You will buy approximately {{amount}} {{asset}} and settle it directly to {{wallet}}. Payment is handled by the provider.",
-    "hostedCheckoutNote": "Payment details and identity checks remain on the provider’s secure hosted checkout. FBT never asks for card details, a seed phrase, or a private key.",
+    "hostedCheckoutNote": "Payment details and identity checks remain on {{provider}}’s secure hosted checkout. FBT never asks for card details, a seed phrase, or a private key.",
     "providerUnavailableTitle": "Buy is unavailable",
     "providerUnavailableBody": "No approved provider integration is operational for this deployment. FBT will not open a payment page until country eligibility, provider checkout, durable order records, and signed settlement verification are configured.",
     "sellUnavailableTitle": "Sell is unavailable",
