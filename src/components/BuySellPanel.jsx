@@ -39,6 +39,26 @@ const STEPS = ['amount', 'wallet', 'asset', 'review'];
 
 const QUICK_FIAT = [50, 100, 250, 500];
 
+/* The provider needs a two-letter country for its own regional eligibility
+   rules. Leaving it empty used to be a dead end: the review screen showed a
+   permanently disabled "get quote" button and nothing said why. Guess it from
+   the browser/OS locale (the user can always overwrite the field) so the last
+   screen of the wizard arrives ready to act. */
+function guessCountry() {
+  const candidates = [];
+  try {
+    if (typeof navigator !== 'undefined') {
+      if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
+      if (navigator.language) candidates.push(navigator.language);
+    }
+  } catch { /* no navigator (SSR / tests) — fall through to '' */ }
+  for (const tag of candidates) {
+    const region = String(tag || '').split(/[-_]/)[1];
+    if (region && /^[A-Za-z]{2}$/.test(region)) return region.toUpperCase();
+  }
+  return '';
+}
+
 function money(value, currency) {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   try {
@@ -178,7 +198,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const [network, setNetwork] = useState('arbitrum');
   const [fiatCurrency, setFiatCurrency] = useState('USD');
   const [paymentMethod, setPaymentMethod] = useState('CARD_PAYMENT');
-  const [country, setCountry] = useState('');
+  const [country, setCountry] = useState(guessCountry);
   const [fiatAmount, setFiatAmount] = useState('');
   const [cryptoAmount, setCryptoAmount] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
@@ -380,6 +400,73 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const nextStep = () => { if (stepValid[step]) go(step + 1); };
   const prevStep = () => go(step - 1);
 
+  /* WHY A DISABLED BUTTON IS NEVER LEFT SILENT.
+     A greyed-out "Next" with no explanation reads as a missing button: the
+     screen looks finished, the control looks decorative, and the only thing
+     that still responds is "Back". Every gate therefore names itself. */
+  const blockReason = useMemo(() => {
+    if (step === 0 && !amountValid) return t('buySell.wizard.needAmount');
+    if (step === 1 && !walletValid) return t('buySell.wizard.needWallet');
+    if (step === 2 && !assetValid) return t('buySell.wizard.needAsset');
+    if (step === 3 && trackedAvailable && !country) return t('buySell.wizard.needCountry');
+    return '';
+  }, [amountValid, assetValid, country, step, t, trackedAvailable, walletValid]);
+
+  /* THE LAST SCREEN'S PRIMARY ACTION, AS ONE VALUE.
+     The review step has no "next" — it has whatever the flow actually needs
+     next: fetch a quote, prepare the order, confirm and pay, or hand off to
+     the provider. Deriving it once means the wizard's action bar is present
+     and labelled on EVERY step, instead of the last screen showing only a
+     "Back" button while its real call to action hid further down the card. */
+  const reviewAction = useMemo(() => {
+    if (trackedAvailable) {
+      if (!quote || quoteExpiry) {
+        return {
+          key: 'quote',
+          label: loading === 'quote' ? t('buySell.fetchingQuote') : quoteExpiry ? t('buySell.refreshQuote') : t('buySell.getQuote'),
+          icon: 'refresh',
+          disabled: !canQuote,
+          onClick: loadQuote
+        };
+      }
+      if (!order) {
+        return {
+          key: 'order',
+          label: loading === 'order' ? t('buySell.preparingOrder') : t('buySell.continueToPayment'),
+          icon: 'next',
+          disabled: Boolean(loading),
+          onClick: prepareOrder
+        };
+      }
+      return {
+        key: 'confirm',
+        label: loading === 'checkout' ? t('buySell.preparingCheckout') : t('buySell.confirmAndPay'),
+        icon: 'next',
+        disabled: Boolean(loading),
+        onClick: continueToCheckout
+      };
+    }
+    if (guidedOpened) {
+      return {
+        key: 'reopen',
+        label: t('buySell.wizard.reopenProvider', { provider: GUIDED_PROVIDER.name }),
+        icon: 'next',
+        disabled: Boolean(loading),
+        onClick: continueToProvider
+      };
+    }
+    return {
+      key: 'guided',
+      label: loading === 'guided' ? t('buySell.preparingCheckout') : t('buySell.wizard.guidedCta', { provider: GUIDED_PROVIDER.name }),
+      icon: 'next',
+      disabled: Boolean(loading) || !amountValid || !walletValid,
+      onClick: continueToProvider
+    };
+  }, [
+    amountValid, canQuote, continueToCheckout, continueToProvider, guidedOpened, loadQuote, loading,
+    order, prepareOrder, quote, quoteExpiry, t, trackedAvailable, walletValid
+  ]);
+
   const sell = side === 'SELL';
 
   const summaryRows = [
@@ -541,14 +628,16 @@ export default function BuySellPanel({ initialOrderId = null }) {
                         <>
                           <div className="buy-sell-fields" style={{ marginTop: 12 }}>
                             <label className="ord-field"><span>{t('buySell.paymentMethod')}</span><select value={paymentMethod} onChange={inputChanged(setPaymentMethod)}>{paymentMethods.map((method) => <option key={method} value={method}>{t(`buySell.pm.${method}`, { defaultValue: method })}</option>)}</select></label>
-                            <label className="ord-field"><span>{t('buySell.country')}</span><input value={country} maxLength="2" onChange={inputChanged(setCountry)} placeholder="DE" autoCapitalize="characters" dir="ltr" /></label>
+                            <label className={`ord-field ${country ? '' : 'ord-field-needed'}`}><span>{t('buySell.country')}</span><input value={country} maxLength="2" onChange={inputChanged(setCountry)} placeholder="DE" autoCapitalize="characters" dir="ltr" required aria-required="true" /></label>
                           </div>
                           {quote && <QuoteRows quote={quote} t={t} />}
                           {quote && <div className={`buy-sell-expiry ${quoteExpiry ? 'expired' : ''}`}><IconClock width={14} height={14} />{quoteExpiry ? t('buySell.quoteExpired') : t('buySell.quoteExpires', { seconds: Math.max(0, Math.ceil((Date.parse(quote.expiresAt) - Date.now()) / 1000)) })}</div>}
                           {error && <div className="notice notice-danger buy-sell-error">{t(`buySell.errors.${error}`, { defaultValue: t('buySell.errors.REQUEST_FAILED') })}</div>}
-                          {!quote || quoteExpiry ? <button type="button" className="btn btn-primary buy-sell-cta" disabled={!canQuote} onClick={loadQuote}>{loading === 'quote' ? t('buySell.fetchingQuote') : quoteExpiry ? t('buySell.refreshQuote') : t('buySell.getQuote')}<IconRefresh width={17} height={17} /></button>
-                            : !order ? <button type="button" className="btn btn-primary buy-sell-cta" disabled={Boolean(loading)} onClick={prepareOrder}>{loading === 'order' ? t('buySell.preparingOrder') : t('buySell.continueToPayment')}<IconChevronRight width={17} height={17} /></button>
-                              : <div className="buy-sell-confirm"><p><b>{t('buySell.reviewTitle')}</b>{t('buySell.reviewBody', { asset: order.asset, amount: amount(order.cryptoAmount, order.asset), wallet: shortAddress(order.walletAddress) })}</p><button type="button" className="btn btn-primary buy-sell-cta" disabled={Boolean(loading)} onClick={continueToCheckout}>{loading === 'checkout' ? t('buySell.preparingCheckout') : t('buySell.confirmAndPay')}<IconChevronRight width={17} height={17} /></button></div>}
+                          {order && quote && !quoteExpiry && (
+                            <div className="buy-sell-confirm">
+                              <p><b>{t('buySell.reviewTitle')}</b>{t('buySell.reviewBody', { asset: order.asset, amount: amount(order.cryptoAmount, order.asset), wallet: shortAddress(order.walletAddress) })}</p>
+                            </div>
+                          )}
                           <p className="buy-sell-hosted-note">{t('buySell.hostedCheckoutNote', { provider: providerName || GUIDED_PROVIDER.name })}</p>
                         </>
                       ) : (
@@ -557,16 +646,10 @@ export default function BuySellPanel({ initialOrderId = null }) {
                           <p className="bsw-hint">{t('buySell.wizard.guidedNote', { provider: GUIDED_PROVIDER.name })}</p>
                           {configurationRequired && <p className="bsw-hint">{t('buySell.wizard.trackedUnavailable')}</p>}
                           {error && <div className="notice notice-danger buy-sell-error">{t(`buySell.errors.${error}`, { defaultValue: t('buySell.errors.REQUEST_FAILED') })}</div>}
-                          {guidedOpened ? (
+                          {guidedOpened && (
                             <div className="buy-sell-confirm">
                               <p><b>{t('buySell.wizard.guidedOpenedTitle')}</b>{t('buySell.wizard.guidedOpenedBody', { provider: GUIDED_PROVIDER.name })}</p>
-                              <button type="button" className="btn btn-ghost btn-sm buy-sell-use-wallet" onClick={continueToProvider}>{t('buySell.wizard.reopenProvider', { provider: GUIDED_PROVIDER.name })}</button>
                             </div>
-                          ) : (
-                            <button type="button" className="btn btn-primary buy-sell-cta" disabled={Boolean(loading) || !amountValid || !walletValid} onClick={continueToProvider}>
-                              {loading === 'guided' ? t('buySell.preparingCheckout') : t('buySell.wizard.guidedCta', { provider: GUIDED_PROVIDER.name })}
-                              <IconChevronRight width={17} height={17} />
-                            </button>
                           )}
                           <p className="buy-sell-hosted-note">{t('buySell.wizard.guidedPrefillNote', { provider: GUIDED_PROVIDER.name })}</p>
                         </>
@@ -577,21 +660,33 @@ export default function BuySellPanel({ initialOrderId = null }) {
                 </AnimatePresence>
               </div>
 
-              {/* wizard navigation — Back is always safe; Next gates on the
-                  single decision this screen asked for */}
-              {step < STEPS.length - 1 && (
+              {/* WIZARD ACTION BAR — present on every step, never just a
+                  "Back". Steps 1-3 advance; the review step carries the flow's
+                  real primary action (quote / prepare / confirm / hand off).
+                  When an action is gated, the reason is printed above it. */}
+              <div className="bsw-actions">
+                {blockReason && <p className="bsw-hint bsw-blocked" role="status">{blockReason}</p>}
                 <div className="bsw-nav">
                   <button type="button" className="btn btn-ghost bsw-back" disabled={step === 0} onClick={prevStep}>{t('buySell.wizard.back')}</button>
-                  <button type="button" className="btn btn-primary bsw-next" disabled={!stepValid[step]} onClick={nextStep}>
-                    {t('buySell.wizard.next')} <IconChevronRight width={16} height={16} />
-                  </button>
+                  {step < STEPS.length - 1 ? (
+                    <button type="button" className="btn btn-primary bsw-next" disabled={!stepValid[step]} onClick={nextStep}>
+                      {t('buySell.wizard.next')} <IconChevronRight width={16} height={16} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary bsw-next"
+                      disabled={reviewAction.disabled}
+                      onClick={reviewAction.onClick}
+                    >
+                      {reviewAction.label}
+                      {reviewAction.icon === 'refresh'
+                        ? <IconRefresh width={16} height={16} />
+                        : <IconChevronRight width={16} height={16} />}
+                    </button>
+                  )}
                 </div>
-              )}
-              {step === 3 && (
-                <div className="bsw-nav">
-                  <button type="button" className="btn btn-ghost bsw-back" onClick={prevStep}>{t('buySell.wizard.back')}</button>
-                </div>
-              )}
+              </div>
             </motion.section>
           )}
 

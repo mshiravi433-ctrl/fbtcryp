@@ -146,9 +146,15 @@
 .bsw-guided-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 13px; padding: 6px 11px; border: 1px solid rgba(0,230,150,.3); border-radius: 999px; background: rgba(0,230,150,.08); color: var(--up); font-size: 10.5px; font-weight: 800; }
 
 /* wizard navigation */
-.bsw-nav { display: flex; gap: 10px; margin-top: 15px; }
+.bsw-actions { margin-top: 15px; }
+.bsw-blocked { margin: 0 0 9px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.03); color: var(--text-2); }
+.bsw-nav { display: flex; gap: 10px; margin-top: 0; }
 .bsw-back { flex: 0 0 auto; min-height: 46px; padding-inline: 18px; }
 .bsw-next { flex: 1; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 800; }
+/* A primary button at 42% opacity on a dark card reads as "not there" — which
+   is exactly how a gated Next got reported as a missing button. Keep a gated
+   action clearly visible; the printed reason above it explains the state. */
+.bsw-next:disabled, .bsw-back:disabled { opacity: 1; filter: grayscale(1) brightness(.72); }
 [dir="rtl"] .bsw-next svg, [dir="rtl"] .buy-sell-cta svg, [dir="rtl"] .buy-sell-tx-link svg { transform: scaleX(-1); }
 
 /* ─── ON-CHAIN WALLET REPORT (گزارش واقعی، زیر هر دو تب) ──────────────────
@@ -179,3 +185,6 @@
 .buy-sell-watch-honesty { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,.1); color: var(--text-3); font-size: 10px; line-height: 1.7; }
 .buy-sell-watch-honesty svg { flex: 0 0 auto; margin-top: 2px; }
 @media (max-width: 390px) { .buy-sell-wizard { padding: 14px 12px 13px; } .bsw-stepper button > small { font-size: 8.5px; } .bsw-assets { grid-template-columns: repeat(3, 1fr); } }
+
+/* A required field the flow is waiting on, outlined rather than merely hinted. */
+.ord-field-needed input { border-color: rgba(255,196,0,.45) !important; }

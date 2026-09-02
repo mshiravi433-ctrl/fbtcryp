@@ -8311,7 +8311,11 @@
       "guidedOpenedTitle": "Checkout opened.",
       "guidedOpenedBody": "Finish your confirmation and payment on {{provider}}’s page. The on-chain report below is now watching your wallet and will show the matching movement the moment it lands on the blockchain.",
       "reopenProvider": "Reopen {{provider}}",
-      "trackedUnavailable": "The fully tracked order flow is not configured on this server yet; the no-sign-up route above works independently of it."
+      "trackedUnavailable": "The fully tracked order flow is not configured on this server yet; the no-sign-up route above works independently of it.",
+      "needAmount": "Enter an amount above zero to continue.",
+      "needWallet": "Enter a valid EVM wallet address (0x + 40 hex characters) to continue.",
+      "needAsset": "Pick an asset and a network to continue.",
+      "needCountry": "Enter your two-letter country code so the provider can price your order."
     },
     "watch": {
       "titleBuy": "On-chain deposit report",
