@@ -1,8 +1,11 @@
 /**
- * Buy / Sell gateway safety probe. It uses the real Express app with no mocked
- * provider: the required result before a signed provider contract exists is a
- * transparent, non-cacheable unavailable response—not a quote, checkout URL,
- * or completed order.
+ * Buy / Sell gateway safety probe (unconfigured deployment).
+ *
+ * It uses the real Express app with NO provider credentials configured: the
+ * required result before the legitimate Ramp production credential exists is
+ * a transparent, non-cacheable CONFIGURATION_REQUIRED state — not a quote,
+ * checkout URL, fake availability, or completed order. The full configured
+ * lifecycle is covered by test/buy-sell-ramp-flow-probe.mjs.
  */
 import app from '../server/app.js';
 
@@ -22,20 +25,26 @@ try {
   const provider = capabilities.body?.providers?.[0];
   check('capabilities are available over the versioned first-party endpoint', capabilities.response.status === 200);
   check('capabilities are non-cacheable', capabilities.response.headers.get('cache-control') === 'no-store');
-  check('provider remains unavailable pending its official settlement contract',
-    provider?.available === false && provider?.prerequisites?.includes('PROVIDER_REQUIRES_INTEGRATION')
-    && provider?.prerequisites?.includes('OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'));
-  check('capabilities declare non-custody, zero FBT fee and no CEX API',
-    capabilities.body?.custody === 'NON_CUSTODIAL' && capabilities.body?.fbtFee === 0 && capabilities.body?.noCexApi === true);
+  check('Ramp is registered as provider #1 in HOSTED_CHECKOUT mode', provider?.id === 'ramp' && provider?.mode === 'HOSTED_CHECKOUT');
+  check('an unconfigured deployment reports CONFIGURATION_REQUIRED, never fake availability',
+    provider?.available === false && provider?.status === 'CONFIGURATION_REQUIRED'
+    && provider?.prerequisites?.includes('RAMP_HOST_API_KEY_REQUIRED')
+    && provider?.prerequisites?.includes('RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED'));
+  check('the missing credential is a Ramp integration credential, not a CEX API',
+    provider?.requiresCexApi === false && provider?.requiresRampProductionCredential === true
+    && !provider?.prerequisites?.some((p) => /CEX|BINANCE|BYBIT|KUCOIN|MEXC/i.test(p)));
+  check('capabilities declare non-custody, zero FBT fee, zero partner fee and no CEX API',
+    capabilities.body?.custody === 'NON_CUSTODIAL' && capabilities.body?.fbtFee === 0
+    && capabilities.body?.noCexApi === true && provider?.partnerFee === 0);
 
   const request = {
-    side: 'BUY', asset: 'USDT', network: 'bsc', fiatCurrency: 'USD', fiatAmount: 100,
-    country: 'US', paymentMethod: 'VISA_MC1', walletAddress: '0x000000000000000000000000000000000000dEaD'
+    side: 'BUY', asset: 'USDT', network: 'arbitrum', fiatCurrency: 'USD', fiatAmount: 100,
+    country: 'DE', paymentMethod: 'CARD_PAYMENT', walletAddress: '0x000000000000000000000000000000000000dEaD'
   };
   const quote = await call('/api/v1/buy-sell/quote', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request)
   });
-  check('unintegrated provider produces no quote', quote.response.status === 503 && quote.body?.error === 'PROVIDER_UNAVAILABLE' && !quote.body?.quote);
+  check('unconfigured provider produces no quote', quote.response.status === 503 && quote.body?.error === 'PROVIDER_UNAVAILABLE' && !quote.body?.quote);
   check('unavailable quote is non-cacheable', quote.response.headers.get('cache-control') === 'no-store');
 
   const order = await call('/api/v1/buy-sell/order', {
@@ -49,18 +58,24 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'buy-sell-safety-test-idempotency-0002' },
     body: JSON.stringify({ orderId: 'bso_not_real', confirmed: true })
   });
-  check('checkout is provider-gated before an order capability can be dereferenced',
-    checkout.response.status === 503 && checkout.body?.error === 'PROVIDER_REQUIRES_INTEGRATION' && !checkout.body?.checkoutUrl);
+  check('checkout never opens without an order capability and a configured provider',
+    (checkout.response.status === 404 || checkout.response.status === 503) && !checkout.body?.checkoutUrl);
 
   const audit = await call('/api/v1/buy-sell/order/bso_not_real/audit');
   check('audit access requires the opaque order capability', audit.response.status === 404 && audit.response.headers.get('cache-control') === 'no-store');
 
-  const webhook = await call('/api/v1/buy-sell/webhooks/changenow_fiat', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-fbt-provider-signature': 'guessed-signature' }, body: JSON.stringify({ status: 'settled' })
+  const webhook = await call('/api/v1/buy-sell/webhooks/ramp', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-body-signature': 'Z3Vlc3NlZA==' }, body: JSON.stringify({ type: 'RELEASED', purchase: { status: 'RELEASED' } })
   });
-  check('undocumented callback data is rejected rather than parsed as settlement',
-    webhook.response.status === 503 && webhook.body?.error === 'PROVIDER_REQUIRES_INTEGRATION');
+  check('webhooks are rejected until Ramp\u2019s signing key is configured — never parsed as settlement',
+    webhook.response.status === 503 && webhook.body?.error === 'PROVIDER_REQUIRES_INTEGRATION'
+    && webhook.body?.detail === 'RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED');
   check('disabled webhook response is non-cacheable', webhook.response.headers.get('cache-control') === 'no-store');
+
+  const unknown = await call('/api/v1/buy-sell/webhooks/unknown_provider', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({})
+  });
+  check('an unknown provider callback is not routable', unknown.response.status === 404);
 
   const legacy = await call('/api/fiat/status');
   check('legacy direct-fiat endpoint is removed', legacy.response.status === 404);

@@ -2,15 +2,20 @@
  * FBT Buy / Sell service
  *
  * This module is deliberately a payment-provider boundary, not an exchange
- * adapter. It defines the boundaries required for a provider-hosted fiat
- * checkout and can independently verify a settlement on chain once a
- * documented provider adapter is installed. It contains no order-book, CEX, custody, or
- * private-key code.
+ * adapter. There is NO CEX trading API here (no Binance/Bybit/KuCoin/MEXC or
+ * any other exchange API), no order book, no custody, and no private-key
+ * code. The primary provider is Ramp Network's official Hosted Mode:
+ *
+ *   FBT (order + wallet context) → Ramp hosted checkout (payment, KYC/AML,
+ *   fiat processing) → crypto settled DIRECTLY to the user's wallet →
+ *   independent on-chain verification by FBT → COMPLETED.
  *
  * A provider is unavailable until every production prerequisite is explicitly
- * configured. That fail-closed posture matters more than displaying a form:
- * an unverified country matrix, redirect host, durable order store, or
- * settlement callback must never lead to a real payment session.
+ * configured (Ramp host API key, signed settlement webhook, durable order
+ * store). That fail-closed posture matters more than displaying a form: a
+ * missing credential surfaces as CONFIGURATION_REQUIRED — never as a fake
+ * checkout, and never (the forbidden inverse) does a missing CEX API key make
+ * Buy unavailable.
  */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { getAddress, isAddress } from 'ethers';
@@ -18,6 +23,18 @@ import { EVM_CHAINS } from './chainsLite.js';
 import { storeGet, storeSet } from './store.js';
 import { upstashConfigured, upstashSetIfAbsent } from './blobCache.js';
 import { publish } from './central/eventBus.js';
+import {
+  RAMP_PROVIDER_ID,
+  buildHostedCheckoutUrl,
+  explorerTxUrl,
+  findCatalogAsset,
+  mapRampWebhookEvent,
+  rampAssetCatalog,
+  rampCapabilities,
+  rampConfig,
+  rampQuote,
+  verifyRampWebhookSignature
+} from './providers/rampNetwork.js';
 
 export const BUY_SELL_SCHEMA = 'fbt.buy-sell.v1';
 export const FBT_TRADING_FEE = 0;
@@ -41,28 +58,6 @@ const TTL = {
   rpcMs: Math.max(3_000, Number(process.env.BUY_SELL_RPC_TIMEOUT_MS || 12_000))
 };
 
-
-/* Candidate BSC assets for a future documented adapter. They are deliberately
-   not exposed as purchasable capabilities until the provider supplies an
-   authenticated checkout and settlement contract. Each can be independently
-   verified by the app's EVM RPC infrastructure. */
-const SETTLEMENT_ASSETS = Object.freeze([
-  Object.freeze({
-    asset: 'USDT', network: 'bsc', providerAssetId: 'usdt-bsc', chainId: 56,
-    paymentNetworks: ['VISA_MC1', 'SEPA_1']
-  }),
-  Object.freeze({
-    asset: 'USDC', network: 'bsc', providerAssetId: 'usdc-bsc', chainId: 56,
-    paymentNetworks: ['VISA_MC1', 'SEPA_1']
-  }),
-  Object.freeze({
-    asset: 'BNB', network: 'bsc', providerAssetId: 'bnb-bsc', chainId: 56,
-    paymentNetworks: ['VISA_MC1', 'SEPA_1']
-  })
-]);
-
-
-
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const txHashPattern = /^0x[0-9a-f]{64}$/i;
 const requestIdPattern = /^[A-Za-z0-9._:-]{16,128}$/;
@@ -78,25 +73,6 @@ const constantTokenMatch = (provided, expectedHash) => {
   const expected = Buffer.from(expectedHash);
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 };
-
-function providerPrerequisites() {
-  const issues = [];
-  /* There is no verified Fiat callback, settlement-status, or signature
-     contract available for this provider. Configuration alone cannot turn an
-     undocumented payload into money-movement evidence, so this adapter is
-     permanently fail-closed until a documented adapter replaces it. */
-  issues.push('PROVIDER_REQUIRES_INTEGRATION');
-  issues.push('OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED');
-  if (!upstashConfigured()) issues.push('DURABLE_PRIVATE_STORE_REQUIRED');
-  return issues;
-}
-
-function findAsset(asset, network) {
-  const wantedAsset = String(asset || '').trim().toUpperCase();
-  const wantedNetwork = String(network || '').trim().toLowerCase();
-  return SETTLEMENT_ASSETS.find((row) => row.asset === wantedAsset && row.network === wantedNetwork) || null;
-}
-
 
 export function validateDestination(address, asset) {
   if (!asset) return { ok: false, code: 'NETWORK_UNSUPPORTED' };
@@ -116,7 +92,7 @@ function externalFacingOrder(order) {
   if (!order) return null;
   const {
     accessTokenHash, providerCheckoutUrl, idempotencyKeyHash, checkoutIdempotencyKeyHash,
-    settlementEventId, ...safe
+    settlementEventId, webhookAuth, webhookAuthHash, ...safe
   } = order;
   return safe;
 }
@@ -137,70 +113,120 @@ async function appendAudit(orderId, type, details = {}) {
 }
 
 
-/** A provider abstraction. The provider is payment infrastructure, never a
- * CEX trading API. This placeholder is disabled, not an enabled payment path. */
-export const ChangeNowHostedCheckoutProvider = Object.freeze({
-  id: 'changenow_fiat',
+/**
+ * Ramp Network — the primary Hosted Checkout provider (Provider #1).
+ *
+ * Ramp is payment / on-ramp / off-ramp infrastructure, not a CEX. The only
+ * production credential this provider needs is what Ramp officially requires
+ * for Hosted Mode (an active production host API key) plus the documented
+ * signed settlement webhook — a Ramp integration credential, never a CEX
+ * trading API. Availability is derived from configuration at call time; no
+ * capability flag is hardcoded.
+ */
+export const RampNetworkHostedCheckoutProvider = Object.freeze({
+  id: RAMP_PROVIDER_ID,
   mode: CHECKOUT_MODE,
   getCapabilities() {
-    const prerequisites = providerPrerequisites();
+    return rampCapabilities(rampConfig());
+  },
+  async listAssets({ side = 'BUY', fiatCurrency = 'USD', userIp = null } = {}) {
+    const capability = this.getCapabilities();
+    const sell = String(side).toUpperCase() === 'SELL';
+    if ((sell && !capability.offRamp) || (!sell && !capability.onRamp)) {
+      return { ok: false, code: sell ? 'SELL_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', prerequisites: capability.prerequisites, rows: [] };
+    }
+    const catalog = await rampAssetCatalog(rampConfig(), { side, currencyCode: fiatCurrency, userIp });
+    return { ok: catalog.ok, code: catalog.code || null, rows: catalog.rows, meta: catalog.meta };
+  },
+  async checkEligibility(input = {}) {
+    const capability = this.getCapabilities();
+    const sell = String(input.side || 'BUY').toUpperCase() === 'SELL';
+    if ((sell && !capability.offRamp) || (!sell && !capability.onRamp)) {
+      return { ok: false, code: sell ? 'SELL_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', prerequisites: capability.prerequisites };
+    }
+    const catalog = await rampAssetCatalog(rampConfig(), {
+      side: input.side, currencyCode: String(input.fiatCurrency || 'USD').toUpperCase(), userIp: input.userIp || null
+    });
+    if (!catalog.ok) return { ok: false, code: catalog.code };
+    const row = findCatalogAsset(catalog.rows, input.asset, input.network);
+    if (!row) return { ok: false, code: 'ASSET_UNSUPPORTED' };
+    const min = row.minPurchaseAmount != null && row.minPurchaseAmount >= 0 ? row.minPurchaseAmount : catalog.meta?.minPurchaseAmount ?? null;
+    const max = row.maxPurchaseAmount != null && row.maxPurchaseAmount >= 0 ? row.maxPurchaseAmount : catalog.meta?.maxPurchaseAmount ?? null;
+    const fiatAmount = Number(input.fiatAmount);
+    if (!sell && Number.isFinite(fiatAmount)) {
+      if (min != null && fiatAmount < min) return { ok: false, code: 'AMOUNT_BELOW_MIN', min, max };
+      if (max != null && max > 0 && fiatAmount > max) return { ok: false, code: 'AMOUNT_ABOVE_MAX', min, max };
+    }
+    /* Country/KYC eligibility is decided by Ramp inside its hosted checkout
+       and geo-aware catalog. FBT passes the user's real inputs through and
+       surfaces a provider rejection as REGION_UNSUPPORTED — never bypassed. */
+    return { ok: true, limits: { min, max }, countryCheck: 'PROVIDER_ENFORCED_AT_CHECKOUT' };
+  },
+  async getQuote(input = {}) {
+    const capability = this.getCapabilities();
+    const sell = String(input.side || 'BUY').toUpperCase() === 'SELL';
+    if ((sell && !capability.offRamp) || (!sell && !capability.onRamp)) {
+      return { ok: false, code: sell ? 'SELL_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE' };
+    }
+    try {
+      return await rampQuote(rampConfig(), input, { makeToken: token });
+    } catch {
+      return { ok: false, code: 'QUOTE_UNAVAILABLE' };
+    }
+  },
+  /**
+   * Hosted Mode has no server-side session API: the "session" is the official
+   * widget URL itself, composed of documented parameters with the destination
+   * wallet prefilled via `userAddress` for direct wallet settlement.
+   */
+  async createCheckoutSession(order, { webhookAuth = null } = {}) {
+    const capability = this.getCapabilities();
+    if (!capability.available) return { ok: false, code: 'PROVIDER_UNAVAILABLE' };
+    const checkoutUrl = buildHostedCheckoutUrl(rampConfig(), order, { webhookAuth });
     return {
-      id: 'changenow_fiat',
-      available: prerequisites.length === 0,
-      status: prerequisites.length ? 'UNAVAILABLE' : 'AVAILABLE',
-      prerequisites,
-      checkoutMode: null,
-      onRamp: false,
-      /* Off-ramp stays unavailable until a separately contracted provider
-         adapter with a verified source-wallet and fiat-payout contract exists. */
-      offRamp: false,
-      directWalletSettlement: false,
-      blockchainVerification: false,
-      fbtFee: FBT_TRADING_FEE,
-      supportedCountries: [],
-      paymentMethods: [],
-      supportedAssets: []
+      ok: true,
+      checkoutUrl,
+      paymentSessionId: null,
+      providerReference: null,
+      expectedCryptoAmount: order.cryptoAmount
     };
-  },
-  async checkEligibility(input) {
-    const capabilities = this.getCapabilities();
-    return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION', prerequisites: capabilities.prerequisites };
-  },
-  async getQuote() {
-    return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION' };
-  },
-  async createCheckoutSession() {
-    return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION' };
-  },
-  getCheckoutUrl() { return null; },
-  async getOrderStatus() { return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION' }; },
-  async getSettlementStatus() { return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION' }; },
-  async getTransactionStatus() { return { ok: false, code: 'PROVIDER_REQUIRES_INTEGRATION' }; },
-  async createOffRampSession() { return { ok: false, code: 'SELL_UNAVAILABLE' }; },
-  async getOffRampStatus() { return { ok: false, code: 'SELL_UNAVAILABLE' }; }
+  }
+});
+
+/**
+ * ProviderRegistry (spec §15). Ramp is Provider #1; future providers are
+ * appended here and compete inside the router on real quotes — never on a
+ * hardcoded "always cheapest" assumption.
+ */
+export const ProviderRegistry = Object.freeze({
+  providers: Object.freeze([RampNetworkHostedCheckoutProvider]),
+  list() { return this.providers.map((provider) => provider.getCapabilities()); },
+  get(id) { return this.providers.find((provider) => provider.id === String(id || '').toLowerCase()) || null; }
 });
 
 /** ProviderRouter evaluates all inputs rather than hardcoding a redirect. */
 export const ProviderRouter = Object.freeze({
   async route(input = {}) {
-    const candidate = ChangeNowHostedCheckoutProvider;
-    const capability = candidate.getCapabilities();
-    if (String(input.side || 'BUY').toUpperCase() === 'SELL') {
-      return { ok: false, code: 'SELL_UNAVAILABLE', candidates: [{ provider: candidate.id, available: false, reason: 'OFF_RAMP_NOT_CONTRACTED' }] };
+    const sell = String(input.side || 'BUY').toUpperCase() === 'SELL';
+    const candidates = [];
+    for (const provider of ProviderRegistry.providers) {
+      const capability = provider.getCapabilities();
+      const eligible = sell ? capability.offRamp : capability.onRamp;
+      candidates.push({ provider: provider.id, available: Boolean(eligible), reasons: eligible ? [] : (capability.prerequisites?.length ? capability.prerequisites : [sell ? 'OFF_RAMP_NOT_CONFIGURED' : 'ON_RAMP_NOT_CONFIGURED']) });
+      if (eligible) return { ok: true, provider, capability, candidates };
     }
-    if (!capability.available) return { ok: false, code: 'PROVIDER_UNAVAILABLE', candidates: [{ provider: candidate.id, available: false, reasons: capability.prerequisites }] };
-    return { ok: true, provider: candidate, capability };
+    return { ok: false, code: sell ? 'SELL_UNAVAILABLE' : 'PROVIDER_UNAVAILABLE', candidates };
   }
 });
 
 export async function getBuySellCapabilities() {
-  const capability = ChangeNowHostedCheckoutProvider.getCapabilities();
+  const providers = ProviderRegistry.list();
   return {
     schema: BUY_SELL_SCHEMA,
     fbtFee: FBT_TRADING_FEE,
-    providers: [capability],
-    buyAvailable: capability.available,
-    sellAvailable: false,
+    providers,
+    buyAvailable: providers.some((capability) => capability.onRamp),
+    sellAvailable: providers.some((capability) => capability.offRamp),
     storage: { durable: upstashConfigured(), type: upstashConfigured() ? 'upstash-redis' : null },
     noCexApi: true,
     custody: 'NON_CUSTODIAL',
@@ -208,19 +234,38 @@ export async function getBuySellCapabilities() {
   };
 }
 
-export async function listAssets({ side = 'BUY' } = {}) {
-  const caps = ChangeNowHostedCheckoutProvider.getCapabilities();
-  if (String(side).toUpperCase() === 'SELL') return { schema: BUY_SELL_SCHEMA, available: false, error: 'SELL_UNAVAILABLE', assets: [] };
+export async function listAssets({ side = 'BUY', fiatCurrency = 'USD' } = {}) {
+  const listed = await RampNetworkHostedCheckoutProvider.listAssets({ side, fiatCurrency });
+  if (!listed.ok) {
+    return { schema: BUY_SELL_SCHEMA, available: false, error: listed.code || 'PROVIDER_UNAVAILABLE', assets: [] };
+  }
   return {
     schema: BUY_SELL_SCHEMA,
-    available: caps.available,
-    assets: []
+    available: true,
+    provider: RAMP_PROVIDER_ID,
+    limits: listed.meta ? { min: listed.meta.minPurchaseAmount, max: listed.meta.maxPurchaseAmount, currency: listed.meta.currencyCode } : null,
+    assets: listed.rows.map((row) => ({
+      asset: row.asset,
+      name: row.name,
+      network: row.network,
+      chainId: row.chainId,
+      native: row.native,
+      minPurchaseAmount: row.minPurchaseAmount,
+      maxPurchaseAmount: row.maxPurchaseAmount,
+      logoUrl: row.logoUrl
+    }))
   };
 }
 
 export async function listNetworks({ asset, side = 'BUY' } = {}) {
-  if (String(side).toUpperCase() === 'SELL') return { schema: BUY_SELL_SCHEMA, available: false, error: 'SELL_UNAVAILABLE', networks: [] };
-  return { schema: BUY_SELL_SCHEMA, available: false, networks: [] };
+  const listed = await listAssets({ side });
+  if (!listed.available) return { schema: BUY_SELL_SCHEMA, available: false, error: listed.error, networks: [] };
+  const wanted = String(asset || '').trim().toUpperCase();
+  const networks = listed.assets
+    .filter((row) => !wanted || row.asset === wanted)
+    .map((row) => ({ network: row.network, chainId: row.chainId }));
+  const unique = [...new Map(networks.map((row) => [row.network, row])).values()];
+  return { schema: BUY_SELL_SCHEMA, available: true, networks: unique };
 }
 
 export async function checkBuySellEligibility(input) {
@@ -271,14 +316,18 @@ async function completeOperation(claim, result) {
 }
 
 export async function createBuySellOrder(input, idempotencyKey) {
-  const capability = ChangeNowHostedCheckoutProvider.getCapabilities();
-  if (!capability.available) return { ok: false, status: 503, body: { error: 'PROVIDER_REQUIRES_INTEGRATION', prerequisites: capability.prerequisites } };
+  const routed = await ProviderRouter.route({ side: 'BUY' });
+  const sellRouted = routed.ok ? null : await ProviderRouter.route({ side: 'SELL' });
+  if (!routed.ok && !sellRouted?.ok) {
+    const capability = RampNetworkHostedCheckoutProvider.getCapabilities();
+    return { ok: false, status: 503, body: { error: 'PROVIDER_REQUIRES_INTEGRATION', prerequisites: capability.prerequisites } };
+  }
   const quoteId = String(input?.quoteId || '');
   const quoteToken = String(input?.quoteAccessToken || '');
   const quote = await storeGet(quoteKey(quoteId), null);
   if (!quote || !constantTokenMatch(quoteToken, quote.accessTokenHash)) return { ok: false, status: 404, body: { error: 'QUOTE_NOT_FOUND' } };
   if (Date.now() >= Date.parse(quote.expiresAt)) return { ok: false, status: 409, body: { error: 'QUOTE_EXPIRED' } };
-  const destination = validateDestination(input?.walletAddress, findAsset(quote.asset, quote.network));
+  const destination = validateDestination(input?.walletAddress, { chainId: quote.chainId });
   if (!destination.ok || destination.address !== quote.walletAddress) return { ok: false, status: 400, body: { error: 'ADDRESS_INVALID' } };
   const fingerprint = h(JSON.stringify({ quoteId, walletAddress: destination.address, side: quote.side }));
   const claim = await claimOperation(destination.address, idempotencyKey, 'order', fingerprint);
@@ -286,6 +335,7 @@ export async function createBuySellOrder(input, idempotencyKey) {
   if (claim.replay) return { ok: true, status: 200, body: claim.result };
 
   const accessToken = token();
+  const webhookAuth = token();
   const now = new Date().toISOString();
   const order = {
     schema: BUY_SELL_SCHEMA,
@@ -296,20 +346,24 @@ export async function createBuySellOrder(input, idempotencyKey) {
     asset: quote.asset,
     network: quote.network,
     chainId: quote.chainId,
+    providerAssetId: quote.providerAssetId,
     tokenContract: quote.tokenContract,
     tokenDecimals: quote.tokenDecimals,
     native: quote.native,
     fiatCurrency: quote.fiatCurrency,
     fiatAmount: quote.fiatAmount,
     cryptoAmount: quote.cryptoAmount,
+    cryptoAmountUnits: quote.cryptoAmountUnits ?? null,
     walletAddress: quote.walletAddress,
     country: quote.country,
     paymentMethod: quote.paymentMethod,
     provider: quote.provider,
+    checkoutMode: CHECKOUT_MODE,
     quoteId: quote.quoteId,
     paymentSessionId: null,
     providerReference: null,
     txHash: null,
+    explorerTxUrl: null,
     status: 'AWAITING_CONFIRMATION',
     paymentStatus: 'NOT_STARTED',
     settlementStatus: 'NOT_STARTED',
@@ -321,9 +375,15 @@ export async function createBuySellOrder(input, idempotencyKey) {
     networkFee: quote.networkFee,
     spread: quote.spread,
     totalPayable: quote.totalPayable,
+    fiatPayout: quote.fiatPayout ?? null,
     createdAt: now,
     updatedAt: now,
-    accessTokenHash: h(accessToken)
+    accessTokenHash: h(accessToken),
+    /* Correlates the provider's signed settlement webhook with this order.
+       Authenticity of the callback itself comes from the provider's ECDSA
+       body signature — this token only pairs callback and order. */
+    webhookAuth,
+    webhookAuthHash: h(webhookAuth)
   };
   await storeSet(orderKey(order.orderId), order);
   await appendAudit(order.orderId, 'BUY_CREATED', { requestId: order.requestId, quoteId, provider: order.provider });
@@ -338,10 +398,13 @@ function validateOrderAccess(order, provided) {
 }
 
 export async function createBuySellCheckout(orderId, orderAccessToken, input, idempotencyKey) {
-  const capability = ChangeNowHostedCheckoutProvider.getCapabilities();
-  if (!capability.available) return { ok: false, status: 503, body: { error: 'PROVIDER_REQUIRES_INTEGRATION', prerequisites: capability.prerequisites } };
   const order = await storeGet(orderKey(orderId), null);
   if (!validateOrderAccess(order, orderAccessToken)) return { ok: false, status: 404, body: { error: 'ORDER_NOT_FOUND' } };
+  const routed = await ProviderRouter.route({ side: order.side });
+  if (!routed.ok || routed.provider.id !== order.provider) {
+    const capability = ProviderRegistry.get(order.provider)?.getCapabilities() || null;
+    return { ok: false, status: 503, body: { error: 'PROVIDER_REQUIRES_INTEGRATION', prerequisites: capability?.prerequisites ?? [] } };
+  }
   if (order.status === 'COMPLETED') return { ok: false, status: 409, body: { error: 'ORDER_COMPLETED' } };
   if (order.status !== 'AWAITING_CONFIRMATION') return { ok: false, status: 409, body: { error: 'ORDER_NOT_READY' } };
   if (input?.confirmed !== true) return { ok: false, status: 400, body: { error: 'CONFIRMATION_REQUIRED' } };
@@ -357,12 +420,12 @@ export async function createBuySellCheckout(orderId, orderAccessToken, input, id
   if (!claim.ok) return { ok: false, status: claim.code === 'REQUEST_IN_PROGRESS' ? 409 : 400, body: { error: claim.code } };
   if (claim.replay) return { ok: true, status: 200, body: claim.result };
 
-  const provider = ChangeNowHostedCheckoutProvider;
+  const provider = routed.provider;
   try {
     order.status = 'CHECKOUT_CREATED';
     order.updatedAt = new Date().toISOString();
     await storeSet(orderKey(order.orderId), order);
-    const session = await provider.createCheckoutSession(order);
+    const session = await provider.createCheckoutSession(order, { webhookAuth: order.webhookAuth || null });
     if (!session.ok) {
       order.status = 'UNKNOWN';
       order.paymentStatus = 'UNKNOWN';
@@ -453,7 +516,15 @@ export async function verifyEvmSettlement(order) {
     const required = Math.max(1, Number(process.env.BUY_SELL_MIN_CONFIRMATIONS || 3));
     if (confirmations < required) return { ok: false, code: 'TX_CONFIRMING', confirmations, required, blockNumber };
     const recipient = getAddress(order.walletAddress);
-    const expectedAmount = decimalToUnits(order.settlementCryptoAmount ?? order.expectedCryptoAmount, order.tokenDecimals);
+    /* Prefer the provider-attested settlement units delivered in the signed
+       webhook; fall back to the quoted expectation. Either way the number on
+       the receipt itself is what decides. */
+    let expectedAmount = null;
+    if (order.settlementCryptoUnits != null) {
+      try { expectedAmount = BigInt(String(order.settlementCryptoUnits)); } catch { expectedAmount = null; }
+    } else {
+      expectedAmount = decimalToUnits(order.settlementCryptoAmount ?? order.expectedCryptoAmount ?? order.cryptoAmount, order.tokenDecimals);
+    }
     if (expectedAmount == null) return { ok: false, code: 'SETTLEMENT_AMOUNT_INVALID' };
     let amount = null;
     if (order.native) {
@@ -497,6 +568,7 @@ async function writeVerification(order, verification) {
     order.verificationStatus = 'VERIFIED';
     order.completedAt = order.updatedAt;
     order.blockchainVerification = verification;
+    order.explorerTxUrl = order.explorerTxUrl || explorerTxUrl(verification.chainId, verification.txHash);
     await storeSet(orderKey(order.orderId), order);
     await storeSet(`buy-sell:blockchain-verification:${order.orderId}`, verification);
     await appendAudit(order.orderId, 'BUY_COMPLETED', { txHash: verification.txHash, blockNumber: verification.blockNumber });
@@ -563,18 +635,107 @@ export async function cancelBuySellOrder(orderId, orderAccessToken) {
 }
 
 /**
- * Callback processing is deliberately disabled. ChangeNOW Fiat's official
- * callback signature, event and settlement-status contract has not been
- * supplied or independently verified. Browser returns and guessed callback
- * fields can never settle an order.
+ * Provider settlement webhook (Ramp Network).
+ *
+ * Ramp signs every webhook body with its ECDSA key (X-Body-Signature, base64
+ * DER, sha256 over the stable-stringified JSON). Processing is enabled only
+ * when the deployment has configured Ramp's published public key — an
+ * unverifiable callback is rejected, never parsed as settlement evidence.
+ *
+ * A verified RELEASED event still does NOT complete the order. It records
+ * the provider-reported transaction hash and settlement amount, then the
+ * independent on-chain verifier must confirm chain, recipient, token, amount
+ * and confirmations before the order can become COMPLETED.
  */
-export async function handleBuySellProviderWebhook() {
-  return {
-    ok: false,
-    status: 503,
-    body: {
-      error: 'PROVIDER_REQUIRES_INTEGRATION',
-      detail: 'OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'
+export async function handleBuySellProviderWebhook({ providerId, rawBody, signature, query } = {}) {
+  if (String(providerId || '').toLowerCase() !== RAMP_PROVIDER_ID) {
+    return { ok: false, status: 404, body: { error: 'PROVIDER_UNKNOWN' } };
+  }
+  const config = rampConfig();
+  if (!config.webhookPublicKeyPem) {
+    return {
+      ok: false,
+      status: 503,
+      body: { error: 'PROVIDER_REQUIRES_INTEGRATION', detail: 'RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED' }
+    };
+  }
+  let event = null;
+  try {
+    event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody ?? ''));
+  } catch {
+    return { ok: false, status: 400, body: { error: 'WEBHOOK_BODY_INVALID' } };
+  }
+  if (!verifyRampWebhookSignature(event, signature, config.webhookPublicKeyPem)) {
+    return { ok: false, status: 401, body: { error: 'WEBHOOK_SIGNATURE_INVALID' } };
+  }
+
+  const orderId = String(query?.orderId || '');
+  const hookToken = String(query?.hookToken || '');
+  const order = await storeGet(orderKey(orderId), null);
+  if (!order || !order.webhookAuthHash || !constantTokenMatch(hookToken, order.webhookAuthHash)) {
+    /* Signed but uncorrelatable: acknowledge without acting so Ramp does not
+       retry forever, and record nothing — no order may be mutated blindly. */
+    return { ok: true, status: 200, body: { received: true, matched: false } };
+  }
+  if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+    return { ok: true, status: 200, body: { received: true, matched: true } };
+  }
+
+  const mapped = mapRampWebhookEvent(event);
+  order.updatedAt = new Date().toISOString();
+  if (mapped.providerReference) order.providerReference = mapped.providerReference;
+  await appendAudit(order.orderId, 'PROVIDER_WEBHOOK', { kind: mapped.kind, purchaseStatus: mapped.purchaseStatus });
+
+  if (mapped.kind === 'FAILED') {
+    order.status = 'PAYMENT_FAILED';
+    order.paymentStatus = 'FAILED';
+    order.settlementStatus = 'FAILED';
+    await storeSet(orderKey(order.orderId), order);
+    publish('BUY_FAILED', { orderId: order.orderId, reason: mapped.purchaseStatus || 'PROVIDER_REPORTED_FAILURE' }, { source: 'buy-sell' });
+    return { ok: true, status: 200, body: { received: true, matched: true } };
+  }
+
+  if (mapped.kind === 'RELEASED') {
+    /* The provider must be settling to the wallet the order was created for.
+       A mismatch is quarantined for manual review — never silently accepted. */
+    if (mapped.receiverAddress) {
+      try {
+        if (getAddress(mapped.receiverAddress) !== getAddress(order.walletAddress)) {
+          order.status = 'MANUAL_REVIEW';
+          order.verificationStatus = 'FAILED';
+          await storeSet(orderKey(order.orderId), order);
+          await appendAudit(order.orderId, 'RECIPIENT_MISMATCH_QUARANTINED');
+          return { ok: true, status: 200, body: { received: true, matched: true } };
+        }
+      } catch { /* non-EVM receiver formats are left to on-chain verification */ }
     }
-  };
+    order.paymentStatus = 'CONFIRMED';
+    order.settlementStatus = 'PROVIDER_REPORTED';
+    if (mapped.finalTxHash && txHashPattern.test(mapped.finalTxHash)) {
+      order.txHash = mapped.finalTxHash;
+      order.explorerTxUrl = explorerTxUrl(order.chainId, order.txHash);
+    }
+    if (mapped.cryptoAmountUnits && /^\d+$/.test(mapped.cryptoAmountUnits)) {
+      order.settlementCryptoUnits = mapped.cryptoAmountUnits;
+    }
+    order.status = order.txHash ? 'TX_DETECTED' : 'SETTLEMENT_PENDING';
+    await storeSet(orderKey(order.orderId), order);
+    publish('PAYMENT_CONFIRMED', { orderId: order.orderId, provider: order.provider }, { source: 'buy-sell' });
+    /* Attempt on-chain verification immediately; failure keeps the order in
+       an honest pending/confirming state which polling will retry. */
+    if (order.txHash && String(order.side).toUpperCase() === 'BUY') {
+      const verification = await verifyEvmSettlement(order);
+      await writeVerification(order, verification);
+    }
+    return { ok: true, status: 200, body: { received: true, matched: true } };
+  }
+
+  /* PENDING / UNKNOWN: provider payment state moved but crypto has not been
+     released. This never advances beyond PAYMENT_PENDING. */
+  if (order.status === 'AWAITING_CONFIRMATION' || order.status === 'CHECKOUT_CREATED' || order.status === 'PAYMENT_PENDING') {
+    order.status = 'PAYMENT_PENDING';
+    order.paymentStatus = 'PENDING';
+    await storeSet(orderKey(order.orderId), order);
+  }
+  return { ok: true, status: 200, body: { received: true, matched: true } };
 }
