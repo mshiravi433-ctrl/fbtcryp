@@ -6,6 +6,7 @@
  */
 
 import { APP_CAPABILITIES } from '../appCapabilities.js';
+import { routeForIntent } from '../moduleRouter.js';
 
 export const NAV_AGENT_SCHEMA = 'fbt.nav-agent.v1';
 
@@ -21,8 +22,10 @@ const PERSIAN_ROUTE_ALIASES = Object.freeze({
   'بازار': '/market',
   'سواپ': '/swap',
   'بریج': '/bridge',
+  'پل': '/bridge',
   'سیگنال': '/signals',
   'هوشمند': '/smart-money',
+  'اسمارت': '/smart-money',
   'وام': '/loan',
   'سود': '/earn',
   'کاوش': '/explore',
@@ -31,9 +34,14 @@ const PERSIAN_ROUTE_ALIASES = Object.freeze({
   'تنظیمات': '/settings',
   'سفارش': '/orders',
   'فیوچرز': '/perp',
+  'پرپچوال': '/perp',
   'سهام': '/stocks',
+  'افق جهانی': '/invest',
+  'فارکس': '/invest',
+  'امتیاز': '/rewards',
   'آرامش': '/explore',
-  'اینتنت': '/intent'
+  'اینتنت': '/intent',
+  'پی تو پی': '/p2p'
 });
 
 export function resolveRoute(input) {
@@ -122,28 +130,12 @@ export function createNavigationAgent({ navigateFn = null, eventBus = null } = {
     },
     
     async handleIntent(intent, context = {}) {
-      // Spec §27 examples
-      const type = intent?.type || intent;
-      
-      if (type === 'NEWS_SEARCH' || /اخبار|news/i.test(intent?.message || '')) {
-        return this.navigate({ route: '/news' });
-      }
-      if (type === 'FARM' || /فارم|farm/i.test(intent?.message || '')) {
-        return this.navigate({ route: '/farm' });
-      }
-      if (type === 'NAVIGATION' && intent.navigation) {
-        return this.navigate({ route: intent.navigation.route });
-      }
-      if (intent?.entities?.targetPage) {
-        return this.navigate({ route: intent.entities.targetPage });
-      }
-      
-      // Try to resolve from message
-      const route = resolveRoute(intent?.message || intent?.content || '');
-      if (route) {
-        return this.navigate({ route });
-      }
-      
+      const routed = routeForIntent(intent, { openPage: true });
+      if (routed) return this.navigate({ route: routed });
+      if (intent?.navigation?.route) return this.navigate({ route: intent.navigation.route });
+      if (intent?.entities?.targetPage) return this.navigate({ route: intent.entities.targetPage });
+      const route = resolveRoute(intent?.raw || intent?.message || intent?.content || '');
+      if (route) return this.navigate({ route });
       return { ok: false, error: 'NO_NAVIGATION_INTENT' };
     },
     

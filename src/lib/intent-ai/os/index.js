@@ -65,6 +65,7 @@ export * from './sharedState.js';
 export * from './tokenResolver.js';
 export * from './opportunityScanner.js';
 export * from './toolExecutor.js';
+export * from './moduleRouter.js';
 
 // Agents
 export * from './agents/intentAgent.js';
@@ -82,6 +83,7 @@ export * from './agents/executionAgent.js';
 // Unified OS Class
 import { buildContext, updateContext, getCurrentPageContext } from './contextEngine.js';
 import { understandIntent, extractNavigationIntent, runAcceptanceTests } from './intentUnderstanding.js';
+import { routeForIntent, wantsPageOpen } from './moduleRouter.js';
 import { resolveToolsForIntent, getRelevantToolsForMessage, validateToolInput, getTool } from './toolRegistry.js';
 import { createIntentAgent } from './agents/intentAgent.js';
 import { createNavigationAgent } from './agents/navigationAgent.js';
@@ -217,19 +219,31 @@ export function createIntentOS({
         // 4. PLAN via orchestrator
         const plan = await orchestrator.plan({ intent, context });
         
-        // 5. EXECUTE if read-only or navigation/media (no confirmation)
+        // 5. EXECUTE if read-only, page handoff, or navigation/media
         let executionResult = null;
         let verification = null;
-        
-        if (plan.readOnly || intent.type === 'NAVIGATION' || intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC' || intent.type === 'NEWS_SEARCH' || intent.readOnly) {
-          // Direct execution for navigation/media/read-only
+        const stayInChat = [
+          'PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
+          'RISK_ANALYSIS', 'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL'
+        ].includes(intent.type);
+        const openPage = wantsPageOpen(intent.raw) || !stayInChat;
+        const handoffRoute = routeForIntent(intent, { openPage });
+
+        if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
+          executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
+        } else if (handoffRoute && (openPage || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH')) {
+          if (liveNavigation?.navigate) {
+            await liveNavigation.navigate({ route: handoffRoute });
+          } else {
+            await navAgent.handleIntent({ ...intent, navigation: { route: handoffRoute } }, context);
+          }
+          executionResult = { ok: true, route: handoffRoute, handoff: true };
+        } else if (plan.readOnly || intent.readOnly || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
           if (intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
             executionResult = await navAgent.handleIntent(intent, context);
             if (executionResult.ok && executionResult.route && liveNavigation?.navigate) {
               await liveNavigation.navigate({ route: executionResult.route });
             }
-          } else if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
-            executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
           } else {
             const toolRun = await executeIntentTools({ intent, context, services: mergedServices });
             const agentResults = {};

@@ -4,6 +4,8 @@
  * Missing price ≠ $0. Connected-but-empty ≠ disconnected.
  */
 
+import { pageName } from './moduleRouter.js';
+
 const LEAK_PATTERNS = [
   /Prepared\s+\d+\s+real\s+action\(s\)\.?/gi,
   /\b\d+\s+action\(s\)\b/gi,
@@ -123,26 +125,23 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
   const connected = isConnected(context, results);
   const hydrating = isHydrating(context, results);
 
-  if (type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
-    const route = results.route || plan?.actions?.[0]?.input?.route || '/news';
-    const routeNames = {
-      '/news': lang === 'fa' ? 'اخبار' : 'News',
-      '/farm': lang === 'fa' ? 'فارم' : 'Farm',
-      '/wallet': lang === 'fa' ? 'کیف پول' : 'Wallet',
-      '/portfolio': lang === 'fa' ? 'پرتفوی' : 'Portfolio',
-      '/market': lang === 'fa' ? 'بازار' : 'Market',
-      '/swap': lang === 'fa' ? 'سواپ' : 'Swap',
-      '/bridge': lang === 'fa' ? 'بریج' : 'Bridge',
-      '/loan': lang === 'fa' ? 'وام' : 'Lending',
-      '/earn': lang === 'fa' ? 'سود' : 'Earn',
-      '/perp': lang === 'fa' ? 'فیوچرز' : 'Futures'
-    };
-    const name = routeNames[route] || route;
-    return {
-      message: lang === 'fa' ? `حتماً، صفحه ${name} را باز کردم.` : `Sure, opened ${name} page.`,
-      ui: { type: 'TEXT' },
-      navigated: route
-    };
+  if (results.route || results.handoff || type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
+    const route = results.route || plan?.actions?.[0]?.input?.route || intent?.navigation?.route;
+    if (route) {
+      const name = pageName(route, locale);
+      const e = intent?.entities || {};
+      const bits = [e.amount, e.fromToken || e.token, e.toToken, e.toAddress].filter(Boolean);
+      const extra = bits.length
+        ? (lang === 'fa' ? ` مقادیر آماده‌شده: ${bits.join(' → ')}.` : ` Prefill: ${bits.join(' → ')}.`)
+        : '';
+      return {
+        message: lang === 'fa'
+          ? `صفحه ${name} را باز کردم.${extra} اگر این کار پول جابه‌جا می‌کند، تأیید و امضا همان‌جا انجام می‌شود — در چت اجرا نمی‌کنم.`
+          : `Opened ${name}.${extra} Money-moving confirmations stay on that page — I will not execute them in chat.`,
+        ui: { type: 'TEXT' },
+        navigated: route
+      };
+    }
   }
 
   if (type === 'OPEN_CALM' || type === 'PLAY_MUSIC') {
@@ -272,7 +271,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
-  if (type === 'YIELD_DISCOVERY' || type === 'FARM' || type === 'INVESTMENT_PLAN' || type === 'LEND' || type === 'STAKING') {
+  if (type === 'YIELD_DISCOVERY' || type === 'INVESTMENT_PLAN' || type === 'STAKING') {
     const scan = results.yieldOpportunities || results.opportunities || {};
     const opps = Array.isArray(scan.opportunities) ? scan.opportunities
       : (Array.isArray(scan) ? scan : (Array.isArray(results.opportunities) ? results.opportunities : []));

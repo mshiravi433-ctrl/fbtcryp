@@ -170,7 +170,7 @@ export function createOrchestrator({
         agentsList.push('research-agent', 'navigation-agent');
       } else if (['OPEN_CALM', 'PLAY_MUSIC'].includes(type)) {
         agentsList.push('media-agent', 'navigation-agent');
-      } else if (['NAVIGATION'].includes(type)) {
+      } else if (['NAVIGATION', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA', 'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'ADD_TOKEN', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS', 'INTENT_OS', 'WALLET_CONNECT', 'WALLET_DISCONNECT', 'SWITCH_NETWORK', 'BORROW'].includes(type)) {
         agentsList.push('navigation-agent');
       } else if (['WALLET_BALANCE'].includes(type)) {
         agentsList.push('wallet-agent', 'portfolio-agent');

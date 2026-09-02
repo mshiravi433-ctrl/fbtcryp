@@ -406,6 +406,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
       // If local OS handled it completely (read-only, nav, media) — use it directly
       const isLocalHandled = osResult.ok && (
+        osResult.intent?.readOnly === true ||
+        osResult.execution?.handoff === true ||
+        Boolean(osResult.navigated) ||
         osResult.intent?.type === 'NAVIGATION' ||
         osResult.intent?.type === 'NEWS_SEARCH' ||
         osResult.intent?.type === 'OPEN_CALM' ||

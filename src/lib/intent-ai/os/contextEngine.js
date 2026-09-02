@@ -337,7 +337,14 @@ export function getCurrentPageContext(route) {
     '/orders': { page: 'orders', tab: 'active', canExecute: ['cancel'] },
     '/perp': { page: 'futures', tab: 'markets', canExecute: ['open', 'close'] },
     '/stocks': { page: 'stocks', tab: 'markets', canExecute: ['trade'] },
-    '/earn': { page: 'yield', tab: 'opportunities', canExecute: ['deposit'] }
+    '/earn': { page: 'yield', tab: 'opportunities', canExecute: ['deposit'] },
+    '/solana': { page: 'solana-swap', tab: 'swap', canExecute: ['swap', 'addToken'] },
+    '/invest': { page: 'horizon', tab: 'markets', canExecute: ['invest'] },
+    '/dydx': { page: 'dydx', tab: 'markets', canExecute: ['trade'] },
+    '/ostium': { page: 'ostium', tab: 'markets', canExecute: ['trade'] },
+    '/p2p': { page: 'p2p', tab: 'send', canExecute: ['send'] },
+    '/rewards': { page: 'rewards', tab: 'points', canExecute: ['view'] },
+    '/buy': { page: 'buy-sell', tab: 'buy', canExecute: ['buy', 'sell'] }
   };
   
   return pageMap[r] || { page: 'general', tab: 'overview', canExecute: [] };
