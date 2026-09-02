@@ -11169,3 +11169,58 @@ button.settings-quick-action {
   background: rgba(251, 191, 36, .08);
   border-color: rgba(251, 191, 36, .25);
 }
+
+/* Farm DeFi Yield Center additions — extends the approved farm visual system. */
+.farm-secondary-filters {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 2px 1px 9px;
+  margin-bottom: 7px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.farm-secondary-filters::-webkit-scrollbar { display: none; }
+.farm-secondary-filters .tag { flex: 0 0 auto; min-height: 36px; }
+.farm-controls { display: grid; gap: 9px; margin-bottom: 14px; }
+.farm-amount-row { gap: 6px; flex-wrap: wrap; }
+.farm-pool-grid,
+.farm-market-grid,
+.farm-strategy-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.farm-pool-selected { border-color: color-mix(in srgb, var(--rgb-1) 62%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--rgb-1) 18%, transparent); }
+.farm-pool-head { gap: 10px; align-items: flex-start; }
+.farm-apy-wrap { text-align: end; flex: 0 0 auto; min-width: 76px; }
+.farm-apy-label { font-size: 10.5px; line-height: 1.35; }
+.farm-card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.farm-metrics-grid,
+.farm-economics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 11px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: var(--line); }
+.farm-metric { min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 9px; background: var(--bg-panel); font-size: 11px; }
+.farm-metric > span:last-child { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: start; }
+.farm-metric-strong { color: var(--rgb-4) !important; font-weight: 750; }
+.farm-source-line { margin: 8px 1px 0; font-size: 10.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.farm-pair-note { margin: 8px 1px 0; line-height: 1.6; font-size: 10.8px; }
+.farm-unavailable-action { display: inline-flex; align-items: center; padding: 8px 2px; color: var(--text-3); font-size: 10.8px; }
+.farm-market-label { color: var(--text-2); font-size: 11.5px; font-weight: 700; margin: 5px 2px 6px; }
+.farm-details { margin-top: 14px; scroll-margin-top: 80px; }
+.farm-risk-grid { display: grid; gap: 1px; border: 1px solid var(--line); background: var(--line); border-radius: 11px; overflow: hidden; margin-top: 10px; }
+.farm-risk-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--bg-panel); color: var(--text-2); font-size: 11.5px; }
+.farm-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 11px; }
+.farm-action-grid .farm-btn { width: 100%; }
+.farm-action-grid .farm-btn:disabled { opacity: .52; cursor: not-allowed; }
+.farm-positions { margin-top: 14px; }
+
+@media (min-width: 720px) {
+  .farm-pool-grid,
+  .farm-market-grid,
+  .farm-strategy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .farm-controls { grid-template-columns: minmax(220px, 1fr) auto; align-items: end; }
+  .farm-search { margin: 0; }
+  .farm-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .farm-economics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .farm-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .farm-tabs button { min-width: 0; width: 100%; }
+  .farm-action-grid { grid-template-columns: minmax(0, 1fr); }
+  .farm-amt-input { width: 100%; flex-basis: 100%; }
+}

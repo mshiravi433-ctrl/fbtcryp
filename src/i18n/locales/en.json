@@ -1169,7 +1169,7 @@
   },
   "farm": {
     "title": "Farm",
-    "subtitle": "Enter here. Your yield stays yours. We earn only on the route.",
+    "subtitle": "Native yield, liquidity pools and strategies — without leaving FBT Swap.",
     "whatTitle": "How farming works",
     "whatBody": "You deposit into a pool and earn a share of what it makes: interest from borrowers, a cut of every swap, or rewards for helping secure a network. All of it is paid by someone doing something real — which is why a pool advertising 900% a year is not paying you out of revenue.",
     "ilTitle": "Impermanent loss — read before depositing",
@@ -1220,7 +1220,10 @@
     "tab": {
       "inapp": "In app",
       "market": "Market",
-      "trade": "Trade"
+      "trade": "Trade",
+      "recommended": "Recommended",
+      "strategies": "Strategies",
+      "pools": "Pools"
     },
     "month": "mo",
     "day": "d",
@@ -1264,6 +1267,92 @@
       "builderFee": "builder · 5 bps",
       "refFee": "referral",
       "vaultFee": "in-app · vault fee"
+    },
+    "yieldCenterTitle": "FBT Yield & Liquidity Center",
+    "estimatedApy": "Estimated APY",
+    "apr": "Current APR",
+    "volume24h": "24h volume",
+    "rewardApr": "Reward APR",
+    "fbtFee": "FBT fee",
+    "netBeforeGas": "Net before gas",
+    "sourceLine": "Source: {{source}} · updated {{time}}",
+    "viewAnalytics": "View analytics",
+    "statusUnavailable": "UNAVAILABLE",
+    "poolExecutionUnavailable": "Direct LP contract execution is not verified for this adapter. Unsupported actions stay unavailable instead of opening an external site.",
+    "poolAnalytics": "Pool analytics",
+    "amount": "Amount",
+    "protocol": "Protocol",
+    "network": "Network",
+    "grossApy": "Estimated gross APY",
+    "gasEstimate": "Gas estimate",
+    "protocolFees": "Protocol costs",
+    "estimatedNetApy": "Estimated net APY",
+    "netPendingQuote": "A verified gas and protocol quote is required before net APY can be calculated. No estimate is invented.",
+    "readOnly": "Read-only mode",
+    "myFarms": "My farms",
+    "positionsIntro": "Connected-wallet LP, staking and vault performance",
+    "positionsUnavailable": "No verified position indexer is integrated for these pools yet. No position or profit is being inferred from the wallet address.",
+    "connectForPositions": "Connect the central wallet to read supported positions. Browsing and comparison remain available.",
+    "recommendedFarms": "Recommended farms",
+    "scoreExplanation": "Ranked by sustainable yield, TVL, reward quality and rate stability — never by APY alone.",
+    "defiMarket": "DeFi farm market",
+    "yieldStrategies": "Yield strategies",
+    "strategyDisclaimer": "Estimated and historical rates are variable, not guaranteed profit. Strategy cards use live eligible pools only.",
+    "poolCount": "{{count}} pools",
+    "noneForFilter": "No live, verified opportunities match this filter.",
+    "filters": "Yield filters",
+    "nativeCustodyNotice": "FBT Swap is non-custodial. Discovery and analytics happen here. A transaction is offered only when a verified protocol adapter can prepare, simulate and verify it through the central wallet; otherwise the action is marked unavailable.",
+    "riskDisclosureTitle": "Variable yield and contract risk",
+    "riskDisclosure": "APY can change. Smart-contract, protocol, liquidity, oracle, reward-token, bridge and impermanent-loss risks may cause loss of principal. Nothing here guarantees profit.",
+    "freshness": {
+      "FRESH": "Fresh",
+      "STALE": "Stale",
+      "UNAVAILABLE": "Unavailable"
+    },
+    "category": {
+      "all": "All",
+      "stable": "Stable",
+      "blueChip": "Blue chip",
+      "highYield": "High yield",
+      "lowRisk": "Low risk",
+      "autoCompound": "Auto compound",
+      "lp": "LP",
+      "staking": "Staking",
+      "vault": "Vault"
+    },
+    "market": {
+      "topTvl": "Top TVL",
+      "topApy": "Top estimated APY",
+      "highestVolume": "Highest volume",
+      "mostStable": "Most stable",
+      "lowestRisk": "Lowest risk"
+    },
+    "strategy": {
+      "stable": "Stable yield",
+      "balanced": "Balanced yield",
+      "highYield": "High yield",
+      "blueChip": "Blue-chip strategy",
+      "lowGas": "Low-gas strategy",
+      "lp": "LP strategy"
+    },
+    "action": {
+      "addLiquidity": "Add liquidity",
+      "removeLiquidity": "Remove liquidity",
+      "stakeLp": "Stake LP",
+      "unstakeLp": "Unstake LP",
+      "claim": "Claim rewards",
+      "compound": "Compound"
+    },
+    "riskFactor": {
+      "smartContract": "Smart-contract risk",
+      "protocol": "Protocol risk",
+      "liquidity": "Liquidity risk",
+      "oracle": "Oracle risk",
+      "impermanentLoss": "Impermanent loss",
+      "rewardToken": "Reward-token risk",
+      "lock": "Lock risk",
+      "bridge": "Bridge risk",
+      "concentration": "Concentration risk"
     }
   },
   "signals": {
