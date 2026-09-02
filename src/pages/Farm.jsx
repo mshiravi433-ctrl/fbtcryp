@@ -13,8 +13,8 @@ import { IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { getYields, pairSwapRoute, pairTokens } from '../lib/yields';
 import {
-  buildYieldStrategies, emitFarmEvent, fbtFeeEngine,
-  normalizeFarmOpportunity
+  buildYieldStrategies, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
+  farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity
 } from '../lib/farmDeFi';
 
 const FARM_TABS = ['recommended', 'market', 'strategies', 'pools'];
@@ -39,6 +39,41 @@ function Metric({ label, value, unavailable, strong }) {
       <span className="faint">{label}</span>
       <span className={`mono ${strong ? 'farm-metric-strong' : ''}`}>{unavailable ? '—' : value}</span>
     </div>
+  );
+}
+
+function ProtocolStatusCard({ protocol, t }) {
+  const status = protocol?.status || 'CONNECTING';
+  const statusLabel = status === 'ACTIVE'
+    ? t('farm.protocolActive')
+    : status === 'UNAVAILABLE' ? t('farm.protocolUnavailable') : t('farm.protocolConnecting');
+  const updated = protocol?.updatedAt
+    ? new Date(protocol.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  return (
+    <motion.section className="card card-rgb card-glow-cyan farm-protocol-card" variants={riseIn} initial="hidden" animate="show">
+      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <div className="row" style={{ gap: 10, alignItems: 'center', minWidth: 0 }}>
+          <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconShield width={22} height={22} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{t('farm.protocolConnected')}</div>
+            <div className="muted" style={{ fontSize: 11.5, margin: '2px 0 0' }}>
+              {FARM_PROTOCOL.name} · {t('farm.protocolMode')}
+            </div>
+          </div>
+        </div>
+        <span className={`pill ${status === 'ACTIVE' ? 'pill-neutral' : status === 'UNAVAILABLE' ? 'pill-down' : 'pill-rgb'}`}>{statusLabel}</span>
+      </div>
+
+      <div className="farm-protocol-meta">
+        <div><span className="faint">{t('farm.protocolSource')}</span><span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span></div>
+        <div><span className="faint">{t('farm.protocolPools')}</span><span className="mono">{protocol?.poolCount ?? 0}</span></div>
+        <div><span className="faint">{t('farm.protocolLastSync')}</span><span className="mono">{updated}</span></div>
+        <div><span className="faint">{t('farm.protocolCapabilities')}</span><span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span></div>
+      </div>
+      {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{protocol.error}</p>}
+    </motion.section>
   );
 }
 
@@ -102,7 +137,16 @@ function PoolCard({ pool, amount, selected, onSelect, onGetTokens, t }) {
 function PoolDetails({ pool, amount, wallet, onGetTokens, t }) {
   const route = pairSwapRoute(pool);
   const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
+  const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: Number(pool.apy), protocolCostApy: 0, gasUsd: null, amountUsd: amount });
   const factors = pool.riskFactors || {};
+  const research = useMemo(() => farmPoolResearch(pool), [pool]);
+  const gross = Number(pool.apy);
+  const netAnalysisApy = Number.isFinite(gross) ? Math.max(-100, gross - (feeYield?.fbtFeeApy || 0)) : null;
+  const realPct = research.realShare == null ? null : Math.round(research.realShare * 100);
+  const rewardPct = research.emissionShare == null ? null : Math.round(research.emissionShare * 100);
+  const mean30 = research.apyMean30d ?? research.unusual?.mean ?? null;
+  const updateTime = pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+
   return (
     <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
       <div className="row-between" style={{ gap: 10 }}>
@@ -110,24 +154,41 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, t }) {
           <p className="section-label" style={{ margin: 0 }}>{t('farm.poolAnalytics')}</p>
           <div className="farm-pool-sym" dir="ltr">{pool.symbol}</div>
         </div>
-        <RiskPill risk={pool.risk} t={t} />
+        <div className="farm-details-head" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="pill pill-neutral">{FARM_PROTOCOL.name}</span>
+          <span className="pill pill-neutral">{t('farm.protocolActive')}</span>
+          <RiskPill risk={pool.risk} t={t} />
+        </div>
       </div>
+
       <div className="farm-economics">
         <Metric label={t('farm.amount')} value={fmtUsd(amount)} />
         <Metric label={t('farm.protocol')} value={pool.project} />
         <Metric label={t('farm.network')} value={pool.chain} />
         <Metric label={t('farm.grossApy')} value={`${pool.apy}%`} />
+        <Metric label={t('farm.protocolFees')} value={t('farm.includedInApy')} />
         <Metric label={t('farm.gasEstimate')} unavailable />
-        <Metric label={t('farm.protocolFees')} unavailable />
         <Metric label={t('farm.fbtFee')} value={`${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`} />
-        <Metric label={t('farm.estimatedNetApy')} unavailable strong />
+        <Metric label={t('farm.estimatedNetApy')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong />
+        <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} />
+        <Metric label={t('farm.rewardYieldShare')} value={rewardPct == null ? null : `${rewardPct}%`} unavailable={rewardPct == null} />
+        <Metric label={t('farm.rateVs30d')} value={mean30 == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null} />
       </div>
-      <p className="notice">{t('farm.netPendingQuote')}</p>
+
+      <p className="notice">{t('farm.analysisActivated')}</p>
+      <p className="faint">{t('farm.netIsAnalysis')}</p>
+
       <div className="farm-risk-grid">
         {Object.entries(factors).map(([key, value]) => (
           <div key={key} className="farm-risk-row"><span>{t(`farm.riskFactor.${key}`)}</span><span className="mono">{t(`farm.risk.${value}`, { defaultValue: value })}</span></div>
         ))}
       </div>
+
+      <div className="farm-source-line faint">
+        {t('farm.sourceLine', { source: research.source, time: updateTime })}
+        {research.freshness && <> · {research.freshness}</>}
+      </div>
+
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{t('farm.getPair')}</button>}
         {['addLiquidity', 'removeLiquidity', 'stakeLp', 'unstakeLp', 'claim', 'compound'].map((action) => (
@@ -224,6 +285,13 @@ export default function Farm() {
   }, [filtered]);
   const strategies = useMemo(() => buildYieldStrategies(filtered, { source: data?.source, updatedAt: data?.at }), [filtered, data]);
 
+  const protocol = useMemo(() => farmProtocolSummary({
+    pools: data?.pools || [],
+    at: data?.at || null,
+    source: data?.source || null,
+    error: error || null
+  }), [data, error]);
+
   const selectTab = (id) => { haptic?.('select'); setSelected(null); setParams({ tab: id }, { replace: true }); };
   const selectPool = (pool) => {
     haptic?.('light'); setSelected(pool);
@@ -249,6 +317,8 @@ export default function Farm() {
         <h1 className="h1">{t('farm.title')}</h1>
         <p className="muted">{t('farm.subtitle')}</p>
       </motion.div>
+
+      <ProtocolStatusCard protocol={protocol} t={t} />
 
       <div className="segmented seg-lg farm-tabs" role="tablist">
         {FARM_TABS.map((id) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => selectTab(id)} style={{ isolation: 'isolate' }}>{tab === id && <SegIndicator id="farmtab" />}{t(`farm.tab.${id}`)}</button>)}
@@ -280,7 +350,7 @@ export default function Farm() {
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
       <InfoBox title={t('farm.riskDisclosureTitle')} tone="warning"><p>{t('farm.riskDisclosure')}</p></InfoBox>
-      <AdBanner slot="farm" />
+      <AdBanner slot="stocks" />
     </PageTransition>
   );
 }

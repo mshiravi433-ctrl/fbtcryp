@@ -39,7 +39,8 @@ const SLOTS = {
   farm: { to: '/farm', hues: ['#00ff9d', '#00e5ff'], inks: ['#008854', '#008392'], icon: '◈' },
   signals: { to: '/signals', hues: ['#7c4dff', '#ff2d95'], inks: ['#6a3ae0', '#e70073'], icon: '✦' },
   p2p: { to: '/p2p', hues: ['#ffb300', '#ff6d00'], inks: ['#9d6e00', '#c55400'], icon: '⇅' },
-  referral: { to: '/earn', hues: ['#ff2d95', '#d500f9'], inks: ['#e70073', '#c800ea'], icon: '★' }
+  referral: { to: '/earn', hues: ['#ff2d95', '#d500f9'], inks: ['#e70073', '#c800ea'], icon: '★' },
+  stocks: { to: '/stocks', hues: ['#00ff9d', '#00b3ff'], inks: ['#006b78', '#5b2fe8'], icon: '↗' }
 };
 
 export default function AdBanner({ slot = 'swap', compact = false, external = null }) {
@@ -193,6 +194,44 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
                 strokeWidth="2.2"
                 animate={{ opacity: [1, 0.5, 1] }}
                 transition={still ? { duration: 0 } : { duration: 2.6, repeat: Infinity }}
+              />
+            </>
+          )}
+
+          {slot === 'stocks' && (
+            <>
+              <motion.path
+                d="M7 30l7-9 6 5 9-12 6 8"
+                stroke={`url(#adg-${slot})`}
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                animate={{ pathLength: [0, 1, 1] }}
+                transition={still ? { duration: 0 } : { duration: 2.8, repeat: Infinity, repeatType: 'reverse' }}
+              />
+              <motion.circle
+                cx="14"
+                cy="21"
+                r="2.6"
+                fill="var(--ad-art-a, var(--ad-a))"
+                animate={{ opacity: [0.45, 1, 0.45] }}
+                transition={still ? { duration: 0 } : { duration: 2.4, repeat: Infinity }}
+              />
+              <motion.circle
+                cx="20"
+                cy="26"
+                r="2.6"
+                fill="var(--ad-art-b, var(--ad-b))"
+                animate={{ opacity: [0.45, 1, 0.45] }}
+                transition={still ? { duration: 0 } : { duration: 2.4, repeat: Infinity, delay }}
+              />
+              <motion.circle
+                cx="29"
+                cy="14"
+                r="2.6"
+                fill="var(--ad-art-a, var(--ad-a))"
+                animate={{ opacity: [0.45, 1, 0.45] }}
+                transition={still ? { duration: 0 } : { duration: 2.4, repeat: Infinity, delay: delay + 0.6 }}
               />
             </>
           )}

@@ -1301,7 +1301,22 @@
     "poolCount": "{{count}} pools",
     "noneForFilter": "No live, verified opportunities match this filter.",
     "filters": "Yield filters",
-    "nativeCustodyNotice": "FBT Swap is non-custodial. Discovery and analytics happen here. A transaction is offered only when a verified protocol adapter can prepare, simulate and verify it through the central wallet; otherwise the action is marked unavailable.",
+    "nativeCustodyNotice": "FBT Swap is non-custodial. The DefiLlama protocol is connected for discovery and analytics; a transaction is only offered when a verified execution adapter can prepare, simulate and verify it through the central wallet.",
+    "protocolConnected": "Protocol connected",
+    "protocolActive": "Active",
+    "protocolConnecting": "Connecting",
+    "protocolUnavailable": "Unavailable",
+    "protocolMode": "Read-only analysis",
+    "protocolSource": "Data source",
+    "protocolPools": "Live pools",
+    "protocolLastSync": "Last sync",
+    "protocolCapabilities": "Protocol capabilities",
+    "analysisActivated": "Protocol analytics are active for this pool. Execution stays read-only until a verified adapter is wired in.",
+    "netIsAnalysis": "Net APY is the live APY minus our known fee. It excludes an execution gas quote, which is shown separately.",
+    "includedInApy": "included",
+    "realYieldShare": "Real yield share",
+    "rewardYieldShare": "Reward yield",
+    "rateVs30d": "Today vs 30-day average",
     "riskDisclosureTitle": "Variable yield and contract risk",
     "riskDisclosure": "APY can change. Smart-contract, protocol, liquidity, oracle, reward-token, bridge and impermanent-loss risks may cause loss of principal. Nothing here guarantees profit.",
     "freshness": {
@@ -2379,6 +2394,11 @@
       "title": "Put idle tokens to work",
       "body": "Earn yield from liquidity pools",
       "cta": "Earn"
+    },
+    "stocks": {
+      "title": "Trade tokenized stocks",
+      "body": "US equities, gold and RWA tokens inside the app",
+      "cta": "Open"
     },
     "signals": {
       "title": "AI market signals",
