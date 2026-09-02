@@ -1401,7 +1401,7 @@ console.log('\n▸ measuring light-theme contrast…');
   // Pull every `inks: [...]` pair out of the slot table.
   const inks = [...ad.matchAll(/inks:\s*\['(#[0-9a-fA-F]{6})',\s*'(#[0-9a-fA-F]{6})'\]/g)];
   const rows = [];
-  rows.push(['every slot defines a readable ink pair', inks.length === 5]);
+  rows.push(['every slot defines a readable ink pair', inks.length === 6]);
 
   for (const [, a] of inks) {
     const r = ratio(a, '#ffffff');

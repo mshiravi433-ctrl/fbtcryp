@@ -1815,6 +1815,11 @@
       "body": "Earn yield from liquidity pools",
       "cta": "Earn"
     },
+    "stocks": {
+      "title": "تداول الأسهم المرمزة",
+      "body": "الأسهم الأمريكية والذهب ورموز RWA داخل التطبيق",
+      "cta": "افتح"
+    },
     "signals": {
       "title": "AI market signals",
       "body": "Daily analysis on every major asset",

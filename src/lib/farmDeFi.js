@@ -1,5 +1,5 @@
 import { FEE_BPS } from './feeBps';
-import { farmScore, pairSwapRoute, pairTokens, realShare } from './yields';
+import { farmScore, pairSwapRoute, pairTokens, rateIsUnusual, realShare } from './yields';
 
 export const FARM_EXECUTION_STATES = Object.freeze([
   'IDLE', 'VALIDATING', 'QUOTING', 'PREPARING', 'SIMULATING',
@@ -164,6 +164,66 @@ export function poolRiskFactors(pool) {
     rewardToken: realShare(pool) == null ? 'unknown' : realShare(pool) < 0.5 ? 'high' : 'medium',
     lock: 'unknown', bridge: 'unknown',
     concentration: pair.length > 1 ? 'medium' : 'low'
+  };
+}
+
+/**
+ * The data protocol the Farm screen uses for discovery and analysis.
+ *
+ * This is deliberately a READ-ONLY adapter. It streams the safety-filtered
+ * DefiLlama pools and answers the metrics the Farm screen needs (APY, APR,
+ * TVL, pool, pools). It does NOT claim to prepare, simulate or broadcast a
+ * deposit — that requires a verified execution adapter, which is still a
+ * separate contract and is reported honestly elsewhere.
+ */
+export const FARM_PROTOCOL = Object.freeze({
+  id: 'defillama',
+  name: 'DefiLlama',
+  source: 'yields.llama.fi',
+  mode: 'READ_ONLY_ANALYSIS',
+  capabilities: Object.freeze(['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL'])
+});
+
+/** A single source of truth for the Farm protocol status shown at the top. */
+export function farmProtocolSummary({ pools = [], at = null, source = null, error = null } = {}) {
+  const ok = !error && (at != null || (Array.isArray(pools) && pools.length > 0));
+  return {
+    ...FARM_PROTOCOL,
+    status: error ? 'UNAVAILABLE' : ok ? 'ACTIVE' : 'CONNECTING',
+    poolCount: Array.isArray(pools) ? pools.length : 0,
+    updatedAt: at,
+    source: source || FARM_PROTOCOL.source,
+    error: error ? String(error.message || error).slice(0, 120) : null
+  };
+}
+
+/**
+ * Research data for one pool.
+ *
+ * The Farm screen previously left this blank whenever it did not have a gas
+ * or protocol quote for the execution path. That conflated two questions:
+ * "can we analyse the position?" and "can we transact it?". The analytics path
+ * needs only what the live yield feed already returned, so this returns the
+ * research view without inventing a transaction quote.
+ */
+export function farmPoolResearch(pool) {
+  const share = realShare(pool);
+  return {
+    adapter: FARM_PROTOCOL.id,
+    apyBase: pool?.apyBase ?? null,
+    apyReward: pool?.apyReward ?? null,
+    realShare: share,
+    emissionShare: share == null ? null : Math.max(0, 1 - share),
+    apyMean30d: pool?.apyMean30d ?? null,
+    unusual: rateIsUnusual(pool),
+    risk: pool?.risk ?? null,
+    ilRisk: Boolean(pool?.ilRisk),
+    stablecoin: Boolean(pool?.stablecoin),
+    type: pool?.exposure === 'single' ? 'staking' : 'lp',
+    source: pool?.source || 'defillama',
+    updatedAt: pool?.updatedAt || null,
+    freshness: pool?.freshness || 'UNAVAILABLE',
+    url: pool?.url || null
   };
 }
 
