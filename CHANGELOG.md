@@ -1,3 +1,91 @@
+# Unreleased — Buy/Sell: step wizard + no-registration guided rail + on-chain report
+
+- **Step-wizard Buy/Sell** (`src/components/BuySellPanel.jsx` rewritten): one
+  decision per screen, exactly in the requested order — **amount → wallet →
+  asset/network → review** — with Next/Back navigation, a numbered progress
+  stepper, direction-aware slide animation (mirrored under RTL), a large
+  fintech-style amount input with quick-amount chips, live EVM address
+  validation with a green check, asset cards + network chips, and an
+  editable review summary. Full fa/en copy; all locked test markers
+  (`continueToCheckout`, `buySell.fbtFee`, `sellUnavailable*`,
+  `providerUnavailable*`) preserved.
+- **Guided handoff — the no-registration rail** (`src/lib/guidedCheckout.js`):
+  when the credentialed tracked flow is not configured, the wizard composes
+  the provider's **official public widget URL** using only documented query
+  parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact
+  base units, `fiatCurrency`, `userAddress`) and opens it — the user's data
+  arrives prefilled and they only confirm and pay **on the provider's own
+  site**, which runs its own KYC/payment checks. No API key of ours exists
+  or appears anywhere in the URL (unit-tested). Prefill is honestly labelled
+  best-effort; the curated catalog only lists pairs whose on-chain contract
+  metadata is already pinned in `lib/chains.js`. Fail-closed validation with
+  stable error codes (`GUIDED_WALLET_INVALID`, `GUIDED_AMOUNT_INVALID`, …).
+- **Real on-chain report under BOTH tabs** (`src/lib/buySellWatch.js` +
+  `src/components/WalletWatchReport.jsx`): polls the watched wallet's balance
+  of the exact chosen token via the app's public-RPC read providers and
+  reports every movement — deposits for Buy, withdrawals for Sell — with a
+  pure, unit-tested delta tracker (first read is the baseline, never an
+  event; re-baselines before reporting; null reads are not events). Wording
+  discipline enforced in copy: it says **"deposit/withdrawal detected"**,
+  and explicitly states it cannot see the provider's payment status — it
+  never claims "payment confirmed". No provider API, no account, no key.
+- The credentialed Ramp tracked flow (below) is unchanged and remains the
+  preferred engine whenever its server credentials exist; the wizard uses it
+  automatically (quote → order → explicit confirm → hosted checkout).
+- Tests: +23 unit checks (guided URL composition, base-unit string math,
+  catalog↔chain-metadata integrity, delta-tracker truth rules); wiring,
+  flow/safety probes, phase88 boundary probe and the 12-language screens
+  suite all green with zero new failures.
+
+# Unreleased — Buy/Sell: Ramp Network hosted checkout (Provider #1)
+
+- **Ramp Network Hosted Mode is now the primary Buy/Sell provider** —
+  payment/on-ramp/off-ramp infrastructure, never a CEX trading API. The new
+  adapter (`server/providers/rampNetwork.js`) uses only officially documented
+  surfaces: the `app.rampnetwork.com` hosted widget URL (with `userAddress`
+  prefilled so crypto settles **directly to the user's wallet**), the
+  `/host-api/v3` asset-catalog and quote endpoints, and Ramp's ECDSA-signed
+  webhooks (`X-Body-Signature`, secp256k1 + sha256 over the stable-stringified
+  body).
+- **ProviderRegistry / ProviderRouter** (`server/buySell.js`): Ramp is
+  Provider #1; future providers are appended and compete on real quotes —
+  no hardcoded "always cheapest" and no capability flag hardcoded to true.
+  The capability engine derives everything from configuration at call time.
+- **Fail-closed, never fake:** without `RAMP_HOST_API_KEY` +
+  `RAMP_WEBHOOK_STATUS_URL` + `RAMP_WEBHOOK_PUBLIC_KEY_PEM` + durable storage,
+  the provider reports `CONFIGURATION_REQUIRED` — no simulated checkout,
+  payment, tx hash or balance. The forbidden inverse also holds: a missing
+  CEX API key can never make Buy unavailable (`requiresCexApi: false`).
+- **Settlement truth stays on-chain:** a signed `RELEASED` webhook only
+  records the provider-reported tx; `COMPLETED` still requires FBT's
+  independent verification of chain, recipient, token contract, exact unit
+  amount and confirmation depth over its own RPC quorum. Receiver mismatches
+  are quarantined to `MANUAL_REVIEW`. Only assets on independently verifiable
+  EVM chains (ETH, Arbitrum, Optimism, Base, Polygon, BSC, Avalanche) are
+  offered.
+- **Fees:** `fbtTradingFee = 0` and Ramp partner fee = 0 remain structural;
+  Ramp's own `appliedFee`/`networkFee` come from the live quote and are shown
+  verbatim — the UI never claims "total fee = 0".
+- **UI:** the Buy/Sell ticket now uses Ramp payment methods (card, Apple/
+  Google Pay, bank transfer, PIX, open banking), per-asset network selection
+  from the live catalog, a distinct `CONFIGURATION_REQUIRED` state, provider
+  identity ("Payments by Ramp Network"), a per-chain explorer link, and the
+  new `/order/result/:orderId` return route (Ramp `finalUrl` target) that
+  re-reads verified server state instead of assuming success. Sell renders a
+  real off-ramp form only when the approved integration enables `OFFRAMP`;
+  otherwise it stays honestly unavailable. EN + FA strings added; layout is
+  RTL-safe.
+- **Compliance unchanged:** Ramp performs KYC/AML/sanctions/geo eligibility;
+  FBT passes real user inputs through untouched and surfaces rejections as
+  `REGION_UNSUPPORTED`. No country spoofing, no identity manipulation, no
+  bypass.
+- **Tests:** new `test/buy-sell-ramp-flow-probe.mjs` runs the full configured
+  lifecycle with only the network layer mocked (quote → order → official
+  hosted URL → genuinely ECDSA-signed webhook → on-chain verification →
+  COMPLETED, plus forged-signature rejection); `test/buy-sell-probe.mjs`
+  re-pins the unconfigured fail-closed contract; units and wiring suites
+  updated for the registry.
+
 # Unreleased — Lab v2: Financial Simulation Center
 
 - The **Lab** screen at `/lab` is now a full **Financial Simulation Center** with

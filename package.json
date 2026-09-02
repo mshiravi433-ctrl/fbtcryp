@@ -24,7 +24,7 @@
     "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
-    "test:buy-sell": "node test/buy-sell-probe.mjs",
+    "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:phase10": "node test/intent-ai/phase10-agent-trust-probe.mjs",
