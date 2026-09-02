@@ -139,8 +139,38 @@ if (DRY) {
   process.exit(0);
 }
 
+// The block is useful even when nothing can PATCH it: it is also written to the
+// step summary and to out/RELEASE-NOTES.md, so the version and digests are
+// reachable from the run page. Only the release *body* needs a token, and the
+// runner hands one to a script only if the workflow maps it — so say exactly
+// that, instead of the shrug "no token".
+if (process.env.GITHUB_STEP_SUMMARY) {
+  try {
+    const { appendFileSync } = await import('node:fs');
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${block}\n`);
+  } catch {
+    /* summary writes are best-effort */
+  }
+}
+try {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  mkdirSync(join(ROOT, 'out'), { recursive: true });
+  writeFileSync(join(ROOT, 'out', 'RELEASE-NOTES.md'), `${lines.join('\n')}\n`);
+} catch {
+  /* nothing upstream depends on this file */
+}
+
 if (!TOKEN) {
-  warn('no GITHUB_TOKEN in this environment (normal for a local run) — body left as-is');
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    warn(
+      'this step has no GITHUB_TOKEN, so the release page was not stamped. '
+      + 'Add `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` to the build step env in '
+      + '.github/workflows/build-apk.yml (the copy in ci/WORKFLOW-FIXED.yml already has it). '
+      + 'The same block is on the run summary page and in out/RELEASE-NOTES.md.'
+    );
+  } else {
+    warn('not running on GitHub Actions — body left as-is; block written to out/RELEASE-NOTES.md');
+  }
   process.exit(0);
 }
 
