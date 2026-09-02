@@ -741,6 +741,26 @@ report('screen smoke (all 12 languages)', await runScreens(document.getElementBy
 /* The former language-gated CEX tab suite was deleted with that CEX adapter.
    `test/screens.jsx` now mounts BuySellPanel through its native Buy page. */
 
+/* ------------- 4a₂. the Buy / Sell wizard, driven like a user -------------- */
+/*
+ * The screens suite proves the panel MOUNTS. It cannot prove the panel can be
+ * COMPLETED, which is what was reported: «صفحه خرید و فروش دکمه بعدی و تایید
+ * ندارد فقط دکمه قبلی دارد» — the last screen offered only "Back", its real
+ * call to action was buried below the fold and, in the tracked flow, disabled
+ * for a reason nothing on screen stated (an empty country field).
+ *
+ * Greps could not catch it: every literal and locale key was present. So the
+ * real panel is walked amount -> wallet -> asset -> review in BOTH provider
+ * states, asserting on the rendered controls at every step and pressing the
+ * primary action through the guided hand-off and the quote -> order -> confirm
+ * chain. Network and external opener are stubbed; nothing reaches a provider.
+ */
+console.log('\n▸ building the Buy / Sell wizard interaction suite…');
+npx(['vite', 'build', '-c', 'test/vite.buysellwizard.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runBuySellWizard } = await import('./.out/buysellwizard/buy-sell-wizard-probe.js');
+report('Buy / Sell wizard (every step keeps a back AND a forward action)', await runBuySellWizard(document.getElementById('r')));
+
 /* --------------------- 4b. coin detail under real data -------------------- */
 /*
  * The screen suite mounts `<CoinDetail />` with NO id, which takes the
