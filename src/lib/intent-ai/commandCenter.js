@@ -661,7 +661,7 @@ function planActions({ intent, utterance, aiControl, bestYield, capitalUsd, cont
     case 'TRADE': {
       const legs = [mk('SWAP', { asset: to || 'BTC', from })];
       if ((utterance.actions || []).some((a) => a.action === 'bridge')) legs.push(mk('BRIDGE', { asset: to || 'USDC', route: '/bridge' }));
-      if (utterance.leverage != null) legs.unshift(mk('FUTURES_OPEN', { leverage: utterance.leverage, route: '/perp' }));
+      if (utterance.leverage != null) legs.unshift(mk('FUTURES_OPEN', { leverage: utterance.leverage, route: '/perp?tab=onchain' }));
       return legs;
     }
     case 'EARN':
@@ -696,7 +696,7 @@ function routeForType(type, { chainId }) {
     case 'DEPOSIT':
     case 'YIELD_SWEEP': return '/farm';
     case 'STABLE_SHIELD': return '/loan';
-    case 'FUTURES_OPEN': return '/perp';
+    case 'FUTURES_OPEN': return '/perp?tab=onchain';
     case 'REVOKE_APPROVAL': return '/wallet';
     case 'REBALANCE': return '/portfolio';
     case 'AUTOMATION_CREATE': return '/intent-ai';

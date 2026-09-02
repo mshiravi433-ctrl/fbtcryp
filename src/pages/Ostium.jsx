@@ -14,7 +14,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import TrendChart from '../components/TrendChart';
-import { assetKnowledgeFor, ostiumDemoSeries } from '../lib/ostiumOffline';
+import { assetKnowledgeFor } from '../lib/assetKnowledge';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -83,12 +83,17 @@ function TokenChip({ symbol, lang, onClick }) {
   );
 }
 
-/** Chart: session-observed prices when live, honest labelled demo series offline. */
+/**
+ * Chart: REAL mids observed by this session's 20s poll, nothing else. While
+ * fewer than two live points exist the chart says it is collecting, and when
+ * the feed is down it says so — it never draws a synthetic series (Futures
+ * Engine v3: no fabricated candles on a leveraged screen).
+ */
 function OstiumChart({ market, feedOffline, sessionPoints, t }) {
-  const points = useMemo(() => {
-    if (sessionPoints && sessionPoints.length >= 2) return sessionPoints;
-    return ostiumDemoSeries(market, 72);
-  }, [sessionPoints, market]);
+  const points = useMemo(
+    () => (sessionPoints && sessionPoints.length >= 2 ? sessionPoints : []),
+    [sessionPoints]
+  );
   const change = useMemo(() => {
     if (points.length < 2) return 0;
     const first = Number(points[0].y);
@@ -102,19 +107,22 @@ function OstiumChart({ market, feedOffline, sessionPoints, t }) {
       <div className="dydx-chart-head">
         <span className="faint">
           {feedOffline
-            ? t('ostium.chartDemo', { defaultValue: 'نمودار نمونه — فید زنده در دسترس نیست' })
+            ? t('futures.chartUnavailableShort')
             : usingSession
               ? t('ostium.chartSession', { defaultValue: 'قیمت‌های مشاهده‌شده در این نشست' })
               : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })}
         </span>
-        <span className={`mono ${change >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
-          {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-        </span>
+        {usingSession && (
+          <span className={`mono ${change >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+            {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+          </span>
+        )}
       </div>
       <TrendChart
         points={points}
         height={92}
         up={change >= 0}
+        emptyLabel={feedOffline ? t('futures.chartUnavailable') : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })}
         formatValue={(v) => `$${fmtPrice(v)}`}
         testId="ostium-trend"
       />
@@ -180,7 +188,7 @@ export default function Ostium() {
     const rows = data.pairs.map((p) => ({ ...p, uiCategory: friendlyCategory(p.category) }));
     setMarkets(rows);
     setFeedLive(data.live);
-    setFeedOffline(data.offline === true);
+    setFeedOffline(data.unavailable === true || !data.live);
     setLoading(false);
     return data;
   }, []);
@@ -507,7 +515,7 @@ export default function Ostium() {
             {feedOffline && (
               <div className="feed-offline-note">
                 <span className="pulse-dot" aria-hidden="true" />
-                {t('ostium.offlineNotice', { defaultValue: 'فید زنده در دسترس نیست — بازارهای آفلاین (نمایشی) و قیمت‌ها نمونه هستند.' })}
+                {t('futures.staleNotice')}
               </div>
             )}
 

@@ -1,24 +1,15 @@
 /**
- * OSTIUM OFFLINE FEED + ASSET KNOWLEDGE — the Global Horizon tab never dies.
+ * ASSET KNOWLEDGE — symbol → name + short description (fa/en).
  * ---------------------------------------------------------------------------
- * Two jobs live here:
+ * Asked for: when a pair is selected, the page must explain what each leg IS
+ * — «XPD چیست؟ USD چیست؟» — in a popup. This is the bilingual lookup table
+ * behind that popup and the header strip on the Ostium screen.
  *
- *  1. OFFLINE FEED. The Ostium price feed and subgraph are public, but a
- *     deployment without egress (or a transient upstream outage) previously
- *     left the tab on a dead "feed unavailable" screen with nothing to press
- *     but retry. This snapshot of the real pair catalogue keeps every control
- *     alive, clearly labelled OFFLINE, and a deterministic demo series powers
- *     the chart so the screen still teaches the product while the feed is
- *     down. The moment the live feed returns it replaces this entirely.
- *
- *  2. ASSET KNOWLEDGE. Asked for: when a pair is selected, the page must
- *     explain what each leg IS — «XPD چیست؟ USD چیست؟» — in a popup. This is
- *     the bilingual lookup table behind that popup and the header strip.
+ * This used to live in `ostiumOffline.js` next to a fabricated pair catalogue
+ * and a synthetic chart series. Futures Engine v3 removed both (a leveraged
+ * screen never shows invented markets or candles); the knowledge table is
+ * real reference copy, not market data, so it survives here on its own.
  */
-
-/* ═══════════════════════════════════════════════════════════════════════
-   1. ASSET KNOWLEDGE — symbol → name + short description (fa/en)
-   ═══════════════════════════════════════════════════════════════════════ */
 
 export const ASSET_KNOWLEDGE = {
   /* ── Commodities ── */
@@ -193,95 +184,4 @@ export function assetKnowledgeFor(symbol) {
     fa: { name: s, desc: `${s} — نماد معاملاتی این جفت‌ارز. جزئیات بیشتر در لحظهٔ باز شدن معامله نمایش داده می‌شود.` },
     en: { name: s, desc: `${s} — the trading symbol of this pair.` }
   };
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   2. OFFLINE PAIR CATALOGUE — same shape as getOstiumMarkets() rows
-   ═══════════════════════════════════════════════════════════════════════ */
-
-const P = (pairId, from, to, category, price, maxLev, feeBps = 2) => ({
-  pairId, from, to, name: `${from}/${to}`, category,
-  maxLeverage: maxLev, overnightMaxLeverage: Math.min(maxLev, 10),
-  openFeeBps: feeBps,
-  bid: Number((price * 0.9992).toFixed(4)),
-  mid: Number(price.toFixed(4)),
-  ask: Number((price * 1.0008).toFixed(4)),
-  isMarketOpen: true,
-  isDayTradingClosed: false,
-  timestampSeconds: Math.floor(Date.now() / 1000)
-});
-
-export function offlineOstiumMarkets() {
-  const pairs = [
-    /* Commodities */
-    P('XAUUSD', 'XAU', 'USD', 'Commodities', 3420.5, 100),
-    P('XAGUSD', 'XAG', 'USD', 'Commodities', 41.85, 100),
-    P('XPDUSD', 'XPD', 'USD', 'Commodities', 1214.2, 100),
-    P('XPTUSD', 'XPT', 'USD', 'Commodities', 1082.7, 100),
-    P('WTIUSD', 'WTI', 'USD', 'Commodities', 71.4, 50),
-    P('NGASUSD', 'NGAS', 'USD', 'Commodities', 2.94, 50),
-    P('COPPERUSD', 'COPPER', 'USD', 'Commodities', 4.62, 50),
-    /* Forex */
-    P('EURUSD', 'EUR', 'USD', 'Forex', 1.0842, 200),
-    P('GBPUSD', 'GBP', 'USD', 'Forex', 1.2718, 200),
-    P('USDJPY', 'USD', 'JPY', 'Forex', 149.62, 200),
-    P('USDCHF', 'USD', 'CHF', 'Forex', 0.8841, 200),
-    P('AUDUSD', 'AUD', 'USD', 'Forex', 0.6528, 200),
-    P('USDCAD', 'USD', 'CAD', 'Forex', 1.3612, 200),
-    P('NZDUSD', 'NZD', 'USD', 'Forex', 0.5984, 200),
-    /* Stocks */
-    P('AAPLUSD', 'AAPL', 'USD', 'Stocks', 231.4, 20),
-    P('TSLAUSD', 'TSLA', 'USD', 'Stocks', 322.8, 20),
-    P('NVDAUSD', 'NVDA', 'USD', 'Stocks', 142.6, 20),
-    P('MSFTUSD', 'MSFT', 'USD', 'Stocks', 448.2, 20),
-    P('AMZNUSD', 'AMZN', 'USD', 'Stocks', 208.9, 20),
-    P('GOOGUSD', 'GOOG', 'USD', 'Stocks', 192.4, 20),
-    P('METAUSD', 'META', 'USD', 'Stocks', 596.1, 20),
-    P('NFLXUSD', 'NFLX', 'USD', 'Stocks', 782.3, 20),
-    P('AMDUSD', 'AMD', 'USD', 'Stocks', 158.7, 20),
-    /* Indices */
-    P('SPXUSD', 'SPX', 'USD', 'Indices', 6321.4, 50),
-    P('NDXUSD', 'NDX', 'USD', 'Indices', 22418.6, 50),
-    P('DJIUSD', 'DJI', 'USD', 'Indices', 44862.1, 50),
-    P('DAXUSD', 'DAX', 'USD', 'Indices', 19684.3, 50),
-    P('NKYUSD', 'NKY', 'USD', 'Indices', 39214.8, 50),
-    /* ETFs */
-    P('GLDUSD', 'GLD', 'USD', 'ETFs', 318.5, 30),
-    P('SLVUSD', 'SLV', 'USD', 'ETFs', 39.2, 30),
-    P('SPYUSD', 'SPY', 'USD', 'ETFs', 630.8, 30),
-    P('QQQUSD', 'QQQ', 'USD', 'ETFs', 548.9, 30),
-    P('TLTUSD', 'TLT', 'USD', 'ETFs', 88.4, 30),
-    /* Crypto */
-    P('BTCUSD', 'BTC', 'USD', 'Crypto', 118500, 50),
-    P('ETHUSD', 'ETH', 'USD', 'Crypto', 3855, 50),
-    P('SOLUSD', 'SOL', 'USD', 'Crypto', 188.6, 50)
-  ];
-  return { pairs, live: false, generatedAt: null, offline: true };
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   3. DEMO PRICE SERIES — deterministic, labelled, powers the chart offline
-   ═══════════════════════════════════════════════════════════════════════ */
-
-/** Deterministic pseudo-random walk seeded by the pair id. Never real data;
-    the chart header always carries the offline label when this is in use. */
-export function ostiumDemoSeries(pair, points = 72) {
-  if (!pair) return [];
-  const base = Number(pair.mid) || 0;
-  if (!base) return [];
-  let seed = 0;
-  const s = String(pair.pairId || pair.name || 'x');
-  for (let i = 0; i < s.length; i += 1) seed = (seed * 31 + s.charCodeAt(i)) % 99991;
-  const out = [];
-  let v = base * 0.985;
-  const now = Date.now();
-  const stepMs = 3_600_000; /* hourly points */
-  for (let i = 0; i < points; i += 1) {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
-    const wave = Math.sin(i / 7 + seed % 10) * 0.004;
-    const drift = ((seed / 2147483648) - 0.5) * 0.008 + wave;
-    v = Math.max(base * 0.8, v * (1 + drift));
-    out.push({ x: now - (points - i) * stepMs, y: v });
-  }
-  return out;
 }

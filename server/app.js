@@ -186,6 +186,7 @@ import aiIntentOSRoutes from './aiIntentOS.js';
 import { createCentralIntelligence } from './ci/api.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
+import { futuresRouter } from './futures/router.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
@@ -5238,6 +5239,18 @@ app.use('/api', centralRouter);
  * bands, alert rules and circuit-breaker ladder run in the UI and here.
  */
 app.use('/api/lending', lendingRouter());
+
+/* ------------------------------ futures BFF -------------------------------- */
+/*
+ * FBT Futures Engine v3 (spec: FUTURES ENGINE — PRODUCTION UPGRADE). The
+ * read/quote/risk/prepare/verify API behind the Futures page's three tabs
+ * (Perpetual · dYdX · On-Chain) and the Intent OS futures_* capabilities.
+ * Same contract as the lending BFF: every POST returns UNSIGNED calldata for
+ * the user's wallet, every fee is computed here (never in the browser), every
+ * provider status is derived from live probes, and every value the UI shows
+ * has a backend source. No signer, no key, no CEX trading API exists here.
+ */
+app.use('/api/v1/futures', futuresRouter());
 
 /* ------------------------------ order watch -------------------------------- */
 /*

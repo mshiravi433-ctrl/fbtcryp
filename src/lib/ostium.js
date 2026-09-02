@@ -535,14 +535,18 @@ export async function getOstiumMarkets({ timeout = 12000 } = {}) {
     }).filter((p) => Number.isFinite(p.mid) && p.mid > 0);
     return { pairs, live: pairs.length > 0, generatedAt: feed.generatedAt };
   } catch {
-    /* Offline catalogue: the tab never dies. Every row is labelled offline and
-       the UI shows the OFFLINE badge + demo chart instead of a dead screen. */
-    const fallback = (await import('./ostiumOffline.js')).offlineOstiumMarkets();
+    /*
+     * ─── NO OFFLINE CATALOGUE ─────────────────────────────────────────────
+     * Futures Engine v3 rule: a leveraged screen never shows a fabricated
+     * market, price or spread. When the feed or subgraph is unreachable the
+     * answer is an empty list flagged `unavailable`, and the page renders its
+     * honest "feed unavailable — trading disabled" state with a Retry.
+     */
     return {
-      pairs: fallback.pairs,
+      pairs: [],
       live: false,
       generatedAt: null,
-      offline: true
+      unavailable: true
     };
   }
 }

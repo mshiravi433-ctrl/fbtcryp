@@ -41,7 +41,7 @@ export const AI_TOOLS = Object.freeze([
       live: false, status: 'UNAVAILABLE', requiresSignature: true, requiresVerifiedAdapter: true
     })),
   Object.freeze({ id: 'getLendingOpportunities', kind: 'read', scope: 'lending', route: '/loan', live: true }),
-  Object.freeze({ id: 'getFuturesMarkets', kind: 'read', scope: 'futures', route: '/perp', live: true }),
+  Object.freeze({ id: 'getFuturesMarkets', kind: 'read', scope: 'futures', route: '/perp?tab=onchain', live: true }),
   Object.freeze({ id: 'getStockMarkets', kind: 'read', scope: 'stocks', route: '/stocks', live: true }),
   Object.freeze({ id: 'createIntent', kind: 'write', scope: 'intent', route: '/intent', live: true }),
   Object.freeze({ id: 'getIntent', kind: 'read', scope: 'intent', route: '/v1/ai/context', live: true }),

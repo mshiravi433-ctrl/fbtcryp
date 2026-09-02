@@ -378,6 +378,43 @@ async function analyzeGoals(record, results, state, entities) {
 /* execution intents → actions behind the confirmation gate                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Futures Engine v3 (§18): a leveraged order is never created from an
+ * ambiguous sentence. Missing market or size → QUESTION. Provider read-only or
+ * unavailable → the honest Persian fallback, no action. Otherwise the preview
+ * carries the engine's fee breakdown, risk verdict and route so the user
+ * confirms exactly what the On-Chain tab will sign.
+ */
+function futuresIntent(record, results, entities, page) {
+  const quoteRes = stepResult(results, 'futures', 'quote');
+  const quote = quoteRes?.ok ? quoteRes.result : null;
+  const asset = entities.asset || page?.selectedAsset || null;
+  if (!quoteRes || (!quoteRes.ok && ['MARKET_REQUIRED', 'SIZE_REQUIRED'].includes(quoteRes.error))) {
+    const missing = !asset ? ['market'] : [entities.amountUsd == null ? 'amountUsd' : null, entities.leverage == null ? 'leverage' : null].filter(Boolean);
+    const text = !asset
+      ? 'روی کدام بازار؟ نام بازار (مثلاً BTC یا XAU) را بگویید یا تب آن‌چین را باز کنید.'
+      : 'مبلغ وثیقه (به دلار) و اهرم را مشخص کنید؛ مثلاً «۵۰ دلار با اهرم ۵». بدون این دو، هیچ پوزیشنی ساخته نمی‌شود.';
+    return { done: true, response: questionResponse(text, missing.length ? missing : ['market']) };
+  }
+  if (!quoteRes.ok) {
+    const code = String(quoteRes.error || 'PROVIDER_UNAVAILABLE');
+    const msg = code === 'PROVIDER_READ_ONLY' || quoteRes.detail === 'این بازار در حال حاضر فقط برای مشاهده در دسترس است.'
+      ? 'این بازار در حال حاضر فقط برای مشاهده در دسترس است.'
+      : code === 'MARKET_NOT_LISTED'
+        ? `بازار ${asset || ''} روی پروتکل‌های آن‌چین فعال فهرست نشده است. بازار دیگری انتخاب کنید.`
+        : `پروتکل فیوچرز در این لحظه در دسترس نیست (${code}). هیچ سفارشی ساخته نشد؛ می‌توانید بعداً دوباره تلاش کنید.`;
+    return { done: true, response: errorResponse({ intentType: record.intentType, message: msg, status: quoteRes.status || 'PROVIDER_ERROR', error: code, recovery: quoteRes.recovery || null, safeStop: Boolean(quoteRes.securityStop) }) };
+  }
+  if (!quote.executable) {
+    const msg = quote.userMessage || 'این قابلیت هنوز برای محیط Production پیکربندی نشده است.';
+    return { done: true, response: analysisResponse({ intentType: record.intentType, message: `${msg} قیمت ${quote.market.symbol}: ${fmtUsd(quote.market.mid)} · ریسک: ${quote.risk.riskLevel} (${quote.risk.riskScore}/100).`, confidence: 0.9, rows: [{ label: 'market', value: quote.market.symbol }, { label: 'mid', value: quote.market.mid }, { label: 'providerStatus', value: quote.providerStatus }], data: [{ source: 'futures', metric: 'providerStatus', value: quote.providerStatus }], suggestions: ['تب آن‌چین را باز کن', 'ریسک این پوزیشن چقدر است؟'] }) };
+  }
+  if (quote.risk?.blocked) {
+    return { done: true, response: errorResponse({ intentType: record.intentType, message: `موتور ریسک این سفارش را مسدود کرد: ${quote.risk.blockReasons.join('، ')}. اندازه، اهرم یا حد ضرر را تغییر دهید؛ هیچ تراکنشی ساخته نشد.`, status: 'POLICY', error: 'RISK_BLOCKED', recovery: { strategy: 'ADJUST_INPUT', risk: quote.risk } }) };
+  }
+  return { done: false, quote };
+}
+
 async function executionIntent(record, results, state, entities, page) {
   const module = record.intentType === 'BRIDGE' ? 'bridge'
     : ['FUTURES_OPEN', 'FUTURES_CLOSE'].includes(record.intentType) ? 'futures'
@@ -390,8 +427,19 @@ async function executionIntent(record, results, state, entities, page) {
     amountUsd: entities.amountUsd ?? null,
     network: entities.network || page?.selectedNetwork || null,
     fromChain: page?.selectedNetwork || null,
-    toChain: entities.network || null
+    toChain: entities.network || null,
+    ...(module === 'futures' ? { leverage: entities.leverage ?? null, side: entities.side || 'long', provider: 'ostium' } : {})
   };
+  let futuresPreview = null;
+  if (module === 'futures') {
+    const gate = futuresIntent(record, results, entities, page);
+    if (gate.done) {
+      record.response = gate.response;
+      record.status = gate.response.mode === 'QUESTION' || gate.response.mode === 'ANSWER' ? INTENT_STATUS.COMPLETED : INTENT_STATUS.ERROR;
+      return gate.response;
+    }
+    futuresPreview = gate.quote;
+  }
   const quoteRes = stepResult(results, module, 'quote');
   const quote = liveResult(quoteRes) || null;
 
@@ -421,6 +469,21 @@ async function executionIntent(record, results, state, entities, page) {
     ? ` نرخ زنده دریافت شد: خروجی تخمینی ${quote.quote.estimate?.toAmountMin ?? quote.quote.estimate?.toAmount ?? '—'} ${quote.quote.tool || ''}`.trim()
     : quoteRes && !quoteRes.ok ? ` نقل‌قول زنده در دسترس نیست (${quoteRes.error}) — پس از تایید دوباره تلاش می‌شود.` : '';
   const dedupeTxt = deduplicated ? ' (درخواست تکراری بود؛ همان عملیات قبلی بازگردانده شد و معامله جدیدی ساخته نشد)' : '';
+
+  if (futuresPreview) {
+    const f = futuresPreview;
+    record.risk = { riskScore: f.risk.riskScore, riskLevel: f.risk.riskLevel, liquidationDistancePct: f.risk.liquidationDistancePct, warnings: f.risk.warnings };
+    const feeTxt = f.fee ? `کارمزد پروتکل ${f.fee.protocol.known ? fmtUsd(f.fee.protocol.feeUsd) : 'نامشخص'} + کارمزد FBT ${fmtUsd(f.fee.fbt.feeUsd)} (${f.fee.fbt.bps} bps) + کارمزد شبکه (در کیف پول)` : '';
+    const liqTxt = f.risk.liquidationDistancePct != null ? ` فاصله تا لیکویید ≈ ${f.risk.liquidationDistancePct.toFixed(2)}٪.` : '';
+    return actionResponse({
+      intentType: record.intentType,
+      message: `پیش‌نمایش پوزیشن ${f.order.side === 'short' ? 'شورت' : 'لانگ'} ${f.market.symbol} روی ${f.provider} — وثیقه ${fmtUsd(f.order.collateralUsd)} × اهرم ${f.order.leverage} = ${fmtUsd(f.order.notionalUsd)} اسمی، قیمت مرجع ${fmtUsd(f.market.mid)}. ${feeTxt}. ریسک: ${f.risk.riskLevel} (${f.risk.riskScore}/100).${liqTxt}${dedupeTxt} برای ساخت تراکنش تایید کنید؛ امضا فقط در کیف پول شما و در تب آن‌چین انجام می‌شود.`,
+      action,
+      quote: { futures: f },
+      plan: record.plan,
+      note: f.risk.warnings.length ? `هشدارها: ${f.risk.warnings.join('، ')}` : null
+    });
+  }
 
   return actionResponse({
     intentType: record.intentType,
