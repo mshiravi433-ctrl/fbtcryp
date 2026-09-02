@@ -125,6 +125,34 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
   const connected = isConnected(context, results);
   const hydrating = isHydrating(context, results);
 
+  /*
+   * A module that exists in the spec but not in this build must be stated
+   * plainly — the user typed a real request, and the honest answer is that
+   * this build does not ship that screen, not a navigation to a dead URL.
+   */
+  if (results.unavailable === 'SPECULATION_DISABLED') {
+    return {
+      message: lang === 'fa'
+        ? 'این بخش (افق جهانی / فیوچرز / dYdX) در این بیلد فعال نیست و صفحه‌اش در این نسخه وجود ندارد. می‌توانم در بخش‌های فعال مثل سواپ، فارم، وام یا بازار کمکت کنم.'
+        : 'That module (Horizon / perpetuals / dYdX) is not enabled in this build — its page does not exist in this version. I can help with swap, farm, lending or markets instead.',
+      ui: { type: 'TEXT' }
+    };
+  }
+
+  /*
+   * «والت را ببند» routes to the wallet page which performs the actual
+   * disconnect. The chat cannot claim it already happened — the page does it.
+   */
+  if (type === 'WALLET_DISCONNECT' && results.route) {
+    return {
+      message: lang === 'fa'
+        ? 'کیف پول را می‌بندم — صفحه کیف پول باز شد و قطع اتصال همان‌جا انجام می‌شود.'
+        : 'Closing your wallet — the wallet page opened and will disconnect there.',
+      ui: { type: 'TEXT' },
+      navigated: results.route
+    };
+  }
+
   if (results.route || results.handoff || type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
     const route = results.route || plan?.actions?.[0]?.input?.route || intent?.navigation?.route;
     if (route) {

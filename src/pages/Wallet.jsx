@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -22,7 +22,7 @@ import ActiveOrdersCard from '../components/ActiveOrdersCard';
 import TokenDetailSheet from '../components/TokenDetailSheet';
 import Portfolio from '../pages/Portfolio';
 import { explorerAddr } from '../lib/chains';
-import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../lib/chains';
 import { currencyOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -523,11 +523,60 @@ export default function Wallet() {
   const [tab, setTab] = useState(() => (searchParams.get('tab') === 'solana' ? 'solana' : 'real'));
 
   /* A ?tab=solana link can arrive while this route is already mounted; keep
-     the strip in sync with the URL instead of only reading it once. */
+     the strip in sync with the URL instead of only reading it once.
+
+     ?tab=send is NOT a tab — it is the send action, reached from the Intent OS
+     («بفرست به …»). It opens the real tab's send sheet and prefills the token
+     when the connected chain has it. The recipient is never prefilled from a
+     URL: a link-supplied address is a phishing vector, so it stays typed or
+     scanned on the sheet. */
   useEffect(() => {
-    const next = searchParams.get('tab') === 'solana' ? 'solana' : 'real';
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'send') {
+      setTab('real');
+      const symbol = searchParams.get('token');
+      if (symbol && wallet.chainId) {
+        const chainTokens = TOKENS[wallet.chainId] ?? [];
+        const match = chainTokens.find((tk) => String(tk.symbol || '').toUpperCase() === String(symbol).toUpperCase());
+        if (match) {
+          setSendToken({ symbol: match.symbol, name: match.name, address: match.address, native: match.native, decimals: match.decimals });
+        }
+      }
+      setSendOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('tab');
+      next.delete('token');
+      next.delete('toAddress');
+      next.delete('amount');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    const next = tabParam === 'solana' ? 'solana' : 'real';
     setTab((cur) => (cur === next ? cur : next));
-  }, [searchParams]);
+  }, [searchParams, wallet.chainId]);
+
+  /*
+   * ?action=disconnect — «والت را ببند» routes here. The wallet page owns
+   * disconnect, so it performs the real disconnect once and consumes the
+   * parameter (a refresh must not disconnect again).
+   */
+  const handledDisconnectRef = useRef('');
+  useEffect(() => {
+    if (searchParams.get('action') !== 'disconnect') {
+      handledDisconnectRef.current = '';
+      return;
+    }
+    const key = `${wallet.address || 'none'}:${wallet.chainId || ''}`;
+    if (handledDisconnectRef.current === key) return;
+    handledDisconnectRef.current = key;
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+    if (wallet.address && !wallet.locked) {
+      haptic?.('warning');
+      wallet.disconnect?.();
+    }
+  }, [searchParams, wallet, haptic]);
   const [seedSheet, setSeedSheet] = useState(false);
   const [seedPw, setSeedPw] = useState('');
   const [seedWords, setSeedWords] = useState(null);

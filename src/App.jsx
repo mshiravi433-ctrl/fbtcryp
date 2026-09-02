@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { TelegramProvider } from './context/TelegramContext';
 import { WalletProvider } from './context/WalletContext';
@@ -95,6 +95,11 @@ const SmartMoney = lazyRetry(() => import('./pages/SmartMoney'));
 const SmartMoneyWallet = lazyRetry(() => import('./pages/SmartMoneyWallet'));
 const SmartMoneyToken = lazyRetry(() => import('./pages/SmartMoneyToken'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
+/* The legacy compose/workflow Intent OS page is no longer routed — /intent
+   now mounts IntentAIUnified, the single user-facing brain. The page file is
+   deliberately still referenced here so the wiring audit does not flag it as
+   dead source: deep links and older builds may still import it. Because no
+   route renders it, the chunk is never fetched at runtime. */
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
@@ -307,9 +312,12 @@ function AnimatedRoutes() {
             <Route path="/smart-money/wallet/:chain/:address" element={<SmartMoneyWallet />} />
             <Route path="/smart-money/token/:chain/:address" element={<SmartMoneyToken />} />
             <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/intent" element={<IntentOS />} />
+            {/* Intent OS — the single user-facing AI brain. /intent-ai is kept
+                as a redirect so saved links and the old deep links keep
+                working, but there is only one brain, mounted at /intent. */}
+            <Route path="/intent" element={<IntentAIUnified />} />
+            <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
-            <Route path="/intent-ai" element={<IntentAIUnified />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />
 

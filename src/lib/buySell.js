@@ -6,7 +6,7 @@
  * order access capability stays in sessionStorage so it survives a return from
  * a hosted checkout without becoming a query parameter.
  */
-import { apiBase } from './apiBase';
+import { apiBase } from './apiBase.js';
 
 const ROOT = `${apiBase()}/v1/buy-sell`;
 const SESSION_KEY = 'fbt:buy-sell:orders:v1';
