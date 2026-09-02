@@ -75,7 +75,7 @@ const DerivativesDashboard = SPECULATION_ENABLED ? lazyRetry(() => import('./pag
 const Shop = lazyRetry(() => import('./pages/Shop'));
 const Help = lazyRetry(() => import('./pages/Help'));
 const Docs = lazyRetry(() => import('./pages/Docs'));
-const Audit = lazyRetry(() => import('./pages/Audit'));
+const Security = lazyRetry(() => import('./pages/Security'));
 const Developers = lazyRetry(() => import('./pages/Developers'));
 const Ecosystem = lazyRetry(() => import('./pages/Ecosystem'));
 const Business = lazyRetry(() => import('./pages/Business'));
@@ -279,7 +279,8 @@ function AnimatedRoutes() {
             <Route path="/shop" element={<Shop />} />
             <Route path="/help" element={<Help />} />
             <Route path="/docs" element={<Docs />} />
-            <Route path="/audit" element={<Audit />} />
+            <Route path="/audit" element={<Security />} />
+            <Route path="/security" element={<Security />} />
             <Route path="/developers" element={<Developers />} />
             <Route path="/ecosystem" element={<Ecosystem />} />
             <Route path="/business" element={<Business />} />
