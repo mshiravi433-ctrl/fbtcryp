@@ -91,8 +91,23 @@ export async function openUrl(url, { toolbarColor = '#0a0c12' } = {}) {
   if (typeof window !== 'undefined') {
     // noopener is not optional: without it the opened page gets a handle to
     // our window object via window.opener and can navigate us somewhere else.
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return true;
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (opened) return true;
+    /*
+     * `window.open` returned null: a pop-up blocker refused it. That happens
+     * easily here because this function awaits a dynamic import first, and
+     * some browsers no longer count the click as a "user gesture" by the
+     * time the open call runs. Silently doing nothing is the worst outcome —
+     * the user taps "Continue to provider" and the app appears dead. Falling
+     * back to a same-tab navigation is always permitted; checkout pages we
+     * hand off to carry a finalUrl that brings the user back afterwards.
+     */
+    try {
+      window.location.assign(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
   return false;
 }

@@ -8311,6 +8311,7 @@
       "guidedOpenedTitle": "Checkout opened.",
       "guidedOpenedBody": "Finish your confirmation and payment on {{provider}}’s page. The on-chain report below is now watching your wallet and will show the matching movement the moment it lands on the blockchain.",
       "reopenProvider": "Reopen {{provider}}",
+      "guidedFallback": "Or continue on {{provider}} without sign-up — your details are pre-filled on its official page.",
       "trackedUnavailable": "The fully tracked order flow is not configured on this server yet; the no-sign-up route above works independently of it.",
       "needAmount": "Enter an amount above zero to continue.",
       "needWallet": "Enter a valid EVM wallet address (0x + 40 hex characters) to continue.",
@@ -8562,6 +8563,7 @@
     "justNow": "just now",
     "minAgo": "{{n}}m ago",
     "hourAgo": "{{n}}h ago",
+    "clear": "Clear all",
     "dayAgo": "{{n}}d ago"
   }
 }

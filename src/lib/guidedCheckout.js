@@ -89,6 +89,42 @@ export const GUIDED_FIAT = ['USD', 'EUR', 'GBP', 'CHF', 'PLN', 'TRY', 'AED', 'BR
 
 export const isEvmAddress = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a.trim());
 
+/* ─── INPUT NORMALISATION ────────────────────────────────────────────────────
+ * «پس از زدن قیمت گزینه بعد نمیاد» — the wizard's Next button never enabled
+ * for users typing on a Persian/Arabic keyboard: the amount arrived as
+ * «۱۰۰» (Eastern digits), Number('۱۰۰') is NaN, and the amount gate stayed
+ * shut with no path to the destination site. The same keyboards produce the
+ * Arabic decimal separator «٫» and zero-width joiners inside pasted wallet
+ * addresses. Everything the wizard validates goes through these first. */
+
+/** Convert Persian (۰-۹) and Arabic-Indic (٠-٩) digits to ASCII 0-9. */
+export function normalizeDigits(text) {
+  return String(text ?? '')
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
+/** Normalise a human-typed amount to `1234.56` form (digits + one dot). */
+export function normalizeAmountInput(text) {
+  const ascii = normalizeDigits(text)
+    .replace(/[٫،,]/g, '.')      /* Arabic decimal sep / comma → dot */
+    .replace(/[^\d.]/g, '');     /* strip currency signs, spaces, letters */
+  /* keep only the first dot so '1.2.3' cannot silently mean anything */
+  const first = ascii.indexOf('.');
+  if (first === -1) return ascii;
+  return ascii.slice(0, first + 1) + ascii.slice(first + 1).replace(/\./g, '');
+}
+
+/** Normalise a pasted wallet address: digits, whitespace, ZWNJ/LRM/RLM,
+ *  and EIP-681 `ethereum:0x…@1` wrappers. Never invents characters. */
+export function normalizeWalletInput(text) {
+  let cleaned = normalizeDigits(text).replace(/[\s\u200c\u200e\u200f\u2066-\u2069]/g, '');
+  cleaned = cleaned.replace(/^ethereum:/i, '');
+  const at = cleaned.indexOf('@');
+  if (at !== -1 && /^0x[a-fA-F0-9]{40}$/.test(cleaned.slice(0, at))) cleaned = cleaned.slice(0, at);
+  return cleaned;
+}
+
 /**
  * On-chain metadata for one catalog row, straight from lib/chains.js — the
  * single source of truth the rest of the app already trusts for contract
