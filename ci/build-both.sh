@@ -118,3 +118,19 @@ echo "────────────────────────�
 echo "  app-release.apk / .aab  → app stores (no speculation screens)"
 echo "  FBT-Swap-full*.apk      → GitHub Releases / direct download only"
 echo "──────────────────────────────────────────────────────────────────"
+
+# ---------------------------------------------------------------------------
+# Keep the download page honest.
+#
+# The `latest` release is where the APK is actually fetched from, and its notes
+# are only rewritten when a version tag is cut — so the assets had been moving for
+# weeks while the page still described an older build. This stamps the real
+# version, sizes and SHA-256 digests into a machine-owned block, leaving any
+# hand-written notes below it alone.
+#
+# Non-fatal on purpose: a signed, uploaded artifact must never fail to publish
+# because a cosmetic PATCH to a description hit a rate limit.
+# ---------------------------------------------------------------------------
+FBT_NOTES_DRY=${FBT_NOTES_DRY:-0} node "$HERE/release-notes.mjs" || echo "  (release notes skipped)"
+
+echo "──────────────────────────────────────────────────────────────────"
