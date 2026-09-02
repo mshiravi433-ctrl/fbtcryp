@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import SolanaWalletTab from '../components/SolanaWalletTab';
 import InfoBox from '../components/InfoBox';
 import HardwareWalletCard from '../components/HardwareWalletCard';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -33,7 +34,7 @@ import { buildIntelligence } from '../lib/portfolioIntel';
 import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
 import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
-import { IconCopy, IconGlobe, IconBuilding, IconChevronRight, IconTrend } from '../components/Icons';
+import { IconCopy, IconGlobe, IconChevronRight } from '../components/Icons';
 import { WalletMesh } from '../components/WalletArt';
 import '../styles/wallet-modern.css';
 import '../styles/wallet.css';
@@ -502,153 +503,11 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
   );
 }
 
-/* ─── Practice (virtual) tab ───────────────────────────────────────────────
-   Paper-trading balance, allocation, stocks banner and history. Virtual
-   credits only — never presented as real funds. ─── */
-function PracticeTab({ t, currency }) {
-  const balance = useAppStore((s) => s.balance);
-  const positions = useAppStore((s) => s.positions);
-  const investments = useAppStore((s) => s.investments);
-  const orders = useAppStore((s) => s.orders);
-  const bets = useAppStore((s) => s.bets);
-  const navigate = useNavigate();
-
-  const staked = useMemo(
-    () => (investments || []).filter((i) => !i.claimedAt).reduce((s, i) => s + i.amount, 0),
-    [investments]
-  );
-
-  const pieData = useMemo(() => {
-    return [
-      { label: t('wallet.cash'), value: balance },
-      { label: t('wallet.positions'), value: positions?.length || 0 },
-      { label: t('wallet.staked'), value: staked }
-    ];
-  }, [balance, positions, staked, t]);
-
-  const betStats = useMemo(() => {
-    const done = (bets || []).filter((b) => b.settled);
-    const wins = done.filter((b) => b.won).length;
-    return { total: done.length, wins, rate: done.length ? (wins / done.length) * 100 : 0 };
-  }, [bets]);
-
-  return (
-    <>
-      <section className="wallet-pie-card" style={{ padding: 14, borderRadius: 18 }}>
-        <div className="wal-kicker" style={{ marginBottom: 6 }}>{t('wallet.practiceMode')}</div>
-        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{t('wallet.practiceBody')}</p>
-        <div className="wallet-bento wal-bento" style={{ marginTop: 12 }}>
-          {pieData.map((c) => (
-            <div key={c.label} className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700 }}>{c.label}</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 900, marginTop: 4 }}>
-                {typeof c.value === 'number' ? (c.label === t('wallet.positions') ? String(c.value) : fmtCurrencyValue(c.value, currency)) : c.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Tokenized-equity discovery: localized, keyboard-accessible and honest about the asset. */}
-      <button
-        type="button"
-        className="wallet-stocks-banner"
-        onClick={() => navigate('/stocks')}
-        aria-label={t('wallet.stocksBanner.aria')}
-      >
-        <span className="wallet-stocks-art" aria-hidden="true">
-          <span className="wallet-stocks-building"><IconBuilding /></span>
-          <span className="wallet-stocks-trend"><IconTrend /></span>
-        </span>
-
-        <span className="wallet-stocks-copy">
-          <span className="wallet-stocks-eyebrow">{t('wallet.stocksBanner.eyebrow')}</span>
-          <strong>{t('wallet.stocksBanner.title')}</strong>
-          <span className="wallet-stocks-description">{t('wallet.stocksBanner.description')}</span>
-        </span>
-
-        <span className="wallet-stocks-cta">
-          <span>{t('wallet.stocksBanner.cta')}</span>
-          <IconChevronRight aria-hidden="true" />
-        </span>
-      </button>
-
-      {/* Practice allocation breakdown */}
-      <section className="wallet-pie-card" style={{ padding: 14, borderRadius: 18, marginTop: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.allocation')}</div>
-        <div className="row" style={{ gap: 16, alignItems: 'center' }}>
-          <div style={{ width: 126, height: 126, flexShrink: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,77,255,0.2), rgba(0,229,255,0.08))', display: 'grid', placeItems: 'center', fontSize: 22 }}>📊</div>
-          <div className="stack" style={{ gap: 8, flex: 1 }}>
-            <div className="row-between" style={{ fontSize: 12.5 }}>
-              <span className="row" style={{ gap: 8 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: '#00e5ff' }} />
-                {t('wallet.cash')}
-              </span>
-              <span className="mono" style={{ fontWeight: 700 }}>{fmtCurrencyValue(balance, currency)}</span>
-            </div>
-            <div className="row-between" style={{ fontSize: 12.5 }}>
-              <span className="row" style={{ gap: 8 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: '#7c4dff' }} />
-                {t('wallet.positions')}
-              </span>
-              <span className="mono" style={{ fontWeight: 700 }}>{(positions || []).length}</span>
-            </div>
-            <div className="row-between" style={{ fontSize: 12.5 }}>
-              <span className="row" style={{ gap: 8 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: '#ff2d95' }} />
-                {t('wallet.staked')}
-              </span>
-              <span className="mono" style={{ fontWeight: 700 }}>{fmtCurrencyValue(staked, currency)}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="wallet-pie-card" style={{ padding: 14, borderRadius: 18, marginTop: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.tab.history')}</div>
-        {(orders || []).length === 0 ? (
-          <div className="empty" style={{ padding: 18 }}>
-            <span className="empty-icon">🗒</span>
-            <div className="faint" style={{ marginTop: 8 }}>{t('wallet.noHistory')}</div>
-          </div>
-        ) : (
-          (orders || []).slice(0, 20).map((o) => (
-            <div key={o.id} className="row-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-              <span className={`pill ${o.side === 'buy' ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 11 }}>{t(`trade.${o.side}`)}</span>
-              <span className="mono" style={{ fontSize: 12 }}>{fmtQty(o.qty)} {o.symbol}</span>
-              <span className="faint mono" style={{ fontSize: 10.5 }}>{new Date(o.at).toLocaleString()}</span>
-            </div>
-          ))
-        )}
-        {(orders || []).length === 0 && (
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => navigate('/trade')}>{t('wallet.startTrading')}</button>
-        )}
-      </section>
-
-      <section className="wallet-pie-card" style={{ padding: 14, borderRadius: 18, marginTop: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.stats')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[
-            { k: t('wallet.trades'), v: (orders || []).length },
-            { k: t('wallet.betsPlaced'), v: (bets || []).length },
-            { k: t('wallet.winRate'), v: `${betStats.rate.toFixed(0)}%` },
-            { k: t('wallet.plans'), v: (investments || []).length },
-          ].map((s) => (
-            <div key={s.k} className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700 }}>{s.k}</div>
-              <div className="mono" style={{ fontSize: 16, fontWeight: 900, marginTop: 4 }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
-}
-
 export default function Wallet() {
   const hideBalances = useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { haptic } = useTelegram();
   const wallet = useWallet();
   const currencyCode = useSettingsStore((s) => s.currency);
@@ -661,7 +520,14 @@ export default function Wallet() {
   const [btcHubOpen, setBtcHubOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState('all');
-  const [tab, setTab] = useState('real');
+  const [tab, setTab] = useState(() => (searchParams.get('tab') === 'solana' ? 'solana' : 'real'));
+
+  /* A ?tab=solana link can arrive while this route is already mounted; keep
+     the strip in sync with the URL instead of only reading it once. */
+  useEffect(() => {
+    const next = searchParams.get('tab') === 'solana' ? 'solana' : 'real';
+    setTab((cur) => (cur === next ? cur : next));
+  }, [searchParams]);
   const [seedSheet, setSeedSheet] = useState(false);
   const [seedPw, setSeedPw] = useState('');
   const [seedWords, setSeedWords] = useState(null);
@@ -811,10 +677,20 @@ export default function Wallet() {
 
   return (
     <PageTransition>
-      {/* Tab strip — exactly two tabs: real | practice */}
+      {/* Tab strip — two tabs: the on-chain EVM wallet and the Solana wallet.
+          The old experimental/practice tab was removed on instruction; the
+          Solana wallet connection moved here from the swap screen. */}
       <div className="segmented wal-tab-strip" style={{ padding: 5, borderRadius: 18, gap: 4 }}>
-        {['real', 'practice'].map((k) => (
-          <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate', minHeight: 38, borderRadius: 13, fontWeight: 800, fontSize: 13 }}>
+        {['real', 'solana'].map((k) => (
+          <button
+            key={k}
+            className={tab === k ? 'active' : ''}
+            onClick={() => {
+              setTab(k);
+              setSearchParams(k === 'real' ? {} : { tab: k }, { replace: true });
+            }}
+            style={{ isolation: 'isolate', minHeight: 38, borderRadius: 13, fontWeight: 800, fontSize: 13 }}
+          >
             {tab === k && <SegIndicator id="wtab" />}
             {t(`wallet.tab.${k}`)}
           </button>
@@ -822,7 +698,7 @@ export default function Wallet() {
       </div>
 
       {/* ----------------- on-chain wallet (non-custodial) ----------------- */}
-      {tab !== 'practice' && (
+      {tab === 'real' && (
         <>
           <WalHero
             wallet={wallet}
@@ -905,13 +781,14 @@ export default function Wallet() {
           Wallet chunk only; no other route pulls it in. */}
       <div id="wallet-btc-card">{tab === 'real' && <BtcCard />}</div>
 
-      {/* ----------------- allocation ----------------- */}
-      {tab === 'practice' && <>
-        <div variants={riseIn} initial="hidden" animate="show" className="notice" style={{ marginTop: 12, borderRadius: 12, padding: '10px 12px', fontSize: 12 }}>
-          {t('wallet.practiceNotice')}
+      {/* ----------------- Solana wallet -----------------
+          Connection through Phantom / Solflare / Backpack belongs on the
+          wallet page; the swap page keeps only quoting and execution. */}
+      {tab === 'solana' && (
+        <div style={{ marginTop: 12 }}>
+          <SolanaWalletTab />
         </div>
-        <PracticeTab t={t} currency={currency} />
-      </>}
+      )}
 
       <div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
         <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">

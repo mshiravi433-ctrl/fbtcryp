@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import { useTelegram } from '../context/TelegramContext';
@@ -25,22 +25,12 @@ import {
 import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
-  canInjectSolana,
-  registerMobileWalletAdapter,
-  connectSolana,
-  disconnectSolana,
   signAndSendSolana,
   signSolanaTransaction,
   getSolanaSwapBalances,
-  solanaAddress,
-  solanaWalletAvailable,
-  solanaWalletName,
-  backpackBrowseLink,
-  phantomBrowseLink,
-  publicAppUrl,
-  solflareBrowseLink
+  solanaAddress
 } from '../lib/solanaWallet';
-import { shortAddress, useWallet } from '../context/WalletContext';
+import { shortAddress } from '../context/WalletContext';
 import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -99,20 +89,12 @@ export default function SolanaSwap({ embedded = false }) {
   useHideBalances();
 
   /*
-   * The EVM wallet, read ONLY to show its state side by side.
-   *
-   * The owner asked how to disconnect the main wallet before connecting
-   * Solana, assuming the two conflict. They do not, and the panel below
-   * proves it visually rather than asking anyone to take my word for it:
-   * MetaMask lives on `window.ethereum`, Phantom on `window.phantom.solana`.
-   * Different objects, different namespaces, no shared state — verified with
-   * both injected at once.
+   * The Solana wallet is connected from the Wallet page. The swap only needs
+   * the public address that the provider already exposes, so it reads that
+   * module-global state and never owns a connection flow of its own.
    */
-  const evm = useWallet();
-
+  const navigate = useNavigate();
   const [address, setAddress] = useState(() => solanaAddress());
-  const [connecting, setConnecting] = useState(false);
-  const [walletErr, setWalletErr] = useState(null);
   const [walletBalances, setWalletBalances] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
 
@@ -292,51 +274,20 @@ export default function SolanaSwap({ embedded = false }) {
   const [extraTokens, setExtraTokens] = useState([]);
 
   const tokens = useMemo(() => [...BASE_TOKENS, ...extraTokens], [extraTokens]);
-  const hasWallet = solanaWalletAvailable();
-  /*
-   * Whether an injected provider is even POSSIBLE here. False in the APK and
-   * in ordinary mobile browsers, where extensions do not exist — so "no wallet
-   * found" would be misleading rather than informative.
-   */
-  const canInject = canInjectSolana();
 
   /*
-   * ─── REGISTER MOBILE WALLET ADAPTER, WHERE IT CAN WORK ──────────────────
-   * Chrome for Android had NO path to a Solana wallet: extensions do not exist
-   * on mobile, so `canInject` is false and the screen could only offer the
-   * "open this inside Phantom" deeplink. MWA is the official route and adds a
-   * real in-place connection there.
-   *
-   * Registered on mount rather than at module load so the package stays out of
-   * the initial bundle, and guarded by `canUseMwa()` so iOS and our own APK —
-   * neither of which can complete the intent round trip — are untouched.
-   *
-   * `mwaReady` only relaxes the "no wallet here" messaging; it never gates the
-   * connect button, because a registration failure must not remove a path the
-   * user already had.
+   * Follow the Solana connection made from the Wallet page. The provider is
+   * not React state, so the swap listens to the one lightweight event the
+   * wallet layer emits on connect/disconnect and lives in sync with the
+   * wallet tab without holding any connection controls of its own.
    */
-  const [mwaReady, setMwaReady] = useState(false);
   useEffect(() => {
-    let alive = true;
-    registerMobileWalletAdapter(publicAppUrl('/')).then((ok) => {
-      if (alive && ok) setMwaReady(true);
-    });
-    return () => { alive = false; };
+    const onWalletChange = (event) => {
+      setAddress(event?.detail?.address || solanaAddress() || null);
+    };
+    window.addEventListener('solana:wallet-change', onWalletChange);
+    return () => window.removeEventListener('solana:wallet-change', onWalletChange);
   }, []);
-
-  /*
-   * Must leave our own WebView.
-   *
-   * lib/browser.js openUrl() prefers the in-app browser plugin, which would
-   * render the Phantom deeplink INSIDE our app — the one place it cannot work,
-   * since the whole point is to hand the page to another application. A plain
-   * window.open lets Android resolve the universal link to the wallet.
-   */
-  const openExternal = (url) => {
-    if (!url) return;
-    haptic?.('light');
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
 
   /*
    * Guards a stale quote overwriting a newer one. Two rapid amount changes
@@ -345,28 +296,6 @@ export default function SolanaSwap({ embedded = false }) {
    * of wrong that costs money.
    */
   const reqSeq = useRef(0);
-
-  const connect = useCallback(async () => {
-    setWalletErr(null);
-    setConnecting(true);
-    try {
-      const addr = await connectSolana();
-      setAddress(addr);
-      haptic?.('success');
-    } catch (err) {
-      setWalletErr(err.message || 'CONNECT_FAILED');
-      haptic?.('error');
-    } finally {
-      setConnecting(false);
-    }
-  }, [haptic]);
-
-  const disconnect = useCallback(async () => {
-    await disconnectSolana();
-    setAddress(null);
-    setWalletBalances(null);
-    setOrder(null);
-  }, []);
 
   const loadWalletBalances = useCallback(async () => {
     if (!address) return null;
@@ -784,7 +713,9 @@ export default function SolanaSwap({ embedded = false }) {
 
   return (
     <PageTransition embedded={embedded}>
-      {/* ---------------------------- wallet ---------------------------- */}
+      {/* ---------------------------- wallet state --------------------------
+          The swap only quotes and executes. Connecting/disconnecting and the
+          three wallet methods live on the Wallet page's Solana tab. */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
         <div className="row-between">
@@ -794,202 +725,23 @@ export default function SolanaSwap({ embedded = false }) {
               {address ? shortAddress(address) : t('solana.notConnected')}
             </div>
           </div>
-          {address ? (
-            <button className="btn btn-ghost btn-sm" onClick={disconnect}>
-              {t('wallet.disconnect')}
-            </button>
-          ) : (
-            /*
-              Enabled when EITHER path exists. Gating on `hasWallet` alone kept
-              the button disabled on Android Chrome even after MWA registered
-              successfully - the exact dead end MWA was added to remove.
-            */
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={connect}
-              disabled={connecting || (!hasWallet && !mwaReady)}
-            >
-              {connecting ? t('wallet.connecting') : t('wallet.connect')}
-            </button>
-          )}
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/wallet?tab=solana')}>
+            {address ? t('solana.manageWallet') : t('wallet.connect')}
+          </button>
         </div>
 
-        {address && (
+        {address ? (
           <div className="row-between" style={{ marginTop: 9 }}>
             <span className="faint">
               {balanceLoading ? t('common.loading') : `${sourceBalance ?? '—'} ${fromToken.symbol}`}
             </span>
             <span className="mono faint" style={{ fontSize: 11.5 }}>{solBalance ?? '—'} SOL</span>
           </div>
-        )}
-
-        {/*
-          ---------- NO INJECTED PROVIDER ----------
-
-          Two different situations that used to share one dead-end message.
-
-          In the APK (and in any ordinary mobile browser) there can NEVER be an
-          injected provider: Phantom injects window.solana from a browser
-          EXTENSION, and extensions do not exist on mobile. Telling that user to
-          "install Phantom" is wrong — they may already have it — and the
-          disabled Connect button gave them nowhere to go.
-
-          Phantom's own recommendation is to hand the page to the wallet's
-          in-app browser, where the provider IS injected. So instead of an
-          error, this offers the button that actually gets them there.
-        */}
-        {/*
-          `mwaReady` suppresses this whole block: on Android Chrome the user now
-          has a working in-place connection, so telling them to reopen the page
-          inside a wallet would send them out of a flow that already works.
-        */}
-        {!hasWallet && !mwaReady && (
-          canInject ? (
-            <p className="notice notice-danger" style={{ marginTop: 11 }}>
-              {t('solana.noWallet')}
-            </p>
-          ) : (
-            <p className="notice" style={{ marginTop: 11 }}>{t('solana.openInWallet')}</p>
-          )
-        )}
-
-        {/* Always available, including after connection. A mobile session can
-            lose its injected provider after an app switch; hiding the escape
-            links once connected turned that recoverable state into a dead end. */}
-        <div style={{ marginTop: 11 }}>
-          <p className="field-label">{t('solana.walletLinksTitle')}</p>
-          <div className="row" style={{ gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/solana')))}>
-              Phantom
-            </button>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/solana')))}>
-              Solflare
-            </button>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(backpackBrowseLink(publicAppUrl('/#/solana')))}>
-              Backpack
-            </button>
-          </div>
-          <p className="faint" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.7 }}>
-            {t('solana.openInWalletHint')}
-          </p>
-        </div>
-
-        {walletErr && (
-          <p className="notice notice-danger" style={{ marginTop: 11 }}>
-            {t(`solana.err.${walletErr}`, t('solana.err.CONNECT_FAILED'))}
+        ) : (
+          <p className="notice" style={{ marginTop: 11 }}>
+            {t('solana.swapNeedsWallet')}
           </p>
         )}
-        {hasWallet && !address && (
-          <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
-            {t('solana.detected', { name: solanaWalletName() })}
-          </p>
-        )}
-
-        {/*
-          ─── WHICH WALLETS ARE SOLANA WALLETS, AND HOW EACH CONNECTS ────────
-          Asked for directly: an explainer saying which wallets are Solana
-          wallets and how the connection works, inside a collapsible box.
-
-          Collapsed by default and placed AFTER the connect row rather than
-          before it. Somebody who already has Phantom should not have to scroll
-          past an explanation to reach the button; somebody who does not is
-          exactly the person who will open it. That is the same rule the rest of
-          the app's InfoBoxes follow — the title has to be a real question, and
-          this one is the question people actually ask.
-
-          The content is a table because the honest answer differs by platform:
-          the same wallet connects three different ways depending on whether
-          you are on a desktop, in Chrome for Android, or in our APK. A
-          paragraph would have to hedge; a table can just say it.
-        */}
-        <InfoBox title={t('solana.whichTitle')} tone="info" id="solana-which">
-          <p>{t('solana.whichIntro')}</p>
-
-          <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-            {['phantom', 'solflare', 'backpack'].map((w) => (
-              <div key={w} className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
-                <span
-                  className="wallet-badge"
-                  style={{ width: 26, height: 26, fontSize: 11, flexShrink: 0 }}
-                  aria-hidden="true"
-                >
-                  {t(`solana.wallets.${w}.short`)}
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12.5 }}>{t(`solana.wallets.${w}.name`)}</div>
-                  <p className="prose-sm" style={{ marginTop: 2 }}>{t(`solana.wallets.${w}.desc`)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p style={{ marginTop: 12, fontWeight: 700, fontSize: 12.5 }}>{t('solana.howTitle')}</p>
-          <ol className="p2p-steps">
-            {['desktop', 'android', 'ios', 'app'].map((k) => (
-              <li key={k}>{t(`solana.how.${k}`)}</li>
-            ))}
-          </ol>
-
-          {/*
-            The one thing that is NOT a Solana wallet, said plainly. Trying to
-            paste an 0x address into a Solana field is the single most common
-            mistake here, and it is unrecoverable if funds follow.
-          */}
-          <p className="notice notice-danger" style={{ marginTop: 10 }}>
-            {t('solana.notSolana')}
-          </p>
-        </InfoBox>
-      </motion.section>
-
-      {/*
-        ---------- HOW THE TWO WALLETS RELATE ----------
-
-        Asked directly: "how do I disconnect the main wallet before connecting
-        Solana — you can't have two connected at once."
-
-        You can. MetaMask/Trust inject `window.ethereum`; Phantom/Solflare
-        inject `window.phantom.solana`. Separate objects, separate namespaces,
-        no shared state — confirmed with both present simultaneously.
-
-        Rather than assert that in a paragraph nobody reads, both connections
-        are shown side by side with their live state. Seeing two green dots at
-        once answers the question permanently.
-      */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.twoWalletsTitle')}</p>
-        <p className="muted" style={{ fontSize: 12.3, marginBottom: 11, lineHeight: 1.8 }}>
-          {t('solana.twoWalletsBody')}
-        </p>
-
-        <div className="stack" style={{ gap: 9 }}>
-          <div className="row-between">
-            <span className="row" style={{ gap: 7 }}>
-              <span className="dot" style={{ background: evm.address ? 'var(--up)' : 'var(--text-3)' }} />
-              <span style={{ fontSize: 12.5 }}>{t('solana.evmSide')}</span>
-            </span>
-            <span className="mono faint" style={{ fontSize: 11.5 }}>
-              {evm.address ? shortAddress(evm.address) : t('solana.notConnected')}
-            </span>
-          </div>
-
-          <div className="row-between">
-            <span className="row" style={{ gap: 7 }}>
-              <span className="dot" style={{ background: address ? 'var(--up)' : 'var(--text-3)' }} />
-              <span style={{ fontSize: 12.5 }}>{t('solana.solSide')}</span>
-            </span>
-            <span className="mono faint" style={{ fontSize: 11.5 }}>
-              {address ? shortAddress(address) : t('solana.notConnected')}
-            </span>
-          </div>
-        </div>
-
-        {/*
-          Was a third amber box, immediately under the two wallet rows the
-          owner also flagged. It is reassurance, not a warning — nothing about
-          it is urgent and nothing is at risk — so it drops to plain prose and
-          stops competing with the notices that do matter.
-        */}
-        <p className="prose-sm" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}

@@ -227,6 +227,23 @@ export function getSolanaProvider() {
 
 export const solanaWalletAvailable = () => Boolean(getSolanaProvider());
 
+/**
+ * Broadcast a lightweight connection change to every open screen.
+ *
+ * Solana state lives in `window.phantom.solana` etc. and is not part of React,
+ * so screens that both need the address (the Wallet tab and the Solana swap)
+ * subscribe to this event instead of duplicating the provider read in each one.
+ * The detail only ever carries a public address — never a secret.
+ */
+function emitSolanaWalletChange(address) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('solana:wallet-change', { detail: { address: address || null } }));
+  } catch {
+    /* An event bus must never break the wallet operation it is reporting. */
+  }
+}
+
 /** Human name for the connected wallet, for the UI. */
 export function solanaWalletName() {
   const p = getSolanaProvider();
@@ -305,6 +322,7 @@ export async function connectSolana() {
        */
       mwaAddress = address;
       mwaAccount = account;
+      emitSolanaWalletChange(address);
       return address;
     }
     throw new Error('NO_WALLET');
@@ -315,6 +333,7 @@ export async function connectSolana() {
     const pk = res?.publicKey ?? provider.publicKey;
     const address = pk?.toString?.();
     if (!address) throw new Error('NO_ACCOUNT');
+    emitSolanaWalletChange(address);
     return address;
   } catch (err) {
     // 4001 is the universal "user rejected" code, mirrored from EIP-1193.
@@ -341,6 +360,7 @@ export async function disconnectSolana() {
   } catch {
     /* same reasoning */
   }
+  emitSolanaWalletChange(null);
 }
 
 /**

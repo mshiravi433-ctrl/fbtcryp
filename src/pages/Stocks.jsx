@@ -9,6 +9,7 @@ import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
 import HistoryPanel from '../components/HistoryPanel';
 import { useChart, useMarkets } from '../hooks/useMarket';
+import { getCategory } from '../lib/api';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { IconShield } from '../components/Icons';
@@ -70,7 +71,29 @@ const LazyDerivatives = SPECULATION_ENABLED ? lazyRetry(() => import('./Derivati
  */
 
 /** Protocols building tokenized real-world assets. These are normal tokens. */
-const RWA_IDS = ['ondo-finance', 'chainlink', 'maker', 'polymesh', 'centrifuge', 'pendle'];
+const RWA_IDS = [
+  'ondo-finance',
+  'chainlink',
+  'maker',
+  'polymesh',
+  'centrifuge',
+  'pendle',
+  'pax-gold',
+  'tether-gold',
+  'xdc-network',
+  'ripple',
+  'stellar',
+  'hedera-hashgraph',
+  'injective-protocol',
+  'filecoin',
+  'sei-network',
+  'clearpool',
+  'maple',
+  'goldfinch',
+  'realt-token',
+  'truflation',
+  'defactor'
+];
 
 /*
  * ─── THE ISSUER LINK-OUTS ARE GONE ──────────────────────────────────────────
@@ -109,13 +132,36 @@ export default function Stocks() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
-  const { data: coins, loading } = useMarkets(100);
+  const { data: coins, loading } = useMarkets(250);
   const [tab, setTab] = useState('equity');
 
   const [assets, setAssets] = useState(null);
   const [assetsError, setAssetsError] = useState(null);
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [amount, setAmount] = useState(AMOUNTS[1]);
+
+  /*
+   * RWA is a CoinGecko sector, not a filter on the top-250 market page. The
+   * sector query returns the whole real-world-assets universe through our
+   * same-origin proxy — more rows, and no outbound marketing links anywhere.
+   * When the sector feed is unavailable the tab keeps the familiar hard-coded
+   * subset so it never renders empty while the network recovers.
+   */
+  const [rwaFeed, setRwaFeed] = useState(null);
+  const [rwaLoading, setRwaLoading] = useState(false);
+  const [rwaError, setRwaError] = useState(null);
+
+  useEffect(() => {
+    if (tab !== 'rwa') return undefined;
+    let alive = true;
+    setRwaLoading(true);
+    setRwaError(null);
+    getCategory('rwa', { perPage: 250 })
+      .then((rows) => { if (alive) setRwaFeed(rows || []); })
+      .catch((e) => { if (alive) setRwaError(e); })
+      .finally(() => { if (alive) setRwaLoading(false); });
+    return () => { alive = false; };
+  }, [tab]);
 
   useEffect(() => {
     let alive = true;
@@ -152,10 +198,11 @@ export default function Stocks() {
     };
   }, [tab]);
 
-  const rwaCoins = useMemo(
-    () => (coins ?? []).filter((c) => RWA_IDS.includes(c.id)),
-    [coins]
-  );
+  const rwaCoins = useMemo(() => {
+    /* The sector feed understands RWA better than the top-250 page does. */
+    if (Array.isArray(rwaFeed) && rwaFeed.length > 0) return rwaFeed;
+    return (coins ?? []).filter((c) => RWA_IDS.includes(c.id));
+  }, [rwaFeed, coins]);
 
   /*
    * ─── ONLY THE TICKERS WE CANNOT SELL ────────────────────────────────────
@@ -592,11 +639,16 @@ export default function Stocks() {
 
           <section>
             <p className="section-label">{t('stocks.rwaTokens')}</p>
-            {loading ? (
+            {rwaLoading || (rwaFeed === null && loading) ? (
               <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-                {Array.from({ length: 4 }).map((_, i) => (
+                {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="skel" style={{ height: 58 }} />
                 ))}
+              </div>
+            ) : rwaError && !rwaFeed?.length ? (
+              <div className="empty">
+                <span className="empty-icon">🏛</span>
+                {t('stocks.unavailable')}
               </div>
             ) : rwaCoins.length === 0 ? (
               <div className="empty">

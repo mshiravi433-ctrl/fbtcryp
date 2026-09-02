@@ -665,8 +665,17 @@
 @keyframes feed-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 /* Chart block polish (dYdX) */
-.dydx-chart { margin-top: 10px; }
-.dydx-chart-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dydx-chart {
+  margin-top: 10px;
+  min-height: 158px;
+  padding: 10px 10px 8px;
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(0, 229, 255, 0.06), rgba(255, 255, 255, 0.02));
+  position: relative;
+  overflow: hidden;
+}
+.dydx-chart-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; padding-inline: 2px; }
 .dydx-chart-res { display: flex; gap: 4px; }
 .dydx-chart-res button {
   border: 1px solid rgba(255,255,255,0.09);

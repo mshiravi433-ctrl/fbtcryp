@@ -5,6 +5,14 @@
 # copy-paste.
 set -euo pipefail
 
+# Where this script lives. `set -u` is on, so a variable that is only defined in
+# the *caller* (ci/build-both.sh) is a hard failure, not an empty string — which
+# is exactly how a guard call added here once killed every build with
+# `HERE: unbound variable` at line 81. Each script declares what it uses.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+cd "$ROOT"
+
 # ---------------------------------------------------------------------------
 # fail <<'MSG'
 #
@@ -28,6 +36,17 @@ fail() {
   fi
   exit 1
 }
+
+# ---------------------------------------------------------------------------
+# note <text> — a checkpoint that survives an unreadable log.
+#
+# `::notice` gets its own line on the run's summary page, so a long build can be
+# read as a sequence of facts (deps installed, bundle built, assets synced, SDK
+# ready) without opening the log at all. When a run dies somewhere, the last
+# notice that DID arrive is the boundary of what worked — the difference between a
+# two-minute diagnosis and a two-day one, a price this repository has already paid.
+# ---------------------------------------------------------------------------
+note() { printf '::notice title=%s::%s\n' "$1" "$2"; }
 
 # ---------------------------------------------------------------------------
 # Toolchain preflight.
@@ -67,13 +86,18 @@ fi
 # APK that silently never gets built — the build log buried it, the release page
 # just stayed empty. The guard adds the flag npm would have added.
 # ---------------------------------------------------------------------------
-node "$HERE/lock-platform-guard.mjs"
+if [ -f "$HERE/lock-platform-guard.mjs" ]; then
+  node "$HERE/lock-platform-guard.mjs"
+else
+  echo "  (lockfile platform guard not found next to this script — continuing without it)"
+fi
 
 echo "▸ installing dependencies"
 # Annotated rather than bare: one platform-locked nested package (see
 # ci/lock-platform-guard.mjs) used to end every run here with three unreadable lines
 # and an empty release page. If the install fails again, the reason belongs where
 # the failure is actually looked at, not forty log lines down.
+note "npm ci" "installing dependencies with node $(node -v)"
 npm ci || fail <<MSG
 npm ci failed, and nothing else in this build can run until the dependency tree is
 installable on a Linux runner.
@@ -87,6 +111,7 @@ If it says EUSAGE instead, package.json and package-lock.json disagree: run
 npm install locally and commit the regenerated lockfile.
 MSG
 
+note "npm ci" "dependencies installed"
 echo "▸ building web bundle"
 if [ -z "${VITE_API_BASE:-}" ]; then
   echo "  ⚠  VITE_API_BASE is not set."
@@ -214,6 +239,7 @@ EFFECTIVE_CODE="$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gr
 EFFECTIVE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.gradle | head -1)"
 echo "▸ building versionCode=${EFFECTIVE_CODE} versionName=${EFFECTIVE_NAME}"
 
+note "web bundle" "dist is $(du -sh dist 2>/dev/null | cut -f1 || echo missing), $(ls dist/assets 2>/dev/null | wc -l | tr -d ' ') asset files"
 echo "▸ syncing Capacitor"
 npx cap sync android || fail <<MSG
 \`npx cap sync android\` failed. It only copies dist/ into the Android project and
@@ -259,8 +285,17 @@ fi
 mkdir -p "$SDK_ROOT" 2>/dev/null || true
 printf 'yes\n' | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
 for pkg in "platform-tools" "platforms;android-${COMPILE_SDK}" "build-tools;${COMPILE_SDK}.0.0"; do
-  name="${pkg%%;*}"
-  if [ -d "$SDK_ROOT/$pkg" ] || ls -d "$SDK_ROOT/$name"*/ >/dev/null 2>&1; then
+  # Match the exact directory the package owns, not merely its parent: "a
+  # platforms dir exists" says nothing about android-35 being in it, and the
+  # whole point of this preflight is the specific level compileSdkVersion asks
+  # for. Anything looser reports "already installed" and lets Gradle die later.
+  case "$pkg" in
+    platform-tools) want="$SDK_ROOT/platform-tools" ;;
+    'platforms;'*) want="$SDK_ROOT/platforms/${pkg#*;}" ;;
+    'build-tools;'*) want="$SDK_ROOT/build-tools/${pkg#*;}" ;;
+    *) want="$SDK_ROOT/$pkg" ;;
+  esac
+  if [ -d "$want" ]; then
     echo "  ✓ $pkg already installed"
     continue
   fi
@@ -275,6 +310,7 @@ else
   echo "  ✓ platforms/android-${COMPILE_SDK} ready"
 fi
 
+note "android sdk" "compileSdk ${COMPILE_SDK:-?}; platforms: $(ls "$SDK_ROOT/platforms" 2>/dev/null | tr '\n' ' ' || echo none); build-tools: $(ls "$SDK_ROOT/build-tools" 2>/dev/null | tr '\n' ' ' || echo none)"
 chmod +x android/gradlew
 cd android
 
@@ -496,6 +532,7 @@ if [ "$SRC" != "$STABLE_DIR/app-debug.apk" ]; then
   cp "$SRC" "$STABLE_DIR/app-debug.apk"
 fi
 
+note "apk" "$(du -h "$SRC" | cut -f1) written to $SRC"
 echo "✓ APK built: $(du -h "$SRC" | cut -f1) → out/$OUT"
 
 # Copy the Play-ready bundle out too, when one was produced.

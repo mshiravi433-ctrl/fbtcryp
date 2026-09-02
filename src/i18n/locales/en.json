@@ -403,7 +403,8 @@
       "liquidity": "Liquidity",
       "history": "History",
       "practice": "Practice wallet",
-      "real": "Real wallet"
+      "real": "Real wallet",
+      "solana": "Solana wallet"
     },
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
@@ -3097,7 +3098,7 @@
   "solana": {
     "title": "Solana wallet",
     "notConnected": "Not connected",
-    "detected": "{{name}} detected. Connect to swap on Solana.",
+    "detected": "{{name}} detected. Connect to manage your Solana wallet.",
     "noWallet": "No Solana wallet found. Install Phantom or Solflare and open this page again — on a phone, use the browser inside the wallet app. Your EVM wallet (MetaMask, Trust) cannot sign Solana transactions; they are different networks, so you need both. Keep your EVM wallet connected — it does not interfere.",
     "router": "Route",
     "importTitle": "Swap any Solana token",
@@ -3168,7 +3169,11 @@
       "app": "Our Android app: same as iPhone — use the button above to reopen this page inside the wallet's browser."
     },
     "notSolana": "Do not paste an address starting with 0x here. That is an Ethereum address, and a Solana address never looks like one — it is 32 to 44 letters and digits with no 0x. Sending to the wrong format cannot be undone.",
-    "walletLinksTitle": "Open this swap inside a Solana wallet"
+    "walletLinksTitle": "Open this page inside a Solana wallet",
+    "balance": "SOL balance",
+    "manageWallet": "Manage wallet",
+    "swapNeedsWallet": "A Solana wallet is needed to swap. Connect it from the Wallet page — the swap only handles quoting and signing.",
+    "manageSwapWallet": "Manage wallet"
   },
   "buy": {
     "title": "Buy & sell",
@@ -4827,7 +4832,11 @@
       "txVerificationOnly": "Verification active / not atomic",
       "txVerificationOff": "Verification off",
       "txVerificationConfiguredAtomic": "Multi-RPC verification and HTLC atomic path are active",
-      "atomicViaHtlc": "Atomic via HTLC"
+      "atomicViaHtlc": "Atomic via HTLC",
+      "walletBothVerified": "EVM + Solana wallets verified",
+      "walletSomeVerified": "One wallet verified — connect the other to reach 100% coverage",
+      "solanaAddress": "Solana address",
+      "solanaChain": "Solana chain"
     },
     "revert": {
       "abort-all": "Abort all",
@@ -5255,6 +5264,14 @@
         "moderate": "Balanced",
         "aggressive": "Aggressive"
       }
+    },
+    "brain": {
+      "walletTitle": "Wallet connections",
+      "walletReadOnly": "Read-only binding — no signature is created here",
+      "walletActive": "EVM + Solana wallet connections are active",
+      "walletOneActive": "One wallet is active — connect the other from the Wallet page",
+      "walletManage": "Manage wallet",
+      "notConnectedShort": "not connected"
     }
   },
   "whales": {
