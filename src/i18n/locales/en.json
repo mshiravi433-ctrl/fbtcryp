@@ -8246,7 +8246,10 @@
       "CONFIGURATION_REQUIRED": "The provider integration is awaiting its production credential.",
       "AMOUNT_BELOW_MIN": "The amount is below the provider’s minimum for this asset.",
       "AMOUNT_ABOVE_MAX": "The amount is above the provider’s maximum for this asset.",
-      "WEBHOOK_SIGNATURE_INVALID": "A provider callback failed signature verification and was rejected."
+      "WEBHOOK_SIGNATURE_INVALID": "A provider callback failed signature verification and was rejected.",
+      "GUIDED_WALLET_INVALID": "The wallet address is not a valid EVM address.",
+      "GUIDED_AMOUNT_INVALID": "Enter a valid amount greater than zero.",
+      "GUIDED_ASSET_UNSUPPORTED": "This asset/network pair is not available on the no-sign-up route."
     },
     "fbtFeeUnavailable": "FBT trading fee: $0.00",
     "providerNames": {
@@ -8276,6 +8279,59 @@
     "resultIntro": "You returned from the provider’s secure checkout. Returning does not mean the crypto has arrived — the status below reflects independent blockchain verification.",
     "loadingOrder": "Loading your order…",
     "orderAccessLostTitle": "Order access unavailable",
-    "orderAccessLostBody": "This browser session no longer holds the access key for that order. The order still exists and settlement continues on-chain; check your wallet balance or transaction history."
+    "orderAccessLostBody": "This browser session no longer holds the access key for that order. The order still exists and settlement continues on-chain; check your wallet balance or transaction history.",
+    "wizard": {
+      "stepOf": "Step {{current}} of {{total}}",
+      "steps": {
+        "amount": "Amount",
+        "wallet": "Wallet",
+        "asset": "Asset",
+        "review": "Review"
+      },
+      "next": "Next",
+      "back": "Back",
+      "edit": "Edit",
+      "amountTitleBuy": "How much would you like to spend?",
+      "amountTitleSell": "How much would you like to sell?",
+      "amountHintBuy": "Enter the amount in your currency. The exact crypto amount and all provider fees are shown on the provider’s own page before you pay.",
+      "amountHintSell": "Enter the amount of crypto to sell. You will pick the exact asset in a later step.",
+      "currencyLabel": "Currency",
+      "quickAmounts": "Quick amounts",
+      "walletTitleBuy": "Which wallet should receive the crypto?",
+      "walletTitleSell": "Which wallet will you send the crypto from?",
+      "walletValid": "Valid wallet address.",
+      "walletInvalid": "This is not a valid EVM wallet address (0x + 40 hex characters).",
+      "assetTitle": "Which asset and network?",
+      "reviewTitle": "Review your order",
+      "summaryAmount": "Amount",
+      "summaryWallet": "Wallet",
+      "summaryAsset": "Asset",
+      "noRegistration": "No sign-up needed",
+      "guidedNote": "Your details are pre-filled on {{provider}}’s official page. You only review, confirm and pay there — {{provider}} runs its own identity and payment checks, holds its own fees and prices, and FBT never touches your money.",
+      "guidedPrefillNote": "Pre-fill is best-effort: if {{provider}} does not accept a value it simply shows its normal selector and you choose there. Nothing is submitted on your behalf.",
+      "guidedCta": "Continue on {{provider}}",
+      "guidedOpenedTitle": "Checkout opened.",
+      "guidedOpenedBody": "Finish your confirmation and payment on {{provider}}’s page. The on-chain report below is now watching your wallet and will show the matching movement the moment it lands on the blockchain.",
+      "reopenProvider": "Reopen {{provider}}",
+      "trackedUnavailable": "The fully tracked order flow is not configured on this server yet; the no-sign-up route above works independently of it."
+    },
+    "watch": {
+      "titleBuy": "On-chain deposit report",
+      "titleSell": "On-chain withdrawal report",
+      "subtitle": "Reads the public blockchain directly — no provider account, no API key.",
+      "start": "Start watching",
+      "stop": "Stop",
+      "needsInputs": "Enter a valid wallet address and pick an asset in the steps above to enable the report.",
+      "watchingBuy": "Watching your wallet for the incoming deposit…",
+      "watchingSell": "Watching your wallet for the outgoing transfer…",
+      "lastChecked": "last checked {{time}}",
+      "providerError": "Could not reach a public RPC node for this network. Try again in a moment.",
+      "eventIn": "Deposit detected",
+      "eventOut": "Withdrawal detected",
+      "eventMatch": "matches your order direction",
+      "noneYet": "No movement detected yet. Card payments typically settle on-chain within a few minutes.",
+      "viewOnExplorer": "View this wallet on the block explorer",
+      "honestNote": "This report proves on-chain transfers only. It can confirm that funds arrived in or left your wallet — it cannot see the provider’s payment status, and it will never claim a payment was confirmed."
+    }
   }
 }

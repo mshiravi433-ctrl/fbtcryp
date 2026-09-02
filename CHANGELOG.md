@@ -1,3 +1,42 @@
+# Unreleased — Buy/Sell: step wizard + no-registration guided rail + on-chain report
+
+- **Step-wizard Buy/Sell** (`src/components/BuySellPanel.jsx` rewritten): one
+  decision per screen, exactly in the requested order — **amount → wallet →
+  asset/network → review** — with Next/Back navigation, a numbered progress
+  stepper, direction-aware slide animation (mirrored under RTL), a large
+  fintech-style amount input with quick-amount chips, live EVM address
+  validation with a green check, asset cards + network chips, and an
+  editable review summary. Full fa/en copy; all locked test markers
+  (`continueToCheckout`, `buySell.fbtFee`, `sellUnavailable*`,
+  `providerUnavailable*`) preserved.
+- **Guided handoff — the no-registration rail** (`src/lib/guidedCheckout.js`):
+  when the credentialed tracked flow is not configured, the wizard composes
+  the provider's **official public widget URL** using only documented query
+  parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact
+  base units, `fiatCurrency`, `userAddress`) and opens it — the user's data
+  arrives prefilled and they only confirm and pay **on the provider's own
+  site**, which runs its own KYC/payment checks. No API key of ours exists
+  or appears anywhere in the URL (unit-tested). Prefill is honestly labelled
+  best-effort; the curated catalog only lists pairs whose on-chain contract
+  metadata is already pinned in `lib/chains.js`. Fail-closed validation with
+  stable error codes (`GUIDED_WALLET_INVALID`, `GUIDED_AMOUNT_INVALID`, …).
+- **Real on-chain report under BOTH tabs** (`src/lib/buySellWatch.js` +
+  `src/components/WalletWatchReport.jsx`): polls the watched wallet's balance
+  of the exact chosen token via the app's public-RPC read providers and
+  reports every movement — deposits for Buy, withdrawals for Sell — with a
+  pure, unit-tested delta tracker (first read is the baseline, never an
+  event; re-baselines before reporting; null reads are not events). Wording
+  discipline enforced in copy: it says **"deposit/withdrawal detected"**,
+  and explicitly states it cannot see the provider's payment status — it
+  never claims "payment confirmed". No provider API, no account, no key.
+- The credentialed Ramp tracked flow (below) is unchanged and remains the
+  preferred engine whenever its server credentials exist; the wizard uses it
+  automatically (quote → order → explicit confirm → hosted checkout).
+- Tests: +23 unit checks (guided URL composition, base-unit string math,
+  catalog↔chain-metadata integrity, delta-tracker truth rules); wiring,
+  flow/safety probes, phase88 boundary probe and the 12-language screens
+  suite all green with zero new failures.
+
 # Unreleased — Buy/Sell: Ramp Network hosted checkout (Provider #1)
 
 - **Ramp Network Hosted Mode is now the primary Buy/Sell provider** —

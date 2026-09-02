@@ -210,6 +210,17 @@ import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
 import { FBT_TRADING_FEE, ORDER_STATES, ProviderRouter, RampNetworkHostedCheckoutProvider, validateDestination } from '../server/buySell.js';
+import {
+  GUIDED_CATALOG,
+  GUIDED_NETWORKS,
+  GUIDED_PROVIDER,
+  buildGuidedCheckoutUrl,
+  guidedAssetCode,
+  guidedTokenMeta,
+  isEvmAddress as guidedIsEvmAddress,
+  toBaseUnits as guidedToBaseUnits
+} from '../src/lib/guidedCheckout.js';
+import { createDeltaTracker } from '../src/lib/buySellWatch.js';
 import { buildHostedCheckoutUrl } from '../server/providers/rampNetwork.js';
 import { STATIONS, parseAudioFeed } from '../server/audio.js';
 import { VAULT_CHAINS, isValidVaultAddress, vaultConfig, vaultFeePercent, vaultIsLive } from '../src/lib/vault.js';
@@ -9054,6 +9065,101 @@ export default async function run() {
     t('the cap is exported at 100% APR (1.0)',
       GOAL_MAX_ANNUAL_YIELD === 1.0);
   }
+
+  /* ================================================================== */
+  /* GUIDED HANDOFF — the no-registration Buy / Sell rail               */
+  /* ================================================================== */
+  {
+    /* ---- the catalog is verifiable, not aspirational ---- */
+    t('every guided catalog row resolves to pinned on-chain metadata',
+      GUIDED_CATALOG.every((row) => {
+        const meta = guidedTokenMeta(row.network, row.asset);
+        return meta && Number.isInteger(meta.chainId) && Number.isInteger(meta.decimals)
+          && (meta.native ? meta.address == null : /^0x[a-fA-F0-9]{40}$/.test(meta.address));
+      }));
+    t('every guided catalog row maps to a CHAIN_SYMBOL provider code',
+      GUIDED_CATALOG.every((row) => {
+        const code = guidedAssetCode(row.network, row.asset);
+        return typeof code === 'string' && code === `${GUIDED_NETWORKS[row.network].ramp}_${row.asset}`;
+      }));
+    t('an uncurated pair yields no metadata and no code',
+      guidedTokenMeta('bsc', 'CAKE') === null && guidedAssetCode('ethereum', 'SHIB') === null);
+
+    /* ---- exact string math for base units ---- */
+    t("'2.5' at 6 decimals is exactly '2500000'", guidedToBaseUnits('2.5', 6) === '2500000');
+    t("'1' at 18 decimals is exactly 1e18 as a string", guidedToBaseUnits('1', 18) === '1000000000000000000');
+    t('sub-unit dust is rejected, not rounded', guidedToBaseUnits('0.1234567', 6) === null);
+    t('non-numeric and negative inputs are rejected',
+      guidedToBaseUnits('abc', 6) === null && guidedToBaseUnits('-1', 6) === null && guidedToBaseUnits('', 6) === null);
+
+    /* ---- the composed URL is the official host with documented params ---- */
+    const wallet = '0x1111111111111111111111111111111111111111';
+    const buy = buildGuidedCheckoutUrl({
+      side: 'BUY', asset: 'USDT', network: 'arbitrum', walletAddress: wallet,
+      fiatCurrency: 'USD', fiatAmount: '150'
+    });
+    const buyUrl = new URL(buy.url);
+    t('the BUY handoff points at the official public widget host',
+      buy.url.startsWith(GUIDED_PROVIDER.host) && buyUrl.protocol === 'https:');
+    t('BUY prefills swapAsset, fiatValue, fiatCurrency and the user wallet',
+      buyUrl.searchParams.get('swapAsset') === 'ARBITRUM_USDT'
+      && buyUrl.searchParams.get('fiatValue') === '150'
+      && buyUrl.searchParams.get('fiatCurrency') === 'USD'
+      && buyUrl.searchParams.get('userAddress') === wallet
+      && buyUrl.searchParams.get('defaultFlow') === 'ONRAMP');
+    t('no credential of ours ever appears in the guided URL',
+      !/hostApiKey|apiKey|secret|token/i.test(buy.url));
+
+    const sell = buildGuidedCheckoutUrl({
+      side: 'SELL', asset: 'USDT', network: 'arbitrum', walletAddress: wallet,
+      fiatCurrency: 'EUR', cryptoAmount: '2.5'
+    });
+    const sellUrl = new URL(sell.url);
+    t('SELL prefills offrampAsset and the amount in exact base units',
+      sellUrl.searchParams.get('offrampAsset') === 'ARBITRUM_USDT'
+      && sellUrl.searchParams.get('swapAmount') === '2500000'
+      && sellUrl.searchParams.get('enabledFlows') === 'OFFRAMP'
+      && sellUrl.searchParams.get('defaultFlow') === 'OFFRAMP');
+
+    /* ---- fail-closed validation with stable codes ---- */
+    const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };
+    t('a malformed wallet is refused before any URL exists',
+      codeOf(() => buildGuidedCheckoutUrl({ side: 'BUY', asset: 'USDT', network: 'arbitrum', walletAddress: '0x123', fiatCurrency: 'USD', fiatAmount: 100 })) === 'GUIDED_WALLET_INVALID');
+    t('a zero or garbage amount is refused',
+      codeOf(() => buildGuidedCheckoutUrl({ side: 'BUY', asset: 'USDT', network: 'arbitrum', walletAddress: wallet, fiatCurrency: 'USD', fiatAmount: 0 })) === 'GUIDED_AMOUNT_INVALID'
+      && codeOf(() => buildGuidedCheckoutUrl({ side: 'SELL', asset: 'USDT', network: 'arbitrum', walletAddress: wallet, fiatCurrency: 'USD', cryptoAmount: 'x' })) === 'GUIDED_AMOUNT_INVALID');
+    t('an uncurated asset pair is refused',
+      codeOf(() => buildGuidedCheckoutUrl({ side: 'BUY', asset: 'SHIB', network: 'ethereum', walletAddress: wallet, fiatCurrency: 'USD', fiatAmount: 100 })) === 'GUIDED_ASSET_UNSUPPORTED');
+    t('an unknown fiat currency is refused',
+      codeOf(() => buildGuidedCheckoutUrl({ side: 'BUY', asset: 'USDT', network: 'arbitrum', walletAddress: wallet, fiatCurrency: 'XYZ', fiatAmount: 100 })) === 'GUIDED_FIAT_INVALID');
+    t('the EVM address gate accepts 0x+40hex and nothing else',
+      guidedIsEvmAddress(wallet) && !guidedIsEvmAddress('0x123') && !guidedIsEvmAddress('') && !guidedIsEvmAddress(null));
+  }
+
+  /* ================================================================== */
+  /* WALLET DELTA TRACKER — the honest on-chain report's state machine  */
+  /* ================================================================== */
+  {
+    const track = createDeltaTracker(6);
+    t('the first successful read is the baseline, never an event',
+      track(1_000_000n) === null);
+    t('an unchanged balance reports nothing', track(1_000_000n) === null);
+    const arrival = track(3_500_000n);
+    t('an increase reports IN with the exact delta',
+      arrival?.direction === 'in' && arrival.raw === 2_500_000n && arrival.amount === '2.5');
+    t('the tracker re-baselines: the same reading again is silent',
+      track(3_500_000n) === null);
+    const spend = track(3_000_000n);
+    t('a decrease reports OUT with the exact delta',
+      spend?.direction === 'out' && spend.raw === 500_000n && spend.amount === '0.5');
+    t('a failed read (null) is not an event and does not move the baseline',
+      track(null) === null && track(3_000_000n) === null);
+    const fresh = createDeltaTracker(18);
+    fresh(5n * 10n ** 18n);
+    t('a holder of an existing balance never gets a false instant deposit',
+      fresh(5n * 10n ** 18n) === null);
+  }
+
 
   return rows;
 }

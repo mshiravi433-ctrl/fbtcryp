@@ -90,3 +90,47 @@ cannot independently verify over its RPC quorum are not offered at all.
 - `test/units.mjs` §Buy/Sell — capability, router, address validation and
   hosted-URL composer invariants (official host, documented params only,
   no fee/partner parameter).
+
+## The no-registration guided rail (wizard + on-chain report)
+
+The Buy page is a four-step wizard — **amount → wallet → asset/network →
+review** — and always works, even with zero server configuration:
+
+| Engine | When | What happens |
+| --- | --- | --- |
+| **Tracked flow** | `RAMP_*` credentials configured | quote → order → explicit confirm → hosted checkout → signed webhook → on-chain settlement verification (unchanged, documented above) |
+| **Guided handoff** | no credentials | `src/lib/guidedCheckout.js` composes the provider's official public widget URL with only documented parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact base units, `fiatCurrency`, `userAddress`) and opens it. The user confirms and pays on the provider's own site, under the provider's own KYC and fees. |
+
+Guided-rail guarantees, unit-tested in `test/units.mjs`:
+
+- **No credential exists or appears** — the URL contains no `hostApiKey`,
+  token or secret of any kind. It is the same public page a bookmark reaches.
+- **Nothing is submitted on the user's behalf** — prefill is best-effort; an
+  unrecognised parameter simply falls back to the provider's own selector.
+- **The catalog is verifiable** — every asset/network pair maps to contract
+  metadata already pinned in `src/lib/chains.js`, so the report below always
+  watches the exact token the handoff named.
+- **No KYC, geo or compliance step is bypassed** — the provider performs all
+  of its own checks on its own site; FBT adds none and removes none.
+
+### The on-chain wallet report (both tabs)
+
+Because the guided rail has no webhook, the only truthful post-handoff signal
+is the public blockchain. `src/lib/buySellWatch.js` +
+`src/components/WalletWatchReport.jsx` poll the watched wallet's balance of
+the chosen token through the app's public-RPC read providers and report every
+movement — IN for Buy, OUT for Sell — via a pure delta tracker whose rules
+are unit-tested:
+
+- the first successful read is the **baseline**, never an event (no false
+  instant "deposit" for existing holders);
+- the tracker **re-baselines before reporting**, so a delta is never
+  double-counted;
+- a failed read is not an event and does not move the baseline.
+
+**Wording rule (enforced in i18n copy):** a balance delta proves a
+*transfer*, not a *payment*. The report says "deposit detected / withdrawal
+detected — matches your order direction" and explicitly states it cannot see
+the provider's payment status. It never says "payment confirmed"; only the
+credentialed tracked flow, with a signed webhook plus on-chain receipt
+verification, may ever say that.

@@ -84,3 +84,98 @@
 .buy-sell-amount-unit { display: flex; align-items: center; padding: 0 11px; border: 1px solid rgba(255,255,255,.12); border-inline-start: 0; border-radius: 0 11px 11px 0; background: rgba(255,255,255,.025); color: var(--text-2); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
 [dir="rtl"] .buy-sell-amount-unit { border-radius: 11px 0 0 11px; }
 
+
+/* ─── STEP WIZARD (خرید/فروش مرحله‌ای) ─────────────────────────────────────
+   One decision per screen: amount → wallet → asset → review. Sizes and
+   spacing tuned for one-hand phone use; everything flow-relative so fa/ar
+   mirror without exceptions. */
+.buy-sell-wizard { padding: 16px 15px 15px; }
+.bsw-stepper { display: flex; margin: 2px 0 0; padding: 0; list-style: none; }
+.bsw-stepper li { position: relative; flex: 1; min-width: 0; }
+.bsw-stepper li:not(:last-child)::after { content: ''; position: absolute; top: 12px; inset-inline-start: calc(50% + 14px); width: calc(100% - 28px); height: 2px; border-radius: 2px; background: rgba(255,255,255,.1); transition: background .25s; }
+.bsw-stepper li.done:not(:last-child)::after { background: linear-gradient(90deg, var(--rgb-4), rgba(0,229,255,.35)); }
+.bsw-stepper button { width: 100%; display: grid; justify-items: center; gap: 5px; padding: 0; background: transparent; border: 0; color: var(--text-3); cursor: pointer; }
+.bsw-stepper button:disabled { cursor: default; }
+.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
+.bsw-stepper button > small { font-size: 9.5px; line-height: 1.3; font-weight: 600; }
+.bsw-stepper li.active button { color: var(--rgb-4); }
+.bsw-stepper li.active button > span { border-color: var(--rgb-4); color: var(--rgb-4); box-shadow: 0 0 0 5px rgba(0,229,255,.09); }
+.bsw-stepper li.done button { color: var(--up); }
+.bsw-stepper li.done button > span { border-color: var(--up); background: var(--up); color: #06140f; }
+.bsw-viewport { margin-top: 16px; overflow: hidden; }
+.bsw-step { min-height: 168px; display: flex; flex-direction: column; }
+.bsw-title { margin: 0 0 13px; color: var(--text-1); font-size: 14.5px; font-weight: 800; line-height: 1.55; }
+.bsw-subtitle { margin: 13px 0 7px; color: var(--text-3); font-size: 11px; font-weight: 700; }
+.bsw-hint { margin: 10px 0 0; color: var(--text-3); font-size: 11px; line-height: 1.75; }
+.bsw-hint.bsw-valid { color: var(--up); }
+.bsw-hint.bsw-invalid { color: var(--down); }
+
+/* the big amount — the whole first screen is one number */
+.bsw-amount { display: flex; align-items: stretch; direction: ltr; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.03); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
+.bsw-amount:focus-within { border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 4px rgba(0,229,255,.08); }
+.bsw-amount input { flex: 1; min-width: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 14px 16px; font-family: var(--font-mono); font-size: clamp(26px, 8vw, 34px); font-weight: 800; letter-spacing: -.5px; box-shadow: none !important; }
+.bsw-amount input:focus { outline: none; }
+.bsw-amount select { max-width: 92px; border: 0 !important; border-inline-start: 1px solid rgba(255,255,255,.1) !important; border-radius: 0 !important; background: rgba(255,255,255,.03); font-weight: 800; font-size: 13px; }
+.bsw-amount-unit { display: flex; align-items: center; padding: 0 16px; border-inline-start: 1px solid rgba(255,255,255,.1); color: var(--text-2); font-family: var(--font-mono); font-size: 13px; font-weight: 800; background: rgba(255,255,255,.03); }
+.bsw-payout { margin-top: 12px; }
+
+/* quick chips + asset/network choices */
+.bsw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bsw-chips button { min-height: 34px; padding: 0 13px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.03); color: var(--text-2); font-size: 11.5px; font-weight: 700; cursor: pointer; transition: border-color .18s, background .18s, color .18s; }
+.bsw-chips button.active { border-color: var(--rgb-4); background: rgba(0,229,255,.1); color: var(--rgb-4); }
+.bsw-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.bsw-assets button { min-height: 52px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.025); color: var(--text-2); cursor: pointer; transition: border-color .18s, background .18s, color .18s, transform .12s; }
+.bsw-assets button b { font-family: var(--font-mono); font-size: 13.5px; letter-spacing: .3px; }
+.bsw-assets button:active { transform: scale(.97); }
+.bsw-assets button.active { border-color: var(--rgb-4); background: linear-gradient(150deg, rgba(0,229,255,.12), rgba(124,77,255,.08)); color: var(--text-1); box-shadow: 0 0 0 4px rgba(0,229,255,.06); }
+
+/* wallet step */
+.bsw-wallet { position: relative; display: flex; align-items: center; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: rgba(255,255,255,.03); transition: border-color .2s, box-shadow .2s; }
+.bsw-wallet:focus-within { border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 4px rgba(0,229,255,.08); }
+.bsw-wallet.valid { border-color: rgba(0,230,150,.45); }
+.bsw-wallet.invalid { border-color: rgba(255,59,107,.45); }
+.bsw-wallet input { flex: 1; min-width: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 13px 14px; direction: ltr; text-align: left; font-family: var(--font-mono); font-size: 12.5px; }
+.bsw-wallet-check { display: grid; place-items: center; width: 26px; height: 26px; margin-inline-end: 10px; border-radius: 50%; background: rgba(0,230,150,.14); color: var(--up); flex: 0 0 auto; }
+
+/* review step */
+.bsw-summary { display: grid; gap: 7px; }
+.bsw-summary-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.02); }
+.bsw-summary-row > span { flex: 1; color: var(--text-3); font-size: 11px; }
+.bsw-summary-row > strong { font-family: var(--font-mono); font-size: 12px; color: var(--text-1); overflow-wrap: anywhere; }
+.bsw-summary-row > button { border: 0; background: transparent; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; cursor: pointer; padding: 4px 2px; }
+.bsw-guided-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 13px; padding: 6px 11px; border: 1px solid rgba(0,230,150,.3); border-radius: 999px; background: rgba(0,230,150,.08); color: var(--up); font-size: 10.5px; font-weight: 800; }
+
+/* wizard navigation */
+.bsw-nav { display: flex; gap: 10px; margin-top: 15px; }
+.bsw-back { flex: 0 0 auto; min-height: 46px; padding-inline: 18px; }
+.bsw-next { flex: 1; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 800; }
+[dir="rtl"] .bsw-next svg, [dir="rtl"] .buy-sell-cta svg, [dir="rtl"] .buy-sell-tx-link svg { transform: scaleX(-1); }
+
+/* ─── ON-CHAIN WALLET REPORT (گزارش واقعی، زیر هر دو تب) ──────────────────
+   Reads the public blockchain only. States: idle, watching (pulse),
+   movement detected. Copy discipline lives in i18n; these rules only make
+   the truth pleasant to look at. */
+.buy-sell-watch { padding: 14px; }
+.buy-sell-watch-head { display: flex; align-items: center; gap: 10px; }
+.buy-sell-watch-head > div { flex: 1; min-width: 0; }
+.buy-sell-watch-dot { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border-radius: 10px; background: rgba(255,255,255,.05); color: var(--text-3); transition: background .25s, color .25s; }
+.buy-sell-watch-dot.live { background: rgba(0,230,150,.13); color: var(--up); }
+.buy-sell-watch-toggle { flex: 0 0 auto; }
+.buy-sell-watch-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 11px; color: var(--text-3); font-size: 10.5px; }
+.buy-sell-watch-meta .mono { color: var(--text-2); }
+.buy-sell-watch-status { display: flex; align-items: center; gap: 8px; margin: 11px 0 0; color: var(--text-2); font-size: 11.5px; }
+.buy-sell-watch-status small { color: var(--text-3); font-size: 10px; }
+.buy-sell-watch-pulse { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--up); animation: bswPulse 1.6s ease-in-out infinite; }
+@keyframes bswPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,230,150,.35); } 50% { box-shadow: 0 0 0 6px rgba(0,230,150,0); } }
+.buy-sell-watch-hint { margin: 10px 0 0; color: var(--text-3); font-size: 11px; line-height: 1.75; }
+.buy-sell-watch-events { margin: 11px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.buy-sell-watch-events li { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.02); }
+.buy-sell-watch-events li.match { border-color: rgba(0,230,150,.35); background: rgba(0,230,150,.05); }
+.buy-sell-watch-kind { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; border-radius: 8px; background: rgba(255,255,255,.06); color: var(--text-3); }
+.buy-sell-watch-kind.in { background: rgba(0,230,150,.13); color: var(--up); }
+.buy-sell-watch-kind.out { background: rgba(255,59,107,.11); color: var(--down); }
+.buy-sell-watch-events b { display: block; font-family: var(--font-mono); font-size: 12px; }
+.buy-sell-watch-events small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10px; line-height: 1.6; }
+.buy-sell-watch-honesty { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,.1); color: var(--text-3); font-size: 10px; line-height: 1.7; }
+.buy-sell-watch-honesty svg { flex: 0 0 auto; margin-top: 2px; }
+@media (max-width: 390px) { .buy-sell-wizard { padding: 14px 12px 13px; } .bsw-stepper button > small { font-size: 8.5px; } .bsw-assets { grid-template-columns: repeat(3, 1fr); } }
