@@ -46,7 +46,19 @@ import {
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
-import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
+import {
+  checkBuySellEligibility,
+  createBuySellCheckout,
+  createBuySellOrder,
+  createBuySellQuote,
+  getBuySellCapabilities,
+  getBuySellOrder,
+  getBuySellOrderAudit,
+  listAssets as buySellAssets,
+  listNetworks as buySellNetworks,
+  cancelBuySellOrder,
+  verifyBuySellOrder
+} from './buySell.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import {
   chainTokens,
@@ -64,7 +76,6 @@ import {
   recordIntent as recordCrossChainIntent,
   updateTransaction as updateCrossChainTransaction
 } from './crossChainStore.js';
-import { wallexUpstream, createWallexOrderLimiter } from './wallex.js';
 import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -385,6 +396,22 @@ const BOT_TOKEN = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
 
 const app = express();
 app.disable('x-powered-by');
+
+/*
+ * This reserved callback endpoint is registered before JSON parsing so it
+ * cannot fall through to another application handler. Callback handling is
+ * disabled: no undocumented signature/header or payload is accepted.
+ */
+app.post('/api/v1/buy-sell/webhooks/:provider', express.raw({ type: 'application/json', limit: '32kb' }), (_req, res) => {
+  res.set('cache-control', 'no-store');
+  /* No guessed signature header, payload field, or return parameter is accepted.
+     This stays a deliberately visible integration blocker until an official
+     provider callback and settlement-attestation contract is implemented. */
+  return res.status(503).json({
+    error: 'PROVIDER_REQUIRES_INTEGRATION',
+    detail: 'OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'
+  });
+});
 
 /*
  * ─── CONFIDENTIAL INTENT WRITES: REJECT BEFORE BODY PARSING ───────────────
@@ -4316,76 +4343,6 @@ app.get('/api/health/cross-chain', async (req, res) => {
 });
 
 
-/* ───────────────────────── Wallex (Iranians-only tab) ──────────────────────
-   Whitelisted proxy for the buy/sell tab that only Persian-language users
-   see. Key handling and the never-echo guarantee live in server/wallex.js.
-   Order routes carry their own tight budget on top of the broad /api one. */
-const wallexOrderAllowed = createWallexOrderLimiter();
-
-const wallexMarketCache = new Map();
-async function wallexMarketCall(routeName, query, { ttlMs } = {}) {
-  const key = `${routeName}?${new URLSearchParams(query || {}).toString()}`;
-  const hit = wallexMarketCache.get(key);
-  if (hit && Date.now() < hit.until) return hit.value;
-  const value = await wallexUpstream(routeName, { query });
-  wallexMarketCache.set(key, { until: Date.now() + (ttlMs ?? 4_000), value });
-  return value;
-}
-
-app.get('/api/wallex/v1/markets', async (_req, res) => {
-  const { status, body } = await wallexMarketCall('markets', {}, { ttlMs: 15_000 });
-  return res.status(status).json(body);
-});
-
-app.get('/api/wallex/v1/otc/markets', async (_req, res) => {
-  const { status, body } = await wallexMarketCall('otcMarkets', {}, { ttlMs: 15_000 });
-  return res.status(status).json(body);
-});
-
-app.get('/api/wallex/v1/depth', async (req, res) => {
-  const { status, body } = await wallexMarketCall('depth', { symbol: req.query.symbol });
-  return res.status(status).json(body);
-});
-
-const wallexAccountCall = (routeName) => async (req, res) => {
-  const { status, body } = await wallexUpstream(routeName, {
-    query: req.query,
-    headerKey: req.get('x-wallex-key')
-  });
-  return res.status(status).json(body);
-};
-
-app.get('/api/wallex/v1/account/balances', wallexAccountCall('balances'));
-app.get('/api/wallex/v1/account/openOrders', wallexAccountCall('openOrders'));
-app.get('/api/wallex/v1/account/trades', wallexAccountCall('trades'));
-app.get('/api/wallex/v1/account/otc/price', wallexAccountCall('otcPrice'));
-app.get('/api/wallex/v1/account/crypto-deposit', wallexAccountCall('cryptoDeposits'));
-
-const wallexOrderCall = (routeName) => async (req, res) => {
-  const identity = req.tgUser?.id ?? req.ip;
-  if (!wallexOrderAllowed(identity)) return res.status(429).json({ error: 'WALLEX_ORDER_RATE_LIMITED' });
-  const { status, body } = await wallexUpstream(routeName, {
-    body: req.body,
-    headerKey: req.get('x-wallex-key')
-  });
-  return res.status(status).json(body);
-};
-
-app.post('/api/wallex/v1/account/orders', wallexOrderCall('placeOrder'));
-app.post('/api/wallex/v1/account/otc/orders', wallexOrderCall('placeOtc'));
-app.post('/api/wallex/v1/account/crypto-withdrawal', wallexOrderCall('withdrawCrypto'));
-app.delete('/api/wallex/v1/account/orders', wallexOrderCall('cancelOrder'));
-
-app.get('/api/wallex/v1/server-ip', async (req, res) => {
-  try {
-    const r = await fetch('https://api.ipify.org?format=json');
-    const d = await r.json();
-    res.json({ ip: d.ip });
-  } catch (e) {
-    res.json({ ip: 'نامشخص' });
-  }
-});
-
 /*
  * ─── THE SECOND BRIDGE, AT MORE THAN TWICE THE FEE ──────────────────────────
  * deBridge DLN pays us 70 bps where LI.FI pays 30, needs no key and no
@@ -4827,58 +4784,75 @@ app.get('/api/thor/quote', async (req, res) => {
   }
 });
 
-/* ---------------------------- fiat buy & sell ----------------------------- */
+/* --------------------- hosted-checkout buy / sell gateway ------------------ */
 /*
- * Money in, crypto out — and crypto out, money in. NOT crypto-to-crypto:
- * that is our own product and routing it to a partner would be handing over
- * a customer we already have. See server/fiat.js, where `assertFiatLeg`
- * makes a crypto-to-crypto pair impossible to request.
+ * The only Buy / Sell server surface. Its provider boundary fails closed until
+ * the official authenticated settlement contract is integrated. The response
+ * wrapper is intentionally narrow: provider, Redis, RPC and parsing failures
+ * become a non-cacheable public error and never leak internal details.
  */
-app.get('/api/fiat/status', (_req, res) => res.json(fiatStatus()));
+function sendBuySell(res, operation) {
+  return Promise.resolve()
+    .then(operation)
+    .then((out) => {
+      res.set('cache-control', 'no-store');
+      return res.status(Number(out?.status) || 200).json(out?.body ?? out);
+    })
+    .catch(() => {
+      res.set('cache-control', 'no-store');
+      return res.status(503).json({ error: 'BUY_SELL_UNAVAILABLE' });
+    });
+}
 
-/*
- * Limits. Keyless upstream, so it answers even before ChangeNOW switch our
- * fiat access on — which is the point: a user who cannot yet buy still gets
- * to see the real minimum instead of an empty form.
- */
-app.get('/api/fiat/range', async (req, res) => {
-  try {
-    const { ok, status, body } = await fiatRange(req.query);
-    return res.status(ok ? 200 : status).json(body);
-  } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+app.get('/api/v1/buy-sell/providers', (_req, res) =>
+  sendBuySell(res, async () => ({ status: 200, body: await getBuySellCapabilities() })));
+app.get('/api/v1/buy-sell/assets', (req, res) =>
+  sendBuySell(res, async () => ({ status: 200, body: await buySellAssets({ side: req.query.side }) })));
+app.get('/api/v1/buy-sell/networks', (req, res) =>
+  sendBuySell(res, async () => ({ status: 200, body: await buySellNetworks({ asset: req.query.asset, side: req.query.side }) })));
+app.post('/api/v1/buy-sell/eligibility', (req, res) =>
+  sendBuySell(res, () => checkBuySellEligibility(req.body ?? {})));
+app.post('/api/v1/buy-sell/quote', (req, res) =>
+  sendBuySell(res, () => createBuySellQuote(req.body ?? {})));
+
+/* Mutating payment actions receive their own tighter rate budget in addition
+   to the API-wide limit. A quote is deliberately not charged here; it never
+   creates a financial commitment. */
+const buySellPaymentHits = new Map();
+const BUY_SELL_PAYMENT_MAX = Math.max(2, Number(process.env.BUY_SELL_PAYMENT_RATE_LIMIT || 12));
+function buySellPaymentRateLimit(req, res, next) {
+  const owner = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const record = buySellPaymentHits.get(owner);
+  if (!record || now > record.reset) {
+    buySellPaymentHits.set(owner, { count: 1, reset: now + WINDOW_MS });
+    return next();
   }
-});
-
-app.get('/api/fiat/quote', async (req, res) => {
-  try {
-    const { ok, status, body } = await fiatQuote(req.query);
-    return res.status(ok ? 200 : status).json(body);
-  } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  record.count += 1;
+  if (record.count > BUY_SELL_PAYMENT_MAX) {
+    res.set('retry-after', String(Math.ceil((record.reset - now) / 1000)));
+    return res.status(429).json({ error: 'BUY_SELL_RATE_LIMITED' });
   }
-});
+  return next();
+}
 
-/*
- * The call that actually earns.
- *
- * Commission is attributed to completed TRANSACTIONS, not to quotes. Without
- * this route the integration could price a purchase and never make a cent —
- * the "wired to nothing" failure already shipped twice on this project.
- *
- * POST because it creates something upstream and must never be reachable by
- * following a link: a GET that provisions a payment session can be triggered
- * by a crawler, a prefetch, or an <img> tag on somebody else's page.
- */
-app.post('/api/fiat/order', async (req, res) => {
-  try {
-    const { ok, status, body } = await fiatOrder(req.body ?? {});
-    return res.status(ok ? 200 : status).json(body);
-  } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
-  }
-});
-
+app.post('/api/v1/buy-sell/order', buySellPaymentRateLimit, (req, res) =>
+  sendBuySell(res, () => createBuySellOrder(req.body ?? {}, req.get('idempotency-key'))));
+app.post('/api/v1/buy-sell/order/:id/checkout', buySellPaymentRateLimit, (req, res) =>
+  sendBuySell(res, () => createBuySellCheckout(req.params.id, req.get('x-buy-sell-order-token'), req.body ?? {}, req.get('idempotency-key'))));
+/* Contract-level alias for clients that carry orderId in a JSON command. */
+app.post('/api/v1/buy-sell/checkout', buySellPaymentRateLimit, (req, res) =>
+  sendBuySell(res, () => createBuySellCheckout(req.body?.orderId, req.get('x-buy-sell-order-token'), req.body ?? {}, req.get('idempotency-key'))));
+app.get('/api/v1/buy-sell/order/:id', (req, res) =>
+  sendBuySell(res, () => getBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'))));
+app.get('/api/v1/buy-sell/order/:id/status', (req, res) =>
+  sendBuySell(res, () => getBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'), { verify: true })));
+app.get('/api/v1/buy-sell/order/:id/audit', (req, res) =>
+  sendBuySell(res, () => getBuySellOrderAudit(req.params.id, req.get('x-buy-sell-order-token'))));
+app.post('/api/v1/buy-sell/order/:id/cancel', (req, res) =>
+  sendBuySell(res, () => cancelBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'))));
+app.post('/api/v1/buy-sell/order/:id/verify', (req, res) =>
+  sendBuySell(res, () => verifyBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'))));
 
 /* --------------------------------- Solana --------------------------------- */
 /*

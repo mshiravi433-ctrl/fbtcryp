@@ -98,7 +98,6 @@ const GROUPS = [
       { m: 'GET', p: '/api/telegram/diagnose', d: 'telegramDiagnose' },
       { m: 'GET', p: '/api/ai/status', d: 'aiStatus' },
       { m: 'GET', p: '/api/bridge/status', d: 'bridgeStatus' },
-      { m: 'GET', p: '/api/fiat/status', d: 'fiatStatus' },
       { m: 'GET', p: '/api/solana/status', d: 'solanaStatus' },
       { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' },
       { m: 'GET', p: '/api/environments', d: 'environments' },

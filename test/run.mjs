@@ -646,19 +646,12 @@ console.log('▸ probing the P2P market proxy (side mapping · allow-list · ref
   report('P2P market (server: proxy contract)', await p2pRows);
 }
 
-/* ------------------------ 0d₂. Wallex buy/sell proxy ------------------------ */
-/*
- * The Iranians-only tab: key custody (user header wins; env key only behind
- * the explicit WALLEX_SERVER_KEY_ALLOW opt-in, trimmed), fail-closed private
- * routes, order-body validation before egress, the never-echo guarantee, and
- * the Persian-only gate + full-locale copy + light-theme rules on the client.
- */
-console.log('▸ probing the Wallex buy/sell proxy (key custody · validation · fa-only gate)…');
+/* ------------------------ 0d₂. Buy / Sell safety gateway ------------------- */
+console.log('▸ probing the Buy / Sell provider safety gateway…');
 {
-  const { default: wallexRows } = await import('./wallex-proxy-probe.mjs');
-  report('Wallex proxy (key custody · fa-only tab)', wallexRows);
+  const { default: buySellRows } = await import('./buy-sell-probe.mjs');
+  report('Buy / Sell gateway (fail-closed provider contract)', buySellRows);
 }
-
 
 /* ------------------------- 0d₃. Internal BTC wallet ------------------------- */
 /*
@@ -744,15 +737,9 @@ installDom();
 const { run: runScreens } = await import('./.out/screens/screens.js');
 report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
 
-/* --------------- 4a. the Iranians-only Wallex tab (fa ONLY) --------------- */
-/* The owner's hard rule, proven BEHAVIORALLY: the Buy page is walked through
-   en → fa → ar → tr → fa with the real i18n, and the Wallex tab + panel may
-   exist only while the live language is Persian. */
-console.log('\n▸ building Wallex fa-only gate suite…');
-npx(['vite', 'build', '-c', 'test/vite.wallex-gate.mjs', '--logLevel', 'error']);
-installDom();
-const { run: runWallexGate } = await import('./.out/wallex-gate/wallex-gate.js');
-report('Wallex tab (fa-only gate, live walk)', await runWallexGate(document.getElementById('r')));
+/* -------- 4a. unified Buy / Sell surface is mounted by the screens suite --- */
+/* The former language-gated CEX tab suite was deleted with that CEX adapter.
+   `test/screens.jsx` now mounts BuySellPanel through its native Buy page. */
 
 /* --------------------- 4b. coin detail under real data -------------------- */
 /*

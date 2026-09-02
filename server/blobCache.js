@@ -29,6 +29,20 @@ const PROVIDER_TIMEOUT_MS = 6_000;
 export const upstashConfigured = () => /^https:\/\/[a-z0-9-]+\.upstash\.io$/i.test(UPSTASH_URL) && UPSTASH_TOKEN.length >= 20;
 export const blobConfigured = () => Boolean(TOKEN) || upstashConfigured();
 
+/**
+ * Atomically claim a durable key in Redis.  Financial workflows use this for
+ * idempotency locks: a Blob overwrite is not a compare-and-set operation and
+ * is therefore deliberately not an acceptable fallback for a payment action.
+ * The value is JSON so callers never need to handle a credential or a Redis
+ * response directly. `true` means this caller acquired the lock.
+ */
+export async function upstashSetIfAbsent(key, value, ttlMs) {
+  if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
+  const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
+  const answer = await upstashCommand(['SET', safeKey(key), JSON.stringify(value), 'NX', 'EX', seconds]);
+  return answer.ok && answer.result === 'OK';
+}
+
 /** Public, secret-free storage status for activation and diagnostics. */
 export function durableBackendStatus() {
   return {

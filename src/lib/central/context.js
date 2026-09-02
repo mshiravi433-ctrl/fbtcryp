@@ -85,7 +85,7 @@ export const PAGE_MAP = Object.freeze({
   '/invest': { module: 'profit-plan', tabs: ['plan', 'goals'], intents: ['plan', 'goals'] },
   '/trade': { module: 'swap', tabs: ['trade'], intents: ['trade'] },
   '/solana': { module: 'swap', tabs: ['solana'], intents: ['quote', 'swap'] },
-  '/buy': { module: 'fiat', tabs: ['ramp'], intents: ['buy'] },
+  '/buy': { module: 'buy-sell', tabs: ['buy', 'sell'], intents: ['buy', 'sell', 'quote'] },
   '/settings': { module: 'session', tabs: ['general', 'security'], intents: ['settings'] },
   '/explore': { module: 'crypto', tabs: ['list'], intents: ['browse'] }
 });

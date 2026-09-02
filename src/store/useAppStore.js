@@ -71,6 +71,11 @@ export const useAppStore = create(
       bets: [], //     game + market bets
       quests: {}, //   questId -> { done, at }
       notifications: [],
+      /* Hosted-checkout orders are references only — never balances and never
+         payment credentials. The authoritative status remains the server plus
+         blockchain verification; this supports the app-wide Recent Orders UI
+         without fabricating a portfolio credit. */
+      buySellOrders: [],
 
       /* ---------------- derived ---------------- */
       xpForNext: () => 250 * get().level,
@@ -129,6 +134,29 @@ export const useAppStore = create(
       },
       dismiss(id) {
         set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) }));
+      },
+
+      /* ---------------- verified buy / sell order references ---------------- */
+      upsertBuySellOrder(order) {
+        if (!order?.orderId) return;
+        /* Do not persist checkout URLs, access tokens, provider payloads, or
+           any payment data in the shared client state. */
+        const safe = {
+          orderId: String(order.orderId), side: String(order.side || 'BUY'),
+          asset: String(order.asset || ''), network: String(order.network || ''),
+          fiatCurrency: String(order.fiatCurrency || ''), fiatAmount: Number(order.fiatAmount),
+          cryptoAmount: Number(order.cryptoAmount), walletAddress: String(order.walletAddress || ''),
+          provider: String(order.provider || ''), status: String(order.status || 'UNKNOWN'),
+          paymentStatus: String(order.paymentStatus || 'UNKNOWN'),
+          settlementStatus: String(order.settlementStatus || 'UNKNOWN'),
+          verificationStatus: String(order.verificationStatus || 'UNKNOWN'),
+          txHash: order.txHash ? String(order.txHash) : null,
+          createdAt: order.createdAt || null, updatedAt: order.updatedAt || null,
+          completedAt: order.completedAt || null
+        };
+        set((state) => ({
+          buySellOrders: [safe, ...state.buySellOrders.filter((entry) => entry.orderId !== safe.orderId)].slice(0, MAX_HISTORY)
+        }));
       },
 
       /* ---------------- favorites ---------------- */

@@ -1,0 +1,76 @@
+/* Hosted checkout Buy / Sell. Uses the existing card, button, input and
+   segmented primitives; these rules only lay out this transactional ticket. */
+.buy-sell-page-intro { margin: 2px 0 14px; }
+.buy-sell-panel { display: grid; gap: 12px; }
+.buy-sell-switch { margin: 0; }
+.buy-sell-switch button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.buy-sell-switch small { font-size: 9px; font-weight: 700; opacity: .74; }
+.buy-sell-ticket { padding: 15px; overflow: hidden; }
+.buy-sell-ticket-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+.buy-sell-ticket-head .section-label { margin: 0 0 3px; }
+.buy-sell-ticket-head .faint { font-size: 11.5px; }
+.buy-sell-secure { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.buy-sell-secure svg, .buy-sell-cta svg, .buy-sell-use-wallet svg, .buy-sell-refresh-status svg, .buy-sell-tx-link svg { flex: 0 0 auto; }
+.buy-sell-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.buy-sell-fields .ord-field { min-width: 0; margin: 0; }
+.buy-sell-fields .ord-field > span { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: 11px; }
+.buy-sell-fields .ord-field em { color: var(--up); font-size: 10px; font-style: normal; font-weight: 700; }
+.buy-sell-fields select, .buy-sell-fields input { min-width: 0; width: 100%; }
+.buy-sell-wallet-field { grid-column: 1 / -1; }
+.buy-sell-wallet-field input { direction: ltr; text-align: left; font-family: var(--font-mono); font-size: 12px; }
+.buy-sell-amount-input { display: flex; direction: ltr; }
+.buy-sell-amount-input input { border-radius: 11px 0 0 11px !important; }
+.buy-sell-amount-input select { max-width: 74px; border-radius: 0 11px 11px 0 !important; border-inline-start: 0 !important; }
+[dir="rtl"] .buy-sell-amount-input input { border-radius: 0 11px 11px 0 !important; }
+[dir="rtl"] .buy-sell-amount-input select { border-radius: 11px 0 0 11px !important; border-inline-start: 1px solid rgba(255,255,255,.12) !important; border-inline-end: 0 !important; }
+.buy-sell-readonly { display: flex; align-items: center; min-height: 38px; padding: 0 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 11px; background: rgba(255,255,255,.025); color: var(--text-2); font-size: 12px; }
+.buy-sell-use-wallet, .buy-sell-refresh-status { width: 100%; margin-top: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.buy-sell-wallet-note, .buy-sell-hosted-note { color: var(--text-3); font-size: 11px; line-height: 1.7; margin: 8px 0 0; }
+.buy-sell-summary { margin-top: 14px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 5px; }
+.buy-sell-summary .trade-summary-row { padding: 7px 1px; font-size: 11.7px; gap: 14px; }
+.buy-sell-summary .trade-summary-row strong { direction: ltr; text-align: end; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; overflow-wrap: anywhere; }
+.buy-sell-summary .buy-sell-zero strong { color: var(--up); }
+.buy-sell-summary .buy-sell-total { padding-top: 10px; font-size: 12.8px; border-top: 1px solid rgba(255,255,255,.1); border-bottom: 0; }
+.buy-sell-summary .buy-sell-total strong { font-size: 13px; color: var(--text-1); }
+.buy-sell-expiry { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-3); font-size: 11px; }
+.buy-sell-expiry.expired { color: var(--down); }
+.buy-sell-error { margin-top: 12px; }
+.buy-sell-cta { width: 100%; min-height: 48px; margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.buy-sell-confirm { margin-top: 13px; padding: 11px; border: 1px solid rgba(0,229,255,.18); border-radius: 13px; background: rgba(0,229,255,.045); }
+.buy-sell-confirm p { margin: 0; color: var(--text-2); font-size: 11.6px; line-height: 1.75; }
+.buy-sell-confirm p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
+.buy-sell-confirm .buy-sell-cta { margin-top: 11px; }
+.buy-sell-loading, .buy-sell-unavailable { display: flex; align-items: flex-start; gap: 10px; padding: 14px; }
+.buy-sell-loading { align-items: center; color: var(--text-2); font-size: 12px; }
+.buy-sell-loading .spinner { width: 17px; height: 17px; border-width: 2px; }
+.buy-sell-progress { padding: 13px 14px; border: 1px solid rgba(0,229,255,.16); border-radius: 16px; background: linear-gradient(140deg,rgba(0,229,255,.06),rgba(124,77,255,.035)); }
+.buy-sell-progress.is-error { border-color: rgba(255,59,107,.3); background: rgba(255,59,107,.05); }
+.buy-sell-progress-icon { color: var(--rgb-4); width: 28px; height: 28px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; background: rgba(0,229,255,.11); }
+.buy-sell-progress.is-error .buy-sell-progress-icon { color: var(--down); background: rgba(255,59,107,.12); }
+.buy-sell-timeline { display: flex; margin: 14px 0 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: thin; }
+.buy-sell-timeline li { position: relative; flex: 1 0 74px; min-width: 74px; display: grid; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
+.buy-sell-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 9px; width: calc(100% - 19px); inset-inline-start: calc(50% + 10px); height: 1px; background: rgba(255,255,255,.13); }
+.buy-sell-timeline li.done:not(:last-child)::after { background: var(--up); }
+.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 9px; }
+.buy-sell-timeline li.active { color: var(--rgb-4); font-weight: 700; }
+.buy-sell-timeline li.active > span { border-color: var(--rgb-4); box-shadow: 0 0 0 4px rgba(0,229,255,.1); }
+.buy-sell-timeline li.done { color: var(--up); }
+.buy-sell-timeline li.done > span { border-color: var(--up); background: var(--up); color: #06140f; }
+.buy-sell-timeline small { font-size: inherit; line-height: 1.3; white-space: normal; }
+.buy-sell-tx-link { display: inline-flex; align-items: center; gap: 3px; color: var(--rgb-4); font-size: 11px; font-weight: 700; margin-top: 12px; text-decoration: none; }
+.buy-sell-recent { padding: 14px; }
+.buy-sell-order-row { border: 1px solid rgba(255,255,255,.075); border-radius: 12px; overflow: hidden; }
+.buy-sell-order-row > button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px; color: inherit; text-align: start; background: transparent; border: 0; cursor: pointer; }
+.buy-sell-order-row > button > span { min-width: 0; display: grid; gap: 2px; }
+.buy-sell-order-row b { font-size: 11.7px; }
+.buy-sell-order-row small { color: var(--text-3); font-size: 10px; }
+.buy-sell-order-amount { text-align: end; }
+.buy-sell-order-details { margin: 0; padding: 9px 10px; border-top: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.02); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.buy-sell-order-details div { min-width: 0; }
+.buy-sell-order-details dt { color: var(--text-3); font-size: 9.5px; }
+.buy-sell-order-details dd { margin: 2px 0 0; font-size: 10.5px; overflow-wrap: anywhere; }
+.buy-sell-safety { padding: 14px; }
+.buy-sell-safety .prose-list { margin-bottom: 0; }
+@media (max-width: 390px) { .buy-sell-ticket { padding: 13px; } .buy-sell-ticket-head { align-items: flex-start; } .buy-sell-secure { font-size: 9.5px; } .buy-sell-fields { grid-template-columns: 1fr; } .buy-sell-wallet-field { grid-column: auto; } .buy-sell-order-details { grid-template-columns: 1fr; } }
+@media (min-width: 700px) { .buy-sell-panel, .buy-sell-page-intro, .buy-sell-safety { max-width: 640px; margin-inline: auto; } .buy-sell-ticket { padding: 18px; } }
+.buy-sell-zero-fee { margin: 8px 0 0; color: var(--up); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }

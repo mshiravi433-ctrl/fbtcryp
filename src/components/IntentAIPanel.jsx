@@ -53,7 +53,7 @@ import {
   computeFee, attachFeeToReceipt,
   /* Phase 94 — offline is a waiting room, never an outbox. */
   enqueueIntent, offlineStatus,
-  /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
+  /* Fiat requests are routed only to the native Buy / Sell review surface. */
   detectFiatIntent, fiatBoundaryResponse,
   /* Draft to transaction: broadcasting stays off unless the build enables it. */
   broadcastEnabled, assertBroadcastAllowed,
@@ -2258,6 +2258,9 @@ export default function IntentAIPanel({
           <small className="ia-hint" data-testid="fiat-ramp-alternative">
             {t(rampNotice.alternativeI18nKey)}
           </small>
+          <a className="btn btn-ghost btn-sm" href="#/buy" data-testid="fiat-ramp-open-buy-sell">
+            {t('intentAI.ramp.openBuySell')}
+          </a>
         </div>
       )}
 

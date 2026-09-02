@@ -10,7 +10,7 @@
  * boundary exists to remove.
  *
  * ─── THIS FILE MUST NEVER LEARN TO PRICE SWAPS ────────────────────────────
- * Same boundary as src/lib/fiat.js: this is fiat<->BTC market data for the
+ * Same direct-settlement safety boundary as Buy / Sell: this is fiat<->BTC market data for the
  * Buy and P2P screens ONLY. The swap path prices itself through its own
  * aggregators; nothing here may feed a crypto-to-crypto quote, and nothing
  * on those screens may import this file (enforced by a wiring check — a

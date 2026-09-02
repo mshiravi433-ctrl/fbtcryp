@@ -611,7 +611,7 @@ export default function run() {
     // builds `BASE + '/overview'` etc., so the concrete paths are asserted
     // separately below; a bare prefix must not fail the "every call is routed"
     // check for the same reason a route *prefix* is never a route.
-    const prefixes = new Set(['v1/smart-money']);
+    const prefixes = new Set(['v1/smart-money', 'v1/buy-sell']);
     const unrouted = [...called].filter(
       (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p))
     );
@@ -3935,7 +3935,7 @@ export default function run() {
     /* Every key the panel renders must exist in en.json, or it prints raw. */
     {
       const en = JSON.parse(read('src/i18n/locales/en.json'));
-      const keys = [...panel.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+      const keys = [...panel.matchAll(/(?<![A-Za-z])t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
       const missing = keys.filter((k) => !hasKey(en, k));
       t(`every funding-panel key resolves (${keys.length} checked)`, missing.length === 0);
       /* The dynamic ones are built by template and cannot be matched above. */
@@ -4371,7 +4371,7 @@ export default function run() {
     /* Every key the panel renders must resolve, in both languages. */
     const en = JSON.parse(read('src/i18n/locales/en.json'));
     const fa = JSON.parse(read('src/i18n/locales/fa.json'));
-    const keys = [...panel.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const keys = [...panel.matchAll(/(?<![A-Za-z])t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
     const missEn = [...new Set(keys)].filter((k) => !hasKey(en, k));
     t(`every autopilot key resolves (${new Set(keys).size} checked)` +
       (missEn.length ? ` — missing: ${missEn.join(', ')}` : ''), missEn.length === 0);
@@ -4779,12 +4779,8 @@ export default function run() {
      * while the partner may come back would re-create the knowledge from
      * scratch at the worst time.
      */
-    t('the restrictions sheet exists', existsSync('src/components/RestrictionsSheet.jsx'));
-    const fiatPanel = read('src/components/FiatPanel.jsx');
-    t('...the fiat panel imports it', /import RestrictionsSheet/.test(fiatPanel));
-    t('...renders it', /<RestrictionsSheet/.test(fiatPanel));
-    t('...and offers a control that opens it',
-      /setRestrictOpen\(true\)/.test(fiatPanel) && /restrict\.open/.test(fiatPanel));
+    t('the restrictions sheet remains available as standalone safety content',
+      existsSync('src/components/RestrictionsSheet.jsx') && !existsSync('src/components/FiatPanel.jsx'));
     {
       const en = JSON.parse(read('src/i18n/locales/en.json'));
       const fa = JSON.parse(read('src/i18n/locales/fa.json'));
@@ -4816,280 +4812,44 @@ export default function run() {
       listed.length === 0);
   }
 
-  /* ---- 59. fiat on-ramp: earns for us, and can never become a swap ----- */
+  /* ---- 59. unified Buy / Sell: direct-wallet payment boundary ----------- */
   {
-    t('the fiat module exists', existsSync('server/fiat.js'));
-    t('the client lib exists', existsSync('src/lib/fiat.js'));
-    t('the panel exists', existsSync('src/components/FiatPanel.jsx'));
-
-    const srv = read('server/fiat.js');
-    const lib = read('src/lib/fiat.js');
-    const panel = read('src/components/FiatPanel.jsx');
     const appSrc = read('server/app.js');
+    const service = read('server/buySell.js');
+    const client = read('src/lib/buySell.js');
+    const panel = read('src/components/BuySellPanel.jsx');
     const buy = read('src/pages/Buy.jsx');
-    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const srvCode = code(srv);
-
-    /* The full chain — a panel nothing renders is the bug shipped twice. */
-    t('the server imports it', /from '\.\/fiat\.js'/.test(appSrc));
-    t('...and exposes a quote route', /\/api\/fiat\/quote/.test(appSrc));
-    t('...and a status route', /\/api\/fiat\/status/.test(appSrc));
-    t('the client calls the published path', /fiat\/quote/.test(lib));
-    t('the panel calls the client lib', /getFiatQuote\s*\(/.test(code(panel)));
-    /*
-     * ─── THE PANEL IS OFF THE BUY SCREEN, AND THAT IS NOW THE REQUIREMENT ──
-     * ChangeNOW told the owner fiat is suspended until September, so the
-     * panel was pulled. It was NOT visibly broken — /api/fiat/status still
-     * answered {"enabled":true} in production — so it rendered, accepted an
-     * amount, and would only have failed when somebody pressed the button
-     * with real money in hand.
-     *
-     * This check is INVERTED rather than deleted, because the danger now runs
-     * the other way: nothing must quietly put a dead partner back on a money
-     * screen. Everything below still verifies the module, its routes and its
-     * client stay intact, so re-enabling is a one-line revert.
-     */
-    t('the Buy screen does NOT render the suspended fiat panel',
-      !/<FiatPanel/.test(code(buy)));
-    /*
-     * The panel still ACCEPTS a mode and still keys off it — verified on the
-     * component rather than the removed call site, so the wiring is preserved
-     * for the day it goes back on the screen.
-     */
-    t('...though the panel still keys off buy/sell for when it returns',
-      /mode === 'sell'/.test(code(panel)));
-
-    /*
-     * ─── THE LINE THAT KEEPS THIS FROM BECOMING A RIVAL SWAP ────────────────
-     * The owner's instruction was exact: fiat yes, swap no, because we run our
-     * own swap. `assertFiatLeg` enforces it in code rather than in a comment,
-     * so "just adding one crypto pair" later is impossible without deleting
-     * this guard — and this test.
-     */
-    t('the server enforces exactly one fiat leg', /export function assertFiatLeg/.test(srvCode));
-    t('...and refuses anything else', /return null;/.test(srvCode));
-
-    /*
-     * The key is a real credential — it authenticates the account and carries
-     * our commission settings. Unlike the public GMX referral code it must
-     * never be VITE_-prefixed.
-     */
-    t('the API key stays server-side',
-      /process\.env\.CHANGENOW_API_KEY/.test(srvCode) && !/VITE_CHANGENOW/.test(srv));
-
-    /*
-     * Two separate switches. ChangeNOW grant fiat per-partner after a
-     * compliance review, so a key with fiat off fails every call. Reporting
-     * "ready" on the key alone would render a form that never works.
-     */
-    t('a key alone does not claim fiat is live',
-      /CHANGENOW_FIAT_ENABLED/.test(srvCode) && /fiatEnabled/.test(srvCode));
-    t('...and the panel explains it instead of showing a dead form',
-      /fiat\.notEnabled/.test(panel));
-
-    /*
-     * ─── THE DISPLAYED FEE MUST BE THE CHARGED FEE ──────────────────────────
-     * The first version read CHANGENOW_FIAT_FEE, defaulted it to 1, and
-     * printed "our fee: 1%" — while nothing anywhere deducted it. A label
-     * with no mechanism behind it: users shown a fee we never charged, and us
-     * earning nothing from it.
-     *
-     * The real commission is a property of the partner account, applied by
-     * ChangeNOW to any request carrying our key and reported inside their own
-     * `service_fees` array. So the panel must render THEIR itemised
-     * breakdown, and must not render an invented percentage of ours.
-     */
-    t('the panel shows their itemised service fees', /serviceFees/.test(panel));
-    t('...and the network fee alongside it', /networkFee/.test(panel));
-    t('...and explains whose fee it is', /fiat\.feeNote/.test(panel));
-    t('the invented "our fee" percentage is not back', !/fiat\.ourFee/.test(panel));
-    t('...and the server publishes no percentage of its own',
-      !/ourFeePercent/.test(srvCode) && /feeModel/.test(srvCode));
-
-    /*
-     * ═══════════════════════════════════════════════════════════════════════
-     * THE BUY SCREEN MUST NOT LEAD WITH A COUNTRY-SPECIFIC WARNING.
-     * ═══════════════════════════════════════════════════════════════════════
-     * The panel used to render `fiat.cardNotice` unconditionally — three
-     * lines about Iranian bank cards and 2012 sanctions, shown to every user
-     * on earth. A buyer in Berlin holding a German card read an explanation
-     * of why a card they do not have will not work.
-     *
-     * The owner's instruction, twice:
-     *     «ما از همه جهان مشتری داریم نه فقط ایران»
-     *     «محدودیت روی اپ و سایت نزار»
-     *
-     * Two harms, and the second costs money. To most readers it is noise
-     * inside a WARNING box, which teaches them to skip warning boxes. And to
-     * a first-time visitor it reads as a claim about what this APP is — an
-     * app whose checkout opens with a sanctions paragraph looks gated, when
-     * in fact nothing here is gated at all.
-     *
-     * So the checks invert. What the panel must show is a country-NEUTRAL,
-     * universally-true settlement note; what it must NOT show is the
-     * jurisdiction paragraph.
-     */
-    t('the settlement note is country-neutral', /fiat\.settlementNote/.test(panel));
-    t('the Iran-specific card paragraph is NOT on the buy screen',
-      !/fiat\.cardNotice/.test(code(panel)));
-
+    const css = read('src/styles/buy-sell.css');
     const en = JSON.parse(read('src/i18n/locales/en.json'));
     const fa = JSON.parse(read('src/i18n/locales/fa.json'));
-    const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
 
-    /* Neutral means neutral: no country may be named in the note itself. */
-    t('...and names no country',
-      !/Iran|ایران|إيران/i.test(en.fiat.settlementNote + fa.fiat.settlementNote + ar.fiat.settlementNote));
-    /* It must still say something USEFUL, not just be inoffensive: the rule
-       is that the CARD's country of issue decides, and that is true for
-       every reader. */
-    t('...but still states the actual rule',
-      /issued/i.test(en.fiat.settlementNote));
-
-    /*
-     * ─── REMOVED, NOT DELETED: THE FACT STILL HAS TO BE REACHABLE ───────────
-     * Dropping the Iran detail entirely would send somebody to enter card
-     * details that cannot be authorised — a worse outcome than reading an
-     * irrelevant paragraph. It lives in the Restrictions sheet, and the panel
-     * must offer a way to open it. Asserted as a chain, because a fact that
-     * exists in a component nobody can reach is the same as a deleted fact.
-     */
-    /*
-     * ─── THE ONE UPSTREAM ERROR THAT NEEDS ITS OWN NAME ─────────────────────
-     * Measured against the live deployment with the real key installed:
-     * /api/fiat/quote returns "token not found for passed api-key". That is
-     * NOT a broken key — the same key works on the swap API. It means fiat is
-     * not enrolled on the partner account, which ChangeNOW grant separately
-     * after a compliance review.
-     *
-     * Folded into the generic QUOTE_FAILED it reads as "something broke" and
-     * sends the owner hunting Vercel for a typo that does not exist. Named,
-     * it states the only action that can fix it.
-     */
-    t('an unenrolled fiat key is reported distinctly',
-      /FIAT_KEY_NOT_ENROLLED/.test(srvCode));
-    t('...and matched on the upstream message, not just a status code',
-      /token not found/i.test(srvCode));
-    t('...with copy that names the fix in all three languages',
-      hasKey(en, 'fiat.err.FIAT_KEY_NOT_ENROLLED') &&
-      hasKey(fa, 'fiat.err.FIAT_KEY_NOT_ENROLLED') &&
-      hasKey(ar, 'fiat.err.FIAT_KEY_NOT_ENROLLED'));
-
-    t('the panel offers the restrictions sheet', /<RestrictionsSheet/.test(panel));
-    t('...with a control that opens it', /setRestrictOpen\(true\)/.test(panel));
-    t('...and the sheet still carries the card-network fact',
-      /Visa|Mastercard/.test(en.restrict.cards));
-    t('...in all three written languages',
-      hasKey(fa, 'restrict.cards') && hasKey(ar, 'restrict.cards'));
-
-    /*
-     * ─── AND THE SHEET MUST LEAD WITH WHAT IS NOT RESTRICTED ────────────────
-     * A page titled "Restrictions" makes a reader assume the app restricts
-     * them. It does not: there is no geofence and no IP check anywhere in
-     * this repository. Letting that assumption stand is how a non-custodial
-     * product gets mistaken for a gated one, so the intro must say so.
-     */
-    t('the restrictions intro states the app itself is not restricted',
-      /non-custodial/i.test(en.restrict.intro) && /no country blocked/i.test(en.restrict.intro));
-    t('...in Persian too', /محدود نیست/.test(fa.restrict.intro));
-    /* The error for a crypto pair must point at OUR swap, not a competitor. */
-    t('a crypto pair is redirected to our own swap',
-      /own swap/i.test(en.fiat.err.NOT_A_FIAT_PAIR));
-
-    const keys = [...panel.matchAll(/t\('(fiat\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
-    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
-    t(`every fiat.* key resolves (${new Set(keys).size} checked)` +
-      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
-    t('...and all are translated into Persian',
-      [...new Set(keys)].every((k) => hasKey(fa, k)));
-  }
-
-  /* ---- 60. fiat: the call that actually earns must reach the API -------- */
-  {
-    /*
-     * ═══════════════════════════════════════════════════════════════════════
-     * THE BUG THIS CHECK WOULD HAVE CAUGHT, AND DID NOT EXIST TO CATCH.
-     * ═══════════════════════════════════════════════════════════════════════
-     * The first fiat integration passed every check in section 59 — module
-     * present, route registered, panel rendered, key server-side, pair guard
-     * enforced — and could not have earned a single cent, for two reasons
-     * neither of which those checks looked at:
-     *
-     *   1. IT CALLED THE WRONG API. `/v2/exchange/estimated-amount` is the
-     *      CRYPTO SWAP endpoint; it does not know what a fiat currency is.
-     *      With a live key installed every request returned QUOTE_FAILED,
-     *      which is exactly what the owner saw. The fiat family is a separate
-     *      set of snake_case routes: /v2/fiat-estimate, /v2/fiat-transaction,
-     *      /v2/fiat-market-info/…, authenticated with `x-api-key` rather than
-     *      `x-changenow-api-key`.
-     *
-     *   2. IT NEVER CREATED A TRANSACTION. Commission is attributed to
-     *      completed orders, never to quotes. There was no POST anywhere in
-     *      the integration, so even a working quote would have earned nothing
-     *      — the same "wired to nothing" shape already shipped twice, on the
-     *      bridge and on the gasless swap.
-     *
-     * So this section asserts the REVENUE CHAIN specifically, endpoint by
-     * endpoint, rather than the presence of files.
-     */
-    const srv = read('server/fiat.js');
-    const srvCode = srv.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const app = read('server/app.js');
-    const lib = read('src/lib/fiat.js');
-    const panel = read('src/components/FiatPanel.jsx');
-
-    /* ---- the right API family ---- */
-    t('the quote calls the FIAT estimate endpoint', /\/fiat-estimate/.test(srvCode));
-    t('...and not the crypto-swap one that never worked',
-      !/exchange\/estimated-amount/.test(srvCode));
-    t('the limits call the fiat market-info endpoint',
-      /fiat-market-info\/min-max-range/.test(srvCode));
-    /*
-     * The header the fiat family reads. Sending only `x-changenow-api-key`
-     * authenticates nothing there, which is the second reason the first
-     * version could not have worked even with the right path.
-     */
-    t('the fiat auth header is sent', /'x-api-key'/.test(srvCode));
-
-    /* ---- snake_case, because the fiat API does not accept camelCase ---- */
-    t('the quote uses the fiat API parameter names',
-      /from_currency/.test(srvCode) && /to_currency/.test(srvCode) && /from_amount/.test(srvCode));
-    t('...including the network, which decides where the coins land',
-      /to_network/.test(srvCode) && /from_network/.test(srvCode));
-
-    /* ---- THE CHAIN THAT EARNS, end to end ---- */
-    t('the server can create a transaction', /export async function fiatOrder/.test(srvCode));
-    t('...by POSTing to the fiat transaction endpoint',
-      /\/fiat-transaction/.test(srvCode) && /method: 'POST'/.test(srvCode));
-    t('...the app registers the order route',
-      /app\.post\('\/api\/fiat\/order'/.test(app));
-    t('...and that route CALLS the module, not a stub',
-      /await fiatOrder\(/.test(app));
-    t('...the client library can reach it',
-      /export function createFiatOrder/.test(lib) && /'\/fiat\/order'/.test(lib));
-    t('...the panel imports it', /createFiatOrder/.test(panel));
-    t('...and actually submits', /await createFiatOrder\(/.test(panel));
-    /*
-     * A created order the user cannot pay for is money they believe they have
-     * committed and have not. The checkout URL must be opened AND kept on
-     * screen, because a Custom Tab dismissed by accident otherwise strands
-     * them with no way back.
-     */
-    t('...then opens the hosted checkout', /openUrl\(res\.redirectUrl\)/.test(panel));
-    t('...and keeps a way back to it', /reopenCheckout/.test(panel));
-    t('a missing checkout URL is treated as failure, not success',
-      /NO_CHECKOUT_URL/.test(srvCode));
-
-    /* The address is required before the order button does anything. A POST
-       with an empty payout address is an order whose coins go nowhere. */
-    t('an order without a payout address is refused', /BAD_ADDRESS/.test(srvCode));
-    t('...and the button stays disabled until one is entered',
-      /address\.trim\(\)\.length >= 16/.test(panel));
-
-    /* The limits route, wired the same way and for the same reason. */
-    t('the range route is registered', /app\.get\('\/api\/fiat\/range'/.test(app));
-    t('...calls the module', /await fiatRange\(/.test(app));
-    t('...and the panel uses it', /getFiatRange/.test(panel));
+    t('obsolete fiat panel and direct client are deleted',
+      !existsSync('server/fiat.js') && !existsSync('src/lib/fiat.js') && !existsSync('src/components/FiatPanel.jsx'));
+    t('Buy renders the one unified native panel', /<BuySellPanel/.test(buy));
+    t('the panel has Buy and Sell transaction directions, not wallet categories',
+      /BUY/.test(panel) && /SELL/.test(panel) && !/Internal Wallet|External Wallet/.test(panel));
+    t('the provider interface and browser client exist',
+      existsSync('server/buySell.js') && existsSync('src/lib/buySell.js') && /ProviderRouter/.test(service));
+    t('all Buy / Sell browser calls are under the versioned first-party API',
+      /apiBase\(\).*\/v1\/buy-sell/s.test(client) && !/api\/fiat/.test(client));
+    t('the server does not leave the bypass fiat routes mounted', !/\/api\/fiat/.test(appSrc));
+    t('the browser keeps order capabilities in session storage only',
+      /sessionStorage/.test(client) && !/localStorage/.test(client));
+    t('the provider fail-closes without an official callback and settlement contract',
+      /PROVIDER_REQUIRES_INTEGRATION/.test(service) && /OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED/.test(service));
+    t('the webhook endpoint exposes the same honest 503 blocker without calling a provider handler',
+      /app\.post\('\/api\/v1\/buy-sell\/webhooks/.test(appSrc) && !/handleBuySellProviderWebhook\(/.test(appSrc));
+    t('blockchain verification requires a receipt, destination, exact amount and confirmations',
+      /eth_getTransactionReceipt/.test(service) && /RECIPIENT_MISMATCH/.test(service)
+      && /AMOUNT_MISMATCH/.test(service) && /TX_CONFIRMING/.test(service));
+    t('the explicit confirmation precedes checkout creation', /confirmed !== true/.test(service) && /continueToCheckout/.test(panel));
+    t('FBT fee is fixed to zero and rendered distinctly', /FBT_TRADING_FEE = 0/.test(service) && /buySell\.fbtFee/.test(panel));
+    t('there is no CEX API or CEX trading redirect in the buy flow',
+      !/(binance|bybit|kucoin|mexc)/i.test(code(`${service}\n${client}\n${panel}\n${buy}`)));
+    t('the responsive Buy / Sell stylesheet is shipped', /buy-sell-ticket/.test(css) && /@media/.test(css) && /\[dir="rtl"\]/.test(css));
+    const keys = [...panel.matchAll(/(?<![A-Za-z])t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    t('every Buy / Sell string resolves in English and Persian', keys.every((key) => hasKey(en, key) && hasKey(fa, key)));
   }
 
   /* ---- 61. crypto radio: every station must be able to play ------------- */
@@ -5839,7 +5599,7 @@ export default function run() {
       'src/pages/Signals.jsx',
       'src/pages/Bridge.jsx',
       'src/pages/SolanaSwap.jsx',
-      'src/components/FiatPanel.jsx'
+      'src/components/BuySellPanel.jsx'
     ];
 
     const en = JSON.parse(read('src/i18n/locales/en.json'));
@@ -5894,7 +5654,7 @@ export default function run() {
      * pins that: no IP geolocation, no country allow-list, no region gate
      * anywhere in our own code. If someone ever adds one, this fails.
      */
-    const scan = ['server/app.js', 'server/fiat.js', 'src/App.jsx', 'src/lib/features.js']
+    const scan = ['server/app.js', 'server/buySell.js', 'src/App.jsx', 'src/lib/features.js']
       .filter((f) => existsSync(f))
       .map((f) => strip3(read(f)))
       .join('\n');
@@ -7173,107 +6933,23 @@ export default function run() {
     }
   }
 
-  /* ---- 74. fiat pulled, swap unified, projection folded ----------------- */
+  /* ---- 74. Buy / Sell replaces retired wallet-category purchase UI ------ */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
       .replace(/^\s*\/\/.*$/gm, '');
-
-    const buy = read('src/pages/Buy.jsx');
-    const buyCode = code(buy);
-
-    /*
-     * ═══════════════════════════════════════════════════════════════════════
-     * 1. THE CHANGENOW PANEL IS OFF THE BUY SCREEN.
-     * ═══════════════════════════════════════════════════════════════════════
-     * The partner told the owner fiat is suspended until September. The panel
-     * was NOT visibly broken — /api/fiat/status still answered
-     * {"enabled":true} in production — so the form rendered, took an amount,
-     * and would only have failed when somebody pressed the button with real
-     * money in hand. That is the worst place in the app to learn a partner is
-     * offline.
-     */
-    t('the fiat panel is off the buy screen', !/FiatPanel/.test(buyCode));
-
-    /*
-     * ─── THE EXTERNAL WALLET TAB ──────────────────────────────────────────
-     * Reported: «ظاهرش خوب نیست، وصل هم نمیشه», ending in «خرید با کیف خارجی در
-     * این نسخه فعال نیست. AppKit On-Ramp باید در تنظیمات WalletConnect/AppKit
-     * فعال باشد».
-     *
-     * The message was accurate and useless. This app ships WalletConnect's
-     * Ethereum provider, not Reown AppKit, so `window.reownAppKit` was never
-     * going to exist and that button could only ever fail — after collecting an
-     * amount, a fiat, an asset and a payment method for a checkout that does
-     * not exist. The owner settled it: «فعلا On-Ramp نداریم، API‌اش را نداریم».
-     */
-    t('the external wallet tab never renders a dead on-ramp form',
-      !existsSync('src/components/ExternalWalletPurchase.jsx')
-      && !/ExternalWalletPurchase/.test(buyCode)
-      && !/(reownAppKit|window\.appKit|OnRampProviders)/.test(buyCode));
-    t('...and the unavailable-AppKit message is gone from every locale',
-      !['en', 'fa', 'ar'].some((l) =>
-        JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.external));
-    t('...with the stylesheet that only that form used',
-      !existsSync('src/styles/external-wallet-purchase.css'));
-    /*
-     * But "we cannot do that" on its own is the same dead end with better
-     * manners, so the tab has to offer something that works. Every button goes
-     * to a real route in this app — not to a provider, and not to a setting
-     * nobody has.
-     */
-    t('the tab states plainly that there is no card on-ramp',
-      /buy\.ext\.noOnRamp/.test(buyCode)
-      && ['en', 'fa'].every((l) =>
-        /do not run a card on-ramp|آن‌رمپ کارت بانکی نداریم/.test(
-          String(JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.ext?.noOnRamp))));
-    t('...and both of its buttons go somewhere that works',
-      /navigate\('\/p2p'\)/.test(buyCode) && /navigate\('\/swap'\)/.test(buyCode)
-      && /navigate\('\/wallet'\)/.test(buyCode));
-    t('...and says the desk releases to an address the USER controls',
-      ['en', 'fa'].every((l) =>
-        /کنترلش دست توست|address you control/.test(
-          String(JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.ext?.p2pNote))));
-
-    /*
-     * ─── THE DEAD END NOW HAS THREE WORKING OPTIONS (2026-08-24) ──────────
-     * The tab used to end in "no on-ramp, nothing else" — «ارجاع کلا
-     * قشنگ نیست» is the owner's ruling against what replaced it before, so
-     * the replacement must be real, buy/sell-only, and earn where an
-     * earning path exists (verified from each venue's own source, 2026-08-24:
-     * Hodl Hodl FAQ/fee guide/ToS for 0.75% → 0.5% with referral and the
-     * 5–10% commission; our swap at 0.70%; Solana's fee per quote). No
-     * third-party spot-swap venue met all the rules, so there is no fourth
-     * card and NO third-party link at all: every string that looks like a
-     * URL in this file would be a hand-off, and a hand-off is what this
-     * screen exists to have stopped. The dead-link check is the URL scan —
-     * zero URLs means every button is an in-app route.
-     */
-    t('...and the tab offers the Solana path as a third working option',
-      /navigate\('\/solana'\)/.test(buyCode));
-    {
-      const get = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
-      const newKeys = ['options', 'p2pReferral', 'solana.title', 'solana.note', 'solanaCta'];
-      t('...every new option string exists in en and fa (other languages fall back to en)',
-        ['en', 'fa'].every((l) => {
-          const loc = JSON.parse(read(`src/i18n/locales/${l}.json`));
-          return newKeys.every((k) => {
-            const v = get(loc, `buy.ext.${k}`);
-            return typeof v === 'string' && v.trim().length > 3;
-          });
-        }));
-      t('...and no third-party URL is linked from anywhere in the file',
-        !/https?:\/\//.test(buyCode));
-    }
-
-    /*
-     * The server module and its routes STAY. Nothing is thrown away and
-     * re-enabling is a one-line revert; deleting them would turn a two-month
-     * pause into a rewrite.
-     */
-    t('...but the fiat module is kept for when it returns',
-      existsSync('server/fiat.js') && /\/api\/fiat\/quote/.test(read('server/app.js')));
+    const buyCode = code(read('src/pages/Buy.jsx'));
+    const panelCode = code(read('src/components/BuySellPanel.jsx'));
+    t('the Buy page contains no obsolete internal or external wallet purchase UI',
+      !/Internal Wallet|External Wallet|FiatPanel|WallexPanel|P2PMarket/.test(`${buyCode}\n${panelCode}`));
+    t('no legacy Wallex client, component, server adapter or route survives',
+      !existsSync('server/wallex.js') && !existsSync('src/lib/wallex.js') && !existsSync('src/components/WallexPanel.jsx')
+      && !/\/api\/wallex/.test(read('server/app.js')));
+    t('unavailable sell is stated as unavailable rather than routed to a venue',
+      /sellUnavailableTitle/.test(panelCode) && /sellUnavailableBody/.test(panelCode) && !/(binance|bybit|kucoin|mexc)/i.test(panelCode));
+    t('the current unintegrated provider state is visibly marked unavailable',
+      /providerUnavailable/.test(panelCode) && /PROVIDER_REQUIRES_INTEGRATION/.test(read('server/buySell.js')));
 
     /*
      * ═══════════════════════════════════════════════════════════════════════
@@ -7306,8 +6982,8 @@ export default function run() {
 
     const market = read('src/components/P2PMarket.jsx');
     const marketCode = code(market);
-    t('Buy renders the shared market, not a copy of it',
-      /<P2PMarket/.test(buyCode));
+    t('Buy does not retain the legacy P2P market beneath Buy / Sell',
+      !/<P2PMarket/.test(buyCode));
     t('P2P renders the same shared component, not a copy of it',
       /<P2PMarket/.test(code(read('src/pages/P2P.jsx'))));
     t('the swap CTA exists for BOTH directions',

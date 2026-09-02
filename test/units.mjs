@@ -209,7 +209,7 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
-import { FIAT_CRYPTO, FIAT_CURRENCIES, assertFiatLeg, fiatEnabled, fiatStatus } from '../server/fiat.js';
+import { ChangeNowHostedCheckoutProvider, FBT_TRADING_FEE, ORDER_STATES, ProviderRouter, validateDestination } from '../server/buySell.js';
 import { STATIONS, parseAudioFeed } from '../server/audio.js';
 import { VAULT_CHAINS, isValidVaultAddress, vaultConfig, vaultFeePercent, vaultIsLive } from '../src/lib/vault.js';
 import { fmtDuration } from '../src/lib/audio.js';
@@ -5551,128 +5551,24 @@ export default async function run() {
   }
 
 
-  /* ================= fiat buy & sell — never a swap ====================== */
+  /* ================ Buy / Sell provider safety boundary ================= */
   {
-    /*
-     * ─── THE GUARD THAT KEEPS THIS FROM BECOMING A SWAP ─────────────────────
-     * The previous ChangeNOW integration quoted crypto-to-crypto and was
-     * deleted for competing with our own product: «ما خودمون صرافی هستیم».
-     * Fiat is allowed back only because we genuinely cannot do it ourselves.
-     *
-     * `assertFiatLeg` is what makes that structural rather than a promise.
-     * If a crypto-to-crypto pair ever validates here, the deleted feature has
-     * been re-created by accident.
-     */
-    /*
-     * `assertFiatLeg` now returns the RESOLVED LEGS, not a bare string. That
-     * is not cosmetic: the quote and the order both need the money's payment
-     * rail and the asset's network, and having each caller look them up again
-     * is how one side of a pair ends up resolved differently from the other.
-     */
-    t('buying is fiat to crypto', assertFiatLeg('usd', 'btc')?.direction === 'buy');
-    t('selling is crypto to fiat', assertFiatLeg('btc', 'usd')?.direction === 'sell');
-    t('a crypto-to-crypto pair is REFUSED', assertFiatLeg('btc', 'eth') === null);
-    t('...in either direction', assertFiatLeg('eth', 'usdt-bsc') === null);
-    t('fiat to fiat is refused', assertFiatLeg('usd', 'eur') === null);
-    t('an unknown ticker is refused', assertFiatLeg('scam', 'usd') === null);
-
-    /*
-     * ─── THE OLD SWAP-STYLE TICKERS MUST NOT RESOLVE ────────────────────────
-     * The first version used `usdttrc20`, the fused ticker the crypto-swap
-     * API uses. The FIAT API does not know it: an asset there is a
-     * (currency, network) pair, so it is `USDT` + `TRX`. Sending the fused
-     * form produced a currency-not-found error on every request.
-     *
-     * Pinned as a literal so the old spelling cannot quietly come back with a
-     * fallback that "helpfully" accepts both — accepting both is how you end
-     * up with two code paths and only one of them tested.
-     */
-    t('the fused swap-style ticker no longer resolves', assertFiatLeg('usd', 'usdttrc20') === null);
-
-    /*
-     * ─── THE NETWORK MUST SURVIVE RESOLUTION ────────────────────────────────
-     * USDT exists on TRON and on BNB Chain, and they are different payout
-     * addresses on different chains. If both resolved to the same network the
-     * user's coins would go somewhere their wallet cannot reach, and nothing
-     * could bring them back. Pinned to literals, not just "they differ".
-     */
-    const trc = assertFiatLeg('usd', 'usdt-trx');
-    const bsc = assertFiatLeg('usd', 'usdt-bsc');
-    t('USDT on TRON resolves to the TRX network', trc?.asset.ticker === 'USDT' && trc?.asset.network === 'TRX');
-    t('USDT on BNB Chain resolves to the BSC network', bsc?.asset.ticker === 'USDT' && bsc?.asset.network === 'BSC');
-
-    /*
-     * ─── THE PAYMENT RAIL IS CARRIED, AND EUR IS NOT ON CARDS ───────────────
-     * Their limits differ per rail: EUR over SEPA starts at €16.50, USD over
-     * card at $19.05. Quoting one rail and charging another produces a
-     * "minimum not met" rejection after the card details are entered, which
-     * is the worst possible moment to discover it.
-     */
-    t('EUR settles over SEPA', assertFiatLeg('eur', 'btc')?.money.deposit === 'SEPA_1');
-    t('USD settles over card', assertFiatLeg('usd', 'btc')?.money.deposit === 'VISA_MC1');
-
-    /*
-     * ─── THE RIAL IS ABSENT ON PURPOSE ──────────────────────────────────────
-     * No international processor settles IRR — Visa, Mastercard and Amex have
-     * been severed from Iran's banking system since 2012. Listing it would
-     * produce a button that fails for every user who taps it.
-     */
-    t('IRR is not offered, because no processor settles it',
-      !FIAT_CURRENCIES.some((c) => c.code === 'irr'));
-    t('the fiat list is not empty', FIAT_CURRENCIES.length > 0);
-    t('the asset list is not empty', FIAT_CRYPTO.length > 0);
-
-    /* Every fiat entry must carry a rail, or `fiatQuote` builds a request
-       with an empty deposit_type and the upstream picks one for us. */
-    t('every currency declares its payment rail',
-      FIAT_CURRENCIES.every((c) => typeof c.deposit === 'string' && c.deposit.length > 2));
-    /* Same for the asset side: a missing network is an ambiguous payout. */
-    t('every asset declares a network',
-      FIAT_CRYPTO.every((a) => typeof a.network === 'string' && a.network.length >= 3));
-
-    /*
-     * ─── OUR COMMISSION IS NOT A NUMBER WE INVENT ───────────────────────────
-     * The first version read CHANGENOW_FIAT_FEE, defaulted it to 1, and
-     * displayed "our fee: 1%" — while nothing anywhere deducted it. It was a
-     * label with no mechanism: users would have been shown a fee we never
-     * charged, and we would have earned nothing from it.
-     *
-     * The real commission is a property of the partner account, applied by
-     * ChangeNOW to any request carrying our key and reported inside their own
-     * `service_fees`. So the status must NOT publish a percentage of our own,
-     * because publishing one recreates exactly the fiction that was removed.
-     */
-    t('the status publishes no invented fee percentage',
-      fiatStatus().ourFeePercent === undefined);
-    t('...and names the model instead', fiatStatus().feeModel === 'partner-rate');
-
-    /*
-     * ─── A KEY ALONE DOES NOT MEAN FIAT WORKS ───────────────────────────────
-     * ChangeNOW enable fiat per-partner after a compliance review, so a valid
-     * key with fiat off errors on every call. Two separate switches keep the
-     * UI honest instead of rendering a form that always fails.
-     */
-    const savedKey = process.env.CHANGENOW_API_KEY;
-    const savedOn = process.env.CHANGENOW_FIAT_ENABLED;
-
-    process.env.CHANGENOW_API_KEY = 'test-key';
-    delete process.env.CHANGENOW_FIAT_ENABLED;
-    t('a key without the fiat switch is not enabled', fiatEnabled() === false);
-
-    process.env.CHANGENOW_FIAT_ENABLED = 'true';
-    t('...and with it, it is', fiatEnabled() === true);
-
-    delete process.env.CHANGENOW_API_KEY;
-    t('the switch alone is not enough either', fiatEnabled() === false);
-
-    if (savedKey == null) delete process.env.CHANGENOW_API_KEY;
-    else process.env.CHANGENOW_API_KEY = savedKey;
-    if (savedOn == null) delete process.env.CHANGENOW_FIAT_ENABLED;
-    else process.env.CHANGENOW_FIAT_ENABLED = savedOn;
-
-    /* The status must announce that this is fiat-only, so no UI can imply
-       otherwise. */
-    t('the status reports fiat-only', fiatStatus().fiatOnly === true);
+    const capability = ChangeNowHostedCheckoutProvider.getCapabilities();
+    t('FBT Buy / Sell fee is configured as exactly zero', FBT_TRADING_FEE === 0 && capability.fbtFee === 0);
+    t('the provider fails closed until an official settlement contract exists',
+      capability.available === false && capability.prerequisites.includes('PROVIDER_REQUIRES_INTEGRATION')
+      && capability.prerequisites.includes('OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'));
+    t('off-ramp is honestly unavailable rather than redirected to an exchange', capability.offRamp === false);
+    t('the explicit order lifecycle includes payment, settlement and verification failures',
+      ['PAYMENT_FAILED', 'SETTLEMENT_FAILED', 'VERIFICATION_FAILED', 'MANUAL_REVIEW', 'COMPLETED'].every((state) => ORDER_STATES.includes(state)));
+    t('only a checksummed BSC/EVM destination is normalized',
+      validateDestination('0x000000000000000000000000000000000000dEaD', { chainId: 56 }).ok === true
+      && validateDestination('not-a-wallet', { chainId: 56 }).code === 'ADDRESS_INVALID');
+    const sellRoute = await ProviderRouter.route({ side: 'SELL' });
+    t('sell routing is an explicit unavailable state', sellRoute.ok === false && sellRoute.code === 'SELL_UNAVAILABLE');
+    const buyRoute = await ProviderRouter.route({ side: 'BUY' });
+    t('buy routing does not create a quote while provider integration is unavailable',
+      buyRoute.ok === false && buyRoute.code === 'PROVIDER_UNAVAILABLE');
   }
 
   /* ==================== crypto radio — audio, not video =================== */

@@ -71,6 +71,17 @@ export const APP_CAPABILITIES = Object.freeze([
     requiresWallet: true
   }),
   Object.freeze({
+    id: 'buy-sell',
+    name: 'Buy & Sell',
+    description: 'Provider-hosted fiat on-ramp with direct wallet settlement and blockchain verification',
+    route: '/buy',
+    actions: ['buySell.buy_quote', 'buySell.sell_quote', 'buySell.buy_asset', 'buySell.sell_asset', 'buySell.checkout'],
+    queries: ['buySell.capabilities', 'buySell.buy_status', 'buySell.sell_status', 'buySell.payment_status', 'buySell.settlement_status', 'buySell.transaction_status'],
+    events: ['buySell.quoteReady', 'buySell.created', 'buySell.checkoutStarted', 'buySell.completed'],
+    category: 'trading',
+    requiresWallet: true
+  }),
+  Object.freeze({
     id: 'bridge',
     name: 'Bridge',
     description: 'Cross-chain bridge',
@@ -418,7 +429,7 @@ export function findCapabilityForAction(actionId) {
 export const CAPABILITY_HIERARCHY = Object.freeze({
   wallet: ['wallet', 'evm-wallet', 'solana-wallet'],
   portfolio: ['portfolio', 'rebalancing', 'financial-goals'],
-  trading: ['swap', 'bridge', 'cross-chain', 'orders', 'futures', 'stocks'],
+  trading: ['buy-sell', 'swap', 'bridge', 'cross-chain', 'orders', 'futures', 'stocks'],
   defi: ['lending', 'borrowing', 'farming', 'yield', 'staking', 'dca'],
   market: ['market', 'tokens', 'signals', 'smart-money', 'whale-tracking'],
   investment: ['dca', 'rebalancing', 'financial-goals', 'yield', 'farming'],

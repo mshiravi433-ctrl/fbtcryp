@@ -49,7 +49,7 @@ import Portfolio from '../src/pages/Portfolio.jsx';
 import IntentOS from '../src/pages/IntentOS.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
-import FiatPanel from '../src/components/FiatPanel.jsx';
+import BuySellPanel from '../src/components/BuySellPanel.jsx';
 import VaultCard from '../src/components/VaultCard.jsx';
 import Vault from '../src/pages/Vault.jsx';
 import AutopilotGuideSheet from '../src/components/AutopilotGuideSheet.jsx';
@@ -271,17 +271,14 @@ export async function run(container) {
 
   /*
    * The three components added or rebuilt alongside them. Mounted directly
-   * rather than trusting the parent page to exercise them: RadioPanel renders
-   * a loading skeleton until its fetch resolves, and FiatPanel renders the
-   * "not enabled" branch — so mounting the parent alone proves neither
-   * component's main body parses.
+   * rather than trusting the parent page to exercise them: RadioPanel and the
+   * Buy / Sell panel each have independent loading and unavailable states.
    *
    * RestrictionsSheet goes through a portal, like every other Sheet here.
    */
   await mount('RestrictionsSheet', <RestrictionsSheet open onClose={() => {}} />, { portal: true });
   await mount('RadioPanel', <RadioPanel />, { mayBeEmpty: true });
-  await mount('FiatPanel (buy)', <FiatPanel mode="buy" />);
-  await mount('FiatPanel (sell)', <FiatPanel mode="sell" />);
+  await mount('BuySellPanel', <BuySellPanel />);
 
   /*
    * VaultCard with NO vault configured — the default, and the state every
