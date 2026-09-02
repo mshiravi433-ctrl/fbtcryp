@@ -1,3 +1,57 @@
+# Unreleased — On-Chain futures: Drift → Velocity migration (the feed was dead, not the flag)
+
+- **Why the On-Chain tab said `drift: UNAVAILABLE · FEED_UNAVAILABLE ·
+  marketCount = 0`**: the venue moved. Drift's program was **paused** and the
+  protocol continues as **Velocity Protocol** — a fork of Drift v2 with a new
+  program ID (`vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P`), a new Data API
+  host and **USDT** instead of USDC as the quote asset. `data.api.drift.trade`
+  and `dlob.drift.trade` no longer resolve, and `GET /contracts` on the new host
+  404s, so the adapter was asking a dead host for a dead endpoint and honestly
+  reported an empty feed. The status flag was never the problem.
+- **`server/futures/adapters/drift.js` rewritten against the live Velocity Data
+  API** (`data.velocity.exchange`, overridable via `VELOCITY_DATA_API` /
+  `VELOCITY_DLOB_API`; the old `DRIFT_*` names still work). The market list is
+  now **read from the feed** instead of intersected with a frozen table of 21
+  Drift market indices — Velocity lists four perps (SOL 0, BTC 1, ETH 2, HYPE 3)
+  with its own indices. The new payload shapes are parsed: decimal **strings**
+  for prices, `openInterest`/`fundingRate` as `{ long, short }` objects (OI is
+  in base units → valued at the mark; funding is **% per hour** → APR, with
+  HYPE pinned at Velocity's documented 10.95 % floor as the sanity check),
+  `quoteVolume` for 24 h volume, `fees.taker` (4 bps) and the real per-market
+  `limits.leverage.max` (20×, 10× — not the old hardcoded 50×). The DLOB `/l2`
+  book is the opposite convention and is divided by `PRICE_PRECISION` (1e6), so
+  `"99800000"` reads as **$99.80** instead of $99.8 M. Receipt verification and
+  the contract-mismatch stop now check the **Velocity** program ID.
+- **Honest venue state**: `readMarkets()` returns the adapter's own reason
+  (`FEED_UNREACHABLE: …` / `FEED_EMPTY: …`) and the registry exposes it as
+  `detail`, so an UNAVAILABLE venue explains itself instead of only saying
+  `FEED_UNAVAILABLE`. Candles are tried on two endpoint shapes and report
+  `live: false` when the venue serves none — the chart says "unavailable" rather
+  than drawing invented candles.
+- **The order path is fail-closed, not silently broken**
+  (`src/lib/futures-engine/providers.js`, `server/futures/router.js`): the venue
+  is catalogued as `execution: NOT_BUILT` with `canExecute: false`, and
+  `/prepare` refuses with `PROVIDER_READ_ONLY`. The browser bundle still speaks
+  `@drift-labs/sdk`, which cannot touch the Velocity program, so this page shows
+  **live prices and "View only"** instead of asking a wallet to sign a
+  transaction aimed at a paused program. `src/lib/driftTrade.js` is marked
+  dormant with the exact migration checklist.
+- **Labels**: the venue is now named **Velocity** (Solana, USDT) in the registry,
+  the venue card badge (`VEL`) and all 12 locales; the provider id stays `drift`
+  for ledger/UI continuity.
+- **Fix: the production build was broken on `main`.**
+  `src/context/WalletContext.jsx` ended with a duplicated 20-line tail fragment
+  (`ession, attachLocal, … ]`), so every `vite build` died with
+  `Unexpected "]"` at line 1433. The tail is removed and all 1 150 JS/JSX files
+  now parse.
+- **Tests**: `test/futures-velocity-feed-probe.mjs` (`npm run test:velocity-feed`)
+  drives the real adapter + real registry with a verbatim live `/stats/markets`
+  capture — 24 checks, including the reproduction of the reported
+  `UNAVAILABLE · FEED_UNAVAILABLE` symptom from the pure status function.
+  `npm run test:futures-onchain` (`test/futures-onchain-run.mjs`) runs the
+  existing On-Chain UI suite standalone (37 checks). `npm run test:futures`
+  passes 40/40 against the real HTTP BFF.
+
 # Unreleased — Buy/Sell: step wizard + no-registration guided rail + on-chain report
 
 - **Step-wizard Buy/Sell** (`src/components/BuySellPanel.jsx` rewritten): one

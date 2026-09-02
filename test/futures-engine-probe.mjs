@@ -33,8 +33,12 @@ t('only a provider with a built order path can claim canExecute',
   Object.values(PROVIDER_CATALOGUE).every((p) => !p.capabilities.canExecute
     || p.execution === EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX
     || p.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX));
-t('the Solana (Drift) adapter builds+signed tx in tab with the user wallet',
-  PROVIDER_CATALOGUE.drift.family === 'solana' && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX && PROVIDER_CATALOGUE.drift.capabilities.canExecute);
+t('the Solana venue is Velocity, read-only until the venue SDK is migrated',
+  PROVIDER_CATALOGUE.drift.family === 'solana' && PROVIDER_CATALOGUE.drift.name === 'Velocity'
+  && PROVIDER_CATALOGUE.drift.collateral === 'USDT'
+  && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.NOT_BUILT
+  && PROVIDER_CATALOGUE.drift.capabilities.canExecute === false
+  && PROVIDER_CATALOGUE.drift.capabilities.canReadMarkets === true);
 t('status vocabulary is exactly the six spec words',
   JSON.stringify(Object.values(PROVIDER_STATUS).sort()) === JSON.stringify(['AVAILABLE', 'BLOCKED', 'DEGRADED', 'MAINTENANCE', 'READ_ONLY', 'UNAVAILABLE']));
 t('a built + configured + live provider is AVAILABLE',
@@ -54,8 +58,10 @@ t('BLOCKED beats everything, MAINTENANCE beats data',
   && resolveProviderStatus({ maintenance: true, dataLive: true, configured: true, execution: EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX }).status === 'MAINTENANCE');
 t('a client-signed venue (dYdX) is READ_ONLY from the server\'s point of view',
   resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_SIGNED_SESSION, configured: true, dataLive: true }).status === 'READ_ONLY');
-t('a client-builds-tx venue (Drift) with a live feed is AVAILABLE in this tab',
+t('a client-builds-tx venue with a live feed is AVAILABLE in this tab',
   resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_BUILDS_TX, configured: true, dataLive: true }).status === 'AVAILABLE');
+t('a client-builds-tx venue with a DEAD feed is the reported UNAVAILABLE · FEED_UNAVAILABLE',
+  (() => { const r = resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_BUILDS_TX, configured: true, dataLive: false }); return r.status === 'UNAVAILABLE' && r.reason === 'FEED_UNAVAILABLE'; })());
 t('config can never make a NOT_BUILT venue executable',
   !isExecutableStatus(resolveProviderStatus({ execution: EXECUTION_MODEL.NOT_BUILT, configured: true, enabled: true, dataLive: true }).status));
 

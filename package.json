@@ -51,6 +51,8 @@
     "test:cross-chain": "node test/cross-chain-probe.mjs",
     "test:central-os": "node test/central-os-probe.mjs",
     "test:futures": "node test/futures-engine-probe.mjs && node test/futures-bff-run.mjs",
+    "test:futures-onchain": "node test/futures-onchain-run.mjs",
+    "test:velocity-feed": "node test/futures-velocity-feed-probe.mjs",
     "ops:drill": "node scripts/run-ops-drills.mjs",
     "ops:external-providers": "node scripts/run-external-providers.mjs",
     "stage3:probe": "node scripts/run-ops-drills.mjs",

@@ -21,10 +21,11 @@
  * the product rule is no CEX trading APIs, and a catalogue entry is the first
  * step toward one.
  *
- * The On-Chain tab of the Futures engine shows Drift (Solana) ONLY — that is
- * the venue FBT is integrating. Ostium (Arbitrum) serves stocks/RWA in its own
- * Stocks tab; it is kept in the catalogue for the registry/ledger but is not
- * part of the on-chain futures page.
+ * The On-Chain tab of the Futures engine shows Velocity (Solana) ONLY — the
+ * Drift-fork venue FBT is integrating; the provider id is still `drift`. Ostium
+ * (Arbitrum) serves stocks/RWA in its own Stocks tab; it is kept in the
+ * catalogue for the registry/ledger but is not part of the on-chain futures
+ * page.
  */
 
 export const PROVIDER_STATUS = Object.freeze({
@@ -178,20 +179,30 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     capabilities: flags(),
     tab: null
   }),
-  /* Drift (Solana) — the venue of the On-Chain futures tab. The public Data
-     API feeds live markets/prices/funding/OI/candles (READ), and the browser
-     builds + signs real Drift transactions with @drift-labs/sdk and the user's
-     own Solana wallet (FBT never holds a key). The server never signs for
-     Solana; it provides quote/risk/fee truth and verifies receipts on chain. */
+  /* Velocity (Solana) — the venue of the On-Chain futures tab.
+     Drift's program was PAUSED; the protocol continues as Velocity Protocol, a
+     fork of Drift v2 with its own program ID, its own Data API host
+     (data.velocity.exchange) and USDT — not USDC — as the quote asset. The
+     public Data API feeds live markets/prices/funding/OI (READ).
+
+     The ORDER path is deliberately NOT_BUILT: the browser still bundles
+     @drift-labs/sdk, which cannot talk to the Velocity program (new program
+     ID, new State PDA seed, USDT mint), so claiming an executable venue here
+     would send users' signatures at a paused program. Until that bundle is
+     migrated to @velocity-exchange/sdk the registry derives READ_ONLY — the
+     page is live and priced, and honest that it cannot trade.
+
+     The provider id stays `drift` (ledger rows, the UI tab and the tests all
+     key off it); only the venue NAME and the facts changed. */
   drift: Object.freeze({
     id: 'drift',
-    name: 'Drift',
+    name: 'Velocity',
     family: 'solana',
     chainId: 'solana:mainnet',
     chainName: 'Solana',
     custody: 'onchain',
-    collateral: 'USDC',
-    execution: EXECUTION_MODEL.CLIENT_BUILDS_TX,
+    collateral: 'USDT',
+    execution: EXECUTION_MODEL.NOT_BUILT,
     fbtFeeModel: 'referrer-on-fill',
     fbtFeeChargedOn: 'fill',
     venueFeeCapBps: 20,
@@ -200,17 +211,19 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       canReadMarkets: true,
       canReadFunding: true,
       canReadOpenInterest: true,
-      canReadPositions: true,
+      /* positions are decoded client-side by the venue SDK, which is not
+         migrated yet — so no position read is claimed either. */
+      canReadPositions: false,
       canQuote: true,
-      canPrepare: true,
-      canExecute: true,
-      canManagePositions: true,
-      supportsTakeProfit: true,
-      supportsStopLoss: true,
-      supportsPartialClose: true,
-      supportsCollateralAdjust: true,
-      supportsLimitOrders: true,
-      supportsReduceOnly: true
+      canPrepare: false,
+      canExecute: false,
+      canManagePositions: false,
+      supportsTakeProfit: false,
+      supportsStopLoss: false,
+      supportsPartialClose: false,
+      supportsCollateralAdjust: false,
+      supportsLimitOrders: false,
+      supportsReduceOnly: false
     }),
     tab: 'onchain'
   })

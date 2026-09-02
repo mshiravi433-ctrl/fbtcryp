@@ -67,10 +67,13 @@ export function providerConfigured(providerId) {
   if (p.execution === EXECUTION_MODEL.NOT_BUILT) return false;
   if (providerId === 'ostium') return Boolean(fbtFeeRecipient());
   if (providerId === 'dydx') return true; // executes in its own tab via the client session
-  /* Drift reads public market data server-side; the ORDER path builds and
-     signs in the browser with @drift-labs/sdk + the user's own Solana wallet
-     (EXECUTION_MODEL.CLIENT_BUILDS_TX), so no server key/config is needed. */
-  if (providerId === 'drift') return true;
+  /* Velocity (Solana) reads public market data server-side. Its ORDER path is
+     not wired yet: the venue moved off Drift (@drift-labs/sdk, USDC, the
+     dRifty… program) to @velocity-exchange/sdk (VelocityClient, USDT, the
+     vELoC1… program), so until that client bundle is migrated the catalogue
+     says NOT_BUILT and this stays false — the venue can then never be shown
+     as tradeable. */
+  if (providerId === 'drift') return p.execution !== EXECUTION_MODEL.NOT_BUILT;
   return false;
 }
 
@@ -86,13 +89,17 @@ async function probeOstium() {
   }
 }
 
+/* The on-chain venue: Velocity Protocol on Solana (the Drift fork; the Drift
+   program is paused). Provider id stays `drift` for ledger/UI continuity. */
 async function probeDrift() {
   try {
-    const mk = await withTimeout(drift.readMarkets(), 9000, 'drift-markets');
+    const mk = await withTimeout(drift.readMarkets(), 9000, 'velocity-markets');
     const h = drift.healthFromMarkets(mk);
-    return { ...h, marketCount: mk.markets.length, readAt: mk.readAt, detail: null };
+    /* `detail` carries the adapter's own reason (dead host, empty feed…) so an
+       UNAVAILABLE venue explains itself instead of only saying FEED_UNAVAILABLE. */
+    return { ...h, marketCount: mk.markets.length, readAt: mk.readAt, detail: h.detail || null };
   } catch (err) {
-    return { dataLive: false, dataStale: false, marketCount: 0, readAt: null, detail: String(err?.message || 'DRIFT_UNREACHABLE').slice(0, 80) };
+    return { dataLive: false, dataStale: false, marketCount: 0, readAt: null, detail: String(err?.message || 'VELOCITY_UNREACHABLE').slice(0, 80) };
   }
 }
 
@@ -130,6 +137,9 @@ export async function probeProvider(providerId, { force = false } = {}) {
     name: p.name,
     status,
     reason: reason || probe.detail || null,
+    /* The adapter's own explanation (dead host, empty feed…). `reason` stays a
+       status-vocabulary word; this is the human/ops "why". */
+    detail: probe.detail || null,
     executable: isExecutableStatus(status) && p.capabilities.canExecute && configured,
     execution: p.execution,
     configured,

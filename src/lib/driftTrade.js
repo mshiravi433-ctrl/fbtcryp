@@ -1,4 +1,26 @@
 /**
+ * ⚠️ DORMANT — this module still targets the PAUSED Drift program.
+ * ---------------------------------------------------------------------------
+ * Drift's on-chain program was paused and the protocol continued as **Velocity
+ * Protocol**: a new program ID (`vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P`),
+ * a renamed State PDA seed (`velocity_state`), USDT instead of USDC as the
+ * quote/collateral mint, and a renamed SDK (`@drift-labs/sdk` → `@velocity-exchange/sdk`,
+ * `DriftClient` → `VelocityClient`, no back-compat aliases). No on-chain state
+ * carried over, so a signature built here would be sent at a program that no
+ * longer executes.
+ *
+ * The venue is therefore catalogued as `execution: NOT_BUILT` and the registry
+ * reports it READ_ONLY: the On-Chain futures page shows live Velocity markets,
+ * prices, funding and open interest, and the action is honestly "View only".
+ * `/prepare` refuses too, so nothing in the app can reach the functions below.
+ *
+ * To re-enable trading, migrate this file (see
+ * https://docs.velocity.exchange/developers/migrate-from-drift/agent-guide):
+ * swap the dependency, re-bundle `scripts/vendor-drift.mjs` from
+ * `@velocity-exchange/sdk`, apply the renames, move every quote-mint/ATA
+ * reference to USDT, re-derive all PDAs against the new program ID, and flip
+ * the catalogue back to CLIENT_BUILDS_TX only after that is verified.
+ *
  * DRIFT (Solana) TRADE EXECUTION — client-side, wallet-signed.
  * ---------------------------------------------------------------------------
  * The On-Chain futures tab actually opens/closes positions on Drift. FBT never

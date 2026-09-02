@@ -63,10 +63,11 @@ const cleanWallet = (w) => {
 const providerOf = (id) => PROVIDER_CATALOGUE[String(id || '').toLowerCase()] || null;
 const ownerFor = (req) => (req?.tgUser?.id ? `tg:${req.tgUser.id}` : String(req.get?.('x-fbt-device') || req.ip || 'anon').slice(0, 64));
 
-/* Ostium has a server-side EVM order path (Stocks). Drift (Solana) has a live
-   READ path — markets/prices/funding/OI/candles — but no order path yet, so its
-   adapter answers data and the venue stays READ_ONLY. The table makes adding
-   Drift execution a registration, not a rewrite. */
+/* Ostium has a server-side EVM order path (Stocks). Velocity (Solana, the
+   Drift fork; provider id `drift`) has a live READ path — markets/prices/
+   funding/OI — but no order path yet, so its adapter answers data and the venue
+   stays READ_ONLY. The table makes adding Velocity execution a registration,
+   not a rewrite. */
 const ADAPTERS = { ostium, drift };
 
 /* Per-adapter fee + collateral constants. Kept out of the generic flow so each
@@ -372,37 +373,20 @@ export function futuresRouter() {
     if (!o.account) return fail(res, 503, 'PROVIDER_UNAVAILABLE', { requestId, detail: 'account read failed; balance and allowance could not be verified' });
     if (o.account.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd) return fail(res, 400, 'INSUFFICIENT_BALANCE', { requestId, balanceUsd: o.account.balanceUsd });
 
-    /* ── Drift (Solana): the browser builds + signs with @drift-labs/sdk and
-       the user's own wallet. The server builds NO calldata and holds NO key; it
-       creates the ledger record and hands back the executionId + order params. */
+    /* ── Velocity (Solana): fail closed.
+       The venue moved from Drift (@drift-labs/sdk · USDC · the dRifty… program,
+       now PAUSED) to @velocity-exchange/sdk (VelocityClient · USDT · the
+       vELoC1… program). The browser bundle has not been migrated, so there is
+       nothing the user's wallet could honestly sign here. The catalogue reports
+       NOT_BUILT and statusGate() already refuses with needExecute — this is the
+       second lock, so flipping one flag can never hand out an unexecutable
+       order. Markets, prices, funding and OI keep answering. */
     if (o.providerId === 'drift') {
-      const feeD = feeFor({ providerId: 'drift', market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
-      if (!feeD) return fail(res, 400, 'INVALID_INPUT', { requestId });
-      const notional = o.collateralUsd * o.leverage;
-      const execution = await createExecution({
-        requestId, intentId, idempotencyKey: idemKey, owner, wallet, providerId: 'drift', marketId: o.market.marketId, symbol: o.market.symbol,
-        action: 'open', side: o.side, collateralUsd: o.collateralUsd, leverage: o.leverage, notionalUsd: notional,
-        fee: feeD, risk: o.risk, route: o.route, unsignedTx: { family: 'solana', model: 'client-builds-tx', program: drift.DRIFT_PROGRAM_ID }
+      return fail(res, 409, 'PROVIDER_READ_ONLY', {
+        requestId,
+        detail: 'Velocity order path is not built: the in-browser SDK still targets the paused Drift program',
+        provider: o.health
       });
-      await appendFeeRecord({ executionId: execution.executionId, requestId, intentId, wallet, providerId: 'drift', marketId: o.market.marketId, action: 'open', fee: feeD, status: 'PREPARED', chainId: 'solana:mainnet' });
-      publish('FUTURES_ORDER_PREPARED', { executionId: execution.executionId, requestId, intentId, providerId: 'drift', marketId: o.market.marketId, side: o.side, notionalUsd: notional, fbtFeeUsd: feeD.fbt.feeUsd }, { source: 'futures-router' });
-      const depositUsdc = num(req.body?.depositUsdc) ?? 0;
-      const data = {
-        requestId, intentId, executionId: execution.executionId, idempotencyKey: idemKey,
-        provider: 'drift', providerStatus: o.health.status, action: 'open',
-        market: { marketId: o.market.marketId, symbol: o.market.symbol, base: o.market.base, mid: o.market.mid, bid: o.market.bid, ask: o.market.ask, maxLeverage: o.effectiveMax, marketIndex: Number(o.market.marketId) },
-        order: { side: o.side, collateralUsd: o.collateralUsd, leverage: o.leverage, notionalUsd: notional, entryPrice: o.entry, takeProfit: o.takeProfit, stopLoss: o.stopLoss, slippageBps: o.slippageBps, depositUsdc },
-        account: o.account ? { balanceUsd: o.account.balanceUsd, needsApproval: false } : null,
-        fee: feeD, risk: o.risk, route: o.route,
-        /* No server calldata: the client constructs these transactions with the
-           Drift SDK and signs them with the user's own Solana wallet. */
-        transactions: [],
-        clientSign: { family: 'solana', program: drift.DRIFT_PROGRAM_ID, sdk: '@drift-labs/sdk', buildsInTab: true },
-        state: 'PREPARED', expiresAt: now() + 120_000
-      };
-      const response = { ok: true, data, meta: { schema: SCHEMA(mode === 'execute' ? 'execute' : 'prepare'), dataStatus: 'live', security: { privateKeys: 'never-held', signing: 'wallet-only', broadcasting: 'wallet-only', note: 'Drift transactions are built in the browser with the venue SDK and signed by the user\'s Solana wallet; the server never signs.' } } };
-      await saveFuturesIdempotency(claim, response);
-      return res.status(200).json(response);
     }
 
     const needsApproval = o.account.allowanceUsd != null && o.account.allowanceUsd + 1e-9 < o.collateralUsd;
@@ -507,9 +491,9 @@ export function futuresRouter() {
       return ok(res, { executionId, txHash, state: updated.state, verification: updated.verification }, { schema: SCHEMA('verify') });
     }
     /* Contract mismatch on the receipt is a security stop: the tx that landed
-       is not ours. EVM compares the target address; Solana compares the Drift
-       program id (case-sensitive base58). */
-    const expectedTo = isSolana ? (record.tx?.program || drift.DRIFT_PROGRAM_ID) : record.tx?.to;
+       is not ours. EVM compares the target address; Solana compares the
+       Velocity program id (case-sensitive base58). */
+    const expectedTo = isSolana ? (record.tx?.program || drift.VELOCITY_PROGRAM_ID) : record.tx?.to;
     if (expectedTo && receipt.to && String(receipt.to).toLowerCase() !== String(expectedTo).toLowerCase()) {
       await updateExecution(executionId, { txHash, verification: { status: 'MISMATCH', at: now(), receiptTo: receipt.to } }, 'FAILED');
       return fail(res, 451, 'CONTRACT_MISMATCH', { executionId });

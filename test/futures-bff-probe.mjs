@@ -138,22 +138,18 @@ try {
   t('Drift fee preview uses Drift venue fees (no Ostium oracle flat fee)', driftFees.status === 200
     ? driftFees.json.data.fee.protocol.flatUsd === 0 && (driftFees.json.data.fee.protocol.bps === 5 || driftFees.json.data.fee.protocol.bps === null)
     : driftFees.json?.ok === false);
-  /* Drift order path: the server builds NO calldata and holds no key. With a
-     live feed it returns a client-builds payload (empty transactions[],
-     clientSign.buildsInTab, Solana program id); with the feed down in CI it
-     refuses honestly with the provider health — never an EVM unsigned tx. */
+  /* Velocity order path: FAIL CLOSED. The venue moved off Drift (paused
+     program) to Velocity, and the browser SDK bundle has not been migrated, so
+     the catalogue says NOT_BUILT and /prepare must refuse honestly with the
+     provider health — never an unsigned tx, and never a "sign this" payload
+     the user's wallet could not execute. */
   const SOL_WALLET = 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd';
-  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_drift_prep_01' });
-  const d = driftPrepare.json?.data;
-  t('Drift /prepare returns the client-builds-tx payload or an honest refusal',
-    driftPrepare.json?.ok === true
-      ? d.clientSign?.family === 'solana' && d.clientSign?.buildsInTab === true
-        && Array.isArray(d.transactions) && d.transactions.length === 0
-        && d.market?.marketIndex === 0 && d.state === 'PREPARED'
-        && d.clientSign?.program === 'dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'
-      : ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY', 'FEED_STALE'].includes(driftPrepare.json?.error?.code));
-  const driftBadWallet = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: 'not-a-wallet' }, { 'idempotency-key': 'fut_probe_drift_badw_01' });
-  t('Drift /prepare rejects a wallet that is neither an EVM nor a Solana address', driftBadWallet.status === 400 && driftBadWallet.json?.error?.code === 'WALLET_NOT_CONNECTED');
+  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_velocity_prep_01' });
+  t('Velocity /prepare refuses while the order path is NOT_BUILT',
+    driftPrepare.json?.ok !== true
+      && ['PROVIDER_READ_ONLY', 'PROVIDER_UNAVAILABLE', 'FEED_STALE'].includes(driftPrepare.json?.error?.code));
+  const driftBadWallet = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: 'not-a-wallet' }, { 'idempotency-key': 'fut_probe_velocity_badw_01' });
+  t('Velocity /prepare rejects a wallet that is neither an EVM nor a Solana address', driftBadWallet.status === 400 && driftBadWallet.json?.error?.code === 'WALLET_NOT_CONNECTED');
   /* An EVM-shaped hash must never be accepted as a Drift receipt: the unknown
      execution still 404s first, but a well-formed id + Solana record would
      hit isSolanaSignature; here we pin that the route never fabricates a
