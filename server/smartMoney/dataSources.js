@@ -444,6 +444,43 @@ export async function solBalance(address) {
   }
 }
 
+/**
+ * SPL token balances for an address (public RPC, jsonParsed).
+ *
+ * Without this, a Solana wallet page could only ever show SOL: every token
+ * position — which is what the Smart Money screens are actually about — was
+ * invisible, so the page read as empty on a wallet holding hundreds of tokens.
+ * The RPC returns a token account per mint (a wallet can hold several), so
+ * rows are summed by mint and zero balances are dropped.
+ */
+export async function solTokenBalances(address, { limit = 40 } = {}) {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) return { dataStatus: 'bad-address', tokens: [] };
+  try {
+    const res = await solRpc('getTokenAccountsByOwner', [
+      address,
+      { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+      { encoding: 'jsonParsed' }
+    ]);
+    const byMint = new Map();
+    for (const acc of (Array.isArray(res?.value) ? res.value : [])) {
+      const info = acc?.account?.data?.parsed?.info;
+      const mint = info?.mint;
+      const ui = Number(info?.tokenAmount?.uiAmount);
+      if (!mint || !Number.isFinite(ui) || ui <= 0) continue;
+      const prev = byMint.get(mint) || { mint, amount: 0, decimals: Number(info?.tokenAmount?.decimals) || 0 };
+      prev.amount += ui;
+      byMint.set(mint, prev);
+    }
+    const tokens = [...byMint.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, limit)
+      .map((t) => ({ token: t.mint, amount: t.amount, decimals: t.decimals, symbol: null, name: null }));
+    return { dataStatus: 'live', tokens, accounts: Array.isArray(res?.value) ? res.value.length : 0 };
+  } catch {
+    return { dataStatus: 'unavailable', tokens: [] };
+  }
+}
+
 /* ═══════════════════════════ search routing ═════════════════════════════ */
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;

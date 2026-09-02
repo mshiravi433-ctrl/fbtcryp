@@ -4178,7 +4178,20 @@
       "DUPLICATE": "Already on the list.",
       "TOO_MANY": "Five contacts is the maximum.",
       "BAD_SESSION": "Pick a session between 1 minute and 24 hours."
-    }
+    },
+    "rulesTitle": "Rules Intent OS follows",
+    "rulesSub": "Chains, slippage, ceilings and proof requirements for Intent OS drafting and goal plans. Saved on this device and applied to the next intent you compile — nothing here signs or sends.",
+    "rulesSaved": "saved",
+    "rulesBadge": "local",
+    "ruleChain": "Preferred chain",
+    "ruleSlippage": "Max slippage %",
+    "rulePerIntent": "Per-intent ceiling (USD)",
+    "rulePrivateAbove": "Route privately above (USD)",
+    "ruleProof": "Require an execution proof",
+    "ruleProofBody": "A compiled intent asks for a verifiable receipt before it is treated as settled; without it the plan is marked unproven, never assumed done.",
+    "ruleEffective": "This ceiling warns Intent OS above {{intent}} for a single intent; the policy above hard-blocks a signature at {{policy}}. The number that actually stops anything is the stricter one: {{effective}}.",
+    "ruleHardFloor": "Any operation above {{n}} still needs your own confirmation, whichever way these values are set.",
+    "rulePolicyOff": "policy off"
   },
   "intel": {
     "title": "Portfolio intelligence",
@@ -4746,7 +4759,8 @@
       "maxAmount": "Max amount",
       "maxSlippage": "Max slippage",
       "automatic": "Automatic execution",
-      "listNote": "Listings are self-reported and read-only. A strategy never reaches a signer: it can only propose an intent that you approve and sign yourself."
+      "listNote": "Listings are self-reported and read-only. A strategy never reaches a signer: it can only propose an intent that you approve and sign yourself.",
+      "assets": "Assets"
     },
     "catalog": {
       "chains": "Chains",
@@ -4780,7 +4794,12 @@
         "superseded": "Superseded"
       },
       "loadMore": "Load more",
-      "pageError": "The next page could not be loaded. What you already see is unchanged."
+      "pageError": "The next page could not be loaded. What you already see is unchanged.",
+      "homepage": "Project page",
+      "certStale": "A certification exists but no longer covers this content — it was edited after review, so no badge is shown.",
+      "publisherTelegram": "Published from a Telegram-verified FBT account; the account itself is never shown.",
+      "viaTelegram": "Every listing is filed under a Telegram-verified FBT account and published only after a reviewer certifies it.",
+      "manageListings": "Manage listings in Developers"
     },
     "policy": {
       "title": "Execution policy",
@@ -4977,7 +4996,9 @@
         "abi": "Contract ABI and addresses readable",
         "security": "Custody and preimage rules verified",
         "wallet": "Wallet connected on a configured chain"
-      }
+      },
+      "advancedSub": "Sequential two-leg settlement and HTLC escrow. Both run only from your own signatures; the chips below say honestly which one is available right now.",
+      "advancedBadge": "{{n}} of 2 modes ready"
     },
     "progress": {
       "title": "Progress of this workflow",
@@ -5083,7 +5104,7 @@
       "honest2": "Nothing here is guaranteed and nothing here executes. Approving creates a draft you still review and sign in Intent OS.",
       "honest3": "No price forecast: crypto sleeves are exposure, not income, so only live venue yields are projected.",
       "failed": "That did not work",
-      "venuePlan": "Venue profit plan (read-only)",
+      "venuePlan": "Venue profit plan",
       "noYield": "No live yield feed is answering right now, so Base is the same as Bear. The plan is not guessing a yield in its place.",
       "rebuild": "Rebuild with fresh market data",
       "deviceScope": "These goals are saved for this device. Sign in with Telegram to keep them across devices.",
@@ -5122,7 +5143,9 @@
         "conservative": "Conservative",
         "moderate": "Balanced",
         "aggressive": "Aggressive"
-      }
+      },
+      "venuePlanSub": "The live stocks / perp / futures / farm allocation behind the goal above. Read-only: it proposes, it never executes.",
+      "venuePlanBadge": "read-only"
     },
     "brain": {
       "walletTitle": "Wallet connections",
@@ -7273,7 +7296,18 @@
     "disclaimer": "On-chain signals only. This describes observed smart-money behaviour, flows and risk — it is NOT a buy signal, a profit guarantee, or insider information. Confidence reflects pattern strength in observed data, never a price prediction. Do your own research.",
     "whaleDisclaimer": "Wallets are ranked by observed large-transfer volume across supported chains. Exchange labels come only from the curated registry; unknown counterparties stay unlabelled.",
     "earlyNote": "Early tokens are flagged for observation with explicit risk. Young, low-liquidity tokens are high risk by definition. Smart-money interest is NEVER an automatic buy recommendation.",
-    "tokenDisclaimer": "Observed on-chain behaviour only — not investment advice, not a buy signal."
+    "tokenDisclaimer": "Observed on-chain behaviour only — not investment advice, not a buy signal.",
+    "offlineSources": "Sources that did not answer: {{list}}",
+    "unknown": "Unknown",
+    "evidenceLine": "{{txs}} transactions · first seen {{age}}",
+    "closedTrades": "Closed trades",
+    "closedTradesSub": "buy→sell round trips inside the fetched history",
+    "pnlPartial": "Only open positions are priced: no closed buy→sell round trip was found in the history this page fetched, so realised P&L stays empty instead of showing zero.",
+    "pnlNoHistory": "P&L needs this wallet's transaction history and the explorer did not return it. Retry in a moment — the numbers appear as soon as the source answers.",
+    "unverifiedTokens": "{{n}} of these tokens have no verified contract metadata on the explorer.",
+    "activityBlocked": "Activity could not be read from the explorer in this attempt — that is a missing source, not an inactive wallet.",
+    "rateLimited": "Too many requests right now — wait a moment and try again.",
+    "errorWalletDetail": "The wallet endpoint rejected this request."
   },
   "crossChain": {
     "youReceive": "You receive",
@@ -8316,7 +8350,8 @@
       "needAmount": "Enter an amount above zero to continue.",
       "needWallet": "Enter a valid EVM wallet address (0x + 40 hex characters) to continue.",
       "needAsset": "Pick an asset and a network to continue.",
-      "needCountry": "Enter your two-letter country code so the provider can price your order."
+      "needCountry": "Enter your two-letter country code so the provider can price your order.",
+      "nextTo": "Next: {{step}}"
     },
     "watch": {
       "titleBuy": "On-chain deposit report",

@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
-import Switch from '../components/Switch';
 import SegIndicator from '../components/SegIndicator';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../lib/chains';
 import {
@@ -15,8 +14,7 @@ import {
   loadIntentMemory,
   loadIntents,
   removeIntent,
-  saveCompiledIntent,
-  saveIntentMemory
+  saveCompiledIntent
 } from '../lib/intentOS';
 import { addOrder, createOrder } from '../lib/orders';
 import {
@@ -38,6 +36,7 @@ import {
   STEP_OPENED
 } from '../lib/intent-ai/workflowProgress.js';
 import ProfitPlanner from '../components/ProfitPlanner';
+import DisclosureCard from '../components/DisclosureCard.jsx';
 import FinancialGoals from '../components/FinancialGoals';
 import CentralBrainPanel from '../components/CentralBrainPanel';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
@@ -56,7 +55,15 @@ import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'history', 'agents', 'strategies', 'network', 'brain'];
+/*
+ * No `memory` tab any more. The wallet rules it edited (chain, slippage,
+ * per-intent ceiling, proof requirement) are the SMART WALLET's rules, and
+ * they now live in one place — src/pages/SmartWallet.jsx, driven by the same
+ * policy engine the executor consults. Two screens editing the same limits is
+ * how «settings that do nothing» get shipped: whichever one you did not look
+ * at was the one that applied.
+ */
+const TABS = ['compose', 'plan', 'crosschain', 'proofs', 'history', 'agents', 'strategies', 'network', 'brain'];
 /* Which registry each tab reads. Only these two tabs fetch a catalog. */
 const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
@@ -564,11 +571,33 @@ function CatalogCard({ ns, entry, lang, t, facts }) {
       </div>
       <span className="mono ios-catalog-id">{entry.id}</span>
       {description ? <p>{description}</p> : null}
+      {/*
+       * A listing you cannot follow anywhere is a screenshot, not a directory.
+       * `homepage` was dropped by the client's normalizer for as long as this
+       * tab existed, so every card rendered without its one real link.
+      */}
+      {entry.homepage ? (
+        <p>
+          <a className="ios-catalog-link" href={entry.homepage} target="_blank" rel="noreferrer noopener" dir="ltr">
+            {t('intentOS.catalog.homepage', { defaultValue: 'Project page' })} ↗
+          </a>
+        </p>
+      ) : null}
       {cert ? (
         <p className="ios-catalog-trust">
           {t('intentOS.catalog.certifiedBy', { issuer: cert.issuers.join(' · ') })}
           {' · '}
           {cert.types.map((type) => t(`intentOS.catalog.certificationType.${type}`)).join(' · ')}
+        </p>
+      ) : null}
+      {entry.certificationStale ? (
+        <p className="ios-catalog-trust ios-catalog-muted">
+          {t('intentOS.catalog.certStale', { defaultValue: 'A certification exists but no longer covers this content — it was edited after review, so no badge is shown.' })}
+        </p>
+      ) : null}
+      {entry.publisherRef ? (
+        <p className="ios-catalog-trust ios-catalog-muted">
+          {t('intentOS.catalog.publisherTelegram', { defaultValue: 'Published from a Telegram-verified FBT account; the account itself is never shown.' })}
         </p>
       ) : null}
       {rep ? (
@@ -623,6 +652,10 @@ function StrategyCard({ entry, lang, t }) {
         { label: t('intentOS.strategies.trigger'), value: entry.trigger ? t(`intentOS.strategies.triggerType.${entry.trigger}`) : t('intentOS.strategies.triggerType.manual') },
         { label: t('intentOS.strategies.maxAmount'), value: policy.maxAmountUsd === null || policy.maxAmountUsd === undefined ? t('intentOS.catalog.notStated') : `$${policy.maxAmountUsd}` },
         { label: t('intentOS.strategies.maxSlippage'), value: policy.maxSlippageBps === null || policy.maxSlippageBps === undefined ? t('intentOS.catalog.notStated') : `${policy.maxSlippageBps} bps` },
+        {
+          label: t('intentOS.strategies.assets', { defaultValue: 'Assets' }),
+          value: Array.isArray(policy.allowedAssets) && policy.allowedAssets.length ? policy.allowedAssets.join(' · ') : t('intentOS.catalog.notStated')
+        },
         { label: t('intentOS.catalog.chains'), value: chainSummary(policy.allowedChains, t) },
         { label: t('intentOS.catalog.approval'), value: t('intentOS.catalog.required') },
         { label: t('intentOS.strategies.automatic'), value: t('intentOS.catalog.never') }
@@ -690,6 +723,22 @@ function CatalogSection({ ns, catalog, lang, t, onRetry, onLoadMore }) {
         {catalog?.pageError ? <p className="ios-catalog-trust ios-catalog-muted">{t('intentOS.catalog.pageError')}</p> : null}
       </div>
       <p className="ios-honesty-note">{t(`intentOS.${ns}.listNote`)}</p>
+      {/*
+       * «How does a listing get here, and how do I add mine?» used to have no
+       * answer on this tab. There is deliberately no write form here — the
+       * registry is edited from the Developers screens, which are the ones
+       * authenticated against a Telegram identity — so the tab links there
+       * instead of pretending it can submit anything.
+      */}
+      <p className="ios-catalog-trust ios-catalog-muted">
+        {t('intentOS.catalog.viaTelegram', { defaultValue: 'Every listing is filed under a Telegram-verified FBT account and published only after a reviewer certifies it.' })}
+        {' · '}
+        {/* A plain hash anchor, like the AI panel's chips: no hook in a
+            component that returns early, and the router owns the navigation. */}
+        <a className="ios-catalog-link" href="#/developers">
+          {t('intentOS.catalog.manageListings', { defaultValue: 'Manage listings in Developers' })} →
+        </a>
+      </p>
     </>
   );
 }
@@ -730,7 +779,7 @@ export default function IntentOS() {
    */
   const intentMemoryAtBoot = useRef(loadIntentMemory());
 
-  const [memory, setMemory] = useState(() => intentMemoryAtBoot.current);
+  const [memory] = useState(() => intentMemoryAtBoot.current);
   const [saved, setSaved] = useState(() => loadIntents());
   const [proofs, setProofs] = useState(() => loadExecutionProofs());
   const [verified, setVerified] = useState(null);
@@ -1023,16 +1072,6 @@ export default function IntentOS() {
       record = failed.ok ? failed.record : record;
     }
     setLifecycle(saveLifecycle(record));
-  };
-
-  const persistMemory = () => {
-    const next = saveIntentMemory(memory);
-    setMemory(next);
-    setDraft((current) => ({
-      ...current,
-      chainId: next.preferredChainId,
-      maxSlippagePct: Math.min(Number(current.maxSlippagePct) || next.maxSlippagePct, next.maxSlippagePct)
-    }));
   };
 
   const checkProof = async (proof) => {
@@ -1801,72 +1840,28 @@ export default function IntentOS() {
            * the compose tab, which already owns review, signing and execution.
            */}
           <FinancialGoals onOpenCompose={() => chooseTab('compose')} />
-          <details className="fg-venue-plan">
-            <summary>{t('intentOS.goals.venuePlan', { defaultValue: 'Venue profit plan (read-only)' })}</summary>
-            <div>
-              <ProfitPlanner />
-            </div>
-          </details>
+          {/*
+           * The multi-venue plan the goals screen is measured against. It used
+           * to be one clickable sentence at the bottom of the tab, which read
+           * as a leftover rather than as the evidence panel it is — so it is a
+           * real box now, and the badge says what opening it costs: nothing.
+          */}
+          <DisclosureCard
+            testId="venue-plan-box"
+            icon="◈"
+            title={t('intentOS.goals.venuePlan', { defaultValue: 'Venue profit plan' })}
+            subtitle={t('intentOS.goals.venuePlanSub', { defaultValue: 'The live stocks / perp / futures / farm allocation behind these goals. Read-only: it proposes, it never executes.' })}
+            badge={t('intentOS.goals.venuePlanBadge', { defaultValue: 'read-only' })}
+            badgeTone="neutral"
+          >
+            <ProfitPlanner />
+          </DisclosureCard>
         </motion.div>
       )}
 
       {tab === 'crosschain' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <IntentCrossChainPanel networkStatus={networkStatus} />
-        </motion.div>
-      )}
-
-      {tab === 'memory' && (
-        <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <section className="ios-memory-hero">
-            <span className="ios-memory-orbit">◌</span>
-            <div>
-              <h2>{t('intentOS.memory.title')}</h2>
-              <p>{t('intentOS.memory.subtitle')}</p>
-            </div>
-          </section>
-
-          <section className="ios-form-card">
-            <div className="ios-grid-2">
-              <label className="ios-field">
-                <span>{t('intentOS.memory.preferredChain')}</span>
-                <select value={memory.preferredChainId} onChange={(event) => setMemory({ ...memory, preferredChainId: Number(event.target.value) })}>
-                  {EVM_CHAIN_ORDER.map((id) => <option key={id} value={id}>{EVM_CHAINS[id]?.name || id}</option>)}
-                </select>
-              </label>
-              <label className="ios-field">
-                <span>{t('intentOS.memory.maxSlippage')}</span>
-                <input type="number" step="0.05" value={memory.maxSlippagePct} onChange={(event) => setMemory({ ...memory, maxSlippagePct: event.target.value })} />
-              </label>
-              <label className="ios-field">
-                <span>{t('intentOS.memory.privateAbove')}</span>
-                <input type="number" value={memory.privateAboveUsd} onChange={(event) => setMemory({ ...memory, privateAboveUsd: event.target.value })} />
-              </label>
-              <label className="ios-field">
-                <span>{t('intentOS.memory.maxSpend')}</span>
-                <input type="number" value={memory.maxPerIntentUsd} onChange={(event) => setMemory({ ...memory, maxPerIntentUsd: event.target.value })} />
-              </label>
-            </div>
-
-            <div className="ios-memory-toggle">
-              <span><strong>{t('intentOS.memory.quietHours')}</strong><small>{t('intentOS.memory.quietBody')}</small></span>
-              <Switch on={memory.quietHoursEnabled} label={t('intentOS.memory.quietHours')} onChange={() => setMemory({ ...memory, quietHoursEnabled: !memory.quietHoursEnabled })} />
-            </div>
-            {memory.quietHoursEnabled && (
-              <div className="ios-grid-2">
-                <label className="ios-field"><span>{t('intentOS.memory.from')}</span><input type="number" min="0" max="23" value={memory.quietStart} onChange={(event) => setMemory({ ...memory, quietStart: event.target.value })} /></label>
-                <label className="ios-field"><span>{t('intentOS.memory.to')}</span><input type="number" min="0" max="23" value={memory.quietEnd} onChange={(event) => setMemory({ ...memory, quietEnd: event.target.value })} /></label>
-              </div>
-            )}
-            <div className="ios-memory-toggle">
-              <span><strong>{t('intentOS.memory.requireProof')}</strong><small>{t('intentOS.memory.requireProofBody')}</small></span>
-              <Switch on={memory.requireExecutionProof} label={t('intentOS.memory.requireProof')} onChange={() => setMemory({ ...memory, requireExecutionProof: !memory.requireExecutionProof })} />
-            </div>
-
-            <button className="btn btn-primary ios-compile" onClick={persistMemory}>{t('intentOS.memory.save')}</button>
-          </section>
-
-          <p className="ios-honesty-note">{t('intentOS.memory.localNotice')}</p>
         </motion.div>
       )}
 

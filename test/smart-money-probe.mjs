@@ -162,6 +162,130 @@ try {
   const solWallet = await call('/api/v1/smart-money/wallet/solana/5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9');
   t('solana wallet route responds 200', solWallet.status === 200 && solWallet.body.chainKind === 'solana');
 
+  /* ══ WALLET INTEL, END TO END, WITH A REAL-SHAPE INDEXER ═════════════════
+   * Why this block exists: the page used to answer
+   *   HTTP 502 {"error":"WALLET_INTEL_UNAVAILABLE","detail":"txRows is not defined"}
+   * — one identifier that never existed, thrown INSIDE the analysis, so the
+   * whole card (activity, holdings, scores) died with it. A route test with the
+   * network black-holed cannot see that: it only ever exercises the degraded
+   * path. Here the indexer answers with a realistic payload, so every line of
+   * extraction, batched pricing, FIFO P&L and scoring runs, and the assertions
+   * are on the numbers themselves.
+   */
+  {
+    const ME = '0xcccccccccccccccccccccccccccccccccccccccc';
+    const DEX_ROUTER = '0x7a250d5630b4cf539739df2c5dacb4c659f2488d'; // Uniswap V2 router
+    const BINANCE = '0x28c6c06298d514db089934071355e5743bf21d60';
+    const SOLD_OUT = '0x6b175474e89094c44da98b954eedeac495271d0f'; // DAI: bought and sold
+    const HELD = '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599'; // WBTC: still held
+    const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+    const DAY = 86_400_000;
+    const now = Date.now();
+    const at = (daysAgo) => now - daysAgo * DAY;
+    const iso = (daysAgo) => new Date(at(daysAgo)).toISOString();
+
+    const dexPairs = [
+      { pairAddress: '0xp1', chainId: 'ethereum', dexId: 'uniswap',
+        baseToken: { address: SOLD_OUT, name: 'Dai', symbol: 'DAI', decimals: 18 },
+        quoteToken: { address: USDC, symbol: 'USDC' },
+        priceUsd: '1.5', liquidity: { usd: 900_000 }, volume: { h24: 120_000 }, pairCreatedAt: at(10) },
+      { pairAddress: '0xp2', chainId: 'ethereum', dexId: 'uniswap',
+        baseToken: { address: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: 8 },
+        quoteToken: { address: USDC, symbol: 'USDC' },
+        priceUsd: '4', liquidity: { usd: 40_000 }, volume: { h24: 80_000 }, pairCreatedAt: at(3) }
+    ];
+    /* Daily history is what turns a spot price into a realised number: DAI was
+       1 when it was bought and 2 when it was sold, so the round-trip of 100 DAI
+       is exactly +100 USD. WBTC was 3 at entry and is 4 now, so the open 50-unit
+       position carries +50 unrealised. */
+    const histories = {
+      dai: [[at(9), 1], [at(4), 2], [at(1), 1.5]],
+      bitcoin: [[at(6), 3], [at(1), 3.5]]
+    };
+    const fakeFetch = async (url) => {
+      const u = String(url);
+      const json = (body) => ({ ok: true, status: 200, json: async () => body });
+      if (u.includes('coingecko.com')) {
+        const cgId = (u.match(/\/coins\/([^/]+)\/market_chart/) || [])[1];
+        const rows = histories[cgId];
+        return rows ? json({ prices: rows.map(([ts, p]) => [ts, p]) }) : json({});
+      }
+      if (u.includes('/latest/dex/tokens/')) return json({ pairs: dexPairs });
+      if (u.includes('/counters')) return json({ transactions_count: 41, token_transfers_count: 6 });
+      if (u.includes('/balances')) {
+        return json([{ token: { address: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8' }, value: String(50n * 10n ** 8n), value_usd: null }]);
+      }
+      if (u.includes('/token-transfers')) {
+        return json({ items: [
+          { transaction_hash: '0x' + 'a1'.repeat(32), timestamp: iso(9), token: { address: SOLD_OUT, symbol: 'DAI', decimals: '18' }, total: { value: String(100n * 10n ** 18n) }, from: { hash: DEX_ROUTER }, to: { hash: ME } },
+          { transaction_hash: '0x' + 'a2'.repeat(32), timestamp: iso(4), token: { address: SOLD_OUT, symbol: 'DAI', decimals: '18' }, total: { value: String(100n * 10n ** 18n) }, from: { hash: ME }, to: { hash: DEX_ROUTER } },
+          { transaction_hash: '0x' + 'a3'.repeat(32), timestamp: iso(6), token: { address: HELD, symbol: 'WBTC', decimals: '8' }, total: { value: String(50n * 10n ** 8n) }, from: { hash: DEX_ROUTER }, to: { hash: ME } },
+          { transaction_hash: '0x' + 'a4'.repeat(32), timestamp: iso(2), token: { address: USDC, symbol: 'USDC', decimals: '6' }, total: { value: '1000000000' }, from: { hash: ME }, to: { hash: BINANCE } }
+        ] });
+      }
+      if (u.includes('/transactions')) {
+        return json({ items: [
+          { hash: '0x' + 'b1'.repeat(32), timestamp: iso(9), from: { hash: ME }, to: { hash: DEX_ROUTER }, value: '0', method: 'swap', status: 'ok' },
+          { hash: '0x' + 'b2'.repeat(32), timestamp: iso(300), from: { hash: BINANCE }, to: { hash: ME }, value: '1000000000000000000', status: 'ok' }
+        ] });
+      }
+      return json({});
+    };
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = fakeFetch;
+    ds.__setFetchForTests(fakeFetch);
+    try {
+      const walletRes = await call(`/api/v1/smart-money/wallet/1/${ME}`);
+      const w = walletRes.body || {};
+      t('wallet route answers 200 with a live indexer (no 502, no ReferenceError)', walletRes.status === 200 && !w.error, JSON.stringify(w).slice(0, 160));
+      t('wallet intel reports live dataStatus', w.dataStatus === 'live');
+      t('activity is classified from the router and the labelled exchange', (w.activity || []).length === 4
+        && w.activity.some((a) => a.type === 'LARGE_BUY')
+        && w.activity.some((a) => a.type === 'EXCHANGE_DEPOSIT'));
+      t('realised P&L is computed for a token the wallet no longer holds', w.pnl?.dataStatus === 'live' && w.pnl.realizedUsd === 100, JSON.stringify(w.pnl));
+      t('unrealised P&L prices the position still open', w.pnl?.unrealizedUsd === 50);
+      t('total P&L is realised plus unrealised', w.pnl?.totalUsd === 150);
+      t('win rate comes from the closed round-trips', w.pnl?.winRate === 100 && w.pnl?.closedTrades === 1);
+      t('holdings are priced from the deepest pair', w.holdings?.[0]?.symbol === 'WBTC' && w.holdings[0].valueUsd === 200);
+      t('portfolio value is the sum of priced holdings', w.portfolioUsd === 200);
+      t('txCount comes from the indexer counters when they answered', w.txCount === 41 && w.txCountSource === 'indexer');
+      t('wallet age is the first observed activity', w.ageMs > 299 * DAY && w.ageMs < 301 * DAY);
+      t('per-section source status is exposed for honest empty states', Object.keys(w.sources || {}).length >= 4 && w.sources.history === 'live');
+      t('scores carry coverage instead of a fabricated certainty', w.smartMoney?.coverage > 0 && w.smartMoney?.coverage <= 1);
+      t('low-liquidity holding raises the risk score with a reason', w.risk?.score > 0 && (w.risk?.reasons?.minus || []).length >= 1);
+    } finally {
+      globalThis.fetch = realFetch;
+      ds.__setFetchForTests(null);
+    }
+
+    /* A dead indexer must cost its own section, never the whole page. */
+    const deadHistoryFetch = async (url) => {
+      const u = String(url);
+      const json = (body) => ({ ok: true, status: 200, json: async () => body });
+      if (u.includes('/token-transfers') || u.includes('/counters') || /\/transactions(\?|$)/.test(u)) {
+        return { ok: false, status: 502, json: async () => ({}) };
+      }
+      if (u.includes('/balances')) return json([{ token: { address: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8' }, value: String(10n * 10n ** 8n), value_usd: null }]);
+      if (u.includes('/latest/dex/tokens/')) return json({ pairs: [dexPairs[1]] });
+      return { ok: false, status: 502, json: async () => ({}) };
+    };
+    const realFetch2 = globalThis.fetch;
+    globalThis.fetch = deadHistoryFetch;
+    ds.__setFetchForTests(deadHistoryFetch);
+    try {
+      const partial = await call('/api/v1/smart-money/wallet/1/0x3333333333333333333333333333333333333333');
+      t('dead history + live balance still answers 200', partial.status === 200 && !partial.body?.error);
+      t('P&L with no history is reported unavailable, never zero', partial.body?.pnl?.dataStatus === 'unavailable' && partial.body.pnl.realizedUsd === null);
+      t('the reason is stated so the UI can explain itself', partial.body?.pnl?.reason === 'NO_HISTORY');
+      t('txCount stays null rather than claiming a wallet that never transacted', partial.body?.txCount == null);
+      t('history is named as a dead source', partial.body?.sources?.history !== 'live');
+    } finally {
+      globalThis.fetch = realFetch2;
+      ds.__setFetchForTests(null);
+    }
+  }
+
   /* Watchlist + alerts */
   const identity = 'https://push.example.com/smart-money-probe-subscription';
   const tracked = '0x28c6c06298d514db089934071355e5743bf21d60'; // a labelled Binance wallet

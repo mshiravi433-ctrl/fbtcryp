@@ -3,9 +3,12 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import DisclosureCard from '../components/DisclosureCard.jsx';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import { IconChevronLeft, IconShield } from '../components/Icons';
+import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { loadIntentMemory, saveIntentMemory } from '../lib/intentOS';
 import {
   activeSession,
   addAllowlist,
@@ -37,6 +40,26 @@ export default function SmartWallet({ embedded = false, onBack }) {
   const [guardian, setGuardian] = useState('');
   const [allow, setAllow] = useState('');
   const [err, setErr] = useState(null);
+  /*
+   * The rules Intent OS compiles against used to be edited on that screen, in
+   * a tab called «Memory Wallet» — a second place to set the same ceilings,
+   * with a switch (quiet hours) that nothing in the app ever read. They live
+   * here now, next to the policy that actually blocks a signature, so one
+   * number cannot disagree with the other depending on which tab you opened.
+   */
+  const [intentMem, setIntentMem] = useState(() => loadIntentMemory());
+  const [rulesSaved, setRulesSaved] = useState(false);
+
+  const patchRules = (patch) => {
+    const next = saveIntentMemory({ ...intentMem, ...patch });
+    setIntentMem(next);
+    setRulesSaved(true);
+  };
+  /* The strictest of the two ceilings is the one that will actually stop a
+     signature — say that number, not the one the user typed. */
+  const effectivePerIntentUsd = policy.enabled
+    ? Math.min(Number(intentMem.maxPerIntentUsd) || 0, Number(policy.perTxLimitUsd) || 0)
+    : Number(intentMem.maxPerIntentUsd) || 0;
 
   const refresh = () => setTick((n) => n + 1);
   const remaining = Math.max(0, policy.dailyLimitUsd - spend.usd);
@@ -292,6 +315,85 @@ export default function SmartWallet({ embedded = false, onBack }) {
       </motion.section>
 
       {err && <p className="notice notice-danger" style={{ marginTop: 12 }}>{t(`smart.err.${err}`, { defaultValue: err })}</p>}
+
+      {/* ── INTENT OS RULES (moved off that screen) ─────────────────── */}
+      <DisclosureCard
+        testId="smart-wallet-intent-rules"
+        icon="⛁"
+        title={t('smart.rulesTitle', { defaultValue: 'Rules Intent OS follows' })}
+        subtitle={t('smart.rulesSub', { defaultValue: 'Chains, slippage, ceilings and proof requirements for Intent OS drafting and goal plans. Saved on this device and applied to the next intent you compile — nothing here signs or sends.' })}
+        badge={rulesSaved ? t('smart.rulesSaved', { defaultValue: 'saved' }) : t('smart.rulesBadge', { defaultValue: 'local' })}
+        badgeTone={rulesSaved ? 'good' : 'neutral'}
+      >
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <label className="field-label" style={{ flex: '1 1 140px', marginTop: 0 }}>
+            {t('smart.ruleChain', { defaultValue: 'Preferred chain' })}
+            <select
+              value={intentMem.preferredChainId}
+              onChange={(e) => patchRules({ preferredChainId: Number(e.target.value) })}
+              style={{ marginTop: 4 }}
+            >
+              {EVM_CHAIN_ORDER.map((id) => (
+                <option key={id} value={id}>{EVM_CHAINS[id]?.name || id}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field-label" style={{ flex: '1 1 110px', marginTop: 0 }}>
+            {t('smart.ruleSlippage', { defaultValue: 'Max slippage %' })}
+            <input
+              type="number" step="0.05" min="0.05" max="5"
+              value={intentMem.maxSlippagePct}
+              onChange={(e) => patchRules({ maxSlippagePct: e.target.value })}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
+            {t('smart.rulePerIntent', { defaultValue: 'Per-intent ceiling (USD)' })}
+            <input
+              type="number" min="1" inputMode="decimal"
+              value={intentMem.maxPerIntentUsd}
+              onChange={(e) => patchRules({ maxPerIntentUsd: e.target.value })}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
+            {t('smart.rulePrivateAbove', { defaultValue: 'Route privately above (USD)' })}
+            <input
+              type="number" min="0" inputMode="decimal"
+              value={intentMem.privateAboveUsd}
+              onChange={(e) => patchRules({ privateAboveUsd: e.target.value })}
+              style={{ marginTop: 4 }}
+            />
+          </label>
+        </div>
+
+        <div className="row-between" style={{ marginTop: 12, gap: 10 }}>
+          <span>
+            <strong style={{ fontSize: 12.5 }}>{t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}</strong>
+            <br />
+            <span className="faint" style={{ fontSize: 11 }}>{t('smart.ruleProofBody', { defaultValue: 'A compiled intent asks for a verifiable receipt before it is treated as settled; without it the plan is marked unproven, never assumed done.' })}</span>
+          </span>
+          <Switch
+            on={intentMem.requireExecutionProof}
+            label={t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}
+            onChange={() => patchRules({ requireExecutionProof: !intentMem.requireExecutionProof })}
+          />
+        </div>
+
+        <p className="faint" style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.7 }}>
+          {t('smart.ruleEffective', {
+            defaultValue: 'This ceiling warns Intent OS above {{intent}} for a single intent; the policy above hard-blocks a signature at {{policy}}. The number that actually stops anything is the stricter one: {{effective}}.',
+            intent: `$${intentMem.maxPerIntentUsd}`,
+            policy: policy.enabled ? `$${policy.perTxLimitUsd}` : t('smart.rulePolicyOff', { defaultValue: 'policy off' }),
+            effective: `$${effectivePerIntentUsd}`
+          })}
+          {' · '}
+          {t('smart.ruleHardFloor', {
+            defaultValue: 'Any operation above {{n}} still needs your own confirmation, whichever way these values are set.',
+            n: `$${policy.requireConfirmAboveUsd}`
+          })}
+        </p>
+      </DisclosureCard>
 
       <InfoBox title={t('smart.gasTitle')} tone="info" id="smart-gas" >
         <p>{t('smart.gasBody')}</p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import DisclosureCard from './DisclosureCard.jsx';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isAddress, keccak256 } from 'ethers';
@@ -275,10 +276,18 @@ export default function IntentCrossChainPanel({ networkStatus }) {
       <CrossChainDesk source="intent-os" />
 
       {/* ── 2) protocol mechanisms, honestly labelled ── */}
-      <details className="ios-panel icc-advanced">
-        <summary>
-          {t('intentOS.crossChain.advancedTitle', { defaultValue: 'Advanced settlement protocols (two-party)' })}
-        </summary>
+      <DisclosureCard
+        className="ios-panel icc-advanced"
+        testId="cross-chain-advanced"
+        icon="⚖"
+        title={t('intentOS.crossChain.advancedTitle', { defaultValue: 'Advanced settlement protocols (two-party)' })}
+        subtitle={t('intentOS.crossChain.advancedSub', { defaultValue: 'Sequential two-leg settlement and HTLC escrow: both run only from your own signatures, and the chips below say honestly which one is available right now.' })}
+        badge={t('intentOS.crossChain.advancedBadge', {
+          defaultValue: '{{n}} of 2 modes ready',
+          n: (sequentialReady ? 1 : 0) + (htlcActive ? 1 : 0)
+        })}
+        badgeTone={sequentialReady || htlcActive ? 'good' : 'warn'}
+      >
 
         <div className="icc-chips" style={{ marginTop: 10 }}>
           <StatusChip ok={sequentialReady}>
@@ -510,7 +519,7 @@ export default function IntentCrossChainPanel({ networkStatus }) {
             </div>
           )}
         </section>
-      </details>
+      </DisclosureCard>
     </div>
   );
 }

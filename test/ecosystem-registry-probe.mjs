@@ -27,6 +27,7 @@ import { createHmac } from 'node:crypto';
 process.env.ECOSYSTEM_CERTIFIERS = process.env.ECOSYSTEM_CERTIFIERS || '555000555:Probe Review';
 import {
   createRegistryEntry,
+  REGISTRY_LIMITATIONS,
   listOwnerRegistry,
   listRegistry,
   listReviewQueue,
@@ -617,6 +618,90 @@ try {
       }
     }
     t('registry writes are rate limited with a retryable, named error', limited);
+  }
+
+  /*
+   * ── 3. THE CLIENT NORMALIZER (src/lib/ecosystemCatalog.js) ───────────────
+   * The Intent OS tabs never touch the registry module; they read through
+   * fetchCatalog, and any field that client drops is a field the user can
+   * not see no matter what the server published. Two were being dropped:
+   * the listing homepage (so a card could not be followed anywhere) and the
+   * reason a badge is missing (so an expired certification looked identical
+   * to a listing nobody ever reviewed). The tabs are a catalog, so those two
+   * were the whole difference between working and decorative.
+   */
+  {
+    const { fetchCatalog } = await import('../src/lib/ecosystemCatalog.js');
+    const realFetch = globalThis.fetch;
+    const json = (payload) => new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+    const list = (resourceSchema, rows_) => json({
+      data: rows_,
+      pagination: { cursor: 'next-cursor', hasMore: true },
+      meta: {
+        schema: 'fbt.resource-list.v1', dataStatus: 'live', resourceSchema,
+        generatedAt: new Date().toISOString(), limitations: [...REGISTRY_LIMITATIONS]
+      }
+    });
+    const AGENT_ROWS = [
+      {
+        schema: 'fbt.agent.v1', id: 'probe-agent', name: { en: 'Probe Agent' },
+        description: { en: 'A listing with everything a card needs.' },
+        homepage: 'https://probe.example/', supportedChains: [1, 42161],
+        executionMode: 'manual',
+        ownerRef: 'telegram-user',
+        verification: { status: 'certified', method: 'reviewer_certified', types: ['sandbox_reviewed'], issuers: ['Probe Review'], issuedAt: Date.now(), expiresAt: null },
+        reputation: { status: 'observed', sampleSize: 12, successRate: 0.75, confidence: 'medium', windowDays: 30 }
+      },
+      {
+        schema: 'fbt.agent.v1', id: 'probe-stale', name: 'Plain english name',
+        homepage: 'http://insecure.example', supportedChains: [],
+        executionMode: 'simulation-only',
+        ownerRef: 'telegram-user',
+        /* The server's own shape for "reviewed, but the content moved". */
+        verification: { status: 'unverified', method: 'self_reported', reviewedAt: null, staleCertification: true },
+        reputation: { status: 'insufficient_data', sampleSize: null, successRate: null, confidence: 'none' }
+      }
+    ];
+    const STRATEGY_ROWS = [{
+      schema: 'fbt.strategy.v1', id: 'probe-strategy', name: { en: 'Probe Strategy' },
+      homepage: null,
+      trigger: { type: 'price', evaluatedBy: 'client' },
+      policy: { maxAmountUsd: 250, maxSlippageBps: 40, allowedChains: [10], allowedAssets: ['usdc', 'eth'], requiresUserApproval: true },
+      action: { type: 'create_intent', automaticExecution: false },
+      ownerRef: 'telegram-user',
+      verification: { status: 'unverified', method: 'self_reported' },
+      reputation: { status: 'insufficient_data' }
+    }];
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.includes('/api/ecosystem/agents')) return list('fbt.agent.v1', AGENT_ROWS);
+      if (path.includes('/api/ecosystem/strategies')) return list('fbt.strategy.v1', STRATEGY_ROWS);
+      return new Response('{"error":{"code":"NOT_PROBED"}}', { status: 500, headers: { 'content-type': 'application/json' } });
+    };
+    try {
+      const agents = await fetchCatalog('agent');
+      const live = agents.items.find((r) => r.id === 'probe-agent');
+      const stale = agents.items.find((r) => r.id === 'probe-stale');
+      t('the catalog client answers live with both listings', agents.status === 'live' && agents.items.length === 2);
+      t('the listing homepage survives to the card as an https link', live?.homepage === 'https://probe.example/');
+      t('an insecure homepage is dropped, never rendered', stale?.homepage === null);
+      t('the Telegram provenance of a listing reaches the card', live?.publisherRef === 'telegram-user' && stale?.publisherRef === 'telegram-user');
+      t('a stale certification is explained instead of looking un-reviewed', stale?.certificationStale === true && stale?.verified === false);
+      t('a real certification still renders as certified', live?.verified === true && live?.certification?.issuers?.[0] === 'Probe Review');
+      t('pagination survives so Load more can actually page', agents.hasMore === true && agents.cursor === 'next-cursor');
+      t('the server limitations are carried for the honest footnote', Array.isArray(agents.limitations) && agents.limitations.length > 0);
+
+      const strategies = await fetchCatalog('strategy');
+      const strat = strategies.items.find((r) => r.id === 'probe-strategy');
+      t('a strategy keeps its trigger and ceilings', strat?.trigger === 'price' && strat?.policy?.maxAmountUsd === 250 && strat?.policy?.maxSlippageBps === 40);
+      t('the allowed asset list reaches the card (upper-cased, bounded)', strat?.policy?.allowedAssets?.join(',') === 'USDC,ETH');
+      t('no listing can smuggle an execution right through the client', strat?.automaticExecution === false && strat?.policy?.requiresUserApproval === true);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   }
 
   /* There is no execution surface to find. */

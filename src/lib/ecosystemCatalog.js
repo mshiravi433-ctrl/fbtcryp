@@ -42,6 +42,10 @@ const text = (value) => {
   return Object.keys(out).length ? out : null;
 };
 const chains = (value) => (Array.isArray(value) ? value : []).map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 64);
+const assetList = (value) => (Array.isArray(value) ? value : [])
+  .filter((x) => typeof x === 'string' && /^[A-Za-z0-9._-]{1,16}$/.test(x))
+  .map((x) => x.toUpperCase())
+  .slice(0, 32);
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : null);
 
 /**
@@ -95,7 +99,24 @@ function normalize(kind, row) {
     verified: Boolean(certified),
     certification: certified,
     reputation: reputation(row.reputation),
-    updatedAt: num(row.updatedAt)
+    updatedAt: num(row.updatedAt),
+    /* The listing's own https page. Dropped for years, which is why every
+       card looked complete while none of them could be followed anywhere. */
+    homepage: httpsOnly(row.homepage),
+    /*
+     * Where the listing came from. The server publishes this marker for every
+     * row and never the id behind it, so the honest sentence the UI can build
+     * is "published from a Telegram-verified account" — nothing more specific
+     * is available to anybody reading the catalog, by design.
+     */
+    publisherRef: row.ownerRef === 'telegram-user' ? 'telegram-user' : null,
+    /* A certificate that exists but no longer covers the content. Saying so
+       beats silently showing the same "unverified" as a listing nobody ever
+       reviewed — that looked like a bug in the review queue, twice now. */
+    certificationStale: row.verification?.status === 'unverified' && row.verification?.staleCertification === true,
+    limitations: (Array.isArray(row.limitations) ? row.limitations : [])
+      .filter((line) => typeof line === 'string' && line.trim())
+      .slice(0, 6)
   };
 
   if (kind === 'agent') {
@@ -116,6 +137,7 @@ function normalize(kind, row) {
         maxAmountUsd: num(policy.maxAmountUsd),
         maxSlippageBps: num(policy.maxSlippageBps),
         allowedChains: chains(policy.allowedChains),
+        allowedAssets: assetList(policy.allowedAssets),
         requiresUserApproval: true
       },
       automaticExecution: false
