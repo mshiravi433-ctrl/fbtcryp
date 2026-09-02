@@ -55,7 +55,8 @@ const INTENT_PATTERNS = [
       /سبد.*تحلیل|تحلیل.*سبد/i,
       /portfolio.*analysis|analyze.*portfolio/i,
       /why.*portfolio.*down|portfolio.*down/i,
-      /عملکرد.*پرتفوی|وضعیت.*پرتفوی/i
+      /عملکرد.*پرتفوی|وضعیت.*پرتفوی/i,
+      /پرتفوی\s*من|پرتفویم|my portfolio|پرتفوی\s*\?/i
     ]
   },
   {
@@ -65,6 +66,7 @@ const INTENT_PATTERNS = [
       /موجودی.*بررسی|بررسی.*موجودی/i,
       /موجودی.*من|موجودیم/i,
       /چقدر.*دارم|دارایی.*من/i,
+      /موجودی.*چقدر|چقدر.*موجودی/i,
       /balance|how much.*have|my balance/i,
       /کیف پول.*موجودی|موجودی.*کیف/i
     ]
@@ -76,8 +78,9 @@ const INTENT_PATTERNS = [
       /سود.*بیشتر|بیشتر.*سود/i,
       /جایی.*بگذار.*سود|سود.*بگذار/i,
       /بهترین.*سود|سود.*بهترین/i,
+      /فرصت\s*سود|فرصت‌های\s*سود|فرصت های سود|profit opportunit/i,
       /yield|best.*apy|highest.*yield/i,
-      /سرمایه.*سود|پول.*سود/i
+      /سرمایه.*سود|پول.*سود|کجا.*سود/i
     ]
   },
   {
@@ -333,9 +336,28 @@ export function understandIntent(message, context = {}) {
         type: 'EXECUTE_CURRENT',
         confidence: 0.85,
         entities,
+        raw: text,
         contextRef: context.currentPage,
         matched: [],
         isFollowUp: true
+      };
+    }
+
+    const slots = context.operational || {};
+    if (/(بخرش|بفروشش|بخر|فروش|تبدیل|انجام بده)/i.test(text) && (slots.asset || entities.token)) {
+      const op = /فروش|sell/i.test(text) ? 'SELL' : (/تبدیل|swap/i.test(text) ? 'SWAP' : 'BUY');
+      return {
+        ok: true,
+        type: op,
+        confidence: 0.8,
+        entities: {
+          ...entities,
+          token: entities.token || slots.asset,
+          amount: entities.amount || entities.amountUsd || slots.amount
+        },
+        raw: text,
+        isFollowUp: true,
+        matched
       };
     }
 
@@ -344,6 +366,7 @@ export function understandIntent(message, context = {}) {
       type: 'GENERAL',
       confidence: 0.3,
       entities,
+      raw: text,
       matched,
       shouldAsk: false
     };
@@ -356,11 +379,12 @@ export function understandIntent(message, context = {}) {
     type: top[0],
     confidence: Math.round(confidence * 100) / 100,
     entities,
+    raw: text,
     matched,
     navigation: nav,
     isFollowUp: /(این|همین|this|it)/i.test(text),
     requiresWallet: ['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'REBALANCE', 'FARM', 'LEND', 'DCA'].includes(top[0]),
-    readOnly: ['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC', 'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE'].includes(top[0])
+    readOnly: ['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC', 'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'FARM', 'LEND', 'ANALYZE_TOKEN', 'RISK_ANALYSIS'].includes(top[0])
   };
 }
 

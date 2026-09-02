@@ -9,9 +9,10 @@ export function createYieldAgent({ yieldService = null, farmService = null, lend
     id: 'yield-agent',
     schema: YIELD_AGENT_SCHEMA,
     
-    async discover({ asset = null, chainId = null, riskTolerance = 'medium', minApy = null } = {}) {
+    async discover({ asset = null, chainId = null, riskTolerance = 'medium', minApy = null, services = null } = {}) {
+      const ys = services?.yieldService || yieldService;
       try {
-        if (yieldService?.discover) return await yieldService.discover({ asset, chainId, riskTolerance, minApy });
+        if (ys?.discover) return await ys.discover({ asset, chainId, riskTolerance, minApy });
         
         // Fallback mock that still uses real structure
         const pools = yieldService?.list ? await yieldService.list({ asset, chainId }) : [];
@@ -54,14 +55,15 @@ export function createYieldAgent({ yieldService = null, farmService = null, lend
     async handleIntent(intent, context = {}) {
       const risk = intent.entities?.riskTolerance || context.preferences?.riskTolerance || 'medium';
       const asset = intent.entities?.token || intent.entities?.amountSymbol || null;
+      const svc = context.services || null;
       
       if (intent.type === 'YIELD_DISCOVERY' || intent.type === 'FARM' || intent.type === 'LEND') {
-        const opportunities = await this.discover({ asset, riskTolerance: risk });
+        const opportunities = await this.discover({ asset, riskTolerance: risk, services: svc });
         return { ok: true, yieldOpportunities: opportunities };
       }
       
       if (intent.type === 'INVESTMENT_PLAN') {
-        const opportunities = await this.discover({ asset, riskTolerance: risk });
+        const opportunities = await this.discover({ asset, riskTolerance: risk, services: svc });
         const farms = await this.getFarms();
         const lending = await this.getLendingMarkets({ asset });
         return {

@@ -60,6 +60,11 @@ export * from './humanResponse.js';
 export * from './security.js';
 export * from './performance.js';
 export * from './debugDashboard.js';
+export * from './centralWalletState.js';
+export * from './sharedState.js';
+export * from './tokenResolver.js';
+export * from './opportunityScanner.js';
+export * from './toolExecutor.js';
 
 // Agents
 export * from './agents/intentAgent.js';
@@ -101,9 +106,19 @@ import { logTask } from './observability.js';
 import { logDebug, createDebugTrace } from './debugDashboard.js';
 import { emitEvent, onEvent, dispatchAction, registerActionHandler } from './eventBus.js';
 import { sanitizeForAI, assertNoSecrets } from './security.js';
+import { executeIntentTools, flattenAgentResults } from './toolExecutor.js';
+import { getCentralWalletState, mergeWalletSnapshots, setCentralWalletState } from './centralWalletState.js';
+import { rememberOperationalSlots, getOperationalSlots, patchSharedState } from './sharedState.js';
+import { clearContextCache } from './contextEngine.js';
 
 export const INTENT_OS_SCHEMA = 'fbt.intent-os.v2';
 export const INTENT_OS_VERSION = '2.0.0';
+
+function mergeServices(base, extra) {
+  const next = { ...(base || {}) };
+  if (extra && typeof extra === 'object' && Object.keys(extra).length) Object.assign(next, extra);
+  return next;
+}
 
 export function createIntentOS({
   services = {},
@@ -113,6 +128,8 @@ export function createIntentOS({
   eventBus = null,
   locale = 'fa'
 } = {}) {
+  let liveServices = { ...(services || {}) };
+  let liveNavigation = navigation;
   // Create agents with dependencies
   const intentAgent = createIntentAgent();
   const navAgent = createNavigationAgent({ navigateFn: navigation?.navigate, eventBus: { emit: emitEvent } });
@@ -154,29 +171,44 @@ export function createIntentOS({
     agents,
     orchestrator,
     agentLoop,
+    setServices(next) { liveServices = mergeServices(liveServices, next); return liveServices; },
+    setNavigation(next) { liveNavigation = next || liveNavigation; return liveNavigation; },
+    getServices() { return liveServices; },
     
     // Main entry: User Intent → Understand → Context → Plan → Execute → Verify → Memory → Response
-    async process({ message, currentPage = '/', walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc = services } = {}) {
+    async process({ message, currentPage = '/', walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc } = {}) {
       const start = Date.now();
       const currentLocale = loc || locale;
+      const mergedServices = mergeServices(liveServices, svc);
       
       try {
         assertNoSecrets({ message }, 'user-message');
+
+        const liveWallet = mergeWalletSnapshots(walletState, getCentralWalletState());
+        if (walletState && (walletState.address || walletState.connected || walletState.isConnected)) {
+          try { setCentralWalletState(liveWallet, { emit: false }); } catch { /* keep going */ }
+        }
         
         // 1. PERCEIVE + UNDERSTAND
-        const intent = understandIntent(message, { currentPage, wallet: walletState });
+        const intent = understandIntent(message, {
+          currentPage,
+          wallet: liveWallet,
+          operational: getOperationalSlots()
+        });
         
         // 2. CONTEXT ENGINE — parallel reads
         const context = await buildContext({
           currentPage,
           currentRoute: currentPage,
-          walletState,
+          walletState: liveWallet,
           portfolioState,
           conversation,
           memory: searchMemory({ query: message, topK: 8 }),
-          services: svc,
+          services: mergedServices,
           locale: currentLocale
         });
+        context.services = mergedServices;
+        context.lastMessage = message;
         
         // 3. Memory preference extraction
         const pref = extractPreferenceFromMessage(message);
@@ -189,28 +221,43 @@ export function createIntentOS({
         let executionResult = null;
         let verification = null;
         
-        if (plan.readOnly || intent.type === 'NAVIGATION' || intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC' || intent.type === 'NEWS_SEARCH') {
+        if (plan.readOnly || intent.type === 'NAVIGATION' || intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC' || intent.type === 'NEWS_SEARCH' || intent.readOnly) {
           // Direct execution for navigation/media/read-only
           if (intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
             executionResult = await navAgent.handleIntent(intent, context);
-            if (executionResult.ok && executionResult.route && navigation?.navigate) {
-              await navigation.navigate({ route: executionResult.route });
+            if (executionResult.ok && executionResult.route && liveNavigation?.navigate) {
+              await liveNavigation.navigate({ route: executionResult.route });
             }
           } else if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
             executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
           } else {
-            // Read-only analysis — gather from agents
+            const toolRun = await executeIntentTools({ intent, context, services: mergedServices });
             const agentResults = {};
             for (const agentId of plan.agents) {
               const agent = agents[agentId];
               if (agent?.handleIntent) {
                 try {
-                  const res = await agent.handleIntent(intent, context);
+                  const res = await agent.handleIntent(intent, { ...context, services: mergedServices });
                   agentResults[agentId] = res;
-                } catch {}
+                } catch { /* one agent failing must not blank the whole turn */ }
               }
             }
-            executionResult = { ok: true, agentResults, analysis: true };
+            const flat = flattenAgentResults(agentResults);
+            executionResult = {
+              ok: true,
+              ...flat,
+              agentResults,
+              analysis: (flat.analysis && typeof flat.analysis === 'object') ? flat.analysis : (toolRun.data.portfolio || context.portfolio),
+              portfolio: flat.portfolio || toolRun.data.portfolio || context.portfolio,
+              balances: flat.balances || toolRun.data.wallet,
+              yieldOpportunities: toolRun.data.yieldOpportunities || flat.yieldOpportunities,
+              opportunities: toolRun.data.opportunities || flat.yieldOpportunities?.opportunities,
+              market: flat.market || toolRun.data.market,
+              smartMoney: flat.smartMoney || toolRun.data.smartMoney,
+              whale: flat.whale || toolRun.data.whale,
+              toolsUsed: toolRun.toolsUsed,
+              dataStatus: toolRun.data.yieldOpportunities?.dataStatus || context.portfolio?.dataStatus
+            };
           }
         } else {
           // Financial — plan ready, needs confirmation
@@ -227,6 +274,18 @@ export function createIntentOS({
         }
         
         // 7. HUMAN RESPONSE
+        try {
+          rememberOperationalSlots({
+            asset: intent.entities?.token || intent.entities?.fromToken || intent.entities?.toToken,
+            operation: intent.type,
+            amount: intent.entities?.amount || intent.entities?.amountUsd,
+            fromToken: intent.entities?.fromToken,
+            toToken: intent.entities?.toToken,
+            intent: intent.type
+          });
+          if (executionResult?.portfolio) patchSharedState('portfolio', executionResult.portfolio, { source: 'intent-os' });
+        } catch { /* memory is best-effort */ }
+
         const human = buildHumanResponse({
           intent,
           context,
@@ -354,11 +413,20 @@ export function createIntentOS({
 let singleton = null;
 
 export function getIntentOS(opts = {}) {
-  if (singleton && !opts.forceNew) return singleton;
+  if (opts.forceNew) {
+    singleton = createIntentOS(opts);
+    return singleton;
+  }
+  if (singleton) {
+    if (opts.services) singleton.setServices(opts.services);
+    if (opts.navigation) singleton.setNavigation(opts.navigation);
+    return singleton;
+  }
   singleton = createIntentOS(opts);
   return singleton;
 }
 
 export function resetIntentOS() {
   singleton = null;
+  try { clearContextCache(); } catch { /* ignore */ }
 }

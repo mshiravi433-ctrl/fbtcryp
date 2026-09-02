@@ -31,15 +31,19 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
       getSummary: async () => portfolio || { dataStatus: 'unavailable', holdings: [], totalValueUsd: null },
       analyze: async ({ holdings } = {}) => {
         const h = holdings || portfolio?.holdings || [];
-        const total = h.reduce((s, x) => s + (Number(x.valueUsd) || 0), 0);
-        const sorted = [...h].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0));
+        const priced = h.filter((x) => Number.isFinite(Number(x.valueUsd)));
+        const total = priced.reduce((s, x) => s + Number(x.valueUsd), 0);
+        const sorted = [...h].sort((a, b) => (Number(b.valueUsd) || 0) - (Number(a.valueUsd) || 0));
         return {
           ok: true,
-          totalValueUsd: total,
+          totalValueUsd: priced.length ? total : null,
           holdings: h,
           largest: sorted[0] || null,
-          allocation: sorted.map(x => ({ symbol: x.symbol, pct: total ? (x.valueUsd / total) * 100 : 0 })),
-          riskLevel: sorted[0] && total ? (sorted[0].valueUsd / total > 0.6 ? 'high' : total > 0 ? 'medium' : 'low') : 'low',
+          allocation: sorted.map((x) => ({
+            symbol: x.symbol,
+            pct: priced.length && Number.isFinite(Number(x.valueUsd)) ? (Number(x.valueUsd) / total) * 100 : null
+          })),
+          riskLevel: sorted[0] && total ? (Number(sorted[0].valueUsd) / total > 0.6 ? 'high' : total > 0 ? 'medium' : 'low') : 'low',
           dataStatus: h.length ? 'live' : 'unavailable'
         };
       },
@@ -149,22 +153,23 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     yieldService: {
       discover: async ({ asset, riskTolerance }) => {
         try {
-          const { fetchYields } = await import('../../yields.js');
-          const yields = await fetchYields();
+          const { getYields } = await import('../../yields.js');
+          const yields = await getYields();
           const pools = Array.isArray(yields?.pools) ? yields.pools : (Array.isArray(yields) ? yields : []);
           let filtered = pools;
-          if (asset) filtered = filtered.filter(p => (p.symbol || '').toUpperCase() === asset.toUpperCase());
-          if (riskTolerance === 'low') filtered = filtered.filter(p => (p.risk || 'medium') !== 'high');
-          return { ok: true, opportunities: filtered.slice(0, 10), dataStatus: 'live' };
-        } catch {
+          if (asset) {
+            const want = String(asset).toUpperCase();
+            filtered = filtered.filter((p) => String(p.symbol || '').toUpperCase().includes(want));
+          }
+          if (riskTolerance === 'low') filtered = filtered.filter((p) => (p.risk || 'medium') !== 'high');
           return {
             ok: true,
-            opportunities: [
-              { protocol: 'Aave', symbol: 'USDC', apy: 4.2, risk: 'low' },
-              { protocol: 'Compound', symbol: 'USDT', apy: 3.8, risk: 'low' }
-            ],
-            dataStatus: 'fallback'
+            opportunities: filtered.slice(0, 12),
+            dataStatus: filtered.length ? 'live' : 'empty',
+            updatedAt: yields?.updatedAt || new Date().toISOString()
           };
+        } catch (e) {
+          return { ok: false, opportunities: [], dataStatus: 'unavailable', error: e.message };
         }
       }
     },
@@ -172,10 +177,12 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     farmService: {
       list: async ({ chainId } = {}) => {
         try {
-          const { fetchFarms } = await import('../../yields.js');
-          return await fetchFarms({ chainId });
+          const { getYields } = await import('../../yields.js');
+          const yields = await getYields();
+          const pools = (yields?.pools || []).filter((p) => p.exposure === 'multi' || /[-/]/.test(String(p.symbol || '')));
+          return { ok: true, pools, dataStatus: pools.length ? 'live' : 'empty', chainId };
         } catch {
-          return { ok: true, pools: [], dataStatus: 'unavailable' };
+          return { ok: false, pools: [], dataStatus: 'unavailable' };
         }
       }
     },
@@ -183,16 +190,22 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     lendingService: {
       getMarkets: async ({ asset } = {}) => {
         try {
-          const { fetchLendingMarkets } = await import('../../lending.js');
-          return await fetchLendingMarkets({ asset });
+          const { lendingAssetsFor, lendingChains } = await import('../../lending.js');
+          let markets = lendingChains().flatMap((cid) => lendingAssetsFor(cid));
+          if (asset) {
+            const want = String(asset).toUpperCase();
+            markets = markets.filter((m) => m.symbol === want);
+          }
+          return { ok: true, markets, dataStatus: 'catalog' };
         } catch {
-          return { ok: true, markets: [], dataStatus: 'unavailable' };
+          return { ok: false, markets: [], dataStatus: 'unavailable' };
         }
       },
       getPositions: async ({ address } = {}) => {
         try {
-          const { getLendingPositions } = await import('../../lending.js');
-          return await getLendingPositions({ address });
+          const { readUserAccount } = await import('../../lending.js');
+          if (!address) return { lending: [], borrowing: [] };
+          return await readUserAccount({ user: address });
         } catch {
           return { lending: [], borrowing: [] };
         }
