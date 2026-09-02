@@ -1092,5 +1092,16 @@
       "history": "Geçmiş",
       "brain": "Beyin"
     }
+  },
+  "futures": {
+    "onchain": {
+      "title": "Zincir üstü vadeli işlemler · Solana'da Drift",
+      "subtitle": "Drift'te kripto vadeli işlemleri — Solana'nın zincir üstü emir defteri DEX'i. Canlı fiyatlar, grafik ve ücretler; cüzdanınız imzalar, FBT hiçbir zaman fon tutmaz."
+    },
+    "driftNote": "Drift bu ekrandaki tek zincir üstü protokoldür. Piyasalar, fiyatlar, fonlama ve grafik Drift'in genel veri API'sinden canlı okunur; emir yürütme yakında etkinleştirilecek.",
+    "protocolAvailableSoon": "Yakında",
+    "chain": {
+      "solana": "Solana"
+    }
   }
 }

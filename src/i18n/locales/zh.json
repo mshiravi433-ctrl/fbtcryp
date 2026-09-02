@@ -1085,5 +1085,16 @@
       "history": "历史",
       "brain": "Brain"
     }
+  },
+  "futures": {
+    "onchain": {
+      "title": "链上合约 · Solana 上的 Drift",
+      "subtitle": "在 Drift 上交易加密货币永续合约 —— Solana 的链上订单簿 DEX。实时价格、图表与费用；由你的钱包签名，FBT 绝不托管资金。"
+    },
+    "driftNote": "Drift 是本页面唯一的链上协议。市场、价格、资金费率和图表均通过 Drift 的公开数据 API 实时读取；下单功能即将开放。",
+    "protocolAvailableSoon": "即将推出",
+    "chain": {
+      "solana": "Solana"
+    }
   }
 }

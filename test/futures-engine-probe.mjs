@@ -30,9 +30,11 @@ const t = (name, ok) => { assert.ok(ok, name); console.log(`✓ ${name}`); };
 t('provider catalogue lists no centralized exchange',
   PROVIDER_IDS.every((id) => !FORBIDDEN_PROVIDER_IDS.includes(id)) && Object.values(PROVIDER_CATALOGUE).every((p) => p.custody === 'onchain'));
 t('only a provider with a built order path can claim canExecute',
-  Object.values(PROVIDER_CATALOGUE).every((p) => !p.capabilities.canExecute || p.execution === EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX));
-t('the Solana adapter shape exists but is NOT_BUILT (does not touch Solana swap/wallet)',
-  PROVIDER_CATALOGUE.drift.family === 'solana' && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.NOT_BUILT && !PROVIDER_CATALOGUE.drift.capabilities.canExecute);
+  Object.values(PROVIDER_CATALOGUE).every((p) => !p.capabilities.canExecute
+    || p.execution === EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX
+    || p.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX));
+t('the Solana (Drift) adapter builds+signed tx in tab with the user wallet',
+  PROVIDER_CATALOGUE.drift.family === 'solana' && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX && PROVIDER_CATALOGUE.drift.capabilities.canExecute);
 t('status vocabulary is exactly the six spec words',
   JSON.stringify(Object.values(PROVIDER_STATUS).sort()) === JSON.stringify(['AVAILABLE', 'BLOCKED', 'DEGRADED', 'MAINTENANCE', 'READ_ONLY', 'UNAVAILABLE']));
 t('a built + configured + live provider is AVAILABLE',
@@ -52,6 +54,8 @@ t('BLOCKED beats everything, MAINTENANCE beats data',
   && resolveProviderStatus({ maintenance: true, dataLive: true, configured: true, execution: EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX }).status === 'MAINTENANCE');
 t('a client-signed venue (dYdX) is READ_ONLY from the server\'s point of view',
   resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_SIGNED_SESSION, configured: true, dataLive: true }).status === 'READ_ONLY');
+t('a client-builds-tx venue (Drift) with a live feed is AVAILABLE in this tab',
+  resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_BUILDS_TX, configured: true, dataLive: true }).status === 'AVAILABLE');
 t('config can never make a NOT_BUILT venue executable',
   !isExecutableStatus(resolveProviderStatus({ execution: EXECUTION_MODEL.NOT_BUILT, configured: true, enabled: true, dataLive: true }).status));
 

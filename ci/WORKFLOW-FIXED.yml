@@ -70,6 +70,14 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_SENDER_ID: ${{ vars.VITE_FIREBASE_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          # Drift (Solana) on-chain futures: the RPC endpoint the browser uses
+          # to build + confirm wallet-signed Drift transactions, and FBT's
+          # optional Drift referrer authority (Solana pubkey; unset = no FBT
+          # rebate, the UI discloses the fee honestly). Both are build-time
+          # literals for Vite, so they must be mapped here for the APK too.
+          VITE_SOLANA_RPC: ${{ vars.VITE_SOLANA_RPC }}
+          VITE_SOLANA_RPC_URL: ${{ vars.VITE_SOLANA_RPC_URL }}
+          VITE_DRIFT_REFERRER: ${{ vars.VITE_DRIFT_REFERRER }}
           APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
           APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
           # ci/release-notes.mjs stamps the `latest` release page with the version
