@@ -148,9 +148,55 @@
 /* wizard navigation */
 .bsw-actions { margin-top: 15px; }
 .bsw-blocked { margin: 0 0 9px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.03); color: var(--text-2); }
-.bsw-nav { display: flex; gap: 10px; margin-top: 0; }
-.bsw-back { flex: 0 0 auto; min-height: 46px; padding-inline: 18px; }
-.bsw-next { flex: 1; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 800; }
+/* ─── WHY \"NEXT\" WAS MISSING AND \"BACK\" WAS HUGE ──────────────────────────
+   Reported: «قیمت در تب خرید یا فروش می‌زنه دکمه مرحله بعدی نیست و وقت دکمه
+   قبلی بزرگ‌تر میشه» — after typing an amount there is no Next button, and
+   Back grows to fill the row.
+
+   Both halves were ONE flexbox bug, and it is the same trap already
+   documented for `.btn-row` in index.css:
+
+     `.btn` sets `width: 100%`. For a flex item `flex-basis: auto` resolves
+     to that width, so
+
+       .bsw-back  flex: 0 0 auto  → basis = THE WHOLE ROW, shrink 0
+       .bsw-next  flex: 1         → basis 0, grow 1
+
+     Back's basis alone already exceeds the container, so free space is
+     NEGATIVE — `flex-grow` has nothing to distribute — and `flex-shrink: 0`
+     forbids Back from giving any of it back. Back therefore keeps the full
+     row (measured: 332px) while Next collapses to min-content, i.e. just its
+     chevron (measured: 44px), and the card's `overflow: hidden` then clips
+     that sliver off the edge entirely.
+
+   So the button was never absent from the DOM — it was squeezed to an icon
+   and cropped out of sight, which is indistinguishable from missing. Both
+   children now get `flex-basis: 0` + `width: auto`, exactly like `.btn-row`,
+   so the split is driven by flex-grow instead of by `width: 100%`. Next is
+   the wide primary action; Back keeps a comfortable tap target and may
+   shrink but never below one. */
+.bsw-nav { display: flex; align-items: stretch; gap: 10px; margin-top: 0; }
+.bsw-back {
+  flex: 0 1 auto;
+  width: auto;          /* neutralise .btn's width:100% inside a flex row */
+  min-width: 84px;      /* still a real tap target on a 320px screen */
+  min-height: 46px;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
+.bsw-next {
+  flex: 1 1 0;          /* basis 0 so grow actually has space to distribute */
+  width: auto;
+  min-width: 0;         /* a long fa/de label shrinks the box, not the row */
+  min-height: 46px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; font-weight: 800;
+  /* The label is the point of the button; never let it be clipped to a bare
+     chevron the way the collapsed state was. */
+  white-space: normal;
+  line-height: 1.25;
+  padding-inline: 12px;
+}
 /* A primary button at 42% opacity on a dark card reads as "not there" — which
    is exactly how a gated Next got reported as a missing button. Keep a gated
    action clearly visible; the printed reason above it explains the state. */

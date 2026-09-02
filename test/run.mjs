@@ -1394,6 +1394,81 @@ console.log('\n▸ checking lazy locale loading…');
   report('lazy locales', await runI18n());
 }
 
+/*
+ * THE BUY / SELL WIZARD'S ACTION ROW IS A FLEX ROW OF `.btn`s.
+ *
+ * Reported (repeatedly): «قیمت در تب خرید یا فروش می‌زنه دکمه مرحله بعدی نیست
+ * و وقت دکمه قبلی بزرگ‌تر میشه» — after typing an amount there is no Next
+ * button, and Back grows to fill the row.
+ *
+ * Measured in a real browser before the fix, at 390px: Back 332px wide, Next
+ * 44px — collapsed to just its chevron and then cropped by the card's
+ * `overflow: hidden`. Invisible to the jsdom wizard probe, which asserts on
+ * `disabled` and text content and has no layout engine at all, so both halves
+ * of the complaint were structurally "fine" while being unusable on screen.
+ *
+ * The cause is the flexbox trap already documented for `.btn-row` in
+ * index.css: `.btn { width: 100% }` becomes each item's `flex-basis: auto`,
+ * so a `flex: 0 0 auto` sibling reserves the WHOLE row and refuses to shrink,
+ * leaving negative free space that `flex-grow` cannot distribute.
+ *
+ * This asserts the shape of the rule rather than the rendering, so it runs in
+ * the normal suite: neither child may keep `width:100%` as its basis, Back
+ * must be allowed to shrink, and Next must grow from a zero basis.
+ */
+console.log('\n▸ checking the Buy / Sell wizard action row…');
+{
+  const { readFileSync } = await import('node:fs');
+  /* Comments are stripped first: these rules are heavily commented, and an
+     inline `/* … *​/` between two declarations otherwise hides the one after
+     it from a regex that expects `;` then whitespace. */
+  const css = readFileSync('src/styles/buy-sell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /* Last declaration wins in CSS: collect the final body for a selector. */
+  const bodyOf = (selector) => {
+    const re = new RegExp(`\\${selector}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'g');
+    let m, last = null;
+    while ((m = re.exec(css))) last = m[1];
+    return last || '';
+  };
+  const decl = (body, prop) => {
+    const m = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'i').exec(body);
+    return m ? m[1].trim() : null;
+  };
+  /* `flex: a b c` shorthand → the three longhands it sets. */
+  const flexOf = (body) => {
+    const raw = decl(body, 'flex');
+    if (!raw) return null;
+    const parts = raw.split(/\s+/);
+    if (parts.length === 1) return { grow: Number(parts[0]), shrink: 1, basis: '0%' };
+    if (parts.length === 2) return { grow: Number(parts[0]), shrink: Number(parts[1]), basis: '0%' };
+    return { grow: Number(parts[0]), shrink: Number(parts[1]), basis: parts[2] };
+  };
+  /* A basis of `auto` inside a row of `.btn`s resolves to width:100%, unless
+     the rule explicitly re-declares width. That is the whole bug. */
+  const basisIsFullRow = (body) => {
+    const f = flexOf(body);
+    if (!f) return true;                       /* no flex at all → auto basis */
+    if (!/auto/i.test(String(f.basis))) return false;
+    return !/^auto$/i.test(String(decl(body, 'width') || ''));
+  };
+
+  const next = bodyOf('.bsw-next');
+  const back = bodyOf('.bsw-back');
+  const nextFlex = flexOf(next);
+  const backFlex = flexOf(back);
+
+  report('Buy / Sell wizard action row (Next is not squeezed out)', [
+    ['both wizard nav buttons are styled', Boolean(next) && Boolean(back)],
+    ['Next does not inherit width:100% as its flex-basis', !basisIsFullRow(next)],
+    ['Back does not reserve the whole row as its flex-basis', !basisIsFullRow(back)],
+    ['Next grows into the free space', Boolean(nextFlex) && nextFlex.grow >= 1],
+    ['Back is allowed to shrink rather than crushing Next', Boolean(backFlex) && backFlex.shrink >= 1],
+    ['Back still keeps a real tap target', /min-width:\s*\d/.test(back)],
+    ['Next may wrap its label instead of collapsing to the icon', /white-space:\s*normal/.test(next)]
+  ]);
+}
+
 console.log('\n▸ checking modal stacking order…');
 {
   const { readFileSync } = await import('node:fs');
