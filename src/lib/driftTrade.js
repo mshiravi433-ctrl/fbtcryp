@@ -142,14 +142,29 @@ async function sendInstructions(sdk, ctx, instructions) {
   return signature;
 }
 
-/** Build FBT's ReferrerInfo ({referrer, referrerStats}) when configured + valid. */
-function fbtReferrerInfo(sdk) {
+/**
+ * Build FBT's ReferrerInfo ({referrer, referrerStats}) only when the referrer
+ * actually HAS an on-chain Drift account. Drift's initializeUserAccount
+ * instruction requires the referrer's stats PDA (referrer_stats) to exist, so
+ * passing a referrer whose account was never created would fail the user's
+ * very first trade. The PDA is read over the RPC first; when it is missing
+ * (or unreadable) this returns undefined and the account is created without
+ * a referrer — the trade still goes through.
+ */
+async function fbtReferrerInfo(sdk, connection) {
   try {
     if (!FBT_REFERRER) return undefined;
     const { PublicKey, DRIFT_PROGRAM_ID, getUserStatsAccountPublicKey } = sdk;
     const referrer = new PublicKey(FBT_REFERRER);
-    return { referrer, referrerStats: getUserStatsAccountPublicKey(new PublicKey(DRIFT_PROGRAM_ID), referrer) };
-  } catch { return undefined; }
+    const referrerStats = getUserStatsAccountPublicKey(new PublicKey(DRIFT_PROGRAM_ID), referrer);
+    const accountInfo = await connection.getAccountInfo(referrerStats);
+    if (!accountInfo || !accountInfo.data?.length) return undefined;
+    return { referrer, referrerStats };
+  } catch {
+    /* An unreadable referrer lookup must never block the user's own first
+       trade — fall back to creating the account without a referrer. */
+    return undefined;
+  }
 }
 
 /* ── public operations ─────────────────────────────────────────────────── */
@@ -163,7 +178,7 @@ export async function openDriftPosition({ wallet, marketIndex, side, notionalUsd
   const ctx = await createDriftClient(sdk, wallet);
   const txs = [];
   try {
-    const referrer = fbtReferrerInfo(sdk);
+    const referrer = await fbtReferrerInfo(sdk, ctx.connection);
 
     /* 1) first-time Drift user account (records FBT as the referrer) */
     if (!ctx.userExists) {
