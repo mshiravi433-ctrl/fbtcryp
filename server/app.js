@@ -57,6 +57,7 @@ import {
   listAssets as buySellAssets,
   listNetworks as buySellNetworks,
   cancelBuySellOrder,
+  handleBuySellProviderWebhook,
   verifyBuySellOrder
 } from './buySell.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
@@ -398,19 +399,22 @@ const app = express();
 app.disable('x-powered-by');
 
 /*
- * This reserved callback endpoint is registered before JSON parsing so it
- * cannot fall through to another application handler. Callback handling is
- * disabled: no undocumented signature/header or payload is accepted.
+ * Provider settlement webhook. Registered before JSON parsing so the raw body
+ * is available for signature verification (Ramp signs the exact JSON payload
+ * with its ECDSA key — X-Body-Signature). The handler itself is fail-closed:
+ * without the configured Ramp public key, nothing is parsed as settlement.
  */
-app.post('/api/v1/buy-sell/webhooks/:provider', express.raw({ type: 'application/json', limit: '32kb' }), (_req, res) => {
+app.post('/api/v1/buy-sell/webhooks/:provider', express.raw({ type: 'application/json', limit: '32kb' }), (req, res) => {
   res.set('cache-control', 'no-store');
-  /* No guessed signature header, payload field, or return parameter is accepted.
-     This stays a deliberately visible integration blocker until an official
-     provider callback and settlement-attestation contract is implemented. */
-  return res.status(503).json({
-    error: 'PROVIDER_REQUIRES_INTEGRATION',
-    detail: 'OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'
-  });
+  return Promise.resolve()
+    .then(() => handleBuySellProviderWebhook({
+      providerId: req.params.provider,
+      rawBody: req.body,
+      signature: req.get('x-body-signature'),
+      query: req.query
+    }))
+    .then((out) => res.status(Number(out?.status) || 200).json(out?.body ?? {}))
+    .catch(() => res.status(503).json({ error: 'WEBHOOK_UNAVAILABLE' }));
 });
 
 /*
@@ -4807,7 +4811,7 @@ function sendBuySell(res, operation) {
 app.get('/api/v1/buy-sell/providers', (_req, res) =>
   sendBuySell(res, async () => ({ status: 200, body: await getBuySellCapabilities() })));
 app.get('/api/v1/buy-sell/assets', (req, res) =>
-  sendBuySell(res, async () => ({ status: 200, body: await buySellAssets({ side: req.query.side }) })));
+  sendBuySell(res, async () => ({ status: 200, body: await buySellAssets({ side: req.query.side, fiatCurrency: req.query.fiatCurrency || 'USD' }) })));
 app.get('/api/v1/buy-sell/networks', (req, res) =>
   sendBuySell(res, async () => ({ status: 200, body: await buySellNetworks({ asset: req.query.asset, side: req.query.side }) })));
 app.post('/api/v1/buy-sell/eligibility', (req, res) =>

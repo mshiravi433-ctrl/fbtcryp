@@ -8142,7 +8142,7 @@
     "quoteExpired": "Quote expired — refresh required",
     "reviewTitle": "Review before payment",
     "reviewBody": " You will buy approximately {{amount}} {{asset}} and settle it directly to {{wallet}}. Payment is handled by the provider.",
-    "hostedCheckoutNote": "Payment details and identity checks remain on the provider’s secure hosted checkout. FBT never asks for card details, a seed phrase, or a private key.",
+    "hostedCheckoutNote": "Payment details and identity checks remain on {{provider}}’s secure hosted checkout. FBT never asks for card details, a seed phrase, or a private key.",
     "providerUnavailableTitle": "Buy is unavailable",
     "providerUnavailableBody": "No approved provider integration is operational for this deployment. FBT will not open a payment page until country eligibility, provider checkout, durable order records, and signed settlement verification are configured.",
     "sellUnavailableTitle": "Sell is unavailable",
@@ -8188,7 +8188,13 @@
       "VERIFICATION_PENDING": "Verification pending",
       "COMPLETED": "Completed",
       "MANUAL_REVIEW": "Manual review",
-      "UNKNOWN": "Status unknown"
+      "UNKNOWN": "Status unknown",
+      "CHECKOUT_CREATED": "Checkout prepared",
+      "PAYMENT_CONFIRMED": "Payment confirmed",
+      "SETTLEMENT_PENDING": "Awaiting settlement",
+      "PAYMENT_FAILED": "Payment failed",
+      "QUOTE_EXPIRED": "Quote expired",
+      "CANCELLED": "Cancelled"
     },
     "safetyTitle": "Settlement safeguards",
     "safetyAddress": "Your wallet address, asset and network are validated before checkout. A validation failure stops the order.",
@@ -8236,8 +8242,40 @@
       "AMOUNT_MISMATCH": "The on-chain amount does not match the provider settlement record.",
       "SETTLEMENT_MISMATCH": "Provider and settlement information do not match. This order requires review.",
       "BUY_SELL_UNAVAILABLE": "Buy / Sell is unavailable. No payment was created.",
-      "OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED": "The provider’s official signed callback and settlement-attestation contract is required before activation."
+      "OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED": "The provider’s official signed callback and settlement-attestation contract is required before activation.",
+      "CONFIGURATION_REQUIRED": "The provider integration is awaiting its production credential.",
+      "AMOUNT_BELOW_MIN": "The amount is below the provider’s minimum for this asset.",
+      "AMOUNT_ABOVE_MAX": "The amount is above the provider’s maximum for this asset.",
+      "WEBHOOK_SIGNATURE_INVALID": "A provider callback failed signature verification and was rejected."
     },
-    "fbtFeeUnavailable": "FBT trading fee: $0.00"
+    "fbtFeeUnavailable": "FBT trading fee: $0.00",
+    "providerNames": {
+      "ramp": "Ramp Network"
+    },
+    "pm": {
+      "CARD_PAYMENT": "Card",
+      "APPLE_PAY": "Apple Pay",
+      "GOOGLE_PAY": "Google Pay",
+      "MANUAL_BANK_TRANSFER": "Bank transfer",
+      "AUTO_BANK_TRANSFER": "Instant bank transfer",
+      "PIX": "PIX",
+      "OPEN_BANKING": "Open banking"
+    },
+    "sellCrypto": "Sell crypto",
+    "youSell": "You sell",
+    "youReceiveFiat": "You receive",
+    "payoutCurrency": "Payout currency",
+    "sourceWallet": "Source wallet",
+    "fiatPayout": "Fiat payout to your account",
+    "methodFallback": "Your selected payment method was not quoted; the best available quote is shown for {{method}}.",
+    "poweredBy": "Payments, KYC and fiat processing by {{provider}}. FBT adds no fee.",
+    "providerStatusLabel": "Provider status",
+    "configurationRequiredTitle": "Buy is not configured yet",
+    "configurationRequiredBody": "The {{provider}} hosted-checkout integration is implemented but its production credential has not been configured for this deployment. Nothing is simulated: the Buy flow becomes operational as soon as the legitimate provider credential is installed.",
+    "resultTitle": "Order result",
+    "resultIntro": "You returned from the provider’s secure checkout. Returning does not mean the crypto has arrived — the status below reflects independent blockchain verification.",
+    "loadingOrder": "Loading your order…",
+    "orderAccessLostTitle": "Order access unavailable",
+    "orderAccessLostBody": "This browser session no longer holds the access key for that order. The order still exists and settlement continues on-chain; check your wallet balance or transaction history."
   }
 }

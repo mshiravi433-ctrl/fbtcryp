@@ -4836,10 +4836,13 @@ export default function run() {
     t('the server does not leave the bypass fiat routes mounted', !/\/api\/fiat/.test(appSrc));
     t('the browser keeps order capabilities in session storage only',
       /sessionStorage/.test(client) && !/localStorage/.test(client));
-    t('the provider fail-closes without an official callback and settlement contract',
-      /PROVIDER_REQUIRES_INTEGRATION/.test(service) && /OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED/.test(service));
-    t('the webhook endpoint exposes the same honest 503 blocker without calling a provider handler',
-      /app\.post\('\/api\/v1\/buy-sell\/webhooks/.test(appSrc) && !/handleBuySellProviderWebhook\(/.test(appSrc));
+    t('the provider fail-closes until the legitimate Ramp production credential exists',
+      /PROVIDER_REQUIRES_INTEGRATION/.test(service) && /RAMP_HOST_API_KEY_REQUIRED/.test(read('server/providers/rampNetwork.js'))
+      && /RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED/.test(read('server/providers/rampNetwork.js')));
+    t('the webhook endpoint verifies the provider ECDSA signature over the raw body',
+      /app\.post\('\/api\/v1\/buy-sell\/webhooks/.test(appSrc) && /handleBuySellProviderWebhook\(/.test(appSrc)
+      && /express\.raw/.test(appSrc) && /x-body-signature/.test(appSrc)
+      && /verifyRampWebhookSignature/.test(service) && /WEBHOOK_SIGNATURE_INVALID/.test(service));
     t('blockchain verification requires a receipt, destination, exact amount and confirmations',
       /eth_getTransactionReceipt/.test(service) && /RECIPIENT_MISMATCH/.test(service)
       && /AMOUNT_MISMATCH/.test(service) && /TX_CONFIRMING/.test(service));

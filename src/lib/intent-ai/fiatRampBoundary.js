@@ -10,9 +10,11 @@
 import { classifyFailure } from './failureModes.js';
 
 export const RAMP_SCHEMA = 'fbt.buy-sell-intent-boundary.v2';
-/* The current provider adapter is deliberately fail-closed pending its
-   official authenticated settlement contract. This is availability, not a
-   promise that Intent OS can turn on with a prompt. */
+/* Whether Intent OS may CLAIM fiat on/off-ramp support in chat output. The
+   real availability is decided per deployment by the Buy/Sell capability API
+   (Ramp Hosted Mode, CONFIGURATION_REQUIRED until legitimately credentialed).
+   This stays false so a prompt can never talk the assistant into promising a
+   live payment rail; the Buy screen itself reports the true provider state. */
 export const RAMP_SUPPORTED = false;
 
 export const FIAT_CURRENCIES = Object.freeze([

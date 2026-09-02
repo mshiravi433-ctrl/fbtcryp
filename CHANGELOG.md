@@ -1,3 +1,52 @@
+# Unreleased — Buy/Sell: Ramp Network hosted checkout (Provider #1)
+
+- **Ramp Network Hosted Mode is now the primary Buy/Sell provider** —
+  payment/on-ramp/off-ramp infrastructure, never a CEX trading API. The new
+  adapter (`server/providers/rampNetwork.js`) uses only officially documented
+  surfaces: the `app.rampnetwork.com` hosted widget URL (with `userAddress`
+  prefilled so crypto settles **directly to the user's wallet**), the
+  `/host-api/v3` asset-catalog and quote endpoints, and Ramp's ECDSA-signed
+  webhooks (`X-Body-Signature`, secp256k1 + sha256 over the stable-stringified
+  body).
+- **ProviderRegistry / ProviderRouter** (`server/buySell.js`): Ramp is
+  Provider #1; future providers are appended and compete on real quotes —
+  no hardcoded "always cheapest" and no capability flag hardcoded to true.
+  The capability engine derives everything from configuration at call time.
+- **Fail-closed, never fake:** without `RAMP_HOST_API_KEY` +
+  `RAMP_WEBHOOK_STATUS_URL` + `RAMP_WEBHOOK_PUBLIC_KEY_PEM` + durable storage,
+  the provider reports `CONFIGURATION_REQUIRED` — no simulated checkout,
+  payment, tx hash or balance. The forbidden inverse also holds: a missing
+  CEX API key can never make Buy unavailable (`requiresCexApi: false`).
+- **Settlement truth stays on-chain:** a signed `RELEASED` webhook only
+  records the provider-reported tx; `COMPLETED` still requires FBT's
+  independent verification of chain, recipient, token contract, exact unit
+  amount and confirmation depth over its own RPC quorum. Receiver mismatches
+  are quarantined to `MANUAL_REVIEW`. Only assets on independently verifiable
+  EVM chains (ETH, Arbitrum, Optimism, Base, Polygon, BSC, Avalanche) are
+  offered.
+- **Fees:** `fbtTradingFee = 0` and Ramp partner fee = 0 remain structural;
+  Ramp's own `appliedFee`/`networkFee` come from the live quote and are shown
+  verbatim — the UI never claims "total fee = 0".
+- **UI:** the Buy/Sell ticket now uses Ramp payment methods (card, Apple/
+  Google Pay, bank transfer, PIX, open banking), per-asset network selection
+  from the live catalog, a distinct `CONFIGURATION_REQUIRED` state, provider
+  identity ("Payments by Ramp Network"), a per-chain explorer link, and the
+  new `/order/result/:orderId` return route (Ramp `finalUrl` target) that
+  re-reads verified server state instead of assuming success. Sell renders a
+  real off-ramp form only when the approved integration enables `OFFRAMP`;
+  otherwise it stays honestly unavailable. EN + FA strings added; layout is
+  RTL-safe.
+- **Compliance unchanged:** Ramp performs KYC/AML/sanctions/geo eligibility;
+  FBT passes real user inputs through untouched and surfaces rejections as
+  `REGION_UNSUPPORTED`. No country spoofing, no identity manipulation, no
+  bypass.
+- **Tests:** new `test/buy-sell-ramp-flow-probe.mjs` runs the full configured
+  lifecycle with only the network layer mocked (quote → order → official
+  hosted URL → genuinely ECDSA-signed webhook → on-chain verification →
+  COMPLETED, plus forged-signature rejection); `test/buy-sell-probe.mjs`
+  re-pins the unconfigured fail-closed contract; units and wiring suites
+  updated for the registry.
+
 # Unreleased — Lab v2: Financial Simulation Center
 
 - The **Lab** screen at `/lab` is now a full **Financial Simulation Center** with

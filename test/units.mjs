@@ -209,7 +209,8 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
-import { ChangeNowHostedCheckoutProvider, FBT_TRADING_FEE, ORDER_STATES, ProviderRouter, validateDestination } from '../server/buySell.js';
+import { FBT_TRADING_FEE, ORDER_STATES, ProviderRouter, RampNetworkHostedCheckoutProvider, validateDestination } from '../server/buySell.js';
+import { buildHostedCheckoutUrl } from '../server/providers/rampNetwork.js';
 import { STATIONS, parseAudioFeed } from '../server/audio.js';
 import { VAULT_CHAINS, isValidVaultAddress, vaultConfig, vaultFeePercent, vaultIsLive } from '../src/lib/vault.js';
 import { fmtDuration } from '../src/lib/audio.js';
@@ -5553,22 +5554,46 @@ export default async function run() {
 
   /* ================ Buy / Sell provider safety boundary ================= */
   {
-    const capability = ChangeNowHostedCheckoutProvider.getCapabilities();
+    const capability = RampNetworkHostedCheckoutProvider.getCapabilities();
     t('FBT Buy / Sell fee is configured as exactly zero', FBT_TRADING_FEE === 0 && capability.fbtFee === 0);
-    t('the provider fails closed until an official settlement contract exists',
-      capability.available === false && capability.prerequisites.includes('PROVIDER_REQUIRES_INTEGRATION')
-      && capability.prerequisites.includes('OFFICIAL_CALLBACK_AND_SETTLEMENT_CONTRACT_REQUIRED'));
+    t('Ramp is the registered hosted-checkout provider, never a CEX API',
+      capability.id === 'ramp' && capability.mode === 'HOSTED_CHECKOUT' && capability.requiresCexApi === false);
+    t('the provider fails closed until the legitimate Ramp production credential exists',
+      capability.available === false && capability.status === 'CONFIGURATION_REQUIRED'
+      && capability.prerequisites.includes('RAMP_HOST_API_KEY_REQUIRED')
+      && capability.prerequisites.includes('RAMP_WEBHOOK_PUBLIC_KEY_REQUIRED'));
+    t('no partner fee is configured on top of Ramp\u2019s own pricing', capability.partnerFee === 0);
     t('off-ramp is honestly unavailable rather than redirected to an exchange', capability.offRamp === false);
     t('the explicit order lifecycle includes payment, settlement and verification failures',
       ['PAYMENT_FAILED', 'SETTLEMENT_FAILED', 'VERIFICATION_FAILED', 'MANUAL_REVIEW', 'COMPLETED'].every((state) => ORDER_STATES.includes(state)));
-    t('only a checksummed BSC/EVM destination is normalized',
+    t('only a checksummed EVM destination is normalized',
       validateDestination('0x000000000000000000000000000000000000dEaD', { chainId: 56 }).ok === true
       && validateDestination('not-a-wallet', { chainId: 56 }).code === 'ADDRESS_INVALID');
     const sellRoute = await ProviderRouter.route({ side: 'SELL' });
     t('sell routing is an explicit unavailable state', sellRoute.ok === false && sellRoute.code === 'SELL_UNAVAILABLE');
     const buyRoute = await ProviderRouter.route({ side: 'BUY' });
-    t('buy routing does not create a quote while provider integration is unavailable',
+    t('buy routing does not create a quote while the provider is unconfigured',
       buyRoute.ok === false && buyRoute.code === 'PROVIDER_UNAVAILABLE');
+    /* The hosted checkout URL composer must only ever emit the official Ramp
+       host with documented parameters — checked here against a synthetic
+       config so no credential is required. */
+    const url = new URL(buildHostedCheckoutUrl(
+      {
+        hosts: { widget: 'https://app.rampnetwork.com', api: 'https://api.rampnetwork.com/api' },
+        hostApiKey: 'test_key', hostAppName: 'FBT', hostLogoUrl: '', flows: ['ONRAMP'],
+        finalUrlBase: 'https://fbt.example', webhookStatusUrl: ''
+      },
+      {
+        orderId: 'bso_test', side: 'BUY', walletAddress: '0x000000000000000000000000000000000000dEaD',
+        providerAssetId: 'ARBITRUM_USDT', fiatCurrency: 'USD', fiatAmount: 100, country: 'DE'
+      }
+    ));
+    t('the checkout composer targets the official Ramp widget host', url.origin === 'https://app.rampnetwork.com');
+    t('...prefills the user wallet with the documented userAddress parameter',
+      url.searchParams.get('userAddress') === '0x000000000000000000000000000000000000dEaD'
+      && url.searchParams.get('swapAsset') === 'ARBITRUM_USDT');
+    t('...and appends no partner-fee or invented parameter',
+      ![...url.searchParams.keys()].some((k) => /fee|partner|commission|spread/i.test(k)));
   }
 
   /* ==================== crypto radio — audio, not video =================== */

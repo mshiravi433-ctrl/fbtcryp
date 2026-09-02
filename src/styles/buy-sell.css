@@ -74,3 +74,13 @@
 @media (max-width: 390px) { .buy-sell-ticket { padding: 13px; } .buy-sell-ticket-head { align-items: flex-start; } .buy-sell-secure { font-size: 9.5px; } .buy-sell-fields { grid-template-columns: 1fr; } .buy-sell-wallet-field { grid-column: auto; } .buy-sell-order-details { grid-template-columns: 1fr; } }
 @media (min-width: 700px) { .buy-sell-panel, .buy-sell-page-intro, .buy-sell-safety { max-width: 640px; margin-inline: auto; } .buy-sell-ticket { padding: 18px; } }
 .buy-sell-zero-fee { margin: 8px 0 0; color: var(--up); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+/* Ramp hosted-checkout additions: provider identity, configuration status,
+   payment-method fallback note and the crypto unit tag on sell amounts. All
+   flow-relative so RTL (fa/ar) mirrors correctly. */
+.buy-sell-powered-by { margin: 6px 0 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
+.buy-sell-config-status { margin: 8px 0 0; direction: ltr; text-align: start; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
+[dir="rtl"] .buy-sell-config-status { text-align: end; }
+.buy-sell-method-note { margin: 6px 1px 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
+.buy-sell-amount-unit { display: flex; align-items: center; padding: 0 11px; border: 1px solid rgba(255,255,255,.12); border-inline-start: 0; border-radius: 0 11px 11px 0; background: rgba(255,255,255,.025); color: var(--text-2); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+[dir="rtl"] .buy-sell-amount-unit { border-radius: 11px 0 0 11px; }
+
