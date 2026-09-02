@@ -155,6 +155,9 @@
    is exactly how a gated Next got reported as a missing button. Keep a gated
    action clearly visible; the printed reason above it explains the state. */
 .bsw-next:disabled, .bsw-back:disabled { opacity: 1; filter: grayscale(1) brightness(.72); }
+/* Keyless escape hatch under the tracked flow's primary action: the route to
+   the destination site that works even when the credentialed rail stalls. */
+.bsw-guided-fallback { display: flex; width: 100%; justify-content: center; margin-top: 9px; min-height: 38px; font-size: 12px; color: var(--text-2); border: 1px dashed rgba(255,255,255,.18); border-radius: 12px; }
 [dir="rtl"] .bsw-next svg, [dir="rtl"] .buy-sell-cta svg, [dir="rtl"] .buy-sell-tx-link svg { transform: scaleX(-1); }
 
 /* ─── ON-CHAIN WALLET REPORT (گزارش واقعی، زیر هر دو تب) ──────────────────

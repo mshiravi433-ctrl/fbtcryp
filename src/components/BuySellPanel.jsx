@@ -23,7 +23,9 @@ import {
   GUIDED_FIAT,
   GUIDED_PROVIDER,
   buildGuidedCheckoutUrl,
-  isEvmAddress
+  isEvmAddress,
+  normalizeAmountInput,
+  normalizeWalletInput
 } from '../lib/guidedCheckout';
 import { IconCheck, IconChevronRight, IconClock, IconRefresh, IconShield, IconWallet } from './Icons';
 
@@ -282,6 +284,16 @@ export default function BuySellPanel({ initialOrderId = null }) {
     if (wallet.address && !walletAddress) setWalletAddress(wallet.address);
   }, [wallet.address, walletAddress]);
 
+  /* THE REPORT ALWAYS WATCHES THE USER'S OWN WALLET.
+     Priority: the verified order's destination → a valid address typed in
+     the wizard → the user's connected wallet. A half-typed or invalid entry
+     must never silence the report, and it must never watch a stranger's
+     address — every candidate is validated before it wins. */
+  const watchAddress = useMemo(() => {
+    const candidates = [order?.walletAddress, walletAddress, wallet.address];
+    return candidates.find((candidate) => isEvmAddress(String(candidate || ''))) || walletAddress || wallet.address || '';
+  }, [order?.walletAddress, wallet.address, walletAddress]);
+
   useEffect(() => {
     if (!quote?.expiresAt) return undefined;
     const tick = () => setQuoteExpiry(Date.now() >= Date.parse(quote.expiresAt));
@@ -379,6 +391,11 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   const changeSide = (next) => { setSide(next); resetQuote(); };
   const inputChanged = (setter) => (event) => { setter(event.target.value); resetQuote(); };
+  /* Amount / wallet fields accept Persian & Arabic keyboards: digits and
+     separators are converted to ASCII BEFORE validation, so «۱۰۰» enables
+     the Next button exactly like «100» does. */
+  const amountChanged = (setter) => (event) => { setter(normalizeAmountInput(event.target.value)); resetQuote(); };
+  const walletChanged = (event) => { setWalletAddress(normalizeWalletInput(event.target.value)); resetQuote(); };
   const chooseAsset = (nextAsset) => {
     const rows = catalog.filter((row) => row.asset === nextAsset);
     setAsset(nextAsset);
@@ -543,9 +560,9 @@ export default function BuySellPanel({ initialOrderId = null }) {
                       <p className="bsw-title">{sell ? t('buySell.wizard.amountTitleSell') : t('buySell.wizard.amountTitleBuy')}</p>
                       <div className="bsw-amount" dir="ltr">
                         <input
-                          type="number" min="0" inputMode="decimal" placeholder="0.00" autoComplete="off"
+                          type="text" inputMode="decimal" placeholder="0.00" autoComplete="off"
                           value={sell ? cryptoAmount : fiatAmount}
-                          onChange={inputChanged(sell ? setCryptoAmount : setFiatAmount)}
+                          onChange={amountChanged(sell ? setCryptoAmount : setFiatAmount)}
                           aria-label={sell ? t('buySell.youSell') : t('buySell.youPay')}
                         />
                         {sell
@@ -572,7 +589,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                       <div className={`bsw-wallet ${walletAddress ? (walletValid ? 'valid' : 'invalid') : ''}`}>
                         <input
                           value={walletAddress}
-                          onChange={inputChanged(setWalletAddress)}
+                          onChange={walletChanged}
                           placeholder="0x…" spellCheck={false} autoCapitalize="none" autoCorrect="off" dir="ltr"
                           aria-label={sell ? t('buySell.sourceWallet') : t('buySell.destinationWallet')}
                         />
@@ -686,6 +703,22 @@ export default function BuySellPanel({ initialOrderId = null }) {
                     </button>
                   )}
                 </div>
+                {/* THE DESTINATION SITE IS NEVER OUT OF REACH. When the
+                    tracked (server credential) rail is selected but stalls —
+                    quote error, provider hiccup, missing country — the
+                    keyless handoff below still takes the user to the
+                    provider's official page with everything prefilled. It
+                    needs only a valid amount and wallet. */}
+                {step === STEPS.length - 1 && trackedAvailable && guidedAvailable && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm bsw-guided-fallback"
+                    disabled={loading === 'guided' || !amountValid || !walletValid}
+                    onClick={continueToProvider}
+                  >
+                    {t('buySell.wizard.guidedFallback', { provider: GUIDED_PROVIDER.name })}
+                  </button>
+                )}
               </div>
             </motion.section>
           )}
@@ -713,11 +746,11 @@ export default function BuySellPanel({ initialOrderId = null }) {
       )}
 
       {/* THE REAL REPORT — under BOTH tabs. It reads the public blockchain
-          for the exact wallet + token above and reports arrivals (buy) or
-          withdrawals (sell). It needs no provider API and no account. */}
+          for the USER'S OWN wallet + token above and reports arrivals (buy)
+          or withdrawals (sell). It needs no provider API and no account. */}
       <WalletWatchReport
         side={side}
-        walletAddress={order?.walletAddress || walletAddress}
+        walletAddress={watchAddress}
         asset={order?.asset || asset}
         network={order?.network || network}
         autoStart={watchKick}

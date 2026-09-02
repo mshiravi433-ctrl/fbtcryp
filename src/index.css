@@ -10698,17 +10698,53 @@ button.switch:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .profile-badge-pop {
-  position: absolute;
-  top: calc(100% + 8px);
-  inset-inline-start: 0;
-  z-index: 60;
-  width: min(300px, 78vw);
+  /* FIXED + portalled to <body>: the settings hero card clips its painted
+     gradient with overflow:hidden, and an absolute popup inside it was cut
+     down to a tiny dark sliver. Fixed coordinates (set inline from the
+     badge's viewport rect, clamped to the screen) cannot be clipped by any
+     ancestor. */
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(70vh, 480px);
   padding: 10px;
   border-radius: 14px;
   background: var(--bg-1, rgba(10, 12, 20, 0.97));
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
+
+.profile-badge-pop-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.profile-badge-pop-foot {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.profile-badge-pop-foot button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.profile-badge-pop-foot button:hover { background: rgba(255, 255, 255, 0.06); }
+
 
 .profile-badge-pop-head {
   display: flex;

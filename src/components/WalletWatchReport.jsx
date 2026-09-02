@@ -5,6 +5,7 @@ import { riseIn } from './PageTransition';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { guidedTokenMeta, isEvmAddress } from '../lib/guidedCheckout';
 import { watchWalletDelta } from '../lib/buySellWatch';
+import { showLocalNotification } from '../lib/notify';
 import { explorerAddr } from '../lib/chains';
 import { IconActivity, IconCheck, IconChevronRight, IconShield } from './Icons';
 
@@ -52,13 +53,33 @@ export default function WalletWatchReport({ side, walletAddress, asset, network,
         address,
         token: meta,
         onTick: ({ amount, at }) => { setBalance(amount); setLastTick(at); },
-        onDelta: (event) => setEvents((rows) => [{ ...event, id: `${event.at}-${rows.length}` }, ...rows].slice(0, 12))
+        onDelta: (event) => {
+          setEvents((rows) => [{ ...event, id: `${event.at}-${rows.length}` }, ...rows].slice(0, 12));
+          /* A REAL notification for a REAL on-chain movement. When the
+             detected transfer matches the order's direction, it goes through
+             the same pipeline every other notification uses: mirrored into
+             the in-app inbox (the settings-badge bell) always, and shown as
+             an OS notification when permission is granted. The wording stays
+             "deposit/withdrawal detected" — a balance delta proves a
+             transfer, never a payment. */
+          const match = sell ? event.direction === 'out' : event.direction === 'in';
+          if (match) {
+            showLocalNotification(
+              event.direction === 'in' ? t('buySell.watch.eventIn') : t('buySell.watch.eventOut'),
+              {
+                body: `${event.direction === 'in' ? '+' : '−'}${event.amount} ${event.symbol} · ${shortAddress(address)}`,
+                tag: `fbt-watch-${address}-${event.at}`,
+                data: { url: '/buy' }
+              }
+            );
+          }
+        }
       });
       setWatching(true);
     } catch {
       setError('WATCH_NO_PROVIDER');
     }
-  }, [address, meta, ready, wallet]);
+  }, [address, meta, ready, sell, t, wallet]);
 
   /* The wizard bumps `autoStart` right after the guided handoff opens, so
      the report begins the moment there is something real to wait for. */
