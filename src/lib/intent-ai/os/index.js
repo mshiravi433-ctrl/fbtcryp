@@ -83,7 +83,8 @@ export * from './agents/executionAgent.js';
 // Unified OS Class
 import { buildContext, updateContext, getCurrentPageContext } from './contextEngine.js';
 import { understandIntent, extractNavigationIntent, runAcceptanceTests } from './intentUnderstanding.js';
-import { routeForIntent, wantsPageOpen } from './moduleRouter.js';
+import { wantsPageOpen } from './moduleRouter.js';
+import { resolveIntent } from './routeAdapter.js';
 import { resolveToolsForIntent, getRelevantToolsForMessage, validateToolInput, getTool } from './toolRegistry.js';
 import { createIntentAgent } from './agents/intentAgent.js';
 import { createNavigationAgent } from './agents/navigationAgent.js';
@@ -227,11 +228,19 @@ export function createIntentOS({
           'RISK_ANALYSIS', 'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL'
         ].includes(intent.type);
         const openPage = wantsPageOpen(intent.raw) || !stayInChat;
-        const handoffRoute = routeForIntent(intent, { openPage });
+        // SSOT-first routing, with an adapter for follow-up slots, SEND→wallet,
+        // speculation gating and entity-driven swap/bridge fallback.
+        const routing = resolveIntent(intent, message, { openPage, slots: getOperationalSlots() });
+        const handoffRoute = routing.route;
+        const forceOpen = routing.openPage === true;
 
-        if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
+        if (routing.unavailable) {
+          // The module exists in the spec but not in this build — say so,
+          // never navigate to a dead URL.
+          executionResult = { ok: true, unavailable: routing.unavailable };
+        } else if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
           executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
-        } else if (handoffRoute && (openPage || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH')) {
+        } else if (handoffRoute && (openPage || forceOpen || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH')) {
           if (liveNavigation?.navigate) {
             await liveNavigation.navigate({ route: handoffRoute });
           } else {
@@ -289,13 +298,18 @@ export function createIntentOS({
         
         // 7. HUMAN RESPONSE
         try {
+          const ent = intent.entities || {};
+          const op = routing.operation || intent.type;
           rememberOperationalSlots({
-            asset: intent.entities?.token || intent.entities?.fromToken || intent.entities?.toToken,
-            operation: intent.type,
-            amount: intent.entities?.amount || intent.entities?.amountUsd,
-            fromToken: intent.entities?.fromToken,
-            toToken: intent.entities?.toToken,
-            intent: intent.type
+            asset: ent.token
+              || (['SELL', 'SEND'].includes(op) ? ent.fromToken : ent.toToken)
+              || ent.fromToken
+              || ent.toToken,
+            operation: op,
+            amount: ent.amount || ent.amountUsd,
+            fromToken: ent.fromToken,
+            toToken: ent.toToken,
+            intent: op
           });
           if (executionResult?.portfolio) patchSharedState('portfolio', executionResult.portfolio, { source: 'intent-os' });
         } catch { /* memory is best-effort */ }
@@ -358,7 +372,7 @@ export function createIntentOS({
         // 13. WORKING MEMORY
         addWorkingMemory(createMemory({
           type: 'conversation',
-          content: `${message} → ${intent.type}`,
+          content: `${message} → ${routing.operation || intent.type}`,
           importance: 0.6,
           metadata: { intent: intent.type, route: currentPage }
         }));
