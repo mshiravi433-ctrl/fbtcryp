@@ -27,10 +27,32 @@
 import { COPY } from './copy.mjs';
 import { CSS } from './styles.mjs';
 import { RUNTIME } from './runtime.mjs';
+import { lottieScript, lottieSlot } from './lottie.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Small helpers                                                        */
 /* ------------------------------------------------------------------ */
+
+/**
+ * THE STORE BUILD CANNOT CARRY THIS VOCABULARY.
+ *
+ * APKPure rejected this app for «illegal sensitive words», and the fix in
+ * vite.config.js was to strip margin/prediction copy from the LOCALE files at
+ * build time — because a content filter reads strings, not call graphs, and a
+ * build whose screens are gone but whose words survive fails review for exactly
+ * the same reason.
+ *
+ * The landing page is a generated HTML file that ships inside `dist/`, so the
+ * APK carries it too, and a slideshow that advertises «Futures · leverage ·
+ * liquidation» would put the rejected words back into the store artefact. So
+ * the same flag that removes the /perp route from the app also removes the
+ * slide and the dock tile that point at it. Route and copy, one switch — the
+ * rule the rest of the build already follows.
+ */
+const SPECULATION = process.env.VITE_ENABLE_SPECULATION !== 'false';
+export function gateSpeculation(list, enabled = SPECULATION) {
+  return enabled ? list : list.filter((it) => it.speculative !== true);
+}
 
 const esc = (s) =>
   String(s)
@@ -76,43 +98,108 @@ function fillFee(str, feeStr, lang) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Inline SVG icon set (stroke, 24×24, currentColor). Kept tiny.       */
+/* The icon set — one inline SVG sprite, drawn with a pen             */
 /* ------------------------------------------------------------------ */
 
-const I = (paths) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+/**
+ * Every icon on the page is a <symbol> in one sprite, referenced with <use>.
+ *
+ * Why a sprite and not inline copies: the same 12 glyphs appear in the header
+ * menu, the slideshow, the ecosystem grid and the bottom dock, and a browser
+ * that parses a path four times pays for it four times. With a sprite the
+ * geometry exists once, and 60 references to it are ~40 bytes each.
+ *
+ * Why hand-drawn paths and not an icon font or a package: an icon font costs
+ * a font download and mis-renders to a crawler as private-use boxes; a package
+ * would be another network request in a document whose rule is zero of them.
+ *
+ * pathLength="100" is stamped onto every path by `sym()` for one reason: it
+ * makes the draw-in animation (`stroke-dashoffset` 100 → 0) identical for a
+ * 6-unit tick and a 20-unit arc, so no per-icon tuning is needed.
+ */
+const STROKE_ATTRS = 'fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
 
-const ICONS = {
-  swap: I('<path d="M4 7h12"/><path d="M13 4l3 3-3 3"/><path d="M20 17H8"/><path d="M11 20l-3-3 3-3"/>'),
-  wallet: I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M16 12.5h3"/><path d="M3 9.5h18"/>'),
-  signals: I('<path d="M4 19V10"/><path d="M10 19V5"/><path d="M16 19v-8"/><path d="M22 19V8"/>'),
-  intent: I('<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.4 0-2.8-.3-4-.9L3 21l1.9-5.5A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 11.5h.01M12.5 11.5h.01M16.5 11.5h.01"/>'),
-  smartMoney: I('<path d="M3 16c2-4 5-6 9-6s7 2 9 6"/><path d="M3 16c2 3 5 5 9 5s7-2 9-5"/><circle cx="12" cy="7" r="2.4"/>'),
-  farm: I('<path d="M12 21V11"/><path d="M12 11c0-4 3-7 8-7 0 4-3 7-8 7z"/><path d="M12 14c0-3-2.4-5-6-5 0 3 2.4 5 6 5z"/>'),
-  orders: I('<path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
-  lending: I('<circle cx="8" cy="8" r="4"/><circle cx="16" cy="16" r="4"/><path d="M14 6l-4 12"/>'),
-  stocks: I('<path d="M7 4v5M7 13v5"/><rect x="5" y="7" width="4" height="6" rx="1"/><path d="M17 3v4M17 15v4"/><rect x="15" y="9" width="4" height="6" rx="1"/>'),
-  rwa: I('<path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/>'),
-  ai: I('<rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l1.6 1.6M19 5l-1.6 1.6M5 19l1.6-1.6M19 19l-1.6-1.6"/>'),
-  explore: I('<circle cx="12" cy="12" r="9"/><path d="M14.8 9.2l-2 5.6-3.6-5.6 5.6 3.6z"/><path d="M12 3v2M21 12h-2"/>'),
-  shield: I('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9.5 12l2 2 3.5-4"/>'),
-  key: I('<circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3"/><path d="M16 7l3 3M18.5 4.5L21 7"/>'),
-  globe: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 2.6 4 5.7 4 9s-1.2 6.4-4 9c-2.8-2.6-4-5.7-4-9s1.2-6.4 4-9z"/>'),
-  zap: I('<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>'),
-  brain: I('<path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 3 5 3 3 0 0 0 5 2 3 3 0 0 0 5-2 3 3 0 0 0 3-5 3 3 0 0 0-2-5 3 3 0 0 0-3-3 2.5 2.5 0 0 0-3 0A2.5 2.5 0 0 0 9 4z"/><path d="M12 5v14"/>'),
-  doc: I('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
-  link: I('<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>'),
-  spark: I('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6z"/>'),
-  eye: I('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'),
-  lock: I('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
-  radar: I('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/><path d="M12 12l6-6"/>'),
-  go: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M9 7h8v8"/></svg>',
-  burger:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-  flowArrow: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="arr"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+const sym = (id, inner, box) =>
+  `<symbol id="ic-${id}" viewBox="${box || '0 0 24 24'}" ${STROKE_ATTRS}>${inner.replace(/<(path|circle|rect|line)\b/g, '<$1 pathLength="100"')}</symbol>`;
+
+const SYMBOLS = {
+  swap:
+    '<path d="M4 8h13"/><path d="M14 5l3.4 3-3.4 3"/><path d="M20 16H7"/><path d="M10 13l-3.4 3 3.4 3"/><circle cx="4" cy="8" r="1.1"/><circle cx="20" cy="16" r="1.1"/>',
+  wallet:
+    '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><path d="M16.5 14.6h2.6"/><path d="M6 6V4.6A1.6 1.6 0 0 1 7.6 3h8.8"/>',
+  signals:
+    '<path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/><path d="M21 20V4"/><path d="M4.5 12.5l5-4 5 3 5-6"/>',
+  intent:
+    '<path d="M20.5 11.6a8.4 8.4 0 0 1-8.4 8.4c-1.4 0-2.7-.3-3.9-.9L3.4 20.6l1.6-4.6a8.4 8.4 0 1 1 15.5-4.4z"/><path d="M8.6 11.7h.01M12.1 11.7h.01M15.6 11.7h.01"/>',
+  smartMoney:
+    '<path d="M3 15.5c2.2-4 5.2-6 9-6s6.8 2 9 6"/><path d="M3 15.5c2.2 3.4 5.2 5.1 9 5.1s6.8-1.7 9-5.1"/><circle cx="12" cy="6" r="2.4"/><path d="M12 3.2v-1M12 9.8v-1"/>',
+  farm:
+    '<path d="M12 21V10"/><path d="M12 10c0-4 2.9-6.8 7.6-6.8 0 4-2.9 6.8-7.6 6.8z"/><path d="M12 14.4c0-3-2.2-5-5.7-5 0 3 2.2 5 5.7 5z"/><path d="M8 21h8"/>',
+  orders:
+    '<path d="M18 9.4A6 6 0 1 0 6 9.4c0 5.8-2 6.9-2 6.9h16s-2-1.1-2-6.9"/><path d="M10 19.6a2.2 2.2 0 0 0 4 0"/><path d="M12 3.4V2"/>',
+  lending:
+    '<circle cx="8.4" cy="8.4" r="3.9"/><circle cx="15.6" cy="15.6" r="3.9"/><path d="M13.3 6.2l-2.6 11.6"/><path d="M8.4 6.4v4M6.5 8.4h3.8"/>',
+  stocks:
+    '<rect x="3.6" y="10.4" width="4.4" height="8" rx="1.4"/><path d="M5.8 6.4v4M5.8 18.4v2.2"/><rect x="15.8" y="5.6" width="4.4" height="9" rx="1.4"/><path d="M18 2.6v3M18 14.6v6"/><path d="M11 21.4h-6M19.4 21.4h-3"/>',
+  rwa:
+    '<path d="M3 20.6h18"/><path d="M5.2 20.6V8.6L12 4l6.8 4.6v12"/><path d="M9.4 20.6v-6.2h5.2v6.2"/><path d="M12 10.4v2"/>',
+  ai:
+    '<rect x="6.6" y="6.6" width="10.8" height="10.8" rx="3"/><path d="M10.4 10.4h3.2v3.2h-3.2z"/><path d="M12 2.6v4M12 17.4v4M2.6 12h4M17.4 12h4M5 5l2.4 2.4M19 5l-2.4 2.4M5 19l2.4-2.4M19 19l-2.4-2.4"/>',
+  gold:
+    '<path d="M12 3.4l2.1 4.5 4.9.7-3.6 3.4.9 4.9L12 14.6l-4.3 2.3.9-4.9L5 8.6l4.9-.7z"/><path d="M4.4 20.4h15.2"/><path d="M7.4 17.6h9.2"/>',
+  futures:
+    '<path d="M3 20.6h18"/><path d="M6.6 20.6v-4.2M6.6 9.4v-3.2"/><rect x="4.8" y="11.6" width="3.6" height="4.8" rx="1.2"/><path d="M13.4 20.6v-6M13.4 10V5.4"/><rect x="11.6" y="7.6" width="3.6" height="7" rx="1.2"/><path d="M20 20.6v-2.4M20 12.4V9"/><rect x="18.2" y="10.6" width="3.6" height="5.4" rx="1.2"/>',
+  tokens:
+    '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2v9.6M9.4 9.6h3.7a1.9 1.9 0 0 1 0 3.8h-3.4M9.4 13.2h4"/>',
+  network:
+    '<circle cx="12" cy="4.6" r="2.1"/><circle cx="4.8" cy="18.4" r="2.1"/><circle cx="19.2" cy="18.4" r="2.1"/><path d="M12 6.7l-6 9.6M12 6.7l6 9.6M6.9 18.4h10.2"/>',
+  explore:
+    '<circle cx="12" cy="12" r="9"/><path d="M15.1 8.9l-2.1 5.8-3.8-5.8 5.9 5.9z"/><path d="M12 2.4v1.8M21.6 12h-1.8"/>',
+  shield:
+    '<path d="M12 2.8l7.4 3v5.9c0 4.6-3.1 7.7-7.4 9.1-4.3-1.4-7.4-4.5-7.4-9.1V5.8z"/><path d="M9 11.9l2.1 2.2 3.8-4.3"/>',
+  key:
+    '<circle cx="8" cy="15.4" r="4"/><path d="M10.7 12.4L20.4 2.7"/><path d="M16.4 6.7l2.9 2.9M18.9 4.2l2.5 2.5"/>',
+  globe:
+    '<circle cx="12" cy="12" r="9"/><path d="M3.2 12h17.6M12 3c2.8 2.6 4.1 5.7 4.1 9s-1.3 6.4-4.1 9c-2.8-2.6-4.1-5.7-4.1-9S9.2 5.6 12 3z"/>',
+  zap: '<path d="M13.4 2.4L4.6 14.2h5.6l-1 7.4 9-12h-5.6z"/>',
+  brain:
+    '<path d="M9.4 4.2a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 3 5 3 3 0 0 0 4.6 1.6 3 3 0 0 0 4.6-1.6 3 3 0 0 0 3-5 3 3 0 0 0-2-5 3 3 0 0 0-3-3 2.6 2.6 0 0 0-2.6 1.4 2.6 2.6 0 0 0-2.6-1.4z"/><path d="M12 5.6v13.2"/><path d="M9 9.4h1.6M13.4 13h1.6"/>',
+  doc:
+    '<path d="M14.2 3H7.4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9.2a2 2 0 0 0 2-2V7.8z"/><path d="M14.2 3v4.8H19M9 13h6M9 17h4"/>',
+  link:
+    '<path d="M10.2 13.8a4.6 4.6 0 0 0 6.6 0l2.6-2.6a4.6 4.6 0 1 0-6.5-6.5l-1.3 1.3"/><path d="M13.8 10.2a4.6 4.6 0 0 0-6.6 0l-2.6 2.6a4.6 4.6 0 1 0 6.5 6.5l1.3-1.3"/>',
+  spark:
+    '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.4 15.4l.8 2.3 2.3.8-2.3.8-.8 2.3-.8-2.3-2.3-.8 2.3-.8z"/>',
+  eye: '<path d="M2.4 12s3.6-6.8 9.6-6.8 9.6 6.8 9.6 6.8-3.6 6.8-9.6 6.8S2.4 12 2.4 12z"/><circle cx="12" cy="12" r="2.9"/>',
+  lock: '<rect x="4.8" y="10.6" width="14.4" height="9.6" rx="2.6"/><path d="M8.2 10.6V7.8a3.8 3.8 0 0 1 7.6 0v2.8"/><path d="M12 14.4v2.4"/>',
+  radar:
+    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.2"/><path d="M12 12l6.6-6.6"/>',
+  go: '<path d="M7.4 16.6L16.6 7.4"/><path d="M9.2 7.4h7.4v7.4"/>',
+  close: '<path d="M6.4 6.4l11.2 11.2M17.6 6.4L6.4 17.6"/>',
+  flowArrow: '<path d="M4.6 12h14"/><path d="M13 6.4l5.6 5.6-5.6 5.6"/>',
+  chevron: '<path d="M9.4 5.6l6.4 6.4-6.4 6.4"/>',
+  play: '<path d="M8 5.4l10.4 6.6L8 18.6z"/>',
+  pause: '<path d="M9 5.6v12.8M15 5.6v12.8"/>',
+  grid: '<rect x="3.6" y="3.6" width="7" height="7" rx="2"/><rect x="13.4" y="3.6" width="7" height="7" rx="2"/><rect x="3.6" y="13.4" width="7" height="7" rx="2"/><rect x="13.4" y="13.4" width="7" height="7" rx="2"/>',
+  bolt: '<path d="M13.2 2.6L5.4 13.4h4.9l-1.2 8 8.4-11.4h-5z"/>'
 };
 
-const icon = (name) => `<span class="card-icon">${ICONS[name] || ICONS.spark}</span>`;
+const iconSprite = () =>
+  `<svg class="ic-defs" aria-hidden="true" focusable="false" width="0" height="0"><defs><linearGradient id="fbt-ink" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b79cff"/><stop offset="0.55" stop-color="#4eeaff"/><stop offset="1" stop-color="#63f5bb"/></linearGradient></defs>${Object.keys(SYMBOLS)
+    .map((k) => sym(k, SYMBOLS[k]))
+    .join('')}</svg>`;
+
+const ICONS = {
+  flowArrow:
+    '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="arr"><path d="M4.6 12h14"/><path d="M13 6.4l5.6 5.6-5.6 5.6"/></svg>'
+};
+
+/**
+ * The public icon call: `<svg class="ic"><use href="#ic-name"/></svg>`.
+ * `aria-hidden` because every one of these sits next to its own text label.
+ */
+const ic = (name, cls) => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-${SYMBOLS[name] ? name : 'spark'}"></use></svg>`;
+const icon = (name, cls) => `<span class="card-icon ${cls || ''}">${ic(name)}</span>`;
 
 /* ------------------------------------------------------------------ */
 /* Section builders                                                     */
@@ -142,30 +229,144 @@ function secHead({ kicker, h2, lede, center }) {
 }
 
 /* 1 ── Navigation ------------------------------------------------------ */
+/**
+ * The header holds the logo and the language switch. Nothing else that used to
+ * sit here stayed:
+ *
+ *   • The wordmark is gone — «Fbt swap را در هیدر حذف کن و فقط لوگو بماند».
+ *     A landing page is not a business card; the brand appears in the tab
+ *     title, the JSON-LD, the footer and the logo's own aria-label, and the
+ *     repeated 17px text next to the mark was competing with the CTA for the
+ *     same 32 pixels of attention.
+ *   • The burger is gone, replaced by the circle at the bottom of the viewport
+ *     (see `dock`) — the same request in its second half: a menu that opens on
+ *     tap, lists the pages, and is there whether you are at the top or the
+ *     bottom of the document.
+ *   • The Launch-App button grew up. It used to be 13.5px with 10px padding
+ *     and `display:none` below 900px, i.e. the single most important action on
+ *     the page was the smallest thing on it and invisible on the device most
+ *     of our visitors use.
+ */
 function nav(site) {
   const links = COPY.nav.links
-    .map((l) => `<a href="${l.href}">${T({ en: l.en, fa: l.fa })}</a>`)
+    .map((l) => `<a href="${l.href}" data-section-link="${l.href.slice(1)}">${ic(sectionIcon(l.href))}<span>${T({ en: l.en, fa: l.fa })}</span></a>`)
     .join('');
   return `<header id="site-nav" class="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="${site}/" aria-label="FBT Swap">
-        <span class="brand-mark"><img src="/icon-192.png" alt="" width="24" height="24"></span>
-        <span>FBT Swap</span>
+      <a class="brand" href="${site}/" aria-label="${esc(COPY.nav.brandLabel.en)}" title="${esc(COPY.meta.en.title)}">
+        <span class="brand-mark"><img src="/icon-192.png" alt="" width="26" height="26"><span class="brand-ring"></span></span>
       </a>
       <nav class="nav-links" aria-label="Sections">${links}</nav>
       <span class="nav-spacer"></span>
-      <div class="lang-switch" role="group" aria-label="Language">
+      <div class="lang-switch" role="group" aria-label="${esc(COPY.nav.langLabel.en)}" data-lang-group>
         <button class="lang-btn" type="button" data-setlang="en" aria-pressed="true">EN</button>
         <button class="lang-btn" type="button" data-setlang="fa" aria-pressed="false">فارسی</button>
       </div>
-      <a class="btn btn-primary nav-cta" href="${site}/#/intent" style="padding:10px 16px;font-size:13.5px">${T(COPY.nav.cta)}</a>
-      <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu" aria-label="Menu">${ICONS.burger}</button>
+      <a class="btn btn-primary nav-cta" href="${site}/#/intent">${ic('zap', 'ic-in-btn')}<span>${T(COPY.nav.cta)}</span>${ICONS.flowArrow}</a>
     </div>
-    <nav id="mobile-menu" class="mobile-menu" aria-label="Mobile">
-      <div class="wrap">${links}</div>
-    </nav>
   </header>`;
 }
+
+const sectionIcon = (href) =>
+  ({
+    '#showcase': 'explore',
+    '#intent-os': 'intent',
+    '#tokens': 'tokens',
+    '#signals': 'signals',
+    '#networks': 'network',
+    '#ecosystem': 'grid',
+    '#faq': 'doc'
+  }[href] || 'spark');
+
+/* 1b ── The bottom dock: the page menu inside a circle ----------------- */
+/**
+ * The circle at the bottom of the screen.
+ *
+ * It is a checkbox plus a label, so opening the menu needs no JavaScript at
+ * all — the script only adds the closing behaviours and the scroll-progress
+ * ring. Every tile is a real link (app routes get an ↗ mark, page anchors do
+ * not), so with the runtime blocked the menu is still the menu.
+ */
+function dock(site) {
+  const tiles = gateSpeculation(COPY.dock.pages)
+    .map(
+      (p, i) => `<a class="dock-tile" href="${p.href.startsWith('/#') ? site + p.href : p.href}"${p.href.startsWith('#') ? ` data-section-link="${p.href.slice(1)}"` : ''} style="--i:${i}">
+        ${ic(p.icon)}<span>${T({ en: p.en, fa: p.fa })}</span>${p.app ? '<i class="dock-out" aria-hidden="true">↗</i>' : ''}
+      </a>`
+    )
+    .join('');
+  return `<div class="dock" id="page-dock">
+    <input class="dock-state" type="checkbox" id="dock-state" aria-describedby="dock-hint">
+    <div class="dock-scrim" data-dock-scrim></div>
+    <nav class="dock-menu" id="dock-menu" aria-label="${esc(COPY.dock.label.en)}">
+      <div class="dock-head">
+        <span class="dock-title">${ic('grid')}<b>${T(COPY.dock.heading)}</b></span>
+        <span class="dock-prog"><i data-dock-bar></i></span>
+      </div>
+      <p class="dock-hint" id="dock-hint">${T(COPY.dock.hint)}</p>
+      <div class="dock-grid">${tiles}</div>
+      <div class="dock-foot">
+        <div class="lang-switch" role="group" aria-label="${esc(COPY.nav.langLabel.en)}" data-lang-group>
+          <button class="lang-btn" type="button" data-setlang="en" aria-pressed="true">EN</button>
+          <button class="lang-btn" type="button" data-setlang="fa" aria-pressed="false">فارسی</button>
+        </div>
+        <a class="btn btn-primary dock-launch" href="${site}/#/intent">${ic('zap', 'ic-in-btn')}<span>${T(COPY.nav.cta)}</span>${ICONS.flowArrow}</a>
+      </div>
+    </nav>
+    <label class="dock-orb" id="dock-orb" for="dock-state" role="button" tabindex="0" aria-controls="dock-menu" aria-expanded="false" aria-label="${esc(COPY.dock.open.en)}">
+      <svg class="dock-ring" viewBox="0 0 44 44" aria-hidden="true">
+        <circle class="dock-ring-track" cx="22" cy="22" r="20"></circle>
+        <circle class="dock-ring-fill" id="dock-ring-fill" cx="22" cy="22" r="20" pathLength="100"></circle>
+      </svg>
+      <span class="dock-orb-face">
+        <span class="dock-ic-open">${ic('grid')}</span>
+        <span class="dock-ic-close">${ic('close')}</span>
+      </span>
+      <span class="dock-orb-glow" aria-hidden="true"></span>
+    </label>
+  </div>`;
+}
+
+/* 1c ── The animated line backdrop ------------------------------------- */
+/**
+ * Background of animated lines, as asked for («پس‌زمینه از خطوط انیمیشنی
+ * استفاده کند»). Four things, deliberately cheap:
+ *
+ *   • one inline SVG of six long curves whose stroke-dashoffset travels, so
+ *     the lines read as flowing rather than as a static wireframe;
+ *   • a drifting grid, already in .ambient-grid;
+ *   • two soft orbs;
+ *   • a single "beam" that scans down the viewport once per slow cycle.
+ *
+ * No canvas, no filter, no per-frame JavaScript: transform/dashoffset on
+ * ~10 elements is compositor work, and the whole layer is display:none under
+ * prefers-reduced-motion.
+ */
+function ambient() {
+  const rows = [
+    { y: 60, amp: 34, dur: 26, delay: 0, color: 'rgba(139,92,246,0.55)', w: 1.2 },
+    { y: 150, amp: 22, dur: 34, delay: -6, color: 'rgba(78,234,255,0.45)', w: 1 },
+    { y: 240, amp: 40, dur: 30, delay: -12, color: 'rgba(99,245,187,0.32)', w: 1.1 },
+    { y: 330, amp: 26, dur: 38, delay: -3, color: 'rgba(255,104,202,0.3)', w: 1 },
+    { y: 420, amp: 46, dur: 44, delay: -18, color: 'rgba(139,92,246,0.35)', w: 1.3 },
+    { y: 510, amp: 30, dur: 28, delay: -9, color: 'rgba(78,234,255,0.26)', w: 1 }
+  ];
+  const paths = rows
+    .map((r) => {
+      const d = `M-40 ${r.y}C 180 ${r.y - r.amp}, 380 ${r.y + r.amp}, 580 ${r.y}S 980 ${r.y - r.amp}, 1180 ${r.y}S 1580 ${r.y + r.amp}, 1780 ${r.y}`;
+      return `<path d="${d}" style="animation-duration:${r.dur}s;animation-delay:${r.delay}s" stroke="${r.color}" stroke-width="${r.w}"></path>`;
+    })
+    .join('');
+  return `<div class="ambient" aria-hidden="true">
+    <span class="ambient-grid"></span>
+    <svg id="bg-lines" class="bg-lines" viewBox="0 0 1440 560" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
+    <span class="beam"></span>
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+    <span class="orb orb-c"></span>
+  </div>`;
+}
+
 
 /* 2 ── Hero ------------------------------------------------------------- */
 function hero(site) {
@@ -175,8 +376,17 @@ function hero(site) {
   const flowMini = intentSteps
     .map((s, i) => `<span>${T({ en: s, fa: intentStepsFa[i] })}</span>`)
     .join('');
+  /*
+   * A coin row inside the hero mockup. The price and the direction marker are
+   * separate grid tracks now, and the name is the track that is allowed to
+   * truncate: the old flex row with `margin-inline-start:auto` on the price is
+   * exactly what was pushing content out of the card at 360px.
+   *
+   * The direction is an ARROW, not «+2.31%» — the request was explicit, and an
+   * arrow is 18px instead of 46, which is what the card did not have.
+   */
   const marketRow = (sym, name, id) =>
-    `<div class="mrow"><span class="t">${sym}</span><span>${name}</span><span class="num" id="${id}-p" style="margin-inline-start:auto">—</span><span class="chg flat" id="${id}-c">—</span></div>`;
+    `<div class="mrow mrow-coin"><span class="t">${sym}</span><span class="nm">${name}</span><span class="num" id="${id}-p">—</span><span class="chg-arrow flat" id="${id}-c" aria-hidden="true">▬</span></div>`;
   const smRows = COPY.hero.dash.smartMoneyRows.map((r) => `<div class="mrow"><span class="t">◈</span><span>${T(r)}</span></div>`).join('');
   const sig = COPY.signals.tiers
     .map((t) => `<span class="sig-pill sig-${t.key}">${T({ en: t.en, fa: t.fa })}</span>`)
@@ -195,12 +405,12 @@ function hero(site) {
           <p class="hero-sub reveal" style="--d:120ms">${T(COPY.hero.sub)}</p>
           <div class="hero-actions reveal" style="--d:180ms">
             <a class="btn btn-primary" href="${site}/#/swap"><span>${T(COPY.hero.ctaPrimary)}</span>${ICONS.flowArrow}</a>
-            <a class="btn btn-ghost" href="#ecosystem"><span>${T(COPY.hero.ctaSecondary)}</span></a>
+            <a class="btn btn-ghost" href="#ecosystem"><span>${T(COPY.hero.ctaSecondary)}</span>${ic('chevron', 'ic-flip')}</a>
           </div>
           <ul class="hero-chips reveal" style="--d:240ms">${chips}</ul>
         </div>
 
-        <div class="dash reveal" style="--d:200ms" aria-hidden="true">
+        <div class="dash reveal-zoom reveal" style="--d:200ms" data-parallax="9" aria-hidden="true">
           <div class="dash-top">
             <span class="traffic"><i></i><i></i><i></i></span>
             <span class="dash-title">${esc(COPY.hero.dash.title)}</span>
@@ -218,7 +428,7 @@ function hero(site) {
             <div class="mini">
               <h4>${T(COPY.hero.dash.portfolio)}<em>BTC / USD · 7D</em></h4>
               <span class="mini-kpi" id="dp-price">—</span>
-              <span class="mini-kpi flat" id="dp-chg" style="font-size:11px">—</span>
+              <span class="chg-arrow flat" id="dp-chg" aria-hidden="true">▬</span>
               <span id="dp-spark"></span>
             </div>
             <div class="mini">
@@ -271,28 +481,122 @@ function hero(site) {
   </section>`;
 }
 
+/* 3b ── Product tour: the bilingual slideshow --------------------------- */
+/**
+ * Five slides, one per page the owner asked to feature — swap, stocks,
+ * futures, gold and precious metals, AI — and each one is bilingual the same
+ * way everything else on this document is: both texts are in the HTML, CSS
+ * picks one. Nothing is fetched or swapped in by the runtime, so a crawler
+ * reads all ten language variants and a JS-less reader still sees every slide
+ * (`.show-slide` are stacked, and without `html[data-js]` all of them are
+ * simply visible as sections — see the `.no-js` rules in the stylesheet).
+ *
+ * Each slide carries three layers of movement: a photographic plate that
+ * breathes (Ken Burns), a Lottie animation drawn by the inline player, and a
+ * CSS entrance for the text. The live chip on a slide is one number from a
+ * feed this page already fetches; when that feed fails the chip is hidden
+ * rather than showing a placeholder.
+ */
+function showcase(site) {
+  const list = gateSpeculation(COPY.showcase.slides);
+  const slides = list
+    .map((s, i) => {
+      const bullets = s.bullets.map((b) => `<li>${ic('spark', 'ic-bullet')}<span>${T(b)}</span></li>`).join('');
+      const total = list.length;
+      const live = `<span class="slide-live" data-live-kind="${s.live.kind}"${s.live.id ? ` data-live-id="${s.live.id}"` : ''}><span class="live-dot"></span><span class="lg lg-en">${esc(s.live.label.en)}</span><span class="lg lg-fa" lang="fa" dir="rtl">${esc(s.live.label.fa)}</span></span>`;
+      return `<article class="show-slide ${i === 0 ? 'is-on' : ''}" id="slide-${s.key}" data-slide="${s.key}" data-accent="${s.accent}" role="group" aria-roledescription="slide" aria-label="${i + 1} / ${total}">
+        <div class="slide-plate" data-parallax="6">
+          <img class="slide-art" src="${s.art}" alt="" width="1280" height="720" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">
+          <span class="slide-veil"></span>
+          <span class="slide-lines" aria-hidden="true"></span>
+        </div>
+        <div class="slide-body">
+          <p class="slide-tag">${ic(s.icon, 'ic-inline')}<span>${T(s.tag)}</span></p>
+          <h3>${T(s.t)}</h3>
+          <p class="slide-d">${T(s.d)}</p>
+          <ul class="slide-bullets">${bullets}</ul>
+          <div class="slide-actions">
+            <a class="btn btn-primary" href="${site}${s.route}"><span>${T(s.cta)}</span>${ICONS.flowArrow}</a>
+            ${live}
+          </div>
+        </div>
+        <div class="slide-lottie">${lottieSlot(s.key)}</div>
+        <span class="slide-index" aria-hidden="true">${String(i + 1).padStart(2, '0')}<i>/</i>${String(total).padStart(2, '0')}</span>
+      </article>`;
+    })
+    .join('');
+
+  const dots = list
+    .map(
+      (s, i) =>
+        `<button class="show-dot" type="button" role="tab" data-dot="${i}" aria-selected="${i === 0}" aria-controls="slide-${s.key}" aria-label="${i + 1}: ${esc(s.t.en)}"><span>${ic(s.icon)}</span></button>`
+    )
+    .join('');
+
+  return `<section id="showcase" class="showcase">
+    <div class="wrap">
+      ${secHead({ kicker: `${T(COPY.showcase.kicker)} <span class="tag tag-info">${T({ en: `${list.length} slides`, fa: toFaDigits(String(list.length)) + ' اسلاید' })}</span>`, h2: COPY.showcase.h2, lede: COPY.showcase.lede })}
+      <div class="show panel" id="show" data-accent="${COPY.showcase.slides[0].accent}" aria-roledescription="carousel" aria-label="${esc(COPY.showcase.h2.en)}">
+        <div class="show-stage" id="show-stage">
+          ${slides}
+          <noscript><style>.show-slide{position:relative;opacity:1;transform:none;pointer-events:auto;visibility:visible}</style></noscript>
+        </div>
+        <button class="show-nav is-prev" type="button" data-show-prev aria-label="${esc(COPY.showcase.prev.en)}">${ic('chevron', 'ic-flip')}</button>
+        <button class="show-nav is-next" type="button" data-show-next aria-label="${esc(COPY.showcase.next.en)}">${ic('chevron')}</button>
+        <div class="show-foot">
+          <div class="show-dots" role="tablist" aria-label="${esc(COPY.showcase.h2.en)}">${dots}</div>
+          <button class="show-play" type="button" data-show-play aria-pressed="true" title="Auto / manual"><span class="show-play-ic" aria-hidden="true"></span><span>${T(COPY.showcase.autoplay)}</span></button>
+        </div>
+        <div class="show-progress" aria-hidden="true"><i id="show-bar"></i></div>
+      </div>
+    </div>
+  </section>`;
+}
+
 /* 4 ── AI Intent OS ----------------------------------------------------- */
 function intentOS(site) {
   const steps = COPY.intentOS.steps
     .map(
       (s, i) =>
-        `<li style="--i:${i}" class="${i === 6 ? 'approve' : ''}"><b>${T(s)}</b></li>`
+        `<li style="--i:${i}" class="flow-step${i === 6 ? ' approve' : ''}"><b>${T(s)}</b>${i === 6 ? '<i class="flow-tick" aria-hidden="true">✓</i>' : ''}</li>`
     )
     .join('');
   const says = COPY.intentOS.personalize.chips
     .map(
-      (c) => `<div class="say-card">
+      (c, i) => `<div class="say-card reveal" style="--d:${i * 70}ms">
           <div class="s1">${T(c.say)}</div>
           <div class="s2">${T(c.act)}</div>
         </div>`
     )
     .join('');
+  /*
+   * The token tape. This is the block the owner was pointing at: the token
+   * list beside the AI panel had a price AND a signed percentage in a card
+   * that is roughly 150px wide, so the pair hung off the edge of the screen.
+   * Here the same facts live in a full-width strip that scrolls, each chip
+   * being logo + symbol + price + an arrow.
+   */
+  const tape = `<div class="ai-tape" id="ai-tape">
+      <div class="ai-tape-head">
+        <span class="ai-tape-label">${lottieSlot('tape', 'lottie-inline')}<b>${T(COPY.intentOS.tapeTitle)}</b></span>
+        <span class="spacer"></span>
+        <span class="ai-tape-note"><span class="live-dot"></span><span data-updated>${T(COPY.hero.pulse.updated)}</span></span>
+      </div>
+      <div class="ai-tape-view">
+        <div class="ai-tape-track" id="ai-tape-track">
+          ${Array.from({ length: 7 })
+            .map(() => `<span class="tape-item is-skel"><span class="skel skel-dot"></span><span class="skel skel-line" style="width:44px"></span></span>`)
+            .join('')}
+        </div>
+      </div>
+    </div>`;
   return `<section id="intent-os">
     <div class="wrap">
       ${secHead({ kicker: `${esc(COPY.intentOS.kicker)} <span class="tag tag-live">${T({ en: 'Core', fa: 'هسته' })}</span>`, h2: COPY.intentOS.h2, lede: COPY.intentOS.lede })}
       <div class="grid grid-2" style="align-items:start">
         <div class="reveal">
           <blockquote class="intent-quote">
+            ${lottieSlot('ai', 'lottie-quote')}
             <span class="q-label">${T(COPY.intentOS.exampleLabel)}</span>
             ${T(COPY.intentOS.example)}
           </blockquote>
@@ -306,8 +610,10 @@ function intentOS(site) {
             <a class="btn btn-primary" href="${site}/#/intent"><span>${T(COPY.intentOS.cta)}</span>${ICONS.flowArrow}</a>
           </div>
         </div>
-        <ol class="flow reveal flow-host" aria-label="${esc(COPY.intentOS.kicker)}">${steps}</ol>
+        <span class="flow-meter" aria-hidden="true"><i></i></span>
+        <ol class="flow reveal-r reveal flow-host" aria-label="${esc(COPY.intentOS.kicker)}">${steps}</ol>
       </div>
+      ${tape}
     </div>
   </section>`;
 }
@@ -448,9 +754,16 @@ function signals(site) {
       ${secHead({ kicker: T(COPY.signals.kicker), h2: `🧠 ${T(COPY.signals.h2)}`, lede: COPY.signals.lede })}
       <div class="grid grid-3" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${tiers}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-block-start:18px" class="reveal">${fields}</div>
-      <div class="note-inline reveal" style="margin-block-start:14px">
-        <span class="risk-mark" style="border-color:rgba(99,245,187,.4);color:var(--lime)">≡</span>
-        <span>${T(COPY.signals.honesty)}</span>
+      <div class="sig-split">
+        <figure class="art-panel reveal-zoom" data-parallax="6">
+          <img class="slide-art" src="/landing/art-signals.jpg" alt="" width="1000" height="750" loading="lazy" decoding="async">
+          <figcaption>${T(COPY.signals.artNote)}</figcaption>
+          <span class="art-sheen" aria-hidden="true"></span>
+        </figure>
+        <div class="note-inline reveal" style="margin-block-start:0">
+          <span class="risk-mark" style="border-color:rgba(99,245,187,.4);color:var(--lime)">≡</span>
+          <span>${T(COPY.signals.honesty)}</span>
+        </div>
       </div>
       <div class="hero-actions reveal" style="margin-block-start:18px">
         <a class="btn btn-primary" href="${site}/#/signals"><span>${T(COPY.signals.cta)}</span>${ICONS.flowArrow}</a>
@@ -526,7 +839,14 @@ function networks() {
   return `<section id="networks">
     <div class="wrap">
       ${secHead({ kicker: T(COPY.networks.kicker), h2: COPY.networks.h2, lede: COPY.networks.lede })}
-      <div class="net-grid">${cards}</div>
+      <div class="net-wrap">
+        <div class="net-grid">${cards}</div>
+        <figure class="art-panel reveal-l reveal" data-parallax="7">
+          <img src="/landing/art-networks.jpg" alt="" width="900" height="675" loading="lazy" decoding="async">
+          <figcaption>${T({ en: 'One interface, ten settlement networks — the chain is a detail, not a decision you have to make first.', fa: 'یک رابط، ده شبکهٔ تسویه — شبکه یک جزئیات است، نه تصمیمی که اول باید بگیری.' })}</figcaption>
+          <span class="art-sheen" aria-hidden="true"></span>
+        </figure>
+      </div>
     </div>
   </section>`;
 }
@@ -564,12 +884,21 @@ function intentTrading() {
 
 /* 14 ── Product ecosystem ------------------------------------------------ */
 function ecosystem(site) {
+  /*
+   * The icon grid, rebuilt around the request «آیکون‌ها بهتر بشه». Each tile
+   * now has: its own accent hue (so ten tiles do not read as one grey block),
+   * a badge with a lit edge that reacts to the cursor, the glyph drawing
+   * itself once when the tile scrolls in, and the arrow waiting in the corner
+   * instead of appearing only on hover — on a touch screen there is no hover,
+   * so a hover-only affordance is an affordance nobody sees.
+   */
   const cards = COPY.ecosystem.cards
     .map(
-      (c) => `<a class="card reveal" href="${site}${c.route}">
-        <span class="go">${ICONS.go}</span>
+      (c, i) => `<a class="card reveal eco-card acc-${c.icon}" href="${site}${c.route}" style="--d:${(i % 4) * 60}ms">
+        <span class="go">${ic('go')}</span>
         <h3>${icon(c.icon)}${T(c.t)}</h3>
         <p>${T(c.d)}</p>
+        <span class="card-sheen" aria-hidden="true"></span>
       </a>`
     )
     .join('');
@@ -597,6 +926,11 @@ function nonCustodial(feeStr) {
     <div class="wrap">
       ${secHead({ kicker: T(COPY.nonCustodial.kicker), h2: COPY.nonCustodial.h2 })}
       <div class="grid grid-3" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${cards}</div>
+      <figure class="art-panel art-wide reveal-l reveal" data-parallax="5">
+        <img src="/landing/art-custody.jpg" alt="" width="900" height="675" loading="lazy" decoding="async">
+        <figcaption>${T(COPY.nonCustodial.artNote)}</figcaption>
+        <span class="art-sheen" aria-hidden="true"></span>
+      </figure>
       <div class="fee-panel panel reveal">
         <div class="fee-figure">
           <span class="lg lg-en">${esc(feeStr)}%</span>
@@ -728,6 +1062,7 @@ function finalCta(site) {
   return `<section id="cta">
     <div class="wrap">
       <div class="cta-band reveal">
+        <img class="cta-art" src="/landing/art-horizon.jpg" alt="" width="1600" height="680" loading="lazy" decoding="async">
         <h2>${T(COPY.finalCta.h2)}</h2>
         <p>${T(COPY.finalCta.sub)}</p>
         <div class="hero-actions">
@@ -910,6 +1245,10 @@ export function renderLandingV2({ site }) {
       en: { lst: 'Liquid staking' },
       fa: { lst: 'استیکینگ مایع' }
     },
+    dock: {
+      en: { open: COPY.dock.open.en, close: COPY.dock.close.en, label: COPY.dock.label.en },
+      fa: { open: COPY.dock.open.fa, close: COPY.dock.close.fa, label: COPY.dock.label.fa }
+    },
     intents: {
       en: COPY.hero.dash.sampleIntents.map((i) => i.en),
       fa: COPY.hero.dash.sampleIntents.map((i) => i.fa)
@@ -918,6 +1257,7 @@ export function renderLandingV2({ site }) {
 
   const sections = [
     hero(SITE),
+    showcase(SITE),
     intentOS(SITE),
     brain(),
     tokens(SITE),
@@ -1037,11 +1377,14 @@ ${CSS}
 </head>
 <body>
 <a class="skip-link" href="#main">${T({ en: 'Skip to content', fa: 'پرش به محتوا' })}</a>
-<div class="ambient" aria-hidden="true"><span class="ambient-grid"></span><span class="orb orb-a"></span><span class="orb orb-b"></span></div>
+${ambient()}
+${iconSprite()}
 ${nav(SITE)}
 <main id="main" tabindex="-1">
   ${sections}
 </main>
+${dock(SITE)}
+${lottieScript()}
 <script>window.__FBT_L10N__ = ${jsonForScript(L10N)};</script>
 <script>${RUNTIME}</script>
 </body>

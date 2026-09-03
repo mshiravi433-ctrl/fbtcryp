@@ -61,6 +61,7 @@ export const COPY = {
   /* ------------------------------------------------------------------ */
   nav: {
     links: [
+      { href: '#showcase', en: 'Product tour', fa: 'گشت محصول' },
       { href: '#intent-os', en: 'Intent OS', fa: 'اینتنت OS' },
       { href: '#tokens', en: 'Markets', fa: 'بازارها' },
       { href: '#signals', en: 'Intelligence', fa: 'هوش مالی' },
@@ -71,7 +72,186 @@ export const COPY = {
     cta: { en: 'Launch App', fa: 'باز کردن برنامه' },
     langLabel: { en: 'Language', fa: 'زبان' },
     menuOpen: { en: 'Open menu', fa: 'باز کردن منو' },
-    menuClose: { en: 'Close menu', fa: 'بستن منو' }
+    menuClose: { en: 'Close menu', fa: 'بستن منو' },
+    /* The wordmark next to the logo is gone by request — «فقط لوگو بماند».
+       The label survives where it matters: aria-labels, the JSON-LD name and
+       the footer, so neither a screen reader nor a crawler loses the brand. */
+    brandLabel: { en: 'FBT Swap — home', fa: 'اف‌بی‌تی سواپ — خانه' }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Product tour — the bilingual slideshow                              */
+  /* ------------------------------------------------------------------ */
+  /* One slide per page of the app the owner asked to feature: swap, stocks,
+     futures, gold and precious metals, AI. Every `route` below is a route that
+     exists in src/App.jsx, and every bullet is a behaviour that screen
+     actually has — the same rule as the rest of this file. */
+  showcase: {
+    kicker: { en: 'PRODUCT TOUR', fa: 'گشت محصول' },
+    h2: { en: 'Five pages. One financial OS.', fa: 'پنج صفحه. یک سیستم‌عامل مالی.' },
+    lede: {
+      en: 'Swipe through what you can actually do today. Each slide opens straight into that page of the app — nothing here is a mockup.',
+      fa: 'با انگشت بکش و ببین امروز واقعاً چه کاری می‌توانی بکنی. هر اسلاید مستقیم همان صفحهٔ برنامه را باز می‌کند؛ هیچ‌چیز اینجا ماکاپ نیست.'
+    },
+    prev: { en: 'Previous slide', fa: 'اسلاید قبلی' },
+    next: { en: 'Next slide', fa: 'اسلاید بعدی' },
+    play: { en: 'Pause slideshow', fa: 'توقف نمایش خودکار' },
+    pause: { en: 'Play slideshow', fa: 'پخش خودکار' },
+    autoplay: { en: 'Auto', fa: 'خودکار' },
+    liveChip: { en: 'Live', fa: 'زنده' },
+    slides: [
+      {
+        key: 'swap',
+        icon: 'swap',
+        art: '/landing/slide-swap.jpg',
+        route: '/#/swap',
+        accent: 'violet',
+        tag: { en: 'Page 01 · Swap', fa: 'صفحهٔ ۰۱ · سواپ' },
+        t: {
+          en: 'Swap on ten networks, quote before you sign',
+          fa: 'سواپ روی ده شبکه؛ اول قیمت، بعد امضا'
+        },
+        d: {
+          en: 'You say what you want. FBT asks the public aggregators for the best route across the decentralised exchanges on that network, shows the quote, the price impact and the fee, then hands the transaction to your wallet. Nobody else signs for you.',
+          fa: 'تو می‌گویی چه می‌خواهی. اف‌بی‌تی بهترین مسیر را بین صرافی‌های غیرمتمرکز همان شبکه از تجمیع‌کننده‌های عمومی می‌گیرد، قیمت، تأثیر بر قیمت و کارمزد را نشان می‌دهد، بعد تراکنش را به کیف پول تو می‌دهد. امضا فقط با توست.'
+        },
+        bullets: [
+          { en: 'Best route across DEXs', fa: 'بهترین مسیر بین صرافی‌های غیرمتمرکز' },
+          { en: 'Price impact and fee shown first', fa: 'نمایش تأثیر قیمت و کارمزد از ابتدا' },
+          { en: 'Non-custodial — you hold the keys', fa: 'غیرامانی؛ کلیدها دست توئه' }
+        ],
+        cta: { en: 'Open Swap', fa: 'باز کردن سواپ' },
+        live: { kind: 'price', id: 'bitcoin', label: { en: 'BTC price', fa: 'قیمت بیت‌کوین' } }
+      },
+      {
+        key: 'stocks',
+        icon: 'stocks',
+        art: '/landing/slide-stocks.jpg',
+        route: '/#/stocks',
+        accent: 'cyan',
+        tag: { en: 'Page 02 · Stocks', fa: 'صفحهٔ ۰۲ · سهام' },
+        t: {
+          en: 'US stocks as tokens, with the fakes filtered out',
+          fa: 'سهام آمریکا به‌شکل توکن، با حذف جعلی‌ها'
+        },
+        d: {
+          en: 'Apple, Tesla and Nvidia exposure trades as verified Backed xStocks on Solana. Every mint is checked against the issuer key on each fetch, so a clone with a copied logo never reaches the list, and a pool thinner than the liquidity floor is not listed at all.',
+          fa: 'دسترسی به اپل، تسلا و انویدیا به‌شکل xStockهای تأیید‌شدهٔ Backed روی سولانا معامله می‌شود. هر mint در هر بار دریافت با کلید صادرکننده بررسی می‌شود، پس یک توکن جعلی با لوگوی کپی‌شده هرگز به لیست نمی‌رسد؛ استخر کم‌عمق هم اصلاً لیست نمی‌شود.'
+        },
+        bullets: [
+          { en: 'Issuer verification on every fetch', fa: 'اعتبارسنجی صادرکننده در هر دریافت' },
+          { en: 'Liquidity floor: thin markets never list', fa: 'کف نقدینگی: بازار کم‌عمق لیست نمی‌شود' },
+          { en: 'Live price with a 90-day history', fa: 'قیمت زنده با تاریخچهٔ ۹۰ روزه' }
+        ],
+        cta: { en: 'Open Stocks', fa: 'باز کردن سهام' },
+        live: { kind: 'equity', label: { en: 'Top equity', fa: 'برترین سهام' } }
+      },
+      {
+        key: 'futures',
+        icon: 'futures',
+        /* Margin vocabulary — «اهرم», «liquidation», the word Futures itself.
+           The store build drops this slide whole; see gateSpeculation. */
+        speculative: true,
+        art: '/landing/slide-futures.jpg',
+        route: '/#/perp',
+        accent: 'pink',
+        tag: { en: 'Page 03 · Futures', fa: 'صفحهٔ ۰۳ · فیوچرز' },
+        t: {
+          en: 'Futures: leverage, funding and liquidation on one screen',
+          fa: 'فیوچرز: اهرم، فاندینگ و لیکوئیدیشن در یک صفحه'
+        },
+        d: {
+          en: 'The on-chain tab lists live markets with funding, open interest and candles, and the confirmation sheet shows the backend breakdown — not a local estimate. Your wallet signs the calldata. This is leverage: it can liquidate the whole position, and FBT is not the counterparty.',
+          fa: 'تب آن‌چین بازارهای زنده را با فاندینگ، اوپن‌اینترست و کندل‌ها نشان می‌دهد، و برگهٔ تأیید شکسته‌ای که بک‌اند می‌دهد را می‌نویسد — نه یک محاسبهٔ محلی. تراکنش را کیف پول خودت امضا می‌کند. این اهرم است: می‌تواند کل موقعیت را لیکوئید کند، و اف‌بی‌تی طرف حساب تو نیست.'
+        },
+        bullets: [
+          { en: 'Mark price, funding and OI per market', fa: 'قیمت مارک، فاندینگ و OI برای هر بازار' },
+          { en: 'Forex, metals and indices on the RWA venue', fa: 'فارکس، فلزات و شاخص‌ها روی بستر دارایی واقعی' },
+          { en: 'Server-priced risk on the confirm sheet', fa: 'ریسک با قیمت‌گذاری سرور در برگهٔ تأیید' }
+        ],
+        cta: { en: 'Open Futures', fa: 'باز کردن فیوچرز' },
+        live: { kind: 'price', id: 'solana', label: { en: 'SOL mark', fa: 'قیمت SOL' } }
+      },
+      {
+        key: 'gold',
+        icon: 'gold',
+        art: '/landing/slide-gold.jpg',
+        route: '/#/stocks',
+        accent: 'amber',
+        tag: { en: 'Page 04 · Gold & metals', fa: 'صفحهٔ ۰۴ · طلا و فلزات' },
+        t: {
+          en: 'Gold and precious metals, one ounce per token',
+          fa: 'طلا و فلزات گرانبها؛ هر توکن یک اونس'
+        },
+        d: {
+          en: 'PAXG and XAUT are tokenised claims on allocated gold: they swap like any other token, with no dealer premium and no vault rental to arrange. The warning sits above the list instead of in a footnote — the issuer can freeze an address, and that is not the same thing as a bar in a safe.',
+          fa: 'PAXG و XAUT ادعای توکنی‌شده روی طلای تخصیص‌یافته‌اند: مثل هر توکن دیگری سواپ می‌شوند، بدون حق‌الزحمهٔ dealer و بدون اجارهٔ گاوصندوق. هشدار بالای لیست ایستاده نه در پانوشت — صادرکننده می‌تواند یک آدرس را فریز کند، و این با یک شمش توی گاوصندوق فرق دارد.'
+        },
+        bullets: [
+          { en: 'One token = one troy ounce', fa: 'هر توکن = یک اونس تروا' },
+          { en: 'Issuer freeze risk stated up front', fa: 'ریسک فریز توسط صادرکننده، از ابتدا اعلام‌شده' },
+          { en: '90 days of gold price alongside', fa: '۹۰ روز قیمت طلا کنار لیست' }
+        ],
+        cta: { en: 'Open gold & metals', fa: 'باز کردن طلا و فلزات' },
+        live: { kind: 'commodity', label: { en: 'Tokenised gold', fa: 'طلای توکنی‌شده' } }
+      },
+      {
+        key: 'ai',
+        icon: 'ai',
+        art: '/landing/slide-ai.jpg',
+        route: '/#/intent',
+        accent: 'lime',
+        tag: { en: 'Page 05 · AI · Intent OS', fa: 'صفحهٔ ۰۵ · هوش مصنوعی · اینتنت OS' },
+        t: {
+          en: 'Intent OS: say it in Persian, get a plan',
+          fa: 'اینتنت OS: به فارسی بگو، برنامه بگیر'
+        },
+        d: {
+          en: 'Type what you want in Persian or English. The AI turns the sentence into a plan — market, size, route, risk flags — and stops at the approval screen. It prepares; it does not sign, and it never promises a profit.',
+          fa: 'هرچه می‌خواهی را به فارسی یا انگلیسی بنویس. هوش مصنوعی جمله را به برنامه تبدیل می‌کند — بازار، اندازه، مسیر و پرچم‌های ریسک — و سرِ صفحهٔ تأیید می‌ایستد. آماده می‌کند؛ امضا نمی‌کند، و هیچ‌وقت سود تضمین نمی‌کند.'
+        },
+        bullets: [
+          { en: 'Persian and English understood', fa: 'فارسی و انگلیسی را می‌فهمد' },
+          { en: 'Plan, risk flags, then your approval', fa: 'برنامه، پرچم ریسک، بعد تأیید تو' },
+          { en: 'No trade executes without you', fa: 'بدون تو هیچ معامله‌ای اجرا نمی‌شود' }
+        ],
+        cta: { en: 'Open Intent OS', fa: 'باز کردن اینتنت OS' },
+        live: { kind: 'trending', label: { en: 'Trending now', fa: 'ترند الان' } }
+      }
+    ]
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* The floating page dock (the circle at the bottom of the screen)      */
+  /* ------------------------------------------------------------------ */
+  /* Replaces the burger menu: requested as «منو بازشونده داخل یک دایره پایین
+     صفحه» that shows the pages and stays with the reader while scrolling. */
+  dock: {
+    label: { en: 'Pages', fa: 'صفحه‌ها' },
+    open: { en: 'Open the page menu', fa: 'باز کردن منوی صفحه‌ها' },
+    close: { en: 'Close the page menu', fa: 'بستن منوی صفحه‌ها' },
+    heading: { en: 'Every page, one tap', fa: 'همهٔ صفحه‌ها، یک لمس' },
+    hint: {
+      en: 'This circle follows you down the page. Tap it for the app pages, the sections of this page, and the language switch.',
+      fa: 'این دایره پایینِ صفحه با تو می‌آید. بزن تا صفحه‌های برنامه، بخش‌های همین صفحه و تغییر زبان را ببینی.'
+    },
+    /* App pages first (they are what the request asked for), then the
+       sections of the landing itself. `app: true` entries get the ↗ mark. */
+    pages: [
+      { icon: 'swap', href: '/#/swap', en: 'Swap', fa: 'سواپ', app: true },
+      { icon: 'intent', href: '/#/intent', en: 'Intent OS', fa: 'اینتنت OS', app: true },
+      { icon: 'stocks', href: '/#/stocks', en: 'Stocks', fa: 'سهام', app: true },
+      { icon: 'futures', href: '/#/perp', en: 'Futures', fa: 'فیوچرز', app: true, speculative: true },
+      { icon: 'gold', href: '/#/stocks', en: 'Gold & metals', fa: 'طلا و فلزات', app: true },
+      { icon: 'ai', href: '/#/signals', en: 'AI signals', fa: 'سیگنال هوش مصنوعی', app: true },
+      { icon: 'wallet', href: '/#/wallet', en: 'Wallet', fa: 'کیف پول', app: true },
+      { icon: 'farm', href: '/#/farm', en: 'Farms', fa: 'فارم‌ها', app: true },
+      { icon: 'tokens', href: '#tokens', en: 'Markets', fa: 'بازارها' },
+      { icon: 'network', href: '#networks', en: 'Networks', fa: 'شبکه‌ها' },
+      { icon: 'smartMoney', href: '#smart-money', en: 'Smart money', fa: 'پول هوشمند' },
+      { icon: 'doc', href: '#faq', en: 'FAQ', fa: 'پرسش‌ها' }
+    ],
+    scroll: { en: 'Scroll', fa: 'موقعیت اسکرول' }
   },
 
   /* ------------------------------------------------------------------ */
@@ -153,6 +333,10 @@ export const COPY = {
       { en: 'Execute', fa: 'اجرا' },
       { en: 'Monitor', fa: 'پایش مستمر' }
     ],
+    tapeTitle: {
+      en: 'What the AI is reading right now — the same feed the app prices from',
+      fa: 'همین الان هوش مصنوعی چه می‌خواند — همان فیدِ قیمت‌گذاری برنامه'
+    },
     approvalNote: {
       en: 'Nothing moves without your approval. Every strategy is prepared and explained first — you sign every transaction yourself, in your own wallet.',
       fa: 'هیچ‌چیز بدون تأیید تو جابه‌جا نمی‌شود. هر استراتژی اول آماده و توضیح داده می‌شود؛ بعد هر تراکنش را خودت، در کیف پول خودت امضا می‌کنی.'
@@ -271,7 +455,10 @@ export const COPY = {
     cols: {
       asset: { en: 'Asset', fa: 'دارایی' },
       price: { en: 'Price', fa: 'قیمت' },
-      change: { en: '24h', fa: '۲۴ ساعت' },
+      /* The cell holds an arrow, not a percentage, since the row that carried
+         both was overflowing — so the header says what the column means now.
+         The exact figure is still on the arrow's title attribute. */
+      change: { en: 'Direction · 24h', fa: 'جهت · ۲۴ ساعت' },
       volume: { en: 'Volume (24h)', fa: 'حجم (۲۴ ساعت)' },
       mcap: { en: 'Market Cap', fa: 'ارزش بازار' },
       trend: { en: 'Trend (7d)', fa: 'روند (۷ روز)' }
@@ -367,6 +554,10 @@ export const COPY = {
     honesty: {
       en: 'Signals are measurements of past data — context for research, never advice and never a promise.',
       fa: 'سیگنال‌ها اندازه‌گیری دادهٔ گذشته‌اند — زمینه برای تحقیق؛ نه توصیه و نه وعده.'
+    },
+    artNote: {
+      en: 'This is what the Signals screen looks like with live data on it — tiers, reasoning and the numbers behind each call. Nothing on that screen is written in advance.',
+      fa: 'این همان صفحهٔ سیگنال‌ها با دادهٔ زنده است — سطح‌بندی، استدلال و اعدادِ پشت هر نظر. هیچ‌چیز در آن صفحه از پیش نوشته نشده.'
     },
     cta: { en: 'View All Signals', fa: 'مشاهدهٔ همهٔ سیگنال‌ها' }
   },
@@ -517,6 +708,10 @@ export const COPY = {
       { t: { en: 'Onchain Execution', fa: 'اجرا روی زنجیره' }, d: { en: 'Swaps settle on-chain between your wallet and the protocol.', fa: 'سواپ‌ها روی زنجیره، مستقیم بین کیف پول تو و پروتکل تسویه می‌شوند.' } },
       { t: { en: 'Transparent Transactions', fa: 'تراکنش‌های شفاف' }, d: { en: 'Route, price impact and fee are shown before you sign.', fa: 'مسیر، اثر قیمتی و کارمزد، پیش از امضا نمایش داده می‌شوند.' } }
     ],
+    artNote: {
+      en: 'A key made of light, held by a hand, not by us. This is what "non-custodial" looks like from the outside: the approval screen is yours, and so is the responsibility.',
+      fa: 'کلیدی از نور، توی دست تو، نه دست ما. «غیرامانی» از بیرون همین شکلی است: صفحهٔ تأیید مال توست و مسئولیتش هم مال توست.'
+    },
     feeTitle: { en: 'One honest fee, shown before you sign', fa: 'یک کارمزد صادقانه، پیش از امضا روی صفحه' },
     feeBody: {
       en: 'Platform fee: {{fee}}% of the input amount, shown on screen before you sign, on every supported network. No account, no email, no identity check for using the swap interface.',
