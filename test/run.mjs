@@ -550,6 +550,18 @@ console.log('▸ probing the Financial OS — Goal Engine (outlook · probabilit
   if (Array.isArray(engineRows)) report('financial goal engine', engineRows);
 }
 
+console.log('▸ probing FBT Rewards — engine (idempotency · verification · levels · missions · referral · claim)…');
+{
+  const { default: rewardRows } = await import('./rewards-engine-probe.mjs');
+  if (Array.isArray(rewardRows)) report('rewards engine', rewardRows);
+}
+
+console.log('▸ probing FBT Rewards — HTTP API (/api/v1/rewards)…');
+{
+  const { default: apiRows } = await import('./rewards-api-probe.mjs');
+  if (Array.isArray(apiRows)) report('rewards API', apiRows);
+}
+
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 console.log('▸ probing the free Upstash durable-store fallback…');
 {

@@ -16,9 +16,66 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { POINT_VALUES } from '../lib/ranks';
 import { dailyRewardStatus } from '../lib/dailyRewards';
+import { reportActivity, setMissionBonusHandler } from '../lib/rewards/rewardsReporter';
 
 const START_BALANCE = 10000;
 const MAX_HISTORY = 200;
+
+/*
+ * Which local awards are REAL activity worth reporting to the rewards engine.
+ * Play-money / arcade quests are deliberately absent: fake-balance activity
+ * must never feed the reputation ledger (the engine enforces the same rule).
+ */
+const REPORTABLE = new Set([
+  'swap',
+  'shareApp',
+  'dailyCheckin',
+  'bridge',
+  'lending',
+  'borrow',
+  'repay',
+  'withdraw',
+  'goals',
+  'lab',
+  'tokenAnalysis',
+  'intentAiPlan',
+  'intentAiExecuted',
+  'quest:firstSwap',
+  'quest:connectWallet',
+  'quest:backupWallet',
+  'quest:enable2fa',
+  'quest:inviteFriend'
+]);
+
+/*
+ * Local mirror of the engine's per-action daily caps
+ * (server/rewards/config.js ACTIONS.dailyCap). Kept in ONE place here so the
+ * number shown the moment an action completes can never exceed the number the
+ * engine will verify — otherwise a farming run would make the two ledgers
+ * diverge visibly.
+ */
+export const DAILY_CAPS = {
+  swap: 50,
+  dailyCheckin: 1,
+  shareApp: 1,
+  bridge: 20,
+  lending: 10,
+  borrow: 10,
+  repay: 10,
+  withdraw: 10,
+  goals: 10,
+  lab: 10,
+  tokenAnalysis: 10,
+  intentAiPlan: 10,
+  intentAiExecuted: 10
+};
+
+/** Local calendar day, used for per-day reward keys (mirror lib/dailyRewards). */
+export function localDayString(at = Date.now()) {
+  const d = new Date(Number(at));
+  if (!Number.isFinite(d.getTime())) return null;
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /*
  * Reputation points per quest id.
@@ -38,9 +95,16 @@ const QUEST_POINTS = {
   addLiquidity: POINT_VALUES.addLiquidity,
   backupWallet: POINT_VALUES.backupWallet,
   enable2fa: POINT_VALUES.enable2fa,
-  inviteFriend: POINT_VALUES.referral,
-  firstTrade: POINT_VALUES.firstSwap,
-  firstStake: POINT_VALUES.addLiquidity
+  inviteFriend: POINT_VALUES.referral
+  /*
+   * firstTrade / firstStake are GONE from this table. They were fired by the
+   * play-money arcade (store.buy/openInvestment) and paid REAL reputation
+   * points — 300 "first swap" points for trading fake balance — while the
+   * row on the Earn screen promised "your first REAL swap". Fake-money
+   * activity feeding the reputation ledger is the exact "no fake reward"
+   * class this repo removes. The arcade still marks its quests internally;
+   * it no longer mints reputation for them.
+   */
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -100,17 +164,95 @@ export const useAppStore = create(
 
       /** Award reputation points for a named action. */
       awardPoints(action, amount, meta = {}) {
-        if (!(amount > 0)) return;
+        if (!(amount > 0)) return false;
+        /*
+         * Sharing is only rewarded once a day. The local ledger mirrors the
+         * engine's own daily cap, so a farming session of ten shares cannot
+         * make the on-screen total diverge from the verified ledger.
+         */
+        if (action === 'shareApp') {
+          const lastShare = get().pointsLog.find((l) => l.action === 'shareApp');
+          if (lastShare && Date.now() - (lastShare.at || 0) < 86400000) return false;
+        }
+        /* Mirror the engine's daily caps (see DAILY_CAPS above). */
+        const cap = DAILY_CAPS[action];
+        if (cap > 0) {
+          const today = localDayString();
+          const todayCount = get().pointsLog.filter(
+            (l) => l.action === action && localDayString(l.at) === today
+          ).length;
+          if (todayCount >= cap) return false;
+        }
+        const entry = { id: uid(), action, amount, at: Date.now(), ...meta };
         set((st) => ({
           points: st.points + amount,
-          pointsLog: [{ id: uid(), action, amount, at: Date.now(), ...meta }, ...st.pointsLog].slice(0, 100)
+          pointsLog: [entry, ...st.pointsLog].slice(0, 100)
         }));
+        if (REPORTABLE.has(action) && !String(action).startsWith('mission:')) {
+          /* Fire-and-forget: the engine dedupes and verifies. */
+          reportActivity(action, meta);
+        }
+        return true;
       },
 
       /** Award once ever — used for milestones like first swap or 2FA setup. */
-      awardPointsOnce(action, amount) {
+      awardPointsOnce(action, amount, meta = {}) {
         if (get().pointsLog.some((l) => l.action === action)) return false;
-        get().awardPoints(action, amount);
+        get().awardPoints(action, amount, meta);
+        return true;
+      },
+
+      /**
+       * Award for a product milestone with a natural reference (a goal id, a
+       * lab scenario, a coin id...). `refId` makes the award unique per
+       * reference locally AND gives the engine a deterministic event id, so
+       * re-running the same milestone can never mint points twice anywhere.
+       * Pass `perDay: true` to allow one award per reference per calendar day
+       * (used by repeated analyses of the same token on different days).
+       */
+      awardProduct(action, amount, meta = {}) {
+        const refId = meta.refId;
+        if (!refId) return get().awardPoints(action, amount, meta);
+        const day = meta.perDay ? `-${localDayString()}` : '';
+        const rk = `${action}:${String(refId).slice(0, 80)}${day}`;
+        if (get().pointsLog.some((l) => l.rk === rk)) return false;
+        const rewardId = `${action}-${String(refId).replace(/[^A-Za-z0-9._:-]/g, '_').slice(0, 48)}${day}`;
+        return get().awardPoints(action, amount, { ...meta, rk, rewardId });
+      },
+
+      /**
+       * A mission bonus the ENGINE decided (server-side rules) lands here,
+       * once per local day per mission — the local mirror of the engine's own
+       * missionsDone marker. Never re-reported (the engine already counted it).
+       */
+      creditMissionBonus(missionId, pts) {
+        const today = localDayString();
+        if (!(pts > 0) || !missionId) return false;
+        if (get().pointsLog.some((l) => l.action === `mission:${missionId}` && l.rk === `day:${today}`)) return false;
+        set((st) => ({
+          points: st.points + pts,
+          pointsLog: [{ id: uid(), action: `mission:${missionId}`, amount: pts, at: Date.now(), rk: `day:${today}` }, ...st.pointsLog].slice(0, 100)
+        }));
+        return true;
+      },
+
+      /**
+       * Converge the local ledger on the engine's authoritative total.
+       * Points only ever go UP here (a score is never silently reduced), and
+       * the rare jump (referral credit earned on another device / a mission
+       * bonus whose response was lost) is explained with one log row.
+       */
+      syncServerPoints(serverPoints) {
+        const n = Number(serverPoints);
+        const cur = get().points;
+        if (!Number.isFinite(n) || n <= cur) return false;
+        const delta = n - cur;
+        set((s) => ({
+          points: n,
+          pointsLog: delta >= 2
+            ? [{ id: uid(), action: 'sync', amount: delta, at: Date.now() }, ...s.pointsLog].slice(0, 100)
+            : s.pointsLog
+        }));
         return true;
       },
 
@@ -408,6 +550,14 @@ export const useAppStore = create(
     }
   )
 );
+
+/*
+ * The engine's mission bonuses flow back through the reporter → store. The
+ * registration lives here (the reporter never imports the store).
+ */
+setMissionBonusHandler((missionId, pts) => {
+  useAppStore.getState().creditMissionBonus(missionId, pts);
+});
 
 export const START_BALANCE_CONST = START_BALANCE;
 

@@ -38,6 +38,8 @@ import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAppStore } from '../store/useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 
 /**
  * CROSS-CHAIN BRIDGE.
@@ -530,6 +532,14 @@ export default function Bridge() {
 
       setTxHash(sent.hash);
       haptic?.('success');
+      /* A broadcast bridge move is real rewarded activity: wallet + chain +
+         txHash travel as the on-chain evidence. */
+      if (sent.hash) {
+        const rewards = useAppStore.getState();
+        rewards.awardPoints('bridge', POINT_VALUES.bridge, {
+          network: 'evm', chainId: fromChain, txHash: sent.hash
+        });
+      }
     } catch (e) {
       setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
       haptic?.('error');
@@ -590,6 +600,15 @@ export default function Bridge() {
     setChangedQuote(null);
     setTxHash(result.sourceTxHash);
     haptic?.('success');
+    /* LI.FI / cross-chain service success — real source tx, real reward. */
+    if (result.sourceTxHash) {
+      const rewards = useAppStore.getState();
+      rewards.awardPoints('bridge', POINT_VALUES.bridge, {
+        network: 'evm',
+        chainId: result.srcChainId || fromChain,
+        txHash: result.sourceTxHash
+      });
+    }
 
     if (result.transaction) {
       setTracked(result.transaction);

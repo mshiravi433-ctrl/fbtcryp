@@ -187,6 +187,7 @@ import { createCentralIntelligence } from './ci/api.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { futuresRouter } from './futures/router.js';
+import { rewardsRouter } from './rewards/index.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 /*
  * EXPLORE + SECURITY CENTER — the blockchain-intelligence and
@@ -5267,6 +5268,18 @@ app.use('/api/lending', lendingRouter());
  * has a backend source. No signer, no key, no CEX trading API exists here.
  */
 app.use('/api/v1/futures', futuresRouter());
+
+/* ------------------------------ FBT REWARDS ------------------------------- */
+/*
+ * The rewards engine (spec: REWARDS PRODUCTION UPGRADE). API-first and
+ * non-custodial: the engine aggregates REAL activity events (idempotent,
+ * rate-limited, on-chain-verified when evidence exists) into one small ledger
+ * per account, derives level / missions / achievements / referral, and serves
+ * the /rewards dashboard. Claims stay honest: prepare/simulate only issue
+ * single-use nonces until a reward distributor contract is configured
+ * (FBT_REWARDS_DISTRIBUTOR_*). No key, no custody, no broadcast.
+ */
+app.use('/api/v1/rewards', rewardsRouter());
 
 /* ------------------------------ order watch -------------------------------- */
 /*

@@ -17,6 +17,7 @@ import {
 import { purgeWcStorage } from '../lib/wcStorage';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
+import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
 
 /*
  * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
@@ -1311,6 +1312,16 @@ export function WalletProvider({ children }) {
     if (address) useAppStore.getState().completeQuest('connectWallet');
   }, [address]);
 
+  /*
+   * FBT Rewards: the reporter learns the connected EVM account so every
+   * activity event carries wallet + chain evidence for on-chain verification.
+   * (Solana connects through its own wallet layer and is followed inside the
+   * reporter via the wallet-change event.)
+   */
+  useEffect(() => {
+    bindRewardsIdentity({ evm: address || null, chainId: chainId ?? null });
+  }, [address, chainId]);
+
   // Injected listeners are attached in connectInjected() via attachInjectedListeners()
   // and removed in disconnect() via detachInjectedListeners(). No duplicate effect here.
 
@@ -1400,26 +1411,6 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       restoreWcSession,
-      attachLocal,
-      attachCreatedLocal,
-      unlockLocal,
-      lock,
-      forgetLocalWallet,
-      disconnect,
-      switchChain,
-      refreshBalance,
-      getReadProvider,
-      getReadProviders
-    ]
-  );
-
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
-}
-
-export const useWallet = () => useContext(WalletContext) ?? {};
-
-export const shortAddress = (a, size = 4) => (a ? `${a.slice(0, 2 + size)}…${a.slice(-size)}` : '');
-ession,
       attachLocal,
       attachCreatedLocal,
       unlockLocal,

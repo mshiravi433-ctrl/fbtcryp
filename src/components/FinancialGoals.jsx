@@ -36,6 +36,8 @@ import {
 } from '../lib/financialGoals';
 import { handOffToIntentOS } from '../lib/financialGoalIntent';
 import { ALLOCATION_ASSETS, RISK_PROFILES } from '../lib/financialGoalEngine';
+import { useAppStore } from '../store/useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 
 const RISK_LABEL = { CONSERVATIVE: 'Conservative', MODERATE: 'Moderate', AGGRESSIVE: 'Aggressive' };
 const ASSET_LABEL = { BTC: 'BTC', ETH: 'ETH', STABLE: 'Stable / Yield', OTHER: 'Other crypto' };
@@ -175,6 +177,13 @@ export default function FinancialGoals({ onOpenCompose = null }) {
     }
     await refresh();
     if (!alive.current) return;
+    /* A goal actually stored on the server is real rewarded activity. The
+       deterministic rewardId (goal id) makes re-creation of the same goal
+       impossible to double-reward, in the local ledger and in the engine. */
+    if (created.data?.id) {
+      const st = useAppStore.getState();
+      st.awardProduct('goals', POINT_VALUES.goals, { refId: `goal:${created.data.id}` });
+    }
     setActive({ goal: created.data, plan: null });
     setView('plan');
     await runBuildPlan(created.data);
