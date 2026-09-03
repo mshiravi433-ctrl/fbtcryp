@@ -8625,7 +8625,7 @@
   "futures": {
     "onchain": {
       "title": "On-Chain Futures · Velocity on Solana",
-      "subtitle": "Crypto perpetuals on Velocity (the Drift fork) — Solana's on-chain order-book DEX. Live prices, chart and fees; order placement is not enabled yet."
+      "subtitle": "Crypto perpetuals on Velocity (the Drift fork) — Solana's on-chain order-book DEX. Live prices, chart and fees; every order is signed by your Solana wallet."
     },
     "risk": {
       "LOW": "Low",
@@ -8635,7 +8635,7 @@
     },
     "providers": "Protocols",
     "providersUnavailable": "The protocol registry is unavailable right now. Nothing is shown rather than a guessed list.",
-    "driftNote": "Velocity is the only on-chain venue on this screen. Markets, prices, funding and open interest are read live from Velocity's public data API; the order path is not built yet, so this venue is view-only.",
+    "driftNote": "Velocity is the only on-chain venue on this screen. Markets, prices, funding and open interest are read live from Velocity's public data API; orders are built with the official Velocity SDK and signed by your own Solana wallet — FBT never holds a key.",
     "protocolAvailableSoon": "Coming soon",
     "chain": {
       "solana": "Solana"

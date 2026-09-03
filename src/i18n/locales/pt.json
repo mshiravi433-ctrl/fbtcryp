@@ -1096,9 +1096,9 @@
   "futures": {
     "onchain": {
       "title": "Futuros on-chain · Velocity na Solana",
-      "subtitle": "Perpétuos de cripto na Velocity (o fork da Drift) — a DEX de livro de ordens on-chain da Solana. Preços, gráfico e taxas ao vivo; a execução de ordens ainda não está ativada."
+      "subtitle": "Perpétuos de cripto na Velocity (o fork da Drift) — a DEX de livro de ordens on-chain da Solana. Preços, gráfico e taxas ao vivo; cada ordem é assinada pela sua carteira Solana."
     },
-    "driftNote": "A Velocity é o único protocolo on-chain nesta tela. Mercados, preços, funding e open interest são lidos ao vivo pela API pública de dados da Velocity; o caminho de ordens ainda não foi construído, então é somente leitura.",
+    "driftNote": "A Velocity é o único protocolo on-chain nesta tela. Mercados, preços, funding e open interest são lidos ao vivo pela API pública de dados da Velocity; as ordens são montadas com o SDK oficial da Velocity e assinadas pela sua carteira Solana — a FBT nunca guarda suas chaves.",
     "protocolAvailableSoon": "Em breve",
     "chain": {
       "solana": "Solana"

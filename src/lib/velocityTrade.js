@@ -1,96 +1,126 @@
 /**
- * ⚠️ DORMANT — this module still targets the PAUSED Drift program.
+ * VELOCITY (Solana) TRADE EXECUTION — client-side, wallet-signed.
  * ---------------------------------------------------------------------------
- * Drift's on-chain program was paused and the protocol continued as **Velocity
- * Protocol**: a new program ID (`vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P`),
- * a renamed State PDA seed (`velocity_state`), USDT instead of USDC as the
- * quote/collateral mint, and a renamed SDK (`@drift-labs/sdk` → `@velocity-exchange/sdk`,
- * `DriftClient` → `VelocityClient`, no back-compat aliases). No on-chain state
- * carried over, so a signature built here would be sent at a program that no
- * longer executes.
- *
- * The venue is therefore catalogued as `execution: NOT_BUILT` and the registry
- * reports it READ_ONLY: the On-Chain futures page shows live Velocity markets,
- * prices, funding and open interest, and the action is honestly "View only".
- * `/prepare` refuses too, so nothing in the app can reach the functions below.
- *
- * To re-enable trading, migrate this file (see
- * https://docs.velocity.exchange/developers/migrate-from-drift/agent-guide):
- * swap the dependency, re-bundle `scripts/vendor-drift.mjs` from
- * `@velocity-exchange/sdk`, apply the renames, move every quote-mint/ATA
- * reference to USDT, re-derive all PDAs against the new program ID, and flip
- * the catalogue back to CLIENT_BUILDS_TX only after that is verified.
- *
- * DRIFT (Solana) TRADE EXECUTION — client-side, wallet-signed.
- * ---------------------------------------------------------------------------
- * The On-Chain futures tab actually opens/closes positions on Drift. FBT never
- * holds a key: this module builds Drift instructions with the official
- * @drift-labs/sdk and asks the connected Solana wallet (Phantom / Solflare /
- * Backpack / Mobile Wallet Adapter) to SIGN AND SEND every transaction. The
- * server only supplies quote/risk/fee truth and verifies the receipt.
+ * The On-Chain futures tab opens/closes positions on **Velocity Protocol** —
+ * the Drift v2 fork that continued after the Drift program was paused. FBT never
+ * holds a key: this module builds Velocity instructions with the official
+ * @velocity-exchange/sdk and asks the connected Solana wallet (Phantom /
+ * Solflare / Backpack / Mobile Wallet Adapter) to SIGN AND SEND every
+ * transaction. The server only supplies quote/risk/fee truth and verifies the
+ * receipt against the Velocity program id.
  *
  * Opening a position, end to end (each step its own signed tx):
  *   1. the Solana wallet is connected (lib/solanaWallet.js)
- *   2. the Drift user account is created on first use — with FBT as the
- *      referrer only while FBT's own on-chain Drift account exists (checked
- *      over the RPC; see fbtReferrerInfo), so the first-time tx never fails
- *      on a referrer that was never created
- *   3. USDC collateral is deposited (getDepositInstruction)
- *   4. the perp market order is placed (getPlacePerpOrderIx), with the FBT
- *      referrer recorded on the user account so the venue attributes fills
- *   5. every signature is returned for backend /verify + ledger
+ *   2. the SDK is pinned to mainnet-beta (see activateMainnet — the SDK
+ *      DEFAULTS TO DEVNET and the program id is the same on both, so this is
+ *      the difference between a real order and a silently wrong one)
+ *   3. the Velocity user account is created on first use — with FBT as the
+ *      referrer only while FBT's own on-chain Velocity account exists (checked
+ *      over the RPC; see fbtReferrerInfo), so the first-time tx never fails on a
+ *      referrer that was never created
+ *   4. **USDT** collateral is deposited (getDepositInstruction) — Velocity's
+ *      quote/collateral asset is USDT, not Drift's USDC
+ *   5. the perp market order is placed (getPlacePerpOrderIx)
+ *   6. every signature is returned for backend /verify + ledger
  *
  * The SDK stack ships as a single esbuild-prebundled ESM file
- * (public/vendor/drift-sdk.js — see scripts/vendor-drift.mjs) loaded here at
- * runtime via dynamic import. Users who never open the Drift tab never
+ * (public/vendor/velocity-sdk.js — see scripts/vendor-velocity.mjs) loaded here
+ * at runtime via dynamic import. Users who never open the On-Chain tab never
  * download it, and the Rollup production build never parses the SDK's ~2700
  * CJS modules (that exhausted the 4GB build sandbox).
  */
 import { getSolanaProvider, getMwaWallet, mwaAccountInfo } from './solanaWallet.js';
-export { DRIFT_PERP_INDEX, driftPerpIndex } from './driftMarkets.js';
+export { VELOCITY_PERP_INDEX, velocityPerpIndex } from './velocityMarkets.js';
 
-const DRIFT_VENDOR_URL = `${import.meta.env?.BASE_URL || '/'}vendor/drift-sdk.js`;
+const VELOCITY_VENDOR_URL = `${import.meta.env?.BASE_URL || '/'}vendor/velocity-sdk.js`;
 
-/** Cache-busting revision for the prebundled Drift SDK. Bump it whenever
-    scripts/vendor-drift.mjs output changes so browsers/CDNs drop the stale
+/** Cache-busting revision for the prebundled Velocity SDK. Bump it whenever
+    scripts/vendor-velocity.mjs output changes so browsers/CDNs drop the stale
     bundle after a deploy. */
-const DRIFT_VENDOR_REV = '2155';
+const VELOCITY_VENDOR_REV = '1';
+
+/**
+ * Velocity mainnet-beta's quote/collateral mint: **USDT**. Pinned here on
+ * purpose — `activateMainnet` refuses to run if the SDK's active config ever
+ * reports a different quote asset, because depositing the wrong token is the
+ * single most expensive mistake this module could make.
+ */
+export const VELOCITY_QUOTE_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+export const VELOCITY_QUOTE_DECIMALS = 6;
 
 let sdkPromise = null;
+let envReady = false;
+
+/* This module's own stable error codes. Anything else is wrapped into
+   PROVIDER_UNAVAILABLE so the UI always gets a translatable reason. */
+const OWN_ERROR_CODES = new Set(['PROVIDER_UNAVAILABLE', 'WALLET_NOT_CONNECTED', 'TX_TOO_LARGE', 'CANNOT_SIGN', 'NO_SIGNATURE', 'NO_POSITION', 'USER_REJECTED']);
+
+/** Build an error that carries a stable code + a human-readable sentence. */
+function velocityError(code, message, cause) {
+  const err = new Error(message, cause === undefined ? undefined : { cause });
+  err.code = code;
+  return err;
+}
+
 /**
- * Load @drift-labs/sdk from the prebundled public/vendor/drift-sdk.js
- * (generated by scripts/vendor-drift.mjs in the `prebuild` step, so both
+ * Pin the SDK to Velocity mainnet-beta.
+ *
+ * `@velocity-exchange/sdk` keeps its environment in MODULE-LEVEL state that
+ * defaults to the **devnet** preset (dUSDT placeholder mint, devnet market
+ * indices) until `initialize()` is called — and the program id is
+ * `vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P` on BOTH networks. Skipping this
+ * step therefore produces a transaction that still broadcasts, against the wrong
+ * quote mint and the wrong markets. We assert the result instead of trusting it.
+ */
+function activateMainnet(sdk) {
+  if (envReady) return;
+  if (typeof sdk.initialize !== 'function') {
+    throw velocityError('PROVIDER_UNAVAILABLE', 'The Velocity SDK bundle does not export initialize(); rebuild public/vendor/velocity-sdk.js (npm run vendor:velocity).');
+  }
+  sdk.initialize({ env: 'mainnet-beta' });
+  const cfg = sdk.getConfig?.();
+  if (cfg?.ENV !== 'mainnet-beta') {
+    throw velocityError('PROVIDER_UNAVAILABLE', `The Velocity SDK is on "${cfg?.ENV}" — refusing to build a mainnet order from a non-mainnet config.`);
+  }
+  if (cfg?.QUOTE_MINT_ADDRESS !== VELOCITY_QUOTE_MINT) {
+    throw velocityError('PROVIDER_UNAVAILABLE', 'Velocity\'s quote asset is not the expected USDT mint — refusing to deposit the wrong token.');
+  }
+  envReady = true;
+}
+
+/**
+ * Load @velocity-exchange/sdk from the prebundled public/vendor/velocity-sdk.js
+ * (generated by scripts/vendor-velocity.mjs in the `prebuild` step, so both
  * `npm run build` and Vercel always ship it). The import URL is resolved
  * against import.meta.env.BASE_URL so sub-path deployments work too.
  *
  * A load failure is surfaced as a readable, code-carrying
  * PROVIDER_UNAVAILABLE error — never a raw "Failed to fetch dynamically
  * imported module" — and the cached rejection is dropped so a retry succeeds
- * as soon as the bundle exists again (e.g. after the prebuild regenerates
- * it). The UI renders the code honestly via futures.err.<CODE>.
+ * as soon as the bundle exists again (e.g. after the prebuild regenerates it).
  */
-async function loadDriftSdk() {
+async function loadVelocitySdk() {
   if (!sdkPromise) {
-    sdkPromise = import(/* @vite-ignore */ `${DRIFT_VENDOR_URL}?v=${DRIFT_VENDOR_REV}`)
+    sdkPromise = import(/* @vite-ignore */ `${VELOCITY_VENDOR_URL}?v=${VELOCITY_VENDOR_REV}`)
+      .then((sdk) => { activateMainnet(sdk); return sdk; })
       .catch((cause) => {
         sdkPromise = null;
-        throw driftError(
+        envReady = false;
+        /* Preserve OUR OWN stable codes (e.g. activateMainnet refusing a
+           non-mainnet config) but wrap everything else — a failed dynamic
+           import arrives as ERR_MODULE_NOT_FOUND, which is exactly the kind of
+           raw runtime string the UI must never show a user. */
+        if (OWN_ERROR_CODES.has(cause?.code)) throw cause;
+        throw velocityError(
           'PROVIDER_UNAVAILABLE',
-          `The Drift SDK bundle could not be loaded (${DRIFT_VENDOR_URL}). ` +
-            'Run the prebuild step (npm run build regenerates public/vendor/drift-sdk.js) ' +
+          `The Velocity SDK bundle could not be loaded (${VELOCITY_VENDOR_URL}). ` +
+            'Run the prebuild step (npm run build regenerates public/vendor/velocity-sdk.js) ' +
             'or check the deployment for the vendor file.',
           cause
         );
       });
   }
   return sdkPromise;
-}
-
-/** Build an error that carries a stable code + a human-readable sentence. */
-function driftError(code, message, cause) {
-  const err = new Error(message, cause === undefined ? undefined : { cause });
-  err.code = code;
-  return err;
 }
 
 /** Host of the configured Solana RPC (never the full URL — no key leakage). */
@@ -101,9 +131,9 @@ function solRpcHost() {
 /** Map a transport/RPC failure to a readable PROVIDER_UNAVAILABLE error. */
 function asProviderError(action, cause) {
   const detail = String(cause?.message || cause || '').slice(0, 200);
-  return driftError(
+  return velocityError(
     'PROVIDER_UNAVAILABLE',
-    `Drift ${action} failed — the Solana RPC (${solRpcHost()}) could not be reached: ${detail}`.replace(/\s+$/g, '')
+    `Velocity ${action} failed — the Solana RPC (${solRpcHost()}) could not be reached: ${detail}`.replace(/\s+$/g, '')
   );
 }
 
@@ -118,12 +148,12 @@ function classifyRpcError(action, err) {
   return err;
 }
 
-/** Reject with a readable PROVIDER_UNAVAILABLE when a Drift/RPC call hangs. */
+/** Reject with a readable PROVIDER_UNAVAILABLE when a Velocity/RPC call hangs. */
 function withTimeout(promise, ms, action) {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
-      () => reject(driftError('PROVIDER_UNAVAILABLE', `Drift ${action} timed out — the Solana RPC (${solRpcHost()}) is not responding.`)),
+      () => reject(velocityError('PROVIDER_UNAVAILABLE', `Velocity ${action} timed out — the Solana RPC (${solRpcHost()}) is not responding.`)),
       ms
     );
   });
@@ -136,14 +166,12 @@ const SOL_RPC = (
   || 'https://api.mainnet-beta.solana.com'
 );
 
-/** FBT Drift referrer AUTHORITY (a Solana pubkey). Empty = no on-chain rebate. */
+/** FBT's Velocity referrer AUTHORITY (a Solana pubkey). Empty = no on-chain rebate. */
 const FBT_REFERRER = String(
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DRIFT_REFERRER)
-  || (typeof process !== 'undefined' && process.env && (process.env.DRIFT_REFERRER || process.env.VITE_DRIFT_REFERRER))
+  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_VELOCITY_REFERRER || import.meta.env.VITE_DRIFT_REFERRER))
+  || (typeof process !== 'undefined' && process.env && (process.env.VELOCITY_REFERRER || process.env.DRIFT_REFERRER || process.env.VITE_VELOCITY_REFERRER || process.env.VITE_DRIFT_REFERRER))
   || ''
 );
-
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 /* ── signing wallet (injected extension or Mobile Wallet Adapter) ────────── */
 
@@ -197,24 +225,26 @@ function base58(bytes) {
   return str;
 }
 
-/** A subscribed DriftClient whose "wallet" routes to the real connected one. */
-async function createDriftClient(sdk, walletAddress) {
-  const { Connection, PublicKey, DriftClient, DRIFT_PROGRAM_ID, getUserAccountPublicKey } = sdk;
+/** A subscribed VelocityClient whose "wallet" routes to the real connected one. */
+async function createVelocityClient(sdk, walletAddress) {
+  const { Connection, PublicKey, VelocityClient, VELOCITY_PROGRAM_ID, getUserAccountPublicKey } = sdk;
   const signing = await getSigningProvider();
   if (!signing) {
-    throw driftError('WALLET_NOT_CONNECTED',
-      'No Solana wallet is connected — connect Phantom / Solflare / Backpack (or the Mobile Wallet Adapter) to trade on Drift.');
+    throw velocityError('WALLET_NOT_CONNECTED',
+      'No Solana wallet is connected — connect Phantom / Solflare / Backpack (or the Mobile Wallet Adapter) to trade on Velocity.');
   }
   const connection = new Connection(SOL_RPC, 'confirmed');
   const authority = new PublicKey(walletAddress);
   let client;
   try {
-    client = new DriftClient({ connection, wallet: walletSigner(authority, signing), env: 'mainnet-beta', activeSubAccountId: 0 });
+    client = new VelocityClient({ connection, wallet: walletSigner(authority, signing), env: 'mainnet-beta', activeSubAccountId: 0 });
     /* subscribe() performs the first live RPC round-trips; guard it so a
        dead/blocked RPC becomes a readable PROVIDER_UNAVAILABLE instead of a
        spinner or an unhandled raw fetch error. */
     await withTimeout(client.subscribe(), 25_000, 'RPC subscribe');
-    const userAccount = await getUserAccountPublicKey(new PublicKey(DRIFT_PROGRAM_ID), authority, 0);
+    /* Every PDA is derived from the VELOCITY program id — Drift-derived
+       addresses are meaningless here (and the State PDA seed was renamed). */
+    const userAccount = await getUserAccountPublicKey(new PublicKey(VELOCITY_PROGRAM_ID), authority, 0);
     const accountInfo = await withTimeout(connection.getAccountInfo(userAccount), 15_000, 'account read');
     return { client, connection, signing, authority, userAccount, userExists: Boolean(accountInfo) };
   } catch (err) {
@@ -223,7 +253,31 @@ async function createDriftClient(sdk, walletAddress) {
   }
 }
 
-/** Sign + send a VersionedTransaction built from Drift instructions. */
+/* Velocity's own address lookup tables, from the ACTIVE config (mainnet-beta:
+   4E971nER9Jn4JjT8mKEX1nvkfg8Qycp7zNEcCq2nT8ZY). A placePerpOrder / deposit
+   instruction references ~20 accounts; without the LUTs the compiled v0
+   transaction can blow the 1232-byte wire limit, which is exactly why the
+   SDK's own tx sender always attaches them. Cached per module. */
+let lutCache = null;
+async function velocityLookupTables(sdk, connection) {
+  if (lutCache) return lutCache;
+  const { PublicKey } = sdk;
+  const cfg = sdk.getConfig?.() || {};
+  const ids = Array.isArray(cfg.MARKET_LOOKUP_TABLES) && cfg.MARKET_LOOKUP_TABLES.length
+    ? cfg.MARKET_LOOKUP_TABLES
+    : (cfg.MARKET_LOOKUP_TABLE ? [cfg.MARKET_LOOKUP_TABLE] : []);
+  const tables = [];
+  for (const id of ids) {
+    try {
+      const found = await connection.getAddressLookupTable(new PublicKey(id));
+      if (found?.value) tables.push(found.value);
+    } catch { /* a missing table only makes the tx bigger — never blocks a trade */ }
+  }
+  lutCache = tables;
+  return tables;
+}
+
+/** Sign + send a VersionedTransaction built from Velocity instructions. */
 async function sendInstructions(sdk, ctx, instructions) {
   const { ComputeBudgetProgram, TransactionMessage, VersionedTransaction } = sdk;
   const bh = await ctx.connection.getLatestBlockhash('confirmed');
@@ -234,8 +288,13 @@ async function sendInstructions(sdk, ctx, instructions) {
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200 }),
       ...instructions
     ]
-  }).compileToV0Message();
+  }).compileToV0Message(await velocityLookupTables(sdk, ctx.connection));
   const tx = new VersionedTransaction(message);
+  /* Solana's hard wire limit. Fail with a readable code rather than letting the
+     wallet reject an oversized transaction. */
+  if (tx.serialize().length > 1232) {
+    throw velocityError('TX_TOO_LARGE', `The Velocity transaction is ${tx.serialize().length} bytes (Solana's limit is 1232) — split the order.`);
+  }
   const { tx: signed, signature } = await signWith(ctx.signing, tx);
   try {
     await ctx.connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
@@ -249,19 +308,20 @@ async function sendInstructions(sdk, ctx, instructions) {
 
 /**
  * Build FBT's ReferrerInfo ({referrer, referrerStats}) only when the referrer
- * actually HAS an on-chain Drift account. Drift's initializeUserAccount
- * instruction requires the referrer's stats PDA (referrer_stats) to exist, so
- * passing a referrer whose account was never created would fail the user's
- * very first trade. The PDA is read over the RPC first; when it is missing
- * (or unreadable) this returns undefined and the account is created without
- * a referrer — the trade still goes through.
+ * actually HAS an on-chain Velocity account. Velocity's initializeUserAccount
+ * instruction requires the referrer's UserStats PDA to exist, so passing a
+ * referrer whose account was never created would fail the user's very first
+ * trade. (Nothing carried over from Drift: FBT has no Velocity referrer account
+ * yet, so in practice this returns undefined and the first trade is built
+ * without a referrer.) The PDA is read over the RPC first; when it is missing
+ * (or unreadable) this returns undefined — the trade still goes through.
  */
 async function fbtReferrerInfo(sdk, connection) {
   try {
     if (!FBT_REFERRER) return undefined;
-    const { PublicKey, DRIFT_PROGRAM_ID, getUserStatsAccountPublicKey } = sdk;
+    const { PublicKey, VELOCITY_PROGRAM_ID, getUserStatsAccountPublicKey } = sdk;
     const referrer = new PublicKey(FBT_REFERRER);
-    const referrerStats = getUserStatsAccountPublicKey(new PublicKey(DRIFT_PROGRAM_ID), referrer);
+    const referrerStats = getUserStatsAccountPublicKey(new PublicKey(VELOCITY_PROGRAM_ID), referrer);
     const accountInfo = await connection.getAccountInfo(referrerStats);
     if (!accountInfo || !accountInfo.data?.length) return undefined;
     return { referrer, referrerStats };
@@ -275,37 +335,47 @@ async function fbtReferrerInfo(sdk, connection) {
 /* ── public operations ─────────────────────────────────────────────────── */
 
 /**
- * Open a Drift perp position with the user's own wallet.
+ * Open a Velocity perp position with the user's own wallet.
+ * `depositQuote` is the USDT to top up (the caller still passes it as
+ * `depositUsdc`; both names are accepted).
  */
-export async function openDriftPosition({ wallet, marketIndex, side, notionalUsd, oraclePrice, slippageBps = 25, depositUsdc = 0 }) {
-  const sdk = await loadDriftSdk();
-  const { BN, OrderType, MarketType, PositionDirection, PostOnlyParams, PublicKey } = sdk;
-  const ctx = await createDriftClient(sdk, wallet);
+export async function openVelocityPosition({ wallet, marketIndex, side, notionalUsd, oraclePrice, slippageBps = 25, depositQuote = 0, depositUsdc = 0 }) {
+  const sdk = await loadVelocitySdk();
+  const { BN, OrderType, MarketType, PositionDirection, PostOnlyParams, PublicKey, getAssociatedTokenAddressSync } = sdk;
+  const deposit = Number(depositQuote || depositUsdc || 0);
+  const ctx = await createVelocityClient(sdk, wallet);
   const txs = [];
   try {
     const referrer = await fbtReferrerInfo(sdk, ctx.connection);
 
-    /* 1) first-time Drift user account (records FBT as the referrer) */
+    /* 1) first-time Velocity user account (records FBT as the referrer when it
+          has one on chain) */
     if (!ctx.userExists) {
       const [ixs] = await ctx.client.getInitializeUserAccountIxs(0, 'FBT', referrer);
       txs.push({ kind: 'init', signature: await sendInstructions(sdk, ctx, ixs) });
+      /* From this transaction on the account EXISTS on chain: the deposit
+         instruction takes `userInitialized` and would otherwise be built for a
+         first-time account that is already there. */
+      ctx.userExists = true;
       await ctx.client.fetchAccounts().catch(() => {});
     }
 
-    /* 2) deposit USDC collateral — only the top-up actually needed. Existing
-       Drift USDC (spot balance + unrealised quote) already counts as margin,
+    /* 2) deposit USDT collateral — only the top-up actually needed. Existing
+       Velocity USDT (spot balance + unrealised quote) already counts as margin,
        so depositing the full requested collateral on every trade would lock
-       twice the margin; compare against what the account already holds. */
-    if (depositUsdc > 0) {
+       twice the margin; compare against what the account already holds. The
+       ATA is the USDT one — Velocity's quote market, never USDC. */
+    if (deposit > 0) {
       let existing = 0;
       try {
         if (ctx.userExists && typeof ctx.client.getQuoteAssetTokenAmount === 'function') {
           existing = ctx.client.getQuoteAssetTokenAmount().toNumber() / 1_000_000;
         }
       } catch { /* first account: existing stays 0 */ }
-      const need = Math.max(0, Number(depositUsdc) - existing);
+      const need = Math.max(0, deposit - existing);
       if (need >= 1) {
-        const ata = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), ctx.authority);
+        const quoteMint = sdk.getConfig().QUOTE_MINT_ADDRESS;
+        const ata = getAssociatedTokenAddressSync(new PublicKey(quoteMint), ctx.authority);
         const ix = await ctx.client.getDepositInstruction(new BN(Math.round(need * 1_000_000)), 0, ata, 0, false, ctx.userExists);
         txs.push({ kind: 'deposit', signature: await sendInstructions(sdk, ctx, [ix]) });
       }
@@ -314,11 +384,11 @@ export async function openDriftPosition({ wallet, marketIndex, side, notionalUsd
     /* 3) the perp market order — base amount in 1e9 base precision */
     const baseUnits = Math.max(1, Math.floor((Number(notionalUsd) / Number(oraclePrice)) * 1e9));
     const baseAssetAmount = new BN(baseUnits);
-    const driftPrice = new BN(Math.round(Number(oraclePrice) * 1e6));
+    const venuePrice = new BN(Math.round(Number(oraclePrice) * 1e6));
     const slip = Math.max(0, Number(slippageBps) || 25);
     const worstPrice = side === 'long'
-      ? driftPrice.mul(new BN(10_000 + slip)).div(new BN(10_000))
-      : driftPrice.mul(new BN(10_000 - slip)).div(new BN(10_000));
+      ? venuePrice.mul(new BN(10_000 + slip)).div(new BN(10_000))
+      : venuePrice.mul(new BN(10_000 - slip)).div(new BN(10_000));
 
     const ix = await ctx.client.getPlacePerpOrderIx(
       { orderType: OrderType.MARKET, marketType: MarketType.PERP, marketIndex: Number(marketIndex),
@@ -336,11 +406,14 @@ export async function openDriftPosition({ wallet, marketIndex, side, notionalUsd
 }
 
 /** Close an open perp position (reduce-only market order in the opposite direction). */
-export async function closeDriftPosition({ wallet, marketIndex }) {
-  const sdk = await loadDriftSdk();
+export async function closeVelocityPosition({ wallet, marketIndex }) {
+  const sdk = await loadVelocitySdk();
   const { BN, OrderType, MarketType, PositionDirection, PostOnlyParams } = sdk;
-  const ctx = await createDriftClient(sdk, wallet);
+  const ctx = await createVelocityClient(sdk, wallet);
   try {
+    /* No Velocity user account ⇒ nothing to close; say so instead of letting
+       the SDK throw on an account it never loaded. */
+    if (!ctx.userExists) throw Object.assign(new Error('NO_POSITION'), { code: 'NO_POSITION' });
     const user = ctx.client.getUser(0);
     const pos = user?.getPerpPosition ? user.getPerpPosition(Number(marketIndex)) : null;
     const amount = pos?.baseAssetAmount;
@@ -367,21 +440,22 @@ export async function closeDriftPosition({ wallet, marketIndex }) {
 /**
  * Attach (or replace) take-profit / stop-loss on an open perp position.
  *
- * Both are Drift reduce-only TRIGGER_MARKET orders:
+ * Both are Velocity reduce-only TRIGGER_MARKET orders:
  *   · take-profit — when the oracle crosses tpPrice in the profit direction
  *   · stop-loss   — when the oracle crosses slPrice in the loss direction
  * Longs exit with sells triggered ABOVE (TP) / BELOW (SL); shorts the mirror.
  * Any existing trigger orders for the market are cancelled first so the set
  * is always exactly what the user asked for (passing neither price removes).
  */
-export async function setDriftTpSl({ wallet, marketIndex, tpPrice = null, slPrice = null }) {
-  const sdk = await loadDriftSdk();
+export async function setVelocityTpSl({ wallet, marketIndex, tpPrice = null, slPrice = null }) {
+  const sdk = await loadVelocitySdk();
   const {
     BN, OrderType, MarketType, PositionDirection, PostOnlyParams, OrderTriggerCondition
   } = sdk;
-  const ctx = await createDriftClient(sdk, wallet);
+  const ctx = await createVelocityClient(sdk, wallet);
   const txs = [];
   try {
+    if (!ctx.userExists) throw Object.assign(new Error('NO_POSITION'), { code: 'NO_POSITION' });
     const user = ctx.client.getUser(0);
     const pos = user?.getPerpPosition ? user.getPerpPosition(Number(marketIndex)) : null;
     const amount = pos?.baseAssetAmount;
@@ -432,10 +506,10 @@ export async function setDriftTpSl({ wallet, marketIndex, tpPrice = null, slPric
 function sPriceSafe(v) { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
 /** Cancel ALL open orders for a perp market (used when closing / moving TP/SL). */
-export async function cancelDriftOrders({ wallet, marketIndex }) {
-  const sdk = await loadDriftSdk();
+export async function cancelVelocityOrders({ wallet, marketIndex }) {
+  const sdk = await loadVelocitySdk();
   const { MarketType } = sdk;
-  const ctx = await createDriftClient(sdk, wallet);
+  const ctx = await createVelocityClient(sdk, wallet);
   try {
     const ix = await ctx.client.getCancelOrdersIx(MarketType.PERP, Number(marketIndex), null, 0);
     if (!ix) return { marketIndex: Number(marketIndex), signature: null, nothingToCancel: true };
@@ -447,11 +521,11 @@ export async function cancelDriftOrders({ wallet, marketIndex }) {
 }
 
 /** Live perp positions for this wallet (decoded via the SDK; never cached by us). */
-export async function getDriftPositions({ wallet }) {
-  const sdk = await loadDriftSdk();
-  const ctx = await createDriftClient(sdk, wallet);
+export async function getVelocityPositions({ wallet }) {
+  const sdk = await loadVelocitySdk();
+  const ctx = await createVelocityClient(sdk, wallet);
   try {
-    if (!ctx.userExists) return { userExists: false, positions: [], collateralUsdc: 0, equityUsdc: 0 };
+    if (!ctx.userExists) return { userExists: false, positions: [], collateralQuote: 0, equityQuote: 0 };
     const user = ctx.client.getUser(0);
     const rows = user?.getActivePerpPositions ? user.getActivePerpPositions() : [];
     const toNum = (bn) => (bn && typeof bn.toNumber === 'function' ? bn.toNumber() : 0) / 1_000_000;
@@ -494,9 +568,9 @@ export async function getDriftPositions({ wallet }) {
           stopLoss: tr.sl ?? null
         };
       }),
-      /* USDC spot deposits in the Drift account (free collateral) */
-      collateralUsdc: ctx.client.getQuoteAssetTokenAmount ? toNum(ctx.client.getQuoteAssetTokenAmount()) : 0,
-      equityUsdc: user?.getNetUsdValue ? toNum(user.getNetUsdValue()) : 0
+      /* USDT spot deposits in the Velocity account (free collateral) */
+      collateralQuote: ctx.client.getQuoteAssetTokenAmount ? toNum(ctx.client.getQuoteAssetTokenAmount()) : 0,
+      equityQuote: user?.getNetUsdValue ? toNum(user.getNetUsdValue()) : 0
     };
   } finally {
     try { await ctx.client.unsubscribe(); } catch { /* best effort */ }

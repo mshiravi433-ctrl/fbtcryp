@@ -1096,9 +1096,9 @@
   "futures": {
     "onchain": {
       "title": "Futures On-Chain · Velocity di Solana",
-      "subtitle": "Perpetual kripto di Velocity (fork Drift) — DEX order-book on-chain Solana. Harga, grafik, dan biaya langsung; penempatan order belum diaktifkan."
+      "subtitle": "Perpetual kripto di Velocity (fork Drift) — DEX order-book on-chain Solana. Harga, grafik, dan biaya langsung; setiap order ditandatangani oleh wallet Solana Anda."
     },
-    "driftNote": "Velocity adalah satu-satunya protokol on-chain di layar ini. Pasar, harga, pendanaan, dan open interest dibaca langsung dari API data publik Velocity; jalur order belum dibangun, jadi hanya-baca.",
+    "driftNote": "Velocity adalah satu-satunya protokol on-chain di layar ini. Pasar, harga, pendanaan, dan open interest dibaca langsung dari API data publik Velocity; order dibangun dengan SDK resmi Velocity dan ditandatangani oleh wallet Solana Anda sendiri — FBT tidak pernah memegang kunci Anda.",
     "protocolAvailableSoon": "Segera",
     "chain": {
       "solana": "Solana"

@@ -28,14 +28,49 @@
   `FEED_UNAVAILABLE`. Candles are tried on two endpoint shapes and report
   `live: false` when the venue serves none — the chart says "unavailable" rather
   than drawing invented candles.
-- **The order path is fail-closed, not silently broken**
-  (`src/lib/futures-engine/providers.js`, `server/futures/router.js`): the venue
-  is catalogued as `execution: NOT_BUILT` with `canExecute: false`, and
-  `/prepare` refuses with `PROVIDER_READ_ONLY`. The browser bundle still speaks
-  `@drift-labs/sdk`, which cannot touch the Velocity program, so this page shows
-  **live prices and "View only"** instead of asking a wallet to sign a
-  transaction aimed at a paused program. `src/lib/driftTrade.js` is marked
-  dormant with the exact migration checklist.
+- **The order path is built, signed by the user's own wallet**
+  (`src/lib/velocityTrade.js`, renamed from `driftTrade.js`): `@drift-labs/sdk`
+  is uninstalled and replaced by **`@velocity-exchange/sdk` 0.21.0**, prebundled
+  by `scripts/vendor-velocity.mjs` (renamed from `vendor-drift.mjs`, `npm run
+  vendor:velocity` + `prebuild`) into `public/vendor/velocity-sdk.js` — a 3.2 MB
+  ESM bundle loaded at runtime, so Rollup still never parses the SDK's ~2 700
+  modules and users who never open the On-Chain tab never download it. Opening a
+  position is three user-signed transactions: `getInitializeUserAccountIxs`
+  (first use only, with FBT as referrer **only if** FBT's own Velocity
+  `userStats` account exists on chain — Velocity's init instruction would fail
+  the user's first trade otherwise) → `getDepositInstruction` of **USDT** into
+  the associated token account → `getPlacePerpOrderIx`. Closing is a reduce-only
+  market order after cancelling resting triggers; **TP/SL** are reduce-only
+  `TRIGGER_MARKET` orders (long: TP `ABOVE`, SL `BELOW`; shorts mirrored) and
+  replacing them cancels the old set first. Positions come from
+  `user.getActivePerpPositions()` plus the open reduce-only triggers, so the
+  management sheet shows the TP/SL that is actually on chain.
+- **Every address is re-derived and the config is asserted.** The SDK keeps its
+  environment in module state that **defaults to devnet** — and devnet and
+  mainnet share the same program ID, so a missing `initialize()` would broadcast
+  a real transaction against the wrong quote mint. `activateMainnet()` calls
+  `initialize({ env: 'mainnet-beta' })` and then refuses to run unless
+  `getConfig().ENV === 'mainnet-beta'` **and** the quote mint is the USDT
+  `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` the module pins. Transactions
+  are compiled v0 with the config's own `MARKET_LOOKUP_TABLES`
+  (`4E971nER9Jn4JjT8mKEX1nvkfg8Qycp7zNEcCq2nT8ZY`) — without them a
+  `placePerpOrder` transaction can exceed Solana's 1 232-byte wire limit — and a
+  failed SDK load is wrapped into `PROVIDER_UNAVAILABLE` instead of leaking
+  `ERR_MODULE_NOT_FOUND` to the user.
+- **Server side: executable, but still keyless** (`src/lib/futures-engine/providers.js`,
+  `server/futures/registry.js`, `server/futures/router.js`,
+  `server/futures/intentAdapter.js`): the catalogue flips to
+  `execution: CLIENT_BUILDS_TX` with `canPrepare`/`canExecute`/
+  `canReadPositions`/`supportsTakeProfit`/`supportsStopLoss`/`supportsReduceOnly`
+  claimed, `providerConfigured('drift')` follows the execution model instead of
+  being hard-coded false, and a live feed now yields **`AVAILABLE`** — so the
+  venue is tradeable and the read-only banner is gone. `/prepare` returns a
+  **client-builds** payload (the perp `marketIndex` and `collateralToken: USDT`
+  for the SDK, plus `clientSign: { family: 'solana', program: 'vELoC1…', sdk:
+  '@velocity-exchange/sdk', buildsInTab: true }`) with **no server calldata**,
+  while still creating the ledger row and the fee record before anything is
+  broadcast; `/verify` keeps checking the receipt against the Velocity program.
+  A dead feed still refuses with `PROVIDER_UNAVAILABLE`.
 - **Labels**: the venue is now named **Velocity** (Solana, USDT) in the registry,
   the venue card badge (`VEL`) and all 12 locales; the provider id stays `drift`
   for ledger/UI continuity.
@@ -44,13 +79,24 @@
   (`ession, attachLocal, … ]`), so every `vite build` died with
   `Unexpected "]"` at line 1433. The tail is removed and all 1 150 JS/JSX files
   now parse.
+- **Copy**: the 12 locales no longer say the order path is "not built yet" —
+  `futures.driftNote` and `futures.onchain.subtitle` now say the orders are built
+  with the official Velocity SDK and **signed by your own Solana wallet**; the
+  read-only strings stay for the registry states that are genuinely read-only.
 - **Tests**: `test/futures-velocity-feed-probe.mjs` (`npm run test:velocity-feed`)
   drives the real adapter + real registry with a verbatim live `/stats/markets`
-  capture — 24 checks, including the reproduction of the reported
-  `UNAVAILABLE · FEED_UNAVAILABLE` symptom from the pure status function.
+  capture — **26 checks**, including the reproduction of the reported
+  `UNAVAILABLE · FEED_UNAVAILABLE` symptom (now reachable only from a dead feed).
+  `test/futures-velocity-trade-probe.mjs` (`npm run test:velocity-trade`) imports
+  the **shipped** vendor bundle and pins the contract the order path depends on —
+  the devnet-by-default config trap, the four perp indices, the USDT mint, the
+  eight `VelocityClient` methods, the Anchor enum shapes, the `user` /
+  `user_stats` PDA seeds and the v0 transaction builder — 27 checks.
   `npm run test:futures-onchain` (`test/futures-onchain-run.mjs`) runs the
-  existing On-Chain UI suite standalone (37 checks). `npm run test:futures`
-  passes 40/40 against the real HTTP BFF.
+  On-Chain UI suite standalone — **47 checks**, now covering the AVAILABLE
+  (tradeable) state and the trade module's fail-closed path. `npm run test:futures`
+  passes 83/83 (engine) + **49/49** (real HTTP BFF, including a live Velocity
+  `/prepare` and its ledger row) + 27 (vendor contract).
 
 # Unreleased — Buy/Sell: step wizard + no-registration guided rail + on-chain report
 

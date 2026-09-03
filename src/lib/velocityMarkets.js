@@ -1,15 +1,17 @@
 /**
  * Velocity (ex-Drift) perp market catalogue — pure constants, NO SDK imports.
  *
- * Kept separate from driftTrade.js so the UI can map base symbol → perp market
+ * Kept separate from velocityTrade.js so the UI can map base symbol → perp market
  * index statically (tiny, tree-shakeable) without touching the large,
  * lazy-loaded venue SDK vendor bundle.
  *
  * The indices are the FORK's own: Velocity is a fresh program deployment, so
  * Drift's old index table (JUP 92, PYTH 58, TON 127 …) is meaningless here.
- * These four are the perps Velocity lists today (SOL 0, BTC 1, ETH 2, HYPE 3);
- * the authoritative list is still the live Data API read, which the BFF returns
- * with `marketId` — this table is only the offline fallback.
+ * These four are the perps Velocity lists (SOL 0, BTC 1, ETH 2, HYPE 3) —
+ * verified against BOTH the live Data API and `@velocity-exchange/sdk`'s
+ * mainnet-beta `PERP_MARKETS` config. The authoritative list is still the live
+ * read, which the BFF returns with `marketId`; this table is only the offline
+ * fallback for the first paint.
  */
 
 /** Velocity perp market index by base symbol. Mirrors the BFF adapter feed. */

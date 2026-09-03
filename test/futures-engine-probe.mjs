@@ -33,12 +33,18 @@ t('only a provider with a built order path can claim canExecute',
   Object.values(PROVIDER_CATALOGUE).every((p) => !p.capabilities.canExecute
     || p.execution === EXECUTION_MODEL.ONCHAIN_UNSIGNED_TX
     || p.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX));
-t('the Solana venue is Velocity, read-only until the venue SDK is migrated',
+/* The browser bundle moved to @velocity-exchange/sdk, so the venue builds and
+   signs real Velocity orders in the tab: CLIENT_BUILDS_TX, executable. */
+t('the Solana venue is Velocity and its order path is built in the tab',
   PROVIDER_CATALOGUE.drift.family === 'solana' && PROVIDER_CATALOGUE.drift.name === 'Velocity'
   && PROVIDER_CATALOGUE.drift.collateral === 'USDT'
-  && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.NOT_BUILT
-  && PROVIDER_CATALOGUE.drift.capabilities.canExecute === false
-  && PROVIDER_CATALOGUE.drift.capabilities.canReadMarkets === true);
+  && PROVIDER_CATALOGUE.drift.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX
+  && PROVIDER_CATALOGUE.drift.capabilities.canExecute === true
+  && PROVIDER_CATALOGUE.drift.capabilities.canPrepare === true
+  && PROVIDER_CATALOGUE.drift.capabilities.canReadPositions === true
+  && PROVIDER_CATALOGUE.drift.capabilities.canReadMarkets === true
+  && PROVIDER_CATALOGUE.drift.capabilities.supportsTakeProfit === true
+  && PROVIDER_CATALOGUE.drift.capabilities.supportsStopLoss === true);
 t('status vocabulary is exactly the six spec words',
   JSON.stringify(Object.values(PROVIDER_STATUS).sort()) === JSON.stringify(['AVAILABLE', 'BLOCKED', 'DEGRADED', 'MAINTENANCE', 'READ_ONLY', 'UNAVAILABLE']));
 t('a built + configured + live provider is AVAILABLE',

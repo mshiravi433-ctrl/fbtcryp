@@ -67,12 +67,12 @@ export function providerConfigured(providerId) {
   if (p.execution === EXECUTION_MODEL.NOT_BUILT) return false;
   if (providerId === 'ostium') return Boolean(fbtFeeRecipient());
   if (providerId === 'dydx') return true; // executes in its own tab via the client session
-  /* Velocity (Solana) reads public market data server-side. Its ORDER path is
-     not wired yet: the venue moved off Drift (@drift-labs/sdk, USDC, the
+  /* Velocity (Solana) reads public market data server-side and BUILDS its
+     orders in the tab: the venue moved off Drift (@drift-labs/sdk, USDC, the
      dRifty… program) to @velocity-exchange/sdk (VelocityClient, USDT, the
-     vELoC1… program), so until that client bundle is migrated the catalogue
-     says NOT_BUILT and this stays false — the venue can then never be shown
-     as tradeable. */
+     vELoC1… program) and the browser bundle was migrated with it, so the
+     catalogue's execution model is what decides. No API key is needed — the
+     user's wallet is the only credential. */
   if (providerId === 'drift') return p.execution !== EXECUTION_MODEL.NOT_BUILT;
   return false;
 }

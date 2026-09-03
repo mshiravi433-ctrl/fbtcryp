@@ -115,7 +115,7 @@ const { resolveProviderStatus, PROVIDER_CATALOGUE, EXECUTION_MODEL } = await imp
 
 /* ── 0. the reported symptom, reproduced from the pure status function ───── */
 const before = resolveProviderStatus({ execution: EXECUTION_MODEL.CLIENT_BUILDS_TX, configured: true, enabled: true, dataLive: false });
-t('a dead feed on the old (executable) catalogue is exactly UNAVAILABLE · FEED_UNAVAILABLE',
+t('a dead feed on the executable catalogue is exactly UNAVAILABLE · FEED_UNAVAILABLE',
   before.status === 'UNAVAILABLE' && before.reason === 'FEED_UNAVAILABLE', JSON.stringify(before));
 
 /* ── 1. the live Velocity feed, through the real adapter ─────────────────── */
@@ -158,9 +158,22 @@ t('a feed with no candles endpoint says so instead of drawing a chart',
 registry.resetFuturesRegistry();
 const health = await registry.probeProvider('drift', { force: true });
 t('registry: 4 markets, data live', health.marketCount === 4 && health.dataAgeMs != null, `marketCount=${health.marketCount}`);
-t('registry: Velocity is READ_ONLY, not UNAVAILABLE', health.status === 'READ_ONLY', `${health.status}/${health.reason}`);
-t('registry: nothing is executable while the order path is NOT_BUILT',
-  health.executable === false && health.execution === 'NOT_BUILT' && PROVIDER_CATALOGUE.drift.name === 'Velocity');
+t('registry: a live feed on an executable catalogue is AVAILABLE',
+  health.status === 'AVAILABLE' && health.reason === null, `${health.status}/${health.reason}`);
+/* The order path is built in the tab (@velocity-exchange/sdk + the user's
+   wallet), so the venue is genuinely tradeable — this is the flip from the
+   read-only phase. */
+t('registry: the Velocity order path is CLIENT_BUILDS_TX and executable',
+  health.executable === true && health.execution === EXECUTION_MODEL.CLIENT_BUILDS_TX
+    && PROVIDER_CATALOGUE.drift.name === 'Velocity'
+    && PROVIDER_CATALOGUE.drift.capabilities.canExecute === true
+    && PROVIDER_CATALOGUE.drift.capabilities.canPrepare === true,
+  `${health.execution}/executable=${health.executable}`);
+t('registry: TP/SL and reduce-only are claimed, partial close is not',
+  PROVIDER_CATALOGUE.drift.capabilities.supportsTakeProfit === true
+    && PROVIDER_CATALOGUE.drift.capabilities.supportsStopLoss === true
+    && PROVIDER_CATALOGUE.drift.capabilities.supportsReduceOnly === true
+    && PROVIDER_CATALOGUE.drift.capabilities.supportsPartialClose === false);
 t('registry: the venue is labelled Velocity on Solana with USDT collateral',
   health.name === 'Velocity' && health.chainName === 'Solana' && health.collateral === 'USDT');
 
@@ -169,7 +182,9 @@ mode = 'dead';
 memoryStore.clear();
 registry.resetFuturesRegistry();
 const dark = await registry.probeProvider('drift', { force: true });
-t('a dead feed is still UNAVAILABLE with 0 markets', dark.status === 'UNAVAILABLE' && dark.marketCount === 0, `${dark.status}/${dark.marketCount}`);
+t('a dead feed is still UNAVAILABLE with 0 markets (the reported symptom)',
+  dark.status === 'UNAVAILABLE' && dark.reason === 'FEED_UNAVAILABLE' && dark.marketCount === 0 && dark.executable === false,
+  `${dark.status}/${dark.reason}/${dark.marketCount}`);
 t('the registry now explains WHY the feed is dark', String(dark.detail || '').includes('FEED_UNREACHABLE'), String(dark.detail));
 
 memoryStore.clear();

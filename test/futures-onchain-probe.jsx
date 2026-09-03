@@ -7,11 +7,12 @@
  *     (Arbitrum) belongs to the Stocks tab.
  *   · Markets, prices, funding and OI are live reads from the BFF, which
  *     proxies Velocity's public Data API (data.velocity.exchange).
- *   · The Solana order path is NOT built (the browser SDK still targets the
- *     paused Drift program, not Velocity's), so the venue is READ_ONLY: the
- *     market info and the FBT fee breakdown render from the backend's numbers,
- *     but the action is "View only" and no /prepare, /verify or wallet
- *     signature can ever happen.
+ *   · The order path is built in this tab: @velocity-exchange/sdk (prebundled
+ *     to public/vendor/velocity-sdk.js) builds Velocity instructions and the
+ *     user's OWN Solana wallet signs and sends them, so an AVAILABLE registry
+ *     row means the CTA is a real Review/Confirm flow — never a server-side
+ *     key. When the registry cannot serve the venue (dead feed, error budget)
+ *     the tab drops back to "View only" and builds nothing.
  *   · When the Velocity feed is down the registry says UNAVAILABLE, the tab
  *     says so and invents nothing.
  *
@@ -51,10 +52,16 @@ const BTC = { ...MARKET, marketId: '1', pairId: '1', symbol: 'BTC/USDT', base: '
 
 function provider(status, extra = {}) {
   const p = PROVIDER_CATALOGUE.drift;
+  /* Same derivation the registry uses: the catalogue's execution model is
+     CLIENT_BUILDS_TX (the tab signs), so only AVAILABLE/DEGRADED are
+     executable — READ_ONLY/UNAVAILABLE are not, however the order path is
+     built. */
+  const executable = extra.executable ?? ['AVAILABLE', 'DEGRADED'].includes(status);
   return {
-    providerId: 'drift', name: p.name, status, reason: extra.reason ?? 'NOT_CONFIGURED',
-    executable: false, // the Solana order path is not built — never executable
-    execution: 'NOT_BUILT', configured: true, family: 'solana', chainId: 'solana:mainnet', chainName: 'Solana',
+    providerId: 'drift', name: p.name, status,
+    reason: extra.reason === undefined ? (executable ? null : 'NOT_CONFIGURED') : extra.reason,
+    executable,
+    execution: extra.execution ?? p.execution, configured: true, family: 'solana', chainId: 'solana:mainnet', chainName: 'Solana',
     custody: 'onchain', collateral: 'USDT', markets: p.markets,
     marketCount: status === 'UNAVAILABLE' ? 0 : 2, capabilities: p.capabilities,
     fbtFeeModel: p.fbtFeeModel, fbtFeeChargedOn: 'fill', venueFeeCapBps: 20, tab: 'onchain',
@@ -128,10 +135,31 @@ export async function run(container) {
         market: { marketId: q.market.marketId, symbol: q.market.symbol, bid: q.market.bid, mid: q.market.mid, ask: q.market.ask, spreadBps: q.market.spreadBps, isMarketOpen: q.market.isMarketOpen, maxLeverage: q.market.maxLeverage, fundingAprPct: q.market.fundingAprPct },
         order: { side: q.side, collateralUsd: q.collateralUsd, leverage: q.leverage, notionalUsd: q.collateralUsd * q.leverage, entryPrice: q.entry, takeProfit: body.takeProfit, stopLoss: body.stopLoss, slippageBps: body.slippageBps },
         account: null, fee: q.fee, risk: q.risk, route: q.route,
-        canExecute: false // READ_ONLY: the button must stay a view-only gate
+        /* mirrors the registry row the tab already has */
+        canExecute: ['AVAILABLE', 'DEGRADED'].includes(providerStatus)
       }));
     }
-    if (p === '/prepare' || p === '/execute') { bff.prepares += 1; return failure(409, 'PROVIDER_READ_ONLY'); }
+    if (p === '/prepare' || p === '/execute') {
+      bff.prepares += 1;
+      if (!['AVAILABLE', 'DEGRADED'].includes(providerStatus)) return failure(409, 'PROVIDER_READ_ONLY');
+      /* exactly what server/futures/router.js hands back for Velocity: the
+         quote/risk/fee truth plus the on-chain facts the SDK needs, and a
+         clientSign descriptor — no server calldata. */
+      const market = reqBody.market === '1' ? BTC : MARKET;
+      const prepared = buildQuote(reqBody);
+      return json(envelope({
+        requestId: reqBody.requestId, executionId: `fut_exec_probe_${bff.prepares}`, idempotencyKey: 'probe',
+        provider: 'drift', providerStatus, action: 'open',
+        market: { marketId: market.marketId, symbol: market.symbol, mid: market.mid, bid: market.bid, ask: market.ask, priceAt: market.priceAt, maxLeverage: market.maxLeverage, marketIndex: Number(market.marketId), collateralToken: 'USDT' },
+        order: { side: prepared.side, collateralUsd: prepared.collateralUsd, leverage: prepared.leverage, notionalUsd: prepared.collateralUsd * prepared.leverage, entryPrice: prepared.entry, takeProfit: reqBody.takeProfit ?? null, stopLoss: reqBody.stopLoss ?? null, slippageBps: reqBody.slippageBps ?? 25 },
+        account: { balanceUsd: null, allowanceUsd: null, needsApproval: false },
+        fee: prepared.fee, risk: prepared.risk, route: prepared.route,
+        simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: null, code: 'CLIENT_BUILDS_TX' },
+        transactions: [],
+        clientSign: { family: 'solana', program: 'vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P', sdk: '@velocity-exchange/sdk', buildsInTab: true },
+        state: 'PREPARED', expiresAt: Date.now() + 45_000
+      }));
+    }
     if (p === '/verify') { bff.verifies += 1; return failure(409, 'PROVIDER_READ_ONLY'); }
     return failure(404, 'NOT_FOUND');
   };
@@ -224,6 +252,35 @@ export async function run(container) {
     t('the (view-only) button stays disabled — no order path exists', byId('futures-review')?.disabled === true);
     t('tapping review on a read-only venue never opens a confirmation sheet', (() => { act(() => { try { click(byId('futures-review')); } catch { /* disabled */ } }); return !document.querySelector('[data-testid="futures-confirm"]'); })());
 
+    /* ═══════ C2. AVAILABLE — the order path is built, so the tab trades ═══════ */
+    providerStatus = 'AVAILABLE'; providerReason = null;
+    /* remount the tab so it re-reads the registry, exactly as a user tapping
+       back into On-Chain after a recovery would */
+    await act(async () => { click(strip[0]); });
+    await act(async () => { click(strip[2]); });
+    await act(async () => { await sleep(700); });
+    t('an AVAILABLE Velocity venue reports Available from the registry', byId('futures-provider-status')?.textContent.trim() === 'Available', byId('futures-provider-status')?.textContent);
+    t('the venue card drops the coming-soon pill once the order path is built', !/Coming soon/.test(byId('futures-venue-card')?.textContent || ''));
+    t('the venue card says the order path is ready with the live market count', /Order path ready · 2 markets/.test(byId('futures-venue-card')?.textContent || ''), byId('futures-venue-card')?.textContent);
+    t('the read-only notice disappears on an executable venue', !byId('futures-readonly-notice'));
+    t('without a wallet the CTA is Connect wallet — enabled, and never a server-side key', byId('futures-review')?.textContent.trim() === 'Connect wallet' && byId('futures-review')?.disabled === false, byId('futures-review')?.textContent);
+    t('no order is prepared before the user reviews it', bff.prepares === 0 && bff.verifies === 0);
+
+    /* The trade module the tab hands the confirmed order to. */
+    const venue = await import('../src/lib/velocityTrade.js');
+    t('the trade module exports the whole Velocity order surface',
+      ['openVelocityPosition', 'closeVelocityPosition', 'setVelocityTpSl', 'cancelVelocityOrders', 'getVelocityPositions']
+        .every((fn) => typeof venue[fn] === 'function'));
+    t('the trade module pins Velocity\'s USDT quote mint, not Drift\'s USDC',
+      venue.VELOCITY_QUOTE_MINT === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' && venue.VELOCITY_QUOTE_DECIMALS === 6);
+    /* No wallet and no vendor bundle in this harness: the module must fail
+       closed with a stable code instead of throwing a raw import error. */
+    const noBundle = await venue.openVelocityPosition({ wallet: 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd', marketIndex: 0, side: 'long', notionalUsd: 100, oraclePrice: 149.05 }).then(() => null, (e) => e);
+    t('a missing SDK bundle fails closed as PROVIDER_UNAVAILABLE, never a raw import error',
+      noBundle?.code === 'PROVIDER_UNAVAILABLE' && /vendor\/velocity-sdk\.js/.test(String(noBundle?.message)), String(noBundle?.message).slice(0, 90));
+    const noBundleRead = await venue.getVelocityPositions({ wallet: 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd' }).then(() => null, (e) => e);
+    t('the position read fails closed the same way', noBundleRead?.code === 'PROVIDER_UNAVAILABLE');
+
     /* ═══════ D. the other tabs are untouched ═══════ */
     await act(async () => { click(strip[1]); });
     await act(async () => { await sleep(500); });
@@ -247,7 +304,7 @@ export async function run(container) {
     t('the Persian locale loads and becomes active', faOk === true && i18n.language === 'fa');
     t('the document flips to RTL for Persian', document.documentElement.getAttribute('dir') === 'rtl');
     t('the tab strip reads پرپچوال · مدار dYdX · آن‌چین in Persian', tabs().map((b) => b.textContent.trim()).join('|') === 'پرپچوال|مدار dYdX|آن‌چین');
-    t('the Velocity venue card is Persian-localised (Solana + coming-soon + read-only in fa)', (() => { const tx = byId('futures-venue-card')?.textContent || ''; if (process.env.DEBUG_FA) console.log('FA_CARD>>>', tx); return /سولانا/.test(tx) && /به‌زودی|به زودی/.test(tx) && byId('futures-provider-status')?.textContent.trim() === 'فقط مشاهده'; })());
+    t('the Velocity venue card is Persian-localised (Solana + order path ready + available in fa)', (() => { const tx = byId('futures-venue-card')?.textContent || ''; if (process.env.DEBUG_FA) console.log('FA_CARD>>>', tx); return /سولانا/.test(tx) && /مسیر سفارش آماده/.test(tx) && !/به‌زودی|به زودی/.test(tx) && byId('futures-provider-status')?.textContent.trim() === 'در دسترس'; })());
     t('no unexpected console errors', errors.length === 0 || (console.log(errors.slice(0, 3)), false));
   } finally {
     if (root) await act(async () => { root.unmount(); });

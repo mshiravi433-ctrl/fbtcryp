@@ -373,20 +373,76 @@ export function futuresRouter() {
     if (!o.account) return fail(res, 503, 'PROVIDER_UNAVAILABLE', { requestId, detail: 'account read failed; balance and allowance could not be verified' });
     if (o.account.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd) return fail(res, 400, 'INSUFFICIENT_BALANCE', { requestId, balanceUsd: o.account.balanceUsd });
 
-    /* ── Velocity (Solana): fail closed.
+    /* ── Velocity (Solana): the transaction is BUILT AND SIGNED IN THE TAB.
        The venue moved from Drift (@drift-labs/sdk · USDC · the dRifty… program,
        now PAUSED) to @velocity-exchange/sdk (VelocityClient · USDT · the
-       vELoC1… program). The browser bundle has not been migrated, so there is
-       nothing the user's wallet could honestly sign here. The catalogue reports
-       NOT_BUILT and statusGate() already refuses with needExecute — this is the
-       second lock, so flipping one flag can never hand out an unexecutable
-       order. Markets, prices, funding and OI keep answering. */
+       vELoC1… program) and the browser bundle was migrated with it, so there is
+       no server-built calldata to hand out: the tab derives the Velocity PDAs,
+       deposits USDT and places the perp order, and the user's wallet signs and
+       sends each transaction (src/lib/velocityTrade.js). /prepare therefore
+       returns the quote/risk/fee truth plus the on-chain facts the SDK needs
+       (perp market index, collateral token) and the signature comes back to
+       /verify. The ledger row and the fee record are still created here, so the
+       trade is accounted for before it is ever broadcast — and FBT still never
+       holds a key. */
     if (o.providerId === 'drift') {
-      return fail(res, 409, 'PROVIDER_READ_ONLY', {
-        requestId,
-        detail: 'Velocity order path is not built: the in-browser SDK still targets the paused Drift program',
-        provider: o.health
+      const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+      if (!fee) return fail(res, 400, 'INVALID_INPUT', { requestId });
+      /* Descriptor, not calldata: the real instructions are built in the tab
+         against the live SDK config. `program` is what /verify checks the
+         receipt against. */
+      const clientTx = {
+        kind: 'client-builds',
+        program: drift.VELOCITY_PROGRAM_ID,
+        to: drift.VELOCITY_PROGRAM_ID,
+        data: null,
+        value: '0x0',
+        chainId: 'solana:mainnet',
+        marketIndex: Number(o.market.marketId),
+        side: o.side,
+        collateralToken: drift.VELOCITY_COLLATERAL,
+        signed: false,
+        broadcast: false,
+        capabilities: { sign: 'wallet-only', broadcast: 'wallet-only', buildsInTab: true }
+      };
+      const execution = await createExecution({
+        requestId, intentId, idempotencyKey: idemKey, owner, wallet, providerId: o.providerId, marketId: o.market.marketId, symbol: o.market.symbol,
+        action: 'open', side: o.side, collateralUsd: o.collateralUsd, leverage: o.leverage, notionalUsd: o.collateralUsd * o.leverage,
+        fee, risk: o.risk, route: o.route, unsignedTx: clientTx
       });
+      await appendFeeRecord({ executionId: execution.executionId, requestId, intentId, wallet, providerId: o.providerId, marketId: o.market.marketId, action: 'open', fee, status: 'PREPARED', chainId: clientTx.chainId });
+      publish('FUTURES_ORDER_PREPARED', { executionId: execution.executionId, requestId, intentId, providerId: o.providerId, marketId: o.market.marketId, side: o.side, notionalUsd: o.collateralUsd * o.leverage, fbtFeeUsd: fee.fbt.feeUsd }, { source: 'futures-router' });
+
+      const response = {
+        ok: true,
+        data: {
+          requestId, intentId, executionId: execution.executionId, idempotencyKey: idemKey,
+          provider: o.providerId, providerStatus: o.health.status, action: 'open',
+          market: {
+            marketId: o.market.marketId, symbol: o.market.symbol, mid: o.market.mid, bid: o.market.bid, ask: o.market.ask,
+            priceAt: o.market.priceAt, maxLeverage: o.effectiveMax,
+            /* The on-chain perp market index for getPlacePerpOrderIx — from the
+               live Data API row, never a hard-coded table. */
+            marketIndex: clientTx.marketIndex,
+            collateralToken: clientTx.collateralToken
+          },
+          order: { side: o.side, collateralUsd: o.collateralUsd, leverage: o.leverage, notionalUsd: o.collateralUsd * o.leverage, entryPrice: o.entry, takeProfit: o.takeProfit, stopLoss: o.stopLoss, slippageBps: o.slippageBps },
+          account: { balanceUsd: o.account.balanceUsd, allowanceUsd: o.account.allowanceUsd, needsApproval: false },
+          fee, risk: o.risk, route: o.route,
+          /* No EVM gas simulation on Solana: the tab pays the priority fee. */
+          simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: null, code: 'CLIENT_BUILDS_TX' },
+          transactions: [],
+          clientSign: { family: 'solana', program: drift.VELOCITY_PROGRAM_ID, sdk: '@velocity-exchange/sdk', buildsInTab: true, tx: clientTx },
+          state: 'PREPARED',
+          expiresAt: now() + 45_000
+        },
+        meta: {
+          schema: SCHEMA(mode === 'execute' ? 'execute' : 'prepare'), dataStatus: 'live',
+          security: { privateKeys: 'never-held', signing: 'wallet-only', broadcasting: 'wallet-only', allowlist: 'velocity-program-only', note: 'Velocity: the tab builds the transaction with @velocity-exchange/sdk and the user\'s wallet signs + sends it; the server holds no key.' }
+        }
+      };
+      await saveFuturesIdempotency(claim, response);
+      return res.status(200).json(response);
     }
 
     const needsApproval = o.account.allowanceUsd != null && o.account.allowanceUsd + 1e-9 < o.collateralUsd;

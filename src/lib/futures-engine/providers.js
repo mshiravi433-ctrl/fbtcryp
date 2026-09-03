@@ -185,12 +185,13 @@ export const PROVIDER_CATALOGUE = Object.freeze({
      (data.velocity.exchange) and USDT — not USDC — as the quote asset. The
      public Data API feeds live markets/prices/funding/OI (READ).
 
-     The ORDER path is deliberately NOT_BUILT: the browser still bundles
-     @drift-labs/sdk, which cannot talk to the Velocity program (new program
-     ID, new State PDA seed, USDT mint), so claiming an executable venue here
-     would send users' signatures at a paused program. Until that bundle is
-     migrated to @velocity-exchange/sdk the registry derives READ_ONLY — the
-     page is live and priced, and honest that it cannot trade.
+     The ORDER path is CLIENT_BUILDS_TX: @drift-labs/sdk was replaced by
+     @velocity-exchange/sdk (prebundled to public/vendor/velocity-sdk.js), so
+     the tab builds real Velocity instructions against the vELoC1… program —
+     initializeUserAccount → USDT deposit → placePerpOrder → cancel/place
+     trigger orders — and the CONNECTED WALLET signs and sends every one of
+     them (src/lib/velocityTrade.js). FBT never holds a Solana key, so a live
+     feed means the venue is genuinely tradeable here.
 
      The provider id stays `drift` (ledger rows, the UI tab and the tests all
      key off it); only the venue NAME and the facts changed. */
@@ -202,7 +203,7 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     chainName: 'Solana',
     custody: 'onchain',
     collateral: 'USDT',
-    execution: EXECUTION_MODEL.NOT_BUILT,
+    execution: EXECUTION_MODEL.CLIENT_BUILDS_TX,
     fbtFeeModel: 'referrer-on-fill',
     fbtFeeChargedOn: 'fill',
     venueFeeCapBps: 20,
@@ -211,19 +212,22 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       canReadMarkets: true,
       canReadFunding: true,
       canReadOpenInterest: true,
-      /* positions are decoded client-side by the venue SDK, which is not
-         migrated yet — so no position read is claimed either. */
-      canReadPositions: false,
+      /* positions are decoded client-side by the venue SDK
+         (getVelocityPositions → user.getActivePerpPositions + open triggers). */
+      canReadPositions: true,
       canQuote: true,
-      canPrepare: false,
-      canExecute: false,
-      canManagePositions: false,
-      supportsTakeProfit: false,
-      supportsStopLoss: false,
+      canPrepare: true,
+      canExecute: true,
+      /* TP/SL are Velocity reduce-only TRIGGER_MARKET orders; close is a
+         reduce-only market order. Partial close / collateral adjust / limit
+         orders are not exposed in the UI yet, so they stay false. */
+      canManagePositions: true,
+      supportsTakeProfit: true,
+      supportsStopLoss: true,
       supportsPartialClose: false,
       supportsCollateralAdjust: false,
       supportsLimitOrders: false,
-      supportsReduceOnly: false
+      supportsReduceOnly: true
     }),
     tab: 'onchain'
   })
@@ -267,7 +271,7 @@ export function resolveProviderStatus({
        tab can only read it. */
     return { status: PROVIDER_STATUS.READ_ONLY, reason: 'EXECUTES_IN_OWN_TAB' };
   }
-  /* CLIENT_BUILDS_TX (Drift) builds and signs in THIS tab with the user's own
+  /* CLIENT_BUILDS_TX (Velocity) builds and signs in THIS tab with the user's own
      wallet, so a live feed means it is genuinely tradeable here. */
   if (recentErrors >= 5) return { status: PROVIDER_STATUS.READ_ONLY, reason: 'ERROR_BUDGET_EXHAUSTED' };
   if (dataStale || recentErrors >= 2) return { status: PROVIDER_STATUS.DEGRADED, reason: dataStale ? 'FEED_STALE' : 'RECENT_ERRORS' };
