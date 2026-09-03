@@ -1438,8 +1438,8 @@
       "weekly": "Weekly · 7 days",
       "monthly": "Monthly · 30 days"
     },
-    "allTab": "All",
-    "solanaTab": "Solana ◎",
+    "allTab": "🌐 Global Signals",
+    "solanaTab": "🟣 Solana Signals",
     "regime": {
       "riskOn": "Risk on",
       "btcLed": "BTC leading",
@@ -1491,6 +1491,347 @@
       "layersSummary": "{{n}} layers",
       "indicators": "Raw indicators",
       "indicatorsSummary": "{{n}} readings"
+    },
+    "intel": {
+      "tabs": {
+        "global": "🌐 Global Signals",
+        "solana": "🟣 Solana Signals"
+      },
+      "title": "AI MARKET PULSE",
+      "subtitle": "Measured from live market, flow and on-chain data.",
+      "sentiment": "Market Sentiment",
+      "riskLevel": "Risk Level",
+      "aiConfidence": "AI Confidence",
+      "momentum": {
+        "title": "MOMENTUM RADAR",
+        "subtitle": "Ranked by measured momentum, volume and flow.",
+        "score": "Signal score",
+        "confidence": "Confidence",
+        "momentum": "Momentum",
+        "volume": "Volume turnover",
+        "empty": "Not enough market data to rank momentum right now."
+      },
+      "volatility": "Volatility",
+      "liquidity": "Liquidity",
+      "lastUpdate": "Last Update",
+      "sentimentLabel": {
+        "bullish": "BULLISH",
+        "neutral": "NEUTRAL",
+        "bearish": "BEARISH"
+      },
+      "riskLabel": {
+        "low": "LOW",
+        "medium": "MEDIUM",
+        "high": "HIGH"
+      },
+      "momentumLabel": {
+        "strong": "STRONG",
+        "moderate": "MODERATE",
+        "flat": "FLAT"
+      },
+      "volLabel": {
+        "high": "HIGH",
+        "moderate": "MODERATE",
+        "low": "LOW"
+      },
+      "liquidityLabel": {
+        "strong": "STRONG",
+        "adequate": "ADEQUATE",
+        "thin": "THIN"
+      },
+      "source": {
+        "live": "Live data",
+        "local": "Local calculation",
+        "market-only": "Market data only",
+        "unavailable": "Data unavailable"
+      },
+      "horizonTitle": "Risk by horizon",
+      "horizonLabels": {
+        "24H": "24H",
+        "7D": "7D",
+        "30D": "30D"
+      },
+      "horizonRisk": {
+        "low": "Low Risk",
+        "medium": "Medium Risk",
+        "high": "High Risk"
+      },
+      "trend": "Trend",
+      "expectedDirection": "Expected Direction",
+      "direction": {
+        "up": "UP",
+        "down": "DOWN",
+        "flat": "FLAT"
+      },
+      "volatilityShort": "Volatility",
+      "confidenceShort": "Confidence",
+      "byHorizon": "24H / 7D / 30D risk timeline",
+      "early": {
+        "title": "AI EARLY SIGNALS",
+        "subtitle": "Assets showing the first real moves before the main run.",
+        "confidence": "Confidence",
+        "direction": {
+          "earlyBullish": "EARLY BULLISH",
+          "earlyBearish": "EARLY BEARISH",
+          "earlyWatch": "EARLY WATCH"
+        },
+        "momentumAccel": "Momentum accel",
+        "holderGrowth": "Holder growth",
+        "whaleInflow": "Whale inflow",
+        "whaleOutflow": "Whale outflow",
+        "dexBuy": "DEX buy pressure",
+        "dexSell": "DEX sell pressure",
+        "smartMoneyAccum": "Smart money accum",
+        "smartMoneyDistrib": "Smart money distrib",
+        "volumeTurnover": "Volume turnover",
+        "empty": "No asset currently shows two or more independent early signals.",
+        "unavailable": "Early signal detection needs price history and flow data. None is available right now.",
+        "note": "Only assets with at least two measured early signals are listed. Every number comes from real data.",
+        "momentum24Up": "24h momentum up",
+        "momentum24Down": "24h momentum down",
+        "trend7dUp": "7d trend up",
+        "trend7dDown": "7d trend down",
+        "rsiOversold": "RSI oversold",
+        "rsiOverbought": "RSI overbought",
+        "rsiNeutral": "RSI neutral",
+        "macdUp": "MACD bullish",
+        "macdDown": "MACD bearish",
+        "maBullish": "MA bullish",
+        "maBearish": "MA bearish",
+        "aboveMa20": "above MA20",
+        "belowMa20": "below MA20",
+        "bollingerLow": "Bollinger lower",
+        "bollingerHigh": "Bollinger upper",
+        "bollingerMid": "Bollinger mid",
+        "liquidityActive": "Liquidity active",
+        "liquidityThin": "Liquidity thin",
+        "marketSentimentUp": "Sentiment bullish",
+        "marketSentimentDown": "Sentiment bearish"
+      },
+      "smartMoney": {
+        "title": "SMART MONEY",
+        "subtitle": "Observed large-flow activity across supported chains.",
+        "whaleActivity": "Whale activity",
+        "accumulation": "Accumulation",
+        "distribution": "Distribution",
+        "netFlow": "Net flow",
+        "tokenTitle": "Token flow ranking",
+        "signal": {
+          "ACCUMULATION": "ACCUMULATION",
+          "DISTRIBUTION": "DISTRIBUTION"
+        },
+        "unavailable": "Smart-money flow feed is unavailable right now. No numbers are invented.",
+        "note": "Derived from observed on-chain transfers only; unlabelled counterparties are not counted.",
+        "live": "flow feed live",
+        "stale": "flow feed stale"
+      },
+      "radar": {
+        "title": "EARLY TOKEN RADAR",
+        "subtitle": "New Solana tokens with opportunity and risk scored together.",
+        "opportunity": "Opportunity",
+        "risk": "Risk",
+        "age": "age",
+        "liquidity": "Liquidity",
+        "volume": "24h volume",
+        "buyRatio": "Buy ratio",
+        "holders": "Top holders",
+        "flags": {
+          "unknownOnchain": "On-chain picture unknown",
+          "washTradingProxy": "Wash-trade proxy",
+          "concentratedHolders": "Concentrated holders",
+          "brandNew": "Brand new"
+        },
+        "unavailable": "Early token radar is unavailable right now.",
+        "note": "Scores derive from observed pairs and on-chain fields. Mint authority, freeze authority, LP lock, honeypot and liquidity-removal checks have no configured source and are reported as unknown rather than guessed."
+      },
+      "card": {
+        "signal": "SIGNAL",
+        "confidence": "Confidence",
+        "risk": "Risk",
+        "timeframe": "Timeframe",
+        "target": "Target",
+        "stop": "Stop Loss",
+        "momentum": "Momentum",
+        "volume": "Volume",
+        "smartMoney": "Smart Money",
+        "whale": "Whale",
+        "liquidity": "Liquidity",
+        "why": "WHY THIS SIGNAL?",
+        "insufficient": "INSUFFICIENT DATA",
+        "insufficientBody": "Not enough measured evidence for a signal on this asset. The engine never generates a signal from thin data.",
+        "highRisk": "HIGH RISK",
+        "avoid": "AVOID",
+        "reason": "AI Reason",
+        "evidence": "Signal Evidence",
+        "at": "at",
+        "timeframeLabel": "{{d}}D",
+        "loading": "Building signals from live data…"
+      },
+      "class": {
+        "strongBuy": "STRONG BUY",
+        "buy": "BUY",
+        "watch": "WATCH",
+        "sell": "SELL",
+        "highRisk": "HIGH RISK",
+        "avoid": "AVOID"
+      },
+      "why": {
+        "title": "WHY THIS SIGNAL?",
+        "technical": "Technical",
+        "market": "Market",
+        "onchain": "On-chain",
+        "sentiment": "Sentiment",
+        "conclusion": "AI CONCLUSION",
+        "consensus": "AI Consensus",
+        "agreement": "Agreement",
+        "disagreement": "AI DISAGREEMENT — confidence reduced",
+        "meta": "{{providers}} · measured evidence only · no wallet data sent",
+        "localMeta": "Deterministic engine · measured evidence only",
+        "loading": "Asking the AI layer to explain this signal…",
+        "unavailable": "No explanation could be produced. The signal itself is still live.",
+        "portfolioSummary": "Portfolio summary included (you opted in) — aggregate exposure only."
+      },
+      "actions": {
+        "view": "View Analysis",
+        "watch": "Watchlist",
+        "watched": "Watched",
+        "alert": "Set Alert",
+        "compare": "Compare",
+        "track": "Track",
+        "trade": "Trade",
+        "intent": "Create Intent"
+      },
+      "alert": {
+        "title": "SET ALERT",
+        "subtitle": "Notify me when…",
+        "kind": "Condition",
+        "price": "Price (USD)",
+        "confidence": "Confidence (%)",
+        "volume": "Volume turnover (%)",
+        "whale": "Whale activity",
+        "smartMoney": "Smart money",
+        "riskChange": "Risk score",
+        "above": "above",
+        "below": "below",
+        "threshold": "Threshold",
+        "create": "Create alert",
+        "cancel": "Cancel",
+        "active": "Active",
+        "fired": "Fired",
+        "none": "No rules yet. An alert fires only while the app is open and is evaluated against real signal data.",
+        "created": "Alert created",
+        "evaluate": "Evaluated on each data refresh; cooldown 6h.",
+        "cond": {
+          "price": "Price reaches {{v}} USD",
+          "confidence": "Confidence goes {{op}} {{v}}%",
+          "volume": "Volume turnover goes {{op}} {{v}}%",
+          "whale": "Whale flow turns {{op}}",
+          "smartMoney": "Smart money turns {{op}}",
+          "riskChange": "Risk score goes {{op}} {{v}}"
+        }
+      },
+      "portfolio": {
+        "title": "PORTFOLIO IMPACT",
+        "impact": "Impact",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "exposure": "Current exposure",
+        "concentration": "Concentration (top 3)",
+        "position": "Existing position",
+        "yes": "yes",
+        "no": "no",
+        "consentTitle": "Portfolio-aware AI",
+        "consentBody": "When on, your portfolio exposure summary (symbols + %) is included in the AI explanation. Wallet addresses, amounts and keys are NEVER sent.",
+        "consentOn": "Portfolio summary shared with AI",
+        "consentOff": "Portfolio stays on this device",
+        "notes": {
+          "highExposure": "Exposure already high — this signal raises concentration risk.",
+          "highConcentration": "Portfolio is highly concentrated.",
+          "existingPositionUp": "You already hold this asset.",
+          "noExistingPosition": "No existing position — signal adds diversification.",
+          "balanced": "Portfolio impact is balanced."
+        },
+        "local": "Computed locally from your app positions. Nothing was sent anywhere."
+      },
+      "history": {
+        "title": "SIGNAL HISTORY",
+        "subtitle": "Real records only: a signal is settled against the actual price at the end of its horizon.",
+        "empty": "No signals recorded yet. Each READY signal you see here is logged and settled automatically when its horizon ends.",
+        "columns": {
+          "symbol": "Asset",
+          "time": "Time",
+          "entry": "Entry",
+          "signal": "Signal",
+          "confidence": "Conf",
+          "result": "Result",
+          "move": "Actual move"
+        },
+        "result": {
+          "success": "HIT",
+          "failed": "MISS",
+          "flat": "FLAT",
+          "pending": "pending…"
+        },
+        "pendingTime": "settles {{d}}d after entry"
+      },
+      "performance": {
+        "title": "AI SIGNAL PERFORMANCE",
+        "totalSignals": "Total signals",
+        "settledSignals": "Settled",
+        "successful": "Successful",
+        "failed": "Failed",
+        "accuracy": "Accuracy",
+        "avgReturn": "Avg return",
+        "avgDrawdown": "Avg drawdown",
+        "best": "Best signal",
+        "worst": "Worst signal",
+        "insufficient": "Performance is computed only from settled real outcomes. It starts empty and grows as signals complete — nothing is pre-filled."
+      },
+      "filters": {
+        "title": "Filters",
+        "type": "Signal type",
+        "risk": "Risk",
+        "confidence": "Confidence",
+        "timeframe": "Timeframe",
+        "asset": "Asset",
+        "market": "Market",
+        "all": "All",
+        "buy": "Buy",
+        "sell": "Sell",
+        "watch": "Watch",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "conf50": "50%+",
+        "conf70": "70%+",
+        "conf90": "90%+",
+        "t24": "24H",
+        "t7": "7D",
+        "t30": "30D",
+        "others": "Others",
+        "evm": "EVM",
+        "solana": "Solana",
+        "clear": "Clear"
+      },
+      "search": {
+        "placeholder": "Search token, wallet or signal…",
+        "noResults": "No asset matches your search or filters.",
+        "label": "Search"
+      },
+      "evidence": {
+        "title": "Signal Evidence",
+        "insufficient": "INSUFFICIENT DATA"
+      },
+      "disclaimer": "AI signals are informational and do not guarantee future performance.",
+      "status": {
+        "live": "LIVE",
+        "stale": "STALE",
+        "offline": "OFFLINE",
+        "unavailable": "UNAVAILABLE"
+      },
+      "pull": "Real data sources: CoinGecko market charts · DexScreener pairs · Solscan on-chain · Smart Money flows integrate here automatically.",
+      "pulseMomentum": "Momentum"
     }
   },
   "stocks": {
