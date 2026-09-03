@@ -463,7 +463,17 @@ const TOOLS = [
         category: { type: 'string' }
       }
     },
-    execute: async (input, ctx) => ctx.mediaService?.play?.(input) ?? { ok: true, playing: input.mood || 'relaxation' },
+    /*
+     * No media service ⇒ NO_SERVICE, exactly like every other tool here.
+     *
+     * This used to return `{ ok: true, playing: input.mood }` when nothing was
+     * wired up: the assistant then told the user their music was playing while
+     * no <audio> element had been touched. Reporting a success for an action
+     * that did not happen is the one failure mode worth failing loudly on, and
+     * a real playback path already exists — RadioDock owns the only <audio>,
+     * driven through useRadioStore, and mediaService.play routes into it.
+     */
+    execute: async (input, ctx) => ctx.mediaService?.play?.(input) ?? { ok: false, reason: 'NO_SERVICE' },
     readOnly: true,
     requiresWallet: false,
     requiresConfirmation: false,

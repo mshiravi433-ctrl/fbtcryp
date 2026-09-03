@@ -48,6 +48,14 @@ import SmartWallet from '../src/pages/SmartWallet.jsx';
 import SmartMoneyWallet from '../src/pages/SmartMoneyWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
 import IntentOS from '../src/pages/IntentOS.jsx';
+import IntentAIUnified from '../src/components/IntentAIUnified.jsx';
+import { EcosystemPanel } from '../src/components/IntentEcosystemPanel.jsx';
+import {
+  OperationsPanel,
+  HistoryPanel,
+  StatusPanel,
+  IntelligencePanel
+} from '../src/components/IntentOpsPanels.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
 import BuySellPanel from '../src/components/BuySellPanel.jsx';
@@ -363,6 +371,27 @@ export async function run(container) {
   }
   await mount('Portfolio', <Portfolio />);
   await mount('IntentOS', <IntentOS />);
+
+  /*
+   * ─── THE LIVE /intent SURFACE ───────────────────────────────────────────
+   * `IntentAIUnified` is what `/intent` actually mounts (pages/IntentOS.jsx is
+   * unrouted), and until now NOTHING rendered it in a test. Every probe
+   * covering it greps its source text, which cannot catch a bad hook order, a
+   * component referenced before it is defined, or a JSX tag left unbalanced by
+   * a refactor — all of which produce a blank screen for the user while the
+   * whole suite stays green.
+   *
+   * Its four panels are mounted open, individually, because each one has its
+   * own data path and its own empty state; rendering the shell alone exercises
+   * none of them.
+   */
+  await mount('IntentAIUnified', <IntentAIUnified />);
+  await mount('OperationsPanel', <OperationsPanel open availability={() => ({ available: true })} onAction={() => {}} onClose={() => {}} locale="fa" />, { portal: true });
+  await mount('HistoryPanel', <HistoryPanel open onClose={() => {}} conversations={[]} operations={[]} monitors={[]} locale="fa" />, { portal: true });
+  await mount('StatusPanel', <StatusPanel open onClose={() => {}} status={{}} locale="fa" />, { portal: true });
+  await mount('IntelligencePanel', <IntelligencePanel open onClose={() => {}} providers={[]} locale="fa" />, { portal: true });
+  /* Agents + strategies, restored to a reachable surface. */
+  await mount('EcosystemPanel', <EcosystemPanel open onClose={() => {}} locale="fa" />, { portal: true });
 
   /*
    * The three components added or rebuilt alongside them. Mounted directly

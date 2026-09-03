@@ -31,7 +31,7 @@
  * - Security: No private key, seed, raw secret — only address, balance, public position, wallet signs
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
@@ -78,6 +78,14 @@ import { createRealServices } from '../lib/intent-ai/os/serviceAdapters.js';
 import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
 import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
+/* What an Operations card asks the assistant, per card and per language. The
+   old inline map was Persian-only and fell back to the card TITLE, which is a
+   label and classifies as GENERAL — that is why several cards did nothing. */
+import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
+/* Background audio has one owner: RadioDock's <audio>, mounted above the
+   router. The assistant drives it through this store instead of building a
+   second player that would die on the next navigation. */
+import { useRadioStore } from '../store/useRadioStore.js';
 import { getLastActiveTask, resumeTask as resumeTaskFn, getActiveTasks } from '../lib/intent-ai/os/taskContinuity.js';
 import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
 import { getLogs as getObsLogs, getStats as getObsStats } from '../lib/intent-ai/os/observability.js';
@@ -122,6 +130,13 @@ import {
   OpportunityList,
   OrderCard
 } from './IntentOpsPanels.jsx';
+/*
+ * Agents + strategies, restored to a reachable surface. The catalog lived only
+ * in the unrouted pages/IntentOS.jsx, which is why the feature "disappeared"
+ * for users while every test stayed green — see IntentEcosystemPanel.jsx.
+ */
+import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
+import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
 const MAX_SUGGESTIONS = 4;
@@ -143,6 +158,104 @@ function isRebalanceKind(type) {
   const t = String(type || '').toUpperCase();
   return t === 'REBALANCE' || t === 'REBALANCE_PORTFOLIO';
 }
+
+
+/**
+ * ONE MESSAGE IN THE THREAD.
+ * ---------------------------------------------------------------------------
+ * ─── WHY THIS IS ITS OWN MEMOIZED COMPONENT ─────────────────────────────────
+ *   «اسکرول صفحه به بالا و پایین لگ می‌زند و فریز می‌شود»
+ *
+ * All of this markup used to be inlined in the parent's `messages.map(...)`.
+ * That meant the entire conversation was rebuilt on EVERY parent render — and
+ * the parent re-renders on every keystroke in the composer (`input` state),
+ * every tick of the thinking indicator, every progress line, every wallet
+ * poll. Typing one character re-rendered every bubble in the thread, including
+ * the MonitorCard / OrderCard / OpportunityList subtrees hanging off them.
+ *
+ * A message is immutable once it lands. `memo` on a stable `m.id` means an
+ * existing bubble renders exactly once, so the cost of a keystroke stops
+ * scaling with conversation length. That is the freeze the user hit: it got
+ * worse the longer they talked, which is the signature of per-render work
+ * proportional to history.
+ *
+ * The callbacks are passed in already wrapped in `useCallback` by the parent,
+ * so the memo comparison actually holds. Adding an unmemoized inline arrow to
+ * this call site would silently defeat the whole thing.
+ */
+const ConversationRow = memo(function ConversationRow({
+  m,
+  t,
+  locale,
+  onConnectWallet,
+  onChoose,
+  onMonitorAction,
+  onMonitorOpportunity
+}) {
+  return (
+    <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
+      <div className="iaos-bubble">
+        <div className="iaos-msg-text">{m.content}</div>
+        {m.ui?.type === 'CONNECT_WALLET' ? (
+          <button
+            type="button"
+            className="iaos-btn iss-solid iaos-connect-btn"
+            data-testid="intent-ai-connect-wallet"
+            onClick={onConnectWallet}
+          >
+            {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
+          </button>
+        ) : null}
+        {Array.isArray(m.choices) && m.choices.length ? (
+          <div className="iaos-choices" data-testid="intent-ai-choices">
+            {m.choices.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="iaos-btn iss-ghost iaos-choice"
+                onClick={() => onChoose(m, c)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
+          <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
+        ) : null}
+        {m.kind === 'monitor' && m.monitor ? (
+          <MonitorCard monitor={m.monitor} onAction={onMonitorAction} locale={locale} />
+        ) : null}
+        {m.kind === 'order' && m.order ? (
+          <OrderCard order={m.order} locale={locale} />
+        ) : null}
+        {Array.isArray(m.opportunities) && m.opportunities.length ? (
+          <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
+        ) : null}
+        {m.multiAi ? (
+          <div className="iaos-multi-ai-badge" data-testid="intent-ai-multi-model-badge">
+            <span className="iaos-model-pill">✦ Multi-AI</span>
+            {m.multiAi.confidenceScore != null ? (
+              <span className="iaos-pill iaos-pill-ok">
+                {locale.startsWith('fa') ? 'اطمینان:' : 'Confidence:'} {m.multiAi.confidenceScore}%
+              </span>
+            ) : null}
+            {m.multiAi.riskScore ? (
+              <span className={`iaos-pill ${m.multiAi.riskScore === 'HIGH' || m.multiAi.riskScore === 'EXTREME' ? 'iaos-pill-bad' : m.multiAi.riskScore === 'MEDIUM' ? 'iaos-pill-warn' : 'iaos-pill-ok'}`}>
+                {locale.startsWith('fa') ? 'ریسک:' : 'Risk:'} {m.multiAi.riskScore}
+              </span>
+            ) : null}
+            {m.multiAi.dataFreshness ? (
+              <span className="iaos-pill iaos-pill-ok">
+                🟢 {m.multiAi.dataFreshness}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});
 
 export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const { t, i18n } = useTranslation();
@@ -296,6 +409,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             return { ok: false, error: e.message };
           }
         }
+      },
+      /* Actions are read off the store rather than subscribed to: this
+         component must not re-render when the playhead moves. */
+      radio: {
+        play: (track, queue) => useRadioStore.getState().play(track, queue),
+        setPlaying: (v) => useRadioStore.getState().setPlaying(v),
+        stop: () => useRadioStore.getState().stop()
       },
       locale
     });
@@ -470,27 +590,42 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         services: liveModuleServices
       });
 
-      // If local OS handled it completely (read-only, nav, media) — use it directly
-      const isLocalHandled = osResult.ok && (
+      /*
+       * ─── DOES THE LOCAL OS OWN THIS TURN? ───────────────────────────────
+       * This used to be a hand-maintained list of 18 intent types, and every
+       * type added to the parser had to be remembered here too. It never was
+       * — so a correctly-classified intent that nobody had added to the list
+       * fell through to the server, which does not know about the app's
+       * screens, and came back with a generic reply. That is the second half
+       * of the "it can't answer me" report.
+       *
+       * The rule is now derived, not enumerated:
+       *   · anything the OS already ANSWERED or NAVIGATED is handled here
+       *   · anything read-only is handled here — it needed no signature
+       *   · anything the OS flagged as needing confirmation goes to the
+       *     server path, which owns the confirm/sign flow
+       *
+       * Adding a parser intent can no longer silently bypass the local OS.
+       */
+      const osIntentType = osResult.intent?.type || null;
+      const needsFinancialConfirmation = Boolean(
+        osResult.requiresConfirmation
+        || osResult.human?.requiresConfirmation
+        || osResult.execution?.requiresConfirmation
+        || osResult.execution?.planReady
+      );
+      const isLocalHandled = osResult.ok && !needsFinancialConfirmation && (
         osResult.intent?.readOnly === true ||
         osResult.execution?.handoff === true ||
         Boolean(osResult.navigated) ||
-        osResult.intent?.type === 'NAVIGATION' ||
-        osResult.intent?.type === 'NEWS_SEARCH' ||
-        osResult.intent?.type === 'OPEN_CALM' ||
-        osResult.intent?.type === 'PLAY_MUSIC' ||
-        osResult.intent?.type === 'PORTFOLIO_ANALYSIS' ||
-        osResult.intent?.type === 'WALLET_BALANCE' ||
-        osResult.intent?.type === 'MARKET_ANALYSIS' ||
-        osResult.intent?.type === 'MARKET_CONTEXT' ||
-        osResult.intent?.type === 'SMART_MONEY' ||
-        osResult.intent?.type === 'WHALE' ||
-        osResult.intent?.type === 'YIELD_DISCOVERY' ||
-        osResult.intent?.type === 'INVESTMENT_PLAN' ||
-        osResult.intent?.type === 'FARM' ||
-        osResult.intent?.type === 'LEND' ||
-        osResult.intent?.type === 'ANALYZE_TOKEN' ||
-        (osResult.plan?.readOnly && !osResult.requiresConfirmation)
+        // The OS produced a real sentence for this turn — a route was opened,
+        // data was read, or a module was named. Sending it to the server too
+        // would replace a specific answer with a generic one.
+        Boolean(osResult.execution?.route) ||
+        Boolean(osResult.execution?.unavailable) ||
+        osIntentType === 'OPEN_CALM' ||
+        osIntentType === 'PLAY_MUSIC' ||
+        (osResult.plan?.readOnly === true)
       );
 
       if (isLocalHandled) {
@@ -502,7 +637,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ui: osResult.human?.ui || osResult.ui || { type: 'TEXT' },
           card: osResult.human?.card || osResult.card || null,
           intentType: osResult.intent?.type || null,
-          suggestions: osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities),
+          suggestions: osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale),
           debug: osResult.debug || null
         };
 
@@ -566,7 +701,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         choiceKind: reply.choiceKind || null,
         intentId: reply.intentId || null,
         intentType: reply.intent?.type || osResult.intent?.type || null,
-        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext)),
+        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext, {}, locale)),
         debug: osResult.debug || null
       };
 
@@ -621,13 +756,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   // Dynamic drawer items — based on current context, not static (Spec §17)
   const drawerItems = useMemo(() => {
-    const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType };
-    return getSuggestionsForMessage('', ctx).map(s => ({
+    const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType, locale };
+    return getSuggestionsForMessage('', ctx, locale).map(s => ({
       id: s.id,
       label: s.label,
       prompt: s.prompt
     }));
-  }, [currentPage, messages]);
+  }, [currentPage, messages, locale]);
 
   const runAction = useCallback(async (item) => {
     setDrawerOpen(false);
@@ -640,6 +775,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (message) rememberPending(message, intentType);
     setWalletSheetOpen(true);
   }, [rememberPending]);
+
+  /*
+   * The connect button inside a chat bubble. It has to be a stable reference,
+   * not an inline arrow at the call site — ConversationRow is memoized, and a
+   * fresh closure every render would make every bubble re-render anyway,
+   * defeating the whole point of memoizing it.
+   *
+   * `pendingExecutionRef` is read instead of `pendingExecution` so this
+   * callback does not have to change identity when the pending intent does.
+   */
+  const pendingExecutionRef = useRef(null);
+  useEffect(() => { pendingExecutionRef.current = pendingExecution; }, [pendingExecution]);
+  const connectFromBubble = useCallback(() => {
+    const pending = pendingExecutionRef.current;
+    openWalletSheet(
+      pending?.message || loadPendingIntent()?.originalMessage,
+      pending?.intentType
+    );
+  }, [openWalletSheet]);
 
   const confirmExecution = useCallback(async () => {
     if (!pendingExecution || executing) return;
@@ -1146,49 +1300,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   /* Card → real action map for read/quote cards (the AI chat pipeline is the
      real tooling: it resolves intent → quote → preview → confirm → execute). */
-  const CARD_PROMPTS = Object.freeze({
-    portfolio_analysis: 'پرتفوی من را تحلیل کن',
-    portfolio_risk: 'ریسک پرتفوی من را بررسی کن',
-    portfolio_allocation: 'توزیع دارایی‌های من را نشان بده',
-    wallet_analysis: 'کیف پول من را تحلیل کن',
-    wallet_balances: 'موجودی کیف پول من را نشان بده',
-    wallet_transactions: 'تراکنش‌های اخیر من را نشان بده',
-    lending_analysis: 'بازارهای lending را تحلیل کن',
-    farm_analysis: 'فرصت‌های فارم را تحلیل کن',
-    farm_recommend: 'بهترین فارم را پیدا کن',
-    lp_analysis: 'استخرهای نقدینگی را تحلیل کن',
-    futures_analysis: 'بازار فیوچرز را تحلیل کن',
-    futures_position: 'پوزیشن‌های فیوچرز من را نشان بده',
-    futures_risk: 'ریسک پوزیشن‌های فیوچرز را بررسی کن',
-    dydx_market: 'بازار dYdX را تحلیل کن',
-    dydx_position: 'پوزیشن‌های dYdX را نشان بده',
-    dydx_risk: 'ریسک dYdX را بررسی کن',
-    markets_rwa: 'توکن‌های RWA را نشان بده',
-    markets_tokenized: 'دارایی‌های توکنیزه را نشان بده',
-    intel_marketscan: 'بازار را اسکن کن',
-    intel_smartmoney: 'اسمارت مانی را دنبال کن',
-    intel_whales: 'نهنگ‌ها را دنبال کن',
-    intel_signals: 'سیگنال‌ها را نشان بده',
-    intel_news: 'اخبار بازار را نشان بده',
-    intel_events: 'رویدادهای بازار را نشان بده',
-    intel_token: 'توکن را تحلیل کن',
-    intel_contract: 'قرارداد را تحلیل کن',
-    goals_profit: 'برنامه سود برای هدفم بساز',
-    goals_whatif: 'چه‌اگر پرتفوی من را شبیه‌سازی کن',
-    goals_progress: 'پیشرفت هدف‌های من را نشان بده',
-    swap_token: 'می‌خواهم سواپ انجام دهم',
-    swap_quote: 'نرخ سواپ را نشان بده',
-    swap_execute: 'می‌خواهم سواپ اجرا کنم',
-    swap_crosschain: 'می‌خواهم سواپ کراس‌چین انجام دهم',
-    bridge_run: 'می‌خواهم پل بزنم',
-    bridge_quote: 'نرخ پل را نشان بده',
-    bridge_execute: 'می‌خواهم پل را اجرا کنم',
-    bridge_crosschain: 'می‌خواهم انتقال کراس‌چین انجام دهم',
-    portfolio_rebalance: 'پرتفوی من را متعادل کن',
-    goals_rebalance: 'پرتفوی من را متعادل کن',
-    loans_or_borrow: 'وام بگیر',
-    lend_market: 'می‌خواهم وام بدهم'
-  });
 
   /* Opportunity Engine run — real data only, honest metadata.
      Declared BEFORE handleOpsAction so the render cannot TDZ-crash
@@ -1248,10 +1359,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return;
     }
     if (card.action === 'order') {
-      if (card.id === 'goals_create') { void sendMessage('می‌خواهم یک هدف مالی بسازم'); return; }
-      if (card.id === 'auto_recurring' || card.id === 'auto_scheduled') {
-        void sendMessage('هر هفته 100 دلار BTC بخر');
-        return;
+      if (card.id === 'goals_create' || card.id === 'auto_recurring' || card.id === 'auto_scheduled') {
+        const seed = opsCardPrompt(card, locale);
+        if (seed) { void sendMessage(seed); return; }
       }
       setOrderDraftOpen(true);
       return;
@@ -1260,9 +1370,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       await runOpportunity(card);
       return;
     }
-    const prompt = CARD_PROMPTS[card.id] || card.title;
+    /*
+     * No prompt means this card is not a chat action. Sending `card.title`
+     * instead — which is what happened before — pushes a bare label like
+     * "Position" into the parser, gets GENERAL back, and answers a button
+     * press with "I could not map that to a module". Opening the card's own
+     * venue is the honest fallback: the card always has a real route.
+     */
+    const prompt = opsCardPrompt(card, locale);
+    if (!prompt) {
+      if (card.route) {
+        navigate(card.route);
+        appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
+      }
+      return;
+    }
     await sendMessage(prompt);
-  }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity]);
+  }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity, locale]);
 
   /* Monitor create — real server registry. */
   const handleMonitorCreate = useCallback(async (draft) => {
@@ -1637,6 +1761,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <button type="button" className="iaos-header-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
               {locale.startsWith('fa') ? 'عملیات' : 'Operations'}
             </button>
+            <button type="button" className="iaos-header-btn" data-testid="intent-ai-ecosystem" onClick={() => openPanel('ecosystem')}>
+              {opsText('eco.agents', locale)} · {opsText('eco.strategies', locale)}
+            </button>
             <button type="button" className="iaos-header-btn" data-testid="intent-ai-status" onClick={() => openPanel('status')}>
               {locale.startsWith('fa') ? 'وضعیت' : 'Status'}
             </button>
@@ -1697,67 +1824,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         <div className="iaos-conversation" ref={threadRef} aria-live="polite">
           {messages.map((m) => (
-            <div key={m.id} className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
-              <div className="iaos-bubble">
-                <div className="iaos-msg-text">{m.content}</div>
-                {m.ui?.type === 'CONNECT_WALLET' ? (
-                  <button
-                    type="button"
-                    className="iaos-btn iss-solid iaos-connect-btn"
-                    data-testid="intent-ai-connect-wallet"
-                    onClick={() => openWalletSheet(pendingExecution?.message || loadPendingIntent()?.originalMessage, pendingExecution?.intentType)}
-                  >
-                    {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
-                  </button>
-                ) : null}
-                {Array.isArray(m.choices) && m.choices.length ? (
-                  <div className="iaos-choices" data-testid="intent-ai-choices">
-                    {m.choices.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="iaos-btn iss-ghost iaos-choice"
-                        onClick={() => chooseOption(m, c)}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
-                  <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
-                ) : null}
-                {m.kind === 'monitor' && m.monitor ? (
-                  <MonitorCard monitor={m.monitor} onAction={handleMonitorAction} locale={locale} />
-                ) : null}
-                {m.kind === 'order' && m.order ? (
-                  <OrderCard order={m.order} locale={locale} />
-                ) : null}
-                {Array.isArray(m.opportunities) && m.opportunities.length ? (
-                  <OpportunityList rows={m.opportunities} onMonitor={monitorOpportunityRow} locale={locale} />
-                ) : null}
-                {m.multiAi ? (
-                  <div className="iaos-multi-ai-badge" data-testid="intent-ai-multi-model-badge">
-                    <span className="iaos-model-pill">✦ Multi-AI</span>
-                    {m.multiAi.confidenceScore != null ? (
-                      <span className="iaos-pill iaos-pill-ok">
-                        {locale.startsWith('fa') ? 'اطمینان:' : 'Confidence:'} {m.multiAi.confidenceScore}%
-                      </span>
-                    ) : null}
-                    {m.multiAi.riskScore ? (
-                      <span className={`iaos-pill ${m.multiAi.riskScore === 'HIGH' || m.multiAi.riskScore === 'EXTREME' ? 'iaos-pill-bad' : m.multiAi.riskScore === 'MEDIUM' ? 'iaos-pill-warn' : 'iaos-pill-ok'}`}>
-                        {locale.startsWith('fa') ? 'ریسک:' : 'Risk:'} {m.multiAi.riskScore}
-                      </span>
-                    ) : null}
-                    {m.multiAi.dataFreshness ? (
-                      <span className="iaos-pill iaos-pill-ok">
-                        🟢 {m.multiAi.dataFreshness}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            <ConversationRow
+              key={m.id}
+              m={m}
+              t={t}
+              locale={locale}
+              onConnectWallet={connectFromBubble}
+              onChoose={chooseOption}
+              onMonitorAction={handleMonitorAction}
+              onMonitorOpportunity={monitorOpportunityRow}
+            />
           ))}
           {thinking.length ? (
             <div className="iaos-msg iaos-ai">
@@ -1919,6 +1995,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         initial={orderInitial}
         onCreate={handleOrderCreate}
         busy={opsBusy}
+        locale={locale}
+      />
+
+      <EcosystemPanel
+        open={panel === 'ecosystem'}
+        onClose={() => setPanel(null)}
         locale={locale}
       />
 

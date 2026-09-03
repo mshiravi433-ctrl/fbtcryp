@@ -142,6 +142,14 @@ export function createIntentOS({
   audioService = null,
   walletService = null,
   eventBus = null,
+  /**
+   * The radio store (store/useRadioStore) actions, handed in by the host
+   * surface. Background audio has exactly one owner — RadioDock's <audio>,
+   * mounted above the router — and the media agent must drive THAT rather
+   * than create a second element. Null in Node tests, where the agent
+   * correctly reports a track as "queued" instead of "playing".
+   */
+  radio = null,
   locale = 'fa'
 } = {}) {
   let liveServices = { ...(services || {}) };
@@ -149,7 +157,14 @@ export function createIntentOS({
   // Create agents with dependencies
   const intentAgent = createIntentAgent();
   const navAgent = createNavigationAgent({ navigateFn: navigation?.navigate, eventBus: { emit: emitEvent } });
-  const mediaAgent = createMediaAgent({ audioService, navigation, eventBus: { emit: emitEvent } });
+  // audioService falls back to the one in the service bundle so a host that
+  // only passes `services` still gets a working media agent.
+  const mediaAgent = createMediaAgent({
+    audioService: audioService || services.audioService || null,
+    navigation,
+    radio,
+    eventBus: { emit: emitEvent }
+  });
   const walletAgent = createWalletAgent({ walletService, eventBus: { emit: emitEvent } });
   const portfolioAgent = createPortfolioAgent({ portfolioService: services.portfolioService, riskService: services.riskService });
   const marketAgent = createMarketAgent({ marketService: services.marketService, signalsService: services.signalsService, smartMoneyService: services.smartMoneyService, whaleService: services.whaleService });
@@ -247,10 +262,33 @@ export function createIntentOS({
         // 5. EXECUTE if read-only, page handoff, or navigation/media
         let executionResult = null;
         let verification = null;
-        const stayInChat = [
+        /*
+         * ─── WHO ANSWERS: the chat, or a page? ────────────────────────────
+         * A question deserves an ANSWER, not a redirect. The old list held 12
+         * types, so asking «تحلیل» or «اخبار» or «سیگنال» — a question — threw
+         * the user onto another screen mid-sentence and answered nothing.
+         *
+         * The rule now: anything the assistant can READ and summarise is
+         * answered here. Only an intent that needs a form the chat does not
+         * have (an amount field, a slippage control, a signature) hands off,
+         * and even then only because the page is where the action completes.
+         *
+         * `wantsPageOpen` still wins for every type — «بازش کن» is an explicit
+         * instruction and always beats this default.
+         */
+        const ANSWER_IN_CHAT = [
+          // analysis and reads — the assistant has the data
           'PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
-          'RISK_ANALYSIS', 'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL'
-        ].includes(intent.type);
+          'RISK_ANALYSIS', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN', 'SIGNALS',
+          'NEWS_SEARCH', 'SMART_MONEY', 'WHALE', 'FARM', 'LEND', 'ORDERS', 'STOCKS',
+          // conversation control
+          'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL',
+          // "what can you do" is a chat answer by definition
+          'CAPABILITIES',
+          // the ops surfaces answer with their own live panels
+          'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS'
+        ];
+        const stayInChat = ANSWER_IN_CHAT.includes(intent.type);
         const openPage = wantsPageOpen(intent.raw) || !stayInChat;
         // SSOT-first routing, with an adapter for follow-up slots, SEND→wallet,
         // speculation gating and entity-driven swap/bridge fallback.

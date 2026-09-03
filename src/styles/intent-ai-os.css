@@ -177,6 +177,36 @@
   gap: 10px;
   padding: 8px 2px 10px;
   scroll-behavior: smooth;
+
+  /*
+   * ─── SCROLL PERFORMANCE ─────────────────────────────────────────────────
+   * `contain: layout paint` tells the browser that nothing inside this box
+   * can affect layout outside it, and nothing paints outside its bounds. That
+   * lets it skip re-laying-out the rest of the page when a message is added,
+   * and confines repaints to this element.
+   *
+   * `overscroll-behavior: contain` stops a flick that reaches the top or the
+   * bottom of the thread from chaining into the page scroll behind it — which
+   * on touch is most of what "scrolling feels stuck" actually is.
+   */
+  contain: layout paint;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Off-screen bubbles are skipped entirely during layout and paint, and the
+ * browser uses the size hint instead. With a long conversation this is the
+ * difference between laying out every message on each scroll frame and laying
+ * out only the handful that are visible.
+ *
+ * `contain-intrinsic-size` must be a rough average bubble height: too small
+ * and the scrollbar jumps as real heights resolve, too large and it jumps the
+ * other way. 88px matches a typical two-line reply in this layout.
+ */
+.iaos-conversation > .iaos-msg {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 88px;
 }
 
 .iaos-msg {
@@ -1343,6 +1373,26 @@
   z-index: 0;
 }
 
+/*
+ * ─── WHY THE GLOW LAYER WAS CHANGED ─────────────────────────────────────────
+ *   «پردازش کند است، اسکرول لگ می‌زند و فریز می‌شود»
+ *
+ * `--iaos-glow` is a custom property consumed by a `conic-gradient`. Animating
+ * it is NOT compositable: every frame invalidates the gradient and forces a
+ * repaint of the whole pseudo-element.
+ *
+ * On `::before` that is a 1px masked ring — small, and it is the design, so it
+ * stays. On `::after` the same per-frame repaint was being pushed through
+ * `filter: blur(22px)`, a full-surface convolution over a layer inset around
+ * the entire chat shell. That one ran 60 times a second, on the main thread,
+ * for the whole session, and it is what left no frame budget for scrolling.
+ *
+ * The blurred layer now animates ONLY `opacity`, which the compositor handles
+ * on the GPU with no repaint. Its gradient is painted once. Visually it is a
+ * soft coloured haze behind a rounded box — the rotation was never legible
+ * through 22px of blur, which is why removing it costs nothing to look at and
+ * removes the entire cost.
+ */
 .iaos-shell::before {
   padding: 1px;
   background: conic-gradient(from var(--iaos-glow), rgba(99, 102, 241, .9), rgba(34, 211, 238, .9), rgba(167, 139, 250, .85), rgba(52, 211, 153, .8), rgba(99, 102, 241, .9));
@@ -1357,8 +1407,11 @@
 .iaos-shell::after {
   inset: -2px;
   filter: blur(22px);
-  background: conic-gradient(from var(--iaos-glow), rgba(99, 102, 241, .35), rgba(34, 211, 238, .28), rgba(167, 139, 250, .3), rgba(52, 211, 153, .22), rgba(99, 102, 241, .35));
-  animation: iaos-border-rotate 16s linear infinite, iaos-glow-pulse 5.2s ease-in-out infinite;
+  /* Fixed angle: painted once. Only opacity moves from here on. */
+  background: conic-gradient(rgba(99, 102, 241, .35), rgba(34, 211, 238, .28), rgba(167, 139, 250, .3), rgba(52, 211, 153, .22), rgba(99, 102, 241, .35));
+  animation: iaos-glow-pulse 5.2s ease-in-out infinite;
+  /* Its own compositor layer, so pulsing it never repaints the chat behind. */
+  will-change: opacity;
   opacity: .16;
   z-index: -1;
 }
@@ -1378,6 +1431,7 @@
   .iaos-shell::before,
   .iaos-shell::after {
     animation: none;
+    will-change: auto;
     opacity: .3;
   }
 }
@@ -1557,3 +1611,231 @@
   color: #334155;
 }
 
+
+/* ==========================================================================
+   ECOSYSTEM PANEL — agents & strategies inside the Operations Center.
+   Shares the panel chrome (.iaos-panel-overlay / .iaos-panel / .iaos-ops-cat)
+   so the restored feature does not read as a bolted-on second design.
+   ========================================================================== */
+
+.iaos-eco-panel {
+  width: min(760px, 100%);
+}
+
+.iaos-eco-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 2px;
+  /* Same containment as the conversation: a long registry must not make the
+     panel re-layout the page behind it on every scroll frame. */
+  contain: layout paint;
+  overscroll-behavior: contain;
+}
+
+.iaos-eco-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 680px) {
+  .iaos-eco-list { grid-template-columns: 1fr 1fr; }
+}
+
+.iaos-eco-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .55);
+  border-radius: 16px;
+  padding: 12px;
+  /* Off-screen listings are skipped during layout and paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+.iaos-eco-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.iaos-eco-card-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.iaos-eco-card-head strong {
+  font-size: 13.5px;
+  color: #e2e8f0;
+  overflow-wrap: anywhere;
+}
+
+.iaos-eco-card-head small {
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.iaos-eco-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 11px;
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, .09);
+  border: 1px solid rgba(103, 232, 249, .18);
+}
+
+.iaos-eco-icon svg { width: 18px; height: 18px; }
+
+.iaos-eco-stale {
+  margin: 0;
+  font-size: 11px;
+  color: #fcd34d;
+}
+
+.iaos-eco-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+
+.iaos-eco-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.iaos-eco-fact span {
+  font-size: 10.5px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.iaos-eco-fact strong {
+  font-size: 12px;
+  color: #cbd5e1;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.iaos-eco-rep {
+  margin: 0;
+  font-size: 11.5px;
+  color: #6ee7b7;
+}
+
+.iaos-eco-limits summary {
+  font-size: 11.5px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.iaos-eco-limits ul {
+  margin: 6px 0 0;
+  padding-inline-start: 16px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+.iaos-eco-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, .10);
+}
+
+.iaos-eco-publisher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: #64748b;
+}
+
+.iaos-eco-publisher svg,
+.iaos-eco-link svg { width: 13px; height: 13px; }
+
+.iaos-eco-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #a5f3fc;
+  text-decoration: none;
+}
+
+.iaos-eco-link:hover { text-decoration: underline; }
+
+.iaos-eco-evidence-btn {
+  border: 1px solid rgba(52, 211, 153, .28);
+  background: rgba(52, 211, 153, .10);
+  color: #6ee7b7;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.iaos-eco-evidence {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, .5);
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.7;
+}
+
+.iaos-eco-evidence a {
+  color: #a5f3fc;
+  margin-inline-start: 6px;
+}
+
+.iaos-eco-evidence code {
+  margin-inline-start: 6px;
+  color: #cbd5e1;
+}
+
+.iaos-eco-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 28px 16px;
+  border: 1px dashed rgba(148, 163, 184, .18);
+  border-radius: 16px;
+  color: #94a3b8;
+}
+
+.iaos-eco-empty strong { color: #e2e8f0; font-size: 13px; }
+.iaos-eco-empty p { margin: 0; font-size: 12px; line-height: 1.7; max-width: 46ch; }
+
+.iaos-eco-more { align-self: center; }
+
+.iaos-eco-page-error {
+  margin: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: #fcd34d;
+}
