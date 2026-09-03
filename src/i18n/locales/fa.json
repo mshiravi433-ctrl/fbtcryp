@@ -2287,7 +2287,79 @@
     "notice": "این‌ها پروژه‌های مستقل هستند. فانوس بازار پیشگام وابستگی به آن‌ها ندارد و از این لینک‌ها درآمدی کسب نمی‌کند.",
     "search": "جستجو در اکوسیستم",
     "noResults": "چیزی با «{{q}}» پیدا نشد.",
-    "noticeTitle": "رابطه ما با این پروژه‌ها: هیچ"
+    "noticeTitle": "رابطه ما با این پروژه‌ها: هیچ",
+    "newTitle": "اکوسیستم FBT Swap",
+    "heroTitle": "زیرساخت powering FBT Swap",
+    "heroSubtitle": "شبکه‌ها، منابع نقدینگی، پروتکل‌های دیفای، زیرساخت داده و سیستم‌های هوشمندی که در پشت FBT Swap کار می‌کنند.",
+    "statusTitle": "وضعیت اکوسیستم FBT",
+    "newSearch": "جستجو در اکوسیستم...",
+    "lastCheck": "آخرین بررسی",
+    "justNow": "همین الان",
+    "secondsAgo": "{{n}} ثانیه پیش",
+    "minutesAgo": "{{n}} دقیقه پیش",
+    "hoursAgo": "{{n}} ساعت پیش",
+    "loadError": "عدم امکان بارگذاری وضعیت اکوسیستم",
+    "statusUnavailable": "اطلاعات وضعیت در دسترس نیست",
+    "noResultsFilter": "هیچ یکپارچه‌سازی فعالی در این دسته وجود ندارد.",
+    "networks": "شبکه‌ها",
+    "dexSources": "منابع DEX",
+    "bridges": "پل‌ها",
+    "dataInfra": "زیرساخت داده",
+    "status": {
+      "operational": "فعال",
+      "degraded": "کاهش عملکرد",
+      "offline": "آفلاین",
+      "unknown": "نامشخص"
+    },
+    "filter": {
+      "all": "همه",
+      "networks": "شبکه‌ها",
+      "dex": "DEX",
+      "bridge": "پل",
+      "defi": "دیفای",
+      "data": "داده",
+      "ai": "هوش مصنوعی"
+    },
+    "statusFilter": {
+      "all": "همه وضعیت‌ها"
+    },
+    "sectionNetworks": "شبکه‌ها",
+    "sectionDex": "DEX و نقدینگی",
+    "sectionRouting": "مسیریابی نقدینگی",
+    "sectionBridges": "زیرساخت پل",
+    "sectionData": "زیرساخت داده و بازار",
+    "sectionAI": "هوش مصنوعی و هوشمندی",
+    "sectionWallets": "یکپارچه‌سازی کیف پول‌ها",
+    "sectionHowItWorks": "FBT Swap چگونه کار می‌کند",
+    "viz": {
+      "ariaLabel": "نمایش مسیریابی نقدینگی از کیف پول از طریق FBT Swap، موتور مسیریاب، منابع DEX تا بلاکچین"
+    },
+    "flow": {
+      "wallet": "کیف پول",
+      "walletDesc": "کیف پول غیرامانی تحت کنترل کاربر.",
+      "fbt": "FBT Swap",
+      "fbtDesc": "لایه رابط و اجرا.",
+      "intelligence": "هوشمندی / مسیریاب",
+      "intelligenceDesc": "مسیرها و نقدینگی موجود را پیدا می‌کند.",
+      "liquidity": "پروتکل‌ها و نقدینگی",
+      "liquidityDesc": "زیرساخت DEX / دیفای / پل.",
+      "blockchain": "بلاکچین",
+      "blockchainDesc": "تسویه نهایی.",
+      "verification": "تأیید",
+      "verificationDesc": "تراکنش را تأیید و وضعیت را به‌روزرسانی می‌کند."
+    },
+    "drawer": {
+      "type": "نوع",
+      "category": "دسته",
+      "networks": "شبکه‌ها",
+      "usage": "استفاده FBT",
+      "capabilities": "قابلیت‌ها",
+      "lastSuccess": "آخرین موفقیت",
+      "lastFailure": "آخرین خطا",
+      "chainType": "نوع زنجیره",
+      "chainId": "شناسه زنجیره",
+      "visitSite": "بازدید از سایت رسمی"
+    }
   },
   "biz": {
     "title": "بیزینس",
