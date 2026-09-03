@@ -51,6 +51,7 @@
 
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { renderLandingV2, V2_PAGE } from './landing-v2/index.mjs';
 
 /*
  * ─── THE CANONICAL HOME IS NOW fbtswap.ir ───────────────────────────────────
@@ -191,81 +192,20 @@ const PAGES = [
   },
 
   /*
-   * ═══════════════════════════════════════════════════════════════════════
-   * THE PERSIAN PAGE — the highest-value single page on this list.
-   * ═══════════════════════════════════════════════════════════════════════
+   * ─── THE DEX LANDING MOVED TO ITS OWN GENERATOR ─────────────────────────
+   * «/صرافی-غیرمتمرکز» is no longer rendered from this table. It became the
+   * flagship bilingual landing page (English default + full Persian, live
+   * market data, the whole FBT Financial OS story) and genuinely outgrew
+   * this shared template: it now lives in scripts/landing-v2/ and main()
+   * below emits it alongside these pages, to the same URL, into the same
+   * sitemap. Its hreflang pairing with 'non-custodial-crypto-swap' was
+   * dropped rather than kept stale: the new page is not a translation of
+   * that guide, it self-declares en + fa + x-default for its own two
+   * languages, and the English guide stands alone — a missing pair is
+   * honest, a wrong one is not.
    *
-   * ─── WHY IT WAS MISSING AND WHY THAT COST US ────────────────────────────
-   * The app is Persian-first. The interface defaults to Persian, the owner is
-   * in Isfahan, and the domain is now a `.ir`. Every crawlable page we had
-   * was in English.
-   *
-   * That is a straightforward mismatch of supply and demand. The English
-   * queries these pages target — "non-custodial crypto swap", "crypto price
-   * alerts" — are among the most contested phrases on the web, competing
-   * with Uniswap, MetaMask and Trust Wallet, all of whom have a decade of
-   * domain authority. We will not rank for them for years.
-   *
-   * The Persian equivalents («صرافی غیرمتمرکز», «سواپ ارز دیجیتال بدون
-   * احراز هویت») have a fraction of the competition and a far higher
-   * proportion of searchers who would actually use this app. It is the one
-   * place where being small is not a disadvantage.
-   *
-   * ─── WHY IT IS NOT A TRANSLATION OF THE ENGLISH PAGE ────────────────────
-   * A translated page ranks badly and deserves to: it answers the questions
-   * an English speaker asks. A Persian speaker searching for this arrives
-   * with different questions — can I use it without ID, does it work without
-   * a foreign bank card, is my money held by anyone — and the copy answers
-   * those instead. It is written, not translated.
-   *
-   * ─── AND WHY IT DOES NOT OVERSELL ───────────────────────────────────────
-   * It does not claim the fiat on-ramp works from Iran, because it does not:
-   * the card networks are disconnected at network level. Claiming otherwise
-   * would rank us for a query we cannot satisfy, and a visitor who bounces
-   * immediately is a ranking signal against the whole domain — as well as
-   * being a lie.
+   * The other Persian guide pages stay exactly where they were.
    */
-  {
-    slug: 'صرافی-غیرمتمرکز',
-    lang: 'fa',
-    dir: 'rtl',
-    route: '/#/swap',
-    title: 'صرافی غیرمتمرکز و سواپ ارز دیجیتال بدون احراز هویت | اف‌بی‌تی سواپ',
-    description:
-      'سواپ ارز دیجیتال روی ۱۰ شبکه، از کیف پول خودت. بدون ثبت‌نام، بدون احراز هویت و بدون اینکه دارایی‌ات دست کسی بیفتد. کلیدها پیش خودت می‌مانند.',
-    h1: 'سواپ ارز دیجیتال، بدون اینکه کلیدهایت را به کسی بدهی',
-    body: [
-      'اف‌بی‌تی سواپ یک رابط صرافی غیرمتمرکز است. کیف پولی را که خودت داری وصل می‌کنی، معامله می‌کنی، و دارایی‌ات هیچ‌وقت از کنترل تو خارج نمی‌شود. حسابی برای ساختن نیست، ایمیلی برای دادن نیست و احراز هویتی برای گذراندن نیست.',
-      'این برنامه دفتر سفارش ندارد و نقدینگی خودش را هم نگه نمی‌دارد. از تجمیع‌کننده‌های عمومی می‌پرسد بهترین مسیر روی شبکه‌ای که انتخاب کرده‌ای کدام است، قیمت و اثر قیمتی و کارمزد را نشانت می‌دهد، و بعد تراکنش را به کیف پول خودت می‌سپارد. امضا با توست و معامله مستقیم روی زنجیره بین کیف پول تو و پروتکل تسویه می‌شود.',
-      'چون هیچ‌کس اینجا کلید تو را ندارد، نتیجه‌اش هم همان است که انتظار داری: ما نمی‌توانیم تراکنشی را برگردانیم، دارایی‌ای را مسدود کنیم، یا عبارت بازیابی گم‌شده‌ای را پس بدهیم. هیچ‌کس نمی‌تواند. این هزینه‌ی غیرامانی بودن است و پیش از هر معامله روی همان صفحه نوشته شده.',
-      'برای استفاده از سواپ، کیف پول، نمودارها و هشدارهای قیمت به هیچ حسابی در هیچ‌جا نیاز نداری و هیچ محدودیت کشوری هم اعمال نمی‌شود — این‌ها روی خودِ بلاکچین اجرا می‌شوند. تنها بخشی که محدودیت دارد خرید با پول نقد است، چون آن یکی از طریق یک شریک پرداخت دارای مجوز انجام می‌شود و شبکه‌های کارت بین‌المللی از سال ۲۰۱۲ به سیستم بانکی ایران متصل نیستند. این را همان‌جا صریح نوشته‌ایم تا کسی وقتش را تلف نکند.'
-    ],
-    facts: [
-      ['شبکه‌ها', 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، سولانا'],
-      ['کارمزد پلتفرم', '۰٫۷۰٪ از مقدار ورودی، پیش از امضا روی صفحه نمایش داده می‌شود؛ روی همهٔ شبکه‌های پشتیبانی‌شده'],
-      ['امانت‌داری', 'هیچ. کلیدها داخل کیف پول خودت می‌مانند'],
-      ['ثبت‌نام', 'لازم نیست'],
-      ['احراز هویت', 'برای رابط سواپ لازم نیست']
-    ],
-    faqs: [
-      {
-        q: 'آیا برای سواپ در اف‌بی‌تی سواپ احراز هویت لازم است؟',
-        a: 'برای استفاده از رابط سواپ روی زنجیره، حساب اف‌بی‌تی سواپ یا احراز هویت لازم نیست؛ کیف پول خودت را وصل می‌کنی و همان‌جا تراکنش را امضا می‌کنی. ممکن است خودِ کیف پول یا پروتکلِ ثالث بررسی امنیتی جداگانه داشته باشد.'
-      },
-      {
-        q: 'آیا اف‌بی‌تی سواپ دارایی یا عبارت بازیابی من را نگه می‌دارد؟',
-        a: 'نه. اف‌بی‌تی سواپ واریز نمی‌گیرد، عبارت بازیابی را نمی‌خواهد و به‌جای کاربر امضا نمی‌کند. دارایی داخل کیف پول متصل می‌ماند و هر تراکنش تأیید صاحب کیف پول را می‌خواهد.'
-      },
-      {
-        q: 'کدام شبکه‌ها پشتیبانی می‌شوند؟',
-        a: 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا پشتیبانی می‌شوند. قبل از ارسال یا امضا، شبکهٔ انتخاب‌شده را با دقت بررسی کن.'
-      }
-    ],
-    ctaLabel: 'باز کردن برنامه',
-    glanceLabel: 'یک نگاه کلی',
-    riskText:
-      'ارزهای دیجیتال پرنوسان‌اند و تراکنش روی زنجیره برگشت‌ناپذیر است. ممکن است پول از دست بدهی، حتی همه‌اش را. هیچ‌چیز اینجا توصیه مالی نیست.'
-  },
 
   /*
    * Persian search intent pages. These are deliberately feature pages, not
@@ -401,7 +341,14 @@ const PAGES = [
  * half the audience.
  */
 const ALTERNATES = [
-  ['non-custodial-crypto-swap', 'صرافی-غیرمتمرکز'],
+  /*
+   * The old ['non-custodial-crypto-swap', 'صرافی-غیرمتمرکز'] pair was
+   * removed on purpose: the slug now hosts a bilingual English-default
+   * super-landing (scripts/landing-v2/) that is NOT a translation of the
+   * non-custodial guide. It declares its own en/fa/x-default hreflang
+   * instead. Pairing the guide with it would be the incorrect-annotation
+   * case the comment above warns about.
+   */
   ['crypto-price-alerts-and-dca', 'هشدار-قیمت-ارز-دیجیتال'],
   ['crypto-market-history-analysis', 'تحلیل-تکنیکال-ارز-دیجیتال']
 ];
@@ -1118,6 +1065,17 @@ function main() {
   }
 
   /*
+   * The flagship bilingual landing. It used to live in PAGES above as a
+   * plain Persian guide; it is now the FBT Financial OS landing 2.0 with
+   * its own template and live market data. Same URL, so existing rankings,
+   * the Search Console history and the IndexNow submission list keep
+   * pointing at the right place.
+   */
+  const v2Dir = join(OUT, V2_PAGE.slug);
+  mkdirSync(v2Dir, { recursive: true });
+  writeFileSync(join(v2Dir, 'index.html'), renderLandingV2({ site: SITE }), 'utf8');
+
+  /*
    * Rewrite the sitemap so the new pages are actually discoverable. Submitting
    * a sitemap that omits them would leave the whole exercise depending on
    * Google finding the links on its own.
@@ -1132,6 +1090,7 @@ function main() {
    */
   const urls = [
     `  <url>\n    <loc>${SITE}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${SITE}/${encodeURIComponent(V2_PAGE.slug)}</loc>\n    <changefreq>${V2_PAGE.changefreq}</changefreq>\n    <priority>${V2_PAGE.priority}</priority>\n  </url>`,
     ...PAGES.map(
       (p) =>
         `  <url>\n    <loc>${SITE}/${encodeURIComponent(p.slug)}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`
@@ -1159,8 +1118,9 @@ ${urls.join('\n')}
   // overwrote it would take the whole site down.
   readFileSync(join(OUT, 'index.html'), 'utf8');
 
-  console.log(`▸ generated ${PAGES.length} landing pages + sitemap`);
+  console.log(`▸ generated ${PAGES.length + 1} landing pages + sitemap`);
   for (const p of PAGES) console.log(`  /${p.slug}`);
+  console.log(`  /${V2_PAGE.slug} (bilingual landing 2.0)`);
 }
 
 main();
