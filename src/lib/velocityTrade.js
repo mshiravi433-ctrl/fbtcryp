@@ -358,6 +358,28 @@ export async function openVelocityPosition({ wallet, marketIndex, side, notional
          first-time account that is already there. */
       ctx.userExists = true;
       await ctx.client.fetchAccounts().catch(() => {});
+
+      /* 1b) A user attributed to a referrer ALSO needs their own
+         RevenueShareEscrow — the venue's fill path for a referred user loads
+         that account and fails with UnableToLoadRevenueShareAccount when it is
+         missing, and the referral slot itself is only written for an escrow
+         created with a referrer. The escrow can only exist after the
+         sub-account (its own tx, sent right after init, signed by the same
+         user); numOrders=1 is the documented minimum slot count. Only sent
+         when a referrer was actually attached — an unreferred account does not
+         need it. */
+      if (referrer) {
+        try {
+          const escrowIx = await ctx.client.getInitializeRevenueShareEscrowIx(ctx.authority, 1);
+          txs.push({ kind: 'escrow', signature: await sendInstructions(sdk, ctx, [escrowIx]) });
+        } catch (e) {
+          /* A user rejection aborts the whole open (nothing else has been
+             risked yet); a network/escrow failure must not strand the flow —
+             the order is still attempted and, if the venue truly requires the
+             escrow, its own error surfaces with the venue's reason. */
+          if (/reject|denied|cancel|4001/i.test(String(e?.message)) || e?.code === 'USER_REJECTED') throw e;
+        }
+      }
     }
 
     /* 2) deposit USDT collateral — only the top-up actually needed. Existing

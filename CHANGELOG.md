@@ -1,5 +1,60 @@
 # Unreleased — On-Chain futures: Drift → Velocity migration (the feed was dead, not the flag)
 
+- **The On-Chain chart works again — with real venue candles (2026-09-03).**
+  `GET https://data.velocity.exchange/market/:symbol/candles/:resolution` is
+  live (verified 15/60/240/D) but the adapter was looking for `open/high/low/
+  close` while the venue ships `ts` (unix **seconds**) + a `fillOpen/fillHigh/
+  fillLow/fillClose` series (plus an `oracle*` series), so every row was
+  dropped and the chart permanently said "unavailable". `readCandles` now maps
+  the real fields: fill series charted (the price trades actually got; carried
+  forward by the venue in empty buckets), oracle bucket as the fallback, `ts`
+  seconds → ms. No candle is ever invented — a dead endpoint still returns
+  `{ candles: [], live: false }` (pinned by probe, including the fallback and
+  the failure mode).
+- **The market-info panel now leads with the live numbers**: oracle price,
+  spread in bps, 24 h change and 24 h volume were added above funding/OI/fees
+  (all from `/stats/markets` + DLOB `/l2`). New i18n keys in all 12 locales.
+- **The Connect-wallet button is no longer a dead end.** With no Solana wallet
+  connected it now walks to the wallet page's Solana tab
+  (`#/wallet?tab=solana&return=/perp?tab=onchain&market=…&side=…&collateral=…
+  &leverage=…` — the CURRENT order rides in `?return=`), and the wallet page
+  returns to that exact order the moment a Solana wallet connects (only
+  same-app paths honoured; the param is consumed before navigating). When a
+  wallet IS connected it is detected instantly — including late extension
+  injection and connects from other tabs (`accountChanged`/`connect` events +
+  a light re-read in `useSolanaWallet`) — the short address is shown, the CTA
+  becomes "Review order" and is enabled. Mobile Wallet Adapter registration
+  now also happens in the tab itself (Android Chrome), and when no wallet
+  exists at all a readable notice replaces silence. The same hand-off covers
+  TP/SL/close.
+- **FBT's referral fee path is complete on the code side.** When FBT is
+  attached as the Velocity referrer (still only if its on-chain `UserStats`
+  exists), the user's first trade now ALSO creates their
+  `RevenueShareEscrow` (`getInitializeRevenueShareEscrowIx(authority, 1)`) —
+  without it a referred user's fill fails with `UnableToLoadRevenueShareAccount`.
+  New `npm run velocity:referrer-setup` (creates UserStats + User(0) +
+  RevenueShare from a LOCAL keypair at `VELOCITY_KEYPAIR_PATH`, refuses
+  keypairs inside the repo, prints the env lines) and `npm run
+  velocity:referral-sweep` (cron sweep: `syncAll` → `getAllByReferrer` /
+  `getEscrowsOwingRevenueShare` → `calculateRevenueShareSweepAvailable` gate →
+  `settleRevenueShare`; `VELOCITY_SWEEP_DRY_RUN=1` for a dry run). Builder
+  codes (which ADD user cost) are deliberately NOT implemented — they would
+  need explicit opt-in UI.
+- `VITE_VELOCITY_REFERRER` is now mapped in `ci/WORKFLOW-FIXED.yml` (it was
+  read in code but never reached the APK build) and documented in
+  `.env.example` together with `VELOCITY_REFERRER`, `VITE_SOLANA_RPC`,
+  `SOLANA_RPC_URL` (remember: VITE_* is build-time — redeploy after setting).
+- Tests: `futures-velocity-feed-probe` pins the real candle payload and its
+  mapping (seconds→ms, fill series, oracle fallback, limit, resolution
+  normalisation, honest 404); `futures-bff-probe` runs the candles route
+  end-to-end through the real adapter+router; `futures-onchain-probe` drives
+  the wallet hand-off end-to-end (no wallet → wallet page with the order in
+  `?return=`, connect there → automatic return, connected Phantom → detected
+  without a tap, CTA "Review order" + enabled, Review → /prepare → confirm
+  sheet); `futures-velocity-trade-probe` pins the referral surface
+  (escrow init, RevenueShareEscrowMap, sweep-available, settle) against the
+  shipped SDK bundle.
+
 - **Why the On-Chain tab said `drift: UNAVAILABLE · FEED_UNAVAILABLE ·
   marketCount = 0`**: the venue moved. Drift's program was **paused** and the
   protocol continues as **Velocity Protocol** — a fork of Drift v2 with a new

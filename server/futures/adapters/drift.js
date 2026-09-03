@@ -21,7 +21,7 @@
  *              (https://data.velocity.exchange) and the DLOB
  *              (https://dlob.velocity.exchange):
  *                GET /stats/markets                     (price · OI · funding · fees · limits)
- *                GET /market/:symbol/candles/:resolution (chart; may not exist)
+ *                GET /market/:symbol/candles/:resolution (chart; verified live 2026-09-03)
  *                GET {dlob}/l2?marketName=…&depth=1      (best bid/ask)
  *              Every field is read defensively; anything missing stays null
  *              rather than being invented, and a failed feed returns
@@ -302,11 +302,26 @@ export async function findMarket(marketRef) {
 }
 
 /**
- * OHLC candles for the chart. Velocity's Data API does not document a candles
- * endpoint (its public list is /stats/markets, /fundingRates, /trades), so the
- * Drift-era path is tried first and a second shape after it; if neither
- * answers, the chart says "unavailable" — it never invents a candle.
- * Cached 30s.
+ * OHLC candles for the chart, from the venue's own Data API.
+ *
+ * `GET {DATA_API}/market/:symbol/candles/:resolution?limit=N` is REAL and was
+ * verified live on 2026-09-03 (resolutions 15 / 60 / 240 / D). A bucket looks
+ * like (verbatim capture):
+ *
+ *   { "ts": 1788393600,
+ *     "fillOpen": 99.74055, "fillHigh": 100.77578,
+ *     "fillLow": 99.32792,  "fillClose": 100.77578,
+ *     "oracleOpen": 100.48411, "oracleHigh": 100.48411,
+ *     "oracleLow": 99.527661,  "oracleClose": 99.535,
+ *     "quoteVolume": 15.116367, "baseVolume": 0.15 }
+ *
+ * `ts` is UNIX SECONDS. Two real series live in each bucket: the FILL price
+ * (the price trades actually executed at; carried forward by the venue in
+ * buckets with no trades) and the ORACLE price. The chart uses the fill series
+ * and falls back to the oracle bucket when a bucket has no fill at all. Every
+ * number on the chart comes from this feed — a dead or empty feed returns
+ * `{ candles: [], live: false }` and the UI says "unavailable"; a candle is
+ * never invented. Cached 30s.
  */
 export async function readCandles({ marketRef, resolution = '60', limit = 96 }) {
   const res = RESOLUTION_MAP[String(resolution)] || '60';
@@ -333,12 +348,17 @@ export async function readCandles({ marketRef, resolution = '60', limit = 96 }) 
         } catch (err) { lastError = String(err?.message || '').slice(0, 60); }
       }
       const candles = rows
-        .map((c) => ({
-          startedAt: num(c.start ?? c.startedAt ?? c.time ?? c.ts) != null
-            ? (num(c.start ?? c.startedAt ?? c.time ?? c.ts) > 1e12 ? num(c.start ?? c.startedAt ?? c.time ?? c.ts) : num(c.start ?? c.startedAt ?? c.time ?? c.ts) * 1000)
-            : null,
-          open: num(c.open), high: num(c.high), low: num(c.low), close: num(c.close)
-        }))
+        .map((c) => {
+          const tsRaw = num(c.ts ?? c.start ?? c.startedAt ?? c.time);
+          const startedAt = tsRaw == null ? null : (tsRaw > 1e12 ? tsRaw : tsRaw * 1000);
+          /* fill series first (what traders actually got), oracle as the
+             fallback, generic OHLC names last for forward compatibility. */
+          const open = num(c.fillOpen) ?? num(c.oracleOpen) ?? num(c.open);
+          const high = num(c.fillHigh) ?? num(c.oracleHigh) ?? num(c.high);
+          const low = num(c.fillLow) ?? num(c.oracleLow) ?? num(c.low);
+          const close = num(c.fillClose) ?? num(c.oracleClose) ?? num(c.close);
+          return { startedAt, open, high, low, close };
+        })
         .filter((c) => c.startedAt != null && c.close != null && c.close > 0)
         .sort((a, b) => a.startedAt - b.startedAt)
         .slice(-count);

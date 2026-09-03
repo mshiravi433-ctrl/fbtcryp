@@ -168,11 +168,25 @@ try {
   };
   const realFetch = globalThis.fetch;
   let velocityFeedLive = true;
+  /* The REAL raw candle payload shape from GET /market/SOL-PERP/candles/60
+     (captured 2026-09-03): ts in unix SECONDS, fill series + oracle series. */
+  const V_CANDLES = {
+    success: true,
+    records: [
+      { ts: 1788386400, fillOpen: 99.32792, fillHigh: 99.32792, fillClose: 99.32792, fillLow: 99.32792, oracleOpen: 99.63457, oracleHigh: 99.675, oracleClose: 99.532148, oracleLow: 99.25607, quoteVolume: 0, baseVolume: 0 },
+      { ts: 1788390000, fillOpen: 99.32792, fillHigh: 100.1101, fillClose: 99.74055, fillLow: 99.32792, oracleOpen: 99.532148, oracleHigh: 100.48411, oracleClose: 100.48411, oracleLow: 99.424666, quoteVolume: 3.997013, baseVolume: 0.04 },
+      { ts: 1788393600, fillOpen: 99.74055, fillHigh: 100.77578, fillClose: 100.77578, fillLow: 99.74055, oracleOpen: 100.48411, oracleHigh: 100.48411, oracleClose: 99.535, oracleLow: 99.527661, quoteVolume: 15.116367, baseVolume: 0.15 }
+    ]
+  };
   globalThis.fetch = async (url, init) => {
     const u = String(url);
     if (u.startsWith('https://data.velocity.exchange/stats/markets')) {
       if (!velocityFeedLive) throw new TypeError('fetch failed');
       return Response.json(V_STATS);
+    }
+    if (/^https:\/\/data\.velocity\.exchange\/market\/.+\/candles\//.test(u)) {
+      if (!velocityFeedLive) throw new TypeError('fetch failed');
+      return Response.json(V_CANDLES);
     }
     if (u.startsWith('https://dlob.velocity.exchange/l2')) return Response.json(V_L2);
     if (u.startsWith('https://api.mainnet-beta.solana.com')) {
@@ -195,6 +209,16 @@ try {
     liveRow?.status === 'AVAILABLE' && liveRow?.executable === true
       && liveRow?.execution === 'CLIENT_BUILDS_TX' && liveRow?.marketCount === 1,
     `${liveRow?.status}/${liveRow?.execution}/${liveRow?.marketCount}`);
+
+  /* The candles route end-to-end: REAL adapter + REAL router against the raw
+     venue payload — ts (unix seconds) → startedAt (ms), fill series charted. */
+  const driftCandles = await get('/api/v1/futures/candles?provider=drift&market=0&resolution=60&limit=10');
+  const dc = driftCandles.json?.data;
+  t('Velocity candles cross the BFF normalized: seconds→ms, fill OHLC, live',
+    driftCandles.status === 200 && dc?.live === true && dc?.candles?.length === 3
+      && dc.candles[0].startedAt === 1_788_386_400_000
+      && dc.candles[2].close === 100.77578 && dc.candles[2].high === 100.77578,
+    JSON.stringify(dc?.candles?.[0] || driftCandles.json?.error));
 
   const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_velocity_prep_01' });
   const pd = driftPrepare.json?.data;

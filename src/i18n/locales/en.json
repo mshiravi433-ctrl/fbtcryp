@@ -8818,6 +8818,10 @@
     "marketOpen": "Market open",
     "marketClosed": "Market closed",
     "spread": "Bid — Ask",
+    "spreadBps": "Spread",
+    "oraclePrice": "Oracle price",
+    "change24h": "24h change",
+    "volume24h": "24h volume",
     "maxLeverage": "Maximum {{value}}×",
     "chartTitle": "Price · on-chain candles",
     "chartUnavailableShort": "Chart unavailable",
@@ -8886,6 +8890,7 @@
     "approveAndReview": "Approve exact amount & review",
     "review": "Review order",
     "exactApproval": "Approval is for this collateral amount only — never unlimited. Nothing is sent without your confirmation.",
+    "noWalletHint": "No Solana wallet is installed on this device. Tap the button above to open the wallet page — connect Phantom, Solflare or Backpack there and you will come straight back to this order.",
     "progress": {
       "validate": "Validate",
       "quote": "Quote",

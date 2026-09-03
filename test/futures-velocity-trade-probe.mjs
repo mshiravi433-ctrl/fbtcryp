@@ -74,9 +74,29 @@ t('the config carries the address lookup tables the tx compiler needs',
 
 /* ── the client methods, with the exact shapes the module calls ──────────── */
 const proto = sdk.VelocityClient?.prototype || {};
-for (const m of ['subscribe', 'unsubscribe', 'getInitializeUserAccountIxs', 'getDepositInstruction', 'getPlacePerpOrderIx', 'getCancelOrdersIx', 'getUser', 'getQuoteAssetTokenAmount']) {
+for (const m of ['subscribe', 'unsubscribe', 'getInitializeUserAccountIxs', 'getDepositInstruction', 'getPlacePerpOrderIx', 'getCancelOrdersIx', 'getUser', 'getQuoteAssetTokenAmount', 'getInitializeRevenueShareEscrowIx']) {
   t(`VelocityClient.${m} exists`, typeof proto[m] === 'function');
 }
+
+/* ── the referral surface: FBT's revenue path ────────────────────────────── */
+/* A referred user needs their own RevenueShareEscrow before their first fill
+   (initializeRevenueShareEscrowIx, called by openVelocityPosition when a
+   referrer is attached); the referrer side is set up by
+   scripts/velocity-referrer-setup.mjs (initializeUserAccount +
+   initializeRevenueShare) and swept by scripts/velocity-referral-sweep.mjs
+   (RevenueShareEscrowMap + calculateRevenueShareSweepAvailable +
+   settleRevenueShare). Pin every one of those symbols against the SHIPPED
+   bundle so a version bump cannot silently kill the fee path. */
+for (const m of ['initializeUserAccount', 'initializeRevenueShare', 'initializeRevenueShareEscrow', 'settleRevenueShare']) {
+  t(`VelocityClient.${m} exists (FBT referral path)`, typeof proto[m] === 'function');
+}
+t('RevenueShareEscrowMap exposes the sweep work-list methods',
+  typeof sdk.RevenueShareEscrowMap?.prototype?.syncAll === 'function'
+    && typeof sdk.RevenueShareEscrowMap?.prototype?.getAllByReferrer === 'function'
+    && typeof sdk.RevenueShareEscrowMap?.prototype?.getEscrowsOwingRevenueShare === 'function');
+t('calculateRevenueShareSweepAvailable is exported (pre-settle safety check)',
+  typeof sdk.calculateRevenueShareSweepAvailable === 'function');
+t('the escrow PDA derivation is exported (referrer setup script)', typeof sdk.getRevenueShareEscrowAccountPublicKey === 'function');
 
 /* ── the Anchor-style enums that go into OrderParams ─────────────────────── */
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -134,6 +154,13 @@ t('the compute-budget instructions the module prepends are real instructions',
   compiled.compiledInstructions.length === 3);
 t('a connection can be built for the configured RPC (no key required)',
   connection?.rpcEndpoint === 'https://api.mainnet-beta.solana.com');
+
+/* ── the referral escrow step in the trade module itself ─────────────────── */
+const tradeSrc = readFileSync(join(ROOT, 'src/lib/velocityTrade.js'), 'utf8');
+t('openVelocityPosition builds the user\'s RevenueShareEscrow only when a referrer is attached',
+  /getInitializeRevenueShareEscrowIx/.test(tradeSrc) && /if \(referrer\) \{/.test(tradeSrc));
+t('the referrer is only attached when its own on-chain UserStats exists (fbtReferrerInfo)',
+  /async function fbtReferrerInfo/.test(tradeSrc) && /getAccountInfo\(referrerStats\)/.test(tradeSrc));
 
 const failed = rows.filter(([, ok]) => !ok);
 console.log(failed.length ? `\n${failed.length} failed` : `\nall ${rows.length} velocity trade checks passed`);

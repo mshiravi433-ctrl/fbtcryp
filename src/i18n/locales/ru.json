@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Скоро",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Спред",
+    "oraclePrice": "Цена оракула",
+    "change24h": "Изменение за 24 ч",
+    "volume24h": "Объём за 24 ч",
+    "noWalletHint": "На этом устройстве нет кошелька Solana. Нажмите кнопку выше, чтобы открыть страницу кошелька — подключите Phantom, Solflare или Backpack там, и вы вернётесь прямо к этому ордеру."
   }
 }

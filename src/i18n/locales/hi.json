@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "जल्द आ रहा है",
     "chain": {
       "solana": "सोलाना"
-    }
+    },
+    "spreadBps": "स्प्रेड",
+    "oraclePrice": "ओरेकल कीमत",
+    "change24h": "24 घंटे बदलाव",
+    "volume24h": "24 घंटे वॉल्यूम",
+    "noWalletHint": "इस डिवाइस पर कोई Solana वॉलेट इंस्टॉल नहीं है। वॉलेट पेज खोलने के लिए ऊपर का बटन दबाएँ — वहाँ Phantom, Solflare या Backpack कनेक्ट करें और आप सीधे इसी ऑर्डर पर वापस आ जाएँगे।"
   }
 }

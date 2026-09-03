@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Próximamente",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Spread",
+    "oraclePrice": "Precio oráculo",
+    "change24h": "Cambio 24 h",
+    "volume24h": "Volumen 24 h",
+    "noWalletHint": "No hay ningún monedero Solana instalado en este dispositivo. Toca el botón de arriba para abrir la página del monedero: conecta Phantom, Solflare o Backpack allí y volverás directamente a esta orden."
   }
 }
