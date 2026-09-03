@@ -1095,18 +1095,14 @@
   },
   "futures": {
     "onchain": {
-      "title": "Zincir üstü vadeli işlemler · Solana'da Velocity",
-      "subtitle": "Velocity'de (Drift çatalı) kripto perpetual'ler — Solana'nın zincir üstü emir defteri DEX'i. Canlı fiyatlar, grafik ve ücretler; her emir Solana cüzdanınızla imzalanır."
-    },
-    "driftNote": "Velocity bu ekrandaki tek zincir üstü protokoldür. Piyasalar, fiyatlar, fonlama ve açık pozisyon Velocity'nin genel veri API'sinden canlı okunur; emirler resmî Velocity SDK'sı ile kurulur ve kendi Solana cüzdanınızla imzalanır — FBT anahtarlarınızı asla tutmaz.",
-    "protocolAvailableSoon": "Yakında",
-    "chain": {
-      "solana": "Solana"
+      "title": "Zincir üstü vadeli işlemler",
+      "subtitle": "Zincir üstü telafi edilen sözleşmeler — kripto, forex, emtia, endeks, hisse ve ETF tek motorda. Canlı fiyatlar, grafik ve ücretler; her emri kendi cüzdanınız imzalar, anahtarlar sizde kalır."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Oracle fiyatı",
     "change24h": "24 saat değişim",
     "volume24h": "24 saat hacim",
-    "noWalletHint": "Bu cihazda kurulu bir Solana cüzdanı yok. Cüzdan sayfasını açmak için yukarıdaki düğmeye dokunun — orada Phantom, Solflare veya Backpack bağlayın ve doğrudan bu emre geri döneceksiniz."
+    "noWalletHint": "Bu cihazda kurulu bir Solana cüzdanı yok. Cüzdan sayfasını açmak için yukarıdaki düğmeye dokunun — orada Phantom, Solflare veya Backpack bağlayın ve doğrudan bu emre geri döneceksiniz.",
+    "chartLive": "canlı piyas mumları"
   }
 }

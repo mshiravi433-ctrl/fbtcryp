@@ -11673,8 +11673,8 @@ export default function run() {
       /https-proxy-agent/.test(vite) &&
       /src\/shims\/https-proxy-agent\.js/.test(vite) &&
       /class HttpsProxyAgent/.test(read('src/shims/https-proxy-agent.js')));
-    t('the service-worker shell cache moved to v4',
-      /fbt-shell-v4/.test(sw) && !/fbt-shell-v3/.test(sw));
+    t('the service-worker shell cache moved to v5',
+      /fbt-shell-v5/.test(sw) && !/fbt-shell-v4/.test(sw));
   }
 
   /* ---- 102. the wallet glow layer must not push the panel down ---------- */
@@ -12820,8 +12820,10 @@ export default function run() {
     t('the fee breakdown is computed server-side by the shared engine, not in the tab',
       /computeFeeBreakdown\(/.test(router) && !/computeFeeBreakdown|\* bps|\/ 10_000|\/ 10000/.test(tab));
     t('the calldata carries the SAME bps the breakdown states', /buildOpen\(o, wallet, feeDraft\.fbt\.bps\)/.test(router));
-    t('the tab shows UNAVAILABLE / READ_ONLY from the registry rather than guessing',
-      /futures-provider-status/.test(tab) && /readOnlyNotice/.test(tab) && /unavailableNotice/.test(tab));
+    /* The venue card is gone (venue names stay internal); the honest
+       read-only/unavailable notices remain, driven by the registry. */
+    t('the tab shows READ_ONLY / UNAVAILABLE from the registry, and no venue card',
+      /readOnlyNotice/.test(tab) && /unavailableNotice/.test(tab) && !/futures-venue-card/.test(tab));
     t('the tab never draws a saved chart: candles come from the BFF or say unavailable',
       /getFuturesCandles\(/.test(tab) && /chartUnavailable/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
     t('the tab reports every hash and rejection back to /verify',
@@ -12838,7 +12840,7 @@ export default function run() {
     const tabKeys = [...tab.matchAll(/(?<![A-Za-z])t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
     const missingTab = [...new Set(tabKeys)].filter((k) => !hasKey(enL, k) || !hasKey(faL, k));
     t(`every On-Chain tab key resolves in en and fa (${new Set(tabKeys).size} checked)${missingTab.length ? ` — missing: ${missingTab.slice(0, 4).join(', ')}` : ''}`, missingTab.length === 0);
-    for (const prefix of ['futures.status.', 'futures.err.', 'futures.risk.', 'futures.progress.', 'futures.manage.', 'futures.warn.', 'futures.block.']) {
+    for (const prefix of ['futures.reason.', 'futures.err.', 'futures.risk.', 'futures.progress.', 'futures.manage.', 'futures.warn.', 'futures.block.']) {
       const enKeys = Object.keys(enL.futures[prefix.split('.')[1]] || {});
       t(`templated ${prefix}* keys exist in Persian (${enKeys.length})`, enKeys.length > 0 && enKeys.every((k) => hasKey(faL, `${prefix}${k}`)));
     }

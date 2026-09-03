@@ -19,9 +19,12 @@
  * longer has, which lands the user on the crash screen.)
  *
  * Bump this whenever the shell caching strategy changes OR the shell itself
- * needs to be force-refreshed on every existing install.
+ * needs to be force-refreshed on every existing install. v4 -> v5: the
+ * On-Chain futures chart fix shipped but installs that had cached a pre-fix
+ * shell still drew the old "unavailable" chart — renaming the cache evicts
+ * that shell on every existing device.
  */
-const SHELL = 'fbt-shell-v4';
+const SHELL = 'fbt-shell-v5';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

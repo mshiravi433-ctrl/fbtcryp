@@ -1,5 +1,38 @@
 # Unreleased — On-Chain futures: Drift → Velocity migration (the feed was dead, not the flag)
 
+- **The On-Chain engine is no longer crypto-only.** The tab now merges the
+  catalogues of EVERY on-chain venue the registry can drive — the Solana perps
+  venue (crypto) and the Arbitrum RWA venue (forex, commodities, indices,
+  stocks, ETFs) — into one market list with category chips: Crypto · Forex ·
+  Commodities · Indices · Stocks · ETFs (a chip only renders when the live
+  feed actually returns that class; a venue that is down simply isn't listed
+  while the other venue's markets still are). Every read is per-market's own
+  venue: candles, quote, fee breakdown, risk and the order path all follow the
+  selection (Solana wallet signs the crypto venue's orders, the EVM wallet
+  signs the RWA venue's unsigned calldata — both paths already existed in the
+  tab and were pinned by the probe). Market selection is now keyed
+  `provider:marketId` because both venues number their markets from 0.
+- **The Velocity information box is gone (on instruction).** The venue card
+  (VEL badge, venue name, status pill, market count) and the "Velocity is the
+  only on-chain protocol…" note were removed from the On-Chain tab, the hero
+  title/subtitle no longer name the venue or its Drift fork, the chart footer
+  says "live market candles" instead of naming the feed, and the confirmation
+  sheet no longer prints a provider row. Which venues feed the engine is not
+  the customer's business and is not ours to hand to competitors; the chain
+  name stays only where it tells the user WHICH wallet signs. Dead i18n keys
+  (`driftNote`, `chartSource`, `providerExecutable`, `providerNotExecutable`,
+  `protocolAvailableSoon`, `status.*`, `chain.*`, `provider`) removed from all
+  12 locales; new `chartLive` key added.
+- **The chart heals itself instead of sticking on "unavailable".** If the
+  candles read comes back empty (a cold serverless instance, a transient venue
+  blip) the tab now retries twice, 3.5 s apart, before showing the honest
+  empty state — previously the chart stayed "unavailable" until the user
+  changed market or resolution. The service-worker shell cache was also bumped
+  v4 → v5 so every existing install (e.g. a Telegram webview still holding a
+  pre-fix shell) evicts it and picks up the fixed bundle on next launch.
+  Verified end-to-end against the live payloads: `/api/v1/futures/candles`
+  answers 96 live candles for both venues in production.
+
 - **The On-Chain chart works again — with real venue candles (2026-09-03).**
   `GET https://data.velocity.exchange/market/:symbol/candles/:resolution` is
   live (verified 15/60/240/D) but the adapter was looking for `open/high/low/

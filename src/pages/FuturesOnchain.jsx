@@ -4,14 +4,22 @@
  * The third tab of /perp, beside Perpetual and dYdX. It renders what the
  * Futures BFF (/api/v1/futures) says and nothing else:
  *
- *   · provider status comes from the registry (AVAILABLE / DEGRADED / READ_ONLY
- *     / UNAVAILABLE / MAINTENANCE / BLOCKED) — the tab never guesses;
- *   · markets, prices, funding, OI, balances and positions are live reads;
- *   · fee, risk and route come from /quote and /prepare (backend truth); the
- *     confirmation sheet shows the server's breakdown, not a local formula;
- *   · the wallet signs UNSIGNED calldata built by the BFF; the tab then
- *     reports the hash to /verify, which updates the ledger and publishes
- *     FUTURES_* events.
+ *   · the tab lists every ON-CHAIN venue the registry can actually drive —
+ *     the Solana perps venue AND the Arbitrum RWA venue — merged into one
+ *     catalogue, so the engine is not crypto-only: forex, commodities,
+ *     indices, stocks and ETFs list under their own category chips as soon
+ *     as the venue serves them. The VENUES THEMSELVES stay invisible: no
+ *     provider card, no venue name, no "what data we run on" — the customer
+ *     sees markets and prices, not our supplier list (on instruction:
+ *     «باکس اطلاعات velocity را پاک کن … برای رقبا هم خوب نیست»);
+ *   · markets, prices, funding, OI, candles, balances and positions are live
+ *     reads per market's own venue; quotes, fees, risk and route come from
+ *     /quote and /prepare (backend truth); the confirmation sheet shows the
+ *     server's breakdown, not a local formula;
+ *   · the wallet signs UNSIGNED calldata built by the BFF (EVM venues) or a
+ *     transaction built in-tab with the venue SDK (Solana venue); the tab
+ *     then reports the hash to /verify, which updates the ledger and
+ *     publishes FUTURES_* events.
  *
  * Visually it reuses the same classes as the dYdX tab (derivatives-glass.css,
  * .card / .brg-quote / .dir-switch / .lev-row / .segmented) so it reads as the
@@ -44,20 +52,33 @@ import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { registerMobileWalletAdapter, publicAppUrl, canUseMwa } from '../lib/solanaWallet.js';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
 
-/* The on-chain futures tab is Velocity (Solana) and ONLY Velocity — the Drift
-   fork; the provider id is still `drift` for ledger/UI continuity. Ostium and
-   the other venues live elsewhere (Stocks tab / their own tabs); this screen
-   never lists a protocol comparison. */
-const ONCHAIN_PROVIDER_ID = 'drift';
-const CATEGORY_ORDER = ['Crypto'];
+/*
+ * The on-chain engine drives EVERY venue whose order path this tab can build
+ * and sign: the Solana perps venue (provider id `drift` — Velocity, the Drift
+ * fork; the id is kept for ledger/UI continuity) and the Arbitrum RWA venue
+ * (`ostium` — forex, commodities, indices, stocks, ETFs). dYdX executes via
+ * its own client session in its own tab and is not listed here. The venue
+ * NAMES are deliberately not shown anywhere in this tab — see the header
+ * comment.
+ */
+const ONCHAIN_VENUES = ['drift', 'ostium'];
+const ONCHAIN_EXECUTION = ['CLIENT_BUILDS_TX', 'ONCHAIN_UNSIGNED_TX'];
+/* Crypto first (continuity: SOL/USDT stays the default market), then the
+   non-crypto classes the second venue serves. Chips only render for classes
+   the live feed actually returns. */
+const CATEGORY_ORDER = ['Crypto', 'Forex', 'Commodities', 'Indices', 'Stocks', 'ETFs'];
 const friendlyCategory = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v.includes('crypto')) return 'Crypto';
+  if (v.includes('forex') || v === 'fx') return 'Forex';
+  if (v.includes('commodit') || v.includes('metal')) return 'Commodities';
+  if (v.includes('indic')) return 'Indices';
+  if (v.includes('stock') || v.includes('equit')) return 'Stocks';
+  if (v.includes('etf')) return 'ETFs';
   return 'Other';
 };
 const RESOLUTIONS = [['15', '15m'], ['60', '1h'], ['240', '4h'], ['1D', '1d']];
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
-const STATUS_TONE = { AVAILABLE: 'pill-up', DEGRADED: 'pill-neutral', READ_ONLY: 'pill-neutral', UNAVAILABLE: 'pill-down', MAINTENANCE: 'pill-down', BLOCKED: 'pill-down' };
 
 const errCode = (e) => mapFuturesError(e).code;
 const isBps = (v) => Number.isFinite(Number(v));
@@ -110,12 +131,10 @@ export default function FuturesOnchain() {
   }, []);
 
   const [providers, setProviders] = useState([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
-  const [providerId] = useState(ONCHAIN_PROVIDER_ID);
   const [markets, setMarkets] = useState([]);
   const [marketsState, setMarketsState] = useState({ loading: true, live: false, stale: false, code: null });
   const [category, setCategory] = useState('Crypto');
-  const [marketId, setMarketId] = useState('');
+  const [marketUid, setMarketUid] = useState('');
   const [search, setSearch] = useState('');
   const [resolution, setResolution] = useState('60');
   const [candles, setCandles] = useState({ rows: [], live: false, loading: false });
@@ -162,35 +181,50 @@ export default function FuturesOnchain() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.isConnected]);
 
-  const provider = providers.find((p) => p.providerId === providerId) || null;
-  const executable = Boolean(provider?.executable);
-  const readOnly = provider && !executable;
+  /* The ACTIVE venue is whatever lists the selected market — looked up per
+     selection after `market` is resolved below; never rendered as a card. */
 
-  /* ── provider (registry) — Velocity only; the registry just tells us status ── */
+  /* ── provider registry — facts only (collateral, chain, executability);
+       the venue itself is never shown to the customer ── */
   const loadProviders = useCallback(async () => {
     const res = await getFuturesProviders();
     const rows = res.ok ? res.data.providers : [];
-    /* This tab presents Velocity (Solana) and no other venue. */
-    const venue = rows.filter((p) => p.providerId === ONCHAIN_PROVIDER_ID);
+    /* Every on-chain venue this tab can drive. A venue that is READ_ONLY or
+       down still appears here so its markets can be listed read-only; its
+       orders stay gated by `executable`. */
+    const venue = ONCHAIN_VENUES
+      .map((id) => rows.find((p) => p.providerId === id))
+      .filter(Boolean)
+      .filter((p) => ONCHAIN_EXECUTION.includes(p.execution));
     setProviders(venue);
     store.setProviders(venue, res.ok ? 'live' : 'unavailable');
-    setProvidersLoading(false);
   }, [store]);
 
   useEffect(() => { loadProviders(); const id = setInterval(loadProviders, 30_000); return () => clearInterval(id); }, [loadProviders]);
 
-  /* ── markets ─────────────────────────────────────────────────────────── */
+  /* ── markets — one merged catalogue across every on-chain venue ─────── */
   const loadMarkets = useCallback(async () => {
-    const res = await getFuturesMarkets(providerId);
-    if (res.ok) {
-      const rows = (res.data.markets || []).map((m) => ({ ...m, uiCategory: friendlyCategory(m.category) }));
-      setMarkets(rows);
-      setMarketsState({ loading: false, live: res.data.live, stale: res.data.stale, code: null });
-    } else {
-      setMarkets([]);
-      setMarketsState({ loading: false, live: false, stale: false, code: res.error?.code || 'PROVIDER_UNAVAILABLE' });
+    /* A venue that is down answers !ok and is simply not listed; the other
+       venue's markets still show. Only when NOTHING answers is the catalogue
+       "unavailable" — and it says so, never invents. */
+    const results = await Promise.all(ONCHAIN_VENUES.map(async (pid) => [pid, await getFuturesMarkets(pid)]));
+    const rows = [];
+    let live = false;
+    let stale = false;
+    let lastCode = null;
+    for (const [pid, res] of results) {
+      if (!res.ok) { lastCode = res.error?.code || 'PROVIDER_UNAVAILABLE'; continue; }
+      live = live || res.data.live === true;
+      stale = stale || res.data.stale === true;
+      for (const m of (res.data.markets || [])) {
+        /* uid: marketIds are per-venue (both venues have a "0"), so the
+           selection key is the pair. providerId rides on every row. */
+        rows.push({ ...m, providerId: pid, uid: `${pid}:${m.marketId}`, uiCategory: friendlyCategory(m.category) });
+      }
     }
-  }, [providerId]);
+    setMarkets(rows);
+    setMarketsState({ loading: false, live, stale, code: rows.length ? null : (lastCode || 'PROVIDER_UNAVAILABLE') });
+  }, []);
 
   useEffect(() => {
     setMarketsState((s) => ({ ...s, loading: true }));
@@ -212,8 +246,8 @@ export default function FuturesOnchain() {
     return rows;
   }, [markets, category, search]);
   useEffect(() => {
-    if (visible.length && !visible.some((m) => m.marketId === marketId)) setMarketId(visible[0].marketId);
-  }, [visible, marketId]);
+    if (visible.length && !visible.some((m) => m.uid === marketUid)) setMarketUid(visible[0].uid);
+  }, [visible, marketUid]);
 
   /* The hand-off market wins the first time the catalogue lists it. */
   const prefillApplied = useRef(false);
@@ -224,10 +258,14 @@ export default function FuturesOnchain() {
     prefillApplied.current = true;
     if (!hit) return;
     setCategory(hit.uiCategory);
-    setMarketId(hit.marketId);
+    setMarketUid(hit.uid);
   }, [markets, prefill.market]);
 
-  const market = markets.find((m) => m.marketId === marketId) || null;
+  const market = markets.find((m) => m.uid === marketUid) || null;
+  const providerId = market?.providerId || ONCHAIN_VENUES[0];
+  const provider = providers.find((p) => p.providerId === providerId) || null;
+  const executable = Boolean(provider?.executable);
+  const readOnly = provider && !executable;
   useEffect(() => {
     if (market) store.setSelection({ selectedProviderId: providerId, selectedMarketId: market.marketId, selectedSide: side });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,18 +274,35 @@ export default function FuturesOnchain() {
   const effectiveMax = market?.isDayTradingClosed && market.overnightMaxLeverage > 0 ? market.overnightMaxLeverage : market?.maxLeverage;
   useEffect(() => { if (effectiveMax && Number(leverage) > effectiveMax) setLeverage(String(effectiveMax)); }, [effectiveMax, leverage]);
 
-  /* ── candles ─────────────────────────────────────────────────────────── */
+  /* ── candles — live from the market's own venue, with a bounded self-heal ──
+     A cold serverless instance or a transient venue blip used to leave the
+     chart on "unavailable" until the user changed market or resolution. The
+     read is now retried twice (3.5s apart) before the honest empty state. */
   useEffect(() => {
     if (!market) return undefined;
     let alive = true;
-    setCandles((c) => ({ ...c, loading: true }));
-    getFuturesCandles({ provider: providerId, market: market.marketId, resolution, limit: 96 }).then((res) => {
+    let retryTimer = null;
+    let attempt = 0;
+    const run = async () => {
+      setCandles((c) => ({ ...c, loading: true }));
+      const res = await getFuturesCandles({ provider: market.providerId, market: market.marketId, resolution, limit: 96 });
       if (!alive) return;
       const rows = res.ok ? res.data.candles || [] : [];
-      setCandles({ rows, live: res.ok && res.data.live === true, loading: false });
-    });
-    return () => { alive = false; };
-  }, [providerId, market?.marketId, resolution]);
+      if (rows.length >= 2) {
+        setCandles({ rows, live: res.ok && res.data.live === true, loading: false });
+        return;
+      }
+      if (attempt < 2) {
+        attempt += 1;
+        retryTimer = setTimeout(run, 3_500);
+        return;
+      }
+      setCandles({ rows: [], live: false, loading: false });
+    };
+    run();
+    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market?.providerId, market?.marketId, resolution]);
 
   const candlePoints = useMemo(() => candles.rows.map((c) => ({ x: c.startedAt, y: c.close })), [candles.rows]);
   const candleChange = useMemo(() => {
@@ -619,13 +674,7 @@ export default function FuturesOnchain() {
           : t('futures.review');
   const canReview = !busy && executable && market && quote && !risk?.blocked && !insufficient && !quoting;
 
-  const statusLabel = (p) => (p ? t(`futures.status.${p.status}`, { defaultValue: p.status }) : '');
   const reasonLabel = (p) => (p?.reason ? t(`futures.reason.${p.reason}`, { defaultValue: p.reason }) : '');
-  const chainLabel = (p) => {
-    if (!p) return 'Solana';
-    if (p.family === 'solana') return t('futures.chain.solana', { defaultValue: p.chainName || 'Solana' });
-    return p.chainName || '';
-  };
 
   return (
     <PageTransition>
@@ -643,29 +692,9 @@ export default function FuturesOnchain() {
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
         </motion.div>
 
-        {/* ── the venue: Velocity on Solana (the only on-chain protocol) ── */}
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }} data-testid="futures-venue-card">
-          {providersLoading && !providers.length ? <div className="skel" style={{ height: 76 }} /> : (
-            <div className="wallet-option" style={{ borderColor: 'rgba(0,229,255,0.35)', cursor: 'default' }}>
-              <span className="wallet-badge" style={{ color: executable ? 'var(--rgb-1)' : 'var(--text-3)' }}>VEL</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>
-                  {provider?.name || 'Velocity'} <span className="faint">· {chainLabel(provider)}</span>
-                  {!executable && <span className="pill pill-neutral" style={{ marginInlineStart: 8 }}>{t('futures.protocolAvailableSoon')}</span>}
-                </span>
-                <span className="set-row-sub">
-                  {executable
-                    ? t('futures.providerExecutable', { count: provider?.marketCount ?? 0 })
-                    : reasonLabel(provider) || t('futures.providerNotExecutable')}
-                </span>
-              </span>
-              <span className={`pill ${STATUS_TONE[provider?.status] || 'pill-down'}`} data-testid="futures-provider-status">
-                {provider ? statusLabel(provider) : t('futures.status.UNAVAILABLE', { defaultValue: 'Unavailable' })}
-              </span>
-            </div>
-          )}
-          <p className="faint" style={{ marginTop: 10 }}>{t('futures.driftNote')}</p>
-        </motion.section>
+        {/* ── NO venue card, on instruction: which venues feed the engine is
+           not the customer's business and is not ours to hand to competitors.
+           The market list below is the product; the registry is plumbing. ── */}
 
         {readOnly && (
           <p className="notice" style={{ marginTop: 12 }} data-testid="futures-readonly-notice">
@@ -699,8 +728,8 @@ export default function FuturesOnchain() {
                 <div className="feed-offline-note"><span className="pulse-dot" aria-hidden="true" />{t('futures.staleNotice')}</div>
               )}
               <label className="field-label">{t('futures.market')}</label>
-              <select value={market?.marketId || ''} onChange={(e) => setMarketId(e.target.value)} data-testid="futures-market-select">
-                {visible.map((m) => <option key={m.marketId} value={m.marketId}>{m.symbol}</option>)}
+              <select value={market?.uid || ''} onChange={(e) => setMarketUid(e.target.value)} data-testid="futures-market-select">
+                {visible.map((m) => <option key={m.uid} value={m.uid}>{m.symbol}</option>)}
               </select>
 
               {market && (
@@ -740,7 +769,7 @@ export default function FuturesOnchain() {
                 {candles.live && (
                   <div className="dydx-chart-foot">
                     <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>{fmtPct(candleChange)}</span>
-                    <span className="faint">{t('futures.chartSource', { provider: provider?.name || providerId })}</span>
+                    <span className="faint">{t('futures.chartLive')}</span>
                   </div>
                 )}
               </div>
@@ -923,7 +952,9 @@ export default function FuturesOnchain() {
           {prepared && (
             <div className="stack" style={{ gap: 10 }} data-testid="futures-confirm">
               <div className="card card-tight stack" style={{ gap: 8 }}>
-                <div className="row-between"><span className="faint">{t('futures.provider')}</span><strong>{provider?.name} · {provider?.chainName}</strong></div>
+                {/* No venue row: the venue name is internal. The chain is
+                    implied by the wallet that signs — it is shown in the
+                    wallet row, not as a supplier list. */}
                 <div className="row-between"><span className="faint">{t('futures.market')}</span><strong>{prepared.market.symbol}</strong></div>
                 <div className="row-between"><span className="faint">{t('futures.direction')}</span><strong>{t(`futures.${prepared.order.side}`)}</strong></div>
                 <div className="row-between"><span className="faint">{t('futures.collateralLabel')}</span><span className="mono">{fmtUsd(prepared.order.collateralUsd)} × {prepared.order.leverage}</span></div>

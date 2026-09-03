@@ -1095,18 +1095,14 @@
   },
   "futures": {
     "onchain": {
-      "title": "Futures On-Chain · Velocity di Solana",
-      "subtitle": "Perpetual kripto di Velocity (fork Drift) — DEX order-book on-chain Solana. Harga, grafik, dan biaya langsung; setiap order ditandatangani oleh wallet Solana Anda."
-    },
-    "driftNote": "Velocity adalah satu-satunya protokol on-chain di layar ini. Pasar, harga, pendanaan, dan open interest dibaca langsung dari API data publik Velocity; order dibangun dengan SDK resmi Velocity dan ditandatangani oleh wallet Solana Anda sendiri — FBT tidak pernah memegang kunci Anda.",
-    "protocolAvailableSoon": "Segera",
-    "chain": {
-      "solana": "Solana"
+      "title": "Futures on-chain",
+      "subtitle": "Perpetual dengan penyelesaian on-chain — kripto, forex, komoditas, indeks, saham, dan ETF dalam satu mesin. Harga, grafik, dan biaya langsung; setiap order ditandatangani dompet Anda sendiri, kunci tetap milik Anda."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Harga oracle",
     "change24h": "Perubahan 24 jam",
     "volume24h": "Volume 24 jam",
-    "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini."
+    "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini.",
+    "chartLive": "candle pasar langsung"
   }
 }

@@ -1088,18 +1088,14 @@
   },
   "futures": {
     "onchain": {
-      "title": "链上合约 · Solana 上的 Velocity",
-      "subtitle": "在 Velocity（Drift 的分叉）上交易加密货币永续合约——Solana 的链上订单簿 DEX。实时价格、图表与费用；每笔订单都由您的 Solana 钱包签名。"
-    },
-    "driftNote": "Velocity 是此页面唯一的链上场所。市场、价格、资金费率与未平仓量均实时读取自 Velocity 的公共数据 API；订单由官方 Velocity SDK 构建，并由您自己的 Solana 钱包签名——FBT 从不持有您的密钥。",
-    "protocolAvailableSoon": "即将推出",
-    "chain": {
-      "solana": "Solana"
+      "title": "链上合约",
+      "subtitle": "链上结算的永续合约——加密货币、外汇、大宗商品、指数、股票与 ETF 汇于一个引擎。实时价格、图表与费用；每笔订单都由您自己的钱包签名，密钥始终在您手中。"
     },
     "spreadBps": "点差",
     "oraclePrice": "预言机价格",
     "change24h": "24 小时涨跌",
     "volume24h": "24 小时成交量",
-    "noWalletHint": "此设备上未安装任何 Solana 钱包。点击上方按钮打开钱包页面——在那里连接 Phantom、Solflare 或 Backpack，即可直接返回当前订单。"
+    "noWalletHint": "此设备上未安装任何 Solana 钱包。点击上方按钮打开钱包页面——在那里连接 Phantom、Solflare 或 Backpack，即可直接返回当前订单。",
+    "chartLive": "实时市场K线"
   }
 }
