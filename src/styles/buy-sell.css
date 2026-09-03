@@ -51,7 +51,7 @@
 .buy-sell-timeline li { position: relative; flex: 1 0 74px; min-width: 74px; display: grid; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
 .buy-sell-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 9px; width: calc(100% - 19px); inset-inline-start: calc(50% + 10px); height: 1px; background: rgba(255,255,255,.13); }
 .buy-sell-timeline li.done:not(:last-child)::after { background: var(--up); }
-.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 9px; }
+.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 9px; }
 .buy-sell-timeline li.active { color: var(--rgb-4); font-weight: 700; }
 .buy-sell-timeline li.active > span { border-color: var(--rgb-4); box-shadow: 0 0 0 4px rgba(0,229,255,.1); }
 .buy-sell-timeline li.done { color: var(--up); }
@@ -96,7 +96,7 @@
 .bsw-stepper li.done:not(:last-child)::after { background: linear-gradient(90deg, var(--rgb-4), rgba(0,229,255,.35)); }
 .bsw-stepper button { width: 100%; display: grid; justify-items: center; gap: 5px; padding: 0; background: transparent; border: 0; color: var(--text-3); cursor: pointer; }
 .bsw-stepper button:disabled { cursor: default; }
-.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
+.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
 .bsw-stepper button > small { font-size: 9.5px; line-height: 1.3; font-weight: 600; }
 .bsw-stepper li.active button { color: var(--rgb-4); }
 .bsw-stepper li.active button > span { border-color: var(--rgb-4); color: var(--rgb-4); box-shadow: 0 0 0 5px rgba(0,229,255,.09); }

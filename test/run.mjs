@@ -1505,6 +1505,101 @@ console.log('\n▸ checking modal stacking order…');
 }
 
 /*
+ * NO STYLESHEET MAY REFERENCE A CUSTOM PROPERTY THAT IS NEVER DEFINED.
+ *
+ * Reported: «در صفحه تنظیمات در تم روشن برای نوتفیکیشن پروفایل جملات مخفیه
+ * اما تم تاریک درسته» — in the light theme the profile notification popup's
+ * text was invisible; the dark theme was fine.
+ *
+ * Cause: `.profile-badge-pop` painted itself with
+ * `var(--bg-1, rgba(10,12,20,.97))`, and `--bg-1` is not defined ANYWHERE in
+ * the project. The fallback therefore won in BOTH themes and the panel was
+ * always near-black, while `--text-1` correctly flipped to near-black under
+ * the light theme. Measured before the fix: title #0d1020 on #0a0c14 =
+ * 1.03:1, i.e. black on black. Two more rules had the same dangling token.
+ *
+ * A fallback is what made this survive review: the CSS is perfectly valid,
+ * the browser reports no error, and the rule looks theme-aware because it
+ * mentions a variable. Only checking that the variable EXISTS catches it.
+ *
+ * So: every `var(--x)` used in a stylesheet must be declared by some rule in
+ * that same set of stylesheets. Tokens that are set from JavaScript are
+ * listed as known-dynamic.
+ */
+console.log('\n▸ checking themed surfaces resolve in BOTH themes…');
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const files = ['src/index.css', ...readdirSync('src/styles').filter((f) => f.endsWith('.css')).map((f) => `src/styles/${f}`)];
+  const all = files.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /* Declared anywhere in the stylesheets: `--name:` inside some rule. */
+  const declared = new Set([...all.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+  /* Tokens set from JS/JSX (inline style objects, setProperty) are legitimate. */
+  const fromJs = new Set(
+    [...readdirSync('src', { recursive: true })
+      .filter((f) => /\.(jsx|js)$/.test(String(f)))
+      .map((f) => { try { return readFileSync(`src/${f}`, 'utf8'); } catch { return ''; } })
+      .join('\n')
+      .matchAll(/['"`]?(--[\w-]+)['"`]?\s*:/g)].map((m) => m[1])
+  );
+
+  /* A surface that paints an opaque PANEL must use a token the light theme
+     re-declares — otherwise the box keeps its dark-theme colour while the
+     text on it flips, which is exactly how the popup went black-on-black.
+     These are the tokens both `:root` and `:root[data-theme='light']` set. */
+  const lightBlock = /:root\[data-theme=['"]light['"]\]\s*\{([^}]*)\}/.exec(all)?.[1] || '';
+  const themedTokens = new Set([...lightBlock.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+
+  /* Every rule body that belongs to the notification popup.
+     `@keyframes` (and any other nested at-rule) has an extra brace level that
+     desynchronises a flat rule scan and silently swallows the rules after it,
+     so those blocks are removed before the scan. */
+  const flat = all.replace(/@(?:keyframes|media|supports|layer)[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+  /* Scan `selector { body }` pairs. The selector must NOT be anchored on the
+     previous rule's `}` — a global match consumes that brace, which makes
+     every second rule invisible (that is how `.profile-badge-pop` itself was
+     being missed while its neighbours matched). */
+  const popRules = [...flat.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m) => ({ sel: m[1].trim(), body: m[2] }))
+    .filter((r) => r.sel.includes('profile-badge'));
+  const popCss = popRules.map((r) => r.body).join(';');
+  const popTokens = [...popCss.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]);
+  const popDangling = [...new Set(popTokens)].filter((n) => !declared.has(n) && !fromJs.has(n));
+
+  /* The popup's own panel fill, and the round step markers that carried the
+     same dangling token, must all be theme-aware. The base `.profile-badge-pop`
+     rule is the unprefixed one — a `:root[data-theme='light'] …` override is a
+     different rule and must not be mistaken for it. */
+  const popPanel = popRules.find((r) => r.sel === '.profile-badge-pop');
+  const panelBg = /background:\s*var\(\s*(--[\w-]+)/.exec(popPanel?.body || '')?.[1] || null;
+  const bsw = readFileSync('src/styles/buy-sell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* Both circular markers: the wizard stepper and the order timeline. */
+  const markerBg = [
+    /\.bsw-stepper button > span\s*\{([^}]*)\}/,
+    /\.buy-sell-timeline li > span\s*\{([^}]*)\}/
+  ].map((re) => /background:\s*var\(\s*(--[\w-]+)/.exec(re.exec(bsw)?.[1] || '')?.[1]).filter(Boolean);
+
+  report('themed surfaces (an undefined token silently keeps the dark colour)', [
+    ['the stylesheets and the light-theme block were read', declared.size > 20 && themedTokens.size > 5],
+    /* The exact token from the report, pinned so it cannot come back. */
+    ['--bg-1 is no longer referenced anywhere', !/var\(\s*--bg-1\s*[,)]/.test(all)],
+    [
+      popDangling.length === 0
+        ? 'every token the notification popup uses is actually declared'
+        : `popup references undefined tokens: ${popDangling.join(', ')}`,
+      popDangling.length === 0
+    ],
+    ['the popup panel is painted from a token', Boolean(panelBg)],
+    [`the popup panel token (${panelBg}) is re-declared by the light theme`, themedTokens.has(panelBg)],
+    ["the round step markers are painted from a token", markerBg.length >= 2],
+    [
+      "those marker tokens are re-declared by the light theme",
+      markerBg.length >= 2 && markerBg.every((tk) => themedTokens.has(tk))
+    ]
+  ]);
+}
+
+/*
  * LIGHT-THEME CONTRAST.
  *
  * Real bug: the palette is neon, designed to glow against black. On a white
