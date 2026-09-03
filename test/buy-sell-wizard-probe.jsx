@@ -29,6 +29,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import '../src/i18n/index.js';
 import BuySellPanel from '../src/components/BuySellPanel.jsx';
+import { GUIDED_PROVIDER } from '../src/lib/guidedCheckout.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -214,7 +215,11 @@ export async function run(container) {
     t('the guided hand-off names the destination provider', /Ramp/.test(nextBtn().textContent));
 
     await click(nextBtn());
-    t('pressing it opens the provider checkout', typeof opened === 'string' && opened.includes('rampnetwork.com'));
+    t('pressing it opens the provider checkout', typeof opened === 'string'
+      && Object.values(GUIDED_PROVIDER.hosts).some((host) => opened.startsWith(host))
+      /* …and NEVER the partner widget host, which demands a key we do not
+         have and answers keyless visitors with «Integration issue detected». */
+      && !/app\.(demo\.)?rampnetwork\.com/.test(new URL(opened).host));
     t('the prefilled hand-off carries the wallet address', String(opened).toLowerCase().includes(WALLET.toLowerCase()));
     t('after the hand-off the action bar is still complete', Boolean(backBtn()) && Boolean(nextBtn()));
     t('...and the action becomes "reopen", so the screen is never a dead end', nextBtn().disabled === false);

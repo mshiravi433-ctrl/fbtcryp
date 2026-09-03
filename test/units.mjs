@@ -9147,8 +9147,9 @@ export default async function run() {
       fiatCurrency: 'USD', fiatAmount: '150'
     });
     const buyUrl = new URL(buy.url);
-    t('the BUY handoff points at the official public widget host',
-      buy.url.startsWith(GUIDED_PROVIDER.host) && buyUrl.protocol === 'https:');
+    t('the BUY handoff points at the official public consumer page, never the key-requiring partner host',
+      buy.url.startsWith(GUIDED_PROVIDER.hosts.BUY) && buyUrl.protocol === 'https:'
+      && !/app\.(demo\.)?rampnetwork\.com/.test(buyUrl.host));
     t('BUY prefills swapAsset, fiatValue, fiatCurrency and the user wallet',
       buyUrl.searchParams.get('swapAsset') === 'ARBITRUM_USDT'
       && buyUrl.searchParams.get('fiatValue') === '150'
@@ -9163,6 +9164,9 @@ export default async function run() {
       fiatCurrency: 'EUR', cryptoAmount: '2.5'
     });
     const sellUrl = new URL(sell.url);
+    t('the SELL handoff points at the official consumer sell page',
+      sell.url.startsWith(GUIDED_PROVIDER.hosts.SELL) && sellUrl.protocol === 'https:'
+      && !/app\.(demo\.)?rampnetwork\.com/.test(sellUrl.host));
     t('SELL prefills offrampAsset and the amount in exact base units',
       sellUrl.searchParams.get('offrampAsset') === 'ARBITRUM_USDT'
       && sellUrl.searchParams.get('swapAmount') === '2500000'

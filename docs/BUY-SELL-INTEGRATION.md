@@ -99,7 +99,7 @@ review** — and always works, even with zero server configuration:
 | Engine | When | What happens |
 | --- | --- | --- |
 | **Tracked flow** | `RAMP_*` credentials configured | quote → order → explicit confirm → hosted checkout → signed webhook → on-chain settlement verification (unchanged, documented above) |
-| **Guided handoff** | no credentials | `src/lib/guidedCheckout.js` composes the provider's official public widget URL with only documented parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact base units, `fiatCurrency`, `userAddress`) and opens it. The user confirms and pays on the provider's own site, under the provider's own KYC and fees. |
+| **Guided handoff** | no credentials | `src/lib/guidedCheckout.js` composes the URL of the provider's OFFICIAL PUBLIC CONSUMER page with only documented parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact base units, `fiatCurrency`, `userAddress`) and opens it. Buy → `buy.ramp.network`, Sell → `ramp.network/sell` — the keyless entry points Ramp itself publishes (the partner widget host `app.rampnetwork.com` hard-requires a `hostApiKey` and shows «Integration issue detected» without one, so a keyless rail must never point there). The user confirms and pays on the provider's own site, under the provider's own KYC and fees. |
 
 Guided-rail guarantees, unit-tested in `test/units.mjs`:
 
