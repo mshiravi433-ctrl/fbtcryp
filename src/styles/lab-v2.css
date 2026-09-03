@@ -947,3 +947,76 @@
   background: linear-gradient(135deg, var(--ink-mint), var(--ink-cyan));
   color: #fff;
 }
+
+/* ─── GLOSSARY / واژه‌شناسی ─────────────────────────────────────────────── */
+.lab2-glossary-search {
+  margin: 4px 0 12px;
+}
+.lab2-glossary-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.lab2-glossary-input::placeholder {
+  color: var(--text-3);
+}
+.lab2-glossary-input:focus {
+  border-color: var(--ink-cyan);
+  background: rgba(255, 255, 255, 0.08);
+}
+.lab2-glossary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lab2-glossary-item {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.lab2-glossary-term {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.lab2-glossary-en {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-cyan);
+  letter-spacing: 0.2px;
+}
+.lab2-glossary-fa {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.lab2-glossary-def {
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+.lab2-glossary-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+:root[data-theme='light'] .lab2-glossary-input {
+  border-color: var(--line-strong);
+  background: #fff;
+  color: var(--text-1);
+}
+:root[data-theme='light'] .lab2-glossary-item {
+  background: #fff;
+  border-color: var(--line);
+}

@@ -1231,204 +1231,65 @@ export default function Settings() {
         </p>
       </motion.section>
 
-      {/* ---------------- phase 92: my data ---------------- */}
+      {/* ---------------- phase 92: my data — in an expandable box ---------------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="my-data-section">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.lifecycle.title')}</p>
-        <div className="set-group">
-          <Row
-            icon={IconDoc}
-            label={t('intentAI.lifecycle.exportDownload')}
-            sub={t('intentAI.lifecycle.subtitle')}
-            right={
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                onClick={doExportMyData}
-                data-testid="my-data-export"
-              >
-                {t('intentAI.lifecycle.exportAction')}
-              </button>
-            }
-          />
-          <Row
-            icon={IconShield}
-            label={t('intentAI.lifecycle.deleteTitle')}
-            sub={t('intentAI.lifecycle.deleteBody')}
-            right={
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                onClick={() => { haptic?.('light'); setDeleteProblem(null); setDeleteOpen(true); }}
-                data-testid="my-data-delete"
-              >
-                {t('intentAI.lifecycle.deleteAction')}
-              </button>
-            }
-          />
-        </div>
-
-        {/* The proof, shown only after every store was read back and was empty. */}
-        {deleteProof && (
-          <div className="card card-tight" style={{ marginTop: 10 }} data-testid="deletion-proof">
-            <div className="field-label">{t('intentAI.lifecycle.proofTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: '4px 0 0', lineHeight: 1.7 }}>
-              {t('intentAI.lifecycle.proofStores', { stores: deleteProof.stores })}
-            </p>
-            <p className="mono faint" style={{ fontSize: 11.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
-              {t('intentAI.lifecycle.proofRef', { proof: deleteProof.proof })}
-            </p>
-          </div>
-        )}
-
-        {/* A deletion we could not prove says so, and names what is left. */}
-        {deleteProblem && (
-          <InfoBox title={t('intentAI.lifecycle.deleteTitle')} tone="warn" id="set-my-data-problem">
-            <p data-testid="deletion-problem">{t(deleteProblem.i18nKey, { cleared: 0, remaining: deleteProblem.leftovers.length })}</p>
-          </InfoBox>
-        )}
-      </motion.section>
-
-      {/* ---------------- phase 100: user sovereignty ---------------- */}
-      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="sovereignty-section">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.sovereignty.title')}</p>
-        <div className="set-group">
-          <Row
-            icon={IconInfo}
-            label={t('intentAI.sovereignty.exitExplained')}
-            sub={t('intentAI.sovereignty.exitDetails', {
-              steps: exitPath.stepsRequired,
-              fee: exitPath.requiresFee ? t('intentAI.flow.yes') : t('intentAI.flow.no')
-            })}
-            right={<span className="region-state region-state-available" data-testid="sovereignty-path">{t('intentAI.sovereignty.pathOpen')}</span>}
-          />
-          <Row
-            icon={IconDoc}
-            label={t('intentAI.sovereignty.prepareTitle')}
-            sub={t('intentAI.sovereignty.prepareBody')}
-            right={
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                onClick={doPrepareExit}
-                data-testid="sovereignty-prepare"
-              >
-                {t('intentAI.sovereignty.prepareAction')}
-              </button>
-            }
-          />
-          <Row
-            icon={IconShield}
-            label={t('intentAI.sovereignty.leaveTitle')}
-            sub={t('intentAI.sovereignty.leaveBody')}
-            right={
-              <button
-                type="button"
-                className="btn btn-sm btn-danger"
-                onClick={() => { haptic?.('light'); setExitProblem(null); setExitOpen(true); }}
-                data-testid="sovereignty-leave"
-              >
-                {t('intentAI.sovereignty.leaveAction')}
-              </button>
-            }
-          />
-        </div>
-
-        {/* The receipt, shown only after every store was read back and was empty. */}
-        {exitReceipt && (
-          <div className="card card-tight" style={{ marginTop: 10 }} data-testid="sovereignty-receipt">
-            <div className="field-label">{t('intentAI.sovereignty.receiptTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: '4px 0 0', lineHeight: 1.7 }}>
-              {t('intentAI.sovereignty.exitComplete')}
-            </p>
-            <p className="mono faint" style={{ fontSize: 11.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
-              {t('intentAI.sovereignty.receiptRef', { proof: exitReceipt.proof })}
-            </p>
-          </div>
-        )}
-
-        {exitProblem && (
-          <InfoBox title={t('intentAI.sovereignty.leaveTitle')} tone="warn" id="sovereignty-problem">
-            <p data-testid="sovereignty-problem">{t(exitProblem.i18nKey, exitProblem.params || {})}</p>
-          </InfoBox>
-        )}
-      </motion.section>
-
-      {/* ---------------- phase 87: what is available in your region ------- */}
-      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="region-availability-section">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.compliance.sectionTitle')}</p>
-        <div className="set-group">
-          {regionRows.map((feature) => (
+        <InfoBox title={t('intentAI.lifecycle.title')} tone="info" id="set-my-data">
+          <p className="muted" style={{ fontSize: 12.3, margin: '0 0 8px', lineHeight: 1.7 }}>
+            {t('intentAI.lifecycle.subtitle')}
+          </p>
+          <div className="set-group">
             <Row
-              key={feature.feature}
-              icon={IconGlobe}
-              label={t(`intentAI.compliance.feature.${feature.feature}`)}
-              sub={t(feature.i18nKey)}
+              icon={IconDoc}
+              label={t('intentAI.lifecycle.exportDownload')}
+              sub={t('intentAI.lifecycle.subtitle')}
               right={
-                <span className="region-right">
-                  {/*
-                    Always exactly one state chip. The acknowledged chip is a
-                    REPLACEMENT for the "restricted" one, not an extra badge —
-                    and the ternary (not two independent `&&` blocks) is what
-                    guarantees it. Two separate conditions left the ordinary
-                    `available` row with no chip at all, because an available
-                    feature is permitted and NOT restricted, so neither branch
-                    matched: swap, bridge and send all rendered blank.
-                  */}
-                  {feature.permitted && feature.restricted ? (
-                    <span
-                      className="region-state region-state-acknowledged"
-                      data-testid={`region-feature-${feature.feature}`}
-                      data-state="acknowledged"
-                      title={t('intentAI.compliance.ackedAt', { defaultValue: 'Confirmed' }) + (feature.ack?.at ? ` · ${fmtSyncedAt(feature.ack.at)}` : '')}
-                    >
-                      ✓ {t('intentAI.compliance.state.available', { defaultValue: 'Available' })}
-                    </span>
-                  ) : (
-                    <span
-                      className={`region-state region-state-${feature.state}`}
-                      data-testid={`region-feature-${feature.feature}`}
-                      data-state={feature.state}
-                    >
-                      {t(`intentAI.compliance.state.${feature.state}`)}
-                    </span>
-                  )}
-                  {/*
-                    The extra confirmation the row promises. It appears only on
-                    a restricted feature — a blocked one gets nothing to press,
-                    because no acknowledgement here may grant what policy denies.
-                  */}
-                  {feature.needsAck && (
-                    <button
-                      type="button"
-                      className="region-ack-btn"
-                      onClick={() => setAckFeature(feature.feature)}
-                      data-testid={`region-ack-${feature.feature}`}
-                    >
-                      {t('intentAI.compliance.confirmExtra', { defaultValue: 'Confirm' })}
-                    </button>
-                  )}
-                  {feature.permitted && feature.restricted && (
-                    <button
-                      type="button"
-                      className="region-ack-btn is-ghost"
-                      onClick={() => withdrawFeature(feature.feature)}
-                      aria-label={t('intentAI.compliance.withdraw', { defaultValue: 'Withdraw confirmation' })}
-                      data-testid={`region-withdraw-${feature.feature}`}
-                    >
-                      {t('intentAI.compliance.withdraw', { defaultValue: 'Withdraw' })}
-                    </button>
-                  )}
-                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={doExportMyData}
+                  data-testid="my-data-export"
+                >
+                  {t('intentAI.lifecycle.exportAction')}
+                </button>
               }
             />
-          ))}
-        </div>
-        {/* An unknown region is stated, not hidden behind the strict defaults. */}
-        {!regionMap.regionKnown && (
-          <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }} data-testid="region-unknown-note">
-            {t('intentAI.compliance.regionUnknown')}
-          </p>
-        )}
+            <Row
+              icon={IconShield}
+              label={t('intentAI.lifecycle.deleteTitle')}
+              sub={t('intentAI.lifecycle.deleteBody')}
+              right={
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => { haptic?.('light'); setDeleteProblem(null); setDeleteOpen(true); }}
+                  data-testid="my-data-delete"
+                >
+                  {t('intentAI.lifecycle.deleteAction')}
+                </button>
+              }
+            />
+          </div>
+
+          {/* The proof, shown only after every store was read back and was empty. */}
+          {deleteProof && (
+            <div className="card card-tight" style={{ marginTop: 10 }} data-testid="deletion-proof">
+              <div className="field-label">{t('intentAI.lifecycle.proofTitle')}</div>
+              <p className="muted" style={{ fontSize: 12.3, margin: '4px 0 0', lineHeight: 1.7 }}>
+                {t('intentAI.lifecycle.proofStores', { stores: deleteProof.stores })}
+              </p>
+              <p className="mono faint" style={{ fontSize: 11.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
+                {t('intentAI.lifecycle.proofRef', { proof: deleteProof.proof })}
+              </p>
+            </div>
+          )}
+
+          {/* A deletion we could not prove says so, and names what is left. */}
+          {deleteProblem && (
+            <InfoBox title={t('intentAI.lifecycle.deleteTitle')} tone="warn" id="set-my-data-problem">
+              <p data-testid="deletion-problem">{t(deleteProblem.i18nKey, { cleared: 0, remaining: deleteProblem.leftovers.length })}</p>
+            </InfoBox>
+          )}
+        </InfoBox>
       </motion.section>
 
       {/*

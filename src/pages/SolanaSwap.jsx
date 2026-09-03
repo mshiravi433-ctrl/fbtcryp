@@ -33,6 +33,8 @@ import {
 import { shortAddress } from '../context/WalletContext';
 import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 import { useAppStore } from '../store/useAppStore';
+import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
+import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import { POINT_VALUES } from '../lib/ranks';
 
 /**
@@ -519,6 +521,7 @@ export default function SolanaSwap({ embedded = false }) {
     setBusy(true);
     setTxErr(null);
     haptic?.('medium');
+    let solRecordId = null;
 
     try {
       /*
@@ -596,6 +599,21 @@ export default function SolanaSwap({ embedded = false }) {
       if (!built) throw buildErr || new Error('NO_TRANSACTION');
 
       let signature;
+      /* Record a pending Solana swap on the device ledger before signing, so
+         the history shows «در حال اجرا» even while the wallet prompt is up. */
+      solRecordId = recordSwap({
+        network: 'solana',
+        chainId: null,
+        chainName: 'Solana',
+        from: amount,
+        fromSymbol: fromToken.symbol,
+        to: outAmount,
+        toSymbol: toToken.symbol,
+        amountIn: Number(amount),
+        amountOut: outAmount != null ? Number(outAmount) : null,
+        status: 'pending'
+      }).id;
+
       if (built.provider === 'jupiter') {
         /*
          * ─── SIGN ONLY, THEN HAND IT TO JUPITER ─────────────────────────────
@@ -637,6 +655,7 @@ export default function SolanaSwap({ embedded = false }) {
       }
 
       if (signature) {
+        if (solRecordId) confirmSwap(solRecordId, signature);
         setResult({ signature });
         const rewards = useAppStore.getState();
         rewards.awardPoints('swap', POINT_VALUES.swap, {
@@ -649,10 +668,12 @@ export default function SolanaSwap({ embedded = false }) {
         loadWalletBalances();
         haptic?.('success');
       } else {
+        if (solRecordId) failSwap(solRecordId, 'SEND_FAILED');
         setTxErr('SEND_FAILED');
         haptic?.('error');
       }
     } catch (err) {
+      if (solRecordId) failSwap(solRecordId, err?.message || 'SIGN_FAILED');
       setTxErr(err.message || 'SIGN_FAILED');
       haptic?.('error');
     } finally {
@@ -866,6 +887,9 @@ export default function SolanaSwap({ embedded = false }) {
           </div>
         )}
       </motion.section>
+
+      {/* --------------------- swap history --------------------- */}
+      <SwapHistoryPanel network="solana" />
 
       {/* --------------------- import any mint (memecoins) --------------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
