@@ -254,8 +254,8 @@ function CatalogList({ kind, state, locale, onRetry, onLoadMore }) {
 
 const EMPTY = { status: 'loading', items: [], cursor: null, hasMore: false, loadingMore: false, pageError: false };
 
-export function EcosystemPanel({ open, onClose, locale = 'fa' }) {
-  const [kind, setKind] = useState('agent');
+export function EcosystemPanel({ open, onClose, locale = 'fa', initialKind = 'agent' }) {
+  const [kind, setKind] = useState(initialKind === 'strategy' ? 'strategy' : 'agent');
   const [byKind, setByKind] = useState({ agent: EMPTY, strategy: EMPTY });
   /* Guards against a slow first page landing after the user switched tabs and
      overwriting the tab they are actually looking at. */

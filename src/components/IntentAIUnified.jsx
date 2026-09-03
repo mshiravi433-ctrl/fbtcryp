@@ -302,7 +302,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
   /* Operations Center state */
-  const [panel, setPanel] = useState(null); // null | 'operations' | 'history' | 'status'
+  const [panel, setPanel] = useState(null); // null | 'operations' | 'history' | 'status' | 'intelligence' | 'ecosystem'
+  /* Which half of the ecosystem panel the menu opened (agents vs strategies). */
+  const [ecoKind, setEcoKind] = useState('agent');
   const [opsBusy, setOpsBusy] = useState(false);
   const [monitors, setMonitors] = useState([]);
   const [monitorEngineStatus, setMonitorEngineStatus] = useState(null);
@@ -323,6 +325,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const resumeLock = useRef(false);
   const sendRef = useRef(null);
   const osRef = useRef(null);
+  /*
+   * ─── STICK-TO-BOTTOM ────────────────────────────────────────────────────
+   * The thread auto-scrolls only while the user is already at (or near) the
+   * bottom. Before this, ANY new message — including a background monitor
+   * poll or a slow server reply — yanked a user who was reading history down
+   * to the newest bubble. That is most of what "scrolling feels broken"
+   * meant: the page kept fighting the user's thumb. A read of history now
+   * stays put; a new turn only follows when the user was following already.
+   */
+  const stickToBottomRef = useRef(true);
 
   // Setup global bus once
   useEffect(() => {
@@ -1071,10 +1083,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return () => { cancelled = true; };
   }, [solanaAddressLive, solanaTick]);
 
+  /* Track whether the user is parked at the bottom; only then auto-follow. */
+  const handleThreadScroll = useCallback(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 96;
+  }, []);
+
   useEffect(() => {
+    const el = threadRef.current;
+    if (!el || !stickToBottomRef.current) return;
     try {
-      if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-    } catch {}
+      /* behavior:'auto' overrides the CSS smooth scroll: an instant jump is
+         correct for "a new message arrived" and avoids a laggy tween when a
+         burst of turns lands together. */
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+    } catch { el.scrollTop = el.scrollHeight; }
   }, [messages, thinking, progress, pendingExecution]);
 
   useEffect(() => {
@@ -1267,6 +1292,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshMonitors, refreshStatus]);
+
+  /* Open the ecosystem panel at a specific half (agents / strategies). */
+  const openEcosystem = useCallback((kind = 'agent') => {
+    setEcoKind(kind);
+    setPanel('ecosystem');
+  }, []);
 
   const openPanel = useCallback((name) => {
     setPanel(name);
@@ -1746,28 +1777,31 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   return (
     <div className="iaos-page">
       <div className="iaos-shell">
+        {/* ─── MINIMAL HEADER ───────────────────────────────────────────────
+            The old header carried five panel buttons (intelligence, history,
+            operations, agents·strategies, status) plus the title. On a phone
+            that wrapped into a second line and read as clutter. Those panels
+            moved to the bottom menu bar; the header keeps only what the user
+            asked for: "AI", a status pill and the live indicator. The debug
+            dashboard stays reachable by tapping the title, as before. */}
         <header className="iaos-header">
           <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
             <span className="iaos-mark" aria-hidden="true">✦</span>
-            <h1>{t('intentAIOS.header', { defaultValue: 'FBT INTENT OS' })}</h1>
+            <span className="iaos-title-copy">
+              <h1>AI</h1>
+              <span className="iaos-title-sub">Intent OS</span>
+            </span>
           </div>
-          <div className="iaos-header-actions">
-            <button type="button" className="iaos-header-btn" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
-              {locale.startsWith('fa') ? 'هوش چندمدلی' : 'AI Intelligence'}
-            </button>
-            <button type="button" className="iaos-header-btn" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
-              {locale.startsWith('fa') ? 'تاریخچه' : 'History'}
-            </button>
-            <button type="button" className="iaos-header-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
-              {locale.startsWith('fa') ? 'عملیات' : 'Operations'}
-            </button>
-            <button type="button" className="iaos-header-btn" data-testid="intent-ai-ecosystem" onClick={() => openPanel('ecosystem')}>
-              {opsText('eco.agents', locale)} · {opsText('eco.strategies', locale)}
-            </button>
-            <button type="button" className="iaos-header-btn" data-testid="intent-ai-status" onClick={() => openPanel('status')}>
-              {locale.startsWith('fa') ? 'وضعیت' : 'Status'}
-            </button>
-            <span className="iaos-live" data-on={walletConnected ? 'true' : 'false'} title={walletConnected ? 'Wallet connected' : 'Wallet not connected'}>
+          <div className="iaos-header-status">
+            {serverReachable != null ? (
+              <span className="iaos-status-pill" data-on={serverReachable ? 'true' : 'false'}>
+                <i aria-hidden="true" />
+                {serverReachable
+                  ? (locale.startsWith('fa') ? 'آنلاین' : 'Online')
+                  : (locale.startsWith('fa') ? 'آفلاین' : 'Offline')}
+              </span>
+            ) : null}
+            <span className="iaos-live" data-on="true" title={t('intentAIOS.live', { defaultValue: 'Live' })}>
               <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
             </span>
           </div>
@@ -1822,7 +1856,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         ) : null}
 
-        <div className="iaos-conversation" ref={threadRef} aria-live="polite">
+        <div className="iaos-conversation" ref={threadRef} onScroll={handleThreadScroll} aria-live="polite">
           {messages.map((m) => (
             <ConversationRow
               key={m.id}
@@ -1919,6 +1953,30 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           />
           <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinking.length > 0}>➤</button>
         </form>
+
+        {/* ─── BOTTOM MENU ─────────────────────────────────────────────────
+            The operations surfaces the header used to hold, moved down here
+            as plain text entries: عملیات / تاریخچه / هوش چندمدلی / ایجنت‌ها /
+            استراتژی‌ها. Text, not icon buttons, so the top of the screen
+            stays clean and the menu sits with the composer where the thumb
+            already is. */}
+        <nav className="iaos-menubar" aria-label={locale.startsWith('fa') ? 'منوی عملیات' : 'Operations menu'}>
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
+            {opsText('ops.aria', locale)}
+          </button>
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
+            {opsText('hist.title', locale)}
+          </button>
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
+            {opsText('menu.multiAi', locale)}
+          </button>
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-agents" onClick={() => openEcosystem('agent')}>
+            {opsText('eco.agents', locale)}
+          </button>
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-strategies" onClick={() => openEcosystem('strategy')}>
+            {opsText('eco.strategies', locale)}
+          </button>
+        </nav>
       </div>
 
       {drawerOpen ? (
@@ -1999,9 +2057,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       />
 
       <EcosystemPanel
+        key={`eco-${ecoKind}`}
         open={panel === 'ecosystem'}
         onClose={() => setPanel(null)}
         locale={locale}
+        initialKind={ecoKind}
       />
 
       <WalletConnectSheet open={walletSheetOpen} onClose={() => setWalletSheetOpen(false)} />

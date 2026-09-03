@@ -62,6 +62,62 @@
   letter-spacing: .01em;
 }
 
+/* Title copy: "AI" with a small "Intent OS" sub-line. One column, so the
+   header stays a single row even when the status pill and live badge join. */
+.iaos-title-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.iaos-title-sub {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, .66);
+}
+
+.iaos-header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Online / offline pill: the "status" half of «AI با وضعیت و زنده». */
+.iaos-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8be9c8;
+  background: rgba(16, 185, 129, .08);
+  border: 1px solid rgba(16, 185, 129, .18);
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
+.iaos-status-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, .12);
+}
+
+.iaos-status-pill[data-on='false'] {
+  color: #cbd5e1;
+  background: rgba(100, 116, 139, .10);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+.iaos-status-pill[data-on='false'] i {
+  background: #64748b;
+  box-shadow: none;
+}
+
 .iaos-live {
   display: inline-flex;
   align-items: center;
@@ -229,8 +285,16 @@
   line-height: 1.55;
   border: 1px solid rgba(148, 163, 184, .14);
   background: rgba(148, 163, 184, .10);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  /*
+   * ─── NO backdrop-filter HERE — THAT WAS THE SCROLL COST ─────────────────
+   * Every bubble used to carry `backdrop-filter: blur(12px)`. A backdrop
+   * filter forces the browser to re-blur whatever is behind EACH bubble on
+   * every repaint, and a long conversation is dozens of bubbles re-blurring
+   * the whole thread on every scroll frame. That single rule is why
+   * «اسکرول چت لگ می‌زند». The tinted background reads the same over this
+   * page's dark gradient without the blur, and the thread is the only long
+   * scroll container in the app — so the blur there, and only there, goes.
+   */
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -537,6 +601,43 @@
   cursor: not-allowed;
 }
 
+/* ─── BOTTOM MENU BAR ─────────────────────────────────────────────────────
+   The operations surfaces that used to crowd the header, moved below the
+   composer as a single row of text. It scrolls horizontally rather than
+   wrapping, so a second line can never reappear on a narrow screen — the
+   exact clutter this was built to remove from the top. */
+.iaos-menubar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.iaos-menubar::-webkit-scrollbar { display: none; }
+
+.iaos-menubar-btn {
+  flex: 0 0 auto;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(13, 20, 36, .62);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.iaos-menubar-btn:hover,
+.iaos-menubar-btn:focus-visible {
+  border-color: rgba(34, 211, 238, .5);
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, .10);
+}
+
 .iaos-overlay {
   position: fixed;
   inset: 0;
@@ -644,6 +745,35 @@
   color: #64748b;
   background: rgba(148, 163, 184, .10);
   border-color: rgba(148, 163, 184, .16);
+}
+
+:root[data-theme='light'] .iaos-title-sub {
+  color: rgba(71, 85, 105, .62);
+}
+
+:root[data-theme='light'] .iaos-status-pill {
+  color: #0f7a5b;
+  background: rgba(16, 185, 129, .10);
+  border-color: rgba(16, 185, 129, .18);
+}
+
+:root[data-theme='light'] .iaos-status-pill[data-on='false'] {
+  color: #64748b;
+  background: rgba(148, 163, 184, .10);
+  border-color: rgba(148, 163, 184, .16);
+}
+
+:root[data-theme='light'] .iaos-menubar-btn {
+  background: rgba(255, 255, 255, .86);
+  border-color: rgba(148, 163, 184, .22);
+  color: #1e293b;
+}
+
+:root[data-theme='light'] .iaos-menubar-btn:hover,
+:root[data-theme='light'] .iaos-menubar-btn:focus-visible {
+  border-color: rgba(6, 182, 212, .4);
+  color: #0e7490;
+  background: rgba(236, 254, 255, .96);
 }
 
 :root[data-theme='light'] .iaos-autos,
@@ -813,33 +943,6 @@
    Operations / History / Status panels + chat cards for monitors, conditional
    orders and the opportunity engine. Everything here is presentational: every
    number comes from a real engine, a real server read or an honest sentinel. */
-
-.iaos-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.iaos-header-btn {
-  border: 1px solid rgba(103, 232, 249, .22);
-  background: rgba(13, 20, 36, .72);
-  color: #a5f3fc;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .04em;
-  border-radius: 999px;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: border-color .2s, color .2s, background .2s;
-}
-
-.iaos-header-btn:hover {
-  border-color: rgba(103, 232, 249, .55);
-  color: #e0f2fe;
-  background: rgba(34, 211, 238, .10);
-}
 
 .iaos-context-chip {
   display: flex;
@@ -1437,12 +1540,6 @@
 }
 
 /* light theme */
-
-:root[data-theme='light'] .iaos-header-btn {
-  color: #0e7490;
-  border-color: rgba(14, 116, 144, .3);
-  background: rgba(224, 242, 254, .7);
-}
 
 :root[data-theme='light'] .iaos-context-chip {
   background: rgba(237, 233, 254, .8);

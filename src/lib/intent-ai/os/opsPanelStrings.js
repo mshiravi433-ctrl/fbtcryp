@@ -111,6 +111,9 @@ export const OPS_PANEL_STRINGS = {
   'order.conditionalBuy': { fa: 'خرید شرطی',      en: 'conditional buy', ar: 'شراء مشروط' },
   'order.stored':         { fa: 'سفارش واقعی ثبت شد', en: 'Stored real order', ar: 'تم تسجيل أمر حقيقي' },
 
+  /* ---- Bottom menu bar --------------------------------------------------- */
+  'menu.multiAi':      { fa: 'هوش چندمدلی',       en: 'Multi-AI',    ar: 'ذكاء متعدد' },
+
   /* ---- Ecosystem section (agents + strategies) --------------------------- */
   'eco.agents':        { fa: 'ایجنت‌ها',          en: 'Agents',      ar: 'الوكلاء' },
   'eco.strategies':    { fa: 'استراتژی‌ها',       en: 'Strategies',  ar: 'الاستراتيجيات' },
