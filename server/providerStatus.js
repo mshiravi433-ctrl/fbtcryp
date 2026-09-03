@@ -34,6 +34,12 @@
  *     with balance/signer/withdrawal authority. Each field is narrow and true.
  */
 
+import { feeReceiver as solanaFeeReceiver, feeBps as solanaFeeBps } from './solanaOcean.js';
+import { feeRecipient as gaslessFeeRecipient, feeBps as gaslessFeeBps } from './gasless.js';
+import { bridgeFee, bridgeFeeReady, integratorId } from './lifi.js';
+import { dlnFeePercent, dlnFeeRecipient } from './dln.js';
+import { feeBps as xchainFeeBps, feeRecipientFor as xchainFeeRecipientFor, crossChainConfigured } from './xchain.js';
+
 const env = (k) => String(process.env[k] ?? '').trim();
 
 /* -------------------------------------------------------------------------- */
@@ -147,6 +153,22 @@ export function buildProviderStatus({
 
 const EVM_CHAINS_ALL = [1, 10, 56, 137, 8453, 42161, 43114, 59144, 146];
 
+/* Public (never secret) fee metadata for the DEX & Liquidity section. */
+const EVM_FEE_RECEIVER = env('ZEROX_FEE_RECIPIENT') || env('VITE_PAYOUT_EVM') || '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+const SWAP_FEE_BPS = (() => {
+  const raw = env('FEE_BPS');
+  if (!raw) return 70;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 70;
+})();
+const evmFee = (cutPercent = 0) => ({
+  bps: SWAP_FEE_BPS,
+  receiver: EVM_FEE_RECEIVER,
+  family: 'evm',
+  providerCutPercent: cutPercent,
+  netBps: Number((SWAP_FEE_BPS * (1 - cutPercent / 100)).toFixed(2))
+});
+
 export function providerStatuses() {
   return [
     buildProviderStatus({
@@ -155,7 +177,7 @@ export function providerStatuses() {
       supportedChains: [56, 1, 137, 42161, 10, 8453, 43114, 59144, 146],
       feeReady: true,
       missingConfiguration: env('KYBER_API_KEY') ? [] : ['KYBER_API_KEY (optional, raises rate limit)'],
-      facts: { authMode: 'keyless', apiKeyOptional: true }
+      facts: { authMode: 'keyless', apiKeyOptional: true, fee: evmFee(0) }
     }),
     buildProviderStatus({
       id: 'openocean',
@@ -163,7 +185,7 @@ export function providerStatuses() {
       supportedChains: EVM_CHAINS_ALL,
       feeReady: true,
       missingConfiguration: env('OPENOCEAN_API_KEY') ? [] : ['OPENOCEAN_API_KEY (optional header)'],
-      facts: { authMode: 'keyless' }
+      facts: { authMode: 'keyless', fee: evmFee(20) }
     }),
     buildProviderStatus({
       id: 'velora',
@@ -173,7 +195,7 @@ export function providerStatuses() {
       // sense that no executable fee-charging path exists yet. Reported, not
       // hidden.
       feeReady: false,
-      facts: { executable: false, role: 'price-source-only' }
+      facts: { executable: false, role: 'price-source-only', fee: { ...evmFee(0), executable: false } }
     }),
     buildProviderStatus({
       id: '0x-gasless',
@@ -181,7 +203,17 @@ export function providerStatuses() {
       supportedChains: [1, 10, 56, 137, 8453, 42161, 43114],
       feeReady: Boolean(env('ZEROX_API_KEY')),
       missingConfiguration: env('ZEROX_API_KEY') ? [] : ['ZEROX_API_KEY'],
-      externalApprovalRequired: !env('ZEROX_API_KEY')
+      externalApprovalRequired: !env('ZEROX_API_KEY'),
+      facts: {
+        authMode: 'api-key',
+        fee: {
+          bps: gaslessFeeBps(),
+          receiver: gaslessFeeRecipient(),
+          family: 'evm',
+          providerCutPercent: 0,
+          netBps: gaslessFeeBps()
+        }
+      }
     }),
     buildProviderStatus({
       id: '0x-cross-chain',
@@ -189,21 +221,52 @@ export function providerStatuses() {
       supportedChains: [1, 10, 56, 137, 8453, 42161, 43114],
       feeReady: Boolean(env('ZEROX_API_KEY')),
       missingConfiguration: env('ZEROX_API_KEY') ? [] : ['ZEROX_API_KEY'],
-      facts: { tronOrigin: false, note: 'Tron works as a destination only' }
+      facts: {
+        tronOrigin: false,
+        note: 'Tron works as a destination only',
+        crossChainConfigured: crossChainConfigured(),
+        fee: {
+          bps: xchainFeeBps(),
+          receiver: xchainFeeRecipientFor('1') || EVM_FEE_RECEIVER,
+          family: 'evm',
+          providerCutPercent: 0,
+          netBps: xchainFeeBps()
+        }
+      }
     }),
     buildProviderStatus({
       id: 'lifi',
       configured: true, // integrator id is compiled in, keyless
       supportedChains: EVM_CHAINS_ALL,
-      feeReady: true,
-      facts: { authMode: 'integrator-id' }
+      feeReady: bridgeFeeReady(),
+      missingConfiguration: bridgeFeeReady() ? [] : ['LIFI_FEE_READY=true'],
+      facts: {
+        authMode: 'integrator-id',
+        integrator: integratorId(),
+        fee: {
+          bps: Math.round(bridgeFee() * 10000),
+          receiver: EVM_FEE_RECEIVER,
+          family: 'evm',
+          providerCutPercent: 0,
+          netBps: Math.round(bridgeFee() * 10000)
+        }
+      }
     }),
     buildProviderStatus({
       id: 'debridge-dln',
       configured: true, // keyless, no account
       supportedChains: EVM_CHAINS_ALL,
       feeReady: true,
-      facts: { authMode: 'keyless' }
+      facts: {
+        authMode: 'keyless',
+        fee: {
+          bps: Math.round(dlnFeePercent() * 100),
+          receiver: dlnFeeRecipient(1),
+          family: 'evm',
+          providerCutPercent: 0,
+          netBps: Math.round(dlnFeePercent() * 100)
+        }
+      }
     }),
     buildProviderStatus({
       id: 'thorchain',
@@ -213,7 +276,16 @@ export function providerStatuses() {
       supportedChains: [1, 56, 137, 43114],
       missingConfiguration: env('THOR_NAME') ? [] : ['THOR_NAME'],
       externalApprovalRequired: !env('THOR_NAME'),
-      facts: { revenueChains: env('THOR_NAME') ? ['BTC', 'BCH', 'LTC', 'DOGE'] : ['RUNE-pairs-only'] }
+      facts: {
+        revenueChains: env('THOR_NAME') ? ['BTC', 'BCH', 'LTC', 'DOGE'] : ['RUNE-pairs-only'],
+        fee: {
+          bps: SWAP_FEE_BPS,
+          receiver: EVM_FEE_RECEIVER,
+          family: 'evm',
+          providerCutPercent: 0,
+          netBps: SWAP_FEE_BPS
+        }
+      }
     }),
     buildProviderStatus({
       id: 'solana-openocean',
@@ -221,7 +293,17 @@ export function providerStatuses() {
       supportedChains: ['solana'],
       feeReady: true,
       missingConfiguration: env('OPENOCEAN_API_KEY') ? [] : ['OPENOCEAN_API_KEY (optional)'],
-      facts: { authMode: 'keyless', jupiterFallback: true }
+      facts: {
+        authMode: 'keyless',
+        jupiterFallback: true,
+        fee: {
+          bps: solanaFeeBps(),
+          receiver: solanaFeeReceiver(),
+          family: 'solana',
+          providerCutPercent: 20,
+          netBps: Number((solanaFeeBps() * 0.8).toFixed(2))
+        }
+      }
     }),
     buildProviderStatus({
       id: 'goplus-token-risk',

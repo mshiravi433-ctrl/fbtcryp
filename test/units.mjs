@@ -7,6 +7,7 @@ import { activateDca } from '../src/lib/dcaExecution.js';
  */
 import { searchTokens, tokenKey, getTokensSync } from '../src/lib/tokenLists.js';
 import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from '../src/lib/payout.js';
+import { buildEcosystemData } from '../src/lib/ecosystemData.js';
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
@@ -2716,9 +2717,56 @@ export default async function run() {
     t('the report carries the schema tag', report.schema === 'fbt.provider-status.v1');
     t('the report has a summary', typeof report.summary.total === 'number' && report.summary.total > 0);
     const serialized = JSON.stringify(report);
-    t('the report never contains the word "key" as a value boundary', !/:"[A-Za-z0-9_-]{20,}"/.test(serialized));
+    /* Public receiving addresses are deliberately allowed (they are printed by
+       other status endpoints too). Replace both address families before the
+       long-string scan so a public 0x/base58 address is not mistaken for a
+       leaked credential. */
+    const redacted = serialized
+      .replace(/0x[a-fA-F0-9]{40}/g, '0xADDR')
+      .replace(/[1-9A-HJ-NP-Za-km-z]{32,44}/g, 'ADDR');
+    t('the report never contains the word "key" as a value boundary', !/:"[A-Za-z0-9_-]{20,}"/.test(redacted));
   }
 
+
+  /* ------------------- ECOSYSTEM DEX fee metadata ---------------------- */
+  {
+    /* The Ecosystem DEX & Liquidity cards must show the fee only when the
+       provider is configured AND feeReady, and must expose the provider's
+       net share rather than pretending the whole 70 bps reaches FBT. */
+    const report = buildEcosystemData({
+      status: 'success',
+      data: {
+        generatedAt: new Date().toISOString(),
+        providers: [
+          { id: 'kyberswap', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: [8453], facts: { fee: { bps: 70, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 70 } } },
+          { id: 'openocean', configured: true, reachable: false, authenticated: false, feeReady: true, supportedChains: [8453], facts: { fee: { bps: 70, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 20, netBps: 56 } } },
+          { id: 'velora', configured: true, reachable: false, authenticated: false, feeReady: false, supportedChains: [8453], facts: { fee: { bps: 70, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 70, executable: false } } },
+          { id: '0x-gasless', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: [8453], facts: { fee: { bps: 70, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 70 } } },
+          { id: 'solana-openocean', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: ['solana'], facts: { fee: { bps: 70, receiver: PAYOUT_ADDRESSES.solana, family: 'solana', providerCutPercent: 20, netBps: 56 } } },
+          { id: 'lifi', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: [1, 56, 8453], facts: { fee: { bps: 30, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 30 } } },
+          { id: 'debridge-dln', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: [1, 56, 8453], facts: { fee: { bps: 40, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 40 } } },
+          { id: '0x-cross-chain', configured: true, reachable: true, authenticated: true, feeReady: true, supportedChains: [1, 56, 8453], facts: { fee: { bps: 30, receiver: PAYOUT_ADDRESSES.evm, family: 'evm', providerCutPercent: 0, netBps: 30 } } },
+          { id: 'thorchain', configured: false, reachable: false, authenticated: false, feeReady: false, supportedChains: [1, 56, 137, 43114], missingConfiguration: ['THOR_NAME'] }
+        ]
+      }
+    });
+    const kyber = report.sections.dex.find((p) => p.id === 'kyberswap');
+    const oo = report.sections.dex.find((p) => p.id === 'openocean');
+    const velora = report.sections.dex.find((p) => p.id === 'velora');
+    const sol = report.sections.dex.find((p) => p.id === 'solana-openocean');
+    const lifi = report.sections.bridges.find((p) => p.id === 'lifi');
+    const dln = report.sections.bridges.find((p) => p.id === 'debridge-dln');
+    const xchain = report.sections.bridges.find((p) => p.id === '0x-cross-chain');
+    const thor = report.sections.bridges.find((p) => p.id === 'thorchain');
+    t('a fee-ready DEX is marked active', kyber.fee.active && kyber.fee.bps === 70);
+    t('OpenOcean reports its net cut, not the full house fee', oo.fee.active && oo.fee.netBps === 56 && oo.fee.providerCutPercent === 20);
+    t('a quote-only source is not shown as active', velora.fee.active === false && velora.fee.configured);
+    t('the Solana route uses the Solana receiver', sol.fee.active && sol.fee.family === 'solana');
+    t('LI.FI bridge fee is exposed at 0.3% when ready', lifi.fee.active && lifi.fee.bps === 30 && lifi.fee.percent === 0.3);
+    t('deBridge DLN bridge fee is exposed at 0.4%', dln.fee.active && dln.fee.bps === 40 && dln.fee.percent === 0.4);
+    t('0x Cross-Chain bridge fee is exposed when ready', xchain.fee.active && xchain.fee.bps === 30);
+    t('THORChain stays fail-closed without THOR_NAME', thor.status === 'OFFLINE' && thor.fee.active === false);
+  }
 
   /* ----------------------- the OpenOcean adapter ------------------------ */
   {

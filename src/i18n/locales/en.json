@@ -2288,6 +2288,9 @@
     "search": "Search the ecosystem",
     "noResults": "Nothing matches “{{q}}”.",
     "noticeTitle": "Our relationship with these projects: none",
+    "feeNoticeTitle": "DEX & Liquidity — commissioned, not an affiliate",
+    "feeNotice": "The DEX & Liquidity integrations above are connected to FBT Swap. When a swap or bridge executes, FBT is paid the platform commission from inside the transaction (70 bps on swaps, 30–40 bps on bridges). FBT is not affiliated with these projects and has no equity or control in them.",
+    "feeToFbt": "Fee → FBT",
     "newTitle": "FBT Swap Ecosystem",
     "heroTitle": "The infrastructure powering FBT Swap",
     "heroSubtitle": "Networks, liquidity sources, DeFi protocols, data infrastructure and intelligence systems working together behind FBT Swap.",
@@ -2358,7 +2361,12 @@
       "lastFailure": "Last Failure",
       "chainType": "Chain Type",
       "chainId": "Chain ID",
-      "visitSite": "Visit Official Site"
+      "visitSite": "Visit Official Site",
+      "fee": "FBT Commission",
+      "feeLive": "{{pct}}% ({{bps}} bps) → FBT",
+      "feeNotLive": "{{pct}}% configured when enabled",
+      "feeNet": "net {{net}} bps after provider {{cut}}% share",
+      "feeReceiver": "Receiver"
     }
   },
   "biz": {

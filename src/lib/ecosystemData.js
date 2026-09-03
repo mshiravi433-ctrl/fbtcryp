@@ -1,3 +1,5 @@
+import { PAYOUT_ADDRESSES } from './payout.js';
+
 /**
  * ECOSYSTEM DATA ADAPTER
  * ---------------------------------------------------------------------------
@@ -33,17 +35,92 @@ export const NETWORK_REGISTRY = [
 /**
  * Provider → Ecosystem category mapping.
  * This maps the real provider IDs from providerStatus.js into ecosystem sections.
+ *
+ * The `fee` object carries the money relationship for THIS integration only.
+ * It is deliberately not a marketing claim: `bps`/`receiver` mirror the values
+ * the same modules read at run time (server/solanaOcean.js, server/gasless.js,
+ * server/swapProxy.js, src/lib/openocean.js), `providerCutPercent` is the
+ * provider's documented share of the referrer fee, and the UI only displays the
+ * fee as live when `feeReady` came back true from /api/providers/status.
  */
+const FBT_FEE_EVM = PAYOUT_ADDRESSES.evm;
+const FBT_FEE_SOLANA = PAYOUT_ADDRESSES.solana;
+const FBT_SWAP_FEE_BPS = 70;
+const OPENOCEAN_CUT_PERCENT = 20;
+
 const PROVIDER_CATEGORIES = {
-  'kyberswap': { section: 'dex', name: 'KyberSwap', type: 'DEX / Aggregator', capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute'], role: 'Swap routing aggregator across 9 chains' },
-  'openocean': { section: 'dex', name: 'OpenOcean', type: 'DEX / Aggregator', capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute'], role: 'Multi-chain DEX aggregator' },
-  'velora': { section: 'dex', name: 'Velora', type: 'Price Source', capabilities: ['read', 'quote'], role: 'Price source (quote-only)' },
-  '0x-gasless': { section: 'dex', name: '0x Gasless', type: 'DEX / Meta-Tx', capabilities: ['read', 'quote', 'prepare', 'execute'], role: 'Gasless swap execution' },
-  '0x-cross-chain': { section: 'bridge', name: '0x Cross-Chain', type: 'Cross-Chain Router', capabilities: ['read', 'quote', 'prepare', 'execute'], role: 'Cross-chain swap routing' },
-  'lifi': { section: 'bridge', name: 'LI.FI', type: 'Bridge Aggregator', capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute', 'verify'], role: 'Bridge and DEX aggregation' },
-  'debridge-dln': { section: 'bridge', name: 'deBridge DLN', type: 'Bridge Protocol', capabilities: ['read', 'quote', 'prepare', 'execute', 'verify'], role: 'Cross-chain liquidity network' },
-  'thorchain': { section: 'bridge', name: 'THORChain', type: 'Cross-Chain Protocol', capabilities: ['read', 'quote', 'prepare', 'execute'], role: 'Cross-chain native asset swaps' },
-  'solana-openocean': { section: 'dex', name: 'OpenOcean (Solana)', type: 'DEX / Aggregator', capabilities: ['read', 'quote', 'prepare', 'execute'], role: 'Solana DEX aggregation' },
+  'kyberswap': {
+    section: 'dex',
+    name: 'KyberSwap',
+    type: 'DEX / Aggregator',
+    capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute'],
+    role: 'Swap routing aggregator across 9 chains',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'swap' }
+  },
+  'openocean': {
+    section: 'dex',
+    name: 'OpenOcean',
+    type: 'DEX / Aggregator',
+    capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute'],
+    role: 'Multi-chain DEX aggregator',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: OPENOCEAN_CUT_PERCENT, revenueMode: 'swap' }
+  },
+  'velora': {
+    section: 'dex',
+    name: 'Velora',
+    type: 'Price Source',
+    capabilities: ['read', 'quote'],
+    role: 'Price source (quote-only) — prices the swap, does not execute it',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'swap-when-executable' }
+  },
+  '0x-gasless': {
+    section: 'dex',
+    name: '0x Gasless',
+    type: 'DEX / Meta-Tx',
+    capabilities: ['read', 'quote', 'prepare', 'execute'],
+    role: 'Gasless swap execution',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'gasless-swap' }
+  },
+  '0x-cross-chain': {
+    section: 'bridge',
+    name: '0x Cross-Chain',
+    type: 'Cross-Chain Router',
+    capabilities: ['read', 'quote', 'prepare', 'execute'],
+    role: 'Cross-chain swap routing',
+    fee: { bps: 30, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'bridge' }
+  },
+  'lifi': {
+    section: 'bridge',
+    name: 'LI.FI',
+    type: 'Bridge Aggregator',
+    capabilities: ['read', 'quote', 'prepare', 'simulate', 'execute', 'verify'],
+    role: 'Bridge and DEX aggregation',
+    fee: { bps: 30, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'bridge' }
+  },
+  'debridge-dln': {
+    section: 'bridge',
+    name: 'deBridge DLN',
+    type: 'Bridge Protocol',
+    capabilities: ['read', 'quote', 'prepare', 'execute', 'verify'],
+    role: 'Cross-chain liquidity network',
+    fee: { bps: 40, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'bridge' }
+  },
+  'thorchain': {
+    section: 'bridge',
+    name: 'THORChain',
+    type: 'Cross-Chain Protocol',
+    capabilities: ['read', 'quote', 'prepare', 'execute'],
+    role: 'Cross-chain native asset swaps',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_EVM, family: 'evm', providerCutPercent: 0, revenueMode: 'bridge-when-thorname' }
+  },
+  'solana-openocean': {
+    section: 'dex',
+    name: 'OpenOcean (Solana)',
+    type: 'DEX / Aggregator',
+    capabilities: ['read', 'quote', 'prepare', 'execute'],
+    role: 'Solana DEX aggregation',
+    fee: { bps: FBT_SWAP_FEE_BPS, receiver: FBT_FEE_SOLANA, family: 'solana', providerCutPercent: OPENOCEAN_CUT_PERCENT, revenueMode: 'swap' }
+  },
   'goplus-token-risk': { section: 'data', name: 'GoPlus', type: 'Security / Token Risk', capabilities: ['read'], role: 'Token security analysis' }
 };
 
@@ -82,6 +159,7 @@ export async function fetchProviderStatus({ timeout = 8000 } = {}) {
     const timer = setTimeout(() => ctrl.abort(), timeout);
     const res = await fetch(`${API_BASE}/providers/status`, {
       signal: ctrl.signal,
+      cache: 'no-store',
       headers: { accept: 'application/json' }
     });
     clearTimeout(timer);
@@ -90,6 +168,33 @@ export async function fetchProviderStatus({ timeout = 8000 } = {}) {
     return { status: 'success', data };
   } catch {
     return { status: 'error', data: null };
+  }
+}
+
+/** At most one upstream probe per minute per browser session. */
+let lastProbeAt = 0;
+
+/**
+ * Ask the server to re-check the fee-earning DEX/liquidity sources with one
+ * small real call each. This is what turns `reachable` from false to true on a
+ * fresh server instance; it is POST, read-only, and never signs anything.
+ */
+export async function probeProviderStatuses({ timeout = 30000 } = {}) {
+  const now = Date.now();
+  if (now - lastProbeAt < 60000) return true;
+  lastProbeAt = now;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    const res = await fetch(`${API_BASE}/providers/probe`, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { accept: 'application/json', 'content-type': 'application/json' }
+    });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -136,6 +241,7 @@ export function buildEcosystemData(providerReport) {
       feeReady: provider.feeReady,
       lastSuccessAt: provider.lastSuccessAt,
       lastFailureAt: provider.lastFailureAt,
+      fee: deriveFee(meta, provider),
       hue: getHue(provider.id)
     };
 
@@ -194,6 +300,31 @@ export function buildEcosystemData(providerReport) {
     summary,
     healthRatio: report?.summary?.healthRatio ?? 0,
     generatedAt: report?.generatedAt
+  };
+}
+
+function deriveFee(meta, provider) {
+  const base = meta?.fee;
+  if (!base || !provider) return null;
+  // Prefer the fee facts reported by the server (/api/providers/status) where
+  // available: they are read from the same env the modules use, so a server
+  // override (e.g. ZEROX_FEE_RECIPIENT) is never hidden by a build-time label.
+  const live = provider.facts?.fee || base;
+  const cut = Number(live.providerCutPercent ?? (base.providerCutPercent || 0));
+  const bps = Number(live.bps ?? (base.bps || 0));
+  const receiver = live.receiver || base.receiver || null;
+  const netBps = Number(live.netBps ?? (bps * (1 - cut / 100)).toFixed(2));
+  return {
+    configured: Boolean(provider.configured),
+    ready: Boolean(provider.feeReady),
+    active: Boolean(provider.configured && provider.feeReady),
+    bps,
+    percent: Number((bps / 100).toFixed(2)),
+    receiver,
+    family: live.family || base.family || null,
+    providerCutPercent: cut,
+    netBps,
+    revenueMode: base.revenueMode || null
   };
 }
 

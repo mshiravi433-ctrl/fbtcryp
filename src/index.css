@@ -11954,6 +11954,28 @@ button.settings-quick-action {
   opacity: 0.6;
 }
 
+/* ─── FBT fee chip (DEX & Liquidity integrations that pay FBT) ─── */
+.eco-fee-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(0, 255, 157, 0.1);
+  color: #00ff9d;
+  border: 1px solid rgba(0, 255, 157, 0.24);
+  font-family: var(--font-mono);
+}
+
+.eco-fee-chip-net {
+  color: var(--text-3);
+  font-weight: 600;
+}
+
 /* ─── Liquidity Visualization ─── */
 .eco-viz-container {
   padding: 20px;
@@ -12275,6 +12297,35 @@ button.settings-quick-action {
 .eco-drawer-cap--active {
   background: rgba(0, 255, 157, 0.1);
   color: var(--up);
+}
+
+/* ─── Drawer: FBT commission ─── */
+.eco-drawer-fee {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.eco-drawer-fee-muted {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.eco-drawer-fee-net {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.eco-drawer-fee-receiver {
+  font-size: 10px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
 }
 
 .eco-drawer-footer {
