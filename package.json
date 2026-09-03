@@ -12,6 +12,7 @@
     "velocity:referrer-setup": "node scripts/velocity-referrer-setup.mjs",
     "velocity:referral-sweep": "node scripts/velocity-referral-sweep.mjs",
     "build": "vite build && node scripts/gen-landing.mjs",
+    "test:landing": "node scripts/landing-v2/qa-dist.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",

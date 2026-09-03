@@ -6208,9 +6208,19 @@ const distDir = path.join(__dirname, '..', 'dist');
  *                the current hashed asset URLs, so caching it pins a
  *                returning visitor to the previous deploy's JavaScript. That
  *                is how somebody stays on an old build for hours after a fix
- *                ships, which is worse than a slow load. Handled by the SPA
- *                fallback below, and `index: false` here makes sure this
- *                middleware never serves it.
+ *                ships, which is worse than a slow load. It keeps its
+ *                must-revalidate policy below, served through this same
+ *                middleware rather than only through the fallback.
+ *
+ *   <slug>/index.html — static landing guides (the Persian DEX landing
+ *                first among them). With `index: false` this middleware
+ *                REFUSED to serve directory indexes at all, so the SPA
+ *                fallback answered /صرافی-غیرمتمرکز/ with the app shell on
+ *                every self-hosted deployment while Vercel served the real
+ *                guide. The two platforms disagreed, silently. Serving the
+ *                index here restores parity; every index.html in dist —
+ *                guide or app shell — gets the identical must-revalidate
+ *                policy that only-ever-applied to the app shell.
  *
  * Vercel serves /assets and /fonts from its edge using the headers in
  * vercel.json and never reaches this code. This matters for the APK, which
@@ -6219,10 +6229,16 @@ const distDir = path.join(__dirname, '..', 'dist');
  */
 app.use(
   express.static(distDir, {
-    index: false,
+    index: 'index.html',
     setHeaders(res, filePath) {
       if (/[\\/](assets|fonts)[\\/]/.test(filePath)) {
         res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+        return;
+      }
+      if (/index\.html$/.test(filePath)) {
+        /* The whole point above: HTML is never stale-pinned. Applies to the
+           app shell AND to every static landing guide in dist. */
+        res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
         return;
       }
       /*
