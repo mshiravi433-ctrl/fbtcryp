@@ -19,6 +19,29 @@
  * contract; opening it is exactly what a bookmark or a printed link would
  * do. No credential of ours is involved, therefore:
  *
+ * ─── WHICH PUBLIC PAGE, AND WHY (the «Integration issue detected» fix) ─────
+ * The PARTNER widget host, app.rampnetwork.com, hard-requires a valid
+ * `hostApiKey`: opened without one it renders Ramp's own error page —
+ * «Integration issue detected. The application isn't properly connected to
+ * Ramp Network. You can visit Ramp Network directly to buy or sell crypto.»
+ * (Ramp support: «The most common case for this issue is the wrong
+ * hostApiKey value used in the widget configuration code or lack thereof.»)
+ * A keyless rail can therefore NEVER point at that host — and the correct
+ * keyless destination is the very one that error page itself offers: Ramp's
+ * own public consumer pages, where Ramp runs the same widget with Ramp's
+ * OWN integration, so no partner key is involved at all:
+ *
+ *     BUY  → https://buy.ramp.network/
+ *     SELL → https://ramp.network/sell   (docs.rampnetwork.com support:
+ *            «How to sell crypto? → Head to https://ramp.network/sell»)
+ *
+ * The pages run the same widget, so the same documented search parameters
+ * apply; Ramp's migration guide (docs.rampnetwork.com/search-params-migration)
+ * states the widget auto-converts the legacy prefill keys we send. Worst
+ * case an unrecognised parameter is ignored and the user picks by hand —
+ * degradation is an extra tap, never an error page, and NEVER a fabricated
+ * credential shoved into the URL to make the partner host load.
+ *
  *   • the provider performs its OWN checks (KYC, card 3-DS, region rules)
  *     on its own site — nothing here can or does bypass any of them;
  *   • we receive no webhook and no order id — so this flow NEVER claims
@@ -42,12 +65,18 @@
 import { TOKENS, EVM_CHAINS } from './chains';
 
 /* The one destination this rail currently composes URLs for: Ramp Network's
-   public hosted widget. Kept as data so a second keyless destination is an
+   PUBLIC CONSUMER pages — not the partner widget host. app.rampnetwork.com
+   refuses keyless visitors with «Integration issue detected»; these pages
+   are the keyless entry points Ramp itself publishes for direct buyers and
+   sellers. Per-side hosts as data, so a second keyless destination is an
    append, not a rewrite. */
 export const GUIDED_PROVIDER = {
   id: 'ramp',
   name: 'Ramp Network',
-  host: 'https://app.rampnetwork.com/',
+  hosts: {
+    BUY: 'https://buy.ramp.network/',
+    SELL: 'https://ramp.network/sell'
+  },
   enabled: true
 };
 
@@ -221,5 +250,10 @@ export function buildGuidedCheckoutUrl({
   }
   if (typeof finalUrl === 'string' && /^https?:\/\//.test(finalUrl)) params.set('finalUrl', finalUrl);
 
-  return { url: `${GUIDED_PROVIDER.host}?${params.toString()}`, provider: GUIDED_PROVIDER.id, assetCode: code, meta };
+  /* The side-specific public consumer page — see GUIDED_PROVIDER above for
+     why the partner widget host must never be used here. */
+  const host = GUIDED_PROVIDER.hosts[side];
+  if (!host) fail('GUIDED_SIDE_INVALID');
+
+  return { url: `${host}?${params.toString()}`, provider: GUIDED_PROVIDER.id, assetCode: code, meta };
 }
