@@ -1,0 +1,107 @@
+/*
+ * Kept as a small companion to buy-sell.css so the Iranian USDT surface uses
+ * the same cards, buttons, type scale and RGB tokens as the existing Buy/Sell
+ * page. It is imported from Buy.jsx with the rest of that page's styles.
+ */
+.iran-buy-panel { width: 100%; }
+.buy-sell-surface-switch { margin-bottom: 10px; }
+.buy-sell-surface-switch > button { font-size: 11.5px; }
+.iran-buy-ticket { padding: 15px; direction: rtl; text-align: start; }
+.iran-buy-ticket-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.iran-buy-ticket-head .section-label { margin: 0; }
+.iran-buy-ticket-head .faint { margin: 4px 0 0; font-size: 11px; line-height: 1.7; }
+.iran-buy-secure { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid rgba(0, 229, 255, .2); border-radius: 999px; color: var(--rgb-4); background: rgba(0, 255, 157, .06); font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+.iran-buy-subtab { width: min(100%, 148px); margin: 14px 0; }
+.iran-buy-subtab > button { cursor: default; }
+.iran-buy-entry, .iran-buy-review, .iran-buy-order { min-width: 0; }
+.iran-buy-locked-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.iran-buy-locked-rows > div { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; min-height: 43px; padding: 8px 10px; border: 1px solid rgba(255, 255, 255, .09); border-radius: 12px; background: rgba(255, 255, 255, .025); }
+.iran-buy-locked-rows span { color: var(--text-3); font-size: 10px; }
+.iran-buy-locked-rows strong { color: var(--text-1); font-family: var(--font-mono); font-size: 11.5px; }
+.iran-buy-locked-rows svg { color: var(--text-3); }
+.iran-buy-amount { display: block; margin-top: 13px; }
+.iran-buy-amount > span { display: block; margin-bottom: 6px; color: var(--text-2); font-size: 11.5px; font-weight: 700; }
+.iran-buy-amount > div { display: flex; align-items: stretch; direction: ltr; }
+.iran-buy-amount input { width: 100%; min-width: 0; min-height: 47px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .13); border-radius: 0 12px 12px 0; outline: none; color: var(--text-1); background: rgba(255, 255, 255, .035); direction: ltr; text-align: start; font-family: var(--font-mono); font-size: 14px; font-weight: 700; }
+.iran-buy-amount input:focus { border-color: var(--rgb-1); box-shadow: 0 0 0 3px rgba(0, 229, 255, .09); }
+.iran-buy-amount b { display: grid; place-items: center; min-width: 65px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, .13); border-inline-end: 0; border-radius: 12px 0 0 12px; color: var(--text-2); background: rgba(255, 255, 255, .025); font-size: 11.5px; }
+.iran-buy-limit { margin: 6px 1px 0; color: var(--text-3); font-size: 10.5px; line-height: 1.65; }
+.iran-buy-inline-warning { display: inline-flex; align-items: center; gap: 5px; margin: 10px 0 0; color: var(--rgb-5); font-size: 10.5px; line-height: 1.6; }
+.iran-buy-destination { display: flex; align-items: center; gap: 9px; min-height: 64px; margin-top: 12px; padding: 10px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 13px; background: rgba(255, 255, 255, .025); }
+.iran-buy-destination.is-valid { border-color: rgba(0, 255, 157, .32); background: rgba(0, 255, 157, .045); }
+.iran-buy-destination-icon { display: grid; place-items: center; width: 33px; height: 33px; border-radius: 10px; color: var(--rgb-1); background: rgba(0, 229, 255, .1); flex: 0 0 auto; }
+.iran-buy-destination-copy { display: grid; min-width: 0; gap: 2px; flex: 1; }
+.iran-buy-destination-copy > span { color: var(--text-2); font-size: 10px; }
+.iran-buy-destination-copy strong { overflow: hidden; direction: ltr; color: var(--text-1); font-family: var(--font-mono); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.iran-buy-destination-copy small { color: var(--text-3); font-size: 9.5px; line-height: 1.5; }
+.iran-buy-destination.is-valid .iran-buy-destination-copy small { color: var(--up); }
+.iran-buy-wallet-action { flex: 0 0 auto; min-height: 32px; padding-inline: 9px; font-size: 10px; }
+.iran-buy-valid-mark { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; color: #04251a; background: var(--up); flex: 0 0 auto; }
+.iran-buy-cta { width: 100%; min-height: 48px; margin-top: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.iran-buy-error { margin-top: 10px; font-size: 11px; line-height: 1.7; }
+.iran-buy-review-title { margin: 0 0 10px; color: var(--text-1); font-size: 13px; font-weight: 800; }
+.iran-buy-summary, .iran-buy-receipt { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 13px; margin: 0; padding: 11px; border: 1px solid rgba(0, 229, 255, .15); border-radius: 14px; background: linear-gradient(140deg, rgba(0, 229, 255, .055), rgba(124, 77, 255, .035)); }
+.iran-buy-summary div, .iran-buy-receipt div { min-width: 0; }
+.iran-buy-summary dt, .iran-buy-receipt dt { color: var(--text-3); font-size: 9.5px; }
+.iran-buy-summary dd, .iran-buy-receipt dd { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--text-1); font-size: 10.8px; font-weight: 700; }
+.iran-buy-summary dd.mono, .iran-buy-receipt dd.mono, .iran-buy-receipt code { direction: ltr; font-family: var(--font-mono); font-size: 10px; }
+.iran-buy-expiry { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; color: var(--text-3); font-size: 10.5px; }
+.iran-buy-expiry.is-expired { color: var(--down); }
+.iran-buy-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; margin-top: 13px; }
+.iran-buy-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.iran-buy-progress { padding: 12px; border: 1px solid rgba(0, 229, 255, .18); border-radius: 15px; background: linear-gradient(140deg, rgba(0, 229, 255, .06), rgba(124, 77, 255, .035)); }
+.iran-buy-progress.is-error { border-color: rgba(255, 59, 107, .34); background: rgba(255, 59, 107, .055); }
+.iran-buy-progress-head { display: flex; align-items: flex-start; gap: 8px; }
+.iran-buy-progress-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--rgb-4); background: rgba(0, 255, 157, .1); flex: 0 0 auto; }
+.iran-buy-progress.is-error .iran-buy-progress-icon { color: var(--down); background: rgba(255, 59, 107, .12); }
+.iran-buy-progress-head p { margin: 0; color: var(--text-1); font-size: 11.5px; font-weight: 800; }
+.iran-buy-progress-head small { display: block; margin-top: 3px; color: var(--text-3); font-size: 10px; line-height: 1.55; }
+.iran-buy-timeline { display: flex; margin: 13px 0 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: thin; }
+.iran-buy-timeline li { position: relative; flex: 1 0 72px; display: grid; justify-items: center; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
+.iran-buy-timeline li:not(:last-child)::after { position: absolute; top: 9px; width: calc(100% - 19px); inset-inline-start: calc(50% + 10px); height: 1px; background: rgba(255, 255, 255, .13); content: ''; }
+.iran-buy-timeline li.done:not(:last-child)::after { background: var(--up); }
+.iran-buy-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 50%; color: var(--text-3); background: var(--bg-panel-solid); font-size: 9px; }
+.iran-buy-timeline li.active { color: var(--rgb-1); font-weight: 700; }
+.iran-buy-timeline li.active > span { border-color: var(--rgb-1); color: var(--rgb-1); box-shadow: 0 0 0 4px rgba(0, 229, 255, .1); }
+.iran-buy-timeline li.done { color: var(--up); }
+.iran-buy-timeline li.done > span { border-color: var(--up); color: #04251a; background: var(--up); }
+.iran-buy-timeline small { max-width: 72px; line-height: 1.4; }
+.iran-buy-authorization { display: flex; gap: 9px; margin-top: 11px; padding: 10px; border: 1px solid rgba(255, 179, 0, .24); border-radius: 12px; color: var(--rgb-5); background: rgba(255, 179, 0, .055); }
+.iran-buy-authorization > svg { flex: 0 0 auto; margin-top: 2px; }
+.iran-buy-authorization b { color: var(--text-1); font-size: 11.5px; }
+.iran-buy-authorization p { margin: 3px 0 0; color: var(--text-2); font-size: 10px; line-height: 1.65; }
+.iran-buy-receipt { margin-top: 11px; border-color: rgba(0, 255, 157, .22); background: rgba(0, 255, 157, .04); }
+.iran-buy-receipt-tx { grid-column: 1 / -1; }
+.iran-buy-receipt-tx dd { display: flex; align-items: center; gap: 4px; }
+.iran-buy-receipt-tx .icon-btn, .iran-buy-receipt-tx a { display: grid; place-items: center; width: 25px; height: 25px; border: 0; border-radius: 7px; color: var(--rgb-1); background: rgba(0, 229, 255, .08); }
+.iran-buy-receipt-tx a { text-decoration: none; }
+.iran-buy-order-actions { flex-wrap: wrap; justify-content: flex-start; }
+.iran-buy-cancel { color: var(--down) !important; }
+.iran-buy-terms { margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, .08); color: var(--text-3); }
+.iran-buy-terms summary { display: flex; align-items: center; gap: 7px; padding: 12px 1px 0; color: var(--text-2); font-size: 10.8px; font-weight: 700; cursor: pointer; list-style: none; }
+.iran-buy-terms summary::-webkit-details-marker { display: none; }
+.iran-buy-terms summary > span { margin-inline-start: auto; transition: transform .2s ease; }
+.iran-buy-terms[open] summary > span { transform: rotate(180deg); }
+.iran-buy-terms ul { margin: 9px 0 0; padding: 0 18px 0 0; font-size: 10.3px; line-height: 1.8; }
+.iran-buy-terms li + li { margin-top: 3px; }
+:root[data-theme='light'] .iran-buy-locked-rows > div, :root[data-theme='light'] .iran-buy-destination { border-color: rgba(20, 32, 58, .14); background: rgba(20, 32, 58, .025); }
+:root[data-theme='light'] .iran-buy-amount input, :root[data-theme='light'] .iran-buy-amount b { border-color: rgba(20, 32, 58, .18); background: rgba(20, 32, 58, .025); }
+:root[data-theme='light'] .iran-buy-summary, :root[data-theme='light'] .iran-buy-progress { border-color: rgba(0, 133, 153, .24); }
+@media (max-width: 390px) {
+  .iran-buy-ticket { padding: 13px; }
+  .iran-buy-ticket-head { gap: 8px; }
+  .iran-buy-secure { font-size: 8.8px; }
+  .iran-buy-locked-rows, .iran-buy-summary, .iran-buy-receipt { grid-template-columns: 1fr; }
+  .iran-buy-receipt-tx { grid-column: auto; }
+  .iran-buy-destination { align-items: flex-start; }
+  .iran-buy-wallet-action { margin-inline-start: auto; }
+  .iran-buy-actions { align-items: stretch; flex-direction: column-reverse; }
+  .iran-buy-actions .btn { width: 100%; }
+}
+@media (min-width: 700px) {
+  .iran-buy-panel { max-width: 640px; margin-inline: auto; }
+  .iran-buy-ticket { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iran-buy-terms summary > span { transition: none; }
+}

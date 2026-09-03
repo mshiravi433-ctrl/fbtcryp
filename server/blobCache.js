@@ -43,6 +43,60 @@ export async function upstashSetIfAbsent(key, value, ttlMs) {
   return answer.ok && answer.result === 'OK';
 }
 
+/**
+ * Read / replace / remove the value behind an atomic Redis key.
+ *
+ * These are intentionally separate from blobGet/blobSet. Those helpers store
+ * a cache envelope (`{ value, expires }`) and are safe for cache entries;
+ * financial idempotency leases need the raw record written by SET NX instead.
+ * Only code that already requires `upstashConfigured()` should use this small
+ * escape hatch. There is deliberately no Blob fallback: Blob cannot provide a
+ * compare-and-set lease and must never become an accidental payment lock.
+ */
+export async function upstashGetAtomic(key) {
+  if (!upstashConfigured() || typeof key !== 'string' || !key) return null;
+  const answer = await upstashCommand(['GET', safeKey(key)]);
+  if (!answer.ok || typeof answer.result !== 'string') return null;
+  try { return JSON.parse(answer.result); } catch { return null; }
+}
+
+export async function upstashSetAtomic(key, value, ttlMs) {
+  if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
+  const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
+  const answer = await upstashCommand(['SET', safeKey(key), JSON.stringify(value), 'EX', seconds]);
+  return answer.ok && answer.result === 'OK';
+}
+
+/**
+ * Release a SET-NX lease only when it is still the exact record acquired by
+ * this caller. An unconditional DEL after a lease has expired could otherwise
+ * erase a newer worker's lease and admit two money-moving transitions.
+ */
+export async function upstashReleaseAtomicLease(key, leaseValue) {
+  if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
+  const script = "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end";
+  const answer = await upstashCommand(['EVAL', script, '1', safeKey(key), JSON.stringify(leaseValue)]);
+  return answer.ok && Number(answer.result) === 1;
+}
+
+/**
+ * Atomically increment a fixed-window counter and set its expiry on the first
+ * hit. Financial route limiters must use this rather than a warm-process Map:
+ * serverless instances do not share memory, whereas the same Upstash instance
+ * already required for the workflow's idempotency keys does.
+ *
+ * `null` means the durable limiter could not be reached. Callers that can move
+ * money must fail closed in that case rather than silently becoming unlimited.
+ */
+export async function upstashIncrementWindow(key, ttlMs) {
+  if (!upstashConfigured() || typeof key !== 'string' || !key) return null;
+  const seconds = Math.max(1, Math.ceil(Number(ttlMs) / 1000));
+  const script = "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end; return n";
+  const answer = await upstashCommand(['EVAL', script, '1', safeKey(key), String(seconds)]);
+  const count = Number(answer.result);
+  return answer.ok && Number.isSafeInteger(count) && count >= 1 ? count : null;
+}
+
 /** Public, secret-free storage status for activation and diagnostics. */
 export function durableBackendStatus() {
   return {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { riseIn } from './PageTransition';
 import SegIndicator from './SegIndicator';
 import WalletWatchReport from './WalletWatchReport';
+import IranianBuyPanel, { IranianBuyTabButton } from './IranianBuyPanel';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { emitEvent } from '../lib/intent-ai/os/eventBus';
@@ -18,6 +19,7 @@ import {
   getBuySellQuote,
   storedOrderAccessToken
 } from '../lib/buySell';
+import { getIranBuyCapability } from '../lib/iranBuy';
 import {
   GUIDED_CATALOG,
   GUIDED_FIAT,
@@ -192,6 +194,11 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const upsertOrder = useAppStore((state) => state.upsertBuySellOrder);
   const notify = useAppStore((state) => state.notify);
   const [side, setSide] = useState('BUY');
+  /* The general hosted-checkout wizard remains untouched underneath this
+     independent surface. The server, not a VITE flag, decides whether the
+     extra Persian tab exists at all. */
+  const [buySurface, setBuySurface] = useState('general');
+  const [iranBuyCapability, setIranBuyCapability] = useState(null);
   const [step, setStep] = useState(0);
   const [stepDir, setStepDir] = useState(1);
   const [providers, setProviders] = useState(null);
@@ -215,6 +222,10 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   const rtl = i18n.dir ? i18n.dir() === 'rtl' : false;
   const slideDir = stepDir * (rtl ? -1 : 1);
+  /* Exact equality is intentional: fa-IR, ar, English and every other locale
+     must never render the Iranian-only tab. */
+  const iranBuyLanguageAllowed = i18n.language === 'fa';
+  const iranBuyVisible = iranBuyLanguageAllowed && iranBuyCapability?.enabled === true;
 
   const provider = providers?.providers?.[0] || null;
   const providerName = provider ? t(`buySell.providerNames.${provider.id}`, { defaultValue: provider.name || provider.id }) : '';
@@ -254,6 +265,26 @@ export default function BuySellPanel({ initialOrderId = null }) {
       .catch(() => { /* tracked flow unavailable — the guided rail still works */ });
     return () => { live = false; };
   }, []);
+
+  /* This request is intentionally skipped outside exact `fa`: no browser can
+     discover a regional capability simply by changing a hidden field. A failed
+     capability call is indistinguishable from disabled and shows no dead tab. */
+  useEffect(() => {
+    let live = true;
+    if (i18n.language !== 'fa') {
+      setIranBuyCapability(null);
+      setBuySurface('general');
+      return () => { live = false; };
+    }
+    getIranBuyCapability()
+      .then((capability) => { if (live) setIranBuyCapability(capability?.enabled === true ? capability : null); })
+      .catch(() => { if (live) setIranBuyCapability(null); });
+    return () => { live = false; };
+  }, [i18n.language]);
+
+  useEffect(() => {
+    if (!iranBuyVisible && buySurface === 'iran') setBuySurface('general');
+  }, [buySurface, iranBuyVisible]);
 
   /* Keep the chosen pair valid whenever the effective catalog changes. */
   useEffect(() => {
@@ -510,6 +541,19 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   return (
     <div className="buy-sell-panel">
+      {iranBuyVisible && (
+        <div className="segmented buy-sell-surface-switch" role="tablist" aria-label={t('buySell.title')}>
+          <button type="button" role="tab" aria-selected={buySurface === 'general'} className={buySurface === 'general' ? 'active' : ''} onClick={() => setBuySurface('general')} style={{ isolation: 'isolate' }}>
+            {buySurface === 'general' && <SegIndicator id="buy-sell-surface" />}{t('buySell.title')}
+          </button>
+          <IranianBuyTabButton active={buySurface === 'iran'} onClick={() => setBuySurface('iran')} />
+        </div>
+      )}
+
+      {buySurface === 'iran' && iranBuyVisible ? (
+        <IranianBuyPanel capability={iranBuyCapability} />
+      ) : (
+        <>
       <div className="segmented buy-sell-switch" role="tablist" aria-label={t('buySell.directionLabel')}>
         <button type="button" role="tab" aria-selected={side === 'BUY'} className={side === 'BUY' ? 'active' : ''} onClick={() => changeSide('BUY')} style={{ isolation: 'isolate' }}>{side === 'BUY' && <SegIndicator id="buy-sell-direction" />}{t('buySell.buy')}</button>
         <button type="button" role="tab" aria-selected={side === 'SELL'} className={side === 'SELL' ? 'active' : ''} onClick={() => changeSide('SELL')} style={{ isolation: 'isolate' }}>{side === 'SELL' && <SegIndicator id="buy-sell-direction" />}{t('buySell.sell')}</button>
@@ -778,6 +822,8 @@ export default function BuySellPanel({ initialOrderId = null }) {
       />
 
       <RecentOrders t={t} />
+        </>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import BuySellPanel from '../components/BuySellPanel';
 import { IconChevronLeft, IconShield } from '../components/Icons';
 import '../styles/lab-modern.css';
 import '../styles/buy-sell.css';
+import '../styles/iran-buy.css';
 
 /**
  * One hosted-checkout surface for fiat on/off-ramp activity.
