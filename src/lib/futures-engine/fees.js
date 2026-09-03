@@ -22,8 +22,10 @@
 
 /** Hard ceiling on what any policy may charge, in bps of notional. */
 export const FBT_FEE_MAX_BPS = 10;
-/** Default when nothing is configured (matches the existing builder default). */
-export const FBT_FEE_DEFAULT_BPS = 5;
+/** Default when nothing is configured — 10 bps, the app-wide builder rate
+ *  (raised from 5 on the owner's instruction; matches BUILDER_BPS_DEFAULT
+ *  and the dYdX builder fee so every executable path charges the same). */
+export const FBT_FEE_DEFAULT_BPS = 10;
 
 export const FEE_POLICIES = Object.freeze({
   STANDARD: Object.freeze({ id: 'STANDARD', bps: FBT_FEE_DEFAULT_BPS, label: 'Standard' }),

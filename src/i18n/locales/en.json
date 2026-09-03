@@ -8921,7 +8921,8 @@
       "totalAtReview": "shown at review",
       "networkWallet": "shown in wallet",
       "totalPartial": "{{known}} + network",
-      "honesty": "The FBT fee is {{pct}}% of your collateral at this leverage. Fees are charged on notional, not collateral. There is no hidden spread or markup."
+      "honesty": "The FBT fee is {{pct}}% of your collateral at this leverage. Fees are charged on notional, not collateral. There is no hidden spread or markup.",
+      "fbtIncluded": "The FBT fee on this venue is paid out of the venue’s own fee — nothing is added to your cost."
     },
     "unknown": "unknown",
     "riskLevel": "Risk",

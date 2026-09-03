@@ -5831,8 +5831,8 @@ export default async function run() {
   /* -------------------------- dYdX builder code -------------------------- */
   {
     t('the supplied dYdX payout has the expected public-address shape', isDydxAddress(DYDX_BUILDER_ADDRESS));
-    t('dYdX charges the same 5 bps builder rate', DYDX_BUILDER_FEE_PPM === 500);
-    t('dYdX fee arithmetic is on notional', dydxFeeUsd(10_000) === 5);
+    t('dYdX charges the same 10 bps builder rate as every other path', DYDX_BUILDER_FEE_PPM === 1000);
+    t('dYdX fee arithmetic is on notional', dydxFeeUsd(10_000) === 10);
     t('an invalid dYdX payout is rejected', !isDydxAddress('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
   }
 

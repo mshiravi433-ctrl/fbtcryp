@@ -293,7 +293,7 @@ export async function run(container) {
     t("the read-only sentence is shown verbatim (en)", byId('futures-readonly-notice')?.textContent.trim() === 'This market is currently available for viewing only.');
     t('the chart is visible in its live state (candles from the BFF), not the unavailable box', !!byId('futures-trend') && !byId('futures-trend-empty') && /on-chain candles/.test(byId('futures-chart')?.textContent || ''));
     t('market info shows funding and the protocol fee (4 bps) from the BFF', /8\.4/.test(byId('futures-market-info')?.textContent || '') && /4 bps/.test(byId('futures-market-info')?.textContent || ''));
-    t('the fee breakdown comes from the engine: 50 × 5 = $250 notional, protocol 5 bps = $0.13, FBT 5 bps = $0.13', /\$250/.test(byId('futures-fee-breakdown')?.textContent || '') && /\$0\.1[23]/.test(byId('futures-fee-breakdown')?.textContent || ''));
+    t('the fee breakdown comes from the engine: 50 × 5 = $250 notional, protocol 4 bps = $0.1, FBT 10 bps = $0.25', /\$250/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(10 bps\)\$0\.25/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the total is NOT printed while the network fee is unknown', /shown at review/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the risk verdict is rendered with its score', /\/100/.test(byId('futures-risk')?.textContent || ''));
     t('without a wallet the action still says View only — the venue is read-only, tradeable never', byId('futures-review')?.textContent.trim() === 'View only' && byId('futures-review')?.disabled === true);
@@ -319,7 +319,7 @@ export async function run(container) {
     await act(async () => { setInputValue(byId('futures-collateral'), '100'); });
     await act(async () => { setInputValue(byId('futures-leverage'), '10'); });
     await act(async () => { await sleep(600); });
-    t('the live quote re-runs on input: $1,000 notional, Velocity protocol $0.4, FBT fee $0.5', /\$1,000/.test(byId('futures-fee-breakdown')?.textContent || '') && /Protocol fee\$0\.4/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(5 bps\)\$0\.5/.test(byId('futures-fee-breakdown')?.textContent || ''));
+    t('the live quote re-runs on input: $1,000 notional, protocol $0.4, FBT fee $1 (10 bps)', /\$1,000/.test(byId('futures-fee-breakdown')?.textContent || '') && /Protocol fee\$0\.4/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(10 bps\)\$1/.test(byId('futures-fee-breakdown')?.textContent || ''));
     await act(async () => { setInputValue(byId('futures-leverage'), '75'); });
     await act(async () => { await sleep(600); });
     t('leverage above the market\'s 20x cap is clamped to the market maximum', Number(byId('futures-leverage')?.value) <= 20);

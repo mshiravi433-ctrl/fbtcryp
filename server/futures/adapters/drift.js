@@ -413,6 +413,53 @@ export function isSolanaAddress(addr) { return isBase58(addr); }
 /** A Solana transaction signature is a 64-byte ed25519 sig → 87–88 base58 chars. */
 export function isSolanaSignature(sig) { return isBase58(sig, 88) || isBase58(sig, 87); }
 
+/* ── network fee estimate (so the review sheet can state a TOTAL) ────────── */
+/*
+ * A Solana transaction pays `lamportsPerSignature` per signature (5 000 since
+ * genesis; read from the RPC rather than assumed). The On-Chain open flow
+ * sends up to THREE transactions in the worst case (initialize user account →
+ * USDT deposit → place order); management sends up to two. Priced at the SOL
+ * oracle from the same market feed the tab already shows, this closes the last
+ * unknown in the fee breakdown — the review sheet can print a complete total
+ * instead of "shown at review" forever. It is an ESTIMATE and is labelled as
+ * one; the true fee is known only from the confirmed receipt.
+ */
+export const VELOCITY_OPEN_SIGNATURES_ESTIMATE = 3;
+export const VELOCITY_MANAGE_SIGNATURES_ESTIMATE = 2;
+
+export async function estimateVelocityNetworkFeeUsd(signatures = VELOCITY_OPEN_SIGNATURES_ESTIMATE) {
+  const sigs = Math.max(1, Math.min(5, Number(signatures) || 1));
+  const { value } = await withCache('futures:velocity:networkfee', 60_000, async () => {
+    let lamportsPerSignature = 5_000; /* mainnet-beta default since genesis */
+    try {
+      const hash = await solRpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
+      const bh = hash?.value?.blockhash || hash?.blockhash || (typeof hash === 'string' ? hash : null);
+      if (bh) {
+        const calc = await solRpc('getFeeCalculatorForBlockhash', [bh, { commitment: 'confirmed' }]);
+        const per = num(calc?.value?.feeCalculator?.lamportsPerSignature ?? calc?.feeCalculator?.lamportsPerSignature);
+        if (per != null && per > 0) lamportsPerSignature = per;
+      }
+    } catch { /* keep the default — the estimate is labelled as one */ }
+    /* SOL/USD from the venue's own oracle (the same number the tab shows). */
+    let solUsd = null;
+    try {
+      const mk = await readMarkets();
+      const sol = mk.markets.find((m) => m.base === 'SOL');
+      solUsd = sol?.oraclePrice ?? sol?.mid ?? null;
+    } catch { /* feed down → try again next window */ }
+    return { lamportsPerSignature, solUsd, readAt: Date.now() };
+  });
+  if (!value.solUsd) return null; /* honest: no price, no estimate */
+  return {
+    feeUsd: (value.lamportsPerSignature * sigs) / 1e9 * value.solUsd,
+    signatures: sigs,
+    lamportsPerSignature: value.lamportsPerSignature,
+    solUsd: value.solUsd,
+    estimate: true,
+    basis: `${sigs} signatures × ${value.lamportsPerSignature} lamports × SOL $${value.solUsd} (venue oracle)`
+  };
+}
+
 /* ── wallet-scoped reads ─────────────────────────────────────────────────── */
 /* The order itself is built/signed in the browser with the venue SDK; the
    server reads state honestly and never holds a key. */

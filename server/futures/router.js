@@ -91,8 +91,18 @@ async function statusGate(providerId, { needExecute = false } = {}) {
 }
 
 /** Network fee in USD from a gas estimate (EVM venues; null when unknown). */
+/** Velocity (Solana) network fee: lamportsPerSignature × expected signatures ×
+ *  the venue's own SOL oracle — an ESTIMATE that closes the fee breakdown so
+ *  the review sheet can state a total (the receipt still settles the truth). */
+async function velocityNetworkFeeUsd(signatures) {
+  try {
+    const est = await drift.estimateVelocityNetworkFeeUsd(signatures);
+    return est ? est.feeUsd : null;
+  } catch { return null; }
+}
+
 async function networkFeeUsd(est, providerId = 'ostium') {
-  if (providerId !== 'ostium') return null; // Solana network fee is not estimated on the read path
+  if (providerId !== 'ostium') return null; // Solana is estimated by velocityNetworkFeeUsd
   if (!est?.ok || est.feeWei == null) return null;
   const eth = await ostium.ethUsd(fetchSimplePrices);
   if (eth == null) return null;
@@ -319,7 +329,8 @@ export function futuresRouter() {
     const wallet = req.body?.wallet ? cleanWallet(req.body.wallet) : null;
     const o = await assembleOrder(req.body || {}, { wallet });
     if (!o.ok) return fail(res, o.status || 400, o.code, { requestId, detail: o.detail || null, provider: o.health || null });
-    const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+    const netFee = o.providerId === 'drift' ? await velocityNetworkFeeUsd(drift.VELOCITY_OPEN_SIGNATURES_ESTIMATE) : null;
+    const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: netFee, policyId: o.policyId });
     publish('FUTURES_QUOTE_UPDATED', { requestId, providerId: o.providerId, marketId: o.market.marketId }, { source: 'futures-router' });
     return ok(res, {
       requestId, provider: o.providerId, providerStatus: o.health.status,
@@ -386,7 +397,8 @@ export function futuresRouter() {
        trade is accounted for before it is ever broadcast — and FBT still never
        holds a key. */
     if (o.providerId === 'drift') {
-      const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: null, policyId: o.policyId });
+      const netFee = await velocityNetworkFeeUsd(drift.VELOCITY_OPEN_SIGNATURES_ESTIMATE);
+      const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: netFee, policyId: o.policyId });
       if (!fee) return fail(res, 400, 'INVALID_INPUT', { requestId });
       /* Descriptor, not calldata: the real instructions are built in the tab
          against the live SDK config. `program` is what /verify checks the
@@ -429,8 +441,10 @@ export function futuresRouter() {
           order: { side: o.side, collateralUsd: o.collateralUsd, leverage: o.leverage, notionalUsd: o.collateralUsd * o.leverage, entryPrice: o.entry, takeProfit: o.takeProfit, stopLoss: o.stopLoss, slippageBps: o.slippageBps },
           account: { balanceUsd: o.account.balanceUsd, allowanceUsd: o.account.allowanceUsd, needsApproval: false },
           fee, risk: o.risk, route: o.route,
-          /* No EVM gas simulation on Solana: the tab pays the priority fee. */
-          simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: null, code: 'CLIENT_BUILDS_TX' },
+          /* No EVM gas simulation on Solana: the tab pays the priority fee.
+             networkFeeUsd carries the signature-count estimate the total is
+             built from, so the review sheet states a COMPLETE cost. */
+          simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: netFee, code: 'CLIENT_BUILDS_TX' },
           transactions: [],
           clientSign: { family: 'solana', program: drift.VELOCITY_PROGRAM_ID, sdk: '@velocity-exchange/sdk', buildsInTab: true, tx: clientTx },
           state: 'PREPARED',

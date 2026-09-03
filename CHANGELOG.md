@@ -1,5 +1,46 @@
 # Unreleased — On-Chain futures: Drift → Velocity migration (the feed was dead, not the flag)
 
+- **The production order path was silently broken — fixed.** `public/vendor/`
+  (the prebundled Velocity SDK) is gitignored, and Vercel builds with
+  `npm run build:full`, which did NOT run the vendor script (only plain
+  `build` had the `prebuild` hook). Every deploy since the Velocity migration
+  shipped without the SDK bundle, so the On-Chain tab's Review→Confirm step
+  failed closed at signing. `build:full` now regenerates the bundle itself,
+  and a wiring probe pins it so a refactor of the build command can never
+  quietly drop it again.
+- **Our fee went up to 10 bps on every executable path, and it reaches us.**
+  The builder fee is raised 5 → 10 bps in all three places that actually
+  collect it: the Ostium order path (صفحهٔ افق جهانی — enforced inside the
+  signed `openTrade` calldata, transferred atomically to our payout address on
+  open), the dYdX order path (builder fee 500 → 1000 ppm, dYdX allows
+  10 000), and the futures BFF STANDARD policy (`FBT_FEE_DEFAULT_BPS` 5 → 10,
+  still ≤ the 10 bps app ceiling and every venue cap: Ostium 50, dYdX 100,
+  Velocity 20). The UI copy already promised "0.10%" — the code now charges
+  it. On Velocity the fee is still earned through the on-chain referral
+  program (paid out of the venue's own fee; the new `futures.fee.fbtIncluded`
+  line says exactly that on the ticket and the confirmation sheet so nobody is
+  told they pay extra when they do not).
+- **The review sheet now states a COMPLETE total (server-computed).** The
+  Solana network fee was the one unknown that kept the On-Chain total at
+  "shown at review" forever. The server now estimates it — `lamportsPerSignature`
+  read from the RPC × expected signatures (3 for open, 2 for manage) × the
+  venue's own SOL oracle — so `/quote` and `/prepare` return
+  `network.known: true` and the sheet prints protocol + network + FBT = total,
+  with the estimate labelled in the breakdown.
+- **The افق جهانی (Ostium) chart draws real candles now.** It used to wait for
+  two 20-second polls before drawing anything ("collecting live price…" for
+  40+ seconds on every fresh open, and nothing at all when the feed was down).
+  It now reads the venue's real OHLC from `/api/v1/futures/candles
+  ?provider=ostium` (the same live read the On-Chain tab uses), appends the
+  freshest observed mid as a live tail, adds 15m/1h/4h/1d resolution buttons,
+  retries a cold read twice, and falls back to the observed session series
+  when the candle feed is down — every point real, none synthesised.
+- **The dYdX tab chart heals itself.** The backend serves candles fine
+  (verified live against the indexer); a single transient failure on the first
+  read used to leave the chart blank until the user changed resolution. The
+  read now retries twice (3.5s apart) before the honest empty state — the same
+  self-heal the On-Chain tab got.
+
 - **The On-Chain engine is no longer crypto-only.** The tab now merges the
   catalogues of EVERY on-chain venue the registry can drive — the Solana perps
   venue (crypto) and the Arbitrum RWA venue (forex, commodities, indices,

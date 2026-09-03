@@ -67,21 +67,29 @@ export default function Dydx() {
   const [candlesLoading, setCandlesLoading] = useState(false);
 
   useEffect(() => {
+    if (!ticker) return undefined;
     let alive = true;
-    setCandlesLoading(true);
-    const limit = resolution === '1DAY' ? 30 : resolution === '15MINS' ? 60 : 24;
-    getDydxCandles(ticker, resolution, limit)
-      .then((r) => {
+    let retryTimer = null;
+    let attempt = 0;
+    /* Two bounded retries: a cold instance or a transient indexer blip used to
+       leave the chart on "no candles" until the user changed resolution — the
+       read heals itself now before giving up honestly. */
+    const run = async () => {
+      setCandlesLoading(true);
+      const limit = resolution === '1DAY' ? 30 : resolution === '15MINS' ? 60 : 24;
+      try {
+        const r = await getDydxCandles(ticker, resolution, limit);
         if (!alive) return;
-        setCandles(r?.candles || []);
-        setCandlesLoading(false);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setCandles([]);
-        setCandlesLoading(false);
-      });
-    return () => { alive = false; };
+        const rows = r?.candles || [];
+        if (rows.length > 1) { setCandles(rows); setCandlesLoading(false); return; }
+      } catch { /* handled below like an empty read */ }
+      if (!alive) return;
+      if (attempt < 2) { attempt += 1; retryTimer = setTimeout(run, 3_500); return; }
+      setCandles([]);
+      setCandlesLoading(false);
+    };
+    run();
+    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
   }, [ticker, resolution]);
 
   const candlePoints = useMemo(

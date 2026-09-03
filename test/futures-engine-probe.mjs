@@ -90,16 +90,16 @@ t('ZERO policy charges nothing',
   t('Protocol + Network + FBT = Total, to the cent',
     Math.abs(b.totalFeeUsd - (b.protocol.feeUsd + b.network.feeUsd + b.fbt.feeUsd)) < 1e-9 && b.complete === true);
   t('the FBT fee is charged on NOTIONAL and its share of collateral is stated',
-    b.fbt.feeUsd === 0.5 && b.fbt.pctOfCollateral === 0.5);
+    b.fbt.feeUsd === 1 && b.fbt.pctOfCollateral === 1);
   t('the breakdown carries policy, bps, recipient and when it is charged (ledger fields)',
-    b.fbt.policyId === 'STANDARD' && b.fbt.bps === 5 && b.fbt.recipient && b.fbt.chargedOn === 'open');
+    b.fbt.policyId === 'STANDARD' && b.fbt.bps === 10 && b.fbt.recipient && b.fbt.chargedOn === 'open');
   t('a valid breakdown passes validation', validateFeeBreakdown(b).ok);
   t('a tampered total is refused', !validateFeeBreakdown({ ...b, totalFeeUsd: b.totalFeeUsd + 1 }).ok);
   t('a hidden markup flag is refused', !validateFeeBreakdown({ ...b, hiddenMarkup: true }).ok);
   t('an out-of-range bps is refused', !validateFeeBreakdown({ ...b, fbt: { ...b.fbt, bps: 11, feeUsd: 1.1 } }).ok);
 }
 t('an unknown protocol fee makes the TOTAL null rather than a partial sum',
-  (() => { const b = computeFeeBreakdown({ collateralUsd: 100, leverage: 10, protocolFeeBps: null, networkFeeUsd: 0.1 }); return b.totalFeeUsd === null && b.complete === false && b.fbt.feeUsd === 0.5; })());
+  (() => { const b = computeFeeBreakdown({ collateralUsd: 100, leverage: 10, protocolFeeBps: null, networkFeeUsd: 0.1 }); return b.totalFeeUsd === null && b.complete === false && b.fbt.feeUsd === 1; })());
 t('an unknown network fee makes the TOTAL null too',
   computeFeeBreakdown({ collateralUsd: 100, leverage: 10, protocolFeeBps: 8, networkFeeUsd: null }).totalFeeUsd === null);
 t('no breakdown for unusable inputs', computeFeeBreakdown({ collateralUsd: -5, leverage: 10 }) === null);

@@ -834,6 +834,7 @@ export default function FuturesOnchain() {
                   <div className="row-between"><span className="faint">{t('futures.fee.protocol')}</span><span className="mono">{fee.protocol.known ? fmtUsd(fee.protocol.feeUsd) : t('futures.unknown')}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.fee.network')}</span><span className="mono">{fee.network.known ? fmtUsd(fee.network.feeUsd) : t('futures.fee.networkAtReview')}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.fee.fbt', { bps: fee.fbt.bps })}</span><span className="mono">{fmtUsd(fee.fbt.feeUsd)}</span></div>
+                  {fee.fbt.chargedOn === 'fill' && <p className="faint" style={{ margin: '4px 0 0' }}>{t('futures.fee.fbtIncluded')}</p>}
                   <div className="row-between"><strong>{t('futures.fee.total')}</strong><strong className="mono">{fee.complete ? fmtUsd(fee.totalFeeUsd) : t('futures.fee.totalAtReview')}</strong></div>
                   <p className="faint" style={{ margin: '7px 0 0' }}>{t('futures.fee.honesty', { pct: (fee.fbt.pctOfCollateral ?? 0).toFixed(2) })}</p>
                 </div>
@@ -965,6 +966,7 @@ export default function FuturesOnchain() {
                 <div className="row-between"><span className="faint">{t('futures.fee.protocol')}</span><span className="mono">{prepared.fee.protocol.known ? fmtUsd(prepared.fee.protocol.feeUsd) : t('futures.unknown')}</span></div>
                 <div className="row-between"><span className="faint">{t('futures.fee.network')}</span><span className="mono">{prepared.fee.network.known ? fmtUsd(prepared.fee.network.feeUsd) : t('futures.fee.networkWallet')}</span></div>
                 <div className="row-between"><span className="faint">{t('futures.fee.fbt', { bps: prepared.fee.fbt.bps })}</span><span className="mono">{fmtUsd(prepared.fee.fbt.feeUsd)}</span></div>
+                {prepared.fee.fbt.chargedOn === 'fill' && <p className="faint" style={{ margin: '4px 0 0' }}>{t('futures.fee.fbtIncluded')}</p>}
                 <div className="row-between"><strong>{t('futures.fee.total')}</strong><strong className="mono">{prepared.fee.complete ? fmtUsd(prepared.fee.totalFeeUsd) : t('futures.fee.totalPartial', { known: fmtUsd((prepared.fee.protocol.feeUsd || 0) + prepared.fee.fbt.feeUsd) })}</strong></div>
                 <div className="row-between"><span className="faint">{t('futures.riskLevel')}</span><span className={`pill ${prepared.risk.riskLevel === 'LOW' ? 'pill-up' : prepared.risk.riskLevel === 'MEDIUM' ? 'pill-neutral' : 'pill-down'}`}>{t(`futures.risk.${prepared.risk.riskLevel}`)}</span></div>
                 <div className="row-between"><span className="faint">{t('futures.route')}</span><span className="mono">{prepared.route?.providerId}</span></div>
