@@ -726,6 +726,22 @@ console.log('▸ probing the Signals page (fail-closed + no hardcoded fa/ar)…'
   report('signals page', await signalsRows());
 }
 
+/* ------------------------- 0f₂. signal intelligence ------------------------ */
+/*
+ * Phase 3 signal engine: deterministic + fail-closed client engine, the
+ * server evidence sanitizer (no wallet/key/seed can reach an AI), the honest
+ * local explanation path when no provider answers, Solana early-token
+ * scoring, the real-outcome learning loop, alert cooldowns, watchlist and
+ * the portfolio consent gate. Bundled with Vite for the same reason as the
+ * unit suite (extensionless imports + import.meta.env in client modules).
+ */
+console.log('▸ probing signal intelligence (deterministic · fail-closed · no fabricated stats)…');
+npx(['vite', 'build', '-c', 'test/vite.signalintel.mjs', '--logLevel', 'error']);
+{
+  const { default: signalIntelRows } = await import('./.out/signalintel/signals-intel-probe.js');
+  report('signal intelligence', await signalIntelRows());
+}
+
 /* ------------------------------ 1. units -------------------------------- */
 /* Pure logic first: it is the fastest suite and the one whose failures point
    most precisely at a cause. Bundled with Vite so extensionless imports and

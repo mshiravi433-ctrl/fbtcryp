@@ -33,6 +33,7 @@ import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
+import { buildMarketPulse, buildSolanaRadar, explainSignal } from './signalEngine.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
@@ -4053,6 +4054,63 @@ app.post('/api/ai/brief', async (req, res) => {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
+
+/* ------------------------- Signal Intelligence API ------------------------ */
+/*
+ * Phase 3 — AI Signal Intelligence Center.
+ *
+ *   GET  /api/signals/pulse            market-wide AI market pulse
+ *   POST /api/signals/why              multi-AI explanation of one signal
+ *   GET  /api/signals/solana/radar     Solana early-token radar (opportunity
+ *                                      + risk scores)
+ *
+ * The engine is fail-closed: an unavailable upstream yields null fields and a
+ * visible `dataStatus`, never an invented number. AI calls only happen on the
+ * `/why` route, are cached per asset per day, and receive a sanitized evidence
+ * bundle (nothing that could identify a wallet or carry a secret).
+ */
+
+app.get('/api/signals/pulse', async (_req, res) => {
+  try {
+    const value = await buildMarketPulse();
+    res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'SIGNAL_PULSE_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+app.post('/api/signals/why', async (req, res) => {
+  const { symbol, name, lang, evidence, classification, confidence, riskLabel, timeframe } = req.body ?? {};
+  if (!symbol || !name) return res.status(400).json({ error: 'BAD_REQUEST' });
+  try {
+    const value = await explainSignal({
+      symbol: String(symbol).slice(0, 20),
+      name: String(name).slice(0, 60),
+      lang: ['en', 'fa', 'ar'].includes(lang) ? lang : 'en',
+      evidence: evidence && typeof evidence === 'object' ? evidence : {},
+      classification: String(classification || 'WATCH').slice(0, 24),
+      confidence: Number.isFinite(Number(confidence)) ? Number(confidence) : null,
+      riskLabel: String(riskLabel || '').slice(0, 12),
+      timeframe: Number.isFinite(Number(timeframe)) ? Number(timeframe) : 7
+    });
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'SIGNAL_WHY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+app.get('/api/signals/solana/radar', async (req, res) => {
+  try {
+    const limit = Math.max(4, Math.min(20, Number(req.query.limit) || 10));
+    const value = await buildSolanaRadar({ limit });
+    res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'SOLANA_RADAR_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
 
 /*
  * /api/ai/faq was removed with the Help chat box. Support questions are now
