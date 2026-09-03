@@ -93,8 +93,6 @@ export const COPY = {
       en: 'Swipe through what you can actually do today. Each slide opens straight into that page of the app — nothing here is a mockup.',
       fa: 'با انگشت بکش و ببین امروز واقعاً چه کاری می‌توانی بکنی. هر اسلاید مستقیم همان صفحهٔ برنامه را باز می‌کند؛ هیچ‌چیز اینجا ماکاپ نیست.'
     },
-    prev: { en: 'Previous slide', fa: 'اسلاید قبلی' },
-    next: { en: 'Next slide', fa: 'اسلاید بعدی' },
     play: { en: 'Pause slideshow', fa: 'توقف نمایش خودکار' },
     pause: { en: 'Play slideshow', fa: 'پخش خودکار' },
     autoplay: { en: 'Auto', fa: 'خودکار' },

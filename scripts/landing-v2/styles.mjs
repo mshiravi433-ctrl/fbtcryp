@@ -40,16 +40,28 @@ export const CSS = /* css */ `
 }
 
 * { box-sizing: border-box; }
-html { min-height: 100%; background: var(--bg); scroll-behavior: smooth; }
-body {
-  margin: 0;
-  min-height: 100svh;
-  overflow-x: hidden;
+/*
+ * The backdrop sits on the CANVAS, not on the body. The animated layer
+ * (.ambient) is position:fixed with z-index:-1, and a fixed negative-z box
+ * paints ABOVE the root canvas background but BELOW any background the body
+ * carries — so as long as body had an opaque background, the whole star/line/
+ * orb field (the previous "animated lines" request included) was painted,
+ * then covered, then never seen. html's background is the canvas itself and
+ * stays behind everything, which is exactly where the space backdrop belongs.
+ */
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
   background:
     radial-gradient(1100px 640px at 78% -12%, rgba(124, 58, 237, 0.28), transparent 60%),
     radial-gradient(900px 620px at -12% 22%, rgba(78, 234, 255, 0.1), transparent 58%),
     radial-gradient(760px 520px at 108% 58%, rgba(255, 104, 202, 0.09), transparent 60%),
     var(--bg);
+}
+body {
+  margin: 0;
+  min-height: 100svh;
+  overflow-x: hidden;
   color: var(--ink);
   font-family: var(--font-en);
   font-size: 16px;
@@ -142,6 +154,79 @@ button { font-family: inherit; }
 .orb-b { width: 36vw; height: 36vw; max-width: 520px; max-height: 520px; inset-block-start: 34%; inset-inline-start: -14%; background: radial-gradient(circle, rgba(78, 234, 255, 0.22), transparent 62%); animation: orb-drift 32s ease-in-out infinite alternate-reverse; }
 .orb-c { width: 30vw; height: 30vw; max-width: 460px; max-height: 460px; inset-block-start: 120%; inset-inline-end: 4%; background: radial-gradient(circle, rgba(99, 245, 187, 0.16), transparent 64%); animation: orb-drift 38s ease-in-out infinite alternate; }
 @keyframes orb-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(4vw, 6vh, 0) scale(1.12); } }
+/*
+ * The star field («در پشت زمینه ستاره ها بدرخشند»). Three tiled layers of
+ * tiny radial-gradient stars; each layer twinkles on its own clock and its
+ * background drifts at a different rate, which is what makes the field read
+ * as depth instead of a static texture. Tiling (background-repeat) keeps the
+ * whole sky at three 1px-paint spans — no canvas, no per-star nodes.
+ */
+.stars { position: absolute; inset: -12% 0; background-repeat: repeat; pointer-events: none; }
+.stars-a {
+  background-image:
+    radial-gradient(1.4px 1.4px at 14% 22%, rgba(255,255,255,0.95) 55%, transparent 60%),
+    radial-gradient(1px 1px at 38% 71%, rgba(214,233,255,0.85) 55%, transparent 60%),
+    radial-gradient(1.7px 1.7px at 63% 12%, rgba(255,255,255,0.9) 55%, transparent 60%),
+    radial-gradient(1px 1px at 81% 48%, rgba(203,222,255,0.8) 55%, transparent 60%),
+    radial-gradient(1.2px 1.2px at 92% 86%, rgba(255,255,255,0.85) 55%, transparent 60%),
+    radial-gradient(1px 1px at 8% 58%, rgba(228,238,255,0.75) 55%, transparent 60%);
+  background-size: 320px 320px;
+  animation: twinkle-a 6.5s ease-in-out infinite, star-drift 140s linear infinite;
+}
+.stars-b {
+  background-image:
+    radial-gradient(1px 1px at 22% 34%, rgba(255,255,255,0.8) 55%, transparent 60%),
+    radial-gradient(0.9px 0.9px at 47% 12%, rgba(255,244,224,0.7) 55%, transparent 60%),
+    radial-gradient(1.1px 1.1px at 72% 62%, rgba(255,255,255,0.75) 55%, transparent 60%),
+    radial-gradient(0.9px 0.9px at 88% 28%, rgba(214,233,255,0.7) 55%, transparent 60%),
+    radial-gradient(1px 1px at 33% 88%, rgba(255,255,255,0.7) 55%, transparent 60%);
+  background-size: 230px 230px;
+  animation: twinkle-b 9s ease-in-out infinite, star-drift 200s linear infinite reverse;
+}
+.stars-c {
+  background-image:
+    radial-gradient(0.8px 0.8px at 18% 18%, rgba(255,255,255,0.65) 55%, transparent 60%),
+    radial-gradient(0.7px 0.7px at 52% 46%, rgba(255,255,255,0.55) 55%, transparent 60%),
+    radial-gradient(0.8px 0.8px at 78% 82%, rgba(230,240,255,0.6) 55%, transparent 60%),
+    radial-gradient(0.7px 0.7px at 90% 10%, rgba(255,255,255,0.5) 55%, transparent 60%);
+  background-size: 160px 160px;
+  animation: twinkle-c 12s ease-in-out infinite, star-drift 260s linear infinite;
+}
+@keyframes twinkle-a { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.95; } }
+@keyframes twinkle-b { 0%, 100% { opacity: 0.7; } 50% { opacity: 0.3; } }
+@keyframes twinkle-c { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.75; } }
+@keyframes star-drift { from { background-position: 0 0; } to { background-position: 320px 640px; } }
+/*
+ * The meteors («و گاهی یک شهاب سنگ نورانی رد شود»). Each streak is a 2px
+ * gradient bar that spends 80-90% of a long cycle at opacity 0, then crosses
+ * the viewport in ~1.2s. Two of them, offset in phase and angle, so a pass
+ * happens every ~8-13 seconds — occasional, not busy. Physical (not
+ * logical) positions: the sky behind the page is decoration that must not
+ * mirror-flip with the document direction.
+ */
+.meteor {
+  position: absolute; top: 8%; left: 72%;
+  width: 170px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, #ffffff 0%, rgba(190, 228, 255, 0.6) 42%, transparent 100%);
+  filter: drop-shadow(0 0 7px rgba(185, 225, 255, 0.9));
+  opacity: 0;
+  transform: rotate(-33deg);
+  will-change: transform, opacity;
+}
+.meteor-a { animation: meteor-a 17s linear infinite; }
+.meteor-b { top: 24%; left: 88%; width: 130px; transform: rotate(-28deg); animation: meteor-b 26s linear infinite 9s; }
+@keyframes meteor-a {
+  0%, 80% { transform: translate3d(0, 0, 0) rotate(-33deg); opacity: 0; }
+  82% { opacity: 1; }
+  92% { opacity: 1; }
+  94%, 100% { transform: translate3d(-78vw, 50vh, 0) rotate(-33deg); opacity: 0; }
+}
+@keyframes meteor-b {
+  0%, 86% { transform: translate3d(0, 0, 0) rotate(-28deg); opacity: 0; }
+  88% { opacity: 0.9; }
+  96% { opacity: 0.9; }
+  97.5%, 100% { transform: translate3d(-88vw, 44vh, 0) rotate(-28deg); opacity: 0; }
+}
 
 /* ─────────────────────────── layout ─────────────────────────── */
 /*
@@ -177,29 +262,30 @@ section { padding-block: clamp(44px, 7vw, 88px); scroll-margin-top: 88px; }
 .nav-inner { display: flex; align-items: center; gap: 12px; padding-block: 12px; }
 
 /*
- * Logo only, as asked. The mark is bigger than it used to be (a 26px image in
- * a 46px plate instead of 24 in 34) because it is now the only thing the header
- * says about who we are, and it wears the brand's own gradient ring so it reads
- * as a logo and not as a favicon that escaped into a header.
+ * Logo only, as asked. The mark is bigger than it used to be (a 30px image
+ * instead of 24 in 34) because it is now the only thing the header says about
+ * who we are, and it wears the brand's own gradient ring so it reads as a
+ * logo and not as a favicon that escaped into a header.
+ *
+ * No plate behind it: a grey/violet box around the mark read as an unstyled
+ * icon chip («لوگو نباید در جعبه طوسی باشد») — the mark sits on the page
+ * background directly and the ring + hover glow carry the branding.
  */
 .brand { display: inline-flex; align-items: center; text-decoration: none; }
 .brand-mark {
-  position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(78, 234, 255, 0.22));
-  border: 1px solid rgba(139, 92, 246, 0.45);
-  box-shadow: var(--glow-violet), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative; display: grid; place-items: center; width: 46px; height: 46px;
+  transition: transform 0.25s ease, filter 0.25s ease;
 }
-.brand-mark img { border-radius: 10px; position: relative; z-index: 1; }
+.brand-mark img { border-radius: 11px; position: relative; z-index: 1; width: 34px; height: 34px; box-shadow: 0 0 0 1px rgba(160, 175, 230, 0.18), 0 6px 24px -6px rgba(124, 58, 237, 0.55); }
 .brand-mark .brand-ring {
-  position: absolute; inset: -3px; border-radius: 18px; pointer-events: none;
+  position: absolute; inset: -4px; border-radius: 15px; pointer-events: none;
   background: conic-gradient(from 0deg, rgba(139, 92, 246, 0), rgba(139, 92, 246, 0.85) 22%, rgba(78, 234, 255, 0.9) 42%, rgba(99, 245, 187, 0) 62%, rgba(255, 104, 202, 0.5) 82%, rgba(139, 92, 246, 0) 100%);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude; -webkit-mask-composite: xor; padding: 1.6px;
   animation: ring-turn 7s linear infinite;
 }
 @keyframes ring-turn { to { transform: rotate(360deg); } }
-.brand:hover .brand-mark { transform: translateY(-1px) scale(1.04); box-shadow: 0 0 54px -4px rgba(139, 92, 246, 0.75); }
+.brand:hover .brand-mark { transform: translateY(-1px) scale(1.04); filter: drop-shadow(0 0 14px rgba(139, 92, 246, 0.7)); }
 
 .nav-links { display: none; align-items: center; gap: 2px; margin-inline-start: 10px; }
 .nav-links a {
@@ -835,7 +921,13 @@ footer.site { margin-block-start: 30px; border-block-start: 1px solid var(--line
 .slide-live .k { font-family: var(--font-mono); color: #fff; }
 .slide-live .v { font-family: var(--font-mono); direction: ltr; }
 .slide-live.is-off { display: none; }
-.slide-lottie { position: absolute; inset-block-start: 8%; inset-inline-end: 4%; width: clamp(120px, 18%, 200px); opacity: 0.9; pointer-events: none; }
+/* The floating animation lives over the photographic plate, never over the
+   copy. The plate is the FIRST grid column, and the first column is the
+   inline-START side in both directions (left in LTR, right in RTL) — so a
+   plain inset-inline-start anchor keeps the art on the photo in EN and FA
+   alike. The old inset-inline-end put it on the text column in both, which
+   is what made the FA slide read as overlapping boxes. */
+.slide-lottie { position: absolute; inset-block-start: 8%; inset-inline-start: 4%; width: clamp(120px, 18%, 200px); opacity: 0.9; pointer-events: none; }
 @media (max-width: 860px) { .slide-lottie { display: none; } }
 .slide-index { position: absolute; inset-block-end: 10px; inset-inline-end: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--quiet); letter-spacing: 0.12em; }
 .slide-index i { font-style: normal; margin-inline: 2px; opacity: 0.5; }
@@ -845,19 +937,9 @@ footer.site { margin-block-start: 30px; border-block-start: 1px solid var(--line
 .lottie-inline { width: 34px; height: 34px; flex: 0 0 34px; }
 .lottie-quote { position: absolute; inset-block-start: -34px; inset-inline-end: 10px; width: 84px; height: 84px; opacity: 0.75; }
 
-/* the chrome: arrows, dots, progress */
-.show-nav {
-  position: absolute; inset-block-start: 50%; transform: translateY(-50%); z-index: 3;
-  width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; cursor: pointer;
-  border: 1px solid rgba(160, 175, 230, 0.22); background: rgba(10, 8, 26, 0.7); color: var(--ink);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.2s, background 0.2s;
-}
-.show:hover .show-nav, .show:focus-within .show-nav, .show-nav:active { opacity: 1; }
-.show-nav:hover { border-color: var(--cyan); background: rgba(24, 18, 54, 0.9); }
-.show-nav.is-prev { inset-inline-start: 12px; }
-.show-nav.is-next { inset-inline-end: 12px; }
-@media (max-width: 860px) { .show-nav { opacity: 1; width: 36px; height: 36px; } }
+/* the chrome: dots, play, progress. The old left/right arrows are gone —
+   they sat on top of the slide copy (worst in RTL, where the text column is
+   the one they overlapped) and the dots + swipe already cover navigation. */
 .show-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 14px; border-block-start: 1px solid rgba(160, 175, 230, 0.1); flex-wrap: wrap; }
 .show-dots { display: flex; align-items: center; gap: 6px; }
 .show-dot {
@@ -1020,6 +1102,5 @@ html[data-js] .reveal.in { opacity: 1; transform: none; }
   .slide-lines { display: none; }
   /* with no autoplay the bar is meaningless — hide it, keep the dots */
   .show-progress { display: none; }
-  .show-nav { opacity: 1; }
 }
 `;
