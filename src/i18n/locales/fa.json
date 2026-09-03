@@ -1543,6 +1543,7 @@
         "live": "داده زنده",
         "local": "محاسبه محلی",
         "market-only": "فقط داده بازار",
+        "offline": "دادهٔ آفلاین",
         "unavailable": "داده در دسترس نیست"
       },
       "horizonTitle": "ریسک در بازه‌های زمانی",
@@ -1576,7 +1577,9 @@
           "earlyWatch": "تحت نظر"
         },
         "momentumAccel": "شتاب حرکت",
+        "momentumDecel": "کند شدن حرکت",
         "holderGrowth": "رشد هولدرها",
+        "holderSpread": "پراکنده شدن هولدرها",
         "whaleInflow": "ورود نهنگ",
         "whaleOutflow": "خروج نهنگ",
         "dexBuy": "فشار خرید DEX",

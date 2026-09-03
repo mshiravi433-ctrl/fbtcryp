@@ -1122,6 +1122,7 @@
         "live": "بيانات حية",
         "local": "حساب محلي",
         "market-only": "بيانات السوق فقط",
+        "offline": "لقطة محفوظة دون اتصال",
         "unavailable": "البيانات غير متاحة"
       },
       "horizonTitle": "المخاطر حسب الأفق الزمني",
@@ -1155,7 +1156,9 @@
           "earlyWatch": "تحت المراقبة"
         },
         "momentumAccel": "تسارع الزخم",
+        "momentumDecel": "تباطؤ الزخم",
         "holderGrowth": "نمو الحائزين",
+        "holderSpread": "توزّع الحائزين",
         "whaleInflow": "تدفق الحيتان",
         "whaleOutflow": "تصريف الحيتان",
         "dexBuy": "ضغط شراء DEX",
@@ -3628,6 +3631,10 @@
   },
   "verdict": {
     "layerName": {
+      "technical": "الرسم البياني اليوم",
+      "historical": "سجلّه السابق",
+      "structural": "بنية السعر",
+      "macro": "السوق الأوسع",
       "derivatives": "تكلفة التمويل"
     },
     "reason": {

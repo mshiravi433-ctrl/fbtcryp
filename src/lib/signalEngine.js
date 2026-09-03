@@ -48,6 +48,32 @@ export const RISK_BAND = Object.freeze({
   HIGH: { key: 'intel.risk.high', tone: 'high' }
 });
 
+/**
+ * The locale key for one classification — `signals.intel.class.strongBuy`.
+ *
+ * ─── WHY THIS IS A FUNCTION AND NOT A TEMPLATE IN THE PAGE ──────────────────
+ * Five places in src/pages/Signals.jsx built the key by hand:
+ *
+ *     t(`signals.intel.class.${classification.toLowerCase()}`)
+ *
+ * `CLASS` values are SCREAMING_SNAKE (`STRONG_BUY`, `HIGH_RISK`), and the
+ * locale keys are camelCase (`strongBuy`, `highRisk`). So the two multi-word
+ * classes asked i18next for a key that exists in no language, and i18next
+ * answered with the key itself: the badge on every STRONG BUY and every HIGH
+ * RISK card — the two loudest signals on the screen — read
+ * «signals.intel.class.strong_buy». BUY / WATCH / SELL / AVOID are one word
+ * each, which is why this looked fine in a screenshot of an ordinary market.
+ *
+ * CLASS_META already carries the right key per class; this returns it, so the
+ * mapping lives in exactly one place and an unknown or null classification
+ * falls back to WATCH instead of throwing on `.toLowerCase()` of null.
+ *
+ * test/signals-page-probe.jsx asserts every CLASS resolves to real copy.
+ */
+export function classKey(classification) {
+  return `signals.${(CLASS_META[classification] || CLASS_META.WATCH).key}`;
+}
+
 export const HORIZONS = Object.freeze([
   { days: 1, key: '24H' },
   { days: 7, key: '7D' },

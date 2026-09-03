@@ -1,3 +1,69 @@
+# Unreleased — Signals: the page crashed on its own signal card (and three labels were raw keys)
+
+- **The Signals screen no longer opens into «مشکلی پیش اومده».** `SignalCard`
+  was the only component in `src/pages/Signals.jsx` that read `t` from its
+  PROPS instead of calling `useTranslation()` like every sibling — and neither
+  call site (the global card list and `SolanaSignalCard`) passed one. The first
+  card to render threw `TypeError: t is not a function` inside its own
+  `CARD_FIELDS` map, past `<Suspense>` (which handles pending, never rejected)
+  into `RouteBoundary`: both tabs, every language, every asset, the moment
+  market data arrived. The card now owns its translation hook, and the hook
+  runs BEFORE the `!signal` early return so the hook count cannot change
+  between renders of one instance.
+- **Why the suite never caught it, and what does now.** `test/screens.jsx`
+  mounts `<Signals />` and asserts on the FIRST paint, before any poll
+  resolves — no coins, no cards, component never constructed. That is the same
+  blind spot `test/coindetail-probe.jsx` was written for, one screen over.
+  `test/signals-page-probe.jsx` (wired into `npm test` as suite 4b₂) mounts the
+  real page against nine response shapes — live, dead pulse, CoinGecko 429
+  object, captive-portal HTML, our own 502 `UPSTREAM_FAILED`, empty, flat,
+  null-filled, string-typed numbers — WAITS for the polls, and asserts a card
+  actually rendered, because "no error" is worthless on a screen that can also
+  pass by painting nothing. It then drives the Solana tab, the horizon switch,
+  the alert sheet and the multi-AI "why" the way a user does. Sabotage-verified
+  against the finished suite: `t` back to a prop → 17/59, the formatter guard
+  reverted → 54/59, the hand-built class key restored → 51/59, one locale key
+  deleted → 57/59, all four restored → 59/59.
+- **Two signal classes printed their own dictionary path.** Five places built
+  the badge key as `` t(`signals.intel.class.${classification.toLowerCase()}`) ``
+  while `CLASS` is SCREAMING_SNAKE and the locales are camelCase, so STRONG_BUY
+  asked for `class.strong_buy` and HIGH_RISK for `class.high_risk` — keys that
+  exist in no language, which i18next echoes back verbatim. BUY / WATCH / SELL /
+  AVOID are single words, so an ordinary market looked fine. `classKey()` in
+  `src/lib/signalEngine.js` now returns the key `CLASS_META` already carried,
+  from one place, and falls back to WATCH instead of throwing on a null
+  classification.
+- **Three more reachable labels were missing from every locale.**
+  `signals.intel.early.momentumDecel` (`computeEarlySignals` flags a fading
+  momentum), `signals.intel.early.holderSpread` (`buildEvidence` reasons a
+  spreading holder base) and `signals.intel.source.offline` — which
+  `computePulseLocal` reports whenever the market rows came from the bundled
+  snapshot, i.e. exactly during a rate limit or an upstream outage. Added to
+  en/fa/ar, and the probe now audits all 124 dynamic keys the page can build
+  (×3 locales = 372 lookups) against the real locale files, with each group
+  annotated by the code path that emits it. Arabic also gains the four missing
+  `verdict.layerName` labels the detail lab renders.
+- **A quoted number from an upstream could take the page down.** The formatters
+  guarded with `Number.isNaN(v)`, which is FALSE for a string, then called a
+  Number METHOD: `fmtPct('3.2')` threw `TypeError: v.toFixed is not a
+  function`. Providers disagree about types — CoinGecko sends numbers, CoinLore
+  sends `"percent_change_24h": "1.4"`, DexScreener sends strings for every
+  numeric field, which is why `server/providers.js` already wraps those in
+  `Number(...)` while `normalizeCoin` passes CoinGecko's through. `fmtPrice`,
+  `fmtUsd`, `fmtCompact`, `fmtNum`, `fmtPct` and `fmtQty` now coerce once and
+  fail closed to '—' — the same rule the data layer follows: an unavailable
+  number is shown as unavailable, never as `NaN`, `$NaN`, or an exception. The
+  unit suite (1716 checks) pins the unchanged behaviour, including the
+  hide-balances mask and the active currency symbol.
+- **`npm ci` works on Linux again.** The lockfile had drifted back to a
+  REQUIRED macOS-only `fsevents@2.3.2` nested under shrinkwrapped `ganache`, so
+  every Linux install died with `EBADPLATFORM` about thirty seconds in — the
+  exact failure `ci/lock-platform-guard.mjs` exists to prevent, and its
+  `--check` mode (run by `npm test`) was failing on the repository's own
+  lockfile. Ran the guard: one line, `"optional": true`, nothing removed and no
+  version changed. `npm ci` now completes unforced, and
+  `test/ci-lockfile-platform-guard.test.mjs` passes 6/6.
+
 # Unreleased — On-Chain futures: Drift → Velocity migration (the feed was dead, not the flag)
 
 - **The production order path was silently broken — fixed.** `public/vendor/`

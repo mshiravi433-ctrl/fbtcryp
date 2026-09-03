@@ -30,7 +30,8 @@ import { fetchOverview } from '../lib/smartMoneyClient';
 import { getSignalPulse, getSignalWhy, getSolanaRadar } from '../lib/signalApi';
 import {
   CLASS_META, computeHorizonRisks, computeSignalCard, computeEarlySignals,
-  computePulseLocal, portfolioImpact, rankSignals, filterSignals, searchSignals
+  computePulseLocal, portfolioImpact, rankSignals, filterSignals, searchSignals,
+  classKey
 } from '../lib/signalEngine';
 import {
   readWatchlist, toggleWatch, createAlert, readAlerts, deleteAlert, saveAlerts,
@@ -286,9 +287,35 @@ function EvidenceChips({ evidence, max = 5 }) {
 
 const CARD_FIELDS = ['confidence', 'risk', 'timeframe', 'target', 'stop', 'momentum', 'volume', 'smartMoney', 'whale', 'liquidity'];
 
-function SignalCard({ signal, selected, onSelect, onWhy, whyLoading, onAlert, watched, onCompare, onTrack, t }) {
+/*
+ * THE SIGNAL CARD — and the crash it used to cause.
+ *
+ * This was the only component in the file that read `t` from its PROPS instead
+ * of calling `useTranslation()` like every sibling does, and neither call site
+ * (the global list below, and SolanaSignalCard) passed one. The first card to
+ * render therefore threw `TypeError: t is not a function` inside the
+ * CARD_FIELDS map — past <Suspense>, into RouteBoundary, which is the
+ * "a problem occurred" screen the user reported. Both tabs, every language,
+ * every asset, the moment market data arrived.
+ *
+ * It survived the suite because test/screens.jsx mounts <Signals /> and
+ * asserts on the FIRST paint, before any poll resolves: no coins, no cards,
+ * component never constructed. test/signals-page-probe.jsx is the test that
+ * serves real response shapes and waits, and it fails if `t` ever becomes a
+ * prop again.
+ *
+ * (This file is scanned by test/wiring.mjs for ANY Arabic-script character —
+ * a localized page must carry no hardcoded Persian, and the check reads the
+ * raw source, comments included. So the report it answers is quoted in the
+ * probe, not here.)
+ *
+ * The hook also runs BEFORE the `!signal` early return now. A hook after a
+ * conditional return changes the hook count between renders of the same
+ * instance, which is its own crash waiting for a card that goes null.
+ */
+function SignalCard({ signal, selected, onSelect, onWhy, whyLoading, onAlert, watched, onCompare, onTrack }) {
+  const { t } = useTranslation();
   if (!signal) return null;
-  const classKey = `signals.intel.class.${String(signal.classification || 'WATCH').toLowerCase()}`;
   const meta = CLASS_META[signal.classification] || CLASS_META.WATCH;
   const ready = signal.status === 'READY';
   const fields = CARD_FIELDS.map((f) => {
@@ -335,7 +362,7 @@ function SignalCard({ signal, selected, onSelect, onWhy, whyLoading, onAlert, wa
       {ready ? (
         <>
           <div className="sic-class">
-            <span className={`badge ${meta.tone}`}>{meta.emoji} {t(classKey)}</span>
+            <span className={`badge ${meta.tone}`}>{meta.emoji} {t(classKey(signal.classification))}</span>
             <span className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.card.confidence')}: <b style={{ color: 'var(--text-1)' }}>{signal.confidence}%</b></span>
             {signal.offline && <span className="pill down" style={{ fontSize: 9.5, padding: '2px 8px' }}>{t('signals.intel.status.offline')}</span>}
           </div>
@@ -440,7 +467,7 @@ function WhyModal({ why, onClose }) {
           <div>
             <h3>🧠 {t('signals.intel.why.title')}</h3>
             <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>
-              {signal?.coin?.symbol} · {t(`signals.intel.class.${(signal?.classification || 'WATCH').toLowerCase()}`)} · {signal?.confidence}%
+              {signal?.coin?.symbol} · {t(classKey(signal?.classification))} · {signal?.confidence}%
             </div>
           </div>
           <button type="button" className="sic-btn" style={{ flex: '0 0 auto', minWidth: 36 }} onClick={onClose}>✕</button>
@@ -683,7 +710,7 @@ function MomentumSection({ cards }) {
               <CoinLogo coin={s.coin} />
               <div className="main">
                 <div className="s">{s.coin.symbol}</div>
-                <div className="d">{t(`signals.intel.class.${s.classification.toLowerCase()}`)} · {s.confidence}%</div>
+                <div className="d">{t(classKey(s.classification))} · {s.confidence}%</div>
               </div>
               <Sparkline data={(s.coin.sparkline ?? []).slice(-40)} up={(s.score ?? 0) >= 0} width={64} height={28} />
               <div className="num">
@@ -779,7 +806,7 @@ function HistorySection({ history, perf, priceMap }) {
                   <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>{h.symbol}</td>
                   <td>{new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                   <td>${fmtPrice(h.entryPrice)}</td>
-                  <td>{t(`signals.intel.class.${h.classification.toLowerCase()}`)}</td>
+                  <td>{t(classKey(h.classification))}</td>
                   <td>{h.confidence}%</td>
                   <td className={`r ${h.result === 'success' ? 'up' : h.result === 'failed' ? 'down' : ''}`}>
                     {h.settled ? t(`signals.intel.history.result.${h.result}`) : `${t('signals.intel.history.result.pending')} ${t('signals.intel.history.pendingTime', { d: h.horizon })}`}
@@ -1245,7 +1272,7 @@ export default function Signals() {
     ? solanaSignals // solana card list is rendered by its own component below
     : visibleSignals;
 
-  const insightLabel = useMemo(() => (selectedSignal ? t(`signals.intel.class.${selectedSignal.classification.toLowerCase()}`) : null), [selectedSignal, t]);
+  const insightLabel = useMemo(() => (selectedSignal ? t(classKey(selectedSignal.classification)) : null), [selectedSignal, t]);
   const pulseLive = Boolean(pulse && (pulse.source === 'live' || pulse.source === 'market-only'));
 
   return (

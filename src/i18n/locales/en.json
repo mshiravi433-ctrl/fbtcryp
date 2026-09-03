@@ -1543,6 +1543,7 @@
         "live": "Live data",
         "local": "Local calculation",
         "market-only": "Market data only",
+        "offline": "Offline snapshot",
         "unavailable": "Data unavailable"
       },
       "horizonTitle": "Risk by horizon",
@@ -1576,7 +1577,9 @@
           "earlyWatch": "EARLY WATCH"
         },
         "momentumAccel": "Momentum accel",
+        "momentumDecel": "Momentum fading",
         "holderGrowth": "Holder growth",
+        "holderSpread": "Holders spreading",
         "whaleInflow": "Whale inflow",
         "whaleOutflow": "Whale outflow",
         "dexBuy": "DEX buy pressure",
