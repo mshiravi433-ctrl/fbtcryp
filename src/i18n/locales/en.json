@@ -1438,8 +1438,8 @@
       "weekly": "Weekly · 7 days",
       "monthly": "Monthly · 30 days"
     },
-    "allTab": "🌐 Global Signals",
-    "solanaTab": "🟣 Solana Signals",
+    "allTab": "Global signals",
+    "solanaTab": "Solana signals",
     "regime": {
       "riskOn": "Risk on",
       "btcLed": "BTC leading",
@@ -1494,8 +1494,8 @@
     },
     "intel": {
       "tabs": {
-        "global": "🌐 Global Signals",
-        "solana": "🟣 Solana Signals"
+        "global": "Global signals",
+        "solana": "Solana signals"
       },
       "title": "AI MARKET PULSE",
       "subtitle": "Measured from live market, flow and on-chain data.",
@@ -1702,7 +1702,8 @@
         "compare": "Compare",
         "track": "Track",
         "trade": "Trade",
-        "intent": "Create Intent"
+        "intent": "Create Intent",
+        "close": "Close"
       },
       "alert": {
         "title": "SET ALERT",
@@ -1731,7 +1732,8 @@
           "whale": "Whale flow turns {{op}}",
           "smartMoney": "Smart money turns {{op}}",
           "riskChange": "Risk score goes {{op}} {{v}}"
-        }
+        },
+        "value": "Value"
       },
       "portfolio": {
         "title": "PORTFOLIO IMPACT",
@@ -1744,10 +1746,6 @@
         "position": "Existing position",
         "yes": "yes",
         "no": "no",
-        "consentTitle": "Portfolio-aware AI",
-        "consentBody": "When on, your portfolio exposure summary (symbols + %) is included in the AI explanation. Wallet addresses, amounts and keys are NEVER sent.",
-        "consentOn": "Portfolio summary shared with AI",
-        "consentOff": "Portfolio stays on this device",
         "notes": {
           "highExposure": "Exposure already high — this signal raises concentration risk.",
           "highConcentration": "Portfolio is highly concentrated.",
@@ -1755,7 +1753,8 @@
           "noExistingPosition": "No existing position — signal adds diversification.",
           "balanced": "Portfolio impact is balanced."
         },
-        "local": "Computed locally from your app positions. Nothing was sent anywhere."
+        "local": "Computed locally from your app positions. Nothing was sent anywhere.",
+        "subtitle": "How the selected signal affects your current asset mix."
       },
       "history": {
         "title": "SIGNAL HISTORY",
@@ -1777,19 +1776,6 @@
           "pending": "pending…"
         },
         "pendingTime": "settles {{d}}d after entry"
-      },
-      "performance": {
-        "title": "AI SIGNAL PERFORMANCE",
-        "totalSignals": "Total signals",
-        "settledSignals": "Settled",
-        "successful": "Successful",
-        "failed": "Failed",
-        "accuracy": "Accuracy",
-        "avgReturn": "Avg return",
-        "avgDrawdown": "Avg drawdown",
-        "best": "Best signal",
-        "worst": "Worst signal",
-        "insufficient": "Performance is computed only from settled real outcomes. It starts empty and grows as signals complete — nothing is pre-filled."
       },
       "filters": {
         "title": "Filters",
@@ -1834,8 +1820,21 @@
         "unavailable": "UNAVAILABLE"
       },
       "pull": "Real data sources: CoinGecko market charts · DexScreener pairs · Solscan on-chain · Smart Money flows integrate here automatically.",
-      "pulseMomentum": "Momentum"
-    }
+      "pulseMomentum": "Momentum",
+      "assetPicker": {
+        "label": "Choose token",
+        "marketLabel": "Choose signal market"
+      },
+      "detailTabs": {
+        "label": "Selected token information"
+      },
+      "hub": {
+        "title": "Signal center",
+        "subtitle": "Supporting intelligence, organized in one place.",
+        "summary": "{{n}} sections"
+      }
+    },
+    "aiPowered": "Powered by AI"
   },
   "stocks": {
     "title": "Stocks",
