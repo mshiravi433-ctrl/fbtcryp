@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Em breve",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Spread",
+    "oraclePrice": "Preço do oráculo",
+    "change24h": "Variação 24 h",
+    "volume24h": "Volume 24 h",
+    "noWalletHint": "Nenhuma carteira Solana está instalada neste dispositivo. Toque no botão acima para abrir a página da carteira — conecte Phantom, Solflare ou Backpack lá e você voltará direto para esta ordem."
   }
 }

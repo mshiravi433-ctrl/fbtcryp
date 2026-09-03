@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Bientôt",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Spread",
+    "oraclePrice": "Prix oracle",
+    "change24h": "Variation 24 h",
+    "volume24h": "Volume 24 h",
+    "noWalletHint": "Aucun portefeuille Solana n'est installé sur cet appareil. Touchez le bouton ci-dessus pour ouvrir la page portefeuille — connectez Phantom, Solflare ou Backpack là-bas et vous reviendrez directement à cet ordre."
   }
 }

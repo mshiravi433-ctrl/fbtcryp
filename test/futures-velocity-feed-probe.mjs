@@ -85,7 +85,25 @@ const l2 = (bid, ask) => ({
 });
 const BOOKS = { 'SOL-PERP': l2(99_800_000, 99_900_000), 'BTC-PERP': l2(77_150_000_000, 77_250_000_000), 'ETH-PERP': l2(2_385_000_000, 2_388_000_000), 'HYPE-PERP': l2(81_300_000, 81_400_000) };
 
-let mode = 'live';           // 'live' | 'dead'
+/* ── the live candle capture: GET /market/SOL-PERP/candles/60, verbatim (2026-09-03).
+   `ts` is UNIX SECONDS; each bucket carries BOTH the fill series (what trades
+   actually executed at — carried forward when a bucket has no trades) and the
+   oracle series. The last bucket simulates a real shape the API can return
+   when the fill series is absent: the adapter must fall back to the oracle. */
+const LIVE_CANDLES = {
+  success: true,
+  records: [
+    /* ascending by ts from the API; three real 1h buckets */
+    { ts: 1788382800, fillOpen: 99.32792, fillHigh: 99.32792, fillClose: 99.32792, fillLow: 99.32792, oracleOpen: 99.758064, oracleHigh: 99.780552, oracleClose: 99.63457, oracleLow: 99.472234, quoteVolume: 0, baseVolume: 0 },
+    { ts: 1788386400, fillOpen: 99.32792, fillHigh: 99.32792, fillClose: 99.32792, fillLow: 99.32792, oracleOpen: 99.63457, oracleHigh: 99.675, oracleClose: 99.532148, oracleLow: 99.25607, quoteVolume: 0, baseVolume: 0 },
+    { ts: 1788390000, fillOpen: 99.32792, fillHigh: 100.1101, fillClose: 99.74055, fillLow: 99.32792, oracleOpen: 99.532148, oracleHigh: 100.48411, oracleClose: 100.48411, oracleLow: 99.424666, quoteVolume: 3.997013, baseVolume: 0.04 },
+    { ts: 1788393600, fillOpen: 99.74055, fillHigh: 100.77578, fillClose: 100.77578, fillLow: 99.74055, oracleOpen: 100.48411, oracleHigh: 100.48411, oracleClose: 99.535, oracleLow: 99.527661, quoteVolume: 15.116367, baseVolume: 0.15 },
+    /* fill series absent on this bucket → the oracle bucket is the honest fallback */
+    { ts: 1788397200, oracleOpen: 99.535, oracleHigh: 100.240991, oracleClose: 100.240991, oracleLow: 99.230864, quoteVolume: 0, baseVolume: 0 }
+  ]
+};
+
+let mode = 'live';           // 'live' | 'dead' | 'no-candles'
 const seen = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
@@ -97,8 +115,12 @@ globalThis.fetch = async (url, init) => {
     const name = new URL(u).searchParams.get('marketName');
     return BOOKS[name] ? Response.json(BOOKS[name]) : Response.json({ bids: [], asks: [] });
   }
-  /* Velocity's Data API has no candles endpoint today — 404, exactly like
-     GET /contracts on the new host. */
+  /* The candles endpoint is REAL (verified 2026-09-03); 'no-candles' simulates
+     the venue dropping it again — the honest failure this probe pins. */
+  if (/\/candles\//.test(u)) {
+    if (mode === 'no-candles') return Response.json({ message: 'Route not found', error: 'Not Found', statusCode: 404 }, { status: 404 });
+    return Response.json(LIVE_CANDLES);
+  }
   return Response.json({ message: `Route GET:${new URL(u).pathname} not found`, error: 'Not Found', statusCode: 404 }, { status: 404 });
 };
 
@@ -143,16 +165,39 @@ t('DLOB prices are divided by PRICE_PRECISION (99800000 → $99.80)',
 t('spread is computed from the real touch', near(sol?.spreadBps, ((99.9 - 99.8) / 99.854) * 10_000, 1e-6), String(sol?.spreadBps));
 t('healthFromMarkets reports the feed live', adapter.healthFromMarkets(mk).dataLive === true);
 
-/* ── 2. findMarket + candles stay honest ─────────────────────────────────── */
+/* ── 2. findMarket + candles: real OHLC, honestly shaped ────────────────── */
 const byBase = await adapter.findMarket('SOL');
 const byVenueSymbol = await adapter.findMarket('BTC-PERP');
 const missing = await adapter.findMarket('JUP'); // listed on Drift, not on Velocity
 t('findMarket resolves base symbol and venue symbol', byBase.market?.marketId === '0' && byVenueSymbol.market?.marketId === '1');
 t('a Drift-only perp is MARKET_NOT_LISTED, not invented', missing.market === null && byBase.live === true);
 
-const candles = await adapter.readCandles({ marketRef: 'SOL', resolution: '60', limit: 24 });
-t('a feed with no candles endpoint says so instead of drawing a chart',
-  candles.ok === true && candles.live === false && candles.candles.length === 0, candles.detail || '');
+const candles = await adapter.readCandles({ marketRef: 'SOL', resolution: '60', limit: 96 });
+t('candles come from the venue\'s real /market/:symbol/candles endpoint',
+  candles.ok === true && candles.live === true && candles.candles.length === 5,
+  `${candles.candles?.length} candles / live=${candles.live}`);
+t('a candle\'s ts is unix SECONDS and becomes ms in the row',
+  candles.candles[0]?.startedAt === 1_788_382_800_000, String(candles.candles[0]?.startedAt));
+t('the fill series is charted: the traded OHLC of the 1788393600 bucket',
+  near(candles.candles[3]?.open, 99.74055) && near(candles.candles[3]?.high, 100.77578)
+    && near(candles.candles[3]?.low, 99.74055) && near(candles.candles[3]?.close, 100.77578),
+  JSON.stringify(candles.candles[3]));
+t('a bucket with no fill series falls back to the ORACLE bucket, never to a made-up price',
+  near(candles.candles[4]?.close, 100.240991) && near(candles.candles[4]?.low, 99.230864),
+  JSON.stringify(candles.candles[4]));
+t('candles arrive sorted oldest → newest', candles.candles.every((c, i, a) => i === 0 || a[i - 1].startedAt < c.startedAt));
+const limited = await adapter.readCandles({ marketRef: 'SOL', resolution: '60', limit: 2 });
+t('limit=2 keeps only the newest 2 buckets', limited.candles.length === 2 && limited.candles[0].startedAt === 1_788_393_600_000);
+const oddRes = await adapter.readCandles({ marketRef: 'SOL', resolution: '7D' });
+t('an unknown candle resolution is normalised to 60, never forwarded upstream',
+  oddRes.resolution === '60' && oddRes.live === true);
+mode = 'no-candles';
+memoryStore.clear();
+const noCandles = await adapter.readCandles({ marketRef: 'SOL', resolution: '60', limit: 24 });
+t('a venue that drops the candles endpoint gets an honest unavailable, not a fabricated chart',
+  noCandles.ok === true && noCandles.live === false && noCandles.candles.length === 0,
+  noCandles.detail || '');
+mode = 'live';
 
 /* ── 3. the registry derives the venue status from the same read ─────────── */
 registry.resetFuturesRegistry();

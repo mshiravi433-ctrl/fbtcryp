@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
@@ -40,6 +41,7 @@ import { useFuturesStore, emitFuturesEvent } from '../lib/futures-engine/store';
 import { mapFuturesError } from '../lib/futures-engine/errors';
 import { createFuturesTxMachine, FUTURES_TX_STATE } from '../lib/futures-engine/stateMachine';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
+import { registerMobileWalletAdapter, publicAppUrl, canUseMwa } from '../lib/solanaWallet.js';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
 
 /* The on-chain futures tab is Velocity (Solana) and ONLY Velocity — the Drift
@@ -91,6 +93,7 @@ function readPrefill() {
 
 export default function FuturesOnchain() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const wallet = useWallet();
   const solWallet = useSolanaWallet();
   const { haptic } = useTelegram();
@@ -139,6 +142,19 @@ export default function FuturesOnchain() {
   const machineRef = useRef(createFuturesTxMachine({ action: 'open' }));
   /* futures_close hand-off lands on the positions list (?panel=positions). */
   const positionsRef = useRef(null);
+
+  /* Mobile Wallet Adapter (Android Chrome): register it HERE too, not only on
+     the wallet page, so a phone that lands directly on /perp?tab=onchain can
+     both DETECT and CONNECT a Solana wallet without a detour. Guarded inside
+     registerMobileWalletAdapter (only Android Chrome, never iOS/native shell);
+     a failure is silent and changes nothing for injected wallets. */
+  const [mwaReady, setMwaReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    registerMobileWalletAdapter(publicAppUrl('/')).then((ok) => { if (alive && ok) setMwaReady(true); })
+      .catch(() => { /* best effort — injected wallets are unaffected */ });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     if (prefill.panel !== 'positions' || !wallet.isConnected) return;
     const id = setTimeout(() => { try { positionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { /* jsdom */ } }, 400);
@@ -329,16 +345,36 @@ export default function FuturesOnchain() {
   /* The Solana venue (Velocity) signs with the Solana wallet, not the EVM one. */
   const isSolanaVenue = provider?.family === 'solana';
 
+  /* ── the wallet-page hand-off ──────────────────────────────────────────
+     When no Solana wallet is connected, the button walks the user to the
+     wallet page's Solana tab (injected wallets, Mobile Wallet Adapter and the
+     Phantom/Solflare/Backpack deeplinks all live there) and comes BACK to
+     this exact order once a wallet connects — ?return=/perp?tab=onchain&…
+     carries the market/side/collateral/leverage of the CURRENT form, not just
+     what the entry URL happened to say. The wallet page only accepts
+     same-app return paths (must start with a single '/'). */
+  const walletHandoffPath = useCallback(() => {
+    const back = new URLSearchParams();
+    back.set('tab', 'onchain');
+    if (market?.base) back.set('market', market.base);
+    if (side === 'long' || side === 'short') back.set('side', side);
+    if (Number.isFinite(Number(collateral)) && Number(collateral) > 0) back.set('collateral', String(collateral));
+    if (Number.isFinite(Number(leverage)) && Number(leverage) > 0) back.set('leverage', String(leverage));
+    const q = new URLSearchParams({ tab: 'solana', return: `/perp?${back.toString()}` });
+    return `/wallet?${q.toString()}`;
+  }, [market?.base, side, collateral, leverage]);
+
+  const goConnectSolana = useCallback(() => {
+    haptic?.('light');
+    navigate(walletHandoffPath());
+  }, [navigate, walletHandoffPath, haptic]);
+
   /* ── review: create the order record server-side (no calldata for the Solana
      venue — the venue SDK builds + signs in this tab when that path exists) ── */
   const openReview = async () => {
     setError(null);
     if (isSolanaVenue) {
-      if (!solWallet.isConnected) {
-        try { await solWallet.connect(); }
-        catch (e) { if (!/REJECTED/i.test(String(e?.message))) setError('WALLET_NOT_CONNECTED'); return; }
-        if (!solWallet.address) return;
-      }
+      if (!solWallet.isConnected) { goConnectSolana(); return; }
     } else if (!wallet.isConnected) return setWalletOpen(true);
     if (!executable) return setError(provider?.status === 'READ_ONLY' ? 'PROVIDER_READ_ONLY' : 'PROVIDER_UNAVAILABLE');
     resetMachine();
@@ -502,7 +538,9 @@ export default function FuturesOnchain() {
          trigger orders) are built + signed in tab with the user's wallet.
          Partial close / increase are not offered in the UI for Velocity yet. */
       if (isSolanaVenue) {
-        if (!solWallet.isConnected) { try { await solWallet.connect(); } catch { throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' }); } }
+        /* Same rule as the order path: no wallet → the wallet page, with the
+           current order in ?return=… so the user lands back on this form. */
+        if (!solWallet.isConnected) { goConnectSolana(); return; }
         const venue = await import('../lib/velocityTrade.js');
         const marketIndex = Number(String(managing.positionId).split(':')[1]);
         let result;
@@ -707,9 +745,13 @@ export default function FuturesOnchain() {
                 )}
               </div>
 
-              {/* market info */}
+              {/* market info — every number a live read from /stats/markets + DLOB */}
               {market && (
                 <div className="brg-quote" style={{ marginTop: 12 }} data-testid="futures-market-info">
+                  <div className="row-between"><span className="faint">{t('futures.oraclePrice')}</span><span className="mono">{market.oraclePrice == null ? '—' : `$${fmtPrice(market.oraclePrice)}`}</span></div>
+                  <div className="row-between"><span className="faint">{t('futures.spreadBps')}</span><span className="mono">{market.spreadBps == null ? '—' : `${market.spreadBps.toFixed(1)} bps`}</span></div>
+                  <div className="row-between"><span className="faint">{t('futures.change24h')}</span><span className={`mono ${market.priceChange24hPct == null ? '' : market.priceChange24hPct >= 0 ? 'up' : 'down'}`}>{market.priceChange24hPct == null ? '—' : fmtPct(market.priceChange24hPct)}</span></div>
+                  <div className="row-between"><span className="faint">{t('futures.volume24h')}</span><span className="mono">{fmtUsd(market.volume24hUsd)}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.funding')}</span><span className="mono">{market.fundingAprPct == null ? '—' : `${fmtPct(market.fundingAprPct)} ${t('futures.perYear')}`}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.fundingSide')}</span><span className="mono">{market.fundingAprPct == null ? '—' : market.fundingAprPct > 0 ? t('futures.longsPay') : t('futures.shortsPay')}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.openInterest')}</span><span className="mono">{fmtUsd(market.openInterestUsd)}{market.maxOpenInterestUsd ? ` / ${fmtUsd(market.maxOpenInterestUsd)}` : ''}</span></div>
@@ -780,10 +822,10 @@ export default function FuturesOnchain() {
                 </div>
               )}
 
-              {connected && quote?.account && (
-                <div className="row-between" style={{ marginTop: 12 }}>
+              {connected && tradingAddress && (
+                <div className="row-between" style={{ marginTop: 12 }} data-testid="futures-wallet-row">
                   <span className="faint">{shortAddress(tradingAddress)} · {provider?.chainName}</span>
-                  <span className="mono" style={{ fontSize: 12 }}>{quote.account.balanceUsd == null ? '—' : `${quote.account.balanceUsd.toFixed(2)} ${provider?.collateral || 'USDC'}`}</span>
+                  <span className="mono" style={{ fontSize: 12 }}>{quote?.account?.balanceUsd == null ? '—' : `${quote.account.balanceUsd.toFixed(2)} ${provider?.collateral || 'USDC'}`}</span>
                 </div>
               )}
               {insufficient && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t('futures.err.INSUFFICIENT_BALANCE')}</p>}
@@ -792,6 +834,14 @@ export default function FuturesOnchain() {
               <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={readOnly || (connected && !canReview)} onClick={openReview} data-testid="futures-review">
                 {busy ? t('common.loading') : buttonLabel}
               </button>
+              {/* No Solana wallet on this device at all: a readable line instead
+                  of silence — the button above already goes to the wallet page,
+                  which carries the connect options and the deeplinks. Not shown
+                  where the Mobile Wallet Adapter can still appear (Android
+                  Chrome) — there a wallet is one intent away, not absent. */}
+              {isSolanaVenue && !connected && !solWallet.available && !mwaReady && !canUseMwa() && (
+                <p className="notice" style={{ marginTop: 9 }} data-testid="futures-no-wallet-hint">{t('futures.noWalletHint')}</p>
+              )}
               <p className="faint" style={{ marginTop: 7 }}>{t('futures.exactApproval')}</p>
               {txState !== FUTURES_TX_STATE.IDLE && (
                 <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }} data-testid="futures-tx-state">

@@ -9,6 +9,8 @@
     "dev:api": "node --watch server/index.js",
     "vendor:velocity": "node scripts/vendor-velocity.mjs",
     "prebuild": "node scripts/vendor-velocity.mjs",
+    "velocity:referrer-setup": "node scripts/velocity-referrer-setup.mjs",
+    "velocity:referral-sweep": "node scripts/velocity-referral-sweep.mjs",
     "build": "vite build && node scripts/gen-landing.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",

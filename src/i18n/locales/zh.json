@@ -1095,6 +1095,11 @@
     "protocolAvailableSoon": "即将推出",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "点差",
+    "oraclePrice": "预言机价格",
+    "change24h": "24 小时涨跌",
+    "volume24h": "24 小时成交量",
+    "noWalletHint": "此设备上未安装任何 Solana 钱包。点击上方按钮打开钱包页面——在那里连接 Phantom、Solflare 或 Backpack，即可直接返回当前订单。"
   }
 }

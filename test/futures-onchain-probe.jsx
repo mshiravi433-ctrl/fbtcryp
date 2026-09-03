@@ -27,6 +27,9 @@ import i18n, { setLanguage } from '../src/i18n/index.js';
 import { TelegramProvider } from '../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../src/context/WalletContext.jsx';
 import Perp from '../src/pages/Perp.jsx';
+/* The REAL wallet page — the hand-off target the On-Chain tab navigates to
+   (?tab=solana&return=…): the probe drives its Solana tab end to end. */
+import WalletPage from '../src/pages/Wallet.jsx';
 import { computeFeeBreakdown, assessFuturesRisk, selectVenue, PROVIDER_CATALOGUE } from '../src/lib/futures-engine/index.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -38,6 +41,21 @@ const setInputValue = (input, value) => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
 const click = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+/* A fake injected Phantom: enough surface for detection (publicKey), connect
+   and the hook's provider-event listeners. Never signs anything real. */
+const FAKE_SOL = '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM';
+const fakePhantom = (addr) => ({
+  isPhantom: true,
+  publicKey: { toString: () => addr },
+  connect: async () => ({ publicKey: { toString: () => addr } }),
+  disconnect: async () => {},
+  on: () => {},
+  off: () => {},
+  removeListener: () => {},
+  signTransaction: async (tx) => tx,
+  signAndSendTransaction: async () => ({ signature: 'probe' })
+});
 
 /* ── the BFF, as the Velocity router/adapter would answer it ─────────────── */
 const MARKET = {
@@ -118,8 +136,15 @@ export async function run(container) {
     }
     if (p === '/candles') {
       if (providerStatus === 'UNAVAILABLE') return json(envelope({ provider: 'drift', ok: false, candles: [], live: false, resolution: '60' }));
-      const now = Date.now();
-      const candles = Array.from({ length: 24 }, (_, i) => ({ startedAt: now - (24 - i) * 3_600_000, open: 146 + i * 0.12, high: 146.4 + i * 0.12, low: 145.6 + i * 0.12, close: 146.1 + i * 0.12 }));
+      /* The NORMALIZED rows the real adapter emits from Velocity's live
+         /market/:symbol/candles endpoint (raw payload + its mapping are pinned
+         by test/futures-velocity-feed-probe.mjs): startedAt in ms, fill-series
+         OHLC. 24 hourly buckets, rising gently. */
+      const nowSec = Math.floor(Date.now() / 1000);
+      const candles = Array.from({ length: 24 }, (_, i) => {
+        const px = 146 + i * 0.12;
+        return { startedAt: (nowSec - (24 - i) * 3_600) * 1000, open: px, high: px + 0.4, low: px - 0.4, close: px + 0.1 };
+      });
       return json(envelope({ provider: 'drift', ok: true, candles, live: true, resolution: url.searchParams.get('resolution') || '60' }));
     }
     /* Wallet-scoped reads are honestly refused on the read-only Velocity path. */
@@ -193,6 +218,7 @@ export async function run(container) {
               <WalletProvider>
                 <Routes>
                   <Route path="/perp" element={<Perp />} />
+                  <Route path="/wallet" element={<WalletPage />} />
                   <Route path="*" element={<div data-testid="elsewhere" />} />
                 </Routes>
               </WalletProvider>
@@ -205,7 +231,7 @@ export async function run(container) {
 
     /* ═══════ THE TAB STRIP ═══════ */
     await mountAt('#/perp');
-    const strip = tabs();
+    let strip = tabs();
     t('the Futures page shows three tabs in one segmented control', strip.length === 3);
     t('the tab labels are Perpetual · dYdX Orbit · On-Chain (i18n, not keys)',
       strip.map((b) => b.textContent.trim()).join('|') === 'Perpetual|dYdX Orbit|On-Chain');
@@ -265,6 +291,61 @@ export async function run(container) {
     t('the read-only notice disappears on an executable venue', !byId('futures-readonly-notice'));
     t('without a wallet the CTA is Connect wallet — enabled, and never a server-side key', byId('futures-review')?.textContent.trim() === 'Connect wallet' && byId('futures-review')?.disabled === false, byId('futures-review')?.textContent);
     t('no order is prepared before the user reviews it', bff.prepares === 0 && bff.verifies === 0);
+
+    /* ═══════ C3. THE WALLET HAND-OFF — no wallet → the wallet page, order in tow ═══════ */
+    act(() => { click(byId('futures-review')); });
+    await act(async () => { await sleep(80); });
+    const hashAfterConnect = String(window.location.hash || '');
+    t('tapping Connect with no wallet opens the wallet page (Solana tab), not a dead end',
+      /#\/wallet\?/.test(hashAfterConnect) && hashAfterConnect.includes('tab=solana'), hashAfterConnect);
+    const backParam = new URLSearchParams(hashAfterConnect.split('?')[1] || '').get('return');
+    t('the return path carries this exact order: market/side/collateral/leverage',
+      backParam === '/perp?tab=onchain&market=SOL&side=long&collateral=50&leverage=5', String(backParam));
+    t('the detour built and signed nothing', bff.prepares === 0 && bff.verifies === 0);
+
+    /* ═══════ C3b. THE WALLET PAGE HALF — connect there, come back here ═══════
+       Phantom installed but not yet authorized for the site: the provider
+       object exists (so Connect is enabled) while publicKey is null (so the
+       page has nothing to return to yet). */
+    window.solana = { ...fakePhantom(FAKE_SOL), publicKey: null };
+    await mountAt(hashAfterConnect.replace(/^#/, ''));
+    await act(async () => { await sleep(600); });
+    const solanaConnect = [...container.querySelectorAll('button.btn-primary.btn-sm')]
+      .find((b) => b.textContent.trim() === 'Connect wallet');
+    t('the wallet page opens on its Solana tab with the real Connect button ready',
+      /#\/wallet\?/.test(String(window.location.hash)) && Boolean(solanaConnect) && solanaConnect.disabled === false,
+      `${solanaConnect?.disabled}/${String(window.location.hash).slice(0, 40)}`);
+    t('with no wallet authorized yet it stays on the wallet page (no premature return)',
+      /#\/wallet\?/.test(String(window.location.hash)) && !/#\/perp/.test(String(window.location.hash)));
+    act(() => { click(solanaConnect); });
+    await act(async () => { await sleep(500); });
+    t('connecting the Solana wallet returns to the exact order automatically',
+      /#\/perp\?tab=onchain/.test(String(window.location.hash)) && !/return=/.test(String(window.location.hash)),
+      String(window.location.hash));
+
+    /* ═══════ C4. A CONNECTED WALLET IS DETECTED INSTANTLY → Review order ═══════ */
+    window.solana = fakePhantom(FAKE_SOL);
+    await mountAt(backParam || '#/perp?tab=onchain&market=SOL&side=long&collateral=50&leverage=5');
+    await act(async () => { await sleep(800); });
+    t('a connected Phantom is detected with no tap: the short address is shown',
+      !!byId('futures-wallet-row') && byId('futures-wallet-row')?.textContent.includes(FAKE_SOL.slice(0, 4)),
+      byId('futures-wallet-row')?.textContent || '');
+    t('the CTA flips to Review order and is ENABLED',
+      byId('futures-review')?.textContent.trim() === 'Review order' && byId('futures-review')?.disabled === false,
+      `${byId('futures-review')?.textContent}/${byId('futures-review')?.disabled}`);
+    act(() => { click(byId('futures-review')); });
+    await act(async () => { await sleep(500); });
+    /* the confirmation sheet portals to document.body — query the document */
+    t('Review with a connected wallet runs /prepare and opens the confirmation sheet',
+      !!document.querySelector('[data-testid="futures-confirm"]') && bff.prepares === 1, `prepares=${bff.prepares}`);
+    await act(async () => {
+      const cancel = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Cancel');
+      if (cancel) click(cancel);
+    });
+    delete window.solana;
+    await mountAt('#/perp?tab=onchain');
+    await act(async () => { await sleep(400); });
+    strip = tabs(); /* the remounts above replaced the DOM — re-grab the strip */
 
     /* The trade module the tab hands the confirmed order to. */
     const venue = await import('../src/lib/velocityTrade.js');

@@ -22,6 +22,7 @@ import ActiveOrdersCard from '../components/ActiveOrdersCard';
 import TokenDetailSheet from '../components/TokenDetailSheet';
 import Portfolio from '../pages/Portfolio';
 import { explorerAddr } from '../lib/chains';
+import { solanaAddress } from '../lib/solanaWallet';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../lib/chains';
 import { currencyOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -554,6 +555,41 @@ export default function Wallet() {
     const next = tabParam === 'solana' ? 'solana' : 'real';
     setTab((cur) => (cur === next ? cur : next));
   }, [searchParams, wallet.chainId]);
+
+  /*
+   * ?return=/perp?tab=onchain&… — the "connect a wallet and come back" path.
+   * Screens that need a Solana signature (the On-Chain futures tab is the
+   * first) send the user here with ?tab=solana&return=<path> when no wallet is
+   * connected; the moment a Solana wallet connects — or turns out to already
+   * be connected — the page returns to that exact path, so the order the user
+   * was building (market/side/collateral/leverage ride inside the return URL)
+   * is still there. Security: only same-app paths are honoured (must start
+   * with exactly one '/'), so a crafted link can never bounce the user to
+   * another origin, and the parameter is consumed before navigating so a
+   * refresh cannot re-trigger the redirect.
+   */
+  const solanaReturnRef = useRef('');
+  useEffect(() => {
+    const raw = searchParams.get('return');
+    solanaReturnRef.current = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '';
+  }, [searchParams]);
+  useEffect(() => {
+    const go = (addr) => {
+      if (!addr || !solanaReturnRef.current) return;
+      const back = solanaReturnRef.current;
+      solanaReturnRef.current = '';
+      const next = new URLSearchParams(searchParams);
+      next.delete('return');
+      setSearchParams(next, { replace: true });
+      navigate(back);
+    };
+    /* already connected when landing here → return immediately */
+    go(solanaAddress());
+    const onSolanaChange = (event) => go(event?.detail?.address || solanaAddress() || null);
+    window.addEventListener('solana:wallet-change', onSolanaChange);
+    return () => window.removeEventListener('solana:wallet-change', onSolanaChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, navigate]);
 
   /*
    * ?action=disconnect — «والت را ببند» routes here. The wallet page owns

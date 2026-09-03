@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Segera",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Spread",
+    "oraclePrice": "Harga oracle",
+    "change24h": "Perubahan 24 jam",
+    "volume24h": "Volume 24 jam",
+    "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini."
   }
 }

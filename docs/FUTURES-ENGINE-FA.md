@@ -112,7 +112,7 @@ SUBMITTED → PENDING → CONFIRMED → VERIFYING → COMPLETED`
 |---|---|
 | `GET /providers`, `GET /health` | رجیستری با وضعیت مشتق‌شده |
 | `GET /markets`, `GET /markets/:provider/:market` | بازارها از ساب‌گراف + فید |
-| `GET /candles` | کندل‌های واقعی (`/v1/ohlc` اوستیوم)؛ نبود = `live:false` و لیست خالی |
+| `GET /candles` | کندل‌های واقعی؛ اوستیوم از `/v1/ohlc`، **ونیو (Velocity)** از `GET data.velocity.exchange/market/:symbol/candles/:res` (تأیید زندهٔ 2026-09-03؛ `ts` ثانیه، سری fill/oracle). نبود = `live:false` و لیست خالی |
 | `GET /funding`, `GET /open-interest` | فاندینگ و OI زنده |
 | `GET /positions/:wallet`, `GET /account/:wallet` | پوزیشن‌ها، موجودی و allowance از RPC |
 | `GET /fees`, `GET /fees/ledger`, `GET /executions/:wallet` | پیش‌نمایش کارمزد، دفتر کارمزد، اجراها |
@@ -168,8 +168,10 @@ SUBMITTED → PENDING → CONFIRMED → VERIFYING → COMPLETED`
 | دستور | چه چیزی را ثابت می‌کند |
 |---|---|
 | `node test/futures-engine-probe.mjs` | موتور خالص: کارمزد، ریسک، روتر (بدون ورودی درآمد)، ماشین حالت، خطاها، ID ها |
-| `node test/futures-bff-run.mjs` | BFF واقعی روی اپ Express: پاکت‌ها، idempotency، READ_ONLY/UNAVAILABLE، تراکنش امضانشده، ledger |
-| `npm run test:futures` | هر دوی بالا |
+| `node test/futures-bff-run.mjs` | BFF واقعی روی اپ Express: پاکت‌ها، idempotency، READ_ONLY/UNAVAILABLE، تراکنش امضانشده، ledger، نرمال‌سازی کندل ونیو سرتاسر |
+| `node test/futures-velocity-feed-probe.mjs` | آداپتر و رجیستری Velocity با پیلود زندهٔ اسیرشده: قیمت/OI/فاندینگ/کارمزد + نگاشت کندل (`ts` ثانیه → ms، سری fill با fallback اوراکل) + شکست صادقانه |
+| `node test/futures-velocity-trade-probe.mjs` | باندل SDK فرستاده‌شده: همهٔ نمادهای مسیر سفارش + سطح ریفرر (escrow/sweep) + PDA ها |
+| `npm run test:futures` | engine + BFF + باندل SDK (هر سه بالا) |
 | `test/futures-onchain-probe.jsx` (داخل `npm test`) | صفحهٔ واقعی `/perp` با BFF و کیف پول stub: سه سناریو UNAVAILABLE / READ_ONLY / AVAILABLE، دیکد calldata امضاشده، هش به `/verify`، تب‌های دیگر سالم، فارسی RTL، هند-آف Intent OS، حذف بازار نمایشی dYdX |
 | `test/wiring.mjs` بخش «Futures Engine v3» | حقایق منبع: سه تب، همان SegIndicator، بدون کاتالوگ آفلاین، بدون فارسی هاردکد، کلیدهای en/fa، رجیستری بدون AVAILABLE ثابت، بدون CEX |
 
@@ -187,6 +189,53 @@ FUTURES_PROVIDERS_BLOCKED=
 FUTURES_FBT_FEE_BPS=          # خالی = سیاست STANDARD (۵)؛ سقف ۱۰
 FUTURES_FBT_FEE_RECIPIENT=    # خالی = VITE_PAYOUT_EVM
 OSTIUM_API_URL=               # خالی = builder.prod.bedrock.ostium.io
+VELOCITY_DATA_API=            # خالی = https://data.velocity.exchange (بدون کلید)
+VELOCITY_DLOB_API=            # خالی = https://dlob.velocity.exchange  (بدون کلید)
+SOLANA_RPC_URL=               # سمت سرور؛ خالی = RPC عمومی سولانا
+VITE_SOLANA_RPC=              # سمت مرورگر (build-time؛ بعد از ست کردن redeploy)
+VELOCITY_REFERRER=            # authority ریفرر FBT (سمت سرور)
+VITE_VELOCITY_REFERRER=       # همان آدرس، سمت بیلد (در ci/WORKFLOW-FIXED.yml هم مپ شده)
 ```
 
 هیچ‌کدام برای بالا آمدن اپ لازم نیست؛ خالی بودن یعنی همان وضعیت صادقانه.
+
+---
+
+## ۸. کیف پول سولانا در تب On-Chain (هند-آف صفحهٔ کیف پول)
+
+دکمهٔ «اتصال کیف پول» در تب On-Chain وقتی کیفی وصل نیست کاربر را به
+`#/wallet?tab=solana&return=/perp?tab=onchain&market=…&side=…&collateral=…&leverage=…`
+می‌برد — همان سفارشِ در دستِ ساخت در `return` حمل می‌شود. صفحهٔ کیف پول با
+اولین اتصال سولانا (رویداد `solana:wallet-change`) خودکار به همان مسیر
+برمی‌گردد؛ `return` فقط مسیر داخلی (شروع‌شده با یک `/` تکی) را می‌پذیرد.
+تشخیص اتصال: اینجکشن (`window.phantom.solana` / `solflare` / `backpack`)،
+Wallet Standard/MWA (`getMwaWallet`، ثبت‌شده در خود تب هم)، رویدادهای
+`accountChanged` کیف پول و بازخوانی سبک `solanaAddress()` برای اینجکشن
+دیرهنگام. اگر هیچ کیفی روی دستگاه نیست، پیام خوانا + همان دکمه (که به
+صفحهٔ کیف پول می‌رود) نمایش داده می‌شود. همین رفتار در TP/SL/close هم
+اعمال شده است.
+
+## ۹. کارمزد ریفرر Velocity (مسیر رسیدن کارمزد به FBT)
+
+نرخ رسمی: سطح Standard **۱۰٪** از کارمزد taker کاربرِ معرفی‌شده (کاربر ۵٪
+تخفیف می‌گیرد)؛ سطح Accelerated ۲۰٪ با تأیید تیم Velocity. ریفرر فقط در
+اولین `initialize_user` آن ولت ثبت می‌شود. کد:
+
+- `src/lib/velocityTrade.js`: ریفرر فقط وقتی ضمیمه می‌شود که `UserStats`
+  ریفرر روی زنجیره باشد (`fbtReferrerInfo` از RPC می‌خواند)؛ هنگام ضمیمه‌شدن،
+  `RevenueShareEscrow` کاربر هم ساخته می‌شود (`getInitializeRevenueShareEscrowIx`)
+  وگرنه fill کاربر با `UnableToLoadRevenueShareAccount` شکست می‌خورد.
+- `npm run velocity:referrer-setup` — از کی‌پیر **لوکال**
+  (`VELOCITY_KEYPAIR_PATH`، بیرون از ریپو) `UserStats`+`User(0)`+
+  `RevenueShare` می‌سازد و pubkey + خطوط env را چاپ می‌کند.
+- `npm run velocity:referral-sweep` — برای cron: `RevenueShareEscrowMap.syncAll()`
+  → `getAllByReferrer` / `getEscrowsOwingRevenueShare` → چک
+  `calculateRevenueShareSweepAvailable` قبل از هر `settleRevenueShare`
+  (`VELOCITY_SWEEP_DRY_RUN=1` برای خشک).
+
+مسیر Builder Code (که به کارمزد کاربر **اضافه** می‌کند) عمداً پیاده نشده؛
+واحد آن هم ۱۰ واحد tenth-bps = ۱ bp است (سقف پروتکل 1000 = ۱٪) — اگر روزی
+اضافه شود فقط با تأیید صریح کاربر در UI.
+
+چیزی که کد نمی‌تواند و باید دستی انجام شود: ساخت/نگهداری کی‌پیر FBT، امضای
+تراکنش‌های راه‌اندازی، ست کردن env در Vercel و درخواست سطح Accelerated.

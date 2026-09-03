@@ -1102,6 +1102,11 @@
     "protocolAvailableSoon": "Yakında",
     "chain": {
       "solana": "Solana"
-    }
+    },
+    "spreadBps": "Spread",
+    "oraclePrice": "Oracle fiyatı",
+    "change24h": "24 saat değişim",
+    "volume24h": "24 saat hacim",
+    "noWalletHint": "Bu cihazda kurulu bir Solana cüzdanı yok. Cüzdan sayfasını açmak için yukarıdaki düğmeye dokunun — orada Phantom, Solflare veya Backpack bağlayın ve doğrudan bu emre geri döneceksiniz."
   }
 }

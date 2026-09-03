@@ -4871,6 +4871,11 @@
     "protocolAvailableSoon": "قريبًا",
     "chain": {
       "solana": "سولانا"
-    }
+    },
+    "spreadBps": "الفرق (سبريد)",
+    "oraclePrice": "سعر أوراكل",
+    "change24h": "تغير 24 ساعة",
+    "volume24h": "حجم 24 ساعة",
+    "noWalletHint": "لا يوجد محفظة سولانا مثبتة على هذا الجهاز. اضغط الزر أعلاه لفتح صفحة المحفظة — اربط Phantom أو Solflare أو Backpack هناك وستعود مباشرة إلى هذا الطلب."
   }
 }
