@@ -57,6 +57,16 @@ import { narrateMissingInformation, narrateReadyPlan } from '../src/lib/intent-a
 import { humanizeError } from '../src/lib/intent-ai/errorHumanizer.js';
 import { createExecutionPlan, toExecutionResult } from '../src/lib/intent-ai/executionStateMachine.js';
 import { checkScheduleAuthorization } from './intentScheduler.js';
+import {
+  createMonitor,
+  listMonitors,
+  getMonitor,
+  setMonitorStatus,
+  deleteMonitor,
+  evaluateMonitor,
+  evaluateAllMonitors,
+  monitorEngineStatus
+} from './intentMonitoring.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
 /* Central Intelligence OS: share one world view between the V1 chat and the
    central brain (wallet/portfolio truth + page awareness, §5/§7). */
@@ -1237,6 +1247,75 @@ router.post('/automations/:id/run', async (req, res) => {
        client records the actual transaction hash/result below. */
     executionsRequireWalletSignature: true
   });
+});
+
+/* ------------------------------ user monitors ------------------------------ */
+/*
+ * "بازار را بپای" — a real, durable, price-fed monitor registry. The engine
+ * (server/intentMonitoring.js) never fabricates a trigger: a missing price is
+ * recorded as an error and the monitor stays ACTIVE.
+ */
+
+router.get('/monitors', async (req, res) => {
+  const owner = ownerFor(req);
+  if (!owner) return res.status(412).json({ ok: false, error: 'DEVICE_SCOPE_REQUIRED' });
+  const monitors = await listMonitors(owner);
+  return res.json({ ok: true, schema: 'fbt.intent-monitors.v1', monitors, durable: storeDurable() });
+});
+
+router.post('/monitors', async (req, res) => {
+  const owner = ownerFor(req);
+  if (!owner) return res.status(412).json({ ok: false, error: 'DEVICE_SCOPE_REQUIRED' });
+  const made = await createMonitor(owner, req.body || {});
+  if (made.error) return res.status(400).json({ ok: false, error: made.error });
+  return res.json({ ok: true, schema: 'fbt.intent-monitor.v2', monitor: made.monitor, durable: storeDurable() });
+});
+
+router.post('/monitors/:id/pause', async (req, res) => {
+  const owner = ownerFor(req);
+  const out = await setMonitorStatus(owner, req.params.id, 'PAUSED');
+  if (out.error) return res.status(out.error === 'NOT_FOUND' ? 404 : 400).json({ ok: false, error: out.error });
+  return res.json({ ok: true, monitor: out.monitor });
+});
+
+router.post('/monitors/:id/resume', async (req, res) => {
+  const owner = ownerFor(req);
+  const out = await setMonitorStatus(owner, req.params.id, 'ACTIVE');
+  if (out.error) return res.status(out.error === 'NOT_FOUND' ? 404 : 400).json({ ok: false, error: out.error });
+  return res.json({ ok: true, monitor: out.monitor });
+});
+
+router.post('/monitors/:id/cancel', async (req, res) => {
+  const owner = ownerFor(req);
+  const out = await setMonitorStatus(owner, req.params.id, 'CANCELLED');
+  if (out.error) return res.status(out.error === 'NOT_FOUND' ? 404 : 400).json({ ok: false, error: out.error });
+  return res.json({ ok: true, monitor: out.monitor });
+});
+
+router.delete('/monitors/:id', async (req, res) => {
+  const owner = ownerFor(req);
+  const out = await deleteMonitor(owner, req.params.id);
+  return res.status(out.error === 'NOT_FOUND' ? 404 : 200).json({ ok: out.error !== 'NOT_FOUND', ...out });
+});
+
+router.post('/monitors/:id/evaluate', async (req, res) => {
+  const owner = ownerFor(req);
+  const row = await getMonitor(owner, req.params.id);
+  if (!row) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+  const out = await evaluateMonitor(row);
+  return res.json({
+    ok: true,
+    schema: 'fbt.intent-monitor-evaluate.v1',
+    triggered: out.triggered === true,
+    sent: out.sent === true,
+    evaluation: out.evaluation,
+    monitor: out.monitor,
+    error: out.error || null
+  });
+});
+
+router.get('/monitors/status', async (_req, res) => {
+  return res.json({ ok: true, schema: 'fbt.intent-monitor-status.v1', ...(await monitorEngineStatus()) });
 });
 
 /* --------------------------------- memory --------------------------------- */

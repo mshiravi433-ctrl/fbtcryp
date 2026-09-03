@@ -172,6 +172,7 @@ import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
+import { evaluateAllMonitors, monitorEngineStatus } from './intentMonitoring.js';
 import {
   addFcmToken,
   addSubscription,
@@ -5361,6 +5362,34 @@ app.get('/api/cron/watch', async (req, res) => {
   return res.json(out);
 });
 
+/* --------------------------- user monitor cron ---------------------------- */
+/*
+ * Evaluates the Intent OS market monitors ("بازار را بپای") that the user
+ * created in chat. Same rules as the order watcher: a missing price is an
+ * error, never a trigger; one failing monitor never cancels the others.
+ */
+async function deliverMonitorPush({ endpoint, lang, title, body }) {
+  const { sendToEndpoint } = await import('./push.js');
+  const { fcmSendToToken } = await import('./fcm.js');
+  const { parseIdentity } = await import('./watch.js');
+  const id = parseIdentity(endpoint);
+  if (!id) return false;
+  return id.kind === 'fcm'
+    ? fcmSendToToken(id.value, { title, body, url: '/intent', tag: 'fbt-monitor', stage: 'ready' })
+    : sendToEndpoint(id.value, { title, body });
+}
+
+app.get('/api/cron/monitors', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const out = await evaluateAllMonitors({ send: deliverMonitorPush });
+  return res.json({ ok: !out.error, ...out });
+});
+
+/** How many user monitors exist, for debugging a silent cron. */
+app.get('/api/monitors/status', async (_req, res) => {
+  res.json(await monitorEngineStatus().catch((err) => ({ ok: false, error: String(err?.message || 'STORE_UNAVAILABLE').slice(0, 120) })));
+});
+
 /** How many watches are registered, for debugging a silent cron. */
 app.get('/api/orders/watch/status', async (_req, res) => {
   const rows = await readWatches().catch(() => []);
@@ -5871,10 +5900,11 @@ app.get('/api/cron/daily', async (req, res) => {
     ensureOpsHydrated().catch(() => {}),
     ensureStage3Hydrated().catch(() => {})
   ]);
-  const [web, fcm, watch, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
+  const [web, fcm, watch, monitors, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
     runWatchCycle(sendWatchAlert),
+    evaluateAllMonitors({ send: deliverMonitorPush }),
     smartMoney.runAlertCycle(async (endpoint, _lang, payload) =>
       deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag })),
     sweepCertifications(),
@@ -5888,6 +5918,7 @@ app.get('/api/cron/daily', async (req, res) => {
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
     watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
+    monitors: monitors.status === 'fulfilled' ? monitors.value : { error: String(monitors.reason).slice(0, 120) },
     smartMoneyAlerts: smartMoneyAlerts.status === 'fulfilled' ? smartMoneyAlerts.value : { error: String(smartMoneyAlerts.reason).slice(0, 120) },
     certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
     reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 })),
