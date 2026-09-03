@@ -830,6 +830,32 @@ installDom();
 const { run: runCoinDetail } = await import('./.out/coindetail/coindetail-probe.js');
 report('coin detail (real data shapes · chunk recovery)', await runCoinDetail(document.getElementById('r')));
 
+/* -------------------- 4b₂. signals page under real data ------------------- */
+/*
+ * The same gap, one screen over — and this one was not intermittent.
+ *
+ * The screens suite mounts `<Signals />` and asserts on the FIRST paint, before
+ * any poll resolves. With no coins there are no cards, so `SignalCard` was
+ * never constructed while the suite stayed green. It read `t` from its props,
+ * no call site passed one, and the first card to render threw
+ * `TypeError: t is not a function` into RouteBoundary: «صفحه سیگنال میزنه به
+ * مشکل خورد». Both tabs, every language, every asset.
+ *
+ * This mounts the page against real response shapes (live, dead pulse, a 429
+ * object, an HTML body, empty, flat, nulls, string-typed numbers), WAITS for
+ * the polls, and asserts a card actually rendered — because "no error" is
+ * worthless on a screen that can also pass by painting nothing. It then drives
+ * the Solana tab, the horizon switch, the alert sheet and the multi-AI "why",
+ * and audits every dynamic i18n key the page can build against the real locale
+ * files, which is how the missing `class.strongBuy` / `early.momentumDecel` /
+ * `source.offline` labels were found.
+ */
+console.log('\n▸ building the Signals-page data suite…');
+npx(['vite', 'build', '-c', 'test/vite.signalspage.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSignalsPage } = await import('./.out/signalspage/signals-page-probe.js');
+report('signals page (real data · cards · sheets · every dynamic key)', await runSignalsPage(document.getElementById('r')));
+
 /* ------------------ 4c. Intent AI panel, driven like a user ------------------ */
 /*
  * Every intent-ai probe so far tests the LOGIC. None of them can catch the

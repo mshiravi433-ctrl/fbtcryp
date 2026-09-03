@@ -2,15 +2,46 @@
 
 const nf = (opts) => new Intl.NumberFormat('en-US', opts);
 
+/*
+ * ─── EVERY FORMATTER COERCES FIRST, AND FAILS CLOSED TO '—' ─────────────────
+ * These used to guard with `Number.isNaN(v)`, which is FALSE for a string:
+ * `Number.isNaN('N/A')` is false, so the guard waved through anything that was
+ * not literally the NaN value, and the next line called a Number METHOD on it.
+ *
+ * That is a crash, not a cosmetic one. `fmtPct('3.2')` throws
+ * `TypeError: v.toFixed is not a function` during render, which on a routed
+ * screen means RouteBoundary and the «مشکلی پیش اومده» card — the whole Signals
+ * page gone because one upstream field arrived quoted. And the failure is not
+ * hypothetical: providers disagree about types. CoinGecko sends numbers,
+ * CoinLore sends `"percent_change_24h": "1.4"` as a string, DexScreener sends
+ * strings for every numeric field, which is exactly why server/providers.js
+ * wraps those in `Number(...)` while `normalizeCoin` passes CoinGecko's fields
+ * through untouched. One un-normalized provider, or one proxy that quotes
+ * numbers, and every screen showing that field dies.
+ *
+ * `'N/A'` and `''` are just as real: a feed that cannot measure a value often
+ * sends a placeholder rather than null.
+ *
+ * So: coerce once, and a value that is not a finite number renders as '—'.
+ * That is the same fail-closed rule the data layer follows — an unavailable
+ * number is shown as unavailable, never as NaN, "$NaN", or an exception.
+ */
+function toNum(v) {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function fmtPrice(v) {
-  if (v == null || Number.isNaN(v)) return '—';
-  const abs = Math.abs(v);
+  const n = toNum(v);
+  if (n == null) return '—';
+  const abs = Math.abs(n);
   if (abs === 0) return '0';
-  if (abs < 0.00001) return v.toExponential(3);
-  if (abs < 0.01) return nf({ maximumFractionDigits: 8 }).format(v);
-  if (abs < 1) return nf({ maximumFractionDigits: 5 }).format(v);
-  if (abs < 1000) return nf({ maximumFractionDigits: 2 }).format(v);
-  return nf({ maximumFractionDigits: 0 }).format(v);
+  if (abs < 0.00001) return n.toExponential(3);
+  if (abs < 0.01) return nf({ maximumFractionDigits: 8 }).format(n);
+  if (abs < 1) return nf({ maximumFractionDigits: 5 }).format(n);
+  if (abs < 1000) return nf({ maximumFractionDigits: 2 }).format(n);
+  return nf({ maximumFractionDigits: 0 }).format(n);
 }
 
 /*
@@ -88,16 +119,18 @@ export function balancesHidden() {
  */
 
 export function fmtUsd(v, opts = {}) {
-  if (v == null || Number.isNaN(v)) return '—';
+  const n = toNum(v);
+  if (n == null) return '—';
   if (hideAmounts) return MASK;
-  return `${activeSymbol}${fmtPrice(v, opts)}`;
+  return `${activeSymbol}${fmtPrice(n, opts)}`;
 }
 
 export function fmtCompact(v) {
-  if (v == null || Number.isNaN(v)) return '—';
+  const n = toNum(v);
+  if (n == null) return '—';
   if (hideAmounts) return MASK;
-  const abs = Math.abs(v);
-  const sign = v < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
   if (abs >= 1e12) return `${sign}${activeSymbol}${(abs / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `${sign}${activeSymbol}${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}${activeSymbol}${(abs / 1e6).toFixed(2)}M`;
@@ -106,25 +139,28 @@ export function fmtCompact(v) {
 }
 
 export function fmtNum(v, digits = 0) {
-  if (v == null || Number.isNaN(v)) return '—';
-  return nf({ maximumFractionDigits: digits }).format(v);
+  const n = toNum(v);
+  if (n == null) return '—';
+  return nf({ maximumFractionDigits: digits }).format(n);
 }
 
 export function fmtPct(v, digits = 2) {
-  if (v == null || Number.isNaN(v)) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(digits)}%`;
+  const n = toNum(v);
+  if (n == null) return '—';
+  return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`;
 }
 
 export function fmtQty(v) {
-  if (v == null || Number.isNaN(v)) return '—';
+  const n = toNum(v);
+  if (n == null) return '—';
   // A token quantity is a holding, so it is covered by the same promise the
   // fiat total makes. Leaving "12.4 BNB" visible next to a masked fiat value
   // would defeat the point.
   if (hideAmounts) return MASK;
-  const abs = Math.abs(v);
-  if (abs >= 1000) return nf({ maximumFractionDigits: 2 }).format(v);
-  if (abs >= 1) return nf({ maximumFractionDigits: 4 }).format(v);
-  return nf({ maximumFractionDigits: 8 }).format(v);
+  const abs = Math.abs(n);
+  if (abs >= 1000) return nf({ maximumFractionDigits: 2 }).format(n);
+  if (abs >= 1) return nf({ maximumFractionDigits: 4 }).format(n);
+  return nf({ maximumFractionDigits: 8 }).format(n);
 }
 
 export function fmtTime(ts) {
