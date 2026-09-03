@@ -21,6 +21,31 @@ there—FBT Swap does not take deposits or hold a recovery phrase.
 | **Languages** | fa · en · ar fully translated; zh · hi · es · fr · ru · tr · ur · id · pt cover navigation, onboarding, the guide, the swap flow and every safety warning |
 | **Keys required to run** | None. See [docs/APIS-FA.md](docs/APIS-FA.md) for what each optional key buys |
 
+### Intent OS — AI Brain + Operations Center
+
+`/#/intent` is no longer chat-only. It is the single user-facing brain with:
+
+- **Operations** — a real catalog (Portfolio, Wallet, Swap, Bridge, Lending,
+  Farm, Liquidity, Futures, dYdX, Global Markets, Intelligence, Goals,
+  Automation, Monitoring, Rewards) where every card performs a real read,
+  quote, monitor, order or venue execution — no UI-only buttons.
+- **Monitoring** — «بازار را بپای» creates a durable, per-device monitor job
+  (`POST /api/v1/ai/monitors`) evaluated against live prices by the server
+  (`/api/cron/monitors` + daily cron); triggers record honest events and push
+  when a push identity exists.
+- **Conditional orders** — «اگر BTC به 100000 رسید بخر» creates a real limit
+  watch in `fbt-orders-v1`, visible on `/orders` and mirrored to the server
+  watcher (fills still require your wallet signature — no custody, no signer).
+- **Opportunity Engine** — portfolio + live market + real yield/farm/lending
+  scan with risk filter, historical base rates, drawn-down, confidence and
+  data quality; nothing is ever labelled guaranteed.
+- **History** — conversations, operations and active monitoring in one drawer,
+  and an operation can be continued in chat («متوقفش کن», «شرطش را تغییر بده»).
+
+See [docs/INTENT-OS-RESTORATION-AUDIT.md](docs/INTENT-OS-RESTORATION-AUDIT.md)
+for the full audit (FOUND / REUSED / BROKEN / MISSING / DISCONNECTED /
+RESTORED / CREATED) and the acceptance-test status.
+
 ### Intent execution layer
 
 FBT now includes a deterministic **Intent OS** control plane at `/#/intent`:

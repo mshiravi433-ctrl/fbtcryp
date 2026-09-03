@@ -83,6 +83,43 @@ import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
 import { getLogs as getObsLogs, getStats as getObsStats } from '../lib/intent-ai/os/observability.js';
 import { getDebugLogs, enableDebug } from '../lib/intent-ai/os/debugDashboard.js';
 import { setupGlobalBus, emitEvent, onEvent } from '../lib/intent-ai/os/eventBus.js';
+/* Operations Center — real monitors / conditional orders / opportunity engine /
+   persistent history, all wired to the server and the real venue pages. */
+import {
+  listMonitors,
+  createMonitor as apiCreateMonitor,
+  pauseMonitor as apiPauseMonitor,
+  resumeMonitor as apiResumeMonitor,
+  cancelMonitor as apiCancelMonitor,
+  evaluateMonitorNow as apiEvaluateMonitor,
+  monitorEngineStatus as apiMonitorEngineStatus,
+  parseMonitorRequest
+} from '../lib/intent-ai/os/monitorClient.js';
+import {
+  parseConditionalBuy,
+  createConditionalOrder,
+  syncOrderWatches,
+  orderPreview
+} from '../lib/intent-ai/os/conditionalOrder.js';
+import { runOpportunityEngine } from '../lib/intent-ai/os/opportunityEngine.js';
+import {
+  appendConversation,
+  appendOperation,
+  readHistory,
+  clearHistory
+} from '../lib/intent-ai/os/historyStore.js';
+import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
+import { loadOrders } from '../lib/orders.js';
+import {
+  OperationsPanel,
+  HistoryPanel,
+  StatusPanel,
+  MonitorDraftForm,
+  OrderDraftForm,
+  MonitorCard,
+  OpportunityList,
+  OrderCard
+} from './IntentOpsPanels.jsx';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
 const MAX_SUGGESTIONS = 4;
@@ -149,6 +186,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   });
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
+  /* Operations Center state */
+  const [panel, setPanel] = useState(null); // null | 'operations' | 'history' | 'status'
+  const [opsBusy, setOpsBusy] = useState(false);
+  const [monitors, setMonitors] = useState([]);
+  const [monitorEngineStatus, setMonitorEngineStatus] = useState(null);
+  const [serverReachable, setServerReachable] = useState(null);
+  const [activeContext, setActiveContext] = useState(null); // {type:'monitor'|'order'|'conversation', id, label}
+  const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
+  const [orderDraftOpen, setOrderDraftOpen] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState(null); // {kind, parsed, preview, message}
+  const [histData, setHistData] = useState({ conversations: [], operations: [] });
+  const [monitorInitial, setMonitorInitial] = useState(null);
+  const [orderInitial, setOrderInitial] = useState(null);
+  const contextHandlerRef = useRef(null);
 
   const threadRef = useRef(null);
   const busyRef = useRef(false);
@@ -377,6 +428,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setSuggestions([]);
 
     try {
+      // 0. Context continuation + natural-language monitor/order/opportunity
+      //    intents are resolved HERE (before the generic chat), so «متوقفش کن»
+      //    reaches the SAME monitor and «انجامش بده» really creates the order.
+      if (contextHandlerRef.current) {
+        const ctxOut = await contextHandlerRef.current(message);
+        if (ctxOut?.handled) {
+          setThinking([]);
+          busyRef.current = false;
+          return true;
+        }
+      }
       // 1. Try local Intent OS first (for nav, media, portfolio analysis, wallet balance, etc.)
       // This is the Universal AI Operating Layer — no server needed for many intents
       const walletState = {
@@ -976,18 +1038,604 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     enableDebug();
   }, [currentPage, aiContext]);
 
+  /* ---------------- Operations Center: real data + real actions ----------- */
+
+  const pushTurn = useCallback((m) => {
+    setMessages((prev) => [...prev, m]);
+    return m;
+  }, []);
+
+  /* Persist every new turn once — one effect, no duplicates, covers all
+     message producers (chat, operations, confirmation, errors). */
+  const persistedCountRef = useRef(0);
+  useEffect(() => {
+    try {
+      const fresh = messages.slice(persistedCountRef.current);
+      if (fresh.length) {
+        for (const m of fresh) {
+          appendConversation({
+            conversationId,
+            role: m.role,
+            content: m.content,
+            kind: m.kind,
+            intentType: m.intentType,
+            operationId: m.operationId || null
+          });
+        }
+        persistedCountRef.current = messages.length;
+      }
+    } catch { /* history is a convenience, never a gate */ }
+  }, [messages, conversationId]);
+
+  const refreshMonitors = useCallback(async () => {
+    try {
+      const res = await listMonitors();
+      if (res?.ok) {
+        setMonitors(Array.isArray(res.monitors) ? res.monitors : []);
+        setServerReachable(true);
+      } else {
+        setServerReachable(false);
+      }
+    } catch {
+      setServerReachable(false);
+    }
+  }, []);
+
+  const [storedOrders, setOrdersFromStore] = useState(loadOrders());
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const [ms, orders] = await Promise.allSettled([
+        apiMonitorEngineStatus(),
+        Promise.resolve(loadOrders())
+      ]);
+      setMonitorEngineStatus(ms.status === 'fulfilled' ? ms.value : null);
+      setServerReachable(ms.status === 'fulfilled' && ms.value?.ok === true);
+      if (orders.status === 'fulfilled') setOrdersFromStore(orders.value);
+    } catch { /* status is best-effort */ }
+  }, []);
+
+  useEffect(() => {
+    void refreshMonitors();
+    void refreshStatus();
+    const t = setInterval(() => {
+      void refreshMonitors();
+      void refreshStatus();
+      // Re-evaluating against the live server keeps TRIGGERED monitors fresh.
+      for (const m of monitors) {
+        if (m.status === 'ACTIVE' && m.intervalMinutes <= 15) void apiEvaluateMonitor(m.id).catch(() => {});
+      }
+    }, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshMonitors, refreshStatus]);
+
+  const openPanel = useCallback((name) => {
+    setPanel(name);
+    if (name === 'history') {
+      setHistData(readHistory());
+      void refreshMonitors();
+    }
+    if (name === 'status' || name === 'operations') {
+      void refreshMonitors();
+      void refreshStatus();
+    }
+  }, [refreshMonitors, refreshStatus]);
+
+  const appendOp = useCallback((op) => {
+    try {
+      const row = appendOperation({ conversationId, ...op });
+      setHistData(readHistory());
+      return row;
+    } catch {
+      return null;
+    }
+  }, [conversationId]);
+
+  /* Card → real action map for read/quote cards (the AI chat pipeline is the
+     real tooling: it resolves intent → quote → preview → confirm → execute). */
+  const CARD_PROMPTS = Object.freeze({
+    portfolio_analysis: 'پرتفوی من را تحلیل کن',
+    portfolio_risk: 'ریسک پرتفوی من را بررسی کن',
+    portfolio_allocation: 'توزیع دارایی‌های من را نشان بده',
+    wallet_analysis: 'کیف پول من را تحلیل کن',
+    wallet_balances: 'موجودی کیف پول من را نشان بده',
+    wallet_transactions: 'تراکنش‌های اخیر من را نشان بده',
+    lending_analysis: 'بازارهای lending را تحلیل کن',
+    farm_analysis: 'فرصت‌های فارم را تحلیل کن',
+    farm_recommend: 'بهترین فارم را پیدا کن',
+    lp_analysis: 'استخرهای نقدینگی را تحلیل کن',
+    futures_analysis: 'بازار فیوچرز را تحلیل کن',
+    futures_position: 'پوزیشن‌های فیوچرز من را نشان بده',
+    futures_risk: 'ریسک پوزیشن‌های فیوچرز را بررسی کن',
+    dydx_market: 'بازار dYdX را تحلیل کن',
+    dydx_position: 'پوزیشن‌های dYdX را نشان بده',
+    dydx_risk: 'ریسک dYdX را بررسی کن',
+    markets_rwa: 'توکن‌های RWA را نشان بده',
+    markets_tokenized: 'دارایی‌های توکنیزه را نشان بده',
+    intel_marketscan: 'بازار را اسکن کن',
+    intel_smartmoney: 'اسمارت مانی را دنبال کن',
+    intel_whales: 'نهنگ‌ها را دنبال کن',
+    intel_signals: 'سیگنال‌ها را نشان بده',
+    intel_news: 'اخبار بازار را نشان بده',
+    intel_events: 'رویدادهای بازار را نشان بده',
+    intel_token: 'توکن را تحلیل کن',
+    intel_contract: 'قرارداد را تحلیل کن',
+    goals_profit: 'برنامه سود برای هدفم بساز',
+    goals_whatif: 'چه‌اگر پرتفوی من را شبیه‌سازی کن',
+    goals_progress: 'پیشرفت هدف‌های من را نشان بده',
+    swap_token: 'می‌خواهم سواپ انجام دهم',
+    swap_quote: 'نرخ سواپ را نشان بده',
+    swap_execute: 'می‌خواهم سواپ اجرا کنم',
+    swap_crosschain: 'می‌خواهم سواپ کراس‌چین انجام دهم',
+    bridge_run: 'می‌خواهم پل بزنم',
+    bridge_quote: 'نرخ پل را نشان بده',
+    bridge_execute: 'می‌خواهم پل را اجرا کنم',
+    bridge_crosschain: 'می‌خواهم انتقال کراس‌چین انجام دهم',
+    portfolio_rebalance: 'پرتفوی من را متعادل کن',
+    goals_rebalance: 'پرتفوی من را متعادل کن',
+    loans_or_borrow: 'وام بگیر',
+    lend_market: 'می‌خواهم وام بدهم'
+  });
+
+  const handleOpsAction = useCallback(async (card) => {
+    if (!card) return;
+    const avail = cardAvailability(card, { walletConnected, serverReachable: serverReachable !== false });
+    if (avail.reason === 'WALLET_REQUIRED' && !walletConnected) {
+      openWalletSheet(null, card.title);
+      return;
+    }
+    setPanel(null);
+    if (card.action === 'navigate') {
+      navigate(card.route);
+      appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
+      return;
+    }
+    if (card.action === 'monitor') {
+      setMonitorDraftOpen(true);
+      return;
+    }
+    if (card.action === 'order') {
+      if (card.id === 'goals_create') { void sendMessage('می‌خواهم یک هدف مالی بسازم'); return; }
+      if (card.id === 'auto_recurring' || card.id === 'auto_scheduled') {
+        void sendMessage('هر هفته 100 دلار BTC بخر');
+        return;
+      }
+      setOrderDraftOpen(true);
+      return;
+    }
+    if (card.action === 'opportunity') {
+      await runOpportunity(card);
+      return;
+    }
+    const prompt = CARD_PROMPTS[card.id] || card.title;
+    await sendMessage(prompt);
+  }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity]);
+
+  /* Opportunity Engine run — real data only, honest metadata. */
+  const runOpportunity = useCallback(async (card) => {
+    setOpsBusy(true);
+    const result = await runOpportunityEngine({
+      portfolio: aiContext.portfolio,
+      services: liveModuleServices,
+      goal: null
+    });
+    const rows = result.opportunities || [];
+    const ok = result.status === 'live';
+    const summary = ok
+      ? (locale.startsWith('fa')
+        ? `اسکن فرصت انجام شد: ${rows.length} فرصت با داده واقعی (کیفیت داده: ${result.dataQuality}). هیچ بازدهی تضمینی نیست.`
+        : `Opportunity scan complete: ${rows.length} opportunities with real data (quality: ${result.dataQuality}). No return is guaranteed.`)
+      : (locale.startsWith('fa')
+        ? 'موتور فرصت نتوانست داده کافی جمع کند؛ وضعیت داده: ' + result.dataStatus
+        : 'The opportunity engine could not collect enough data. Data status: ' + result.dataStatus);
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'opportunity',
+      ui: { type: 'OPPORTUNITY_CARD' },
+      content: summary,
+      opportunities: rows,
+      dataQuality: result.dataQuality,
+      card: { title: locale.startsWith('fa') ? '✦ موتور فرصت' : '✦ Opportunity Engine' }
+    });
+    appendOp({
+      kind: 'OPPORTUNITY_SCAN',
+      status: ok ? 'COMPLETED' : 'FAILED',
+      title: card?.title || 'Opportunity scan',
+      detail: `${rows.length} found · quality ${result.dataQuality} · no guarantees`,
+      ref: null,
+      refKind: null
+    });
+    setOpsBusy(false);
+  }, [aiContext.portfolio, liveModuleServices, locale, pushTurn, appendOp]);
+
+  /* Monitor create — real server registry. */
+  const handleMonitorCreate = useCallback(async (draft) => {
+    setOpsBusy(true);
+    let alert = {};
+    try {
+      const { pushIdentity } = await import('../lib/notify.js');
+      const id = await pushIdentity();
+      if (id?.endpoint) alert = { endpoint: id.endpoint, lang: locale };
+    } catch { /* no push identity → monitor still records events in-app */ }
+    const made = await apiCreateMonitor({ ...draft, alert, conversationId, source: 'intent-os' });
+    setMonitorDraftOpen(false);
+    if (!made?.ok) {
+      pushTurn({
+        id: makeId(),
+        role: 'ai',
+        kind: 'error',
+        ui: { type: 'TEXT' },
+        content: (locale.startsWith('fa')
+          ? 'پایش ایجاد نشد: ' : 'Monitor was not created: ') + String(made?.error || 'UNAVAILABLE')
+      });
+      setOpsBusy(false);
+      return;
+    }
+    setMonitors((prev) => [made.monitor, ...prev]);
+    setActiveContext({ type: 'monitor', id: made.monitor.id, label: made.monitor.label });
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'monitor',
+      ui: { type: 'MONITOR_CARD' },
+      content: (locale.startsWith('fa')
+        ? `پایش «${made.monitor.label}» ایجاد شد و در سرور فعال است.`
+        : `Monitor "${made.monitor.label}" created and active on the server.`),
+      monitor: made.monitor
+    });
+    appendOp({
+      kind: 'MONITOR_CREATE',
+      status: 'ACTIVE',
+      title: made.monitor.label,
+      detail: `${made.monitor.asset?.symbol || 'MARKET'} ${made.monitor.metric} ${made.monitor.operator} ${made.monitor.threshold} · every ${made.monitor.intervalMinutes}m`,
+      ref: made.monitor.id,
+      refKind: 'monitor'
+    });
+    setOpsBusy(false);
+  }, [conversationId, locale, pushTurn, appendOp]);
+
+  /* Conditional order — real order in fbt-orders-v1 + /orders + server watch. */
+  const handleOrderCreate = useCallback(async (parsed) => {
+    setOpsBusy(true);
+    const made = createConditionalOrder(parsed, { chainId: 42161 });
+    setOrderDraftOpen(false);
+    if (made.error) {
+      pushTurn({
+        id: makeId(),
+        role: 'ai',
+        kind: 'error',
+        ui: { type: 'TEXT' },
+        content: (locale.startsWith('fa')
+          ? 'سفارش شرطی ثبت نشد: ' : 'Conditional order not created: ') + String(made.error)
+      });
+      setOpsBusy(false);
+      return;
+    }
+    const sync = await syncOrderWatches();
+    const order = made.order;
+    setActiveContext({ type: 'order', id: order.id, label: `${order.toToken.symbol} @ ${order.targetRate}` });
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'order',
+      ui: { type: 'ORDER_CARD' },
+      content: (locale.startsWith('fa')
+        ? `سفارش شرطی واقعی ثبت شد و در صفحه Orders و پایش سرور فعال است. پر شدن با امضای شما در صفحه سواپ انجام می‌شود (میزان همگام‌سازی پایش: ${sync}).`
+        : `Real conditional order stored. It is visible on /orders and mirrored to the server watcher (watch sync: ${sync}). Filling always requires your signature on the swap screen.`),
+      order
+    });
+    appendOp({
+      kind: 'ORDER_CREATE',
+      status: sync === 'synced' ? 'ACTIVE' : 'WARNING',
+      title: `${order.toToken.symbol} conditional buy`,
+      detail: `${order.direction === 'above' ? '≥' : '≤'} ${order.targetRate} USD · ${order.amountIn} ${order.fromToken.symbol} · ${order.id}`,
+      ref: order.id,
+      refKind: 'order'
+    });
+    await refreshStatus();
+    setOpsBusy(false);
+  }, [locale, pushTurn, appendOp, refreshStatus]);
+
+  /* Monitor actions from cards / history — real API calls. */
+  const handleMonitorAction = useCallback(async (m, action) => {
+    if (!m?.id) return;
+    setOpsBusy(true);
+    let out = null;
+    if (action === 'pause') out = await apiPauseMonitor(m.id);
+    else if (action === 'resume') out = await apiResumeMonitor(m.id);
+    else if (action === 'cancel') out = await apiCancelMonitor(m.id);
+    else if (action === 'evaluate') out = await apiEvaluateMonitor(m.id);
+    if (out?.ok) await refreshMonitors();
+    const verb = action === 'pause' ? (locale.startsWith('fa') ? 'متوقف شد' : 'paused')
+      : action === 'resume' ? (locale.startsWith('fa') ? 'ادامه یافت' : 'resumed')
+      : action === 'cancel' ? (locale.startsWith('fa') ? 'لغو شد' : 'cancelled')
+      : (locale.startsWith('fa') ? 'بررسی شد' : 'checked');
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: action === 'cancel' ? 'error' : 'assistant',
+      ui: { type: 'MONITOR_CARD' },
+      content: `${m.label || m.asset?.symbol} ${verb}${out?.error ? ' — ' + out.error : ''}`,
+      monitor: out?.monitor || { ...m, status: action === 'pause' ? 'PAUSED' : action === 'resume' ? 'ACTIVE' : action === 'cancel' ? 'CANCELLED' : m.status }
+    });
+    appendOp({
+      kind: 'MONITOR_' + String(action).toUpperCase(),
+      status: out?.ok === false ? 'FAILED' : (action === 'cancel' ? 'CANCELLED' : 'ACTIVE'),
+      title: m.label || `${m.asset?.symbol || ''} monitor`,
+      detail: action,
+      ref: m.id,
+      refKind: 'monitor'
+    });
+    setOpsBusy(false);
+  }, [locale, refreshMonitors, pushTurn, appendOp]);
+
+  /* Monitor one opportunity row — real server monitor (price or yield APY). */
+  const monitorOpportunityRow = useCallback(async (o) => {
+    if (o?.apy != null) {
+      await handleMonitorCreate({
+        type: 'GOAL',
+        metric: 'OPPORTUNITY',
+        operator: 'ABOVE',
+        threshold: o.apy,
+        asset: { symbol: o.symbol || 'YIELD' },
+        goalText: `Monitor ${o.kind} opportunities`,
+        label: `${o.kind} APY ≥ ${Number(o.apy).toFixed(1)}%`,
+        intervalMinutes: 360
+      });
+      return;
+    }
+    if (o?.priceUsd != null) {
+      await handleMonitorCreate({
+        type: 'ASSET',
+        metric: 'PRICE',
+        operator: 'ABOVE',
+        threshold: Math.round((Number(o.priceUsd) * 1.05) * 100) / 100,
+        asset: { symbol: o.symbol },
+        label: `${o.symbol} ≥ ${Number(o.priceUsd).toFixed(0)} USD`,
+        intervalMinutes: 60
+      });
+      return;
+    }
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      content: locale.startsWith('fa')
+        ? 'این فرصت نه قیمت لحظه‌ای دارد و نه APY قابل پایش؛ برای آن نمی‌توان پایش واقعی ساخت (و نمونهٔ ساختگی هم نمی‌سازم).'
+        : 'This opportunity has neither a live price nor a watchable APY, so no real monitor can be created for it (and none will be faked).'
+    });
+  }, [handleMonitorCreate, pushTurn, locale]);
+
+  /* Natural-language monitoring / conditional-order / context continuation.
+     Runs before the generic chat so operations are CREATED, not described. */
+  const handleContextTurn = useCallback(async (message) => {
+    const text = String(message || '').trim();
+    const lower = text.toLowerCase();
+
+    /* (a) Confirmation of a prepared draft — real creation, no re-navigation. */
+    if (pendingDraft && /انجامش بده|تأیید|تایید|بله|باشه|do it|confirm|execute|yes/i.test(text)) {
+      const d = pendingDraft;
+      setPendingDraft(null);
+      if (d.kind === 'monitor') await handleMonitorCreate(d.parsed);
+      else if (d.kind === 'order') await handleOrderCreate(d.parsed);
+      return { handled: true };
+    }
+    if (pendingDraft && /ویرایش|تغییر|edit|change|cancel/i.test(text)) {
+      const d = pendingDraft;
+      setPendingDraft(null);
+      if (d.kind === 'monitor') { setMonitorInitial(d.parsed.asset || d.parsed); setMonitorDraftOpen(true); }
+      else { setOrderInitial(d.parsed); setOrderDraftOpen(true); }
+      return { handled: true };
+    }
+
+    /* (b) Active monitor/order control — the SAME operation (§11). */
+    if (activeContext?.type === 'monitor') {
+      const m = monitors.find((x) => x.id === activeContext.id) || monitors.find((x) => x.label === activeContext.label);
+      if (m) {
+        if (/متوقف|توقف|بایست|stop|pause/i.test(lower)) { await handleMonitorAction(m, 'pause'); return { handled: true }; }
+        if (/فعال کن|ادامه بده|resume|start/i.test(lower)) { await handleMonitorAction(m, 'resume'); return { handled: true }; }
+        if (/لغو|cancel|حذف|delete/i.test(lower)) { await handleMonitorAction(m, 'cancel'); return { handled: true }; }
+        if (/بررسی کن|چک کن|check|status/i.test(lower)) { await handleMonitorAction(m, 'evaluate'); return { handled: true }; }
+      }
+    }
+
+    /* (c) «بازار را بپای» / «اگر ETH کمتر از 3000 شد خبر بده» — monitor intent. */
+    const monitorIntent = /پایش|بپای|نظارت|watch|monitor|خبر بده|اطلاع بده|alert/i.test(text)
+      && !/توقف|متوقف|لغو/i.test(text);
+
+    /* (c-1) «اگر شرایط سود 20 درصدی ایجاد شد بررسی کن» — real OPPORTUNITY job:
+       the server scans real yield venues and triggers at the target APY %. */
+    if (monitorIntent && /سود|بازدهی|yield|return|apy/i.test(text)) {
+      const pctMatch = text.match(/([0-9۰-۹.,]+)\s*(?:درصد|%|pct|percent)/i);
+      let target = null;
+      if (pctMatch) {
+        const fa = pctMatch[1].replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+        target = parseFloat(fa.replace(/,/g, ''));
+      }
+      if (target != null && Number.isFinite(target) && target > 0 && target <= 200) {
+        const p = {
+          type: 'GOAL',
+          metric: 'OPPORTUNITY',
+          operator: 'ABOVE',
+          threshold: target,
+          asset: { symbol: 'YIELD' },
+          goalText: `Watch for ${target}% returns`,
+          label: `Yield ≥ ${target}%`,
+          intervalMinutes: 360
+        };
+        setPendingDraft({ kind: 'monitor', parsed: p, message: text });
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'draft',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? `پایش فرصت آماده است: بهترین APY واقعی ≥ ${target}٪ (بررسی هر ۶ ساعت). «انجامش بده»؟`
+            : `Opportunity monitor ready: best real APY ≥ ${target}% (checked every 6h). Say "do it"?`
+        });
+        return { handled: true };
+      }
+    }
+
+    if (monitorIntent) {
+      const parsed = parseMonitorRequest(text, { locale });
+      if (parsed.monitor?.threshold == null && !parsed.error) {
+        /* Asset/condition missing → ask with the real form instead of guessing. */
+        setMonitorInitial(parsed.monitor || null);
+        setMonitorDraftOpen(true);
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? 'برای پایش واقعی، یک دارایی و یک شرط لازم است (مثلاً «آستانه 100000» یا «تغییر ۵٪»). فرم را پر کن یا بنویس: «اگر ETH کمتر از 3000 شد خبر بده».'
+            : 'A real monitor needs an asset and a condition (e.g. threshold 100000 or 5% change). Fill the form or write: "alert me if ETH goes below 3000".'
+        });
+        return { handled: true };
+      }
+      if (parsed.monitor) {
+        const p = parsed.monitor;
+        setPendingDraft({ kind: 'monitor', parsed: p, message: text });
+        setMonitorDraftOpen(true);
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'draft',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? `شرط آماده است: ${p.asset?.symbol || 'بازار'} ${p.metric} ${p.operator} ${p.threshold} (هر ${p.intervalMinutes} دقیقه بررسی). «تأیید» یا «انجامش بده»؟`
+            : `Condition ready: ${p.asset?.symbol || 'market'} ${p.metric} ${p.operator} ${p.threshold} (check every ${p.intervalMinutes}m). Say "confirm" or "do it".`
+        });
+        return { handled: true };
+      }
+      if (parsed.error === 'NO_CONDITION' || parsed.error === 'NO_AMOUNT') {
+        setMonitorInitial(parsed.asset ? { asset: { symbol: parsed.asset } } : null);
+        setMonitorDraftOpen(true);
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? 'دارایی مشخص است ولی شرط (آستانه/درصد) را بنویس — یا فرم را پر کن.'
+            : 'Asset is clear but the condition (threshold/percent) is missing — type it or use the form.'
+        });
+        return { handled: true };
+      }
+    }
+
+    /* (d) «اگر BTC به 100000 رسید بخر» — real conditional order. */
+    if (/بخر|buy|خرید/i.test(text) && /اگر|وقتی|when|if|به\s/i.test(text)) {
+      const parsed = parseConditionalBuy(text, { chainId: 42161 });
+      if (!parsed.error) {
+        const preview = orderPreview(parsed);
+        setPendingDraft({ kind: 'order', parsed, preview, message: text });
+        setOrderInitial(parsed);
+        setOrderDraftOpen(true);
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'draft',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? `پیش‌نمایش خرید شرطی: ${parsed.asset} ${parsed.operator} ${parsed.target} دلار، ${parsed.amount} دلار USDT. این یک سفارش پایش واقعی است؛ اجرا با امضای تو در سواپ. «انجامش بده»؟`
+            : `Conditional buy preview: ${parsed.asset} ${parsed.operator} ${parsed.target} USD, ${parsed.amount} USD USDT. This is a real watch order; the fill needs your signature on the swap screen. Say "do it"?`
+        });
+        return { handled: true };
+      }
+      if (parsed.error === 'NO_TARGET' || parsed.error === 'NOT_BUY' || parsed.error === 'NO_ASSET') {
+        setOrderInitial({ asset: parsed.asset || 'BTC' });
+        setOrderDraftOpen(true);
+        pushTurn({
+          id: makeId(),
+          role: 'ai',
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? 'برای سفارش شرطی، دارایی، قیمت هدف و مبلغ لازم است (مثال: «اگر BTC به 100000 رسید 100 دلار بخر»).'
+            : 'A conditional order needs an asset, a target price and an amount (e.g. "if BTC hits 100000, buy $100").'
+        });
+        return { handled: true };
+      }
+    }
+
+    /* (e) «فرصت برای هدف» — real opportunity engine run. */
+    if (/فرصت|opportunit|بهترین.*درآمد|بازدهی/i.test(text) && /هدف|goal|سود/i.test(text)) {
+      pushTurn({
+        id: makeId(),
+        role: 'ai',
+        kind: 'assistant',
+        ui: { type: 'TEXT' },
+        content: locale.startsWith('fa')
+          ? 'در حال اجرای موتور فرصت روی پرتفوی و بازار واقعی…'
+          : 'Running the opportunity engine on your real portfolio and the market…'
+      });
+      await runOpportunity(null);
+      return { handled: true };
+    }
+
+    return { handled: false };
+  }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity]);
+
+  contextHandlerRef.current = handleContextTurn;
+
+  /* Continue a history/monitor item in chat — context resolution (§11/§12). */
+  const handleContinue = useCallback((item) => {
+    if (item?.refKind === 'monitor' || item?.kind === 'MONITOR_CREATE' || item?.id?.startsWith?.('mon_')) {
+      const mon = monitors.find((x) => x.id === (item.ref || item.id));
+      setActiveContext({ type: 'monitor', id: item.ref || item.id, label: item.title || mon?.label || 'monitor' });
+    } else if (item?.refKind === 'order' || item?.kind === 'ORDER_CREATE') {
+      setActiveContext({ type: 'order', id: item.ref || item.id, label: item.title || 'order' });
+    } else {
+      setActiveContext({ type: 'conversation', id: item.id, label: String(item?.content || item?.title || '').slice(0, 60) });
+    }
+    setPanel(null);
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      content: locale.startsWith('fa')
+        ? `ادامهٔ «${item?.title || item?.content || activeContext?.label || 'عملیات'}». حالا می‌توانی بگویی «متوقفش کن» یا «شرطش را تغییر بده».`
+        : `Context resumed for "${item?.title || item?.content || 'item'}". Try "stop it" or "change its condition".`
+    });
+  }, [monitors, locale, pushTurn]);
+
   return (
     <div className="iaos-page">
       <div className="iaos-shell">
         <header className="iaos-header">
           <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
             <span className="iaos-mark" aria-hidden="true">✦</span>
-            <h1>{t('intentAIOS.header', { defaultValue: 'Intent AI' })}</h1>
+            <h1>{t('intentAIOS.header', { defaultValue: 'FBT INTENT OS' })}</h1>
           </div>
-          <span className="iaos-live" data-on={walletConnected ? 'true' : 'false'} title={walletConnected ? 'Wallet connected' : 'Wallet not connected'}>
-            <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
-          </span>
+          <div className="iaos-header-actions">
+            <button type="button" className="iaos-header-btn" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
+              {locale.startsWith('fa') ? 'تاریخچه' : 'History'}
+            </button>
+            <button type="button" className="iaos-header-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
+              {locale.startsWith('fa') ? 'عملیات' : 'Operations'}
+            </button>
+            <button type="button" className="iaos-header-btn" data-testid="intent-ai-status" onClick={() => openPanel('status')}>
+              {locale.startsWith('fa') ? 'وضعیت' : 'Status'}
+            </button>
+            <span className="iaos-live" data-on={walletConnected ? 'true' : 'false'} title={walletConnected ? 'Wallet connected' : 'Wallet not connected'}>
+              <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
+            </span>
+          </div>
         </header>
+
+        {activeContext ? (
+          <div className="iaos-context-chip" data-testid="intent-ai-context">
+            <span>{locale.startsWith('fa') ? 'در حال ادامه:' : 'Continuing:'}</span>
+            <strong>{activeContext.label}</strong>
+            <button type="button" aria-label="Clear context" onClick={() => setActiveContext(null)}>✕</button>
+          </div>
+        ) : null}
 
         {showDebug && debugInfo ? (
           <div className="iaos-debug" style={{ background: '#111', color: '#0f0', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace', maxHeight: '300px', overflow: 'auto' }}>
@@ -1061,6 +1709,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 ) : null}
                 {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
                   <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
+                ) : null}
+                {m.kind === 'monitor' && m.monitor ? (
+                  <MonitorCard monitor={m.monitor} onAction={handleMonitorAction} locale={locale} />
+                ) : null}
+                {m.kind === 'order' && m.order ? (
+                  <OrderCard order={m.order} locale={locale} />
+                ) : null}
+                {Array.isArray(m.opportunities) && m.opportunities.length ? (
+                  <OpportunityList rows={m.opportunities} onMonitor={monitorOpportunityRow} locale={locale} />
                 ) : null}
               </div>
             </div>
@@ -1170,6 +1827,56 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         </div>
       ) : null}
+
+      <OperationsPanel
+        open={panel === 'operations'}
+        onClose={() => setPanel(null)}
+        availability={(card) => cardAvailability(card, { walletConnected, serverReachable: serverReachable !== false })}
+        onAction={handleOpsAction}
+        busy={opsBusy}
+        locale={locale}
+      />
+      <HistoryPanel
+        open={panel === 'history'}
+        onClose={() => setPanel(null)}
+        history={histData}
+        monitors={monitors}
+        onContinue={handleContinue}
+        onMonitorAction={handleMonitorAction}
+        busy={opsBusy}
+        locale={locale}
+      />
+      <StatusPanel
+        open={panel === 'status'}
+        onClose={() => setPanel(null)}
+        status={{
+          walletConnected,
+          serverReachable,
+          monitors: monitorEngineStatus || { active: monitors.filter((m) => m.status === 'ACTIVE').length, total: monitors.length },
+          ordersCount: storedOrders.length,
+          automationsCount: automations.length,
+          engine: monitorEngineStatus || {}
+        }}
+        locale={locale}
+      />
+      <MonitorDraftForm
+        key={monitorDraftOpen ? `mon-${monitorInitial ? `${monitorInitial.asset?.symbol || ''}${monitorInitial.metric || ''}` : 'open'}` : 'mon-closed'}
+        open={monitorDraftOpen}
+        onClose={() => setMonitorDraftOpen(false)}
+        initial={monitorInitial}
+        onCreate={handleMonitorCreate}
+        busy={opsBusy}
+        locale={locale}
+      />
+      <OrderDraftForm
+        key={orderDraftOpen ? `ord-${orderInitial?.asset || 'open'}` : 'ord-closed'}
+        open={orderDraftOpen}
+        onClose={() => setOrderDraftOpen(false)}
+        initial={orderInitial}
+        onCreate={handleOrderCreate}
+        busy={opsBusy}
+        locale={locale}
+      />
 
       <WalletConnectSheet open={walletSheetOpen} onClose={() => setWalletSheetOpen(false)} />
     </div>
