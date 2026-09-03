@@ -361,6 +361,8 @@ export function OrderDraftForm({ open, onClose, onCreate, initial = null, busy =
   const [asset, setAsset] = useState(initial?.asset || 'BTC');
   const [target, setTarget] = useState(initial?.target ?? '');
   const [amount, setAmount] = useState(initial?.amount ?? '100');
+
+  if (!open) return null;
   const L = locale === 'en'
     ? { title: 'Conditional Buy', asset: 'Asset', target: 'Target price (USD)', amount: 'Amount (USD)', create: 'Create Order', cancel: 'Cancel', note: 'Creates a REAL limit watch on /orders: the server watches the price and alerts; the fill is always signed by you at the swap screen.' }
     : { title: 'خرید شرطی', asset: 'دارایی', target: 'قیمت هدف (دلار)', amount: 'مبلغ (دلار)', create: 'ایجاد سفارش', cancel: 'انصراف', note: 'یک سفارش واقعی در /orders ایجاد می‌شود: سرور قیمت را پایش می‌کند و خبر می‌دهد؛ پر شدن همیشه با امضای شما در صفحه سواپ انجام می‌شود.' };
