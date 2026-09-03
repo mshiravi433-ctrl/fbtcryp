@@ -228,6 +228,7 @@ function WalHero({
             onEarn={() => children?.onEarn?.()}
             onOptimize={() => children?.onOptimize?.()}
             canOptimize={children?.canOptimize}
+            showBitcoin={children?.showBitcoin}
           />
 
           {/* Utility / wallet management row */}
@@ -696,6 +697,15 @@ export default function Wallet() {
 
   const canOptimize = connected && portfolio.rows.length > 0 && portfolio.totalValue > 0;
 
+  /*
+   * Bitcoin is derived from the INTERNAL local vault seed (BIP-84) only. A
+   * wallet connected through WalletConnect / an injected provider (Trust
+   * Wallet, MetaMask, …) has no BTC leg: show nothing for it — no action
+   * row button, no card, no popup. `bitcoinAvailable` is what the BTC token
+   * detail / card / sheet all read instead of re-deriving the mode each time.
+   */
+  const bitcoinAvailable = wallet.mode === 'local';
+
   const handleOptimize = useCallback(() => {
     haptic?.('select');
     if (!connected) { setConnectOpen(true); return; }
@@ -753,6 +763,7 @@ export default function Wallet() {
     onEarn: () => navigate('/earn'),
     onOptimize: handleOptimize,
     canOptimize,
+    showBitcoin: bitcoinAvailable,
     onAssets: () => setSelectedChain('all'),
     onFarm: () => navigate('/farm'),
     onNft: () => navigate('/nft'),
@@ -864,7 +875,7 @@ export default function Wallet() {
           itself renders nothing for injected/locked wallets — so this line is
           a no-op for everyone who has no internal BTC wallet. It lives in the
           Wallet chunk only; no other route pulls it in. */}
-      <div id="wallet-btc-card">{tab === 'real' && <BtcCard />}</div>
+      <div id="wallet-btc-card">{bitcoinAvailable && tab === 'real' && <BtcCard />}</div>
 
       {/* ----------------- Solana wallet -----------------
           Connection through Phantom / Solflare / Backpack belongs on the
@@ -896,6 +907,7 @@ export default function Wallet() {
         /api/btc reads it performs are part of the Wallet chunk and cannot
         reach Home, Market or the swap path.
       */}
+      {bitcoinAvailable && (
       <BtcHubSheet
         open={btcHubOpen}
         onClose={() => setBtcHubOpen(false)}
@@ -911,6 +923,7 @@ export default function Wallet() {
           document.getElementById('wallet-btc-card')?.scrollIntoView({ behavior, block: 'center' });
         }}
       />
+      )}
 
       {/* Token detail (from the unified asset list) */}
       <TokenDetailSheet

@@ -730,7 +730,18 @@
       "acknowledge": "Acknowledge risk"
     },
     "gaslessUnavailable": "Swapping without gas is not enabled on this deployment, so this trade still needs {{coin}} for the network fee.",
-    "gaslessUsingNormal": "The normal price above still applies."
+    "gaslessUsingNormal": "The normal price above still applies.",
+    "historyTitle": "Swap history",
+    "historyClear": "Clear",
+    "historyCleared": "History cleared.",
+    "historyRemove": "Remove this record",
+    "historyStatus": {
+      "confirmed": "Confirmed",
+      "pending": "In progress",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "currentNetwork": "Current network"
   },
   "onboarding": {
     "skip": "Skip",
@@ -8817,6 +8828,10 @@
       "leaderboard": {
         "title": "Leaderboard",
         "sub": "Virtual rank"
+      },
+      "glossary": {
+        "title": "Glossary",
+        "sub": "Crypto terms explained"
       }
     },
     "screens": {
@@ -8865,6 +8880,14 @@
       },
       "leaderboard": {
         "title": "Lab Leaderboard"
+      },
+      "glossary": {
+        "title": "Crypto Glossary",
+        "sub": "Short, plain-language meanings of market words",
+        "search": "Search: e.g. Liquidation, ATH, wallet…",
+        "count": "{{count}} terms",
+        "empty": "Nothing found — try another spelling.",
+        "note": "These are for learning only, not investment advice; research any contract before trading."
       }
     },
     "levelNames": {

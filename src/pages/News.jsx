@@ -58,7 +58,7 @@ const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
  * the ?tab= deep link so a URL like #/news?tab=calm cannot open a tab that
  * does not exist, and the row and the URL cannot drift apart.
  */
-const NEWS_TABS = ['read', 'whales', 'community', 'listen', 'insights', 'calm'];
+const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'calm'];
 
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
@@ -254,14 +254,7 @@ export default function News() {
         ))}
       </div>
 
-      {tab === 'whales' ? (
-        /*
-          Whale Tracking — real large-transfer feed from our own /api/news/whales
-          endpoint. Server-side caching, no fabricated events, unknown labels
-          stay "Unknown". See components/WhaleTrackingPanel.jsx.
-        */
-        <WhaleTrackingPanel />
-      ) : tab === 'community' ? (
+      {tab === 'community' ? (
         /*
           Read-only Farcaster feed, hosted by the protocol rather than by us:
           no storage cost, no moderation duty — see components/CommunityPanel.jsx.

@@ -286,7 +286,18 @@
     "gasBody": "Gas selalu dibayar dengan koin asli jaringan dari dompet yang sama — bukan hanya BNB. Untuk menukar di suatu rantai Anda perlu koin di bawah ini.",
     "gasNote": "Gas untuk validator jaringan, bukan kami, dan terpisah dari biaya platform {{fee}}%. Jika tak punya koin asli suatu rantai, pindah ke rantai lain.",
     "needGas": "Transaksi ini butuh {{coin}} di {{chain}} untuk gas dan saldo Anda kurang. Tambah sedikit {{coin}} atau pindah rantai.",
-    "importBody": "Alamat ini tidak ada di daftar publik mana pun. Kami membaca simbol dan desimal langsung dari rantai. Verifikasi alamat adalah tanggung jawab Anda."
+    "importBody": "Alamat ini tidak ada di daftar publik mana pun. Kami membaca simbol dan desimal langsung dari rantai. Verifikasi alamat adalah tanggung jawab Anda.",
+    "historyTitle": "Swap history",
+    "historyClear": "Clear",
+    "historyCleared": "History cleared.",
+    "historyRemove": "Remove this record",
+    "historyStatus": {
+      "confirmed": "Confirmed",
+      "pending": "In progress",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "currentNetwork": "Jaringan saat ini"
   },
   "signals": {
     "title": "Sinyal",
@@ -1104,5 +1115,9 @@
     "volume24h": "Volume 24 jam",
     "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini.",
     "chartLive": "candle pasar langsung"
+  },
+  "lab2": {
+    "cards": {},
+    "screens": {}
   }
 }
