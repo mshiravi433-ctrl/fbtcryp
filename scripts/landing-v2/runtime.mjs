@@ -764,10 +764,22 @@ function updateFlowMeter() {
   for (var i = 0; i < bars.length; i++) bars[i].style.setProperty('--p', p);
 }
 
-function initReveal() {
+  /** Make one reveal node visible, lighting its flow steps too. */
+  function revealNode(n) {
+    n.classList.add('in');
+    var lis = n.querySelectorAll('.flow li');
+    for (var i = 0; i < lis.length; i++) lis[i].classList.add('on');
+    updateFlowMeter();
+  }
+
+  function initReveal() {
     html.setAttribute('data-js', '1');
+    /* Every hidden variant, not just .reveal — a reveal-zoom element that
+       never carries the plain .reveal class would otherwise sit at
+       opacity:0 for the whole session, leaving a black hole mid-page. */
+    var REVEAL_SEL = '.reveal, .reveal-l, .reveal-r, .reveal-zoom';
     if (RM || typeof IntersectionObserver === 'undefined') {
-      document.querySelectorAll('.reveal').forEach(function (n) { n.classList.add('in'); });
+      document.querySelectorAll(REVEAL_SEL).forEach(function (n) { n.classList.add('in'); });
       document.querySelectorAll('.flow li').forEach(function (n) { n.classList.add('on'); });
       updateFlowMeter();
       return;
@@ -775,16 +787,56 @@ function initReveal() {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
-        e.target.classList.add('in');
-        e.target.querySelectorAll('.flow li').forEach(function (li) { li.classList.add('on'); });
-        if (e.target.classList.contains('flow-host')) {
-          e.target.querySelectorAll('.flow li').forEach(function (li) { li.classList.add('on'); });
-        }
+        revealNode(e.target);
         io.unobserve(e.target);
-        updateFlowMeter();
       });
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-    document.querySelectorAll('.reveal').forEach(function (n) { io.observe(n); });
+    var nodes = document.querySelectorAll(REVEAL_SEL);
+    for (var i = 0; i < nodes.length; i++) io.observe(nodes[i]);
+
+    /* The safety net.
+     * IntersectionObserver callbacks are delivered as part of the frame the
+     * intersection changed in; when the main thread is busy (lottie repaint,
+     * image decode, a long scroll) a frame can be dropped and the callback
+     * never comes — the element keeps opacity:0 forever. That is exactly the
+     * "black page with nothing on it" the reader was scrolling past. A
+     * viewport pass that measures with getBoundingClientRect on every scroll
+     * tick cannot miss, and it tears itself down once every element has been
+     * seen, so a finished page costs nothing. */
+    var pending = [];
+    for (var j = 0; j < nodes.length; j++) if (!nodes[j].classList.contains('in')) pending.push(nodes[j]);
+    var netTimer = null;
+    var queued = false;
+    function pass() {
+      if (!pending.length) return;
+      var vh = window.innerHeight || document.documentElement.clientHeight || 800;
+      var left = [];
+      for (var k = 0; k < pending.length; k++) {
+        var n = pending[k];
+        if (n.classList.contains('in')) continue; /* IO already lit it */
+        var r = n.getBoundingClientRect();
+        if (r.bottom > -72 && r.top < vh + 72) revealNode(n);
+        else left.push(n);
+      }
+      pending = left;
+      if (!pending.length) {
+        window.removeEventListener('scroll', netScroll);
+        window.removeEventListener('resize', pass);
+        if (netTimer) { clearInterval(netTimer); netTimer = null; }
+      }
+    }
+    function netScroll() {
+      if (queued) return;
+      queued = true;
+      if (window.requestAnimationFrame) requestAnimationFrame(function () { queued = false; pass(); });
+      else { queued = false; pass(); }
+    }
+    window.addEventListener('scroll', netScroll, { passive: true });
+    window.addEventListener('resize', pass);
+    pass();
+    /* The reader may stand still: while anything is pending, re-check at a
+       relaxed cadence so a starved observer is still caught. Self-terminating. */
+    netTimer = setInterval(pass, 600);
   }
 
   /* Rotating sample intent in the hero console — clearly an illustration,
@@ -921,7 +973,8 @@ function initReveal() {
   /* ------------------------------------------------ product slideshow --- */
 
   /**
-   * The bilingual product tour: five slides, autoplay, swipe, arrows, dots.
+   * The bilingual product tour: five slides, autoplay, swipe, dots
+   * (the left/right arrows were removed — they overlapped the slide copy).
    *
    * The autoplay pauses on hover, on focus inside, on a hidden tab and on
    * reduced motion — a carousel that moves while someone is reading the
@@ -1002,10 +1055,6 @@ function initReveal() {
       if (!show.contains(ev.relatedTarget)) show.classList.remove('is-focus');
     });
 
-    var prev = $('[data-show-prev]');
-    var next = $('[data-show-next]');
-    if (prev) prev.addEventListener('click', function () { go(idx - 1, true); });
-    if (next) next.addEventListener('click', function () { go(idx + 1, true); });
     for (var d2 = 0; d2 < dots.length; d2++) {
       (function (n) {
         dots[n].addEventListener('click', function () { go(n, true); });
