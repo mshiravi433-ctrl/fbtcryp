@@ -48,7 +48,7 @@ export async function futuresRead(input = {}) {
   let markets = [];
   let marketsLive = false;
   try {
-    /* The on-chain futures tab is Drift (Solana) only. */
+    /* The on-chain futures tab is Velocity (Solana) only. */
     const mk = await drift.readMarkets();
     marketsLive = mk.live;
     markets = mk.markets.slice(0, 40).map((m) => ({ providerId: 'drift', marketId: m.marketId, symbol: m.symbol, mid: m.mid, maxLeverage: m.maxLeverage, fundingAprPct: m.fundingAprPct, openInterestUsd: m.openInterestUsd, isMarketOpen: m.isMarketOpen, category: m.category }));
@@ -88,7 +88,14 @@ export async function futuresQuote(input = {}, ctx = {}) {
 
   const wallet = ctx?.clientData?.wallet?.evmAddresses?.[0] || ctx?.clientData?.wallet?.address || input.wallet || null;
   let account = null;
-  /* Drift's Solana order path is not built; the quote is a read-only preview. */
+  /* Velocity's collateral (USDT) lives inside the on-chain user account, which
+     only the venue SDK can decode, so readAccount reports the SOL balance and
+     leaves balanceUsd null — the tab shows the real collateral. Best effort:
+     a failed RPC read must not fail the quote. */
+  if (wallet && drift.isSolanaAddress(wallet)) {
+    const read = await drift.readAccount(wallet);
+    if (read.ok) account = read;
+  }
 
   const risk = assessFuturesRisk({
     providerId, side, collateralUsd, leverage, maxLeverage: effectiveMax, entryPrice: side === 'long' ? market.ask : market.bid,
@@ -130,22 +137,23 @@ export async function futuresPrepare(input = {}, ctx = {}) {
   const wallet = input.fromAddress || input.wallet
     || ctx?.clientData?.wallet?.solanaAddresses?.[0]
     || ctx?.clientData?.wallet?.evmAddresses?.[0] || null;
-  /* Drift (the only venue on the On-Chain tab) trades on Solana; accept either
+  /* Velocity (the only venue on the On-Chain tab) trades on Solana; accept either
      a Solana base58 address or an EVM address, but never guess one. */
   const looksLikeWallet = wallet && (drift.isSolanaAddress(wallet) || /^0x[0-9a-fA-F]{40}$/.test(wallet));
   if (!looksLikeWallet) return refuse('POLICY', 'WALLET_REQUIRED', FA.WALLET_REQUIRED);
   if (q.provider === 'drift') {
     /* CLIENT_BUILDS_TX: the server builds NO calldata and holds NO key. The
-       browser constructs init/deposit/order instructions with @drift-labs/sdk
-       and the user's Solana wallet signs every transaction. */
+       browser constructs initializeUserAccount / USDT deposit / placePerpOrder
+       instructions with @velocity-exchange/sdk and the user's Solana wallet
+       signs and sends every transaction. */
     return live({
       prepared: true, signer: 'user-solana-wallet', provider: q.provider,
-      market: { ...q.market, marketIndex: Number(q.market.marketId) },
+      market: { ...q.market, marketIndex: Number(q.market.marketId), collateralToken: drift.VELOCITY_COLLATERAL },
       order: q.order, fee: q.fee, risk: q.risk, route: q.route,
       transactions: [],
-      clientSign: { family: 'solana', program: drift.DRIFT_PROGRAM_ID, sdk: '@drift-labs/sdk', buildsInTab: true },
+      clientSign: { family: 'solana', program: drift.VELOCITY_PROGRAM_ID, sdk: '@velocity-exchange/sdk', buildsInTab: true },
       onchainTab: '/perp?tab=onchain',
-      note: 'FBT never signs; the browser builds Drift transactions and the user\'s Solana wallet signs them on the On-Chain tab.'
+      note: 'FBT never signs; the browser builds Velocity transactions and the user\'s Solana wallet signs them on the On-Chain tab.'
     });
   }
   if (!q.account) return refuse('PROVIDER_ERROR', 'PROVIDER_UNAVAILABLE', 'account read failed; balance and allowance could not be verified');

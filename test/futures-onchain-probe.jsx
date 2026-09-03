@@ -1,21 +1,24 @@
 /**
- * THE FUTURES PAGE, DRIVEN THROUGH THE ON-CHAIN (Drift · Solana) TAB.
+ * THE FUTURES PAGE, DRIVEN THROUGH THE ON-CHAIN (Velocity · Solana) TAB.
  * ---------------------------------------------------------------------------
  * Product rule for this tab:
- *   · Drift (Solana) is the ONLY on-chain venue shown — there is no protocol
- *     comparison list, and Ostium (Arbitrum) belongs to the Stocks tab.
- *   · Markets, prices, funding, OI and candles are live reads from the BFF,
- *     which proxies Drift's public data API.
- *   · The Solana order path is NOT built, so the venue is READ_ONLY: the chart,
- *     market info and the FBT fee breakdown render from the backend's numbers,
- *     but the action is "View only" and no /prepare, /verify or wallet
- *     signature can ever happen.
- *   · When the Drift feed is down the registry says UNAVAILABLE, the tab says
- *     so and invents nothing.
+ *   · Velocity (Solana, the Drift fork; provider id `drift`) is the ONLY
+ *     on-chain venue shown — there is no protocol comparison list, and Ostium
+ *     (Arbitrum) belongs to the Stocks tab.
+ *   · Markets, prices, funding and OI are live reads from the BFF, which
+ *     proxies Velocity's public Data API (data.velocity.exchange).
+ *   · The order path is built in this tab: @velocity-exchange/sdk (prebundled
+ *     to public/vendor/velocity-sdk.js) builds Velocity instructions and the
+ *     user's OWN Solana wallet signs and sends them, so an AVAILABLE registry
+ *     row means the CTA is a real Review/Confirm flow — never a server-side
+ *     key. When the registry cannot serve the venue (dead feed, error budget)
+ *     the tab drops back to "View only" and builds nothing.
+ *   · When the Velocity feed is down the registry says UNAVAILABLE, the tab
+ *     says so and invents nothing.
  *
  * The probe mounts the REAL /perp page (Perp.jsx → FuturesOnchain.jsx →
  * futuresClient.js) with the BFF stubbed at the network boundary — exactly the
- * envelopes the Drift adapter/router produce — and drives the UI through it.
+ * envelopes the Velocity adapter/router produce — and drives the UI through it.
  */
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
@@ -36,24 +39,30 @@ const setInputValue = (input, value) => {
 };
 const click = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 
-/* ── the BFF, as the Drift router/adapter would answer it ────────────────── */
+/* ── the BFF, as the Velocity router/adapter would answer it ─────────────── */
 const MARKET = {
-  marketId: '0', pairId: '0', symbol: 'SOL/USD', base: 'SOL', quote: 'USD', category: 'crypto',
-  maxLeverage: 50, overnightMaxLeverage: null,
-  openFeeBps: 5, makerFeeBps: 2, openInterestLongUsd: null, openInterestShortUsd: null,
+  marketId: '0', pairId: '0', symbol: 'SOL/USDT', base: 'SOL', quote: 'USDT', category: 'crypto',
+  maxLeverage: 20, overnightMaxLeverage: null,
+  openFeeBps: 4, makerFeeBps: -0.25, openInterestLongUsd: null, openInterestShortUsd: null,
   openInterestUsd: 42_000_000, maxOpenInterestUsd: null,
   fundingAprPct: 8.4, rolloverAprPct: null, bid: 148.92, mid: 149.05, ask: 149.18, spreadBps: 17.4,
   isMarketOpen: true, isDayTradingClosed: false, priceAt: Date.now()
 };
-const BTC = { ...MARKET, marketId: '1', pairId: '1', symbol: 'BTC/USD', base: 'BTC', openInterestUsd: 180_000_000, fundingAprPct: 11.2, bid: 67_940, mid: 68_000, ask: 68_060, spreadBps: 17.6 };
+const BTC = { ...MARKET, marketId: '1', pairId: '1', symbol: 'BTC/USDT', base: 'BTC', openInterestUsd: 180_000_000, fundingAprPct: 11.2, bid: 67_940, mid: 68_000, ask: 68_060, spreadBps: 17.6 };
 
 function provider(status, extra = {}) {
   const p = PROVIDER_CATALOGUE.drift;
+  /* Same derivation the registry uses: the catalogue's execution model is
+     CLIENT_BUILDS_TX (the tab signs), so only AVAILABLE/DEGRADED are
+     executable — READ_ONLY/UNAVAILABLE are not, however the order path is
+     built. */
+  const executable = extra.executable ?? ['AVAILABLE', 'DEGRADED'].includes(status);
   return {
-    providerId: 'drift', name: 'Drift', status, reason: extra.reason ?? 'NOT_CONFIGURED',
-    executable: false, // the Solana order path is not built — never executable
-    execution: 'NOT_BUILT', configured: true, family: 'solana', chainId: null, chainName: 'Solana',
-    custody: 'onchain', collateral: 'USDC', markets: p.markets,
+    providerId: 'drift', name: p.name, status,
+    reason: extra.reason === undefined ? (executable ? null : 'NOT_CONFIGURED') : extra.reason,
+    executable,
+    execution: extra.execution ?? p.execution, configured: true, family: 'solana', chainId: 'solana:mainnet', chainName: 'Solana',
+    custody: 'onchain', collateral: 'USDT', markets: p.markets,
     marketCount: status === 'UNAVAILABLE' ? 0 : 2, capabilities: p.capabilities,
     fbtFeeModel: p.fbtFeeModel, fbtFeeChargedOn: 'fill', venueFeeCapBps: 20, tab: 'onchain',
     recentErrors: 0, dataAgeMs: 1000, checkedAt: Date.now()
@@ -87,7 +96,7 @@ export async function run(container) {
     const leverage = Number(body.leverage);
     const entry = side === 'long' ? market.ask : market.bid;
     const risk = assessFuturesRisk({ providerId: 'drift', side, collateralUsd, leverage, maxLeverage: market.maxLeverage, entryPrice: entry, takeProfit: body.takeProfit, stopLoss: body.stopLoss, availableBalanceUsd: null, fundingAprPct: market.fundingAprPct, isMarketOpen: market.isMarketOpen, spreadBps: market.spreadBps });
-    /* Drift: 5 bps taker fee, no flat oracle fee, network fee unknown on the read path. */
+    /* Velocity: 4 bps taker fee from the feed, no flat oracle fee, network fee unknown on the read path. */
     const fee = computeFeeBreakdown({ collateralUsd, leverage, protocolFeeBps: market.openFeeBps, protocolFlatUsd: 0, networkFeeUsd: null, policyId: 'STANDARD', venueCapBps: 20, recipient: null, chargedOn: 'fill' });
     const route = selectVenue([{ providerId: 'drift', status: providerStatus, capabilities: PROVIDER_CATALOGUE.drift.capabilities, isMarketOpen: true, maxLeverage: market.maxLeverage, protocolFeeBps: market.openFeeBps, protocolFlatUsd: 0, networkFeeUsd: null, spreadBps: market.spreadBps, openInterestUsd: market.openInterestUsd, fundingAprPct: market.fundingAprPct, dataAgeMs: 1000, supportsMarket: true }], { notionalUsd: collateralUsd * leverage, leverage });
     return { market, side, collateralUsd, leverage, entry, risk, fee, route };
@@ -99,7 +108,7 @@ export async function run(container) {
     let reqBody = {};
     try { reqBody = init?.body ? JSON.parse(init.body) : {}; } catch { reqBody = {}; }
     if (p === '/providers') {
-      /* The tab's own provider set: Drift only — Ostium/GMX/… never appear. */
+      /* The tab's own provider set: Velocity only — Ostium/GMX/… never appear. */
       return json(envelope({ providers: [provider(providerStatus, { reason: providerReason })] }));
     }
     if (p === '/health') return json(envelope({ engine: 'fbt-futures-engine', providers: [] }));
@@ -113,7 +122,7 @@ export async function run(container) {
       const candles = Array.from({ length: 24 }, (_, i) => ({ startedAt: now - (24 - i) * 3_600_000, open: 146 + i * 0.12, high: 146.4 + i * 0.12, low: 145.6 + i * 0.12, close: 146.1 + i * 0.12 }));
       return json(envelope({ provider: 'drift', ok: true, candles, live: true, resolution: url.searchParams.get('resolution') || '60' }));
     }
-    /* Wallet-scoped reads are honestly refused on the read-only Drift path. */
+    /* Wallet-scoped reads are honestly refused on the read-only Velocity path. */
     if (p.startsWith('/account/')) return failure(503, 'PROVIDER_READ_ONLY');
     if (p.startsWith('/positions/')) return failure(503, 'PROVIDER_READ_ONLY');
     if (p === '/quote') {
@@ -126,10 +135,31 @@ export async function run(container) {
         market: { marketId: q.market.marketId, symbol: q.market.symbol, bid: q.market.bid, mid: q.market.mid, ask: q.market.ask, spreadBps: q.market.spreadBps, isMarketOpen: q.market.isMarketOpen, maxLeverage: q.market.maxLeverage, fundingAprPct: q.market.fundingAprPct },
         order: { side: q.side, collateralUsd: q.collateralUsd, leverage: q.leverage, notionalUsd: q.collateralUsd * q.leverage, entryPrice: q.entry, takeProfit: body.takeProfit, stopLoss: body.stopLoss, slippageBps: body.slippageBps },
         account: null, fee: q.fee, risk: q.risk, route: q.route,
-        canExecute: false // READ_ONLY: the button must stay a view-only gate
+        /* mirrors the registry row the tab already has */
+        canExecute: ['AVAILABLE', 'DEGRADED'].includes(providerStatus)
       }));
     }
-    if (p === '/prepare' || p === '/execute') { bff.prepares += 1; return failure(409, 'PROVIDER_READ_ONLY'); }
+    if (p === '/prepare' || p === '/execute') {
+      bff.prepares += 1;
+      if (!['AVAILABLE', 'DEGRADED'].includes(providerStatus)) return failure(409, 'PROVIDER_READ_ONLY');
+      /* exactly what server/futures/router.js hands back for Velocity: the
+         quote/risk/fee truth plus the on-chain facts the SDK needs, and a
+         clientSign descriptor — no server calldata. */
+      const market = reqBody.market === '1' ? BTC : MARKET;
+      const prepared = buildQuote(reqBody);
+      return json(envelope({
+        requestId: reqBody.requestId, executionId: `fut_exec_probe_${bff.prepares}`, idempotencyKey: 'probe',
+        provider: 'drift', providerStatus, action: 'open',
+        market: { marketId: market.marketId, symbol: market.symbol, mid: market.mid, bid: market.bid, ask: market.ask, priceAt: market.priceAt, maxLeverage: market.maxLeverage, marketIndex: Number(market.marketId), collateralToken: 'USDT' },
+        order: { side: prepared.side, collateralUsd: prepared.collateralUsd, leverage: prepared.leverage, notionalUsd: prepared.collateralUsd * prepared.leverage, entryPrice: prepared.entry, takeProfit: reqBody.takeProfit ?? null, stopLoss: reqBody.stopLoss ?? null, slippageBps: reqBody.slippageBps ?? 25 },
+        account: { balanceUsd: null, allowanceUsd: null, needsApproval: false },
+        fee: prepared.fee, risk: prepared.risk, route: prepared.route,
+        simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: null, code: 'CLIENT_BUILDS_TX' },
+        transactions: [],
+        clientSign: { family: 'solana', program: 'vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P', sdk: '@velocity-exchange/sdk', buildsInTab: true },
+        state: 'PREPARED', expiresAt: Date.now() + 45_000
+      }));
+    }
     if (p === '/verify') { bff.verifies += 1; return failure(409, 'PROVIDER_READ_ONLY'); }
     return failure(404, 'NOT_FOUND');
   };
@@ -185,11 +215,11 @@ export async function run(container) {
     await act(async () => { click(strip[2]); });
     await act(async () => { await sleep(500); });
     t('the On-Chain tab mounts lazily when tapped', !!byId('futures-provider-status'));
-    t('an unreachable Drift feed is shown as UNAVAILABLE from the registry', byId('futures-provider-status')?.textContent.trim() === 'Unavailable');
+    t('an unreachable Velocity feed is shown as UNAVAILABLE from the registry', byId('futures-provider-status')?.textContent.trim() === 'Unavailable');
     t('no market list is invented while the feed is down', !!byId('futures-markets-unavailable') && !byId('futures-market-select'));
     t('the unavailable notice names the reason and says no order can be built', /not available right now \(price feed unreachable\)/.test(byId('futures-readonly-notice')?.textContent || '') && /No order can be built/.test(byId('futures-readonly-notice')?.textContent || ''));
     t('NO protocol comparison list is rendered — the protocols section is gone', !qa('[data-testid^="futures-provider-"]').some((el) => el.tagName === 'BUTTON') && !/Ostium|GMX|Hyperliquid|Avantis/i.test(container.textContent));
-    t('the venue card names Drift on Solana and only Drift', /Drift/.test(byId('futures-venue-card')?.textContent || '') && /Solana/.test(byId('futures-venue-card')?.textContent || ''));
+    t('the venue card names Velocity on Solana and only Velocity', /Velocity/.test(byId('futures-venue-card')?.textContent || '') && /Solana/.test(byId('futures-venue-card')?.textContent || '') && !/Drift/.test(byId('futures-venue-card')?.textContent || ''));
     t('nothing was quoted or prepared while UNAVAILABLE', bff.prepares === 0);
 
     /* ═══════ B. READ_ONLY — live chart + fees, the view-only gate, no order ═══════ */
@@ -198,29 +228,58 @@ export async function run(container) {
     await act(async () => { click(strip[0]); });
     await act(async () => { click(strip[2]); });
     await act(async () => { await sleep(700); });
-    t('a READ_ONLY Drift shows its crypto markets', !!byId('futures-market-select') && qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).join() === 'SOL/USD,BTC/USD');
-    t('Drift crypto markets are the only category — no stocks/forex/commodities tabs', qa('.tag').every((b) => !/Stocks|Forex|Commodit|Indices|ETF/i.test(b.textContent)));
+    t('a READ_ONLY Velocity venue shows its crypto markets', !!byId('futures-market-select') && qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).join() === 'SOL/USDT,BTC/USDT');
+    t('Velocity crypto markets are the only category — no stocks/forex/commodities tabs', qa('.tag').every((b) => !/Stocks|Forex|Commodit|Indices|ETF/i.test(b.textContent)));
     t("the read-only sentence is shown verbatim (en)", byId('futures-readonly-notice')?.textContent.trim() === 'This market is currently available for viewing only.');
     t('the chart is visible in its live state (candles from the BFF), not the unavailable box', !!byId('futures-trend') && !byId('futures-trend-empty') && /on-chain candles/.test(byId('futures-chart')?.textContent || ''));
-    t('market info shows funding and Drift protocol fee (5 bps) from the BFF', /8\.4/.test(byId('futures-market-info')?.textContent || '') && /5 bps/.test(byId('futures-market-info')?.textContent || ''));
+    t('market info shows funding and the Velocity protocol fee (4 bps) from the BFF', /8\.4/.test(byId('futures-market-info')?.textContent || '') && /4 bps/.test(byId('futures-market-info')?.textContent || ''));
     t('the fee breakdown comes from the engine: 50 × 5 = $250 notional, protocol 5 bps = $0.13, FBT 5 bps = $0.13', /\$250/.test(byId('futures-fee-breakdown')?.textContent || '') && /\$0\.1[23]/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the total is NOT printed while the network fee is unknown', /shown at review/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the risk verdict is rendered with its score', /\/100/.test(byId('futures-risk')?.textContent || ''));
     t('the status pill reports the read-only venue honestly', byId('futures-provider-status')?.textContent.trim() === 'Read-only');
     t('without a wallet the action still says View only — the venue is read-only, tradeable never', byId('futures-review')?.textContent.trim() === 'View only' && byId('futures-review')?.disabled === true);
-    t('no /prepare and no /verify call ever happens on the Drift read-only tab', bff.prepares === 0 && bff.verifies === 0);
+    t('no /prepare and no /verify call ever happens on the read-only Velocity tab', bff.prepares === 0 && bff.verifies === 0);
     t('quotes DID run (the fee breakdown is live), they just never execute', bff.quotes >= 1);
 
     /* ═══════ C. quote input still re-computes fee/risk live ═══════ */
     await act(async () => { setInputValue(byId('futures-collateral'), '100'); });
     await act(async () => { setInputValue(byId('futures-leverage'), '10'); });
     await act(async () => { await sleep(600); });
-    t('the live quote re-runs on input: $1,000 notional, Drift protocol $0.5, FBT fee $0.5', /\$1,000/.test(byId('futures-fee-breakdown')?.textContent || '') && /Protocol fee\$0\.5/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(5 bps\)\$0\.5/.test(byId('futures-fee-breakdown')?.textContent || ''));
+    t('the live quote re-runs on input: $1,000 notional, Velocity protocol $0.4, FBT fee $0.5', /\$1,000/.test(byId('futures-fee-breakdown')?.textContent || '') && /Protocol fee\$0\.4/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(5 bps\)\$0\.5/.test(byId('futures-fee-breakdown')?.textContent || ''));
     await act(async () => { setInputValue(byId('futures-leverage'), '75'); });
     await act(async () => { await sleep(600); });
-    t('leverage above Drift\'s 50x max is clamped to the market maximum', Number(byId('futures-leverage')?.value) <= 50);
+    t('leverage above the market\'s 20x cap is clamped to the market maximum', Number(byId('futures-leverage')?.value) <= 20);
     t('the (view-only) button stays disabled — no order path exists', byId('futures-review')?.disabled === true);
     t('tapping review on a read-only venue never opens a confirmation sheet', (() => { act(() => { try { click(byId('futures-review')); } catch { /* disabled */ } }); return !document.querySelector('[data-testid="futures-confirm"]'); })());
+
+    /* ═══════ C2. AVAILABLE — the order path is built, so the tab trades ═══════ */
+    providerStatus = 'AVAILABLE'; providerReason = null;
+    /* remount the tab so it re-reads the registry, exactly as a user tapping
+       back into On-Chain after a recovery would */
+    await act(async () => { click(strip[0]); });
+    await act(async () => { click(strip[2]); });
+    await act(async () => { await sleep(700); });
+    t('an AVAILABLE Velocity venue reports Available from the registry', byId('futures-provider-status')?.textContent.trim() === 'Available', byId('futures-provider-status')?.textContent);
+    t('the venue card drops the coming-soon pill once the order path is built', !/Coming soon/.test(byId('futures-venue-card')?.textContent || ''));
+    t('the venue card says the order path is ready with the live market count', /Order path ready · 2 markets/.test(byId('futures-venue-card')?.textContent || ''), byId('futures-venue-card')?.textContent);
+    t('the read-only notice disappears on an executable venue', !byId('futures-readonly-notice'));
+    t('without a wallet the CTA is Connect wallet — enabled, and never a server-side key', byId('futures-review')?.textContent.trim() === 'Connect wallet' && byId('futures-review')?.disabled === false, byId('futures-review')?.textContent);
+    t('no order is prepared before the user reviews it', bff.prepares === 0 && bff.verifies === 0);
+
+    /* The trade module the tab hands the confirmed order to. */
+    const venue = await import('../src/lib/velocityTrade.js');
+    t('the trade module exports the whole Velocity order surface',
+      ['openVelocityPosition', 'closeVelocityPosition', 'setVelocityTpSl', 'cancelVelocityOrders', 'getVelocityPositions']
+        .every((fn) => typeof venue[fn] === 'function'));
+    t('the trade module pins Velocity\'s USDT quote mint, not Drift\'s USDC',
+      venue.VELOCITY_QUOTE_MINT === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' && venue.VELOCITY_QUOTE_DECIMALS === 6);
+    /* No wallet and no vendor bundle in this harness: the module must fail
+       closed with a stable code instead of throwing a raw import error. */
+    const noBundle = await venue.openVelocityPosition({ wallet: 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd', marketIndex: 0, side: 'long', notionalUsd: 100, oraclePrice: 149.05 }).then(() => null, (e) => e);
+    t('a missing SDK bundle fails closed as PROVIDER_UNAVAILABLE, never a raw import error',
+      noBundle?.code === 'PROVIDER_UNAVAILABLE' && /vendor\/velocity-sdk\.js/.test(String(noBundle?.message)), String(noBundle?.message).slice(0, 90));
+    const noBundleRead = await venue.getVelocityPositions({ wallet: 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd' }).then(() => null, (e) => e);
+    t('the position read fails closed the same way', noBundleRead?.code === 'PROVIDER_UNAVAILABLE');
 
     /* ═══════ D. the other tabs are untouched ═══════ */
     await act(async () => { click(strip[1]); });
@@ -235,7 +294,7 @@ export async function run(container) {
     await mountAt('#/perp?tab=onchain&market=BTC&side=short&collateral=120&leverage=7');
     await act(async () => { await sleep(900); });
     t('the deep link opens the On-Chain tab directly', tabs()[2]?.getAttribute('aria-selected') === 'true' && !!byId('futures-market-select'));
-    t('the requested Drift market is selected: BTC/USD', byId('futures-market-select')?.value === '1');
+    t('the requested Velocity market is selected: BTC/USDT', byId('futures-market-select')?.value === '1');
     t('side, collateral and leverage are pre-filled from the draft', q('.dir-btn.short')?.classList.contains('active') === true && byId('futures-collateral')?.value === '120' && byId('futures-leverage')?.value === '7');
     t('a deep link builds and signs NOTHING by itself', bff.prepares === preparesBefore && !document.querySelector('[data-testid="futures-confirm"]'));
 
@@ -245,7 +304,7 @@ export async function run(container) {
     t('the Persian locale loads and becomes active', faOk === true && i18n.language === 'fa');
     t('the document flips to RTL for Persian', document.documentElement.getAttribute('dir') === 'rtl');
     t('the tab strip reads پرپچوال · مدار dYdX · آن‌چین in Persian', tabs().map((b) => b.textContent.trim()).join('|') === 'پرپچوال|مدار dYdX|آن‌چین');
-    t('the Drift venue card is Persian-localised (Solana + coming-soon + read-only in fa)', (() => { const tx = byId('futures-venue-card')?.textContent || ''; if (process.env.DEBUG_FA) console.log('FA_CARD>>>', tx); return /سولانا/.test(tx) && /به‌زودی|به زودی/.test(tx) && byId('futures-provider-status')?.textContent.trim() === 'فقط مشاهده'; })());
+    t('the Velocity venue card is Persian-localised (Solana + order path ready + available in fa)', (() => { const tx = byId('futures-venue-card')?.textContent || ''; if (process.env.DEBUG_FA) console.log('FA_CARD>>>', tx); return /سولانا/.test(tx) && /مسیر سفارش آماده/.test(tx) && !/به‌زودی|به زودی/.test(tx) && byId('futures-provider-status')?.textContent.trim() === 'در دسترس'; })());
     t('no unexpected console errors', errors.length === 0 || (console.log(errors.slice(0, 3)), false));
   } finally {
     if (root) await act(async () => { root.unmount(); });

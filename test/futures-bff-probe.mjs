@@ -135,25 +135,107 @@ try {
     ? driftMarkets.json.data.markets.every((m) => m.category === 'crypto' && m.mid > 0)
     : driftMarkets.json?.ok === false);
   const driftFees = await get('/api/v1/futures/fees?provider=drift&collateral=100&leverage=10&market=0');
-  t('Drift fee preview uses Drift venue fees (no Ostium oracle flat fee)', driftFees.status === 200
-    ? driftFees.json.data.fee.protocol.flatUsd === 0 && (driftFees.json.data.fee.protocol.bps === 5 || driftFees.json.data.fee.protocol.bps === null)
+  t('Velocity fee preview uses the venue fee from the feed (no Ostium oracle flat fee)', driftFees.status === 200
+    ? driftFees.json.data.fee.protocol.flatUsd === 0
+      /* 4 bps = the feed's fees.taker 0.0004; null when the feed is down. */
+      && (driftFees.json.data.fee.protocol.bps === 4 || driftFees.json.data.fee.protocol.bps === null)
     : driftFees.json?.ok === false);
-  /* Drift order path: the server builds NO calldata and holds no key. With a
-     live feed it returns a client-builds payload (empty transactions[],
-     clientSign.buildsInTab, Solana program id); with the feed down in CI it
-     refuses honestly with the provider health — never an EVM unsigned tx. */
+  /* ── Velocity order path: EXECUTABLE, built and signed IN THE TAB ───────
+     The venue moved off Drift (paused program) to Velocity and the browser SDK
+     bundle was migrated with it, so /prepare no longer refuses: it returns the
+     quote/risk/fee truth plus the on-chain facts the SDK needs — the perp
+     market index and the USDT collateral token — with a `clientSign`
+     descriptor and NO server calldata, because the tab builds the Velocity
+     instructions and the user's wallet signs and sends them. Only the network
+     boundary is stubbed; the server, registry, adapter and ledger are real. */
   const SOL_WALLET = 'DRfFtYV4BHJoJEZx8LZ4FqfKnGkm8fQaLt8QxN3FgGd';
-  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_drift_prep_01' });
-  const d = driftPrepare.json?.data;
-  t('Drift /prepare returns the client-builds-tx payload or an honest refusal',
-    driftPrepare.json?.ok === true
-      ? d.clientSign?.family === 'solana' && d.clientSign?.buildsInTab === true
-        && Array.isArray(d.transactions) && d.transactions.length === 0
-        && d.market?.marketIndex === 0 && d.state === 'PREPARED'
-        && d.clientSign?.program === 'dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'
-      : ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY', 'FEED_STALE'].includes(driftPrepare.json?.error?.code));
-  const driftBadWallet = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: 'not-a-wallet' }, { 'idempotency-key': 'fut_probe_drift_badw_01' });
-  t('Drift /prepare rejects a wallet that is neither an EVM nor a Solana address', driftBadWallet.status === 400 && driftBadWallet.json?.error?.code === 'WALLET_NOT_CONNECTED');
+  const VELOCITY_PROGRAM_ID = 'vELoC1audYbSYVRXn1vPaV8Axoa9oU6BYmNGZZBDZ1P';
+  const V_STATS = {
+    success: true,
+    markets: [
+      { symbol: 'USDT', marketIndex: 0, marketType: 'spot', status: 'active', precision: 6, oraclePrice: '1.000000' },
+      {
+        symbol: 'SOL-PERP', marketIndex: 0, marketType: 'perp', uiStatus: 'visible', baseAsset: 'SOL', quoteAsset: 'USDT', status: 'active', precision: 9,
+        limits: { leverage: { min: 1, max: 20 }, amount: { min: 0.01, max: 16081.91 } }, fees: { maker: -0.000025, taker: 0.0004 },
+        oraclePrice: '99.642107', markPrice: '99.854000', baseVolume: '7.880000', quoteVolume: '781.189477',
+        openInterest: { long: '110.49', short: '-11.42' }, fundingRate: { long: '-0.007591', short: '0.007591' }
+      }
+    ]
+  };
+  const V_L2 = {
+    bids: [{ price: '99800000', size: '1000000000' }], asks: [{ price: '99900000', size: '1000000000' }],
+    bestBidPrice: '99800000', bestAskPrice: '99900000', marketType: 'perp', marketIndex: 0, ts: 1788386414000, slot: 474184487
+  };
+  const realFetch = globalThis.fetch;
+  let velocityFeedLive = true;
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.startsWith('https://data.velocity.exchange/stats/markets')) {
+      if (!velocityFeedLive) throw new TypeError('fetch failed');
+      return Response.json(V_STATS);
+    }
+    if (u.startsWith('https://dlob.velocity.exchange/l2')) return Response.json(V_L2);
+    if (u.startsWith('https://api.mainnet-beta.solana.com')) {
+      const body = JSON.parse(String(init?.body || '{}'));
+      /* readAccount only needs getBalance; the USDT collateral is decoded in
+         the tab, so the server honestly reports balanceUsd = null. */
+      if (body.method === 'getBalance') return Response.json({ jsonrpc: '2.0', id: body.id ?? 1, result: { context: { slot: 1 }, value: 12_345_678 } });
+      return Response.json({ jsonrpc: '2.0', id: body.id ?? 1, result: null });
+    }
+    return realFetch(url, init);
+  };
+  const registry = await import('../server/futures/registry.js');
+  const { memoryStore } = await import('../server/cache.js');
+  memoryStore.clear();
+  registry.resetFuturesRegistry();
+
+  const live = await get('/api/v1/futures/providers');
+  const liveRow = live.json?.data?.providers?.find((p) => p.providerId === 'drift');
+  t('with a live feed the registry reports Velocity AVAILABLE and executable',
+    liveRow?.status === 'AVAILABLE' && liveRow?.executable === true
+      && liveRow?.execution === 'CLIENT_BUILDS_TX' && liveRow?.marketCount === 1,
+    `${liveRow?.status}/${liveRow?.execution}/${liveRow?.marketCount}`);
+
+  const driftPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_velocity_prep_01' });
+  const pd = driftPrepare.json?.data;
+  t('Velocity /prepare hands the order to the tab instead of refusing',
+    driftPrepare.status === 200 && driftPrepare.json?.ok === true && pd?.state === 'PREPARED',
+    JSON.stringify(driftPrepare.json?.error || driftPrepare.status));
+  t('the prepared payload carries the Velocity program and the SDK that builds it',
+    pd?.clientSign?.program === VELOCITY_PROGRAM_ID && pd?.clientSign?.sdk === '@velocity-exchange/sdk'
+      && pd?.clientSign?.buildsInTab === true && pd?.clientSign?.family === 'solana');
+  t('the prepared payload gives the SDK the perp index and the USDT collateral token',
+    pd?.market?.marketIndex === 0 && pd?.market?.collateralToken === 'USDT' && pd?.market?.mid > 0);
+  t('the server builds no calldata for a client-built transaction',
+    Array.isArray(pd?.transactions) && pd.transactions.length === 0 && pd?.simulation?.code === 'CLIENT_BUILDS_TX');
+  t('the prepared order keeps the quote, the risk verdict and the fee breakdown',
+    pd?.order?.side === 'long' && pd?.order?.notionalUsd === 1000 && typeof pd?.risk?.riskScore === 'number'
+      && pd?.fee && pd?.account && pd.account.needsApproval === false);
+  t('the prepared Velocity order is written to the ledger',
+    /^fut_exec_/.test(pd?.executionId || '') && pd?.idempotencyKey === 'fut_probe_velocity_prep_01');
+  const execRows = await get(`/api/v1/futures/executions/${SOL_WALLET}`);
+  const row = (execRows.json?.data?.executions || []).find((e) => e.executionId === pd?.executionId);
+  t('the ledger row points at the Velocity program and is unsigned',
+    row?.tx?.to === VELOCITY_PROGRAM_ID && row?.tx?.chainId === 'solana:mainnet' && row?.tx?.calldataHash === null && row?.state === 'PREPARED');
+  const replay = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_velocity_prep_01' });
+  t('replaying the same idempotency key returns the same execution', replay.json?.data?.executionId === pd?.executionId && replay.json?.meta?.replay === true);
+
+  /* A dark feed must still refuse — executable ≠ unconditional. */
+  velocityFeedLive = false;
+  memoryStore.clear();
+  registry.resetFuturesRegistry();
+  const darkPrepare = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: SOL_WALLET }, { 'idempotency-key': 'fut_probe_velocity_prep_dark_01' });
+  t('Velocity /prepare refuses honestly when the feed is down',
+    darkPrepare.json?.ok !== true && darkPrepare.status === 409
+      && ['PROVIDER_UNAVAILABLE', 'PROVIDER_READ_ONLY', 'FEED_STALE'].includes(darkPrepare.json?.error?.code),
+    JSON.stringify(darkPrepare.json?.error || darkPrepare.status));
+
+  globalThis.fetch = realFetch;
+  velocityFeedLive = true;
+  memoryStore.clear();
+  registry.resetFuturesRegistry();
+  const driftBadWallet = await post('/api/v1/futures/prepare', { provider: 'drift', market: '0', side: 'long', collateralUsd: 100, leverage: 10, wallet: 'not-a-wallet' }, { 'idempotency-key': 'fut_probe_velocity_badw_01' });
+  t('Velocity /prepare rejects a wallet that is neither an EVM nor a Solana address', driftBadWallet.status === 400 && driftBadWallet.json?.error?.code === 'WALLET_NOT_CONNECTED');
   /* An EVM-shaped hash must never be accepted as a Drift receipt: the unknown
      execution still 404s first, but a well-formed id + Solana record would
      hit isSolanaSignature; here we pin that the route never fabricates a

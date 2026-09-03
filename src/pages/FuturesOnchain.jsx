@@ -40,11 +40,12 @@ import { useFuturesStore, emitFuturesEvent } from '../lib/futures-engine/store';
 import { mapFuturesError } from '../lib/futures-engine/errors';
 import { createFuturesTxMachine, FUTURES_TX_STATE } from '../lib/futures-engine/stateMachine';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
-import { driftPerpIndex } from '../lib/driftMarkets';
+import { velocityPerpIndex } from '../lib/velocityMarkets';
 
-/* The on-chain futures tab is Drift (Solana) and ONLY Drift. Ostium and the
-   other venues live elsewhere (Stocks tab / their own tabs); this screen never
-   lists a protocol comparison. */
+/* The on-chain futures tab is Velocity (Solana) and ONLY Velocity — the Drift
+   fork; the provider id is still `drift` for ledger/UI continuity. Ostium and
+   the other venues live elsewhere (Stocks tab / their own tabs); this screen
+   never lists a protocol comparison. */
 const ONCHAIN_PROVIDER_ID = 'drift';
 const CATEGORY_ORDER = ['Crypto'];
 const friendlyCategory = (raw) => {
@@ -149,14 +150,14 @@ export default function FuturesOnchain() {
   const executable = Boolean(provider?.executable);
   const readOnly = provider && !executable;
 
-  /* ── provider (registry) — Drift only; the registry just tells us status ── */
+  /* ── provider (registry) — Velocity only; the registry just tells us status ── */
   const loadProviders = useCallback(async () => {
     const res = await getFuturesProviders();
     const rows = res.ok ? res.data.providers : [];
-    /* This tab presents Drift (Solana) and no other venue. */
-    const drift = rows.filter((p) => p.providerId === ONCHAIN_PROVIDER_ID);
-    setProviders(drift);
-    store.setProviders(drift, res.ok ? 'live' : 'unavailable');
+    /* This tab presents Velocity (Solana) and no other venue. */
+    const venue = rows.filter((p) => p.providerId === ONCHAIN_PROVIDER_ID);
+    setProviders(venue);
+    store.setProviders(venue, res.ok ? 'live' : 'unavailable');
     setProvidersLoading(false);
   }, [store]);
 
@@ -239,7 +240,7 @@ export default function FuturesOnchain() {
     return a > 0 ? ((b - a) / a) * 100 : 0;
   }, [candles.rows]);
 
-  /* Drift settles on Solana; its signing wallet is the Solana wallet, not the
+  /* Velocity settles on Solana; its signing wallet is the Solana wallet, not the
      EVM one. Ostium-style EVM venues would use the EVM wallet address. */
   const tradingAddress = provider?.family === 'solana' ? solWallet.address : wallet.address;
 
@@ -251,23 +252,26 @@ export default function FuturesOnchain() {
     setPositions((p) => ({ ...p, loading: true }));
     const [acc, pos] = await Promise.all([getFuturesAccount(tradingAddress, providerId), getFuturesPositions(tradingAddress, providerId)]);
     setAccount(acc.ok ? acc.data : null);
-    /* Drift positions are decoded in the browser with the SDK. */
+    /* Velocity positions are decoded in the BROWSER with the venue SDK
+       (getVelocityPositions → user.getActivePerpPositions plus the open
+       reduce-only triggers), because the server cannot decode the on-chain user
+       account without the SDK. */
     if (provider.family === 'solana') {
       try {
-        const { getDriftPositions } = await import('../lib/driftTrade.js');
-        const result = await getDriftPositions({ wallet: tradingAddress });
-        const driftRows = Array.isArray(result) ? result : (result.positions || []);
+        const { getVelocityPositions } = await import('../lib/velocityTrade.js');
+        const result = await getVelocityPositions({ wallet: tradingAddress });
+        const velocityRows = Array.isArray(result) ? result : (result.positions || []);
         const live = await getFuturesMarkets(providerId);
         const byIndex = new Map((live.ok ? live.data.markets : []).map((m) => [Number(m.marketId), m]));
-        const mapped = driftRows.filter((r) => r.openOrders > 0 || Number(r.baseAssetAmount) !== 0).map((r) => {
+        const mapped = velocityRows.filter((r) => r.openOrders > 0 || Number(r.baseAssetAmount) !== 0).map((r) => {
           const mk = byIndex.get(r.marketIndex);
           return {
             positionId: `drift:${r.marketIndex}:0`, providerId: 'drift', marketId: String(r.marketIndex),
-            symbol: mk?.symbol || `MKT-${r.marketIndex}/USD`, pairId: String(r.marketIndex), index: 0,
+            symbol: mk?.symbol || `MKT-${r.marketIndex}/USDT`, pairId: String(r.marketIndex), index: 0,
             side: Number(r.baseAssetAmount) >= 0 ? 'long' : 'short',
             collateralUsd: mk ? (Math.abs(Number(r.quoteAssetAmount)) || 0) : 0,
             leverage: 1, notionalUsd: 0, entryPrice: mk?.mid || 0, markPrice: mk?.mid ?? null,
-            takeProfit: r.takeProfit ?? null, stopLoss: r.stopLoss ?? null, maxLeverage: mk?.maxLeverage ?? 50,
+            takeProfit: r.takeProfit ?? null, stopLoss: r.stopLoss ?? null, maxLeverage: mk?.maxLeverage ?? 20,
             grossPnlPct: null, grossPnlUsd: null,
             pnlBasis: 'price-only; funding is settled by the venue and not included', chainId: 'solana:mainnet'
           };
@@ -322,13 +326,14 @@ export default function FuturesOnchain() {
   const setMachine = (next, meta) => { const r = machineRef.current.transition(next, meta); if (r.ok) setTxState(next); return r.ok; };
   const resetMachine = () => { machineRef.current = createFuturesTxMachine({ action: 'open' }); setTxState(FUTURES_TX_STATE.IDLE); };
 
-  const isDrift = provider?.family === 'solana';
+  /* The Solana venue (Velocity) signs with the Solana wallet, not the EVM one. */
+  const isSolanaVenue = provider?.family === 'solana';
 
-  /* ── review: create the order record server-side (no calldata for Solana;
-     the Drift SDK builds + signs the transactions in this tab) ───────────── */
+  /* ── review: create the order record server-side (no calldata for the Solana
+     venue — the venue SDK builds + signs in this tab when that path exists) ── */
   const openReview = async () => {
     setError(null);
-    if (isDrift) {
+    if (isSolanaVenue) {
       if (!solWallet.isConnected) {
         try { await solWallet.connect(); }
         catch (e) { if (!/REJECTED/i.test(String(e?.message))) setError('WALLET_NOT_CONNECTED'); return; }
@@ -340,7 +345,7 @@ export default function FuturesOnchain() {
     setBusy(true);
     try {
       setMachine(FUTURES_TX_STATE.VALIDATING);
-      if (!isDrift) await ensureChain();
+      if (!isSolanaVenue) await ensureChain();
       setMachine(FUTURES_TX_STATE.QUOTING);
       const res = await prepareFutures({
         provider: providerId, market: market.marketId, side, collateralUsd: Number(collateral), leverage: Number(leverage),
@@ -374,24 +379,26 @@ export default function FuturesOnchain() {
     try {
       if (Date.now() > prepared.expiresAt) throw Object.assign(new Error('QUOTE_EXPIRED'), { code: 'QUOTE_EXPIRED' });
 
-      /* ── Drift (Solana): build + sign + send with the Drift SDK and the
-         user's own Solana wallet (FBT never holds a key). ── */
-      if (prepared.clientSign?.buildsInTab || isDrift) {
+      /* ── Velocity (Solana): build + sign + send with @velocity-exchange/sdk
+         and the user's own Solana wallet. /prepare hands back the perp market
+         index and the USDT collateral token; the tab derives the PDAs, tops up
+         USDT if needed and places the market order — FBT never holds a key. ── */
+      if (prepared.clientSign?.buildsInTab || isSolanaVenue) {
         setMachine(FUTURES_TX_STATE.SIMULATING);
         setMachine(FUTURES_TX_STATE.AWAITING_SIGNATURE);
-        const { openDriftPosition } = await import('../lib/driftTrade.js');
-        const marketIndex = prepared.market?.marketIndex ?? driftPerpIndex(market?.base);
+        const { openVelocityPosition } = await import('../lib/velocityTrade.js');
+        const marketIndex = prepared.market?.marketIndex ?? velocityPerpIndex(market?.base);
         if (marketIndex == null) throw Object.assign(new Error('MARKET_NOT_LISTED'), { code: 'MARKET_NOT_LISTED' });
         let result;
         try {
-          result = await openDriftPosition({
+          result = await openVelocityPosition({
             wallet: tradingAddress,
             marketIndex: Number(marketIndex),
             side: prepared.order.side,
             notionalUsd: prepared.order.notionalUsd,
             oraclePrice: prepared.market.mid,
             slippageBps: prepared.order.slippageBps ?? 25,
-            depositUsdc: Number(collateral)
+            depositQuote: Number(collateral)
           });
         } catch (e) {
           const code = /reject|denied|cancel|4001/i.test(String(e?.message)) ? 'USER_REJECTED' : (e?.code || 'SIMULATION_FAILED');
@@ -491,16 +498,16 @@ export default function FuturesOnchain() {
     setBusy(true);
     setError(null);
     try {
-      /* Drift (Solana): close (reduce-only market) and TP/SL (reduce-only
+      /* Velocity (Solana): close (reduce-only market) and TP/SL (reduce-only
          trigger orders) are built + signed in tab with the user's wallet.
-         Partial close / increase are not offered in the UI for Drift yet. */
-      if (isDrift) {
+         Partial close / increase are not offered in the UI for Velocity yet. */
+      if (isSolanaVenue) {
         if (!solWallet.isConnected) { try { await solWallet.connect(); } catch { throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' }); } }
-        const drift = await import('../lib/driftTrade.js');
+        const venue = await import('../lib/velocityTrade.js');
         const marketIndex = Number(String(managing.positionId).split(':')[1]);
         let result;
         if (manageAction === 'close') {
-          result = await drift.closeDriftPosition({ wallet: tradingAddress, marketIndex });
+          result = await venue.closeVelocityPosition({ wallet: tradingAddress, marketIndex });
         } else if (manageAction === 'tp' || manageAction === 'sl') {
           /* The sheet edits one trigger at a time; the existing value of the
              OTHER trigger is preserved (positions arrive with takeProfit /
@@ -512,7 +519,7 @@ export default function FuturesOnchain() {
           const sl = manageAction === 'sl'
             ? (Number.isFinite(incoming) && incoming > 0 ? incoming : null)
             : (managing.stopLoss ?? null);
-          result = await drift.setDriftTpSl({ wallet: tradingAddress, marketIndex, tpPrice: tp, slPrice: sl });
+          result = await venue.setVelocityTpSl({ wallet: tradingAddress, marketIndex, tpPrice: tp, slPrice: sl });
         } else {
           setError('PROVIDER_READ_ONLY');
           return;
@@ -560,14 +567,14 @@ export default function FuturesOnchain() {
   };
 
   /* A read-only venue (no executable order path) stays a "View only" gate.
-     Drift now builds + signs Solana transactions in this tab, so a connected
+     Velocity now builds + signs Solana transactions in this tab, so a connected
      Solana wallet gets the real Review/Confirm flow. */
-  const connected = isDrift ? solWallet.isConnected : wallet.isConnected;
+  const connected = isSolanaVenue ? solWallet.isConnected : wallet.isConnected;
   const buttonLabel = readOnly
     ? t('futures.readOnlyButton')
     : !connected
       ? t('futures.connect')
-      : !isDrift && provider?.chainId && wallet.chainId !== provider.chainId
+      : !isSolanaVenue && provider?.chainId && wallet.chainId !== provider.chainId
         ? t('futures.switchNetwork', { chain: provider.chainName })
         : needsApproval
           ? t('futures.approveAndReview')
@@ -598,14 +605,14 @@ export default function FuturesOnchain() {
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
         </motion.div>
 
-        {/* ── the venue: Drift on Solana (the only on-chain protocol) ────── */}
+        {/* ── the venue: Velocity on Solana (the only on-chain protocol) ── */}
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }} data-testid="futures-venue-card">
           {providersLoading && !providers.length ? <div className="skel" style={{ height: 76 }} /> : (
             <div className="wallet-option" style={{ borderColor: 'rgba(0,229,255,0.35)', cursor: 'default' }}>
-              <span className="wallet-badge" style={{ color: executable ? 'var(--rgb-1)' : 'var(--text-3)' }}>DRF</span>
+              <span className="wallet-badge" style={{ color: executable ? 'var(--rgb-1)' : 'var(--text-3)' }}>VEL</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>
-                  {provider?.name || 'Drift'} <span className="faint">· {chainLabel(provider)}</span>
+                  {provider?.name || 'Velocity'} <span className="faint">· {chainLabel(provider)}</span>
                   {!executable && <span className="pill pill-neutral" style={{ marginInlineStart: 8 }}>{t('futures.protocolAvailableSoon')}</span>}
                 </span>
                 <span className="set-row-sub">
@@ -804,7 +811,7 @@ export default function FuturesOnchain() {
         )}
 
         {/* ── my positions ──────────────────────────────────────────────── */}
-        {(isDrift ? solWallet.isConnected : wallet.isConnected) && (provider?.execution === 'ONCHAIN_UNSIGNED_TX' || isDrift) && (
+        {(isSolanaVenue ? solWallet.isConnected : wallet.isConnected) && (provider?.execution === 'ONCHAIN_UNSIGNED_TX' || isSolanaVenue) && (
           <section style={{ marginTop: 18 }} data-testid="futures-positions" ref={positionsRef}>
             <div className="row-between" style={{ marginBottom: 10 }}>
               <p className="section-label">{t('futures.positions')}</p>
@@ -827,7 +834,7 @@ export default function FuturesOnchain() {
                     <div className="row-between"><span className="faint">{t('futures.tpSl')}</span><span className="mono">{p.takeProfit ? `$${fmtPrice(p.takeProfit)}` : '—'} / {p.stopLoss ? `$${fmtPrice(p.stopLoss)}` : '—'}</span></div>
                     <p className="faint" style={{ margin: '6px 0 0' }}>{t('futures.pnlBasis')}</p>
                     <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
-                      {(isDrift
+                      {(isSolanaVenue
                         ? [['tp', t('futures.manage.tp')], ['sl', t('futures.manage.sl')], ['close', t('futures.manage.close')]]
                         : [['tp', t('futures.manage.tp')], ['sl', t('futures.manage.sl')], ['increase', t('futures.manage.increase')], ['decrease', t('futures.manage.decrease')], ['close', t('futures.manage.close')]]
                       ).map(([a, label]) => (

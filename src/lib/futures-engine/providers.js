@@ -21,10 +21,11 @@
  * the product rule is no CEX trading APIs, and a catalogue entry is the first
  * step toward one.
  *
- * The On-Chain tab of the Futures engine shows Drift (Solana) ONLY — that is
- * the venue FBT is integrating. Ostium (Arbitrum) serves stocks/RWA in its own
- * Stocks tab; it is kept in the catalogue for the registry/ledger but is not
- * part of the on-chain futures page.
+ * The On-Chain tab of the Futures engine shows Velocity (Solana) ONLY — the
+ * Drift-fork venue FBT is integrating; the provider id is still `drift`. Ostium
+ * (Arbitrum) serves stocks/RWA in its own Stocks tab; it is kept in the
+ * catalogue for the registry/ledger but is not part of the on-chain futures
+ * page.
  */
 
 export const PROVIDER_STATUS = Object.freeze({
@@ -178,19 +179,30 @@ export const PROVIDER_CATALOGUE = Object.freeze({
     capabilities: flags(),
     tab: null
   }),
-  /* Drift (Solana) — the venue of the On-Chain futures tab. The public Data
-     API feeds live markets/prices/funding/OI/candles (READ), and the browser
-     builds + signs real Drift transactions with @drift-labs/sdk and the user's
-     own Solana wallet (FBT never holds a key). The server never signs for
-     Solana; it provides quote/risk/fee truth and verifies receipts on chain. */
+  /* Velocity (Solana) — the venue of the On-Chain futures tab.
+     Drift's program was PAUSED; the protocol continues as Velocity Protocol, a
+     fork of Drift v2 with its own program ID, its own Data API host
+     (data.velocity.exchange) and USDT — not USDC — as the quote asset. The
+     public Data API feeds live markets/prices/funding/OI (READ).
+
+     The ORDER path is CLIENT_BUILDS_TX: @drift-labs/sdk was replaced by
+     @velocity-exchange/sdk (prebundled to public/vendor/velocity-sdk.js), so
+     the tab builds real Velocity instructions against the vELoC1… program —
+     initializeUserAccount → USDT deposit → placePerpOrder → cancel/place
+     trigger orders — and the CONNECTED WALLET signs and sends every one of
+     them (src/lib/velocityTrade.js). FBT never holds a Solana key, so a live
+     feed means the venue is genuinely tradeable here.
+
+     The provider id stays `drift` (ledger rows, the UI tab and the tests all
+     key off it); only the venue NAME and the facts changed. */
   drift: Object.freeze({
     id: 'drift',
-    name: 'Drift',
+    name: 'Velocity',
     family: 'solana',
     chainId: 'solana:mainnet',
     chainName: 'Solana',
     custody: 'onchain',
-    collateral: 'USDC',
+    collateral: 'USDT',
     execution: EXECUTION_MODEL.CLIENT_BUILDS_TX,
     fbtFeeModel: 'referrer-on-fill',
     fbtFeeChargedOn: 'fill',
@@ -200,16 +212,21 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       canReadMarkets: true,
       canReadFunding: true,
       canReadOpenInterest: true,
+      /* positions are decoded client-side by the venue SDK
+         (getVelocityPositions → user.getActivePerpPositions + open triggers). */
       canReadPositions: true,
       canQuote: true,
       canPrepare: true,
       canExecute: true,
+      /* TP/SL are Velocity reduce-only TRIGGER_MARKET orders; close is a
+         reduce-only market order. Partial close / collateral adjust / limit
+         orders are not exposed in the UI yet, so they stay false. */
       canManagePositions: true,
       supportsTakeProfit: true,
       supportsStopLoss: true,
-      supportsPartialClose: true,
-      supportsCollateralAdjust: true,
-      supportsLimitOrders: true,
+      supportsPartialClose: false,
+      supportsCollateralAdjust: false,
+      supportsLimitOrders: false,
       supportsReduceOnly: true
     }),
     tab: 'onchain'
@@ -254,7 +271,7 @@ export function resolveProviderStatus({
        tab can only read it. */
     return { status: PROVIDER_STATUS.READ_ONLY, reason: 'EXECUTES_IN_OWN_TAB' };
   }
-  /* CLIENT_BUILDS_TX (Drift) builds and signs in THIS tab with the user's own
+  /* CLIENT_BUILDS_TX (Velocity) builds and signs in THIS tab with the user's own
      wallet, so a live feed means it is genuinely tradeable here. */
   if (recentErrors >= 5) return { status: PROVIDER_STATUS.READ_ONLY, reason: 'ERROR_BUDGET_EXHAUSTED' };
   if (dataStale || recentErrors >= 2) return { status: PROVIDER_STATUS.DEGRADED, reason: dataStale ? 'FEED_STALE' : 'RECENT_ERRORS' };
