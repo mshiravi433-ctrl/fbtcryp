@@ -2287,7 +2287,79 @@
     "notice": "These are independent projects. Fanous Bazaar Pishgam is not affiliated with them and earns nothing from these links.",
     "search": "Search the ecosystem",
     "noResults": "Nothing matches “{{q}}”.",
-    "noticeTitle": "Our relationship with these projects: none"
+    "noticeTitle": "Our relationship with these projects: none",
+    "newTitle": "FBT Swap Ecosystem",
+    "heroTitle": "The infrastructure powering FBT Swap",
+    "heroSubtitle": "Networks, liquidity sources, DeFi protocols, data infrastructure and intelligence systems working together behind FBT Swap.",
+    "statusTitle": "FBT ECOSYSTEM STATUS",
+    "newSearch": "Search ecosystem...",
+    "lastCheck": "Last checked",
+    "justNow": "just now",
+    "secondsAgo": "{{n}} sec ago",
+    "minutesAgo": "{{n}} min ago",
+    "hoursAgo": "{{n}}h ago",
+    "loadError": "Unable to load ecosystem status",
+    "statusUnavailable": "STATUS INFORMATION UNAVAILABLE",
+    "noResultsFilter": "No active integrations in this category.",
+    "networks": "Networks",
+    "dexSources": "DEX Sources",
+    "bridges": "Bridges",
+    "dataInfra": "Data Infra",
+    "status": {
+      "operational": "Operational",
+      "degraded": "Degraded",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    },
+    "filter": {
+      "all": "All",
+      "networks": "Networks",
+      "dex": "DEX",
+      "bridge": "Bridge",
+      "defi": "DeFi",
+      "data": "Data",
+      "ai": "AI"
+    },
+    "statusFilter": {
+      "all": "All Status"
+    },
+    "sectionNetworks": "Networks",
+    "sectionDex": "DEX & Liquidity",
+    "sectionRouting": "Liquidity Routing",
+    "sectionBridges": "Bridge Infrastructure",
+    "sectionData": "Market & Data Infrastructure",
+    "sectionAI": "AI & Intelligence",
+    "sectionWallets": "Wallet Integrations",
+    "sectionHowItWorks": "How FBT Swap Works",
+    "viz": {
+      "ariaLabel": "Liquidity routing visualization showing data flow from wallet through FBT Swap, router engine, DEX sources to blockchain"
+    },
+    "flow": {
+      "wallet": "Wallet",
+      "walletDesc": "Non-custodial user-controlled wallet.",
+      "fbt": "FBT Swap",
+      "fbtDesc": "Interface and execution layer.",
+      "intelligence": "Intelligence / Router",
+      "intelligenceDesc": "Finds available routes and liquidity.",
+      "liquidity": "Protocols & Liquidity",
+      "liquidityDesc": "DEX / DeFi / Bridge infrastructure.",
+      "blockchain": "Blockchain",
+      "blockchainDesc": "Final settlement.",
+      "verification": "Verification",
+      "verificationDesc": "Confirms transaction and updates state."
+    },
+    "drawer": {
+      "type": "Type",
+      "category": "Category",
+      "networks": "Networks",
+      "usage": "FBT Usage",
+      "capabilities": "Capabilities",
+      "lastSuccess": "Last Success",
+      "lastFailure": "Last Failure",
+      "chainType": "Chain Type",
+      "chainId": "Chain ID",
+      "visitSite": "Visit Official Site"
+    }
   },
   "biz": {
     "title": "Business",
