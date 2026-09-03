@@ -573,6 +573,19 @@
 
 ## Unreleased — Phase 152: Flash Liquidity (collateral-free flash-loan arbitrage planner)
 
+### Fix — Build APK on main (esbuild parse error in IntentAIUnified)
+
+- PR #165 added the TDZ-safe `runOpportunity` useCallback (declared before
+  `handleOpsAction`) but left the previous function body orphaned after
+  `handleOpsAction`'s closing — top-level `await` + a stray `}, [deps]);` that
+  esbuild rejects. Every `Build APK` run on `main` after that merge failed at
+  the full-build stage (exit 1 at ~1m40s). The orphaned 35 lines are deleted;
+  the live definition of `runOpportunity` is untouched. Verified by running:
+  `npx esbuild src/components/IntentAIUnified.jsx` (clean parse),
+  `VITE_ENABLE_SPECULATION=true npx vite build` (exit 0 — the exact failing CI
+  stage), `test/intent-ai/ops-center-probe.mjs` 40/40 and
+  `test/intent-ai/intent-os-execution-flow-probe.mjs` 42/42.
+
 - The flash-loan architecture from the Intent OS spec is now real code: deterministic
   opportunity scanner + planner in `src/lib/intent-ai/flashLiquidity.js`, dry-run
   server API (`GET /api/flash-liquidity/v1/capabilities`, `POST …/scan`, `POST …/plan`),
