@@ -10711,9 +10711,35 @@ button.switch:disabled { cursor: not-allowed; opacity: .55; }
   max-height: min(70vh, 480px);
   padding: 10px;
   border-radius: 14px;
-  background: var(--bg-1, rgba(10, 12, 20, 0.97));
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* ─── WHY THIS WAS INVISIBLE IN THE LIGHT THEME ───────────────────────
+     Reported: «در تنظیمات در تم روشن برای نوتفیکیشن پروفایل جملات مخفیه،
+     اما تم تاریک درسته».
+
+     This said `var(--bg-1, rgba(10,12,20,.97))`, and `--bg-1` IS NOT
+     DEFINED ANYWHERE IN THE PROJECT — not in `:root`, not in the light
+     theme block. So the fallback won in BOTH themes and the popup was
+     always painted near-black, while `--text-1` correctly flipped to
+     near-black (#0d1020) under the light theme.
+
+     Measured in Chrome, light theme, before the fix:
+       title / item title  #0d1020 on #0a0c14  →   1.03:1
+       item subtitle       #4d5570 on #0a0c14  →   2.65:1
+       footer button       #4d5570 on #0a0c14  →   2.65:1
+     WCAG AA wants 4.5:1. 1.03:1 is black-on-black — the text was there
+     and simply could not be seen, exactly as reported.
+
+     `--bg-panel-solid` is the real token for an opaque raised surface and
+     is defined by BOTH themes (#0a0c12 dark / #ffffff light), so the panel
+     now follows the theme its text already follows. Border and shadow are
+     theme-aware for the same reason: a white-on-white hairline and a
+     heavy black shadow both read as broken on a light canvas. */
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme='light'] .profile-badge-pop {
+  box-shadow: 0 16px 40px rgba(16, 20, 40, 0.18);
 }
 
 .profile-badge-pop-body {
@@ -10728,7 +10754,7 @@ button.switch:disabled { cursor: not-allowed; opacity: .55; }
   flex: 0 0 auto;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--line);
   text-align: center;
 }
 
@@ -10743,7 +10769,7 @@ button.switch:disabled { cursor: not-allowed; opacity: .55; }
   cursor: pointer;
 }
 
-.profile-badge-pop-foot button:hover { background: rgba(255, 255, 255, 0.06); }
+.profile-badge-pop-foot button:hover { background: var(--bg-raised); }
 
 
 .profile-badge-pop-head {
@@ -10762,7 +10788,7 @@ button.profile-badge-pop-close {
   padding: 0;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-raised);
   color: var(--text-2);
   font-size: 12px;
   cursor: pointer;
@@ -10790,8 +10816,12 @@ button.profile-badge-item {
   cursor: pointer;
 }
 
-button.profile-badge-item:hover { background: rgba(255, 255, 255, 0.05); }
+button.profile-badge-item:hover { background: var(--bg-raised); }
+/* An unread row is tinted with the brand cyan. At 6% over a white panel that
+   tint is invisible, so the one row the user most needs to spot looks like
+   every other one; the light theme gets a stronger, still-subtle wash. */
 button.profile-badge-item.is-unread { background: rgba(0, 229, 255, 0.06); }
+:root[data-theme='light'] button.profile-badge-item.is-unread { background: rgba(0, 145, 180, 0.10); }
 
 .profile-badge-item-ico { flex: 0 0 auto; font-size: 14px; line-height: 1.4; }
 .profile-badge-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

@@ -1406,6 +1406,81 @@ console.log('\n▸ checking lazy locale loading…');
   report('lazy locales', await runI18n());
 }
 
+/*
+ * THE BUY / SELL WIZARD'S ACTION ROW IS A FLEX ROW OF `.btn`s.
+ *
+ * Reported (repeatedly): «قیمت در تب خرید یا فروش می‌زنه دکمه مرحله بعدی نیست
+ * و وقت دکمه قبلی بزرگ‌تر میشه» — after typing an amount there is no Next
+ * button, and Back grows to fill the row.
+ *
+ * Measured in a real browser before the fix, at 390px: Back 332px wide, Next
+ * 44px — collapsed to just its chevron and then cropped by the card's
+ * `overflow: hidden`. Invisible to the jsdom wizard probe, which asserts on
+ * `disabled` and text content and has no layout engine at all, so both halves
+ * of the complaint were structurally "fine" while being unusable on screen.
+ *
+ * The cause is the flexbox trap already documented for `.btn-row` in
+ * index.css: `.btn { width: 100% }` becomes each item's `flex-basis: auto`,
+ * so a `flex: 0 0 auto` sibling reserves the WHOLE row and refuses to shrink,
+ * leaving negative free space that `flex-grow` cannot distribute.
+ *
+ * This asserts the shape of the rule rather than the rendering, so it runs in
+ * the normal suite: neither child may keep `width:100%` as its basis, Back
+ * must be allowed to shrink, and Next must grow from a zero basis.
+ */
+console.log('\n▸ checking the Buy / Sell wizard action row…');
+{
+  const { readFileSync } = await import('node:fs');
+  /* Comments are stripped first: these rules are heavily commented, and an
+     inline `/* … *​/` between two declarations otherwise hides the one after
+     it from a regex that expects `;` then whitespace. */
+  const css = readFileSync('src/styles/buy-sell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /* Last declaration wins in CSS: collect the final body for a selector. */
+  const bodyOf = (selector) => {
+    const re = new RegExp(`\\${selector}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'g');
+    let m, last = null;
+    while ((m = re.exec(css))) last = m[1];
+    return last || '';
+  };
+  const decl = (body, prop) => {
+    const m = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'i').exec(body);
+    return m ? m[1].trim() : null;
+  };
+  /* `flex: a b c` shorthand → the three longhands it sets. */
+  const flexOf = (body) => {
+    const raw = decl(body, 'flex');
+    if (!raw) return null;
+    const parts = raw.split(/\s+/);
+    if (parts.length === 1) return { grow: Number(parts[0]), shrink: 1, basis: '0%' };
+    if (parts.length === 2) return { grow: Number(parts[0]), shrink: Number(parts[1]), basis: '0%' };
+    return { grow: Number(parts[0]), shrink: Number(parts[1]), basis: parts[2] };
+  };
+  /* A basis of `auto` inside a row of `.btn`s resolves to width:100%, unless
+     the rule explicitly re-declares width. That is the whole bug. */
+  const basisIsFullRow = (body) => {
+    const f = flexOf(body);
+    if (!f) return true;                       /* no flex at all → auto basis */
+    if (!/auto/i.test(String(f.basis))) return false;
+    return !/^auto$/i.test(String(decl(body, 'width') || ''));
+  };
+
+  const next = bodyOf('.bsw-next');
+  const back = bodyOf('.bsw-back');
+  const nextFlex = flexOf(next);
+  const backFlex = flexOf(back);
+
+  report('Buy / Sell wizard action row (Next is not squeezed out)', [
+    ['both wizard nav buttons are styled', Boolean(next) && Boolean(back)],
+    ['Next does not inherit width:100% as its flex-basis', !basisIsFullRow(next)],
+    ['Back does not reserve the whole row as its flex-basis', !basisIsFullRow(back)],
+    ['Next grows into the free space', Boolean(nextFlex) && nextFlex.grow >= 1],
+    ['Back is allowed to shrink rather than crushing Next', Boolean(backFlex) && backFlex.shrink >= 1],
+    ['Back still keeps a real tap target', /min-width:\s*\d/.test(back)],
+    ['Next may wrap its label instead of collapsing to the icon', /white-space:\s*normal/.test(next)]
+  ]);
+}
+
 console.log('\n▸ checking modal stacking order…');
 {
   const { readFileSync } = await import('node:fs');
@@ -1438,6 +1513,101 @@ console.log('\n▸ checking modal stacking order…');
     ['sheet panel sits above its own backdrop', sheetLayer > sheetBackdrop],
     [`more drawer (${moreLayer}) is above the top stage (${topStage})`, moreLayer > topStage],
     ['more drawer sits above the shared backdrop', moreLayer > sheetBackdrop]
+  ]);
+}
+
+/*
+ * NO STYLESHEET MAY REFERENCE A CUSTOM PROPERTY THAT IS NEVER DEFINED.
+ *
+ * Reported: «در صفحه تنظیمات در تم روشن برای نوتفیکیشن پروفایل جملات مخفیه
+ * اما تم تاریک درسته» — in the light theme the profile notification popup's
+ * text was invisible; the dark theme was fine.
+ *
+ * Cause: `.profile-badge-pop` painted itself with
+ * `var(--bg-1, rgba(10,12,20,.97))`, and `--bg-1` is not defined ANYWHERE in
+ * the project. The fallback therefore won in BOTH themes and the panel was
+ * always near-black, while `--text-1` correctly flipped to near-black under
+ * the light theme. Measured before the fix: title #0d1020 on #0a0c14 =
+ * 1.03:1, i.e. black on black. Two more rules had the same dangling token.
+ *
+ * A fallback is what made this survive review: the CSS is perfectly valid,
+ * the browser reports no error, and the rule looks theme-aware because it
+ * mentions a variable. Only checking that the variable EXISTS catches it.
+ *
+ * So: every `var(--x)` used in a stylesheet must be declared by some rule in
+ * that same set of stylesheets. Tokens that are set from JavaScript are
+ * listed as known-dynamic.
+ */
+console.log('\n▸ checking themed surfaces resolve in BOTH themes…');
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const files = ['src/index.css', ...readdirSync('src/styles').filter((f) => f.endsWith('.css')).map((f) => `src/styles/${f}`)];
+  const all = files.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /* Declared anywhere in the stylesheets: `--name:` inside some rule. */
+  const declared = new Set([...all.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+  /* Tokens set from JS/JSX (inline style objects, setProperty) are legitimate. */
+  const fromJs = new Set(
+    [...readdirSync('src', { recursive: true })
+      .filter((f) => /\.(jsx|js)$/.test(String(f)))
+      .map((f) => { try { return readFileSync(`src/${f}`, 'utf8'); } catch { return ''; } })
+      .join('\n')
+      .matchAll(/['"`]?(--[\w-]+)['"`]?\s*:/g)].map((m) => m[1])
+  );
+
+  /* A surface that paints an opaque PANEL must use a token the light theme
+     re-declares — otherwise the box keeps its dark-theme colour while the
+     text on it flips, which is exactly how the popup went black-on-black.
+     These are the tokens both `:root` and `:root[data-theme='light']` set. */
+  const lightBlock = /:root\[data-theme=['"]light['"]\]\s*\{([^}]*)\}/.exec(all)?.[1] || '';
+  const themedTokens = new Set([...lightBlock.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+
+  /* Every rule body that belongs to the notification popup.
+     `@keyframes` (and any other nested at-rule) has an extra brace level that
+     desynchronises a flat rule scan and silently swallows the rules after it,
+     so those blocks are removed before the scan. */
+  const flat = all.replace(/@(?:keyframes|media|supports|layer)[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+  /* Scan `selector { body }` pairs. The selector must NOT be anchored on the
+     previous rule's `}` — a global match consumes that brace, which makes
+     every second rule invisible (that is how `.profile-badge-pop` itself was
+     being missed while its neighbours matched). */
+  const popRules = [...flat.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((m) => ({ sel: m[1].trim(), body: m[2] }))
+    .filter((r) => r.sel.includes('profile-badge'));
+  const popCss = popRules.map((r) => r.body).join(';');
+  const popTokens = [...popCss.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]);
+  const popDangling = [...new Set(popTokens)].filter((n) => !declared.has(n) && !fromJs.has(n));
+
+  /* The popup's own panel fill, and the round step markers that carried the
+     same dangling token, must all be theme-aware. The base `.profile-badge-pop`
+     rule is the unprefixed one — a `:root[data-theme='light'] …` override is a
+     different rule and must not be mistaken for it. */
+  const popPanel = popRules.find((r) => r.sel === '.profile-badge-pop');
+  const panelBg = /background:\s*var\(\s*(--[\w-]+)/.exec(popPanel?.body || '')?.[1] || null;
+  const bsw = readFileSync('src/styles/buy-sell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* Both circular markers: the wizard stepper and the order timeline. */
+  const markerBg = [
+    /\.bsw-stepper button > span\s*\{([^}]*)\}/,
+    /\.buy-sell-timeline li > span\s*\{([^}]*)\}/
+  ].map((re) => /background:\s*var\(\s*(--[\w-]+)/.exec(re.exec(bsw)?.[1] || '')?.[1]).filter(Boolean);
+
+  report('themed surfaces (an undefined token silently keeps the dark colour)', [
+    ['the stylesheets and the light-theme block were read', declared.size > 20 && themedTokens.size > 5],
+    /* The exact token from the report, pinned so it cannot come back. */
+    ['--bg-1 is no longer referenced anywhere', !/var\(\s*--bg-1\s*[,)]/.test(all)],
+    [
+      popDangling.length === 0
+        ? 'every token the notification popup uses is actually declared'
+        : `popup references undefined tokens: ${popDangling.join(', ')}`,
+      popDangling.length === 0
+    ],
+    ['the popup panel is painted from a token', Boolean(panelBg)],
+    [`the popup panel token (${panelBg}) is re-declared by the light theme`, themedTokens.has(panelBg)],
+    ["the round step markers are painted from a token", markerBg.length >= 2],
+    [
+      "those marker tokens are re-declared by the light theme",
+      markerBg.length >= 2 && markerBg.every((tk) => themedTokens.has(tk))
+    ]
   ]);
 }
 

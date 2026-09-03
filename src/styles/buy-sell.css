@@ -51,7 +51,7 @@
 .buy-sell-timeline li { position: relative; flex: 1 0 74px; min-width: 74px; display: grid; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
 .buy-sell-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 9px; width: calc(100% - 19px); inset-inline-start: calc(50% + 10px); height: 1px; background: rgba(255,255,255,.13); }
 .buy-sell-timeline li.done:not(:last-child)::after { background: var(--up); }
-.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 9px; }
+.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 9px; }
 .buy-sell-timeline li.active { color: var(--rgb-4); font-weight: 700; }
 .buy-sell-timeline li.active > span { border-color: var(--rgb-4); box-shadow: 0 0 0 4px rgba(0,229,255,.1); }
 .buy-sell-timeline li.done { color: var(--up); }
@@ -96,7 +96,7 @@
 .bsw-stepper li.done:not(:last-child)::after { background: linear-gradient(90deg, var(--rgb-4), rgba(0,229,255,.35)); }
 .bsw-stepper button { width: 100%; display: grid; justify-items: center; gap: 5px; padding: 0; background: transparent; border: 0; color: var(--text-3); cursor: pointer; }
 .bsw-stepper button:disabled { cursor: default; }
-.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-1); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
+.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
 .bsw-stepper button > small { font-size: 9.5px; line-height: 1.3; font-weight: 600; }
 .bsw-stepper li.active button { color: var(--rgb-4); }
 .bsw-stepper li.active button > span { border-color: var(--rgb-4); color: var(--rgb-4); box-shadow: 0 0 0 5px rgba(0,229,255,.09); }
@@ -148,9 +148,55 @@
 /* wizard navigation */
 .bsw-actions { margin-top: 15px; }
 .bsw-blocked { margin: 0 0 9px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.03); color: var(--text-2); }
-.bsw-nav { display: flex; gap: 10px; margin-top: 0; }
-.bsw-back { flex: 0 0 auto; min-height: 46px; padding-inline: 18px; }
-.bsw-next { flex: 1; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 800; }
+/* ─── WHY \"NEXT\" WAS MISSING AND \"BACK\" WAS HUGE ──────────────────────────
+   Reported: «قیمت در تب خرید یا فروش می‌زنه دکمه مرحله بعدی نیست و وقت دکمه
+   قبلی بزرگ‌تر میشه» — after typing an amount there is no Next button, and
+   Back grows to fill the row.
+
+   Both halves were ONE flexbox bug, and it is the same trap already
+   documented for `.btn-row` in index.css:
+
+     `.btn` sets `width: 100%`. For a flex item `flex-basis: auto` resolves
+     to that width, so
+
+       .bsw-back  flex: 0 0 auto  → basis = THE WHOLE ROW, shrink 0
+       .bsw-next  flex: 1         → basis 0, grow 1
+
+     Back's basis alone already exceeds the container, so free space is
+     NEGATIVE — `flex-grow` has nothing to distribute — and `flex-shrink: 0`
+     forbids Back from giving any of it back. Back therefore keeps the full
+     row (measured: 332px) while Next collapses to min-content, i.e. just its
+     chevron (measured: 44px), and the card's `overflow: hidden` then clips
+     that sliver off the edge entirely.
+
+   So the button was never absent from the DOM — it was squeezed to an icon
+   and cropped out of sight, which is indistinguishable from missing. Both
+   children now get `flex-basis: 0` + `width: auto`, exactly like `.btn-row`,
+   so the split is driven by flex-grow instead of by `width: 100%`. Next is
+   the wide primary action; Back keeps a comfortable tap target and may
+   shrink but never below one. */
+.bsw-nav { display: flex; align-items: stretch; gap: 10px; margin-top: 0; }
+.bsw-back {
+  flex: 0 1 auto;
+  width: auto;          /* neutralise .btn's width:100% inside a flex row */
+  min-width: 84px;      /* still a real tap target on a 320px screen */
+  min-height: 46px;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
+.bsw-next {
+  flex: 1 1 0;          /* basis 0 so grow actually has space to distribute */
+  width: auto;
+  min-width: 0;         /* a long fa/de label shrinks the box, not the row */
+  min-height: 46px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; font-weight: 800;
+  /* The label is the point of the button; never let it be clipped to a bare
+     chevron the way the collapsed state was. */
+  white-space: normal;
+  line-height: 1.25;
+  padding-inline: 12px;
+}
 /* A primary button at 42% opacity on a dark card reads as "not there" — which
    is exactly how a gated Next got reported as a missing button. Keep a gated
    action clearly visible; the printed reason above it explains the state. */
