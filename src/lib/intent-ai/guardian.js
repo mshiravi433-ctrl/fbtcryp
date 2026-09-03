@@ -21,7 +21,7 @@ import { DEFAULT_POLICY_CAPS, ALLOWED_CHAINS, ALLOWED_PROTOCOLS } from './permis
    Guardian rejects immediately. We err on the side of false positives — the
    user can rephrase; a successful injection can move money. */
 const INJECTION_PATTERNS = [
-  /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts?|rules?)/i,
+  /ignore\s+(all\s+)?(?:previous|prior|above\s+)?(instructions|prompts?|rules?)/i,
   /you\s+are\s+now/i,
   /disregard\s+(your|the|all)\s+(safety|guardian|policy|rules?)/i,
   /reveal\s+(the\s+)?(private\s+key|seed|mnemonic|secret)/i,

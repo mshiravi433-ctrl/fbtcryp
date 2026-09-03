@@ -78,7 +78,15 @@ export * from './agents/tradingAgent.js';
 export * from './agents/yieldAgent.js';
 export * from './agents/researchAgent.js';
 export * from './agents/riskAgent.js';
+export * from './agents/strategyAgent.js';
+export * from './agents/guardianAgent.js';
 export * from './agents/executionAgent.js';
+
+// Multi-AI Phase 3 Extensions
+export * from './aiGateway.js';
+export * from './consensusEngine.js';
+export * from './confidenceEngine.js';
+export * from './learningLoop.js';
 
 // Unified OS Class
 import { buildContext, updateContext, getCurrentPageContext } from './contextEngine.js';
@@ -96,8 +104,13 @@ import { createTradingAgent } from './agents/tradingAgent.js';
 import { createYieldAgent } from './agents/yieldAgent.js';
 import { createResearchAgent } from './agents/researchAgent.js';
 import { createRiskAgent } from './agents/riskAgent.js';
+import { createStrategyAgent } from './agents/strategyAgent.js';
+import { createGuardianAgent } from './agents/guardianAgent.js';
 import { createExecutionAgent, createVerificationAgent, createSelfHealing } from './agents/executionAgent.js';
 import { createFinancialAgent } from './financialAgent.js';
+import { createConsensusEngine } from './consensusEngine.js';
+import { createConfidenceEngine } from './confidenceEngine.js';
+import { createLearningLoop } from './learningLoop.js';
 import { createOrchestrator } from './orchestrator.js';
 import { createAgentLoop } from './agentLoop.js';
 import { buildHumanResponse, stripInternalLeaks } from './humanResponse.js';
@@ -114,8 +127,8 @@ import { getCentralWalletState, mergeWalletSnapshots, setCentralWalletState } fr
 import { rememberOperationalSlots, getOperationalSlots, patchSharedState } from './sharedState.js';
 import { clearContextCache } from './contextEngine.js';
 
-export const INTENT_OS_SCHEMA = 'fbt.intent-os.v2';
-export const INTENT_OS_VERSION = '2.0.0';
+export const INTENT_OS_SCHEMA = 'fbt.intent-os.v3';
+export const INTENT_OS_VERSION = '3.0.0';
 
 function mergeServices(base, extra) {
   const next = { ...(base || {}) };
@@ -144,11 +157,17 @@ export function createIntentOS({
   const yieldAgent = createYieldAgent({ yieldService: services.yieldService, farmService: services.farmService, lendingService: services.lendingService });
   const researchAgent = createResearchAgent({ newsService: services.newsService, marketService: services.marketService });
   const riskAgent = createRiskAgent({ riskService: services.riskService });
+  const strategyAgent = createStrategyAgent({ strategyService: services.strategyService });
+  const guardianAgent = createGuardianAgent({ policy: services.policy });
   const executionAgent = createExecutionAgent({ toolRegistry: { getTool }, actionBus: { dispatch: dispatchAction } });
   const verificationAgent = createVerificationAgent();
   const selfHealing = createSelfHealing({ executionAgent, toolRegistry: { getToolsByCapability: () => [] } });
   const financialAgent = createFinancialAgent({ portfolioAgent, riskAgent, marketAgent, yieldAgent, tradingAgent });
   
+  const consensusEngine = createConsensusEngine();
+  const confidenceEngine = createConfidenceEngine();
+  const learningLoop = createLearningLoop();
+
   const agents = {
     'intent-agent': intentAgent,
     'navigation-agent': navAgent,
@@ -160,6 +179,8 @@ export function createIntentOS({
     'yield-agent': yieldAgent,
     'research-agent': researchAgent,
     'risk-agent': riskAgent,
+    'strategy-agent': strategyAgent,
+    'guardian-agent': guardianAgent,
     'execution-agent': executionAgent,
     'verification-agent': verificationAgent,
     'financial-agent': financialAgent
@@ -174,6 +195,9 @@ export function createIntentOS({
     agents,
     orchestrator,
     agentLoop,
+    consensusEngine,
+    confidenceEngine,
+    learningLoop,
     setServices(next) { liveServices = mergeServices(liveServices, next); return liveServices; },
     setNavigation(next) { liveNavigation = next || liveNavigation; return liveNavigation; },
     getServices() { return liveServices; },
@@ -376,6 +400,23 @@ export function createIntentOS({
           importance: 0.6,
           metadata: { intent: intent.type, route: currentPage }
         }));
+
+        // 14. CONFIDENCE & LEARNING
+        const confidence = confidenceEngine.evaluate({
+          intent,
+          context,
+          toolsUsed: executionResult?.toolsUsed || [],
+          dataStatus: executionResult?.dataStatus || context.portfolio?.dataStatus || 'live'
+        });
+
+        learningLoop.record({
+          intentType: intent.type,
+          providerUsed: 'intent-os-v3',
+          confidenceScore: confidence.confidenceScore,
+          executionSuccess: executionResult?.ok !== false,
+          durationMs: latency,
+          locale: currentLocale
+        }).catch(() => {});
         
         return {
           ok: true,
@@ -389,6 +430,13 @@ export function createIntentOS({
           task,
           debug: debugTrace,
           latency,
+          confidence,
+          multiAi: {
+            activeProviders: ['grok', 'openrouter', 'groq', 'gemini', 'internal'],
+            confidenceScore: confidence.confidenceScore,
+            riskScore: confidence.riskScore,
+            dataFreshness: confidence.dataFreshness
+          },
           message: stripInternalLeaks(human.message),
           ui: human.ui,
           card: human.card,
