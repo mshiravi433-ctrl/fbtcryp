@@ -233,6 +233,33 @@ function prefetchLikelyRoutes() {
   else setTimeout(start, 2000);
 }
 
+/*
+ * ─── FULL-SCREEN ROUTES ────────────────────────────────────────────────────
+ * `/intent` (the AI chat) is an app within the app: it gets the whole
+ * viewport. The global chrome — Header (logo + settings) and BottomNav (tabs
+ * + the More sheet) — is NOT rendered there, so the page stretches edge to
+ * edge and the conversation uses every pixel of height instead of sitting
+ * between a top bar and a bottom bar it does not need.
+ *
+ * This has to live inside <HashRouter> because it reads `useLocation()`, and
+ * it is the single place that decides what "full screen" means — so Header
+ * and BottomNav themselves stay route-agnostic and never grow a `/intent`
+ * special case.
+ */
+function AppChrome() {
+  const { pathname } = useLocation();
+  const fullscreen = pathname === '/intent';
+  return (
+    <div className={`app-shell${fullscreen ? ' app-shell--fullscreen' : ''}`}>
+      {!fullscreen && <Header />}
+      <PullToRefresh>
+        <AnimatedRoutes />
+      </PullToRefresh>
+      {!fullscreen && <BottomNav />}
+    </div>
+  );
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   const { t } = useTranslation();
@@ -465,13 +492,7 @@ export default function App() {
   } else {
     screen = (
       <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <div className="app-shell">
-          <Header />
-          <PullToRefresh>
-            <AnimatedRoutes />
-          </PullToRefresh>
-          <BottomNav />
-        </div>
+        <AppChrome />
         {/*
           ─── THE RADIO, OUTSIDE <AnimatedRoutes> AND THAT IS THE FEATURE ───
           Requested: «امکان پخش در پس‌زمینه داشته باشد، مثلا وقتی پادکست را

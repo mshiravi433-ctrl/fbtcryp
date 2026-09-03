@@ -294,6 +294,20 @@ body {
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
 }
 
+/*
+ * Full-screen routes (the AI chat) render neither the top bar nor the bottom
+ * nav, so the shell must not reserve any room for them. The composer inside
+ * the chat owns its own safe-area padding, so zero here is correct — any
+ * extra inset would leave a dead strip at the bottom of the screen.
+ */
+/* Double class on purpose: `.app-shell` gets its padding-bottom re-asserted
+   inside the short-viewport media query below, so a single-class override
+   written here would lose to that later rule on laptops. Two classes win by
+   specificity regardless of order. */
+.app-shell.app-shell--fullscreen {
+  padding-bottom: 0;
+}
+
 .page {
   padding: 12px 16px 24px;
   display: flex;
