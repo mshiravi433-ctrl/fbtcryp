@@ -25,6 +25,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useAppStore } from './useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 
 export const LAB_START_BALANCE = 100000; // $100k virtual — matches the design spec
 
@@ -212,6 +214,15 @@ export const useLabStore = create(
           challengeWins: s.challengeWins + (c.outcome === 'win' ? 1 : 0)
         }));
         get().addXp(c.xpAward || 30, 'challenge');
+        /*
+         * A completed learning scenario is real activity (one reward per
+         * scenario — the scenarioId travels as the idempotent reference; no
+         * lab balance, portfolio or score ever leaves the device).
+         */
+        if (c.scenarioId) {
+          const st = useAppStore.getState();
+          st.awardProduct('lab', POINT_VALUES.lab, { refId: `scenario:${c.scenarioId}` });
+        }
       },
 
       /* ─────── lessons ─────── */

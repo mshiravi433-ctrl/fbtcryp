@@ -3430,7 +3430,142 @@
     "title": "Learn"
   },
   "rewards": {
-    "title": "Points & rewards"
+    "title": "Points & rewards",
+    "tab": {
+      "dashboard": "Dashboard"
+    },
+    "wallet": {
+      "title": "Your wallet",
+      "sub": "Connect a wallet to earn verified rewards",
+      "connect": "Connect Wallet",
+      "evm": "EVM wallet",
+      "solana": "Solana wallet"
+    },
+    "offlineNote": "Rewards API unreachable — showing the device ledger only.",
+    "points": "Points",
+    "pointsSub": "verified activity ledger",
+    "level": "Level",
+    "levelTo": "{{n}} pts to {{tier}}",
+    "levelMax": "Top level",
+    "fbtBalance": "FBT Balance",
+    "fbtSub": "loyalty balance — not a token yet",
+    "rank": "Rank",
+    "rankNone": "—",
+    "rankSub": "no public board — your tier is your rank",
+    "todayMissions": "Today's Missions",
+    "done": "done",
+    "streakTitle": "Check-in streak",
+    "streakSub": "visit every day to keep it alive",
+    "days": "days",
+    "benefitsTitle": "Your Benefits",
+    "benefitsSub": "Venue discounts unlocked by your tier — each is a real, verified code.",
+    "referralTitle": "Referral",
+    "referralBinding": "Activating…",
+    "referralBindWallet": "Activate code with this wallet",
+    "referralBound": "Code is active — referral rewards credit to the bound wallet.",
+    "referralHow": "A friend who opens your link and completes a real swap or deposit qualifies. One reward per friend; self-referrals are refused. Codes must be activated with a wallet (or the verified Telegram account) before rewards can credit.",
+    "err": {
+      "WALLET_REQUIRED": "Connect an EVM wallet first.",
+      "NO_CODE": "No referral code yet — pull to refresh.",
+      "SIGN_REJECTED": "Signature was rejected.",
+      "CODE_TAKEN": "This code is already bound to another wallet.",
+      "BIND_FAILED": "Activation failed — try again.",
+      "SIGNATURE_REQUIRED": "A wallet signature is required to activate the code.",
+      "BAD_BIND_MESSAGE": "The signed message does not match this code.",
+      "SIGNATURE_VERIFY_FAILED": "The signature could not be verified.",
+      "SIGNATURE_MISMATCH": "The signature does not match this wallet.",
+      "BAD_REF_CODE": "This code is not a valid FBT code.",
+      "TELEGRAM_OWNER_REQUIRED": "Code activation needs a verified account."
+    },
+    "achievementsTitle": "Achievements",
+    "utilityTitle": "FBT Utility",
+    "utilityNone": "No utility is live yet.",
+    "utility": {
+      "feeDiscount": {
+        "title": "Fee discount",
+        "body": "Swap-fee discount by FBT tier. Not wired into the live swap router yet — it appears here only when the backend really applies it."
+      },
+      "rewardBoost": {
+        "title": "Reward boost",
+        "body": "Multiply activity points with FBT. Not executed by the backend yet."
+      },
+      "referralBoost": {
+        "title": "Referral boost",
+        "body": "Higher referral rewards for FBT holders. Not executed by the backend yet."
+      },
+      "premium": {
+        "title": "Premium features",
+        "body": "Exclusive surfaces for FBT tiers. Not launched yet."
+      }
+    },
+    "notLaunched": "NOT_LAUNCHED",
+    "marketTitle": "FBT Market",
+    "marketSub": "Price · volume · chart",
+    "marketStatus": "MARKET NOT LAUNCHED",
+    "marketInfoTitle": "Why there is no market",
+    "marketInfoBody": "FBT is not an issued token and nothing here is traded or priced. The points ledger is the asset: one point equals one FBT if a token is ever launched (see docs/FBT-TOKEN-FA.md). The moment a real market exists, FBT joins the swap router — never before, and never with invented prices.",
+    "claimTitle": "Claim FBT",
+    "claimSub": "points → token claim",
+    "claimReady": "READY",
+    "claimNotLaunched": "Claims need a deployed reward-distributor contract and an issued FBT token. Until then nothing on this screen is claimable — no fake claims.",
+    "historyTitle": "Reward History",
+    "goSwap": "Swap",
+    "goEarn": "Earn",
+    "goGoals": "Goals",
+    "missionBonus": "Mission bonus",
+    "mission": {
+      "checkin": "Check in today",
+      "swap1": "Make a swap",
+      "swap5": "Make 5 swaps",
+      "bridge1": "Move funds across chains",
+      "lend1": "Supply or withdraw lending",
+      "borrow1": "Borrow or repay",
+      "lp1": "Provide liquidity",
+      "dydx1": "Trade on dYdX",
+      "futures1": "Trade a future",
+      "goals1": "Create a financial goal",
+      "lab1": "Complete a lab scenario",
+      "analysis1": "Analyse a token",
+      "share1": "Share the app",
+      "firstSwapEver": "First real swap",
+      "referralEver": "First referred friend",
+      "streak3": "3-day check-in streak",
+      "streak7": "7-day check-in streak"
+    },
+    "ach": {
+      "firstSwap": "First swap",
+      "firstBridge": "First bridge",
+      "firstLending": "First supply",
+      "firstBorrow": "First borrow",
+      "firstGoal": "First goal",
+      "firstLab": "First scenario",
+      "firstAnalysis": "First analysis",
+      "firstSecurity": "First security scan",
+      "firstReferral": "First referral",
+      "streak3": "3-day streak",
+      "streak7": "7-day streak"
+    },
+    "live": "Live",
+    "marketLive": "MARKET LIVE",
+    "action": {
+      "bridge": "Cross-chain move",
+      "lending": "Lending supply",
+      "borrow": "Borrow",
+      "repay": "Loan repayment",
+      "withdraw": "Lending withdrawal",
+      "goals": "Goal created",
+      "lab": "Lab scenario completed",
+      "tokenAnalysis": "Token analysed",
+      "securityAnalysis": "Security scan",
+      "lp": "Liquidity provided",
+      "dydx": "dYdX order filled",
+      "futures": "Futures trade",
+      "referralShare": "Invite shared",
+      "inviteFriend": "Friend invited",
+      "sync": "Engine sync",
+      "intentAiPlan": "AI plan drafted",
+      "intentAiExecuted": "AI intent executed"
+    }
   },
   "verdict": {
     "title": "The full picture",

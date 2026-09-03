@@ -47,6 +47,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import {
@@ -1619,6 +1620,26 @@ export default function Loan() {
         updateMachine();
         setExec((prev) => (prev ? { ...prev, phase: 'done', code: null, message: null } : prev));
         haptic?.('success');
+
+        /*
+         * A confirmed, on-chain lending action is real rewarded activity.
+         * The final step's hash is the action's own transaction (approval
+         * steps precede it; the last step is the action itself).
+         */
+        const actionKey =
+          exec.action === 'supply' ? 'lending'
+            : exec.action === 'withdraw' ? 'withdraw'
+              : exec.action === 'repay' ? 'repay'
+                : exec.action === 'borrow' ? 'borrow' : null;
+        if (actionKey && POINT_VALUES[actionKey] > 0) {
+          const mainHash = [...(exec.steps || [])].reverse().find((step) => step.hash)?.hash;
+          if (mainHash) {
+            const rewards = useAppStore.getState();
+            rewards.awardPoints(actionKey, POINT_VALUES[actionKey], {
+              network: 'evm', chainId: exec.chainId, txHash: mainHash
+            });
+          }
+        }
       } else {
         /* §14: a raw wallet/RPC error is mapped to a stable code + friendly
            message. The raw text is never rendered. */

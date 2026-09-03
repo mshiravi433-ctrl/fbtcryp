@@ -37,7 +37,21 @@ export const POINT_VALUES = {
      points screen says where points come from, so the AI names its own.
      A real broadcast is the rare, valuable event and pays the most. */
   intentAiPlan: 10, // a structured plan made it to the confirmation screen
-  intentAiExecuted: 25 // an intent actually reached a network (real txHash)
+  intentAiExecuted: 25, // an intent actually reached a network (real txHash)
+
+  /* Product activity — the same table the rewards engine enforces server-side
+     (server/rewards/config.js). Only WIRED products appear here: a row that
+     nothing can emit is a fake reward, so bridge/lending/borrow/goals/lab/
+     token analysis live here because their screens really emit, and
+     dydx/futures/lp/security analysis deliberately do not (yet). */
+  bridge: 60, // one confirmed cross-chain move
+  lending: 80, // a confirmed supply/collateral deposit
+  borrow: 100, // a confirmed borrow
+  repay: 30, // a confirmed repay
+  withdraw: 20, // a confirmed withdraw
+  goals: 40, // one real goal created (server-stored)
+  lab: 15, // one lab challenge completed (once per scenario)
+  tokenAnalysis: 25 // a token analysed on the Signals verdict surface
 };
 
 export function tierFor(points) {

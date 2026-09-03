@@ -18,6 +18,8 @@ import SegIndicator from '../components/SegIndicator';
 import VerdictPanel from '../components/VerdictPanel';
 import { verdict } from '../lib/verdict';
 import { marketRegime } from '../lib/macro';
+import { useAppStore } from '../store/useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 import { scenarioSplit, findLevels } from '../lib/history';
 import { SOLANA_SIGNAL_ASSETS, getSolanaIntel } from '../lib/solanaSignals';
 import { getPerpMarkets } from '../lib/perp';
@@ -288,6 +290,24 @@ export default function Signals() {
   /* The detail card reads the horizon the user picked (7D → short, 30D → long). */
   const horizonKey = horizon.days >= 30 ? 'long' : 'short';
   const read = verdictData?.[horizonKey];
+
+  /*
+   * TOKEN ANALYSIS — real rewarded activity. An analysis here means live
+   * market data was fetched and the four-layer verdict was actually computed
+   * for this asset (analysis === null offline, so nothing is rewarded for a
+   * page that could not analyse). One credit per asset per local day; the
+   * deterministic reference (coin id + day) is what both ledgers dedupe on.
+   */
+  const analysedCoinId = coin?.id ?? null;
+  const analysisReady = Boolean(analysis && verdictData && analysedCoinId);
+  useEffect(() => {
+    if (!analysisReady || !analysedCoinId) return;
+    const st = useAppStore.getState();
+    st.awardProduct('tokenAnalysis', POINT_VALUES.tokenAnalysis, {
+      refId: `coin:${analysedCoinId}`,
+      perDay: true
+    });
+  }, [analysisReady, analysedCoinId]);
 
   /* PROBABILITY SCENENARIOS — how often the same window ended up, flat or
      down on this coin's own history, with the neutral band sized to the
