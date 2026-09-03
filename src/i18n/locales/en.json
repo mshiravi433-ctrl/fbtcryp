@@ -966,6 +966,429 @@
       "users": "Users",
       "languages": "Languages",
       "coins": "Coins"
+    },
+    "heroEyebrow": "INTENT FIRST · AI POWERED",
+    "heroTitle": "Building the Intelligent Financial Infrastructure of Tomorrow",
+    "heroSubtitle": "FBT Swap combines blockchain infrastructure, AI intelligence and intent-based experiences to make financial markets simpler, smarter and more accessible.",
+    "heroPrimary": "Explore FBT Swap",
+    "heroSecondary": "Meet Intent OS",
+    "trust": {
+      "ai": "AI-Powered",
+      "multiChain": "Multi-Chain",
+      "nonCustodial": "Non-Custodial",
+      "intentBased": "Intent-Based",
+      "dataDriven": "Data-Driven"
+    },
+    "visualFlow": {
+      "intent": "User Intent",
+      "ai": "AI Intelligence",
+      "market": "Market Data",
+      "risk": "Risk Analysis",
+      "strategy": "Strategy",
+      "execution": "Execution",
+      "verification": "Verification",
+      "monitoring": "Monitoring"
+    },
+    "story": {
+      "title": "Our Story",
+      "headline": "Financial markets are becoming more powerful — and more complex.",
+      "p1": "Users increasingly have to navigate wallets, blockchains, exchanges, liquidity pools, protocols, market data, investment products and increasingly fragmented financial infrastructure.",
+      "p2": "FBT Swap was created around a simple idea: Users should be able to focus on what they want to achieve, rather than being forced to understand every layer of financial infrastructure underneath it.",
+      "p3": "This idea became the foundation for FBT's development of AI-powered Intent OS and a broader financial intelligence platform."
+    },
+    "why": {
+      "title": "Why We Built FBT",
+      "complexityTitle": "Complexity",
+      "complexityBody": "Modern financial infrastructure is fragmented across networks, applications and protocols.",
+      "intelligenceTitle": "Intelligence",
+      "intelligenceBody": "Users need better tools to understand markets, risks and opportunities.",
+      "controlTitle": "Control",
+      "controlBody": "Financial automation should not mean giving up control of assets.",
+      "simplicityTitle": "Simplicity",
+      "simplicityBody": "Users should be able to express their goals naturally."
+    },
+    "vision": {
+      "title": "Our Vision",
+      "headline": "From Transactions to Intent.",
+      "body": "We envision a financial experience where users describe what they want to accomplish and intelligent systems help transform that intent into an understandable, risk-aware and executable plan.",
+      "traditionalTitle": "Traditional Finance",
+      "traditionalFlow": "User → Complex Interfaces → Multiple Platforms → Manual Decisions",
+      "fbtTitle": "FBT Vision",
+      "fbtFlow": "User Intent → AI → Intelligence → Strategy → Approval → Execution"
+    },
+    "intentOS": {
+      "title": "Meet FBT Intent OS",
+      "description": "Intent OS is the intelligence layer designed to understand what a user wants to achieve, analyze the available information and help create a path toward that goal.",
+      "exampleUser": "“I want to optimize my portfolio for the next three months.”",
+      "steps": [
+        "Understand Intent",
+        "Analyze Portfolio",
+        "Analyze Market",
+        "Assess Risk",
+        "Generate Strategies",
+        "Compare Options",
+        "Explain",
+        "Request Approval",
+        "Execute",
+        "Verify",
+        "Monitor"
+      ],
+      "badges": [
+        "AI-assisted",
+        "Risk-aware",
+        "Data-driven",
+        "User-controlled"
+      ],
+      "disclaimer": "Never describe AI as guaranteeing profit."
+    },
+    "humanAI": {
+      "title": "AI Works With You — Not Instead of You",
+      "headline": "Human decides. AI understands, analyzes and assists.",
+      "flow": [
+        "Human Goal",
+        "AI Understanding",
+        "Analysis",
+        "Strategy",
+        "Risk Review",
+        "User Approval",
+        "Secure Execution"
+      ],
+      "note": "For sensitive financial actions, AI never independently controls user funds."
+    },
+    "aiLayer": {
+      "title": "One Intelligence Layer. Multiple AI Models.",
+      "description": "The platform can use configured AI providers and internal intelligence systems through a unified gateway.",
+      "gateway": "FBT AI Gateway",
+      "orchestrator": "AI Orchestrator",
+      "providers": "Multiple AI Providers",
+      "reasoning": "Reasoning / Consensus",
+      "confidence": "Confidence",
+      "risk": "Risk",
+      "decision": "Decision Support",
+      "note": "If Grok, OpenRouter or other providers are configured, they appear as supported intelligence providers. No API keys or credentials are ever exposed.",
+      "providersLabel": "Supported intelligence providers when configured:"
+    },
+    "ecosystem": {
+      "title": "One Financial Experience. Multiple Markets.",
+      "subtitle": "Only features that actually exist are shown — anything still in development is clearly labeled.",
+      "swapTitle": "Swap",
+      "swapDesc": "Trade digital assets across supported networks.",
+      "walletTitle": "Wallet",
+      "walletDesc": "Manage and interact with digital assets while maintaining user control.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "Express financial goals using natural language.",
+      "signalsTitle": "AI Signals",
+      "signalsDesc": "AI-assisted market and opportunity intelligence.",
+      "solanaTitle": "Solana Intelligence",
+      "solanaDesc": "Monitor Solana assets, activity and emerging opportunities.",
+      "smartMoneyTitle": "Smart Money",
+      "smartMoneyDesc": "Analyze wallet and market activity where data is available.",
+      "defiTitle": "DeFi",
+      "defiDesc": "Discover decentralized financial opportunities.",
+      "farmsTitle": "Farms & Yield",
+      "farmsDesc": "Explore supported yield and liquidity opportunities.",
+      "marketIntelTitle": "Market Intelligence",
+      "marketIntelDesc": "Monitor financial markets and relevant assets.",
+      "exploreTitle": "Explore",
+      "exploreDesc": "Discover protocols, networks and onchain opportunities.",
+      "live": "Live",
+      "comingSoon": "Coming Soon",
+      "inDev": "In Development"
+    },
+    "multichain": {
+      "title": "One Experience Across Multiple Networks",
+      "subtitle": "Blockchain complexity should happen underneath the experience — not overwhelm the user.",
+      "supported": "Currently supported networks",
+      "dynamicNote": "Sourced live from the app's network registry.",
+      "solanaLabel": "Solana"
+    },
+    "nonCustodial": {
+      "title": "Your Assets. Your Control.",
+      "body": "FBT Swap is designed around a non-custodial philosophy: you remain in control of your assets and your keys.",
+      "bullets": [
+        "User-controlled wallet",
+        "User-controlled signing",
+        "Transparent transaction confirmation",
+        "Onchain execution where applicable"
+      ],
+      "note": "We never claim “100% Safe”, “Unhackable” or “Risk-Free”. Security is a practice, not a slogan."
+    },
+    "security": {
+      "title": "Security Is Part of the Architecture",
+      "signingTitle": "Secure Signing",
+      "signingBody": "Sensitive signing operations remain within the appropriate wallet / signing layer.",
+      "permissionTitle": "Permission Controls",
+      "permissionBody": "Financial actions require appropriate user authorization.",
+      "riskTitle": "Risk Awareness",
+      "riskBody": "Potentially risky actions are identified before execution where supported.",
+      "verificationTitle": "Verification",
+      "verificationBody": "Execution results are verified.",
+      "transparencyTitle": "Transparency",
+      "transparencyBody": "Important transaction details are understandable before confirmation."
+    },
+    "smartMoney": {
+      "title": "See Where Smart Money Is Moving",
+      "subtitle": "Turn onchain activity into understandable intelligence.",
+      "features": [
+        "Whale Tracking",
+        "Smart Wallet Tracking",
+        "Wallet Alerts",
+        "Wallet P&L",
+        "Holder Analysis",
+        "Large Transactions",
+        "Accumulation Signals"
+      ],
+      "disclaimer": "Wallet tracking does not predict future prices."
+    },
+    "signalsSection": {
+      "title": "From Market Data to Actionable Intelligence",
+      "flow": [
+        "Market Data",
+        "Technical Analysis",
+        "Onchain Activity",
+        "Smart Money",
+        "AI Analysis",
+        "Confidence",
+        "Risk",
+        "Signal"
+      ],
+      "categories": [
+        "Strong Buy",
+        "Buy",
+        "Watch",
+        "Sell",
+        "High Risk"
+      ],
+      "disclaimer": "AI signals are informational and do not guarantee future performance."
+    },
+    "solanaSection": {
+      "title": "Built for the Speed of Solana",
+      "subtitle": "Fast, low-cost, and rich with onchain data — Solana deserves its own intelligence layer.",
+      "features": [
+        "SOL analysis",
+        "Token discovery",
+        "Early signals",
+        "Smart Money",
+        "Whale activity",
+        "Liquidity analysis",
+        "Holder growth",
+        "DEX activity",
+        "Token risk indicators"
+      ],
+      "cta": "Explore Solana"
+    },
+    "defiSection": {
+      "title": "Discover DeFi Opportunities",
+      "subtitle": "Where data exists, every opportunity shows its essentials. Where it doesn't, we say so.",
+      "features": [
+        "Farms",
+        "Liquidity",
+        "Yield",
+        "Lending",
+        "Protocols",
+        "Pools"
+      ],
+      "labels": [
+        "APY",
+        "TVL",
+        "Risk",
+        "Chain",
+        "Protocol"
+      ],
+      "noData": "Live market data unavailable",
+      "note": "APY and TVL are never fabricated. If a feed is down, we show a graceful fallback instead of a fake number."
+    },
+    "globalVision": {
+      "title": "Beyond Crypto",
+      "subtitle": "An expanding universe of financial markets — carefully labeled so you always know what's live and what's ahead.",
+      "markets": [
+        "Crypto",
+        "DeFi",
+        "Stablecoins",
+        "Tokenized Assets",
+        "RWA",
+        "Stocks",
+        "Commodities",
+        "Futures",
+        "Global Financial Markets"
+      ],
+      "live": "Live",
+      "future": "Future",
+      "comingSoon": "Coming Soon"
+    },
+    "principles": {
+      "title": "Our Principles",
+      "userControlTitle": "User Control",
+      "userControlBody": "Users remain at the center of financial decisions.",
+      "automationTitle": "Intelligent Automation",
+      "automationBody": "AI should reduce complexity, not remove transparency.",
+      "transparencyTitle": "Transparency",
+      "transparencyBody": "Important actions, risks and costs should be understandable.",
+      "openTitle": "Open Infrastructure",
+      "openBody": "Build around interoperable networks and protocols where appropriate.",
+      "dataTitle": "Data-Driven Intelligence",
+      "dataBody": "Use real data instead of assumptions.",
+      "improvementTitle": "Continuous Improvement",
+      "improvementBody": "Systems should learn from outcomes and improve over time without compromising user security."
+    },
+    "techStack": {
+      "title": "The FBT Technology Stack",
+      "subtitle": "From interface to verification — a layered, technology-first architecture.",
+      "experience": "Experience Layer",
+      "experienceDesc": "Web / Mobile / User Interface",
+      "intent": "Intent Layer",
+      "intentDesc": "Intent OS / Natural Language",
+      "intelligence": "Intelligence Layer",
+      "intelligenceDesc": "AI / Signals / Market Analysis",
+      "data": "Data Layer",
+      "dataDesc": "Market / Onchain / Wallet / Protocol Data",
+      "decision": "Decision Layer",
+      "decisionDesc": "Risk / Strategy / Simulation",
+      "execution": "Execution Layer",
+      "executionDesc": "Wallet / DEX / Protocol / Secure Signing",
+      "verification": "Verification Layer",
+      "verificationDesc": "Transaction Verification / Monitoring"
+    },
+    "roadmap": {
+      "title": "Evolution",
+      "subtitle": "Not a dated promise — a conceptual evolution reflecting how the platform grows.",
+      "phase1Title": "Phase 1",
+      "phase1Desc": "Digital Asset Infrastructure",
+      "phase2Title": "Phase 2",
+      "phase2Desc": "Multi-Chain Experience",
+      "phase3Title": "Phase 3",
+      "phase3Desc": "AI Intelligence",
+      "phase4Title": "Phase 4",
+      "phase4Desc": "Intent OS",
+      "phase5Title": "Phase 5",
+      "phase5Desc": "Smart Money & Market Intelligence",
+      "phase6Title": "Phase 6",
+      "phase6Desc": "Personal Financial OS",
+      "futureTitle": "Future",
+      "futureDesc": "Global Intelligent Financial Infrastructure"
+    },
+    "personalOS": {
+      "title": "Toward a Personal Financial Operating System",
+      "subtitle": "The long-term goal is not simply to help users trade. It is to help them understand, organize and interact with financial opportunities through one intelligent interface.",
+      "flow": [
+        "Goal",
+        "Risk Profile",
+        "Strategy",
+        "Allocation",
+        "Execution",
+        "Monitoring",
+        "Learning"
+      ],
+      "note": "This future system is not yet fully implemented. We label vision as vision."
+    },
+    "globalAccess": {
+      "title": "Designed for a Global Financial Internet",
+      "subtitle": "A financial experience should not feel fragmented simply because the underlying infrastructure is.",
+      "bullets": [
+        "Blockchain networks",
+        "Protocols",
+        "Markets",
+        "AI systems",
+        "Users"
+      ],
+      "note": "We avoid unsupported claims about worldwide availability, regulatory status or geographic access."
+    },
+    "transparency": {
+      "title": "What We Are — and What We Are Not",
+      "subtitle": "Trust is built on clarity, not on promises.",
+      "weAreTitle": "We Are",
+      "weAre": [
+        "An evolving financial technology platform",
+        "A Web3 / DeFi interface",
+        "An AI-powered intelligence layer",
+        "A non-custodial experience where applicable",
+        "A platform focused on intent-driven financial interactions"
+      ],
+      "weAreNotTitle": "We Are Not",
+      "weAreNot": [
+        "A guaranteed-profit service",
+        "A promise of investment returns",
+        "A substitute for professional financial advice",
+        "An excuse to hide transaction complexity or risks"
+      ]
+    },
+    "faq": {
+      "title": "FAQ",
+      "q1": "What is FBT Swap?",
+      "a1": "FBT Swap is a non-custodial interface that helps you swap and interact with digital assets across supported networks. You connect your own wallet, you sign your own transactions, and assets never sit in a company account.",
+      "q2": "What is FBT Intent OS?",
+      "a2": "Intent OS is the intelligence layer that understands what you want to achieve, analyzes available information, and helps create a risk-aware, explainable path toward that goal — always asking for your approval before any execution.",
+      "q3": "Is FBT Swap non-custodial?",
+      "a3": "Yes, where applicable. Trades execute directly between your wallet and the blockchain. Fanous Bazaar Pishgam has no access to your private keys, cannot move your funds, and cannot recover a lost seed phrase.",
+      "q4": "Which networks are supported?",
+      "a4": "The live set is derived from the app registry: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, and Solana. The page always reflects the current registry — not a hardcoded marketing list.",
+      "q5": "How does the AI work?",
+      "a5": "Through the FBT AI Gateway and orchestrator, the platform can use configured providers (such as Grok or OpenRouter) and internal intelligence systems to analyze market, onchain and portfolio data. It assists and explains — it does not guarantee outcomes.",
+      "q6": "Does FBT guarantee profits?",
+      "a6": "No. AI analysis and signals are informational and cannot guarantee future performance. Crypto is volatile and you can lose everything.",
+      "q7": "Can AI execute transactions?",
+      "a7": "AI can propose and explain actions, but execution always requires your explicit authorization. For sensitive financial actions AI never independently controls user funds. The authorization model is user-controlled signing.",
+      "q8": "What is Smart Money?",
+      "a8": "Smart Money turns onchain activity — whale movements, large transactions, holder changes and wallet behaviors where data is available — into understandable intelligence. It does not predict prices.",
+      "q9": "What is Solana Intelligence?",
+      "a9": "A dedicated layer for the Solana ecosystem: SOL analysis, token discovery, early signals, liquidity and holder analytics, and token risk indicators where implemented.",
+      "q10": "What markets does FBT support?",
+      "a10": "Live: crypto swaps, DeFi discovery, and Solana intelligence. Future/Coming Soon where appropriate: tokenized assets, RWA, stocks, commodities, futures and broader global markets. We always label future markets as Future or Coming Soon.",
+      "noProfit": "No. AI analysis and signals are informational and cannot guarantee future performance."
+    },
+    "seo": {
+      "title": "About FBT Swap | AI-Powered Financial & DeFi Platform",
+      "description": "Learn about FBT Swap, an AI-powered financial platform combining blockchain, DeFi, market intelligence, non-custodial wallets and Intent OS."
+    },
+    "footer": {
+      "product": "Product",
+      "resources": "Resources",
+      "legal": "Legal",
+      "swap": "Swap",
+      "wallet": "Wallet",
+      "signals": "Signals",
+      "intentOS": "Intent OS",
+      "solana": "Solana",
+      "farms": "Farms",
+      "explore": "Explore",
+      "ecosystem": "Ecosystem",
+      "about": "About",
+      "faq": "FAQ",
+      "security": "Security",
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "riskDisclosure": "Risk Disclosure"
+    },
+    "finalCTA": {
+      "title": "The Future of Finance Starts With Intent.",
+      "subtitle": "Explore a smarter way to interact with financial markets.",
+      "primary": "Launch FBT Swap",
+      "secondary": "Explore Intent OS"
+    },
+    "microcopy": {
+      "aiPowered": "AI POWERED",
+      "intentFirst": "INTENT FIRST",
+      "multiChain": "MULTI-CHAIN",
+      "nonCustodial": "NON-CUSTODIAL",
+      "onchainIntelligence": "ONCHAIN INTELLIGENCE",
+      "smartMoney": "SMART MONEY",
+      "dataDriven": "DATA DRIVEN",
+      "userControlled": "USER CONTROLLED"
+    },
+    "internalLinks": {
+      "swap": "Swap",
+      "wallet": "Wallet",
+      "signals": "Signals",
+      "solana": "Solana",
+      "intentOS": "Intent OS",
+      "orders": "Orders",
+      "farms": "Farms",
+      "explore": "Explore",
+      "ecosystem": "Ecosystem"
+    },
+    "languageSwitcher": {
+      "en": "EN",
+      "fa": "فارسی"
     }
   },
   "contact": {
