@@ -32,6 +32,7 @@ import './intent-ai/ci-brain-turns-probe.mjs';
 /* Operations Center restoration: real monitor engine, conditional orders,
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
+import './intent-ai/ops-i18n-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe

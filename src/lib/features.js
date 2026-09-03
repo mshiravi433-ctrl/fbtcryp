@@ -66,9 +66,26 @@
  * produce a single unit of revenue — while being the specific reason the app
  * cannot be distributed. That is a bad trade in every direction.
  *
- * OFF by default, so a release build that forgets
- * an env var fails SAFE. The routes and their chunks are removed entirely,
- * not hidden — someone unzipping the APK finds no trace of them.
+ * ─── WHAT THE DEFAULT ACTUALLY IS ───────────────────────────────────────────
+ * ON unless `VITE_ENABLE_SPECULATION=false` is set. This comment used to claim
+ * the opposite ("OFF by default, so a release build that forgets an env var
+ * fails SAFE") while the expression below read `!== 'false'`. Anyone trusting
+ * the comment over the code would have shipped a store build believing these
+ * screens were gone.
+ *
+ * The default is ON because this flag serves the WEBSITE, which is the common
+ * case and where the owner wants the screens. The distribution that must not
+ * contain them opts out explicitly and verifiably:
+ *
+ *     "android:sync": "VITE_ENABLE_SPECULATION=false npm run build && …"
+ *
+ * so the store build cannot forget — the flag is written into the one script
+ * that produces it, and `test/run.mjs` builds with the variable both ways and
+ * greps the output to prove the screens really are absent in one and present
+ * in the other.
+ *
+ * When the flag is off the routes and their chunks are removed entirely, not
+ * hidden — someone unzipping the APK finds no trace of them.
  */
 export const SPECULATION_ENABLED =
   typeof __SPECULATION_ENABLED__ !== 'undefined'

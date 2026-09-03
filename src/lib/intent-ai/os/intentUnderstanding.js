@@ -53,12 +53,163 @@ export const INTENT_TYPES = Object.freeze([
   'SETTINGS',
   'REWARDS',
   'INTENT_OS',
+  'OPS_CENTER',
+  'AGENTS',
+  'STRATEGY',
+  'SYSTEM_STATUS',
+  'SECURITY',
+  'NFT',
+  'SHOP',
+  'EXPLORE',
+  'LEARN',
+  'DOCS',
+  'LEADERBOARD',
+  'VAULT',
+  'CAPABILITIES',
   'EXECUTE_CURRENT',
   'CANCEL',
   'CONTINUE',
   'DETAILS',
   'GENERAL'
 ]);
+
+/* -------------------------------------------------------------------------- */
+/*  NORMALISATION                                                              */
+/* -------------------------------------------------------------------------- */
+/**
+ * Real Persian input is not typed the way the regexes above were written:
+ * Arabic ي/ك arrive from iOS keyboards, ZWNJ (\u200c) splits «پرتفوی‌ام» in a
+ * place no `.*` can see, and Persian/Arabic digits never match `\d`.
+ *
+ * The legacy INTENT_PATTERNS keep running against the RAW text — they encode
+ * ZWNJ-joined words like «نهنگ‌ها» on purpose and normalising underneath them
+ * would silently change what they match. The keyword layer below runs against
+ * the normalised form instead, which is where the tolerance is needed.
+ */
+const AR_TO_FA = { 'ي': 'ی', 'ك': 'ک', 'ة': 'ه', 'ۀ': 'ه', 'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ؤ': 'و' };
+const DIGIT_MAP = { '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9', '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9' };
+
+export function normalizeText(value) {
+  return String(value ?? '')
+    .replace(/[يكةۀأإآؤ]/g, (c) => AR_TO_FA[c] || c)
+    .replace(/[۰-۹٠-٩]/g, (d) => DIGIT_MAP[d] || d)
+    .replace(/[\u200c\u200f\u200e\u064b-\u0652]/g, ' ')
+    .replace(/[?!.,;:؛،؟)("'`]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/* -------------------------------------------------------------------------- */
+/*  KEYWORD LAYER                                                              */
+/* -------------------------------------------------------------------------- */
+/**
+ * WHY THIS EXISTS — the bug this file was rewritten to fix.
+ *
+ * INTENT_PATTERNS is a co-occurrence grammar: nearly every rule needs TWO
+ * words in one sentence («پرتفوی» AND «تحلیل»). Users do not type sentences
+ * into an assistant, they type nouns: «پرتفوی», «سود», «تحلیل», «استراتژی»,
+ * «مرکز عملیات». Every one of those scored zero, fell through the
+ * `top[1] < 3` guard and came back as GENERAL@0.3 — the generic "I couldn't
+ * map that to a module" reply the user reported.
+ *
+ * A bare noun is a WEAKER signal than a full phrase, not an absent one. It
+ * scores 3 (just clears the floor) so any real INTENT_PATTERNS match still
+ * outranks it, and two keywords for the same intent still lose to one
+ * explicit phrase. Nothing here can promote a keyword above an executable
+ * grammar match.
+ */
+const KEYWORD_WEIGHT = 3;
+
+const KEYWORD_LEXICON = Object.freeze([
+  { type: 'PORTFOLIO_ANALYSIS', words: ['پرتفوی', 'پرتفولیو', 'پورتفولیو', 'پرتفو', 'سبد دارایی', 'سبد من', 'داراییهای من', 'تخصیص', 'توزیع دارایی', 'portfolio', 'holdings', 'allocation', 'asset allocation'] },
+  { type: 'WALLET_BALANCE', words: ['کیف پول', 'کیفپول', 'والت', 'موجودی', 'موجودیم', 'دارایی', 'داراییها', 'wallet', 'balance', 'balances'] },
+  { type: 'YIELD_DISCOVERY', words: ['سود', 'سودآوری', 'سود اوری', 'بازدهی', 'بازده', 'درامد', 'درآمد', 'ییلد', 'apy', 'apr', 'yield', 'earn', 'staking', 'استیک', 'سپرده'] },
+  { type: 'MARKET_ANALYSIS', words: ['تحلیل', 'انالیز', 'آنالیز', 'بررسی', 'بازار', 'مارکت', 'قیمت', 'نرخ', 'روند', 'analysis', 'analyse', 'analyze', 'market', 'price', 'trend'] },
+  { type: 'RISK_ANALYSIS', words: ['ریسک', 'خطر', 'risk', 'exposure', 'drawdown'] },
+  { type: 'NEWS_SEARCH', words: ['اخبار', 'خبر', 'خبرها', 'news', 'headline', 'headlines'] },
+  { type: 'SIGNALS', words: ['سیگنال', 'سیگنالها', 'signal', 'signals', 'outlook'] },
+  { type: 'SWAP', words: ['سواپ', 'تبدیل', 'معاوضه', 'swap', 'convert', 'exchange'] },
+  { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge'] },
+  { type: 'FARM', words: ['فارم', 'استخر', 'ال پی', 'farm', 'farming', 'pool', 'liquidity'] },
+  { type: 'LEND', words: ['وام دادن', 'لند', 'lend', 'lending', 'supply', 'aave'] },
+  { type: 'BORROW', words: ['وام', 'قرض', 'borrow', 'loan'] },
+  { type: 'ORDERS', words: ['سفارش', 'سفارشها', 'سفارشات', 'order', 'orders', 'limit'] },
+  /* Transaction history is a wallet read — the wallet page owns the ledger. */
+  { type: 'WALLET_BALANCE', words: ['تاریخچه', 'تراکنش', 'تراکنشها', 'تاریخچه تراکنشها', 'history', 'transactions', 'transaction history'] },
+  /* A bare "quote" with no pair still belongs on the swap surface. */
+  { type: 'SWAP', words: ['نقل قول', 'قیمت بگیر', 'quote', 'get a quote'] },
+  { type: 'SMART_MONEY', words: ['اسمارت مانی', 'پول هوشمند', 'smart money', 'smartmoney'] },
+  { type: 'WHALE', words: ['نهنگ', 'نهنگها', 'whale', 'whales'] },
+  { type: 'REWARDS', words: ['امتیاز', 'پاداش', 'جایزه', 'rewards', 'points', 'airdrop'] },
+  { type: 'SETTINGS', words: ['تنظیمات', 'settings', 'preferences'] },
+  { type: 'NOTIFICATIONS', words: ['اعلان', 'اعلانها', 'نوتیف', 'هشدار', 'alert', 'alerts', 'notification', 'notifications'] },
+  /* Monitors are the Ops Center's own surface, not a settings screen. */
+  { type: 'OPS_CENTER', words: ['پایش', 'پایشها', 'مانیتور', 'مانیتورها', 'monitor', 'monitors', 'monitoring'] },
+  { type: 'STOCKS', words: ['سهام', 'سهم', 'بورس', 'stock', 'stocks', 'xstock', 'equities'] },
+  /* Tokenized real-world assets — the Stocks/RWA surface owns these. */
+  { type: 'RWA', words: ['توکن شده', 'توکنیزه', 'دارایی واقعی', 'rwa', 'tokenized', 'tokenized assets', 'real world asset'] },
+  { type: 'P2P', words: ['p2p', 'پی تو پی', 'همتا به همتا'] },
+  { type: 'FUTURES', words: ['فیوچرز', 'پرپچوال', 'اهرم', 'futures', 'perp', 'perps', 'perpetual', 'leverage'] },
+  { type: 'DYDX', words: ['dydx', 'دیوایدیایکس'] },
+  { type: 'HORIZON', words: ['افق جهانی', 'فارکس', 'forex', 'طلا', 'نفت', 'کالا', 'commodity', 'commodities'] },
+  { type: 'BUY', words: ['خرید', 'بخرم', 'buy', 'purchase'] },
+  { type: 'SELL', words: ['فروش', 'بفروشم', 'sell'] },
+  { type: 'SEND', words: ['ارسال', 'انتقال', 'واریز', 'send', 'transfer'] },
+  { type: 'REBALANCE', words: ['متعادل', 'متوازن', 'ریبالانس', 'rebalance', 'rebalancing'] },
+  { type: 'GOAL', words: ['هدف', 'هدف مالی', 'goal', 'goals', 'target'] },
+  { type: 'DCA', words: ['دی سی ای', 'خرید پلکانی', 'خرید دورهای', 'dca', 'recurring'] },
+  { type: 'CONTINUE', words: ['ادامه', 'ادامهاش', 'continue', 'resume', 'go on'] },
+  { type: 'DETAILS', words: ['جزئیات', 'جزییات', 'بیشتر', 'details', 'more'] },
+
+  /* ── app surfaces the assistant must be able to reach ─────────────────── */
+  { type: 'OPS_CENTER', words: ['مرکز عملیات', 'مرکز عملیاتی', 'اپراسیون', 'ops center', 'operations center', 'operations', 'ops'] },
+  { type: 'AGENTS', words: ['ایجنت', 'ایجنتها', 'ایجنت ها', 'عامل هوشمند', 'agent', 'agents'] },
+  { type: 'STRATEGY', words: ['استراتژی', 'استراتژیها', 'استراتژی ها', 'strategy', 'strategies', 'playbook'] },
+  { type: 'SYSTEM_STATUS', words: ['وضعیت سیستم', 'وضعیت سرویس', 'سلامت سیستم', 'system status', 'status', 'health', 'uptime'] },
+  { type: 'SECURITY', words: ['امنیت', 'ادیت', 'حسابرسی', 'security', 'audit'] },
+  { type: 'NFT', words: ['nft', 'ان اف تی', 'nfts'] },
+  { type: 'SHOP', words: ['فروشگاه', 'گیفت کارت', 'گیفت', 'shop', 'store', 'gift card'] },
+  { type: 'EXPLORE', words: ['کاوش', 'اکسپلور', 'کشف', 'explore', 'discover'] },
+  { type: 'LEARN', words: ['اموزش', 'آموزش', 'یادگیری', 'learn', 'academy', 'tutorial'] },
+  { type: 'DOCS', words: ['مستندات', 'داکیومنت', 'docs', 'documentation', 'api'] },
+  { type: 'LEADERBOARD', words: ['لیدربورد', 'جدول رتبه', 'رتبهبندی', 'leaderboard', 'ranking'] },
+  { type: 'VAULT', words: ['ولت هوشمند', 'خزانه', 'vault'] },
+  { type: 'INTENT_OS', words: ['intent os', 'intentos', 'اینتنت', 'اینتنت او اس'] },
+  { type: 'BTC_WALLET', words: ['والت بیتکوین', 'کیف بیتکوین', 'btc wallet', 'bitcoin wallet'] },
+  { type: 'CAPABILITIES', words: ['چه کاری بلدی', 'چیکار میتونی', 'چه کارهایی بلدی', 'قابلیت', 'قابلیتها', 'راهنما', 'کمک', 'help', 'what can you do', 'capabilities', 'commands'] }
+]);
+
+/** Pre-compile one boundary-aware matcher per keyword (built once, not per call). */
+const KEYWORD_MATCHERS = KEYWORD_LEXICON.map((entry) => ({
+  type: entry.type,
+  matchers: entry.words.map((w) => {
+    const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Persian has no case and no \b that works on its script — bound on
+    // "not a letter or digit" instead so «سود» does not match inside «سودان».
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${esc}($|[^\\p{L}\\p{N}])`, 'u');
+  })
+}));
+
+function scoreKeywords(normalized) {
+  const hits = [];
+  for (const entry of KEYWORD_MATCHERS) {
+    for (const re of entry.matchers) {
+      if (re.test(normalized)) {
+        hits.push({ type: entry.type, score: KEYWORD_WEIGHT });
+        break; // one keyword hit per intent — repeats are not extra evidence
+      }
+    }
+  }
+  return hits;
+}
+
+/**
+ * «بیت کوین چطوره» / «قیمت اتریوم» — a token name plus a question about it is
+ * a token analysis, not a swap and not GENERAL. Kept separate from the lexicon
+ * because it needs the extracted entity, not a word.
+ */
+const TOKEN_QUESTION = /(چطور|چطوره|چگونه|وضعیت|قیمت|نرخ|تحلیل|بخرم|ارزش|how is|how's|what about|price of|outlook|worth)/i;
 
 // Persian + English patterns
 const INTENT_PATTERNS = [
@@ -474,6 +625,7 @@ export function understandIntent(message, context = {}) {
     };
   }
 
+  const normalized = normalizeText(text);
   const scores = new Map();
   const matched = [];
 
@@ -493,6 +645,16 @@ export function understandIntent(message, context = {}) {
     }
   }
 
+  /*
+   * Keyword layer — the fix for bare nouns («پرتفوی», «سود», «استراتژی»).
+   * It only ADDS evidence; a phrase match from INTENT_PATTERNS always carries
+   * more weight, so nothing that used to classify correctly can be displaced.
+   */
+  for (const hit of scoreKeywords(normalized)) {
+    scores.set(hit.type, (scores.get(hit.type) || 0) + hit.score);
+    matched.push({ type: hit.type, score: hit.score, keyword: true });
+  }
+
   // Check navigation separately
   const nav = extractNavigationIntent(text);
   if (nav) {
@@ -501,12 +663,23 @@ export function understandIntent(message, context = {}) {
     matched.push({ type: nav.type, score: 6, nav });
   }
 
-  // Sort by score
-  const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
-  const top = sorted[0];
-
   // Entity extraction
   const entities = extractEntities(text);
+
+  /*
+   * A named token plus a question about it is a token analysis. Without this
+   * «بیت کوین چطوره» and «قیمت اتریوم» scored nothing at all: the token name
+   * is an entity, not one of the lexicon words.
+   */
+  if (entities.token && !entities.fromToken && TOKEN_QUESTION.test(text)) {
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 5);
+    matched.push({ type: 'ANALYZE_TOKEN', score: 5, tokenQuestion: entities.token });
+  }
+
+  // Sort by score, breaking ties deterministically so the same sentence never
+  // classifies two different ways between runs.
+  const sorted = [...scores.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+  const top = sorted[0];
 
   // If no clear intent, try to infer from context
   if (!top || top[1] < 3) {
@@ -571,9 +744,11 @@ export function understandIntent(message, context = {}) {
       'FARM', 'LEND', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
       'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS',
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
-      'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'
+      'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND',
+      'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
+      'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES'
     ].includes(top[0]),
-    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS'].includes(top[0])
+    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(top[0])
   };
 }
 
@@ -683,7 +858,44 @@ export const ACCEPTANCE_TESTS = Object.freeze([
   { input: 'همان کاری که گفتیم را ادامه بده', expected: 'CONTINUE' },
   { input: 'این را اجرا کن', expected: 'EXECUTE_CURRENT' },
   { input: 'لغوش کن', expected: 'CANCEL' },
-  { input: 'جزئیاتش را بیشتر بررسی کن', expected: 'DETAILS' }
+  { input: 'جزئیاتش را بیشتر بررسی کن', expected: 'DETAILS' },
+
+  /* ── BARE NOUNS ──────────────────────────────────────────────────────────
+   * Every case below used to return GENERAL@0.3 — the "I couldn't map that to
+   * a module" reply users actually hit. They are the regression net for the
+   * keyword layer: a user types a noun, not a sentence, and still gets routed.
+   */
+  { input: 'پرتفوی', expected: 'PORTFOLIO_ANALYSIS' },
+  { input: 'سود', expected: 'YIELD_DISCOVERY' },
+  { input: 'تحلیل', expected: 'MARKET_ANALYSIS' },
+  { input: 'کیف پول من', expected: 'WALLET_BALANCE' },
+  { input: 'استراتژی', expected: 'STRATEGY' },
+  { input: 'ایجنت‌ها را نشان بده', expected: 'AGENTS' },
+  { input: 'مرکز عملیات', expected: 'OPS_CENTER' },
+  { input: 'وضعیت سیستم', expected: 'SYSTEM_STATUS' },
+  { input: 'امنیت', expected: 'SECURITY' },
+  { input: 'nft', expected: 'NFT' },
+  { input: 'فروشگاه', expected: 'SHOP' },
+  { input: 'چه کاری بلدی', expected: 'CAPABILITIES' },
+  { input: 'برای ادامه کار', expected: 'CONTINUE' },
+  { input: 'سهام', expected: 'STOCKS' },
+  { input: 'بریج', expected: 'BRIDGE' },
+  { input: 'p2p', expected: 'P2P' },
+  { input: 'سفارش‌های من', expected: 'ORDERS' },
+  { input: 'اخبار', expected: 'NEWS_SEARCH' },
+
+  /* ── TOKEN + QUESTION ────────────────────────────────────────────────────
+   * A named coin plus a question about it is an analysis request. Neither
+   * word is in the lexicon; the entity extractor supplies the token.
+   */
+  { input: 'بیت کوین چطوره', expected: 'ANALYZE_TOKEN' },
+  { input: 'قیمت اتریوم', expected: 'ANALYZE_TOKEN' },
+
+  /* ── MIXED SCRIPT / ARABIC KEYBOARD ──────────────────────────────────────
+   * Arabic ي and ك arrive from iOS keyboards; normalisation must fold them.
+   */
+  { input: 'پرتفوي', expected: 'PORTFOLIO_ANALYSIS' },
+  { input: 'كيف پول', expected: 'WALLET_BALANCE' }
 ]);
 
 export function runAcceptanceTests() {

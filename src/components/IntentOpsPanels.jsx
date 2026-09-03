@@ -9,6 +9,17 @@
 
 import { useMemo, useState } from 'react';
 import { CATEGORIES, OPERATIONS } from '../lib/intent-ai/os/opsCatalog.js';
+/* The catalog's title/desc are English data literals; these translate them at
+   render time without touching the routing fields the panel dispatches on. */
+import { localizeOpsCard, localizeOpsCategory } from '../lib/intent-ai/os/opsCatalogI18n.js';
+/* Line-art icons replacing the catalog's emoji — see OpsIcons.jsx for why. */
+import { OpsCardIcon, OpsCategoryIcon } from './OpsIcons.jsx';
+/*
+ * Panel chrome in fa/en/ar. Replaces forty inline `locale === 'en' ? …` pairs
+ * that were a two-way switch in a three-language app AND compared against a
+ * bare 'en' while the live locale is 'en-US' — see opsPanelStrings.js.
+ */
+import { opsText, opsPhrase, intlLocale } from '../lib/intent-ai/os/opsPanelStrings.js';
 
 /* ------------------------------------------------------------------------- */
 /* helpers                                                                    */
@@ -23,16 +34,16 @@ const fmtNum = (v, digits = 2) => {
 export function statusPill(status, locale = 'fa') {
   const s = String(status || 'UNKNOWN').toUpperCase();
   const label = {
-    ACTIVE: locale === 'en' ? 'Active' : 'فعال',
-    PAUSED: locale === 'en' ? 'Paused' : 'متوقف',
-    TRIGGERED: locale === 'en' ? 'Triggered' : 'شرط برقرار شد',
-    COMPLETED: locale === 'en' ? 'Completed' : 'تکمیل',
-    CANCELLED: locale === 'en' ? 'Cancelled' : 'لغو شده',
-    ERROR: locale === 'en' ? 'Error' : 'خطا',
-    DRAFT: locale === 'en' ? 'Draft' : 'پیش‌نویس',
-    WAITING_CONFIRMATION: locale === 'en' ? 'Waiting' : 'در انتظار تأیید',
-    EXECUTING: locale === 'en' ? 'Executing' : 'در حال اجرا',
-    UNKNOWN: locale === 'en' ? 'Unknown' : 'نامشخص'
+    ACTIVE: opsText('status.active', locale),
+    PAUSED: opsText('status.paused', locale),
+    TRIGGERED: opsText('status.triggered', locale),
+    COMPLETED: opsText('status.completed', locale),
+    CANCELLED: opsText('status.cancelled', locale),
+    ERROR: opsText('status.error', locale),
+    DRAFT: opsText('status.draft', locale),
+    WAITING_CONFIRMATION: opsText('status.waiting', locale),
+    EXECUTING: opsText('status.executing', locale),
+    UNKNOWN: opsText('status.unknown', locale)
   }[s] || s;
   return { label, tone: ['TRIGGERED', 'EXECUTING'].includes(s) ? 'warn' : ['COMPLETED'].includes(s) ? 'ok' : ['ERROR', 'CANCELLED', 'FAILED'].includes(s) ? 'bad' : 'idle' };
 }
@@ -50,14 +61,24 @@ export function OperationsPanel({
   locale = 'fa'
 }) {
   const [cat, setCat] = useState('portfolio');
-  const cards = useMemo(() => OPERATIONS.filter((c) => c.category === cat), [cat]);
+  /*
+   * Localize at render, not in the catalog. `localizeOpsCard` returns a copy
+   * with only title/desc swapped — `action`, `capabilityId`, `route` and
+   * `requiresWallet` pass through untouched, so `onAction(card)` still
+   * dispatches on exactly the same fields it always did and switching the
+   * language cannot change what a button does.
+   */
+  const cards = useMemo(
+    () => OPERATIONS.filter((c) => c.category === cat).map((c) => localizeOpsCard(c, locale)),
+    [cat, locale]
+  );
 
   if (!open) return null;
   return (
-    <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={locale === 'en' ? 'Operations' : 'عملیات'}>
+    <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={opsText('ops.aria', locale)}>
       <div className="iaos-panel iaos-ops-panel">
         <div className="iaos-panel-head">
-          <h2>{locale === 'en' ? 'Operations Center' : 'مرکز عملیات'}</h2>
+          <h2>{opsText('ops.title', locale)}</h2>
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="iaos-ops-cats" role="tablist">
@@ -70,8 +91,8 @@ export function OperationsPanel({
               className={`iaos-ops-cat${cat === c.id ? ' is-on' : ''}`}
               onClick={() => setCat(c.id)}
             >
-              <span aria-hidden="true">{c.icon}</span>
-              {c.title}
+              <OpsCategoryIcon category={c} />
+              {localizeOpsCategory(c, locale)}
             </button>
           ))}
         </div>
@@ -88,14 +109,14 @@ export function OperationsPanel({
                 disabled={!avail.available || busy}
                 onClick={() => onAction(card)}
               >
-                <span className="iaos-ops-icon" aria-hidden="true">{card.icon}</span>
+                <span className="iaos-ops-icon"><OpsCardIcon card={card} /></span>
                 <span className="iaos-ops-body">
                   <strong>{card.title}</strong>
                   <small>{card.desc}</small>
                 </span>
                 <span className="iaos-ops-state">
                   {!avail.available
-                    ? (avail.reason === 'WALLET_REQUIRED' ? (locale === 'en' ? 'Wallet needed' : 'نیاز به کیف پول') : (locale === 'en' ? 'Unavailable' : 'در دسترس نیست'))
+                    ? opsText(avail.reason === 'WALLET_REQUIRED' ? 'ops.walletNeeded' : 'ops.unavailable', locale)
                     : '↗'}
                 </span>
               </button>
@@ -103,9 +124,7 @@ export function OperationsPanel({
           })}
         </div>
         <p className="iaos-panel-note">
-          {locale === 'en'
-            ? 'Every card is a real operation. Cards needing a connected wallet show why they are disabled.'
-            : 'هر کارت یک عملیات واقعی است؛ کارت‌هایی که کیف پول می‌خواهند دلیل غیرفعال بودن را نشان می‌دهند.'}
+          {opsText('ops.note', locale)}
         </p>
       </div>
     </div>
@@ -133,14 +152,18 @@ export function HistoryPanel({
   const operations = history?.operations || [];
   const activeMonitors = (monitors || []).filter((m) => ['ACTIVE', 'PAUSED', 'TRIGGERED'].includes(String(m.status || '').toUpperCase()));
 
-  const L = locale === 'en' ? {
-    title: 'History', conversations: 'Conversations', operations: 'Operations', monitoring: 'Active Monitoring',
-    empty: 'Nothing recorded yet', pause: 'Pause', resume: 'Resume', cancel: 'Cancel', evaluate: 'Check now',
-    continue: 'Continue', close: 'Close'
-  } : {
-    title: 'تاریخچه', conversations: 'گفتگوها', operations: 'عملیات', monitoring: 'پایش فعال',
-    empty: 'هنوز چیزی ثبت نشده', pause: 'توقف', resume: 'ادامه', cancel: 'لغو', evaluate: 'بررسی اکنون',
-    continue: 'ادامه', close: 'بستن'
+  const L = {
+    title: opsText('hist.title', locale),
+    conversations: opsText('hist.conversations', locale),
+    operations: opsText('hist.operations', locale),
+    monitoring: opsText('hist.monitoring', locale),
+    empty: opsText('hist.empty', locale),
+    pause: opsText('monitor.pause', locale),
+    resume: opsText('monitor.resume', locale),
+    cancel: opsText('monitor.cancel', locale),
+    evaluate: opsText('monitor.checkNow', locale),
+    continue: opsText('hist.continue', locale),
+    close: opsText('hist.close', locale)
   };
 
   return (
@@ -174,9 +197,9 @@ export function HistoryPanel({
             conversations.length
               ? conversations.map((c) => (
                 <div key={c.id} className={`iaos-history-row iaos-history-${c.role}`}>
-                  <span className="iaos-history-who">{c.role === 'user' ? (locale === 'en' ? 'You' : 'شما') : (locale === 'en' ? 'AI' : 'اینتنت')}</span>
+                  <span className="iaos-history-who">{opsText(c.role === 'user' ? 'history.you' : 'history.ai', locale)}</span>
                   <p>{c.content}</p>
-                  <time>{new Date(c.at || 0).toLocaleString(locale === 'en' ? 'en-US' : 'fa-IR')}</time>
+                  <time>{new Date(c.at || 0).toLocaleString(intlLocale(locale))}</time>
                 </div>
               ))
               : <p className="iaos-empty">{L.empty}</p>
@@ -190,7 +213,7 @@ export function HistoryPanel({
                     <strong>{o.title}</strong>
                     <small>{o.detail}</small>
                     <span className={`iaos-pill iaos-pill-${pill.tone}`}>{pill.label}</span>
-                    <time>{new Date(o.at || 0).toLocaleString(locale === 'en' ? 'en-US' : 'fa-IR')}</time>
+                    <time>{new Date(o.at || 0).toLocaleString(intlLocale(locale))}</time>
                     <button type="button" className="iaos-history-continue" onClick={() => onContinue(o)} disabled={busy}>
                       {L.continue} ↗
                     </button>
@@ -207,7 +230,9 @@ export function HistoryPanel({
                   <div key={m.id} className="iaos-history-row iaos-history-monitor" data-testid="intent-ai-monitor-row">
                     <strong>{m.label || `${m.asset?.symbol || ''} ${m.metric}`}</strong>
                     <small>
-                      {m.asset?.symbol || ''} · {m.metric} {m.operator} {fmtNum(m.threshold)} · every {m.intervalMinutes}m
+                      {m.asset?.symbol || ''} · {m.metric} {m.operator} {fmtNum(m.threshold)}
+                      {' · '}
+                      {opsPhrase('everyMinutes', locale, m.intervalMinutes)}
                       {m.lastEvent ? ` · ${m.lastEvent.message}` : ''}
                     </small>
                     <span className={`iaos-pill iaos-pill-${pill.tone}`}>{pill.label}</span>
@@ -237,9 +262,16 @@ export function HistoryPanel({
 
 export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
   if (!open) return null;
-  const L = locale === 'en'
-    ? { title: 'Intent OS Status', wallet: 'Wallet', server: 'AI Gateway', monitors: 'Monitors', orders: 'Orders', automations: 'Automations', engine: 'Monitor engine', cron: 'Background cron' }
-    : { title: 'وضعیت Intent OS', wallet: 'کیف پول', server: 'درگاه AI', monitors: 'پایش‌ها', orders: 'سفارش‌ها', automations: 'اتوماسیون‌ها', engine: 'موتور پایش', cron: 'کرون پس‌زمینه' };
+  const L = {
+    title: opsText('st.title', locale),
+    wallet: opsText('st.wallet', locale),
+    server: opsText('st.server', locale),
+    monitors: opsText('st.monitors', locale),
+    orders: opsText('st.orders', locale),
+    automations: opsText('st.automations', locale),
+    engine: opsText('st.engine', locale),
+    cron: opsText('st.cron', locale)
+  };
 
   const Cell = ({ label, value, ok }) => (
     <div className="iaos-status-cell">
@@ -256,18 +288,19 @@ export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="iaos-status-grid">
-          <Cell label={L.wallet} value={status?.walletConnected ? (locale === 'en' ? 'Connected' : 'متصل') : (locale === 'en' ? 'Not connected' : 'متصل نیست')} ok={status?.walletConnected} />
-          <Cell label={L.server} value={status?.serverReachable ? (locale === 'en' ? 'Online' : 'آنلاین') : (locale === 'en' ? 'Unavailable' : 'در دسترس نیست')} ok={status?.serverReachable} />
-          <Cell label={L.monitors} value={`${status?.monitors?.active ?? 0} active / ${status?.monitors?.total ?? 0} total`} />
+          <Cell label={L.wallet} value={opsText(status?.walletConnected ? 'status.connected' : 'status.notConnected', locale)} ok={status?.walletConnected} />
+          <Cell label={L.server} value={opsText(status?.serverReachable ? 'status.online' : 'ops.unavailable', locale)} ok={status?.serverReachable} />
+          <Cell
+            label={L.monitors}
+            value={opsPhrase('monitorCount', locale, status?.monitors?.active ?? 0, status?.monitors?.total ?? 0)}
+          />
           <Cell label={L.orders} value={status?.ordersCount ?? 0} />
           <Cell label={L.automations} value={status?.automationsCount ?? 0} />
-          <Cell label={L.engine} value={status?.engine?.durable ? (locale === 'en' ? 'Durable store' : 'ذخیره بادوام') : (locale === 'en' ? 'Memory store' : 'حافظه موقت')} />
-          <Cell label={L.cron} value={status?.engine?.cronSecretSet ? (locale === 'en' ? 'Configured' : 'پیکربندی شده') : (locale === 'en' ? 'Not configured' : 'پیکربندی نشده')} />
+          <Cell label={L.engine} value={opsText(status?.engine?.durable ? 'status.durableStore' : 'status.memoryStore', locale)} />
+          <Cell label={L.cron} value={opsText(status?.engine?.cronSecretSet ? 'status.configured' : 'status.notConfigured', locale)} />
         </div>
         <p className="iaos-panel-note">
-          {locale === 'en'
-            ? 'All values are read from live services. Nothing here is a simulated number.'
-            : 'همه مقادیر از سرویس‌های واقعی خوانده می‌شوند؛ هیچ عدد شبیه‌سازی‌شده‌ای نمایش داده نمی‌شود.'}
+          {opsText('status.note', locale)}
         </p>
       </div>
     </div>
@@ -288,9 +321,17 @@ export function MonitorDraftForm({ open, onClose, onCreate, initial = null, busy
   const [intervalMinutes, setIntervalMinutes] = useState(initial?.intervalMinutes || 60);
 
   if (!open) return null;
-  const L = locale === 'en'
-    ? { title: 'Create Monitor', asset: 'Asset', metric: 'Metric', operator: 'Operator', threshold: 'Threshold', interval: 'Check every', create: 'Create Monitor', cancel: 'Cancel', note: 'The server evaluates this job against live prices and records every check. No fake trigger.' }
-    : { title: 'ایجاد پایش', asset: 'دارایی', metric: 'شاخص', operator: 'شرط', threshold: 'آستانه', interval: 'بررسی هر', create: 'ایجاد پایش', cancel: 'انصراف', note: 'سرور این پایش را با قیمت واقعی ارزیابی می‌کند و هر بررسی ثبت می‌شود؛ هیچ شرط ساختگی‌ای وجود ندارد.' };
+  const L = {
+    title: opsText('mon.title', locale),
+    asset: opsText('mon.asset', locale),
+    metric: opsText('mon.metric', locale),
+    operator: opsText('mon.operator', locale),
+    threshold: opsText('mon.threshold', locale),
+    interval: opsText('mon.interval', locale),
+    create: opsText('mon.create', locale),
+    cancel: opsText('mon.cancel', locale),
+    note: opsText('mon.note', locale)
+  };
 
   const submit = (e) => {
     e.preventDefault();
@@ -363,9 +404,15 @@ export function OrderDraftForm({ open, onClose, onCreate, initial = null, busy =
   const [amount, setAmount] = useState(initial?.amount ?? '100');
 
   if (!open) return null;
-  const L = locale === 'en'
-    ? { title: 'Conditional Buy', asset: 'Asset', target: 'Target price (USD)', amount: 'Amount (USD)', create: 'Create Order', cancel: 'Cancel', note: 'Creates a REAL limit watch on /orders: the server watches the price and alerts; the fill is always signed by you at the swap screen.' }
-    : { title: 'خرید شرطی', asset: 'دارایی', target: 'قیمت هدف (دلار)', amount: 'مبلغ (دلار)', create: 'ایجاد سفارش', cancel: 'انصراف', note: 'یک سفارش واقعی در /orders ایجاد می‌شود: سرور قیمت را پایش می‌کند و خبر می‌دهد؛ پر شدن همیشه با امضای شما در صفحه سواپ انجام می‌شود.' };
+  const L = {
+    title: opsText('ord.title', locale),
+    asset: opsText('ord.asset', locale),
+    target: opsText('ord.target', locale),
+    amount: opsText('ord.amount', locale),
+    create: opsText('ord.create', locale),
+    cancel: opsText('ord.cancel', locale),
+    note: opsText('ord.note', locale)
+  };
 
   const submit = (e) => {
     e.preventDefault();
@@ -426,13 +473,13 @@ export function MonitorCard({ monitor, onAction, locale = 'fa' }) {
       <div className="iaos-monitor-card-body">
         <span>{monitor?.asset?.symbol || '—'} · {monitor?.metric} {monitor?.operator} {fmtNum(monitor?.threshold)}</span>
         {monitor?.lastEvent ? <small>⏱ {monitor.lastEvent.message}</small> : null}
-        {monitor?.lastCheckAt ? <small>{locale === 'en' ? 'checked' : 'آخرین بررسی'}: {new Date(monitor.lastCheckAt).toLocaleString(locale === 'en' ? 'en-US' : 'fa-IR')}</small> : null}
+        {monitor?.lastCheckAt ? <small>{opsText('monitor.checked', locale)}: {new Date(monitor.lastCheckAt).toLocaleString(intlLocale(locale))}</small> : null}
       </div>
       <div className="iaos-monitor-card-actions">
-        {monitor?.status === 'ACTIVE' ? <button type="button" onClick={() => onAction(monitor, 'pause')}>{locale === 'en' ? 'Pause' : 'توقف'}</button> : null}
-        {monitor?.status === 'PAUSED' ? <button type="button" onClick={() => onAction(monitor, 'resume')}>{locale === 'en' ? 'Resume' : 'ادامه'}</button> : null}
-        <button type="button" onClick={() => onAction(monitor, 'evaluate')}>{locale === 'en' ? 'Check now' : 'بررسی اکنون'}</button>
-        <button type="button" className="iaos-danger" onClick={() => onAction(monitor, 'cancel')}>{locale === 'en' ? 'Cancel' : 'لغو'}</button>
+        {monitor?.status === 'ACTIVE' ? <button type="button" onClick={() => onAction(monitor, 'pause')}>{opsText('monitor.pause', locale)}</button> : null}
+        {monitor?.status === 'PAUSED' ? <button type="button" onClick={() => onAction(monitor, 'resume')}>{opsText('monitor.resume', locale)}</button> : null}
+        <button type="button" onClick={() => onAction(monitor, 'evaluate')}>{opsText('monitor.checkNow', locale)}</button>
+        <button type="button" className="iaos-danger" onClick={() => onAction(monitor, 'cancel')}>{opsText('monitor.cancel', locale)}</button>
       </div>
     </div>
   );
@@ -440,16 +487,14 @@ export function MonitorCard({ monitor, onAction, locale = 'fa' }) {
 
 export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' }) {
   if (!Array.isArray(rows) || !rows.length) {
-    return <div className="iaos-opp-empty">{locale === 'en' ? 'No opportunities with enough real data.' : 'فرصتی با داده کافی پیدا نشد.'}</div>;
+    return <div className="iaos-opp-empty">{opsText('opp.none', locale)}</div>;
   }
   const top = rows.slice(0, 5);
   return (
     <div className="iaos-opp-list" data-testid="intent-ai-opportunities">
       {goal ? (
         <div className="iaos-opp-goal">
-          {locale === 'en'
-            ? `Goal: ${fmtNum(goal?.targetReturnPct)}% → this is an estimate, never a guarantee`
-            : `هدف: ${fmtNum(goal?.targetReturnPct)}٪ → این تخمین است، نه تضمین`}
+          {opsPhrase('goalEstimate', locale, fmtNum(goal?.targetReturnPct))}
         </div>
       ) : null}
       {top.map((o) => (
@@ -460,17 +505,15 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
             <small>{o.basis === 'apy' ? 'APY' : '7d/2'}</small>
           </span>
           <span className="iaos-opp-meta">
-            {o.probabilityPct != null ? `${locale === 'en' ? 'hist. rate' : 'نرخ تاریخی'} ${fmtNum(o.probabilityPct, 0)}%` : '—'}
+            {o.probabilityPct != null ? `${opsText('opp.histRate', locale)} ${fmtNum(o.probabilityPct, 0)}%` : '—'}
             {o.potentialDrawdownPct != null ? ` · DD ${fmtNum(o.potentialDrawdownPct, 0)}%` : ''}
           </span>
           <span className={`iaos-pill iaos-pill-${o.risk === 'high' ? 'bad' : o.risk === 'medium' ? 'warn' : 'ok'}`}>{o.risk.toUpperCase()}</span>
-          <button type="button" className="iaos-opp-monitor" onClick={() => onMonitor(o)}>{locale === 'en' ? 'Monitor' : 'پایش کن'}</button>
+          <button type="button" className="iaos-opp-monitor" onClick={() => onMonitor(o)}>{opsText('opp.monitor', locale)}</button>
         </div>
       ))}
       <p className="iaos-opp-disclaimer">
-        {locale === 'en'
-          ? 'Expected return / probability are historical observations or stated APY — never guaranteed. Confidence and data quality are shown per row.'
-          : 'بازده و احتمال، مشاهدات تاریخی یا APY اعلام‌شده‌اند — هیچ‌گاه تضمین نیستند. اطمینان و کیفیت داده هر ردیف نمایش داده می‌شود.'}
+        {opsText('opp.note', locale)}
       </p>
     </div>
   );
@@ -479,10 +522,10 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
 export function OrderCard({ order, locale = 'fa' }) {
   return (
     <div className="iaos-order-card" data-testid="intent-ai-order-card">
-      <strong>{order?.toToken?.symbol || order?.toSymbol || '?'} {locale === 'en' ? 'conditional buy' : 'خرید شرطی'}</strong>
+      <strong>{order?.toToken?.symbol || order?.toSymbol || '?'} {opsText('order.conditionalBuy', locale)}</strong>
       <span>{order?.targetRate != null ? `${order.direction === 'above' ? '≥' : '≤'} ${fmtNum(order.targetRate, 0)} USD` : ''}</span>
       <small>{order?.amountIn} {order?.fromToken?.symbol || order?.fromSymbol || 'USDT'} · /orders</small>
-      <span className="iaos-pill iaos-pill-ok">{locale === 'en' ? 'Stored real order' : 'سفارش واقعی ثبت شد'}</span>
+      <span className="iaos-pill iaos-pill-ok">{opsText('order.stored', locale)}</span>
     </div>
   );
 }
@@ -533,13 +576,14 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
         <div className="iaos-panel-scroll">
           {tab === 'models' ? (
             <div className="iaos-intel-grid">
-              {(providers?.length ? providers : [
-                { id: 'grok', name: 'Grok (xAI)', configured: true, specialty: 'Market Intelligence & Deep Search', costTier: 'medium' },
-                { id: 'openrouter', name: 'OpenRouter', configured: true, specialty: 'Multi-Model Routing & Strategic Reasoning', costTier: 'medium' },
-                { id: 'groq', name: 'Groq', configured: true, specialty: 'Ultra-fast Intent Understanding', costTier: 'free' },
-                { id: 'gemini', name: 'Google Gemini', configured: true, specialty: 'Structured Extraction & Synthesis', costTier: 'low' },
-                { id: 'internal', name: 'FBT Internal Reasoning', configured: true, specialty: 'Deterministic Safety & Offline Fallback', costTier: 'zero' }
-              ]).map((p) => (
+              {/*
+                * The fallback list here used to hard-code `configured: true`
+                * for all five providers, so an install with no API keys at all
+                * showed Grok, OpenRouter, Groq and Gemini as "Active". The
+                * provider list now comes only from the real gateway; when it
+                * is empty the panel says so instead of inventing a fleet.
+                */}
+              {(providers || []).map((p) => (
                 <div key={p.id} className="iaos-intel-card">
                   <div className="iaos-intel-card-head">
                     <strong>{p.name}</strong>
@@ -551,6 +595,13 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
                   <small>{isEn ? 'Cost / Latency:' : 'سطح هزینه / تأخیر:'} {p.costTier || 'standard'}</small>
                 </div>
               ))}
+              {!(providers || []).length ? (
+                <p className="iaos-empty">
+                  {isEn
+                    ? 'No AI provider is configured on this deployment. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.'
+                    : 'هیچ ارائه‌دهنده هوش مصنوعی روی این نصب پیکربندی نشده است. دستیار همچنان کار می‌کند: درک قصد، مسیریابی و همه‌ی خواندن‌های داده‌ی زنده به‌صورت محلی و روی سرویس‌های خود اپ اجرا می‌شوند.'}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -591,23 +642,48 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
           ) : null}
 
           {tab === 'learning' ? (
+            /*
+             * ─── THESE NUMBERS USED TO BE INVENTED ──────────────────────────
+             * The fallbacks here were the literals '142+', '99.4%' and '320ms'.
+             * They were not measurements of anything — they rendered whenever
+             * `learningStats` was null, which is every session before the OS
+             * has run a single intent. A brand-new install displayed a 99.4%
+             * success rate over 142 intents it had never processed.
+             *
+             * A statistic with no observations is not a small inaccuracy; it
+             * is the app lying about its own track record. The honest render
+             * for "nothing measured yet" is an em dash, so that is what it is.
+             */
             <div className="iaos-status-grid">
               <div className="iaos-status-cell">
-                <small>{isEn ? 'Total Intents Processed' : 'مجموع قصد‌های پردازش‌شده'}</small>
-                <strong>{learningStats?.totalIntents ?? '142+'}</strong>
+                <small>{isEn ? 'Intents processed (this device)' : 'قصدهای پردازش‌شده (این دستگاه)'}</small>
+                <strong>{Number.isFinite(Number(learningStats?.totalIntents)) ? Number(learningStats.totalIntents).toLocaleString() : '—'}</strong>
               </div>
               <div className="iaos-status-cell">
-                <small>{isEn ? 'Execution Success Rate' : 'نرخ موفقیت عملیات'}</small>
-                <strong>{learningStats?.successRate != null ? `${Math.round(learningStats.successRate * 100)}%` : '99.4%'}</strong>
+                <small>{isEn ? 'Execution success rate' : 'نرخ موفقیت عملیات'}</small>
+                <strong>
+                  {Number.isFinite(Number(learningStats?.successRate)) && Number(learningStats?.totalIntents) > 0
+                    ? `${Math.round(Number(learningStats.successRate) * 100)}%`
+                    : '—'}
+                </strong>
               </div>
               <div className="iaos-status-cell">
-                <small>{isEn ? 'Avg Model Latency' : 'میانگین پاسخ‌دهی'}</small>
-                <strong>{learningStats?.averageLatencyMs != null ? `${learningStats.averageLatencyMs}ms` : '320ms'}</strong>
+                <small>{isEn ? 'Avg response time' : 'میانگین زمان پاسخ'}</small>
+                <strong>{Number.isFinite(Number(learningStats?.averageLatencyMs)) ? `${Math.round(Number(learningStats.averageLatencyMs))}ms` : '—'}</strong>
               </div>
               <div className="iaos-status-cell">
-                <small>{isEn ? 'Privacy Assurance' : 'تضمین حریم خصوصی'}</small>
-                <strong>{isEn ? 'Zero Keys/Secrets Stored' : 'عدم ذخیره کلید خصوصی'}</strong>
+                {/* Not a statistic — a property of the code. No key or secret
+                    is ever written to storage, so this one is safe to state. */}
+                <small>{isEn ? 'Key storage' : 'ذخیره‌سازی کلید'}</small>
+                <strong>{isEn ? 'No keys or secrets stored' : 'هیچ کلید خصوصی ذخیره نمی‌شود'}</strong>
               </div>
+              {!(Number(learningStats?.totalIntents) > 0) ? (
+                <p className="iaos-panel-note">
+                  {isEn
+                    ? 'No runs recorded on this device yet — these fill in as you use the assistant. Nothing is pre-filled.'
+                    : 'هنوز اجرایی روی این دستگاه ثبت نشده — این اعداد با استفاده از دستیار پر می‌شوند. هیچ مقداری از پیش نوشته نشده است.'}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

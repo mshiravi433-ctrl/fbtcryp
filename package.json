@@ -107,6 +107,7 @@
     "test:phase60": "node test/intent-ai/phase60-live-why-probe.mjs",
     "test:phase61": "node test/intent-ai/phase61-live-goal-progress-probe.mjs",
     "test:ops-center": "node test/intent-ai/ops-center-probe.mjs",
+    "test:ops-i18n": "node test/intent-ai/ops-i18n-probe.mjs",
     "test:phase62": "node test/intent-ai/phase62-honest-backtest-probe.mjs",
     "test:phase80": "node test/intent-ai/phase80-adaptive-risk-probe.mjs",
     "test:phase81": "node test/intent-ai/phase81-asset-screening-probe.mjs",

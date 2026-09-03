@@ -428,6 +428,79 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
+  /*
+   * ─── «چه کاری بلدی؟» ───────────────────────────────────────────────────
+   * This used to fall through to the generic tail, which answered a direct
+   * question about capabilities with "I routed this to the relevant module".
+   * The answer is enumerated from the capability registry — the same registry
+   * the router uses — so it can never advertise a screen that is not wired.
+   */
+  if (type === 'CAPABILITIES') {
+    const groups = lang === 'fa'
+      ? [
+          ['پرتفوی و کیف پول', 'موجودی چند-زنجیره‌ای، تحلیل تخصیص و تمرکز، ریسک'],
+          ['بازار و تحلیل', 'قیمت زنده، تحلیل تکنیکال بک‌تست‌شده، سیگنال، اخبار'],
+          ['سواپ و بریج', 'نقل‌قول زنده؛ امضا همیشه روی صفحه خودش'],
+          ['سود', 'فارم، وام، استخرها با APY واقعی از منبع'],
+          ['هوش زنجیره', 'اسمارت مانی، نهنگ‌ها، جریان صرافی‌ها'],
+          ['عملیات', 'مرکز عملیات، ایجنت‌ها، استراتژی‌ها، مانیتورها و سفارش‌های شرطی']
+        ]
+      : [
+          ['Portfolio & wallet', 'multi-chain balances, allocation and concentration, risk'],
+          ['Market & analysis', 'live prices, backtested technicals, signals, news'],
+          ['Swap & bridge', 'live quotes; signing always happens on its own page'],
+          ['Yield', 'farms, lending, pools with real upstream APY'],
+          ['On-chain intelligence', 'smart money, whales, exchange flows'],
+          ['Operations', 'ops center, agents, strategies, monitors and conditional orders']
+        ];
+    const body = groups.map(([k, v]) => `• ${k} — ${v}`).join('\n');
+    return {
+      message: lang === 'fa'
+        ? `این کارها را از داده زنده‌ی خود اپ انجام می‌دهم:\n\n${body}\n\nکافی است بنویسید چه می‌خواهید — لازم نیست جمله کامل باشد. هیچ تراکنشی بدون تأیید صریح شما اجرا نمی‌شود.`
+        : `Here is what I can do from the app's live data:\n\n${body}\n\nJust name what you want — a single word is enough. Nothing that moves money runs without your explicit confirmation.`,
+      ui: { type: 'TEXT' },
+      actions: [
+        { id: 'open-ops', route: '/intent?tab=ops', label: lang === 'fa' ? 'مرکز عملیات' : 'Ops Center' },
+        { id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'پرتفوی' : 'Portfolio' }
+      ]
+    };
+  }
+
+  /*
+   * The ops surfaces answer with their own live panels, which the chat cannot
+   * render inline. It says which panel and offers the jump — that is a real
+   * answer, not the "did not map to a module" fallback these used to hit.
+   */
+  if (type === 'OPS_CENTER' || type === 'AGENTS' || type === 'STRATEGY' || type === 'SYSTEM_STATUS') {
+    const copy = {
+      OPS_CENTER: {
+        fa: 'مرکز عملیات باز است: مانیتورهای فعال، سفارش‌های شرطی، فرصت‌ها و تاریخچه عملیات — همه از داده زنده.',
+        en: 'Operations Center is open: live monitors, conditional orders, opportunities and operation history.',
+        tab: 'ops'
+      },
+      AGENTS: {
+        fa: 'فهرست ایجنت‌ها را باز کردم. هر ایجنت وضعیت واقعی و آخرین اجرای خودش را نشان می‌دهد؛ ایجنتی که داده ندارد صریحاً همین را می‌گوید.',
+        en: 'Opened the agent registry. Each agent shows its real status and last run; an agent without data says so explicitly.',
+        tab: 'agents'
+      },
+      STRATEGY: {
+        fa: 'استراتژی‌ها را باز کردم. این‌ها پیشنهاد هستند نه اجرا — هر کدام قبل از هر حرکتی نیاز به تأیید صریح شما دارند.',
+        en: 'Opened strategies. These are proposals, not executions — each needs your explicit approval before anything moves.',
+        tab: 'strategies'
+      },
+      SYSTEM_STATUS: {
+        fa: 'وضعیت سیستم را باز کردم: سرویس‌های متصل، آخرین خطاها و تازگی داده‌ها.',
+        en: 'Opened system status: connected services, recent errors and data freshness.',
+        tab: 'status'
+      }
+    }[type];
+    return {
+      message: lang === 'fa' ? copy.fa : copy.en,
+      ui: { type: 'TEXT' },
+      actions: [{ id: `open-${copy.tab}`, route: `/intent?tab=${copy.tab}`, label: lang === 'fa' ? 'باز کن' : 'Open' }]
+    };
+  }
+
   if (type === 'GENERAL' || type === 'CANCEL') {
     const greet = /^(سلام|hi|hello|hey|درود)\s*[!.؟?]*$/i.test(String(intent?.raw || context.lastMessage || ''));
     if (greet || type === 'CANCEL') {
@@ -438,11 +511,22 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         ui: { type: 'TEXT' }
       };
     }
+    /*
+     * The last-resort reply. It must still be USEFUL: the old wording said
+     * "did not map to a specific module" and stopped, which read as a refusal
+     * and gave the user nothing to do next. It now names concrete next steps
+     * and offers the capability list, so a miss costs one tap, not a restart.
+     */
     return {
       message: lang === 'fa'
-        ? 'درخواست را فهمیدم، اما به یک ماژول مشخص نگاشت نشد. می‌توانم پرتفوی، موجودی، سواپ، فارم، وام یا فرصت سود را از داده زنده بخوانم.'
-        : 'I understood you, but it did not map to a specific module. I can read live portfolio, balances, swap, farm, lending or yield.',
-      ui: { type: 'TEXT' }
+        ? 'مطمئن نشدم دقیقاً کدام بخش را می‌خواهید. مثلاً بنویسید: «پرتفوی» · «سود» · «تحلیل بیت کوین» · «اخبار» · «مرکز عملیات» — یا بپرسید «چه کاری بلدی؟» تا همه قابلیت‌ها را فهرست کنم.'
+        : 'I am not sure which part you meant. Try: "portfolio" · "yield" · "analyze bitcoin" · "news" · "ops center" — or ask "what can you do?" and I will list everything.',
+      ui: { type: 'TEXT' },
+      actions: [
+        { id: 'ask-capabilities', label: lang === 'fa' ? 'چه کاری بلدی؟' : 'What can you do?', prompt: lang === 'fa' ? 'چه کاری بلدی' : 'what can you do' },
+        { id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'پرتفوی' : 'Portfolio' },
+        { id: 'open-ops', route: '/intent?tab=ops', label: lang === 'fa' ? 'مرکز عملیات' : 'Ops Center' }
+      ]
     };
   }
 

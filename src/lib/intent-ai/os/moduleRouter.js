@@ -205,6 +205,39 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
       return openPage ? '/market' : null;
     case 'INTENT_OS':
       return e.tab ? `/intent?tab=${encodeURIComponent(e.tab)}` : '/intent';
+    /*
+     * The Operations Center, the agent registry and the strategy registry all
+     * live inside the Intent surface as tabs. They are reachable by name now
+     * ("مرکز عملیات", "ایجنت‌ها", "استراتژی") instead of falling through to a
+     * null route and a "couldn't map that" reply.
+     */
+    case 'OPS_CENTER':
+      return '/intent?tab=ops';
+    case 'AGENTS':
+      return '/intent?tab=agents';
+    case 'STRATEGY':
+      return '/intent?tab=strategies';
+    case 'SYSTEM_STATUS':
+      return '/intent?tab=status';
+    case 'SECURITY':
+      return '/security';
+    case 'NFT':
+      return '/nft';
+    case 'SHOP':
+      return '/shop';
+    case 'EXPLORE':
+      return '/explore';
+    case 'LEARN':
+      return '/learn';
+    case 'DOCS':
+      return '/docs';
+    case 'LEADERBOARD':
+      return '/leaderboard';
+    case 'VAULT':
+      return '/vault';
+    /* "what can you do" is answered in the chat, never by opening a page. */
+    case 'CAPABILITIES':
+      return null;
     default:
       return nav || null;
   }
