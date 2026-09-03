@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
-import { blobConfigured, blobSet, withPersistentCache } from './blobCache.js';
+import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } from './blobCache.js';
 import {
   fetchChart,
   fetchCoinDetail,
@@ -61,6 +61,19 @@ import {
   handleBuySellProviderWebhook,
   verifyBuySellOrder
 } from './buySell.js';
+import {
+  authorizeIranBuySettlement,
+  cancelIranBuyOrder,
+  createIranBuyOrder,
+  createIranBuyPreview,
+  createIranBuySettlementChallenge,
+  createIranBuyWalletChallenge,
+  getIranBuyCapability,
+  getIranBuyOrder,
+  getIranBuyOrderAudit,
+  iranBuyPublicFailure,
+  verifyIranBuyWalletChallenge
+} from './iranBuy.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import {
   chainTokens,
@@ -121,7 +134,7 @@ import { listProjects, createProject, ownedProject, projectScopes } from './deve
 import { apiKeyScopes, authenticateApiKey, createApiKey, hasScope, looksLikeApiKey, revokeApiKey } from './developerKeys.js';
 import { SCHEMAS } from './phase2Schemas.js';
 import { claimIdempotency, saveIdempotency } from './idempotency.js';
-import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
@@ -4953,6 +4966,136 @@ app.post('/api/v1/buy-sell/order/:id/cancel', (req, res) =>
   sendBuySell(res, () => cancelBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'))));
 app.post('/api/v1/buy-sell/order/:id/verify', (req, res) =>
   sendBuySell(res, () => verifyBuySellOrder(req.params.id, req.get('x-buy-sell-order-token'))));
+
+/* ---------------- Iranian USDT buy: isolated, fail-closed capability ------ */
+/*
+ * This is not a second general on-ramp and never shares Buy/Sell's Ramp order
+ * model. It can be visible only when the server says every production
+ * prerequisite is ready. Mutations additionally require a freshly verified
+ * Telegram Mini App identity; the app-wide Telegram middleware is optional,
+ * so financial routes must assert it explicitly rather than assuming it.
+ */
+function sendIranBuy(res, operation) {
+  return Promise.resolve()
+    .then(operation)
+    .then((body) => {
+      res.set('cache-control', 'no-store');
+      return res.status(200).json(body ?? {});
+    })
+    .catch((error) => {
+      const safe = iranBuyPublicFailure(error);
+      res.set('cache-control', 'no-store');
+      return res.status(safe.status).json({ error: safe.code });
+    });
+}
+
+function requireIranBuyTelegramAuth(req, res, next) {
+  const id = String(req.tgUser?.id || '').trim();
+  if (!/^\d{1,20}$/.test(id)) {
+    res.set('cache-control', 'no-store');
+    return res.status(401).json({ error: 'AUTH_REQUIRED' });
+  }
+  req.iranBuyOwnerId = id;
+  return next();
+}
+
+/* The public response is intentionally tiny: it never exposes raw env flags,
+   provider credentials, readiness internals, or an unready configured network. */
+app.get('/api/iran/buy/config', (_req, res) => {
+  res.set('cache-control', 'no-store');
+  return res.json(getIranBuyCapability());
+});
+
+const IRAN_BUY_RATE_WINDOW_MS = 60_000;
+const configuredIranBuyLimit = (name, fallback) => {
+  const parsed = Number(process.env[name]);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 60 ? parsed : fallback;
+};
+const iranBuyRateOwnerHash = (owner) => createHash('sha256').update(`telegram:${owner}`).digest('hex');
+
+/* Use the same durable Redis boundary that protects idempotency. A per-process
+   Map would reset on a serverless cold start and let parallel instances bypass
+   the financial budget. If the durable counter cannot be reached, actions fail
+   closed rather than pretending a rate limit was applied. */
+function iranBuyRateLimit({ limitEnv, fallback, bucket }) {
+  return async (req, res, next) => {
+    const owner = String(req.iranBuyOwnerId || '');
+    const limit = configuredIranBuyLimit(limitEnv, fallback);
+    const count = await upstashIncrementWindow(`iran-buy:rate:${bucket}:${iranBuyRateOwnerHash(owner)}`, IRAN_BUY_RATE_WINDOW_MS);
+    res.set('cache-control', 'no-store');
+    if (count == null) return res.status(503).json({ error: 'IRAN_BUY_DISABLED' });
+    if (count > limit) {
+      res.set('retry-after', String(Math.ceil(IRAN_BUY_RATE_WINDOW_MS / 1000)));
+      return res.status(429).json({ error: 'IRAN_BUY_RATE_LIMITED' });
+    }
+    return next();
+  };
+}
+
+const iranBuyPaymentRateLimit = iranBuyRateLimit({ limitEnv: 'IRAN_BUY_ORDER_RATE_LIMIT', fallback: 10, bucket: 'write' });
+const iranBuyStatusRateLimit = iranBuyRateLimit({ limitEnv: 'IRAN_BUY_STATUS_RATE_LIMIT', fallback: 20, bucket: 'read' });
+
+/* The narrow limits above apply to any action that can create an intent,
+   consume a signature challenge, or eventually cause a provider command. */
+app.post('/api/iran/buy/wallet-challenge', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => createIranBuyWalletChallenge({
+    ownerId: req.iranBuyOwnerId,
+    address: req.body?.address,
+    chainId: req.body?.chainId
+  })));
+app.post('/api/iran/buy/wallet-verify', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => verifyIranBuyWalletChallenge({
+    ownerId: req.iranBuyOwnerId,
+    challengeId: req.body?.challengeId,
+    signature: req.body?.signature
+  })));
+app.post('/api/iran/buy/usdt/preview', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => createIranBuyPreview({
+    ownerId: req.iranBuyOwnerId,
+    amountToman: req.body?.amountToman,
+    walletBindingToken: req.body?.walletBindingToken
+  })));
+app.post('/api/iran/buy/usdt', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => createIranBuyOrder({
+    ownerId: req.iranBuyOwnerId,
+    previewId: req.body?.previewId,
+    previewAccessToken: req.body?.previewAccessToken,
+    walletBindingToken: req.body?.walletBindingToken,
+    idempotencyKey: req.body?.idempotencyKey
+  }, req.get('idempotency-key'))));
+app.get('/api/iran/buy/orders/:id', requireIranBuyTelegramAuth, iranBuyStatusRateLimit, (req, res) =>
+  sendIranBuy(res, () => getIranBuyOrder({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token'),
+    poll: true
+  })));
+app.get('/api/iran/buy/orders/:id/audit', requireIranBuyTelegramAuth, iranBuyStatusRateLimit, (req, res) =>
+  sendIranBuy(res, () => getIranBuyOrderAudit({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token')
+  })));
+app.post('/api/iran/buy/orders/:id/settlement-challenge', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => createIranBuySettlementChallenge({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token')
+  })));
+app.post('/api/iran/buy/orders/:id/settlement-authorize', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => authorizeIranBuySettlement({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token'),
+    challengeId: req.body?.challengeId,
+    signature: req.body?.signature
+  })));
+app.post('/api/iran/buy/orders/:id/cancel', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => cancelIranBuyOrder({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token')
+  })));
 
 /* --------------------------------- Solana --------------------------------- */
 /*

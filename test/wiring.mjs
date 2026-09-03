@@ -619,7 +619,14 @@ export default function run() {
     // builds `BASE + '/overview'` etc., so the concrete paths are asserted
     // separately below; a bare prefix must not fail the "every call is routed"
     // check for the same reason a route *prefix* is never a route.
-    const prefixes = new Set(['v1/smart-money', 'v1/buy-sell']);
+    const prefixes = new Set([
+      'v1/smart-money',
+      'v1/buy-sell',
+      /* The Iranian client holds its concrete /config,/usdt,/orders suffixes
+         behind a regional ROOT constant; the focused Iran-buy probe asserts
+         those routes and this generic scanner treats the bare mount as a prefix. */
+      'iran/buy'
+    ]);
     /*
      * Mounted routers: `app.use('/api/v1/futures', futuresRouter())` declares a
      * whole subtree in one line. The subtree's own routes are asserted by the

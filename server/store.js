@@ -42,6 +42,25 @@ export async function storeGet(key, fallback = null) {
   return fallback;
 }
 
+/**
+ * Read through the durable backend even when this warm process has a cached
+ * value. Ordinary app preferences can tolerate a warm cache; payment/order
+ * state cannot, because a webhook may have advanced the record on another
+ * serverless instance. This helper remains a read only — callers that need a
+ * compare-and-set transition must also take an Upstash atomic lease.
+ */
+export async function storeGetFresh(key, fallback = null) {
+  if (blobConfigured()) {
+    const v = await blobGet(`kv:${key}`);
+    if (v !== null && v !== undefined) {
+      mem.set(key, v);
+      return v;
+    }
+    return fallback;
+  }
+  return mem.has(key) ? mem.get(key) : fallback;
+}
+
 export async function storeSet(key, value) {
   mem.set(key, value);
   if (blobConfigured()) {
