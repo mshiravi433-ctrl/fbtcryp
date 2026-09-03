@@ -1,3 +1,32 @@
+# Unreleased — About: the landing page that was really twenty sections in a 520px column
+
+- **The screen was authored for a width it can never have.** `.app-shell` is
+  `max-width: 520px`, so every `min-width: 900px` two-column breakpoint in
+  `about-premium.css` was dead CSS: on a phone, on a tablet and on a desktop
+  alike, the ~20 sections stacked into one very long single column. That is
+  the «صفحه شلوغ شده» this answers — and it is why the rewritten stylesheet
+  contains no width breakpoints at all. The capability grid is
+  `repeat(auto-fit, minmax(150px, 1fr))`, so it is two cards wide only when
+  the column can actually give each one 150px, and one card wide otherwise.
+- **What is left.** Logo → «ما که هستیم» → four capability cards → the FAQ →
+  Contact us / Security. Everything after the FAQ — the internal-link farm,
+  the four-column footer and the closing "start swapping" CTA — is gone, per
+  «پایین صفحه بعد از سوالات متداول بقیش را حذف کن و دو دکمه تماس با ما و امنیت
+  بزار». Cut before that: the story, vision, Intent OS walkthrough, AI
+  gateway, technology stack, roadmap, principles, globe, and the are/are-not
+  matrix. Most of what they said is either in the FAQ already or belongs on
+  the screens they linked to, and «ما که هستیم» now reads as one paragraph
+  instead of three.
+- **The screen's own top bar went with them.** It carried a back button and
+  an EN / فارسی switch. Going back is what the browser gesture and the bottom
+  nav are for, and language is an app-wide preference, not a per-screen one —
+  the page now simply follows the app's language like every other screen.
+- **Four new `about.*` keys** (`summary`, `featuresTitle`, `ctaTitle`,
+  `footNote`) are defined in `en.json` and `fa.json`. The other ten locales
+  fall back to English for them, which is the documented behaviour for
+  partial locales. `src/i18n/coverage.json` was regenerated with
+  `scripts/gen-locales.mjs`, so its totals match the current `en.json`.
+
 # Unreleased — Signals: the page crashed on its own signal card (and three labels were raw keys)
 
 - **The Signals screen no longer opens into «مشکلی پیش اومده».** `SignalCard`
