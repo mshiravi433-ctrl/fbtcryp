@@ -1,82 +1,69 @@
 /**
- * AI analysis backend — OpenRouter (LLM) + Jina (news search).
+ * AI analysis backend — Multi-AI Intelligence Layer (FBT AI Gateway).
  *
  * ─── WHY THIS IS SERVER-SIDE ──────────────────────────────────────────────
- * These are BILLABLE keys. An OpenRouter key shipped in the client bundle is
- * readable by anyone who opens devtools, and scrapers harvest them within
- * hours — you would be paying for other people's inference. So the keys live
- * only in server env vars, and the browser calls our own /api/ai/* endpoints.
+ * These are BILLABLE keys. Provider keys (Grok, OpenRouter, Gemini, Groq,
+ * OpenAI, Anthropic, DeepSeek, etc.) shipped in the client bundle would be
+ * readable by anyone. So the keys live only in server env vars, and the browser
+ * calls our own /api/v1/ai/* and /api/ai/* endpoints.
  *
- * Responses are cached hard (default 6h) because a daily-refreshed outlook
- * doesn't need regenerating per user, and because LLM calls cost money per
- * request. One cache entry per coin per day keeps the bill flat regardless of
- * how many users you get.
+ * Responses are cached appropriately to optimize costs and latency.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const JINA_SEARCH_URL = 'https://s.jina.ai/';
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+import {
+  PROVIDER_CONFIGS,
+  isProviderConfigured,
+  getActiveProviderIds,
+  anyAiConfigured,
+  routedChat,
+  executeProviderChat,
+  gatewaySelfTest
+} from './aiGateway.js';
 
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
-const GROQ_KEY = process.env.GROQ_API_KEY || '';
-/**
- * Groq serves open-weight models. `gpt-oss-20b` is the current default because
- * it is on the free tier, answers in well under a second, and is more than
- * capable of the two jobs we give it (narrating indicators, answering support
- * questions from a fixed knowledge base).
- *
- * Groq deprecates model IDs on a published schedule, so this is intentionally
- * an env var: when a shutdown date lands you change one variable rather than
- * redeploying code.
- */
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
-const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+const JINA_SEARCH_URL = 'https://s.jina.ai/';
 const JINA_KEY = process.env.JINA_API_KEY || '';
-const MODEL = process.env.AI_MODEL || 'openai/gpt-4o-mini';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-const SITE_URL = process.env.WEBAPP_URL || 'https://fbt-swap.app';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
 
-/**
- * Provider preference: Groq -> Gemini -> OpenRouter.
- *
- * Groq is first for a specific, practical reason. Gemini's endpoint is
- * geo-blocked in a number of countries, and a server deployed in the wrong
- * region gets a bare `fetch failed` that looks like the app is broken. Groq
- * has no such restriction, has a genuinely usable free tier, and is
- * OpenAI-compatible so the request shape is the same one OpenRouter already
- * uses.
- *
- * Cost matters here because AI spend scales with users while this app's
- * revenue scales with swap volume — the two are not correlated, so a free
- * tier is a real structural advantage rather than a nicety.
- *
- * Each provider falls through to the next on error, so one outage or quota
- * wall does not take the feature down.
- */
-export const aiConfigured = () => Boolean(GROQ_KEY || GEMINI_KEY || OPENROUTER_KEY);
+const GROK_KEY = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+const GROQ_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const MODEL = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+
+/** Check if any external AI provider is configured */
+export const aiConfigured = () => anyAiConfigured();
+
+/** Active primary provider identifier */
+export const aiProvider = () => {
+  if (GROK_KEY) return 'grok';
+  if (GROQ_KEY) return 'groq';
+  if (GEMINI_KEY) return 'gemini';
+  if (OPENROUTER_KEY) return 'openrouter';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
+  return null;
+};
 
 /**
- * Live self-test for the configured provider.
- *
- * "AI doesn't work" is nearly always one of five specific things, and from the
- * outside they all look identical — the UI just falls back. This makes the
- * actual cause visible: sends a one-token prompt to whichever provider is
- * configured and reports precisely what came back.
- *
- * Deliberately NOT cached: the whole point is to reflect the state right now.
- * It costs a fraction of a cent per call, and it is only reachable with the
- * diagnostic secret.
+ * Diagnostic self-test for configured AI providers.
  */
 export async function aiSelfTest() {
+  const activeIds = getActiveProviderIds().filter((id) => id !== 'internal');
   const out = {
+    grokKeyPresent: Boolean(GROK_KEY),
     groqKeyPresent: Boolean(GROQ_KEY),
     geminiKeyPresent: Boolean(GEMINI_KEY),
     openrouterKeyPresent: Boolean(OPENROUTER_KEY),
+    openaiKeyPresent: Boolean(process.env.OPENAI_API_KEY),
+    anthropicKeyPresent: Boolean(process.env.ANTHROPIC_API_KEY),
+    deepseekKeyPresent: Boolean(process.env.DEEPSEEK_API_KEY),
     jinaKeyPresent: Boolean(JINA_KEY),
     provider: aiProvider(),
+    activeProviders: activeIds,
     groqModel: GROQ_MODEL,
     geminiModel: GEMINI_MODEL,
     openrouterModel: MODEL
@@ -86,16 +73,15 @@ export async function aiSelfTest() {
     out.ok = false;
     out.reason = 'NO_KEY';
     out.fix =
-      'Set GROQ_API_KEY (free tier at console.groq.com, no card needed and not ' +
-      'geo-blocked), or GEMINI_API_KEY, or OPENROUTER_API_KEY in your host ' +
-      'environment, then redeploy. These must NOT have a VITE_ prefix — that ' +
-      'would compile the key into the browser bundle for anyone to read.';
+      'Set GROK_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in your environment, ' +
+      'then redeploy. These must NOT have a VITE_ prefix (except VITE_GEMINI_API_KEY for Android build).';
     return out;
   }
 
   const started = Date.now();
   try {
-    const { text, model } = await chat({
+    const res = await routedChat({
+      taskType: 'fast',
       system: 'Reply with the single word: ok',
       user: 'ping',
       temperature: 0,
@@ -103,9 +89,10 @@ export async function aiSelfTest() {
       json: false
     });
     out.ok = true;
-    out.model = model;
+    out.model = res.model;
+    out.provider = res.provider;
     out.latencyMs = Date.now() - started;
-    out.sample = String(text).trim().slice(0, 40);
+    out.sample = String(res.text).trim().slice(0, 40);
     return out;
   } catch (err) {
     const msg = String(err.message || err);
@@ -113,61 +100,30 @@ export async function aiSelfTest() {
     out.latencyMs = Date.now() - started;
     out.error = msg.slice(0, 300);
 
-    // Translate the provider's error into the thing you actually have to fix.
     if (/API_KEY_INVALID|API key not valid|invalid_api_key|^401/i.test(msg)) {
       out.reason = 'KEY_INVALID';
-      out.fix =
-        'The key is wrong, was revoked, or has a stray space/quote around it. ' +
-        'Generate a fresh one and paste it with no surrounding characters.';
+      out.fix = 'The API key is wrong, was revoked, or has stray characters. Generate a fresh key and paste it with no quotes or spaces.';
     } else if (/^403|PERMISSION_DENIED|SERVICE_DISABLED/i.test(msg)) {
       out.reason = 'KEY_RESTRICTED';
-      out.fix =
-        'The key is valid but not allowed to make this call. In Google Cloud ' +
-        'Console check that the Generative Language API is enabled, and that ' +
-        'any application/IP restriction on the key permits a server-side call ' +
-        '(an Android-restricted key will NOT work from a server).';
+      out.fix = 'The key is valid but not allowed to make this call. Check permissions or IP restrictions in provider console.';
     } else if (/^429|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
       out.reason = 'QUOTA';
-      out.fix = 'Rate limit or free-tier quota exhausted. Wait, or enable billing.';
-    } else if (/model_not_found|does not exist|decommissioned|model_decommissioned/i.test(msg)) {
-      // Groq retires model IDs on a schedule, so this is a routine failure
-      // rather than an exotic one, and it must name the variable to change.
+      out.fix = 'Rate limit or free-tier quota exhausted. Wait or enable billing.';
+    } else if (/model_not_found|does not exist|decommissioned/i.test(msg)) {
       out.reason = 'MODEL_NOT_FOUND';
-      out.fix =
-        `The model "${GROQ_KEY ? GROQ_MODEL : GEMINI_MODEL}" is not available. ` +
-        (GROQ_KEY
-          ? 'Groq retires model IDs periodically — set GROQ_MODEL to a current ' +
-            'one, e.g. openai/gpt-oss-20b or openai/gpt-oss-120b.'
-          : 'Try GEMINI_MODEL=gemini-2.0-flash or gemini-1.5-flash.');
-    } else if (/^404|not found for API version|is not found/i.test(msg)) {
-      out.reason = 'MODEL_NOT_FOUND';
-      out.fix =
-        `The model "${GEMINI_MODEL}" is not available to this key. Try ` +
-        'GEMINI_MODEL=gemini-2.0-flash or gemini-1.5-flash.';
+      out.fix = 'The configured model is not available. Check provider model list.';
     } else if (/abort|timeout/i.test(msg)) {
       out.reason = 'TIMEOUT';
-      out.fix =
-        'The provider did not answer in time. On Vercel Hobby the function ' +
-        'ceiling is 60s (already set in vercel.json); a smaller model helps.';
-    } else if (/fetch failed|ENOTFOUND|EAI_AGAIN/i.test(msg)) {
-      out.reason = 'NETWORK';
-      out.fix = GEMINI_KEY && !GROQ_KEY
-        ? 'The server could not reach the provider. Google geo-blocks a number ' +
-          'of countries outright, and this is what that looks like. Either move ' +
-          'the deployment region, or set GROQ_API_KEY instead — Groq is not ' +
-          'geo-restricted and has a free tier.'
-        : 'The server could not reach the provider. Check the deployment has ' +
-          'outbound internet access.';
+      out.fix = 'The provider did not answer in time.';
     } else {
       out.reason = 'UNKNOWN';
-      out.fix = 'See `error` for the provider response.';
+      out.fix = 'See error details.';
     }
     return out;
   }
 }
+
 export const newsConfigured = () => Boolean(JINA_KEY);
-export const aiProvider = () =>
-  GROQ_KEY ? 'groq' : GEMINI_KEY ? 'gemini' : OPENROUTER_KEY ? 'openrouter' : null;
 
 async function req(url, options, timeout = TIMEOUT_MS) {
   const ctrl = new AbortController();
@@ -187,14 +143,9 @@ async function req(url, options, timeout = TIMEOUT_MS) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Jina — recent news for grounding                                           */
+/* Jina / DDG News & Web Search                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Fetch recent headlines so the model reasons over current events rather than
- * its training cutoff. Failure here is non-fatal — we degrade to
- * indicators-only analysis rather than blocking the whole response.
- */
 export async function fetchNews(query, limit = 6) {
   if (!JINA_KEY) return [];
   try {
@@ -224,20 +175,6 @@ export async function fetchNews(query, limit = 6) {
   }
 }
 
-/**
- * Keyless web search fallback (DuckDuckGo Instant Answer).
- *
- * Jina gives much better results but needs a paid key, so without one the
- * assistant would answer every current-events question from its training
- * cutoff — months stale, stated with full confidence. DDG's public endpoint
- * needs no key and covers exactly the "what is X" questions people ask a help
- * screen.
- *
- * It returns definitions and related topics rather than ranked pages, so it is
- * genuinely weaker than Jina. That is why it runs second, and why a miss is
- * silent: no results simply means the model answers from its own knowledge,
- * which is the previous behaviour and still useful.
- */
 async function ddgSearch(query, limit = 4) {
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
@@ -253,8 +190,6 @@ async function ddgSearch(query, limit = 4) {
     }
     for (const topic of raw?.RelatedTopics ?? []) {
       if (out.length >= limit) break;
-      // Nested "Topics" groups have no Text of their own; skip them rather
-      // than emitting an entry with an empty snippet.
       if (!topic?.Text) continue;
       out.push({
         title: String(topic.Text).split(' - ')[0].slice(0, 120),
@@ -264,18 +199,10 @@ async function ddgSearch(query, limit = 4) {
     }
     return out.slice(0, limit);
   } catch {
-    // A search failure must never fail the answer.
     return [];
   }
 }
 
-/**
- * Search the web, best source first.
- *
- * Jina when a key is configured, DuckDuckGo otherwise. Returns [] rather than
- * throwing: grounding is an enhancement, and losing it should degrade the
- * answer, not break it.
- */
 export async function webSearch(query, limit = 4) {
   if (JINA_KEY) {
     const viaJina = await fetchNews(query, limit);
@@ -285,16 +212,9 @@ export async function webSearch(query, limit = 4) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* OpenRouter — the analyst                                                   */
+/* Multi-Provider Unified Chat Execution                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * The system prompt is deliberately strict about uncertainty. An LLM asked for
- * a price prediction will happily produce a confident number with no basis,
- * and users act on those numbers with real money. We require it to reason from
- * the supplied indicators, to give ranges rather than point targets, and to
- * say when the signal is unclear.
- */
 const SYSTEM_PROMPT = `You are a disciplined crypto market analyst writing a daily briefing for a trading app.
 
 RULES — these are not optional:
@@ -353,124 +273,9 @@ function buildUserPrompt({ symbol, name, price, indicators, change24h, change7d,
   return lines.join('\n');
 }
 
-/**
- * Call Gemini. Its API shape differs from OpenAI's: the system prompt goes in
- * `systemInstruction`, and JSON mode is `responseMimeType`.
- */
-async function geminiChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
-  const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_KEY)}`;
-
-  const raw = await req(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      generationConfig: {
-        temperature,
-        maxOutputTokens: maxTokens,
-        ...(json ? { responseMimeType: 'application/json' } : {})
-      }
-    })
-  });
-
-  const text = raw?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
-  if (!text) {
-    // A blocked prompt returns no candidate but does explain why.
-    const reason = raw?.promptFeedback?.blockReason;
-    throw new Error(reason ? `BLOCKED:${reason}` : 'EMPTY_RESPONSE');
-  }
-  return text;
-}
-
-/** Call OpenRouter (OpenAI-compatible). */
-async function openRouterChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
-  const raw = await req(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
-      'HTTP-Referer': SITE_URL,
-      'X-Title': 'FBT Swap',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ],
-      temperature,
-      max_tokens: maxTokens,
-      ...(json ? { response_format: { type: 'json_object' } } : {})
-    })
-  });
-  const text = raw?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('EMPTY_RESPONSE');
-  return text;
-}
-
-/**
- * Groq speaks the OpenAI chat-completions dialect, so this is the same shape
- * as `openRouterChat` with a different host and no referer headers.
- *
- * One incompatibility worth knowing: Groq's OpenAI compatibility is close but
- * not total. `response_format: json_object` IS supported on the models we use,
- * which is the only non-trivial thing we rely on.
- */
-async function groqChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
-  const raw = await req(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GROQ_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ],
-      temperature,
-      max_tokens: maxTokens,
-      ...(json ? { response_format: { type: 'json_object' } } : {})
-    })
-  });
-  const text = raw?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('EMPTY_RESPONSE');
-  return text;
-}
-
-/**
- * Provider-agnostic entry point. Tries each configured provider in turn so a
- * quota error or outage on one doesn't take the feature down.
- */
-async function chat(opts) {
-  if (GROQ_KEY) {
-    try {
-      return { text: await groqChat(opts), model: GROQ_MODEL };
-    } catch (e) {
-      // Only fall through if there is somewhere to fall through TO. Otherwise
-      // rethrow, so the diagnostic endpoint reports Groq's real error rather
-      // than a generic "not configured".
-      if (!GEMINI_KEY && !OPENROUTER_KEY) throw e;
-      console.warn('[ai] groq failed, trying next provider:', e.message);
-    }
-  }
-  if (GEMINI_KEY) {
-    try {
-      return { text: await geminiChat(opts), model: GEMINI_MODEL };
-    } catch (e) {
-      if (!OPENROUTER_KEY) throw e;
-      console.warn('[ai] gemini failed, falling back to openrouter:', e.message);
-    }
-  }
-  if (!OPENROUTER_KEY) throw new Error('AI_NOT_CONFIGURED');
-  return { text: await openRouterChat(opts), model: MODEL };
-}
-
-/** Strip markdown fences some models add despite instructions. */
+/** Strip markdown fences */
 function parseJson(text) {
-  let t = String(text).trim();
+  let t = String(text || '').trim();
   if (t.startsWith('```')) t = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
   const start = t.indexOf('{');
   const end = t.lastIndexOf('}');
@@ -481,65 +286,37 @@ function parseJson(text) {
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 
 /**
- * ANSWER A SUPPORT QUESTION ABOUT THIS APP.
- *
- * ─── THE RULE THAT MAKES THIS SAFE ──────────────────────────────────────────
- * A general model asked "what is the fee on FBT Swap?" will confidently invent
- * a number. On a finance app that is not a wrong answer, it is a lie the user
- * may act on. So the model is NEVER the source of facts here.
- *
- * The client sends `context` — the matching hand-written FAQ entries — and the
- * system prompt forbids going beyond them. The model's only job is to rephrase
- * the supplied facts as a direct answer to the exact question asked, in the
- * user's language. Anything not covered gets "I do not know, contact support",
- * which is a correct answer.
- *
- * This is why the client tries its local FAQ matcher FIRST and only calls here
- * when confidence is low: for the common questions a hand-written answer is
- * strictly better, and free.
- * ────────────────────────────────────────────────────────────────────────────
+ * Universal Chat execution across configured providers via FBT AI Gateway.
  */
+export async function chat(opts) {
+  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
+  const res = await routedChat({
+    taskType: opts.taskType || 'general',
+    system: opts.system || '',
+    user: opts.user || '',
+    temperature: opts.temperature ?? 0.3,
+    maxTokens: opts.maxTokens ?? 700,
+    json: opts.json ?? true
+  });
+  return { text: res.text, model: res.model, provider: res.provider };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Support & General Knowledge Answering                                     */
+/* -------------------------------------------------------------------------- */
+
 export async function answerSupportQuestion({ question, context = [], lang = 'fa', web = true }) {
   if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
   const q = String(question || '').slice(0, 500);
   if (!q.trim()) throw new Error('EMPTY_QUESTION');
 
-  /*
-   * TWO MODES, chosen by whether our own docs matched.
-   *
-   * The previous prompt said "answer ONLY from the reference", which made the
-   * assistant useless for the thing people actually want to ask — "what is a
-   * blockchain", "is Bitcoin going up", "what does staking mean". Refusing
-   * those is not safety, it is just an unhelpful product.
-   *
-   * But the reverse is worse: a model asked "what fee does FBT charge?" will
-   * invent a number, and an invented fee on a finance app is a lie the user
-   * may act on.
-   *
-   * So the mode depends on the question:
-   *
-   *   GROUNDED  — our FAQ matched, so the question is about THIS app. The
-   *               reference is the only permitted source. No invention.
-   *
-   *   GENERAL   — no FAQ match, so it is a general crypto question. The model
-   *               may use its own knowledge, but it is explicitly told it does
-   *               NOT know anything about FBT Swap specifically and must not
-   *               guess about our fees, addresses or features.
-   *
-   * Both modes keep the safety floor: never request a seed phrase, never imply
-   * a transaction can be reversed, never give financial advice.
-   */
   const grounded = context.length > 0;
-
   const facts = context
     .slice(0, 4)
     .map((c, i) => `[${i + 1}] ${String(c).slice(0, 900)}`)
     .join('\n\n');
 
-  // Live web results, when a search key is configured. Without this the model
-  // answers "what is the price of bitcoin" from its training cutoff, which is
-  // months stale and stated with full confidence.
   let sources = [];
   if (web && !grounded) {
     sources = await webSearch(q, 4);
@@ -595,13 +372,11 @@ export async function answerSupportQuestion({ question, context = [], lang = 'fa
       ].join('\n');
 
   const { text, model } = await chat({
+    taskType: 'fast',
     system,
     user: q,
     maxTokens: 420,
     temperature: grounded ? 0.2 : 0.4,
-    // The shared chat() defaults to json:true because other callers parse
-    // structured output. This one wants prose; leaving the default renders a
-    // raw JSON object into the chat bubble.
     json: false
   });
 
@@ -619,18 +394,19 @@ export async function generateOutlook(payload) {
   const news = await fetchNews(`${payload.name} ${payload.symbol} crypto news analysis`, 6);
 
   const { text, model } = await chat({
+    taskType: 'market',
     system: SYSTEM_PROMPT,
     user: buildUserPrompt({ ...payload, news }),
     temperature: 0.3,
-    maxTokens: 700
+    maxTokens: 700,
+    json: true
   });
 
   const parsed = parseJson(text);
 
-  // Normalise and clamp — never trust model output shape blindly.
   return {
     bias: ['bullish', 'bearish', 'neutral'].includes(parsed.bias) ? parsed.bias : 'neutral',
-    confidence: clamp(parsed.confidence, 0, 90), // cap at 90: nothing here justifies more
+    confidence: clamp(parsed.confidence, 0, 90),
     headline: String(parsed.headline ?? '').slice(0, 140),
     summary: String(parsed.summary ?? '').slice(0, 700),
     range: parsed.range
@@ -649,7 +425,6 @@ export async function generateOutlook(payload) {
   };
 }
 
-/** Short market-wide briefing for the Signals landing card. */
 export async function generateMarketBrief({ global, top, lang }) {
   if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
@@ -671,10 +446,12 @@ export async function generateMarketBrief({ global, top, lang }) {
   ].join('\n');
 
   const { text, model } = await chat({
+    taskType: 'market',
     system: `${SYSTEM_PROMPT}\n\nFor this market-wide brief use exactly this JSON shape:\n{"bias":"bullish|bearish|neutral","confidence":0-100,"headline":"max 90 chars","summary":"2-3 sentences","drivers":["..."],"risks":["..."]}`,
     user,
     temperature: 0.3,
-    maxTokens: 500
+    maxTokens: 500,
+    json: true
   });
 
   const parsed = parseJson(text);
@@ -691,31 +468,8 @@ export async function generateMarketBrief({ global, top, lang }) {
   };
 }
 
-/** FAQ answering, grounded in a fixed knowledge base about this app. */
-
 /**
- * INTENT CLASSIFICATION — the one job a model is allowed to do on this path.
- * ────────────────────────────────────────────────────────────────────────────
- * The AI page needs to know which door a sentence walked through (Trade · Earn ·
- * Protect · Plan · Automate), and a keyword table reads «should I buy?» as an
- * order to buy. A model is genuinely better at that — and it is also the place
- * where a finance app can invent a trade.
- *
- * So the authority is cut to the size of the job:
- *
- *   · the model may return ONE label from a fixed enum;
- *   · an amount, a chain, a token or a permission is NEVER read out of the
- *     model — the plan's numbers come from the deterministic local layer that
- *     parsed the user's own sentence, so there is nothing for a hallucinated
- *     "5000 SOL on Solana" to become;
- *   · the reply is schema-validated, and any deviation (unknown label, missing
- *     field, prose instead of JSON) is `ok:false` and the caller falls back to
- *     the local classifier. An unavailable model costs a worse label, never a
- *     worse number;
- *   · temperature 0 and maxTokens 60: this is a form field, not a conversation.
- *
- * @returns {Promise<{ok:boolean, intent?:string, confidence?:number,
- *                    reason?:string, model?:string}>}
+ * INTENT CLASSIFICATION via AI Gateway.
  */
 export async function classifyIntentWithModel({ message = '', intents = [], locale = null } = {}) {
   if (!aiConfigured()) return { ok: false, reason: 'AI_NOT_CONFIGURED' };
@@ -743,10 +497,12 @@ export async function classifyIntentWithModel({ message = '', intents = [], loca
 
   try {
     const { text: raw, model } = await chat({
+      taskType: 'fast',
       system: 'You classify financial intent for a self-custody wallet. You never produce amounts, assets, chains, permissions or advice — only one label from the given enum. If you cannot decide, return GENERAL.',
       user,
       temperature: 0,
-      maxTokens: 60
+      maxTokens: 60,
+      json: true
     });
     const parsed = parseJson(raw);
     const intent = String(parsed?.intent || '').trim().toUpperCase();
@@ -754,9 +510,6 @@ export async function classifyIntentWithModel({ message = '', intents = [], loca
     const confidence = clamp(parsed?.confidence, 0, 0.99);
     return { ok: true, intent, confidence: Number(confidence.toFixed(2)), model };
   } catch (err) {
-    /* Every failure shape is a fall-back, not an error the user sees: a stale
-       model id, a quota wall and a markdown-wrapped answer all mean "use the
-       deterministic layer". */
     return { ok: false, reason: String(err.message || 'AI_FAILED').slice(0, 120) };
   }
 }

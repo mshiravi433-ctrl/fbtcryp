@@ -85,6 +85,15 @@ import {
   EXECUTION_CHAIN,
   buildSystemPrompt
 } from '../src/lib/intent-ai/os/systemPrompt.js';
+import {
+  getAvailableProviders,
+  getActiveProviderIds,
+  routedChat,
+  gatewaySelfTest
+} from './aiGateway.js';
+import { runMultiAiDebate } from './aiConsensus.js';
+import { evaluateConfidenceMetrics } from './aiConfidence.js';
+import { recordIntentOutcome, getLearningInsights } from './aiLearning.js';
 
 const router = Router();
 
@@ -662,6 +671,66 @@ router.get('/system-prompt', (_req, res) => res.json({
 
 router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA, tools: listAiTools(), at: nowMs() }));
 
+/* FBT AI Gateway Endpoints (Spec Phase 3) */
+router.get('/gateway/providers', (_req, res) => res.json({
+  ok: true,
+  schema: 'fbt.ai-providers.v1',
+  providers: getAvailableProviders(),
+  activeProviderIds: getActiveProviderIds(),
+  at: nowMs()
+}));
+
+router.get('/gateway/selftest', async (_req, res) => {
+  const report = await gatewaySelfTest();
+  return res.json(report);
+});
+
+router.post('/gateway/chat', async (req, res) => {
+  try {
+    const result = await routedChat(req.body || {});
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/gateway/consensus', async (req, res) => {
+  try {
+    const { message, context, locale, preferredProviders } = req.body || {};
+    const consensus = await runMultiAiDebate({ message, context, locale, preferredProviders });
+    return res.json({ ok: true, ...consensus });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/gateway/confidence', (req, res) => {
+  try {
+    const metrics = evaluateConfidenceMetrics(req.body || {});
+    return res.json({ ok: true, ...metrics });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/learning/record', async (req, res) => {
+  try {
+    const record = await recordIntentOutcome(req.body || {});
+    return res.json({ ok: true, record });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/learning/stats', async (_req, res) => {
+  try {
+    const insights = await getLearningInsights();
+    return res.json({ ok: true, ...insights });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/context', async (req, res) => {
   const context = await buildAIContext(req, req.body || {});
   return res.json({ ok: true, schema: 'fbt.ai-context.v1', context, at: nowMs() });
@@ -755,6 +824,12 @@ router.post('/chat', async (req, res) => {
   }
   if (pendingIntent) await writePending(ownerFor(req), pendingIntent);
 
+  const confidenceMetrics = evaluateConfidenceMetrics({
+    intent: human.intent,
+    context,
+    dataStatus: context.portfolio?.dataStatus || 'live'
+  });
+
   const reply = {
     text: stripInternalLeaks(human.message),
     message: stripInternalLeaks(human.message),
@@ -766,6 +841,13 @@ router.post('/chat', async (req, res) => {
     },
     intent: human.intent,
     confidence: out.plan.confidence,
+    confidenceMetrics,
+    multiAi: {
+      activeProviders: getActiveProviderIds(),
+      confidenceScore: confidenceMetrics.confidenceScore,
+      riskScore: confidenceMetrics.riskScore,
+      dataFreshness: confidenceMetrics.dataFreshness
+    },
     ui: human.ui,
     card: human.card,
     actions: human.actions,
@@ -782,6 +864,17 @@ router.post('/chat', async (req, res) => {
     broadcasts: false,
     requiresUserSignature: human.ui?.type === 'ACTION_CARD'
   };
+
+  recordIntentOutcome({
+    intentId,
+    intentType: human.intent?.type || 'GENERAL',
+    providerUsed: llm?.model ? 'gateway-llm' : 'internal',
+    modelsConsulted: getActiveProviderIds(),
+    confidenceScore: confidenceMetrics.confidenceScore,
+    executionSuccess: true,
+    durationMs: nowMs() - ctx.now,
+    locale: locale || 'fa'
+  }).catch(() => {});
 
   const safeSummary = safe(message, 240);
   const recent = (context.conversationSummary || '').slice(-600);

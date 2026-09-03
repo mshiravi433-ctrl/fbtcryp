@@ -110,10 +110,12 @@ import {
 } from '../lib/intent-ai/os/historyStore.js';
 import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
 import { loadOrders } from '../lib/orders.js';
+import { fetchAiProviders, fetchLearningStats } from '../lib/aiGatewayClient.js';
 import {
   OperationsPanel,
   HistoryPanel,
   StatusPanel,
+  IntelligencePanel,
   MonitorDraftForm,
   OrderDraftForm,
   MonitorCard,
@@ -193,6 +195,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [monitorEngineStatus, setMonitorEngineStatus] = useState(null);
   const [serverReachable, setServerReachable] = useState(null);
   const [activeContext, setActiveContext] = useState(null); // {type:'monitor'|'order'|'conversation', id, label}
+  const [aiProviders, setAiProviders] = useState([]);
+  const [learningStats, setLearningStats] = useState(null);
   const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
   const [orderDraftOpen, setOrderDraftOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState(null); // {kind, parsed, preview, message}
@@ -1120,6 +1124,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       void refreshMonitors();
       void refreshStatus();
     }
+    if (name === 'intelligence') {
+      fetchAiProviders().then((res) => {
+        if (res?.ok && Array.isArray(res.providers)) setAiProviders(res.providers);
+      }).catch(() => {});
+      fetchLearningStats().then((res) => {
+        if (res?.ok) setLearningStats(res);
+      }).catch(() => {});
+    }
   }, [refreshMonitors, refreshStatus]);
 
   const appendOp = useCallback((op) => {
@@ -1616,6 +1628,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <h1>{t('intentAIOS.header', { defaultValue: 'FBT INTENT OS' })}</h1>
           </div>
           <div className="iaos-header-actions">
+            <button type="button" className="iaos-header-btn" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
+              {locale.startsWith('fa') ? 'هوش چندمدلی' : 'AI Intelligence'}
+            </button>
             <button type="button" className="iaos-header-btn" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
               {locale.startsWith('fa') ? 'تاریخچه' : 'History'}
             </button>
@@ -1720,6 +1735,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 ) : null}
                 {Array.isArray(m.opportunities) && m.opportunities.length ? (
                   <OpportunityList rows={m.opportunities} onMonitor={monitorOpportunityRow} locale={locale} />
+                ) : null}
+                {m.multiAi ? (
+                  <div className="iaos-multi-ai-badge" data-testid="intent-ai-multi-model-badge">
+                    <span className="iaos-model-pill">✦ Multi-AI</span>
+                    {m.multiAi.confidenceScore != null ? (
+                      <span className="iaos-pill iaos-pill-ok">
+                        {locale.startsWith('fa') ? 'اطمینان:' : 'Confidence:'} {m.multiAi.confidenceScore}%
+                      </span>
+                    ) : null}
+                    {m.multiAi.riskScore ? (
+                      <span className={`iaos-pill ${m.multiAi.riskScore === 'HIGH' || m.multiAi.riskScore === 'EXTREME' ? 'iaos-pill-bad' : m.multiAi.riskScore === 'MEDIUM' ? 'iaos-pill-warn' : 'iaos-pill-ok'}`}>
+                        {locale.startsWith('fa') ? 'ریسک:' : 'Risk:'} {m.multiAi.riskScore}
+                      </span>
+                    ) : null}
+                    {m.multiAi.dataFreshness ? (
+                      <span className="iaos-pill iaos-pill-ok">
+                        🟢 {m.multiAi.dataFreshness}
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -1859,6 +1894,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           automationsCount: automations.length,
           engine: monitorEngineStatus || {}
         }}
+        locale={locale}
+      />
+      <IntelligencePanel
+        open={panel === 'intelligence'}
+        onClose={() => setPanel(null)}
+        providers={aiProviders}
+        learningStats={learningStats}
         locale={locale}
       />
       <MonitorDraftForm

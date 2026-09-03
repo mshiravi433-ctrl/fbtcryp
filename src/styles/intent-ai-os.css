@@ -1447,3 +1447,113 @@
 [dir='rtl'] .iaos-panel-head {
   text-align: right;
 }
+
+/* Multi-AI Intelligence & Consensus Panel Styling */
+.iaos-intel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.iaos-intel-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.iaos-intel-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.iaos-intel-card-head strong {
+  font-size: 13px;
+  color: #f8fafc;
+}
+
+.iaos-intel-card p {
+  margin: 0;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.iaos-intel-card small {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.iaos-multi-ai-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+}
+
+.iaos-model-pill {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.iaos-conf-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.iaos-consensus-box {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.iaos-consensus-box strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #818cf8;
+}
+
+.iaos-divergence-warn {
+  color: #fbbf24;
+  margin-top: 4px;
+}
+
+:root[data-theme='light'] .iaos-intel-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme='light'] .iaos-intel-card-head strong {
+  color: #0f172a;
+}
+
+:root[data-theme='light'] .iaos-intel-card p {
+  color: #475569;
+}
+
+:root[data-theme='light'] .iaos-consensus-box {
+  background: rgba(241, 245, 249, 0.9);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #334155;
+}
+

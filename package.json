@@ -198,6 +198,8 @@
     "test:central-brain": "node test/intent-ai/ci-brain-turns-probe.mjs && node test/intent-ai/ci-brain-http-probe.mjs",
     "test:central-brain-turns": "node test/intent-ai/ci-brain-turns-probe.mjs",
     "test:central-brain-http": "node test/intent-ai/ci-brain-http-probe.mjs",
+    "test:phase3": "node test/intent-ai/phase3-multi-ai-gateway-probe.mjs",
+    "test:multi-ai": "node test/intent-ai/phase3-multi-ai-gateway-probe.mjs",
     "verify:apk-lock": "node ci/lock-platform-guard.mjs --check"
   },
   "dependencies": {

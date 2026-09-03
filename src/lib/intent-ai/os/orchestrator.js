@@ -1,42 +1,44 @@
 /**
  * FBT INTENT OS — Multi-Agent Orchestrator (Universal)
  * ---------------------------------------------------------------------------
- * Spec §15 + §16 + §38 Final Architecture
+ * Spec Phase 3: Multi-AI Intelligence Upgrade — Multi-Agent Reasoning
  * Orchestrator picks specialist agents, but user sees only Intent AI
  */
 
 import { resolveToolsForIntent } from './toolRegistry.js';
 import { understandIntent } from './intentUnderstanding.js';
 
-export const ORCHESTRATOR_SCHEMA = 'fbt.orchestrator.v1';
+export const ORCHESTRATOR_SCHEMA = 'fbt.orchestrator.v3';
 
-// Import agents dynamically to avoid circular deps — will be injected
+// Full specialized agent list
 const AGENT_IDS = Object.freeze([
   'intent-agent',
-  'portfolio-agent',
   'market-agent',
+  'portfolio-agent',
+  'risk-agent',
+  'strategy-agent',
+  'execution-agent',
+  'verification-agent',
+  'guardian-agent',
   'trading-agent',
   'wallet-agent',
   'yield-agent',
   'research-agent',
   'navigation-agent',
   'media-agent',
-  'risk-agent',
-  'execution-agent',
-  'verification-agent'
+  'financial-agent'
 ]);
 
 export function createOrchestrator({
   agents = {},
   toolRegistry = null,
   contextEngine = null,
-  eventBus = null
+  eventBus = null,
+  aiGateway = null
 } = {}) {
   
-  // Lazy agent getter
   const getAgent = (id) => {
     if (agents[id]) return agents[id];
-    // Try to load from os/agents
     return null;
   };
   
@@ -45,24 +47,23 @@ export function createOrchestrator({
     schema: ORCHESTRATOR_SCHEMA,
     
     /**
-     * Plan: Understand → Retrieve Context → Select Tools → Plan
+     * Plan: Understand → Retrieve Context → Multi-Agent Routing → Tool Selection → Action Plan
      */
     async plan({ intent, context = {}, perception = null } = {}) {
       const type = intent.type || 'GENERAL';
       
-      // Select relevant tools (hierarchical)
+      // Select relevant tools
       const tools = toolRegistry?.resolveToolsForIntent
         ? toolRegistry.resolveToolsForIntent(type, context)
         : resolveToolsForIntent(type, context);
       
-      // Determine agents needed (Spec §15)
+      // Determine agents needed
       const agentRouting = await this.routeToAgents(intent, context);
       
       // Build action plan
       const actions = [];
       let expected = null;
       
-      // Navigation doesn't need confirmation
       if (type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
         const navTool = tools.find(t => t.id === 'navigation.open');
         if (navTool) {
@@ -96,10 +97,8 @@ export function createOrchestrator({
           });
         }
       } else if (['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'RISK_ANALYSIS', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'ANALYZE_TOKEN', 'FARM', 'LEND', 'STAKING'].includes(type)) {
-        // Read-only analysis — collect from agents + real tools
         actions.length = 0;
       } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'REBALANCE', 'DCA', 'GOAL'].includes(type)) {
-        // Financial — needs quote + confirmation
         const tradingTools = tools.filter(t => !t.readOnly && t.requiresConfirmation);
         const primary = tradingTools[0] || tools[0];
         
@@ -116,8 +115,6 @@ export function createOrchestrator({
           expected = input;
         }
       } else if (type === 'INVESTMENT_PLAN') {
-        // Multi-agent: Portfolio → Market → Yield → Risk → Research → Strategy
-        // For now, just yield discovery + portfolio analysis
         const yieldTool = tools.find(t => t.id === 'yield.discover');
         if (yieldTool) {
           actions.push({
@@ -125,8 +122,8 @@ export function createOrchestrator({
             id: yieldTool.id,
             input: {
               asset: intent.entities?.token || null,
-              riskTolerance: intent.entities?.riskTolerance || 'medium',
-              amount: intent.entities?.amount || intent.entities?.amountUsd || null
+              riskTolerance: intent.financialParams?.riskPreference || intent.entities?.riskTolerance || 'medium',
+              amount: intent.financialParams?.capital || intent.entities?.amount || intent.entities?.amountUsd || null
             },
             requiresConfirmation: false,
             readOnly: true
@@ -157,15 +154,15 @@ export function createOrchestrator({
       const agentsList = ['intent-agent'];
       
       if (['PORTFOLIO_ANALYSIS', 'REBALANCE'].includes(type)) {
-        agentsList.push('portfolio-agent', 'risk-agent', 'market-agent');
+        agentsList.push('portfolio-agent', 'risk-agent', 'market-agent', 'strategy-agent');
       } else if (['MARKET_ANALYSIS', 'MARKET_CONTEXT'].includes(type)) {
         agentsList.push('market-agent', 'research-agent', 'risk-agent');
       } else if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'STAKING'].includes(type)) {
-        agentsList.push('yield-agent', 'risk-agent', 'portfolio-agent');
+        agentsList.push('yield-agent', 'risk-agent', 'portfolio-agent', 'strategy-agent');
       } else if (['INVESTMENT_PLAN', 'GOAL'].includes(type)) {
-        agentsList.push('portfolio-agent', 'market-agent', 'yield-agent', 'risk-agent', 'research-agent');
+        agentsList.push('portfolio-agent', 'market-agent', 'yield-agent', 'risk-agent', 'strategy-agent', 'research-agent');
       } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'DCA'].includes(type)) {
-        agentsList.push('trading-agent', 'wallet-agent', 'risk-agent', 'execution-agent', 'verification-agent');
+        agentsList.push('trading-agent', 'wallet-agent', 'risk-agent', 'guardian-agent', 'execution-agent', 'verification-agent');
       } else if (['NEWS_SEARCH'].includes(type)) {
         agentsList.push('research-agent', 'navigation-agent');
       } else if (['OPEN_CALM', 'PLAY_MUSIC'].includes(type)) {
@@ -185,24 +182,24 @@ export function createOrchestrator({
     
     buildInputFromIntent(intent, context, tool) {
       const entities = intent.entities || {};
+      const fp = intent.financialParams || {};
       const input = {};
       
       if (tool.inputSchema?.properties) {
         for (const key of Object.keys(tool.inputSchema.properties)) {
-          if (key === 'fromSymbol' && entities.fromToken) input[key] = entities.fromToken;
+          if (key === 'fromSymbol' && (entities.fromToken || entities.token)) input[key] = entities.fromToken || entities.token;
           if (key === 'toSymbol' && entities.toToken) input[key] = entities.toToken;
-          if (key === 'amount' && entities.amount) input[key] = entities.amount;
+          if (key === 'amount' && (fp.capital || entities.amount)) input[key] = fp.capital || entities.amount;
           if (key === 'token' && entities.token) input[key] = entities.token;
           if (key === 'asset' && (entities.token || entities.amountSymbol)) input[key] = entities.token || entities.amountSymbol;
           if (key === 'chainId' && context.wallet?.chains?.[0]) input[key] = context.wallet.chains[0];
-          if (key === 'riskTolerance' && entities.riskTolerance) input[key] = entities.riskTolerance;
+          if (key === 'riskTolerance' && (fp.riskPreference || entities.riskTolerance)) input[key] = fp.riskPreference || entities.riskTolerance;
         }
       }
       
-      // Fill from entities directly if no schema match
       if (entities.fromToken) input.fromSymbol = entities.fromToken;
       if (entities.toToken) input.toSymbol = entities.toToken;
-      if (entities.amount) input.amount = entities.amount;
+      if (fp.capital || entities.amount) input.amount = fp.capital || entities.amount;
       if (entities.token && !input.token) input.token = entities.token;
       if (entities.amountUsd && !input.amount) input.amount = entities.amountUsd;
       
@@ -211,19 +208,17 @@ export function createOrchestrator({
     
     async isComplete({ intent, plan, result, context } = {}) {
       if (!result) return false;
-      if (result.ok === false) return true; // Failed tasks are complete
-      if (plan.actions?.length === 0) return true; // Analysis tasks
+      if (result.ok === false) return true;
+      if (plan.actions?.length === 0) return true;
       if (result.status === 'CONFIRMED' || result.success === true) return true;
       return false;
     },
     
     async replan({ intent, context, previousResult } = {}) {
-      // For multi-step tasks
       return this.plan({ intent, context });
     },
     
     async heal({ error, plan, context } = {}) {
-      // Self-healing: try alternative tool
       const tools = plan.tools || [];
       const failedToolId = plan.actions?.[0]?.toolId;
       const alternatives = tools.filter(t => t.id !== failedToolId && t.category === (plan.tools?.[0]?.category));
