@@ -75,6 +75,20 @@ Respond in STRICT JSON:
 }`
 };
 
+// Specialized multi-model routing via OpenRouter and Groq
+const ROLE_MODELS = {
+  openrouter: {
+    market_intelligence: 'x-ai/grok-2',
+    risk_guardian: 'anthropic/claude-3.5-sonnet',
+    strategy_architect: 'deepseek/deepseek-chat'
+  },
+  groq: {
+    market_intelligence: 'llama-3.3-70b-versatile',
+    risk_guardian: 'llama-3.3-70b-versatile',
+    strategy_architect: 'mixtral-8x7b-32768'
+  }
+};
+
 /**
  * Run Multi-AI Debate and calculate Consensus.
  *
@@ -92,21 +106,38 @@ export async function runMultiAiDebate({
 } = {}) {
   const active = getActiveProviderIds();
   
-  // Select up to 3 distinct providers for the debate
+  // Select active providers prioritizing Groq and OpenRouter
   let debateProviders = preferredProviders.filter(isProviderConfigured);
   if (!debateProviders.length) {
-    const priority = ['grok', 'openrouter', 'gemini', 'groq', 'deepseek', 'anthropic', 'openai'];
+    const priority = ['groq', 'openrouter', 'grok', 'gemini', 'deepseek', 'anthropic', 'openai'];
     debateProviders = priority.filter((p) => active.includes(p)).slice(0, 3);
   }
 
-  // If fewer than 2 external providers configured, include internal engine
-  if (debateProviders.length === 0) {
-    debateProviders = ['internal'];
-  } else if (debateProviders.length === 1 && !debateProviders.includes('internal')) {
-    debateProviders.push('internal');
+  // If only OpenRouter is configured, we run multi-model debate across diverse models on OpenRouter (Grok, Claude, DeepSeek)
+  let executionPlan = [];
+  if (debateProviders.includes('openrouter') && debateProviders.length === 1) {
+    executionPlan = [
+      { provider: 'openrouter', role: 'market_intelligence', model: 'x-ai/grok-2' },
+      { provider: 'openrouter', role: 'risk_guardian', model: 'anthropic/claude-3.5-sonnet' },
+      { provider: 'openrouter', role: 'strategy_architect', model: 'deepseek/deepseek-chat' }
+    ];
+  } else if (debateProviders.includes('groq') && debateProviders.includes('openrouter')) {
+    executionPlan = [
+      { provider: 'groq', role: 'market_intelligence', model: 'llama-3.3-70b-versatile' },
+      { provider: 'openrouter', role: 'risk_guardian', model: 'anthropic/claude-3.5-sonnet' },
+      { provider: 'openrouter', role: 'strategy_architect', model: 'deepseek/deepseek-chat' }
+    ];
+  } else {
+    const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
+    if (debateProviders.length === 0) debateProviders = ['internal'];
+    if (debateProviders.length === 1 && !debateProviders.includes('internal')) debateProviders.push('internal');
+    executionPlan = debateProviders.map((p, idx) => ({
+      provider: p,
+      role: roles[idx % roles.length],
+      model: ROLE_MODELS[p]?.[roles[idx % roles.length]] || null
+    }));
   }
 
-  const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
   const isPersian = locale.startsWith('fa') || /[آ-ی]/.test(message);
 
   // Build context summary for models
@@ -121,8 +152,10 @@ export async function runMultiAiDebate({
   ].filter(Boolean).join('\n');
 
   // Execute queries across assigned roles in parallel
-  const debateTasks = debateProviders.map(async (providerId, index) => {
-    const roleKey = roles[index % roles.length];
+  const debateTasks = executionPlan.map(async (task) => {
+    const providerId = task.provider;
+    const roleKey = task.role;
+    const assignedModel = task.model;
     const systemPrompt = ROLE_PROMPTS[roleKey];
     const start = Date.now();
 
@@ -130,6 +163,7 @@ export async function runMultiAiDebate({
       const res = await executeProviderChat(providerId, {
         system: systemPrompt,
         user: userPrompt,
+        model: assignedModel,
         temperature: 0.25,
         maxTokens: 500,
         json: true
