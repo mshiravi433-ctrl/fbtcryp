@@ -178,8 +178,8 @@ try {
       && !swList.includes(r)));
   check('the service worker still refuses to cache API responses',
     /pathname\.startsWith\('\/api\/'\)/.test(sw));
-  check('the service worker still handles fetch and keeps the v4 shell',
-    /addEventListener\('fetch'/.test(sw) && /fbt-shell-v4/.test(sw));
+  check('the service worker still handles fetch and keeps the v5 shell',
+    /addEventListener\('fetch'/.test(sw) && /fbt-shell-v5/.test(sw));
 
   console.log(JSON.stringify({ probe: 'phase94-offline-queue', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;

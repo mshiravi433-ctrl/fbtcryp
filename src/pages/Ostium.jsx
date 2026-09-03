@@ -15,6 +15,7 @@ import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import TrendChart from '../components/TrendChart';
 import { assetKnowledgeFor } from '../lib/assetKnowledge';
+import { getFuturesCandles } from '../lib/futuresClient';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -32,6 +33,9 @@ import {
 } from '../lib/ostium';
 
 const CATEGORY_ORDER = ['Commodities', 'Forex', 'Stocks', 'Indices', 'ETFs', 'Crypto'];
+/* Chart resolutions the venue's OHLC endpoint serves (same set as the
+   futures BFF router accepts for ostium). */
+const OSTIUM_CHART_RESOLUTIONS = [['15', '15m'], ['60', '1h'], ['240', '4h'], ['1D', '1d']];
 const friendlyCategory = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v.includes('commod')) return 'Commodities';
@@ -84,48 +88,98 @@ function TokenChip({ symbol, lang, onClick }) {
 }
 
 /**
- * Chart: REAL mids observed by this session's 20s poll, nothing else. While
- * fewer than two live points exist the chart says it is collecting, and when
- * the feed is down it says so — it never draws a synthetic series (Futures
- * Engine v3: no fabricated candles on a leveraged screen).
+ * Chart: REAL venue candles (OHLC from the futures BFF — the same
+ * /api/v1/futures/candles read the On-Chain tab uses), so the price shape is
+ * on screen the moment the page opens. Live session mids are appended as the
+ * freshest point while the 20s poll runs, and if the candle feed is down the
+ * observed session series still draws — every line is a price somebody actually
+ * paid or saw; nothing is synthesised (Futures Engine v3).
  */
 function OstiumChart({ market, feedOffline, sessionPoints, t }) {
-  const points = useMemo(
-    () => (sessionPoints && sessionPoints.length >= 2 ? sessionPoints : []),
-    [sessionPoints]
-  );
+  const [resolution, setResolution] = useState('60');
+  const [candles, setCandles] = useState({ rows: [], live: false, loading: false });
+
+  useEffect(() => {
+    if (!market) return undefined;
+    let alive = true;
+    let retryTimer = null;
+    let attempt = 0;
+    const run = async () => {
+      setCandles((c) => ({ ...c, loading: true }));
+      const res = await getFuturesCandles({
+        provider: 'ostium',
+        market: String(market.pairId ?? market.marketId ?? market.symbol),
+        resolution,
+        limit: 96
+      });
+      if (!alive) return;
+      const rows = res.ok ? res.data.candles || [] : [];
+      if (rows.length >= 2) { setCandles({ rows, live: true, loading: false }); return; }
+      /* A cold instance or a transient blip retries twice before the honest
+         empty state — the chart heals instead of staying blank. */
+      if (attempt < 2) { attempt += 1; retryTimer = setTimeout(run, 3_500); return; }
+      setCandles({ rows: [], live: false, loading: false });
+    };
+    run();
+    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market?.pairId, resolution]);
+
+  const points = useMemo(() => {
+    const base = candles.rows.map((c) => ({ x: c.startedAt, y: c.close }));
+    /* Live tail: the newest mid this session actually observed, newer than the
+       last candle bucket, extends the series to "now". */
+    const lastMid = market?.mid;
+    if (base.length && Number.isFinite(lastMid) && lastMid > 0) {
+      const lastX = base[base.length - 1].x;
+      base.push({ x: Math.max(Date.now(), lastX + 1), y: lastMid });
+    }
+    if (base.length >= 2) return base;
+    /* Candle feed down → the observed session series still draws. */
+    return sessionPoints && sessionPoints.length >= 2 ? sessionPoints : [];
+  }, [candles.rows, market?.mid, sessionPoints]);
+
+  const usingCandles = candles.live && points.length >= 2;
+  const usingSession = !usingCandles && sessionPoints && sessionPoints.length >= 2;
+
   const change = useMemo(() => {
     if (points.length < 2) return 0;
     const first = Number(points[0].y);
     const last = Number(points[points.length - 1].y);
     return first > 0 ? ((last - first) / first) * 100 : 0;
   }, [points]);
-  const usingSession = sessionPoints && sessionPoints.length >= 2;
 
   return (
     <div className="dydx-chart" data-testid="ostium-chart">
       <div className="dydx-chart-head">
         <span className="faint">
-          {feedOffline
-            ? t('futures.chartUnavailableShort')
-            : usingSession
-              ? t('ostium.chartSession', { defaultValue: 'قیمت‌های مشاهده‌شده در این نشست' })
-              : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })}
+          {usingCandles || usingSession
+            ? (usingCandles ? t('futures.chartLive') : t('ostium.chartSession', { defaultValue: 'قیمت‌های مشاهده‌شده در این نشست' }))
+            : candles.loading
+              ? t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })
+              : t('futures.chartUnavailableShort')}
         </span>
-        {usingSession && (
-          <span className={`mono ${change >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
-            {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-          </span>
-        )}
+        <div className="dydx-chart-res">
+          {OSTIUM_CHART_RESOLUTIONS.map(([res, label]) => (
+            <button key={res} type="button" className={resolution === res ? 'active' : ''} onClick={() => setResolution(res)}>{label}</button>
+          ))}
+        </div>
       </div>
       <TrendChart
         points={points}
         height={92}
         up={change >= 0}
-        emptyLabel={feedOffline ? t('futures.chartUnavailable') : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })}
+        loading={candles.loading}
+        emptyLabel={candles.loading ? '' : (feedOffline ? t('futures.chartUnavailable') : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' }))}
         formatValue={(v) => `$${fmtPrice(v)}`}
         testId="ostium-trend"
       />
+      {(usingCandles || usingSession) && (
+        <div className="dydx-chart-foot">
+          <span className={`mono ${change >= 0 ? 'up' : 'down'}`}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</span>
+          <span className="faint">{usingCandles ? t('futures.chartLive') : t('ostium.chartSession', { defaultValue: 'قیمت‌های مشاهده‌شده در این نشست' })}</span>
+        </div>
+      )}
     </div>
   );
 }

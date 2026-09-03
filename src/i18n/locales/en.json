@@ -8839,8 +8839,8 @@
   },
   "futures": {
     "onchain": {
-      "title": "On-Chain Futures · Velocity on Solana",
-      "subtitle": "Crypto perpetuals on Velocity (the Drift fork) — Solana's on-chain order-book DEX. Live prices, chart and fees; every order is signed by your Solana wallet."
+      "title": "On-chain futures",
+      "subtitle": "Perpetual contracts settled on-chain — crypto, forex, commodities, indices, stocks and ETFs in one engine. Live prices, chart and fees; every order is signed by your own wallet, and the keys stay yours."
     },
     "risk": {
       "LOW": "Low",
@@ -8850,25 +8850,10 @@
     },
     "providers": "Protocols",
     "providersUnavailable": "The protocol registry is unavailable right now. Nothing is shown rather than a guessed list.",
-    "driftNote": "Velocity is the only on-chain venue on this screen. Markets, prices, funding and open interest are read live from Velocity's public data API; orders are built with the official Velocity SDK and signed by your own Solana wallet — FBT never holds a key.",
-    "protocolAvailableSoon": "Coming soon",
-    "chain": {
-      "solana": "Solana"
-    },
-    "providerExecutable": "Order path ready · {{count}} markets",
-    "providerNotExecutable": "Read-only on this deployment",
     "routerNote": "The router picks a venue on execution quality and safety only — fees the user pays, spread, liquidity, funding, feed freshness — never on what FBT earns.",
     "readOnlyNotice": "This market is currently available for viewing only.",
     "unavailableNotice": "This protocol is not available right now ({{reason}}). No order can be built until it recovers.",
     "readOnlyButton": "View only",
-    "status": {
-      "AVAILABLE": "Available",
-      "DEGRADED": "Degraded",
-      "READ_ONLY": "Read-only",
-      "UNAVAILABLE": "Unavailable",
-      "MAINTENANCE": "Maintenance",
-      "BLOCKED": "Blocked"
-    },
     "reason": {
       "NOT_CONFIGURED": "not configured for production yet",
       "FEED_UNAVAILABLE": "price feed unreachable",
@@ -8906,7 +8891,6 @@
     "chartTitle": "Price · on-chain candles",
     "chartUnavailableShort": "Chart unavailable",
     "chartUnavailable": "The protocol did not return candles for this market. No chart is drawn rather than a flat line.",
-    "chartSource": "{{provider}} OHLC feed",
     "funding": "Funding (annualised est.)",
     "fundingSide": "Who pays",
     "longsPay": "Longs pay shorts",
@@ -8937,7 +8921,8 @@
       "totalAtReview": "shown at review",
       "networkWallet": "shown in wallet",
       "totalPartial": "{{known}} + network",
-      "honesty": "The FBT fee is {{pct}}% of your collateral at this leverage. Fees are charged on notional, not collateral. There is no hidden spread or markup."
+      "honesty": "The FBT fee is {{pct}}% of your collateral at this leverage. Fees are charged on notional, not collateral. There is no hidden spread or markup.",
+      "fbtIncluded": "The FBT fee on this venue is paid out of the venue’s own fee — nothing is added to your cost."
     },
     "unknown": "unknown",
     "riskLevel": "Risk",
@@ -9020,7 +9005,6 @@
     "derivativeNotice": "You do not own the underlying coin, commodity or share. You own a leveraged on-chain position settled in USDC. FBT is the interface and is not the counterparty.",
     "noGuarantee": "No strategy, signal or risk score here guarantees profit or eliminates risk.",
     "confirmTitle": "Confirm on-chain order",
-    "provider": "Protocol",
     "direction": "Direction",
     "entryPrice": "Reference price",
     "route": "Routed to",
@@ -9061,7 +9045,8 @@
       "NOT_CONFIGURED": "This capability is not configured for the Production environment yet.",
       "UNKNOWN": "Something went wrong. Nothing was sent without your signature."
     },
-    "riskNotice": "Perpetuals are leveraged derivatives. A move against you can liquidate all of your collateral, and most retail leveraged traders lose money. Nothing here is a profit guarantee."
+    "riskNotice": "Perpetuals are leveraged derivatives. A move against you can liquidate all of your collateral, and most retail leveraged traders lose money. Nothing here is a profit guarantee.",
+    "chartLive": "live market candles"
   },
   "profileBadge": {
     "title": "Notifications",

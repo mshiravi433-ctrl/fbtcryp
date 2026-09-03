@@ -1095,18 +1095,14 @@
   },
   "futures": {
     "onchain": {
-      "title": "Futuros on-chain · Velocity en Solana",
-      "subtitle": "Perpetuos de cripto en Velocity (el fork de Drift) — el DEX de libro de órdenes on-chain de Solana. Precios, gráfico y comisiones en vivo; cada orden la firma tu wallet de Solana."
-    },
-    "driftNote": "Velocity es el único protocolo on-chain de esta pantalla. Mercados, precios, fondeo e interés abierto se leen en vivo desde la API pública de datos de Velocity; las órdenes se construyen con el SDK oficial de Velocity y las firma tu propia wallet de Solana: FBT nunca tiene tus claves.",
-    "protocolAvailableSoon": "Próximamente",
-    "chain": {
-      "solana": "Solana"
+      "title": "Futuros on-chain",
+      "subtitle": "Perpetuos con liquidación on-chain — cripto, forex, materias primas, índices, acciones y ETF en un solo motor. Precios, gráfico y comisiones en vivo; cada orden la firma tu propia cartera y las llaves siguen contigo."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Precio oráculo",
     "change24h": "Cambio 24 h",
     "volume24h": "Volumen 24 h",
-    "noWalletHint": "No hay ningún monedero Solana instalado en este dispositivo. Toca el botón de arriba para abrir la página del monedero: conecta Phantom, Solflare o Backpack allí y volverás directamente a esta orden."
+    "noWalletHint": "No hay ningún monedero Solana instalado en este dispositivo. Toca el botón de arriba para abrir la página del monedero: conecta Phantom, Solflare o Backpack allí y volverás directamente a esta orden.",
+    "chartLive": "velas del mercado en vivo"
   }
 }

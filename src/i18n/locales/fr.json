@@ -1095,18 +1095,14 @@
   },
   "futures": {
     "onchain": {
-      "title": "Futurs on-chain · Velocity sur Solana",
-      "subtitle": "Perpétuels crypto sur Velocity (le fork de Drift) — le DEX à carnet d'ordres on-chain de Solana. Prix, graphique et frais en direct ; chaque ordre est signé par votre wallet Solana."
-    },
-    "driftNote": "Velocity est le seul protocole on-chain de cet écran. Les marchés, les prix, le financement et l'open interest sont lus en direct depuis l'API publique de Velocity ; les ordres sont construits avec le SDK officiel de Velocity et signés par votre wallet Solana — FBT ne détient jamais vos clés.",
-    "protocolAvailableSoon": "Bientôt",
-    "chain": {
-      "solana": "Solana"
+      "title": "Futurs on-chain",
+      "subtitle": "Perpétuels réglés on-chain — crypto, forex, matières premières, indices, actions et ETF dans un seul moteur. Prix, graphique et frais en direct ; chaque ordre est signé par votre propre portefeuille, vos clés restent chez vous."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Prix oracle",
     "change24h": "Variation 24 h",
     "volume24h": "Volume 24 h",
-    "noWalletHint": "Aucun portefeuille Solana n'est installé sur cet appareil. Touchez le bouton ci-dessus pour ouvrir la page portefeuille — connectez Phantom, Solflare ou Backpack là-bas et vous reviendrez directement à cet ordre."
+    "noWalletHint": "Aucun portefeuille Solana n'est installé sur cet appareil. Touchez le bouton ci-dessus pour ouvrir la page portefeuille — connectez Phantom, Solflare ou Backpack là-bas et vous reviendrez directement à cet ordre.",
+    "chartLive": "bougies du marché en direct"
   }
 }

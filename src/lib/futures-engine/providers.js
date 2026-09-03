@@ -98,8 +98,10 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       supportsLimitOrders: false,
       supportsReduceOnly: true
     }),
-    /* Ostium lives in the Stocks tab (src/pages/Ostium.jsx); it is not part of
-       the on-chain futures screen, which shows Drift (Solana) only. */
+    /* Ostium powers both the Stocks tab (src/pages/Ostium.jsx) and the
+       non-crypto categories of the On-Chain futures engine tab, which merges
+       its forex/commodities/indices/stocks/ETFs perps with the Solana venue's
+       crypto perps into one catalogue (the venue names stay internal). */
     tab: null
   }),
   dydx: Object.freeze({
