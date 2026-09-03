@@ -148,7 +148,7 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', onOpen
   const short = (a) => (a.length > 22 ? `${a.slice(0, 12)}…${a.slice(-8)}` : a);
 
   return (
-    <Sheet open={open} onClose={onClose} title={t('btc.hub.title')} anchor="bottom" size="lg">
+    <Sheet open={open} onClose={onClose} title={t('btc.hub.title')} anchor="center" size="lg">
       <div className="stack" style={{ gap: 14 }}>
         {/* ------------------------- this app's wallet ------------------------ */}
         <motion.div variants={rise} initial="hidden" animate="show">

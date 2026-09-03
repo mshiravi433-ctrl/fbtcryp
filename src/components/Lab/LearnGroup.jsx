@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import Challenges from './Challenges';
 import Lesson from './Lesson';
 import RiskTrainer from './RiskTrainer';
+import Glossary from './Glossary';
 
 const CARDS = [
   {
@@ -25,6 +26,12 @@ const CARDS = [
     icon: '🛡️',
     glow: 'cyan',
     Component: RiskTrainer
+  },
+  {
+    id: 'glossary',
+    icon: '📖',
+    glow: 'violet',
+    Component: Glossary
   }
 ];
 

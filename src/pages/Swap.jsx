@@ -61,6 +61,8 @@ import MevGuard from '../components/MevGuard';
 import { evaluateExecutionGate, isBlocked, requiresAcknowledgement } from '../lib/executionGate';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
+import { recordSwap, confirmSwap, cancelSwap, failSwap } from '../lib/swapHistory';
+import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import { POINT_VALUES } from '../lib/ranks';
 import { createExecutionProof } from '../lib/executionProof';
 import useIntentExecution from '../hooks/useIntentExecution';
@@ -813,6 +815,7 @@ export default function Swap() {
 
     setTxState({ stage: 'preparing' });
     let approvalHashForApprovalStage = null;
+    let swapRecordId = null;
     try {
       const provider = await wallet.getReadProvider(chainId);
       const mustApprove = await needsApproval({
@@ -897,6 +900,22 @@ export default function Swap() {
       haptic?.('medium');
       exec.markConfirming();
 
+      /* Record the pending swap in the on-device ledger (localStorage), so
+         the history survives a reload and shows «در حال اجرا». */
+      swapRecordId = recordSwap({
+        network: 'evm',
+        chainId,
+        chainName: cfg?.name ?? null,
+        from: amount,
+        fromSymbol: fromToken.symbol,
+        to: fresh.amountOut,
+        toSymbol: toToken.symbol,
+        amountIn: Number(amount),
+        amountOut: fresh.amountOut != null ? Number(fresh.amountOut) : null,
+        txHash: tx.hash,
+        status: 'pending'
+      }).id;
+
       /*
        * ─── REPLACEMENT TRACKING ──────────────────────────────────────────────
        * If the user (or their wallet) replaces this pending transaction —
@@ -948,6 +967,7 @@ export default function Swap() {
               policyVersion: exec.lifecycle?.policyVersion ?? 'fbt.intent-lifecycle-policy.v1'
             });
             setTxState({ stage: 'error', error: 'CONFIRMATION_TIMEOUT' });
+            if (swapRecordId) failSwap(swapRecordId, 'CONFIRMATION_TIMEOUT');
             notifyTrade({
               ok: false, haptic,
               title: t('notify.tradeFailTitle'),
@@ -1028,6 +1048,11 @@ export default function Swap() {
         proofId: executionProof?.id ?? null,
         proofDigest: executionProof?.integrity?.digest ?? null
       });
+
+      if (swapRecordId) {
+        if (ok) confirmSwap(swapRecordId, tx.hash);
+        else failSwap(swapRecordId, 'RECEIPT_FAILED');
+      }
 
       if (ok) {
         const rewards = useAppStore.getState();
@@ -1121,6 +1146,10 @@ export default function Swap() {
         policyVersion: exec.lifecycle?.policyVersion ?? 'fbt.intent-lifecycle-policy.v1'
       });
       setTxState({ stage: 'error', error: code, detail: msg.slice(0, 140) });
+      if (swapRecordId) {
+        if (code === 'USER_REJECTED') cancelSwap(swapRecordId, code);
+        else failSwap(swapRecordId, code);
+      }
       if (code !== 'USER_REJECTED') {
         notifyTrade({ ok: false, haptic, title: t('notify.tradeFailTitle'), body: t(`swap.err.${code}`) });
       } else {
@@ -1889,26 +1918,38 @@ export default function Swap() {
         </button>
       </section>
 
-      <section className="card">
-        <p className="section-label" style={{ marginTop: 0 }}>{t('swap.gasTitle')}</p>
+      <InfoBox title={t('swap.gasTitle')} tone="info" id="swap-gas-fees">
         <p className="muted" style={{ fontSize: 12, lineHeight: 1.85, marginTop: 0 }}>
           {t('swap.gasBody')}
         </p>
         <div className="stack" style={{ gap: 5, marginTop: 8 }}>
           {PAYOUT_DIRECTORY.map((row) => (
-            <div className="row-between" key={row.id}>
+            <div
+              className="row-between"
+              key={row.id}
+              style={chainId === row.chainId ? { background: 'rgba(0,229,255,0.05)', borderRadius: 8, padding: '2px 4px' } : undefined}
+            >
               <span className="row" style={{ gap: 7 }}>
                 <span
                   style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, display: 'inline-block' }}
                 />
-                <span style={{ fontSize: 12 }}>{row.label}</span>
+                <span style={{ fontSize: 12 }}>
+                  {row.label}
+                  {chainId === row.chainId && (
+                    <span className="pill pill-up" style={{ fontSize: 9, padding: '1px 6px', marginInlineStart: 6 }}>
+                      {t('swap.currentNetwork')}
+                    </span>
+                  )}
+                </span>
               </span>
               <span className="mono faint" style={{ fontSize: 11 }}>{row.gas}</span>
             </div>
           ))}
         </div>
         <p className="faint" style={{ marginTop: 9, lineHeight: 1.8 }}>{t('swap.gasNote')}</p>
-      </section>
+      </InfoBox>
+
+      <SwapHistoryPanel network="evm" />
 
       <AdBanner slot="p2p" />
 

@@ -20,13 +20,19 @@ import { IconSend, IconReceive, IconBitcoin } from './WalletArt';
  * lib/btcWallet, lib/btcTx or lib/btcApi. The bitcoin code is fetched by the
  * sheet, at the moment of the tap, and never before.
  */
-export default function WalletActionRow({ onSend, onReceive, onBitcoin, onSwap, onBridge, onBuy, onEarn, onOptimize, canOptimize }) {
+export default function WalletActionRow({ onSend, onReceive, onBitcoin, onSwap, onBridge, onBuy, onEarn, onOptimize, canOptimize, showBitcoin = true }) {
   const { t } = useTranslation();
 
   const actions = [
     { key: 'send', label: t('send.title'), Icon: IconSend, tint: 'send', onClick: onSend },
     { key: 'receive', label: t('receive.title'), Icon: IconReceive, tint: 'recv', onClick: onReceive },
-    { key: 'bitcoin', label: t('btc.hub.action'), Icon: IconBitcoin, tint: 'btc', onClick: onBitcoin },
+    /*
+     * The bitcoin doorway exists ONLY for the internal local vault. When a
+     * wallet is connected through WalletConnect / an injected provider (Trust
+     * Wallet, MetaMask, …) there is no BTC leg to derive, so the button is
+     * removed entirely rather than left visible as a dead tap.
+     */
+    ...(showBitcoin ? [{ key: 'bitcoin', label: t('btc.hub.action'), Icon: IconBitcoin, tint: 'btc', onClick: onBitcoin }] : []),
     { key: 'swap', label: t('swap.title'), Icon: IconSwap, tint: 'swap', onClick: onSwap },
     { key: 'bridge', label: t('nav.bridge'), Icon: IconSwap, tint: 'bridge', onClick: onBridge },
     { key: 'buy', label: t('nav.buy'), Icon: IconPlus, tint: 'buy', onClick: onBuy },

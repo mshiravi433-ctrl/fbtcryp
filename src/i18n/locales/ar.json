@@ -570,7 +570,18 @@
     "solanaOnlyBody": "الانزلاق التلقائي ومهلة المعاملة ووضع الخبير خاصة بمسار EVM: فالانزلاق التلقائي يُشتق من تسعيرة EVM، والمهلة وسيط لموجّه EVM، ووضع الخبير يتخطى شاشة مراجعة EVM. لا يوجد لأي منها مقابل على سولانا، لذا فإظهارها هنا يعني أدوات تحكم لا تفعل شيئًا — وهي المشكلة نفسها التي كانت في هذه الشاشة.",
     "gaslessUnavailable": "المبادلة بدون رسوم غاز غير مفعّلة على هذا النشر، لذا ما زالت هذه العملية تحتاج {{coin}} لرسوم الشبكة.",
     "gaslessUsingNormal": "السعر العادي أعلاه ما زال سارياً.",
-    "gaslessQuoteFailed": "سعر المبادلة بدون غاز غير متاح حالياً. حاول مجدداً أو أوقفها."
+    "gaslessQuoteFailed": "سعر المبادلة بدون غاز غير متاح حالياً. حاول مجدداً أو أوقفها.",
+    "historyTitle": "Swap history",
+    "historyClear": "Clear",
+    "historyCleared": "History cleared.",
+    "historyRemove": "Remove this record",
+    "historyStatus": {
+      "confirmed": "Confirmed",
+      "pending": "In progress",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "currentNetwork": "الشبكة الحالية"
   },
   "onboarding": {
     "skip": "تخطي",
@@ -5231,5 +5242,9 @@
     "volume24h": "حجم 24 ساعة",
     "noWalletHint": "لا يوجد محفظة سولانا مثبتة على هذا الجهاز. اضغط الزر أعلاه لفتح صفحة المحفظة — اربط Phantom أو Solflare أو Backpack هناك وستعود مباشرة إلى هذا الطلب.",
     "chartLive": "شموع السوق المباشرة"
+  },
+  "lab2": {
+    "cards": {},
+    "screens": {}
   }
 }

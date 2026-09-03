@@ -235,37 +235,6 @@ export default function MarketInsightsPanel({
         </button>
       )}
 
-      <div className="insights-section-heading">
-        <IconTrend width={17} height={17} />
-        <div><strong>{t('insights.indicatorsTitle', { defaultValue: 'شاخص‌های کلیدی بازار و نقدینگی' })}</strong><span>{t('insights.indicatorsSub', { defaultValue: 'تحلیل داده‌های زنده و جریان نقدینگی' })}</span></div>
-      </div>
-      <div className="insights-grid">
-        <MetricCard
-          title={t('insights.volumeLeader', { defaultValue: 'بیشترین حجم معاملات ۲۴ ساعته' })}
-          item={insights.volumeLeader}
-          source={t('insights.volumeSource', { vol: insights.volumeLeader?.volume ? fmtCompact(insights.volumeLeader.volume) : '—', defaultValue: insights.volumeLeader?.volume ? `حجم ۲۴ساعته: ${fmtCompact(insights.volumeLeader.volume)}` : 'حجم زنده معاملات' })}
-          tone="up"
-          fallback={IconTrend}
-          emptyText={t('insights.marketUnavailable')}
-        />
-        <MetricCard
-          title={t('insights.marketCapLeader', { defaultValue: 'برترین ارزش بازار' })}
-          item={insights.marketCapLeader}
-          source={t('insights.mcapSource', { mcap: insights.marketCapLeader?.mcap ? fmtCompact(insights.marketCapLeader.mcap) : '—', defaultValue: insights.marketCapLeader?.mcap ? `ارزش بازار: ${fmtCompact(insights.marketCapLeader.mcap)}` : 'ارزش کل بازار' })}
-          tone="blue"
-          fallback={IconBuilding}
-          emptyText={t('insights.marketUnavailable')}
-        />
-        <MetricCard
-          title={t('insights.volatilityLeader', { defaultValue: 'بیشترین دامنه نوسان روزانه' })}
-          item={insights.volatilityLeader}
-          source={insights.volatilityLeader?.spreadPct != null ? t('insights.spreadSource', { spread: fmtPct(insights.volatilityLeader.spreadPct, 1), defaultValue: `دامنه نوسان: ${fmtPct(insights.volatilityLeader.spreadPct, 1)}` }) : t('insights.cryptoSource')}
-          tone="violet"
-          fallback={IconTrend}
-          emptyText={t('insights.marketUnavailable')}
-        />
-      </div>
-
       <div className="insights-section-heading insights-events-heading">
         <IconClock width={17} height={17} />
         <div><strong>{t('insights.eventsTitle')}</strong><span>{t('insights.eventsSub')}</span></div>

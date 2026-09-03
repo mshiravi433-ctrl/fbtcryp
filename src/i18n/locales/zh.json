@@ -286,7 +286,18 @@
     "gasBody": "网络费（Gas）始终以所在链的原生币支付，并从同一个钱包扣除——不只是 BNB。要在某条链上兑换，你需要持有下方对应的币。",
     "gasNote": "Gas 归区块链验证者所有，不归我们，且与 {{fee}}% 平台费无关。如果你在某条链上没有原生币，请切换到你持有原生币的链。",
     "needGas": "这笔交易需要 {{chain}} 上的 {{coin}} 作为手续费，你的余额不足。请补充少量 {{coin}}，或切换到你已持有原生币的链。",
-    "importBody": "该地址不在任何公开列表中。我们直接从链上读取代号和精度。核对地址是你的责任——错一个字符就是假币。"
+    "importBody": "该地址不在任何公开列表中。我们直接从链上读取代号和精度。核对地址是你的责任——错一个字符就是假币。",
+    "historyTitle": "Swap history",
+    "historyClear": "Clear",
+    "historyCleared": "History cleared.",
+    "historyRemove": "Remove this record",
+    "historyStatus": {
+      "confirmed": "Confirmed",
+      "pending": "In progress",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "currentNetwork": "当前网络"
   },
   "signals": {
     "title": "技术信号",
@@ -1097,5 +1108,9 @@
     "volume24h": "24 小时成交量",
     "noWalletHint": "此设备上未安装任何 Solana 钱包。点击上方按钮打开钱包页面——在那里连接 Phantom、Solflare 或 Backpack，即可直接返回当前订单。",
     "chartLive": "实时市场K线"
+  },
+  "lab2": {
+    "cards": {},
+    "screens": {}
   }
 }
