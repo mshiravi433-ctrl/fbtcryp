@@ -3361,7 +3361,9 @@ export default function run() {
 
     const signals = read('src/pages/Signals.jsx');
     const detail = read('src/pages/CoinDetail.jsx');
-    t('the Signals screen mounts the panel', /<VerdictPanel/.test(signals));
+    t('the Signals screen computes the verdict inside its single-token breakdown',
+      /\bverdict\(\{\s*analysis,\s*series: priceSeries,\s*btcSeries,\s*coin,\s*global/.test(signals)
+        && !/<VerdictPanel/.test(signals));
 
     /*
      * ─── AND THE COIN PAGE DELIBERATELY DOES NOT ────────────────────────────
@@ -3385,9 +3387,11 @@ export default function run() {
      *
      * Only Signals is checked now; CoinDetail has no panel to feed.
      */
-    t('Signals passes a bitcoin series to the macro layer', /btcSeries=\{/.test(signals));
+    t('Signals passes a bitcoin series to the macro layer',
+      /verdict\(\{[^}]*btcSeries/.test(signals));
     t('Signals fetches one', /useChart\('bitcoin'/.test(signals));
-    t('Signals passes global stats too', /global=\{/.test(signals));
+    t('Signals passes global stats too',
+      /verdict\(\{[^}]*global/.test(signals));
 
     /*
      * The inputs must go with it. `analyze()`, the Bitcoin series and the
@@ -7165,9 +7169,11 @@ export default function run() {
     const sig = code(read('src/pages/Signals.jsx'));
     t('the weekly/monthly projection is inside a collapsible box',
       /InfoBox title=\{t\('signals\.projectionTitle'\)\}/.test(sig));
-    /* Nested card must not draw a second competing surface. */
-    t('...and the nested card does not double up its border',
-      /card card-soft/.test(sig) && /\.card-soft \{/.test(read('src/index.css')));
+    /* The range is a plain row inside InfoBox, not another bordered card. */
+    const signalsCss = read('src/styles/signals-intel.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const projectionRow = /\.sic-projection-row \{([^}]*)\}/.exec(signalsCss)?.[1] ?? '';
+    t('...and the nested range does not double up its border',
+      /sic-projection-row/.test(sig) && projectionRow && !/\bborder\s*:/.test(projectionRow));
     {
       const enL = JSON.parse(read('src/i18n/locales/en.json'));
       const faL = JSON.parse(read('src/i18n/locales/fa.json'));

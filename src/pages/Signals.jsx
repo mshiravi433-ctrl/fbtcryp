@@ -10,14 +10,23 @@ import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useChart, useCoin, useGlobalStats, useMarkets, usePoll } from '../hooks/useMarket';
-import { analyze, marketSentiment, projectRange } from '../lib/ai';
+import { analyze, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice, fmtCompact, timeAgo } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
-import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
+import { getMarketBrief, getOutlook } from '../lib/aiClient';
 import SegIndicator from '../components/SegIndicator';
-import VerdictPanel from '../components/VerdictPanel';
+import {
+  IconActivity,
+  IconBell,
+  IconClock,
+  IconGlobe,
+  IconSmartMoney,
+  IconSparkle,
+  IconTrend,
+  IconWallet,
+  IconX
+} from '../components/Icons';
 import { verdict } from '../lib/verdict';
-import { marketRegime } from '../lib/macro';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { scenarioSplit, findLevels } from '../lib/history';
@@ -27,16 +36,14 @@ import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fetchOverview } from '../lib/smartMoneyClient';
-import { getSignalPulse, getSignalWhy, getSolanaRadar } from '../lib/signalApi';
+import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
 import {
-  CLASS_META, computeHorizonRisks, computeSignalCard, computeEarlySignals,
-  computePulseLocal, portfolioImpact, rankSignals, filterSignals, searchSignals,
-  classKey
+  computeHorizonRisks, computeSignalCard, computeEarlySignals,
+  computePulseLocal, portfolioImpact, rankSignals, classKey
 } from '../lib/signalEngine';
 import {
   readWatchlist, toggleWatch, createAlert, readAlerts, deleteAlert, saveAlerts,
-  evaluateSignalAlerts, recordSignal, settleHistory, readHistory, performance,
-  readConsent, setConsent
+  evaluateSignalAlerts, recordSignal, settleHistory, readHistory
 } from '../lib/signalStore';
 import { showLocalNotification } from '../lib/notify';
 import '../styles/docs-modern.css';
@@ -48,11 +55,6 @@ const HORIZONS = [
   { days: 7, key: '7D' },
   { days: 30, key: '30D' }
 ];
-
-const SOLANA_IDS = new Set(SOLANA_SIGNAL_ASSETS.map((a) => a.id));
-
-/** Which chain bucket a coin belongs to (drives the market filter). */
-const marketOf = (c) => (SOLANA_IDS.has(c?.id) ? 'solana' : 'evm');
 
 /* ────────────────────────────────────────────────────────────────────────────
  * COLLAPSIBLE SIGNAL SECTION (kept from the existing page — presentation only)
@@ -102,8 +104,6 @@ function SignalSection({ id, title, summary, defaultOpen = false, children }) {
     </div>
   );
 }
-
-const REGIME_LABEL = { riskOn: 'riskOn', btcLed: 'btcLed', rotationOut: 'rotationOut', riskOff: 'riskOff' };
 
 function Gauge({ score, label, confidence }) {
   const { t } = useTranslation();
@@ -197,38 +197,96 @@ function MetricTile({ k, v, tone }) {
   );
 }
 
-function PulseCard({ pulse }) {
+function Chevron({ open, className = '' }) {
+  return (
+    <svg
+      className={`sic-chevron ${open ? 'is-open' : ''} ${className}`}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function PulseCard({ pulse, brief }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   if (!pulse) return null;
   const s = pulse.sentiment ?? {};
   const tone = s.label === 'bullish' ? 'bullish' : s.label === 'bearish' ? 'bearish' : 'neutral';
   const liveTone = pulse.source === 'live' ? 'bullet up' : '';
   return (
-    <motion.section className="sic-pulse" variants={riseIn} initial="hidden" animate="show">
-      <div className="sic-pulse-head">
-        <div>
-          <div className="sic-pulse-title">✦ {t('signals.intel.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5, marginTop: 4 }}>{t('signals.intel.subtitle')}</div>
-        </div>
+    <motion.section className={`sic-pulse ${open ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
+      <button
+        type="button"
+        className="sic-pulse-toggle"
+        aria-expanded={open}
+        aria-controls="sic-pulse-content"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="sic-head-icon"><IconActivity /></span>
+        <span className="sic-pulse-copy">
+          <span className="sic-pulse-title">{t('signals.intel.title')}</span>
+          <span className="sic-pulse-subtitle">{t('signals.intel.subtitle')}</span>
+        </span>
         <span className={`sic-badge ${tone}`}>
-          {s.label === 'bullish' ? '🟢' : s.label === 'bearish' ? '🔴' : '🟡'} {t(`signals.intel.sentimentLabel.${s.label || 'neutral'}`)}
+          <i className="sic-status-dot" aria-hidden="true" />
+          {t(`signals.intel.sentimentLabel.${s.label || 'neutral'}`)}
         </span>
-      </div>
-      <div className="sic-pulse-grid">
-        <MetricTile k={t('signals.intel.sentiment')} v={`${s.score ?? '—'}/100`} />
-        <MetricTile k={t('signals.intel.riskLevel')} v={t(`signals.intel.riskLabel.${(pulse.risk?.label || 'medium').toLowerCase()}`)} tone={pulse.risk?.label === 'HIGH' ? 'down' : pulse.risk?.label === 'LOW' ? 'up' : 'warn'} />
-        <MetricTile k={t('signals.intel.aiConfidence')} v={`${pulse.aiConfidence ?? '—'}%`} tone={pulse.aiConfidence >= 70 ? 'up' : ''} />
-        <MetricTile k={t('signals.intel.pulseMomentum')} v={`${t(`signals.intel.momentumLabel.${(pulse.momentum?.label || 'flat')}`)}${pulse.momentum?.direction === 'up' ? ' ▲' : pulse.momentum?.direction === 'down' ? ' ▼' : ''}`} tone={pulse.momentum?.direction === 'up' ? 'up' : pulse.momentum?.direction === 'down' ? 'down' : ''} />
-        <MetricTile k={t('signals.intel.volatility')} v={t(`signals.intel.volLabel.${(pulse.volatility?.label || 'moderate')}`)} tone={pulse.volatility?.label === 'high' ? 'down' : pulse.volatility?.label === 'low' ? 'up' : 'warn'} />
-        <MetricTile k={t('signals.intel.liquidity')} v={t(`signals.intel.liquidityLabel.${(pulse.liquidity?.label || 'adequate')}`)} tone={pulse.liquidity?.label === 'strong' ? 'up' : pulse.liquidity?.label === 'thin' ? 'down' : ''} />
-      </div>
-      <div className="row-between" style={{ marginTop: 12 }}>
-        <span className="faint" style={{ fontSize: 10 }}>
-          {t(`signals.intel.source.${pulse.source || 'unavailable'}`)}
-          {pulse.smartMoney?.dataStatus ? ` · ${t(`signals.intel.smartMoney.${pulse.smartMoney.dataStatus}`)}` : ''}
-        </span>
-        <span className={`faint ${liveTone}`} style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5 }}>{t('signals.intel.lastUpdate')}: {timeAgo(pulse.lastUpdate || pulse.at)}</span>
-      </div>
+        <Chevron open={open} />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id="sic-pulse-content"
+            key="pulse-content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="sic-collapsible-body"
+          >
+            <div className="sic-pulse-content">
+              <div className="sic-pulse-grid">
+                <MetricTile k={t('signals.intel.sentiment')} v={`${s.score ?? '—'}/100`} />
+                <MetricTile k={t('signals.intel.riskLevel')} v={t(`signals.intel.riskLabel.${(pulse.risk?.label || 'medium').toLowerCase()}`)} tone={pulse.risk?.label === 'HIGH' ? 'down' : pulse.risk?.label === 'LOW' ? 'up' : 'warn'} />
+                <MetricTile k={t('signals.intel.aiConfidence')} v={`${pulse.aiConfidence ?? '—'}%`} tone={pulse.aiConfidence >= 70 ? 'up' : ''} />
+                <MetricTile k={t('signals.intel.pulseMomentum')} v={`${t(`signals.intel.momentumLabel.${(pulse.momentum?.label || 'flat')}`)}${pulse.momentum?.direction === 'up' ? ' ↑' : pulse.momentum?.direction === 'down' ? ' ↓' : ''}`} tone={pulse.momentum?.direction === 'up' ? 'up' : pulse.momentum?.direction === 'down' ? 'down' : ''} />
+                <MetricTile k={t('signals.intel.volatility')} v={t(`signals.intel.volLabel.${(pulse.volatility?.label || 'moderate')}`)} tone={pulse.volatility?.label === 'high' ? 'down' : pulse.volatility?.label === 'low' ? 'up' : 'warn'} />
+                <MetricTile k={t('signals.intel.liquidity')} v={t(`signals.intel.liquidityLabel.${(pulse.liquidity?.label || 'adequate')}`)} tone={pulse.liquidity?.label === 'strong' ? 'up' : pulse.liquidity?.label === 'thin' ? 'down' : ''} />
+              </div>
+
+              {brief && (
+                <div className="sic-daily-brief">
+                  <div className="sic-daily-brief-head">
+                    <span>{t('signals.dailyBrief')}</span>
+                    <span className={`sic-bias ${brief.bias || 'neutral'}`}>{t(`signals.bias.${brief.bias || 'neutral'}`)}</span>
+                  </div>
+                  <strong>{brief.headline}</strong>
+                  <p>{brief.summary}</p>
+                </div>
+              )}
+
+              <div className="sic-pulse-meta">
+                <span>
+                  {t(`signals.intel.source.${pulse.source || 'unavailable'}`)}
+                  {pulse.smartMoney?.dataStatus ? ` · ${t(`signals.intel.smartMoney.${pulse.smartMoney.dataStatus}`)}` : ''}
+                </span>
+                <span className={liveTone}>{t('signals.intel.lastUpdate')}: {timeAgo(pulse.lastUpdate || pulse.at)}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.section>
   );
 }
@@ -285,177 +343,6 @@ function EvidenceChips({ evidence, max = 5 }) {
   );
 }
 
-const CARD_FIELDS = ['confidence', 'risk', 'timeframe', 'target', 'stop', 'momentum', 'volume', 'smartMoney', 'whale', 'liquidity'];
-
-/*
- * THE SIGNAL CARD — and the crash it used to cause.
- *
- * This was the only component in the file that read `t` from its PROPS instead
- * of calling `useTranslation()` like every sibling does, and neither call site
- * (the global list below, and SolanaSignalCard) passed one. The first card to
- * render therefore threw `TypeError: t is not a function` inside the
- * CARD_FIELDS map — past <Suspense>, into RouteBoundary, which is the
- * "a problem occurred" screen the user reported. Both tabs, every language,
- * every asset, the moment market data arrived.
- *
- * It survived the suite because test/screens.jsx mounts <Signals /> and
- * asserts on the FIRST paint, before any poll resolves: no coins, no cards,
- * component never constructed. test/signals-page-probe.jsx is the test that
- * serves real response shapes and waits, and it fails if `t` ever becomes a
- * prop again.
- *
- * (This file is scanned by test/wiring.mjs for ANY Arabic-script character —
- * a localized page must carry no hardcoded Persian, and the check reads the
- * raw source, comments included. So the report it answers is quoted in the
- * probe, not here.)
- *
- * The hook also runs BEFORE the `!signal` early return now. A hook after a
- * conditional return changes the hook count between renders of the same
- * instance, which is its own crash waiting for a card that goes null.
- */
-function SignalCard({ signal, selected, onSelect, onWhy, whyLoading, onAlert, watched, onCompare, onTrack }) {
-  const { t } = useTranslation();
-  if (!signal) return null;
-  const meta = CLASS_META[signal.classification] || CLASS_META.WATCH;
-  const ready = signal.status === 'READY';
-  const fields = CARD_FIELDS.map((f) => {
-    let v = null;
-    let tone = '';
-    switch (f) {
-      case 'confidence': v = ready ? `${signal.confidence}%` : '—'; tone = (signal.confidence ?? 0) >= 70 ? 'up' : ''; break;
-      case 'risk': v = t(`signals.intel.riskLabel.${(signal.risk || 'medium').toLowerCase()}`); tone = signal.risk === 'HIGH' ? 'down' : signal.risk === 'LOW' ? 'up' : 'warn'; break;
-      case 'timeframe': v = ready ? `${signal.timeframe}D` : '—'; break;
-      case 'target': v = signal.target != null ? `+${signal.targetPct}%` : '—'; tone = 'up'; break;
-      case 'stop': v = signal.stop != null ? `-${signal.stopPct}%` : '—'; tone = 'down'; break;
-      case 'momentum': v = ready ? t(`signals.intel.momentumLabel.${signal.momentum?.label || 'flat'}`) : '—'; tone = signal.momentum?.direction === 'up' ? 'up' : signal.momentum?.direction === 'down' ? 'down' : ''; break;
-      case 'volume': v = signal.volumeChange != null ? `${signal.volumeChange}%` : '—'; tone = (signal.volumeChange ?? 0) >= 6 ? 'up' : ''; break;
-      case 'smartMoney': v = signal.smartMoney ? t(`signals.intel.sentimentLabel.${signal.smartMoney}`) : '—'; tone = signal.smartMoney === 'bullish' ? 'up' : signal.smartMoney === 'bearish' ? 'down' : ''; break;
-      case 'whale': v = signal.whale ? t(`signals.intel.sentimentLabel.${signal.whale === 'inflow' ? 'bullish' : 'bearish'}`) : '—'; tone = signal.whale === 'inflow' ? 'up' : signal.whale === 'outflow' ? 'down' : ''; break;
-      case 'liquidity': v = signal.liquidity ? t(`signals.intel.liquidityLabel.${signal.liquidity}`) : '—'; tone = signal.liquidity === 'strong' ? 'up' : signal.liquidity === 'thin' ? 'down' : ''; break;
-      default: break;
-    }
-    return { f, v, tone };
-  });
-
-  return (
-    <motion.div
-      className={`sic-card ${selected ? 'is-selected' : ''}`}
-      variants={riseIn}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(); } }}
-    >
-      <div className="glow" style={{ background: `radial-gradient(160px 60px at 50% 0%, ${meta.tone === 'up' ? 'rgba(0,255,157,.08)' : meta.tone === 'down' ? 'rgba(255,59,107,.08)' : 'rgba(255,179,0,.08)'}, transparent)` }} />
-      <div className="sic-card-head">
-        <CoinLogo coin={signal.coin} />
-        <div style={{ minWidth: 0 }}>
-          <div className="sym">{signal.coin?.symbol}</div>
-          <div className="name">{signal.coin?.name}</div>
-        </div>
-        <div className="price">
-          <div>${fmtPrice(signal.coin?.price)}</div>
-          <div className={`mono ${(signal.coin?.change24h ?? 0) >= 0 ? 'up' : 'down'}`} style={{ fontSize: 10.5 }}>{fmtPct(signal.coin?.change24h ?? 0)}</div>
-        </div>
-      </div>
-
-      {ready ? (
-        <>
-          <div className="sic-class">
-            <span className={`badge ${meta.tone}`}>{meta.emoji} {t(classKey(signal.classification))}</span>
-            <span className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.card.confidence')}: <b style={{ color: 'var(--text-1)' }}>{signal.confidence}%</b></span>
-            {signal.offline && <span className="pill down" style={{ fontSize: 9.5, padding: '2px 8px' }}>{t('signals.intel.status.offline')}</span>}
-          </div>
-          <div className="sic-bar">
-            <motion.i initial={{ width: 0 }} animate={{ width: `${signal.confidence}%` }} transition={{ duration: 0.7 }} style={{ background: `linear-gradient(90deg, ${meta.tone === 'up' ? 'var(--up)' : meta.tone === 'down' ? 'var(--down)' : '#ffb300'}, transparent)` }} />
-          </div>
-          <div className="sic-grid">
-            {fields.map((x) => (
-              <div key={x.f} className="sic-tile">
-                <div className="k">{t(`signals.intel.card.${x.f}`)}</div>
-                <div className={`v ${x.tone}`}>{x.v}</div>
-              </div>
-            ))}
-          </div>
-          <EvidenceChips evidence={signal.evidence} />
-          <div className="sic-actions">
-            <button type="button" className="sic-btn primary" onClick={(e) => { e.stopPropagation(); onWhy?.(signal); }}>
-              {whyLoading ? '…' : '🧠'} {t('signals.intel.card.why')}
-            </button>
-            <button type="button" className={`sic-btn ${watched ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); onAlert?.('watch', signal); }}>
-              ★ {t(watched ? 'signals.intel.actions.watched' : 'signals.intel.actions.watch')}
-            </button>
-            <button type="button" className="sic-btn" onClick={(e) => { e.stopPropagation(); onAlert?.('alert', signal); }}>
-              🔔 {t('signals.intel.actions.alert')}
-            </button>
-          </div>
-          {ready && (
-            <div className="sic-actions secondary">
-              <button type="button" className="sic-btn" onClick={(e) => { e.stopPropagation(); onCompare?.(signal); }}>
-                ⇄ {t('signals.intel.actions.compare')}
-              </button>
-              <button type="button" className="sic-btn" onClick={(e) => { e.stopPropagation(); onTrack?.(signal); }}>
-                📒 {t('signals.intel.actions.track')}
-              </button>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="sic-insufficient" style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--rgb-5)' }}>⛔ {t('signals.intel.card.insufficient')}</div>
-          <div style={{ marginTop: 6 }}>{t('signals.intel.card.insufficientBody')}</div>
-        </div>
-      )}
-      <div className="faint" style={{ fontSize: 9.5, marginTop: 10 }}>{t('signals.intel.card.at')} {timeAgo(signal.at)}</div>
-    </motion.div>
-  );
-}
-
-function FilterBar({ filters, setFilters }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const set = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
-  const sel = (k, opts, val) => (
-    <select value={val} onChange={(e) => set(k, e.target.value)} style={{ width: '100%', minHeight: 36, borderRadius: 11, background: 'var(--bg-panel-solid)', color: 'var(--text-1)', border: '1px solid rgba(255,255,255,0.1)', padding: '0 10px', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>
-      {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-  const rows = [
-    { k: 'type', opts: [['all', t('signals.intel.filters.all')], ['buy', t('signals.intel.filters.buy')], ['sell', t('signals.intel.filters.sell')], ['watch', t('signals.intel.filters.watch')]] },
-    { k: 'risk', opts: [['all', t('signals.intel.filters.all')], ['low', t('signals.intel.filters.low')], ['medium', t('signals.intel.filters.medium')], ['high', t('signals.intel.filters.high')]] },
-    { k: 'confidence', opts: [['all', t('signals.intel.filters.all')], ['50', t('signals.intel.filters.conf50')], ['70', t('signals.intel.filters.conf70')], ['90', t('signals.intel.filters.conf90')]] },
-    { k: 'timeframe', opts: [['all', t('signals.intel.filters.all')], ['24H', t('signals.intel.filters.t24')], ['7D', t('signals.intel.filters.t7')], ['30D', t('signals.intel.filters.t30')]] },
-    { k: 'asset', opts: [['all', t('signals.intel.filters.all')], ['BTC', 'BTC'], ['ETH', 'ETH'], ['SOL', 'SOL'], ['others', t('signals.intel.filters.others')]] },
-    { k: 'market', opts: [['all', t('signals.intel.filters.all')], ['evm', t('signals.intel.filters.evm')], ['solana', t('signals.intel.filters.solana')]] }
-  ];
-  const filterLabels = {
-    type: t('signals.intel.filters.type'), risk: t('signals.intel.filters.risk'), confidence: t('signals.intel.filters.confidence'),
-    timeframe: t('signals.intel.filters.timeframe'), asset: t('signals.intel.filters.asset'), market: t('signals.intel.filters.market')
-  };
-  return (
-    <div className="sic-controls" style={{ marginTop: 12 }}>
-      <div className="row-between">
-        <button type="button" className="sic-btn" style={{ flex: 1 }} onClick={() => setOpen((v) => !v)}>
-          <span>{open ? '▾' : '▸'}</span> {t('signals.intel.filters.title')}
-        </button>
-        <button type="button" className="sic-btn" onClick={() => setFilters({ type: 'all', risk: 'all', confidence: 'all', timeframe: 'all', asset: 'all', market: 'all' })}>
-          {t('signals.intel.filters.clear')}
-        </button>
-      </div>
-      {open && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-          {rows.map((r) => (
-            <div key={r.k}>
-              <div className="faint" style={{ fontSize: 9.5, marginBottom: 4, fontWeight: 700, letterSpacing: 0.5 }}>{filterLabels[r.k]}</div>
-              {sel(r.k, r.opts.map(([v, l]) => ({ value: v, label: l })), filters[r.k] || 'all')}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function WhyModal({ why, onClose }) {
   const { t } = useTranslation();
   if (!why) return null;
@@ -465,12 +352,12 @@ function WhyModal({ why, onClose }) {
       <motion.div className="sic-modal" role="dialog" aria-modal="true" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
         <div className="row-between" style={{ alignItems: 'flex-start' }}>
           <div>
-            <h3>🧠 {t('signals.intel.why.title')}</h3>
+            <h3 className="sic-modal-title"><IconSparkle /> {t('signals.intel.why.title')}</h3>
             <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>
               {signal?.coin?.symbol} · {t(classKey(signal?.classification))} · {signal?.confidence}%
             </div>
           </div>
-          <button type="button" className="sic-btn" style={{ flex: '0 0 auto', minWidth: 36 }} onClick={onClose}>✕</button>
+          <button type="button" className="sic-icon-btn" onClick={onClose} aria-label={t('signals.intel.actions.close')}><IconX /></button>
         </div>
 
         {loading && (
@@ -486,7 +373,7 @@ function WhyModal({ why, onClose }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {data.aiDisagreement && (
               <div className="sic-why-block">
-                <span className="pill pill-down" style={{ fontSize: 10.5 }}>⚠️ {t('signals.intel.why.disagreement')}</span>
+                <span className="pill pill-down sic-warning-pill"><b aria-hidden="true">!</b> {t('signals.intel.why.disagreement')}</span>
               </div>
             )}
             {data.agreement != null && (
@@ -552,8 +439,8 @@ function AlertSheet({ symbol, onClose }) {
     <div className="sic-modal-backdrop" role="presentation" onClick={onClose}>
       <motion.div className="sic-modal" role="dialog" aria-modal="true" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
         <div className="row-between">
-          <h3>🔔 {t('signals.intel.alert.title')} · {symbol}</h3>
-          <button type="button" className="sic-btn" style={{ flex: '0 0 auto', minWidth: 36 }} onClick={onClose}>✕</button>
+          <h3 className="sic-modal-title"><IconBell /> {t('signals.intel.alert.title')} · {symbol}</h3>
+          <button type="button" className="sic-icon-btn" onClick={onClose} aria-label={t('signals.intel.actions.close')}><IconX /></button>
         </div>
         <p className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>{t('signals.intel.alert.subtitle')}</p>
         <div className="stack" style={{ gap: 10, marginTop: 14 }}>
@@ -572,7 +459,7 @@ function AlertSheet({ symbol, onClose }) {
               </select>
             </div>
             <div>
-              <div className="field-label">Value</div>
+              <div className="field-label">{t('signals.intel.alert.value')}</div>
               <input value={value} onChange={(e) => setValue(e.target.value)} type="number" inputMode="decimal" className="input" placeholder={kind === 'price' ? '100' : '70'} style={{ width: '100%', minHeight: 44, background: 'var(--bg-panel-solid)', color: 'var(--text-1)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '0 12px' }} />
             </div>
           </div>
@@ -606,17 +493,19 @@ function AlertSheet({ symbol, onClose }) {
   );
 }
 
-function EarlySection({ early }) {
+function EarlySection({ early, embedded = false }) {
   const { t } = useTranslation();
   return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">⚡</span>
-        <div>
-          <div className="title">{t('signals.intel.early.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.early.subtitle')}</div>
+    <section className={embedded ? 'sic-embedded-section' : ''}>
+      {!embedded && (
+        <div className="sic-section-head">
+          <span className="cap"><IconSparkle /></span>
+          <div>
+            <div className="title">{t('signals.intel.early.title')}</div>
+            <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.early.subtitle')}</div>
+          </div>
         </div>
-      </div>
+      )}
       {early.length === 0 ? (
         <div className="sic-insufficient">{t('signals.intel.early.empty')}</div>
       ) : (
@@ -643,26 +532,28 @@ function EarlySection({ early }) {
   );
 }
 
-function SmartMoneySection({ sm }) {
+function SmartMoneySection({ sm, embedded = false }) {
   const { t } = useTranslation();
   if (!sm || !sm.tokenActivity?.length) {
     return (
-      <section>
-        <div className="sic-section-head"><span className="cap">🐋</span><div className="title">{t('signals.intel.smartMoney.title')}</div></div>
+      <section className={embedded ? 'sic-embedded-section' : ''}>
+        {!embedded && <div className="sic-section-head"><span className="cap"><IconSmartMoney /></span><div className="title">{t('signals.intel.smartMoney.title')}</div></div>}
         <div className="sic-insufficient">{t('signals.intel.smartMoney.unavailable')}</div>
       </section>
     );
   }
   const m = sm.metrics || {};
   return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">🐋</span>
-        <div>
-          <div className="title">{t('signals.intel.smartMoney.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.smartMoney.subtitle')}</div>
+    <section className={embedded ? 'sic-embedded-section' : ''}>
+      {!embedded && (
+        <div className="sic-section-head">
+          <span className="cap"><IconSmartMoney /></span>
+          <div>
+            <div className="title">{t('signals.intel.smartMoney.title')}</div>
+            <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.smartMoney.subtitle')}</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className="sic-history-grid">
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.whaleActivity')}</div><div className="v">{m.whaleActivity?.value ?? '—'}</div></div>
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.accumulation')}</div><div className="v up">{m.accumulation?.valueUsd != null ? `$${fmtCompact(m.accumulation.valueUsd)}` : '—'}</div></div>
@@ -689,18 +580,20 @@ function SmartMoneySection({ sm }) {
   );
 }
 
-function MomentumSection({ cards }) {
+function MomentumSection({ cards, embedded = false }) {
   const { t } = useTranslation();
   const rows = (cards ?? []).filter((s) => s.status === 'READY').slice(0, 6);
   return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">📊</span>
-        <div>
-          <div className="title">{t('signals.intel.momentum.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.momentum.subtitle')}</div>
+    <section className={embedded ? 'sic-embedded-section' : ''}>
+      {!embedded && (
+        <div className="sic-section-head">
+          <span className="cap"><IconTrend /></span>
+          <div>
+            <div className="title">{t('signals.intel.momentum.title')}</div>
+            <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.momentum.subtitle')}</div>
+          </div>
         </div>
-      </div>
+      )}
       {rows.length === 0 ? (
         <div className="sic-insufficient">{t('signals.intel.momentum.empty')}</div>
       ) : (
@@ -725,71 +618,20 @@ function MomentumSection({ cards }) {
   );
 }
 
-function RadarSection({ radar }) {
-  const { t } = useTranslation();
-  const tokens = radar?.tokens ?? [];
-  return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">🚀</span>
-        <div>
-          <div className="title">{t('signals.intel.radar.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.radar.subtitle')}</div>
-        </div>
-      </div>
-      {tokens.length === 0 ? (
-        <div className="sic-insufficient">{t('signals.intel.radar.unavailable')}</div>
-      ) : (
-        <div className="sic-radar-grid">
-          {tokens.map((tk) => (
-            <div key={tk.address} className="sic-radar">
-              <div className="head">
-                <div>
-                  <div className="sym">{tk.symbol}</div>
-                  <div className="age">{tk.name}</div>
-                </div>
-                <div className="age">{t('signals.intel.radar.age')}: {tk.ageHours != null ? `${tk.ageHours}h` : '—'}</div>
-              </div>
-              <div className="sic-scores">
-                <div className="sic-score">
-                  <div className="k">{t('signals.intel.radar.opportunity')}</div>
-                  <div className="v up">{tk.opportunityScore}</div>
-                </div>
-                <div className="sic-score">
-                  <div className="k">{t('signals.intel.radar.risk')}</div>
-                  <div className={`v ${tk.riskScore >= 75 ? 'down' : tk.riskScore >= 50 ? 'warn' : 'up'}`}>{tk.riskScore}</div>
-                </div>
-              </div>
-              <div className="pct">
-                💧 {t('signals.intel.radar.liquidity')}: ${fmtCompact(tk.liquidityUsd)} · 📈 {t('signals.intel.radar.volume')}: ${fmtCompact(tk.volumeH24)}
-                {tk.buyRatio != null ? ` · ${t('signals.intel.radar.buyRatio')}: ${Math.round(tk.buyRatio * 100)}%` : ''}
-              </div>
-              {tk.flags?.length > 0 && (
-                <div className="sic-evidence" style={{ marginTop: 8 }}>
-                  {tk.flags.map((f) => <span key={f} className="sic-ev down">⚠ {t(`signals.intel.radar.flags.${f}`)}</span>)}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="sic-note">{t('signals.intel.radar.note')}</div>
-    </section>
-  );
-}
-
-function HistorySection({ history, perf, priceMap }) {
+function HistorySection({ history, embedded = false }) {
   const { t } = useTranslation();
   const rows = [...history].reverse().slice(0, 8);
   return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">📒</span>
-        <div>
-          <div className="title">{t('signals.intel.history.title')}</div>
-          <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.history.subtitle')}</div>
+    <section className={embedded ? 'sic-embedded-section' : ''}>
+      {!embedded && (
+        <div className="sic-section-head">
+          <span className="cap"><IconClock /></span>
+          <div>
+            <div className="title">{t('signals.intel.history.title')}</div>
+            <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.history.subtitle')}</div>
+          </div>
         </div>
-      </div>
+      )}
       {rows.length === 0 ? (
         <div className="sic-insufficient">{t('signals.intel.history.empty')}</div>
       ) : (
@@ -818,42 +660,21 @@ function HistorySection({ history, perf, priceMap }) {
           </table>
         </div>
       )}
-      <div className="sic-note">{t('signals.intel.performance.insufficient')}</div>
     </section>
   );
 }
 
-function PerformanceSection({ perf }) {
+function PortfolioCard({ impact, embedded = false }) {
   const { t } = useTranslation();
-  if (!perf) return null;
-  return (
-    <section>
-      <div className="sic-section-head">
-        <span className="cap">🎯</span>
-        <div className="title">{t('signals.intel.performance.title')}</div>
-      </div>
-      <div className="sic-history-grid">
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.totalSignals')}</div><div className="v">{perf.totalSignals}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.settledSignals')}</div><div className="v">{perf.settledSignals}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.successful')}</div><div className="v up">{perf.successful ?? '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.failed')}</div><div className="v down">{perf.failed ?? '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.accuracy')}</div><div className={`v ${(perf.accuracy ?? 0) >= 50 ? 'up' : 'down'}`}>{perf.accuracy != null ? `${perf.accuracy}%` : '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.avgReturn')}</div><div className={`v ${(perf.avgReturn ?? 0) >= 0 ? 'up' : 'down'}`}>{perf.avgReturn != null ? `${perf.avgReturn > 0 ? '+' : ''}${perf.avgReturn}%` : '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.avgDrawdown')}</div><div className="v down">{perf.avgDrawdown != null ? `${perf.avgDrawdown}%` : '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.best')}</div><div className="v up">{perf.best ? `${perf.best.symbol} ${perf.best.pct > 0 ? '+' : ''}${perf.best.pct}%` : '—'}</div></div>
-        <div className="sic-stat"><div className="k">{t('signals.intel.performance.worst')}</div><div className="v down">{perf.worst ? `${perf.worst.symbol} ${perf.worst.pct > 0 ? '+' : ''}${perf.worst.pct}%` : '—'}</div></div>
-      </div>
-    </section>
-  );
-}
-
-function PortfolioCard({ impact, consent, onConsent }) {
-  const { t } = useTranslation();
-  if (!impact && !consent) return null;
   const tone = impact?.impact === 'HIGH' ? 'down' : impact?.impact === 'MEDIUM' ? 'warn' : 'up';
   return (
-    <section>
-      <div className="sic-section-head"><span className="cap">💼</span><div className="title">{t('signals.intel.portfolio.title')}</div></div>
+    <section className={embedded ? 'sic-embedded-section' : ''}>
+      {!embedded && (
+        <div className="sic-section-head">
+          <span className="cap"><IconWallet /></span>
+          <div className="title">{t('signals.intel.portfolio.title')}</div>
+        </div>
+      )}
       {impact ? (
         <>
           <div className="sic-history-grid">
@@ -869,56 +690,402 @@ function PortfolioCard({ impact, consent, onConsent }) {
       ) : (
         <div className="sic-insufficient">{t('signals.intel.portfolio.local')}</div>
       )}
-      <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
-        <div className="row-between">
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 800 }}>{t('signals.intel.portfolio.consentTitle')}</div>
-            <div className="faint" style={{ fontSize: 10.5, marginTop: 4, lineHeight: 1.7 }}>{t('signals.intel.portfolio.consentBody')}</div>
-          </div>
-          <button type="button" className={`sic-btn ${consent.portfolioAi ? 'active' : ''}`} style={{ flex: '0 0 auto' }} onClick={onConsent}>
-            {consent.portfolioAi ? '✓' : '○'} {t(consent.portfolioAi ? 'signals.intel.portfolio.consentOn' : 'signals.intel.portfolio.consentOff')}
-          </button>
-        </div>
-      </div>
     </section>
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Per-asset Solana signal card (fetches its own chart lazily, only when the
- * Solana tab is mounted — same hook the existing page used for one asset).
- * ──────────────────────────────────────────────────────────────────────────── */
-function SolanaSignalCard({ asset, marketCoin, pulse, smToken, selected, onSelect, onWhy, whyLoading, onAlert, watched, onCompare, onTrack, search = '', filters = null }) {
-  const { data: chart } = useChart(asset.id, 30);
-  const [intel, setIntel] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    getSolanaIntel(asset.mint).then((d) => alive && setIntel(d)).catch(() => {});
-    return () => { alive = false; };
-  }, [asset.mint]);
-  const signal = useMemo(() => {
-    const series = (chart ?? []).map((p) => p.p);
-    const coin = marketCoin ?? { id: asset.id, symbol: asset.symbol, name: asset.name, price: series[series.length - 1] ?? 0, change24h: 0, change7d: 0, mcap: 0, volume: 0, dataProvenance: 'live' };
-    const analysis = series.length >= 30 ? analyze(series, coin) : null;
-    if (!analysis || !series.length || !Number.isFinite(coin.price) || coin.price <= 0) {
-      return { status: 'INSUFFICIENT_DATA', at: Date.now(), coin };
-    }
-    return computeSignalCard({ coin, series, analysis, solanaIntel: intel, smToken, pulse });
-  }, [chart, asset, marketCoin, intel, pulse, smToken]);
+function StarIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="m12 3 2.75 5.57 6.15.9-4.45 4.33 1.05 6.12L12 17.03l-5.5 2.89 1.05-6.12L3.1 9.47l6.15-.9L12 3Z" />
+    </svg>
+  );
+}
 
-  /* Same search/filter semantics as the global tab, applied once the card's
-     own measured data is in. An insufficient-data card is still searchable by
-     symbol/name; filtering by signal fields only applies to READY cards. */
-  const visible = useMemo(() => {
-    if (signal.status !== 'READY') {
-      return searchSignals([signal], search).length === 1;
-    }
-    return searchSignals([signal], search).length === 1 && filterSignals([signal], filters ?? {}, marketOf).length === 1;
-  }, [signal, search, filters]);
-  if (!visible) return null;
+function SolanaIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M6.2 5.5h12.3l-2.7 3H3.5l2.7-3Z" />
+      <path d="M5.5 10.5h12.3l2.7 3H8.2l-2.7-3Z" />
+      <path d="M6.2 15.5h12.3l-2.7 3H3.5l2.7-3Z" />
+    </svg>
+  );
+}
+
+function TokenPicker({ coin, options, value, onChange }) {
+  const { t } = useTranslation();
+  const available = options.length ? options : (coin ? [{ id: coin.id, symbol: coin.symbol, name: coin.name }] : []);
+  return (
+    <label className="sic-token-picker">
+      <span className="sic-token-picker-label">{t('signals.intel.assetPicker.label')}</span>
+      <span className="sic-token-select-shell">
+        <CoinLogo coin={coin} px={34} />
+        <select value={value} onChange={(event) => onChange(event.target.value)} aria-label={t('signals.intel.assetPicker.label')}>
+          {available.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.symbol}{option.name ? ` · ${option.name}` : ''}
+            </option>
+          ))}
+        </select>
+        <Chevron />
+      </span>
+    </label>
+  );
+}
+
+function SelectedSignalCard({ coin, signal, analysis, scanning, watched, whyLoading, onWhy, onWatch, onAlert }) {
+  const { t } = useTranslation();
+  const ready = signal?.status === 'READY';
+  const risk = (signal?.risk || 'MEDIUM').toLowerCase();
+
+  if (!coin) return <div className="sic-insufficient sic-token-empty">{t('signals.intel.card.insufficientBody')}</div>;
 
   return (
-    <SignalCard signal={signal} selected={selected} onSelect={onSelect} onWhy={onWhy} whyLoading={whyLoading} onAlert={onAlert} watched={watched} onCompare={onCompare} onTrack={onTrack} />
+    <section className="sic-card sic-focus-card" data-testid="selected-signal-card" aria-live="polite">
+      {scanning || !analysis || !coin ? (
+        <div className="sic-focus-loading">
+          <motion.span className="sic-spinner" animate={{ rotate: 360 }} transition={{ duration: 1.05, repeat: Infinity, ease: 'linear' }} />
+          <span>{t('signals.analyzing')}</span>
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div key={coin.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
+            <div className="sic-focus-head">
+              <div className="sic-focus-asset">
+                <CoinLogo coin={coin} px={42} />
+                <div>
+                  <div className="sic-focus-symbol"><b>{coin.symbol}</b></div>
+                  <span className="sic-focus-name">{coin.name}</span>
+                </div>
+              </div>
+              <div className="sic-focus-price">
+                <b>${fmtPrice(coin.price)}</b>
+                <span className={(coin.change24h ?? 0) >= 0 ? 'up' : 'down'}>{fmtPct(coin.change24h ?? 0)}</span>
+              </div>
+            </div>
+
+            <div className="sic-focus-overview">
+              <Gauge score={analysis.score} label={analysis.label} confidence={analysis.confidence} />
+              {ready ? (
+                <div className="sic-focus-metrics">
+                  <MetricTile
+                    k={t('signals.intel.card.risk')}
+                    v={t(`signals.intel.riskLabel.${risk}`)}
+                    tone={risk === 'high' ? 'down' : risk === 'low' ? 'up' : 'warn'}
+                  />
+                  <MetricTile k={t('signals.intel.card.timeframe')} v={t('signals.intel.card.timeframeLabel', { d: signal.timeframe })} />
+                  <MetricTile k={t('signals.intel.card.target')} v={signal.targetPct != null ? `+${signal.targetPct}%` : '—'} tone="up" />
+                  <MetricTile k={t('signals.intel.card.stop')} v={signal.stopPct != null ? `-${signal.stopPct}%` : '—'} tone="down" />
+                </div>
+              ) : (
+                <div className="sic-insufficient">
+                  <strong>{t('signals.intel.card.insufficient')}</strong>
+                  <span>{t('signals.intel.card.insufficientBody')}</span>
+                </div>
+              )}
+            </div>
+
+            {ready && <EvidenceChips evidence={signal.evidence} max={4} />}
+
+            <div className="sic-focus-actions">
+              <button type="button" className="sic-btn primary" disabled={!ready} onClick={() => onWhy(signal)}>
+                <IconSparkle />
+                <span>{whyLoading ? t('signals.intel.why.loading') : t('signals.intel.card.why')}</span>
+              </button>
+              <button type="button" className={`sic-icon-btn ${watched ? 'active' : ''}`} disabled={!ready} onClick={() => onWatch(signal)} title={t(watched ? 'signals.intel.actions.watched' : 'signals.intel.actions.watch')} aria-label={t(watched ? 'signals.intel.actions.watched' : 'signals.intel.actions.watch')}>
+                <StarIcon />
+              </button>
+              <button type="button" className="sic-icon-btn" disabled={!ready} onClick={() => onAlert(signal)} title={t('signals.intel.actions.alert')} aria-label={t('signals.intel.actions.alert')}>
+                <IconBell />
+              </button>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      )}
+    </section>
+  );
+}
+
+function SignalBreakdown({
+  analysis,
+  activeHorizons,
+  layerRows,
+  perpForCoin,
+  scenarios,
+  horizon,
+  invalidation,
+  backtestInfo,
+  hasOnchain,
+  intel
+}) {
+  const { t } = useTranslation();
+  if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
+
+  return (
+    <div className="sic-breakdown">
+      <HorizonStrip horizons={activeHorizons} />
+
+      {layerRows.length > 0 && (
+        <SignalSection
+          id="layers"
+          title={t('signals.layerTitle')}
+          summary={t('signals.acc.layersSummary', { n: layerRows.length })}
+        >
+          {layerRows.map((layer) => (
+            <LayerBar key={layer.key} label={t(`verdict.layerName.${layer.key}`)} score={layer.score} weight={layer.weight} />
+          ))}
+        </SignalSection>
+      )}
+
+      {perpForCoin && perpForCoin.avgFundingApr != null && (
+        <SignalSection
+          id="derivatives"
+          title={t('signals.derivatives.title')}
+          summary={`${perpForCoin.avgFundingApr > 0 ? '+' : ''}${Math.round(perpForCoin.avgFundingApr)}%`}
+        >
+          <div className="sic-pair-grid">
+            <div>
+              <div className="faint sic-mini-label">{t('signals.derivatives.funding')}</div>
+              <div className={`mono sic-mini-value ${perpForCoin.avgFundingApr >= 0 ? 'up' : 'down'}`}>
+                {perpForCoin.avgFundingApr > 0 ? '+' : ''}{Math.round(perpForCoin.avgFundingApr)}%
+              </div>
+            </div>
+            {perpForCoin.openInterestUsd != null && (
+              <div className="sic-align-end">
+                <div className="faint sic-mini-label">{t('signals.derivatives.openInterest')}</div>
+                <div className="mono sic-mini-value">${fmtCompact(perpForCoin.openInterestUsd)}</div>
+              </div>
+            )}
+          </div>
+        </SignalSection>
+      )}
+
+      {scenarios && scenarios.samples >= 20 && (
+        <SignalSection
+          id="scenarios"
+          title={t('signals.scenarios.title')}
+          summary={`↑ ${scenarios.pctUp}% · ↓ ${scenarios.pctDown}%`}
+        >
+          <div className="sic-scenario-track">
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} className="up" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} className="neutral" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown}%` }} transition={{ duration: 0.7 }} className="down" />
+          </div>
+          <div className="sic-scenario-legend">
+            <span className="up">↑ {scenarios.pctUp}% {t('signals.scenarios.bullish')}</span>
+            <span className="faint">{scenarios.pctNeutral}% {t('signals.scenarios.neutral')}</span>
+            <span className="down">↓ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
+          </div>
+          <div className="faint sic-panel-note">{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
+        </SignalSection>
+      )}
+
+      {invalidation && (
+        <SignalSection id="invalidation" title={t('signals.invalidation')} summary={`$${fmtPrice(invalidation.price)}`}>
+          <div className="row-between">
+            <div>
+              <div className="faint sic-mini-label">{t('signals.invalidation')}</div>
+              <div className="mono down sic-mini-value">${fmtPrice(invalidation.price)}</div>
+            </div>
+            <div className="sic-align-end">
+              <div className="faint sic-mini-label">{t('signals.invalidationBelow')}</div>
+              <div className="mono sic-mini-value">-{fmtPct(invalidation.pctBelow)}</div>
+            </div>
+          </div>
+        </SignalSection>
+      )}
+
+      {backtestInfo && (
+        <SignalSection
+          id="backtest"
+          title={t('signals.backtestHistory')}
+          summary={`${Math.round(backtestInfo.rate)}% · n=${backtestInfo.samples}`}
+        >
+          <div className="sic-triple-grid">
+            <div><b className="mono up">{Math.round(backtestInfo.rate)}%</b><span>{t('signals.backtestHitRate')}</span></div>
+            <div><b className={`mono ${backtestInfo.edge >= 0 ? 'up' : 'down'}`}>{backtestInfo.edge >= 0 ? '+' : ''}{Math.round(backtestInfo.edge)}pp</b><span>{t('signals.backtestEdge')}</span></div>
+            <div><b className="mono">{backtestInfo.samples}</b><span>{t('signals.backtestSamples')}</span></div>
+          </div>
+          <div className="faint sic-panel-note">{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
+        </SignalSection>
+      )}
+
+      {hasOnchain && (
+        <SignalSection id="onchain" title={t('signals.onchain.title')}>
+          <div className="sic-key-value-list">
+            {intel.whaleFlow?.direction && <div><span>{t('signals.onchain.whaleFlow')}</span><b className={`mono ${intel.whaleFlow.direction === 'outflow' ? 'down' : intel.whaleFlow.direction === 'inflow' ? 'up' : ''}`}>{t(`signals.onchain.flow.${intel.whaleFlow.direction}`)}</b></div>}
+            {intel.holderTrend?.change && <div><span>{t('signals.onchain.holderTrend')}</span><b className={`mono ${intel.holderTrend.change === 'rising' ? 'down' : 'up'}`}>{t(`signals.onchain.trend.${intel.holderTrend.change}`)}</b></div>}
+            {intel.topHolderPct != null && <div><span>{t('signals.onchain.topHolder')}</span><b className="mono">{intel.topHolderPct}%</b></div>}
+            {intel.dexActivity?.pressure && <div><span>{t('signals.onchain.dexActivity')}</span><b className={`mono ${intel.dexActivity.pressure === 'buy' ? 'up' : intel.dexActivity.pressure === 'sell' ? 'down' : ''}`}>{t(`signals.onchain.pressure.${intel.dexActivity.pressure}`)}</b></div>}
+          </div>
+        </SignalSection>
+      )}
+
+      <SignalSection id="indicators" title={t('signals.acc.indicators')} summary={t('signals.acc.indicatorsSummary', { n: analysis.signals.length })}>
+        {analysis.signals.map((signal) => <IndicatorBar key={signal.key} signal={signal} />)}
+        <div className="sic-indicator-grid">
+          {analysis.indicators.rsi != null && <div className="sic-data-cell"><span>RSI (14)</span><b className="mono">{analysis.indicators.rsi.toFixed(1)}</b></div>}
+          {analysis.indicators.volatility != null && <div className="sic-data-cell"><span>{t('signals.volatility')}</span><b className="mono">{analysis.indicators.volatility.toFixed(0)}%</b></div>}
+          {analysis.indicators.support != null && <div className="sic-data-cell"><span>{t('signals.support')}</span><b className="mono up">${fmtPrice(analysis.indicators.support)}</b></div>}
+          {analysis.indicators.resistance != null && <div className="sic-data-cell"><span>{t('signals.resistance')}</span><b className="mono down">${fmtPrice(analysis.indicators.resistance)}</b></div>}
+        </div>
+      </SignalSection>
+    </div>
+  );
+}
+
+function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
+  const { t } = useTranslation();
+  return (
+    <div className="sic-ai-panel">
+      <div className="sic-ai-panel-head">
+        <span>{outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}</span>
+        {outlook && <span className={`sic-bias ${outlook.bias || 'neutral'}`}>{t(`signals.bias.${outlook.bias || 'neutral'}`)} · {outlook.confidence}%</span>}
+      </div>
+      <div className="segmented sic-horizon-tabs">
+        {HORIZONS.filter((item) => item.days !== 1).map((item) => (
+          <button key={item.key} type="button" className={horizon.key === item.key ? 'active' : ''} onClick={() => setHorizon(item)}>
+            {horizon.key === item.key && <SegIndicator id="hz-outlook" />}
+            {t(item.key === '7D' ? 'signals.horizon.weekly' : 'signals.horizon.monthly')}
+          </button>
+        ))}
+      </div>
+
+      {aiLoading && (
+        <div className="stack sic-ai-loading">
+          {[92, 78, 60].map((width) => <motion.div key={width} className="skel" style={{ height: 11, width: `${width}%`, borderRadius: 8 }} animate={{ opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }} />)}
+          <span className="faint">{t('signals.aiThinking')}</span>
+        </div>
+      )}
+      {aiError && <p className="notice">{t('signals.aiUnavailable')}</p>}
+      {!aiLoading && !aiError && !outlook && <div className="sic-insufficient">{t('signals.aiUnavailable')}</div>}
+
+      {outlook && !aiLoading && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <h3 className="sic-ai-headline">{outlook.headline}</h3>
+          <p className="sic-ai-summary">{outlook.summary}</p>
+          {outlook.range?.low != null && (
+            <InfoBox title={t('signals.projectionTitle')} tone="info" id="sig-proj-box">
+              <div className="sic-projection-row">
+                <span>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
+                <b className="mono">${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}</b>
+              </div>
+            </InfoBox>
+          )}
+          {outlook.drivers?.length > 0 && (
+            <div className="sic-ai-list">
+              <div className="field-label">{t('signals.drivers')}</div>
+              {outlook.drivers.map((driver, index) => <p key={index} className="support"><i aria-hidden="true">↑</i><span>{driver}</span></p>)}
+            </div>
+          )}
+          {outlook.risks?.length > 0 && (
+            <div className="sic-ai-list">
+              <div className="field-label">{t('signals.risks')}</div>
+              {outlook.risks.map((riskItem, index) => <p key={index} className="risk"><i aria-hidden="true">↓</i><span>{riskItem}</span></p>)}
+            </div>
+          )}
+          {outlook.invalidation && <p className="notice sic-ai-invalidation"><strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}</p>}
+          <div className="faint sic-ai-meta">{outlook.source === 'local' ? t('signals.aiMetaLocal') : t('signals.aiMeta', { model: outlook.model })}</div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function IntelligenceHub({ early, sm, momentumCards, portfolioImpactData, history }) {
+  const { t } = useTranslation();
+  const still = useStill();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState('early');
+  const tabs = [
+    { id: 'early', label: t('signals.intel.early.title'), subtitle: t('signals.intel.early.subtitle'), Icon: IconSparkle },
+    { id: 'smartMoney', label: t('signals.intel.smartMoney.title'), subtitle: t('signals.intel.smartMoney.subtitle'), Icon: IconSmartMoney },
+    { id: 'momentum', label: t('signals.intel.momentum.title'), subtitle: t('signals.intel.momentum.subtitle'), Icon: IconTrend },
+    { id: 'portfolio', label: t('signals.intel.portfolio.title'), subtitle: t('signals.intel.portfolio.subtitle'), Icon: IconWallet },
+    { id: 'history', label: t('signals.intel.history.title'), subtitle: t('signals.intel.history.subtitle'), Icon: IconClock }
+  ];
+  const selected = tabs.find((item) => item.id === active) || tabs[0];
+  const moveTab = (event, index) => {
+    const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;
+    const next = tabs[nextIndex];
+    setActive(next.id);
+    requestAnimationFrame(() => document.getElementById(`sic-tab-${next.id}`)?.focus());
+  };
+  const panels = {
+    early: <EarlySection early={early} embedded />,
+    smartMoney: <SmartMoneySection sm={sm} embedded />,
+    momentum: <MomentumSection cards={momentumCards} embedded />,
+    portfolio: <PortfolioCard impact={portfolioImpactData} embedded />,
+    history: <HistorySection history={history} embedded />
+  };
+
+  return (
+    <motion.section className={`sic-hub ${open ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
+      <button type="button" className="sic-hub-toggle" aria-expanded={open} aria-controls="sic-hub-content" onClick={() => setOpen((value) => !value)}>
+        <span className="sic-head-icon"><IconSparkle /></span>
+        <span className="sic-hub-copy">
+          <strong>{t('signals.intel.hub.title')}</strong>
+          <small>{t('signals.intel.hub.subtitle')}</small>
+        </span>
+        <span className="sic-hub-summary">{t('signals.intel.hub.summary', { n: tabs.length })}</span>
+        <Chevron open={open} />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id="sic-hub-content"
+            key="hub-content"
+            initial={still ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={still ? { duration: 0 } : { duration: 0.24, ease: 'easeOut' }}
+            className="sic-collapsible-body"
+          >
+            <div className="sic-hub-layout">
+              <div className="sic-tab-rail" role="tablist" aria-orientation="vertical" aria-label={t('signals.intel.hub.title')}>
+                {tabs.map(({ id, label, Icon }, index) => (
+                  <button
+                    type="button"
+                    key={id}
+                    id={`sic-tab-${id}`}
+                    role="tab"
+                    aria-selected={active === id}
+                    aria-controls={`sic-panel-${id}`}
+                    tabIndex={active === id ? 0 : -1}
+                    className={active === id ? 'active' : ''}
+                    onClick={() => setActive(id)}
+                    onKeyDown={(event) => moveTab(event, index)}
+                  >
+                    <Icon />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="sic-hub-panel" id={`sic-panel-${active}`} role="tabpanel" aria-labelledby={`sic-tab-${active}`} tabIndex={0}>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div key={active} initial={still ? false : { opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -4 }} transition={{ duration: still ? 0 : 0.16 }}>
+                    <div className="sic-hub-panel-head">
+                      <span className="sic-panel-icon"><selected.Icon /></span>
+                      <div><h3>{selected.label}</h3><p>{selected.subtitle}</p></div>
+                    </div>
+                    {panels[active]}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   );
 }
 
@@ -938,19 +1105,16 @@ export default function Signals() {
   const activeId = tab === 'solana' ? solanaId : coinId;
 
   const [horizon, setHorizon] = useState(HORIZONS[1]);
+  const [detailTab, setDetailTab] = useState('breakdown');
   const [scanning, setScanning] = useState(true);
-  const [ai, setAi] = useState({ enabled: false });
   const [outlook, setOutlook] = useState(null);
   const [brief, setBrief] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
 
-  const [filters, setFilters] = useState({ type: 'all', risk: 'all', confidence: 'all', timeframe: 'all', asset: 'all', market: 'all' });
-  const [search, setSearch] = useState('');
   const [why, setWhy] = useState(null);
   const [alertFor, setAlertFor] = useState(null);
   const [watchVersion, setWatchVersion] = useState(0);
-  const [consent, setConsentState] = useState(readConsent());
   const [history, setHistory] = useState(readHistory());
 
   const { data: chart } = useChart(activeId, 30);
@@ -967,7 +1131,6 @@ export default function Signals() {
   /* ── server-driven feeds (all fail closed) ────────────────────────────── */
   const pulsePoll = usePoll(() => getSignalPulse(), [], 60_000);
   const smPoll = usePoll(() => fetchOverview('24h'), [], 120_000);
-  const radarPoll = usePoll(() => (tab === 'solana' ? getSolanaRadar(10) : Promise.resolve({ dataStatus: 'idle', tokens: [] })), [tab], 300_000);
   const sm = smPoll.data;
   const pulse = useMemo(
     () => (pulsePoll.data && pulsePoll.data?.sentiment ? pulsePoll.data : computePulseLocal({ global, markets: coins ?? [], smartMoney: sm, now: Date.now() })),
@@ -983,8 +1146,6 @@ export default function Signals() {
   const btcSeries = useMemo(() => (btcChart ?? []).map((p) => p.p), [btcChart]);
   const analysis = useMemo(() => (priceSeries.length ? analyze(priceSeries, coin ?? {}) : null), [priceSeries, coin]);
   const projection = useMemo(() => (analysis ? projectRange(analysis, horizon.days) : null), [analysis, horizon]);
-  const sentiment = useMemo(() => marketSentiment(global), [global]);
-  const regime = useMemo(() => (global ? marketRegime({ global, btcSeries }) : null), [global, btcSeries]);
 
   const [perpMarkets, setPerpMarkets] = useState(null);
   useEffect(() => {
@@ -1031,7 +1192,6 @@ export default function Signals() {
     visible: Boolean(optedIn && analysis && !scanning)
   });
 
-  useEffect(() => { aiStatus().then(setAi); }, []);
   useEffect(() => {
     if (!global || !coins?.length) return;
     getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language }).then(setBrief).catch(() => {});
@@ -1069,19 +1229,25 @@ export default function Signals() {
     return rankSignals(list);
   }, [coins, pulse, smBySymbol]);
 
-  /* ── Solana curated signals: each card owns one chart fetch (lazy) ────── */
-  const solanaSignals = useMemo(() => SOLANA_SIGNAL_ASSETS.map((a) => ({ asset: a, smToken: smBySymbol.get(a.symbol) })), [smBySymbol]);
+  /* One picker, one active token. Bitcoin stays first and selected by default
+     in the global view; Solana stays first in the Solana view. */
+  const globalOptions = useMemo(() => {
+    return [...globalSignals]
+      .sort((a, b) => (a.coin?.id === 'bitcoin' ? -1 : b.coin?.id === 'bitcoin' ? 1 : 0))
+      .map((signal) => ({ id: signal.coin.id, symbol: signal.coin.symbol, name: signal.coin.name }));
+  }, [globalSignals]);
+  const solanaOptions = useMemo(() => SOLANA_SIGNAL_ASSETS.map((asset) => {
+    const marketCoin = (coins ?? []).find((item) => item.id === asset.id);
+    return { id: asset.id, symbol: asset.symbol, name: marketCoin?.name || '' };
+  }), [coins]);
+  const tokenOptions = tab === 'solana' ? solanaOptions : globalOptions;
 
-  /* Global tab filters here (cards are already computed). Solana cards hold
-     their own lazy signal computation, so they receive the same search +
-     filter state and decide visibility after their data resolves. */
-  const visibleSignals = useMemo(
-    () => (tab === 'all' ? filterSignals(searchSignals(globalSignals, search), filters, marketOf) : globalSignals),
-    [tab, globalSignals, search, filters, marketOf]
-  );
+  useEffect(() => {
+    if (tab !== 'all' || !globalOptions.length || globalOptions.some((option) => option.id === coinId)) return;
+    setCoinId(globalOptions.find((option) => option.id === 'bitcoin')?.id || globalOptions[0].id);
+  }, [tab, globalOptions, coinId]);
 
-  /* Solana per-card intel is resolved inside SolanaSignalCard; the selected
-     asset's intel is fetched here for the detail lab (kept from the old page). */
+  /* The selected Solana asset's on-chain data is fetched only when needed. */
   const activeMint = useMemo(
     () => (tab === 'solana' ? (SOLANA_SIGNAL_ASSETS.find((a) => a.id === activeId)?.mint ?? null) : null),
     [tab, activeId]
@@ -1112,6 +1278,30 @@ export default function Signals() {
     )
   );
 
+  const selectedSignal = useMemo(() => {
+    if (tab === 'all') return globalSignals.find((signal) => signal.coin?.id === coinId) ?? null;
+    if (!coin) return null;
+    if (!analysis || priceSeries.length < 30 || !Number.isFinite(coin.price) || coin.price <= 0) {
+      return { status: 'INSUFFICIENT_DATA', at: Date.now(), coin };
+    }
+    return computeSignalCard({
+      coin,
+      series: priceSeries,
+      analysis,
+      solanaIntel: intel,
+      smToken: smBySymbol.get(coin.symbol),
+      pulse,
+      now: Date.now()
+    });
+  }, [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smBySymbol, pulse]);
+
+  const portfolioImpactData = useMemo(
+    () => (selectedSignal?.status === 'READY'
+      ? portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification })
+      : null),
+    [selectedSignal, positions, priceMap]
+  );
+
   /* ── Early signals: momentum acceleration + flow/on-chain agreement ─────
         Market-wide (both tabs): every number comes from real market data. */
   const earlyEntries = useMemo(() => {
@@ -1137,7 +1327,6 @@ export default function Signals() {
     if (next !== history) setHistory(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceMap]);
-  const perf = useMemo(() => performance(history), [history]);
 
   /* ── alerts: evaluate against real signal data, one fire per cooldown ──── */
   useEffect(() => {
@@ -1183,13 +1372,6 @@ export default function Signals() {
     ev.change24h = signal.momentum?.pct ?? null;
     ev.riskScore = signal.riskScore;
     ev.confidence = signal.confidence;
-    /* Portfolio-aware path — ONLY with explicit consent, and ONLY aggregate
-       percentages (the server sanitizer additionally enforces the allowlist). */
-    if (consent.portfolioAi && portfolioImpactData) {
-      ev.portfolioExposure = portfolioImpactData.exposurePct;
-      ev.portfolioConcentration = portfolioImpactData.concentrationPct;
-      ev.portfolioHasPosition = portfolioImpactData.hasPosition ? 1 : 0;
-    }
     const res = await getSignalWhy({
       symbol: signal.coin.symbol,
       name: signal.coin.name,
@@ -1213,24 +1395,11 @@ export default function Signals() {
     if (kind === 'alert') setAlertFor(signal.coin.symbol);
   };
 
-  const selectCard = (signal) => {
+  const selectToken = (id) => {
     haptic?.('select');
-    if (tab === 'all') setCoinId(signal.coin.id);
-    else setSolanaId(signal.coin.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (tab === 'all') setCoinId(id);
+    else setSolanaId(id);
   };
-
-  /* ── portfolio-aware impact (local only) ───────────────────────────────── */
-  const selectedSignal = useMemo(() => {
-    if (tab === 'solana') return null;
-    return globalSignals.find((s) => s.coin?.id === coinId) ?? null;
-  }, [globalSignals, coinId, tab]);
-  const portfolioImpactData = useMemo(
-    () => (selectedSignal?.status === 'READY'
-      ? portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification })
-      : null),
-    [selectedSignal, positions, priceMap]
-  );
 
   /* ── detail lab data (kept from the existing page, fail-closed) ────────── */
   const bandPct = useMemo(() => {
@@ -1268,445 +1437,145 @@ export default function Signals() {
   }, [read]);
 
   const watchedIds = useMemo(() => new Set(readWatchlist()), [watchVersion]);
-  const filteredCards = tab === 'solana'
-    ? solanaSignals // solana card list is rendered by its own component below
-    : visibleSignals;
-
-  const insightLabel = useMemo(() => (selectedSignal ? t(classKey(selectedSignal.classification)) : null), [selectedSignal, t]);
   const pulseLive = Boolean(pulse && (pulse.source === 'live' || pulse.source === 'market-only'));
+  const momentumCards = useMemo(
+    () => [...globalSignals].sort((a, b) => Math.abs(b.score ?? 0) - Math.abs(a.score ?? 0)),
+    [globalSignals]
+  );
 
   return (
-    <PageTransition>
-      {/* HERO */}
-      <motion.section className="docs-hero" variants={riseIn} initial="hidden" animate="show" style={{ overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: -40, background: 'radial-gradient(600px 300px at 20% 0%, rgba(0,229,255,0.12), transparent 60%), radial-gradient(500px 280px at 90% 0%, rgba(124,77,255,0.12), transparent 60%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative' }}>
-          <div className="docs-hero-title" style={{ fontSize: 24 }}>{t('signals.title')}</div>
-          <p className="docs-hero-sub" style={{ maxWidth: 'none', fontSize: 13, lineHeight: 1.9, whiteSpace: 'normal' }}>{t('signals.subtitle')}</p>
-          <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <span className="pill pill-rgb" style={{ fontSize: 11, padding: '5px 10px' }}>✦ AI Powered</span>
-            <span className="pill" style={{ background: pulseLive ? 'rgba(0,255,157,0.08)' : 'rgba(255,179,0,0.08)', borderColor: pulseLive ? 'rgba(0,255,157,0.16)' : 'rgba(255,179,0,0.16)', color: pulseLive ? 'var(--up)' : '#ffb300', fontSize: 11 }}>
-              {t(`signals.intel.status.${pulseLive ? 'live' : pulse?.source === 'local' || pulse?.source === 'offline' ? 'offline' : 'unavailable'}`)}
-            </span>
-          </div>
+    <PageTransition className="page sic-page">
+      <motion.section className="sic-page-hero" variants={riseIn} initial="hidden" animate="show">
+        <span className="sic-hero-icon"><IconSparkle /></span>
+        <div className="sic-hero-copy">
+          <h1>{t('signals.title')}</h1>
+          <p>{t('signals.subtitle')}</p>
+        </div>
+        <div className="sic-hero-status">
+          <span>{t('signals.aiPowered')}</span>
+          <i className={pulseLive ? 'live' : 'offline'}>
+            <b aria-hidden="true" />
+            {t(`signals.intel.status.${pulseLive ? 'live' : pulse?.source === 'local' || pulse?.source === 'offline' ? 'offline' : 'unavailable'}`)}
+          </i>
         </div>
       </motion.section>
 
-      {/* AI MARKET PULSE */}
-      <PulseCard pulse={pulse} />
+      <PulseCard pulse={pulse} brief={brief} />
 
-      {/* Horizon risk for the selected asset */}
-      {analysis && <HorizonStrip horizons={activeHorizons} />}
-
-      {/* Daily brief (existing) */}
-      {brief && (
-        <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-4)', borderColor: 'rgba(0,255,157,0.14)', background: 'linear-gradient(145deg, rgba(0,255,157,0.07), rgba(255,255,255,0.02))' }}>
-          <div className="row-between" style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, color: 'var(--rgb-4)' }}>✦ {t('signals.dailyBrief')}</span>
-            <span className={`pill ${brief.bias === 'bullish' ? 'pill-up' : brief.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`} style={{ fontSize: 11 }}>{t(`signals.bias.${brief.bias}`)}</span>
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.5 }}>{brief.headline}</div>
-          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, marginTop: 6 }}>{brief.summary}</p>
-        </motion.section>
-      )}
-
-      {/* TABS — Global Signals / Solana Signals (kept, labels upgraded) */}
-      <motion.div className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, padding: 14 }}>
-        <div className="segmented" style={{ width: '100%', marginBottom: 12 }}>
-          <button className={tab === 'all' ? 'active' : ''} onClick={() => { haptic?.('select'); setTab('all'); }} style={{ isolation: 'isolate', flex: 1, minHeight: 38 }}>
-            {tab === 'all' && <SegIndicator id="tab-all" />}
-            {t('signals.allTab')}
-          </button>
-          <button className={tab === 'solana' ? 'active' : ''} onClick={() => { haptic?.('select'); setTab('solana'); }} style={{ isolation: 'isolate', flex: 1, minHeight: 38 }}>
-            {tab === 'solana' && <SegIndicator id="tab-sol" />}
-            {t('signals.solanaTab')}
-          </button>
-        </div>
-
-        {/* SEARCH */}
-        <div className="sic-search">
-          <span aria-hidden="true">🔍</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('signals.intel.search.placeholder')}
-            aria-label={t('signals.intel.search.label')}
-          />
-        </div>
-
-        {/* FILTERS */}
-        <FilterBar filters={filters} setFilters={setFilters} />
-
-        {/* Cards */}
-        <div style={{ marginTop: 14 }}>
-          {tab === 'all' ? (
-            filteredCards.length ? (
-              <div className="sic-cards">
-                {filteredCards.map((s) => (
-                  <SignalCard
-                    key={s.coin?.id}
-                    signal={s}
-                    selected={s.coin?.id === coinId}
-                    onSelect={() => selectCard(s)}
-                    onWhy={openWhy}
-                    whyLoading={why?.signal?.coin?.id === s.coin?.id && why?.loading}
-                    onAlert={onCardAction}
-                    watched={watchedIds.has(s.coin?.id)}
-                    onCompare={(sig) => navigate(`/coin/${sig.coin?.id}`)}
-                    onTrack={() => document.getElementById('sic-history')?.scrollIntoView({ behavior: 'smooth' })}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="sic-insufficient">{t('signals.intel.search.noResults')}</div>
-            )
-          ) : (
-            <div className="sic-cards">
-              {solanaSignals.map(({ asset, smToken }) => (
-                <SolanaSignalCard
-                  key={asset.id}
-                  asset={asset}
-                  marketCoin={(coins ?? []).find((c) => c.id === asset.id) ?? null}
-                  pulse={pulse}
-                  smToken={smToken}
-                  selected={asset.id === solanaId}
-                  onSelect={() => selectCard({ coin: { id: asset.id, symbol: asset.symbol, name: asset.name } })}
-                  onWhy={openWhy}
-                  whyLoading={why?.signal?.coin?.id === asset.id && why?.loading}
-                  onAlert={onCardAction}
-                  watched={watchedIds.has(asset.id)}
-                  onCompare={(sig) => navigate(`/coin/${sig.coin?.id}`)}
-                  onTrack={() => document.getElementById('sic-history')?.scrollIntoView({ behavior: 'smooth' })}
-                  search={search}
-                  filters={filters}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </motion.div>
-
-      {/* DETAIL LAB — the selected asset (existing gauge + breakdown, preserved) */}
-      <motion.section className="wallet-hero-modern" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, padding: 18 }}>
-        <div className="wallet-hero-aurora" aria-hidden="true" />
-        <AnimatePresence mode="wait">
-          {scanning || !analysis ? (
-            <motion.div key="scan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ height: 240, display: 'grid', placeItems: 'center', gap: 14 }}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }} style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(127,127,127,.14)', borderTopColor: 'var(--rgb-1)', boxShadow: '0 0 18px rgba(0,229,255,0.18)' }} />
-              <span className="faint" style={{ fontSize: 12.5 }}>{t('signals.analyzing')}</span>
-            </motion.div>
-          ) : (
-            <motion.div key="gauge" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ width: '100%' }}>
-              <div className="row-between" style={{ marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-                <div className="row" style={{ gap: 10 }}>
-                  <CoinLogo coin={coin} />
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {coin?.symbol}
-                      {regime?.regime && (
-                        <span className="pill" title={t(`signals.regime.${REGIME_LABEL[regime.regime]}`)} style={{ fontSize: 10, padding: '3px 8px', background: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'rgba(255,89,107,0.10)' : 'rgba(0,255,157,0.10)', borderColor: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'rgba(255,89,107,0.22)' : 'rgba(0,255,157,0.22)', color: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'var(--down)' : 'var(--up)' }}>
-                          {t(`signals.regime.${REGIME_LABEL[regime.regime]}`)}
-                        </span>
-                      )}
-                      {insightLabel && <span className="pill" style={{ fontSize: 10, fontWeight: 800, background: 'rgba(0,229,255,0.08)', borderColor: 'rgba(0,229,255,0.2)', color: 'var(--rgb-1)' }}>{insightLabel}</span>}
-                    </div>
-                    <div className="faint mono" style={{ fontSize: 11.5 }}>${fmtPrice(coin?.price)}</div>
-                  </div>
-                </div>
-                <span className={`pill ${(coin?.change24h ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 11.5, padding: '5px 10px' }}>{fmtPct(coin?.change24h ?? 0)}</span>
-              </div>
-              <Gauge score={analysis.score} label={analysis.label} confidence={analysis.confidence} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.section>
-
-      {analysis && !scanning && (
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-          <VerdictPanel analysis={analysis} series={priceSeries} btcSeries={btcSeries} coin={coin} global={global} />
-        </motion.div>
-      )}
-
-      {analysis && !scanning && (
-        <motion.section className="wallet-pie-card" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-3), var(--rgb-2))', color: '#fff', fontSize: 12 }}>◈</span>
-            {t('signals.breakdown')}
-          </div>
-
-          {layerRows.length > 0 && (
-            <SignalSection
-              id="layers"
-              defaultOpen
-              title={t('signals.layerTitle')}
-              summary={t('signals.acc.layersSummary', { n: layerRows.length })}
-            >
-              {layerRows.map((l) => (
-                <LayerBar key={l.key} label={t(`verdict.layerName.${l.key}`)} score={l.score} weight={l.weight} />
-              ))}
-            </SignalSection>
-          )}
-
-          {perpForCoin && perpForCoin.avgFundingApr != null && (
-            <SignalSection
-              id="derivatives"
-              title={t('signals.derivatives.title')}
-              summary={`${perpForCoin.avgFundingApr > 0 ? '+' : ''}${Math.round(perpForCoin.avgFundingApr)}%`}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <div className="faint" style={{ fontSize: 10 }}>{t('signals.derivatives.funding')}</div>
-                  <div className={`mono ${perpForCoin.avgFundingApr >= 0 ? 'up' : 'down'}`} style={{ fontSize: 14, fontWeight: 800, marginTop: 3 }}>
-                    {perpForCoin.avgFundingApr > 0 ? '+' : ''}{Math.round(perpForCoin.avgFundingApr)}%
-                  </div>
-                </div>
-                {perpForCoin.openInterestUsd != null && (
-                  <div style={{ textAlign: 'end' }}>
-                    <div className="faint" style={{ fontSize: 10 }}>{t('signals.derivatives.openInterest')}</div>
-                    <div className="mono" style={{ fontSize: 14, fontWeight: 800, marginTop: 3 }}>${fmtCompact(perpForCoin.openInterestUsd)}</div>
-                  </div>
-                )}
-              </div>
-            </SignalSection>
-          )}
-
-          {scenarios && scenarios.samples >= 20 && (
-            <SignalSection
-              id="scenarios"
-              title={t('signals.scenarios.title')}
-              summary={`▲ ${scenarios.pctUp}% · ▼ ${scenarios.pctDown}%`}
-            >
-              <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.10)' }}>
-                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--up)' }} />
-                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} style={{ background: 'rgba(127,127,127,.32)' }} />
-                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--down)' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11 }}>
-                <span className="up" style={{ fontWeight: 700 }}>▲ {scenarios.pctUp}% {t('signals.scenarios.bullish')}</span>
-                <span className="faint" style={{ fontWeight: 700 }}>{scenarios.pctNeutral}% {t('signals.scenarios.neutral')}</span>
-                <span className="down" style={{ fontWeight: 700 }}>▼ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
-              </div>
-              <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
-            </SignalSection>
-          )}
-
-          {invalidation && (
-            <SignalSection
-              id="invalidation"
-              title={t('signals.invalidation')}
-              summary={`$${fmtPrice(invalidation.price)}`}
-            >
-              <div className="row-between">
-                <div>
-                  <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.invalidation')}</div>
-                  <div className="mono down" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>${fmtPrice(invalidation.price)}</div>
-                </div>
-                <div style={{ textAlign: 'end' }}>
-                  <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.invalidationBelow')}</div>
-                  <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>-{fmtPct(invalidation.pctBelow)}</div>
-                </div>
-              </div>
-            </SignalSection>
-          )}
-
-          {backtestInfo && (
-            <SignalSection
-              id="backtest"
-              title={t('signals.backtestHistory')}
-              summary={`${Math.round(backtestInfo.rate)}% · n=${backtestInfo.samples}`}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div className="mono up" style={{ fontSize: 16, fontWeight: 900 }}>{Math.round(backtestInfo.rate)}%</div>
-                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestHitRate')}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div className={`mono ${backtestInfo.edge >= 0 ? 'up' : 'down'}`} style={{ fontSize: 16, fontWeight: 900 }}>{backtestInfo.edge >= 0 ? '+' : ''}{Math.round(backtestInfo.edge)}pp</div>
-                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestEdge')}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div className="mono" style={{ fontSize: 16, fontWeight: 900 }}>{backtestInfo.samples}</div>
-                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestSamples')}</div>
-                </div>
-              </div>
-              <div className="faint" style={{ fontSize: 10.5, marginTop: 8 }}>{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
-            </SignalSection>
-          )}
-
-          {hasOnchain && (
-            <SignalSection id="onchain" title={t('signals.onchain.title')}>
-              <div style={{ display: 'grid', gap: 10 }}>
-                {intel.whaleFlow?.direction && (
-                  <div className="row-between">
-                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.whaleFlow')}</span>
-                    <span className={`mono ${intel.whaleFlow.direction === 'outflow' ? 'down' : intel.whaleFlow.direction === 'inflow' ? 'up' : ''}`} style={{ fontSize: 12, fontWeight: 800 }}>
-                      {t(`signals.onchain.flow.${intel.whaleFlow.direction}`)}
-                    </span>
-                  </div>
-                )}
-                {intel.holderTrend?.change && (
-                  <div className="row-between">
-                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.holderTrend')}</span>
-                    <span className={`mono ${intel.holderTrend.change === 'rising' ? 'down' : 'up'}`} style={{ fontSize: 12, fontWeight: 800 }}>
-                      {t(`signals.onchain.trend.${intel.holderTrend.change}`)}
-                    </span>
-                  </div>
-                )}
-                {intel.topHolderPct != null && (
-                  <div className="row-between">
-                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.topHolder')}</span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 800 }}>{intel.topHolderPct}%</span>
-                  </div>
-                )}
-                {intel.dexActivity?.pressure && (
-                  <div className="row-between">
-                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.dexActivity')}</span>
-                    <span className={`mono ${intel.dexActivity.pressure === 'buy' ? 'up' : intel.dexActivity.pressure === 'sell' ? 'down' : ''}`} style={{ fontSize: 12, fontWeight: 800 }}>
-                      {t(`signals.onchain.pressure.${intel.dexActivity.pressure}`)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </SignalSection>
-          )}
-
-          <SignalSection
-            id="indicators"
-            title={t('signals.acc.indicators')}
-            summary={t('signals.acc.indicatorsSummary', { n: analysis.signals.length })}
+      <motion.section className="sic-workspace" variants={riseIn} initial="hidden" animate="show">
+        <div className="sic-market-tabs" role="tablist" aria-label={t('signals.intel.assetPicker.marketLabel')}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'all'}
+            className={tab === 'all' ? 'active' : ''}
+            onClick={() => { haptic?.('select'); setTab('all'); }}
           >
-            {analysis.signals.map((s) => <IndicatorBar key={s.key} signal={s} />)}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
-              {analysis.indicators.rsi != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>RSI (14)</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.rsi.toFixed(1)}</div></div>}
-              {analysis.indicators.volatility != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.volatility')}</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.volatility.toFixed(0)}%</div></div>}
-              {analysis.indicators.support != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.support')}</div><div className="mono up" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.support)}</div></div>}
-              {analysis.indicators.resistance != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div><div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div></div>}
-            </div>
-          </SignalSection>
-
-          <button className="btn btn-primary" style={{ width: '100%', minHeight: 46, borderRadius: 14, marginTop: 16 }} onClick={() => { haptic?.('select'); navigate(`/intent?to=${encodeURIComponent(coin?.symbol || '')}`); }}>
-            {t('signals.createIntent')}
+            <IconGlobe />
+            <span>{t('signals.allTab')}</span>
           </button>
-        </motion.section>
-      )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'solana'}
+            className={tab === 'solana' ? 'active' : ''}
+            onClick={() => { haptic?.('select'); setTab('solana'); }}
+          >
+            <SolanaIcon />
+            <span>{t('signals.solanaTab')}</span>
+          </button>
+        </div>
 
-      {/* AI OUTLOOK (existing) */}
-      {(
-        <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-2)' }}>
-          <div className="row-between" style={{ marginBottom: 12 }}>
-            <div className="row" style={{ gap: 9 }}>
-              <span style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-2), var(--rgb-1))', color: '#fff', fontSize: 13 }}>✦</span>
-              <span style={{ fontWeight: 800, fontSize: 13.5 }}>{outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}</span>
-            </div>
-            {outlook && <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`} style={{ fontSize: 11 }}>{t(`signals.bias.${outlook.bias}`)} · {outlook.confidence}%</span>}
+        <TokenPicker coin={coin} options={tokenOptions} value={activeId} onChange={selectToken} />
+
+        <SelectedSignalCard
+          coin={coin}
+          signal={selectedSignal}
+          analysis={analysis}
+          scanning={scanning}
+          watched={watchedIds.has(activeId)}
+          whyLoading={why?.signal?.coin?.id === activeId && why?.loading}
+          onWhy={openWhy}
+          onWatch={(signal) => onCardAction('watch', signal)}
+          onAlert={(signal) => onCardAction('alert', signal)}
+        />
+
+        <div className="sic-detail-box">
+          <div className="sic-detail-tabs" role="tablist" aria-label={t('signals.intel.detailTabs.label')}>
+            <button
+              type="button"
+              id="sic-detail-tab-breakdown"
+              role="tab"
+              aria-controls="sic-detail-panel"
+              aria-selected={detailTab === 'breakdown'}
+              className={detailTab === 'breakdown' ? 'active' : ''}
+              onClick={() => setDetailTab('breakdown')}
+            >
+              <IconActivity />
+              <span>{t('signals.breakdown')}</span>
+            </button>
+            <button
+              type="button"
+              id="sic-detail-tab-ai"
+              role="tab"
+              aria-controls="sic-detail-panel"
+              aria-selected={detailTab === 'ai'}
+              className={detailTab === 'ai' ? 'active' : ''}
+              onClick={() => setDetailTab('ai')}
+            >
+              <IconSparkle />
+              <span>{t('signals.aiOutlook')}</span>
+            </button>
           </div>
-          <div className="segmented" style={{ width: '100%', marginBottom: 12 }}>
-            {HORIZONS.filter((h) => h.days !== 1).map((h) => (
-              <button key={h.key} className={horizon.key === h.key ? 'active' : ''} onClick={() => setHorizon(h)} style={{ isolation: 'isolate', flex: 1, minHeight: 36 }}>
-                {horizon.key === h.key && <SegIndicator id="hz-outlook" />}
-                {t(h.key === '7D' ? 'signals.horizon.weekly' : 'signals.horizon.monthly')}
-              </button>
-            ))}
+
+          <div
+            id="sic-detail-panel"
+            className="sic-detail-panel"
+            role="tabpanel"
+            aria-labelledby={detailTab === 'breakdown' ? 'sic-detail-tab-breakdown' : 'sic-detail-tab-ai'}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={detailTab} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.16 }}>
+                {detailTab === 'breakdown' ? (
+                  <SignalBreakdown
+                    analysis={analysis}
+                    activeHorizons={activeHorizons}
+                    layerRows={layerRows}
+                    perpForCoin={perpForCoin}
+                    scenarios={scenarios}
+                    horizon={horizon}
+                    invalidation={invalidation}
+                    backtestInfo={backtestInfo}
+                    hasOnchain={hasOnchain}
+                    intel={intel}
+                  />
+                ) : (
+                  <AiAnalysisPanel outlook={outlook} aiLoading={aiLoading} aiError={aiError} horizon={horizon} setHorizon={setHorizon} />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
-          {aiLoading && (
-            <div className="stack" style={{ gap: 10 }}>
-              {[92, 78, 60].map((w) => (
-                <motion.div key={w} className="skel" style={{ height: 11, width: `${w}%`, borderRadius: 8 }} animate={{ opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }} />
-              ))}
-              <span className="faint" style={{ marginTop: 4, fontSize: 12 }}>{t('signals.aiThinking')}</span>
-            </div>
-          )}
-          {aiError && <p className="notice" style={{ marginTop: 10 }}>{t('signals.aiUnavailable')}</p>}
-          {outlook && !aiLoading && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.6, marginBottom: 8 }}>{outlook.headline}</div>
-              <p className="muted" style={{ fontSize: 12.7, lineHeight: 1.85, margin: 0 }}>{outlook.summary}</p>
-              {outlook.range?.low != null && (
-                <InfoBox title={t('signals.projectionTitle')} tone="info" id="sig-proj-box">
-                  <div className="card card-soft row-between" style={{ marginTop: 6, background: 'rgba(255,255,255,0.04)', borderRadius: 12 }}>
-                    <span className="faint" style={{ fontSize: 11 }}>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
-                    <span className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}</span>
-                  </div>
-                </InfoBox>
-              )}
-              {outlook.drivers?.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div className="field-label" style={{ fontSize: 11 }}>{t('signals.drivers')}</div>
-                  {outlook.drivers.map((d, i) => (
-                    <motion.div key={i} className="row" style={{ gap: 8, marginTop: 6, alignItems: 'flex-start' }} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * i }}>
-                      <span className="up" style={{ fontSize: 11, marginTop: 2 }}>▲</span><span className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>{d}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-              {outlook.risks?.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div className="field-label" style={{ fontSize: 11 }}>{t('signals.risks')}</div>
-                  {outlook.risks.map((r, i) => (
-                    <motion.div key={i} className="row" style={{ gap: 8, marginTop: 6, alignItems: 'flex-start' }} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * i }}>
-                      <span className="down" style={{ fontSize: 11, marginTop: 2 }}>▼</span><span className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>{r}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-              {outlook.invalidation && <p className="notice" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.8 }}><strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}</p>}
-              <div className="faint" style={{ marginTop: 12, fontSize: 10.5, lineHeight: 1.7 }}>{outlook.source === 'local' ? t('signals.aiMetaLocal') : t('signals.aiMeta', { model: outlook.model })}</div>
-            </motion.div>
-          )}
-        </motion.section>
-      )}
+        </div>
+
+        <div className="sic-workspace-actions">
+          <button type="button" className="btn btn-primary" onClick={() => navigate(`/intent?to=${encodeURIComponent(coin?.symbol || '')}`)}>{t('signals.createIntent')}</button>
+          <button type="button" className="btn btn-ghost" onClick={() => navigate(`/coin/${activeId}`)}>{t('signals.viewChart')}</button>
+        </div>
+      </motion.section>
 
       <AdBanner slot="swap" />
 
-      {/* AI EARLY SIGNALS */}
-      <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 6 }}>
-        <EarlySection early={early} />
-      </motion.div>
+      <IntelligenceHub
+        early={early}
+        sm={sm}
+        momentumCards={momentumCards}
+        portfolioImpactData={portfolioImpactData}
+        history={history}
+      />
 
-      {/* SMART MONEY */}
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <SmartMoneySection sm={sm} />
-      </motion.div>
-
-      {/* MOMENTUM RADAR */}
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <MomentumSection cards={[...globalSignals].sort((a, b) => Math.abs(b.score ?? 0) - Math.abs(a.score ?? 0))} />
-      </motion.div>
-
-      {/* SOLANA EARLY TOKEN RADAR */}
-      {tab === 'solana' && (
-        <motion.div variants={riseIn} initial="hidden" animate="show">
-          <RadarSection radar={radarPoll.data?.schema ? radarPoll.data : null} />
-        </motion.div>
-      )}
-
-      {/* PORTFOLIO-AWARE */}
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <PortfolioCard
-          impact={portfolioImpactData}
-          consent={consent}
-          onConsent={() => { const next = setConsent({ portfolioAi: !consent.portfolioAi }); setConsentState(next); haptic?.('select'); }}
-        />
-      </motion.div>
-
-      {/* HISTORICAL LEARNING LOOP + PERFORMANCE */}
-      <motion.div id="sic-history" variants={riseIn} initial="hidden" animate="show">
-        <HistorySection history={history} perf={perf} priceMap={priceMap} />
-      </motion.div>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <PerformanceSection perf={perf} />
-      </motion.div>
-
-      <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer" style={{ marginTop: 18 }}>
+      <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer" style={{ marginTop: 2 }}>
         <p style={{ fontSize: 12.5, lineHeight: 1.9 }}>{t('signals.intel.disclaimer')} — {t('signals.disclaimer')}</p>
       </InfoBox>
-
-      {/* Actions / routing (kept) */}
-      <div className="row" style={{ gap: 12, marginTop: 18 }}>
-        <button className="btn btn-primary" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/swap?coin=${activeId}`)}>{t('nav.swap')}</button>
-        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/coin/${activeId}`)}>{t('signals.viewChart')}</button>
-      </div>
 
       <WhyModal why={why} onClose={() => setWhy(null)} />
       <AlertSheet symbol={alertFor} onClose={() => setAlertFor(null)} />

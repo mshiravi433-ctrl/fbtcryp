@@ -206,7 +206,7 @@ const CASES = [
     markets: [btc, eth],
     chart: series(60, (i) => 62_000 + Math.sin(i / 5) * 900 + i * 55),
     pulse: livePulse,
-    expectCards: 2
+    expectCards: 1
   },
   {
     /*
@@ -218,7 +218,7 @@ const CASES = [
     markets: [btc, eth],
     chart: series(60, (i) => 62_000 + i * 40),
     pulse: { status: 502, body: { error: 'SIGNAL_PULSE_UNAVAILABLE', detail: 'upstream' } },
-    expectCards: 2
+    expectCards: 1
   },
   {
     /*
@@ -448,7 +448,10 @@ export async function run(container) {
       } else {
         /* The assertion that makes every other line above meaningful. */
         const wanted = typeof c.expectCards === 'number' ? c.expectCards : 1;
-        check(`${c.name}: signal cards actually rendered (${cards.length})`, cards.length >= wanted);
+        check(
+          `${c.name}: selected signal card rendered without duplicate token cards (${cards.length})`,
+          typeof c.expectCards === 'number' ? cards.length === wanted : cards.length >= wanted
+        );
         const raw = rawKeyIn(text);
         check(`${c.name}: card copy is translated, not a raw key${raw ? ` (found "${raw}")` : ''}`, !raw);
       }
@@ -483,7 +486,7 @@ export async function run(container) {
           );
         });
         await settle(60);
-        const solTab = [...container.querySelectorAll('.segmented button')][1];
+        const solTab = [...container.querySelectorAll('.sic-market-tabs button')][1];
         check('the Solana tab button exists', Boolean(solTab));
         if (solTab) {
           await act(async () => { solTab.click(); });
@@ -590,6 +593,16 @@ export async function run(container) {
           + ` (${groups.reduce((n, g) => n + g[1].length, 0) * LOCALES.length} lookups, ${missing.length} missing${missing.length ? ': ' + missing.slice(0, 6).join(', ') : ''})`,
         missing.length === 0
       );
+      check(
+        'Global and Solana signal tabs are genuinely localized in Persian',
+        /[\u0600-\u06ff]/.test(LOCALE_FA.signals.allTab)
+          && /[\u0600-\u06ff]/.test(LOCALE_FA.signals.solanaTab)
+          && !/Global\s+Signals|Solana\s+Signals/i.test(`${LOCALE_FA.signals.allTab} ${LOCALE_FA.signals.solanaTab}`)
+      );
+      check(
+        'removed performance and portfolio-AI copy is deleted from every locale',
+        LOCALES.every(([, locale]) => !locale.signals.intel.performance && !locale.signals.intel.portfolio.consentTitle)
+      );
 
       /* And the fallback: an unknown or null class must not throw. */
       check('an unknown classification falls back instead of throwing', classKey(null) === classKey('WATCH') && classKey('NOPE') === classKey('WATCH'));
@@ -615,30 +628,57 @@ export async function run(container) {
             </Wrap>
           );
         });
-        await settle(60);
+        await settle(920);
 
         const card = container.querySelector('.sic-card');
-        check('a card is present to interact with', Boolean(card));
+        check('exactly one selected-token card is present', Boolean(card) && container.querySelectorAll('.sic-card').length === 1);
+        const picker = container.querySelector('.sic-token-select-shell select');
+        check('global signals default to Bitcoin', picker?.value === 'bitcoin');
 
-        /* Horizon switch — re-runs the projection and the verdict panels. */
-        const horizonBtns = [...container.querySelectorAll('button')].filter((b) => /^(1D|7D|30D)$/.test(b.textContent.trim()));
-        if (horizonBtns.length >= 3) {
-          await act(async () => { horizonBtns[2].click(); });
+        const pulseToggle = container.querySelector('.sic-pulse-toggle');
+        check('AI market pulse starts collapsed', pulseToggle?.getAttribute('aria-expanded') === 'false' && !container.querySelector('#sic-pulse-content'));
+        if (pulseToggle) {
+          await act(async () => { pulseToggle.click(); });
+          await settle(30);
+        }
+        check('AI market pulse expands in place', pulseToggle?.getAttribute('aria-expanded') === 'true' && Boolean(container.querySelector('#sic-pulse-content')));
+
+        const hubToggle = container.querySelector('.sic-hub-toggle');
+        check('supporting signal center starts collapsed', hubToggle?.getAttribute('aria-expanded') === 'false');
+        if (hubToggle) {
+          await act(async () => { hubToggle.click(); });
+          await settle(30);
+        }
+        const verticalRail = container.querySelector('.sic-tab-rail[aria-orientation="vertical"]');
+        check('expanded signal center has five vertical tabs', verticalRail?.querySelectorAll('[role="tab"]').length === 5);
+        check('only one intelligence panel is shown at a time', container.querySelectorAll('.sic-hub-panel[role="tabpanel"]').length === 1);
+        check('removed performance and portfolio-AI panels stay absent', !/AI SIGNAL PERFORMANCE|Portfolio-aware AI|عملکرد سیگنال هوش مصنوعی|هوش مصنوعی آگاه از پرتفوی/.test(container.textContent || ''));
+
+        /* AI analysis is a sibling tab inside the one selected-token box. */
+        const detailTabs = [...container.querySelectorAll('.sic-detail-tabs button')];
+        check('signal breakdown and AI analysis are two compact detail tabs', detailTabs.length === 2);
+        if (detailTabs[1]) {
+          await act(async () => { detailTabs[1].click(); });
+          await settle(30);
+        }
+        const horizonBtns = [...container.querySelectorAll('.sic-horizon-tabs button')];
+        if (horizonBtns.length === 2) {
+          await act(async () => { horizonBtns[1].click(); });
           await settle(30);
           await act(async () => { horizonBtns[0].click(); });
           await settle(30);
         }
-        check('switching horizon does not throw', true);
+        check('switching AI horizon does not throw', true);
 
         /* The alert bell opens AlertSheet; the star toggles the watchlist. */
-        const cardBtns = card ? [...card.querySelectorAll('.sic-btn')] : [];
-        const alertBtn = cardBtns.find((b) => b.textContent.includes('🔔'));
+        const cardBtns = card ? [...card.querySelectorAll('button')] : [];
+        const alertBtn = cardBtns.find((b) => /alert|هشدار|تنبيه/i.test(`${b.textContent} ${b.getAttribute('aria-label') || ''}`));
         if (alertBtn) {
           await act(async () => { alertBtn.click(); });
           await settle(30);
-          check('the alert sheet opens', Boolean(document.body.textContent.match(/alert/i)));
+          check('the alert sheet opens', Boolean(document.body.textContent.match(/alert|هشدار|تنبيه/i)));
           /* Close it again so the next step starts from a clean tree. */
-          const back = [...document.body.querySelectorAll('button')].find((b) => /close|بستن|✕|×/i.test(b.textContent));
+          const back = [...document.body.querySelectorAll('button')].find((b) => /close|بستن|إغلاق|✕|×/i.test(`${b.textContent} ${b.getAttribute('aria-label') || ''}`));
           if (back) {
             await act(async () => { back.click(); });
             await settle(20);
@@ -646,7 +686,7 @@ export async function run(container) {
         }
 
         /* "Why this signal?" — the multi-AI explanation path end to end. */
-        const whyBtn = cardBtns.find((b) => b.textContent.includes('🧠'));
+        const whyBtn = cardBtns.find((b) => /why|چرا|لماذا/i.test(b.textContent));
         check('the Why button is wired on a READY card', Boolean(whyBtn));
         if (whyBtn) {
           await act(async () => { whyBtn.click(); });
