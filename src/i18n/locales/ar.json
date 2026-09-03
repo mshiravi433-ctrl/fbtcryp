@@ -1704,7 +1704,17 @@
         "desc": "Connect any wallet"
       }
     },
-    "notice": "These are independent projects. فانوس بازار بيشغام is not affiliated with them and earns nothing from these links."
+    "notice": "These are independent projects. فانوس بازار بيشغام is not affiliated with them and earns nothing from these links.",
+    "feeNoticeTitle": "DEX والسيولة — عمولة، وليست شراكة إحالة",
+    "feeNotice": "اتصالات DEX والسيولة أعلاه متصلة فعلاً بـ FBT Swap. عند تنفيذ مبادلة أو جسر، تُدفع عمولة المنصة إلى FBT من داخل نفس المعاملة (70 نقطة أساس للمبادلات، و30–40 لجسر الأصول). FBT ليست شريكة في هذه المشاريع ولا تملك حصة فيها.",
+    "feeToFbt": "العمولة → FBT",
+    "drawer": {
+      "fee": "عمولة FBT",
+      "feeLive": "{{pct}}% ({{bps}} نقطة أساس) → FBT",
+      "feeNotLive": "{{pct}}% بعد التفعيل",
+      "feeNet": "صافي {{net}} نقطة أساس بعد حصة {{cut}}% من المزوّد",
+      "feeReceiver": "المستلم"
+    }
   },
   "biz": {
     "title": "Business",

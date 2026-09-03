@@ -143,6 +143,30 @@ export default function ProtocolDrawer({ item, onClose, onOpenUrl, t }) {
             </div>
           )}
 
+          {/* FBT commission — the money relationship for this integration */}
+          {item.fee && (
+            <div className="eco-drawer-row eco-drawer-row--full">
+              <span className="eco-drawer-label">{t('eco.drawer.fee', 'FBT Commission')}</span>
+              <div className="eco-drawer-fee">
+                <span className={item.fee.active ? 'eco-fee-chip' : 'eco-drawer-fee-muted'}>
+                  {item.fee.active
+                    ? t('eco.drawer.feeLive', '{{pct}}% ({{bps}} bps) → FBT', { pct: item.fee.percent, bps: item.fee.bps })
+                    : t('eco.drawer.feeNotLive', '{{pct}}% configured when enabled', { pct: item.fee.percent })}
+                </span>
+                {item.fee.active && item.fee.providerCutPercent > 0 && (
+                  <span className="eco-drawer-fee-net">
+                    {t('eco.drawer.feeNet', 'net {{net}} bps after provider {{cut}}% share', { net: item.fee.netBps, cut: item.fee.providerCutPercent })}
+                  </span>
+                )}
+                {item.fee.active && (
+                  <span className="eco-drawer-fee-receiver mono">
+                    {t('eco.drawer.feeReceiver', 'Receiver')}: {shortAddress(item.fee.receiver)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Health Info */}
           {item.lastSuccessAt && (
             <div className="eco-drawer-row">
@@ -193,6 +217,12 @@ export default function ProtocolDrawer({ item, onClose, onOpenUrl, t }) {
 
 function extractDomain(url) {
   try { return new URL(url).hostname; } catch { return ''; }
+}
+
+function shortAddress(addr) {
+  const s = String(addr || '');
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 6)}…${s.slice(-6)}`;
 }
 
 function formatDate(iso) {

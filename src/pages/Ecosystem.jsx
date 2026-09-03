@@ -8,6 +8,7 @@ import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
 import {
   fetchProviderStatus,
+  probeProviderStatuses,
   buildEcosystemData,
   NETWORK_REGISTRY,
   monogram
@@ -297,7 +298,15 @@ export default function Ecosystem() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     loadData();
+    // Ask the server for fresh liveness evidence for the DEX/liquidity sources,
+    // then re-read the standard status once the probe has recorded it.
+    probeProviderStatuses().finally(() => {
+      if (cancelled) return;
+      setTimeout(() => { if (!cancelled) loadData(true); }, 450);
+    });
+    return () => { cancelled = true; };
   }, [loadData]);
 
   /** Debounced search */
@@ -369,6 +378,12 @@ export default function Ecosystem() {
 
   const open = (url) => { if (url) openUrl(url); };
   const { summary, sections } = ecosystemData || {};
+
+  /** DEX & Liquidity (plus bridges) are the integrations that actually pay the
+   *  FBT house fee. The bottom notice must not tell a visitor we earn nothing
+   *  from the very section where our fee is applied. */
+  const isFeeEarningView = categoryFilter === 'dex' ||
+    (categoryFilter === 'all' && (sections?.dex?.length > 0 || sections?.bridges?.length > 0));
 
   return (
     <PageTransition>
@@ -701,8 +716,8 @@ export default function Ecosystem() {
       )}
 
       {/* ─── Notice ─── */}
-      <InfoBox title={t('eco.noticeTitle')} tone="info" id="eco-notice">
-        <p>{t('eco.notice')}</p>
+      <InfoBox title={t(isFeeEarningView ? 'eco.feeNoticeTitle' : 'eco.noticeTitle')} tone="info" id="eco-notice">
+        <p>{t(isFeeEarningView ? 'eco.feeNotice' : 'eco.notice')}</p>
       </InfoBox>
 
       {/* ─── Protocol Detail Drawer ─── */}
@@ -763,6 +778,12 @@ function ProtocolCard({ item, onSelect, t }) {
       </div>
       <span className="eco-new-card-name">{item.name}</span>
       <span className="eco-new-card-type">{item.type}</span>
+      {item.fee?.active && (
+        <span className="eco-fee-chip" title={item.fee.receiver || ''}>
+          {t('eco.feeToFbt', 'Fee → FBT')} · {item.fee.percent}%
+          {item.fee.providerCutPercent > 0 && <span className="eco-fee-chip-net"> net {item.fee.netBps} bps</span>}
+        </span>
+      )}
       {item.networks?.length > 0 && (
         <span className="eco-new-card-networks">
           {item.networks.slice(0, 4).map(n => (

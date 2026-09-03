@@ -86,7 +86,8 @@ import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
-import { providerStatusReport } from './providerStatus.js';
+import { providerStatusReport, recordFailure, recordSuccess } from './providerStatus.js';
+import { probeProviderStatuses } from './providerProbe.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
 import { catalogList, catalogError, CATALOG_SCHEMAS } from './ecosystemCatalog.js';
 import {
@@ -4089,8 +4090,12 @@ app.get('/api/category/:slug', (req, res) => {
 app.get('/api/bridge/status', async (_req, res) => {
   try {
     res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
-    return res.json(await bridgeStatus());
+    const status = await bridgeStatus();
+    if (status.registered) recordSuccess('lifi');
+    else recordFailure('lifi', status.detail || 'LI_FI_INTEGRATOR_UNREGISTERED');
+    return res.json(status);
   } catch (err) {
+    recordFailure('lifi', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4098,8 +4103,10 @@ app.get('/api/bridge/status', async (_req, res) => {
 app.get('/api/bridge/quote', async (req, res) => {
   try {
     const { ok, status, body } = await bridgeQuote(req.query);
+    recordProviderHealth('lifi', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('lifi', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4189,6 +4196,7 @@ app.get('/api/cross-chain/quote', async (req, res) => {
     preferTool: req.query.preferTool,
     order: req.query.order
   });
+  recordCrossChainHealth(result);
   if (!result.ok) return crossChainError(res, result);
   /* Never cached: a quote is a price with a 60-second life. A CDN copy of it
      would be a stale rate presented as live — the exact failure this whole
@@ -4210,6 +4218,7 @@ app.get('/api/cross-chain/routes', async (req, res) => {
     slippage: req.query.slippage,
     order: req.query.order
   });
+  recordCrossChainHealth(result);
   if (!result.ok) return crossChainError(res, result);
   res.set('cache-control', 'no-store');
   return res.json({
@@ -4378,8 +4387,10 @@ app.get('/api/dln/status', (_req, res) => {
 app.get('/api/dln/quote', async (req, res) => {
   try {
     const { ok, status, body } = await dlnQuote(req.query);
+    recordProviderHealth('debridge-dln', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('debridge-dln', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4387,8 +4398,10 @@ app.get('/api/dln/quote', async (req, res) => {
 app.get('/api/dln/tx', async (req, res) => {
   try {
     const { ok, status, body } = await dlnCreateTx(req.query);
+    recordProviderHealth('debridge-dln', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('debridge-dln', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4411,8 +4424,10 @@ app.get('/api/gasless/status', (_req, res) => {
 app.get('/api/gasless/price', async (req, res) => {
   try {
     const { ok, status, body } = await gaslessPrice(req.query);
+    recordProviderHealth('0x-gasless', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('0x-gasless', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4420,8 +4435,10 @@ app.get('/api/gasless/price', async (req, res) => {
 app.get('/api/gasless/quote', async (req, res) => {
   try {
     const { ok, status, body } = await gaslessQuote(req.query);
+    recordProviderHealth('0x-gasless', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('0x-gasless', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4429,8 +4446,10 @@ app.get('/api/gasless/quote', async (req, res) => {
 app.post('/api/gasless/submit', async (req, res) => {
   try {
     const { ok, status, body } = await gaslessSubmit(req.body);
+    recordProviderHealth('0x-gasless', { ok, status, body });
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
+    recordFailure('0x-gasless', String(err.message).slice(0, 120));
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
@@ -4921,13 +4940,41 @@ app.post('/api/solana/execute', async (req, res) => {
  */
 app.get('/api/solana/oo/status', (_req, res) => res.json(oceanStatus()));
 
+/**
+ * Record a provider call in the in-process health tracker used by
+ * /api/providers/status and the Ecosystem page. A client validation error
+ * (400 BAD_MINT, UNSUPPORTED_CHAIN, ...) says nothing about the provider's
+ * health, so it is deliberately not recorded; only success, upstream/auth
+ * failures and unavailability (5xx/401/403/503) move the tracker.
+ */
+function recordProviderHealth(id, r) {
+  if (!r) return;
+  const status = Number(r.status || (r.ok ? 200 : 0));
+  if (status >= 200 && status < 400) {
+    recordSuccess(id);
+    return;
+  }
+  const detail = r.body?.error || r.body?.detail || r.body?.message || `HTTP_${status}`;
+  if (status >= 500 || status === 401 || status === 403 || status === 503) {
+    recordFailure(id, String(detail).slice(0, 120));
+  }
+  return r;
+}
+
+/** Record the shared LI.FI health from the /api/cross-chain routes. */
+function recordCrossChainHealth(result) {
+  recordProviderHealth('lifi', result);
+}
+
 app.get('/api/solana/oo/quote', async (req, res) => {
   const r = await oceanQuote(req.query);
+  recordProviderHealth('solana-openocean', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 app.get('/api/solana/oo/swap', async (req, res) => {
   const r = await oceanSwap(req.query);
+  recordProviderHealth('solana-openocean', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
@@ -4943,27 +4990,32 @@ app.get('/api/solana/oo/swap', async (req, res) => {
  */
 app.get('/api/swap/kyber/routes', async (req, res) => {
   const r = await proxyKyberRoutes(req.query);
+  recordProviderHealth('kyberswap', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 app.post('/api/swap/kyber/build', async (req, res) => {
   const r = await proxyKyberBuild(req.body ?? {});
+  recordProviderHealth('kyberswap', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 app.get('/api/swap/oo/quote', async (req, res) => {
   const r = await proxyOoQuote(req.query);
+  recordProviderHealth('openocean', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 app.get('/api/swap/oo/swap', async (req, res) => {
   const r = await proxyOoSwap(req.query);
+  recordProviderHealth('openocean', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 /* Velora — quote-only, same reachability fallback (see lib/velora.js). */
 app.get('/api/swap/velora/prices', async (req, res) => {
   const r = await proxyVeloraPrices(req.query);
+  recordProviderHealth('velora', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
@@ -5078,15 +5130,35 @@ app.get('/api/providers/status', (_req, res) => {
   return res.json(providerStatusReport());
 });
 
+/*
+ * POST /api/providers/probe — one tiny quote per fee-earning DEX/liquidity
+ * source, recorded into the same health tracker /providers/status reads.
+ *
+ * This is what makes the Ecosystem page able to say "connected" about
+ * KyberSwap, OpenOcean, Velora and 0x Gasless on a fresh server process. It is
+ * read-only (nothing is signed/broadcast) and the calls are fixed upstream
+ * shapes with small amounts, so it cannot be used as an open proxy.
+ */
+app.post('/api/providers/probe', async (_req, res) => {
+  return res.status(200).json(await probeProviderStatuses());
+});
+
 app.get('/api/xchain/status', (_req, res) => res.json(crossChainStatus()));
 
 app.get('/api/xchain/probe', async (_req, res) => {
   const r = await crossChainProbe();
+  // crossChainProbe returns 200 with the real HTTP result in body.httpStatus;
+  // record that so /api/providers/status sees whether our 0x key actually
+  // reached upstream without treating a 401/403 as "unconfigured".
+  const status = Number(r.body?.httpStatus || r.status);
+  if (status >= 200 && status < 400) recordSuccess('0x-cross-chain');
+  else if (status >= 500 || status === 401 || status === 403) recordFailure('0x-cross-chain', r.body?.detail || `HTTP_${status}`);
   return res.status(r.status).json(r.body);
 });
 
 app.get('/api/xchain/quotes', async (req, res) => {
   const r = await crossChainQuotes(req.query);
+  recordProviderHealth('0x-cross-chain', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

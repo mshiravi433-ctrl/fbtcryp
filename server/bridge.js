@@ -121,6 +121,7 @@ export async function bridgeStatus() {
   return {
     integrator: status.integrator,
     keySet: status.keySet,
+    feeReady: bridgeFeeReady(),
     feePercent: status.feePercent,
     registered: status.registered,
     detail: status.detail
