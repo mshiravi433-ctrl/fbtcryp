@@ -85,6 +85,7 @@ import {
   EXECUTION_CHAIN,
   buildSystemPrompt
 } from '../src/lib/intent-ai/os/systemPrompt.js';
+import { understandIntent, updateIntentSession } from '../src/lib/intent-ai/os/index.js';
 import {
   getAvailableProviders,
   getActiveProviderIds,
@@ -758,18 +759,41 @@ router.post('/chat', async (req, res) => {
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
   const context = await buildAIContext(req, req.body || {});
   const locale = safe(req.body?.locale, 5) || null;
+  const conversationId = safe(req.body?.conversationId, 64) || null;
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
     ? { intent: String(req.body.prior.intent).toUpperCase(), surface: req.body.prior.surface || null }
     : null;
+  
+  // Upgrade 4 Intent Understanding & Context Resolution
+  const u4 = understandIntent(message, {
+    locale,
+    prior,
+    conversationId,
+    currentPage: req.body?.surface || req.body?.currentPage || '/',
+    wallet: context.wallet,
+    portfolio: context.portfolio
+  });
+
+  if (conversationId) {
+    updateIntentSession(conversationId, {
+      currentIntent: u4.primaryIntent || u4.type,
+      entities: u4.entities,
+      missingFields: u4.missingInformation,
+      assumptions: u4.assumptions,
+      confidence: u4.confidence,
+      isCorrection: u4.isCorrection
+    });
+  }
+
   const local = classifyIntent(message, { locale, prior });
   let llm = null;
   if (aiConfigured() && local.confidence < 0.6 && !req.body?.surface) {
     llm = await classifyIntentWithModel({ message, intents: AI_INTENTS, locale });
   }
-  const intent = llm?.ok === true ? llm.intent : local.intent;
+  const intent = llm?.ok === true ? llm.intent : (u4.type !== 'GENERAL' ? u4.type : local.intent);
   const classification = llm?.ok === true && llm.intent !== local.intent
     ? { ...local, intent, source: 'model-override', confidence: Math.max(local.confidence, Number(llm.confidence) || 0) }
-    : local;
+    : { ...local, intent: intent || local.intent };
 
   const ctx = {
     ...context,
@@ -825,7 +849,7 @@ router.post('/chat', async (req, res) => {
   if (pendingIntent) await writePending(ownerFor(req), pendingIntent);
 
   const confidenceMetrics = evaluateConfidenceMetrics({
-    intent: human.intent,
+    intent: u4.type !== 'GENERAL' ? u4 : human.intent,
     context,
     dataStatus: context.portfolio?.dataStatus || 'live'
   });
@@ -839,7 +863,11 @@ router.post('/chat', async (req, res) => {
       version: INTENT_OS_PROMPT_VERSION,
       executionChain: EXECUTION_CHAIN
     },
-    intent: human.intent,
+    intent: {
+      ...human.intent,
+      ...u4,
+      type: human.intent?.type || u4.type
+    },
     confidence: out.plan.confidence,
     confidenceMetrics,
     multiAi: {

@@ -49,9 +49,14 @@ export function clearContextCache() {
 export async function buildContext({
   userId = null,
   sessionId = null,
+  conversationId = null,
   currentPage = '/',
   currentRoute = null,
   currentTab = null,
+  activeTab = null,
+  selectedAsset = null,
+  selectedNetwork = null,
+  currentWorkflow = null,
   walletState = null,
   portfolioState = null,
   conversation = [],
@@ -64,7 +69,7 @@ export async function buildContext({
   const central = getCentralWalletState();
   const liveWallet = mergeWalletSnapshots(walletState, central);
 
-  const cacheKey = `ctx:${userId || 'anon'}:${route}:${liveWallet?.address || ''}:${liveWallet?.connectionStatus || ''}`;
+  const cacheKey = `ctx:${userId || 'anon'}:${route}:${liveWallet?.address || ''}:${liveWallet?.connectionStatus || ''}:${selectedAsset || ''}`;
   const cached = getCached(cacheKey);
   if (cached && isWalletConnected(liveWallet) === Boolean(cached.hasWallet)) {
     return {
@@ -72,6 +77,10 @@ export async function buildContext({
       walletState: liveWallet,
       timestamp: now,
       cached: true,
+      selectedAsset: selectedAsset || cached.selectedAsset,
+      selectedNetwork: selectedNetwork || cached.selectedNetwork,
+      activeTab: activeTab || currentTab || cached.activeTab,
+      currentWorkflow: currentWorkflow || cached.currentWorkflow,
       operational: getOperationalSlots()
     };
   }
@@ -96,10 +105,15 @@ export async function buildContext({
   const context = {
     schema: CONTEXT_SCHEMA,
     userId,
-    sessionId,
+    sessionId: sessionId || conversationId,
+    conversationId: conversationId || sessionId,
     currentPage,
     currentRoute: route,
-    currentTab,
+    currentTab: currentTab || activeTab,
+    activeTab: activeTab || currentTab,
+    selectedAsset,
+    selectedNetwork,
+    currentWorkflow,
     locale,
     timestamp: now,
     
@@ -136,7 +150,7 @@ export async function buildContext({
     cached: Boolean(cached)
   };
 
-  try { setPageContextState({ page: currentPage, route, walletConnected: context.hasWallet }); } catch { /* page context is best-effort */ }
+  try { setPageContextState({ page: currentPage, route, walletConnected: context.hasWallet, selectedAsset, selectedNetwork }); } catch { /* page context is best-effort */ }
 
   if (context.hasWallet && portfolio?.freshness !== 'PENDING') {
     setCached(cacheKey, context);

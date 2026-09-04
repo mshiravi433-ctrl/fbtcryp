@@ -2884,6 +2884,14 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
                 {t(`intentAI.flow.tasks.${task.key}`)}
               </button>
             ))}
+            <button
+              key={'intentOS'}
+              type="button"
+              className="ia-chip"
+              onClick={() => onQuickReply?.(t('intentAI.navigation.intentOS', { defaultValue: 'Intent OS' }))}
+            >
+              {t('intentAI.navigation.intentOS', { defaultValue: 'Intent OS' })}
+            </button>
           </div>
         </div>
       );

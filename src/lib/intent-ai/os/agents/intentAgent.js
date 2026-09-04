@@ -50,7 +50,7 @@ export function createIntentAgent() {
       const text = toLatinDigits(rawText);
       
       // Capital extraction
-      let capital = intent.entities?.amount || intent.entities?.amountUsd || null;
+      let capital = (intent.entities?.amount != null || intent.entities?.amountUsd != null) ? Number(intent.entities.amount || intent.entities.amountUsd) : null;
       if (!capital) {
         const dollarMatch = text.match(/(?:\$|usd|دلار)\s*([\d,]+(?:\.\d+)?)/i) || text.match(/([\d,]+(?:\.\d+)?)\s*(?:\$|usd|دلار)/i);
         if (dollarMatch) {

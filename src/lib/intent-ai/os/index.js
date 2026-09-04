@@ -46,6 +46,8 @@
 export * from './appCapabilities.js';
 export * from './toolRegistry.js';
 export * from './intentUnderstanding.js';
+export * from './intentUnderstandingEngine.js';
+export * from './intentSession.js';
 export * from './contextEngine.js';
 export * from './memoryEngine.js';
 export * from './actionMemory.js';
@@ -110,6 +112,7 @@ import { createExecutionAgent, createVerificationAgent, createSelfHealing } from
 import { createFinancialAgent } from './financialAgent.js';
 import { createConsensusEngine } from './consensusEngine.js';
 import { createConfidenceEngine } from './confidenceEngine.js';
+import { getSessionOperationalSlots, updateIntentSession } from './intentSession.js';
 import { createLearningLoop } from './learningLoop.js';
 import { createOrchestrator } from './orchestrator.js';
 import { createAgentLoop } from './agentLoop.js';
@@ -218,10 +221,11 @@ export function createIntentOS({
     getServices() { return liveServices; },
     
     // Main entry: User Intent → Understand → Context → Plan → Execute → Verify → Memory → Response
-    async process({ message, currentPage = '/', walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc } = {}) {
+    async process({ message, conversationId = null, sessionId = null, currentPage = '/', selectedAsset = null, selectedNetwork = null, activeTab = null, walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc } = {}) {
       const start = Date.now();
       const currentLocale = loc || locale;
       const mergedServices = mergeServices(liveServices, svc);
+      const convId = conversationId || sessionId || 'default';
       
       try {
         assertNoSecrets({ message }, 'user-message');
@@ -230,18 +234,40 @@ export function createIntentOS({
         if (walletState && (walletState.address || walletState.connected || walletState.isConnected)) {
           try { setCentralWalletState(liveWallet, { emit: false }); } catch { /* keep going */ }
         }
+
+        const sessionSlots = getSessionOperationalSlots(convId);
+        const operationalSlots = { ...sessionSlots, ...getOperationalSlots() };
         
         // 1. PERCEIVE + UNDERSTAND
         const intent = understandIntent(message, {
           currentPage,
+          selectedAsset,
+          selectedNetwork,
+          activeTab,
           wallet: liveWallet,
-          operational: getOperationalSlots()
+          operational: operationalSlots,
+          conversation,
+          sessionId: convId
+        });
+
+        updateIntentSession(convId, {
+          currentIntent: intent.primaryIntent || intent.type,
+          entities: intent.entities,
+          missingFields: intent.missingInformation,
+          assumptions: intent.assumptions,
+          confidence: intent.confidence,
+          isCorrection: intent.isCorrection
         });
         
         // 2. CONTEXT ENGINE — parallel reads
         const context = await buildContext({
           currentPage,
           currentRoute: currentPage,
+          selectedAsset,
+          selectedNetwork,
+          activeTab,
+          conversationId: convId,
+          sessionId: convId,
           walletState: liveWallet,
           portfolioState,
           conversation,

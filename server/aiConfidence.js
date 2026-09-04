@@ -1,16 +1,17 @@
 /**
- * FBT AI CONFIDENCE & LIVE DATA ENGINE
+ * FBT AI CONFIDENCE & LIVE DATA ENGINE (Upgrade 4)
  * ---------------------------------------------------------------------------
- * Spec Phase 3: Multi-AI Intelligence Upgrade — Confidence Engine & Live Data Validation
+ * Spec Phase 3 & Upgrade 4: Multi-AI Intelligence Upgrade — Confidence Engine & Live Data Validation
  *
  * Requirements:
  *   - Confidence Score (0-100%)
+ *   - Confidence Breakdown (intent, context, entity, execution)
+ *   - Decision Thresholds (PROCEED_PLAN, CONFIRM_INTERPRETATION, ASK_CLARIFICATION)
+ *   - Pre-execution checklist (Intent, Entity, Amount, Network, Wallet, Permission, Risk)
  *   - Risk Score (LOW, MEDIUM, HIGH, EXTREME)
  *   - AI Agreement (e.g., 3/3, 4/5)
  *   - Data Freshness (LIVE, RECENT, STALE, UNAVAILABLE)
  *   - Execution Risk (LOW, MEDIUM, HIGH)
- *   - Live Data Grounding: Strictly verifies that real prices, balances, gas,
- *     and yields are sourced from authoritative Data/Tool layers, not LLM guesses.
  */
 
 export function evaluateConfidenceMetrics({
@@ -21,14 +22,13 @@ export function evaluateConfidenceMetrics({
   dataStatus = 'live'
 } = {}) {
   const factors = [];
-  let score = 80; // Baseline
+  let score = 85; // Baseline
 
   // 1. Data Freshness & Grounding
   const now = Date.now();
   const priceMap = context.market?.priceMap || context.priceMap;
   const hasLivePrices = Boolean(priceMap && Object.keys(priceMap).length > 0);
   const walletConnected = Boolean(context.wallet?.connected || context.wallet?.address);
-  const hasLiveBalances = Boolean(context.wallet?.balances || context.portfolio?.holdings?.length);
 
   let dataFreshness = 'LIVE';
   if (!hasLivePrices && ['SWAP', 'BUY', 'SELL', 'REBALANCE', 'INVESTMENT_PLAN'].includes(intent.type)) {
@@ -70,7 +70,7 @@ export function evaluateConfidenceMetrics({
 
   // 4. Execution Risk Assessment
   let executionRisk = 'LOW';
-  const capitalAmountUsd = Number(intent.entities?.amountUsd || intent.amountUsd || 0);
+  const capitalAmountUsd = Number(intent.entities?.amountUsd || intent.amountUsd || intent.entities?.amount || 0);
   const totalPortfolioUsd = Number(context.portfolio?.totalValueUsd || 0);
 
   if (intent.type === 'FUTURES' || intent.entities?.leverage > 2) {
@@ -83,13 +83,24 @@ export function evaluateConfidenceMetrics({
     factors.push({ name: 'CONCENTRATION_RISK', penalty: -10, reason: 'Action utilizes >50% of detected portfolio' });
   }
 
-  // Final Clamp
-  const finalScore = Math.min(95, Math.max(15, score));
+  const intentConf = intent.confidenceBreakdown?.intent ?? (intent.confidence || 0.9);
+  const contextConf = intent.confidenceBreakdown?.context ?? (walletConnected ? 0.98 : 0.85);
+  const entityConf = intent.confidenceBreakdown?.entity ?? (intent.entities?.token ? 0.95 : 0.7);
+  const execConf = intent.confidenceBreakdown?.execution ?? ((intent.entities?.amount || intent.readOnly) ? 0.95 : 0.65);
+
+  const finalScore = Math.min(98, Math.max(15, score));
   const isLowConfidence = finalScore < 60 || dataFreshness === 'UNAVAILABLE';
 
   return {
     confidenceScore: finalScore,
-    confidenceLabel: finalScore >= 80 ? 'HIGH' : finalScore >= 60 ? 'MODERATE' : 'LOW',
+    confidenceLabel: finalScore >= 90 ? 'VERY_HIGH' : finalScore >= 75 ? 'HIGH' : finalScore >= 60 ? 'MODERATE' : 'LOW',
+    breakdown: {
+      intent: intentConf,
+      context: contextConf,
+      entity: entityConf,
+      execution: execConf
+    },
+    decision: finalScore >= 90 ? 'PROCEED_PLAN' : finalScore >= 70 ? 'CONFIRM_INTERPRETATION' : 'ASK_CLARIFICATION',
     dataFreshness,
     aiAgreement: consensus?.agreementRatio || '1/1',
     executionRisk,
