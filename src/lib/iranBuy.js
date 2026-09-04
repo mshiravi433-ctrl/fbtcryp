@@ -14,6 +14,10 @@ function iranBuyRoot() {
 }
 const BINDING_KEY = 'fbt:iran-buy:wallet-binding:v1';
 const ORDERS_KEY = 'fbt:iran-buy:orders:v1';
+/* Which order the browser was last redirected to a hosted checkout for. It
+   stays in sessionStorage on purpose: the gateway return happens in the same
+   tab, so the capability survives the redirect but not a closed session. */
+const PENDING_KEY = 'fbt:iran-buy:pending-payment:v1';
 
 function requestId(prefix = 'irb') {
   const entropy = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
@@ -105,6 +109,46 @@ export function getIranBuyCapability() {
 }
 
 /**
+ * Public reference rate for the Toman calculator. It is not a quote, carries
+ * no capability, and never prices an order — the server does that from an
+ * authenticated provider quote when a preview is created.
+ */
+export function getIranBuyRate() {
+  return request('/rate', { timeout: 12_000 });
+}
+
+export function rememberIranBuyPendingPayment(orderId) {
+  if (!orderId) return;
+  writeSession(PENDING_KEY, { orderId, at: Date.now() });
+}
+
+export function storedIranBuyPendingPayment() {
+  const pending = readSession(PENDING_KEY);
+  return pending?.orderId && Date.now() - Number(pending.at || 0) < 6 * 60 * 60_000 ? pending.orderId : null;
+}
+
+export function clearIranBuyPendingPayment() {
+  try { sessionStorage.removeItem(PENDING_KEY); } catch { /* nothing to clear */ }
+}
+
+/**
+ * Ask the server to confirm the hosted-checkout result. `status` is only the
+ * gateway's redirect hint; the server re-verifies with the provider before any
+ * order can move forward.
+ */
+export function verifyIranBuyPayment({ orderId, authority, status } = {}) {
+  const orderAccessToken = storedIranBuyOrderAccessToken(orderId);
+  if (!orderAccessToken) return Promise.reject(Object.assign(new Error('ORDER_ACCESS_UNAVAILABLE'), { code: 'ORDER_ACCESS_UNAVAILABLE' }));
+  return request(`/orders/${encodeURIComponent(orderId)}/payment/verify`, {
+    method: 'POST',
+    authenticated: true,
+    headers: { 'x-iran-buy-order-token': orderAccessToken },
+    body: { authority: authority || '', status: status || '' },
+    timeout: 45_000
+  });
+}
+
+/**
  * Bind exactly the active EVM account to the server. Signing this message does
  * not send a transaction or approve token spending; it prevents a page script
  * from substituting an arbitrary withdrawal destination behind the wallet UI.
@@ -165,6 +209,7 @@ export async function createIranBuyOrder({ preview, walletBindingToken, idempote
     timeout: 35_000
   });
   saveOrderAccess(payload?.order?.orderId, payload?.orderAccessToken);
+  rememberIranBuyPendingPayment(payload?.order?.orderId);
   return payload;
 }
 
@@ -221,6 +266,33 @@ export function cancelIranBuyOrder(orderId) {
   return request(`/orders/${encodeURIComponent(orderId)}/cancel`, {
     method: 'POST', authenticated: true, headers: { 'x-iran-buy-order-token': orderAccessToken }
   });
+}
+
+/**
+ * Send the payer to the hosted checkout in the *same* tab.
+ *
+ * Telegram's openLink would hand the checkout to an external browser, where
+ * this session's order capability does not exist and the customer could pay
+ * for an order the app can no longer see. A same-tab navigation keeps the
+ * session, and the gateway returns to the configured callback URL.
+ */
+export function openIranBuyCheckout(checkoutUrl) {
+  let url;
+  try { url = new URL(String(checkoutUrl || '')); } catch { url = null; }
+  if (!url || url.protocol !== 'https:') {
+    throw Object.assign(new Error('PAYMENT_CHECKOUT_UNAVAILABLE'), { code: 'PAYMENT_CHECKOUT_UNAVAILABLE' });
+  }
+  globalThis.location?.assign?.(url.toString());
+  return url.toString();
+}
+
+/** Read the PSP return parameters the callback page was loaded with. */
+export function readIranBuyGatewayReturn(search = globalThis.location?.search || '') {
+  const params = new URLSearchParams(String(search || ''));
+  const authority = params.get('Authority') || params.get('authority') || '';
+  const status = params.get('Status') || params.get('status') || '';
+  if (!authority) return null;
+  return { authority: authority.slice(0, 120), status: status.toUpperCase() === 'OK' ? 'OK' : 'NOK' };
 }
 
 export const __iranBuyClient = Object.freeze({ requestId, normalizedAddress, currentBinding });

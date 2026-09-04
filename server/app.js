@@ -72,8 +72,10 @@ import {
   getIranBuyOrder,
   getIranBuyOrderAudit,
   iranBuyPublicFailure,
+  verifyIranBuyPayment,
   verifyIranBuyWalletChallenge
 } from './iranBuy.js';
+import { publicUsdtTmnRate } from './providers/iranWallexPublic.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import {
   chainTokens,
@@ -5006,6 +5008,19 @@ app.get('/api/iran/buy/config', (_req, res) => {
   return res.json(getIranBuyCapability());
 });
 
+/* Public USDT/TMN reference rate. No credential, no account, no order: it is
+   the public Wallex market endpoint, cached server-side so a browser poll can
+   never become one upstream request per user. It is explicitly a reference
+   number for the calculator, never the price an order is executed at. */
+app.get('/api/iran/buy/rate', async (_req, res) => {
+  /* Shared-cache directives too: without s-maxage the CDN treats this as
+     private and every Persian visitor wakes a serverless instance. */
+  res.set('cache-control', 'public, max-age=15, s-maxage=30, stale-while-revalidate=120');
+  const rate = await publicUsdtTmnRate().catch(() => null);
+  if (!rate) return res.status(200).json({ schema: 'fbt.iran-buy-rate.v1', available: false });
+  return res.status(200).json({ schema: 'fbt.iran-buy-rate.v1', available: true, ...rate });
+});
+
 const IRAN_BUY_RATE_WINDOW_MS = 60_000;
 const configuredIranBuyLimit = (name, fallback) => {
   const parsed = Number(process.env[name]);
@@ -5075,6 +5090,16 @@ app.get('/api/iran/buy/orders/:id/audit', requireIranBuyTelegramAuth, iranBuySta
     ownerId: req.iranBuyOwnerId,
     orderId: req.params.id,
     orderAccessToken: req.get('x-iran-buy-order-token')
+  })));
+/* Hosted-checkout return. The browser hands back the PSP's Authority/Status
+   pair; the server ignores the claim and asks the PSP itself. */
+app.post('/api/iran/buy/orders/:id/payment/verify', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
+  sendIranBuy(res, () => verifyIranBuyPayment({
+    ownerId: req.iranBuyOwnerId,
+    orderId: req.params.id,
+    orderAccessToken: req.get('x-iran-buy-order-token'),
+    authority: req.body?.authority,
+    status: req.body?.status
   })));
 app.post('/api/iran/buy/orders/:id/settlement-challenge', requireIranBuyTelegramAuth, iranBuyPaymentRateLimit, (req, res) =>
   sendIranBuy(res, () => createIranBuySettlementChallenge({

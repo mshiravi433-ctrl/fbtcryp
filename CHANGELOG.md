@@ -1,3 +1,58 @@
+# Unreleased — «فقط برای ایرانیان»: خرید تتر با تومان، از درگاه تا زنجیره
+
+The Persian-only Buy tab used to render one sentence — «هنوز فعال نشده» — and
+nothing else. It is now the complete flow, and the missing half (collecting
+Toman) is implemented instead of described.
+
+- **A real payment adapter** (`server/providers/iranZarinpal.js`). A Wallex API
+  key trades the *operator's* exchange account; it never was a customer payment
+  rail, which is why the flow could not be finished. Customer money is now
+  collected through ZarinPal's documented contract — `POST
+  /pg/v4/payment/request.json` → hosted `/pg/StartPay/{authority}` → `POST
+  /pg/v4/payment/verify.json`. Amounts are sent in one explicit unit (Toman ×10,
+  `currency: "IRR"`) on both request and verify; the checkout URL is composed
+  from a pinned host, never echoed from the response; card data is dropped and
+  only `ref_id` (the tracking number the payer already sees) is kept.
+- **`Status=OK` is not a receipt.** The gateway's return parameters are only
+  matched against the order's own authority hash — payment becomes confirmed
+  solely because ZarinPal's verify answered 100/101 for the stored amount.
+  Verify is idempotent, so an unknown network result is re-asked instead of
+  re-charged, and a status poll re-checks the PSP a minute after the intent is
+  created for anyone who paid and closed the browser.
+- **Bounded execution replaces the permanent OTC blocker.** Wallex's OTC create
+  endpoint has no max-cost field, so the bound now lives in our code: the live
+  quote may not exceed the customer's quoted price by more than
+  `IRAN_BUY_MAX_SLIPPAGE_BPS` (exact decimal arithmetic). Outside the bound the
+  paid order waits and retries; after 12 attempts it becomes a refund case
+  rather than silently buying less USDT than the customer was shown.
+- **The tab is complete even before activation.** `GET /api/iran/buy/rate`
+  serves the public Wallex market rate (no key, cached 30s, `available: false`
+  rather than a guessed number), and the panel shows the live Toman rate, a
+  labelled Toman → USDT estimate, quick amounts, the destination-wallet check,
+  the four-step journey and coarse readiness groups explaining what is missing.
+  Every mutating route still answers `IRAN_BUY_DISABLED`, so nothing can be
+  charged until a deployment is fully configured.
+- **Activation is a contract, not a flag.** `server/iranBuyConfig.js` now
+  requires the reviewed adapter name, a real merchant UUID, a query-free https
+  return URL, the checkout host present in the redirect allowlist, and the
+  slippage cap plus a treasury acknowledgement. A free-text adapter name, a
+  malformed merchant id or a missing cap keeps the tab read-only.
+- Return hop: `/iran-buy/return` (SPA rewrite + `src/main.jsx`) bounces the
+  gateway's query string back into the hash router so the checkout returns into
+  the same session that created the order.
+- **Cancelling asks the gateway first.** An order paid in the seconds before
+  the cancel click is kept instead of being closed with the money collected,
+  and a cancelled order stops advertising its checkout link.
+- Env/docs: `.env.example` gains the ZarinPal and cost-cap block;
+  `docs/IRAN-BUY-WALLEX-READINESS.md` becomes an implementation + activation
+  record with an operator checklist. `npm run test:iran-buy` is now 37 safety checks + a
+  20-check **lifecycle probe** that drives one order from wallet signature →
+  hosted checkout → verified payment → OTC fill → withdrawal → on-chain receipt
+  against in-process stubs for Redis, Wallex, ZarinPal and the EVM RPC + 15
+  mounted-UI checks — including that an incomplete deployment cannot activate
+  itself, that the browser holds no merchant id, and that a chain transfer of
+  the wrong amount is quarantined rather than reported as delivered.
+
 # Unreleased — three dead AI providers removed, their jobs reassigned, and the multi-model tab scrolls on a phone
 
 - **Grok (xAI), OpenAI and Perplexity are gone from the gateway** (`server/aiGateway.js`). All three were registered but never carried an API key on this deployment — `GET /api/v1/ai/gateway/providers` reported them `configured: false`, so any route that named them failed over before answering. They were still being advertised to the user as part of the fleet, which is the part that was actually wrong.

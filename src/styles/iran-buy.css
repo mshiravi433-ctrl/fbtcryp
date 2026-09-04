@@ -105,3 +105,40 @@
 @media (prefers-reduced-motion: reduce) {
   .iran-buy-terms summary > span { transition: none; }
 }
+
+/* ── Live rate, calculator and the always-visible journey ────────────────── */
+/* Added with the Toman gateway flow: the tab now shows a real market rate and
+   an estimate before anything is signed or paid, and it keeps the same four
+   steps visible whether or not the paid rail is switched on. */
+.iran-buy-rate { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 13px; padding: 10px 11px; border: 1px solid rgba(0, 229, 255, .16); border-radius: 13px; background: linear-gradient(140deg, rgba(0, 229, 255, .06), rgba(124, 77, 255, .03)); }
+.iran-buy-rate-main { display: grid; gap: 3px; min-width: 0; }
+.iran-buy-rate-main > span { color: var(--text-3); font-size: 9.5px; }
+.iran-buy-rate-main > strong { color: var(--text-1); font-family: var(--font-mono); font-size: 14px; font-weight: 800; }
+.iran-buy-rate-meta { display: inline-flex; align-items: center; gap: 7px; }
+.iran-buy-rate-meta small { color: var(--text-3); font-size: 9px; line-height: 1.5; }
+.iran-buy-rate-meta em { font-family: var(--font-mono); font-size: 10px; font-style: normal; font-weight: 700; }
+.iran-buy-rate-meta em.is-up { color: var(--up); }
+.iran-buy-rate-meta em.is-down { color: var(--down); }
+.iran-buy-rate-meta .icon-btn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 8px; color: var(--rgb-1); background: rgba(0, 229, 255, .08); }
+.iran-buy-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.iran-buy-chips > button { min-height: 30px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, .12); border-radius: 999px; color: var(--text-2); background: rgba(255, 255, 255, .03); font-family: var(--font-mono); font-size: 10.5px; cursor: pointer; }
+.iran-buy-chips > button.is-active { border-color: var(--rgb-1); color: var(--rgb-1); background: rgba(0, 229, 255, .1); }
+.iran-buy-chips > button:disabled { opacity: .5; cursor: not-allowed; }
+.iran-buy-estimate { margin: 9px 1px 0; color: var(--text-2); font-size: 11px; line-height: 1.7; }
+.iran-buy-estimate strong { color: var(--rgb-4); font-family: var(--font-mono); font-size: 12.5px; }
+.iran-buy-estimate small { display: block; color: var(--text-3); font-size: 9.5px; line-height: 1.6; }
+.iran-buy-readiness { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.iran-buy-readiness li { display: flex; align-items: flex-start; gap: 6px; color: var(--text-3); font-size: 10.5px; line-height: 1.65; }
+.iran-buy-readiness svg { flex: 0 0 auto; margin-top: 2px; color: var(--rgb-5); }
+.iran-buy-inline-note { margin: 8px 1px 0; color: var(--text-3); font-size: 10px; line-height: 1.7; }
+.iran-buy-guide { display: grid; gap: 9px; margin: 15px 0 0; padding: 12px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 14px; background: rgba(255, 255, 255, .02); list-style: none; }
+.iran-buy-guide li { display: flex; gap: 9px; }
+.iran-buy-guide li > span { display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid rgba(0, 229, 255, .3); border-radius: 50%; color: var(--rgb-1); font-family: var(--font-mono); font-size: 10px; flex: 0 0 auto; }
+.iran-buy-guide b { display: block; color: var(--text-1); font-size: 11px; }
+.iran-buy-guide small { display: block; margin-top: 2px; color: var(--text-3); font-size: 9.8px; line-height: 1.65; }
+.iran-buy-checkout { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 11px; padding: 11px; border: 1px solid rgba(0, 229, 255, .26); border-radius: 13px; background: rgba(0, 229, 255, .05); }
+.iran-buy-checkout b { color: var(--text-1); font-size: 11.5px; }
+.iran-buy-checkout p { margin: 3px 0 0; color: var(--text-2); font-size: 10px; line-height: 1.65; }
+.iran-buy-checkout small { display: block; margin-top: 4px; font-size: 9.5px; line-height: 1.6; }
+.iran-buy-checkout small.is-warning { color: var(--rgb-5); }
+.iran-buy-checkout .btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; }

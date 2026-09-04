@@ -29,6 +29,7 @@ import {
   validateIranBuyEvmDestination
 } from './iranBuyConfig.js';
 import { WallexIranBuyError, wallexIranBuyProvider } from './providers/iranWallex.js';
+import { ZarinpalIranBuyError, zarinpalIranBuyProvider } from './providers/iranZarinpal.js';
 import { publish } from './central/eventBus.js';
 
 export const IRAN_BUY_ORDER_SCHEMA = 'fbt.iran-buy-order.v1';
@@ -62,6 +63,12 @@ const REQUEST_ID = /^[A-Za-z0-9._:-]{16,128}$/;
 const TX_HASH = /^0x[0-9a-f]{64}$/i;
 const DECIMAL = /^(0|[1-9]\d*)(?:\.(\d+))?$/;
 const MAX_AUDIT_ROWS = 120;
+/* How many times a payment-confirmed order may wait for the market to come
+   back inside the approved slippage before it becomes a refund case. */
+const MAX_PRICE_CAP_ATTEMPTS = 12;
+/* Grace period before a status poll starts asking the PSP about an intent the
+   customer may not have opened yet. */
+const PAYMENT_POLL_DELAY_MS = 60_000;
 
 export class IranBuyError extends Error {
   constructor(code, status = 400) {
@@ -105,6 +112,15 @@ function requireAvailable(config = iranBuyConfig()) {
 
 function toPublicError(error) {
   if (error instanceof IranBuyError) return error;
+  if (error instanceof ZarinpalIranBuyError) {
+    return new IranBuyError(
+      error.code === 'PAYMENT_PROVIDER_RATE_LIMITED' ? 'PAYMENT_PROVIDER_RATE_LIMITED'
+        : error.code === 'PAYMENT_PROVIDER_UNCERTAIN' ? 'PAYMENT_STATUS_UNCERTAIN'
+          : error.code === 'PAYMENT_PROVIDER_REJECTED' ? 'PAYMENT_PROVIDER_REJECTED'
+            : 'PAYMENT_PROVIDER_UNAVAILABLE',
+      error.status === 429 ? 429 : 503
+    );
+  }
   if (error instanceof WallexIranBuyError) {
     return new IranBuyError(
       error.code === 'WALLEX_PROVIDER_RATE_LIMITED' ? 'PROVIDER_RATE_LIMITED'
@@ -132,6 +148,9 @@ function externalFacingOrder(order) {
     providerSubmission,
     providerWithdrawalSubmission,
     internalFailure,
+    paymentAuthority,
+    paymentAuthorityHash,
+    paymentProviderMeta,
     ...safe
   } = order;
   return {
@@ -227,6 +246,13 @@ function subtractDecimal(left, right) {
   const bv = b.units * unitPower(scale - b.scale);
   if (av <= bv) return null;
   return unitsToDecimal(av - bv, scale);
+}
+
+/** quotedPrice × (1 + bps/10000), exactly, with no float rounding. */
+function priceCapFor(quotedPrice, bps) {
+  const base = decimalParts(quotedPrice);
+  if (!base || base.units <= 0n || !Number.isInteger(bps) || bps < 1 || bps > 500) return null;
+  return unitsToDecimal(base.units * BigInt(10_000 + bps), base.scale + 4);
 }
 
 function sumFees(fills, asset) {
@@ -473,11 +499,13 @@ async function loadPreview({ owner, previewId, accessToken, binding, config }) {
 }
 
 /**
- * Create a durable payment-pending order. It does not debit, buy, or withdraw
- * anything. A production payment adapter must create a real customer payment
- * and deliver an independently signed confirmation before settlement can be
- * authorized; no adapter is currently approved, so requireAvailable() blocks
- * this method in every ordinary deployment.
+ * Create a durable payment-pending order and one hosted-checkout intent for
+ * exactly its stored Toman amount.
+ *
+ * Creating the intent does not move money: a ZarinPal authority only becomes a
+ * charge if the customer completes the hosted checkout, and it only becomes
+ * *our* confirmed payment after the server-side verify call answers 100/101
+ * for the same amount. Nothing is bought or withdrawn here.
  */
 export async function createIranBuyOrder({ ownerId, previewId, previewAccessToken, walletBindingToken, idempotencyKey: bodyKey } = {}, headerIdempotencyKey = '') {
   const owner = normalizeOwnerId(ownerId);
@@ -510,8 +538,13 @@ export async function createIranBuyOrder({ ownerId, previewId, previewAccessToke
       destinationAddress: preview.destinationAddress,
       amountToman: preview.amountToman,
       requestedQuantity: preview.requestedQuantity,
+      /* The price the customer was quoted at preview time. Bounded execution
+         later refuses to buy above this price plus the configured slippage. */
+      quotedPrice: preview.providerQuotePrice,
+      maxSlippageBps: config.settlement.maxSlippageBps,
       status: 'CREATED',
       paymentStatus: 'NOT_STARTED',
+      paymentProvider: config.payment.provider,
       settlementStatus: 'NOT_STARTED',
       verificationStatus: 'NOT_STARTED',
       provider: 'wallex-otc-server',
@@ -527,14 +560,140 @@ export async function createIranBuyOrder({ ownerId, previewId, previewAccessToke
       amountToman: preview.amountToman,
       destinationHash: hash(preview.destinationAddress)
     });
-    /* There is deliberately no generated bank link, card number, receipt, or
-       checkout URL here. That would invent an unsupported payment rail. */
+
+    /* One hosted-checkout intent, created by the reviewed PSP adapter for the
+       amount already stored above. The browser never supplies the amount, the
+       merchant id, or the checkout host. */
+    let payment;
+    try {
+      payment = await zarinpalIranBuyProvider(config).createPayment({
+        amountToman: order.amountToman,
+        callbackUrl: config.payment.callbackUrl,
+        description: `FBT — خرید تتر (${orderId})`,
+        orderId
+      });
+    } catch (error) {
+      order.status = 'FAILED';
+      order.paymentStatus = 'INTENT_FAILED';
+      await saveOrder(order);
+      await appendAudit(orderId, 'PAYMENT_INTENT_FAILED');
+      throw toPublicError(error);
+    }
+    const checkoutHost = safeCheckoutHost(payment.checkoutUrl, config);
+    if (!checkoutHost) {
+      order.status = 'FAILED';
+      order.paymentStatus = 'INTENT_FAILED';
+      await saveOrder(order);
+      await appendAudit(orderId, 'PAYMENT_CHECKOUT_HOST_REJECTED');
+      fail('PAYMENT_PROVIDER_UNAVAILABLE', 503);
+    }
+    order.paymentAuthority = payment.authority;
+    order.paymentAuthorityHash = hash(payment.authority);
+    order.paymentCheckoutUrl = payment.checkoutUrl;
+    order.paymentCheckoutHost = checkoutHost;
+    order.paymentIntentCreatedAt = isoNow();
     order.status = 'PAYMENT_PENDING';
-    order.paymentStatus = 'PENDING';
+    order.paymentStatus = 'AWAITING_GATEWAY';
     await saveOrder(order);
-    await appendAudit(orderId, 'PAYMENT_AWAITING_VERIFIED_COLLECTION');
-    return { order: externalFacingOrder(order), orderAccessToken: accessToken };
+    /* Audit keeps no authority, checkout URL, or provider payload. */
+    await appendAudit(orderId, 'PAYMENT_INTENT_CREATED', { provider: config.payment.provider, host: checkoutHost });
+    return { order: externalFacingOrder(order), orderAccessToken: accessToken, checkoutUrl: payment.checkoutUrl };
   }});
+}
+
+/** A redirect target is only allowed if the deployment listed its host. */
+function safeCheckoutHost(checkoutUrl, config) {
+  let url;
+  try { url = new URL(String(checkoutUrl || '')); } catch { return null; }
+  if (url.protocol !== 'https:') return null;
+  const host = url.hostname.toLowerCase();
+  return config.payment.approvedPaymentHosts.includes(host) ? host : null;
+}
+
+/**
+ * Ask the PSP whether this order was actually paid.
+ *
+ * The browser's `Status` query parameter is a hint only: it is checked for a
+ * matching authority and then ignored in favour of the provider's own answer,
+ * because a user can edit the return URL and a gateway can drop a redirect
+ * after a successful charge.
+ */
+async function resolvePaymentUnsafe(order, config, { browserStatus = null } = {}) {
+  if (order.paymentStatus === 'CONFIRMED') return order;
+  if (!order.paymentAuthority) return order;
+  const previousStatus = order.status;
+  order.status = 'PAYMENT_PROCESSING';
+  order.paymentStatus = 'VERIFYING';
+  await saveOrder(order);
+  let result;
+  try {
+    result = await zarinpalIranBuyProvider(config).verifyPayment({
+      amountToman: order.amountToman,
+      authority: order.paymentAuthority
+    });
+  } catch (error) {
+    /* Verify is idempotent, so an unknown answer is simply "ask again later".
+       It must never be read as either paid or not paid. */
+    order.status = previousStatus === 'CREATED' ? 'PAYMENT_PENDING' : previousStatus;
+    order.paymentStatus = 'VERIFICATION_UNAVAILABLE';
+    order.paymentLastCheckedAt = isoNow();
+    await saveOrder(order);
+    await appendAudit(order.orderId, 'PAYMENT_VERIFICATION_UNAVAILABLE', { error: toPublicError(error).code });
+    return order;
+  }
+  order.paymentLastCheckedAt = isoNow();
+  if (result.verified) {
+    order.status = 'PAYMENT_CONFIRMED';
+    order.paymentStatus = 'CONFIRMED';
+    /* The bank tracking number the customer also sees on their receipt. It is
+       not a secret and is the only provider value shown back to them. */
+    order.paymentReference = result.refId;
+    order.paymentConfirmedAt = isoNow();
+    await saveOrder(order);
+    await appendAudit(order.orderId, 'PAYMENT_VERIFIED', { alreadyVerified: Boolean(result.alreadyVerified) });
+    publish('IRAN_BUY_PAYMENT_CONFIRMED', { orderId: order.orderId, asset: IRAN_BUY_ASSET }, { source: 'iran-buy' });
+    return order;
+  }
+  if (result.terminal) {
+    order.status = 'FAILED';
+    order.paymentStatus = 'FAILED';
+    order.internalFailure = `PAYMENT_PROVIDER_CODE_${result.providerCode}`;
+    await saveOrder(order);
+    await appendAudit(order.orderId, 'PAYMENT_FAILED');
+    return order;
+  }
+  /* Not paid (yet). The hosted checkout stays usable until the order expires,
+     so this is a resumable state, not a failure. */
+  order.status = 'PAYMENT_PENDING';
+  order.paymentStatus = browserStatus === 'NOK' ? 'CANCELLED_AT_GATEWAY' : 'NOT_COMPLETED';
+  await saveOrder(order);
+  await appendAudit(order.orderId, 'PAYMENT_NOT_COMPLETED');
+  return order;
+}
+
+/**
+ * Called when the customer returns from the hosted checkout. Requires the same
+ * Telegram owner, the order's session capability, and an authority that
+ * matches the one this server created for this order.
+ */
+export async function verifyIranBuyPayment({ ownerId, orderId, orderAccessToken, authority, status } = {}) {
+  const owner = normalizeOwnerId(ownerId);
+  const config = requireAvailable();
+  const id = String(orderId || '');
+  return withOrderLease(id, async () => {
+    const order = await storeGetFresh(orderKey(id), null);
+    assertOrderAccess(order, owner, orderAccessToken);
+    if (order.paymentStatus === 'CONFIRMED' || ['CONFIRMED', 'PROCESSING', 'SETTLEMENT_PENDING', 'SENT'].includes(order.status)) {
+      return { order: externalFacingOrder(order) };
+    }
+    if (!['CREATED', 'PAYMENT_PENDING', 'PAYMENT_PROCESSING'].includes(order.status)) fail('ORDER_NOT_READY', 409);
+    if (!order.paymentAuthority) fail('PAYMENT_NOT_STARTED', 409);
+    const provided = String(authority || '').trim();
+    if (provided && !constantTokenMatch(provided, order.paymentAuthorityHash)) fail('PAYMENT_AUTHORITY_MISMATCH', 409);
+    const browserStatus = String(status || '').toUpperCase() === 'NOK' ? 'NOK' : null;
+    const resolved = await resolvePaymentUnsafe(order, config, { browserStatus });
+    return { order: externalFacingOrder(resolved) };
+  });
 }
 
 
@@ -704,9 +863,9 @@ async function recordOtcExecution(order, execution) {
     return false;
   }
   if (compareDecimals(execution.executedSum, order.amountToman) > 0) {
-    /* Detection happens AFTER the unknown-execution risk but BEFORE a
-       withdrawal. This is why the live capability remains disabled pending a
-       documented cost cap / treasury policy. */
+    /* Last line of defence. The pre-trade price cap in settleAuthorizedOrder
+       should make this unreachable, but a provider that fills above the
+       collected Toman amount must never reach a withdrawal. */
     order.status = 'FAILED';
     order.settlementStatus = 'BLOCKED';
     order.internalFailure = 'WALLEX_COST_EXCEEDS_PAYMENT';
@@ -805,6 +964,33 @@ async function settleAuthorizedOrder(order, config) {
     await saveOrder(order); await appendAudit(order.orderId, 'OTC_QUOTE_EXPIRED');
     return order;
   }
+  /* Bounded execution. The OTC create endpoint has no max-cost field, so the
+     bound is applied here, before the irreversible call: the live provider
+     price may not exceed the price the customer was quoted plus the approved
+     slippage. Money already collected is never lost by this check — the order
+     stays payment-confirmed and is retried on the next poll. */
+  const cap = priceCapFor(order.quotedPrice, config.settlement.maxSlippageBps);
+  if (!cap) {
+    order.status = 'FAILED'; order.settlementStatus = 'BLOCKED'; order.internalFailure = 'PRICE_CAP_UNAVAILABLE';
+    await saveOrder(order); await appendAudit(order.orderId, 'OTC_PRICE_CAP_UNAVAILABLE');
+    return order;
+  }
+  if (compareDecimals(quote.price, cap) > 0) {
+    const attempts = Number(order.priceCapAttempts || 0) + 1;
+    order.priceCapAttempts = attempts;
+    order.providerSubmission = { ...order.providerSubmission, outcome: 'PRICE_CAP_WAIT' };
+    /* After a long wait the market has genuinely moved away; stop retrying and
+       hand the order to the documented refund path instead of buying less
+       USDT than the customer was shown. */
+    if (attempts >= MAX_PRICE_CAP_ATTEMPTS) {
+      order.status = 'FAILED'; order.settlementStatus = 'REFUND_REQUIRED'; order.internalFailure = 'PRICE_CAP_EXCEEDED';
+      await saveOrder(order); await appendAudit(order.orderId, 'OTC_PRICE_CAP_EXCEEDED', { attempts });
+      return order;
+    }
+    order.status = 'PAYMENT_CONFIRMED'; order.settlementStatus = 'PRICE_CAP_WAIT';
+    await saveOrder(order); await appendAudit(order.orderId, 'OTC_PRICE_CAP_WAIT', { attempts });
+    return order;
+  }
   const marketCheck = enoughForMarket(order.amountToman, market);
   const quantity = marketCheck.ok ? calculateIranBuyQuantity({
     tomanAmount: order.amountToman, price: quote.price, quantityDecimals: market.quantityDecimals
@@ -876,6 +1062,20 @@ async function pollOrderUnsafe(order, config) {
      users can still read their existing durable record, but no secret-bearing
      call is made from an unready deployment. */
   if (!config.available) return order;
+  /* A customer can pay and then close the browser before the return redirect
+     runs. Re-asking the PSP is the only way that money becomes visible to the
+     order; verify is idempotent, so this cannot double-charge. */
+  if (order.paymentStatus !== 'CONFIRMED' && order.paymentAuthority
+    && ['PAYMENT_PENDING', 'PAYMENT_PROCESSING'].includes(order.status)
+    && Date.parse(order.paymentIntentCreatedAt || 0) + PAYMENT_POLL_DELAY_MS <= Date.now()) {
+    await resolvePaymentUnsafe(order, config);
+  }
+  /* The market moved outside the approved slippage last time; try again with
+     the money already safely collected. */
+  if (order.status === 'PAYMENT_CONFIRMED' && order.settlementStatus === 'PRICE_CAP_WAIT'
+    && order.walletSettlementAuthorizedAt) {
+    await settleAuthorizedOrder(order, config);
+  }
   const provider = wallexIranBuyProvider(config);
   if (order.providerOrderId && !order.providerWithdrawalId && !order.providerWithdrawalSubmission?.attemptedAt) {
     try {
@@ -959,11 +1159,24 @@ export async function cancelIranBuyOrder({ ownerId, orderId, orderAccessToken } 
     if (!['CREATED', 'PAYMENT_PENDING', 'PAYMENT_PROCESSING'].includes(order.status) || order.paymentStatus === 'CONFIRMED') {
       fail('CANCEL_UNAVAILABLE', 409);
     }
+    /* A checkout that was opened may already have been paid in the seconds
+       before this click. Cancelling a paid order would keep the money with no
+       delivery obligation on record, so ask the provider first: if the payment
+       exists it is kept and the cancellation is refused. */
+    const config = iranBuyConfig();
+    if (config.available && order.paymentAuthority) {
+      const resolved = await resolvePaymentUnsafe(order, config);
+      if (resolved.paymentStatus === 'CONFIRMED') fail('CANCEL_UNAVAILABLE', 409);
+    }
     order.status = 'CANCELLED';
     order.paymentStatus = 'CANCELLED';
     order.settlementStatus = 'NOT_STARTED';
+    /* Remove the hand-off so a cancelled order cannot be paid from a stale
+       screen. The authority itself is retained server-side: it is what the
+       operator reconciles against the provider's unverified list. */
+    order.paymentCheckoutUrl = null;
     await saveOrder(order);
-    await appendAudit(order.orderId, 'ORDER_CANCELLED');
+    await appendAudit(order.orderId, 'ORDER_CANCELLED', { hadPaymentIntent: Boolean(order.paymentAuthority) });
     return { order: externalFacingOrder(order) };
   });
 }
@@ -977,12 +1190,15 @@ export function iranBuyPublicFailure(error) {
     'WALLET_CHALLENGE_USED', 'WALLET_SIGNATURE_INVALID', 'WALLET_DESTINATION_CHANGED', 'PREVIEW_NOT_FOUND',
     'QUOTE_EXPIRED', 'IDEMPOTENCY_KEY_REQUIRED', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'DURABLE_STORE_REQUIRED',
     'ORDER_NOT_FOUND', 'ORDER_NOT_READY', 'CANCEL_UNAVAILABLE',
+    'PAYMENT_NOT_STARTED', 'PAYMENT_AUTHORITY_MISMATCH', 'PAYMENT_PROVIDER_UNAVAILABLE',
+    'PAYMENT_PROVIDER_REJECTED', 'PAYMENT_PROVIDER_RATE_LIMITED', 'PAYMENT_STATUS_UNCERTAIN',
     'PROVIDER_RATE_LIMITED', 'PROVIDER_STATUS_UNCERTAIN', 'PROVIDER_UNAVAILABLE', 'IRAN_BUY_UNAVAILABLE'
   ]);
   return { status: allowed.has(safe.code) ? safe.status : 503, code: allowed.has(safe.code) ? safe.code : 'IRAN_BUY_UNAVAILABLE' };
 }
 
 export const __iranBuy = Object.freeze({
+  priceCapFor,
   compareDecimals,
   decimalToUnitsExact,
   unitsToDecimal,

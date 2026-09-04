@@ -19,7 +19,7 @@ import {
   getBuySellQuote,
   storedOrderAccessToken
 } from '../lib/buySell';
-import { getIranBuyCapability } from '../lib/iranBuy';
+import { getIranBuyCapability, readIranBuyGatewayReturn } from '../lib/iranBuy';
 import {
   GUIDED_CATALOG,
   GUIDED_FIAT,
@@ -196,8 +196,12 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const [side, setSide] = useState('BUY');
   /* The general hosted-checkout wizard remains untouched underneath this
      independent surface. The server, not a VITE flag, decides whether the
-     extra Persian tab exists at all. */
-  const [buySurface, setBuySurface] = useState('general');
+     extra Persian tab exists at all.
+
+     One exception decides the initial tab: a customer coming back from the
+     Toman gateway carries its return parameters, and landing them on the
+     general wizard would hide the payment they just made. */
+  const [buySurface, setBuySurface] = useState(() => (readIranBuyGatewayReturn() ? 'iran' : 'general'));
   const [iranBuyCapability, setIranBuyCapability] = useState(null);
   const [step, setStep] = useState(0);
   const [stepDir, setStepDir] = useState(1);

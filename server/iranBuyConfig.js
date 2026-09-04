@@ -46,6 +46,26 @@ function safeHttpsOrigin(value) {
   } catch { return null; }
 }
 
+/**
+ * A payment return address is a full URL, not just an origin. It must carry no
+ * query or fragment of its own: the PSP appends `?Authority=…&Status=…`, and a
+ * pre-existing query string is exactly where a return URL silently breaks.
+ */
+function safeHttpsUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return null;
+    if (url.pathname.length > 200) return null;
+    return url;
+  } catch { return null; }
+}
+
+function merchantUuid(value) {
+  const raw = String(value || '').trim();
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(raw) ? raw.toLowerCase() : null;
+}
+
 function normalizeNetwork(value) {
   const candidate = String(value || '').trim().toUpperCase();
   return /^[A-Z0-9_-]{2,32}$/.test(candidate) ? candidate : null;
@@ -76,10 +96,15 @@ export function iranBuyConfig() {
   const tokenDecimals = tokenDecimalsBig == null ? null : Number(tokenDecimalsBig);
   const minToman = configuredInteger('IRAN_BUY_MIN_TOMAN', { min: 1 });
   const maxToman = configuredInteger('IRAN_BUY_MAX_TOMAN', { min: 1 });
-  const paymentAdapter = env('IRAN_BUY_PAYMENT_ADAPTER');
-  const paymentCallbackUrl = safeHttpsOrigin(env('IRAN_BUY_PAYMENT_CALLBACK_URL'));
-  const paymentWebhookSecret = env('IRAN_BUY_PAYMENT_WEBHOOK_SECRET');
+  const paymentAdapter = env('IRAN_BUY_PAYMENT_ADAPTER').toUpperCase();
+  const paymentCallbackUrl = safeHttpsUrl(env('IRAN_BUY_PAYMENT_CALLBACK_URL'));
   const paymentContractVerified = enabled('IRAN_BUY_PAYMENT_CONTRACT_VERIFIED');
+  const zarinpalMerchantId = merchantUuid(env('ZARINPAL_MERCHANT_ID'));
+  const zarinpalApiBase = safeHttpsOrigin(env('ZARINPAL_API_BASE_URL') || 'https://payment.zarinpal.com');
+  const zarinpalCheckoutBase = safeHttpsOrigin(env('ZARINPAL_CHECKOUT_BASE_URL') || 'https://payment.zarinpal.com');
+  const slippageBpsBig = configuredInteger('IRAN_BUY_MAX_SLIPPAGE_BPS', { min: 1, max: 500, required: false });
+  const maxSlippageBps = slippageBpsBig == null ? null : Number(slippageBpsBig);
+  const costCapAcknowledged = enabled('IRAN_BUY_TREASURY_COST_CAP_ACKNOWLEDGED');
   const withdrawalContractVerified = enabled('IRAN_BUY_WALLEX_WITHDRAWAL_LIFECYCLE_VERIFIED');
   const settlementApproved = enabled('IRAN_BUY_SETTLEMENT_RECONCILIATION_APPROVED');
   const minConfirmationsBig = configuredInteger('IRAN_BUY_MIN_CONFIRMATIONS', { min: 1, max: 100, required: false });
@@ -103,35 +128,44 @@ export function iranBuyConfig() {
   if (!upstashConfigured()) prerequisites.push('UPSTASH_ATOMIC_IDEMPOTENCY_REQUIRED');
 
   /*
-   * A Wallex exchange API key is not an end-user payment rail. The public
-   * Wallex API reference documents OTC trading and a withdrawal request, but
-   * does not document a merchant checkout, customer-payment authorization, or
-   * a signed payment callback for this product. Do not weaken either guard by
-   * setting an environment variable: a real, reviewed adapter must replace
-   * this blocker before a production deployment can be exposed.
+   * A Wallex exchange API key is not an end-user payment rail: the documented
+   * OTC endpoints trade the *operator* account. Collecting Toman from a
+   * customer therefore needs a separate, real PSP contract. The reviewed
+   * adapter for that is server/providers/iranZarinpal.js, implementing
+   * ZarinPal's published request/StartPay/verify contract.
+   *
+   * Every element below is required, and none of them is a free-text promise:
+   * a merchant id must be a real UUID, the return URL must be an exact https
+   * URL with no query of its own, and the hosted checkout host must be listed
+   * explicitly in the approved-host allowlist that the browser is redirected
+   * to.
    */
-  if (paymentAdapter !== 'IMPLEMENTED_REVIEWED_PROVIDER'
-    || !paymentCallbackUrl
-    || paymentWebhookSecret.length < 32
-    || !paymentContractVerified
-    || approvedPaymentHosts.length === 0) {
-    prerequisites.push('PAYMENT_COLLECTION_ADAPTER_REQUIRED');
-  }
-  /* There is intentionally no generic checkout/callback implementation in
-     this repository. A string in an environment variable must never turn an
-     unspecified merchant API into a live money-moving integration. */
-  prerequisites.push('PAYMENT_COLLECTION_ADAPTER_NOT_IMPLEMENTED');
+  const paymentCheckoutHost = zarinpalCheckoutBase?.hostname?.toLowerCase() || null;
+  const paymentAdapterReady = paymentAdapter === 'ZARINPAL'
+    && Boolean(zarinpalMerchantId)
+    && Boolean(zarinpalApiBase)
+    && Boolean(zarinpalCheckoutBase)
+    && Boolean(paymentCallbackUrl)
+    && paymentContractVerified
+    && Boolean(paymentCheckoutHost)
+    && approvedPaymentHosts.includes(paymentCheckoutHost);
+  if (!paymentAdapterReady) prerequisites.push('PAYMENT_COLLECTION_ADAPTER_REQUIRED');
   if (!withdrawalContractVerified || !settlementApproved) {
     prerequisites.push('WALLEX_WITHDRAWAL_RECONCILIATION_REQUIRED');
   }
   /*
-   * The documented OTC create endpoint has no documented client idempotency
-   * or max-cost field. A timeout after submission cannot safely be retried,
-   * and an OTC buy cannot be exposed against a customer payment until Wallex
-   * documents a bounded-execution contract or the reviewed payment adapter
-   * supplies an equivalent treasury/cost safeguard.
+   * The documented OTC create endpoint has no client max-cost field, so the
+   * price can move between the quote that priced the customer's order and the
+   * execution. Bounded execution is therefore enforced here instead: an order
+   * is only executable while the live provider quote is within
+   * IRAN_BUY_MAX_SLIPPAGE_BPS of the price the customer was quoted, and the
+   * operator must acknowledge that the remaining spread is absorbed by the
+   * treasury (see docs/IRAN-BUY-WALLEX-READINESS.md). Without both, the
+   * feature stays closed.
    */
-  prerequisites.push('WALLEX_OTC_COST_CAP_CONTRACT_REQUIRED');
+  if (maxSlippageBps == null || !costCapAcknowledged) {
+    prerequisites.push('WALLEX_OTC_COST_CAP_CONTRACT_REQUIRED');
+  }
 
   const available = prerequisites.length === 0;
   return {
@@ -159,12 +193,45 @@ export function iranBuyConfig() {
     },
     payment: {
       adapter: paymentAdapter || null,
-      callbackConfigured: Boolean(paymentCallbackUrl && paymentWebhookSecret),
+      provider: paymentAdapter === 'ZARINPAL' ? 'zarinpal' : null,
+      merchantId: zarinpalMerchantId,
+      apiBase: zarinpalApiBase?.origin || null,
+      checkoutBase: zarinpalCheckoutBase?.origin || null,
+      checkoutHost: paymentCheckoutHost,
+      callbackUrl: paymentCallbackUrl?.toString() || null,
+      currency: 'IRR',
+      ready: paymentAdapterReady,
       approvedPaymentHosts
     },
-    settlement: { minConfirmations },
+    settlement: { minConfirmations, maxSlippageBps, costCapAcknowledged },
     rateLimit
   };
+}
+
+/**
+ * Coarse, credential-free readiness groups.
+ *
+ * The detailed prerequisite list stays server-side — it is an operational
+ * checklist. These four group codes tell a Persian-speaking user *why* the tab
+ * cannot take money yet without naming a single environment variable, host,
+ * key, or provider secret.
+ */
+function readinessGroups(prerequisites) {
+  const groups = new Set();
+  for (const code of prerequisites) {
+    if (code === 'IRAN_BUY_DISABLED') groups.add('ACTIVATION');
+    else if (code === 'PAYMENT_COLLECTION_ADAPTER_REQUIRED') groups.add('PAYMENT');
+    else if (code === 'WALLEX_API_BASE_URL_REQUIRED' || code === 'WALLEX_API_KEY_REQUIRED'
+      || code === 'WALLEX_WITHDRAWAL_RECONCILIATION_REQUIRED' || code === 'WALLEX_OTC_COST_CAP_CONTRACT_REQUIRED') {
+      groups.add('EXCHANGE');
+    } else if (code === 'APPROVED_USDT_NETWORK_REQUIRED' || code === 'EVM_WALLET_BINDING_REQUIRED'
+      || code === 'APPROVED_EVM_CHAIN_REQUIRED' || code === 'VERIFIED_USDT_TOKEN_CONTRACT_REQUIRED'
+      || code === 'TOMAN_LIMITS_REQUIRED') {
+      groups.add('NETWORK');
+    } else if (code === 'UPSTASH_ATOMIC_IDEMPOTENCY_REQUIRED') groups.add('STORAGE');
+    else groups.add('ACTIVATION');
+  }
+  return [...groups];
 }
 
 /** The only configuration that may cross the server/browser boundary. */
@@ -177,7 +244,9 @@ export function publicIranBuyCapability() {
       asset: null,
       network: null,
       limits: null,
-      requiresTelegramAuth: true
+      requiresTelegramAuth: true,
+      /* Not the checklist: four coarse groups so the UI can explain the wait. */
+      readiness: readinessGroups(config.prerequisites)
     };
   }
   return {
@@ -192,7 +261,9 @@ export function publicIranBuyCapability() {
       chainName: config.network.chainName
     },
     limits: config.limits,
-    requiresTelegramAuth: true
+    requiresTelegramAuth: true,
+    payment: { provider: 'zarinpal', mode: 'REDIRECT', currency: 'TOMAN' },
+    readiness: []
   };
 }
 

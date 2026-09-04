@@ -16,16 +16,38 @@ const capability = {
   asset: 'USDT',
   network: { id: 'ERC20', label: 'ERC20', walletFamily: 'EVM', chainId: 1, chainName: 'Ethereum' },
   limits: { minToman: '50000', maxToman: '10000000' },
-  requiresTelegramAuth: true
+  requiresTelegramAuth: true,
+  payment: { provider: 'zarinpal', mode: 'REDIRECT', currency: 'TOMAN' },
+  readiness: []
+};
+const disabledCapability = {
+  schema: 'fbt.iran-buy.v1',
+  enabled: false,
+  asset: null,
+  network: null,
+  limits: null,
+  requiresTelegramAuth: true,
+  readiness: ['PAYMENT', 'EXCHANGE']
+};
+const rate = {
+  schema: 'fbt.iran-buy-rate.v1',
+  available: true,
+  symbol: 'USDTTMN',
+  buyPrice: '62500',
+  sellPrice: '62400',
+  lastPrice: '62450',
+  change24h: -1.2,
+  source: 'wallex-public-markets'
 };
 
-function stubFetch() {
+function stubFetch(capabilityBody = capability) {
   globalThis.fetch = async (url) => {
     const path = String(url);
-    const body = path.includes('/iran/buy/config') ? capability
-      : path.includes('/buy-sell/providers') ? { buyAvailable: false, sellAvailable: false, providers: [] }
-        : path.includes('/buy-sell/assets') ? { assets: [] }
-          : {};
+    const body = path.includes('/iran/buy/rate') ? rate
+      : path.includes('/iran/buy/config') ? capabilityBody
+        : path.includes('/buy-sell/providers') ? { buyAvailable: false, sellAvailable: false, providers: [] }
+          : path.includes('/buy-sell/assets') ? { assets: [] }
+            : {};
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   };
 }
@@ -64,6 +86,49 @@ export async function run(container) {
     check('the disconnected state offers the shared wallet connection path and no manual destination field',
       Boolean(iranPanel?.querySelector('.iran-buy-wallet-action')) && !iranPanel?.querySelector('input[aria-label*="کیف پول مقصد"]'));
     check('the terms stay collapsed until requested, keeping the mobile flow focused', iranPanel?.querySelector('.iran-buy-terms')?.open === false);
+    check('the live Toman rate from the public market endpoint is shown with its source',
+      iranPanel?.querySelector('[data-testid="iran-buy-rate"]')?.textContent.includes('۶۲٬۵۰۰'));
+    check('the four-step journey is explained before anything is signed or paid',
+      iranPanel?.querySelectorAll('.iran-buy-guide li').length === 4);
+
+    const amountInput = iranPanel?.querySelector('.iran-buy-amount input');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(amountInput, '1250000');
+      amountInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await sleep(40);
+    });
+    check('a Toman amount produces a labelled estimate instead of a promised amount',
+      container.querySelector('[data-testid="iran-buy-estimate"]')?.textContent.includes('۲۰')
+      && container.querySelector('[data-testid="iran-buy-estimate"]')?.textContent.includes('USDT'));
+
+    /* Not-yet-live deployment: the tab must stay a complete, honest surface. */
+    await act(async () => { root.unmount(); });
+    stubFetch(disabledCapability);
+    root = createRoot(container);
+    await act(async () => { root.render(<WalletProvider><BuySellPanel /></WalletProvider>); });
+    await act(async () => { await sleep(120); });
+    await act(async () => {
+      container.querySelector('[data-testid="iran-buy-top-tab"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(80);
+    });
+    const closedPanel = container.querySelector('[data-testid="iran-buy-panel"]');
+    check('a disabled deployment still shows the rate, calculator, wallet check and journey',
+      Boolean(closedPanel?.querySelector('[data-testid="iran-buy-rate"]'))
+      && Boolean(closedPanel?.querySelector('.iran-buy-amount input'))
+      && Boolean(closedPanel?.querySelector('.iran-buy-destination'))
+      && closedPanel?.querySelectorAll('.iran-buy-guide li').length === 4);
+    check('a disabled deployment explains what is missing and offers no payable action',
+      closedPanel?.querySelectorAll('.iran-buy-readiness li').length === 2
+      && Boolean(closedPanel?.querySelector('[data-testid="iran-buy-unavailable"]'))
+      && closedPanel?.querySelector('[data-testid="iran-buy-disabled-cta"]')?.disabled === true
+      && !closedPanel?.querySelector('[data-testid="iran-buy-pay"]'));
+
+    await act(async () => { root.unmount(); });
+    stubFetch();
+    root = createRoot(container);
+    await act(async () => { root.render(<WalletProvider><BuySellPanel /></WalletProvider>); });
+    await act(async () => { await sleep(120); });
 
     await act(async () => { await i18n.changeLanguage('en'); await sleep(100); });
     check('English never renders the Iranian-only top tab or panel', !container.querySelector('[data-testid="iran-buy-top-tab"]') && !container.querySelector('[data-testid="iran-buy-panel"]'));
