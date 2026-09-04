@@ -131,7 +131,9 @@ export const PROVIDER_CONFIGS = Object.freeze({
     defaultModel: process.env.AIMLAPI_MODEL || 'gpt-4o-mini',
     fallbackModels: ['anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash', 'deepseek/deepseek-chat', 'meta-llama/Llama-3.3-70B-Instruct'],
     type: 'openai-compatible',
-    specialty: 'Unified Gateway: OpenAI/Claude/Gemini/Llama/DeepSeek via One Key',
+    // The OpenAI-shaped slot of the fleet is served from here: AIMLAPI fronts
+    // the same GPT class (and Claude/Gemini/Llama) behind its own key.
+    specialty: 'Unified Gateway: GPT / Claude / Gemini / Llama / DeepSeek via One Key — carries the OpenAI-class slot',
     costTier: 'low',
     latencyTier: 'fast'
   },
