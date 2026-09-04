@@ -10412,7 +10412,8 @@
       "PAYMENT_PROVIDER_REJECTED": "The payment gateway rejected this request.",
       "PAYMENT_PROVIDER_RATE_LIMITED": "Too many gateway requests. Try again shortly.",
       "PAYMENT_STATUS_UNCERTAIN": "The gateway answer was inconclusive. Do not pay again; refresh the status.",
-      "PAYMENT_CHECKOUT_UNAVAILABLE": "The checkout link is not valid; create the order again."
+      "PAYMENT_CHECKOUT_UNAVAILABLE": "The checkout link is not valid; create the order again.",
+      "REFERRAL_LINK_UNAVAILABLE": "The referral link is unavailable right now. Please try again later."
     },
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured.",
     "rateLabel": "Live USDT rate",
@@ -10459,6 +10460,52 @@
     "payNow": "Pay at the gateway",
     "verifyingPayment": "Verifying payment…",
     "receiptPaymentRef": "Payment reference",
-    "newOrder": "New order"
+    "newOrder": "New order",
+    "referral": {
+      "cardTitle": "Buy on bitpin for now",
+      "cardBody": "USDT is bought with Toman on bitpin and withdrawn straight to your own wallet.",
+      "cardCta": "Buy USDT on bitpin",
+      "disclosure": "This link earns us a commission.",
+      "headerNote": "Until direct payment is switched on, you can buy USDT on bitpin, withdraw it to your own wallet, and swap it right here.",
+      "guideTitle": "Full guide to buying and transferring USDT",
+      "addressLabel": "Your USDT receiving address",
+      "addressNetwork": "Withdrawal network: {{network}}",
+      "copyAddress": "Copy address",
+      "copied": "Copied",
+      "addressNeedsWallet": "The receiving address is read only from your own wallet. Connect a wallet to see it.",
+      "addressWarning": "Send on the {{network}} network only. Choosing the wrong network means losing the funds.",
+      "addressWarningGeneric": "Send on the approved network only. Choosing the wrong network means losing the funds.",
+      "popupBlocked": "Automatic opening was blocked. Copy this link and open it in your browser:",
+      "steps": {
+        "signup": {
+          "title": "Sign up or log in on bitpin",
+          "body": "Use this link so the discount/commission applies. If you already have an account, just log in."
+        },
+        "kyc": {
+          "title": "Identity verification",
+          "body": "The first time can take a while; without it, Toman deposits and crypto withdrawals are not possible."
+        },
+        "deposit": {
+          "title": "Deposit Toman",
+          "body": "From a bank account in your own name."
+        },
+        "buy": {
+          "title": "Buy USDT",
+          "body": "Buy USDT only; all other conversions happen later in this app."
+        },
+        "withdraw": {
+          "title": "Withdraw USDT on the {{network}} network",
+          "body": "Copy the address above and paste it into the withdrawal form. Select exactly {{network}} as the network. bitpin itself shows the minimum amount and the network fee."
+        },
+        "return": {
+          "title": "Back to the app",
+          "body": "Once the USDT arrives, you can swap right here."
+        }
+      },
+      "stepsNote": "Amounts and fees are set by bitpin; we are not the payment intermediary on this route and your money never passes through our accounts.",
+      "swapCta": "USDT arrived? Swap it here",
+      "readinessTitle": "Why direct payment is still off",
+      "readinessIntro": "Direct payment stays off in this tab until the items below are complete — but the bitpin route is open right now, so this is not a dead end."
+    }
   }
 }

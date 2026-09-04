@@ -1,3 +1,49 @@
+# Unreleased — «فقط برای ایرانیان»: مسیر ارجاع بیت‌پین تا روشن شدن پرداخت مستقیم
+
+The direct Toman rail stays off for now — turning it on means treasury float,
+a merchant agreement and a tax footprint before the first order. Instead of
+leaving Persian users in a read-only dead end, the tab (still only while
+`enabled: false`) now offers a real route: a referral deep link to **bitpin,
+for USDT only**.
+
+- **Server contract** (`server/iranBuyConfig.js`): `IRAN_BUY_REFERRAL_PARTNER`
+  (only `BITPIN` accepted), `IRAN_BUY_REFERRAL_URL` (copied verbatim from the
+  bitpin affiliate panel, query string intact — the code never builds or
+  rewrites a referral code), an exact-host allowlist
+  (`IRAN_BUY_REFERRAL_APPROVED_HOSTS`, default `bitpin.ir`, no implicit
+  subdomains), and an optional `IRAN_BUY_REFERRAL_DISCOUNT_NOTE`. Transport
+  checks only — https, no embedded credentials, bounded length; anything else
+  answers `referral: null`. The referral rides the public config response and
+  disappears (`referral: null`) the moment `enabled: true` — the two are never
+  shown together, and the direct-rail prerequisites are untouched.
+- **Opening behaviour** (`openIranBuyReferral` in `src/lib/iranBuy.js`): the
+  browser re-checks https plus the server-sent host, uses
+  `Telegram.WebApp.openLink` inside the Mini App, and otherwise opens a new
+  `noopener` tab. This tab is never navigated away (the opposite of the
+  deliberate same-tab ZarinPal checkout) — the user must be able to come back
+  and copy their address. A blocked popup surfaces the link for manual copy
+  instead of a dead click.
+- **The tab, in referral mode:** a bitpin card with the commission disclosure
+  («این لینک برای ما پورسانت دارد») and the optional discount perk; a collapsed
+  walkthrough containing the user's own receiving address — read only from the
+  connected wallet, rendered in full, copied exactly, with the withdrawal
+  network chip and a wrong-network red warning, plus connect/switch buttons
+  instead of any manual address field — and six numbered steps (signup → KYC →
+  Toman deposit → buy USDT only → withdraw on the configured network → return
+  and swap). No order status, no delivery promise, no guaranteed price: we
+  never see bitpin's delivery. The readiness list stays, reworded so the user
+  knows the direct rail is the only thing still pending, and a swap CTA
+  (`/swap`) sits outside the guide, always reachable. One anonymous click
+  event (`iranBuy.referralClicked`, partner name only) is emitted locally for
+  later comparison with bitpin's panel stats — no address, id or amount ever
+  leaves the browser.
+- **Tests:** the safety probe grows to 57 checks (referral transport contract,
+  allowlist exactness, rail/referral mutual exclusion, no env-name leakage,
+  browser opener pinned to new-tab + Telegram) and the UI probe to 28
+  (collapsed guide, full character-exact address when connected, no
+  input/select added, https host match, disclosure present, no trace when
+  enabled). `npm run test:iran-buy` runs all three probes green.
+
 # Unreleased — «فقط برای ایرانیان»: خرید تتر با تومان، از درگاه تا زنجیره
 
 The Persian-only Buy tab used to render one sentence — «هنوز فعال نشده» — and

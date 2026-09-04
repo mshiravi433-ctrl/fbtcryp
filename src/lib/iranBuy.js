@@ -286,6 +286,50 @@ export function openIranBuyCheckout(checkoutUrl) {
   return url.toString();
 }
 
+/**
+ * Send the user to the partner exchange (bitpin) in a NEW tab.
+ *
+ * This is the opposite of openIranBuyCheckout on purpose: the customer must be
+ * able to come straight back to copy their own deposit address, so this tab is
+ * never navigated away.
+ *
+ *  1. Browser-side re-check only the transport: https, plus the exact host the
+ *     server itself sent inside `capability.referral.url`. The string is never
+ *     recomposed and no parameter is added — attribution is the partner's
+ *     business, not ours.
+ *  2. Inside a Telegram Mini App, `window.open` either stays trapped in the
+ *     webview or is blocked outright, so Telegram's own `openLink` is used.
+ *  3. Else a normal `noopener` popup. If a pop-up blocker returns null the
+ *     caller is told, so it can offer the link for manual copy instead of
+ *     silently doing nothing — but never a same-tab navigation.
+ */
+export function openIranBuyReferral(referralUrl, expectedHost = null) {
+  let url;
+  try { url = new URL(String(referralUrl || '')); } catch { url = null; }
+  if (!url || url.protocol !== 'https:') {
+    return { ok: false, code: 'REFERRAL_LINK_UNAVAILABLE' };
+  }
+  /* The host check compares against the server-provided value only; there is
+     no fallback default, because a host we did not receive is a host we cannot
+     vouch for. */
+  const host = url.hostname.toLowerCase();
+  if (expectedHost && host !== String(expectedHost).toLowerCase()) {
+    return { ok: false, code: 'REFERRAL_LINK_UNAVAILABLE' };
+  }
+  const target = url.toString();
+  const telegram = globalThis.window?.Telegram?.WebApp;
+  if (typeof telegram?.openLink === 'function') {
+    try {
+      telegram.openLink(target);
+      return { ok: true, code: 'REFERRAL_OPENED' };
+    } catch { /* fall through to a normal tab */ }
+  }
+  let opened = null;
+  try { opened = globalThis.window?.open?.(target, '_blank', 'noopener,noreferrer') || null; } catch { opened = null; }
+  if (!opened) return { ok: false, code: 'REFERRAL_POPUP_BLOCKED' };
+  return { ok: true, code: 'REFERRAL_OPENED' };
+}
+
 /** Read the PSP return parameters the callback page was loaded with. */
 export function readIranBuyGatewayReturn(search = globalThis.location?.search || '') {
   const params = new URLSearchParams(String(search || ''));

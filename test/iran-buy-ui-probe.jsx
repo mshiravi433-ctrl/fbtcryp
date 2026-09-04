@@ -29,6 +29,31 @@ const disabledCapability = {
   requiresTelegramAuth: true,
   readiness: ['PAYMENT', 'EXCHANGE']
 };
+/* A disabled rail WITH a server-approved bitpin link: the referral path. */
+const referralCapability = {
+  ...disabledCapability,
+  referral: {
+    partner: 'bitpin',
+    url: 'https://bitpin.ir/register?ref=ABC123',
+    discountNote: 'تخفیف دائمی کارمزد',
+    network: { id: 'ERC20', label: 'ERC20', chainId: 1 }
+  }
+};
+const WALLET_ADDRESS = '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B';
+/* Minimal injected-wallet stub: enough for BrowserProvider to "connect". */
+function stubEthereum() {
+  window.ethereum = {
+    isMetaMask: true,
+    request: async ({ method }) => {
+      if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [WALLET_ADDRESS];
+      if (method === 'eth_chainId') return '0x1';
+      if (method === 'net_version') return '1';
+      return null;
+    },
+    on() {},
+    removeListener() {}
+  };
+}
 const rate = {
   schema: 'fbt.iran-buy-rate.v1',
   available: true,
@@ -75,6 +100,8 @@ export async function run(container) {
     const topTab = container.querySelector('[data-testid="iran-buy-top-tab"]');
     check('exact fa plus a server capability renders the Iranian-only top tab', Boolean(topTab) && topTab.textContent.includes('فقط برای ایرانیان'));
     check('the ordinary Buy/Sell wizard remains the initial surface', Boolean(container.querySelector('.buy-sell-switch')) && !container.querySelector('[data-testid="iran-buy-panel"]'));
+    check('the live direct rail renders no referral card or guide anywhere',
+      !container.querySelector('[data-testid="iran-buy-referral"]') && !container.querySelector('[data-testid="iran-buy-referral-guide"]'));
 
     await act(async () => { topTab?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(80); });
     const iranPanel = container.querySelector('[data-testid="iran-buy-panel"]');
@@ -123,6 +150,109 @@ export async function run(container) {
       && Boolean(closedPanel?.querySelector('[data-testid="iran-buy-unavailable"]'))
       && closedPanel?.querySelector('[data-testid="iran-buy-disabled-cta"]')?.disabled === true
       && !closedPanel?.querySelector('[data-testid="iran-buy-pay"]'));
+
+    /* ── Referral mode: rail closed + a server-approved bitpin link ────────── */
+    await act(async () => { root.unmount(); });
+    stubFetch(referralCapability);
+    root = createRoot(container);
+    await act(async () => { root.render(<WalletProvider><BuySellPanel /></WalletProvider>); });
+    await act(async () => { await sleep(120); });
+    await act(async () => {
+      container.querySelector('[data-testid="iran-buy-top-tab"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(80);
+    });
+    const referralPanel = container.querySelector('[data-testid="iran-buy-panel"]');
+    const flow = referralPanel?.querySelector('[data-testid="iran-buy-referral-flow"]');
+    const guide = flow?.querySelector('[data-testid="iran-buy-referral-guide"]');
+    check('a server-approved referral renders its card, disclosure and guide; the dead disabled CTA is gone',
+      Boolean(flow?.querySelector('[data-testid="iran-buy-referral"]'))
+      && Boolean(flow?.querySelector('[data-testid="iran-buy-referral-disclosure"]'))
+      && Boolean(flow?.querySelector('[data-testid="iran-buy-referral-perk"]'))
+      && !referralPanel?.querySelector('[data-testid="iran-buy-disabled-cta"]'));
+    check('the guide ships collapsed and offers connect instead of any address while the wallet is away',
+      guide?.open === false
+      && Boolean(flow?.querySelector('[data-testid="iran-buy-address-connect"]'))
+      && !flow?.querySelector('[data-testid="iran-buy-address-value"]'));
+    check('the referral flow adds no manual address field and no asset/network picker',
+      !flow?.querySelector('input, textarea, select') && referralPanel?.querySelectorAll('select').length === 0);
+    check('the swap CTA sits outside the guide, so it is reachable while the guide is closed',
+      Boolean(flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]'))
+      && !flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')?.closest('details'));
+    check('the referral block names only USDT and no other asset',
+      !/BTC|SOL|BNB|DOGE|TRX|XRP|ADA|LTC|SHIB|ETC\b/i.test(flow?.textContent || ''));
+
+    /* Opening the link: new-tab opener wired to the exact server-sent URL. */
+    const openedUrls = [];
+    const previousOpen = window.open;
+    window.open = (url, target, features) => { openedUrls.push({ url, target, features }); return {}; };
+    let referralEvent = null;
+    const onReferralEvent = (event) => { if (event.detail?.type === 'iranBuy.referralClicked') referralEvent = event.detail; };
+    window.addEventListener('fbt:ai-event', onReferralEvent);
+    await act(async () => {
+      flow?.querySelector('[data-testid="iran-buy-referral-cta"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(40);
+    });
+    check('the CTA opens exactly the https link the server sent, in a new noopener tab',
+      openedUrls.length === 1 && openedUrls[0].url === 'https://bitpin.ir/register?ref=ABC123'
+      && new URL(openedUrls[0].url).protocol === 'https:' && new URL(openedUrls[0].url).hostname === 'bitpin.ir'
+      && openedUrls[0].target === '_blank' && /noopener/.test(openedUrls[0].features || ''));
+    check('the click emits one anonymous partner-only event, with no address, id or amount',
+      referralEvent && JSON.stringify(referralEvent.payload).includes('bitpin')
+      && !/0x|Address|amount/i.test(JSON.stringify(referralEvent.payload || {})));
+    window.removeEventListener('fbt:ai-event', onReferralEvent);
+
+    /* Popup blocked → manual copy fallback, never a dead click. */
+    window.open = () => null;
+    await act(async () => {
+      flow?.querySelector('[data-testid="iran-buy-referral-cta"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(40);
+    });
+    check('a blocked popup surfaces the link for manual opening instead of doing nothing',
+      Boolean(flow?.querySelector('[data-testid="iran-buy-referral-manual"] a[href="https://bitpin.ir/register?ref=ABC123"]')));
+    window.open = previousOpen;
+
+    /* Connected wallet on the right chain: the full address appears. */
+    stubEthereum();
+    await act(async () => { root.unmount(); });
+    root = createRoot(container);
+    await act(async () => { root.render(<WalletProvider><BuySellPanel /></WalletProvider>); });
+    await act(async () => { await sleep(120); });
+    await act(async () => {
+      container.querySelector('[data-testid="iran-buy-top-tab"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(80);
+    });
+    const connectedPanel = container.querySelector('[data-testid="iran-buy-panel"]');
+    await act(async () => {
+      connectedPanel?.querySelector('[data-testid="iran-buy-address-connect"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(120);
+    });
+    /* The sheet portals to document.body, so its options are found there. */
+    const metamaskOption = [...document.querySelectorAll('.wallet-option')].find((button) => button.textContent.includes('MetaMask'));
+    await act(async () => {
+      metamaskOption?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(400);
+    });
+    const connectedFlow = connectedPanel?.querySelector('[data-testid="iran-buy-referral-flow"]');
+    check('a connected wallet on the target chain renders its FULL address, character-exact',
+      connectedFlow?.querySelector('[data-testid="iran-buy-address-value"]')?.textContent === WALLET_ADDRESS);
+    let copiedValue = null;
+    try {
+      Object.defineProperty(window.navigator, 'clipboard', { value: { writeText: async (value) => { copiedValue = value; } }, configurable: true });
+    } catch { /* clipboard stubbing unavailable — the copy check then reports the stored value */ }
+    await act(async () => {
+      connectedFlow?.querySelector('[data-testid="iran-buy-address-copy"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(60);
+    });
+    check('the copy button copies exactly the address and nothing else', copiedValue === WALLET_ADDRESS);
+    check('the guide warns that a wrong network selection loses the funds',
+      /شبکهٔ اشتباه|از دست رفتن/.test(connectedFlow?.querySelector('.iran-buy-address-warning')?.textContent || ''));
+    await act(async () => {
+      connectedFlow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(30);
+    });
+    check('opening the guide, swapping and unmounting produced no unexpected React error', errors.length === 0);
+    delete window.ethereum;
+    try { delete window.navigator.clipboard; } catch { /* optional stub cleanup */ }
 
     await act(async () => { root.unmount(); });
     stubFetch();

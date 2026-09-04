@@ -168,6 +168,67 @@ a summary, not the internal checklist: they never name an environment variable,
 host, key, or provider. Every mutating route still answers `IRAN_BUY_DISABLED`,
 so nothing can be charged.
 
+## Referral mode (the bitpin deep link)
+
+**Why this exists:** turning the direct rail on means holding Toman float,
+a PSP merchant agreement, and a tax/compliance footprint before the first
+order. Until that investment is justified, the tab would otherwise be a dead
+end. The product decision (2026-09): while the rail is off, offer Persian users
+a *real* route instead — a referral deep link to **bitpin**, for **USDT only**:
+
+1. the user buys USDT with Toman on bitpin (their account, their KYC, their
+   bank);
+2. they withdraw it on the configured network to **their own connected wallet
+   address** — the guide shows the address read live from the wallet, with a
+   copy button and a wrong-network warning; there is no manual address field,
+   no default address, and no treasury address anywhere in this path;
+3. they come back and use the ordinary internal **swap** (`/swap`) for every
+   other conversion. No asset other than USDT is named, listed or linked.
+
+**Honesty rules pinned in code and tests:** we never see bitpin's delivery, so
+the UI shows no order status, no success state, no delivery-time promise and no
+guaranteed price — the existing "approximate" rate strip is all there is. The
+commission disclosure («این لینک برای ما پورسانت دارد») is part of the card,
+not fine print a user must hunt for. Amounts and fees are set by bitpin; the
+money never passes through our accounts.
+
+**Configuration (all server-side, `server/iranBuyConfig.js`):**
+
+```bash
+IRAN_BUY_REFERRAL_PARTNER=BITPIN        # only BITPIN is accepted today
+IRAN_BUY_REFERRAL_URL=https://bitpin.ir/signup/?refcode=ob8fyvn2k4   # the owner's panel link, verbatim
+IRAN_BUY_REFERRAL_APPROVED_HOSTS=bitpin.ir   # exact-host allowlist (no implicit subdomains)
+IRAN_BUY_REFERRAL_DISCOUNT_NOTE=        # optional; empty means no discount line is shown
+IRAN_BUY_REFERRAL_USDT_NETWORK=         # the network the user must pick inside bitpin
+IRAN_BUY_REFERRAL_USDT_NETWORK_LABEL=   # display label (falls back to the id)
+IRAN_BUY_REFERRAL_EVM_CHAIN_ID=         # optional; enables the in-guide switch-network hint
+```
+
+The URL is validated transport-only — https, no embedded credentials, host on
+the allowlist, bounded length — and is served **exactly as configured,
+including its query string**. The codebase never builds, shortens or rewrites
+a referral code; attribution is the partner panel's job, and a silently
+"normalized" link is how attribution breaks. Any failed check — or a missing
+partner name — yields `referral: null` and the tab renders exactly as before,
+with no dead CTA.
+
+**Opening behaviour (`openIranBuyReferral`):** the browser re-checks https and
+the server-sent host, uses `Telegram.WebApp.openLink` inside the Mini App (a
+plain `window.open` stays trapped in the webview), and otherwise opens a new
+`noopener` tab. The app's own tab is never navigated away — the user must be
+able to come straight back and copy their address. A pop-up blocker surfaces
+the link for manual copy instead of a dead click. One anonymous click event
+(`iranBuy.referralClicked`, partner name only — no address, id or amount) is
+emitted locally so the count can later be compared with bitpin's panel stats.
+
+**Mutual exclusion:** the referral is an alternative to the paid rail, never a
+companion. `GET /api/iran/buy/config` answers `referral: null` whenever
+`enabled: true`, so the moment the ZarinPal rail goes live the referral card,
+the guide and the swap CTA disappear from the tab. Switching over is exactly
+the activation checklist above; nothing about the referral blocks or modifies
+it. With no link configured the tab is byte-for-byte today's read-only
+surface.
+
 ## Required activation evidence
 
 All of the following must be reviewed and recorded before production values are
@@ -230,11 +291,11 @@ readable, and no provider call is made from an unready deployment.
 npm run test:iran-buy
 ```
 
-Three probes run: the safety probe (37 checks), a full lifecycle probe (20
+Three probes run: the safety probe (57 checks), a full lifecycle probe (20
 checks) that drives one order from wallet signature → hosted checkout →
 verified payment → OTC fill → withdrawal → on-chain receipt against in-process
 stubs for Redis, Wallex, ZarinPal and the EVM RPC, and the mounted Persian UI
-probe (15 checks).
+probe (28 checks).
 
 Together they check that an incomplete deployment cannot activate itself, that a complete
 one exposes no credential, that both provider adapters use exactly the
@@ -243,5 +304,11 @@ the only proof of payment, that the price cap is exact decimal arithmetic (a mar
 payment holds the order and settles it later instead of under-delivering), that
 a chain transfer whose amount differs from the withdrawal is quarantined rather
 than confirmed, and that the Persian UI renders correctly in both the live and
-the not-yet-live state. No test sends an order, payment, withdrawal, or transaction to a
-provider.
+the not-yet-live state. The referral contract is pinned from both ends: an
+unapproved host, a non-https link, embedded credentials, an overlong URL, an
+unknown partner — or a live direct rail — each yields `referral: null`, and the
+mounted UI proves the guide ships collapsed, offers the wallet's own full
+address only when connected, adds no manual address field or asset/network
+picker, opens exactly the server-sent link in a new tab, discloses the
+commission, and renders nothing referral-shaped once the rail is live. No test
+sends an order, payment, withdrawal, or transaction to a provider.

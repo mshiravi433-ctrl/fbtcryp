@@ -71,6 +71,81 @@ function normalizeNetwork(value) {
   return /^[A-Z0-9_-]{2,32}$/.test(candidate) ? candidate : null;
 }
 
+/* ── Referral mode (bitpin deep link) ────────────────────────────────────── */
+/*
+ * While the direct rail is off, the tab may hand Persian users a deep link to
+ * a partner exchange instead. This is deliberately a *display-only* surface:
+ * the link is copied verbatim from the partner's affiliate panel (query string
+ * included — that is usually where the invite code lives), and this module
+ * only checks the transport before it is allowed to cross to the browser:
+ * https, no embedded credentials, an exact host from a short allowlist, and a
+ * bounded length. No parameter is ever added, removed or rewritten here — a
+ * silently "normalized" link could break attribution or point somewhere the
+ * operator never approved. Anything else keeps `referral` null and the tab
+ * renders exactly as before.
+ */
+const IRAN_BUY_REFERRAL_URL_MAX_LENGTH = 500;
+const IRAN_BUY_REFERRAL_PATH_MAX_LENGTH = 200;
+const IRAN_BUY_REFERRAL_NOTE_MAX_LENGTH = 140;
+const IRAN_BUY_REFERRAL_PARTNERS = new Set(['BITPIN']);
+
+function approvedReferralHosts() {
+  const raw = env('IRAN_BUY_REFERRAL_APPROVED_HOSTS') || 'bitpin.ir';
+  const hosts = raw
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => /^[a-z0-9.-]+$/.test(value));
+  return [...new Set(hosts)];
+}
+
+function safeReferralUrl(value, approvedHosts) {
+  const raw = String(value || '').trim();
+  if (!raw || raw.length > IRAN_BUY_REFERRAL_URL_MAX_LENGTH || !approvedHosts.length) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    if (url.pathname.length > IRAN_BUY_REFERRAL_PATH_MAX_LENGTH) return null;
+    if (!approvedHosts.includes(url.hostname.toLowerCase())) return null;
+    return url.toString();
+  } catch { return null; }
+}
+
+function referralDiscountNote(value) {
+  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!raw || raw.length > IRAN_BUY_REFERRAL_NOTE_MAX_LENGTH) return null;
+  return raw;
+}
+
+/**
+ * The withdrawal network a Persian user must pick *inside the partner
+ * exchange*. In referral mode the direct-rail network config is normally
+ * absent, so the referral block carries its own, with an explicit fallback
+ * chain: a referral-specific value, then the direct-rail network, then ERC20.
+ * ERC20 is the safe default because the destination is always the user's own
+ * EVM address — a wrong-but-EVM chain is recoverable, a non-EVM one is not.
+ */
+function referralNetwork() {
+  const id = normalizeNetwork(env('IRAN_BUY_REFERRAL_USDT_NETWORK'))
+    || normalizeNetwork(env('IRAN_BUY_USDT_NETWORK'))
+    || 'ERC20';
+  const label = String(env('IRAN_BUY_REFERRAL_USDT_NETWORK_LABEL') || env('IRAN_BUY_USDT_NETWORK_LABEL') || id).trim();
+  const chainIdBig = configuredInteger('IRAN_BUY_REFERRAL_EVM_CHAIN_ID', { min: 1, max: 9_007_199_254_740_991, required: false });
+  return { id, label: label.slice(0, 60), chainId: chainIdBig == null ? null : Number(chainIdBig) };
+}
+
+/** null unless partner + link + allowlist all agree; null means "render nothing". */
+export function publicIranBuyReferral() {
+  if (!IRAN_BUY_REFERRAL_PARTNERS.has(env('IRAN_BUY_REFERRAL_PARTNER').toUpperCase())) return null;
+  const url = safeReferralUrl(env('IRAN_BUY_REFERRAL_URL'), approvedReferralHosts());
+  if (!url) return null;
+  return {
+    partner: 'bitpin',
+    url,
+    discountNote: referralDiscountNote(env('IRAN_BUY_REFERRAL_DISCOUNT_NOTE')),
+    network: referralNetwork()
+  };
+}
+
 function configuredWalletFamily() {
   const family = env('IRAN_BUY_WALLET_FAMILY').toUpperCase();
   return family === 'EVM' ? family : null;
@@ -238,6 +313,9 @@ function readinessGroups(prerequisites) {
 export function publicIranBuyCapability() {
   const config = iranBuyConfig();
   if (!config.available) {
+    /* Referral is an *alternative* to the paid rail, never a companion: it is
+       offered only while the direct path is closed, and only when the link
+       itself passes the transport checks above. */
     return {
       schema: IRAN_BUY_SCHEMA,
       enabled: false,
@@ -245,6 +323,7 @@ export function publicIranBuyCapability() {
       network: null,
       limits: null,
       requiresTelegramAuth: true,
+      referral: publicIranBuyReferral(),
       /* Not the checklist: four coarse groups so the UI can explain the wait. */
       readiness: readinessGroups(config.prerequisites)
     };
@@ -263,6 +342,8 @@ export function publicIranBuyCapability() {
     limits: config.limits,
     requiresTelegramAuth: true,
     payment: { provider: 'zarinpal', mode: 'REDIRECT', currency: 'TOMAN' },
+    /* The direct rail replaces the referral the moment it is live. */
+    referral: null,
     readiness: []
   };
 }
