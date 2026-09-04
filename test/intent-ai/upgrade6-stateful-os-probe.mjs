@@ -168,20 +168,28 @@ async function runAll() {
     s = convMod.updateRoute(s, '/portfolio', { reason: 'analysis' });
     s = convMod.updateRoute(s, '/intent', { reason: 'return' }); // back to /intent, so next to /portfolio is loop
 
-    // Now 3 times to /portfolio — loop guard should trigger when at /intent
+    /*
+     * ─── REPEATED NAVIGATION IS ALLOWED, ALWAYS ────────────────────────────
+     * This used to assert the opposite: after two trips to /portfolio the
+     * guard refused the third. That refusal was the reported bug — the user
+     * tapped «سیگنال» in the menu, the guard had already seen /signals twice,
+     * and nothing happened. The count is still measured (it is useful
+     * telemetry) but it no longer vetoes anything.
+     */
     const loopCheck = convMod.shouldAllowNavigation(s, '/portfolio');
-    // History has 3 entries to /portfolio in last 5, so >=2 should block
-    if (loopCheck.allowed === false) {
-      assert.ok(['navigation_loop_detected', 'intent_completed', 'same_route'].includes(loopCheck.reason), `unexpected reason ${loopCheck.reason}`);
-    } else {
-      // If implementation allows but counts loop, at least check history length
-      assert.ok(s.navigationHistory.length >= 5);
-    }
+    assert.equal(loopCheck.allowed, true, 'a repeated route must still be allowed');
+    assert.equal(loopCheck.reason, 'repeat_navigation', 'and is labelled as a repeat');
+    assert.ok(loopCheck.loopCount >= 2, `loop is still counted, got ${loopCheck.loopCount}`);
+    assert.ok(s.navigationHistory.length >= 5);
 
-    // Completed intent should not auto-navigate
+    /*
+     * A COMPLETED INTENT NO LONGER BLOCKS NAVIGATION EITHER.
+     * `intent_completed` was the second permanent refusal: once an intent
+     * finished, its page could never be opened again from the assistant.
+     */
     s = convMod.updateIntentStatus(s, 'completed');
     const completedCheck = convMod.shouldAllowNavigation(s, '/portfolio');
-    assert.equal(completedCheck.allowed, false);
+    assert.equal(completedCheck.allowed, true, 'a finished intent must not lock its page');
     assert.equal(completedCheck.reason, 'intent_completed');
   });
 
@@ -229,16 +237,21 @@ async function runAll() {
     const id4 = (r4.record || r4).navigationId;
     if (id4 && typeof mgr.completeNavigation === 'function') mgr.completeNavigation(id4);
 
-    // Now check if loop detection triggers for next /portfolio
+    /*
+     * The fifth trip to /portfolio MUST still be allowed. This is the exact
+     * shape of the reported bug: the manager had already recorded /portfolio
+     * twice, so it returned `allowed: false, reason: 'navigation_loop'` and
+     * the assistant refused to open the page — permanently, because the
+     * history lives in localStorage.
+     */
     const r5 = mgr.startNavigation({ source: '/intent', target: '/portfolio', reason: 'analysis', intentId: 'i1', sessionId: 's1' });
-    // After 2 loops to same target, should block or warn
-    if (r5.allowed === false) {
-      assert.ok(['navigation_loop', 'navigation_loop_detected', 'intent_completed', 'same_route'].includes(r5.reason) || String(r5.reason).includes('loop'), `reason ${r5.reason} should indicate loop`);
-    } else {
-      // At least history should have entries
-      const hist = typeof mgr.getHistory === 'function' ? mgr.getHistory() : [];
-      assert.ok(hist.length >= 4, 'history should have at least 4 entries');
-    }
+    assert.equal(r5.allowed, true, 'repeated navigation must never be refused');
+    assert.equal(r5.reason, 'repeat_navigation', 'and is labelled as a repeat');
+    assert.ok(r5.loopCount >= 2, `loop still counted, got ${r5.loopCount}`);
+    assert.ok((r5.record || r5).navigationId, 'the repeat still gets a record');
+
+    const hist = typeof mgr.getHistory === 'function' ? mgr.getHistory() : [];
+    assert.ok(hist.length >= 5, 'history should have at least 5 entries');
   });
 
   test('NavigationManager shouldRepeatAfterReturn prevents portfolio re-ask', () => {
@@ -910,7 +923,15 @@ async function runAll() {
     assert.ok(content.includes('chatScrollManager') || content.includes('scrollMgr'), 'should use chatScrollManager');
     assert.ok(content.includes('observability') || content.includes('obsV2'), 'should use observability');
     assert.ok(content.includes('eventBusV2') || content.includes('busV6'), 'should use eventBusV2');
-    assert.ok(content.includes('shouldAllowNavigation'), 'should use navigation guard');
+    /*
+     * The navigation guard is deliberately NOT imported any more. It used to
+     * wrap every `navigate()` in the chat and could refuse the trip; the
+     * guard itself now never refuses repeats (see conversationState.js), but
+     * the chat should not be consulting a veto at all. Asserting on the
+     * absence of the call is what keeps the dead menu from coming back.
+     */
+    assert.ok(!/shouldAllowNavigation\s*\(/.test(content), 'the chat must not gate navigation behind a veto');
+    assert.ok(/navigate\(r\)|navigate\(route\)|navigate\(card\.route\)/.test(content), 'the chat performs real router navigation');
     assert.ok(content.includes('parseShortAnswer') || content.includes('fillFromAnswer'), 'should handle short answer ۴ ماه');
     assert.ok(content.includes('createWalletSnapshot') || content.includes('takeSnapshot'), 'should snapshot wallet');
     assert.ok(content.includes('verifyBeforeExecution'), 'should verify before execution');

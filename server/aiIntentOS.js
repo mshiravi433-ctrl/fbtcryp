@@ -1015,7 +1015,29 @@ router.post('/chat', async (req, res) => {
      reply stands: the upgrade can only improve an answer, never break one.
      Execution authority is untouched — this layer never signs, sends or
      approves anything (§67). */
-  const COLLABORATION_INTENTS = ['GENERAL', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'NEWS_SEARCH', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'LEARN', 'SIGNALS', 'SMART_MONEY', 'STRATEGY', 'OPEN_CALM'];
+  /*
+   * ─── WHICH TURNS THE EXTERNAL FLEET IS ALLOWED TO HELP ON ────────────────
+   * This list used to stop at market/news/risk. Every portfolio, yield,
+   * lending and rebalance turn — the ones a user actually asks the assistant
+   * about — fell through to the deterministic reply alone, so on a deployment
+   * that HAS keys the fleet still sat idle for most of the conversation. That
+   * is the other half of «مدل‌ها فعال نیستن»: registered, keyed, and never
+   * called.
+   *
+   * The safety properties are unchanged and are what make widening safe:
+   *   · the numbers still come from the wallet/portfolio tool data injected
+   *     into the turn — a model never supplies a balance or a price
+   *   · `collaborationUsable` below still demands grounding, so a degraded
+   *     no-evidence answer can never overwrite the deterministic reply
+   *   · `u5.level >= 2` still gates on complexity, so «سلام» costs no calls
+   *   · execution authority is untouched (§67)
+   */
+  const COLLABORATION_INTENTS = [
+    'GENERAL', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'NEWS_SEARCH', 'ANALYZE_TOKEN',
+    'RISK_ANALYSIS', 'LEARN', 'SIGNALS', 'SMART_MONEY', 'STRATEGY', 'OPEN_CALM',
+    'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'YIELD_DISCOVERY', 'STAKING', 'LEND',
+    'FARM', 'REBALANCE', 'STOCKS', 'WHALE'
+  ];
   const u5 = planCollaboration({
     message,
     intentType: intent || 'GENERAL',

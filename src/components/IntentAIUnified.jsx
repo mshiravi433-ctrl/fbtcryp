@@ -153,7 +153,6 @@ import {
   appendMessage as appendConvMessage,
   hasAskedQuestion,
   getSlotValue,
-  shouldAllowNavigation,
   INTENT_STATUS,
   STATE_MACHINE
 } from '../lib/intent-ai/os/upgrade6/conversationState.js';
@@ -517,13 +516,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
     const unsubNav = onEvent('navigation.opened', (ev) => {
       const route = ev.payload?.route;
+      /*
+       * No gating here either. This listener exists so an agent that emits
+       * `navigation.opened` without holding a `navigate` reference still
+       * moves the router; the old version ran it through the same loop
+       * detector as the host handler and could silently drop the trip.
+       */
       if (route && route !== currentPage) {
-        const check = shouldAllowNavigation(convStateRef.current, route, { intentId: convStateRef.current.intentId });
-        if (check.allowed) {
-          try { navigate(route); } catch {}
-        } else {
-          busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { type: 'navigation', target: route, reason: check.reason });
-        }
+        try { navigate(route); } catch {}
       }
     });
 
@@ -604,20 +604,47 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const os = getIntentOS({
       services: liveModuleServices,
       navigation: {
-        navigate: async ({ route, params } = {}) => {
-          const r = typeof route === 'string' ? route : route?.route;
-          if (!r) return { ok: false };
-          // Check loop before navigating (§3)
-          const check = shouldAllowNavigation(convStateRef.current, r, { intentId: convStateRef.current.intentId });
-          if (!check.allowed) {
-            busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { type: 'navigation', target: r, reason: check.reason });
-            metricsRef.current.recordNavigation(check.reason === 'navigation_loop_detected');
-            // If return_no_repeat, show summary instead
-            if (check.reason === 'intent_completed' || check.reason === 'return_no_repeat') {
-              return { ok: true, route: r, skipped: true, reason: check.reason };
-            }
-            return { ok: false, reason: check.reason };
-          }
+        /*
+         * ─── THE HOST NAVIGATION CONTRACT ─────────────────────────────────
+         * Callers in the OS pass the target in TWO shapes and both have to
+         * work, because a silent mismatch here is invisible to the user:
+         *
+         *   · object    — `navigate({ route, params })`  (os/index.js,
+         *                 mediaAgent.js, toolRegistry.js)
+         *   · positional— `navigate('/signals', params, replace)`
+         *                 (navigation-agent, and the plain function form any
+         *                 injected host may expose)
+         *
+         * The old handler destructured ONLY the object shape. When the
+         * navigation agent called it positionally the destructure of a string
+         * produced `route === undefined`, the guard below returned
+         * `{ ok: false }`, and the chat announced a page it never opened.
+         * That was the reported «سیگنال نمیاد و تو همون چت می‌مونه».
+         * `pickRoute` accepts every shape instead of one of them.
+         */
+        navigate: async (target, maybeParams, maybeReplace) => {
+          const pickRoute = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+          const r = pickRoute(target)
+            || pickRoute(target?.route)
+            || pickRoute(target?.to)
+            || pickRoute(target?.path);
+          const params = (target && typeof target === 'object' ? target.params : maybeParams) || {};
+          if (!r) return { ok: false, reason: 'NO_ROUTE' };
+
+          /*
+           * ─── NO NAVIGATION LIMITS ───────────────────────────────────────
+           * This used to run `shouldAllowNavigation` and refuse on
+           * `navigation_loop_detected` / `intent_completed`. Those were
+           * version-1 guardrails: the conversation state accumulated every
+           * route it had ever visited, so after two trips to the same page
+           * the assistant permanently refused to open it again — the user
+           * tapped «سیگنال» and nothing happened, with no message saying why.
+           *
+           * Navigation is now unconditional. It is a read-only, always
+           * reversible action: the user can come back with one tap, and the
+           * conversation state is preserved across the trip either way
+           * (updateRoute below). There is nothing to protect against.
+           */
           try {
             const navRec = navManagerRef.current.startNavigation({
               source: convStateRef.current.currentRoute,
@@ -626,18 +653,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               intentId: convStateRef.current.intentId,
               sessionId: convStateRef.current.sessionId
             });
-            if (!navRec.allowed) {
-              return { ok: false, reason: navRec.reason };
-            }
             navigate(r);
-            navManagerRef.current.completeNavigation(navRec.record.navigationId);
-            emitEvent('navigation.opened', { route: r, params }, 'intent-os');
-            busV6.emit(EVENTS_V6.NAVIGATION_STARTED, { route: r, navigationId: navRec.record.navigationId });
-            busV6.emit(EVENTS_V6.NAVIGATION_COMPLETED, { route: r, navigationId: navRec.record.navigationId });
+            if (navRec?.record?.navigationId) {
+              navManagerRef.current.completeNavigation(navRec.record.navigationId);
+            }
+            emitEvent('navigation.opened', { route: r, params, replace: maybeReplace === true }, 'intent-os');
+            busV6.emit(EVENTS_V6.NAVIGATION_STARTED, { route: r, navigationId: navRec?.record?.navigationId || null });
+            busV6.emit(EVENTS_V6.NAVIGATION_COMPLETED, { route: r, navigationId: navRec?.record?.navigationId || null });
             // Update conv state
             setConvState((prev) => updateRoute(prev, r, { reason: prev.currentIntent, intentId: prev.intentId }));
             obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'NAVIGATION', payload: { route: r } });
-            return { ok: true, route: r, navigationId: navRec.record.navigationId };
+            return { ok: true, route: r, navigationId: navRec?.record?.navigationId || null };
           } catch (e) {
             return { ok: false, error: e.message };
           }
@@ -2179,17 +2205,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return;
     }
     setPanel(null);
-    if (card.action === 'navigate') {
-      // §3 check loop
-      const check = shouldAllowNavigation(convStateRef.current, card.route, { intentId: convStateRef.current.intentId });
-      if (!check.allowed) {
-        busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { target: card.route, reason: check.reason });
-        if (check.reason === 'same_route') return;
-      }
-      navigate(card.route);
-      appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
-      return;
-    }
+    /*
+     * ─── A MENU ENTRY WITH A DESTINATION GOES TO THAT DESTINATION ─────────
+     * The old order here was: check `action`, else look up a chat prompt, and
+     * only navigate if there was NO prompt. Most cards have a prompt, so most
+     * cards were turned into a sentence and fed back into the assistant —
+     * which then decided, on its own, whether the page was worth opening.
+     *
+     * That indirection is what produced «روی منو می‌زنی، سیگنال نمیاد»: the
+     * Signals card became the message «سیگنال‌ها را نشان بده», the classifier
+     * read it as an analysis request, and the page never opened. The user
+     * tapped a destination and got a conversation instead.
+     *
+     * Now the menu is deterministic: `monitor` / `order` / `opportunity` keep
+     * their own surfaces (they open a form or run a scan — there is no page to
+     * go to), and everything else that names a route opens it. No loop check,
+     * no prompt detour, nothing that can quietly decide not to go.
+     */
     if (card.action === 'monitor') {
       setMonitorDraftOpen(true);
       return;
@@ -2206,15 +2238,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       await runOpportunity(card);
       return;
     }
-    const prompt = opsCardPrompt(card, locale);
-    if (!prompt) {
-      if (card.route) {
-        navigate(card.route);
-        appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
-      }
+    if (card.route) {
+      navigate(card.route);
+      appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
       return;
     }
-    await sendMessage(prompt);
+    const prompt = opsCardPrompt(card, locale);
+    if (prompt) await sendMessage(prompt);
   }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity, locale]);
 
   const handleMonitorCreate = useCallback(async (draft) => {

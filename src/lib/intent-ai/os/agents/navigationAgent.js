@@ -92,14 +92,44 @@ export function resolveRoute(input) {
   return null;
 }
 
+/*
+ * ─── THE NAVIGATION CALL SIGNATURE, AND THE BUG IT CAUSED ───────────────────
+ * Every host in this codebase injects `navigate` as a SINGLE-OBJECT function:
+ *
+ *     navigate({ route, params, replace })
+ *
+ * `IntentAIUnified.jsx` destructures exactly that. This agent used to call the
+ * injected function POSITIONALLY — `navigate(resolved, params, replace)` — so
+ * the host destructured a STRING. `{ route } = '/signals'` yields
+ * `route === undefined`, the host's own guard (`if (!r) return { ok: false }`)
+ * fired, and the turn reported `navigated: '/signals'` while the router never
+ * moved.
+ *
+ * That is the reported «روی منو می‌زنی، سیگنال نمیاد و تو همون چت می‌مونه»:
+ * the chat SAID it opened the page and the user stayed exactly where they
+ * were. It was silent because the agent treated the host's `{ ok: false }`
+ * as success and never surfaced it.
+ *
+ * `callHostNavigate` below is the single place the host is invoked, and it
+ * normalises BOTH shapes on the way in, so no future host can reintroduce the
+ * mismatch by picking the other convention.
+ */
+function callHostNavigate(navigateFn, { route, params, replace }) {
+  const asObject = navigateFn({ route, params, replace });
+  return Promise.resolve(asObject);
+}
+
 export function createNavigationAgent({ navigateFn = null, eventBus = null } = {}) {
-  const navigate = navigateFn || ((route) => {
+  const navigate = navigateFn || ((arg) => {
+    // Default (no host injected): the browser's own hash router. Accepts the
+    // object form like every other host, and a bare string for convenience.
+    const route = typeof arg === 'string' ? arg : arg?.route;
     try {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && route) {
         window.location.hash = `#${route}`;
         if (eventBus?.emit) eventBus.emit('navigation.opened', { route }, 'navigation-agent');
       }
-      return { ok: true, route };
+      return { ok: Boolean(route), route: route || null };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -117,8 +147,23 @@ export function createNavigationAgent({ navigateFn = null, eventBus = null } = {
       
       // Navigation doesn't need confirmation (Spec §26)
       try {
-        const result = await navigate(resolved, params, replace);
-        
+        const result = await callHostNavigate(navigate, { route: resolved, params, replace });
+
+        /*
+         * A host that declines (`{ ok: false }`, or `undefined`) is a FAILED
+         * navigation, not a successful one. Reporting success here is what
+         * made the bug invisible: the chat rendered «opened /signals» over a
+         * router that had not moved.
+         */
+        if (result && result.ok === false) {
+          return {
+            ok: false,
+            error: result.reason || result.error || 'NAVIGATION_REFUSED',
+            message: result.message || 'مسیریابی انجام نشد.',
+            route: resolved
+          };
+        }
+
         if (eventBus?.emit) {
           eventBus.emit('navigation.opened', { route: resolved, params }, 'navigation-agent');
         }

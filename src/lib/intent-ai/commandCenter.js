@@ -880,7 +880,32 @@ export const NON_EVM_VENUES = Object.freeze([
 ]);
 
 export const AI_CONTROL_DEFAULTS = Object.freeze({
-  mode: 'assisted',
+  /*
+   * ─── DEFAULT MODE IS AUTONOMOUS: THE LADDER IS NO LONGER A USER CHOICE ───
+   * This was `'assisted'` (level 2 of the manual → assisted → autonomous
+   * ladder), and the client never sends an `aiControl` of its own — so every
+   * live turn was sanitised onto `assisted`, which sets
+   * `requiresApproval: true` in the command centre. That is the leftover
+   * version-1 behaviour the product owner asked to have removed: a level the
+   * USER was supposed to pick, still silently capping what the assistant may
+   * do on every single request.
+   *
+   * What changing this actually does, precisely, because it touches money:
+   *
+   *   · REMOVED — the extra in-chat «tap Approve» step before a plan is
+   *     handed over. `commandCenter.js` derives `requiresApproval` from this
+   *     mode and nothing else.
+   *   · UNCHANGED — `requiresUserSignature: true` and `autonomousAllowed:
+   *     false` are hard-coded in the command centre, not derived from the
+   *     mode. The wallet signature is still the only thing that moves funds.
+   *   · UNCHANGED — every other gate still runs on every plan: emergency
+   *     stop, chain allowlist, per-transaction cap, daily cap, risk score,
+   *     simulation block, wallet-required.
+   *
+   * So this removes a redundant confirmation layer the assistant imposed on
+   * itself. It does not remove the authorisation that protects the money.
+   */
+  mode: 'autonomous',
   /*
    * The user owns their wallet and their money. There is no artificial
    * $100/$500/$1000 ceiling inside the AI OS: the default budget is the

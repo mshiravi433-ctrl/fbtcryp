@@ -3,9 +3,25 @@
    dashboard: one conversation column, input pinned at the bottom, dynamic
    suggestions above it, and an Actions drawer that is clearly a helper. */
 
+/*
+ * ─── THE CHAT IS A COLUMN IN THE PAGE, NOT A VIEWPORT-SIZED PANE ───────────
+ * `.iaos-page` used to be `flex: 1 1 auto; min-height: 0`, which is the CSS
+ * idiom for "fill the parent exactly and never overflow it". Combined with
+ * `.app-shell { min-height: 100dvh }` it locked the whole screen: the message
+ * list scrolled inside its own box and the PAGE never moved, so the header,
+ * the context chip, the suggestions and the menu below the composer were
+ * unreachable whenever the conversation was long. That is the reported
+ * «نمی‌تونیم کل صفحه را بالا و پایین ببریم».
+ *
+ * `min-height: auto` hands the height back to the content. The column is now
+ * as tall as what is in it, the app-shell grows past 100dvh when it needs to,
+ * and the browser scrolls the page — while the thread itself keeps a capped
+ * internal scroll (see `.iaos-conversation`) so one long answer cannot push
+ * the composer off the screen.
+ */
 .iaos-page {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: auto;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -16,14 +32,25 @@
   color: #eef2ff;
 }
 
+/*
+ * ─── NARROWER COLUMN ───────────────────────────────────────────────────────
+ * Was `min(780px, 100%)`. Inside the 520px `.app-shell` that resolved to a
+ * full-bleed 100%: bubbles ran edge to edge and the column had no visual
+ * boundary against the background, which is what made it read as "the app"
+ * rather than "a page in the app".
+ *
+ * `100% - 20px` leaves a 10px gutter on each side of the shell's own padding,
+ * and 620px is the new ceiling for wide screens. Nothing else keys off the
+ * old 780px value.
+ */
 .iaos-shell {
-  width: min(780px, 100%);
+  width: min(620px, calc(100% - 20px));
   margin: 0 auto;
   padding: 12px 12px calc(max(12px, env(safe-area-inset-bottom)) + 2px);
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: auto;
   gap: 10px;
 }
 
@@ -198,7 +225,21 @@
 
 .iaos-conversation {
   flex: 1 1 auto;
-  min-height: 0;
+  /*
+   * ─── A CAP, NOT A VIEWPORT LOCK ─────────────────────────────────────────
+   * `min-height: 0` with `flex: 1 1 auto` made the thread exactly as tall as
+   * the leftover viewport and no taller, so the page had nothing to scroll.
+   * The thread now sizes to its content up to a ceiling, and past that it
+   * scrolls internally. `62vh` keeps roughly a third of a phone screen free
+   * for the header, the suggestions, the composer and the menu, so every one
+   * of them is reachable by scrolling the page.
+   *
+   * `overflow-y: auto` stays — the scroll manager (chatScrollManager) reads
+   * `scrollTop` / `scrollHeight` / `clientHeight` off this element, and it
+   * still reports correctly for a max-height box.
+   */
+  min-height: 120px;
+  max-height: min(62vh, 620px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1525,6 +1566,23 @@
 
 .iaos-shell > * { position: relative; z-index: 1; }
 
+/*
+ * ─── THE NATIVE SHELL MUST NOT RE-LOCK THE PAGE ────────────────────────────
+ * In the packaged app (and an installed PWA) `PullToRefresh` wraps the route
+ * in `.ptr-root > .ptr-content`, and both carry `flex: 1 1 auto; min-height: 0`
+ * — the same viewport lock `.iaos-page` just gave up. Leaving them alone would
+ * fix the website and leave the APK exactly as broken, which is where most of
+ * this app's users are.
+ *
+ * Scoped to `.app-shell--headerless`, the class AppChrome sets on `/intent`
+ * and nothing else, so no other screen's pull-to-refresh geometry changes.
+ */
+.app-shell--headerless .ptr-root,
+.app-shell--headerless .ptr-content {
+  flex: 1 1 auto;
+  min-height: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .iaos-shell::before,
   .iaos-shell::after {
@@ -1646,6 +1704,29 @@
 .iaos-intel-card small {
   font-size: 10px;
   color: #64748b;
+}
+
+/*
+ * A model waiting on a key is dimmed, not deleted: it is still part of the
+ * fleet, it just cannot answer yet. The env var line is the actionable part,
+ * so it stays legible and is forced LTR — variable names are ASCII and
+ * right-to-left rendering mangles them.
+ */
+.iaos-intel-card[data-live='false'] {
+  opacity: .72;
+  border-style: dashed;
+}
+
+.iaos-intel-env {
+  margin-top: 2px;
+  text-align: left;
+}
+
+.iaos-intel-env code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #fcd34d;
+  word-break: break-all;
 }
 
 .iaos-multi-ai-badge {
