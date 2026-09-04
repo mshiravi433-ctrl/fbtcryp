@@ -141,7 +141,7 @@ const KEYWORD_LEXICON = Object.freeze([
   { type: 'NEWS_SEARCH', words: ['اخبار', 'خبر', 'خبرها', 'news', 'headline', 'headlines'] },
   { type: 'SIGNALS', words: ['سیگنال', 'سیگنالها', 'signal', 'signals', 'outlook'] },
   { type: 'SWAP', words: ['سواپ', 'تبدیل', 'معاوضه', 'swap', 'convert', 'exchange'] },
-  { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge'] },
+  { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge', 'کراس‌چین', 'کراس چین', 'کراسچین', 'بین‌زنجیره‌ای', 'cross-chain', 'cross chain', 'crosschain'] },
   { type: 'FARM', words: ['فارم', 'استخر', 'ال پی', 'farm', 'farming', 'pool', 'liquidity'] },
   { type: 'LEND', words: ['وام دادن', 'لند', 'lend', 'lending', 'supply', 'aave'] },
   { type: 'BORROW', words: ['وام', 'قرض', 'borrow', 'loan'] },
@@ -466,7 +466,8 @@ const INTENT_PATTERNS = [
     weight: 7,
     patterns: [
       /از شبکه.*به شبکه|ببر.*شبکه|منتقل.*شبکه/i,
-      /بریج|بریدج|پل.*زنجیره|bridge|cross.?chain/i
+      /کراس.?چین|کراس چین|کراسچین|بین.?زنجیره/i,
+      /بریج|بریدج|پل.*زنجیره|bridge|cross.?chain|crosschain/i
     ]
   },
   {
