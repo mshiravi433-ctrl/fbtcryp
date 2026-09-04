@@ -137,6 +137,23 @@ const CHIPS = Object.freeze({
     fa: { label: 'چه کاری بلدی؟', prompt: 'چه کاری بلدی' },
     ar: { label: 'ماذا تستطيع؟', prompt: 'what can you do' },
     en: { label: 'What can you do?', prompt: 'what can you do' }
+  },
+  // ── REAL PRODUCT CHIPS — FIX: investment intents must go to real markets only
+  // No lab/virtual/پول خیالی. These prompts are parseable by intentUnderstanding.
+  invest_horizon: {
+    fa: { label: 'افق جهانی', prompt: 'افق جهانی را باز کن' },
+    ar: { label: 'الأسواق العالمية', prompt: 'open horizon markets' },
+    en: { label: 'Horizon', prompt: 'open horizon markets' }
+  },
+  perp_futures: {
+    fa: { label: 'فیوچرز', prompt: 'فیوچرز را باز کن' },
+    ar: { label: 'العقود الآجلة', prompt: 'open futures' },
+    en: { label: 'Futures', prompt: 'open futures' }
+  },
+  stocks_real: {
+    fa: { label: 'سهام', prompt: 'سهام را باز کن' },
+    ar: { label: 'الأسهم', prompt: 'open stocks' },
+    en: { label: 'Stocks', prompt: 'open stocks' }
   }
 });
 
@@ -153,14 +170,16 @@ function chips(ids, locale) {
 
 /** Per-intent chip sets, by id only — the text lives in CHIPS. */
 const BY_INTENT = Object.freeze({
-  YIELD: ['yield_discover', 'farm', 'lending', 'dca'],
-  PORTFOLIO: ['analyze_portfolio', 'rebalance', 'risk', 'yield_discover'],
+  // FIX: YIELD/INVESTMENT intents now route to real products only: /invest, /perp, /stocks
+  // No lab/virtual/پول خیالی. Keeps old chips but prioritizes real markets.
+  YIELD: ['invest_horizon', 'perp_futures', 'stocks_real', 'yield_discover'],
+  PORTFOLIO: ['analyze_portfolio', 'rebalance', 'risk', 'invest_horizon'],
   WALLET: ['balance', 'analyze_portfolio', 'history', 'send'],
   MARKET: ['market_overview', 'smart_money', 'whale', 'signals'],
   SWAP: ['quote', 'market_overview', 'balance'],
   ORDERS: ['orders', 'dca', 'market_overview'],
   OPS: ['ops_center', 'orders', 'analyze_portfolio', 'capabilities'],
-  GENERAL: ['analyze_portfolio', 'market_overview', 'yield_discover', 'news']
+  GENERAL: ['analyze_portfolio', 'market_overview', 'invest_horizon', 'news']
 });
 
 /**
@@ -201,8 +220,12 @@ export function getSuggestionsForIntent(intentType, context = {}, entities = {},
   if (['MARKET_ANALYSIS', 'MARKET_CONTEXT', 'SMART_MONEY', 'WHALE', 'ANALYZE_TOKEN', 'SIGNALS', 'NEWS_SEARCH'].includes(type)) {
     return chips(BY_INTENT.MARKET, lang);
   }
-  if (['PORTFOLIO_ANALYSIS', 'REBALANCE', 'RISK_ANALYSIS', 'GOAL'].includes(type)) {
+  if (['PORTFOLIO_ANALYSIS', 'REBALANCE', 'RISK_ANALYSIS'].includes(type)) {
     return chips(BY_INTENT.PORTFOLIO, lang);
+  }
+  // GOAL/INVESTMENT is real trading, not portfolio-only — route to real markets
+  if (['GOAL', 'GOAL_PLANNING', 'PROFIT_PLAN', 'INVESTMENT_PLAN'].includes(type)) {
+    return chips(BY_INTENT.YIELD, lang);
   }
   if (['WALLET_BALANCE', 'BTC_WALLET', 'WALLET_CONNECT'].includes(type)) {
     return chips(BY_INTENT.WALLET, lang);

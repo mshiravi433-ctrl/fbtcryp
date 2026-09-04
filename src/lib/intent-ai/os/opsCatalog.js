@@ -120,11 +120,11 @@ export const OPERATIONS = Object.freeze([
   { id: 'intel_contract', category: 'intelligence', icon: '📜', title: 'Contract Analysis', desc: 'Token contract risk screen (address shield)', action: 'read', capabilityId: 'intel.contract', route: '/smart-wallet' },
 
   /* -------------------------------- Goals -------------------------------- */
-  { id: 'goals_create', category: 'goals', icon: '🎯', title: 'Financial Goal', desc: 'Create a real, durable financial goal (Financial OS)', action: 'order', capabilityId: 'goals.create', route: '/earn' },
-  { id: 'goals_profit', category: 'goals', icon: '📈', title: 'Profit Plan', desc: 'Risk-aware plan toward your profit target', action: 'opportunity', capabilityId: 'profit_plan.build', route: '/earn' },
-  { id: 'goals_forecast', category: 'goals', icon: '🔮', title: 'Forecast', desc: 'Historical scenario range for a goal (no guarantees)', action: 'read', capabilityId: 'goals.forecast', route: '/earn' },
-  { id: 'goals_whatif', category: 'goals', icon: '🧮', title: 'What-if', desc: 'What-if simulation on real portfolio data', action: 'read', capabilityId: 'goals.whatif', route: '/earn' },
-  { id: 'goals_progress', category: 'goals', icon: '📊', title: 'Progress', desc: 'Real progress toward existing goals', action: 'read', capabilityId: 'goals.progress', route: '/earn' },
+  { id: 'goals_create', category: 'goals', icon: '🎯', title: 'Financial Goal', desc: 'Create a real, durable financial goal (Financial OS) — real markets: Horizon/Perp/Stocks', action: 'navigate', capabilityId: 'goals.create', route: '/invest' },
+  { id: 'goals_profit', category: 'goals', icon: '📈', title: 'Profit Plan', desc: 'Risk-aware plan toward your profit target — opens real trading: Horizon (افق جهانی), Perp (فیوچرز), Stocks (سهام)', action: 'navigate', capabilityId: 'profit_plan.build', route: '/invest' },
+  { id: 'goals_forecast', category: 'goals', icon: '🔮', title: 'Forecast', desc: 'Historical scenario range for a goal (no guarantees) — real data from Horizon', action: 'navigate', capabilityId: 'goals.forecast', route: '/invest' },
+  { id: 'goals_whatif', category: 'goals', icon: '🧮', title: 'What-if', desc: 'What-if simulation on real portfolio data — real markets only', action: 'navigate', capabilityId: 'goals.whatif', route: '/invest' },
+  { id: 'goals_progress', category: 'goals', icon: '📊', title: 'Progress', desc: 'Real progress toward existing goals — portfolio view', action: 'read', capabilityId: 'goals.progress', route: '/portfolio' },
   { id: 'goals_rebalance', category: 'goals', icon: '⚖️', title: 'Rebalance', desc: 'Align portfolio with the goal plan', action: 'quote', capabilityId: 'portfolio.rebalance', route: '/portfolio', requiresWallet: true },
 
   /* ------------------------------ Automation ----------------------------- */
