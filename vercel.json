@@ -12,6 +12,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/index"
+    },
+    {
+      "source": "/iran-buy/return",
+      "destination": "/index.html"
     }
   ],
   "headers": [

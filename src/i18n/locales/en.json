@@ -10405,8 +10405,60 @@
       "CANCEL_UNAVAILABLE": "This order can no longer be cancelled.",
       "PROVIDER_RATE_LIMITED": "The provider is temporarily rate limited. Try later.",
       "PROVIDER_STATUS_UNCERTAIN": "The provider response was uncertain. Do not submit again; check status.",
-      "PROVIDER_UNAVAILABLE": "The verified provider connection is unavailable."
+      "PROVIDER_UNAVAILABLE": "The verified provider connection is unavailable.",
+      "PAYMENT_NOT_STARTED": "No payment was created for this order.",
+      "PAYMENT_AUTHORITY_MISMATCH": "The gateway return does not match this order; nothing was confirmed.",
+      "PAYMENT_PROVIDER_UNAVAILABLE": "The payment gateway could not be reached. Nothing was charged.",
+      "PAYMENT_PROVIDER_REJECTED": "The payment gateway rejected this request.",
+      "PAYMENT_PROVIDER_RATE_LIMITED": "Too many gateway requests. Try again shortly.",
+      "PAYMENT_STATUS_UNCERTAIN": "The gateway answer was inconclusive. Do not pay again; refresh the status.",
+      "PAYMENT_CHECKOUT_UNAVAILABLE": "The checkout link is not valid; create the order again."
     },
-    "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
+    "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured.",
+    "rateLabel": "Live USDT rate",
+    "rateUnavailable": "Rate unavailable",
+    "rateSource": "Source: public Wallex market · indicative",
+    "rateRefresh": "Refresh rate",
+    "quickAmounts": "Suggested amounts",
+    "estimateLabel": "You receive approximately:",
+    "estimateNote": "Estimate only; the final amount is set by the executed order.",
+    "estimateEmpty": "Enter an amount to see the estimated USDT.",
+    "guideTitle": "How it works",
+    "guide": {
+      "amount": {
+        "title": "Enter the Toman amount",
+        "body": "The live rate and an estimate are shown here."
+      },
+      "wallet": {
+        "title": "Confirm the destination wallet",
+        "body": "The address comes only from your active wallet; signing a message is not a transaction."
+      },
+      "gateway": {
+        "title": "Pay at the bank gateway",
+        "body": "You are sent to the hosted checkout and the result is re-verified with the provider on return."
+      },
+      "delivery": {
+        "title": "Receive USDT on-chain",
+        "body": "Status becomes successful only after the on-chain transfer is verified."
+      }
+    },
+    "readinessTitle": "Remaining activation work",
+    "readiness": {
+      "ACTIVATION": "Final activation of this service on the server is pending.",
+      "PAYMENT": "The Toman payment gateway connection is not complete yet.",
+      "EXCHANGE": "The verified exchange connection for buying and withdrawal is not complete yet.",
+      "NETWORK": "The approved USDT network and token contract are not configured yet.",
+      "STORAGE": "Durable, replay-safe order storage is not ready yet."
+    },
+    "disabledCta": "Toman payment is not live yet",
+    "disabledNote": "This same screen continues the payment once it is enabled. Nothing is charged until then.",
+    "checkoutTitle": "Complete the payment at the gateway",
+    "checkoutBody": "{{amount}} Toman is paid at the hosted checkout. You return here and the result is verified with the provider.",
+    "checkoutCancelled": "The previous attempt was not completed; you can try again.",
+    "checkoutVerifyLater": "The gateway answer was unavailable. If you were charged, refreshing the status re-checks it.",
+    "payNow": "Pay at the gateway",
+    "verifyingPayment": "Verifying payment…",
+    "receiptPaymentRef": "Payment reference",
+    "newOrder": "New order"
   }
 }

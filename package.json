@@ -204,7 +204,7 @@
     "test:phase3": "node test/intent-ai/phase3-multi-ai-gateway-probe.mjs",
     "test:multi-ai": "node test/intent-ai/phase3-multi-ai-gateway-probe.mjs",
     "verify:apk-lock": "node ci/lock-platform-guard.mjs --check",
-    "test:iran-buy": "node test/iran-buy-probe.mjs && vite build --config test/vite.iranbuy.mjs && node test/run-one-probe.mjs ./.out/iranbuy/iran-buy-ui-probe.js"
+    "test:iran-buy": "node test/iran-buy-probe.mjs && node test/iran-buy-lifecycle-probe.mjs && vite build --config test/vite.iranbuy.mjs && node test/run-one-probe.mjs ./.out/iranbuy/iran-buy-ui-probe.js"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

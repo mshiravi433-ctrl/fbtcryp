@@ -6,6 +6,21 @@ import { clearHardReloadFlag } from './lib/refresh.js';
 import './i18n';
 import './index.css';
 
+/*
+ * Payment-gateway return hop.
+ *
+ * The Iranian Toman checkout has to hand the PSP a plain https callback URL
+ * with no query of its own (the gateway appends ?Authority=…&Status=…), while
+ * this app routes on the hash. So the configured return path is a real path,
+ * and the only thing it does is bounce back into the SPA with the gateway's
+ * query string intact. Returning here NEVER means "paid": the panel asks the
+ * server, which asks the provider.
+ */
+if (typeof window !== 'undefined'
+  && window.location.pathname.replace(/\/+$/, '') === '/iran-buy/return') {
+  window.location.replace(`/${window.location.search}#/buy`);
+}
+
 /**
  * Top-level crash guard.
  *
