@@ -1,0 +1,25 @@
+{
+	# ایمیل برای صدور خودکار گواهی Let's Encrypt
+	email admin@yourdomain.com
+}
+
+ai.yourdomain.com {
+
+	# ── Ollama: فقط با Bearer Token قابل دسترس است ──
+	handle_path /ollama/* {
+		@noauth not header Authorization "Bearer {$OLLAMA_TOKEN}"
+		respond @noauth 401
+
+		# /ollama/api/chat  ──►  ollama:11434/api/chat
+		reverse_proxy ollama:11434
+	}
+
+	# ── SearXNG: جستجوی وب بدون کلید ──
+	handle_path /searxng/* {
+		# /searxng/search?q=...  ──►  searxng:8080/search?q=...
+		reverse_proxy searxng:8080
+	}
+
+	# هر چیز دیگر را رد کن
+	respond 404
+}

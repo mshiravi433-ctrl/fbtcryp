@@ -1,0 +1,14 @@
+use_default_settings: true
+
+# فعال‌سازی خروجی JSON (برای فراخوانی از سمت سرور ورسل)
+search:
+  formats:
+    - html
+    - json
+
+# کلید امنیتی اجباری SearXNG — حتماً عوضش کن
+server:
+  secret_key: "CHANGE_ME_TO_A_RANDOM_STRING"
+
+# محدود کردن به خروجی JSON برای جلوگیری از سوءاستفاده عمومی (اختیاری)
+# برای ایمن‌تر: فقط فرمت json را نگه دار و دسترسی را با Caddy محدود کن

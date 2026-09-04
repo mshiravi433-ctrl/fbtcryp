@@ -1,0 +1,50 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: fbt-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    # برای اجرای مبتنی بر GPU (اختیاری): بلاک زیر را فعال کن
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: fbt-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=https://ai.yourdomain.com/searxng/
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:latest
+    container_name: fbt-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - OLLAMA_TOKEN=${OLLAMA_TOKEN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - searxng
+
+volumes:
+  ollama-data:
+  caddy-data:
+  caddy-config:
