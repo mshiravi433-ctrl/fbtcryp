@@ -17,7 +17,7 @@ function normalizeText(input) {
   s = s.replace(/[\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g, '');
   s = s.replace(/[\u064B-\u0652\u0670]/g, '');
   s = s.replace(/\u0640/g, '');
-  s = s.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/ة/g, 'ه');
+  s = s.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/ة|ۀ/g, 'ه').replace(/[أإآ]/g, 'ا').replace(/ؤ/g, 'و');
   s = s.replace(/[۰-۹٠-٩]/g, (d) => FA_DIGITS[d] || d);
   s = s.replace(/[\u200c]/g, ' ');
   s = s.replace(/\s+/g, ' ').trim();
@@ -58,7 +58,7 @@ export function parseShortAnswer(text) {
   if (!t) return { type: 'empty', confidence: 0 };
 
   // Confirmation
-  if (/^(بله|آره|آری|باشه|اوکی|ok|yes|yep|yeah|confirm|انجام بده|انجامش بده|ادامه بده|ادامه|تایید|تأیید)$/.test(t)) {
+  if (/^(بله|اره|آره|اری|آری|باشه|اوکی|ok|yes|yep|yeah|confirm|انجام بده|انجامش بده|ادامه بده|ادامه|تایید|تأیید)$/.test(t)) {
     return { type: 'confirm', value: true, confidence: 0.99, raw: text };
   }
   if (/^(نه|نخیر|نه فعلا|فعلا نه|لغو کن|کنسل|بی خیال|no|nope|cancel|stop)$/.test(t)) {
