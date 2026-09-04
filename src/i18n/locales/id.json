@@ -1171,7 +1171,7 @@
       "q4": "Jaringan apa saja yang didukung?",
       "a4": "Daftar aktif diambil dari registri aplikasi: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, dan Solana. Halaman ini selalu mencerminkan registri saat ini, bukan daftar pemasaran yang ditulis tetap.",
       "q5": "Bagaimana cara kerja AI-nya?",
-      "a5": "Melalui FBT AI Gateway dan orkestrator, platform dapat memakai penyedia yang dikonfigurasi (seperti Grok atau OpenRouter) dan sistem kecerdasan internal untuk menganalisis data pasar, on-chain, dan portofolio. Ia membantu dan menjelaskan, bukan menjamin hasil.",
+      "a5": "Melalui FBT AI Gateway dan orkestrator, platform dapat memakai penyedia yang dikonfigurasi (seperti Gemini atau OpenRouter) dan sistem kecerdasan internal untuk menganalisis data pasar, on-chain, dan portofolio. Ia membantu dan menjelaskan, bukan menjamin hasil.",
       "q6": "Apakah FBT menjamin keuntungan?",
       "a6": "Tidak. Analisis dan sinyal AI bersifat informatif dan tidak dapat menjamin kinerja di masa depan. Kripto sangat fluktuatif dan kamu bisa kehilangan semuanya.",
       "q7": "Bisakah AI mengeksekusi transaksi?",

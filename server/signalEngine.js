@@ -9,8 +9,8 @@
  *        ↓
  *   Signal Engine      (this module — deterministic scoring from real data)
  *        ↓
- *   AI Orchestrator    (server/aiGateway.js: Grok / OpenRouter / Groq /
- *                        Gemini / OpenAI / Anthropic / DeepSeek / Internal)
+ *   AI Orchestrator    (server/aiGateway.js: OpenRouter / Groq /
+ *                        Gemini / Anthropic / DeepSeek / Workers AI / Internal)
  *        ↓
  *   Consensus          (multi-provider vote, agreement %, disagreement guard)
  *        ↓
@@ -324,7 +324,7 @@ Respond with STRICT JSON only:
 }`;
 
 /**
- * Ask the configured AI providers (Grok / OpenRouter / ... / Internal) to
+ * Ask the configured AI providers (OpenRouter / Gemini / ... / Internal) to
  * explain the evidence, then form a consensus. Returns honest `source`:
  * 'ai' when at least one provider answered, 'local' when none is configured
  * or every call failed.
@@ -384,7 +384,7 @@ async function runWhy({ symbol, name, safe, classification, confidence, riskLabe
         : 'Write the four text fields in English.'
   ].join('\n');
 
-  const providers = ['grok', 'openrouter', 'gemini', 'groq', 'openai', 'anthropic', 'deepseek']
+  const providers = ['openrouter', 'gemini', 'groq', 'anthropic', 'deepseek', 'aimlapi', 'mistral']
     .filter((p) => getActiveProviderIds().includes(p))
     .slice(0, 3);
   const results = await parallelMultiProviderChat({

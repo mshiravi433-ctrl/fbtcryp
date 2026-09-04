@@ -1171,7 +1171,7 @@
       "q4": "Que redes são suportadas?",
       "a4": "A lista ativa vem do registo da app: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic e Solana. A página reflete sempre o registo atual, não uma lista de marketing escrita à mão.",
       "q5": "Como funciona a IA?",
-      "a5": "Através do FBT AI Gateway e do orquestrador, a plataforma pode usar fornecedores configurados (como Grok ou OpenRouter) e sistemas de inteligência internos para analisar dados de mercado, on-chain e de carteira. Ela ajuda e explica; não garante resultados.",
+      "a5": "Através do FBT AI Gateway e do orquestrador, a plataforma pode usar fornecedores configurados (como Gemini ou OpenRouter) e sistemas de inteligência internos para analisar dados de mercado, on-chain e de carteira. Ela ajuda e explica; não garante resultados.",
       "q6": "A FBT garante lucros?",
       "a6": "Não. As análises e os sinais de IA são informativos e não podem garantir resultados futuros. As criptomoedas são voláteis e você pode perder tudo.",
       "q7": "A IA pode executar transações?",

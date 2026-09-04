@@ -134,7 +134,7 @@ export default async function run() {
 
   /* ─────────────── (d) explainSignal → honest local when no AI ─────────── */
   const savedEnv = {};
-  for (const k of ['GROK_API_KEY', 'XAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'VITE_GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY', 'PERPLEXITY_API_KEY', 'BLOB_READ_WRITE_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) {
+  for (const k of ['OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'VITE_GEMINI_API_KEY', 'GROQ_API_KEY', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY', 'AIMLAPI_KEY', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'BLOB_READ_WRITE_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) {
     savedEnv[k] = process.env[k];
     process.env[k] = '';
   }

@@ -4,16 +4,28 @@
  * Spec Phase 3: Multi-AI Intelligence Upgrade
  *
  * Connects and orchestrates multiple AI providers:
- *   1. Grok (xAI)           — Market Intelligence, real-time reasoning, deep search
- *   2. OpenRouter           — Multi-model router (Claude, GPT-4o, DeepSeek, Llama-3)
- *   3. Groq                 — Ultra-low latency open-weight inference
- *   4. Google Gemini        — Multi-modal analysis, fast structured generation
- *   5. OpenAI               — GPT-4o, GPT-4o-mini, o3-mini reasoning
- *   6. Anthropic            — Claude 3.5 Sonnet, Claude 3 Haiku safety & analysis
- *   7. DeepSeek             — DeepSeek-V3, DeepSeek-R1 reasoning & math
- *   8. Mistral              — Mistral Large, Mistral Small
- *   9. Perplexity           — Real-time search & market intelligence
- *  10. Internal AI Engine   — Zero-dependency deterministic offline-ready fallback
+ *   1. OpenRouter           — Multi-model router (Claude, GPT-4o, DeepSeek, Llama-3)
+ *   2. Groq                 — Ultra-low latency open-weight inference
+ *   3. Google Gemini        — Multi-modal analysis, fast structured generation
+ *   4. Anthropic            — Claude 3.5 Sonnet, Claude 3 Haiku safety & analysis
+ *   5. DeepSeek             — DeepSeek-V3, DeepSeek-R1 reasoning & math
+ *   6. Mistral              — Mistral Large, Mistral Small
+ *   7. Cloudflare Workers AI — Free serverless open models (Llama/Mistral/DeepSeek)
+ *   8. AIMLAPI              — Unified multi-model gateway behind one key
+ *   9. Internal AI Engine   — Zero-dependency deterministic offline-ready fallback
+ *
+ * ─── REMOVED PROVIDERS (no API key on this deployment) ─────────────────────
+ * Grok (xAI), OpenAI and Perplexity were registered here but never had a key
+ * configured, so every call routed to them failed over anyway. They are gone
+ * from the registry, and the jobs they were listed for are now carried by the
+ * providers that do have keys:
+ *
+ *   · Grok (market intelligence / macro synthesis)  → OpenRouter (it routes to
+ *     market-grade models incl. online variants), then Gemini, Groq, DeepSeek.
+ *   · Perplexity (live web search & sourced notes)  → OpenRouter `:online`
+ *     capable models, then Gemini; the research task has its own route.
+ *   · OpenAI (high-precision finance logic)         → Anthropic, DeepSeek and
+ *     AIMLAPI (which serves the same GPT class behind its own key).
  *
  * Security Absolutes:
  *   - NEVER leaks private keys, mnemonics, seed phrases or API secrets to external models.
@@ -29,18 +41,6 @@ import { createHash } from 'node:crypto';
 // ---------------------------------------------------------------------------
 
 export const PROVIDER_CONFIGS = Object.freeze({
-  grok: {
-    name: 'Grok (xAI)',
-    url: 'https://api.x.ai/v1/chat/completions',
-    envKey: 'GROK_API_KEY',
-    altEnvKey: 'XAI_API_KEY',
-    defaultModel: 'grok-2-latest',
-    fallbackModels: ['grok-beta', 'grok-2-vision-1212', 'grok-3'],
-    type: 'openai-compatible',
-    specialty: 'Market Intelligence, Macro Trends & Speculative Synthesis',
-    costTier: 'medium',
-    latencyTier: 'medium'
-  },
   openrouter: {
     name: 'OpenRouter',
     url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -48,7 +48,10 @@ export const PROVIDER_CONFIGS = Object.freeze({
     defaultModel: process.env.AI_MODEL || 'openai/gpt-4o-mini',
     fallbackModels: ['anthropic/claude-3.5-sonnet', 'deepseek/deepseek-chat', 'meta-llama/llama-3.3-70b-instruct'],
     type: 'openai-compatible',
-    specialty: 'Multi-Model Routing & Strategic Reasoning',
+    // Also carries the market-intelligence and live-search duties that used to
+    // sit on Grok and Perplexity: OpenRouter can route to online-capable
+    // models, so it is the honest home for both once those keys are absent.
+    specialty: 'Multi-Model Routing, Market Intelligence & Live Search-Grounded Synthesis',
     costTier: 'medium',
     latencyTier: 'medium'
   },
@@ -75,17 +78,6 @@ export const PROVIDER_CONFIGS = Object.freeze({
     costTier: 'low',
     latencyTier: 'fast'
   },
-  openai: {
-    name: 'OpenAI',
-    url: 'https://api.openai.com/v1/chat/completions',
-    envKey: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-4o-mini',
-    fallbackModels: ['gpt-4o', 'o3-mini'],
-    type: 'openai-compatible',
-    specialty: 'High-precision Financial Logic & Strategy Synthesis',
-    costTier: 'medium',
-    latencyTier: 'fast'
-  },
   anthropic: {
     name: 'Anthropic Claude',
     url: 'https://api.anthropic.com/v1/messages',
@@ -93,7 +85,9 @@ export const PROVIDER_CONFIGS = Object.freeze({
     defaultModel: 'claude-3-5-sonnet-20241022',
     fallbackModels: ['claude-3-haiku-20240307'],
     type: 'anthropic-native',
-    specialty: 'Deep Risk Assessment, Constraint Checking & Policy Auditing',
+    // Carries the high-precision financial-logic duty that used to sit on
+    // OpenAI, alongside its own risk/policy specialisation.
+    specialty: 'Deep Risk Assessment, Constraint Checking, Policy Auditing & High-precision Financial Logic',
     costTier: 'high',
     latencyTier: 'medium'
   },
@@ -118,17 +112,6 @@ export const PROVIDER_CONFIGS = Object.freeze({
     specialty: 'Multilingual Intent Processing & Concise Explanations',
     costTier: 'medium',
     latencyTier: 'fast'
-  },
-  perplexity: {
-    name: 'Perplexity',
-    url: 'https://api.perplexity.ai/chat/completions',
-    envKey: 'PERPLEXITY_API_KEY',
-    defaultModel: 'sonar-pro',
-    fallbackModels: ['sonar'],
-    type: 'openai-compatible',
-    specialty: 'Live Web Search & Sourced Market Intelligence',
-    costTier: 'medium',
-    latencyTier: 'medium'
   },
   workersai: {
     name: 'Cloudflare Workers AI',
@@ -265,7 +248,7 @@ async function httpReq(url, options, timeout = TIMEOUT_MS) {
 // Provider Specific Chat Implementations
 // ---------------------------------------------------------------------------
 
-/** OpenAI Compatible Chat (Grok, OpenRouter, Groq, OpenAI, DeepSeek, Mistral, Perplexity) */
+/** OpenAI Compatible Chat (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI) */
 async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {} }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
@@ -447,7 +430,7 @@ export async function executeProviderChat(providerId, {
     if (!accountId) throw new Error('NO_CLOUDFLARE_ACCOUNT_ID');
     text = await callWorkersAI({ accountId, apiToken: apiKey, model: selectedModel, system, user, temperature, maxTokens });
   } else {
-    // OpenAI Compatible (Grok, OpenRouter, Groq, OpenAI, DeepSeek, Mistral, Perplexity)
+    // OpenAI Compatible (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI)
     if (!apiKey) throw new Error(`NO_API_KEY:${providerId}`);
     const extraHeaders = {};
     if (providerId === 'openrouter') {
@@ -483,12 +466,22 @@ export async function executeProviderChat(providerId, {
 // ---------------------------------------------------------------------------
 
 /**
- * Priority order by task type:
- * - market: Grok -> Perplexity -> Gemini -> OpenRouter -> Groq -> Internal
- * - reasoning: OpenRouter -> Anthropic -> DeepSeek -> OpenAI -> Gemini -> Groq -> Internal
- * - risk: Anthropic -> DeepSeek -> OpenRouter -> Gemini -> Groq -> Internal
- * - fast / intent: Groq -> Gemini -> Mistral -> OpenAI -> OpenRouter -> Internal
- * - default: Grok -> OpenRouter -> Groq -> Gemini -> Internal
+ * Priority order by task type. Every route below is built ONLY from providers
+ * that are still registered — Grok, OpenAI and Perplexity were removed (no key
+ * on this deployment), so the jobs they used to head are reassigned:
+ *
+ *   market     (was Grok → Perplexity)  → OpenRouter → Gemini → Groq → DeepSeek
+ *   research   (was Perplexity)         → OpenRouter → Gemini → Groq → DeepSeek
+ *   reasoning  (was … → OpenAI → Grok)  → OpenRouter → Anthropic → DeepSeek → AIMLAPI
+ *   fast       (was … → OpenAI)         → Workers AI → Groq → Gemini → Mistral → AIMLAPI
+ *   default    (was Grok → …)           → OpenRouter → Groq → Gemini → Workers AI …
+ *
+ * - market: OpenRouter -> Gemini -> Groq -> DeepSeek -> AIMLAPI -> Workers AI -> Internal
+ * - research: OpenRouter -> Gemini -> Groq -> DeepSeek -> AIMLAPI -> Workers AI -> Internal
+ * - reasoning: OpenRouter -> Anthropic -> DeepSeek -> Gemini -> AIMLAPI -> Workers AI -> Internal
+ * - risk: Anthropic -> DeepSeek -> OpenRouter -> AIMLAPI -> Gemini -> Groq -> Workers AI -> Internal
+ * - fast / intent: Workers AI -> Groq -> Gemini -> Mistral -> AIMLAPI -> OpenRouter -> Internal
+ * - default: OpenRouter -> Groq -> Gemini -> Workers AI -> AIMLAPI -> DeepSeek -> Anthropic -> Mistral -> Internal
  */
 export function getPreferredProvidersForTask(taskType = 'general', { configuredOnly = false } = {}) {
   const type = String(taskType).toLowerCase();
@@ -498,25 +491,37 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
     case 'market':
     case 'market_intelligence':
     case 'crypto_trend':
-      candidateOrder = ['grok', 'perplexity', 'gemini', 'openrouter', 'groq', 'openai', 'workersai', 'internal'];
+      // Grok's market/macro seat and Perplexity's search-grounded market notes
+      // both moved to OpenRouter, with Gemini and Groq behind it.
+      candidateOrder = ['openrouter', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      break;
+    case 'research':
+    case 'news':
+    case 'web_research':
+    case 'crypto-analysis':
+      // Perplexity's old job: sourced, web-grounded answers. OpenRouter's
+      // online-capable models lead; Gemini backs it up.
+      candidateOrder = ['openrouter', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
-      candidateOrder = ['openrouter', 'anthropic', 'deepseek', 'openai', 'grok', 'gemini', 'workersai', 'internal'];
+      // OpenAI's high-precision logic seat is covered by Anthropic, DeepSeek
+      // and AIMLAPI; Grok's slot drops out.
+      candidateOrder = ['openrouter', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'deepseek', 'openrouter', 'gemini', 'groq', 'workersai', 'internal'];
+      candidateOrder = ['anthropic', 'deepseek', 'openrouter', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
     case 'classification':
-      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'openai', 'openrouter', 'internal'];
+      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'internal'];
       break;
     default:
-      candidateOrder = ['grok', 'openrouter', 'groq', 'workersai', 'gemini', 'deepseek', 'anthropic', 'openai', 'internal'];
+      candidateOrder = ['openrouter', 'groq', 'gemini', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
       break;
   }
 
@@ -582,7 +587,10 @@ export async function routedChat({
  * Parallel Multi-Provider Query (for Debate, Consensus, and Multi-Agent Reasoning).
  */
 export async function parallelMultiProviderChat({
-  providers = ['grok', 'openrouter', 'gemini'],
+  // Grok's debate seat is gone; OpenRouter, Gemini and Anthropic are the
+  // three configured providers with the widest disagreement, which is the
+  // point of a debate.
+  providers = ['openrouter', 'gemini', 'anthropic'],
   system = '',
   user = '',
   temperature = 0.3,

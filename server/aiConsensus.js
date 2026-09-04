@@ -6,7 +6,7 @@
  * For high-stakes, strategic, or complex financial intent:
  *   - Never relies on a single model.
  *   - Orchestrates multi-model reasoning & debate across diverse AI models
- *     (e.g., Grok for market intelligence, OpenRouter / Claude for risk/logic,
+ *     (e.g., OpenRouter for market intelligence, Anthropic Claude for risk/logic,
  *     Gemini / Groq for speed & verification, Internal engine for ground truth).
  *   - Evaluates convergence and divergence.
  *   - Computes:
@@ -75,10 +75,13 @@ Respond in STRICT JSON:
 }`
 };
 
-// Specialized multi-model routing via OpenRouter and Groq
+// Specialized multi-model routing via OpenRouter and Groq.
+// The market-intelligence seat was Grok's, served through OpenRouter as
+// `x-ai/grok-2`. Grok is no longer a registered provider, so the seat goes to
+// the deployment's own OpenRouter default model.
 const ROLE_MODELS = {
   openrouter: {
-    market_intelligence: 'x-ai/grok-2',
+    market_intelligence: process.env.AI_MODEL || 'openai/gpt-4o-mini',
     risk_guardian: 'anthropic/claude-3.5-sonnet',
     strategy_architect: 'deepseek/deepseek-chat'
   },
@@ -152,15 +155,15 @@ export async function runMultiAiDebate({
   // Select active providers prioritizing Groq and OpenRouter
   let debateProviders = preferredProviders.filter(isProviderConfigured);
   if (!debateProviders.length) {
-    const priority = ['groq', 'openrouter', 'grok', 'gemini', 'deepseek', 'anthropic', 'openai'];
+    const priority = ['groq', 'openrouter', 'gemini', 'deepseek', 'anthropic', 'aimlapi', 'mistral', 'workersai'];
     debateProviders = priority.filter((p) => active.includes(p)).slice(0, 3);
   }
 
-  // If only OpenRouter is configured, we run multi-model debate across diverse models on OpenRouter (Grok, Claude, DeepSeek)
+  // If only OpenRouter is configured, we run multi-model debate across diverse models on OpenRouter (GPT-4o, Claude, DeepSeek)
   let executionPlan = [];
   if (debateProviders.includes('openrouter') && debateProviders.length === 1) {
     executionPlan = [
-      { provider: 'openrouter', role: 'market_intelligence', model: 'x-ai/grok-2' },
+      { provider: 'openrouter', role: 'market_intelligence', model: ROLE_MODELS.openrouter.market_intelligence },
       { provider: 'openrouter', role: 'risk_guardian', model: 'anthropic/claude-3.5-sonnet' },
       { provider: 'openrouter', role: 'strategy_architect', model: 'deepseek/deepseek-chat' }
     ];

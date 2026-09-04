@@ -2,8 +2,8 @@
  * AI analysis backend — Multi-AI Intelligence Layer (FBT AI Gateway).
  *
  * ─── WHY THIS IS SERVER-SIDE ──────────────────────────────────────────────
- * These are BILLABLE keys. Provider keys (Grok, OpenRouter, Gemini, Groq,
- * OpenAI, Anthropic, DeepSeek, etc.) shipped in the client bundle would be
+ * These are BILLABLE keys. Provider keys (OpenRouter, Gemini, Groq, Anthropic,
+ * DeepSeek, Mistral, Workers AI, AIMLAPI…) shipped in the client bundle would be
  * readable by anyone. So the keys live only in server env vars, and the browser
  * calls our own /api/v1/ai/* and /api/ai/* endpoints.
  *
@@ -25,7 +25,6 @@ const JINA_SEARCH_URL = 'https://s.jina.ai/';
 const JINA_KEY = process.env.JINA_API_KEY || '';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
 
-const GROK_KEY = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
 const GROQ_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -38,13 +37,14 @@ export const aiConfigured = () => anyAiConfigured();
 
 /** Active primary provider identifier */
 export const aiProvider = () => {
-  if (GROK_KEY) return 'grok';
   if (GROQ_KEY) return 'groq';
   if (GEMINI_KEY) return 'gemini';
   if (OPENROUTER_KEY) return 'openrouter';
-  if (process.env.OPENAI_API_KEY) return 'openai';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
   if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
+  if (process.env.MISTRAL_API_KEY) return 'mistral';
+  if (process.env.AIMLAPI_KEY) return 'aimlapi';
+  if (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID) return 'workersai';
   return null;
 };
 
@@ -54,13 +54,14 @@ export const aiProvider = () => {
 export async function aiSelfTest() {
   const activeIds = getActiveProviderIds().filter((id) => id !== 'internal');
   const out = {
-    grokKeyPresent: Boolean(GROK_KEY),
     groqKeyPresent: Boolean(GROQ_KEY),
     geminiKeyPresent: Boolean(GEMINI_KEY),
     openrouterKeyPresent: Boolean(OPENROUTER_KEY),
-    openaiKeyPresent: Boolean(process.env.OPENAI_API_KEY),
     anthropicKeyPresent: Boolean(process.env.ANTHROPIC_API_KEY),
     deepseekKeyPresent: Boolean(process.env.DEEPSEEK_API_KEY),
+    mistralKeyPresent: Boolean(process.env.MISTRAL_API_KEY),
+    aimlapiKeyPresent: Boolean(process.env.AIMLAPI_KEY),
+    workersaiKeyPresent: Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID),
     jinaKeyPresent: Boolean(JINA_KEY),
     provider: aiProvider(),
     activeProviders: activeIds,
@@ -73,7 +74,7 @@ export async function aiSelfTest() {
     out.ok = false;
     out.reason = 'NO_KEY';
     out.fix =
-      'Set GROK_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY in your environment, ' +
+      'Set GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY or ANTHROPIC_API_KEY in your environment, ' +
       'then redeploy. These must NOT have a VITE_ prefix (except VITE_GEMINI_API_KEY for Android build).';
     return out;
   }

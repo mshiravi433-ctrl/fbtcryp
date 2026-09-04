@@ -1171,7 +1171,7 @@
       "q4": "Quels réseaux sont pris en charge ?",
       "a4": "La liste active provient du registre de l’application : BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic et Solana. La page reflète toujours le registre courant, pas une liste marketing codée en dur.",
       "q5": "Comment fonctionne l’IA ?",
-      "a5": "Via la passerelle FBT AI et l’orchestrateur, la plateforme peut s’appuyer sur des fournisseurs configurés (comme Grok ou OpenRouter) et des systèmes d’intelligence internes pour analyser les données de marché, on-chain et de portefeuille. Elle assiste et explique — elle ne garantit aucun résultat.",
+      "a5": "Via la passerelle FBT AI et l’orchestrateur, la plateforme peut s’appuyer sur des fournisseurs configurés (comme Gemini ou OpenRouter) et des systèmes d’intelligence internes pour analyser les données de marché, on-chain et de portefeuille. Elle assiste et explique — elle ne garantit aucun résultat.",
       "q6": "FBT garantit-il des profits ?",
       "a6": "Non. Les analyses et signaux de l’IA sont informatifs et ne peuvent garantir aucune performance future. Les cryptomonnaies sont volatiles et vous pouvez tout perdre.",
       "q7": "L’IA peut-elle exécuter des transactions ?",

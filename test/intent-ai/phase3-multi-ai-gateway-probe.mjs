@@ -55,16 +55,26 @@ function pass(desc) {
 const providers = getAvailableProviders();
 assert(Array.isArray(providers), 'getAvailableProviders must return an array');
 assert(providers.length >= 8, 'Gateway must support at least 8 providers');
-pass('Gateway registers all 10 providers including Grok, OpenRouter, Groq, Gemini, DeepSeek, Anthropic, OpenAI');
+pass('Gateway registers the 9 keyed-capable providers: OpenRouter, Groq, Gemini, Anthropic, DeepSeek, Mistral, Workers AI, AIMLAPI, Internal');
 
-const grokConfig = PROVIDER_CONFIGS.grok;
-assert(grokConfig && grokConfig.url === 'https://api.x.ai/v1/chat/completions', 'Grok provider URL must be x.ai completions');
-assert(grokConfig.envKey === 'GROK_API_KEY' && grokConfig.altEnvKey === 'XAI_API_KEY', 'Grok keys must be configured');
-pass('Grok (xAI) provider configuration verified with xAI endpoint and keys');
+/*
+ * Grok (xAI), OpenAI and Perplexity were de-registered: they never carried an
+ * API key, so a route that named them always failed over. The registry is the
+ * contract this panel and the task router both read, so the probe pins their
+ * absence — a future re-add must be deliberate, not an accident of a merge.
+ */
+for (const removed of ['grok', 'openai', 'perplexity']) {
+  assert(!PROVIDER_CONFIGS[removed], `Provider "${removed}" must not be registered (no API key — job reassigned)`);
+}
+pass('Grok, OpenAI and Perplexity are no longer registered (no key — duties reassigned)');
 
 const openRouterConfig = PROVIDER_CONFIGS.openrouter;
 assert(openRouterConfig && openRouterConfig.url === 'https://openrouter.ai/api/v1/chat/completions', 'OpenRouter endpoint verified');
 pass('OpenRouter provider configuration verified');
+
+const aimlapiConfig = PROVIDER_CONFIGS.aimlapi;
+assert(aimlapiConfig && aimlapiConfig.envKey === 'AIMLAPI_KEY', 'AIMLAPI provider carries the OpenAI-class slot');
+pass('AIMLAPI covers the OpenAI-class financial-logic slot behind its own key');
 
 const activeIds = getActiveProviderIds();
 assert(activeIds.includes('internal'), 'Internal engine must always be active');
@@ -75,8 +85,23 @@ pass('Internal deterministic reasoning engine is active and available as safe fa
 // ---------------------------------------------------------------------------
 
 const marketRouting = getPreferredProvidersForTask('market');
-assert(marketRouting[0] === 'grok' || marketRouting.includes('grok'), 'Market task must prefer Grok / market specialists');
-pass('Market Intelligence tasks route preferentially to Grok & search models');
+assert(marketRouting[0] === 'openrouter', 'Market task must prefer OpenRouter (Grok/Perplexity duty reassigned)');
+pass('Market Intelligence tasks route preferentially to OpenRouter & search-capable models');
+
+/* Perplexity's live-web-search duty now has its own route. */
+const researchRouting = getPreferredProvidersForTask('research');
+assert(researchRouting[0] === 'openrouter', 'Research must prefer OpenRouter (Perplexity duty reassigned)');
+assert(researchRouting.every((p) => Boolean(PROVIDER_CONFIGS[p])), 'Research route names only registered providers');
+pass('Web research tasks route to OpenRouter / Gemini (Perplexity duty reassigned)');
+
+/* No route anywhere may name a provider that is no longer registered. */
+for (const task of ['market', 'research', 'reasoning', 'risk', 'fast', 'general', 'news', 'intent']) {
+  const route = getPreferredProvidersForTask(task);
+  for (const p of route) {
+    assert(Boolean(PROVIDER_CONFIGS[p]), `Task "${task}" routes to unregistered provider "${p}"`);
+  }
+}
+pass('Every task route resolves only to registered providers');
 
 const reasoningRouting = getPreferredProvidersForTask('reasoning');
 assert(reasoningRouting.includes('openrouter') || reasoningRouting.includes('anthropic') || reasoningRouting.includes('internal'), 'Reasoning routes to analytical models');
@@ -228,8 +253,8 @@ pass('Confidence Engine evaluates data freshness, model agreement & tool groundi
 const outcomeRecord = await recordIntentOutcome({
   intentId: 'int_test_123',
   intentType: 'INVESTMENT_PLAN',
-  providerUsed: 'grok',
-  modelsConsulted: ['grok', 'openrouter', 'internal'],
+  providerUsed: 'openrouter',
+  modelsConsulted: ['openrouter', 'gemini', 'internal'],
   strategyId: 'strat_bluechip_dca',
   executionSuccess: true,
   userApproved: true,

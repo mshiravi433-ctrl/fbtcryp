@@ -1012,6 +1012,41 @@
   gap: 10px;
 }
 
+/* ── The scroll area of a sheet panel ─────────────────────────────────────
+ *
+ * `.iaos-panel` is a flex column with `overflow: hidden` and a capped
+ * max-height of `min(86vh, 780px)`. The body inside it had no flex rules at
+ * all, so it kept its natural height, spilled past the parent and was simply
+ * clipped: on a phone the provider list showed its first row of cards and the
+ * rest existed but could not be reached — no scrollbar, no gesture.
+ *
+ * `min-height: 0` is the load-bearing line. It is what allows a flex child to
+ * shrink below its content height, which is what makes `overflow-y: auto`
+ * turn it into a scroll container instead of a clipped box.
+ */
+.iaos-panel-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Breathing room so the scrollbar never sits on top of a card edge. */
+  padding-inline-end: 2px;
+}
+
+.iaos-panel-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.iaos-panel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, .3);
+  border-radius: 999px;
+}
+
+.iaos-panel-scroll > *:last-child {
+  margin-bottom: 4px;
+}
+
 /* operations grid */
 
 .iaos-ops-cats {
@@ -1562,9 +1597,22 @@
 /* Multi-AI Intelligence & Consensus Panel Styling */
 .iaos-intel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* `min(240px, 100%)` instead of a bare `240px`: on a 320px-wide phone a
+     hard 240px minimum plus the panel padding used to push the column wider
+     than the panel, so the card ran under the edge. Now it collapses to one
+     full-width column and the list scrolls vertically instead. */
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
   gap: 12px;
   padding: 8px 0;
+}
+
+/* Two readable columns on wider phones — the fleet is nine cards long now,
+   and one card per row makes that a very long scroll. */
+@media (min-width: 420px) and (max-width: 759px) {
+  .iaos-intel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
 }
 
 .iaos-intel-card {

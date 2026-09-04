@@ -1071,7 +1071,7 @@
       "confidence": "Confidence",
       "risk": "Risk",
       "decision": "Decision Support",
-      "note": "If Grok, OpenRouter or other providers are configured, they appear as supported intelligence providers. No API keys or credentials are ever exposed.",
+      "note": "If Gemini, OpenRouter or other providers are configured, they appear as supported intelligence providers. No API keys or credentials are ever exposed.",
       "providersLabel": "Supported intelligence providers when configured:"
     },
     "ecosystem": {
@@ -1329,7 +1329,7 @@
       "q4": "Which networks are supported?",
       "a4": "The live set is derived from the app registry: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, and Solana. The page always reflects the current registry — not a hardcoded marketing list.",
       "q5": "How does the AI work?",
-      "a5": "Through the FBT AI Gateway and orchestrator, the platform can use configured providers (such as Grok or OpenRouter) and internal intelligence systems to analyze market, onchain and portfolio data. It assists and explains — it does not guarantee outcomes.",
+      "a5": "Through the FBT AI Gateway and orchestrator, the platform can use configured providers (such as Gemini or OpenRouter) and internal intelligence systems to analyze market, onchain and portfolio data. It assists and explains — it does not guarantee outcomes.",
       "q6": "Does FBT guarantee profits?",
       "a6": "No. AI analysis and signals are informational and cannot guarantee future performance. Crypto is volatile and you can lose everything.",
       "q7": "Can AI execute transactions?",
