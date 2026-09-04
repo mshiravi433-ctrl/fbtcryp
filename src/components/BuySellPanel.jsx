@@ -222,10 +222,11 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   const rtl = i18n.dir ? i18n.dir() === 'rtl' : false;
   const slideDir = stepDir * (rtl ? -1 : 1);
-  /* Exact equality is intentional: fa-IR, ar, English and every other locale
-     must never render the Iranian-only tab. */
-  const iranBuyLanguageAllowed = i18n.language === 'fa';
-  const iranBuyVisible = iranBuyLanguageAllowed && iranBuyCapability?.enabled === true;
+  /* Persian UI only. `fa` and `fa-IR` both count; English/Arabic never see
+     this tab. Server `enabled` gates checkout, not whether Iranians can find
+     the Wallex tab at all. */
+  const iranBuyLanguageAllowed = String(i18n.resolvedLanguage || i18n.language || '').split(/[-_]/)[0] === 'fa';
+  const iranBuyVisible = iranBuyLanguageAllowed;
 
   const provider = providers?.providers?.[0] || null;
   const providerName = provider ? t(`buySell.providerNames.${provider.id}`, { defaultValue: provider.name || provider.id }) : '';
@@ -277,7 +278,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
       return () => { live = false; };
     }
     getIranBuyCapability()
-      .then((capability) => { if (live) setIranBuyCapability(capability?.enabled === true ? capability : null); })
+      .then((capability) => { if (live) setIranBuyCapability(capability || null); })
       .catch(() => { if (live) setIranBuyCapability(null); });
     return () => { live = false; };
   }, [i18n.language]);

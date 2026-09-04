@@ -69,7 +69,7 @@ export async function run(container) {
     check('English never renders the Iranian-only top tab or panel', !container.querySelector('[data-testid="iran-buy-top-tab"]') && !container.querySelector('[data-testid="iran-buy-panel"]'));
 
     await act(async () => { await i18n.changeLanguage('fa-IR'); await sleep(100); });
-    check('fa-IR is not treated as exact fa for this feature', !container.querySelector('[data-testid="iran-buy-top-tab"]'));
+    check('fa-IR still shows the Iranian-only tab', Boolean(container.querySelector('[data-testid="iran-buy-top-tab"]')));
     check('mounting and locale changes produced no unexpected React error', errors.length === 0);
   } finally {
     if (root) await act(async () => { root.unmount(); });

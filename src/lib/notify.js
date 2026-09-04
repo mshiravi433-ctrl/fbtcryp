@@ -284,9 +284,6 @@ export async function requestNotificationPermission() {
       if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
         status = await PushNotifications.requestPermissions();
       }
-      // Remember it: notificationPermission() has no web API to read on
-      // native, so without this the Settings row would keep offering "allow"
-      // even after the user had already granted it.
       nativePermissionCache = status.receive === 'granted' ? 'granted' : 'denied';
       return nativePermissionCache;
     } catch {
@@ -300,6 +297,30 @@ export async function requestNotificationPermission() {
     return await Notification.requestPermission();
   } catch {
     return 'denied';
+  }
+}
+
+async function presentNativeShade(title, options = {}) {
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    let perm = await LocalNotifications.checkPermissions();
+    if (perm.display === 'prompt' || perm.display === 'prompt-with-rationale') {
+      perm = await LocalNotifications.requestPermissions();
+    }
+    if (perm.display !== 'granted') return false;
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: Date.now() % 2147483647,
+        title: String(title || 'FBT Swap'),
+        body: options?.body ? String(options.body) : '',
+        extra: options?.data || {},
+        smallIcon: 'ic_stat_icon_config_sample',
+        iconColor: '#00e5ff'
+      }]
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -322,6 +343,10 @@ export function showLocalNotification(title, options = {}) {
     }).catch(() => {});
   } catch { /* inbox mirror is best-effort */ }
 
+  if (isNativeApp()) {
+    presentNativeShade(title, options);
+    return true;
+  }
   if (!notificationsSupported()) return null;
   /*
    * Guarded before the global is touched. This line used to read
@@ -674,6 +699,12 @@ export async function initNativePushListeners() {
       const route = safeNativeRoute(notification?.data?.url);
       if (route) window.location.hash = route.slice(1);
     });
+    await nativePushPlugin.addListener('pushNotificationReceived', (notification) => {
+      presentNativeShade(notification?.title || 'FBT Swap', {
+        body: notification?.body || '',
+        data: notification?.data || {}
+      });
+    });
     nativePushListenersReady = true;
     return () => {
       nativeRegistrationListener?.remove?.();
@@ -695,18 +726,12 @@ export async function registerNativePush() {
     nativePushPlugin = PushNotifications;
     await initNativePushListeners();
 
-    // Android 13+ made notifications a runtime permission. Without this the OS
-    // silently drops every notification and the app looks broken rather than
-    // denied.
     let status = await PushNotifications.checkPermissions();
     if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
       status = await PushNotifications.requestPermissions();
     }
     if (status.receive !== 'granted') return { ok: false, reason: 'DENIED' };
 
-    // The token arrives asynchronously via an event, so wrap it in a promise
-    // with a timeout — a registration that never resolves would hang the
-    // settings toggle forever with no explanation.
     const token = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         nativeTokenWaiters = nativeTokenWaiters.filter((waiter) => waiter.resolve !== resolve);
@@ -730,8 +755,6 @@ export async function registerNativePush() {
     return { ok: true, token };
   } catch (e) {
     const msg = String(e?.message || e);
-    // A missing Firebase config is the most common setup failure and produces
-    // a very unhelpful native error, so name it.
     if (/FirebaseApp|google-services/i.test(msg)) {
       return { ok: false, reason: 'FIREBASE_NOT_CONFIGURED' };
     }

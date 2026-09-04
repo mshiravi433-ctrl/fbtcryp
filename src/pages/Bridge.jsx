@@ -164,6 +164,8 @@ export default function Bridge() {
    * on the pair. Two tabs is honest about them being different acts.
    */
   const [mode, setMode] = useState('tokens');
+  const [thorFromAsset, setThorFromAsset] = useState(null);
+  const [thorToAsset, setThorToAsset] = useState(null);
 
   const [fromChain, setFromChain] = useState(56);
   const [toChain, setToChain] = useState(42161);
@@ -179,6 +181,12 @@ export default function Bridge() {
    */
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    const tab = String(searchParams.get('mode') || '').toLowerCase();
+    if (MODES.includes(tab)) setMode(tab);
+    const thorFrom = searchParams.get('fromAsset');
+    const thorTo = searchParams.get('toAsset');
+    if (thorFrom) setThorFromAsset(thorFrom);
+    if (thorTo) setThorToAsset(thorTo);
     const fc = Number(searchParams.get('fromChain'));
     const tc = Number(searchParams.get('toChain'));
     const tk = (searchParams.get('token') || '').toUpperCase();
@@ -673,7 +681,7 @@ export default function Bridge() {
         </Suspense>
       ) : mode === 'native' ? (
         <Suspense fallback={<PanelSkeleton />}>
-          <ThorPanel />
+          <ThorPanel initialFrom={thorFromAsset} initialTo={thorToAsset} />
         </Suspense>
       ) : (
         <>

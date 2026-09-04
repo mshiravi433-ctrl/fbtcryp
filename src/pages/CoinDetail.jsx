@@ -449,7 +449,10 @@ export default function CoinDetail() {
               </button>
             </div>
             <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
-              {t('coin.realSwapNote', { chain: realSwap.chainName, symbol: realSwap.token.symbol })}
+              {t(
+                realSwap.kind === 'thor' ? 'coin.thorSwapNote' : 'coin.realSwapNote',
+                { chain: realSwap.chainName, symbol: realSwap.token.symbol }
+              )}
             </p>
           </>
         ) : resolvedRoute ? (
@@ -514,7 +517,7 @@ export default function CoinDetail() {
         </button>
       </motion.div>
 
-      {realSwap?.token?.address && (
+      {realSwap?.kind !== 'thor' && realSwap?.token?.address && (
         <TokenRiskCard
           chainId={realSwap.chainId}
           address={realSwap.token.address}
@@ -529,7 +532,7 @@ export default function CoinDetail() {
         real contract address to anchor to; it reports unavailability rather
         than inventing a signal. Not a buy recommendation.
       */}
-      {realSwap?.token?.address && realSwap?.chainId !== 'solana' && (
+      {realSwap?.kind !== 'thor' && realSwap?.token?.address && realSwap?.chainId !== 'solana' && (
         <TokenSmartMoney
           chainId={Number(realSwap.chainId) || 1}
           address={realSwap.token.address}

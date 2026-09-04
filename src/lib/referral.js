@@ -27,6 +27,7 @@
  * closing the app, coming back a week later, and finally swapping — which is
  * the only moment any fee exists to share.
  */
+import { publicAppUrl } from './nativeShell.js';
 
 const REF_KEY = 'fbt-referred-by';
 const REF_AT_KEY = 'fbt-referred-at';
@@ -46,6 +47,15 @@ export const REFERRAL_SHARE = 0.01;
 const VALID = /^[A-Za-z0-9_-]{4,32}$/;
 
 export const isValidRefCode = (code) => typeof code === 'string' && VALID.test(code);
+
+/**
+ * Public invite URL for this app. HashRouter keeps the query after `#`, so
+ * `https://fbtswap.ir/#/?ref=CODE` is what friends actually open.
+ */
+export function siteInviteUrl(code) {
+  if (!isValidRefCode(code)) return publicAppUrl('/');
+  return publicAppUrl(`/#/?ref=${encodeURIComponent(code)}`);
+}
 
 function read(key) {
   try {
@@ -91,16 +101,25 @@ function ownRefCode() {
   }
 }
 
+function hashSearch(hash) {
+  const raw = String(hash || '');
+  const q = raw.indexOf('?');
+  return q >= 0 ? raw.slice(q) : '';
+}
+
 export function captureReferral(
   search = typeof window !== 'undefined' ? window.location.search : '',
-  telegramStartParam = ''
+  telegramStartParam = '',
+  hash = typeof window !== 'undefined' ? window.location.hash : ''
 ) {
   const existing = read(REF_KEY);
   if (isValidRefCode(existing)) return existing;
 
   let query = null;
+  let hashQuery = null;
   try {
     query = new URLSearchParams(search);
+    hashQuery = new URLSearchParams(hashSearch(hash));
   } catch {
     return null;
   }
@@ -109,7 +128,9 @@ export function captureReferral(
   // a Main Mini App direct link and are constrained by the same validator.
   const candidates = [
     query.get('ref'),
+    hashQuery.get('ref'),
     query.get('tgWebAppStartParam'),
+    hashQuery.get('tgWebAppStartParam'),
     telegramStartParam
   ];
   const code = candidates.find(isValidRefCode) ?? null;

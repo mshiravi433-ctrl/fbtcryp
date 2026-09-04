@@ -18,7 +18,8 @@ import InfoBox from '../components/InfoBox';
 import { perksFor } from '../lib/perks';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
-import { telegramBotStartAppUrl } from '../lib/telegramBot';
+import { siteInviteUrl } from '../lib/referral';
+import { bindRewardCode } from '../lib/rewards/rewardsApi';
 import { dailyRewardStatus } from '../lib/dailyRewards';
 import { SPECULATION_ENABLED } from '../lib/features';
 import { vaultIsLive } from '../lib/vault';
@@ -254,7 +255,12 @@ export default function Earn({ embedded = false }) {
    * identity, validates the parameter and falls back to the bare bot link if
    * a corrupted local refCode somehow reaches this point.
    */
-  const inviteUrl = telegramBotStartAppUrl(refCode);
+  const inviteUrl = siteInviteUrl(refCode);
+
+  useEffect(() => {
+    if (!refCode) return;
+    void bindRewardCode({ code: refCode });
+  }, [refCode]);
 
   const tier = tierFor(points);
   const next = nextTier(points);
@@ -726,7 +732,7 @@ export default function Earn({ embedded = false }) {
               className="row-between"
               style={{ background: 'rgba(127,127,127,.08)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px' }}
             >
-              <span className="mono" style={{ fontSize: 12, color: 'var(--rgb-1)' }}>{refCode}</span>
+              <span className="mono" style={{ fontSize: 12, color: 'var(--rgb-1)', overflow: 'hidden', textOverflow: 'ellipsis' }} dir="ltr">{inviteUrl}</span>
               <span className="pill pill-neutral">{referrals}</span>
             </div>
 

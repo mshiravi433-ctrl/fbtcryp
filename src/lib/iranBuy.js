@@ -9,7 +9,9 @@
 import { apiBase } from './apiBase.js';
 import { telegramAuthBodyFields, telegramAuthHeaders } from './telegramSession.js';
 
-const ROOT = `${apiBase()}/iran/buy`;
+function iranBuyRoot() {
+  return `${apiBase()}/iran/buy`;
+}
 const BINDING_KEY = 'fbt:iran-buy:wallet-binding:v1';
 const ORDERS_KEY = 'fbt:iran-buy:orders:v1';
 
@@ -33,7 +35,7 @@ async function request(path, { method = 'GET', body, headers = {}, authenticated
     if (authenticated && !authHeaders) throw Object.assign(new Error('AUTH_REQUIRED'), { code: 'AUTH_REQUIRED' });
     const authBody = authenticated && method !== 'GET' ? telegramAuthBodyFields() : null;
     const payloadBody = body == null ? body : { ...body, ...(authBody || {}) };
-    const response = await fetch(`${ROOT}${path}`, {
+    const response = await fetch(`${iranBuyRoot()}${path}`, {
       method,
       signal: controller.signal,
       headers: {

@@ -178,6 +178,7 @@ export function computeHorizonRisks({ series = [], analysis = null } = {}) {
  */
 export function computePulseLocal({ global = null, markets = [], smartMoney: sm = null, now = Date.now() } = {}) {
   const priced = (markets ?? []).filter((c) => num(c.change24h) != null && num(c.price) > 0).slice(0, 20);
+  if (!priced.length) return null;
   const up = priced.filter((c) => c.change24h > 0).length;
   const breadth = priced.length ? up / priced.length : null;
   const avgChange = priced.length ? priced.reduce((s, c) => s + num(c.change24h), 0) / priced.length : null;

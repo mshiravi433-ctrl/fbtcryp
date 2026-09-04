@@ -37,6 +37,7 @@ import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fetchOverview } from '../lib/smartMoneyClient';
 import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
+import { swapUrlFor } from '../lib/coinToSwap';
 import {
   computeHorizonRisks, computeSignalCard, computeEarlySignals,
   computePulseLocal, portfolioImpact, rankSignals, classKey
@@ -218,11 +219,15 @@ function Chevron({ open, className = '' }) {
 
 function PulseCard({ pulse, brief }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   if (!pulse) return null;
   const s = pulse.sentiment ?? {};
   const tone = s.label === 'bullish' ? 'bullish' : s.label === 'bearish' ? 'bearish' : 'neutral';
-  const liveTone = pulse.source === 'live' ? 'bullet up' : '';
+  const live = pulse.source === 'live' || pulse.source === 'market-only' || pulse.source === 'local';
+  const liveTone = live ? 'bullet up' : '';
+  const breadth = pulse.breadth;
+  const avg = breadth?.avgChange;
+  const turn = pulse.liquidity?.turnoverPct;
   return (
     <motion.section className={`sic-pulse ${open ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
       <button
@@ -263,6 +268,20 @@ function PulseCard({ pulse, brief }) {
                 <MetricTile k={t('signals.intel.pulseMomentum')} v={`${t(`signals.intel.momentumLabel.${(pulse.momentum?.label || 'flat')}`)}${pulse.momentum?.direction === 'up' ? ' ↑' : pulse.momentum?.direction === 'down' ? ' ↓' : ''}`} tone={pulse.momentum?.direction === 'up' ? 'up' : pulse.momentum?.direction === 'down' ? 'down' : ''} />
                 <MetricTile k={t('signals.intel.volatility')} v={t(`signals.intel.volLabel.${(pulse.volatility?.label || 'moderate')}`)} tone={pulse.volatility?.label === 'high' ? 'down' : pulse.volatility?.label === 'low' ? 'up' : 'warn'} />
                 <MetricTile k={t('signals.intel.liquidity')} v={t(`signals.intel.liquidityLabel.${(pulse.liquidity?.label || 'adequate')}`)} tone={pulse.liquidity?.label === 'strong' ? 'up' : pulse.liquidity?.label === 'thin' ? 'down' : ''} />
+                <MetricTile
+                  k={t('signals.intel.breadth')}
+                  v={breadth?.total ? `${breadth.up ?? 0}/${breadth.total}` : '—'}
+                  tone={(breadth?.up ?? 0) > (breadth?.total ?? 0) / 2 ? 'up' : (breadth?.total ? 'down' : '')}
+                />
+                <MetricTile
+                  k={t('signals.intel.avgChange')}
+                  v={avg != null ? `${avg > 0 ? '+' : ''}${avg}%` : '—'}
+                  tone={avg > 0 ? 'up' : avg < 0 ? 'down' : ''}
+                />
+                <MetricTile
+                  k={t('signals.intel.turnover')}
+                  v={turn != null ? `${turn}%` : '—'}
+                />
               </div>
 
               {brief && (
@@ -1132,10 +1151,12 @@ export default function Signals() {
   const pulsePoll = usePoll(() => getSignalPulse(), [], 60_000);
   const smPoll = usePoll(() => fetchOverview('24h'), [], 120_000);
   const sm = smPoll.data;
-  const pulse = useMemo(
-    () => (pulsePoll.data && pulsePoll.data?.sentiment ? pulsePoll.data : computePulseLocal({ global, markets: coins ?? [], smartMoney: sm, now: Date.now() })),
-    [pulsePoll.data, global, coins, sm]
-  );
+  const pulse = useMemo(() => {
+    const srv = pulsePoll.data?.sentiment ? pulsePoll.data : null;
+    if (srv && (srv.source === 'live' || srv.source === 'market-only')) return srv;
+    const local = computePulseLocal({ global, markets: coins ?? [], smartMoney: sm, now: Date.now() });
+    return local || srv || null;
+  }, [pulsePoll.data, global, coins, sm]);
 
   const coin = useMemo(() => {
     if (tab === 'solana') return solanaCoin ?? (coins ?? []).find((c) => c.id === activeId) ?? null;

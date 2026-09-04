@@ -440,6 +440,8 @@ export async function bindCode({ code, wallet, owner, signature = null, message 
 
   if (via === 'telegram') {
     if (!owner.startsWith('tg:')) return { ok: false, code: 'TELEGRAM_OWNER_REQUIRED' };
+  } else if (via === 'device') {
+    if (!String(owner || '').startsWith('dev:')) return { ok: false, code: 'DEVICE_OWNER_REQUIRED' };
   } else {
     if (!isEvmAddress(wallet)) return { ok: false, code: 'WALLET_REQUIRED' };
     if (!message || !signature) return { ok: false, code: 'SIGNATURE_REQUIRED' };
@@ -455,7 +457,13 @@ export async function bindCode({ code, wallet, owner, signature = null, message 
     if (!recovered || recovered !== normWallet(wallet)) return { ok: false, code: 'SIGNATURE_MISMATCH' };
   }
 
-  await io.bindRefcode({ code, owner, wallet: via === 'telegram' ? null : normWallet(wallet), via, at: now });
+  await io.bindRefcode({
+    code,
+    owner,
+    wallet: via === 'wallet' ? normWallet(wallet) : null,
+    via,
+    at: now
+  });
   /* credit ledger link so summary shows the live code */
   const ledger = await io.getLedger(owner);
   ledger.refCode = code;
@@ -472,11 +480,17 @@ export async function referralOpportunity({ owner, ev, ledger, at, day, io, now 
   const code = ev.refCode;
   if (!code) return null;
   if (!REFERRAL.qualifying.includes(ev.action)) return null;
-  if (!isEvmAddress(ev.wallet) && !isSolSignature(ev.wallet) && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ev.wallet)) return null;
+  const visitKey = ev.action === 'inviteVisit' ? `acct:${owner}` : null;
+  if (
+    !visitKey &&
+    !isEvmAddress(ev.wallet) &&
+    !isSolSignature(ev.wallet) &&
+    !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ev.wallet)
+  ) return null;
   const ref = await io.getRefcode(code);
   if (!ref) return null;
 
-  const inviteeWallet = normWallet(ev.wallet);
+  const inviteeWallet = visitKey || normWallet(ev.wallet);
   /* self-referral: same wallet or same account */
   if (ref.owner === owner) return { skipped: 'self' };
   if (REFERRAL.rejectSelfWallet && ref.wallet === inviteeWallet) return { skipped: 'self-wallet' };

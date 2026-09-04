@@ -57,7 +57,7 @@ import { useAppStore } from '../store/useAppStore';
  */
 const DEBOUNCE_MS = 550;
 
-export default function ThorPanel() {
+export default function ThorPanel({ initialFrom, initialTo } = {}) {
   const { t } = useTranslation();
   const notify = useAppStore((s) => s.notify);
 

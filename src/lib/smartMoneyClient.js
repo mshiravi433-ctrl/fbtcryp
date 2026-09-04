@@ -9,7 +9,7 @@
 
 import { apiBase } from './apiBase.js';
 
-const BASE = `${apiBase()}/v1/smart-money`;
+const smBase = () => `${apiBase()}/v1/smart-money`;
 /*
  * 30s, not 12s: a COLD serverless instance building the overview for the
  * first time legitimately needs 10-20s (seven chains + prices + DexScreener).
@@ -33,7 +33,7 @@ async function getJson(path, { signal, timeout = TIMEOUT_MS } = {}) {
   let lastErr;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const res = await fetch(`${BASE}${path}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+      const res = await fetch(`${smBase()}${path}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
       if (res.status === 429) {
         const err = new Error('RATE_LIMITED'); err.status = 429; throw err;
       }
@@ -62,7 +62,7 @@ async function send(method, path, body) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(`${smBase()}${path}`, {
       method,
       signal: ctrl.signal,
       headers: { 'content-type': 'application/json', accept: 'application/json' },

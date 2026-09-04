@@ -155,7 +155,10 @@ export default function SmartMoney() {
         <motion.section className="sm-hero" variants={riseIn} initial="hidden" animate="show">
           <div className="row-between">
             <h1>✦ {t('sm.title')}</h1>
-            <span className="sm-live"><span className="dot" />{t('sm.live')}</span>
+            <span className={`sm-live ${data?.dataStatus === 'live' ? '' : 'is-off'}`}>
+              <span className="dot" />
+              {t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking')}
+            </span>
           </div>
           <p className="sm-tagline" dangerouslySetInnerHTML={{ __html: t('sm.tagline') }} />
           <div className="sm-search">

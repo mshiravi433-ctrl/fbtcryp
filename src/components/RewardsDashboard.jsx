@@ -30,7 +30,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { POINT_VALUES, tierFor, nextTier } from '../lib/ranks';
 import { perksFor } from '../lib/perks';
 import { rewardsSummary, bindRewardCode } from '../lib/rewards/rewardsApi';
-import { telegramBotStartAppUrl } from '../lib/telegramBot';
+import { siteInviteUrl } from '../lib/referral';
 import { copyText } from '../lib/share';
 import {
   IconActivity, IconCheck, IconChevronRight, IconCopy, IconGift, IconLink,
@@ -137,7 +137,12 @@ export default function RewardsDashboard({ embedded = false }) {
   const localNext = nextTier(points);
 
   const perks = useMemo(() => perksFor(pts), [pts]);
-  const inviteUrl = telegramBotStartAppUrl(refCodeLocal);
+  const inviteUrl = siteInviteUrl(refCodeLocal);
+
+  useEffect(() => {
+    if (!refCodeLocal) return;
+    void bindRewardCode({ code: refCodeLocal });
+  }, [refCodeLocal]);
 
   const missions = summary?.missions?.today || [];
   const milestones = summary?.missions?.milestones || [];
@@ -438,7 +443,7 @@ export default function RewardsDashboard({ embedded = false }) {
         </div>
         <div className="card" style={{ padding: 13, borderRadius: 14 }}>
           <div className="row-between" style={{ background: 'rgba(127,127,127,.08)', border: '1px solid var(--line)', borderRadius: 11, padding: '9px 11px', gap: 8 }}>
-            <span className="mono" style={{ fontSize: 12, color: 'var(--rgb-1)', overflow: 'hidden', textOverflow: 'ellipsis' }} dir="ltr">{refCodeLocal}</span>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--rgb-1)', overflow: 'hidden', textOverflow: 'ellipsis' }} dir="ltr">{inviteUrl}</span>
             <span className="pill pill-neutral" style={{ flexShrink: 0 }}>{fmtNum(referrals?.total ?? 0, 0)}</span>
           </div>
 
@@ -457,7 +462,7 @@ export default function RewardsDashboard({ embedded = false }) {
           )}
 
           <div className="btn-row" style={{ marginTop: 9 }}>
-            <button className="btn btn-ghost btn-row-minor" onClick={() => copyCode()}>
+            <button className="btn btn-ghost btn-row-minor" onClick={() => copyCode(inviteUrl)}>
               <IconCopy width={13} height={13} /> {t('common.copy')}
             </button>
             <button

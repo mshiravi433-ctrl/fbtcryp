@@ -95,8 +95,6 @@ const GROUPS = [
     id: 'status',
     endpoints: [
       { m: 'GET', p: '/api/health', d: 'health' },
-      { m: 'GET', p: '/api/telegram/diagnose', d: 'telegramDiagnose' },
-      { m: 'GET', p: '/api/ai/status', d: 'aiStatus' },
       { m: 'GET', p: '/api/bridge/status', d: 'bridgeStatus' },
       { m: 'GET', p: '/api/solana/status', d: 'solanaStatus' },
       { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' },
@@ -104,15 +102,6 @@ const GROUPS = [
       { m: 'GET', p: '/api/ecosystem/agents', d: 'agentsCatalog' },
       { m: 'GET', p: '/api/ecosystem/strategies', d: 'strategiesCatalog' },
       { m: 'GET', p: '/api/ecosystem/liquidity', d: 'liquidityCatalog' },
-      { m: 'GET', p: '/api/ecosystem/status', d: 'ecosystemStatus' },
-      { m: 'GET', p: '/api/ecosystem/certifications?subjectId=', d: 'certifications' },
-      { m: 'GET', p: '/api/reputation/:id', d: 'reputation' },
-      { m: 'POST', p: '/api/ecosystem/agents', d: 'createAgent' },
-      { m: 'POST', p: '/api/ecosystem/agents/:id/submit', d: 'submitListing' },
-      { m: 'POST', p: '/api/ecosystem/agents/:id/publish', d: 'publishListing' },
-      { m: 'GET', p: '/api/ecosystem/mine/agents', d: 'myListings' },
-      { m: 'GET', p: '/api/ecosystem/review/queue', d: 'reviewQueue' },
-      { m: 'GET', p: '/api/portfolio/agent', d: 'portfolioAgent' },
       { m: 'GET', p: '/api/openapi.json', d: 'openapi' },
       { m: 'GET', p: '/api/network/overview?window=24h', d: 'networkOverview' }
     ]

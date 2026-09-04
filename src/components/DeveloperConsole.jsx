@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hasTelegramSession } from '../lib/telegramSession';
+import { TELEGRAM_BOT_URL } from '../lib/telegramBot';
 import {
   buildListingPayload,
   diagnoseTelegramAuth,
@@ -180,6 +181,15 @@ export default function DeveloperConsole() {
       <section className="card" style={{ marginTop: 12 }}>
         <p className="section-label">{t('dev.console.title')}</p>
         <p className="prose-sm">{t('dev.console.signedOut')}</p>
+        <a
+          className="btn btn-primary"
+          href={TELEGRAM_BOT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 14 }}
+        >
+          {t('dev.console.openBot')}
+        </a>
       </section>
     );
   }

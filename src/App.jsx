@@ -38,7 +38,8 @@ import { languageIsUnset } from './i18n';
 import { initServiceWorker, initNativePushListeners, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
-import { captureReferral } from './lib/referral';
+import { captureReferral, referredBy } from './lib/referral';
+import { reportActivity } from './lib/rewards/rewardsReporter';
 
 const Market = lazyRetry(() => import('./pages/Market'));
 const CoinDetail = lazyRetry(() => import('./pages/CoinDetail'));
