@@ -254,7 +254,7 @@ function nav(site) {
   return `<header id="site-nav" class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="${site}/" aria-label="${esc(COPY.nav.brandLabel.en)}" title="${esc(COPY.meta.en.title)}">
-        <span class="brand-mark"><img src="/icon-192.png" alt="" width="26" height="26"><span class="brand-ring"></span></span>
+        <span class="brand-mark"><img src="/icon-192.png" alt="" width="34" height="34"><span class="brand-ring"></span></span>
       </a>
       <nav class="nav-links" aria-label="Sections">${links}</nav>
       <span class="nav-spacer"></span>
@@ -327,11 +327,19 @@ function dock(site) {
   </div>`;
 }
 
-/* 1c ── The animated line backdrop ------------------------------------- */
+/* 1c ── The animated space backdrop -------------------------------------- */
 /**
  * Background of animated lines, as asked for («پس‌زمینه از خطوط انیمیشنی
- * استفاده کند»). Four things, deliberately cheap:
+ * استفاده کند»), now with a star field so the environment reads as space:
+ * stars twinkle and a bright meteor streaks across every now and then
+ * («در پشت زمینه ستاره ها بدرخشند و گاهی یک شهاب سنگ نورانی رد شود»).
+ * Deliberately cheap:
  *
+ *   • three tiled layers of tiny stars — background-image radial gradients,
+ *     each twinkling (opacity) and drifting (background-position) on its own
+ *     clock, which is what sells the depth;
+ *   • two meteors: a 2px gradient streak that sits at opacity 0 for most of
+ *     a long cycle and then crosses the viewport in a second or two;
  *   • one inline SVG of six long curves whose stroke-dashoffset travels, so
  *     the lines read as flowing rather than as a static wireframe;
  *   • a drifting grid, already in .ambient-grid;
@@ -339,7 +347,7 @@ function dock(site) {
  *   • a single "beam" that scans down the viewport once per slow cycle.
  *
  * No canvas, no filter, no per-frame JavaScript: transform/dashoffset on
- * ~10 elements is compositor work, and the whole layer is display:none under
+ * ~12 elements is compositor work, and the whole layer is display:none under
  * prefers-reduced-motion.
  */
 function ambient() {
@@ -358,12 +366,17 @@ function ambient() {
     })
     .join('');
   return `<div class="ambient" aria-hidden="true">
+    <span class="stars stars-a"></span>
+    <span class="stars stars-b"></span>
+    <span class="stars stars-c"></span>
     <span class="ambient-grid"></span>
     <svg id="bg-lines" class="bg-lines" viewBox="0 0 1440 560" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>
     <span class="beam"></span>
     <span class="orb orb-a"></span>
     <span class="orb orb-b"></span>
     <span class="orb orb-c"></span>
+    <span class="meteor meteor-a"></span>
+    <span class="meteor meteor-b"></span>
   </div>`;
 }
 
@@ -541,8 +554,6 @@ function showcase(site) {
           ${slides}
           <noscript><style>.show-slide{position:relative;opacity:1;transform:none;pointer-events:auto;visibility:visible}</style></noscript>
         </div>
-        <button class="show-nav is-prev" type="button" data-show-prev aria-label="${esc(COPY.showcase.prev.en)}">${ic('chevron', 'ic-flip')}</button>
-        <button class="show-nav is-next" type="button" data-show-next aria-label="${esc(COPY.showcase.next.en)}">${ic('chevron')}</button>
         <div class="show-foot">
           <div class="show-dots" role="tablist" aria-label="${esc(COPY.showcase.h2.en)}">${dots}</div>
           <button class="show-play" type="button" data-show-play aria-pressed="true" title="Auto / manual"><span class="show-play-ic" aria-hidden="true"></span><span>${T(COPY.showcase.autoplay)}</span></button>
@@ -755,7 +766,7 @@ function signals(site) {
       <div class="grid grid-3" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">${tiers}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-block-start:18px" class="reveal">${fields}</div>
       <div class="sig-split">
-        <figure class="art-panel reveal-zoom" data-parallax="6">
+        <figure class="art-panel reveal-zoom reveal" data-parallax="6">
           <img class="slide-art" src="/landing/art-signals.jpg" alt="" width="1000" height="750" loading="lazy" decoding="async">
           <figcaption>${T(COPY.signals.artNote)}</figcaption>
           <span class="art-sheen" aria-hidden="true"></span>

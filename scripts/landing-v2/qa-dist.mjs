@@ -38,8 +38,8 @@ t('Persian fee figure rendered (۰٫۷٪)', html.includes('۰٫۷٪'));
 t('all 10 networks listed', ['BNB Chain', 'Ethereum', 'Polygon', 'Arbitrum', 'Base', 'Optimism', 'Avalanche', 'Linea', 'Sonic', 'Solana'].every((n) => (html.match(new RegExp(n, 'g')) || []).length >= 1));
 t('language switcher buttons exist', html.includes('data-setlang="en"') && html.includes('data-setlang="fa"'));
 
-/* ── v2.1: the header, the bottom dock, the tour, the arrows ─────────── */
-console.log('— landing v2.1 (header / dock / tour / arrows) —');
+/* ── v2.1: the header, the bottom dock, the tour ─────────────────────── */
+console.log('— landing v2.1 (header / dock / tour) —');
 const header = /<header id="site-nav"[\s\S]*?<\/header>/.exec(html)?.[0] || '';
 t('header keeps the logo mark', header.includes('brand-mark') && header.includes('/icon-192.png'));
 t('header has no wordmark next to the logo', !/>\s*FBT Swap\s*<\/span>/.test(header));
@@ -236,10 +236,7 @@ const okFetch = () => (url) => {
 // 6) the two new controls answer to input
 {
   const { d } = await run(null, okFetch, 'controls');
-  d.querySelector('[data-show-next]').click();
-  t('carousel: next advances to slide 2', d.querySelectorAll('.show-slide')[1].classList.contains('is-on'));
-  d.querySelector('[data-show-prev]').click();
-  t('carousel: prev comes back to slide 1', d.querySelectorAll('.show-slide')[0].classList.contains('is-on'));
+  t('carousel: the old left/right arrows are gone', !d.querySelector('[data-show-prev]') && !d.querySelector('[data-show-next]') && !d.querySelector('.show-nav'));
   d.querySelector('[data-dot="3"]').click();
   t('carousel: a dot jumps to its slide', d.querySelectorAll('.show-slide')[3].classList.contains('is-on'));
   const box = d.querySelector('#dock-state');
