@@ -48,7 +48,8 @@ import {
   aiDeleteAutomation,
   aiRunAutomation,
   aiExecutionResult,
-  aiConfirm
+  aiConfirm,
+  aiFeedback
 } from '../lib/aiIntentClient';
 import { centralIngest } from '../lib/centralClient.js';
 import WalletConnectSheet from './WalletConnectSheet';
@@ -190,8 +191,15 @@ const ConversationRow = memo(function ConversationRow({
   onConnectWallet,
   onChoose,
   onMonitorAction,
-  onMonitorOpportunity
+  onMonitorOpportunity,
+  onFeedback
 }) {
+  /* Feedback is per-row UI state: a message is immutable, but its 👍/👎 is not. */
+  const [fbSent, setFbSent] = useState(null);
+  const fa = locale.startsWith('fa');
+  const intel = m.intelligence || null;
+  const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
+  const showFeedback = m.role === 'ai' && (m.kind === 'assistant' || m.kind === 'result') && m.intentId && !fbSent;
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
       <div className="iaos-bubble">
@@ -265,6 +273,54 @@ const ConversationRow = memo(function ConversationRow({
               </span>
             ) : null}
           </div>
+        ) : null}
+        {/* AI Upgrade 5 — honest uncertainty, only when it is genuinely high (§39) */}
+        {intel?.uncertainty?.level === 'HIGH' ? (
+          <div className="iaos-uncertainty" data-testid="intent-ai-uncertainty">
+            ⚠ {fa
+              ? 'اطمینان این پاسخ پایین است؛ بر اساس داده‌های فعلی است و قطعی نیست.'
+              : 'Confidence in this answer is low; it reflects current data and is not certain.'}
+          </div>
+        ) : null}
+        {/* AI Upgrade 5 — evidence sources, https-only, tier-4 leads labelled (§21-22) */}
+        {sources.length ? (
+          <div className="iaos-sources" data-testid="intent-ai-sources">
+            <span className="iaos-sources-label">{fa ? 'منابع:' : 'Sources:'}</span>
+            {sources.slice(0, 4).map((s, i) => (
+              <a
+                key={`${s.url}-${i}`}
+                className="iaos-source-chip"
+                href={s.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={s.title}
+              >
+                {s.tier >= 4 ? `☁ ${fa ? 'رسانه اجتماعی' : 'social'}` : (s.title || new URL(s.url).hostname).slice(0, 48)}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {/* AI Upgrade 5 — 👍/👎 feedback loop (§64) */}
+        {showFeedback ? (
+          <div className="iaos-feedback-row" data-testid="intent-ai-feedback">
+            <button
+              type="button"
+              className="iaos-fb-btn"
+              data-testid="intent-ai-feedback-up"
+              aria-label={fa ? 'مفید بود' : 'Helpful'}
+              onClick={() => { setFbSent(1); onFeedback?.(m, 1); }}
+            >👍</button>
+            <button
+              type="button"
+              className="iaos-fb-btn"
+              data-testid="intent-ai-feedback-down"
+              aria-label={fa ? 'مفید نبود' : 'Not helpful'}
+              onClick={() => { setFbSent(-1); onFeedback?.(m, -1); }}
+            >👎</button>
+          </div>
+        ) : null}
+        {fbSent ? (
+          <div className="iaos-fb-thanks">{fa ? 'ممنون از بازخوردت!' : 'Thanks for the feedback!'}</div>
         ) : null}
       </div>
     </div>
@@ -738,6 +794,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         detectedIntent: reply.intent?.primaryIntent || reply.intent?.type || osResult.intent?.type || null,
         missingInfo: reply.intent?.minimalQuestion ? (locale.startsWith('fa') ? reply.intent.minimalQuestion.fa : reply.intent.minimalQuestion.en) : null,
         suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext, {}, locale)),
+        multiAi: reply.multiAi || null,
+        intelligence: reply.intelligence || null,
         debug: osResult.debug || null
       };
 
@@ -1060,6 +1118,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       ? `${original} ${choice.value}`.trim()
       : original || choice.label;
     void sendRef.current?.(followUp, { hints, skipUserBubble: false });
+  }, []);
+
+  /* AI Upgrade 5 — answer feedback (§64). Fire-and-forget; feeds evaluation
+     and the question-intelligence dashboard, never uncontrolled self-learning. */
+  const sendFeedback = useCallback((msg, rating) => {
+    if (!msg?.intentId) return;
+    void aiFeedback({ intentId: msg.intentId, rating });
   }, []);
 
   const editExecution = useCallback(() => {
@@ -1892,6 +1957,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               onChoose={chooseOption}
               onMonitorAction={handleMonitorAction}
               onMonitorOpportunity={monitorOpportunityRow}
+              onFeedback={sendFeedback}
             />
           ))}
           {thinking.length ? (
