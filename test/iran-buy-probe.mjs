@@ -80,12 +80,16 @@ function withEnv(overrides, worker) {
     previous[key] = process.env[key];
     if (value == null) delete process.env[key]; else process.env[key] = value;
   }
-  try { return worker(); }
-  finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value == null) delete process.env[key]; else process.env[key] = value;
+  /* Awaited so an async worker observes exactly this environment for its whole
+     lifetime; sync workers keep working unchanged. */
+  return (async () => {
+    try { return await worker(); }
+    finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value == null) delete process.env[key]; else process.env[key] = value;
+      }
     }
-  }
+  })();
 }
 
 try {
@@ -133,11 +137,80 @@ try {
     !new RegExp(`${MERCHANT_ID}|api-key|apikey|secret|prerequisite|merchant`, 'i').test(JSON.stringify(config.body)));
   check('capability response is never cacheable', config.response.headers.get('cache-control') === 'no-store');
 
-  const disabled = withEnv({ IRAN_BUY_ENABLED: 'false' }, () => publicIranBuyCapability());
+  const disabled = await withEnv({ IRAN_BUY_ENABLED: 'false' }, () => publicIranBuyCapability());
   check('a disabled capability answers with coarse readiness groups, not the checklist',
     disabled.enabled === false && disabled.asset === null && Array.isArray(disabled.readiness)
     && disabled.readiness.includes('ACTIVATION')
     && !/wallex|upstash|env|token|key/i.test(JSON.stringify(disabled.readiness)));
+
+  /* ---------------- Referral mode (bitpin deep link) ---------------------- */
+  /*
+   * The referral is a *display-only* alternative while the paid rail is off.
+   * The server is the only place a link can be approved from: partner name,
+   * exact-host allowlist, https, no credentials, bounded size, verbatim query
+   * string. Anything else — or a live direct rail — must answer referral:null
+   * so the browser renders nothing at all.
+   */
+  const REFERRAL_URL = 'https://bitpin.ir/register?ref=ABC123';
+  const noReferral = await withEnv(
+    { IRAN_BUY_ENABLED: 'false', IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: null },
+    () => publicIranBuyCapability()
+  );
+  check('without IRAN_BUY_REFERRAL_URL the config answers referral:null', noReferral.enabled === false && noReferral.referral === null);
+
+  const referral = await withEnv(
+    { IRAN_BUY_ENABLED: 'false', IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL },
+    () => publicIranBuyCapability()
+  );
+  check('a valid approved https link is returned for the browser, with its query intact',
+    referral.enabled === false && referral.referral?.partner === 'bitpin'
+    && referral.referral?.url === REFERRAL_URL
+    && new URL(referral.referral?.url).search === '?ref=ABC123');
+
+  /* Reads ONLY the referral block, with the overrides applied around the call. */
+  const referralWith = async (overrides) =>
+    (await withEnv({ IRAN_BUY_ENABLED: 'false', ...overrides }, () => publicIranBuyCapability()))?.referral;
+
+  check('a non-https referral link is never accepted',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: 'http://bitpin.ir/register?ref=ABC123' }) === null);
+  check('a host outside the allowlist is never accepted, and the allowlist itself is the operator switch',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: 'https://phisher.example/invite?ref=ABC123' }) === null
+    && (await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: 'https://phisher.example/invite?ref=ABC123', IRAN_BUY_REFERRAL_APPROVED_HOSTS: 'phisher.example' }))?.url === 'https://phisher.example/invite?ref=ABC123');
+  check('an allowlisted apex does not implicitly approve its subdomains',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: 'https://web.bitpin.ir/register?ref=ABC123' }) === null);
+  check('a link carrying embedded credentials is rejected outright',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: 'https://user:pass@bitpin.ir/register?ref=ABC123' }) === null);
+  check('an overlong link is rejected before it can reach the browser',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: `https://bitpin.ir/register?ref=${'A'.repeat(600)}` }) === null);
+  check('an unlisted partner name disables the referral even with a valid link',
+    await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'NOBLE_EXCHANGE', IRAN_BUY_REFERRAL_URL: REFERRAL_URL }) === null);
+  check('the optional discount note surfaces only when configured',
+    (await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL, IRAN_BUY_REFERRAL_DISCOUNT_NOTE: 'تخفیف دائمی کارمزد' }))?.discountNote === 'تخفیف دائمی کارمزد'
+    && referral.referral?.discountNote === null);
+  check('the withdrawal network shown to users falls back referral → rail → ERC20',
+    referral.referral?.network?.id === 'ERC20'
+    && (await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL, IRAN_BUY_REFERRAL_USDT_NETWORK: 'TRC20', IRAN_BUY_REFERRAL_EVM_CHAIN_ID: '195x' }))?.network?.id === 'TRC20'
+    && (await referralWith({ IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL, IRAN_BUY_REFERRAL_EVM_CHAIN_ID: '1' }))?.network?.chainId === 1);
+  check('a live direct rail replaces the referral even when a link is configured',
+    (await withEnv({ IRAN_BUY_ENABLED: 'true', IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL }, () => publicIranBuyCapability()))?.referral === null);
+
+  const disabledWithReferral = await withEnv(
+    { IRAN_BUY_ENABLED: 'false', IRAN_BUY_REFERRAL_PARTNER: 'BITPIN', IRAN_BUY_REFERRAL_URL: REFERRAL_URL },
+    async () => call('/api/iran/buy/config')
+  );
+  const publicReferral = disabledWithReferral.body?.referral;
+  check('the public config route serves the referral only while the rail is closed, and still leaks no env names or checklist',
+    disabledWithReferral.response.status === 200
+    && disabledWithReferral.body?.enabled === false
+    && publicReferral?.url === REFERRAL_URL
+    && disabledWithReferral.response.headers.get('cache-control') === 'no-store'
+    && !/IRAN_BUY_REFERRAL_[A-Z_]+|APPROVED_HOSTS|_REQUIRED|PAYMENT_COLLECTION/i.test(JSON.stringify(disabledWithReferral.body).replace(REFERRAL_URL, '')));
+  check('the referral payload carries exactly the approved fields and no second asset',
+    publicReferral
+    && JSON.stringify(Object.keys(publicReferral).sort()) === JSON.stringify(['discountNote', 'network', 'partner', 'url'])
+    && JSON.stringify(Object.keys(publicReferral.network || {}).sort()) === JSON.stringify(['chainId', 'id', 'label'])
+    && !/BTC|SOL|BNB|DOGE|TRX|XRP|ADA|LTC|TON\b/i.test(JSON.stringify(publicReferral)));
+
 
   /* ---------------- Authentication on every mutating route ---------------- */
   const challenge = await call('/api/iran/buy/wallet-challenge', {
@@ -285,6 +358,30 @@ try {
   check('tab visibility is Persian language, not a live Wallex capability',
     /split\(\/\[-_\]\/\)\[0\] === 'fa'/.test(generalPanel) && /const iranBuyVisible = iranBuyLanguageAllowed/.test(generalPanel)
     && !/iranBuyCapability\?\.enabled === true/.test(generalPanel));
+
+  /* ---------------- Referral open path (browser side) --------------------- */
+  const referralFn = /export function openIranBuyReferral[\s\S]*?\n}/.exec(browserClient)?.[0] || '';
+  check('the referral opener exists and re-checks https plus the server-sent host before doing anything',
+    /protocol !== 'https:'/.test(referralFn) && /expectedHost/.test(referralFn)
+    && referralFn.indexOf('protocol') < referralFn.indexOf('openLink'));
+  check('inside Telegram the referral uses Telegram.openLink, never the webview trap',
+    /Telegram\?\./.test(referralFn) && /openLink/.test(referralFn));
+  check('the referral opens a new noopener tab and never navigates this tab away',
+    /window\?\.open\?\.\(target, '_blank', 'noopener,noreferrer'\)/.test(referralFn)
+    && !/location\??\.?assign|location\.href\s*=/.test(referralFn));
+  check('a blocked referral popup is reported instead of silently ignored',
+    /REFERRAL_POPUP_BLOCKED/.test(referralFn) && /REFERRAL_POPUP_BLOCKED/.test(browserPanel));
+  check('the referral card renders only with an approved capability and discloses the commission',
+    /data-testid="iran-buy-referral"/.test(browserPanel)
+    && /iranBuy\.referral\.disclosure/.test(browserPanel)
+    && /capability\?\.referral\?\.url \? capability\.referral : null/.test(browserPanel));
+  const addressCard = /function ReferralAddressCard[\s\S]*?\n}/.exec(browserPanel)?.[0] || '';
+  check('the guide address is read only from the connected wallet and is never shortened',
+    /data-testid="iran-buy-address-value"/.test(browserPanel)
+    && /\{address\}/.test(addressCard)
+    && !/shortAddress/.test(addressCard));
+  check('no hardcoded Persian copy in the Iranian panel — every string goes through i18n',
+    !/[\u0600-\u06ff]/.test(browserPanel.split('\n').filter((line) => !/[\u06f0-\u06f9\u0660-\u066c\u060c]/.test(line)).join('\n')));
 } catch (error) {
   console.error(error);
   rows.push({ name: 'probe execution', ok: false });

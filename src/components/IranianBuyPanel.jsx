@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useInRouterContext, useNavigate } from 'react-router-dom';
 import SegIndicator from './SegIndicator';
 import WalletConnectSheet from './WalletConnectSheet';
 import { IconCheck, IconChevronRight, IconClock, IconCopy, IconExternal, IconLock, IconRefresh, IconShield, IconWallet } from './Icons';
@@ -33,6 +34,7 @@ import {
   getIranBuyOrder,
   getIranBuyRate,
   openIranBuyCheckout,
+  openIranBuyReferral,
   readIranBuyGatewayReturn,
   storedIranBuyPendingPayment,
   verifyIranBuyPayment
@@ -42,6 +44,33 @@ import { riseIn } from './PageTransition';
 const POLL_MS = 15_000;
 const RATE_POLL_MS = 60_000;
 const QUICK_AMOUNTS = ['500000', '1000000', '2000000', '5000000'];
+/* The referral guide's fixed order. Withdraw is the network-sensitive step. */
+const REFERRAL_STEPS = ['signup', 'kyc', 'deposit', 'buy', 'withdraw', 'return'];
+/* The only route the internal swap lives on (src/App.jsx: path="/swap"). */
+const SWAP_ROUTE = '/swap';
+
+/**
+ * The internal swap CTA navigates with the project router when the panel is
+ * mounted under one. Probes mount the panel bare, so the hook is guarded —
+ * and the guard is stable for a mounted instance: a panel never migrates
+ * between router and no-router between renders.
+ */
+function useSwapNavigate() {
+  const inRouter = useInRouterContext();
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- router presence is fixed by the enclosing tree
+  return inRouter ? useNavigate() : null;
+}
+
+/** Best-effort clipboard write; a missing/blocked API never throws upward. */
+async function copyText(value) {
+  try {
+    if (globalThis.navigator?.clipboard?.writeText) {
+      await globalThis.navigator.clipboard.writeText(String(value || ''));
+      return true;
+    }
+  } catch { /* clipboard access is optional */ }
+  return false;
+}
 
 function normalizeTomanInput(value) {
   const digits = '۰۱۲۳۴۵۶۷۸۹';
@@ -318,6 +347,132 @@ function OrderProgress({ order, t }) {
   );
 }
 
+/**
+ * The user's own receiving address for the referral journey — shown only from
+ * the connected wallet, never from an input. The full address is always
+ * rendered (no truncation: a wallet form needs the whole string) and the copy
+ * button copies exactly the address, nothing around it.
+ */
+function ReferralAddressCard({ onConnect, onSwitch, referral, t, wallet }) {
+  const [copied, setCopied] = useState(false);
+  const address = String(wallet?.address || '');
+  const connected = Boolean(wallet?.isConnected && address);
+  const networkLabel = String(referral?.network?.label || referral?.network?.id || '').trim();
+  const targetChain = Number(referral?.network?.chainId);
+  const chainMismatch = connected && Number.isFinite(targetChain) && targetChain > 0
+    && Number(wallet?.chainId) !== targetChain;
+
+  const copy = useCallback(async () => {
+    if (!address) return;
+    if (await copyText(address)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2_000);
+    }
+  }, [address]);
+
+  return (
+    <div className="iran-buy-address" data-testid="iran-buy-address">
+      <div className="iran-buy-address-head">
+        <span>{t('iranBuy.referral.addressLabel')}</span>
+        {networkLabel && <em className="iran-buy-address-network">{t('iranBuy.referral.addressNetwork', { network: networkLabel })}</em>}
+      </div>
+      {connected ? (
+        <>
+          <code className="iran-buy-address-value" dir="ltr" data-testid="iran-buy-address-value">{address}</code>
+          <div className="iran-buy-address-actions">
+            <button type="button" className="btn btn-ghost btn-sm iran-buy-address-copy" onClick={copy} data-testid="iran-buy-address-copy">
+              <IconCopy width={14} height={14} /> {copied ? t('iranBuy.referral.copied') : t('iranBuy.referral.copyAddress')}
+            </button>
+            {chainMismatch && (
+              <button type="button" className="btn btn-ghost btn-sm iran-buy-wallet-action" onClick={onSwitch} data-testid="iran-buy-address-switch">
+                {t('iranBuy.switchWalletNetwork')}
+              </button>
+            )}
+          </div>
+          <p className="iran-buy-address-warning" role="alert">
+            <IconLock width={12} height={12} />
+            {networkLabel
+              ? t('iranBuy.referral.addressWarning', { network: networkLabel })
+              : t('iranBuy.referral.addressWarningGeneric')}
+          </p>
+        </>
+      ) : (
+        <div className="iran-buy-address-empty">
+          <p>{t('iranBuy.referral.addressNeedsWallet')}</p>
+          <button type="button" className="btn btn-ghost btn-sm iran-buy-wallet-action" onClick={onConnect} data-testid="iran-buy-address-connect">
+            {t('iranBuy.connectWallet')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The complete "get USDT without our rail" walkthrough. Collapsed by default;
+ * the address card sits above the numbered steps so it can be copied before
+ * reading. No step promises a price or a delivery time — the partner sets
+ * both, and the closing note says exactly that.
+ */
+function ReferralGuide({ onConnect, onSwitch, referral, t, wallet }) {
+  const networkLabel = String(referral?.network?.label || referral?.network?.id || '').trim();
+  return (
+    <details className="iran-buy-referral-guide" data-testid="iran-buy-referral-guide">
+      <summary>
+        <IconWallet width={15} height={15} />
+        {t('iranBuy.referral.guideTitle')}
+        <span aria-hidden="true">▾</span>
+      </summary>
+      <div className="iran-buy-referral-guide-body">
+        <ReferralAddressCard referral={referral} wallet={wallet} t={t} onConnect={onConnect} onSwitch={onSwitch} />
+        <ol className="iran-buy-referral-steps" aria-label={t('iranBuy.referral.guideTitle')}>
+          {REFERRAL_STEPS.map((step, index) => (
+            <li key={step}>
+              <span>{index + 1}</span>
+              <div>
+                <b>{t(`iranBuy.referral.steps.${step}.title`, step === 'withdraw' ? { network: networkLabel } : {})}</b>
+                <small>{t(`iranBuy.referral.steps.${step}.body`, step === 'withdraw' ? { network: networkLabel } : {})}</small>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="iran-buy-referral-note">{t('iranBuy.referral.stepsNote')}</p>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * The bitpin referral card. Rendered only while the direct rail is closed AND
+ * the server approved a link; the disclosure line is not optional copy — it is
+ * the affiliate disclosure, and it ships with the card unconditionally.
+ */
+function ReferralCard({ manualFallback, onOpen, referral, t }) {
+  return (
+    <section className="iran-buy-referral" data-testid="iran-buy-referral">
+      <div className="iran-buy-referral-copy">
+        <b>{t('iranBuy.referral.cardTitle')}</b>
+        <p>{t('iranBuy.referral.cardBody')}</p>
+        {referral?.discountNote && (
+          <small className="iran-buy-referral-perk" data-testid="iran-buy-referral-perk">
+            <IconCheck width={12} height={12} /> {referral.discountNote}
+          </small>
+        )}
+      </div>
+      <button type="button" className="btn btn-primary iran-buy-referral-btn" onClick={onOpen} data-testid="iran-buy-referral-cta">
+        {t('iranBuy.referral.cardCta')} <IconExternal width={15} height={15} />
+      </button>
+      <small className="iran-buy-referral-disclosure" data-testid="iran-buy-referral-disclosure">{t('iranBuy.referral.disclosure')}</small>
+      {manualFallback && (
+        <div className="iran-buy-referral-manual" data-testid="iran-buy-referral-manual">
+          <p>{t('iranBuy.referral.popupBlocked')}</p>
+          <a href={referral?.url} target="_blank" rel="noopener noreferrer" dir="ltr">{referral?.url}</a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function IranianBuyPanel({ capability }) {
   const { t } = useTranslation();
   const wallet = useWallet();
@@ -347,6 +502,11 @@ export default function IranianBuyPanel({ capability }) {
     String(order.destinationAddress || '').toLowerCase() === String(wallet?.address || '').toLowerCase()
     && Number(order.chainId) === Number(wallet?.chainId)
   );
+  /* The referral block exists only while the direct rail is closed, and only
+     when the server approved a link. When the direct rail is live the server
+     sends referral: null and none of this renders. */
+  const referral = !enabled && capability?.referral?.url ? capability.referral : null;
+  const swapNavigate = useSwapNavigate();
 
   useEffect(() => {
     if (!preview?.expiresAt) return undefined;
@@ -362,11 +522,36 @@ export default function IranianBuyPanel({ capability }) {
     clearIranBuyPendingPayment();
   }, []);
 
+  /* Referral open: one anonymous click counter (no address, no id, no amount),
+     then the guarded new-tab open. A blocked popup is surfaced as a manual
+     copy fallback instead of a dead click. */
+  const [referralManualFallback, setReferralManualFallback] = useState(false);
+  const openReferral = useCallback(() => {
+    if (!referral?.url) return;
+    emitEvent('iranBuy.referralClicked', { partner: referral.partner || 'bitpin' }, 'iran-buy');
+    const result = openIranBuyReferral(referral.url);
+    /* A blocked popup is not an error: the manual link fallback IS the answer. */
+    setReferralManualFallback(result?.code === 'REFERRAL_POPUP_BLOCKED');
+    if (result?.ok) setError('');
+    else if (result?.code !== 'REFERRAL_POPUP_BLOCKED') setError(result?.code || 'REFERRAL_LINK_UNAVAILABLE');
+  }, [referral?.partner, referral?.url]);
+
+  const goSwap = useCallback(() => {
+    try { swapNavigate?.(SWAP_ROUTE); } catch { /* navigation is cosmetic here */ }
+  }, [swapNavigate]);
+
   const switchNetwork = useCallback(async () => {
     setError('');
-    const ok = await wallet.switchChain?.(targetChain);
+    /* Direct-rail chain when configured; otherwise the referral journey's
+       withdrawal chain. No chain is ever guessed from the wallet itself. */
+    const referralChain = Number(referral?.network?.chainId);
+    const target = Number.isFinite(targetChain) && targetChain > 0
+      ? targetChain
+      : (Number.isFinite(referralChain) && referralChain > 0 ? referralChain : null);
+    if (!target) { setError('WALLET_NETWORK_INCOMPATIBLE'); return; }
+    const ok = await wallet.switchChain?.(target);
     if (!ok) setError('WALLET_NETWORK_INCOMPATIBLE');
-  }, [targetChain, wallet]);
+  }, [referral?.network?.chainId, targetChain, wallet]);
 
   const preparePreview = useCallback(async () => {
     if (!telegramReady) { setError('AUTH_REQUIRED'); return; }
@@ -488,8 +673,9 @@ export default function IranianBuyPanel({ capability }) {
   const paymentPending = awaitingPayment(order);
   const introRows = useMemo(() => [
     { label: t('iranBuy.asset'), value: 'USDT' },
-    { label: t('iranBuy.network'), value: capability?.network?.label || capability?.network?.id || 'ERC20' }
-  ], [capability?.network?.id, capability?.network?.label, t]);
+    { label: t('iranBuy.network'), value: capability?.network?.label || capability?.network?.id
+      || (referral ? (capability?.referral?.network?.label || capability?.referral?.network?.id || 'ERC20') : 'ERC20') }
+  ], [capability?.network?.id, capability?.network?.label, capability?.referral?.network?.id, capability?.referral?.network?.label, referral, t]);
   const readiness = useMemo(() => {
     const groups = Array.isArray(capability?.readiness) ? capability.readiness : [];
     return (groups.length ? groups : ['ACTIVATION']).slice(0, 5);
@@ -499,7 +685,7 @@ export default function IranianBuyPanel({ capability }) {
     <div className="iran-buy-ticket-head">
       <div>
         <p className="section-label">{t('iranBuy.heading')}</p>
-        <p className="faint">{enabled ? t('iranBuy.subheading') : t('iranBuy.unavailableBody')}</p>
+        <p className="faint">{enabled ? t('iranBuy.subheading') : (referral ? t('iranBuy.referral.headerNote') : t('iranBuy.unavailableBody'))}</p>
       </div>
       <span className="iran-buy-secure"><IconShield width={15} height={15} /> {t('iranBuy.serverOnly')}</span>
     </div>
@@ -533,9 +719,11 @@ export default function IranianBuyPanel({ capability }) {
 
   /*
    * Not live yet. The tab still shows the real market rate, a working
-   * calculator, the destination wallet check and the exact journey, and it says
-   * plainly what is missing — but no amount can be submitted and no payment can
-   * be started, because the server refuses every mutating route.
+   * calculator, the destination wallet check and the exact journey — and when
+   * the server approved a partner link, it also offers a real way to get USDT
+   * today: a bitpin referral, the user's own receiving address, and a route
+   * back to the internal swap. Without an approved link it renders exactly the
+   * read-only surface it has always rendered.
    */
   if (!enabled) {
     return (
@@ -555,22 +743,51 @@ export default function IranianBuyPanel({ capability }) {
               t={t}
             />
             <DestinationCard capability={capability} wallet={wallet} t={t} onConnect={() => setConnectOpen(true)} onSwitch={switchNetwork} />
-            <div className="notice iran-buy-error" role="status" data-testid="iran-buy-unavailable">
-              {t('iranBuy.errors.IRAN_BUY_DISABLED')}
-            </div>
-            <ul className="iran-buy-readiness" aria-label={t('iranBuy.readinessTitle')}>
-              {readiness.map((group) => (
-                <li key={group}>
-                  <IconClock width={13} height={13} />
-                  {t(`iranBuy.readiness.${group}`, { defaultValue: t('iranBuy.readiness.ACTIVATION') })}
-                </li>
-              ))}
-            </ul>
-            <button type="button" className="btn btn-primary iran-buy-cta" disabled data-testid="iran-buy-disabled-cta">
-              {t('iranBuy.disabledCta')}
-            </button>
-            <p className="iran-buy-inline-note">{t('iranBuy.disabledNote')}</p>
+            {error && <div className="notice notice-danger iran-buy-error" role="alert">{errorText}</div>}
+            {!referral && (
+              <>
+                <div className="notice iran-buy-error" role="status" data-testid="iran-buy-unavailable">
+                  {t('iranBuy.errors.IRAN_BUY_DISABLED')}
+                </div>
+                <ul className="iran-buy-readiness" aria-label={t('iranBuy.readinessTitle')}>
+                  {readiness.map((group) => (
+                    <li key={group}>
+                      <IconClock width={13} height={13} />
+                      {t(`iranBuy.readiness.${group}`, { defaultValue: t('iranBuy.readiness.ACTIVATION') })}
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" className="btn btn-primary iran-buy-cta" disabled data-testid="iran-buy-disabled-cta">
+                  {t('iranBuy.disabledCta')}
+                </button>
+                <p className="iran-buy-inline-note">{t('iranBuy.disabledNote')}</p>
+              </>
+            )}
           </div>
+          {referral && (
+            <div className="iran-buy-referral-flow" data-testid="iran-buy-referral-flow">
+              <ReferralCard referral={referral} t={t} onOpen={openReferral} manualFallback={referralManualFallback} />
+              <ReferralGuide
+                referral={referral}
+                wallet={wallet}
+                t={t}
+                onConnect={() => setConnectOpen(true)}
+                onSwitch={switchNetwork}
+              />
+              <button type="button" className="btn btn-ghost iran-buy-swap-cta" onClick={goSwap} data-testid="iran-buy-referral-swap-cta">
+                {t('iranBuy.referral.swapCta')} <IconChevronRight width={16} height={16} />
+              </button>
+              <p className="iran-buy-referral-readiness-intro">{t('iranBuy.referral.readinessIntro')}</p>
+              <ul className="iran-buy-readiness" aria-label={t('iranBuy.referral.readinessTitle')}>
+                {readiness.map((group) => (
+                  <li key={group}>
+                    <IconClock width={13} height={13} />
+                    {t(`iranBuy.readiness.${group}`, { defaultValue: t('iranBuy.readiness.ACTIVATION') })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <FlowGuide t={t} />
           {terms}
         </motion.section>
