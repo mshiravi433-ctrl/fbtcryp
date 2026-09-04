@@ -130,6 +130,28 @@ export const PROVIDER_CONFIGS = Object.freeze({
     costTier: 'medium',
     latencyTier: 'medium'
   },
+  workersai: {
+    name: 'Cloudflare Workers AI',
+    url: 'https://api.cloudflare.com/client/v4/accounts',
+    envKey: 'CLOUDFLARE_API_TOKEN',
+    defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
+    fallbackModels: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/mistral/mistral-7b-instruct-v0.2', '@cf/deepseek/deepseek-r1-distill-qwen-32b'],
+    type: 'workersai-native',
+    specialty: 'Free Serverless Open Models (Llama/Mistral/DeepSeek) — Private Edge Inference',
+    costTier: 'free',
+    latencyTier: 'fast'
+  },
+  aimlapi: {
+    name: 'AIMLAPI (Unified Multi-Model)',
+    url: 'https://api.aimlapi.com/v1/chat/completions',
+    envKey: 'AIMLAPI_KEY',
+    defaultModel: process.env.AIMLAPI_MODEL || 'gpt-4o-mini',
+    fallbackModels: ['anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash', 'deepseek/deepseek-chat', 'meta-llama/Llama-3.3-70B-Instruct'],
+    type: 'openai-compatible',
+    specialty: 'Unified Gateway: OpenAI/Claude/Gemini/Llama/DeepSeek via One Key',
+    costTier: 'low',
+    latencyTier: 'fast'
+  },
   internal: {
     name: 'FBT Internal Reasoning Engine',
     url: 'internal://heuristic',
@@ -188,7 +210,10 @@ export function getProviderKey(providerId) {
 export function isProviderConfigured(providerId) {
   if (providerId === 'internal') return true;
   const key = getProviderKey(providerId);
-  return Boolean(key && key.trim().length > 0);
+  if (!key || key.trim().length === 0) return false;
+  // Workers AI also needs the account id to build the run endpoint
+  if (providerId === 'workersai' && !process.env.CLOUDFLARE_ACCOUNT_ID) return false;
+  return true;
 }
 
 export function getAvailableProviders() {
@@ -332,6 +357,36 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
   return String(text).trim();
 }
 
+/** Cloudflare Workers AI (serverless open models via REST run endpoint) */
+async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800 }) {
+  assertNoSecretsInPayload({ system, user });
+  const sanitizedSystem = sanitizePrompt(system);
+  const sanitizedUser = sanitizePrompt(user);
+
+  const url = `${PROVIDER_CONFIGS.workersai.url}/${encodeURIComponent(accountId)}/ai/run/${encodeURIComponent(model)}`;
+  const body = {
+    messages: [
+      ...(sanitizedSystem ? [{ role: 'system', content: sanitizedSystem }] : []),
+      { role: 'user', content: sanitizedUser }
+    ],
+    temperature,
+    max_tokens: maxTokens
+  };
+
+  const raw = await httpReq(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiToken}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  const text = raw?.result?.response;
+  if (!text) throw new Error('EMPTY_WORKERSAI_RESPONSE');
+  return String(text).trim();
+}
+
 /** Internal Deterministic AI Intelligence (Zero External Key Fallback) */
 function callInternalEngine({ system, user, taskType = 'general', json = false }) {
   const query = String(user || '').trim().toLowerCase();
@@ -386,6 +441,11 @@ export async function executeProviderChat(providerId, {
   } else if (cfg.type === 'anthropic-native') {
     if (!apiKey) throw new Error(`NO_API_KEY:${providerId}`);
     text = await callAnthropic({ apiKey, model: selectedModel, system, user, temperature, maxTokens });
+  } else if (cfg.type === 'workersai-native') {
+    if (!apiKey) throw new Error(`NO_API_KEY:${providerId}`);
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!accountId) throw new Error('NO_CLOUDFLARE_ACCOUNT_ID');
+    text = await callWorkersAI({ accountId, apiToken: apiKey, model: selectedModel, system, user, temperature, maxTokens });
   } else {
     // OpenAI Compatible (Grok, OpenRouter, Groq, OpenAI, DeepSeek, Mistral, Perplexity)
     if (!apiKey) throw new Error(`NO_API_KEY:${providerId}`);
@@ -438,25 +498,25 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
     case 'market':
     case 'market_intelligence':
     case 'crypto_trend':
-      candidateOrder = ['grok', 'perplexity', 'gemini', 'openrouter', 'groq', 'openai', 'internal'];
+      candidateOrder = ['grok', 'perplexity', 'gemini', 'openrouter', 'groq', 'openai', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
-      candidateOrder = ['openrouter', 'anthropic', 'deepseek', 'openai', 'grok', 'gemini', 'internal'];
+      candidateOrder = ['openrouter', 'anthropic', 'deepseek', 'openai', 'grok', 'gemini', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'deepseek', 'openrouter', 'gemini', 'groq', 'internal'];
+      candidateOrder = ['anthropic', 'deepseek', 'openrouter', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
     case 'classification':
-      candidateOrder = ['groq', 'gemini', 'mistral', 'openai', 'openrouter', 'internal'];
+      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'openai', 'openrouter', 'internal'];
       break;
     default:
-      candidateOrder = ['grok', 'openrouter', 'groq', 'gemini', 'deepseek', 'anthropic', 'openai', 'internal'];
+      candidateOrder = ['grok', 'openrouter', 'groq', 'workersai', 'gemini', 'deepseek', 'anthropic', 'openai', 'internal'];
       break;
   }
 
