@@ -1171,7 +1171,7 @@
       "q4": "Hangi ağlar destekleniyor?",
       "a4": "Canlı liste uygulamanın kayıt defterinden gelir: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic ve Solana. Sayfa her zaman güncel kaydı yansıtır; sabit kodlanmış bir pazarlama listesi değildir.",
       "q5": "Yapay zekâ nasıl çalışıyor?",
-      "a5": "FBT AI Gateway ve orkestratör üzerinden platform, yapılandırılmış sağlayıcıları (Grok veya OpenRouter gibi) ve dahili zekâ sistemlerini kullanarak piyasa, zincir üstü ve portföy verilerini analiz edebilir. Yardımcı olur ve açıklar; sonuç garanti etmez.",
+      "a5": "FBT AI Gateway ve orkestratör üzerinden platform, yapılandırılmış sağlayıcıları (Gemini veya OpenRouter gibi) ve dahili zekâ sistemlerini kullanarak piyasa, zincir üstü ve portföy verilerini analiz edebilir. Yardımcı olur ve açıklar; sonuç garanti etmez.",
       "q6": "FBT kâr garantisi veriyor mu?",
       "a6": "Hayır. Yapay zekâ analizleri ve sinyaller bilgilendirme amaçlıdır ve gelecekteki performansı garanti edemez. Kripto oynaktır ve her şeyi kaybedebilirsin.",
       "q7": "Yapay zekâ işlem yapabilir mi?",

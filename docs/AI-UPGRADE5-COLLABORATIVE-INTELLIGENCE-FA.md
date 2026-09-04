@@ -17,7 +17,7 @@
       → تحقیق وب → داده ابزار → راستی‌آزمایی → اجماع → پاسخ نهایی FBT → کاربر
 ```
 
-کاربر هرگز «Grok گفت… / Claude گفت…» نمی‌بیند؛ فقط در حالت شفافیت (transparency)
+کاربر هرگز «Claude گفت… / Gemini گفت…» نمی‌بیند؛ فقط در حالت شفافیت (transparency)
 دیدگاه هر نقش قابل مشاهده است.
 
 ## ۲) اجزای جدید
@@ -90,7 +90,7 @@ AI_COLLAB_MAX_MODELS=4        # حداکثر مدل در هر سؤال
 ```
 
 هیچ کلید جدیدی لازم نیست؛ ارائه‌دهنده‌ها از همان کلیدهای موجود
-(GROK/OPENROUTER/GROQ/GEMINI/OPENAI/ANTHROPIC/…) به‌صورت پویا کشف می‌شوند و
+(OPENROUTER/GROQ/GEMINI/ANTHROPIC/DEEPSEEK/MISTRAL/CLOUDFLARE/AIMLAPI/…) به‌صورت پویا کشف می‌شوند و
 تحقیق وب از `JINA_API_KEY` (در صورت وجود) و در غیر این صورت DuckDuckGo استفاده می‌کند.
 
 ## ۸) تست

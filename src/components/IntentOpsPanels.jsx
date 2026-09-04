@@ -536,6 +536,14 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
 
   if (!open) return null;
 
+  /*
+   * Only providers the gateway reports as configured belong on this tab.
+   * A provider with no API key cannot answer a single request, so listing it
+   * as «آماده» next to the ones that actually serve traffic hides the real
+   * shape of the fleet — and the fleet is the thing this tab exists to show.
+   */
+  const activeProviders = (providers || []).filter((p) => p.configured);
+
   const agentFleet = [
     { id: 'intent-agent', name: isEn ? 'Intent Agent' : 'ایجنت درک قصد (Intent)', role: isEn ? 'Natural language parameter extraction & clarification' : 'استخراج سرمایه، افق زمانی، هدف و طرح سؤالات شفاف‌ساز' },
     { id: 'market-agent', name: isEn ? 'Market Agent' : 'ایجنت هوش بازار (Market)', role: isEn ? 'Live price feeds, volume, trends & sentiment' : 'داده‌های لحظه‌ای قیمت، حجم، روندهای تکنیکال و جریانات کلان' },
@@ -553,22 +561,27 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
         <div className="iaos-panel-head">
           <div>
             <h2>{isEn ? 'Multi-AI Intelligence & Consensus' : 'هوش مصنوعی چندمدلی و موتور اجماع'}</h2>
-            <small>{isEn ? 'Decentralized Intelligence Layer (Grok, OpenRouter, Groq, Gemini & Internal)' : 'لایه مرکزی هوش مالی بدون وابستگی به یک مدل'}</small>
+            <small>{isEn ? 'Decentralized Intelligence Layer (OpenRouter, Groq, Gemini, Anthropic & Internal)' : 'لایه مرکزی هوش مالی بدون وابستگی به یک مدل'}</small>
           </div>
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        <div className="iaos-history-tabs">
-          <button type="button" className={`iaos-history-tab ${tab === 'models' ? 'active' : ''}`} onClick={() => setTab('models')}>
-            {isEn ? 'AI Providers' : 'تأمین‌کنندگان هوش'}
+        {/*
+          * `is-on` is the class the stylesheet actually styles — these four
+          * used `active`, which matches no rule, so the open tab looked
+          * identical to the closed ones.
+          */}
+        <div className="iaos-history-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'models'} data-testid="intel-tab-models" className={`iaos-history-tab${tab === 'models' ? ' is-on' : ''}`} onClick={() => setTab('models')}>
+            {isEn ? `Active Models (${activeProviders.length})` : `مدل‌های فعال (${activeProviders.length})`}
           </button>
-          <button type="button" className={`iaos-history-tab ${tab === 'agents' ? 'active' : ''}`} onClick={() => setTab('agents')}>
+          <button type="button" role="tab" aria-selected={tab === 'agents'} data-testid="intel-tab-agents" className={`iaos-history-tab${tab === 'agents' ? ' is-on' : ''}`} onClick={() => setTab('agents')}>
             {isEn ? 'Agent Fleet' : 'ناوگان ایجنت‌ها'}
           </button>
-          <button type="button" className={`iaos-history-tab ${tab === 'consensus' ? 'active' : ''}`} onClick={() => setTab('consensus')}>
+          <button type="button" role="tab" aria-selected={tab === 'consensus'} data-testid="intel-tab-consensus" className={`iaos-history-tab${tab === 'consensus' ? ' is-on' : ''}`} onClick={() => setTab('consensus')}>
             {isEn ? 'Consensus & Risk' : 'موتور اجماع و ریسک'}
           </button>
-          <button type="button" className={`iaos-history-tab ${tab === 'learning' ? 'active' : ''}`} onClick={() => setTab('learning')}>
+          <button type="button" role="tab" aria-selected={tab === 'learning'} data-testid="intel-tab-learning" className={`iaos-history-tab${tab === 'learning' ? ' is-on' : ''}`} onClick={() => setTab('learning')}>
             {isEn ? 'Learning Loop' : 'چرخه یادگیری'}
           </button>
         </div>
@@ -580,22 +593,22 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
                 * The fallback list here used to hard-code `configured: true`
                 * for all five providers, so an install with no API keys at all
                 * showed Grok, OpenRouter, Groq and Gemini as "Active". The
-                * provider list now comes only from the real gateway; when it
-                * is empty the panel says so instead of inventing a fleet.
+                * provider list now comes only from the real gateway, and only
+                * the configured ones are rendered — so what you see here is
+                * the fleet that can actually answer.
                 */}
-              {(providers || []).map((p) => (
-                <div key={p.id} className="iaos-intel-card">
+              {activeProviders.map((p) => (
+                <div key={p.id} className="iaos-intel-card" data-testid={`intel-provider-${p.id}`}>
                   <div className="iaos-intel-card-head">
                     <strong>{p.name}</strong>
-                    <span className={`iaos-pill ${p.configured ? 'iaos-pill-ok' : 'iaos-pill-warn'}`}>
-                      {p.configured ? (isEn ? 'Active' : 'فعال') : (isEn ? 'Standby' : 'آماده')}
-                    </span>
+                    <span className="iaos-pill iaos-pill-ok">{isEn ? 'Active' : 'فعال'}</span>
                   </div>
                   <p>{p.specialty || p.role}</p>
                   <small>{isEn ? 'Cost / Latency:' : 'سطح هزینه / تأخیر:'} {p.costTier || 'standard'}</small>
+                  {p.defaultModel ? <small>{p.defaultModel}</small> : null}
                 </div>
               ))}
-              {!(providers || []).length ? (
+              {!activeProviders.length ? (
                 <p className="iaos-empty">
                   {isEn
                     ? 'No AI provider is configured on this deployment. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.'

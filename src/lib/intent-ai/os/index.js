@@ -496,7 +496,12 @@ export function createIntentOS({
           latency,
           confidence,
           multiAi: {
-            activeProviders: ['grok', 'openrouter', 'groq', 'gemini', 'internal'],
+            /*
+             * Kept in step with server/aiGateway.js — Grok, OpenAI and
+             * Perplexity are no longer registered providers, so they must not
+             * be advertised to the user as part of the fleet.
+             */
+            activeProviders: ['openrouter', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi', 'internal'],
             confidenceScore: confidence.confidenceScore,
             riskScore: confidence.riskScore,
             dataFreshness: confidence.dataFreshness

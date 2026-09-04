@@ -1,3 +1,15 @@
+# Unreleased — three dead AI providers removed, their jobs reassigned, and the multi-model tab scrolls on a phone
+
+- **Grok (xAI), OpenAI and Perplexity are gone from the gateway** (`server/aiGateway.js`). All three were registered but never carried an API key on this deployment — `GET /api/v1/ai/gateway/providers` reported them `configured: false`, so any route that named them failed over before answering. They were still being advertised to the user as part of the fleet, which is the part that was actually wrong.
+- **Their jobs moved to providers that do have keys**, reassigned in `getPreferredProvidersForTask()` rather than dropped:
+  - market intelligence / macro synthesis (was Grok) → **OpenRouter** first, then Gemini, Groq, DeepSeek.
+  - live web search & sourced research (was Perplexity) → **OpenRouter** (online-capable models), then Gemini — `research` / `news` / `web_research` now has its own route instead of falling through the default list.
+  - high-precision financial logic (was OpenAI) → **Anthropic**, **DeepSeek** and **AIMLAPI** (the same GPT class behind its own key). AIMLAPI now appears in the routing table at all, which it previously did not.
+  - The multi-model debate (`server/aiConsensus.js`) runs OpenRouter / Gemini / Anthropic instead of Grok, and its market-intelligence seat uses the deployment's own `AI_MODEL` instead of a Grok slug.
+- **The multi-model tab lists only the models that are active.** The Intelligence panel's first tab is now «مدل‌های فعال (n)» / “Active Models (n)” and renders only `configured: true` providers; the «آماده»/“Standby” pill is gone, because a provider with no key is not on standby, it is absent. `src/lib/intent-ai/os/index.js` advertises the same nine ids it actually has.
+- **The panel scrolls on a phone.** `.iaos-panel-scroll` had no flex or overflow rules at all, so inside the `overflow: hidden`, `max-height`-capped `.iaos-panel` the list spilled past the box and was clipped — one row of cards visible and nothing to scroll. It is now the flex child that shrinks (`flex: 1 1 auto; min-height: 0; overflow-y: auto`, `overscroll-behavior: contain`), the card grid collapses to one full-width column below 420px and two columns between 420–759px, and the tab strip marks the open tab with `is-on` — the class the stylesheet styles — instead of `active`, which matched no rule at all.
+- Env: `GROK_API_KEY`, `XAI_API_KEY`, `OPENAI_API_KEY` and `PERPLEXITY_API_KEY` are no longer read, and `.env.example` says which active key took over each job. `npm run test:multi-ai` (25/25) now pins that the three are not registered and that no task route anywhere names an unregistered provider.
+
 # Unreleased — AI Upgrade 5: Collaborative Multi-AI Intelligence, Web Research & Customer Question Intelligence
 
 ## AI Upgrade 5 — one FBT intelligence layer, many specialists behind it

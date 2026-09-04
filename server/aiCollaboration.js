@@ -19,7 +19,7 @@
  *   - AI consensus is NOT proof of truth. Factual claims are only "verified"
  *     when tool data or web evidence supports them; otherwise they are marked
  *     aiConsensusOnly (§11).
- *   - The user never sees "Grok says… / Claude says…" unless transparency mode
+ *   - The user never sees "Claude says… / Gemini says…" unless transparency mode
  *     is explicitly requested (§37).
  *   - No secrets, no raw wallet data — aggregated portfolio summaries at most
  *     (§44). Execution authority is untouched: this engine cannot sign, send
