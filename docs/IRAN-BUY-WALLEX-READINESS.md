@@ -196,7 +196,7 @@ money never passes through our accounts.
 
 ```bash
 IRAN_BUY_REFERRAL_PARTNER=BITPIN        # only BITPIN is accepted today
-IRAN_BUY_REFERRAL_URL=https://bitpin.ir/register?ref=…   # copied VERBATIM from the bitpin affiliate panel
+IRAN_BUY_REFERRAL_URL=https://bitpin.ir/signup/?refcode=ob8fyvn2k4   # the owner's panel link, verbatim
 IRAN_BUY_REFERRAL_APPROVED_HOSTS=bitpin.ir   # exact-host allowlist (no implicit subdomains)
 IRAN_BUY_REFERRAL_DISCOUNT_NOTE=        # optional; empty means no discount line is shown
 IRAN_BUY_REFERRAL_USDT_NETWORK=         # the network the user must pick inside bitpin
