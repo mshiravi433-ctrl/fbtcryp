@@ -498,9 +498,9 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         ui: { type: 'TEXT' },
         opportunities: best,
         actions: [
-          { id: 'open-earn', label: lang === 'fa' ? 'صفحه سود' : 'Earn', route: '/earn' },
-          { id: 'open-farm', label: lang === 'fa' ? 'فارم' : 'Farm', route: '/farm' },
-          { id: 'open-loan', label: lang === 'fa' ? 'وام' : 'Lending', route: '/loan' }
+          { id: 'open-invest', label: lang === 'fa' ? 'افق جهانی' : 'Horizon', route: '/invest' },
+          { id: 'open-perp', label: lang === 'fa' ? 'فیوچرز' : 'Perpetuals', route: '/perp' },
+          { id: 'open-stocks', label: lang === 'fa' ? 'سهام' : 'Stocks', route: '/stocks' }
         ]
       };
     }

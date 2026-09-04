@@ -2040,3 +2040,335 @@
   font-size: 11.5px;
   color: #fcd34d;
 }
+
+/* ==========================================================================
+   UPGRADE 6 — V6 SCROLL REDESIGN, THINKING ORB, NEW-MESSAGE INDICATOR
+   Spec §23-§29
+   ========================================================================== */
+
+/* ─── §23 Chat container: flex column 100% overflow hidden ─────────────── */
+.iaos-page-v6 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.iaos-page-v6 .iaos-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.iaos-chat-container,
+.iaos-chat-container-v6 {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── §23 Viewport: flex1 overflow-y auto overscroll-behavior contain ─── */
+.iaos-conversation-v6 {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 2px 12px;
+  scroll-behavior: smooth;
+  contain: layout paint;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.22) transparent;
+}
+
+.iaos-conversation-v6::-webkit-scrollbar {
+  width: 4px;
+}
+
+.iaos-conversation-v6::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.22);
+  border-radius: 999px;
+}
+
+.iaos-conversation-v6::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Content-visibility for perf */
+.iaos-conversation-v6 > .iaos-msg {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 88px;
+}
+
+/* ─── §24 Intelligent auto-scroll: only this container scrolls ─────────── */
+html:has(.iaos-page-v6),
+body:has(.iaos-page-v6) {
+  overscroll-behavior: none;
+}
+
+/* Prevent nested scrolls: composer/suggestions/menubar never scroll */
+.iaos-page-v6 .iaos-suggestions,
+.iaos-page-v6 .iaos-composer,
+.iaos-page-v6 .iaos-menubar {
+  flex-shrink: 0;
+}
+
+/* ─── §23 New-message indicator ────────────────────────────────────────── */
+.iaos-new-msg-indicator {
+  position: absolute;
+  bottom: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #6366f1, #22d3ee);
+  color: #061018;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.35), 0 2px 8px rgba(0,0,0,0.2);
+  animation: iaos-new-msg-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  white-space: nowrap;
+}
+
+@keyframes iaos-new-msg-bounce {
+  from { transform: translateX(-50%) translateY(12px) scale(0.92); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+.iaos-new-msg-indicator:hover {
+  filter: brightness(1.08);
+  transform: translateX(-50%) translateY(-1px) scale(1.02);
+}
+
+/* ─── §25 Composer V6: sticky + safe-area + keyboard handling ─────────── */
+.iaos-composer-v6 {
+  position: sticky;
+  bottom: 0;
+  bottom: max(0px, env(safe-area-inset-bottom));
+  bottom: calc(max(0px, env(safe-area-inset-bottom)) + var(--kb-offset, 0px));
+  z-index: 3;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.iaos-composer-v6:focus-within {
+  border-color: rgba(99,102,241,0.45);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12), 0 14px 34px rgba(2,6,23,0.28);
+}
+
+/* ─── §26 Mobile keyboard handling ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .iaos-page-v6 {
+    height: 100dvh;
+    max-height: 100dvh;
+    /* visualViewport will set --vv-height if needed */
+    height: var(--vv-height, 100dvh);
+    max-height: var(--vv-height, 100dvh);
+  }
+
+  .iaos-page-v6 .iaos-shell {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 2px);
+  }
+
+  .iaos-conversation-v6 {
+    padding-bottom: 16px;
+    /* Prevent bounce that triggers parent scroll */
+    overscroll-behavior-y: contain;
+  }
+
+  .iaos-composer-v6 {
+    border-radius: 16px;
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* When keyboard is open, composer lifts */
+  .iaos-page-v6.keyboard-open .iaos-composer-v6 {
+    transform: translateY(0);
+  }
+
+  .iaos-page-v6.keyboard-open .iaos-conversation-v6 {
+    padding-bottom: 8px;
+  }
+}
+
+/* visualViewport fallback */
+@supports (height: 100dvh) {
+  .iaos-page-v6 {
+    min-height: 100dvh;
+  }
+}
+
+/* ─── §27-28 Thinking Orb — global overrides ───────────────────────────── */
+.thinking-orb-wrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.thinking-orb {
+  position: relative;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.thinking-orb-inner {
+  width: 35%;
+  height: 35%;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(255,255,255,0.8);
+}
+
+.thinking-orb-pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  opacity: 0.6;
+}
+
+.thinking-orb-label {
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+/* Thinking bubble V6 */
+.iaos-thinking-v6 {
+  background: rgba(13, 20, 36, 0.72) !important;
+  border: 1px solid rgba(99,102,241,0.22) !important;
+  border-radius: 16px !important;
+  backdrop-filter: blur(12px);
+  animation: iaos-thinking-in 0.28s ease-out both;
+}
+
+@keyframes iaos-thinking-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.iaos-thinking-legacy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(148,163,184,0.14);
+  margin-top: 2px;
+}
+
+/* ─── §29 AI Activity Timeline ─────────────────────────────────────────── */
+.ai-activity-timeline {
+  background: rgba(13, 20, 36, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  backdrop-filter: blur(8px);
+  animation: iaos-thinking-in 0.28s ease-out both;
+}
+
+.ai-timeline-step {
+  transition: all 0.2s ease;
+  line-height: 1.5;
+}
+
+.ai-timeline-step[data-status="active"] {
+  background: rgba(34, 211, 238, 0.06);
+  border-radius: 6px;
+  padding: 4px 8px !important;
+  margin: 2px -4px;
+}
+
+.ai-timeline-step[data-status="completed"] .ai-timeline-label {
+  text-decoration: none;
+}
+
+.ai-timeline-icon {
+  font-variant-emoji: text;
+}
+
+/* ─── Intent chip V6 ───────────────────────────────────────────────────── */
+.iaos-intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.16);
+  border-radius: 999px;
+  padding: 4px 10px;
+  animation: iaos-thinking-in 0.25s ease-out;
+}
+
+/* ─── Reduced motion ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .iaos-conversation-v6 {
+    scroll-behavior: auto;
+  }
+  .iaos-new-msg-indicator {
+    animation: none;
+  }
+  .iaos-thinking-v6,
+  .ai-activity-timeline,
+  .iaos-intent-chip {
+    animation: none;
+  }
+  .thinking-orb,
+  .thinking-orb-inner,
+  .thinking-orb-pulse {
+    animation: none !important;
+  }
+}
+
+/* ─── Light theme V6 overrides ─────────────────────────────────────────── */
+:root[data-theme='light'] .iaos-page-v6 {
+  background:
+    radial-gradient(1100px 520px at 50% -10%, rgba(99, 102, 241, .12), transparent 62%),
+    radial-gradient(900px 520px at 85% 110%, rgba(34, 211, 238, .10), transparent 58%),
+    linear-gradient(180deg, #f7fbff 0%, #eef4fb 100%);
+}
+
+:root[data-theme='light'] .iaos-thinking-v6 {
+  background: rgba(255,255,255,0.92) !important;
+  border-color: rgba(99,102,241,0.18) !important;
+}
+
+:root[data-theme='light'] .ai-activity-timeline {
+  background: rgba(248,250,252,0.92);
+  border-color: rgba(148,163,184,0.18);
+}
+
+:root[data-theme='light'] .iaos-intent-chip {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.18);
+  color: #5b4bb7;
+}
+
+:root[data-theme='light'] .iaos-new-msg-indicator {
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.25), 0 2px 8px rgba(15,23,42,0.08);
+}

@@ -163,7 +163,26 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
       return `/loan${q({ tab: 'borrow', asset: token, amount, chain: fromChain })}`;
     case 'YIELD_DISCOVERY':
     case 'INVESTMENT_PLAN':
-      return openPage ? '/earn' : null;
+    case 'GOAL':
+    case 'GOAL_PLANNING':
+    case 'PROFIT_PLAN': {
+      // ── FIX: investment/profit intents must NEVER go to /earn (points tab = پول خیالی)
+      // nor to /lab (virtual). Must route to real products only: /perp, /invest, /stocks.
+      const raw = String(intent.raw || intent.message || '').toLowerCase();
+      const e = intent.entities || {};
+      const risk = String(e.riskPreference || e.riskTolerance || '').toLowerCase();
+      const tokens = (e.tokens || []).map((t) => String(t).toLowerCase());
+      const hasStocks = tokens.some((t) => ['stock', 'stocks', 'xstock', 'rwa'].includes(t))
+        || /سهام|بورس|xstock|stocks|equities|tokenized|rwa|دارایی واقعی|توکن شده/i.test(raw);
+      const hasHighRisk = risk === 'high' || risk === 'aggressive'
+        || /اهرم|لوریج|leverage|فیوچرز|پرپچوال|perp|futures|زلا|پول خیالی|مجازی|سود میبره|سود می‌بره/i.test(raw)
+        || /high.*risk|پرریسک|ریسک.*زیاد|تهاجمی/i.test(raw);
+      // If user explicitly mentioned stocks → /stocks, high risk/leverage → /perp, otherwise → /invest (افق جهانی)
+      if (hasStocks) return '/stocks';
+      if (hasHighRisk) return '/perp';
+      // Default for any investment / profit intent: افق جهانی (real global markets)
+      return '/invest';
+    }
     case 'SIGNALS':
     case 'ANALYZE_TOKEN':
       return e.token ? `/signals` : '/signals';
