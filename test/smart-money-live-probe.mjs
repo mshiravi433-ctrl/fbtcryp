@@ -34,6 +34,14 @@ const EARLY_TOKEN = '0x1234567890abcdef1234567890abcdef12345678';
 const LP_PAIR = '0x9999999999999999999999999999999999999999';
 const LP_TOKEN0 = EARLY_TOKEN;
 const LP_TOKEN1 = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'; // WETH
+const KRAKEN_TAGGED = '0x05ff6964d21e5dae3b1010d5ae0465b3c450f381'; // NOT in the curated registry; explorer-tagged
+const MEV_BOT = '0x51c72848c68a965f66fa7a88855f9f7784502a7f';
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+const WALLET_C = '0xccccccccccccccccccccccccccccccccccccccc3';
+
+/** Every Blockscout / metadata URL the modules asked for — asserted below. */
+const blockscoutUrls = [];
+const metadataCalls = [];
 
 /* URL host → chainId, so the fake RPC knows which chain is asking. */
 const hostToChain = new Map();
@@ -69,9 +77,13 @@ function rpcAnswer(chainId, { method, params }) {
     if (chainId !== 1) return [];
     if (isTransfer) {
       return [
-        transferLog({ from: BINANCE_HOT, to: WALLET_A, idx: 0 }),                       // cex_out
+        transferLog({ from: BINANCE_HOT, to: WALLET_A, idx: 0 }),                       // cex_out → A accumulates
         transferLog({ from: WALLET_B, to: BINANCE_HOT, tx: '0x' + '12'.repeat(32) }),   // cex_in
-        transferLog({ from: WALLET_A, to: UNI_ROUTER, tx: '0x' + '13'.repeat(32) })     // dex flow
+        transferLog({ from: WALLET_A, to: UNI_ROUTER, tx: '0x' + '13'.repeat(32) }),    // dex flow (sell)
+        transferLog({ from: ZERO_ADDR, to: WALLET_B, tx: '0x' + '14'.repeat(32) }),     // mint — zero address must never be a whale
+        transferLog({ from: WALLET_C, to: KRAKEN_TAGGED, tx: '0x' + '15'.repeat(32) }), // deposit to an explorer-tagged (uncurated) Kraken wallet
+        transferLog({ from: WALLET_C, to: KRAKEN_TAGGED, tx: '0x' + '16'.repeat(32) }), // second deposit → C is HIGH risk (distributing)
+        transferLog({ from: MEV_BOT, to: WALLET_B, tx: '0x' + '17'.repeat(32) })        // MEV bot must be excluded from the board
       ];
     }
     if (isPairEvent) {
@@ -156,9 +168,12 @@ globalThis.fetch = async (input, opts = {}) => {
   /* ── DexScreener ── */
   if (u.host === 'api.dexscreener.com') {
     if (u.pathname.startsWith('/token-profiles')) {
-      return json([{ tokenAddress: EARLY_TOKEN, chainId: 'ethereum', url: '', description: '' }]);
+      return json([
+        { tokenAddress: EARLY_TOKEN, chainId: 'ethereum', url: '', description: '' },
+        { tokenAddress: EARLY_TOKEN, chainId: 'robinhood', url: '', description: '' } // same token, bogus seed chain
+      ]);
     }
-    if (u.pathname.startsWith('/token-boosts')) return json([]);
+    if (u.pathname.startsWith('/token-boosts')) return json([{ tokenAddress: EARLY_TOKEN, chainId: 'ethereum', amount: 10 }]);
     if (u.pathname.startsWith('/latest/dex/tokens/')) {
       const addrs = decodeURIComponent(u.pathname.split('/latest/dex/tokens/')[1]).split(',');
       const pairs = [];
@@ -174,10 +189,82 @@ globalThis.fetch = async (input, opts = {}) => {
     return json({ pairs: [] });
   }
 
-  /* ── Blockscout ── */
-  if (u.host.endsWith('blockscout.com')) {
-    if (u.pathname.endsWith('/counters')) return json({ transactions_count: '4', token_transfers_count: '2' });
+  /* ── Blockscout (real v2 contract: no `limit`, `filter` ∈ {to,from}) ── */
+  if (u.host.endsWith('blockscout.com') && u.host !== 'metadata.services.blockscout.com') {
+    blockscoutUrls.push(url);
+    if (u.searchParams.has('limit')) return json({ errors: [{ title: 'Invalid value', source: { pointer: '/limit' }, detail: 'Unexpected field: limit' }] }, 422);
+    const f = u.searchParams.get('filter');
+    if (f && f !== 'to' && f !== 'from') return json({ errors: [{ detail: 'Invalid filter' }] }, 422);
+    if (u.pathname.endsWith('/counters')) {
+      const addr = u.pathname.split('/addresses/')[1].split('/')[0].toLowerCase();
+      return json(addr === WALLET_A
+        ? { transactions_count: '3', token_transfers_count: '2' }   // fresh
+        : { transactions_count: '412', token_transfers_count: '90' }); // seasoned
+    }
+    if (u.pathname.endsWith('/token-balances')) {
+      return json([{ token: { address_hash: USDT_ETH, symbol: 'USDT', name: 'Tether', decimals: '6', type: 'ERC-20', exchange_rate: '1.0' }, value: '2500000000000' }]);
+    }
+    if (u.pathname.endsWith('/balances')) return json({ errors: [{ detail: 'not found' }] }, 404);
+    if (u.pathname.endsWith('/token-transfers')) {
+      return json({ items: [
+        { transaction_hash: '0x' + 'a1'.repeat(32), timestamp: new Date(Date.now() - 3600_000).toISOString(), block_number: LATEST,
+          from: { hash: BINANCE_HOT, is_contract: false, metadata: { tags: [{ name: 'Binance: Hot Wallet', tagType: 'name', slug: 'binance-hot-wallet', meta: { main_entity: 'Binance' } }, { name: 'Exchange', tagType: 'generic', slug: 'exchange', meta: {} }] } },
+          to: { hash: WALLET_A, is_contract: false, metadata: null },
+          token: { address_hash: USDT_ETH, symbol: 'USDT', name: 'Tether', decimals: '6', type: 'ERC-20' },
+          total: { value: '2500000000000', decimals: '6' }, method: 'transfer', type: 'token_transfer' },
+        { transaction_hash: '0x' + 'a2'.repeat(32), timestamp: new Date(Date.now() - 1800_000).toISOString(), block_number: LATEST,
+          from: { hash: WALLET_A, is_contract: false, metadata: null },
+          to: { hash: '0x1111111254eeb25477b68fb85ed929f73a960582', is_contract: true, name: 'AggregationRouterV5', metadata: { tags: [{ name: 'Aggregation Router V5', tagType: 'name', slug: 'aggregation-router-v5', meta: {} }, { name: 'DEX', tagType: 'generic', slug: 'dex', meta: {} }] } },
+          token: { address_hash: USDT_ETH, symbol: 'USDT', name: 'Tether', decimals: '6', type: 'ERC-20' },
+          total: { value: '500000000000', decimals: '6' }, method: 'swap', type: 'token_transfer' },
+        { transaction_hash: '0x' + 'a3'.repeat(32), timestamp: new Date(Date.now() - 900_000).toISOString(), block_number: LATEST,
+          from: { hash: '0x000000000000000000000000000000000000dead', is_contract: false, metadata: null },
+          to: { hash: WALLET_A, is_contract: false, metadata: null },
+          token: { address_hash: '0x0000000000000000000000000000000000000bad', symbol: 'SPAM', decimals: '18', type: 'ERC-20' },
+          total: { value: '0', decimals: '18' }, method: 'transfer', type: 'token_transfer' }
+      ], next_page_params: null });
+    }
+    if (u.pathname.endsWith('/transactions')) {
+      return json({ items: [
+        { hash: '0x' + 'b1'.repeat(32), timestamp: new Date(Date.now() - 7200_000).toISOString(), block_number: LATEST - 100,
+          from: { hash: WALLET_A }, to: { hash: BINANCE_HOT }, value: '1000000000000000000', status: 'ok', method: null }
+      ], next_page_params: null });
+    }
+    if (/\/tokens\/0x[0-9a-f]{40}\/holders$/i.test(u.pathname)) {
+      return json({ items: [
+        { address: { hash: BINANCE_HOT, is_contract: false, metadata: { tags: [{ name: 'Binance: Hot Wallet', tagType: 'name', slug: 'binance-hot-wallet', meta: { main_entity: 'Binance' } }, { name: 'Exchange', tagType: 'generic', slug: 'exchange', meta: {} }] } }, value: '400000000000000000000000' },
+        { address: { hash: WALLET_B, is_contract: false, metadata: null }, value: '100000000000000000000000' }
+      ] });
+    }
+    if (/\/tokens\/0x[0-9a-f]{40}$/i.test(u.pathname)) {
+      return json({ address_hash: EARLY_TOKEN, decimals: '18', total_supply: '1000000000000000000000000', holders_count: '1234', exchange_rate: '1.23', symbol: 'MOCK', name: 'Mock Token' });
+    }
     return json({ items: [] });
+  }
+
+  /* ── Blockscout public address metadata (name-tags) ── */
+  if (u.host === 'metadata.services.blockscout.com') {
+    metadataCalls.push(url);
+    const addrs = String(u.searchParams.get('addresses') || '').toLowerCase().split(',');
+    const out = {};
+    if (addrs.includes(KRAKEN_TAGGED)) {
+      out[KRAKEN_TAGGED] = { tags: [
+        { slug: 'kraken-hot-wallet-4', name: 'Kraken: Hot Wallet 4', tagType: 'name', ordinal: 10, meta: '{"tooltipUrl":"https://www.kraken.com/"}' },
+        { slug: 'exchange', name: 'Exchange', tagType: 'generic', ordinal: 0, meta: '{}' },
+        { slug: 'kraken', name: 'Kraken', tagType: 'protocol', ordinal: 0, meta: '{}' }
+      ] };
+    }
+    if (addrs.includes(MEV_BOT)) {
+      out[MEV_BOT] = { tags: [{ slug: 'mev-bot-0x51ca7f', name: 'MEV Bot: 0x51C…a7F', tagType: 'name', ordinal: 10, meta: '{}' }] };
+    }
+    if (addrs.includes(ZERO_ADDR)) {
+      out[ZERO_ADDR] = { tags: [
+        { slug: 'null-address', name: 'Null Address', tagType: 'name', ordinal: 10, meta: '{"main_entity":"Genesis"}' },
+        { slug: 'coinbase', name: 'Coinbase', tagType: 'generic', ordinal: 0, meta: '{}' },
+        { slug: 'burn', name: 'Burn', tagType: 'generic', ordinal: 0, meta: '{}' }
+      ] };
+    }
+    return json({ addresses: out });
   }
 
   /* Anything else in this probe is a bug — fail closed like the sandbox. */
@@ -246,9 +333,14 @@ const call = (path) => new Promise((resolve, reject) => {
   req.end();
 });
 
+const { __resetEventStoreForTests } = await import('../server/smartMoney/eventStore.js');
+const { __clearTagCacheForTests } = await import('../server/smartMoney/dataSources.js');
+
 try {
   mode.coingecko = 'ok';
   clearSharedCache();
+  __resetEventStoreForTests();
+  __clearTagCacheForTests();
 
   const started = Date.now();
   const ov = await call('/api/v1/smart-money/overview?window=24h');
@@ -276,6 +368,66 @@ try {
 
   const liq = await call('/api/v1/smart-money/liquidity');
   t('liquidity route live', liq.status === 200 && (liq.body?.events?.length || 0) > 0);
+
+  /* ── the data-quality contract the live page was violating ──────────── */
+  const board = wh.body?.wallets || [];
+  const addrs = board.map((w) => w.address);
+  t('zero address is never listed as a whale', !addrs.includes(ZERO_ADDR));
+  t('curated exchange hot wallet is never listed as a whale', !addrs.includes(BINANCE_HOT));
+  t('explorer-tagged exchange wallet (uncurated) is excluded from the board', !addrs.includes(KRAKEN_TAGGED));
+  t('explorer-tagged MEV bot is excluded from the board', !addrs.includes(MEV_BOT));
+  t('DEX router is never listed as a whale', !addrs.includes(UNI_ROUTER));
+  const rowA = board.find((w) => w.address === WALLET_A);
+  const rowC = board.find((w) => w.address === WALLET_C);
+  t('whale net flow is received − sent (not a permanent 0)', !!rowA && rowA.netUsd === 0 && rowA.receivedUsd > 0 && rowA.sentUsd > 0 && board.some((w) => w.netUsd !== 0));
+  t('repeated exchange deposits earn HIGH risk / DISTRIBUTING', !!rowC && rowC.riskBand === 'HIGH' && rowC.behaviour === 'DISTRIBUTING' && rowC.deposits === 2);
+  t('risk bands are not all MEDIUM any more', new Set(board.map((w) => w.riskBand)).size >= 2);
+  t('explorer-tagged Kraken deposit is counted as exchange flow (source blockscout-tag)',
+    (fl.body?.windows?.['24h']?.byExchange || []).some((r) => r.exchange === 'Kraken' && r.inflowUsd >= 1_900_000));
+  t('flow windows carry per-window status + coverage', ['24h', '7d', '30d'].every((k) => typeof fl.body.windows[k].coverage === 'number' && typeof fl.body.windows[k].dataStatus === 'string'));
+  t('last action names the counterparty', typeof rowC.lastAction === 'string' && /Kraken/.test(rowC.lastAction));
+
+  const ta = ov.body?.tokenActivity || [];
+  t('token activity never says ACCUMULATION on 0/0 labelled flow', ta.every((r) => r.labelledEvents > 0 || r.signal === 'NEUTRAL'));
+  t('token activity carries wallet + labelled counts', ta.every((r) => typeof r.wallets === 'number' && typeof r.labelledEvents === 'number'));
+  t('overview coverage says how far back it observed', typeof ov.body?.coverage?.windowCoverage === 'number' && 'observedSince' in (ov.body?.coverage || {}));
+  t('changePct is null when there is no comparable previous window', ov.body?.metrics?.whaleActivity?.changePct === null);
+
+  const earlyRows = early.body?.tokens || [];
+  const earlyKeys = earlyRows.map((r) => `${r.chain}:${r.address}`);
+  t('early tokens are de-duplicated per chain+address', new Set(earlyKeys).size === earlyKeys.length && earlyRows.length === 1);
+  t('early token chain comes from the pair, not the bogus seed slug', earlyRows[0]?.chain === 'ethereum' && earlyRows[0]?.chainId === 1);
+
+  const fresh = await call('/api/v1/smart-money/fresh-wallets');
+  const freshRows = fresh.body?.wallets || [];
+  t('fresh wallets are VERIFIED (counters answered, tiny lifetime activity)', freshRows.length >= 1 && freshRows.every((w) => Number.isFinite(w.txCount) && w.txCount + (w.tokenTransfersCount || 0) <= 25));
+  t('seasoned wallets never appear as fresh', !freshRows.some((w) => w.address === WALLET_B || w.address === WALLET_C));
+
+  /* ── wallet page: the Blockscout contract that was 4xx-ing in production ─ */
+  const wallet = await call(`/api/v1/smart-money/wallet/1/${WALLET_A}`);
+  const w = wallet.body || {};
+  t('wallet route is LIVE against the real Blockscout v2 shape', wallet.status === 200 && w.dataStatus === 'live', JSON.stringify(w.sources));
+  t('no Blockscout request carries a `limit` parameter', blockscoutUrls.length > 0 && blockscoutUrls.every((x) => !/[?&]limit=/.test(x)));
+  t('no Blockscout request sends `filter=to | from`', blockscoutUrls.every((x) => !/filter=to(%20|\+| )/.test(x)));
+  t('token balances are read from /token-balances', blockscoutUrls.some((x) => /\/token-balances$/.test(x)) && !blockscoutUrls.some((x) => /\/balances\?/.test(x)));
+  t('holdings read token.address_hash and price via the explorer rate', (w.holdings || []).some((h) => h.token === USDT_ETH && h.amount === 2_500_000 && h.valueUsd === 2_500_000));
+  t('zero-value poisoning transfers are dropped from activity', !(w.activity || []).some((a) => a.token === 'SPAM'));
+  t('explorer-tagged DEX router classifies as a sell', (w.activity || []).some((a) => a.type === 'LARGE_SELL'));
+  t('counterparty label comes from the explorer name-tag', (w.activity || []).some((a) => /Binance/.test(a.counterpartyLabel || '')));
+  t('wallet sources all live', w.sources && w.sources.history === 'live' && w.sources.balances === 'live' && w.sources.counters === 'live');
+
+  const token = await call(`/api/v1/smart-money/token/1/${EARLY_TOKEN}`);
+  const holders = token.body?.holders || {};
+  t('token holders carry a real supply share and the exchange flag', token.status === 200 && holders.dataStatus === 'live' && holders.top?.[0]?.share === 40 && holders.top[0].isExchange === true && holders.total === 1234);
+  t('address metadata service was consulted for unlabelled counterparties', metadataCalls.length >= 1);
+
+  /* ── the buffer accumulates across scans (the «24h == 7d == 30d» bug) ─── */
+  const { readEvents } = await import('../server/smartMoney/eventStore.js');
+  const before = (await readEvents()).size;
+  clearSharedCache(); // force a new scan; the buffer must keep earlier rows
+  await call('/api/v1/smart-money/flows');
+  const after = (await readEvents()).size;
+  t('observed-event buffer persists across scans', before > 0 && after >= before);
 } finally {
   server.close();
 }

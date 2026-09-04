@@ -738,40 +738,100 @@
   },
   "about": {
     "title": "من نحن",
-    "tagline": "Trade & technology for a new economy",
-    "who": "Who we are",
-    "body1": "فانوس بازار بيشغام is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
-    "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
-    "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
-    "values": "What we stand for",
+    "tagline": "تجارة وتقنية لاقتصاد جديد",
+    "who": "من نحن",
+    "body1": "فانوس بازار بيشغام شركة تجارية مقرها خميني شهر في أصفهان. جذورنا في التجارة التقليدية، واتجاهنا بثبات نحو الاقتصاد الرقمي الجديد — حيث تنتقل القيمة دون وسطاء وتبقى الأسواق مفتوحة على مدار الساعة.",
+    "body2": "بنينا هذه المنصة لأننا نؤمن بأن الوصول إلى الأسواق العالمية لا ينبغي أن يتوقف على مكان إقامتك، أو على البنك الذي يقبلك، أو على من يرضى بحفظ أموالك. منصة التبادل اللامركزية تزيل هؤلاء الحراس: تربط محفظتك، وتتداول، ولا تخرج الأصول أبداً عن سيطرتك.",
+    "body3": "نحن فريق صغير يفضّل تقديم برمجيات صادقة على الوعود التسويقية. يخبرك التطبيق بدقة بما يفعله، وبما يتقاضاه، وبما لا يستطيع حمايتك منه. نفضّل أن تفهم المخاطرة على أن تفاجئك لاحقاً.",
+    "values": "ما نؤمن به",
     "value": {
       "transparency": {
-        "title": "Transparency",
-        "body": "Fees are shown before you sign, every transaction is verifiable on-chain, and our contract is public."
+        "title": "الشفافية",
+        "body": "تُعرض الرسوم قبل التوقيع، وكل معاملة قابلة للتحقق على السلسلة، وعقدنا علني."
       },
       "innovation": {
-        "title": "New economy",
-        "body": "We treat blockchain as real financial infrastructure, not a trend to chase."
+        "title": "اقتصاد جديد",
+        "body": "نتعامل مع البلوكتشين كبنية مالية حقيقية، لا كموجة نلاحقها."
       },
       "access": {
-        "title": "Open access",
-        "body": "No account, no approval, no minimum balance. A wallet is all you need."
+        "title": "وصول مفتوح",
+        "body": "بلا حساب، بلا موافقة، بلا حد أدنى للرصيد. محفظة واحدة تكفي."
       },
       "security": {
-        "title": "Self-custody",
-        "body": "We hold nothing. There is no company wallet for your funds to sit in and no withdrawal queue."
+        "title": "حفظ ذاتي",
+        "body": "لا نحتفظ بشيء. لا توجد محفظة شركة تبقى فيها أموالك ولا طابور سحب."
       }
     },
-    "details": "Company details",
-    "company": "Company",
-    "address": "Address",
+    "details": "بيانات الشركة",
+    "company": "الشركة",
+    "address": "العنوان",
     "addressValue": "أصفهان، خميني شهر، شارع الشهيد بهشتي، بجوار بلدية المنطقة ٤",
-    "network": "Network",
-    "custody": "We never hold your funds",
-    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. فانوس بازار بيشغام has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
-    "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
+    "network": "الشبكة",
+    "custody": "لا نحتفظ بأموالك أبداً",
+    "custodyBody": "هذه منصة تبادل غير وصائية. تُنفَّذ الصفقات مباشرة بين محفظتك والبلوكتشين. لا تملك فانوس بازار بيشغام أي وصول إلى أصولك، ولا يمكنها تجميد معاملة أو عكسها، ولا استعادة عبارة استرداد مفقودة.",
+    "riskDisclosure": "ينطوي تداول الأصول الرقمية على مخاطر كبيرة تشمل خسارة رأس المال بالكامل. الأسعار متقلبة والمعاملات على السلسلة لا رجعة فيها. لا شيء في هذا التطبيق يُعد نصيحة مالية. لا تتداول إلا بما يمكنك تحمّل خسارته، وتأكد من فهم لوائح بلدك.",
     "companyFull": "فانوس بازار بيشغام",
-    "companyShort": "فانوس بازار بيشغام"
+    "companyShort": "فانوس بازار بيشغام",
+    "headline": "تداول على السلسلة. واحتفظ بمفاتيحك.",
+    "summary": "فانوس بازار بيشغام شركة تجارية مقرها خميني شهر في أصفهان. نبني منصة تبادل غير وصائية: تربط محفظتك الخاصة، وتُسوّى الصفقات مباشرة على السلسلة، ولا تبقى أصولك أبداً في حساب نتحكم به.",
+    "trust": {
+      "nonCustodial": "غير وصائي",
+      "multiChain": "متعدد السلاسل"
+    },
+    "stats": {
+      "chains": "شبكات",
+      "languages": "لغات",
+      "custody": "أموال نحتفظ بها"
+    },
+    "how": {
+      "title": "كيف يعمل",
+      "step1Title": "أحضر محفظة",
+      "step1Body": "استخدم محفظة تملكها بالفعل أو أنشئ واحدة داخل التطبيق. بلا حساب، بلا بريد إلكتروني، بلا تحقق من الهوية.",
+      "step2Title": "قل ما تريد",
+      "step2Body": "بدّل مباشرة، أو صف هدفك بلغة بسيطة ودع Intent OS يعرض المسار والرسوم والمخاطر قبل أن يحدث أي شيء.",
+      "step3Title": "وقّع وسوِّ على السلسلة",
+      "step3Body": "أنت توقّع كل معاملة وتُسوّى على البلوكتشين. لا يتحرك شيء دون موافقتك، ولا يبقى شيء أبداً في حساب نتحكم به."
+    },
+    "featuresTitle": "ما الذي يمكنك فعله هنا",
+    "ecosystem": {
+      "swapTitle": "تبديل",
+      "swapDesc": "تداول الأصول الرقمية عبر الشبكات المدعومة.",
+      "walletTitle": "المحفظة",
+      "walletDesc": "أدر أصولك الرقمية وتعامل معها مع الاحتفاظ بالتحكم الكامل.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "عبّر عن أهدافك المالية بلغة طبيعية.",
+      "signalsTitle": "إشارات الذكاء الاصطناعي",
+      "signalsDesc": "رؤى للسوق والفرص بمساعدة الذكاء الاصطناعي.",
+      "smartMoneyTitle": "الأموال الذكية",
+      "smartMoneyDesc": "حلّل نشاط المحافظ والسوق حيث تتوفر البيانات.",
+      "farmsTitle": "المزارع والعوائد",
+      "farmsDesc": "استكشف فرص العائد والسيولة المدعومة."
+    },
+    "faq": {
+      "title": "الأسئلة الشائعة",
+      "q1": "ما هو FBT Swap؟",
+      "a1": "FBT Swap واجهة غير وصائية تساعدك على تبديل الأصول الرقمية والتعامل معها عبر الشبكات المدعومة. تربط محفظتك الخاصة، وتوقّع معاملاتك بنفسك، ولا تبقى الأصول أبداً في حساب للشركة.",
+      "q2": "ما هو FBT Intent OS؟",
+      "a2": "Intent OS هو طبقة الذكاء التي تفهم ما تريد تحقيقه، وتحلل المعلومات المتاحة، وتساعد في رسم مسار واعٍ بالمخاطر وقابل للشرح نحو ذلك الهدف — مع طلب موافقتك دائماً قبل أي تنفيذ.",
+      "q3": "هل FBT Swap غير وصائي؟",
+      "a3": "نعم، حيثما ينطبق ذلك. تُنفَّذ الصفقات مباشرة بين محفظتك والبلوكتشين. لا تملك فانوس بازار بيشغام أي وصول إلى مفاتيحك الخاصة، ولا يمكنها تحريك أموالك، ولا استعادة عبارة استرداد مفقودة.",
+      "q4": "ما الشبكات المدعومة؟",
+      "a4": "القائمة الفعلية مستمدة من سجل التطبيق: BNB Chain وEthereum وPolygon وArbitrum وBase وOptimism وAvalanche وLinea وSonic وSolana. تعكس الصفحة دائماً السجل الحالي، لا قائمة تسويقية مكتوبة يدوياً.",
+      "q5": "كيف يعمل الذكاء الاصطناعي؟",
+      "a5": "عبر بوابة FBT AI والمنسّق، يمكن للمنصة استخدام مزودين مهيّئين (مثل Grok أو OpenRouter) وأنظمة ذكاء داخلية لتحليل بيانات السوق والسلسلة والمحفظة. إنه يساعد ويشرح — ولا يضمن النتائج.",
+      "q6": "هل يضمن FBT الأرباح؟",
+      "a6": "لا. تحليلات وإشارات الذكاء الاصطناعي معلوماتية ولا يمكنها ضمان الأداء المستقبلي. العملات الرقمية متقلبة وقد تخسر كل شيء.",
+      "q7": "هل يستطيع الذكاء الاصطناعي تنفيذ المعاملات؟",
+      "a7": "يمكن للذكاء الاصطناعي اقتراح الإجراءات وشرحها، لكن التنفيذ يتطلب دائماً تفويضك الصريح. في الإجراءات المالية الحساسة لا يتحكم الذكاء الاصطناعي أبداً بأموال المستخدم بشكل مستقل. نموذج التفويض هو توقيع يتحكم به المستخدم.",
+      "q8": "ما هي الأموال الذكية؟",
+      "a8": "تحوّل الأموال الذكية النشاط على السلسلة — تحركات الحيتان، والمعاملات الكبيرة، وتغيرات الحائزين، وسلوك المحافظ حيث تتوفر البيانات — إلى رؤى مفهومة. وهي لا تتنبأ بالأسعار.",
+      "q9": "ما هو ذكاء Solana؟",
+      "a9": "طبقة مخصصة لمنظومة Solana: تحليل SOL، واكتشاف الرموز، والإشارات المبكرة، وتحليلات السيولة والحائزين، ومؤشرات مخاطر الرموز حيثما طُبّقت.",
+      "q10": "ما الأسواق التي يدعمها FBT؟",
+      "a10": "المتاح الآن: تبديل العملات الرقمية، واكتشاف DeFi، وذكاء Solana. مستقبلاً / قريباً حيثما يلزم: الأصول المرمّزة، وRWA، والأسهم، والسلع، والعقود الآجلة، والأسواق العالمية الأوسع. نُعلّم الأسواق المستقبلية دائماً بـ«مستقبلاً» أو «قريباً»."
+    },
+    "ctaTitle": "ما زال لديك سؤال؟",
+    "footNote": "بيانات السوق معلوماتية وليست نصيحة مالية. العملات الرقمية متقلبة — لا تتداول إلا بما يمكنك تحمّل خسارته."
   },
   "contact": {
     "title": "اتصل بنا",

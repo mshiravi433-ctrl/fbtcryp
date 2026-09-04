@@ -62,6 +62,24 @@
   filter: blur(4px);
 }
 
+/*
+ * A faint dot grid under the hero. Masked to fade out before the first
+ * section so it reads as texture, never as a table. Pure CSS, no image.
+ */
+.about-grid {
+  position: absolute;
+  z-index: 0;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 380px;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 24%, #000 20%, transparent 100%);
+  mask-image: radial-gradient(70% 70% at 50% 24%, #000 20%, transparent 100%);
+  opacity: 0.55;
+}
+
 .about-shell {
   position: relative;
   z-index: 1;
@@ -173,9 +191,175 @@
 
 .about-hero-summary {
   margin: 0;
-  max-width: 44ch;
+  max-width: 48ch;
   font-size: 13.5px;
   line-height: 1.95;
+  color: var(--about-body);
+  text-wrap: pretty;
+}
+
+/* ---------- Figures ---------- */
+/*
+ * Three numbers, three cells, always three across: even at 320px each cell
+ * still gets ~90px, which is enough for a two-digit figure and a one-word
+ * label. `dd` before `dt` in the markup so the number leads visually; the
+ * <dl> keeps the pairing for assistive tech either way.
+ */
+.about-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.about-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 13px 8px 11px;
+  border-radius: 16px;
+  text-align: center;
+  background: var(--about-card);
+  border: 1px solid var(--about-line);
+}
+
+.about-figure dd {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(120deg, #00e5ff, #a78bfa 60%, #ff2d95);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The zero is the point of the third cell: hold it in the "up" colour so it
+   reads as a promise kept, not as a missing value. */
+.about-figure--custody dd {
+  background: linear-gradient(120deg, #00ff9d, #00e5ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.about-figure dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--about-dim);
+}
+
+/* ---------- Network chips ---------- */
+.about-networks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about-network {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #d7deef;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--about-line);
+}
+
+.about-network-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--net, #7c4dff);
+  box-shadow: 0 0 8px var(--net, #7c4dff);
+  flex-shrink: 0;
+}
+
+/* ---------- How it works ---------- */
+/*
+ * A vertical rail runs through the step numbers. It is drawn on the <li>
+ * (not the list) so it starts at the first number and stops at the last
+ * instead of overshooting either end. Logical properties, so the rail
+ * mirrors to the right in RTL.
+ */
+.about-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: about-step;
+}
+
+.about-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 0 18px;
+}
+
+.about-step:last-child {
+  padding-block-end: 0;
+}
+
+.about-step::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 16px;
+  inset-block: 34px 0;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(124, 77, 255, 0.55), rgba(124, 77, 255, 0.08));
+}
+
+.about-step:last-child::before {
+  display: none;
+}
+
+.about-step-num {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #06070d;
+  background: linear-gradient(135deg, #00e5ff, #7c4dff);
+  box-shadow: 0 8px 20px rgba(124, 77, 255, 0.35);
+}
+
+.about-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block-start: 5px;
+}
+
+.about-step-copy strong {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #fff;
+}
+
+.about-step-copy p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.85;
   color: var(--about-body);
   text-wrap: pretty;
 }
@@ -617,4 +801,17 @@
 :root[data-theme='light'] .about-btn--ghost {
   color: #1e293b;
   background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme='light'] .about-grid {
+  background-image: radial-gradient(rgba(15, 23, 42, 0.22) 1px, transparent 1.2px);
+}
+
+:root[data-theme='light'] .about-network {
+  color: #1e293b;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme='light'] .about-step-copy strong {
+  color: #0f172a;
 }

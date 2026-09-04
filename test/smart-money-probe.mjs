@@ -129,11 +129,11 @@ const call = (path, opts = {}) => new Promise((resolve, reject) => {
 
 try {
   const ov = await call('/api/v1/smart-money/overview?window=24h');
-  t('overview route responds 200 with schema', ov.status === 200 && ov.body.schema === 'fbt.smart-money-overview.v1');
+  t('overview route responds 200 with schema', ov.status === 200 && /^fbt\.smart-money-overview\.v\d+$/.test(ov.body.schema || ''));
   t('overview carries metrics + flows + windows', !!ov.body.metrics && !!ov.body.flows?.windows?.['24h']);
 
   const whales = await call('/api/v1/smart-money/whales');
-  t('whales route responds with wallet board schema', whales.status === 200 && whales.body.schema === 'fbt.smart-money-whales.v1' && Array.isArray(whales.body.wallets));
+  t('whales route responds with wallet board schema', whales.status === 200 && /^fbt\.smart-money-whales\.v\d+$/.test(whales.body.schema || '') && Array.isArray(whales.body.wallets));
 
   const flows = await call('/api/v1/smart-money/flows');
   t('flows route responds with inflow/outflow windows', flows.status === 200 && typeof flows.body.windows?.['24h']?.inflowUsd === 'number');
@@ -212,8 +212,10 @@ try {
       }
       if (u.includes('/latest/dex/tokens/')) return json({ pairs: dexPairs });
       if (u.includes('/counters')) return json({ transactions_count: 41, token_transfers_count: 6 });
-      if (u.includes('/balances')) {
-        return json([{ token: { address: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8' }, value: String(50n * 10n ** 8n), value_usd: null }]);
+      // Real Blockscout v2 shape: /token-balances, token.address_hash, no limit/filter params.
+      if (/[?&](limit|filter)=/.test(u) && u.includes('blockscout')) return { ok: false, status: 422, json: async () => ({ errors: [{ detail: 'Unexpected field' }] }) };
+      if (u.includes('/token-balances')) {
+        return json([{ token: { address_hash: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8', type: 'ERC-20' }, value: String(50n * 10n ** 8n) }]);
       }
       if (u.includes('/token-transfers')) {
         return json({ items: [
@@ -266,7 +268,7 @@ try {
       if (u.includes('/token-transfers') || u.includes('/counters') || /\/transactions(\?|$)/.test(u)) {
         return { ok: false, status: 502, json: async () => ({}) };
       }
-      if (u.includes('/balances')) return json([{ token: { address: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8' }, value: String(10n * 10n ** 8n), value_usd: null }]);
+      if (u.includes('/token-balances')) return json([{ token: { address_hash: HELD, name: 'Wrapped Bitcoin', symbol: 'WBTC', decimals: '8', type: 'ERC-20' }, value: String(10n * 10n ** 8n) }]);
       if (u.includes('/latest/dex/tokens/')) return json({ pairs: [dexPairs[1]] });
       return { ok: false, status: 502, json: async () => ({}) };
     };

@@ -1781,9 +1781,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             The old header carried five panel buttons (intelligence, history,
             operations, agents·strategies, status) plus the title. On a phone
             that wrapped into a second line and read as clutter. Those panels
-            moved to the bottom menu bar; the header keeps only what the user
-            asked for: "AI", a status pill and the live indicator. The debug
-            dashboard stays reachable by tapping the title, as before. */}
+            moved to the bottom menu bar; the header keeps only "AI" and ONE
+            status pill. There used to be a second, always-on "Live" badge
+            next to it — so the top of the page said both «آنلاین» and «زنده»
+            (or "Online" and "Live") for the same thing. On instruction only
+            the real, measured state survives: the pill reflects the actual
+            server probe, the decorative badge is gone. The debug dashboard
+            stays reachable by tapping the title, as before. */}
         <header className="iaos-header">
           <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
             <span className="iaos-mark" aria-hidden="true">✦</span>
@@ -1794,16 +1798,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
           <div className="iaos-header-status">
             {serverReachable != null ? (
-              <span className="iaos-status-pill" data-on={serverReachable ? 'true' : 'false'}>
+              <span className="iaos-status-pill" data-on={serverReachable ? 'true' : 'false'} data-testid="intent-ai-status-pill">
                 <i aria-hidden="true" />
                 {serverReachable
                   ? (locale.startsWith('fa') ? 'آنلاین' : 'Online')
                   : (locale.startsWith('fa') ? 'آفلاین' : 'Offline')}
               </span>
             ) : null}
-            <span className="iaos-live" data-on="true" title={t('intentAIOS.live', { defaultValue: 'Live' })}>
-              <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
-            </span>
           </div>
         </header>
 
@@ -1956,10 +1957,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         {/* ─── BOTTOM MENU ─────────────────────────────────────────────────
             The operations surfaces the header used to hold, moved down here
-            as plain text entries: عملیات / تاریخچه / هوش چندمدلی / ایجنت‌ها /
+            as plain text entries: عملیات / تاریخچه / هوش چندمدلی / ایجنت‌ها و
             استراتژی‌ها. Text, not icon buttons, so the top of the screen
             stays clean and the menu sits with the composer where the thumb
-            already is. */}
+            already is.
+
+            Agents and strategies are ONE entry, not two: both live in the same
+            ecosystem panel (it has its own agent/strategy tabs), so two buttons
+            here opened the same box twice under different names — «ایجنت» و
+            «استراتژی» side by side for one place. On instruction the single
+            entry opens that panel on its agents tab, where the strategies tab
+            is one tap away. */}
         <nav className="iaos-menubar" aria-label={locale.startsWith('fa') ? 'منوی عملیات' : 'Operations menu'}>
           <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
             {opsText('ops.aria', locale)}
@@ -1970,11 +1978,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
             {opsText('menu.multiAi', locale)}
           </button>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-agents" onClick={() => openEcosystem('agent')}>
-            {opsText('eco.agents', locale)}
-          </button>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-strategies" onClick={() => openEcosystem('strategy')}>
-            {opsText('eco.strategies', locale)}
+          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-ecosystem" onClick={() => openEcosystem('agent')}>
+            {opsText('eco.menu', locale)}
           </button>
         </nav>
       </div>

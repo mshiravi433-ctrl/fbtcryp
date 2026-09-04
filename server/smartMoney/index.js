@@ -17,7 +17,7 @@
  */
 import { withCache } from '../cache.js';
 import { TTL, WINDOWS, FLOORS } from './config.js';
-import { labelledEvents, whaleBoard, exchangeFlows, earlyTokens, freshWallets, liquidityEvents, tokenSignals } from './moneyFlow.js';
+import { labelledEvents, whaleBoard, exchangeFlows, earlyTokens, freshWallets, liquidityEvents, tokenSignals, windowCoverage, isNonWallet, SCAN_FLOOR } from './moneyFlow.js';
 import { analyzeWallet } from './walletIntel.js';
 import { analyzeToken } from './tokenIntel.js';
 import { registryManifest } from './registry.js';
@@ -59,28 +59,48 @@ function within(p, ms) {
 
 async function buildOverview(winKey) {
   const winMs = WINDOWS[winKey] || WINDOWS.H24;
-  const cutoff = Date.now() - winMs;
-  const prevCutoff = Date.now() - winMs * 2;
+  const now = Date.now();
+  const cutoff = now - winMs;
+  const prevCutoff = now - winMs * 2;
 
-  const { events, partial, pricedCount } = await labelledEvents({ minUsd: FLOORS.whaleUsd });
-  const inWin = events.filter((e) => (e.timestamp || 0) >= cutoff && e.valueUsd != null);
-  const prevWin = events.filter((e) => (e.timestamp || 0) >= prevCutoff && (e.timestamp || 0) < cutoff && e.valueUsd != null);
+  /* ONE stream read feeds every aggregate below (flows, whale board, fresh
+     wallets all used to re-read and re-filter it independently). */
+  const stream = await labelledEvents({ minUsd: SCAN_FLOOR });
+  const { events, partial, observedSince, sourceUp, scanPending, bufferSize } = stream;
+  const whaleEvents = events.filter((e) => e.valueUsd != null && e.valueUsd >= FLOORS.whaleUsd);
+  const inWin = whaleEvents.filter((e) => (e.timestamp || 0) >= cutoff);
+  const prevWin = whaleEvents.filter((e) => (e.timestamp || 0) >= prevCutoff && (e.timestamp || 0) < cutoff);
+
+  /* A «previous window» comparison is only honest when the buffer actually
+     reaches back that far; otherwise changePct is null and the UI shows no
+     arrow rather than «+100%» against an empty past. */
+  const coverageNow = windowCoverage(observedSince, winMs, now);
+  const havePrev = windowCoverage(observedSince, winMs * 2, now) >= 0.95;
+  const pct = (a, b) => (havePrev ? pctChange(a, b) : null);
 
   // Aggregate activity metrics
   const whaleActivity = inWin.length;
   const whaleActivityPrev = prevWin.length;
-  const accumulationNow = inWin.filter((e) => e.flow === 'dex_buy' || e.flow === 'cex_out').reduce((s, e) => s + e.valueUsd, 0);
-  const accumulationPrev = prevWin.filter((e) => e.flow === 'dex_buy' || e.flow === 'cex_out').reduce((s, e) => s + e.valueUsd, 0);
-  const distributionNow = inWin.filter((e) => e.flow === 'dex_sell' || e.flow === 'cex_in').reduce((s, e) => s + e.valueUsd, 0);
-  const distributionPrev = prevWin.filter((e) => e.flow === 'dex_sell' || e.flow === 'cex_in').reduce((s, e) => s + e.valueUsd, 0);
+  const isAcc = (e) => e.flow === 'dex_buy' || e.flow === 'cex_out';
+  const isDist = (e) => e.flow === 'dex_sell' || e.flow === 'cex_in';
+  const sum = (rows, pred) => rows.filter(pred).reduce((s, e) => s + e.valueUsd, 0);
+  const accumulationNow = sum(inWin, isAcc);
+  const accumulationPrev = sum(prevWin, isAcc);
+  const distributionNow = sum(inWin, isDist);
+  const distributionPrev = sum(prevWin, isDist);
+  const labelledNow = inWin.filter((e) => isAcc(e) || isDist(e)).length;
 
-  const flows = await exchangeFlows();
-  const netFlow24 = flows.windows['24h'].netUsd;
+  const flows = await exchangeFlows({ stream });
+  const flowWin = flows.windows[winKey] || flows.windows['24h'];
 
-  // Per-token accumulation ranking
+  // Per-token accumulation ranking — LABELLED flow only. Plain wallet-to-
+  // wallet transfers say nothing about buying or selling, so a token whose
+  // whole window is unlabelled transfers is reported NEUTRAL, never
+  // «ACCUMULATION» on 0/0 as before.
   const byToken = new Map();
   for (const e of inWin) {
-    if (!e.token?.symbol || e.valueUsd == null) continue;
+    if (!e.token?.symbol) continue;
+    if (e.flow === 'mint' || e.flow === 'burn' || e.flow === 'cex_internal') continue;
     const key = `${e.chainId}:${e.token.address || e.token.symbol}`;
     const r = byToken.get(key) || {
       symbol: e.token.symbol,
@@ -89,52 +109,73 @@ async function buildOverview(winKey) {
       chainId: e.chainId,
       address: e.token.address || null,
       coingeckoId: e.token.coingeckoId || null,
-      buy: 0, sell: 0, cexIn: 0, cexOut: 0, events: 0
+      buy: 0, sell: 0, cexIn: 0, cexOut: 0, transfer: 0, events: 0, labelled: 0, wallets: new Set()
     };
     r.events += 1;
-    if (e.flow === 'dex_buy') r.buy += e.valueUsd;
-    if (e.flow === 'dex_sell') r.sell += e.valueUsd;
-    if (e.flow === 'cex_in') r.cexIn += e.valueUsd;
-    if (e.flow === 'cex_out') r.cexOut += e.valueUsd;
+    if (e.flow === 'dex_buy') { r.buy += e.valueUsd; r.labelled += 1; }
+    else if (e.flow === 'dex_sell') { r.sell += e.valueUsd; r.labelled += 1; }
+    else if (e.flow === 'cex_in') { r.cexIn += e.valueUsd; r.labelled += 1; }
+    else if (e.flow === 'cex_out') { r.cexOut += e.valueUsd; r.labelled += 1; }
+    else r.transfer += e.valueUsd;
+    for (const side of ['from', 'to']) if (e[side]?.address && !isNonWallet(e.chainId, e[side])) r.wallets.add(e[side].address);
     byToken.set(key, r);
   }
   const tokenActivity = [...byToken.values()].map((r) => {
     const net = r.buy + r.cexOut - r.sell - r.cexIn;
     const scale = Math.max(r.buy + r.cexOut, r.sell + r.cexIn, 1);
     const accum = detectAccumulation({
-      netBuying: Math.max(0, net) / scale,
+      netBuying: r.labelled ? Math.max(0, net) / scale : null,
       exchangeOutflow: r.cexOut > 0 ? Math.min(1, r.cexOut / scale) : null,
-      smartMoneyBuying: r.events >= 3 ? Math.min(1, r.events / 10) : null
+      smartMoneyBuying: r.labelled >= 3 ? Math.min(1, r.labelled / 10) : null
     });
     const distrib = detectDistribution({
-      netSelling: Math.max(0, -net) / scale,
+      netSelling: r.labelled ? Math.max(0, -net) / scale : null,
       exchangeInflow: r.cexIn > 0 ? Math.min(1, r.cexIn / scale) : null
     });
+    let signal = 'NEUTRAL';
+    if (r.labelled) {
+      if (accum.detected && !distrib.detected) signal = 'ACCUMULATION';
+      else if (distrib.detected && !accum.detected) signal = 'DISTRIBUTION';
+      else if (net > 0) signal = 'ACCUMULATION';
+      else if (net < 0) signal = 'DISTRIBUTION';
+    }
     return {
-      ...r,
+      symbol: r.symbol,
+      name: r.name,
+      chainShort: r.chainShort,
+      chainId: r.chainId,
+      address: r.address,
+      coingeckoId: r.coingeckoId,
       buy: Math.round(r.buy), sell: Math.round(r.sell),
       cexIn: Math.round(r.cexIn), cexOut: Math.round(r.cexOut),
+      transferUsd: Math.round(r.transfer),
+      totalUsd: Math.round(r.buy + r.sell + r.cexIn + r.cexOut + r.transfer),
       netUsd: Math.round(net),
-      accumulation: accum.confidence,
-      distribution: distrib.confidence,
-      signal: accum.detected ? 'ACCUMULATION' : distrib.detected ? 'DISTRIBUTION' : net >= 0 ? 'ACCUMULATION' : 'DISTRIBUTION'
+      events: r.events,
+      labelledEvents: r.labelled,
+      wallets: r.wallets.size,
+      accumulation: r.labelled ? accum.confidence : null,
+      distribution: r.labelled ? distrib.confidence : null,
+      signal
     };
-  }).sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd)).slice(0, 10);
+  }).sort((a, b) => (Math.abs(b.netUsd) - Math.abs(a.netUsd)) || (b.totalUsd - a.totalUsd)).slice(0, 10);
 
   const [early, fresh, liquidity, whales] = await Promise.all([
     within(earlyTokens({ limit: 8 }).catch(() => null), 10_000),
-    within(freshWallets().catch(() => null), 10_000),
+    within(freshWallets({ stream }).catch(() => null), 10_000),
     within(liquidityEvents({ windowBlocks: 8 }).catch(() => null), 12_000),
-    within(whaleBoard().catch(() => null), 12_000)
+    within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), 12_000)
   ]);
 
   /*
    * `dataStatus` drives the page-level «اتصال برقرار نیست» banner, so it must
    * mean "EVERYTHING is dark", not "the whale stream is momentarily quiet".
-   * The old `events.length ? live : unavailable` blanked a page that had
-   * live early-token, liquidity and flow data. The whale-stream-specific
-   * state now travels separately as `streamStatus` so the metric tiles can
-   * show honest em-dashes while the live sections keep rendering.
+   * The whale-stream-specific state travels separately as `streamStatus`
+   * so the metric tiles can show honest em-dashes while the live sections
+   * keep rendering:
+   *   live  — a scan answered and the buffer has events
+   *   stale — the scan failed/timed out but earlier observations exist
+   *   unavailable — nothing observed at all
    */
   const anyLive =
     events.length > 0 ||
@@ -142,26 +183,35 @@ async function buildOverview(winKey) {
     (liquidity?.events?.length || 0) > 0 ||
     (whales?.wallets?.length || 0) > 0 ||
     (fresh?.wallets?.length || 0) > 0;
+  const streamStatus = events.length ? (sourceUp && !scanPending ? 'live' : 'stale') : 'unavailable';
 
   return {
-    schema: 'fbt.smart-money-overview.v1',
-    at: Date.now(),
+    schema: 'fbt.smart-money-overview.v2',
+    at: now,
     window: winKey,
     dataStatus: anyLive ? 'live' : 'unavailable',
-    streamStatus: events.length ? 'live' : 'unavailable',
+    streamStatus,
     partial: !!partial,
     coverage: {
-      events: events.length,
-      priced: pricedCount ?? inWin.length,
-      note: 'Metrics derive from observed large on-chain transfers across supported chains. Unlabelled counterparties are not counted as exchange flow.'
+      events: whaleEvents.length,
+      inWindow: inWin.length,
+      labelledInWindow: labelledNow,
+      priced: whaleEvents.filter((e) => e.valueUsd != null).length,
+      observedEvents: bufferSize,
+      observedSince,
+      windowCoverage: Math.round(coverageNow * 100) / 100,
+      comparable: havePrev,
+      note: 'Metrics derive from large on-chain transfers observed while the scanner was running (not a full chain history). Unlabelled counterparties are never counted as exchange or DEX flow.'
     },
     metrics: {
-      whaleActivity: { value: whaleActivity, changePct: pctChange(whaleActivity, whaleActivityPrev) },
-      accumulation: { valueUsd: Math.round(accumulationNow), changePct: pctChange(accumulationNow, accumulationPrev) },
-      distribution: { valueUsd: Math.round(distributionNow), changePct: pctChange(distributionNow, distributionPrev) },
-      exchangeInflow: compactUsd(flows.windows[winKey].inflowUsd),
-      exchangeOutflow: compactUsd(flows.windows[winKey].outflowUsd),
-      netFlow: compactUsd(netFlow24)
+      whaleActivity: { value: whaleActivity, changePct: pct(whaleActivity, whaleActivityPrev) },
+      accumulation: { valueUsd: Math.round(accumulationNow), changePct: pct(accumulationNow, accumulationPrev), events: inWin.filter(isAcc).length },
+      distribution: { valueUsd: Math.round(distributionNow), changePct: pct(distributionNow, distributionPrev), events: inWin.filter(isDist).length },
+      exchangeInflow: compactUsd(flowWin.inflowUsd),
+      exchangeOutflow: compactUsd(flowWin.outflowUsd),
+      netFlow: compactUsd(flowWin.netUsd),
+      flowStatus: flowWin.dataStatus,
+      flowEvents: flowWin.events
     },
     flows,
     tokenActivity,

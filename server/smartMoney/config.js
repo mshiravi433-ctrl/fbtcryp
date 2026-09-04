@@ -168,7 +168,10 @@ export const CLASSIFY = {
 export const FRESH = {
   maxAgeMs: WINDOWS.H24,
   minCapitalUsd: num(env.SM_FRESH_MIN_CAPITAL, 100_000),
-  interestingMinUsd: num(env.SM_FRESH_INTERESTING_USD, 500_000)
+  interestingMinUsd: num(env.SM_FRESH_INTERESTING_USD, 500_000),
+  /** Lifetime transactions + token transfers the explorer may report for a
+   *  wallet that still counts as «fresh». Verified, never assumed. */
+  maxActivityCount: num(env.SM_FRESH_MAX_ACTIVITY, 25)
 };
 
 /* ── Early token detection ────────────────────────────────────────────── */

@@ -320,3 +320,28 @@
   background: rgba(255, 194, 75, 0.08);
 }
 .sm-offline .msg { font-size: 12.5px; font-weight: 700; line-height: 1.55; color: #ffc24b; }
+
+/*
+ * Stale notice — the scan is slow or failed but earlier observations are on
+ * screen. Softer than the offline banner: the numbers are real, just not
+ * refreshed this very second.
+ */
+.sm-stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-color: rgba(0, 229, 255, 0.22);
+  background: rgba(0, 229, 255, 0.05);
+}
+.sm-stale .msg { font-size: 11.5px; font-weight: 600; line-height: 1.5; opacity: 0.85; }
+
+/* «Based on N transfers observed over X h» — the provenance line under the
+   metric tiles. Every number on the page has one; a metric without a
+   stated basis is how «$0» came to read like a finding. */
+.sm-coverage {
+  font-size: 10.5px;
+  line-height: 1.55;
+  opacity: 0.6;
+  padding: 2px 6px 10px;
+}

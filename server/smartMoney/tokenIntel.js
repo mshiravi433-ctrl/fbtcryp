@@ -96,12 +96,15 @@ async function buildTokenIntel(address, chainId) {
     const share = h.share ?? null;
     if (i < 10 && share != null) top10Share = (top10Share || 0) + share;
     const cex = exchangeFor(chainId, h.address);
-    if (cex && share != null) exchangeSupply += share;
+    const exchange = cex?.exchange || (h.kind === 'exchange' ? h.exchange : null);
+    if (exchange && share != null) exchangeSupply += share;
     topHolders.push({
       address: h.address,
-      name: h.name || cex?.label || null,
-      isExchange: !!cex,
-      exchange: cex?.exchange || null,
+      name: cex?.label || h.name || null,
+      isExchange: !!exchange,
+      isContract: !!h.isContract,
+      kind: cex ? 'exchange' : h.kind || null,
+      exchange,
       share: share != null ? Math.round(share * 1000) / 10 : null
     });
   }
