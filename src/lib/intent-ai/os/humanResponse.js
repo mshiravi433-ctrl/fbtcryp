@@ -551,6 +551,53 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
+  if (type === 'REBALANCE') {
+    const plan = results.rebalancePlan || {};
+    if (plan.code === 'NO_TARGET_ALLOCATION') {
+      const msg = plan.messageFa || plan.message
+        || (lang === 'fa'
+          ? 'برای متعادل‌سازی به یک تخصیص هدف نیاز است. نسبت موردنظرتان را بگویید یا آن را در صفحه‌ی پرتفوی تعیین کنید.'
+          : 'A rebalance needs a target allocation. Tell me the split you want, or open the portfolio page to set one.');
+      return {
+        message: msg,
+        ui: { type: 'TEXT' },
+        code: plan.code,
+        actions: [{ id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'صفحه پرتفوی' : 'Portfolio' }]
+      };
+    }
+
+    if (plan.ok === true) {
+      const lines = Array.isArray(plan.trades) && plan.trades.length
+        ? plan.trades.map((t) => {
+            const side = t.side === 'buy' ? (lang === 'fa' ? 'خرید' : 'Buy') : (lang === 'fa' ? 'فروش' : 'Sell');
+            return `${t.symbol}: ${side} ${t.toPct}% (${lang === 'fa' ? 'از' : 'from'} ${Number(t.fromPct || 0).toFixed(1)}%)`;
+          })
+        : [lang === 'fa' ? 'نیازی به بازتنظیم نیست؛ تخصیص فعلی نزدیک هدف است.' : 'No trade is needed; the current allocation is already close to target.'];
+      return {
+        message: `${lang === 'fa' ? 'پیشنهاد متعادل‌سازی (بدون اجرا):' : 'Rebalance proposal (nothing executed):'}\n\n${lines.join('\n')}\n\n${lang === 'fa' ? 'این فقط یک پیشنهاد است و بدون تأیید شما هیچ تراکنشی اجرا نمی‌شود.' : 'This is a proposal only — nothing will execute without your approval.'}`,
+        ui: { type: 'TEXT' },
+        rebalance: plan,
+        actions: [{ id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'صفحه پرتفوی' : 'Portfolio' }]
+      };
+    }
+
+    if (!connected) {
+      return {
+        message: lang === 'fa'
+          ? 'برای متعادل‌سازی باید پرتفوی زنده‌ی شما قابل خواندن باشد. کیف پول را متصل کنید یا نسبت تخصیص هدف را بگویید.'
+          : 'To rebalance I need to read your live portfolio. Connect the wallet or tell me the target allocation.',
+        ui: { type: 'TEXT' }
+      };
+    }
+
+    return {
+      message: lang === 'fa'
+        ? 'برای متعادل‌سازی به تخصیص هدف نیاز است. نسبت موردنظرتان را بگویید (مثلاً «اتریوم ۳۰٪، بیت‌کوین ۷۰٪») یا آن را در صفحه پرتفوی تعیین کنید.'
+        : 'A rebalance needs a target allocation. Tell me the split you want (e.g. “ETH 30%, BTC 70%”) or set it on the portfolio page.',
+      ui: { type: 'TEXT' }
+    };
+  }
+
   if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'].includes(type)) {
     const action = plan?.actions?.[0] || results.action || {};
     const from = action.input?.fromSymbol || action.from || intent?.entities?.fromToken || intent?.entities?.token || 'USDC';
