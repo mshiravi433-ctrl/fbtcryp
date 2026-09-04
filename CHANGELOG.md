@@ -1,3 +1,72 @@
+# Unreleased — AI Upgrade 5: Collaborative Multi-AI Intelligence, Web Research & Customer Question Intelligence
+
+## AI Upgrade 5 — one FBT intelligence layer, many specialists behind it
+
+- **Collaborative Intelligence Engine** (`server/aiCollaboration.js`). The user
+  talks to FBT once; a deterministic question analyzer
+  (`src/lib/intent-ai/os/collaborationRouter.js`) decides how much intelligence
+  the turn needs — conversation kind (greeting/thanks/casual/action/follow-up),
+  emotion (fear, panic, frustration, confusion, uncertainty), FOMO, freshness
+  (STATIC/RECENT/LIVE/BREAKING), complexity and a collaboration level 1-5.
+  «سلام» costs zero extra model calls; «الان همه پولم رو بیت کوین بخرم؟» gets
+  the full multi-model + web + verification + uncertainty pipeline. Stages run
+  per the collaborative protocol: independent parallel analyses → compare →
+  verification → consensus → ONE clean FBT answer (no "Grok says…" unless
+  transparency mode is requested).
+- **Fact consensus, not majority vote.** Three models agreeing is not proof:
+  factual claims are marked verified only when live tool data or tier ≤ 3 web
+  evidence supports them; otherwise they are flagged `aiConsensusOnly` and the
+  answer states the uncertainty. Model disagreement is never forced into false
+  consensus — `disagreement: true` is recorded and surfaced honestly.
+- **Web Research Engine** (`server/aiWebResearch.js`) on top of the existing
+  `webSearch` (Jina when keyed, DuckDuckGo otherwise): source tiering 1-4
+  (official → major news → industry → social-as-lead-only), grounded answers
+  that cite only the sources they were given, and the News → Crypto Impact
+  engine with `impactDirection / impactStrength / confidence / timeHorizon`,
+  bull/bear/neutral scenarios, multi-source corroboration and a hard
+  confidence cap (60) for single-source stories. Analysis, never a guarantee.
+- **Customer Question Intelligence** (`server/aiQuestionIntel.js` +
+  `src/lib/intent-ai/os/questionIntel.js`). Every chat turn is recorded
+  anonymized (secret material is rejected before storage; only cluster
+  counters and a short redacted sample persist). «BTC چطوره؟», «بیت کوین چه
+  وضعیه؟» and «نظرت درباره بیت کوین چیه» cluster into MARKET_OUTLOOK;
+  «چطور USDT بخرم؟»/«با تومان تتر بخرم؟» into USDT_PURCHASE. Admin-gated
+  analytics (`CRON_SECRET`) expose top/emerging/unanswered/confusing/high-risk
+  questions, knowledge gaps with concrete recommendations, and FAQ candidates
+  that are DRAFT-only until human review. 👍/👎 feedback classifies into a
+  fixed taxonomy (incorrect/outdated/too long/…) feeding the evaluation loop —
+  never uncontrolled self-learning — and feeds the new AI quality dashboard.
+- **Knowledge Center** (`src/lib/intent-ai/os/knowledgeCenter.js`): versioned,
+  status-flagged (verified/unverified/deprecated) FBT product knowledge with
+  deterministic retrieval, so product answers come from controlled facts
+  instead of model memory. Prices, balances and news never live here — those
+  stay with their authoritative tools.
+- **Provider health + circuit breaker**: per-provider latency/success/error
+  tracking; 4 consecutive failures open a 60s circuit so a dying provider
+  cannot drag every turn into its timeout. Every stage is deadline-bounded
+  (`AI_COLLAB_DEADLINE_MS`, default 20s; research gets a slice, never the
+  whole budget) with graceful degradation: no external AI → knowledge- and
+  tool-grounded answers with explicit uncertainty, never invention.
+- **Emotional + FOMO handling**: fear/panic gets acknowledgement + structured
+  risk assessment (no false reassurance, no automatic sell); FOMO gets
+  opportunity + risk + alternative + uncertainty (never amplified);
+  frustration gets a short, precise repair path.
+- **Execution security untouched (§67)**: collaboration output only ever
+  becomes reply text and `intelligence` metadata — it never creates actions,
+  plans or pending intents. Wallet approval, risk controls and the confirmed
+  execution flow are exactly as before. Secrets/seed phrases are rejected at
+  every new endpoint; models receive aggregated portfolio summaries at most.
+- **Regression gate**: `npm run test:upgrade5` — 41 assertions plus a 165-question
+  evaluation corpus (Persian/English/mixed, greetings, emotions, FOMO, news,
+  risk, wallet, ambiguity, follow-ups) that must pass the analyzer at 100%.
+  Upgrade 4's probe (`npm run test:upgrade4`, 21/21) and the full `npm test`
+  suite carry zero new failures.
+- Chat replies now carry `reply.intelligence` (level, freshness, emotion,
+  sources, uncertainty, quality); the chat bubble renders https source chips,
+  a low-confidence warning when warranted, and 👍/👎 feedback — nothing else
+  of the internal machinery is exposed. Docs:
+  `docs/AI-UPGRADE5-COLLABORATIVE-INTELLIGENCE-FA.md`.
+
 # Unreleased — Smart Money loads real data; About in twelve languages; Intent OS header; dead charts removed
 
 ## Smart Money: «به داده وصل نشد» and a page full of zeros

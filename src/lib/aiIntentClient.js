@@ -67,8 +67,20 @@ const payload = (extra = {}) => ({
 export const aiContext = (context = {}) => call('/v1/ai/context', { method: 'POST', body: payload(context) });
 export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
   call('/v1/ai/suggestions', { method: 'POST', body: payload({ message, conversationId, context, prior }) });
-export const aiChat = ({ message, surface, conversationId, aiControl, prior, context, resume, hints } = {}) =>
-  call('/v1/ai/chat', { method: 'POST', body: payload({ message, surface, conversationId, aiControl, prior, context, resume, hints }) });
+/* AI Upgrade 5: complex turns can coordinate several models + web research,
+   so the chat turn gets a longer budget than the default 12s. The server
+   enforces its own deadline and always answers with what it has. */
+export const aiChat = ({ message, surface, conversationId, aiControl, prior, context, resume, hints, transparency } = {}) =>
+  call('/v1/ai/chat', { method: 'POST', body: payload({ message, surface, conversationId, aiControl, prior, context, resume, hints, transparency }), timeout: 30000 });
+/** 👍/👎 feedback for one AI answer (Upgrade 5 §64). */
+export const aiFeedback = ({ intentId, rating, reason = '', comment = '' } = {}) =>
+  call('/v1/ai/feedback', { method: 'POST', body: payload({ intentId, rating, reason, comment }) });
+/** Explicit web research with tiered sources (Upgrade 5 §12). */
+export const aiResearch = ({ query, locale, limit, analyze } = {}) =>
+  call('/v1/ai/research', { method: 'POST', body: payload({ query, limit, analyze }), timeout: 30000 });
+/** News → crypto impact analysis (Upgrade 5 §18-19). */
+export const aiNewsImpact = ({ news, assets, locale, verify } = {}) =>
+  call('/v1/ai/news-impact', { method: 'POST', body: payload({ news, assets, verify }), timeout: 30000 });
 /**
  * Confirm continues an intent BY ID. It never sends the confirmation word
  * back through the parser (spec §26).

@@ -95,6 +95,23 @@ import {
 import { runMultiAiDebate } from './aiConsensus.js';
 import { evaluateConfidenceMetrics } from './aiConfidence.js';
 import { recordIntentOutcome, getLearningInsights } from './aiLearning.js';
+/* AI Upgrade 5 — Collaborative Multi-AI Intelligence + Web Research +
+   Customer Question Intelligence. The deterministic question analyzer decides
+   how much intelligence a turn needs; the collaboration engine coordinates
+   models/tools/web inside that budget; question-intel learns what users
+   actually ask. Execution authority is untouched (§67). */
+import { planCollaboration } from '../src/lib/intent-ai/os/collaborationRouter.js';
+import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
+import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
+import {
+  recordQuestion,
+  recordAnswerFeedback,
+  getQuestionAnalytics,
+  getKnowledgeGaps,
+  getFaqCandidates,
+  getQualityDashboard
+} from './aiQuestionIntel.js';
+import { searchKnowledge, listKnowledge, knowledgeStats } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 
 const router = Router();
 
@@ -732,6 +749,141 @@ router.get('/learning/stats', async (_req, res) => {
   }
 });
 
+/* ─── AI UPGRADE 5 ENDPOINTS ─────────────────────────────────────────────
+   Collaborative analysis, web research, news impact, feedback and the
+   question-intelligence analytics. Analytics endpoints are admin-gated with
+   the shared CRON_SECRET — they are never exposed to normal users (§62). */
+
+function adminSecretOk(req) {
+  const secret = process.env.CRON_SECRET || '';
+  if (!secret) return false; // fail closed: no secret configured → no analytics
+  const provided =
+    String(req.get('authorization') || '').replace(/^Bearer\s+/i, '') ||
+    String(req.get('x-cron-secret') || '') ||
+    String(req.query?.key || '');
+  return Boolean(provided) && provided === secret;
+}
+
+/* Explicit collaborative analysis (same engine the chat turn uses). */
+router.post('/collaborate', async (req, res) => {
+  try {
+    const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
+    if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
+    if (isSensitive(message)) return res.status(400).json({ ok: false, error: 'SENSITIVE_CONTENT_REJECTED' });
+    const locale = safe(req.body?.locale, 5) || 'fa';
+    const context = req.body?.context && typeof req.body.context === 'object' ? req.body.context : {};
+    const result = await runCollaborativeAnalysis({
+      message,
+      context,
+      locale,
+      intentType: req.body?.intentType || null,
+      transparency: req.body?.transparency === true,
+      deadlineMs: Number(req.body?.deadlineMs) || undefined
+    });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 160) });
+  }
+});
+
+/* Web research with tiered sources (§12, §21-22). */
+router.post('/research', async (req, res) => {
+  try {
+    const query = String(req.body?.query || req.body?.message || '').slice(0, 400);
+    if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
+    if (isSensitive(query)) return res.status(400).json({ ok: false, error: 'SENSITIVE_CONTENT_REJECTED' });
+    const locale = safe(req.body?.locale, 5) || 'fa';
+    const research = await researchWeb({ query, locale, limit: Number(req.body?.limit) || 5 });
+    if (req.body?.analyze === false) return res.json({ ok: true, ...research });
+    const analysis = await analyzeWithSources({
+      question: query,
+      sources: research.sources || [],
+      context: req.body?.context || {},
+      locale
+    });
+    return res.json({ ok: true, research, analysis });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 160) });
+  }
+});
+
+/* News → Crypto impact engine (§18-20). */
+router.post('/news-impact', async (req, res) => {
+  try {
+    const news = String(req.body?.news || req.body?.message || '').slice(0, 1200);
+    if (!news.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_NEWS' });
+    if (isSensitive(news)) return res.status(400).json({ ok: false, error: 'SENSITIVE_CONTENT_REJECTED' });
+    const locale = safe(req.body?.locale, 5) || 'fa';
+    const assets = Array.isArray(req.body?.assets) ? req.body.assets.slice(0, 8).map((a) => token(a)) : [];
+    const webEvidence = req.body?.verify !== false
+      ? await researchWeb({ query: news.slice(0, 300), locale, limit: 5 }).catch(() => null)
+      : null;
+    const market = await marketContext();
+    const impact = await analyzeNewsImpact({ news, assets, marketContext: market, locale, webEvidence });
+    return res.json({ ok: true, ...impact, webEvidence: webEvidence ? { corroborated: webEvidence.corroborated, sourceCount: webEvidence.sourceCount, sources: (webEvidence.sources || []).map((s) => ({ title: s.title, url: s.url, tier: s.tier })) } : null });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 160) });
+  }
+});
+
+/* Answer feedback 👍/👎 with optional reason (§64). */
+router.post('/feedback', async (req, res) => {
+  try {
+    const rating = Number(req.body?.rating) > 0 ? 1 : -1;
+    const intentId = safe(req.body?.intentId, 64) || null;
+    const reason = safe(req.body?.reason, 200) || '';
+    const comment = safe(req.body?.comment, 500) || '';
+    if (isSensitive(comment) || isSensitive(reason)) return res.status(400).json({ ok: false, error: 'SENSITIVE_CONTENT_REJECTED' });
+    const locale = safe(req.body?.locale, 5) || 'fa';
+    const record = await recordAnswerFeedback({ intentId, rating, reason, comment, locale });
+    return res.json({ ok: true, record });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 160) });
+  }
+});
+
+/* Question analytics — ADMIN ONLY (§62). */
+router.get('/questions/analytics', async (req, res) => {
+  if (!adminSecretOk(req)) return res.status(403).json({ ok: false, error: 'ADMIN_KEY_REQUIRED' });
+  const analytics = await getQuestionAnalytics({ limit: Number(req.query?.limit) || 20 });
+  return res.json(analytics);
+});
+
+/* Knowledge gaps — ADMIN ONLY (§31). */
+router.get('/questions/gaps', async (req, res) => {
+  if (!adminSecretOk(req)) return res.status(403).json({ ok: false, error: 'ADMIN_KEY_REQUIRED' });
+  const gaps = await getKnowledgeGaps();
+  return res.json(gaps);
+});
+
+/* FAQ candidates — ADMIN ONLY; drafts, never auto-published (§32). */
+router.get('/questions/faq-candidates', async (req, res) => {
+  if (!adminSecretOk(req)) return res.status(403).json({ ok: false, error: 'ADMIN_KEY_REQUIRED' });
+  const faqs = await getFaqCandidates();
+  return res.json(faqs);
+});
+
+/* AI quality dashboard — ADMIN ONLY (§63). */
+router.get('/quality', async (req, res) => {
+  if (!adminSecretOk(req)) return res.status(403).json({ ok: false, error: 'ADMIN_KEY_REQUIRED' });
+  const dashboard = await getQualityDashboard();
+  return res.json(dashboard);
+});
+
+/* Knowledge center — the internal knowledge layer the AI retrieves from (§55-57). */
+router.get('/knowledge', (_req, res) => {
+  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge() });
+});
+
+router.post('/knowledge/search', (req, res) => {
+  const query = String(req.body?.query || '').slice(0, 400);
+  if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
+  const locale = safe(req.body?.locale, 5) || 'fa';
+  const limit = Math.min(5, Math.max(1, Number(req.body?.limit) || 3));
+  const results = searchKnowledge(query, { locale, limit });
+  return res.json({ ok: true, results });
+});
+
 router.post('/context', async (req, res) => {
   const context = await buildAIContext(req, req.body || {});
   return res.json({ ok: true, schema: 'fbt.ai-context.v1', context, at: nowMs() });
@@ -854,9 +1006,74 @@ router.post('/chat', async (req, res) => {
     dataStatus: context.portfolio?.dataStatus || 'live'
   });
 
+  /* ─── AI UPGRADE 5 — COLLABORATIVE INTELLIGENCE LAYER ───────────────────
+     The deterministic question analyzer (planCollaboration) decides how much
+     intelligence THIS turn needs — «سلام» costs zero extra model calls. For
+     knowledge/market/news/research turns the collaboration engine coordinates
+     the configured providers, tools, web research and verification within a
+     hard deadline. If it degrades or times out, the existing deterministic
+     reply stands: the upgrade can only improve an answer, never break one.
+     Execution authority is untouched — this layer never signs, sends or
+     approves anything (§67). */
+  const COLLABORATION_INTENTS = ['GENERAL', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'NEWS_SEARCH', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'LEARN', 'SIGNALS', 'SMART_MONEY', 'STRATEGY', 'OPEN_CALM'];
+  const u5 = planCollaboration({
+    message,
+    intentType: intent || 'GENERAL',
+    entities: u4.entities || {},
+    context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
+    priorIntent: prior?.intent || null,
+    locale: locale || 'fa'
+  });
+  const isCollaborativeIntent = COLLABORATION_INTENTS.includes(String(human.intent?.type || intent || 'GENERAL'));
+  const collaborationWanted = isCollaborativeIntent
+    && !human.pendingIntent
+    && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
+    && u5.level >= 2;
+
+  let collaboration = null;
+  if (collaborationWanted) {
+    try {
+      collaboration = await runCollaborativeAnalysis({
+        message,
+        context: {
+          market: context.market,
+          portfolio: context.portfolio,
+          locale: locale || 'fa'
+        },
+        intentType: human.intent?.type || intent,
+        entities: u4.entities || {},
+        analysis: u5,
+        locale: locale || 'fa',
+        transparency: req.body?.transparency === true
+      });
+    } catch (err) {
+      logInternal('collab-error', { error: String(err?.message || err).slice(0, 160) });
+      collaboration = null;
+    }
+  }
+
+  /* Only replace the reply when the collaboration produced a real, grounded
+     answer — a degraded no-evidence answer never overwrites the existing
+     deterministic reply. */
+  const collaborationUsable = Boolean(
+    collaboration?.ok
+    && String(collaboration.answer || '').trim().length > 20
+    && (!collaboration.degraded || collaboration.evidence.knowledgeUsed || collaboration.evidence.toolDataUsed || collaboration.evidence.webUsed)
+  );
+  let finalText = human.message;
+  if (collaborationUsable) {
+    finalText = collaboration.answer;
+  } else {
+    /* Even without a model pass, an emotional turn gets acknowledged (§25). */
+    const ack = formatEmotionalAcknowledgement({ emotion: u5.emotion, fomo: u5.fomo, locale: locale || 'fa' });
+    if (ack && (u5.conversationKind === 'EMOTIONAL' || u5.emotion.state === 'panic' || u5.emotion.state === 'fearful' || u5.fomo.detected)) {
+      finalText = `${ack}\n\n${finalText}`;
+    }
+  }
+
   const reply = {
-    text: stripInternalLeaks(human.message),
-    message: stripInternalLeaks(human.message),
+    text: stripInternalLeaks(finalText),
+    message: stripInternalLeaks(finalText),
     /* The governing behavior contract (execution-first spec v2.0) travels with
        the reply so the frontend renders state instead of guessing it (§49). */
     contract: {
@@ -875,6 +1092,27 @@ router.post('/chat', async (req, res) => {
       confidenceScore: confidenceMetrics.confidenceScore,
       riskScore: confidenceMetrics.riskScore,
       dataFreshness: confidenceMetrics.dataFreshness
+    },
+    /* AI Upgrade 5 intelligence metadata — the UI renders only what is useful
+       to the user (sources, uncertainty, feedback); the rest stays internal. */
+    intelligence: {
+      schema: 'fbt.intelligence-meta.v1',
+      level: u5.level,
+      conversationKind: u5.conversationKind,
+      complexity: u5.complexity,
+      freshness: u5.freshness,
+      emotion: u5.emotion.state,
+      fomo: u5.fomo.detected,
+      providersUsed: collaboration?.providersUsed || [],
+      modelsConsulted: collaboration?.modelsConsulted || [],
+      sources: collaboration?.sources || [],
+      uncertainty: collaboration?.uncertainty || null,
+      disagreement: collaboration?.disagreement || false,
+      consensus: collaboration?.consensus || null,
+      quality: collaboration?.quality?.answerQualityScore ?? null,
+      degraded: collaboration?.degraded ?? false,
+      webUsed: collaboration?.evidence?.webUsed || false,
+      latencyMs: collaboration?.latencyMs || 0
     },
     ui: human.ui,
     card: human.card,
@@ -901,6 +1139,25 @@ router.post('/chat', async (req, res) => {
     confidenceScore: confidenceMetrics.confidenceScore,
     executionSuccess: true,
     durationMs: nowMs() - ctx.now,
+    locale: locale || 'fa'
+  }).catch(() => {});
+
+  /* AI Upgrade 5 — Customer Question Intelligence (§28): anonymized,
+     fire-and-forget. The secret guard inside recordQuestion rejects anything
+     sensitive; only cluster counters and a short redacted sample persist. */
+  recordQuestion({
+    message,
+    intentType: human.intent?.type || 'GENERAL',
+    conversationKind: u5.conversationKind,
+    freshness: u5.freshness,
+    level: u5.level,
+    resolved: !(u4.missingInformation?.length > 0) && !u4.isCorrection,
+    clarificationAsked: Boolean(u4.missingInformation?.length > 0),
+    confidenceScore: confidenceMetrics.confidenceScore,
+    correctionDetected: Boolean(u4.isCorrection),
+    webUsed: Boolean(collaboration?.evidence?.webUsed),
+    multiAiUsed: (collaboration?.modelsConsulted?.length || 0) > 1,
+    toolUsed: Boolean(collaboration?.evidence?.toolDataUsed || out.plan?.actions?.length),
     locale: locale || 'fa'
   }).catch(() => {});
 
