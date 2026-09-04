@@ -79,19 +79,48 @@ export function resolveIntent(intent, message = '', { openPage = false, slots = 
    * classifies «بخرش» as BUY with NO entities, so without this the router
    * would default the pair to USDT→ETH instead of the asset the user was just
    * talking about.
+   *
+   * ─── AND THE CONDITION THAT USED TO BE HERE WAS A SERIOUS BUG ────────────
+   * The carry-over fired on `(bare || hasNoAsset)`. `hasNoAsset` is true of
+   * almost every sentence that is not a trade — «کیف پولم چقدره؟»,
+   * «پرتفوی من چطوره؟», «۴ ماه», «سلام». So one «۱۰۰ دلار بیت کوین بخر»
+   * wrote USD/BTC/100 into the session slots, and from then on EVERY
+   * unrelated question inherited that pair. The SSOT cannot classify
+   * GENERAL, the entity fallback below saw from=USD to=BTC, and the app
+   * opened a prefilled swap. Ask about your wallet, get a buy order.
+   *
+   * Carrying a slot forward is only correct when the new message is actually
+   * a CONTINUATION of the stored operation. Two signals qualify, and nothing
+   * else does:
+   *
+   *   · `bare`  — the message is nothing but a follow-up verb («بخرش»). There
+   *               is no content of its own, so the previous operation is the
+   *               only thing it can mean.
+   *   · same operation family — the parser independently classified this
+   *               message as a trade of the kind already in flight, and it is
+   *               missing a detail the previous turn supplied.
+   *
+   * A question that merely omits a coin is neither.
    */
+  const TRADE_TYPES = ['BUY', 'SELL', 'SWAP', 'BRIDGE', 'SEND'];
   const bare = BARE_FOLLOWUPS.test(String(message || '').trim());
-  const hasNoAsset = !e.token && !e.fromToken && !e.toToken;
-  if ((bare || hasNoAsset) && (operational.asset || operational.fromToken || operational.toToken || operational.operation)) {
+  const storedOp = String(operational.operation || '').toUpperCase() || null;
+  const sameOperationFamily = Boolean(
+    storedOp
+    && TRADE_TYPES.includes(resolvedType)
+    && (resolvedType === storedOp || resolvedType === 'GENERAL')
+  );
+  const continuesStoredOperation = bare || sameOperationFamily;
+  const hasStoredSlots = Boolean(operational.asset || operational.fromToken || operational.toToken || storedOp);
+
+  if (continuesStoredOperation && hasStoredSlots) {
     if (!e.amount) e.amount = operational.amount;
-    if (hasNoAsset || bare) {
-      if (!e.token) e.token = operational.asset || operational.toToken || operational.fromToken || null;
-      if (!e.fromToken) e.fromToken = operational.fromToken || null;
-      if (!e.toToken) e.toToken = operational.toToken || null;
-    }
-    if (bare && (type === 'GENERAL' || type === 'BUY' || type === 'SELL' || type === 'SWAP') && operational.operation) {
+    if (!e.token) e.token = operational.asset || operational.toToken || operational.fromToken || null;
+    if (!e.fromToken) e.fromToken = operational.fromToken || null;
+    if (!e.toToken) e.toToken = operational.toToken || null;
+    if (bare && (type === 'GENERAL' || type === 'BUY' || type === 'SELL' || type === 'SWAP') && storedOp) {
       // A bare verb continues whatever operation was in flight, not the verb's default pair.
-      resolvedType = String(operational.operation || '').toUpperCase() || type;
+      resolvedType = storedOp;
     }
   }
 

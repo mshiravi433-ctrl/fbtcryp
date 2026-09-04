@@ -209,6 +209,21 @@ export function getAvailableProviders() {
       id,
       name: cfg.name,
       configured,
+      /*
+       * ─── WHY STATUS AND THE ENV VAR NAME ARE PART OF THE PAYLOAD ─────────
+       * The intelligence panel used to render ONLY `configured: true` rows and
+       * hide the rest. On a deployment with no keys that produced a tab titled
+       * «مدل‌های فعال (۰)» over an empty grid: eight real, registered models
+       * were invisible, and nothing on screen said what was missing or how to
+       * switch them on. That reads as «مدل‌ها دیگه نیستن، زده صفر».
+       *
+       * They are not gone — they are unconfigured. `status` says which, and
+       * `envVar` names the exact variable that flips each one on, so the panel
+       * is both honest about the fleet and actionable. `internal` needs no
+       * key: it is the deterministic engine, so the fleet is never really 0.
+       */
+      status: configured ? 'ACTIVE' : (id === 'internal' ? 'ACTIVE' : 'NEEDS_KEY'),
+      envVar: id === 'internal' ? null : (cfg.altEnvKey ? `${cfg.envKey} (or ${cfg.altEnvKey})` : cfg.envKey),
       defaultModel: cfg.defaultModel,
       specialty: cfg.specialty,
       costTier: cfg.costTier,

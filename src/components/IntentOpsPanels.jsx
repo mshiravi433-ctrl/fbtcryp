@@ -537,12 +537,27 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
   if (!open) return null;
 
   /*
-   * Only providers the gateway reports as configured belong on this tab.
-   * A provider with no API key cannot answer a single request, so listing it
-   * as «آماده» next to the ones that actually serve traffic hides the real
-   * shape of the fleet — and the fleet is the thing this tab exists to show.
+   * ─── THE WHOLE FLEET IS SHOWN, NOT ONLY THE CONFIGURED SLICE ─────────────
+   * This used to be `(providers || []).filter((p) => p.configured)` and the
+   * tab title counted that filtered list. On a deployment with no provider
+   * keys the result was a tab reading «مدل‌های فعال (۰)» above the message
+   * «no provider is configured» — eight registered models simply not there.
+   * The user reads that as «مدل‌های هوش مصنوعی دیگه نیستن».
+   *
+   * They are registered and they are wired; they are waiting on a key. So the
+   * grid now lists every model the gateway knows, each with its real state:
+   *   · ACTIVE     — a key is present, this model answers traffic
+   *   · NEEDS_KEY  — registered, and the card names the env var that turns it
+   *                  on, so the operator can act instead of guessing
+   * The count in the tab is the fleet size, with the serving subset next to
+   * it, so neither number is ever a bare 0 by omission.
    */
-  const activeProviders = (providers || []).filter((p) => p.configured);
+  const fleet = Array.isArray(providers) ? providers : [];
+  const activeProviders = fleet.filter((p) => p.configured || p.status === 'ACTIVE');
+  const pendingProviders = fleet.filter((p) => !p.configured && p.status !== 'ACTIVE');
+  const fleetLabel = isEn
+    ? `AI Models (${fleet.length})`
+    : `مدل‌های هوش مصنوعی (${fleet.length})`;
 
   const agentFleet = [
     { id: 'intent-agent', name: isEn ? 'Intent Agent' : 'ایجنت درک قصد (Intent)', role: isEn ? 'Natural language parameter extraction & clarification' : 'استخراج سرمایه، افق زمانی، هدف و طرح سؤالات شفاف‌ساز' },
@@ -573,7 +588,7 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
           */}
         <div className="iaos-history-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'models'} data-testid="intel-tab-models" className={`iaos-history-tab${tab === 'models' ? ' is-on' : ''}`} onClick={() => setTab('models')}>
-            {isEn ? `Active Models (${activeProviders.length})` : `مدل‌های فعال (${activeProviders.length})`}
+            {fleetLabel}
           </button>
           <button type="button" role="tab" aria-selected={tab === 'agents'} data-testid="intel-tab-agents" className={`iaos-history-tab${tab === 'agents' ? ' is-on' : ''}`} onClick={() => setTab('agents')}>
             {isEn ? 'Agent Fleet' : 'ناوگان ایجنت‌ها'}
@@ -590,29 +605,51 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
           {tab === 'models' ? (
             <div className="iaos-intel-grid">
               {/*
-                * The fallback list here used to hard-code `configured: true`
-                * for all five providers, so an install with no API keys at all
-                * showed Grok, OpenRouter, Groq and Gemini as "Active". The
-                * provider list now comes only from the real gateway, and only
-                * the configured ones are rendered — so what you see here is
-                * the fleet that can actually answer.
-                */}
-              {activeProviders.map((p) => (
-                <div key={p.id} className="iaos-intel-card" data-testid={`intel-provider-${p.id}`}>
-                  <div className="iaos-intel-card-head">
-                    <strong>{p.name}</strong>
-                    <span className="iaos-pill iaos-pill-ok">{isEn ? 'Active' : 'فعال'}</span>
+               * ─── WHY THE PENDING MODELS ARE RENDERED, NOT HIDDEN ────────
+               * The earlier version of this grid hard-coded `configured: true`
+               * for five providers, so an install with no keys at all claimed
+               * Grok, OpenRouter, Groq and Gemini were «Active». That was a
+               * lie and it was removed — but the replacement went too far the
+               * other way and rendered NOTHING unless a key existed, which is
+               * how the fleet came to look empty.
+               *
+               * This is the honest middle: every registered model is listed
+               * with the state the gateway actually reports. A model that
+               * cannot answer says so, and names the variable that lets it.
+               */}
+              {fleet.map((p) => {
+                const live = Boolean(p.configured) || p.status === 'ACTIVE';
+                return (
+                  <div key={p.id} className="iaos-intel-card" data-testid={`intel-provider-${p.id}`} data-live={live ? 'true' : 'false'}>
+                    <div className="iaos-intel-card-head">
+                      <strong>{p.name}</strong>
+                      <span className={`iaos-pill ${live ? 'iaos-pill-ok' : 'iaos-pill-warn'}`}>
+                        {live ? (isEn ? 'Active' : 'فعال') : (isEn ? 'Needs key' : 'نیازمند کلید')}
+                      </span>
+                    </div>
+                    <p>{p.specialty || p.role}</p>
+                    <small>{isEn ? 'Cost / Latency:' : 'سطح هزینه / تأخیر:'} {p.costTier || 'standard'}</small>
+                    {p.defaultModel ? <small>{p.defaultModel}</small> : null}
+                    {!live && p.envVar ? (
+                      <small className="iaos-intel-env" dir="ltr">
+                        {isEn ? 'Enable with ' : 'فعال‌سازی با '}<code>{p.envVar}</code>
+                      </small>
+                    ) : null}
                   </div>
-                  <p>{p.specialty || p.role}</p>
-                  <small>{isEn ? 'Cost / Latency:' : 'سطح هزینه / تأخیر:'} {p.costTier || 'standard'}</small>
-                  {p.defaultModel ? <small>{p.defaultModel}</small> : null}
-                </div>
-              ))}
-              {!activeProviders.length ? (
+                );
+              })}
+              {!fleet.length ? (
                 <p className="iaos-empty">
                   {isEn
-                    ? 'No AI provider is configured on this deployment. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.'
-                    : 'هیچ ارائه‌دهنده هوش مصنوعی روی این نصب پیکربندی نشده است. دستیار همچنان کار می‌کند: درک قصد، مسیریابی و همه‌ی خواندن‌های داده‌ی زنده به‌صورت محلی و روی سرویس‌های خود اپ اجرا می‌شوند.'}
+                    ? 'The gateway did not answer, so the fleet cannot be listed. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.'
+                    : 'گیت‌وی پاسخ نداد، بنابراین فهرست مدل‌ها قابل نمایش نیست. دستیار همچنان کار می‌کند: درک قصد، مسیریابی و همه‌ی خواندن‌های داده‌ی زنده به‌صورت محلی و روی سرویس‌های خود اپ اجرا می‌شوند.'}
+                </p>
+              ) : null}
+              {fleet.length && !activeProviders.length ? (
+                <p className="iaos-empty" data-testid="intel-fleet-no-keys">
+                  {isEn
+                    ? `The FBT internal engine is serving every turn. ${pendingProviders.length} external model${pendingProviders.length === 1 ? '' : 's'} ${pendingProviders.length === 1 ? 'is' : 'are'} registered and ready — set the key named on each card to bring ${pendingProviders.length === 1 ? 'it' : 'them'} into the consensus alongside it.`
+                    : `موتور داخلی FBT هم‌اکنون همه‌ی پاسخ‌ها را تولید می‌کند. ${pendingProviders.length} مدل بیرونی ثبت و آماده است — کلید نام‌برده روی هر کارت را تنظیم کنید تا در کنار موتور داخلی وارد موتور اجماع شود.`}
                 </p>
               ) : null}
             </div>

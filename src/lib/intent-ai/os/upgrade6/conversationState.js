@@ -407,35 +407,56 @@ export function isIntentCompleted(state, intentId = null) {
 }
 
 /**
- * Should we navigate again? Prevent loop per §3
+ * Should we navigate again?
+ *
+ * ─── THIS FUNCTION USED TO BE A HARD GATE, AND THAT WAS THE BUG ────────────
+ * §3 of the original spec treated repeated navigation as something to be
+ * PREVENTED. Two refusals came out of it:
+ *
+ *   · `intent_completed`          — once an intent finished, the assistant
+ *                                   would never open that page again
+ *   · `navigation_loop_detected`  — two visits to the same route inside the
+ *                                   last five and the route was refused
+ *
+ * `navigationHistory` is append-only and survives in localStorage, so both
+ * refusals were effectively permanent: after the user had been to /signals
+ * twice, every later «سیگنال» was silently dropped and the chat stayed where
+ * it was. The user experienced it as a dead menu.
+ *
+ * Opening a page is read-only and reversible — one tap back, and the
+ * conversation state is preserved either way. There is nothing here worth
+ * protecting against, so both refusals are gone. The two that remain are not
+ * limits, they are no-ops: there is no route to go to, or we are already
+ * standing on it.
+ *
+ * `loopCount` is still computed and returned, because "the user has been here
+ * three times" is useful telemetry — it just no longer vetoes anything.
  */
 export function shouldAllowNavigation(state, targetRoute, { intentId = null, force = false } = {}) {
   if (force) return { allowed: true, reason: 'forced' };
   if (!targetRoute) return { allowed: false, reason: 'no_target' };
-  
-  // If same route, don't navigate
+
+  // Already standing on it — nothing to do, not a refusal.
   if (state.currentRoute === targetRoute) {
     return { allowed: false, reason: 'same_route' };
   }
-  
+
   // If returning to chat, never repeat previous navigation
   if (targetRoute === '/intent' && state.currentRoute !== '/intent') {
     return { allowed: true, reason: 'return_to_chat' };
   }
-  
-  // If intent already completed, don't auto-navigate again
-  if (isIntentCompleted(state, intentId)) {
-    return { allowed: false, reason: 'intent_completed' };
-  }
-  
-  // Check recent navigation history for loops
+
   const recent = (state.navigationHistory || []).slice(-5);
   const loopCount = recent.filter((n) => n.to === targetRoute).length;
-  if (loopCount >= 2) {
-    return { allowed: false, reason: 'navigation_loop_detected', loopCount };
+
+  if (isIntentCompleted(state, intentId)) {
+    return { allowed: true, reason: 'intent_completed', loopCount };
   }
-  
-  return { allowed: true, reason: 'new_navigation' };
+  if (loopCount >= 2) {
+    return { allowed: true, reason: 'repeat_navigation', loopCount };
+  }
+
+  return { allowed: true, reason: 'new_navigation', loopCount };
 }
 
 /**

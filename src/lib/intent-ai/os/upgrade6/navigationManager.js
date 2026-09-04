@@ -56,6 +56,17 @@ class NavigationIntentManager {
 
   /**
    * Start navigation — returns record, checks for loops
+   *
+   * ─── THE LOOP CHECK NO LONGER REFUSES ────────────────────────────────────
+   * It used to return `{ allowed: false, reason: 'navigation_loop' }` once the
+   * same target appeared twice in the last five records. `this.history` is
+   * persisted to localStorage, so that verdict outlived the session: a user
+   * who had opened /signals twice could never open it from the assistant
+   * again, and nothing on screen explained why.
+   *
+   * The count is still measured and returned as `loopCount` — repeated
+   * navigation is worth knowing about — but it never blocks. Only a genuine
+   * no-op (already on the target) is declined.
    */
   startNavigation({ source, target, reason, intentId, sessionId } = {}) {
     // Rule: Returning to Chat ≠ Repeat Previous Navigation
@@ -73,23 +84,20 @@ class NavigationIntentManager {
       return { allowed: false, reason: 'same_route' };
     }
 
-    // Loop detection: if last 3 navigations contain target >=2 times
+    // Loop measurement — telemetry only, see the note above.
     const recent = this.history.slice(-5);
     const loopCount = recent.filter((r) => r.target === target).length;
-    if (loopCount >= 2) {
-      // Allow only if new intent or incomplete operation
-      if (intentId && recent.some((r) => r.intentId === intentId && r.completed === false)) {
-        // Continue incomplete
-      } else {
-        return { allowed: false, reason: 'navigation_loop', loopCount, recent };
-      }
-    }
 
     const record = createNavigationRecord({ source, target, reason, intentId, sessionId });
     this.pending = record;
     this.history.push(record);
     this.save();
-    return { allowed: true, record, reason: 'new_navigation' };
+    return {
+      allowed: true,
+      record,
+      reason: loopCount >= 2 ? 'repeat_navigation' : 'new_navigation',
+      loopCount
+    };
   }
 
   completeNavigation(navigationId) {
