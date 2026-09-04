@@ -1,3 +1,97 @@
+# Unreleased — Smart Money loads real data; About in twelve languages; Intent OS header; dead charts removed
+
+## Smart Money: «به داده وصل نشد» and a page full of zeros
+
+- **The wallet page could never load.** `server/smartMoney/dataSources.js`
+  called Blockscout with URL shapes the v2 API rejects (`?limit=` on
+  `/transactions`, a `/tokens` path that does not exist, the pre-v2
+  `address` field where v2 returns `address_hash`). Every request 4xx'd, the
+  page reported `dataStatus: 'unavailable'`, and «اتصال به داده ممکن نشد» was
+  the honest result. The client now speaks the contract Blockscout actually
+  serves (`/addresses/{a}/token-transfers?type=ERC-20`, `/token-balances`,
+  `/counters`, `/tokens/{t}/holders`), reads `total.value`/`total.decimals`
+  and `address_hash`, and drops zero-value «address-poisoning» transfers
+  (`total.value: "0"` to a look-alike address), which were a quarter of some
+  wallets' history and all of it noise.
+- **Explorer name-tags now label counterparties.** Blockscout's metadata
+  service (`metadata.services.blockscout.com`, no key, batched 30 addresses
+  a call) returns «Binance: Hot Wallet», «Kraken: Hot Wallet 4», «Uniswap V3:
+  Swap Router02», «MEV Bot» tags for chains 1/56/42161/8453. `summarizeTags`
+  folds them into the existing exchange/DEX/bridge classifier, so flows are
+  attributed to venues instead of «unknown». The zero address is hard-excluded
+  first — its metadata carries a stray «Coinbase / deposit-address» tag that
+  would otherwise put the burn address on the whale board.
+- **24h / 7d / 30d were the same number.** The old pipeline scanned once and
+  labelled the whole result with every window. `server/smartMoney/eventStore.js`
+  is a persisted, deduplicated buffer of observed transfers (`smart-money:
+  events:v2`, capped at 800), so each window is cut from what was actually
+  observed inside it and reports its own `coverage` (observed hours / window
+  hours). The page shows «—» rather than «$0» for a window that has not been
+  observed yet, and prints the observation basis under the tiles
+  (`data-testid="sm-coverage"`).
+- **The whale board listed Binance and the zero address, all «MEDIUM».**
+  `riskBandOf` returned the same band on both branches of its ternary; the
+  board now derives LOW / MEDIUM / HIGH from behaviour (accumulating,
+  distributing, rotating, transfer) and exchange exposure, excludes
+  non-wallets (`isNonWallet`: contracts, routers, exchange hot wallets, burn
+  addresses), and carries a signed `netUsd` instead of a `0` counter.
+- **Seven tokens at $0 were all «ACCUMULATION».** Token activity defaults to
+  `NEUTRAL` when there is no labelled flow, `changePct` is `null` (rendered
+  «—») unless a comparable previous window exists, early tokens are
+  deduplicated by token instead of repeating one Robinhood row six times, and
+  fresh wallets with `txCount: null` are no longer «interesting»; the fresh
+  panel has an honest «quiet» state.
+- **Bounded waits.** A cold scan is capped at 14 s (`SCAN_WAIT_MS`) so the
+  Vercel function answers with what it has and `partial: true` instead of
+  timing out at 60 s. Probes: `test/smart-money-probe.mjs` 59/59,
+  `test/smart-money-live-probe.mjs` 52/52 (against recorded Blockscout v2
+  fixtures), and a wiring block that pins «$0 is not a finding».
+- Thirteen new `sm.*` keys in en/fa (`streamStale`, `observedNote`,
+  `noLabelledFlow`, `quietFresh`, `signal.*`, `behaviour.*`, `netIn/netOut`,
+  `observedExchanges`, `windowCoverage`).
+
+## About: «برای همه زبان‌ها مدرن‌تر»
+
+- **Translated everywhere.** Nine of the twelve locales had zero `about.*`
+  keys, so «درباره ما» opened as an English brochure under a translated nav
+  bar. Every string the page renders now exists in all twelve files:
+  `scripts/locales/about.mjs` feeds the nine generated locales through
+  `scripts/gen-locales.mjs`, Arabic is hand-written in `ar.json`, and the
+  screens suite mounts the page in every language and checks the script on
+  screen by Unicode block — a key that still holds the English sentence
+  fails the test.
+- **RTL is a property of the language.** `dir` was `isFA ? 'rtl' : 'ltr'`,
+  which rendered Arabic and Urdu left-to-right on this one screen. It now
+  asks the language registry.
+- **Three figures, all derived.** Networks (chain registry + Solana),
+  languages (language registry) and «funds we hold: 0». Nothing typed in, so
+  nothing to go stale, and still no volume / TVL / user counts. Numerals
+  follow the reader's locale (`۱۰` in Persian, `١٠` in Arabic).
+- **New surfaces:** a one-line promise under the brand, a network strip fed
+  by the same registry the swap screen uses, a three-step «how it works»
+  rail, and two more capability cards (Smart Money, Farms) — all routable.
+  Nine new `about.*` keys (`headline`, `stats.custody`, `how.*`).
+
+## Intent OS AI (`/intent`)
+
+- **Only the header is gone; the bottom nav stays.** `AppChrome` renders the
+  `/intent` route headerless (`.app-shell--headerless`) and keeps `BottomNav`,
+  so the user still knows where they are and can leave.
+- One status pill instead of «live» next to «زنده»; one «ایجنت‌ها و
+  استراتژی‌ها» suggestion instead of separate «agent» and «strategy» chips,
+  and tapping it opens the ecosystem panel that holds both (`eco.menu`).
+
+## Buy / Sell
+
+- Verified: the «فقط برای ایرانیان» tab is gated on `i18n.language === 'fa'`
+  and does not appear in any other language.
+
+## Futures & افق جهانی
+
+- The on-chain futures chart (`FuturesOnchain.jsx`) and the Ostium chart
+  (`Ostium.jsx`) never rendered on the live site; both are removed rather
+  than left as empty panels. The probe and wiring suite pin their absence.
+
 # Unreleased — About: the landing page that was really twenty sections in a 520px column
 
 - **The screen was authored for a width it can never have.** `.app-shell` is

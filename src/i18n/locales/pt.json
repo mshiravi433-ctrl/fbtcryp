@@ -1116,8 +1116,78 @@
     "noWalletHint": "Nenhuma carteira Solana está instalada neste dispositivo. Toque no botão acima para abrir a página da carteira — conecte Phantom, Solflare ou Backpack lá e você voltará direto para esta ordem.",
     "chartLive": "candles do mercado ao vivo"
   },
-  "lab2": {
-    "cards": {},
-    "screens": {}
+  "about": {
+    "title": "Sobre nós",
+    "tagline": "Comércio e tecnologia para uma nova economia",
+    "headline": "Negocie on-chain. Fique com as suas chaves.",
+    "who": "Quem somos",
+    "summary": "A Fanous Bazaar Pishgam é uma empresa comercial sediada em Khomeyni Shahr, Isfahan. Construímos uma exchange sem custódia: você conecta a sua própria carteira, as operações são liquidadas diretamente on-chain e os seus ativos nunca ficam numa conta controlada por nós.",
+    "trust": {
+      "nonCustodial": "Sem custódia",
+      "multiChain": "Multichain"
+    },
+    "value": {
+      "access": {
+        "title": "Acesso aberto"
+      }
+    },
+    "stats": {
+      "chains": "Redes",
+      "languages": "Idiomas",
+      "custody": "Fundos sob nossa guarda"
+    },
+    "how": {
+      "title": "Como funciona",
+      "step1Title": "Traga uma carteira",
+      "step1Body": "Use uma carteira que já tem ou crie uma dentro da app. Sem conta, sem e-mail, sem verificação de identidade.",
+      "step2Title": "Diga o que quer",
+      "step2Body": "Troque diretamente, ou descreva o seu objetivo em linguagem simples e deixe o Intent OS apresentar a rota, a taxa e o risco antes de qualquer coisa acontecer.",
+      "step3Title": "Assine e liquide on-chain",
+      "step3Body": "Você assina cada transação e ela é liquidada na blockchain. Nada se move sem a sua aprovação e nada fica jamais numa conta controlada por nós."
+    },
+    "featuresTitle": "O que pode fazer aqui",
+    "ecosystem": {
+      "swapTitle": "Trocar",
+      "swapDesc": "Negocie ativos digitais nas redes suportadas.",
+      "walletTitle": "Carteira",
+      "walletDesc": "Gira os seus ativos digitais mantendo o controlo.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "Expresse os seus objetivos financeiros em linguagem natural.",
+      "signalsTitle": "Sinais de IA",
+      "signalsDesc": "Inteligência de mercado e oportunidades assistida por IA.",
+      "smartMoneyTitle": "Smart Money",
+      "smartMoneyDesc": "Analise a atividade de carteiras e do mercado onde há dados.",
+      "farmsTitle": "Farms e rendimento",
+      "farmsDesc": "Explore oportunidades de rendimento e liquidez suportadas."
+    },
+    "faq": {
+      "title": "Perguntas frequentes",
+      "q1": "O que é o FBT Swap?",
+      "a1": "O FBT Swap é uma interface sem custódia que o ajuda a trocar e interagir com ativos digitais nas redes suportadas. Você conecta a sua própria carteira, assina as suas próprias transações e os ativos nunca ficam numa conta da empresa.",
+      "q2": "O que é o FBT Intent OS?",
+      "a2": "O Intent OS é a camada de inteligência que entende o que quer alcançar, analisa a informação disponível e ajuda a traçar um caminho explicável e consciente do risco até esse objetivo, pedindo sempre a sua aprovação antes de qualquer execução.",
+      "q3": "O FBT Swap é sem custódia?",
+      "a3": "Sim, onde aplicável. As operações são executadas diretamente entre a sua carteira e a blockchain. A Fanous Bazaar Pishgam não tem acesso às suas chaves privadas, não pode mover os seus fundos e não pode recuperar uma frase-semente perdida.",
+      "q4": "Que redes são suportadas?",
+      "a4": "A lista ativa vem do registo da app: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic e Solana. A página reflete sempre o registo atual, não uma lista de marketing escrita à mão.",
+      "q5": "Como funciona a IA?",
+      "a5": "Através do FBT AI Gateway e do orquestrador, a plataforma pode usar fornecedores configurados (como Grok ou OpenRouter) e sistemas de inteligência internos para analisar dados de mercado, on-chain e de carteira. Ela ajuda e explica; não garante resultados.",
+      "q6": "A FBT garante lucros?",
+      "a6": "Não. As análises e os sinais de IA são informativos e não podem garantir resultados futuros. As criptomoedas são voláteis e você pode perder tudo.",
+      "q7": "A IA pode executar transações?",
+      "a7": "A IA pode propor e explicar ações, mas a execução exige sempre a sua autorização explícita. Em ações financeiras sensíveis, a IA nunca controla os fundos do utilizador de forma independente. O modelo de autorização é a assinatura controlada pelo utilizador.",
+      "q8": "O que é o Smart Money?",
+      "a8": "O Smart Money transforma a atividade on-chain — movimentos de baleias, transações grandes, mudanças de detentores e comportamento de carteiras onde há dados — em inteligência compreensível. Não prevê preços.",
+      "q9": "O que é o Solana Intelligence?",
+      "a9": "Uma camada dedicada ao ecossistema Solana: análise de SOL, descoberta de tokens, sinais iniciais, análise de liquidez e detentores, e indicadores de risco de tokens onde implementados.",
+      "q10": "Que mercados a FBT suporta?",
+      "a10": "Ativo: swaps de cripto, descoberta DeFi e inteligência Solana. Futuro / em breve, quando aplicável: ativos tokenizados, RWA, ações, matérias-primas, futuros e mercados globais mais amplos. Os mercados futuros são sempre marcados como Futuro ou Em breve."
+    },
+    "ctaTitle": "Ainda tem dúvidas?",
+    "companyFull": "Fanous Bazaar Pishgam",
+    "footNote": "Os dados de mercado são informativos, não aconselhamento financeiro. As criptomoedas são voláteis: negocie apenas o que pode perder."
+  },
+  "contact": {
+    "title": "Fale connosco"
   }
 }

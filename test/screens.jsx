@@ -44,6 +44,7 @@ import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
 import Developers from '../src/pages/Developers.jsx';
 import Security from '../src/pages/Security.jsx';
+import About from '../src/pages/About.jsx';
 import SmartWallet from '../src/pages/SmartWallet.jsx';
 import SmartMoneyWallet from '../src/pages/SmartMoneyWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
@@ -274,6 +275,55 @@ export async function run(container) {
    */
   await mount('Developers', <Developers />);
   await mount('Security Center (offline)', <Security />);
+
+  /*
+   * ─── ABOUT, IN ALL TWELVE LANGUAGES ──────────────────────────────────────
+   * «صفحه درباره ما را برای همه زبان‌ها مدرن‌تر کن». The page used to fall
+   * back to English in nine of the twelve locales and to render Arabic and
+   * Urdu left-to-right (its `dir` was `isFA ? 'rtl' : 'ltr'`). Mount it in
+   * every language and check the three things a grep cannot: it paints, it
+   * paints in that language's script, and it mirrors when the language does.
+   *
+   * The script check is by Unicode block, not by key: a translated key that
+   * still holds the English sentence would pass a key-presence test and fail
+   * a reader. Latin-script locales are checked for their own diacritics or
+   * a word English does not use, which is the weakest form of the same idea.
+   */
+  {
+    const SCRIPT = {
+      fa: /[\u0600-\u06FF]/, ar: /[\u0600-\u06FF]/, ur: /[\u0600-\u06FF]/,
+      zh: /[\u4E00-\u9FFF]/, hi: /[\u0900-\u097F]/, ru: /[\u0400-\u04FF]/,
+      es: /Quiénes|cartera/i, fr: /Qui nous sommes|portefeuille/i, tr: /Biz kimiz|cüzdan/i,
+      id: /Siapa kami|dompet/i, pt: /Quem somos|carteira/i, en: /Who we are/,
+    };
+    for (const lang of LANGUAGES) {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = createRoot(host);
+      const before = errors.length;
+      await act(async () => {
+        setLanguage(lang.code);
+        root.render(
+          <Wrap>
+            <About />
+          </Wrap>
+        );
+      });
+      const page = host.querySelector('.about-page');
+      const text = host.textContent ?? '';
+      out.push([`About renders in ${lang.code} without a React error`, !!page && errors.length === before]);
+      out.push([`About is in the ${lang.code} script, not English fallback`, SCRIPT[lang.code].test(text)]);
+      out.push([`About mirrors for ${lang.code} (${lang.dir})`, page?.getAttribute('dir') === lang.dir]);
+      // The figures are derived from the registries — never typed in.
+      const figures = host.querySelectorAll('[data-testid="about-figures"] dd');
+      out.push([`About ${lang.code}: three derived figures (networks · languages · custody 0)`,
+        figures.length === 3 && /\d|[۰-۹٠-٩]/.test(figures[0].textContent) && /^[0۰٠]$/.test(figures[2].textContent.trim())]);
+      await act(async () => root.unmount());
+      host.remove();
+    }
+    // Ten networks in the registry today (nine EVM + Solana) — the strip must list them all.
+    setLanguage('en');
+  }
   await mount('SmartWallet', <SmartWallet />);
 
   /*

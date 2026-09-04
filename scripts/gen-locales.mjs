@@ -21,6 +21,7 @@ import common from './locales/common.mjs';
 import product from './locales/product.mjs';
 import wallet from './locales/wallet.mjs';
 import settings from './locales/settings.mjs';
+import about from './locales/about.mjs';
 
 const LANGS = ['zh', 'hi', 'es', 'fr', 'ru', 'tr', 'ur', 'id', 'pt'];
 // Hand-maintained. English is the source, so it is 100% by definition and is
@@ -30,7 +31,7 @@ const FULL = ['fa', 'ar'];
 const localePath = (code) => new URL(`../src/i18n/locales/${code}.json`, import.meta.url);
 const coveragePath = new URL('../src/i18n/coverage.json', import.meta.url);
 
-const SOURCES = { ...common, ...product, ...wallet, ...settings };
+const SOURCES = { ...common, ...product, ...wallet, ...settings, ...about };
 
 function setPath(obj, dotted, value) {
   const parts = dotted.split('.');

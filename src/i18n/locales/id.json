@@ -1116,8 +1116,78 @@
     "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini.",
     "chartLive": "candle pasar langsung"
   },
-  "lab2": {
-    "cards": {},
-    "screens": {}
+  "about": {
+    "title": "Tentang kami",
+    "tagline": "Perdagangan & teknologi untuk ekonomi baru",
+    "headline": "Bertransaksi on-chain. Kunci tetap milikmu.",
+    "who": "Siapa kami",
+    "summary": "Fanous Bazaar Pishgam adalah perusahaan dagang yang berbasis di Khomeyni Shahr, Isfahan. Kami membangun bursa non-kustodial: kamu menghubungkan dompetmu sendiri, transaksi diselesaikan langsung on-chain, dan asetmu tidak pernah berada di akun yang kami kendalikan.",
+    "trust": {
+      "nonCustodial": "Non-kustodial",
+      "multiChain": "Multi-chain"
+    },
+    "value": {
+      "access": {
+        "title": "Akses terbuka"
+      }
+    },
+    "stats": {
+      "chains": "Jaringan",
+      "languages": "Bahasa",
+      "custody": "Dana yang kami simpan"
+    },
+    "how": {
+      "title": "Cara kerjanya",
+      "step1Title": "Bawa dompetmu",
+      "step1Body": "Gunakan dompet yang sudah kamu miliki atau buat di dalam aplikasi. Tanpa akun, tanpa email, tanpa verifikasi identitas.",
+      "step2Title": "Katakan apa yang kamu mau",
+      "step2Body": "Tukar langsung, atau jelaskan tujuanmu dengan bahasa sehari-hari dan biarkan Intent OS memaparkan rute, biaya, dan risikonya sebelum apa pun terjadi.",
+      "step3Title": "Tanda tangani dan selesaikan on-chain",
+      "step3Body": "Kamu menandatangani setiap transaksi dan transaksi itu diselesaikan di blockchain. Tidak ada yang bergerak tanpa persetujuanmu, dan tidak ada yang pernah berada di akun yang kami kendalikan."
+    },
+    "featuresTitle": "Apa yang bisa kamu lakukan di sini",
+    "ecosystem": {
+      "swapTitle": "Tukar",
+      "swapDesc": "Perdagangkan aset digital di jaringan yang didukung.",
+      "walletTitle": "Dompet",
+      "walletDesc": "Kelola aset digital dengan kendali tetap di tanganmu.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "Ungkapkan tujuan finansialmu dengan bahasa sehari-hari.",
+      "signalsTitle": "Sinyal AI",
+      "signalsDesc": "Intelijen pasar dan peluang berbantuan AI.",
+      "smartMoneyTitle": "Smart Money",
+      "smartMoneyDesc": "Analisis aktivitas dompet dan pasar di mana datanya tersedia.",
+      "farmsTitle": "Farm & imbal hasil",
+      "farmsDesc": "Jelajahi peluang imbal hasil dan likuiditas yang didukung."
+    },
+    "faq": {
+      "title": "Pertanyaan umum",
+      "q1": "Apa itu FBT Swap?",
+      "a1": "FBT Swap adalah antarmuka non-kustodial yang membantumu menukar dan berinteraksi dengan aset digital di jaringan yang didukung. Kamu menghubungkan dompetmu sendiri, menandatangani transaksimu sendiri, dan aset tidak pernah berada di akun perusahaan.",
+      "q2": "Apa itu FBT Intent OS?",
+      "a2": "Intent OS adalah lapisan kecerdasan yang memahami apa yang ingin kamu capai, menganalisis informasi yang tersedia, dan membantu menyusun jalur yang sadar risiko dan dapat dijelaskan menuju tujuan itu, selalu meminta persetujuanmu sebelum eksekusi apa pun.",
+      "q3": "Apakah FBT Swap non-kustodial?",
+      "a3": "Ya, di mana berlaku. Transaksi dieksekusi langsung antara dompetmu dan blockchain. Fanous Bazaar Pishgam tidak punya akses ke kunci privatmu, tidak bisa memindahkan danamu, dan tidak bisa memulihkan seed phrase yang hilang.",
+      "q4": "Jaringan apa saja yang didukung?",
+      "a4": "Daftar aktif diambil dari registri aplikasi: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, dan Solana. Halaman ini selalu mencerminkan registri saat ini, bukan daftar pemasaran yang ditulis tetap.",
+      "q5": "Bagaimana cara kerja AI-nya?",
+      "a5": "Melalui FBT AI Gateway dan orkestrator, platform dapat memakai penyedia yang dikonfigurasi (seperti Grok atau OpenRouter) dan sistem kecerdasan internal untuk menganalisis data pasar, on-chain, dan portofolio. Ia membantu dan menjelaskan, bukan menjamin hasil.",
+      "q6": "Apakah FBT menjamin keuntungan?",
+      "a6": "Tidak. Analisis dan sinyal AI bersifat informatif dan tidak dapat menjamin kinerja di masa depan. Kripto sangat fluktuatif dan kamu bisa kehilangan semuanya.",
+      "q7": "Bisakah AI mengeksekusi transaksi?",
+      "a7": "AI bisa mengusulkan dan menjelaskan tindakan, tetapi eksekusi selalu membutuhkan otorisasi eksplisit darimu. Untuk tindakan finansial yang sensitif, AI tidak pernah mengendalikan dana pengguna secara mandiri. Model otorisasinya adalah penandatanganan yang dikendalikan pengguna.",
+      "q8": "Apa itu Smart Money?",
+      "a8": "Smart Money mengubah aktivitas on-chain (pergerakan whale, transaksi besar, perubahan pemegang, dan perilaku dompet di mana datanya tersedia) menjadi intelijen yang mudah dipahami. Ia tidak memprediksi harga.",
+      "q9": "Apa itu Solana Intelligence?",
+      "a9": "Lapisan khusus untuk ekosistem Solana: analisis SOL, penemuan token, sinyal awal, analitik likuiditas dan pemegang, serta indikator risiko token di mana sudah diterapkan.",
+      "q10": "Pasar apa saja yang didukung FBT?",
+      "a10": "Aktif: swap kripto, penemuan DeFi, dan intelijen Solana. Mendatang / segera hadir bila sesuai: aset tertokenisasi, RWA, saham, komoditas, futures, dan pasar global yang lebih luas. Pasar mendatang selalu kami beri label Mendatang atau Segera Hadir."
+    },
+    "ctaTitle": "Masih ada pertanyaan?",
+    "companyFull": "Fanous Bazaar Pishgam",
+    "footNote": "Data pasar bersifat informatif, bukan nasihat keuangan. Kripto sangat fluktuatif; bertransaksilah hanya dengan dana yang siap kamu relakan."
+  },
+  "contact": {
+    "title": "Hubungi kami"
   }
 }

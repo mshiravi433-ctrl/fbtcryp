@@ -1116,8 +1116,78 @@
     "noWalletHint": "Bu cihazda kurulu bir Solana cüzdanı yok. Cüzdan sayfasını açmak için yukarıdaki düğmeye dokunun — orada Phantom, Solflare veya Backpack bağlayın ve doğrudan bu emre geri döneceksiniz.",
     "chartLive": "canlı piyas mumları"
   },
-  "lab2": {
-    "cards": {},
-    "screens": {}
+  "about": {
+    "title": "Hakkımızda",
+    "tagline": "Yeni ekonomi için ticaret ve teknoloji",
+    "headline": "Zincir üstünde işlem yap. Anahtarların sende kalsın.",
+    "who": "Biz kimiz",
+    "summary": "Fanous Bazaar Pishgam, İsfahan’ın Humeyni Şehir ilçesinde kurulu bir ticaret şirketidir. Saklama yapmayan bir borsa geliştiriyoruz: kendi cüzdanını bağlarsın, işlemler doğrudan zincir üstünde sonuçlanır ve varlıkların asla bizim kontrolümüzdeki bir hesapta durmaz.",
+    "trust": {
+      "nonCustodial": "Saklamasız",
+      "multiChain": "Çok zincirli"
+    },
+    "value": {
+      "access": {
+        "title": "Açık erişim"
+      }
+    },
+    "stats": {
+      "chains": "Ağ",
+      "languages": "Dil",
+      "custody": "Bizde tutulan fon"
+    },
+    "how": {
+      "title": "Nasıl çalışır",
+      "step1Title": "Bir cüzdan getir",
+      "step1Body": "Zaten sahip olduğun bir cüzdanı kullan ya da uygulama içinde bir tane oluştur. Hesap yok, e-posta yok, kimlik doğrulama yok.",
+      "step2Title": "Ne istediğini söyle",
+      "step2Body": "Doğrudan takas yap ya da hedefini düz bir dille anlat; Intent OS herhangi bir şey olmadan önce rotayı, ücreti ve riski önüne koysun.",
+      "step3Title": "İmzala, zincir üstünde sonuçlansın",
+      "step3Body": "Her işlemi sen imzalarsın ve işlem blokzincirde sonuçlanır. Onayın olmadan hiçbir şey hareket etmez ve hiçbir şey asla bizim kontrolümüzdeki bir hesapta durmaz."
+    },
+    "featuresTitle": "Burada neler yapabilirsin",
+    "ecosystem": {
+      "swapTitle": "Takas",
+      "swapDesc": "Desteklenen ağlarda dijital varlık alıp sat.",
+      "walletTitle": "Cüzdan",
+      "walletDesc": "Kontrol sende kalarak dijital varlıklarını yönet.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "Finansal hedeflerini doğal dille ifade et.",
+      "signalsTitle": "Yapay zekâ sinyalleri",
+      "signalsDesc": "Yapay zekâ destekli piyasa ve fırsat analizi.",
+      "smartMoneyTitle": "Akıllı para",
+      "smartMoneyDesc": "Veri olan yerde cüzdan ve piyasa hareketlerini incele.",
+      "farmsTitle": "Çiftlikler ve getiri",
+      "farmsDesc": "Desteklenen getiri ve likidite fırsatlarını keşfet."
+    },
+    "faq": {
+      "title": "Sık sorulan sorular",
+      "q1": "FBT Swap nedir?",
+      "a1": "FBT Swap, desteklenen ağlarda dijital varlıkları takas etmene ve kullanmana yardımcı olan saklamasız bir arayüzdür. Kendi cüzdanını bağlarsın, işlemlerini kendin imzalarsın ve varlıklar asla bir şirket hesabında durmaz.",
+      "q2": "FBT Intent OS nedir?",
+      "a2": "Intent OS, neye ulaşmak istediğini anlayan, mevcut bilgiyi analiz eden ve o hedefe giden riske duyarlı, açıklanabilir bir yol oluşturmaya yardımcı olan zekâ katmanıdır; herhangi bir işlemden önce her zaman onayını ister.",
+      "q3": "FBT Swap saklamasız mı?",
+      "a3": "Evet, geçerli olduğu her yerde. İşlemler doğrudan cüzdanınla blokzincir arasında yürür. Fanous Bazaar Pishgam özel anahtarlarına erişemez, fonlarını taşıyamaz ve kaybolmuş bir kurtarma ifadesini geri getiremez.",
+      "q4": "Hangi ağlar destekleniyor?",
+      "a4": "Canlı liste uygulamanın kayıt defterinden gelir: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic ve Solana. Sayfa her zaman güncel kaydı yansıtır; sabit kodlanmış bir pazarlama listesi değildir.",
+      "q5": "Yapay zekâ nasıl çalışıyor?",
+      "a5": "FBT AI Gateway ve orkestratör üzerinden platform, yapılandırılmış sağlayıcıları (Grok veya OpenRouter gibi) ve dahili zekâ sistemlerini kullanarak piyasa, zincir üstü ve portföy verilerini analiz edebilir. Yardımcı olur ve açıklar; sonuç garanti etmez.",
+      "q6": "FBT kâr garantisi veriyor mu?",
+      "a6": "Hayır. Yapay zekâ analizleri ve sinyaller bilgilendirme amaçlıdır ve gelecekteki performansı garanti edemez. Kripto oynaktır ve her şeyi kaybedebilirsin.",
+      "q7": "Yapay zekâ işlem yapabilir mi?",
+      "a7": "Yapay zekâ eylem önerebilir ve açıklayabilir; ancak yürütme her zaman açık onayını gerektirir. Hassas finansal işlemlerde yapay zekâ kullanıcı fonlarını asla tek başına kontrol etmez. Yetkilendirme modeli kullanıcı kontrolündeki imzadır.",
+      "q8": "Akıllı para nedir?",
+      "a8": "Akıllı para; balina hareketleri, büyük işlemler, sahip değişimleri ve veri olan yerde cüzdan davranışları gibi zincir üstü etkinliği anlaşılır bilgiye dönüştürür. Fiyat tahmini yapmaz.",
+      "q9": "Solana zekâsı nedir?",
+      "a9": "Solana ekosistemine özel bir katman: SOL analizi, token keşfi, erken sinyaller, likidite ve sahip analizi ve uygulandığı yerde token risk göstergeleri.",
+      "q10": "FBT hangi piyasaları destekliyor?",
+      "a10": "Canlı: kripto takası, DeFi keşfi ve Solana zekâsı. Gelecek / yakında (uygun olduğunda): tokenleştirilmiş varlıklar, RWA, hisseler, emtialar, vadeli işlemler ve daha geniş küresel piyasalar. Gelecekteki piyasaları her zaman Gelecek veya Yakında olarak etiketleriz."
+    },
+    "ctaTitle": "Hâlâ bir sorun mu var?",
+    "companyFull": "Fanous Bazaar Pishgam",
+    "footNote": "Piyasa verileri bilgilendirme amaçlıdır, finansal tavsiye değildir. Kripto oynaktır; yalnızca kaybetmeyi göze alabileceğin kadarıyla işlem yap."
+  },
+  "contact": {
+    "title": "Bize ulaşın"
   }
 }

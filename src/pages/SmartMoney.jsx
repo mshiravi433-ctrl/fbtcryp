@@ -141,6 +141,12 @@ export default function SmartMoney() {
    */
   const offline = data?.dataStatus === 'unavailable';
   const streamDown = offline || (data?.streamStatus ?? data?.dataStatus) === 'unavailable';
+  /* stale = the scan is slow/failed but earlier observations exist: keep the
+     numbers, add a soft notice (not the red offline banner). */
+  const streamStale = !streamDown && data?.streamStatus === 'stale';
+  const cov = data?.coverage;
+  const observedHours = cov?.observedSince ? Math.max(1, Math.round((Date.now() - cov.observedSince) / 3600_000)) : null;
+  const usdOrDash = (n, events) => (events === 0 || n == null ? '—' : fmtUsd(n));
 
   return (
     <PageTransition>
@@ -208,58 +214,85 @@ export default function SmartMoney() {
                 <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(window)}>{t('sm.retry')}</button>
               </div>
             )}
+            {data && streamStale && (
+              <div className="sm-section sm-stale" data-testid="sm-stale-notice">
+                <span className="msg">⏳ {t('sm.streamStale')}</span>
+              </div>
+            )}
 
             {data && (
               <>
+                {/*
+                  Every tile states what it is based on. A window with no
+                  labelled event shows «—», never «$0»: zero labelled flow
+                  is the absence of an observation, not an observed zero.
+                */}
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.whaleActivity')}</div>
                     <div className="val">{streamDown ? '—' : m?.whaleActivity?.value ?? '—'}</div>
-                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{streamDown ? '—' : fmtPct(m?.whaleActivity?.changePct)}</div>
+                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{streamDown || m?.whaleActivity?.changePct == null ? '' : fmtPct(m.whaleActivity.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.accumulation')}</div>
-                    <div className="val sm-up">{streamDown ? '—' : fmtUsd(m?.accumulation?.valueUsd)}</div>
-                    <div className="chg sm-up">{streamDown ? '—' : fmtPct(m?.accumulation?.changePct)}</div>
+                    <div className="val sm-up">{streamDown ? '—' : usdOrDash(m?.accumulation?.valueUsd, m?.accumulation?.events)}</div>
+                    <div className="chg sm-up">{streamDown || m?.accumulation?.changePct == null ? (m?.accumulation?.events ? t('sm.labelledEvents', { n: m.accumulation.events }) : '') : fmtPct(m.accumulation.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.distribution')}</div>
-                    <div className="val sm-down">{streamDown ? '—' : fmtUsd(m?.distribution?.valueUsd)}</div>
-                    <div className="chg sm-down">{streamDown ? '—' : fmtPct(m?.distribution?.changePct)}</div>
+                    <div className="val sm-down">{streamDown ? '—' : usdOrDash(m?.distribution?.valueUsd, m?.distribution?.events)}</div>
+                    <div className="chg sm-down">{streamDown || m?.distribution?.changePct == null ? (m?.distribution?.events ? t('sm.labelledEvents', { n: m.distribution.events }) : '') : fmtPct(m.distribution.changePct)}</div>
                   </div>
                 </div>
 
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeInflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{streamDown ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{streamDown || !m?.flowEvents ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeOutflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{streamDown ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{streamDown || !m?.flowEvents ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.netFlow')}</div>
                     <div className={`val ${(m?.netFlow?.value || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>
-                      {streamDown ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
+                      {streamDown || !m?.flowEvents ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
                     </div>
                   </div>
                 </div>
+
+                {!streamDown && cov && (
+                  <div className="sm-coverage" data-testid="sm-coverage">
+                    {cov.observedEvents > 0 && observedHours
+                      ? t('sm.observedNote', { n: cov.observedEvents, hours: observedHours })
+                      : t('sm.observedNoteNew')}
+                    {!m?.flowEvents && cov.inWindow > 0 ? ` ${t('sm.noLabelledFlow')}` : ''}
+                  </div>
+                )}
 
                 {/* Token activity */}
                 <div className="sm-section">
                   <h3>🐋 {t('sm.smartMoneyActivity')}</h3>
                   {data.tokenActivity?.length === 0 && <Empty>{t('sm.noActivity')}</Empty>}
                   {data.tokenActivity?.map((r) => (
-                    <div key={`${r.chainId}:${r.symbol}`} className="sm-row" onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}>
+                    <div key={`${r.chainId}:${r.address || r.symbol}`} className="sm-row" onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}>
                       <div className="sym">{r.symbol.slice(0, 4)}</div>
                       <div className="mid">
                         <div className="name">{r.symbol} <span className="faint" style={{ fontSize: 10 }}>· {r.chainShort}</span></div>
-                        <div className="sub">{t('sm.smartWallets', { n: r.events })}</div>
+                        <div className="sub">
+                          {t('sm.walletsCount', { n: r.wallets ?? r.events })}
+                          {r.labelledEvents ? ` · ${t('sm.labelledEvents', { n: r.labelledEvents })}` : ''}
+                        </div>
                       </div>
                       <div className="right">
-                        <div className={`usd ${r.netUsd >= 0 ? 'sm-up' : 'sm-down'}`}>{fmtUsd(r.netUsd)}</div>
-                        <ConfBar value={r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution} signal={r.signal} />
+                        {/* Labelled flow → signed net; unlabelled → total moved, no sign. */}
+                        <div className={`usd ${r.signal === 'NEUTRAL' ? '' : r.netUsd >= 0 ? 'sm-up' : 'sm-down'}`}>
+                          {r.signal === 'NEUTRAL' ? fmtUsd(r.totalUsd ?? Math.abs(r.netUsd)) : fmtUsd(r.netUsd)}
+                        </div>
+                        {r.signal === 'NEUTRAL'
+                          ? <span className="faint" style={{ fontSize: 10, fontWeight: 800 }}>{t('sm.signal.NEUTRAL')}</span>
+                          : <ConfBar value={r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution} signal={r.signal} />}
                       </div>
                     </div>
                   ))}
@@ -267,7 +300,7 @@ export default function SmartMoney() {
 
                 {/* Money flow quick view — hidden while offline: a 0/0 bar
                     reads as "no flow", which is exactly what we are NOT sure of. */}
-                {!streamDown && <FlowSummary flows={data.flows} onMore={() => setTab('flows')} t={t} />}
+                {!streamDown && <FlowSummary flows={data.flows} window={window} onMore={() => setTab('flows')} t={t} />}
 
                 {/* Early detection */}
                 <div className="sm-section">
@@ -277,21 +310,28 @@ export default function SmartMoney() {
                 </div>
 
                 {/* Fresh wallets */}
-                {data.freshWallets && data.freshWallets.dataStatus === 'live' && (
+                {data.freshWallets && (data.freshWallets.dataStatus === 'live' || data.freshWallets.dataStatus === 'quiet') && (
                   <div className="sm-section">
                     <h3>🆕 {t('sm.freshWallets')}</h3>
-                    <div className="sm-metrics">
-                      <div className="sm-metric"><div className="lab">{t('sm.newWallets')}</div><div className="val">{data.freshWallets.newWallets}</div></div>
-                      <div className="sm-metric"><div className="lab">{t('sm.interesting')}</div><div className="val">{data.freshWallets.interestingWallets}</div></div>
-                      <div className="sm-metric"><div className="lab">{t('sm.capital')}</div><div className="val" style={{ fontSize: 16 }}>{fmtUsd(data.freshWallets.capitalUsd)}</div></div>
-                    </div>
-                    {data.freshWallets.wallets?.slice(0, 5).map((w) => (
-                      <div key={`${w.chainId}:${w.address}`} className="sm-row" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
-                        <div className="sym">{w.chainShort}</div>
-                        <div className="mid"><div className="name mono">{w.short}</div><div className="sub">{w.txCount ?? '—'} tx</div></div>
-                        <div className="right"><div className="usd">{fmtUsd(w.capitalUsd)}</div>{w.interesting && <div className="conf sm-risk-MEDIUM">★</div>}</div>
-                      </div>
-                    ))}
+                    {data.freshWallets.dataStatus === 'quiet' ? (
+                      <Empty>{t('sm.quietFresh')}</Empty>
+                    ) : (
+                      <>
+                        <div className="sm-metrics">
+                          <div className="sm-metric"><div className="lab">{t('sm.newWallets')}</div><div className="val">{data.freshWallets.newWallets}</div></div>
+                          <div className="sm-metric"><div className="lab">{t('sm.interesting')}</div><div className="val">{data.freshWallets.interestingWallets}</div></div>
+                          <div className="sm-metric"><div className="lab">{t('sm.capital')}</div><div className="val" style={{ fontSize: 16 }}>{fmtUsd(data.freshWallets.capitalUsd)}</div></div>
+                        </div>
+                        {data.freshWallets.wallets?.slice(0, 5).map((w) => (
+                          <div key={`${w.chainId}:${w.address}`} className="sm-row" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
+                            <div className="sym">{w.chainShort}</div>
+                            <div className="mid"><div className="name mono">{w.short}</div><div className="sub">{w.txCount} tx</div></div>
+                            <div className="right"><div className="usd">{fmtUsd(w.capitalUsd)}</div>{w.interesting && <div className="conf sm-risk-MEDIUM">★</div>}</div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    <div className="sm-disclaimer">{data.freshWallets.note}</div>
                   </div>
                 )}
 
@@ -344,19 +384,27 @@ export default function SmartMoney() {
   );
 }
 
-function FlowSummary({ flows, onMore, t }) {
-  const f = flows?.windows?.['24h'];
+function FlowSummary({ flows, window: win = '24h', onMore, t }) {
+  const f = flows?.windows?.[win] || flows?.windows?.['24h'];
   if (!f) return null;
+  const hasFlow = (f.events || 0) > 0;
   return (
     <div className="sm-section">
       <h3>💰 {t('sm.moneyFlow')}<span className="spacer" />
         <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={onMore}>{t('sm.viewAll')}</button>
       </h3>
-      <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} />
-      <div className="row-between" style={{ marginTop: 10, fontSize: 12 }}>
-        <span className="sm-down">↓ {t('sm.cexInflow')}: {fmtUsd(f.inflowUsd)}</span>
-        <span className="sm-up">↑ {t('sm.cexOutflow')}: {fmtUsd(f.outflowUsd)}</span>
-      </div>
+      {hasFlow ? (
+        <>
+          <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} />
+          <div className="row-between" style={{ marginTop: 10, fontSize: 12 }}>
+            <span className="sm-down">↓ {t('sm.cexInflow')}: {fmtUsd(f.inflowUsd)}</span>
+            <span className="sm-up">↑ {t('sm.cexOutflow')}: {fmtUsd(f.outflowUsd)}</span>
+          </div>
+        </>
+      ) : (
+        /* A 0/0 bar reads as «no flow», which is exactly what we do NOT know. */
+        <div className="sm-empty" style={{ padding: '6px 0' }}>{t('sm.noLabelledFlow')}</div>
+      )}
     </div>
   );
 }
@@ -392,7 +440,7 @@ function EarlyGrid({ tokens, navigate, t }) {
         };
         return (
           <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
-            <div className="tk">{tk.symbol} <span className="faint" style={{ fontSize: 10 }}>· {tk.chain}</span></div>
+            <div className="tk">{tk.symbol} <span className="faint" style={{ fontSize: 10 }}>· {tk.chain}{tk.dex ? ` · ${tk.dex}` : ''}</span></div>
             <div className="meta">
               <div><div className="k">{t('sm.age')}</div><div className="v">{tk.ageHours}h</div></div>
               <div><div className="k">{t('sm.liquidity')}</div><div className="v">{fmtUsd(tk.liquidityUsd)}</div></div>
@@ -409,11 +457,12 @@ function EarlyGrid({ tokens, navigate, t }) {
 
 function WhalesTab({ navigate, t, smart }) {
   const [rows, setRows] = useState(null);
+  const [note, setNote] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
     let on = true;
     fetchWhales(smart ? 1_000_000 : 250_000)
-      .then((d) => on && setRows(d.wallets || []))
+      .then((d) => { if (!on) return; setRows(d.wallets || []); setNote(d.note || null); })
       .catch((e) => on && setErr(e.message));
     return () => { on = false; };
   }, [smart]);
@@ -434,11 +483,18 @@ function WhalesTab({ navigate, t, smart }) {
           </div>
           <div className="right">
             <div className="usd">{fmtUsd(w.movedUsd)}</div>
-            <div className={`conf sm-risk-${w.riskBand === 'LOW' ? 'LOW' : 'MEDIUM'}`}>{t(`sm.riskBand.${w.riskBand}`)}</div>
+            {w.netUsd != null && w.netUsd !== 0 && (
+              <div className={`sub ${w.netUsd > 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 10, fontWeight: 800 }}>
+                {w.netUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(w.netUsd))} {t(w.netUsd > 0 ? 'sm.netIn' : 'sm.netOut')}
+              </div>
+            )}
+            <div className={`conf sm-risk-${['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand) ? w.riskBand : 'MEDIUM'}`}>
+              {w.behaviour && w.behaviour !== 'TRANSFER' ? `${t(`sm.behaviour.${w.behaviour}`)} · ` : ''}{t(`sm.riskBand.${w.riskBand}`)}
+            </div>
           </div>
         </div>
       ))}
-      <div className="sm-disclaimer">{t('sm.whaleDisclaimer')}</div>
+      <div className="sm-disclaimer">{note || t('sm.whaleDisclaimer')}</div>
     </div>
   );
 }
@@ -497,17 +553,35 @@ function FlowsTab({ t }) {
         </h3>
         {!flows ? <Spinner /> : (
           <>
-            <div className="sm-metrics">
-              <div className="sm-metric"><div className="lab">{t('sm.cexInflow')}</div><div className="val sm-down" style={{ fontSize: 16 }}>{fmtUsd(f?.inflowUsd)}</div></div>
-              <div className="sm-metric"><div className="lab">{t('sm.cexOutflow')}</div><div className="val sm-up" style={{ fontSize: 16 }}>{fmtUsd(f?.outflowUsd)}</div></div>
-              <div className="sm-metric"><div className="lab">{t('sm.netFlow')}</div><div className={`val ${(f?.netUsd || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>{fmtUsd(f?.netUsd)}</div></div>
-            </div>
-            {f && <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} />}
+            {(() => {
+              const hasFlow = (f?.events || 0) > 0;
+              const dash = (n) => (hasFlow ? fmtUsd(n) : '—');
+              return (
+                <>
+                  <div className="sm-metrics">
+                    <div className="sm-metric"><div className="lab">{t('sm.cexInflow')}</div><div className="val sm-down" style={{ fontSize: 16 }}>{dash(f?.inflowUsd)}</div></div>
+                    <div className="sm-metric"><div className="lab">{t('sm.cexOutflow')}</div><div className="val sm-up" style={{ fontSize: 16 }}>{dash(f?.outflowUsd)}</div></div>
+                    <div className="sm-metric"><div className="lab">{t('sm.netFlow')}</div><div className={`val ${(f?.netUsd || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>{dash(f?.netUsd)}</div></div>
+                  </div>
+                  {hasFlow ? <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} /> : (
+                    <div className="sm-empty" style={{ padding: '6px 0' }}>
+                      {flows.dataStatus === 'unavailable' ? t('sm.dataSourceOffline') : t('sm.noLabelledFlow')}
+                    </div>
+                  )}
+                  {f && typeof f.coverage === 'number' && f.coverage < 0.95 && (
+                    <div className="sm-coverage">{t('sm.windowCoverage', { pct: Math.round(f.coverage * 100) })}</div>
+                  )}
+                </>
+              );
+            })()}
             {f?.byExchange?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 {f.byExchange.map((r) => (
                   <div key={r.exchange} className="sm-row" style={{ cursor: 'default' }}>
-                    <div className="mid"><div className="name">{r.exchange}</div></div>
+                    <div className="mid">
+                      <div className="name">{r.exchange}</div>
+                      <div className="sub">↓ {fmtUsd(r.inflowUsd)} · ↑ {fmtUsd(r.outflowUsd)}</div>
+                    </div>
                     <div className="right"><div className={`usd ${r.netUsd >= 0 ? 'sm-up' : 'sm-down'}`}>{fmtUsd(r.netUsd)}</div></div>
                   </div>
                 ))}
@@ -538,6 +612,9 @@ function FlowsTab({ t }) {
           <div className="sm-holdings">
             {exchanges.exchanges?.map((ex) => <span key={ex} className="sm-chip">{ex}</span>)}
           </div>
+          {flows?.observedExchanges?.length > 0 && (
+            <div className="sm-coverage">{t('sm.observedExchanges')}: {flows.observedExchanges.join(' · ')}</div>
+          )}
           <div className="sm-disclaimer">{exchanges.note}</div>
         </div>
       )}

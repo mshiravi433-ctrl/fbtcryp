@@ -234,28 +234,31 @@ function prefetchLikelyRoutes() {
 }
 
 /*
- * ─── FULL-SCREEN ROUTES ────────────────────────────────────────────────────
- * `/intent` (the AI chat) is an app within the app: it gets the whole
- * viewport. The global chrome — Header (logo + settings) and BottomNav (tabs
- * + the More sheet) — is NOT rendered there, so the page stretches edge to
- * edge and the conversation uses every pixel of height instead of sitting
- * between a top bar and a bottom bar it does not need.
+ * ─── HEADERLESS ROUTES ─────────────────────────────────────────────────────
+ * `/intent` (the AI chat) is an app within the app: the global Header (logo
+ * + settings) is NOT rendered there, so the conversation starts at the very
+ * top of the viewport instead of sitting under a bar it does not need.
+ *
+ * The BottomNav STAYS, on instruction («فقط هدر حذف شود، نه منوی پایین»):
+ * it is how the user knows where they are and how they reach the rest of the
+ * app — without it the AI page was a dead end that could only be left with
+ * the browser's back button. The shell keeps its bottom padding for it.
  *
  * This has to live inside <HashRouter> because it reads `useLocation()`, and
- * it is the single place that decides what "full screen" means — so Header
- * and BottomNav themselves stay route-agnostic and never grow a `/intent`
- * special case.
+ * it is the single place that decides which routes are headerless — so
+ * Header and BottomNav themselves stay route-agnostic and never grow a
+ * `/intent` special case.
  */
 function AppChrome() {
   const { pathname } = useLocation();
-  const fullscreen = pathname === '/intent';
+  const headerless = pathname === '/intent';
   return (
-    <div className={`app-shell${fullscreen ? ' app-shell--fullscreen' : ''}`}>
-      {!fullscreen && <Header />}
+    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}`}>
+      {!headerless && <Header />}
       <PullToRefresh>
         <AnimatedRoutes />
       </PullToRefresh>
-      {!fullscreen && <BottomNav />}
+      <BottomNav />
     </div>
   );
 }

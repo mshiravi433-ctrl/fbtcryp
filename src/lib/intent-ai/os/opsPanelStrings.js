@@ -115,6 +115,9 @@ export const OPS_PANEL_STRINGS = {
   'menu.multiAi':      { fa: 'هوش چندمدلی',       en: 'Multi-AI',    ar: 'ذكاء متعدد' },
 
   /* ---- Ecosystem section (agents + strategies) --------------------------- */
+  /* One menu entry for the one panel that holds both tabs (see the bottom
+     menu bar in IntentAIUnified): the panel's own tabs keep the two words. */
+  'eco.menu':          { fa: 'ایجنت‌ها و استراتژی‌ها', en: 'Agents & strategies', ar: 'الوكلاء والاستراتيجيات' },
   'eco.agents':        { fa: 'ایجنت‌ها',          en: 'Agents',      ar: 'الوكلاء' },
   'eco.strategies':    { fa: 'استراتژی‌ها',       en: 'Strategies',  ar: 'الاستراتيجيات' },
   'eco.loading':       { fa: 'در حال خواندن فهرست…', en: 'Loading the registry…', ar: 'جارٍ تحميل السجل…' },

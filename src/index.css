@@ -295,17 +295,13 @@ body {
 }
 
 /*
- * Full-screen routes (the AI chat) render neither the top bar nor the bottom
- * nav, so the shell must not reserve any room for them. The composer inside
- * the chat owns its own safe-area padding, so zero here is correct — any
- * extra inset would leave a dead strip at the bottom of the screen.
+ * Headerless routes (the AI chat) drop only the top bar. The bottom nav is
+ * still rendered there (on instruction — the user must always see where they
+ * are and be able to leave), so the shell keeps its normal bottom padding
+ * and no override is needed. The class is kept as a styling hook only.
  */
-/* Double class on purpose: `.app-shell` gets its padding-bottom re-asserted
-   inside the short-viewport media query below, so a single-class override
-   written here would lose to that later rule on laptops. Two classes win by
-   specificity regardless of order. */
-.app-shell.app-shell--fullscreen {
-  padding-bottom: 0;
+.app-shell.app-shell--headerless {
+  /* intentionally inherits `.app-shell` padding-bottom — the nav is present */
 }
 
 .page {

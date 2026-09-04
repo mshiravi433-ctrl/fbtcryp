@@ -54,9 +54,13 @@ function cgIdForToken(chainId, tokenAddress) {
 
 /* ── activity classification ──────────────────────────────────────────── */
 
-function classifyAction({ chainId, direction, counterparty, token, txHash, method }) {
-  const cex = exchangeFor(chainId, counterparty);
-  const dex = routerFor(chainId, counterparty);
+function classifyAction({ chainId, direction, counterparty, token, txHash, method, counterpartyKind, counterpartyExchange, counterpartyLabel }) {
+  /* Curated registry first; the explorer's public name-tag («Kraken: Hot
+     Wallet 4», «OKX Deposit», «Uniswap V3: Swap Router02») second. */
+  const curatedCex = exchangeFor(chainId, counterparty);
+  const cex = curatedCex ? { exchange: curatedCex.exchange } : counterpartyKind === 'exchange' && counterpartyExchange ? { exchange: counterpartyExchange } : null;
+  const curatedDex = routerFor(chainId, counterparty);
+  const dex = curatedDex ? { dex: curatedDex.dex } : counterpartyKind === 'dex' ? { dex: counterpartyLabel || 'DEX' } : null;
   const m = String(method || '').toLowerCase();
 
   // Exchange flows
@@ -70,6 +74,9 @@ function classifyAction({ chainId, direction, counterparty, token, txHash, metho
     return direction === 'out'
       ? { type: 'LARGE_SELL', label: `Sold ${token?.symbol || 'token'} on ${dex?.dex || 'DEX'}`, dex: dex?.dex || null }
       : { type: 'LARGE_BUY', label: `Bought ${token?.symbol || 'token'} on ${dex?.dex || 'DEX'}`, dex: dex?.dex || null };
+  }
+  if (counterpartyKind === 'bridge') {
+    return { type: 'TRANSFER', label: `${direction === 'out' ? 'Bridged out' : 'Bridged in'} ${token?.symbol || 'tokens'}`, bridge: counterpartyLabel || 'bridge' };
   }
   if (m.includes('mint') || m.includes('addliquidity') || m.includes('addliquidity')) {
     return { type: 'LIQUIDITY_MOVEMENT', label: `Liquidity added (${token?.symbol || 'LP'})` };
@@ -194,17 +201,23 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   for (const b of balances) {
     if (!b.token || b.amount <= 0) continue;
     const market = markets.get(b.token) || null;
-    const usd = market?.priceUsd ?? null;
+    /* Deepest DEX pair first; the explorer's own exchange rate second (it
+       prices majors and CEX-listed tokens that have thin on-chain pools). */
+    const usd = market?.priceUsd ?? b.priceUsd ?? null;
     const liq = market?.liquidityUsd ?? null;
     const valueUsd = usd != null ? b.amount * usd : b.valueUsd ?? null;
     if (valueUsd != null) portfolioUsd += valueUsd;
     if (liq != null && liq < 50_000 && valueUsd != null) lowLiqValue += valueUsd;
+    if (!priceMap.has(b.token) && usd != null) {
+      priceMap.set(b.token, { usd, liquidity: liq, cgId: cgIdForToken(chainId, b.token), symbol: b.symbol || null, pairCreatedAt: null });
+    }
     holdings.push({
       token: b.token,
       symbol: b.symbol || market?.symbol || '???',
       amount: b.amount,
       valueUsd: valueUsd != null ? Math.round(valueUsd) : null,
       priceUsd: usd,
+      priceSource: market?.priceUsd != null ? 'dex' : b.priceUsd != null ? 'explorer' : null,
       liquidityUsd: liq
     });
   }
@@ -221,7 +234,10 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
       counterparty: tr.counterparty,
       token: tr.token,
       txHash: tr.hash,
-      method: tr.method
+      method: tr.method,
+      counterpartyKind: tr.counterpartyKind,
+      counterpartyExchange: tr.counterpartyExchange,
+      counterpartyLabel: tr.counterpartyLabel
     });
     const px = priceMap.get(tr.token?.address)?.usd;
     const valueUsd = px != null && tr.amount != null ? tr.amount * px : null;
@@ -234,7 +250,8 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
       amount: tr.amount,
       valueUsd: valueUsd != null ? Math.round(valueUsd) : null,
       counterparty: tr.counterparty,
-      counterpartyLabel: exchangeFor(chainId, tr.counterparty)?.label || tr.toTag || tr.fromTag || null,
+      counterpartyLabel: exchangeFor(chainId, tr.counterparty)?.label || tr.counterpartyLabel || tr.toTag || tr.fromTag || null,
+      counterpartyKind: tr.counterpartyKind || null,
       hash: tr.hash,
       timestamp: tr.timestamp
     });
@@ -311,7 +328,7 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   const topShare = holdings.length ? (holdings[0].valueUsd || 0) / Math.max(1, portfolioUsd) : 0;
   const lowLiqShare = lowLiqValue / Math.max(1, portfolioUsd);
   const cexFlowCount = activity.filter((a) => a.type === 'EXCHANGE_DEPOSIT' || a.type === 'EXCHANGE_WITHDRAWAL').length;
-  const bridgeHits = activity.filter((a) => /bridge|across|stargate|layerzero/i.test(a.counterpartyLabel || '')).length;
+  const bridgeHits = activity.filter((a) => a.counterpartyKind === 'bridge' || /bridge|across|stargate|layerzero/i.test(a.counterpartyLabel || '')).length;
   const scamHits = 0; // wired when a scam-address list is supplied (tokenRisk/GoPlus path)
   /* Did any history source actually answer? If not, «no exposure» is not a
      finding — it is the absence of one. */

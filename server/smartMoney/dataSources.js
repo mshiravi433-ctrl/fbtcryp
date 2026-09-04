@@ -222,19 +222,130 @@ export async function bsAddressCounters(chainId, address) {
   }
 }
 
-/** Native + token balances for an address (token balances carry USD where
- *  Blockscout has exchange rates — otherwise we price via CoinGecko). */
+/*
+ * BLOCKSCOUT v2 CONTRACT — verified against eth.blockscout.com / base.blockscout.com
+ * ---------------------------------------------------------------------------
+ *   · list endpoints take NO `limit` parameter (the API answers 4xx
+ *     «Unexpected field: limit») and `filter` accepts only `to` or `from`
+ *     — `filter=to | from` is rejected. We ask for the plain page (50 rows)
+ *     and slice client-side.
+ *   · token balances live at `/addresses/{a}/token-balances` (not `/balances`).
+ *   · token objects carry `address_hash` (older hosts: `address`).
+ *   · transfer amounts are `total.value` + `total.decimals`.
+ *   · address objects carry `is_contract`, `is_scam`, `name`, `ens_domain_name`
+ *     and `metadata.tags[]` ({name, slug, tagType:name|generic|protocol|note,
+ *     meta}) — the explorer's public name-tags («Kraken: Hot Wallet 4»,
+ *     «OKX Deposit», «MEV Bot», «Null Address»).
+ *
+ * Every one of these mistakes used to turn the wallet page into
+ * `dataStatus:'unavailable'` for EVERY address while the indexer was up.
+ */
+
+const tokenAddr = (token) => {
+  const a = token?.address_hash ?? token?.address;
+  return a ? String(a).toLowerCase() : null;
+};
+
+const EXCHANGE_HINTS = [
+  ['binance', 'Binance'], ['coinbase', 'Coinbase'], ['kraken', 'Kraken'], ['okx', 'OKX'], ['okex', 'OKX'],
+  ['bybit', 'Bybit'], ['bitfinex', 'Bitfinex'], ['gate', 'Gate.io'], ['kucoin', 'KuCoin'], ['htx', 'HTX'],
+  ['huobi', 'HTX'], ['crypto.com', 'Crypto.com'], ['bitget', 'Bitget'], ['mexc', 'MEXC'], ['upbit', 'Upbit'],
+  ['bithumb', 'Bithumb'], ['gemini', 'Gemini'], ['bitstamp', 'Bitstamp'], ['robinhood', 'Robinhood'],
+  ['bitmart', 'BitMart'], ['poloniex', 'Poloniex'], ['bittrex', 'Bittrex'], ['deribit', 'Deribit'],
+  ['bitpanda', 'Bitpanda'], ['bitvavo', 'Bitvavo'], ['whitebit', 'WhiteBIT'], ['lbank', 'LBank'], ['coinex', 'CoinEx']
+];
+
+function exchangeFromText(text) {
+  const low = String(text || '').toLowerCase();
+  if (!low) return null;
+  for (const [needle, name] of EXCHANGE_HINTS) if (low.includes(needle)) return name;
+  return null;
+}
+
+/**
+ * Reduce an explorer tag list to one honest label.
+ *   kind: 'exchange' | 'zero' | 'mev' | 'dex' | 'bridge' | 'contract' | 'scam' | 'entity' | null
+ * Exchange detection uses ONLY name/protocol tags (or an explicit
+ * `cexDeposit` meta) — the generic «Coinbase» tag Blockscout puts on the
+ * zero address means the block *coinbase*, not the exchange, and must never
+ * count as a flow.
+ */
+export function summarizeTags(tags, { isContract = false, isScam = false, name = null, ens = null } = {}) {
+  const list = Array.isArray(tags) ? tags : [];
+  const meta = (t) => {
+    if (!t?.meta) return {};
+    if (typeof t.meta === 'object') return t.meta;
+    try { return JSON.parse(t.meta); } catch { return {}; }
+  };
+  const named = list.filter((t) => t?.tagType === 'name').sort((a, b) => (b.ordinal || 0) - (a.ordinal || 0));
+  const generic = new Set(list.filter((t) => t?.tagType === 'generic').map((t) => String(t.slug || '').toLowerCase()));
+  const protocols = list.filter((t) => t?.tagType === 'protocol');
+  const label = named[0]?.name || name || ens || null;
+
+  let kind = null;
+  let exchange = null;
+  if (generic.has('burn') || generic.has('genesis') || generic.has('null') || /^null[: ]/i.test(label || '')) kind = 'zero';
+  for (const t of named) {
+    const m = meta(t);
+    exchange = exchange || (m.cexDeposit ? exchangeFromText(t.name) : null) || exchangeFromText(m.main_entity) || null;
+  }
+  if (!exchange && (generic.has('exchange') || generic.has('hot-wallet') || generic.has('deposit-address'))) {
+    for (const t of [...named, ...protocols]) { exchange = exchangeFromText(t.name); if (exchange) break; }
+  }
+  if (!exchange) {
+    for (const t of protocols) { exchange = exchangeFromText(t.name); if (exchange) break; }
+    // A protocol tag alone (e.g. «Binance» on a BNB-chain contract) is only
+    // evidence when the address is also marked as an exchange-class wallet.
+    if (exchange && !(generic.has('exchange') || generic.has('hot-wallet') || generic.has('deposit-address') || /hot wallet|cold wallet|deposit/i.test(label || ''))) exchange = null;
+  }
+  if (kind !== 'zero') {
+    if (exchange) kind = 'exchange';
+    else if (isScam || generic.has('phish--hack') || generic.has('scam')) kind = 'scam';
+    else if (generic.has('mev-bot') || /^mev bot/i.test(label || '')) kind = 'mev';
+    else if (generic.has('dex') || generic.has('router') || /router|swap|aggregat/i.test(label || '')) kind = 'dex';
+    else if (generic.has('bridge') || /bridge|portal|stargate|across|layerzero/i.test(label || '')) kind = 'bridge';
+    else if (isContract || generic.has('token-contract')) kind = 'contract';
+    else if (label) kind = 'entity';
+  }
+  return { label, kind, exchange, isContract: !!isContract };
+}
+
+function shapeParty(party) {
+  if (!party || typeof party !== 'object') return { address: null, label: null, kind: null, exchange: null, isContract: false };
+  const sum = summarizeTags(party.metadata?.tags, {
+    isContract: !!party.is_contract,
+    isScam: !!party.is_scam,
+    name: party.name || null,
+    ens: party.ens_domain_name || null
+  });
+  return { address: party.hash ? String(party.hash).toLowerCase() : null, ...sum };
+}
+
+/** Native + token balances for an address. Blockscout ships an
+ *  `exchange_rate` per token where it has one — kept as `priceUsd`/`valueUsd`
+ *  so a holding still prices when no DEX pair answers. */
 export async function bsBalances(chainId, address) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/balances?type=ERC-20`);
-    const tokens = (Array.isArray(j) ? j : []).map((b) => ({
-      token: b?.token?.address ? String(b.token.address).toLowerCase() : null,
-      symbol: b?.token?.symbol || null,
-      name: b?.token?.name || null,
-      decimals: Number(b?.token?.decimals) || 18,
-      amount: b?.value != null ? Number(b.value) / 10 ** (Number(b?.token?.decimals) || 18) : null,
-      valueUsd: b?.value_usd != null ? Number(b.value_usd) : null
-    })).filter((t) => t.amount != null);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-balances`);
+    const tokens = (Array.isArray(j) ? j : [])
+      .filter((b) => !b?.token?.type || b.token.type === 'ERC-20')
+      .map((b) => {
+        const decimals = Number(b?.token?.decimals);
+        const dec = Number.isFinite(decimals) ? decimals : 18;
+        const amount = b?.value != null ? Number(b.value) / 10 ** dec : null;
+        const rate = Number(b?.token?.exchange_rate);
+        const priceUsd = Number.isFinite(rate) && rate > 0 ? rate : null;
+        return {
+          token: tokenAddr(b?.token),
+          symbol: b?.token?.symbol || null,
+          name: b?.token?.name || null,
+          decimals: dec,
+          amount,
+          priceUsd,
+          valueUsd: amount != null && priceUsd != null ? amount * priceUsd : null
+        };
+      })
+      .filter((t) => t.token && t.amount != null);
     return { dataStatus: 'live', tokens };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', tokens: [] };
@@ -245,42 +356,47 @@ export async function bsBalances(chainId, address) {
  * Recent token transfers for an address. Each row has counterparty, token,
  * value, timestamp and a direction. This is the raw material for wallet
  * activity classification (buy/sell/transfer/CEX) and flow aggregation.
+ * Zero-value transfers (address-poisoning spam) are dropped.
  */
 export async function bsTokenTransfers(chainId, address, { limit = 50 } = {}) {
   try {
-    const j = await bsGet(
-      chainId,
-      `/api/v2/addresses/${address}/token-transfers?type=ERC-20&filter=to%20%7C%20from&limit=${Math.min(100, limit)}`
-    );
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-transfers?type=ERC-20`);
     const items = Array.isArray(j?.items) ? j.items : [];
+    const me = address.toLowerCase();
     const rows = items.map((it) => {
       const token = it?.token;
-      const decimals = Number(token?.decimals) || 18;
+      const decimalsRaw = Number(it?.total?.decimals ?? token?.decimals);
+      const decimals = Number.isFinite(decimalsRaw) ? decimalsRaw : 18;
       const raw = Number(it?.total?.value ?? it?.value);
-      const from = String(it?.from?.hash || '').toLowerCase();
-      const to = String(it?.to?.hash || '').toLowerCase();
-      const me = address.toLowerCase();
+      const fromP = shapeParty(it?.from);
+      const toP = shapeParty(it?.to);
+      const from = fromP.address || '';
+      const to = toP.address || '';
+      const direction = to === me ? 'in' : from === me ? 'out' : null;
+      const other = direction === 'in' ? fromP : toP;
       return {
         hash: it?.transaction_hash ? String(it.transaction_hash).toLowerCase() : null,
         timestamp: it?.timestamp ? new Date(it.timestamp).getTime() : null,
         blockNumber: Number(it?.block_number) || null,
         from,
         to,
-        direction: to === me ? 'in' : from === me ? 'out' : null,
-        counterparty: to === me ? from : to,
+        direction,
+        counterparty: direction === 'in' ? from : to,
+        counterpartyLabel: other.label,
+        counterpartyKind: other.kind,
+        counterpartyExchange: other.exchange,
         token: {
-          address: token?.address ? String(token.address).toLowerCase() : null,
+          address: tokenAddr(token),
           symbol: token?.symbol || '???',
           name: token?.name || null,
           decimals
         },
         amount: Number.isFinite(raw) ? raw / 10 ** decimals : null,
         method: it?.method || null,
-        // Blockscout public-tags / exchange labels when it knows them.
-        fromTag: it?.from?.is_contract ? (it?.from?.name || null) : null,
-        toTag: it?.to?.is_contract ? (it?.to?.name || null) : null
+        fromTag: fromP.label,
+        toTag: toP.label
       };
-    }).filter((r) => r.direction && r.amount != null);
+    }).filter((r) => r.direction && r.amount != null && r.amount > 0).slice(0, Math.max(1, limit));
     return {
       dataStatus: 'live',
       rows,
@@ -295,10 +411,10 @@ export async function bsTokenTransfers(chainId, address, { limit = 50 } = {}) {
 /** Transactions for an address (used for native flows + tx-count/age). */
 export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/transactions?filter=to%20%7C%20from&limit=${Math.min(100, limit)}`);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/transactions`);
     const items = Array.isArray(j?.items) ? j.items : [];
+    const me = address.toLowerCase();
     const rows = items.map((it) => {
-      const me = address.toLowerCase();
       const from = String(it?.from?.hash || '').toLowerCase();
       const to = String(it?.to?.hash || '').toLowerCase();
       return {
@@ -313,30 +429,118 @@ export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
         method: it?.method || null,
         success: it?.status === 'ok'
       };
-    }).filter((r) => r.direction);
+    }).filter((r) => r.direction).slice(0, Math.max(1, limit));
     return { dataStatus: 'live', rows };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
   }
 }
 
-/** Token holder list + total holder count for a contract. */
+/** Token contract facts (total supply, holder count, explorer price). */
+export async function bsTokenInfo(chainId, tokenAddress) {
+  try {
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}`);
+    const decimals = Number(j?.decimals);
+    return {
+      dataStatus: 'live',
+      decimals: Number.isFinite(decimals) ? decimals : 18,
+      totalSupplyRaw: j?.total_supply != null ? String(j.total_supply) : null,
+      holdersCount: Number(j?.holders_count) || null,
+      priceUsd: Number(j?.exchange_rate) > 0 ? Number(j.exchange_rate) : null,
+      symbol: j?.symbol || null,
+      name: j?.name || null
+    };
+  } catch (e) {
+    return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable' };
+  }
+}
+
+/** Token holder list + total holder count for a contract. `share` is the
+ *  holder's slice of total supply when the contract reports one. */
 export async function bsTokenHolders(chainId, tokenAddress, { limit = 20 } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/holders?limit=${Math.min(100, limit)}`);
+    const [j, info] = await Promise.all([
+      bsGet(chainId, `/api/v2/tokens/${tokenAddress}/holders`),
+      bsTokenInfo(chainId, tokenAddress).catch(() => ({ dataStatus: 'unavailable' }))
+    ]);
     const items = Array.isArray(j?.items) ? j.items : [];
-    const rows = items.map((h) => ({
-      address: String(h?.address?.hash || '').toLowerCase(),
-      name: h?.address?.name || h?.address?.ens_domain_name || null,
-      isContract: !!h?.address?.is_contract,
-      balance: Number(h?.value) / 10 ** (Number(h?.token?.decimals) || 18) || 0,
-      share: null // computed by caller against total supply
-    }));
-    return { dataStatus: 'live', rows, totalHolders: Number(j?.total) ?? rows.length };
+    const supply = info?.totalSupplyRaw ? Number(info.totalSupplyRaw) : null;
+    const rows = items.slice(0, Math.max(1, limit)).map((h) => {
+      const dec = Number(h?.token?.decimals ?? info?.decimals);
+      const decimals = Number.isFinite(dec) ? dec : 18;
+      const party = shapeParty(h?.address);
+      const raw = Number(h?.value);
+      return {
+        address: party.address || '',
+        name: party.label,
+        kind: party.kind,
+        exchange: party.exchange,
+        isContract: party.isContract,
+        balance: Number.isFinite(raw) ? raw / 10 ** decimals : 0,
+        share: supply && Number.isFinite(raw) && supply > 0 ? raw / supply : null
+      };
+    });
+    const total = Number(j?.total);
+    return {
+      dataStatus: 'live',
+      rows,
+      totalHolders: Number.isFinite(total) && total > 0 ? total : (info?.holdersCount ?? rows.length)
+    };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
   }
 }
+
+/* ═══════════════════ Blockscout public address metadata ════════════════ */
+/*
+ * Keyless bulk name-tag lookup: the same tags the explorer shows on an
+ * address page («Kraken: Hot Wallet 4», «OKX Deposit», «MEV Bot»,
+ * «Beacon Depositor», «Null Address»). One request labels up to 50
+ * addresses on one chain. Used to (a) recognise exchange counterparties the
+ * curated registry does not list yet — reported at confidence 'medium' with
+ * source 'blockscout-tag' — and (b) keep contracts, MEV bots and the zero
+ * address off the whale board. A silent failure labels nothing; nothing
+ * is ever guessed.
+ */
+
+const METADATA_BASE = 'https://metadata.services.blockscout.com/api/v1/metadata';
+const TAG_TTL_MS = 6 * 3600_000;
+const tagMemo = new Map(); // `${chainId}:${addr}` → { value, expires }
+const EMPTY_TAG = Object.freeze({ label: null, kind: null, exchange: null, isContract: false });
+
+export async function bsAddressTags(chainId, addresses, { timeout = 5000 } = {}) {
+  const out = new Map();
+  const want = [...new Set((addresses || []).map((a) => String(a || '').toLowerCase()).filter((a) => /^0x[a-f0-9]{40}$/.test(a)))];
+  const missing = [];
+  const now = Date.now();
+  for (const a of want) {
+    const hit = tagMemo.get(`${chainId}:${a}`);
+    if (hit && hit.expires > now) out.set(a, hit.value);
+    else missing.push(a);
+  }
+  const batches = [];
+  for (let i = 0; i < missing.length; i += 50) batches.push(missing.slice(i, i + 50));
+  await Promise.all(batches.map(async (batch) => {
+    let body = null;
+    try {
+      body = await getJson(`${METADATA_BASE}?chainId=${Number(chainId)}&tagsLimit=8&addresses=${batch.join(',')}`, { timeout });
+    } catch {
+      return; // labels are an enrichment, never a dependency
+    }
+    const byLower = new Map();
+    for (const [addr, row] of Object.entries(body?.addresses || {})) byLower.set(String(addr).toLowerCase(), row);
+    for (const a of batch) {
+      const row = byLower.get(a);
+      const value = row ? summarizeTags(row.tags) : EMPTY_TAG;
+      tagMemo.set(`${chainId}:${a}`, { value, expires: now + TAG_TTL_MS });
+      out.set(a, value);
+    }
+  }));
+  return out;
+}
+
+/** Test/ops seam: forget every cached tag. */
+export function __clearTagCacheForTests() { tagMemo.clear(); }
 
 /* ════════════════════════ Etherscan-family (keyed) ═════════════════════ */
 /*

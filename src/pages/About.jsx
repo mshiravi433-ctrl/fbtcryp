@@ -8,28 +8,44 @@ import {
   IconArrowDown,
   IconChevronRight,
   IconMail,
+  IconPools,
   IconRefresh,
   IconShield,
+  IconSmartMoney,
   IconSparkle,
   IconWallet,
 } from '../components/Icons';
+import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { LANGUAGES, isRtl } from '../i18n/languages';
 import '../styles/about-premium.css';
 
 /* ==========================================================================
    ABOUT — FBT Swap
    --------------------------------------------------------------------------
-   Deliberately lean. The previous version of this screen stacked ~20
-   sections inside the app's 520px shell, which is why it read as crowded:
-   every two-column grid in the old stylesheet had a `min-width: 900px`
-   breakpoint that can never fire here, so all of them rendered as one long
-   single column.
+   Written for the column it is actually rendered in (`.app-shell` is
+   520px wide), in every one of the twelve languages, and with nothing on it
+   that is not true of the shipped app.
 
-   What is left is the four things a visitor actually came for:
-     brand → who we are → what the product does → questions → where to go next
+   Reading order — the order a first-time visitor actually wants:
+     brand + one-line promise → who we are → three honest figures →
+     the networks (from the registry, not a list) → how it works in three
+     steps → what you can do here → questions → where to go next
 
-   No invented numbers: no volume, no TVL, no user counts. Copy is honest
-   about what is live and what is not, and that rule is not negotiable —
-   a claim that is not true of the shipped app does not go on this page.
+   THE FIGURES ARE DERIVED, NOT TYPED. The network count comes from the chain
+   registry plus Solana, the language count from the language registry, and
+   the third figure — funds we hold — is zero because the exchange is
+   non-custodial. No volume, no TVL, no user counts: a number nobody can
+   verify does not go on this page.
+
+   EVERY STRING IS A `t()` KEY. The previous version fell back to English in
+   nine of the twelve languages, which on a "who are these people" screen
+   reads as "these people did not bother". The keys now exist in all twelve
+   locale files (`scripts/locales/about.mjs` feeds the nine generated ones).
+
+   RTL IS A PROPERTY OF THE LANGUAGE, NOT OF PERSIAN. `dir` used to be
+   `isFA ? 'rtl' : 'ltr'`, which rendered Arabic and Urdu left-to-right on
+   this one screen while the rest of the app was mirrored. It now asks the
+   language registry.
    ========================================================================== */
 
 // --- SEO hook --------------------------------------------------------------
@@ -204,32 +220,65 @@ function AboutBrandMark() {
 }
 
 /**
- * The four things the product actually does.
+ * What the product actually does — only screens that exist and are routable.
  *
- * Only screens that exist and are routable. `hue` drives the icon tile's
- * gradient through a CSS custom property, so the palette lives here and the
- * stylesheet stays generic.
+ * `hue` drives the icon tile's gradient through a CSS custom property, so
+ * the palette lives here and the stylesheet stays generic.
  */
 const FEATURES = [
   { key: 'swap', icon: IconRefresh, hue: '#00e5ff', to: '/swap' },
   { key: 'wallet', icon: IconWallet, hue: '#7c4dff', to: '/wallet' },
   { key: 'intent', icon: IconSparkle, hue: '#a78bfa', to: '/intent' },
   { key: 'signals', icon: IconActivity, hue: '#00ff9d', to: '/signals' },
+  { key: 'smartMoney', icon: IconSmartMoney, hue: '#ffb347', to: '/smart-money' },
+  { key: 'farms', icon: IconPools, hue: '#ff2d95', to: '/farm' },
 ];
 
 /* Three facts a first-time visitor needs before anything else. All three are
    already true of the shipped app — no aspirational copy here. */
 const FACTS = ['trust.nonCustodial', 'trust.multiChain', 'value.access.title'];
 
+/* The three-step walkthrough. Numbered in the stylesheet, so the copy keys
+   are all that lives here. */
+const STEPS = ['step1', 'step2', 'step3'];
+
+/**
+ * The networks, straight from the registry that the swap screen itself uses,
+ * plus Solana (which lives outside `EVM_CHAINS` because it is not EVM). If a
+ * chain is added or removed there, this strip follows — the page never has
+ * to be told.
+ */
+const NETWORKS = [
+  ...EVM_CHAIN_ORDER.map((id) => EVM_CHAINS[id]).filter(Boolean).map((c) => ({ key: c.short, label: c.short, color: c.color })),
+  { key: 'SOL', label: 'SOL', color: '#9945ff' },
+];
+
 // ---------------------------------------------------------------------------
 export default function About() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const lang = i18n.language || 'en';
-  const isFA = lang.startsWith('fa');
+  const rtl = isRtl(lang.split('-')[0]);
   const reduceMotion = useReducedMotion();
 
   useAboutSEO(lang);
+
+  /* Figures in the reader's own numerals: «۱۰» for Persian, «١٠» for Arabic,
+     «10» elsewhere. `Intl` knows the numbering system per locale, and a
+     malformed tag falls back to English rather than throwing. */
+  const num = useMemo(() => {
+    try {
+      const nf = new Intl.NumberFormat(lang);
+      return (n) => nf.format(n);
+    } catch {
+      return (n) => String(n);
+    }
+  }, [lang]);
+  const figures = [
+    { key: 'chains', value: num(NETWORKS.length) },
+    { key: 'languages', value: num(LANGUAGES.length) },
+    { key: 'custody', value: num(0) },
+  ];
 
   // scroll reveal
   const revealRef = useRef(null);
@@ -278,11 +327,12 @@ export default function About() {
 
   return (
     <PageTransition>
-      <div className="about-page" ref={revealRef} dir={isFA ? 'rtl' : 'ltr'} lang={lang}>
+      <div className="about-page" ref={revealRef} dir={rtl ? 'rtl' : 'ltr'} lang={lang}>
         <div className="about-aurora" aria-hidden="true" />
+        <div className="about-grid" aria-hidden="true" />
 
         <div className="about-shell">
-          {/* ================= BRAND + WHO WE ARE ================= */}
+          {/* ================= BRAND + PROMISE ================= */}
           <header className="about-hero about-reveal">
             <AboutBrandMark />
 
@@ -291,8 +341,7 @@ export default function About() {
               <span className="about-hero-tag">{t('about.tagline')}</span>
             </div>
 
-            <h1 className="about-hero-title">{t('about.who')}</h1>
-            <p className="about-hero-summary">{t('about.summary')}</p>
+            <h1 className="about-hero-title">{t('about.headline')}</h1>
 
             <ul className="about-facts" role="list">
               {FACTS.map((key) => (
@@ -303,6 +352,52 @@ export default function About() {
               ))}
             </ul>
           </header>
+
+          {/* ================= WHO WE ARE ================= */}
+          <section className="about-block about-reveal" aria-labelledby="about-who-title">
+            <h2 className="about-block-title" id="about-who-title">
+              {t('about.who')}
+            </h2>
+            <p className="about-hero-summary">{t('about.summary')}</p>
+
+            <dl className="about-figures" data-testid="about-figures">
+              {figures.map((f) => (
+                <div key={f.key} className={`about-figure about-figure--${f.key}`}>
+                  <dd>{f.value}</dd>
+                  <dt>{t(`about.stats.${f.key}`)}</dt>
+                </div>
+              ))}
+            </dl>
+
+            <ul className="about-networks" role="list" aria-label={t('about.stats.chains')}>
+              {NETWORKS.map((n) => (
+                <li key={n.key} className="about-network" style={{ '--net': n.color }}>
+                  <span className="about-network-dot" aria-hidden="true" />
+                  {n.label}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* ================= HOW IT WORKS ================= */}
+          <section className="about-block about-reveal" aria-labelledby="about-how-title">
+            <h2 className="about-block-title" id="about-how-title">
+              {t('about.how.title')}
+            </h2>
+            <ol className="about-steps">
+              {STEPS.map((step, i) => (
+                <li key={step} className="about-step">
+                  <span className="about-step-num" aria-hidden="true">
+                    {num(i + 1)}
+                  </span>
+                  <div className="about-step-copy">
+                    <strong>{t(`about.how.${step}Title`)}</strong>
+                    <p>{t(`about.how.${step}Body`)}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
 
           {/* ================= WHAT THE PRODUCT DOES ================= */}
           <section className="about-block about-reveal" aria-labelledby="about-features-title">

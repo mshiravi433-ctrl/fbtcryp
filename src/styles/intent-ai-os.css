@@ -63,7 +63,7 @@
 }
 
 /* Title copy: "AI" with a small "Intent OS" sub-line. One column, so the
-   header stays a single row even when the status pill and live badge join. */
+   header stays a single row even when the status pill joins. */
 .iaos-title-copy {
   display: flex;
   flex-direction: column;
@@ -114,34 +114,6 @@
 }
 
 .iaos-status-pill[data-on='false'] i {
-  background: #64748b;
-  box-shadow: none;
-}
-
-.iaos-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: #8be9c8;
-  background: rgba(34, 211, 238, .08);
-  border: 1px solid rgba(34, 211, 238, .18);
-  border-radius: 999px;
-  padding: 5px 9px;
-}
-
-.iaos-live i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 4px rgba(52, 211, 153, .12);
-}
-
-.iaos-live[data-on="false"] i {
   background: #64748b;
   box-shadow: none;
 }
@@ -733,18 +705,6 @@
 
 :root[data-theme='light'] .iaos-mark {
   color: #ffffff;
-}
-
-:root[data-theme='light'] .iaos-live {
-  color: #0f7a5b;
-  background: rgba(16, 185, 129, .10);
-  border-color: rgba(16, 185, 129, .18);
-}
-
-:root[data-theme='light'] .iaos-live[data-on='false'] {
-  color: #64748b;
-  background: rgba(148, 163, 184, .10);
-  border-color: rgba(148, 163, 184, .16);
 }
 
 :root[data-theme='light'] .iaos-title-sub {

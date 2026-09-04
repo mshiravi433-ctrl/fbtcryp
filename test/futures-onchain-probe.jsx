@@ -131,7 +131,7 @@ export async function run(container) {
   /* mutable scenario state */
   let providerStatus = 'UNAVAILABLE';
   let providerReason = 'FEED_UNAVAILABLE';
-  const bff = { quotes: 0, prepares: 0, verifies: 0 };
+  const bff = { quotes: 0, prepares: 0, verifies: 0, candles: 0 };
 
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const envelope = (data, meta = {}) => ({ ok: true, data, meta: { generatedAt: new Date().toISOString(), ...meta } });
@@ -170,6 +170,7 @@ export async function run(container) {
       return json(envelope({ provider: pid, status: providerStatus, markets: rows, live: true, stale: false }));
     }
     if (p === '/candles') {
+      bff.candles += 1;
       if (providerStatus === 'UNAVAILABLE') return json(envelope({ provider: url.searchParams.get('provider') || 'drift', ok: false, candles: [], live: false, resolution: '60' }));
       /* The NORMALIZED rows the real adapter emits from Velocity's live
          /market/:symbol/candles endpoint (raw payload + its mapping are pinned
@@ -291,7 +292,12 @@ export async function run(container) {
     await act(async () => { await sleep(700); });
     t('the Crypto category lists the Solana venue perps', !!byId('futures-market-select') && qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).join() === 'SOL/USDT,BTC/USDT');
     t("the read-only sentence is shown verbatim (en)", byId('futures-readonly-notice')?.textContent.trim() === 'This market is currently available for viewing only.');
-    t('the chart is visible in its live state (candles from the BFF), not the unavailable box', !!byId('futures-trend') && !byId('futures-trend-empty') && /on-chain candles/.test(byId('futures-chart')?.textContent || ''));
+    /* The candle chart was REMOVED on instruction («نمودار … وجود ندارد — حذف
+       کن»): it rendered as a permanent "unavailable" box on the live app, so
+       the tab no longer mounts a chart block at all — and never calls
+       /candles. */
+    t('NO chart block is rendered on the On-Chain tab (removed on instruction)', !byId('futures-chart') && !byId('futures-trend') && !byId('futures-trend-empty'));
+    t('the tab never calls the candles endpoint any more', bff.candles === 0);
     t('market info shows funding and the protocol fee (4 bps) from the BFF', /8\.4/.test(byId('futures-market-info')?.textContent || '') && /4 bps/.test(byId('futures-market-info')?.textContent || ''));
     t('the fee breakdown comes from the engine: 50 × 5 = $250 notional, protocol 4 bps = $0.1, FBT 10 bps = $0.25', /\$250/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(10 bps\)\$0\.25/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the total is NOT printed while the network fee is unknown', /shown at review/.test(byId('futures-fee-breakdown')?.textContent || ''));
@@ -306,7 +312,7 @@ export async function run(container) {
     await act(async () => { const fx = qa('.tag').find((b) => b.textContent.trim() === 'Forex'); if (fx) click(fx); });
     await act(async () => { await sleep(800); });
     t('the Forex category lists EUR/USD from the RWA venue', qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).includes('EUR/USD'));
-    t('the chart draws for the forex market too (candles from its own venue)', !!byId('futures-trend') && !byId('futures-trend-empty'));
+    t('no chart block appears for the forex market either', !byId('futures-chart') && !byId('futures-trend'));
     t('the forex quote runs against its own venue (provider=ostium)', /\$250|\$500/.test(byId('futures-fee-breakdown')?.textContent || ''));
     await act(async () => { const st = qa('.tag').find((b) => b.textContent.trim() === 'Stocks'); if (st) click(st); });
     await act(async () => { await sleep(800); });

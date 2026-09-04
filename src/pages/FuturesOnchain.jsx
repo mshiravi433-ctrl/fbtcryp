@@ -12,7 +12,7 @@
  *     provider card, no venue name, no "what data we run on" — the customer
  *     sees markets and prices, not our supplier list (on instruction:
  *     «باکس اطلاعات velocity را پاک کن … برای رقبا هم خوب نیست»);
- *   · markets, prices, funding, OI, candles, balances and positions are live
+ *   · markets, prices, funding, OI, balances and positions are live
  *     reads per market's own venue; quotes, fees, risk and route come from
  *     /quote and /prepare (backend truth); the confirmation sheet shows the
  *     server's breakdown, not a local formula;
@@ -34,7 +34,6 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import TrendChart from '../components/TrendChart';
 import { IconShield, IconTrend } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -42,7 +41,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import {
-  getFuturesProviders, getFuturesMarkets, getFuturesCandles, getFuturesPositions, getFuturesAccount,
+  getFuturesProviders, getFuturesMarkets, getFuturesPositions, getFuturesAccount,
   quoteFutures, prepareFutures, verifyFutures, manageFuturesPosition
 } from '../lib/futuresClient';
 import { useFuturesStore, emitFuturesEvent } from '../lib/futures-engine/store';
@@ -77,7 +76,6 @@ const friendlyCategory = (raw) => {
   if (v.includes('etf')) return 'ETFs';
   return 'Other';
 };
-const RESOLUTIONS = [['15', '15m'], ['60', '1h'], ['240', '4h'], ['1D', '1d']];
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
 
 const errCode = (e) => mapFuturesError(e).code;
@@ -136,8 +134,6 @@ export default function FuturesOnchain() {
   const [category, setCategory] = useState('Crypto');
   const [marketUid, setMarketUid] = useState('');
   const [search, setSearch] = useState('');
-  const [resolution, setResolution] = useState('60');
-  const [candles, setCandles] = useState({ rows: [], live: false, loading: false });
   const [side, setSide] = useState(prefill.side || 'long');
   const [collateral, setCollateral] = useState(prefill.collateral || '50');
   const [leverage, setLeverage] = useState(prefill.leverage || '5');
@@ -273,43 +269,6 @@ export default function FuturesOnchain() {
 
   const effectiveMax = market?.isDayTradingClosed && market.overnightMaxLeverage > 0 ? market.overnightMaxLeverage : market?.maxLeverage;
   useEffect(() => { if (effectiveMax && Number(leverage) > effectiveMax) setLeverage(String(effectiveMax)); }, [effectiveMax, leverage]);
-
-  /* ── candles — live from the market's own venue, with a bounded self-heal ──
-     A cold serverless instance or a transient venue blip used to leave the
-     chart on "unavailable" until the user changed market or resolution. The
-     read is now retried twice (3.5s apart) before the honest empty state. */
-  useEffect(() => {
-    if (!market) return undefined;
-    let alive = true;
-    let retryTimer = null;
-    let attempt = 0;
-    const run = async () => {
-      setCandles((c) => ({ ...c, loading: true }));
-      const res = await getFuturesCandles({ provider: market.providerId, market: market.marketId, resolution, limit: 96 });
-      if (!alive) return;
-      const rows = res.ok ? res.data.candles || [] : [];
-      if (rows.length >= 2) {
-        setCandles({ rows, live: res.ok && res.data.live === true, loading: false });
-        return;
-      }
-      if (attempt < 2) {
-        attempt += 1;
-        retryTimer = setTimeout(run, 3_500);
-        return;
-      }
-      setCandles({ rows: [], live: false, loading: false });
-    };
-    run();
-    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [market?.providerId, market?.marketId, resolution]);
-
-  const candlePoints = useMemo(() => candles.rows.map((c) => ({ x: c.startedAt, y: c.close })), [candles.rows]);
-  const candleChange = useMemo(() => {
-    if (candles.rows.length < 2) return 0;
-    const a = candles.rows[0].close; const b = candles.rows[candles.rows.length - 1].close;
-    return a > 0 ? ((b - a) / a) * 100 : 0;
-  }, [candles.rows]);
 
   /* Velocity settles on Solana; its signing wallet is the Solana wallet, not the
      EVM one. Ostium-style EVM venues would use the EVM wallet address. */
@@ -746,33 +705,6 @@ export default function FuturesOnchain() {
                   </div>
                 </div>
               )}
-
-              {/* chart — real candles or an honest "unavailable" */}
-              <div className="dydx-chart" data-testid="futures-chart">
-                <div className="dydx-chart-head">
-                  <span className="faint">{candles.live ? t('futures.chartTitle') : t('futures.chartUnavailableShort')}</span>
-                  <div className="dydx-chart-res">
-                    {RESOLUTIONS.map(([res, label]) => (
-                      <button key={res} type="button" className={resolution === res ? 'active' : ''} onClick={() => setResolution(res)}>{label}</button>
-                    ))}
-                  </div>
-                </div>
-                <TrendChart
-                  points={candlePoints}
-                  height={132}
-                  up={candleChange >= 0}
-                  loading={candles.loading}
-                  emptyLabel={candles.loading ? '' : t('futures.chartUnavailable')}
-                  formatValue={(v) => `$${fmtPrice(v)}`}
-                  testId="futures-trend"
-                />
-                {candles.live && (
-                  <div className="dydx-chart-foot">
-                    <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>{fmtPct(candleChange)}</span>
-                    <span className="faint">{t('futures.chartLive')}</span>
-                  </div>
-                )}
-              </div>
 
               {/* market info — every number a live read from /stats/markets + DLOB */}
               {market && (

@@ -1116,8 +1116,78 @@
     "noWalletHint": "Aucun portefeuille Solana n'est installé sur cet appareil. Touchez le bouton ci-dessus pour ouvrir la page portefeuille — connectez Phantom, Solflare ou Backpack là-bas et vous reviendrez directement à cet ordre.",
     "chartLive": "bougies du marché en direct"
   },
-  "lab2": {
-    "cards": {},
-    "screens": {}
+  "about": {
+    "title": "À propos",
+    "tagline": "Commerce et technologie pour une nouvelle économie",
+    "headline": "Tradez on-chain. Gardez vos clés.",
+    "who": "Qui nous sommes",
+    "summary": "Fanous Bazaar Pishgam est une société de négoce basée à Khomeyni Shahr, Ispahan. Nous construisons un exchange non-custodial : vous connectez votre propre portefeuille, les échanges se règlent directement on-chain et vos actifs ne transitent jamais par un compte que nous contrôlons.",
+    "trust": {
+      "nonCustodial": "Non-custodial",
+      "multiChain": "Multi-chaînes"
+    },
+    "value": {
+      "access": {
+        "title": "Accès ouvert"
+      }
+    },
+    "stats": {
+      "chains": "Réseaux",
+      "languages": "Langues",
+      "custody": "Fonds que nous détenons"
+    },
+    "how": {
+      "title": "Comment ça marche",
+      "step1Title": "Apportez un portefeuille",
+      "step1Body": "Utilisez un portefeuille que vous possédez déjà ou créez-en un dans l’application. Pas de compte, pas d’e-mail, pas de vérification d’identité.",
+      "step2Title": "Dites ce que vous voulez",
+      "step2Body": "Échangez directement, ou décrivez votre objectif en langage courant et laissez Intent OS présenter l’itinéraire, les frais et le risque avant toute action.",
+      "step3Title": "Signez et réglez on-chain",
+      "step3Body": "Vous signez chaque transaction et elle se règle sur la blockchain. Rien ne bouge sans votre accord, et rien ne reste jamais sur un compte que nous contrôlons."
+    },
+    "featuresTitle": "Ce que vous pouvez faire ici",
+    "ecosystem": {
+      "swapTitle": "Échanger",
+      "swapDesc": "Échangez des actifs numériques sur les réseaux pris en charge.",
+      "walletTitle": "Portefeuille",
+      "walletDesc": "Gérez vos actifs numériques en gardant le contrôle.",
+      "intentTitle": "Intent OS",
+      "intentDesc": "Exprimez vos objectifs financiers en langage courant.",
+      "signalsTitle": "Signaux IA",
+      "signalsDesc": "Analyse des marchés et des opportunités assistée par IA.",
+      "smartMoneyTitle": "Smart Money",
+      "smartMoneyDesc": "Analysez l’activité des portefeuilles et du marché là où les données existent.",
+      "farmsTitle": "Farms et rendement",
+      "farmsDesc": "Explorez les opportunités de rendement et de liquidité prises en charge."
+    },
+    "faq": {
+      "title": "Questions fréquentes",
+      "q1": "Qu’est-ce que FBT Swap ?",
+      "a1": "FBT Swap est une interface non-custodial qui vous permet d’échanger et d’utiliser des actifs numériques sur les réseaux pris en charge. Vous connectez votre propre portefeuille, vous signez vos propres transactions et les actifs ne transitent jamais par un compte de la société.",
+      "q2": "Qu’est-ce que FBT Intent OS ?",
+      "a2": "Intent OS est la couche d’intelligence qui comprend ce que vous voulez accomplir, analyse les informations disponibles et aide à construire un parcours explicable et conscient du risque vers cet objectif, en demandant toujours votre accord avant toute exécution.",
+      "q3": "FBT Swap est-il non-custodial ?",
+      "a3": "Oui, là où cela s’applique. Les échanges s’exécutent directement entre votre portefeuille et la blockchain. Fanous Bazaar Pishgam n’a pas accès à vos clés privées, ne peut pas déplacer vos fonds et ne peut pas récupérer une phrase de récupération perdue.",
+      "q4": "Quels réseaux sont pris en charge ?",
+      "a4": "La liste active provient du registre de l’application : BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic et Solana. La page reflète toujours le registre courant, pas une liste marketing codée en dur.",
+      "q5": "Comment fonctionne l’IA ?",
+      "a5": "Via la passerelle FBT AI et l’orchestrateur, la plateforme peut s’appuyer sur des fournisseurs configurés (comme Grok ou OpenRouter) et des systèmes d’intelligence internes pour analyser les données de marché, on-chain et de portefeuille. Elle assiste et explique — elle ne garantit aucun résultat.",
+      "q6": "FBT garantit-il des profits ?",
+      "a6": "Non. Les analyses et signaux de l’IA sont informatifs et ne peuvent garantir aucune performance future. Les cryptomonnaies sont volatiles et vous pouvez tout perdre.",
+      "q7": "L’IA peut-elle exécuter des transactions ?",
+      "a7": "L’IA peut proposer et expliquer des actions, mais l’exécution exige toujours votre autorisation explicite. Pour les opérations financières sensibles, l’IA ne contrôle jamais seule les fonds de l’utilisateur. Le modèle d’autorisation est la signature contrôlée par l’utilisateur.",
+      "q8": "Qu’est-ce que Smart Money ?",
+      "a8": "Smart Money transforme l’activité on-chain — mouvements de baleines, grosses transactions, évolution des détenteurs et comportement des portefeuilles lorsque les données existent — en informations compréhensibles. Il ne prédit pas les prix.",
+      "q9": "Qu’est-ce que Solana Intelligence ?",
+      "a9": "Une couche dédiée à l’écosystème Solana : analyse de SOL, découverte de tokens, signaux précoces, analyse de la liquidité et des détenteurs, et indicateurs de risque des tokens lorsqu’ils sont implémentés.",
+      "q10": "Quels marchés FBT prend-il en charge ?",
+      "a10": "En service : échanges crypto, découverte DeFi et intelligence Solana. À venir / bientôt, le cas échéant : actifs tokenisés, RWA, actions, matières premières, contrats à terme et marchés mondiaux plus larges. Les marchés à venir sont toujours étiquetés « À venir » ou « Bientôt »."
+    },
+    "ctaTitle": "Une question ?",
+    "companyFull": "Fanous Bazaar Pishgam",
+    "footNote": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptomonnaies sont volatiles : ne tradez que ce que vous pouvez vous permettre de perdre."
+  },
+  "contact": {
+    "title": "Nous contacter"
   }
 }

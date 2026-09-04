@@ -685,6 +685,95 @@ export default function run() {
       t(`wallet page: ${label}`, walletPage.includes(needle));
     }
 
+    /*
+     * ─── SMART MONEY OVERVIEW: «$0» IS NOT A FINDING ────────────────────────
+     * Reported (fa): «داده‌ها را نمی‌تواند وصل شود یا خیلی از اعداد صفر است».
+     * Two root causes, both pinned here:
+     *   1. the Blockscout calls used a URL contract the API rejects
+     *      (`limit=`, `filter=to | from`, `/balances`) → every wallet page
+     *      was `unavailable` while the indexer was up;
+     *   2. every window was computed from the same ~3-minute RPC slice with
+     *      no accumulation, so 24h/7d/30d were identical, exchange flow was
+     *      two Binance deposits, and the tiles rendered «$0» over nothing.
+     */
+    const smDataSources = read('server/smartMoney/dataSources.js');
+    t('smart money: Blockscout token balances read from /token-balances', smDataSources.includes('/token-balances') && !/addresses\/\$\{address\}\/balances/.test(smDataSources));
+    t('smart money: no Blockscout list call sends a `limit` or `filter=to | from` parameter', !/[?&]limit=\$\{/.test(smDataSources) && !smDataSources.includes('filter=to%20%7C%20from'));
+    t('smart money: token address is read from address_hash', smDataSources.includes('token?.address_hash'));
+    t('smart money: explorer name-tags label counterparties (metadata service)', smDataSources.includes('metadata.services.blockscout.com') && smDataSources.includes('export function summarizeTags'));
+    const smFlow = read('server/smartMoney/moneyFlow.js');
+    t('smart money: scans accumulate in an observed-event buffer', smFlow.includes("from './eventStore.js'") && smFlow.includes('mergeEvents('));
+    t('smart money: the zero address / exchanges / routers never rank as whales', smFlow.includes('export function isNonWallet') && /if \(isNonWallet\(e\.chainId, party\)\) continue;/.test(smFlow));
+    t('smart money: whale risk band is derived, not a constant MEDIUM', !smFlow.includes("? 'MEDIUM' : 'MEDIUM'") && smFlow.includes('function riskBandOf'));
+    t('smart money: whale net flow is received − sent', smFlow.includes('netUsd: Math.round(w.receivedUsd - w.sentUsd)'));
+    t('smart money: early tokens are merged per chain+address', smFlow.includes('const byToken = new Map(); // `${chain}:${address}`'));
+    t('smart money: fresh wallets are verified against explorer counters', smFlow.includes("counters.dataStatus !== 'live'") && smFlow.includes('FRESH.maxActivityCount'));
+    const smIndex = read('server/smartMoney/index.js');
+    t('smart money: token signal is NEUTRAL without labelled flow', smIndex.includes("let signal = 'NEUTRAL';") && smIndex.includes('if (r.labelled) {'));
+    t('smart money: changePct is null without a comparable previous window', smIndex.includes('const pct = (a, b) => (havePrev ? pctChange(a, b) : null);'));
+    const smPage = read('src/pages/SmartMoney.jsx');
+    t('smart money page: exchange-flow tiles show «—» when no labelled flow was observed', smPage.includes("streamDown || !m?.flowEvents ? '—'"));
+    t('smart money page: accumulation/distribution tiles never print $0 over zero events', smPage.includes('const usdOrDash = (n, events) =>'));
+    t('smart money page: every metric states its observation basis', smPage.includes('sm.observedNote') && smPage.includes('data-testid="sm-coverage"'));
+    t('smart money page: a slow scan is a soft notice, not the offline banner', smPage.includes('data-testid="sm-stale-notice"') && smPage.includes("data?.streamStatus === 'stale'"));
+    t('smart money page: NEUTRAL tokens are not painted as accumulation', smPage.includes("r.signal === 'NEUTRAL'"));
+    t('smart money page: all three whale risk bands render', smPage.includes("['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand)"));
+    {
+      const smEn = JSON.parse(read('src/i18n/locales/en.json'));
+      const smFa = JSON.parse(read('src/i18n/locales/fa.json'));
+      for (const key of ['sm.streamStale', 'sm.observedNote', 'sm.noLabelledFlow', 'sm.quietFresh', 'sm.signal.NEUTRAL', 'sm.behaviour.ACCUMULATING', 'sm.netIn', 'sm.windowCoverage']) {
+        t(`smart money strings: ${key} exists in en + fa`, hasKey(smEn, key) && hasKey(smFa, key));
+      }
+    }
+
+    /*
+     * ─── ABOUT: TWELVE LANGUAGES, DERIVED FIGURES, REGISTRY-FED NETWORKS ────
+     * «صفحه درباره ما را برای همه زبان‌ها مدرن‌تر کن». The redesign's
+     * contract, pinned so it cannot quietly regress to what it replaced:
+     *   - every string the page renders exists in ALL twelve locale files
+     *     (nine of them had zero `about.*` keys and fell back to English);
+     *   - `dir` comes from the language registry, not from `isFA`
+     *     (Arabic and Urdu used to render left-to-right on this one screen);
+     *   - the figures are computed from the chain and language registries,
+     *     never typed in — a hardcoded «10 chains» goes stale the day a
+     *     chain is added, and there are still no volume / TVL / user counts.
+     */
+    {
+      const aboutSrc = read('src/pages/About.jsx');
+      const aboutCss = read('src/styles/about-premium.css');
+      const aboutKeys = [
+        'about.title', 'about.tagline', 'about.headline', 'about.who', 'about.summary',
+        'about.trust.nonCustodial', 'about.trust.multiChain', 'about.value.access.title',
+        'about.stats.chains', 'about.stats.languages', 'about.stats.custody',
+        'about.how.title', 'about.how.step1Title', 'about.how.step1Body', 'about.how.step2Title', 'about.how.step2Body', 'about.how.step3Title', 'about.how.step3Body',
+        'about.featuresTitle',
+        'about.ecosystem.swapTitle', 'about.ecosystem.swapDesc', 'about.ecosystem.walletTitle', 'about.ecosystem.walletDesc',
+        'about.ecosystem.intentTitle', 'about.ecosystem.intentDesc', 'about.ecosystem.signalsTitle', 'about.ecosystem.signalsDesc',
+        'about.ecosystem.smartMoneyTitle', 'about.ecosystem.smartMoneyDesc', 'about.ecosystem.farmsTitle', 'about.ecosystem.farmsDesc',
+        'about.faq.title', ...Array.from({ length: 10 }, (_, i) => [`about.faq.q${i + 1}`, `about.faq.a${i + 1}`]).flat(),
+        'about.ctaTitle', 'about.companyFull', 'about.footNote', 'contact.title', 'nav.audit'
+      ];
+      const aboutLocales = readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json')).map((n) => n.replace('.json', ''));
+      t('About is translated into all twelve locales', aboutLocales.length === 12);
+      for (const code of aboutLocales) {
+        const dict = JSON.parse(read(`src/i18n/locales/${code}.json`));
+        const missing = aboutKeys.filter((k) => !hasKey(dict, k));
+        t(`About: every rendered key exists in ${code}.json${missing.length ? ` — missing ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? '…' : ''}` : ''}`, missing.length === 0);
+      }
+      t('About feeds the nine generated locales from scripts/locales/about.mjs', existsSync('scripts/locales/about.mjs') && /import about from '\.\/locales\/about\.mjs'/.test(read('scripts/gen-locales.mjs')) && /\.\.\.about \}/.test(read('scripts/gen-locales.mjs')));
+      t('About takes text direction from the language registry, not from isFA', /isRtl\(/.test(aboutSrc) && /dir=\{rtl \? 'rtl' : 'ltr'\}/.test(aboutSrc) && !/dir=\{isFA/.test(aboutSrc));
+      t('About derives the network count from the chain registry', /EVM_CHAIN_ORDER\.map\(\(id\) => EVM_CHAINS\[id\]\)/.test(aboutSrc) && /value: num\(NETWORKS\.length\)/.test(aboutSrc));
+      t('About derives the language count from the language registry', /value: num\(LANGUAGES\.length\)/.test(aboutSrc));
+      t('About states custody as zero, computed, not as a slogan', /key: 'custody', value: num\(0\)/.test(aboutSrc));
+      t('About still invents no volume / TVL / user counts', !/stats\.users|stats\.coins|key: '(tvl|volume|users)'/.test(aboutSrc));
+      t('About renders the figures in the reader\'s numerals', /new Intl\.NumberFormat\(lang\)/.test(aboutSrc));
+      t('About walks the product in three numbered steps', /const STEPS = \['step1', 'step2', 'step3'\]/.test(aboutSrc) && /about\.how\.\$\{step\}Title/.test(aboutSrc) && /\.about-step-num/.test(aboutCss));
+      t('About lists only routable capabilities', ['/swap', '/wallet', '/intent', '/signals', '/smart-money', '/farm'].every((r) => routes.includes(r) && aboutSrc.includes(`to: '${r}'`)));
+      t('About stylesheet still has no dead width breakpoint', !/min-width:\s*9\d\d px|min-width:\s*1\d{3}px/.test(aboutCss));
+      t('About step rail and figures use logical properties (mirror in RTL)', /inset-inline-start: 16px/.test(aboutCss) && /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/.test(aboutCss));
+      t('About keeps its light-theme block for the new surfaces', /\[data-theme='light'\] \.about-network/.test(aboutCss) && /\[data-theme='light'\] \.about-grid/.test(aboutCss));
+    }
+
     /* The rules moved, once, and must stay moved: one owner per setting. */
     const intentOsSrc = read('src/pages/IntentOS.jsx');
     const smartWalletSrc = read('src/pages/SmartWallet.jsx');
@@ -12837,8 +12926,11 @@ export default function run() {
        read-only/unavailable notices remain, driven by the registry. */
     t('the tab shows READ_ONLY / UNAVAILABLE from the registry, and no venue card',
       /readOnlyNotice/.test(tab) && /unavailableNotice/.test(tab) && !/futures-venue-card/.test(tab));
-    t('the tab never draws a saved chart: candles come from the BFF or say unavailable',
-      /getFuturesCandles\(/.test(tab) && /chartUnavailable/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
+    /* The chart block was removed on instruction («نمودار … وجود ندارد — حذف
+       کن»): the tab renders no chart at all, so it must neither read candles
+       nor carry any saved/demo series. */
+    t('the tab draws NO chart: no candles read, no chart block, no saved series',
+      !/getFuturesCandles\(/.test(tab) && !/TrendChart|futures-chart|chartUnavailable/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
     t('the tab reports every hash and rejection back to /verify',
       (tab.match(/verifyFutures\(/g) || []).length >= 3 && /status: 'REJECTED'/.test(tab));
     t('the confirmation preview shows fee, risk, liquidation distance and route from /prepare',
@@ -12900,10 +12992,11 @@ export default function run() {
       !/ostiumOffline|offlineOstium/.test(ostLib) && /pairs: \[\],\s*live: false,\s*generatedAt: null,\s*unavailable: true/.test(ostLib));
     const ostPage = read('src/pages/Ostium.jsx');
     const dydxPage = read('src/pages/Dydx.jsx');
-    /* Real venue candles + a live session tail (and the session series alone
-       when the candle feed is down) — every point observed, none synthetic. */
-    t('the Ostium chart draws real venue candles with a live session tail — no synthetic series',
-      !/ostiumDemoSeries|chartDemo/.test(ostPage) && /getFuturesCandles\(/.test(ostPage) && /sessionPoints\.length >= 2 \? sessionPoints : \[\]/.test(ostPage));
+    /* The chart was REMOVED on instruction («نمودار افق جهانی وجود ندارد —
+       حذف کن»): the page renders no chart block, reads no candles and — as
+       before — carries no synthetic series that could pretend to be one. */
+    t('the Ostium page draws NO chart: no candle read, no chart block, no synthetic series',
+      !/ostiumDemoSeries|chartDemo/.test(ostPage) && !/getFuturesCandles\(/.test(ostPage) && !/TrendChart|OstiumChart|ostium-chart|sessionPoints/.test(ostPage));
     t('the dYdX page has no "sample chart" path left', !/chartDemo|candlesOffline|marketsOffline/.test(dydxPage));
     /*
      * THE DEPLOY FIX (2026-09-03): public/vendor/ is gitignored, and Vercel

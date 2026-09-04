@@ -970,7 +970,8 @@
       "chains": "Chains",
       "users": "Users",
       "languages": "Languages",
-      "coins": "Coins"
+      "coins": "Coins",
+      "custody": "Funds we hold"
     },
     "heroEyebrow": "INTENT FIRST · AI POWERED",
     "heroTitle": "Building the Intelligent Financial Infrastructure of Tomorrow",
@@ -1394,6 +1395,16 @@
     "languageSwitcher": {
       "en": "EN",
       "fa": "فارسی"
+    },
+    "headline": "Trade on-chain. Keep your keys.",
+    "how": {
+      "title": "How it works",
+      "step1Title": "Bring a wallet",
+      "step1Body": "Use a wallet you already own or create one inside the app. No account, no email, no identity check.",
+      "step2Title": "Say what you want",
+      "step2Body": "Swap directly, or describe your goal in plain language and let Intent OS lay out the route, the fee and the risk before anything happens.",
+      "step3Title": "Sign and settle on-chain",
+      "step3Body": "You sign every transaction and it settles on the blockchain. Nothing moves without your approval, and nothing ever sits in an account we control."
     }
   },
   "contact": {
@@ -8554,7 +8565,29 @@
     "unverifiedTokens": "{{n}} of these tokens have no verified contract metadata on the explorer.",
     "activityBlocked": "Activity could not be read from the explorer in this attempt — that is a missing source, not an inactive wallet.",
     "rateLimited": "Too many requests right now — wait a moment and try again.",
-    "errorWalletDetail": "The wallet endpoint rejected this request."
+    "errorWalletDetail": "The wallet endpoint rejected this request.",
+    "streamStale": "Live scan is running slowly — showing the transfers observed so far. Refreshes automatically.",
+    "observedNote": "Based on {{n}} large transfers observed over the last {{hours}}h. Not a full chain history.",
+    "observedNoteNew": "Observation just started — windows fill in as the scanner keeps running.",
+    "noLabelledFlow": "No transfer touched a labelled exchange in this window yet — nothing is counted as flow until one does.",
+    "quietFresh": "Every large mover in the last 24h is a seasoned wallet — no verified fresh wallet right now.",
+    "labelledEvents": "{{n}} labelled",
+    "walletsCount": "{{n}} wallets",
+    "signal": {
+      "ACCUMULATION": "Accumulation",
+      "DISTRIBUTION": "Distribution",
+      "NEUTRAL": "Transfers only"
+    },
+    "behaviour": {
+      "ACCUMULATING": "Accumulating",
+      "DISTRIBUTING": "Distributing",
+      "ROTATING": "Rotating",
+      "TRANSFER": "Transferring"
+    },
+    "netIn": "net in",
+    "netOut": "net out",
+    "observedExchanges": "Observed in flows",
+    "windowCoverage": "Window coverage {{pct}}%"
   },
   "crossChain": {
     "youReceive": "You receive",
