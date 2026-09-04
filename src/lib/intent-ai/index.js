@@ -1405,7 +1405,7 @@ export {
 
 /* ── Intent OS human layer (chat formatter, pending resume, live rebalance, wallet runtime) ── */
 export { USER_INTENTS, WALLET_REQUIRED_INTENTS, EXECUTABLE_INTENTS, classifyUserIntent, intentRequiresWallet, intentIsExecutable } from './intentKinds.js';
-export { createPendingIntent, transitionPendingIntent, savePendingIntent, loadPendingIntent, clearPendingIntent, resumePendingIntent, PENDING_INTENT_SCHEMA, PENDING_INTENT_KEY } from './pendingIntent.js';
+export { createPendingIntent, transitionPendingIntent, savePendingIntent, loadPendingIntent, clearPendingIntent, resumePendingIntent, shouldAutoResumePending, markPendingResumed, PENDING_INTENT_SCHEMA, PENDING_INTENT_KEY } from './pendingIntent.js';
 export { planRebalance, normalizeHoldings, DEFAULT_REBALANCE_TARGET, REBALANCE_PLAN_SCHEMA } from './rebalanceEngine.js';
 export { createExecutionPlan, advanceAction, toExecutionResult, isSuccessfulReceipt, EXECUTION_RESULT_SCHEMA } from './executionStateMachine.js';
 export { humanizeError, normalizeErrorCode } from './errorHumanizer.js';

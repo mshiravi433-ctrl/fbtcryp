@@ -494,8 +494,24 @@ export default function App() {
   } else if (showGuide) {
     screen = <Guide />;
   } else {
+    /*
+     * ─── NO v7_startTransition, ON PURPOSE ─────────────────────────────────
+     * The reported /intent freeze: tap Wallet → the hash in the address bar
+     * changes, but the AI page stays on screen and the orb goes "Offline".
+     * That shape is React Router's transitioned navigation: with
+     * `v7_startTransition: true` every `navigate()` is a transition, and when
+     * a lazy route suspends while its chunk is still loading, React keeps the
+     * PREVIOUS page visible instead of showing the Suspense fallback. On a
+     * flaky/offline connection the chunk request can hang, so the old page
+     * just sits there — URL changed, nothing rendered, no loading feedback.
+     *
+     * A route change is a user-initiated action that MUST give immediate
+     * visual feedback. Making it urgent (the React Router 6 default) lets the
+     * `<Suspense fallback={<Loader />}>` boundary show the loader right away
+     * and lets `RouteBoundary` recover if the chunk genuinely cannot load.
+     */
     screen = (
-      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <HashRouter future={{ v7_relativeSplatPath: true }}>
         <AppChrome />
         {/*
           ─── THE RADIO, OUTSIDE <AnimatedRoutes> AND THAT IS THE FEATURE ───

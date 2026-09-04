@@ -141,7 +141,7 @@ const KEYWORD_LEXICON = Object.freeze([
   { type: 'NEWS_SEARCH', words: ['اخبار', 'خبر', 'خبرها', 'news', 'headline', 'headlines'] },
   { type: 'SIGNALS', words: ['سیگنال', 'سیگنالها', 'signal', 'signals', 'outlook'] },
   { type: 'SWAP', words: ['سواپ', 'تبدیل', 'معاوضه', 'swap', 'convert', 'exchange'] },
-  { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge'] },
+  { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge', 'کراس‌چین', 'کراس چین', 'کراسچین', 'بین‌زنجیره‌ای', 'cross-chain', 'cross chain', 'crosschain'] },
   { type: 'FARM', words: ['فارم', 'استخر', 'ال پی', 'farm', 'farming', 'pool', 'liquidity'] },
   { type: 'LEND', words: ['وام دادن', 'لند', 'lend', 'lending', 'supply', 'aave'] },
   { type: 'BORROW', words: ['وام', 'قرض', 'borrow', 'loan'] },
@@ -410,6 +410,15 @@ const INTENT_PATTERNS = [
     ]
   },
   {
+    type: 'GOAL',
+    weight: 7,
+    patterns: [
+      /سود.*درصد|درصد.*سود|بازده.*درصد|درصد.*بازده/i,
+      /return.*percent|percent.*return|profit.*percent|percent.*profit/i,
+      /سود.*داشته باشم|بازده.*داشته باشم/i
+    ]
+  },
+  {
     type: 'CONTINUE',
     weight: 7,
     patterns: [
@@ -466,7 +475,8 @@ const INTENT_PATTERNS = [
     weight: 7,
     patterns: [
       /از شبکه.*به شبکه|ببر.*شبکه|منتقل.*شبکه/i,
-      /بریج|بریدج|پل.*زنجیره|bridge|cross.?chain/i
+      /کراس.?چین|کراس چین|کراسچین|بین.?زنجیره/i,
+      /بریج|بریدج|پل.*زنجیره|bridge|cross.?chain|crosschain/i
     ]
   },
   {
@@ -831,6 +841,8 @@ export function understandIntent(message, context = {}) {
     riskPreference: entities.riskPreference || null,
     targetReturn: entities.targetReturn || null,
     targetReturnNote: entities.targetReturnNote || null,
+    priceTrigger: entities.priceTrigger || null,
+    priceTriggerOperator: entities.priceTriggerOperator || null,
     constraints: entities.constraints || [],
     urgency: entities.urgency || 'normal',
     executionRequested: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE'].includes(selectedType) || /(برام.*بخر|اجرا کن|do it)/i.test(text),
@@ -856,7 +868,7 @@ export function understandIntent(message, context = {}) {
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
       'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND',
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
-      'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES'
+      'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES', 'GOAL', 'REBALANCE'
     ].includes(selectedType),
     handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
   };

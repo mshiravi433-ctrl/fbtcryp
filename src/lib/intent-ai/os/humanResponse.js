@@ -306,7 +306,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     if (route) {
       const name = pageName(route, locale);
       const e = intent?.entities || {};
-      const bits = [e.amount, e.fromToken || e.token, e.toToken, e.toAddress].filter(Boolean);
+      const bits = [e.amount, e.fromToken || e.token, e.toToken, e.toAddress, e.priceTrigger != null ? e.priceTrigger : null].filter(Boolean);
       const extra = bits.length
         ? (lang === 'fa' ? ` مقادیر آماده‌شده: ${bits.join(' → ')}.` : ` Prefill: ${bits.join(' → ')}.`)
         : '';
@@ -521,6 +521,80 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         : 'I ran the opportunity scan, but no live market source answered. That is not a guess — data was unavailable.') + targetNotice,
       ui: { type: 'TEXT' },
       code: 'PRICE_PROVIDER_UNAVAILABLE'
+    };
+  }
+
+  /**
+   * «سود ۲۰ درصد» is a GOAL (a target the user wants to reach), not a request
+   * to scan the yield market. The distinction is what the return field
+   * captures: without it the chat fell through to the generic tail and never
+   * acknowledged the number.
+   */
+  if (type === 'GOAL') {
+    const target = intent?.entities?.targetReturn;
+    const timeframe = intent?.entities?.timeframe?.raw;
+    if (target != null) {
+      const targetText = lang === 'fa' ? `${target}٪` : `${target}%`;
+      return {
+        message: lang === 'fa'
+          ? `هدف مالی شما ثبت شد: رسیدن به ${targetText} سود${timeframe ? ` در ${timeframe}` : ''}.\n\nاین یک هدف است، نه کشف بازده و نه تضمین تحقق — برای برنامه‌ریزی واقعی به بازه زمانی و سطح ریسک نیاز دارم. اگر بگویید (مثلاً «۶ ماه، متعادل»)، برنامه را روی همان هدف می‌سازم.`
+          : `Financial goal recorded: a ${targetText} return${timeframe ? ` over ${timeframe}` : ''}.\n\nThis is a target, not a yield scan and not a guarantee. To build a real plan I need a timeframe and a risk level — say it (e.g. “6 months, balanced”) and I will plan around exactly this goal.`,
+        ui: { type: 'TEXT' },
+        goal: { targetReturn: target, timeframe: intent?.entities?.timeframe || null }
+      };
+    }
+    return {
+      message: lang === 'fa'
+        ? 'یک هدف مالی برایت تعیین می‌کنم. چه مقدار سود را هدف گرفته‌ای؟ (مثلاً «۲۰ درصد»)'
+        : 'Let us set a financial goal. What return are you targeting? (e.g. “20%”)',
+      ui: { type: 'TEXT' }
+    };
+  }
+
+  if (type === 'REBALANCE') {
+    const plan = results.rebalancePlan || {};
+    if (plan.code === 'NO_TARGET_ALLOCATION') {
+      const msg = plan.messageFa || plan.message
+        || (lang === 'fa'
+          ? 'برای متعادل‌سازی به یک تخصیص هدف نیاز است. نسبت موردنظرتان را بگویید یا آن را در صفحه‌ی پرتفوی تعیین کنید.'
+          : 'A rebalance needs a target allocation. Tell me the split you want, or open the portfolio page to set one.');
+      return {
+        message: msg,
+        ui: { type: 'TEXT' },
+        code: plan.code,
+        actions: [{ id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'صفحه پرتفوی' : 'Portfolio' }]
+      };
+    }
+
+    if (plan.ok === true) {
+      const lines = Array.isArray(plan.trades) && plan.trades.length
+        ? plan.trades.map((t) => {
+            const side = t.side === 'buy' ? (lang === 'fa' ? 'خرید' : 'Buy') : (lang === 'fa' ? 'فروش' : 'Sell');
+            return `${t.symbol}: ${side} ${t.toPct}% (${lang === 'fa' ? 'از' : 'from'} ${Number(t.fromPct || 0).toFixed(1)}%)`;
+          })
+        : [lang === 'fa' ? 'نیازی به بازتنظیم نیست؛ تخصیص فعلی نزدیک هدف است.' : 'No trade is needed; the current allocation is already close to target.'];
+      return {
+        message: `${lang === 'fa' ? 'پیشنهاد متعادل‌سازی (بدون اجرا):' : 'Rebalance proposal (nothing executed):'}\n\n${lines.join('\n')}\n\n${lang === 'fa' ? 'این فقط یک پیشنهاد است و بدون تأیید شما هیچ تراکنشی اجرا نمی‌شود.' : 'This is a proposal only — nothing will execute without your approval.'}`,
+        ui: { type: 'TEXT' },
+        rebalance: plan,
+        actions: [{ id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'صفحه پرتفوی' : 'Portfolio' }]
+      };
+    }
+
+    if (!connected) {
+      return {
+        message: lang === 'fa'
+          ? 'برای متعادل‌سازی باید پرتفوی زنده‌ی شما قابل خواندن باشد. کیف پول را متصل کنید یا نسبت تخصیص هدف را بگویید.'
+          : 'To rebalance I need to read your live portfolio. Connect the wallet or tell me the target allocation.',
+        ui: { type: 'TEXT' }
+      };
+    }
+
+    return {
+      message: lang === 'fa'
+        ? 'برای متعادل‌سازی به تخصیص هدف نیاز است. نسبت موردنظرتان را بگویید (مثلاً «اتریوم ۳۰٪، بیت‌کوین ۷۰٪») یا آن را در صفحه پرتفوی تعیین کنید.'
+        : 'A rebalance needs a target allocation. Tell me the split you want (e.g. “ETH 30%, BTC 70%”) or set it on the portfolio page.',
+      ui: { type: 'TEXT' }
     };
   }
 
