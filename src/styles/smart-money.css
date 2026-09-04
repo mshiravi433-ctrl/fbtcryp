@@ -66,6 +66,16 @@
   padding: 3px 10px;
   text-transform: uppercase;
 }
+.sm-live.is-off {
+  color: var(--text-3, #9aa);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.sm-live.is-off .dot {
+  background: #888;
+  box-shadow: none;
+  animation: none;
+}
 .sm-live .dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--up, #2ee6a8);

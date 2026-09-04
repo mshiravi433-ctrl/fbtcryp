@@ -13,13 +13,13 @@
  * which never pretends the server data it does not have.
  */
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+import { apiBase } from './apiBase';
 
 async function getJson(path, timeout = 15_000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(`${API_BASE}${path}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+    const res = await fetch(`${apiBase()}${path}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
@@ -31,7 +31,7 @@ async function postJson(path, body, timeout = 60_000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${apiBase()}${path}`, {
       method: 'POST',
       signal: ctrl.signal,
       headers: { 'content-type': 'application/json', accept: 'application/json' },

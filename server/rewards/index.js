@@ -211,7 +211,9 @@ export function rewardsRouter() {
     const who = identity(req, res);
     if (!who) return undefined;
     const { code, wallet, signature, message } = req.body || {};
-    const via = who.ok && who.owner.startsWith('tg:') ? 'telegram' : 'wallet';
+    const via = who.owner.startsWith('tg:')
+      ? 'telegram'
+      : (wallet && signature) ? 'wallet' : 'device';
     const result = await engine.bindCode({
       code: String(code || '').toUpperCase(),
       wallet: wallet || null,

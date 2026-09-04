@@ -310,7 +310,24 @@ export default function IranianBuyPanel({ capability }) {
     { label: t('iranBuy.network'), value: capability?.network?.label || capability?.network?.id || '—' }
   ], [capability?.network?.id, capability?.network?.label, t]);
 
-  if (!capability?.enabled || capability.asset !== 'USDT' || capability.network?.walletFamily !== 'EVM') return null;
+  if (!capability?.enabled || capability.asset !== 'USDT' || capability.network?.walletFamily !== 'EVM') {
+    return (
+      <section className="iran-buy-panel" dir="rtl" lang="fa" data-testid="iran-buy-panel">
+        <motion.section className="lab-card iran-buy-ticket" variants={riseIn} initial="hidden" animate="show">
+          <div className="iran-buy-ticket-head">
+            <div>
+              <p className="section-label">{t('iranBuy.heading')}</p>
+              <p className="faint">{t('iranBuy.unavailableBody')}</p>
+            </div>
+            <span className="iran-buy-secure"><IconShield width={15} height={15} /> {t('iranBuy.serverOnly')}</span>
+          </div>
+          <div className="notice iran-buy-error" role="status" data-testid="iran-buy-unavailable">
+            {t('iranBuy.errors.IRAN_BUY_DISABLED')}
+          </div>
+        </motion.section>
+      </section>
+    );
+  }
 
   return (
     <section className="iran-buy-panel" dir="rtl" lang="fa" data-testid="iran-buy-panel">

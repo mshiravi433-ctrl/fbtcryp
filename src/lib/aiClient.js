@@ -12,17 +12,19 @@
  * https://localhost, so a relative path resolves to nothing — the build must
  * supply an absolute origin via VITE_API_BASE.
  */
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+import { apiBase } from './apiBase';
+
+const API_BASE = () => apiBase();
 
 /** True when we have no absolute API to talk to (packaged app, unset base). */
 export const apiUnreachable = () =>
-  API_BASE.startsWith('/') && typeof window !== 'undefined' && window.location.protocol === 'capacitor:';
+  apiBase().startsWith('/') && typeof window !== 'undefined' && window.location.protocol === 'capacitor:';
 
 async function post(path, body, timeout = 60000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${API_BASE()}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -72,7 +74,7 @@ export async function aiStatus(force = false) {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);
-    const res = await fetch(`${API_BASE}/ai/status`, { signal: ctrl.signal });
+    const res = await fetch(`${API_BASE()}/ai/status`, { signal: ctrl.signal });
     clearTimeout(t);
     if (res.ok) {
       const data = await res.json();

@@ -242,7 +242,8 @@
     "change7d": "Cambio 7d",
     "supply": "Suministro",
     "fromAth": "Desde máx. histórico",
-    "notFoundHelp": "Esta moneda no estaba en la página cargada y la consulta directa tampoco respondió. Suele significar que el proveedor de datos está limitando peticiones: inténtalo en un momento."
+    "notFoundHelp": "Esta moneda no estaba en la página cargada y la consulta directa tampoco respondió. Suele significar que el proveedor de datos está limitando peticiones: inténtalo en un momento.",
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
   },
   "swap": {
     "title": "Intercambiar",
@@ -334,6 +335,11 @@
     "horizon": {
       "weekly": "Weekly · 7 days",
       "monthly": "Monthly · 30 days"
+    },
+    "intel": {
+      "breadth": "Top-20 up today",
+      "avgChange": "Avg 24h move",
+      "turnover": "Volume / mcap"
     }
   },
   "news": {
@@ -1189,5 +1195,245 @@
   },
   "contact": {
     "title": "Contáctanos"
+  },
+  "lab2": {
+    "screens": {
+      "glossary": {
+        "terms": {
+          "liquidation": {
+            "en": "Liquidation",
+            "local": "Liquidation",
+            "def": "Forced close of a position when losses exceed collateral — the venue sells your asset to cover the debt."
+          },
+          "ath": {
+            "en": "ATH (All-Time High)",
+            "local": "All-time high",
+            "def": "The highest price an asset has ever traded at."
+          },
+          "atl": {
+            "en": "ATL (All-Time Low)",
+            "local": "All-time low",
+            "def": "The lowest price an asset has ever traded at."
+          },
+          "altcoin": {
+            "en": "Altcoin",
+            "local": "Altcoin",
+            "def": "Any coin other than Bitcoin."
+          },
+          "stablecoin": {
+            "en": "Stablecoin",
+            "local": "Stablecoin",
+            "def": "A coin whose value is pegged to a stable asset (usually the dollar) so it does not swing with the market."
+          },
+          "defi": {
+            "en": "DeFi",
+            "local": "DeFi",
+            "def": "Decentralized finance: lending, swapping and similar services on-chain, without a bank."
+          },
+          "dex": {
+            "en": "DEX",
+            "local": "DEX",
+            "def": "A decentralized exchange that trades wallet-to-wallet with no custodian."
+          },
+          "cex": {
+            "en": "CEX",
+            "local": "CEX",
+            "def": "A centralized exchange run by a company that holds customer assets."
+          },
+          "staking": {
+            "en": "Staking",
+            "local": "Staking",
+            "def": "Locking coins to help secure a network in return for a yield."
+          },
+          "yield": {
+            "en": "Yield",
+            "local": "Yield",
+            "def": "Return earned by holding or lending an asset."
+          },
+          "apy": {
+            "en": "APY",
+            "local": "APY",
+            "def": "Annual percentage yield with compounding — interest on both principal and prior interest over a year."
+          },
+          "gas": {
+            "en": "Gas Fee",
+            "local": "Gas",
+            "def": "The network fee paid to process a blockchain transaction."
+          },
+          "wallet": {
+            "en": "Wallet",
+            "local": "Wallet",
+            "def": "The tool that holds your keys and sends or receives coins."
+          },
+          "privateKey": {
+            "en": "Private Key",
+            "local": "Private key",
+            "def": "The secret that proves you own the funds. Never share it."
+          },
+          "seed": {
+            "en": "Seed Phrase",
+            "local": "Seed phrase",
+            "def": "12–24 words that rebuild the wallet. Treat it like the master key to the house."
+          },
+          "blockchain": {
+            "en": "Blockchain",
+            "local": "Blockchain",
+            "def": "A public, append-only ledger that records transactions in a chain of blocks."
+          },
+          "mining": {
+            "en": "Mining",
+            "local": "Mining",
+            "def": "Solving hard puzzles to confirm transactions and issue new coins."
+          },
+          "nft": {
+            "en": "NFT",
+            "local": "NFT",
+            "def": "A unique digital item whose ownership is recorded on-chain."
+          },
+          "dao": {
+            "en": "DAO",
+            "local": "DAO",
+            "def": "An organization run by code and member votes rather than a manager."
+          },
+          "airdrop": {
+            "en": "Airdrop",
+            "local": "Airdrop",
+            "def": "Free tokens sent to users to grow a project's community."
+          },
+          "fomo": {
+            "en": "FOMO",
+            "local": "FOMO",
+            "def": "Fear of missing out — buying in a rush because others seem to be making money."
+          },
+          "fud": {
+            "en": "FUD",
+            "local": "FUD",
+            "def": "Fear, uncertainty and doubt — rumours spread to push a price down."
+          },
+          "hodl": {
+            "en": "HODL",
+            "local": "HODL",
+            "def": "Holding through volatility instead of selling."
+          },
+          "whale": {
+            "en": "Whale",
+            "local": "Whale",
+            "def": "A wallet or institution that holds a very large amount of an asset."
+          },
+          "bull": {
+            "en": "Bull Market",
+            "local": "Bull market",
+            "def": "A market where prices trend up and confidence is high."
+          },
+          "bear": {
+            "en": "Bear Market",
+            "local": "Bear market",
+            "def": "A market where prices trend down and fear dominates."
+          },
+          "mcap": {
+            "en": "Market Cap",
+            "local": "Market cap",
+            "def": "Price times circulating supply — a size measure for the project."
+          },
+          "tokenVsCoin": {
+            "en": "Token vs Coin",
+            "local": "Token vs coin",
+            "def": "A coin runs on its own chain; a token is issued on someone else's."
+          },
+          "cold": {
+            "en": "Cold Wallet",
+            "local": "Cold wallet",
+            "def": "An offline wallet (often hardware) — the safest way to store keys."
+          },
+          "hot": {
+            "en": "Hot Wallet",
+            "local": "Hot wallet",
+            "def": "A wallet connected to the internet — convenient, less isolated."
+          },
+          "smartContract": {
+            "en": "Smart Contract",
+            "local": "Smart contract",
+            "def": "A program on the blockchain that runs without a middleman."
+          },
+          "l2": {
+            "en": "Layer 2",
+            "local": "Layer 2",
+            "def": "A network on top of a main chain that makes transactions cheaper and faster."
+          },
+          "tokenomics": {
+            "en": "Tokenomics",
+            "local": "Tokenomics",
+            "def": "A token's economic model: supply, distribution, issuance and incentives."
+          },
+          "rug": {
+            "en": "Rug Pull",
+            "local": "Rug pull",
+            "def": "Builders drain liquidity or vanish with user funds — a scam."
+          },
+          "pumpDump": {
+            "en": "Pump & Dump",
+            "local": "Pump and dump",
+            "def": "Inflating a price then selling into the buyers left holding the bag."
+          },
+          "p2p": {
+            "en": "P2P",
+            "local": "Peer to peer",
+            "def": "A trade directly between two people, no exchange in the middle."
+          },
+          "kyc": {
+            "en": "KYC",
+            "local": "KYC",
+            "def": "Identity checks required by many financial services."
+          },
+          "dca": {
+            "en": "DCA",
+            "local": "DCA",
+            "def": "Buying a fixed amount on a schedule so the average entry price smooths out."
+          },
+          "liquidity": {
+            "en": "Liquidity",
+            "local": "Liquidity",
+            "def": "How much money is available to trade in a market or pair without moving the price much."
+          },
+          "spread": {
+            "en": "Spread",
+            "local": "Spread",
+            "def": "The gap between buy and sell price — a hidden cost of trading."
+          },
+          "zk": {
+            "en": "Zk / Zero-Knowledge",
+            "local": "Zero-knowledge",
+            "def": "Proving a claim is true without revealing the data behind it."
+          },
+          "bridge": {
+            "en": "Bridge",
+            "local": "Bridge",
+            "def": "A tool that moves assets from one blockchain to another."
+          },
+          "oracle": {
+            "en": "Oracle",
+            "local": "Oracle",
+            "def": "A service that feeds real-world data into smart contracts."
+          },
+          "slippage": {
+            "en": "Slippage",
+            "local": "Slippage",
+            "def": "The difference between the price you expected and the price the trade actually filled at."
+          },
+          "portfolio": {
+            "en": "Portfolio",
+            "local": "Portfolio",
+            "def": "Everything you hold, and the share of each asset."
+          }
+        }
+      }
+    }
+  },
+  "sm": {
+    "checking": "Connecting…",
+    "offlineShort": "Offline"
+  },
+  "iranBuy": {
+    "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
   }
 }

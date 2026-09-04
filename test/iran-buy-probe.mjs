@@ -141,8 +141,9 @@ try {
   check('browser client has no Wallex credential or direct provider header', !/WALLEX_API_KEY|x-api-key/i.test(browserClient));
   check('Iranian panel has no user-selectable asset/network control or manual destination input',
     !/<select[\s\S]{0,300}(asset|network)|manualWallet|walletAddress.*onChange/i.test(browserPanel));
-  check('tab visibility uses exact fa plus a backend enabled capability',
-    /i18n\.language === 'fa'/.test(generalPanel) && /iranBuyCapability\?\.enabled === true/.test(generalPanel));
+  check('tab visibility is Persian language, not a live Wallex capability',
+    /split\(\/\[-_\]\/\)\[0\] === 'fa'/.test(generalPanel) && /const iranBuyVisible = iranBuyLanguageAllowed/.test(generalPanel)
+    && !/iranBuyCapability\?\.enabled === true/.test(generalPanel));
 } catch (error) {
   console.error(error);
   rows.push({ name: 'probe execution', ok: false });

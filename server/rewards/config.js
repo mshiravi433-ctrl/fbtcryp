@@ -89,6 +89,9 @@ export const ACTIONS = Object.freeze({
   /* loyalty mechanics */
   dailyCheckin: { points: 15, verify: 'none', dailyCap: 1, kind: 'checkin' },
   shareApp: { points: 30, verify: 'none', dailyCap: 1, kind: 'growth' },
+  /* Opening a friend's https://fbtswap.ir/#/?ref=CODE link. Zero points for
+     the visitor; the referrer is credited via referralOpportunity. */
+  inviteVisit: { points: 0, verify: 'none', dailyCap: 1, kind: 'growth', qualifiesReferral: true },
   connectWallet: { points: 100, verify: 'none', once: true, kind: 'milestone' },
   backupWallet: { points: 75, verify: 'none', once: true, kind: 'milestone' },
   enable2fa: { points: 60, verify: 'none', once: true, kind: 'milestone' },
@@ -176,7 +179,7 @@ export const ACHIEVEMENTS = Object.freeze([
 /** Referral rules (spec §7). */
 export const REFERRAL = Object.freeze({
   /** Qualifying actions for an invitee (must be rpc-verified). */
-  qualifying: ['swap', 'bridge', 'lending', 'borrow'],
+  qualifying: ['swap', 'bridge', 'lending', 'borrow', 'inviteVisit'],
   /** Max new attributed wallets per code, per day — anti-farming. */
   maxPerCodePerDay: 20,
   /** Max total attributed wallets kept per code. */

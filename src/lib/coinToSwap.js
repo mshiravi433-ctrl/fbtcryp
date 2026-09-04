@@ -67,6 +67,36 @@ export const SOLANA_TARGET = {
 };
 
 /**
+ * Native L1s that are not EVM/Solana but this app already quotes on THORChain
+ * (Bridge → Native tab). Bitcoin itself stays on the curated EVM table
+ * (BTCB / WBTC) because that is a one-tap wallet swap. BCH and XRP have no
+ * curated EVM contract here, so Buy/Sell used to print "cannot swap" while
+ * the THOR panel could already quote them.
+ *
+ * Cardano (ADA) is still refused: THOR has no ADA pool, and we do not open
+ * a swap on a wrapped ticker that is a different asset.
+ */
+export const THOR_NATIVE = {
+  'bitcoin-cash': { asset: 'BCH.BCH', symbol: 'BCH', name: 'Bitcoin Cash', coingeckoId: 'bitcoin-cash' },
+  ripple: { asset: 'XRP.XRP', symbol: 'XRP', name: 'XRP', coingeckoId: 'ripple' },
+  litecoin: { asset: 'LTC.LTC', symbol: 'LTC', name: 'Litecoin', coingeckoId: 'litecoin' },
+  dogecoin: { asset: 'DOGE.DOGE', symbol: 'DOGE', name: 'Dogecoin', coingeckoId: 'dogecoin' }
+};
+
+const THOR_COUNTER = 'ETH.ETH';
+
+export function thorTargetFor(coingeckoId) {
+  const row = THOR_NATIVE[String(coingeckoId || '').trim().toLowerCase()];
+  if (!row) return null;
+  return {
+    kind: 'thor',
+    chainId: null,
+    chainName: 'THORChain',
+    token: row
+  };
+}
+
+/**
  * Find a real, swappable token for a CoinGecko coin id.
  *
  * @returns {{kind:'evm'|'solana', chainId:number|null, token:object, chainName:string}|null}
@@ -79,6 +109,9 @@ export function swapTargetFor(coingeckoId) {
 
   /* The Solana native coin, handled before the EVM scan for clarity. */
   if (id === 'solana') return SOLANA_TARGET;
+
+  const thor = thorTargetFor(id);
+  if (thor) return thor;
 
   for (const chainId of CHAIN_PREFERENCE) {
     const list = TOKENS[chainId] ?? [];
@@ -115,6 +148,13 @@ export function swapUrlFor(coingeckoId, side = 'buy') {
      taken from a URL (see src/pages/SolanaSwap.jsx). */
   if (target.kind === 'solana') {
     return `/solana?to=${encodeURIComponent(target.token.symbol)}&side=${side}`;
+  }
+
+  if (target.kind === 'thor') {
+    const asset = target.token.asset;
+    const from = side === 'sell' ? asset : THOR_COUNTER;
+    const to = side === 'sell' ? THOR_COUNTER : asset;
+    return `/bridge?mode=native&fromAsset=${encodeURIComponent(from)}&toAsset=${encodeURIComponent(to)}`;
   }
 
   const { chainId, token } = target;

@@ -2521,8 +2521,8 @@ export default function run() {
     const telegramContext = strip(read('src/context/TelegramContext.jsx'));
 
     t('the invite link has no placeholder host', !/your_bot_username/.test(code));
-    t('the invite link uses the centralized bot-link helper',
-      /telegramBotStartAppUrl\(refCode\)/.test(code));
+    t('the invite link uses the public site URL with the ref code',
+      /siteInviteUrl\(refCode\)/.test(code));
     t('the public bot identity names fbtco_bot',
       /DEFAULT_BOT_USERNAME\s*=\s*'fbtco_bot'/.test(bot) && /https:\/\/t\.me\/\$\{TELEGRAM_BOT_USERNAME\}/.test(bot));
     t('the public bot ID is 7837421575', /DEFAULT_BOT_ID\s*=\s*'7837421575'/.test(bot));

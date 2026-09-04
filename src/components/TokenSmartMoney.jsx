@@ -90,13 +90,13 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <div style={{ flex: 1 }}>
               <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{t('sm.accumulation')}</div>
-              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${accum?.confidence || 0}%`, background: '#2ee6a8' }} /></div>
-              <div className="sm-up" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{accum?.confidence ?? 0}%</div>
+              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${accum?.confidence != null ? accum.confidence : 0}%`, background: '#2ee6a8' }} /></div>
+              <div className="sm-up" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{accum?.confidence != null ? `${accum.confidence}%` : '—'}</div>
             </div>
             <div style={{ flex: 1 }}>
               <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{t('sm.distribution')}</div>
-              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${distrib?.confidence || 0}%`, background: '#ff5c7a' }} /></div>
-              <div className="sm-down" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{distrib?.confidence ?? 0}%</div>
+              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${distrib?.confidence != null ? distrib.confidence : 0}%`, background: '#ff5c7a' }} /></div>
+              <div className="sm-down" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{distrib?.confidence != null ? `${distrib.confidence}%` : '—'}</div>
             </div>
           </div>
 

@@ -2850,36 +2850,45 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 .guide-rail {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-top: 14px;
 }
 
 .guide-rail-item {
-  flex: 1;
-  height: 4px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: var(--line-strong);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text-2);
   cursor: pointer;
+  font: inherit;
 }
 
-.guide-rail-fill {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
-  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+.guide-rail-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
 }
 
-.guide-rail-item[data-state='active'] .guide-rail-fill { width: 100%; }
-.guide-rail-item[data-state='seen'] .guide-rail-fill {
-  width: 100%;
-  background: var(--rgb-4);
-  opacity: 0.55;
+.guide-rail-item[data-state='active'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, var(--line));
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--rgb-1) 12%, var(--bg-panel));
+}
+
+.guide-rail-item[data-state='seen'] {
+  border-color: color-mix(in srgb, var(--up) 55%, var(--line));
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 14%, var(--bg-panel));
 }
 
 /* ------------------------------ scroll box ------------------------------- */

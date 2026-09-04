@@ -247,9 +247,10 @@ export default function Guide({ onDone }) {
               className="guide-rail-item"
               data-state={i === index ? 'active' : seen.has(i) ? 'seen' : 'todo'}
               onClick={() => go(i)}
-              aria-label={t(`guide.${s.key}.title`)}
+              aria-label={t(`guide.rail.${s.key}`)}
             >
-              <span className="guide-rail-fill" />
+              <s.Icon width={16} height={16} />
+              <span className="guide-rail-label">{t(`guide.rail.${s.key}`)}</span>
             </button>
           ))}
         </div>

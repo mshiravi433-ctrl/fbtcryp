@@ -40,7 +40,8 @@ import {
   clearReferral,
   isValidRefCode,
   referredBy,
-  referrerShare
+  referrerShare,
+  siteInviteUrl
 } from '../src/lib/referral.js';
 import { backpackBrowseLink, phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import {
@@ -1911,6 +1912,11 @@ export default async function run() {
     clearReferral();
     t('a Telegram URL launch parameter is captured',
       captureReferral('?tgWebAppStartParam=URLFRIEND') === 'URLFRIEND');
+    clearReferral();
+    t('a HashRouter invite is captured from the hash query',
+      captureReferral('', '', '#/?ref=HASHFRIEND') === 'HASHFRIEND');
+    t('the public invite URL is the live site with the code after the hash',
+      siteInviteUrl('FRIEND01') === 'https://fbtswap.ir/#/?ref=FRIEND01');
     clearReferral();
     t('an invalid Telegram start_param is refused', captureReferral('', '<bad>') === null);
 
@@ -5582,6 +5588,10 @@ export default async function run() {
      */
     t('a coin on an unsupported chain refuses', swapTargetFor('cardano') === null);
     t('...and isSwappable agrees', isSwappable('cardano') === false && isSwappable('bitcoin') === true);
+    t('BCH is a THOR native, not an EVM guess', swapTargetFor('bitcoin-cash')?.kind === 'thor');
+    t('XRP is a THOR native', swapTargetFor('ripple')?.kind === 'thor');
+    t('buying BCH opens the native bridge tab', /mode=native/.test(swapUrlFor('bitcoin-cash', 'buy') || '') && /toAsset=BCH/.test(swapUrlFor('bitcoin-cash', 'buy') || ''));
+    t('selling XRP spends XRP on THOR', /fromAsset=XRP/.test(swapUrlFor('ripple', 'sell') || ''));
     t('junk input refuses', swapTargetFor('') === null && swapTargetFor(null) === null);
 
     /*
