@@ -18,6 +18,68 @@ import { storeGet, storeSet } from './store.js';
 const LEARNING_STORE_KEY = 'fbt.ai.learning.v3';
 const MAX_LEARNING_RECORDS = 500;
 
+const SENSITIVE_PATTERNS = [
+  /0x[a-fA-F0-9]{64}/i, // 32-byte hex private key
+  /(?:\b(?:abandon|ability|able|about|above|absent|absorb|abstract|absurd|abuse|access|accident|account|accuse|achieve|acid|acoustic|acquire|across|act|action|actor|actress|actual|adapt|add|addict|address|adjust|admit|adult|advance|advice|aerobic|affair|afford|afraid|again|age|agent|agree|ahead|aim|air|airport|aisle|alarm|album|alcohol|alert|alien|all|alley|allow|almost|alone|alpha|already|also|alter|always|amateur|amazing|among|amount|amused|analyst|anchor|ancient|anger|angle|angry|animal|ankle|announce|annual|another|answer|antenna|antique|anxiety|any|apart|apology|appear|apple|approve|april|arch|arctic|area|arena|argue|arm|armed|armor|army|around|arrange|arrest|arrive|arrow|art|artefact|artist|artwork|ask|aspect|assault|asset|assist|assume|asthma|athlete|atom|attack|attend|attitude|attract|auction|audit|august|aunt|author|auto|autumn|average|avocado|avoid|awake|aware|away|awesome|awful|awkward|axis|baby|bachelor|bacon|badge|bag|balance|balcony|ball|bamboo|banana|banner|bar|barely|bargain|barrel|base|basic|basket|battle|beach|bean|beauty|because|become|beef|before|begin|behave|behind|believe|below|belt|bench|benefit|best|betray|better|between|beyond|bicycle|bid|bike|bind|biology|bird|birth|bitter|black|blade|blame|blanket|blast|bleak|bless|blind|blood|blossom|blouse|blue|blur|blush|board|boat|body|boil|bomb|bone|bonus|book|boost|border|boring|borrow|boss|bottom|bounce|box|boy|bracket|brain|brand|brass|brave|bread|breeze|brick|bridge|brief|bright|bring|brisk|broccoli|broken|bronze|broom|brother|brown|brush|bubble|buddy|budget|buffalo|build|bulb|bulk|bullet|bundle|bunker|burden|burger|burst|bus|business|busy|butter|buyer|buzz)\b\s*){11,24}/i,
+  /bearer\s+[a-zA-Z0-9_\-\.]{20,}/i
+];
+
+export function containsSensitiveKeyOrPhrase(input) {
+  if (!input) return false;
+  const str = typeof input === 'string' ? input : JSON.stringify(input);
+  return SENSITIVE_PATTERNS.some(pat => pat.test(str));
+}
+
+export function anonymizeFeedbackContext(context = {}) {
+  if (!context) return {};
+  const scrubbed = JSON.parse(JSON.stringify(context));
+  
+  function scrubValue(val) {
+    if (typeof val === 'string') {
+      if (containsSensitiveKeyOrPhrase(val)) {
+        return '[REDACTED_SECRET]';
+      }
+      return val;
+    }
+    if (Array.isArray(val)) {
+      return val.map(scrubValue);
+    }
+    if (val && typeof val === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (/key|secret|password|seed|token|auth/i.test(k) || containsSensitiveKeyOrPhrase(v)) {
+          out[k] = '[REDACTED_SECRET]';
+        } else {
+          out[k] = scrubValue(v);
+        }
+      }
+      return out;
+    }
+    return val;
+  }
+
+  return scrubValue(scrubbed);
+}
+
+export async function recordLearningFeedback({
+  intentId = null,
+  intentType = 'GENERAL',
+  rating = 1,
+  feedbackText = '',
+  context = {}
+} = {}) {
+  const safeContext = anonymizeFeedbackContext(context);
+  const safeText = containsSensitiveKeyOrPhrase(feedbackText) ? '[REDACTED_SECRET]' : String(feedbackText || '').slice(0, 500);
+
+  return recordIntentOutcome({
+    intentId,
+    intentType,
+    userApproved: rating > 0,
+    confidenceScore: rating > 0 ? 95 : 40,
+    errorCategory: rating <= 0 ? (safeText || 'USER_NEGATIVE_FEEDBACK') : null
+  });
+}
+
 // In-memory ring buffer with fallback to store
 let memoryRecords = [];
 

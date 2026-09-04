@@ -17,7 +17,7 @@ export const MODULES = Object.freeze([
   'farming', 'liquidity', 'staking', 'futures', 'dydx', 'stocks', 'etf',
   'funds', 'forex', 'commodities', 'rwa', 'crypto', 'signals', 'news',
   'events', 'alerts', 'goals', 'profit-plan', 'prediction', 'lab', 'risk',
-  'forecast', 'transactions', 'notifications', 'buy-sell'
+  'forecast', 'transactions', 'notifications'
 ]);
 
 /** §8 — capability statuses. The AI must never claim what is not true. */

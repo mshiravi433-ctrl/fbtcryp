@@ -7,6 +7,17 @@
  */
 
 import { aliasChainId, aliasToken, wantsPageOpen } from './moduleRouter.js';
+import {
+  normalizeUpgrade4,
+  extractEntitiesUpgrade4,
+  classifyQuestionType,
+  detectConflict,
+  detectUserCorrection,
+  calculateClarificationPriority,
+  calculateConfidenceBreakdown,
+  predictNextActions,
+  QUESTION_TYPES
+} from './intentUnderstandingEngine.js';
 
 export const INTENT_TYPES = Object.freeze([
   'PORTFOLIO_ANALYSIS',
@@ -205,11 +216,11 @@ function scoreKeywords(normalized) {
 }
 
 /**
- * «بیت کوین چطوره» / «قیمت اتریوم» — a token name plus a question about it is
+ * «بیت کوین چطوره» / «قیمت اتریوم» / «بیت کوین چیه» — a token name plus a question about it is
  * a token analysis, not a swap and not GENERAL. Kept separate from the lexicon
  * because it needs the extracted entity, not a word.
  */
-const TOKEN_QUESTION = /(چطور|چطوره|چگونه|وضعیت|قیمت|نرخ|تحلیل|بخرم|ارزش|how is|how's|what about|price of|outlook|worth)/i;
+const TOKEN_QUESTION = /(چطور|چطوره|چگونه|وضعیت|قیمت|نرخ|تحلیل|بخرم|ارزش|چیه|چیست|how is|how's|what is|what about|price of|outlook|worth)/i;
 
 // Persian + English patterns
 const INTENT_PATTERNS = [
@@ -224,7 +235,8 @@ const INTENT_PATTERNS = [
       /portfolio.*analysis|analyze.*portfolio/i,
       /why.*portfolio.*down|portfolio.*down/i,
       /عملکرد.*پرتفوی|وضعیت.*پرتفوی/i,
-      /پرتفوی\s*من|پرتفویم|my portfolio|پرتفوی\s*\?/i
+      /پرتفوی\s*من|پرتفویم|my portfolio|پرتفوی\s*\?/i,
+      /من.*دارم\s*\?|دارم\s*\?|دارم\s*$|چیا دارم|چه دارایی.*دارم|کدوم دارایی.*دارم|do i have/i
     ]
   },
   {
@@ -233,9 +245,9 @@ const INTENT_PATTERNS = [
     patterns: [
       /موجودی.*بررسی|بررسی.*موجودی/i,
       /موجودی.*من|موجودیم/i,
-      /چقدر.*دارم|دارایی.*من/i,
+      /چقدر.*دارم|دارایی.*من|چقدر.*سرمایه/i,
       /موجودی.*چقدر|چقدر.*موجودی/i,
-      /balance|how much.*have|my balance/i,
+      /balance|how much.*have|how many.*have|my balance/i,
       /کیف پول.*موجودی|موجودی.*کیف/i
     ]
   },
@@ -299,7 +311,8 @@ const INTENT_PATTERNS = [
       /بهترین.*سرمایه|سرمایه.*بهترین/i,
       /1000.*دلار.*سرمایه|سرمایه.*1000/i,
       /investment.*plan|best.*invest/i,
-      /برای.*ETH.*سرمایه/i
+      /برای.*ETH.*سرمایه/i,
+      /پولم.*زیاد|سرمایه‌ام.*بیشتر|سرمایه‌ام.*رشد|رشد.*سرمایه|grow.*money/i
     ]
   },
   {
@@ -324,8 +337,16 @@ const INTENT_PATTERNS = [
     type: 'BUY',
     weight: 4,
     patterns: [
-      /بخر|خرید.*کن|می‌خواهم.*ETH|ETH.*می‌خواهم/i,
-      /buy.*ETH|get.*ETH|want.*ETH/i
+      /بخر|خرید.*کن|می‌خواهم.*ETH|ETH.*می‌خواهم|برام.*بخر|یه مقدار.*بگیر/i,
+      /buy.*ETH|get.*ETH|want.*ETH|buy bitcoin|buy /i
+    ]
+  },
+  {
+    type: 'SELL',
+    weight: 4,
+    patterns: [
+      /بفروش|فروش.*کن|می‌خواهم.*بفروشم|رو بفروش/i,
+      /sell.*ETH|sell /i
     ]
   },
   {
@@ -334,6 +355,20 @@ const INTENT_PATTERNS = [
     patterns: [
       /بریج|بریدج|پل.*زنجیره/i,
       /bridge|cross.*chain/i
+    ]
+  },
+  {
+    type: 'ORDERS',
+    weight: 6,
+    patterns: [
+      /اگر.*شد.*بخر|اگر.*رسید.*بخر|اگه.*شد.*بخر|conditional.*order|limit.*order/i
+    ]
+  },
+  {
+    type: 'NOTIFICATIONS',
+    weight: 6,
+    patterns: [
+      /اگر.*رسید.*خبر|اگر.*شد.*خبر|خبرم کن|اطلاع بده|alert me|notify me/i
     ]
   },
   {
@@ -663,8 +698,13 @@ export function understandIntent(message, context = {}) {
     matched.push({ type: nav.type, score: 6, nav });
   }
 
-  // Entity extraction
-  const entities = extractEntities(text);
+  // Entity extraction (Upgrade 4)
+  const entities = extractEntities(text, context);
+
+  // Upgrade 4 NLP classification & conflict/correction analysis
+  const questionType = classifyQuestionType(text);
+  const conflict = detectConflict(text);
+  const correction = detectUserCorrection(text, context);
 
   /*
    * A named token plus a question about it is a token analysis. Without this
@@ -681,63 +721,133 @@ export function understandIntent(message, context = {}) {
   const sorted = [...scores.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
   const top = sorted[0];
 
+  // If user corrected to SELL / BUY / SWAP, apply correction
+  if (correction && correction.newIntent) {
+    scores.set(correction.newIntent, (scores.get(correction.newIntent) || 0) + 15);
+  }
+
   // If no clear intent, try to infer from context
   if (!top || top[1] < 3) {
     // Contextual follow-up: "this" "it" refers to current page/action
     if (/(این|همین|this|it).*اجرا|اجرا.*کن/i.test(text) && context.currentPage) {
+      const breakdown = calculateConfidenceBreakdown({ intentType: 'EXECUTE_CURRENT', entities, context, questionType });
+      const clarification = calculateClarificationPriority({ intentType: 'EXECUTE_CURRENT', entities, context });
       return {
         ok: true,
         type: 'EXECUTE_CURRENT',
+        primaryIntent: 'EXECUTE_CURRENT',
         confidence: 0.85,
+        confidenceBreakdown: breakdown,
+        questionType,
         entities,
         raw: text,
         contextRef: context.currentPage,
         matched: [],
-        isFollowUp: true
+        isFollowUp: true,
+        missingInformation: clarification.missingFields,
+        clarificationPriority: clarification.priorityList,
+        minimalQuestion: clarification.minimalQuestion,
+        isCorrection: Boolean(correction?.isCorrection),
+        isConflict: Boolean(conflict.conflict),
+        conflictDetails: conflict.conflict ? { messageFa: conflict.messageFa, messageEn: conflict.messageEn } : null
       };
     }
 
     const slots = context.operational || {};
     if (/(بخرش|بفروشش|بخر|فروش|تبدیل|انجام بده)/i.test(text) && (slots.asset || entities.token)) {
       const op = /فروش|sell/i.test(text) ? 'SELL' : (/تبدیل|swap/i.test(text) ? 'SWAP' : 'BUY');
+      const mergedEntities = {
+        ...entities,
+        token: entities.token || slots.asset,
+        amount: entities.amount || entities.amountUsd || slots.amount
+      };
+      const breakdown = calculateConfidenceBreakdown({ intentType: op, entities: mergedEntities, context, questionType });
+      const clarification = calculateClarificationPriority({ intentType: op, entities: mergedEntities, context });
       return {
         ok: true,
         type: op,
+        primaryIntent: op,
         confidence: 0.8,
-        entities: {
-          ...entities,
-          token: entities.token || slots.asset,
-          amount: entities.amount || entities.amountUsd || slots.amount
-        },
+        confidenceBreakdown: breakdown,
+        questionType,
+        entities: mergedEntities,
         raw: text,
         isFollowUp: true,
-        matched
+        matched,
+        missingInformation: clarification.missingFields,
+        clarificationPriority: clarification.priorityList,
+        minimalQuestion: clarification.minimalQuestion,
+        isCorrection: Boolean(correction?.isCorrection),
+        isConflict: Boolean(conflict.conflict),
+        conflictDetails: conflict.conflict ? { messageFa: conflict.messageFa, messageEn: conflict.messageEn } : null
       };
     }
 
+    const clarification = calculateClarificationPriority({ intentType: 'GENERAL', entities, context });
+    const breakdown = calculateConfidenceBreakdown({ intentType: 'GENERAL', entities, context, questionType });
     return {
       ok: true,
       type: 'GENERAL',
+      primaryIntent: 'GENERAL',
       confidence: 0.3,
+      confidenceBreakdown: breakdown,
+      questionType,
       entities,
       raw: text,
       matched,
-      shouldAsk: false
+      shouldAsk: false,
+      missingInformation: clarification.missingFields,
+      clarificationPriority: clarification.priorityList,
+      minimalQuestion: clarification.minimalQuestion,
+      isCorrection: Boolean(correction?.isCorrection),
+      isConflict: Boolean(conflict.conflict),
+      conflictDetails: conflict.conflict ? { messageFa: conflict.messageFa, messageEn: conflict.messageEn } : null
     };
   }
 
   const confidence = Math.min(0.98, top[1] / (top[1] + (sorted[1]?.[1] || 0) + 1) + 0.3);
+  const secondary = sorted.slice(1, 3).map(([k]) => k);
+  const selectedType = (correction && correction.newIntent) ? correction.newIntent : top[0];
+
+  const clarification = calculateClarificationPriority({ intentType: selectedType, entities, context });
+  const breakdown = calculateConfidenceBreakdown({ intentType: selectedType, entities, context, questionType });
+  const nextPredictedActions = predictNextActions({ intentType: selectedType, entities, context });
 
   return {
     ok: true,
-    type: top[0],
+    type: selectedType,
+    primaryIntent: selectedType,
+    secondaryIntents: secondary,
     confidence: Math.round(confidence * 100) / 100,
+    confidenceBreakdown: breakdown,
+    questionType,
     entities,
+    goal: entities.targetReturn ? 'TARGET_RETURN' : entities.timeframe ? 'TIMEFRAME_GROWTH' : null,
+    assets: entities.tokens?.map((sym) => ({ symbol: sym, role: sym === entities.toToken ? 'target' : 'primary' })) || [],
+    amount: entities.amount ? [{ value: entities.amount, unit: entities.amountUnit || 'USD', isRelative: Boolean(entities.isRelative) }] : [],
+    currency: entities.currency || 'USD',
+    network: entities.network || null,
+    timeframe: entities.timeframe || null,
+    riskPreference: entities.riskPreference || null,
+    targetReturn: entities.targetReturn || null,
+    targetReturnNote: entities.targetReturnNote || null,
+    constraints: entities.constraints || [],
+    urgency: entities.urgency || 'normal',
+    executionRequested: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE'].includes(selectedType) || /(برام.*بخر|اجرا کن|do it)/i.test(text),
+    missingInformation: clarification.missingFields,
+    clarificationPriority: clarification.priorityList,
+    minimalQuestion: clarification.minimalQuestion,
+    assumptions: [],
+    requiresConfirmation: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE', 'REBALANCE'].includes(selectedType),
+    isCorrection: Boolean(correction?.isCorrection),
+    isConflict: Boolean(conflict.conflict),
+    conflictDetails: conflict.conflict ? { messageFa: conflict.messageFa, messageEn: conflict.messageEn } : null,
+    nextPredictedActions,
     raw: text,
     matched,
     navigation: nav,
     isFollowUp: /(این|همین|this|it)/i.test(text),
-    requiresWallet: ['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'REBALANCE', 'FARM', 'LEND', 'BORROW', 'DCA'].includes(top[0]),
+    requiresWallet: ['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'REBALANCE', 'FARM', 'LEND', 'BORROW', 'DCA'].includes(selectedType),
     readOnly: [
       'PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC',
       'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
@@ -747,45 +857,49 @@ export function understandIntent(message, context = {}) {
       'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND',
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
       'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES'
-    ].includes(top[0]),
-    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(top[0])
+    ].includes(selectedType),
+    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
   };
 }
 
-function extractEntities(text) {
-  const entities = {};
-
+function extractEntities(text, context = {}) {
+  const deep = extractEntitiesUpgrade4(text, context);
   const raw = String(text || '');
 
   const amountMatch = raw.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s*(USDC|USDT|ETH|BTC|SOL|USD|\$|دلار|تتر)/i);
-  if (amountMatch) {
-    entities.amount = amountMatch[1].replace(/,/g, '');
-    entities.amountSymbol = aliasToken(amountMatch[2]) || amountMatch[2];
+  if (amountMatch && !deep.amount) {
+    deep.amount = amountMatch[1].replace(/,/g, '');
+    deep.amountSymbol = aliasToken(amountMatch[2]) || amountMatch[2];
   }
 
   const dollarMatch = raw.match(/(?:\$|usd|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)/i);
-  if (dollarMatch && !entities.amount) {
-    entities.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
+  if (dollarMatch && !deep.amountUsd) {
+    deep.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
+    if (!deep.amount) deep.amount = deep.amountUsd;
   }
 
-  const tokens = [];
+  const tokens = [...(deep.tokens || [])];
   const aliasHits = ['تتر', 'اتریوم', 'اتر', 'بیت‌کوین', 'بیت کوین', 'بیتکوین', 'سولانا', 'بایننس'];
   for (const a of aliasHits) {
     if (raw.includes(a)) {
       const t = aliasToken(a);
-      if (t) tokens.push(t);
+      if (t && !tokens.includes(t)) tokens.push(t);
     }
   }
   const tokenRegex = /\b(ETH|BTC|SOL|USDC|USDT|BNB|ARB|MATIC|AVAX|OP|DAI)\b/gi;
-  for (const m of raw.matchAll(tokenRegex)) tokens.push(m[1].toUpperCase());
+  for (const m of raw.matchAll(tokenRegex)) {
+    const sym = m[1].toUpperCase();
+    if (!tokens.includes(sym)) tokens.push(sym);
+  }
   const uniq = [...new Set(tokens)];
   if (uniq.length) {
-    entities.tokens = uniq;
+    deep.tokens = uniq;
     if (uniq.length >= 2) {
-      entities.fromToken = uniq[0];
-      entities.toToken = uniq[1];
+      deep.fromToken = deep.fromToken || uniq[0];
+      deep.toToken = deep.toToken || uniq[1];
+      deep.token = deep.token || uniq[0];
     } else {
-      entities.token = uniq[0];
+      deep.token = deep.token || uniq[0];
     }
   }
 
@@ -793,8 +907,8 @@ function extractEntities(text) {
   if (toPrep) {
     const dest = aliasToken(toPrep[1]) || String(toPrep[1]).toUpperCase();
     if (dest) {
-      entities.toToken = dest;
-      if (entities.token && entities.token !== dest) entities.fromToken = entities.fromToken || entities.token;
+      deep.toToken = dest;
+      if (deep.token && deep.token !== dest) deep.fromToken = deep.fromToken || deep.token;
     }
   }
 
@@ -808,36 +922,36 @@ function extractEntities(text) {
   foundChains.sort((a, b) => a.j - b.j);
   const chains = foundChains.map((c) => c.w.toLowerCase());
   const chainIds = foundChains.map((c) => c.id).filter(Boolean);
-  if (chains.length) entities.chains = [...new Set(chains)];
+  if (chains.length) deep.chains = [...new Set(chains)];
   if (chainIds.length) {
     const uniqueIds = [...new Set(chainIds)];
-    entities.chainIds = uniqueIds;
-    entities.network = uniqueIds[0];
+    deep.chainIds = uniqueIds;
+    deep.network = uniqueIds[0];
     if (uniqueIds.length > 1) {
-      entities.fromChain = uniqueIds[0];
-      entities.toChain = uniqueIds[1];
-      entities.destinationNetwork = uniqueIds[1];
+      deep.fromChain = uniqueIds[0];
+      deep.toChain = uniqueIds[1];
+      deep.destinationNetwork = uniqueIds[1];
     }
   }
 
   const evmAddr = raw.match(/0x[a-fA-F0-9]{40}/);
-  if (evmAddr) entities.toAddress = evmAddr[0];
+  if (evmAddr && !deep.toAddress) deep.toAddress = evmAddr[0];
 
   // Timeframes
-  const timeMatch = text.match(/(\d+)\s*(سال|ماه|روز|year|month|day)/i);
-  if (timeMatch) {
-    entities.timeframe = { value: timeMatch[1], unit: timeMatch[2] };
+  const timeMatch = raw.match(/(\d+)\s*(سال|ماه|روز|year|month|day)/i);
+  if (timeMatch && !deep.timeframe) {
+    deep.timeframe = { value: timeMatch[1], unit: timeMatch[2] };
   }
 
   // Risk
-  if (/ریسک.*کم|low.*risk|محافظه/i.test(raw)) entities.riskTolerance = 'low';
-  else if (/ریسک.*متوسط|medium.*risk/i.test(raw)) entities.riskTolerance = 'medium';
-  else if (/ریسک.*زیاد|high.*risk|تهاجمی/i.test(raw)) entities.riskTolerance = 'high';
+  if (/ریسک.*کم|low.*risk|محافظه/i.test(raw)) deep.riskTolerance = 'low';
+  else if (/ریسک.*متوسط|medium.*risk/i.test(raw)) deep.riskTolerance = 'medium';
+  else if (/ریسک.*زیاد|high.*risk|تهاجمی/i.test(raw)) deep.riskTolerance = 'high';
 
-  if (/solana|سولانا/i.test(raw)) entities.venue = 'solana';
-  else if (/evm|اتریوم|آربیتروم|بیس/i.test(raw)) entities.venue = 'evm';
+  if (/solana|سولانا/i.test(raw)) deep.venue = 'solana';
+  else if (/evm|اتریوم|آربیتروم|بیس/i.test(raw)) deep.venue = 'evm';
 
-  return entities;
+  return deep;
 }
 
 // Acceptance tests (Spec §40)

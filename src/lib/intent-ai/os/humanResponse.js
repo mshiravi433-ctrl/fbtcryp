@@ -38,6 +38,55 @@ const LEAK_PATTERNS = [
 
 const ALLOWED_CAPS = new Set(['ETH', 'BTC', 'SOL', 'USDC', 'USDT', 'BNB', 'ARB', 'OK', 'USD']);
 
+export function formatUnderstandingConfirmation(intentData = {}, { locale = 'fa' } = {}) {
+  const isEn = String(locale).toLowerCase().startsWith('en');
+  const action = intentData.action || intentData.intentType || intentData.primaryIntent || 'REQUEST';
+  const params = intentData.parameters || intentData.entities || {};
+  const impact = intentData.estimatedImpact || '';
+  const assumptions = intentData.assumptions || [];
+
+  const paramStrings = Object.entries(params)
+    .filter(([_, v]) => v != null && v !== '')
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  if (isEn) {
+    let out = `I understand you want to execute: ${action}\n`;
+    if (paramStrings) out += `• Parameters: ${paramStrings}\n`;
+    if (impact) out += `• Estimated impact: ${impact}\n`;
+    if (assumptions.length) out += `• Assumptions: ${assumptions.join('; ')}\n`;
+    out += `\nPlease confirm if you want to proceed.`;
+    return out;
+  }
+
+  let out = `من متوجه شدم که می‌خواهید عملیات زیر را انجام دهید: ${action}\n`;
+  if (paramStrings) out += `• مشخصات: ${paramStrings}\n`;
+  if (impact) out += `• برآورد اثر: ${impact}\n`;
+  if (assumptions.length) out += `• فرضیات: ${assumptions.join('؛ ')}\n`;
+  out += `\nدر صورت تایید، دستور اجرا خواهد شد.`;
+  return out;
+}
+
+export function formatConflictResolution(conflict = {}, { locale = 'fa' } = {}) {
+  const isEn = String(locale).toLowerCase().startsWith('en');
+  const prev = conflict.previousIntent || conflict.from || 'previous operation';
+  const next = conflict.newIntent || conflict.to || 'new operation';
+
+  if (isEn) {
+    return `Notice: Your current request (${next}) conflicts with your earlier request (${prev}). Would you like to override it and proceed with the new action?`;
+  }
+
+  return `توجه: درخواست جدید شما با درخواست قبلی (${prev}) در تعارض است. آیا مایلید با دستور جدید (${next}) ادامه دهیم؟`;
+}
+
+export function formatRiskWarning({ riskScore = 'HIGH', reason = '' } = {}, { locale = 'fa' } = {}) {
+  const isEn = String(locale).toLowerCase().startsWith('en');
+  if (isEn) {
+    return `⚠️ High Risk Warning (${riskScore}): ${reason || 'This transaction carries market volatility or leverage risk.'} Capital is never guaranteed.`;
+  }
+  return `⚠️ هشدار ریسک (${riskScore}): ${reason || 'این عملیات شامل نوسان بازار یا اهرم است.'} سود تضمین‌شده وجود ندارد و اصل سرمایه ممکن است با کاهش روبرو شود.`;
+}
+
 export function stripInternalLeaks(text) {
   let out = String(text || '');
   for (const re of LEAK_PATTERNS) {
@@ -125,6 +174,15 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
   const connected = isConnected(context, results);
   const hydrating = isHydrating(context, results);
 
+  if (intent?.isConflict || results?.isConflict) {
+    const conflictMsg = intent?.conflictDetails?.messageFa || results?.conflictDetails?.messageFa || 'منظورتان خرید است یا فروش آن؟';
+    const conflictMsgEn = intent?.conflictDetails?.messageEn || results?.conflictDetails?.messageEn || 'Did you mean to buy or sell?';
+    return {
+      message: lang === 'fa' ? conflictMsg : conflictMsgEn,
+      ui: { type: 'TEXT' }
+    };
+  }
+
   /*
    * A module that exists in the spec but not in this build must be stated
    * plainly — the user typed a real request, and the honest answer is that
@@ -136,6 +194,96 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         ? 'این بخش (افق جهانی / فیوچرز / dYdX) در این بیلد فعال نیست و صفحه‌اش در این نسخه وجود ندارد. می‌توانم در بخش‌های فعال مثل سواپ، فارم، وام یا بازار کمکت کنم.'
         : 'That module (Horizon / perpetuals / dYdX) is not enabled in this build — its page does not exist in this version. I can help with swap, farm, lending or markets instead.',
       ui: { type: 'TEXT' }
+    };
+  }
+
+  /*
+   * Specific Token Portfolio Query (e.g. "من بیت کوین دارم؟" / "بیت کوین دارم؟")
+   */
+  const rawText = String(intent?.raw || '').toLowerCase();
+  const isHoldingQuery = /(دارم\s*\?|دارم\s*$|من.*دارم|do i have)/i.test(rawText) && Boolean(intent?.entities?.token);
+  if (isHoldingQuery && intent?.entities?.token) {
+    const sym = intent.entities.token.toUpperCase();
+    if (!connected) {
+      return {
+        message: lang === 'fa'
+          ? `برای بررسی اینکه آیا ${sym} دارید یا خیر، لطفاً کیف پول خود را متصل کنید.`
+          : `Please connect your wallet to check if you hold ${sym}.`,
+        ui: { type: 'CONNECT_WALLET' }
+      };
+    }
+    const { holdings } = collectHoldings(context, results);
+    const match = holdings.find((h) => String(h.symbol || '').toUpperCase() === sym);
+    if (match && Number(match.amount) > 0) {
+      const valStr = match.valueUsd ? ` (معادل تقریبی ${money(match.valueUsd)})` : '';
+      const valStrEn = match.valueUsd ? ` (approx. ${money(match.valueUsd)})` : '';
+      return {
+        message: lang === 'fa'
+          ? `بله، شما در این کیف پول ${match.amount} ${sym}${valStr} دارید.`
+          : `Yes, you currently have ${match.amount} ${sym}${valStrEn} in this wallet.`,
+        ui: { type: 'TEXT' },
+        holding: match
+      };
+    }
+    return {
+      message: lang === 'fa'
+        ? `بر اساس موجودی فعلی کیف پول، شما در حال حاضر دارایی ${sym} در این والت ندارید.`
+        : `Based on your current wallet balance, you do not hold any ${sym} in this wallet.`,
+      ui: { type: 'TEXT' }
+    };
+  }
+
+  /*
+   * "چیا دارم که بفروشم؟" — Portfolio Candidate Inspection
+   */
+  if (/(چیا دارم که بفروشم|چی دارم بفروشم|دارایی.*فروش|what can i sell)/i.test(rawText)) {
+    if (!connected) {
+      return {
+        message: lang === 'fa'
+          ? 'برای مشاهده دارایی‌های قابل فروش، لطفاً ابتدا کیف پول خود را متصل کنید.'
+          : 'Please connect your wallet to view sellable assets.',
+        ui: { type: 'CONNECT_WALLET' }
+      };
+    }
+    const { holdings } = collectHoldings(context, results);
+    const sellable = holdings.filter((h) => Number(h.valueUsd) > 0 || Number(h.amount) > 0);
+    if (!sellable.length) {
+      return {
+        message: lang === 'fa'
+          ? 'در حال حاضر دارایی با موجودی مثبت در کیف پول شما یافت نشد.'
+          : 'No positive-balance assets found in your wallet.',
+        ui: { type: 'TEXT' }
+      };
+    }
+    const lines = sellable.map((h) => `• ${h.symbol}: ${h.amount || '—'} (${moneyOrNa(h.valueUsd)})`);
+    return {
+      message: lang === 'fa'
+        ? `دارایی‌های موجود شما در کیف پول:\n\n${lines.join('\n')}\n\nهیچ فروشی خودکار انجام نمی‌شود. اگر می‌خواهید هر کدام را بفروشید، بفرمایید تا نقل‌قول را آماده کنم.`
+        : `Your current wallet holdings:\n\n${lines.join('\n')}\n\nNo sale will run automatically. Tell me if you wish to sell any of them.`,
+      ui: { type: 'TEXT' },
+      holdings: sellable
+    };
+  }
+
+  /*
+   * Definition question (e.g. "بیت کوین چیه؟")
+   */
+  if (/(چیست|چیه|what is|tell me about)/i.test(rawText) && intent?.entities?.token) {
+    const sym = intent.entities.token.toUpperCase();
+    const tokenInfo = {
+      BTC: { fa: 'بیت‌کوین (BTC) نخستین و شناخته‌شده‌ترین ارز دیجیتال غیرمتمرکز است که به عنوان طلای دیجیتال و ذخیره ارزش استفاده می‌شود.', en: 'Bitcoin (BTC) is the first decentralized cryptocurrency, widely used as digital gold and store of value.' },
+      ETH: { fa: 'اتریوم (ETH) پلتفرم پیشرو قراردادهای هوشمند است که اکوسیستم دیفای و برنامه‌های غیرمتمرکز را قدرت می‌بخشد.', en: 'Ethereum (ETH) is the leading smart contract platform powering decentralized finance and dApps.' },
+      USDT: { fa: 'تتر (USDT) یک استیبل‌کوین محبوب با پشتوانه دلار آمریکا است که ارزش آن همیشه در محدوده ۱ دلار تثبیت شده است.', en: 'Tether (USDT) is a major USD-pegged stablecoin maintaining a steady $1 valuation.' },
+      SOL: { fa: 'سولانا (SOL) یک شبکه بلاکچینی پرسرعت و با کارمزد بسیار پایین برای اجرای قراردادهای هوشمند و تراکنش‌های سریع است.', en: 'Solana (SOL) is a high-throughput, low-fee blockchain built for scalable decentralized applications.' }
+    }[sym] || {
+      fa: `${sym} یک توکن کریپتویی در اکوسیستم ارزهای دیجیتال است. می‌توانید نمودار قیمت و وضعیت لحظه‌ای آن را در صفحه بازار بررسی کنید.`,
+      en: `${sym} is a digital asset in the crypto ecosystem. You can inspect its live market data on the market page.`
+    };
+
+    return {
+      message: lang === 'fa' ? tokenInfo.fa : tokenInfo.en,
+      ui: { type: 'TEXT' },
+      actions: [{ id: `view-${sym.toLowerCase()}`, route: '/market', label: lang === 'fa' ? `صفحه بازار ${sym}` : `${sym} Market` }]
     };
   }
 
@@ -300,11 +448,41 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
   }
 
   if (type === 'YIELD_DISCOVERY' || type === 'INVESTMENT_PLAN' || type === 'STAKING') {
+    const rawMsg = String(intent?.raw || '').toLowerCase();
+    const isVagueGrowth = /(پولم.*زیاد|سرمایه‌ام.*بیشتر|سرمایه.*رشد|grow.*money|make.*money.*work)/i.test(rawMsg)
+      && !intent?.entities?.timeframe && !intent?.entities?.riskPreference && !intent?.entities?.amount;
+
+    if (isVagueGrowth) {
+      return {
+        message: lang === 'fa'
+          ? 'متوجه شدم؛ هدف شما افزایش ارزش سرمایه در یک بازه زمانی مشخص است.\n\nاستراتژی‌های ممکن بر اساس سطح ریسک:\n• کم‌ریسک (سود استیبل‌کوین و استخرهای کم‌نوسان)\n• متعادل (ترکیب استیکینگ دارایی‌های اصلی و استخر نقدینگی)\n• رشد بالا (تخصیص به دارایی‌های با پتانسیل رشد بالا)\n\nبرای ساختن برنامه مناسب، سطح ریسک موردنظر شما چیست؟ (کم / متعادل / بالا)'
+          : 'I understand your goal is to grow your capital.\n\nPotential strategies by risk profile:\n• Low risk (stablecoin yield & low-volatility lending)\n• Balanced (staking top assets & liquidity pools)\n• Higher growth (allocation to high-upside assets)\n\nTo tailor the plan, what is your preferred risk level? (Low / Moderate / High)',
+        ui: { type: 'CHOICE' },
+        choices: lang === 'fa'
+          ? [
+              { label: 'کم‌ریسک', value: 'LOW' },
+              { label: 'متعادل', value: 'MEDIUM' },
+              { label: 'رشد بالا', value: 'HIGH' }
+            ]
+          : [
+              { label: 'Low risk', value: 'LOW' },
+              { label: 'Moderate', value: 'MEDIUM' },
+              { label: 'High growth', value: 'HIGH' }
+            ]
+      };
+    }
+
     const scan = results.yieldOpportunities || results.opportunities || {};
     const opps = Array.isArray(scan.opportunities) ? scan.opportunities
       : (Array.isArray(scan) ? scan : (Array.isArray(results.opportunities) ? results.opportunities : []));
     const best = opps.filter((o) => o && (o.apy != null || o.protocol || o.symbol)).slice(0, 3);
     const dataStatus = scan.dataStatus || results.dataStatus;
+
+    const targetNotice = intent?.entities?.targetReturn
+      ? (lang === 'fa'
+          ? `\n\n🎯 هدف تعیین‌شده: +${intent.entities.targetReturn}٪ (این یک هدف است و تضمینی برای تحقق سود وجود ندارد).`
+          : `\n\n🎯 Target return: +${intent.entities.targetReturn}% (Goal only, not a guaranteed outcome).`)
+      : '';
 
     if (best.length) {
       const lines = best.map((o, i) => {
@@ -315,8 +493,8 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       const stamp = scan.updatedAt ? `\n\n${lang === 'fa' ? 'زمان داده' : 'As of'}: ${scan.updatedAt}` : '';
       return {
         message: lang === 'fa'
-          ? `${best.length} فرصت فعلی پیدا کردم:\n\n${lines.join('\n\n')}${stamp}\n\nاین‌ها برآوردند، تضمین سود نیستند. می‌خواهید یکی را در صفحه مربوط باز کنیم؟`
-          : `Found ${best.length} current opportunities:\n\n${lines.join('\n\n')}${stamp}\n\nEstimates, not guaranteed. Open one on its real page?`,
+          ? `${best.length} فرصت فعلی پیدا کردم:\n\n${lines.join('\n\n')}${stamp}${targetNotice}\n\nاین‌ها برآوردند، تضمین سود نیستند. می‌خواهید یکی را در صفحه مربوط باز کنیم؟`
+          : `Found ${best.length} current opportunities:\n\n${lines.join('\n\n')}${stamp}${targetNotice}\n\nEstimates, not guaranteed. Open one on its real page?`,
         ui: { type: 'TEXT' },
         opportunities: best,
         actions: [
@@ -329,18 +507,18 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
     if (dataStatus === 'empty' || (scan.ok && scan.scanned >= 0 && !best.length && scan.dataQuality && scan.dataQuality !== 'NONE')) {
       return {
-        message: lang === 'fa'
+        message: (lang === 'fa'
           ? 'در حال حاضر فرصت مناسبی که از فیلترهای ریسک شما عبور کند پیدا نشد.'
-          : 'No opportunity currently passes your risk filters.',
+          : 'No opportunity currently passes your risk filters.') + targetNotice,
         ui: { type: 'TEXT' },
         opportunities: []
       };
     }
 
     return {
-      message: lang === 'fa'
+      message: (lang === 'fa'
         ? 'اسکن فرصت‌ها را اجرا کردم، اما هیچ منبع بازار زنده پاسخ نداد. این حدس نیست — داده در دسترس نبود.'
-        : 'I ran the opportunity scan, but no live market source answered. That is not a guess — data was unavailable.',
+        : 'I ran the opportunity scan, but no live market source answered. That is not a guess — data was unavailable.') + targetNotice,
       ui: { type: 'TEXT' },
       code: 'PRICE_PROVIDER_UNAVAILABLE'
     };
@@ -351,11 +529,19 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     const from = action.input?.fromSymbol || action.from || intent?.entities?.fromToken || intent?.entities?.token || 'USDC';
     const to = action.input?.toSymbol || action.to || intent?.entities?.toToken || (type === 'BUY' ? intent?.entities?.token : 'ETH') || 'ETH';
     const amount = action.input?.amount || action.amount || intent?.entities?.amount || intent?.entities?.amountUsd || null;
+    const walletAddr = context.wallet?.address || context.walletState?.address || null;
+    const shortAddr = walletAddr ? `${walletAddr.slice(0, 6)}...${walletAddr.slice(-4)}` : null;
+
+    const opFa = type === 'BUY' ? `خرید ${to}` : type === 'SELL' ? `فروش ${from}` : type === 'SWAP' ? `تبدیل ${from} به ${to}` : type === 'SEND' ? `ارسال ${from}` : `بریج ${from}`;
+    const opEn = type === 'BUY' ? `Buy ${to}` : type === 'SELL' ? `Sell ${from}` : type === 'SWAP' ? `Swap ${from} to ${to}` : type === 'SEND' ? `Send ${from}` : `Bridge ${from}`;
+
     if (lang === 'fa') {
+      const understandText = amount
+        ? `متوجه شدم که می‌خواهید:\n\n• عملیات: ${opFa}\n• مبلغ: ${amount} ${from}\n${shortAddr ? `• کیف پول: ${shortAddr}\n` : ''}\nبرنامه آماده است. در صورت تأیید، امضا روی والت شما درخواست می‌شود (هیچ تراکنشی بدون تأیید نهایی شما اجرا نمی‌شود).`
+        : (intent?.minimalQuestion?.fa || `متوجه شدم می‌خواهید ${opFa} انجام دهید. فقط مبلغ موردنظر مشخص نشده است. چه مقدار می‌خواهید اختصاص دهید؟`);
+
       return {
-        message: amount
-          ? `نقل‌قول آماده شد:\n\n${amount} ${from} → ${to}\n\nاگر تأیید کنید، امضا را از کیف پول می‌گیرم. هیچ انتقالی بدون تأیید شما انجام نمی‌شود.`
-          : `برای ${from} → ${to} آماده‌ام. مبلغ را بگویید تا نقل‌قول زنده بگیرم.`,
+        message: understandText,
         ui: { type: 'ACTION_CARD' },
         card: {
           title: '✦ آماده اجرا',
@@ -370,10 +556,13 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         action
       };
     }
+
+    const understandTextEn = amount
+      ? `I understand you want to:\n\n• Action: ${opEn}\n• Amount: ${amount} ${from}\n${shortAddr ? `• Wallet: ${shortAddr}\n` : ''}\nReady to proceed. Confirmation will request a signature on your wallet (never executed automatically).`
+      : (intent?.minimalQuestion?.en || `I understand you want to ${opEn}. Only the amount is needed. What amount would you like to use?`);
+
     return {
-      message: amount
-        ? `Quote ready:\n\n${amount} ${from} → ${to}\n\nConfirm and I will request a wallet signature.`
-        : `Ready for ${from} → ${to}. Tell me the amount for a live quote.`,
+      message: understandTextEn,
       ui: { type: 'ACTION_CARD' },
       card: {
         title: '✦ Ready to run',

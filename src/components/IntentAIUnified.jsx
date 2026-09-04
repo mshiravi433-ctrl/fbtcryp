@@ -232,6 +232,20 @@ const ConversationRow = memo(function ConversationRow({
         {Array.isArray(m.opportunities) && m.opportunities.length ? (
           <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
         ) : null}
+        {(m.detectedIntent || (m.intentType && m.intentType !== 'GENERAL') || m.missingInfo) ? (
+          <div className="iaos-multi-ai-badge" data-testid="intent-ai-understanding-badge">
+            {m.detectedIntent || (m.intentType && m.intentType !== 'GENERAL') ? (
+              <span className="iaos-intent-pill">
+                ✦ {locale.startsWith('fa') ? `درخواست: ${m.detectedIntent || m.intentType}` : `Intent: ${m.detectedIntent || m.intentType}`}
+              </span>
+            ) : null}
+            {m.missingInfo ? (
+              <span className="iaos-missing-pill">
+                ⚠ {m.missingInfo}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {m.multiAi ? (
           <div className="iaos-multi-ai-badge" data-testid="intent-ai-multi-model-badge">
             <span className="iaos-model-pill">✦ Multi-AI</span>
@@ -560,7 +574,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMessages((prev) => [...prev, { id: makeId(), role: 'user', content: message, kind: 'user' }]);
     }
 
-    setThinking([...THINKING]);
+    const localizedThinking = locale.startsWith('fa')
+      ? ['در حال درک درخواست شما…', 'بررسی کیف پول و بازار…', 'طراحی مسیر امن…']
+      : ['Understanding your request…', 'Checking wallet & market…', 'Building safe plan…'];
+    setThinking(localizedThinking);
     setSuggestions([]);
 
     try {
@@ -594,6 +611,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
       const osResult = await intentOS.process({
         message,
+        conversationId,
         currentPage,
         walletState,
         portfolioState: aiContext.portfolio,
@@ -649,7 +667,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ui: osResult.human?.ui || osResult.ui || { type: 'TEXT' },
           card: osResult.human?.card || osResult.card || null,
           intentType: osResult.intent?.type || null,
-          suggestions: osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale),
+          detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
+          missingInfo: osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null,
+          suggestions: (osResult.intent?.nextPredictedActions?.length
+            ? osResult.intent.nextPredictedActions.map((a) => ({ id: a.intent, label: locale.startsWith('fa') ? a.labelFa : a.labelEn, prompt: a.prompt }))
+            : (osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale))),
           debug: osResult.debug || null
         };
 
@@ -713,6 +735,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         choiceKind: reply.choiceKind || null,
         intentId: reply.intentId || null,
         intentType: reply.intent?.type || osResult.intent?.type || null,
+        detectedIntent: reply.intent?.primaryIntent || reply.intent?.type || osResult.intent?.type || null,
+        missingInfo: reply.intent?.minimalQuestion ? (locale.startsWith('fa') ? reply.intent.minimalQuestion.fa : reply.intent.minimalQuestion.en) : null,
         suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext, {}, locale)),
         debug: osResult.debug || null
       };

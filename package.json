@@ -32,6 +32,7 @@
     "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
+    "test:upgrade4": "node test/intent-ai/phase204-upgrade4-intent-intelligence-probe.mjs",
     "test:phase10": "node test/intent-ai/phase10-agent-trust-probe.mjs",
     "test:phase11": "node test/intent-ai/phase11-strategy-competition-probe.mjs",
     "test:phase12": "node test/intent-ai/phase12-smart-wallet-policy-probe.mjs",

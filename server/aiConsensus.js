@@ -98,6 +98,49 @@ const ROLE_MODELS = {
  * @param {string} [params.locale] - 'fa' | 'en'
  * @param {string[]} [params.preferredProviders] - optional list of provider IDs
  */
+export function synthesizeConsensus(responses = []) {
+  if (!Array.isArray(responses) || responses.length === 0) {
+    return {
+      intent: 'GENERAL',
+      agreementScore: 100,
+      confidenceScore: 80,
+      divergenceDetected: false,
+      reasons: []
+    };
+  }
+
+  const intentCounts = {};
+  let totalConfidence = 0;
+
+  for (const r of responses) {
+    const intent = r.plan?.intent || r.intent || r.type || 'GENERAL';
+    intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+    const conf = Number(r.confidence || 0.8) > 1 ? Number(r.confidence) : Number(r.confidence || 0.8) * 100;
+    totalConfidence += conf;
+  }
+
+  const dominantIntent = Object.keys(intentCounts).reduce((a, b) => (intentCounts[a] >= intentCounts[b] ? a : b));
+  const dominantCount = intentCounts[dominantIntent];
+  const total = responses.length;
+  const agreementRatio = `${dominantCount}/${total}`;
+  const agreementScore = Math.round((dominantCount / total) * 100);
+  const avgConfidence = Math.round(totalConfidence / total);
+  const divergenceDetected = total > 1 && (dominantCount / total) < 0.67;
+
+  return {
+    intent: dominantIntent,
+    agreementRatio,
+    agreementScore,
+    confidenceScore: divergenceDetected ? Math.max(30, Math.round(avgConfidence * 0.75)) : avgConfidence,
+    divergenceDetected,
+    modelsConsulted: responses.map((r) => ({
+      provider: r.provider || 'unknown',
+      model: r.model || 'default',
+      confidence: r.confidence
+    }))
+  };
+}
+
 export async function runMultiAiDebate({
   message = '',
   context = {},
