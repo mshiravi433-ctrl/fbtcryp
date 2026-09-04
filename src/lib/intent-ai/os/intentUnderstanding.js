@@ -832,6 +832,8 @@ export function understandIntent(message, context = {}) {
     riskPreference: entities.riskPreference || null,
     targetReturn: entities.targetReturn || null,
     targetReturnNote: entities.targetReturnNote || null,
+    priceTrigger: entities.priceTrigger || null,
+    priceTriggerOperator: entities.priceTriggerOperator || null,
     constraints: entities.constraints || [],
     urgency: entities.urgency || 'normal',
     executionRequested: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE'].includes(selectedType) || /(برام.*بخر|اجرا کن|do it)/i.test(text),

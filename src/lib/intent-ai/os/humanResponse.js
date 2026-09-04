@@ -306,7 +306,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     if (route) {
       const name = pageName(route, locale);
       const e = intent?.entities || {};
-      const bits = [e.amount, e.fromToken || e.token, e.toToken, e.toAddress].filter(Boolean);
+      const bits = [e.amount, e.fromToken || e.token, e.toToken, e.toAddress, e.priceTrigger != null ? e.priceTrigger : null].filter(Boolean);
       const extra = bits.length
         ? (lang === 'fa' ? ` مقادیر آماده‌شده: ${bits.join(' → ')}.` : ` Prefill: ${bits.join(' → ')}.`)
         : '';

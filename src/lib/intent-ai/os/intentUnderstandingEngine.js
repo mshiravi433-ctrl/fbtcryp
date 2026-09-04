@@ -374,6 +374,8 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
     riskPreference: null,
     targetReturn: null,
     targetReturnNote: null,
+    priceTrigger: null,
+    priceTriggerOperator: null,
     constraints: [],
     urgency: 'normal',
     isCorrection: false,
@@ -534,6 +536,23 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
 
   if (entities.targetReturn != null) {
     entities.targetReturnNote = 'این یک هدف است و تضمینی برای تحقق سود وجود ندارد.';
+  }
+
+  // 5b. Price trigger for conditional orders / alerts
+  // «وقتی قیمتش به ۲۷۰۰ رسید» / «اگر ETH کمتر از 3000 شد خبر بده» / «alert me if eth hits 2700»
+  let triggerMatch = null;
+  try {
+    triggerMatch = norm.match(/(?:قیمتش?\s*(?:به|reached|hits|is|equals)\s*(\d+(?:\.\d+)?))|(?:اگر\s*[a-z\u0600-\u06ff]+\s*(?:کمتر از|بالاتر از|زیر|بالای|بالاتر|کمتر|below|above|under|over|>=|<=|>|<)\s*(\d+(?:\.\d+)?))|(?:اگر\s*[a-z\u0600-\u06ff]+\s*(?:به|رسید|reached|hits)\s*(\d+(?:\.\d+)?))|(?:when(?:ever)?\s*[^.!?]{0,40}?(?:hits|reaches|goes above|goes below|above|below)\s*(\d+(?:\.\d+)?))/i);
+  } catch { /* ignore malformed regex */ }
+  if (triggerMatch) {
+    const rawTrigger = triggerMatch[1] || triggerMatch[2] || triggerMatch[3] || triggerMatch[4];
+    const trigger = rawTrigger ? parseFloat(rawTrigger) : null;
+    if (trigger != null && Number.isFinite(trigger)) {
+      entities.priceTrigger = trigger;
+      entities.priceTriggerOperator = /بالاتر از|بالای|بالاتر|above|over|>=|>/.test(norm) ? 'above'
+        : /کمتر از|زیر|کمتر|below|under|<=|</.test(norm) ? 'below'
+          : 'at';
+    }
   }
 
   // 6. Risk Preference (low, moderate, high, aggressive, capital_preservation)
