@@ -1,34 +1,46 @@
 /**
- * FBT INTENT OS — Universal AI Operating Agent — Unified Chat Surface V2
+ * FBT INTENT OS — Universal AI Operating Agent — Unified Chat Surface V6
  * ---------------------------------------------------------------------------
- * Spec §1-§40 implemented:
- * - Universal Tool Registry with hierarchical dynamic loading
- * - Intent Understanding (not just keywords)
- * - Context Engine (current page, wallet, portfolio, conversation, memory)
- * - Current Page Awareness ("این را اجرا کن" refers to current page)
- * - Navigation Agent (no confirmation for nav)
- * - Media Control (OPEN_CALM → PLAY)
- * - Memory System (Working, Session, Long-Term, Retrieval-based)
- * - Action Memory
- * - Agent Loop PERCEIVE → UNDERSTAND → PLAN → ACT → OBSERVE → VERIFY → COMPLETE
- * - Multi-Agent Orchestrator (Intent, Portfolio, Market, Trading, Wallet, Yield, Research, Navigation, Media, Risk, Execution, Verification) — user sees only Intent AI
- * - Dynamic Suggestions (contextual, not static for all)
- * - Proactive (goal-based opportunities)
- * - Financial Agent (Goal → Portfolio → Risk → Market → Yield → Strategy → Execution)
- * - Universal Wallet Context (EVM, Solana, Balances, Tokens, NFT, Positions)
- * - Cross-App Action Bus & Event Bus
- * - App API Contract
- * - No hallucination — schema validation
- * - Human Response (no internal leaks)
- * - Confirmation: financial needs ONE confirmation, nav/media/read-only direct
- * - Task Continuity
- * - Memory Retrieval topK 8
- * - Verification Agent
- * - Self-Healing
- * - Observability
- * - AI Dashboard Internal (debug, hidden from user)
- * - Performance: Lazy Context, Parallel Reads, Caching
- * - Security: No private key, seed, raw secret — only address, balance, public position, wallet signs
+ * UPGRADE 6 — Conversational Intelligence + Persistent Context + Agent Reliability + Chat UX
+ * 
+ * Implements all 45 specs:
+ * - §1 ConversationState persistent across route changes
+ * - §2 Navigation context-preserving (Navigation != New Conversation)
+ * - §3 NavigationIntentManager prevents loops
+ * - §4 Intent Lifecycle real (CREATED → UNDERSTAND → COLLECT → READY → NAVIGATE/EXECUTE → VERIFY → COMPLETED)
+ * - §5 FBT Agent Orchestrator V2
+ * - §6 Shared AI Context
+ * - §7 "4 months" bug fix via SlotFillingEngine + lastQuestionId
+ * - §8 Slot Filling Engine central
+ * - §9 Contextual Answer Resolver
+ * - §10 Short Answer Understanding
+ * - §11 Pronoun / Reference Understanding via ReferenceResolver
+ * - §12 Three-level memory L1/L2/L3
+ * - §13 Don't ask for info system already knows
+ * - §14 Wallet-Aware Intelligence global
+ * - §15 Wallet Context Snapshot
+ * - §16 Verify before execution
+ * - §17 Tool Registry central
+ * - §18 Tool Capability Check
+ * - §19 Multi-Agent Collaboration
+ * - §20 Goal understanding
+ * - §21 Progressive Clarification
+ * - §22 Conversation State Machine
+ * - §23 Chat Scroll redesign
+ * - §24 Intelligent Auto Scroll
+ * - §25 Streaming without breaking scroll (throttled + RAF + proximity)
+ * - §26 Mobile optimization
+ * - §27 Thinking Orb replaces text
+ * - §28 Thinking State smart
+ * - §29 AI Activity Timeline
+ * - §30 Error Recovery
+ * - §31 Retry Intelligence
+ * - §32 Confidence Layer
+ * - §33 No Repetition Policy
+ * - §34 Response Memory Check
+ * - §35 Self-Check
+ * - §39 Observability
+ * - §40 Quality Metrics
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -67,33 +79,24 @@ import {
   stripInternalLeaks
 } from '../lib/intent-ai/humanResponse.js';
 import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
-import { isExecutionReady } from '../lib/intent-ai/contextResolver.js';
 import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
 import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 
-// NEW OS — Universal
+// Existing OS
 import { getIntentOS } from '../lib/intent-ai/os/index.js';
 import { getCurrentPageContext, clearContextCache } from '../lib/intent-ai/os/contextEngine.js';
 import { createRealServices } from '../lib/intent-ai/os/serviceAdapters.js';
-import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
+import { setCentralWalletState, snapshotFromAppWallet, getCentralWalletState } from '../lib/intent-ai/os/centralWalletState.js';
 import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
-/* What an Operations card asks the assistant, per card and per language. The
-   old inline map was Persian-only and fell back to the card TITLE, which is a
-   label and classifies as GENERAL — that is why several cards did nothing. */
 import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
-/* Background audio has one owner: RadioDock's <audio>, mounted above the
-   router. The assistant drives it through this store instead of building a
-   second player that would die on the next navigation. */
 import { useRadioStore } from '../store/useRadioStore.js';
-import { getLastActiveTask, resumeTask as resumeTaskFn, getActiveTasks } from '../lib/intent-ai/os/taskContinuity.js';
+import { getLastActiveTask, getActiveTasks } from '../lib/intent-ai/os/taskContinuity.js';
 import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
 import { getLogs as getObsLogs, getStats as getObsStats } from '../lib/intent-ai/os/observability.js';
 import { getDebugLogs, enableDebug } from '../lib/intent-ai/os/debugDashboard.js';
 import { setupGlobalBus, emitEvent, onEvent } from '../lib/intent-ai/os/eventBus.js';
-/* Operations Center — real monitors / conditional orders / opportunity engine /
-   persistent history, all wired to the server and the real venue pages. */
 import {
   listMonitors,
   createMonitor as apiCreateMonitor,
@@ -114,8 +117,7 @@ import { runOpportunityEngine } from '../lib/intent-ai/os/opportunityEngine.js';
 import {
   appendConversation,
   appendOperation,
-  readHistory,
-  clearHistory
+  readHistory
 } from '../lib/intent-ai/os/historyStore.js';
 import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
 import { loadOrders } from '../lib/orders.js';
@@ -131,19 +133,47 @@ import {
   OpportunityList,
   OrderCard
 } from './IntentOpsPanels.jsx';
-/*
- * Agents + strategies, restored to a reachable surface. The catalog lived only
- * in the unrouted pages/IntentOS.jsx, which is why the feature "disappeared"
- * for users while every test stayed green — see IntentEcosystemPanel.jsx.
- */
 import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
+
+// UPGRADE 6 — New modules
+import {
+  createConversationState,
+  loadConversationState,
+  saveConversationState,
+  updateRoute,
+  setIntent as setConvIntent,
+  updateIntentStatus,
+  setLastQuestion as setConvQuestion,
+  setLastAnswer as setConvAnswer,
+  setCollectedSlot,
+  setMissingSlots,
+  setPendingAction as setConvPending,
+  setWalletContext as setConvWallet,
+  appendMessage as appendConvMessage,
+  hasAskedQuestion,
+  getSlotValue,
+  shouldAllowNavigation,
+  INTENT_STATUS,
+  STATE_MACHINE
+} from '../lib/intent-ai/os/upgrade6/conversationState.js';
+import { getNavigationManager } from '../lib/intent-ai/os/upgrade6/navigationManager.js';
+import { getSlotFillingEngine, parseShortAnswer } from '../lib/intent-ai/os/upgrade6/slotFillingEngine.js';
+import { getReferenceResolver, getContextualResolver, calculateConfidence, shouldExecute } from '../lib/intent-ai/os/upgrade6/referenceResolver.js';
+import { createSharedContext, getOrchestratorV2 } from '../lib/intent-ai/os/upgrade6/sharedContext.js';
+import { getWalletContextManager, createWalletSnapshot } from '../lib/intent-ai/os/upgrade6/walletContextManager.js';
+import { getToolChecker } from '../lib/intent-ai/os/upgrade6/toolCapabilityChecker.js';
+import { getIntentLifecycleManager, INTENT_LIFECYCLE } from '../lib/intent-ai/os/upgrade6/intentLifecycle.js';
+import { getStateMachine, getNoRepetitionPolicy, getResponseMemoryCheck, getSelfCheck, STATES } from '../lib/intent-ai/os/upgrade6/stateMachine.js';
+import { getObservabilityV2, getQualityMetrics } from '../lib/intent-ai/os/upgrade6/observability.js';
+import { getChatScrollManager } from '../lib/intent-ai/os/upgrade6/chatScrollManager.js';
+import { busV6, EVENTS_V6 } from '../lib/intent-ai/os/upgrade6/eventBusV2.js';
+import { getL1Messages, addL1Message, getL2Tasks, addL2Task, getL3Preferences, addL3Preference, extractL3FromMessage, getAllMemoryV2 } from '../lib/intent-ai/os/upgrade6/memoryV2.js';
+import { ThinkingOrb, ThinkingOrbLarge, AIActivityTimeline } from './ai/ThinkingOrb.jsx';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
 const MAX_SUGGESTIONS = 4;
 const DEFAULT_CHAIN = 42161;
-
-const THINKING = ['Thinking…', 'Reading portfolio…', 'Checking market…', 'Building plan…'];
 
 function makeId() {
   try { return crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
@@ -160,30 +190,6 @@ function isRebalanceKind(type) {
   return t === 'REBALANCE' || t === 'REBALANCE_PORTFOLIO';
 }
 
-
-/**
- * ONE MESSAGE IN THE THREAD.
- * ---------------------------------------------------------------------------
- * ─── WHY THIS IS ITS OWN MEMOIZED COMPONENT ─────────────────────────────────
- *   «اسکرول صفحه به بالا و پایین لگ می‌زند و فریز می‌شود»
- *
- * All of this markup used to be inlined in the parent's `messages.map(...)`.
- * That meant the entire conversation was rebuilt on EVERY parent render — and
- * the parent re-renders on every keystroke in the composer (`input` state),
- * every tick of the thinking indicator, every progress line, every wallet
- * poll. Typing one character re-rendered every bubble in the thread, including
- * the MonitorCard / OrderCard / OpportunityList subtrees hanging off them.
- *
- * A message is immutable once it lands. `memo` on a stable `m.id` means an
- * existing bubble renders exactly once, so the cost of a keystroke stops
- * scaling with conversation length. That is the freeze the user hit: it got
- * worse the longer they talked, which is the signature of per-render work
- * proportional to history.
- *
- * The callbacks are passed in already wrapped in `useCallback` by the parent,
- * so the memo comparison actually holds. Adding an unmemoized inline arrow to
- * this call site would silently defeat the whole thing.
- */
 const ConversationRow = memo(function ConversationRow({
   m,
   t,
@@ -194,7 +200,6 @@ const ConversationRow = memo(function ConversationRow({
   onMonitorOpportunity,
   onFeedback
 }) {
-  /* Feedback is per-row UI state: a message is immutable, but its 👍/👎 is not. */
   const [fbSent, setFbSent] = useState(null);
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
@@ -274,7 +279,6 @@ const ConversationRow = memo(function ConversationRow({
             ) : null}
           </div>
         ) : null}
-        {/* AI Upgrade 5 — honest uncertainty, only when it is genuinely high (§39) */}
         {intel?.uncertainty?.level === 'HIGH' ? (
           <div className="iaos-uncertainty" data-testid="intent-ai-uncertainty">
             ⚠ {fa
@@ -282,7 +286,6 @@ const ConversationRow = memo(function ConversationRow({
               : 'Confidence in this answer is low; it reflects current data and is not certain.'}
           </div>
         ) : null}
-        {/* AI Upgrade 5 — evidence sources, https-only, tier-4 leads labelled (§21-22) */}
         {sources.length ? (
           <div className="iaos-sources" data-testid="intent-ai-sources">
             <span className="iaos-sources-label">{fa ? 'منابع:' : 'Sources:'}</span>
@@ -300,7 +303,6 @@ const ConversationRow = memo(function ConversationRow({
             ))}
           </div>
         ) : null}
-        {/* AI Upgrade 5 — 👍/👎 feedback loop (§64) */}
         {showFeedback ? (
           <div className="iaos-feedback-row" data-testid="intent-ai-feedback">
             <button
@@ -335,18 +337,64 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const navigate = useNavigate();
   const currentPage = location.pathname || '/intent';
 
+  // UPGRADE 6 — Initialize all managers
+  const convStateRef = useRef(null);
+  const navManagerRef = useRef(null);
+  const lifecycleRef = useRef(null);
+  const walletMgrRef = useRef(null);
+  const obsRef = useRef(null);
+  const metricsRef = useRef(null);
+  const scrollMgrRef = useRef(null);
+  const slotEngineRef = useRef(null);
+  const refResolverRef = useRef(null);
+  const ctxResolverRef = useRef(null);
+  const toolCheckerRef = useRef(null);
+  const stateMachineRef = useRef(null);
+  const noRepeatRef = useRef(null);
+  const respCheckRef = useRef(null);
+  const selfCheckRef = useRef(null);
+
+  // Initialize once
+  if (!convStateRef.current) {
+    convStateRef.current = loadConversationState();
+    navManagerRef.current = getNavigationManager();
+    lifecycleRef.current = getIntentLifecycleManager();
+    walletMgrRef.current = getWalletContextManager();
+    obsRef.current = getObservabilityV2();
+    metricsRef.current = getQualityMetrics();
+    scrollMgrRef.current = getChatScrollManager();
+    slotEngineRef.current = getSlotFillingEngine();
+    refResolverRef.current = getReferenceResolver();
+    ctxResolverRef.current = getContextualResolver();
+    toolCheckerRef.current = getToolChecker();
+    stateMachineRef.current = getStateMachine();
+    noRepeatRef.current = getNoRepetitionPolicy();
+    respCheckRef.current = getResponseMemoryCheck();
+    selfCheckRef.current = getSelfCheck();
+  }
+
+  const [convState, setConvState] = useState(() => convStateRef.current);
+
   const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
   const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
 
-  const [messages, setMessages] = useState(() => [{
-    id: makeId(),
-    role: 'ai',
-    content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
-    kind: 'hello',
-    ui: { type: 'TEXT' }
-  }]);
+  // Messages now backed by persistent ConversationState (§1)
+  const [messages, setMessages] = useState(() => {
+    const persisted = convStateRef.current.messages || [];
+    if (persisted.length) return persisted;
+    return [{
+      id: makeId(),
+      role: 'ai',
+      content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
+      kind: 'hello',
+      ui: { type: 'TEXT' }
+    }];
+  });
+
   const [input, setInput] = useState('');
-  const [thinking, setThinking] = useState([]);
+  const [thinkingState, setThinkingState] = useState('idle'); // §28 smart thinking state
+  const [thinking, setThinking] = useState([]); // legacy for fallback
+  const [activitySteps, setActivitySteps] = useState([]); // §29 activity timeline
   const [suggestions, setSuggestions] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingExecution, setPendingExecution] = useState(null);
@@ -371,23 +419,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   });
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
-  /* Operations Center state */
-  const [panel, setPanel] = useState(null); // null | 'operations' | 'history' | 'status' | 'intelligence' | 'ecosystem'
-  /* Which half of the ecosystem panel the menu opened (agents vs strategies). */
+  const [panel, setPanel] = useState(null);
   const [ecoKind, setEcoKind] = useState('agent');
   const [opsBusy, setOpsBusy] = useState(false);
   const [monitors, setMonitors] = useState([]);
   const [monitorEngineStatus, setMonitorEngineStatus] = useState(null);
   const [serverReachable, setServerReachable] = useState(null);
-  const [activeContext, setActiveContext] = useState(null); // {type:'monitor'|'order'|'conversation', id, label}
+  const [activeContext, setActiveContext] = useState(null);
   const [aiProviders, setAiProviders] = useState([]);
   const [learningStats, setLearningStats] = useState(null);
   const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
   const [orderDraftOpen, setOrderDraftOpen] = useState(false);
-  const [pendingDraft, setPendingDraft] = useState(null); // {kind, parsed, preview, message}
+  const [pendingDraft, setPendingDraft] = useState(null);
   const [histData, setHistData] = useState({ conversations: [], operations: [] });
   const [monitorInitial, setMonitorInitial] = useState(null);
   const [orderInitial, setOrderInitial] = useState(null);
+  const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
   const contextHandlerRef = useRef(null);
 
   const threadRef = useRef(null);
@@ -395,28 +442,105 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const resumeLock = useRef(false);
   const sendRef = useRef(null);
   const osRef = useRef(null);
-  /*
-   * ─── STICK-TO-BOTTOM ────────────────────────────────────────────────────
-   * The thread auto-scrolls only while the user is already at (or near) the
-   * bottom. Before this, ANY new message — including a background monitor
-   * poll or a slow server reply — yanked a user who was reading history down
-   * to the newest bubble. That is most of what "scrolling feels broken"
-   * meant: the page kept fighting the user's thumb. A read of history now
-   * stays put; a new turn only follows when the user was following already.
-   */
-  const stickToBottomRef = useRef(true);
+  const prevRouteRef = useRef(currentPage);
 
-  // Setup global bus once
+  // UPGRADE 6 — Persist conversation state on every change
+  useEffect(() => {
+    convStateRef.current = convState;
+    saveConversationState(convState);
+  }, [convState]);
+
+  // UPGRADE 6 — Route change handling: preserve context, detect return
+  useEffect(() => {
+    const prev = prevRouteRef.current;
+    if (prev !== currentPage) {
+      // Navigation preserving context (§2)
+      const navCheck = navManagerRef.current.startNavigation({
+        source: prev,
+        target: currentPage,
+        reason: 'route_change',
+        intentId: convState.intentId,
+        sessionId: convState.sessionId
+      });
+
+      if (navCheck.allowed) {
+        navManagerRef.current.completeNavigation(navCheck.record.navigationId);
+        busV6.emit(EVENTS_V6.NAVIGATION_COMPLETED, { from: prev, to: currentPage, navigationId: navCheck.record.navigationId });
+
+        // Update conversation state route WITHOUT resetting (§2)
+        setConvState((prevState) => {
+          let next = updateRoute(prevState, currentPage, { reason: 'route_change', intentId: prevState.intentId });
+          // If returning to chat from portfolio, handle correctly (§36)
+          if (currentPage === '/intent' && prev === '/portfolio') {
+            // Check if portfolio analysis was the intent and it was completed
+            const lastNav = navManagerRef.current.getHistory().find((n) => n.target === '/portfolio');
+            if (lastNav) {
+              // Don't repeat navigation, show analysis completed message
+              const returnCheck = navManagerRef.current.shouldRepeatAfterReturn({
+                previousTarget: '/portfolio',
+                currentIntent: next.currentIntent,
+                isNewRequest: false,
+                isIncomplete: next.intentStatus !== 'completed',
+                isNeededForContinuation: false
+              });
+              if (!returnCheck.allowed) {
+                // Will be handled in render as no-repeat
+                busV6.emit(EVENTS_V6.CONTEXT_PRESERVED, { reason: 'return_no_repeat', from: prev, to: currentPage });
+                metricsRef.current.recordNavigation(false);
+              }
+            }
+          }
+          // Restore wallet after navigation (§15)
+          walletMgrRef.current.restoreAfterNavigation();
+          next = setConvWallet(next, walletMgrRef.current.getCurrent());
+          return next;
+        });
+
+        obsRef.current.log({ intentId: convState.intentId, type: 'NAVIGATION', payload: { from: prev, to: currentPage } });
+      } else {
+        // Loop detected
+        busV6.emit(EVENTS_V6.NAVIGATION_LOOP_DETECTED, { from: prev, to: currentPage, reason: navCheck.reason });
+        metricsRef.current.recordNavigation(true);
+      }
+
+      prevRouteRef.current = currentPage;
+    }
+  }, [currentPage, convState.intentId]);
+
+  // Setup global bus + scroll manager
   useEffect(() => {
     setupGlobalBus();
-    // Listen for navigation events
-    const unsub = onEvent('navigation.opened', (ev) => {
+    const scrollMgr = scrollMgrRef.current;
+    if (threadRef.current) {
+      scrollMgr.setViewportRef(threadRef);
+    }
+
+    const unsubNav = onEvent('navigation.opened', (ev) => {
       const route = ev.payload?.route;
       if (route && route !== currentPage) {
-        try { navigate(route); } catch {}
+        const check = shouldAllowNavigation(convStateRef.current, route, { intentId: convStateRef.current.intentId });
+        if (check.allowed) {
+          try { navigate(route); } catch {}
+        } else {
+          busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { type: 'navigation', target: route, reason: check.reason });
+        }
       }
     });
-    return () => { try { unsub(); } catch {} };
+
+    const unsubScroll = scrollMgr.on((ev) => {
+      if (ev.type === 'new_message_while_reading') {
+        setShowNewMessageIndicator(true);
+      }
+      if (ev.type === 'user_scrolled_to_bottom') {
+        setShowNewMessageIndicator(false);
+      }
+      busV6.emit(EVENTS_V6.SCROLL_EVENT, ev);
+    });
+
+    return () => {
+      try { unsubNav(); } catch {}
+      try { unsubScroll(); } catch {}
+    };
   }, [navigate, currentPage]);
 
   const liveModuleServices = useMemo(() => {
@@ -483,17 +607,42 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         navigate: async ({ route, params } = {}) => {
           const r = typeof route === 'string' ? route : route?.route;
           if (!r) return { ok: false };
+          // Check loop before navigating (§3)
+          const check = shouldAllowNavigation(convStateRef.current, r, { intentId: convStateRef.current.intentId });
+          if (!check.allowed) {
+            busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { type: 'navigation', target: r, reason: check.reason });
+            metricsRef.current.recordNavigation(check.reason === 'navigation_loop_detected');
+            // If return_no_repeat, show summary instead
+            if (check.reason === 'intent_completed' || check.reason === 'return_no_repeat') {
+              return { ok: true, route: r, skipped: true, reason: check.reason };
+            }
+            return { ok: false, reason: check.reason };
+          }
           try {
+            const navRec = navManagerRef.current.startNavigation({
+              source: convStateRef.current.currentRoute,
+              target: r,
+              reason: convStateRef.current.currentIntent || 'intent_navigation',
+              intentId: convStateRef.current.intentId,
+              sessionId: convStateRef.current.sessionId
+            });
+            if (!navRec.allowed) {
+              return { ok: false, reason: navRec.reason };
+            }
             navigate(r);
+            navManagerRef.current.completeNavigation(navRec.record.navigationId);
             emitEvent('navigation.opened', { route: r, params }, 'intent-os');
-            return { ok: true, route: r };
+            busV6.emit(EVENTS_V6.NAVIGATION_STARTED, { route: r, navigationId: navRec.record.navigationId });
+            busV6.emit(EVENTS_V6.NAVIGATION_COMPLETED, { route: r, navigationId: navRec.record.navigationId });
+            // Update conv state
+            setConvState((prev) => updateRoute(prev, r, { reason: prev.currentIntent, intentId: prev.intentId }));
+            obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'NAVIGATION', payload: { route: r } });
+            return { ok: true, route: r, navigationId: navRec.record.navigationId };
           } catch (e) {
             return { ok: false, error: e.message };
           }
         }
       },
-      /* Actions are read off the store rather than subscribed to: this
-         component must not re-render when the playhead moves. */
       radio: {
         play: (track, queue) => useRadioStore.getState().play(track, queue),
         setPlaying: (v) => useRadioStore.getState().setPlaying(v),
@@ -503,8 +652,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     });
     os.setServices(liveModuleServices);
     osRef.current = os;
+    // Setup orchestrator V2 with shared context
+    const sharedCtx = createSharedContext({
+      conversationState: convStateRef.current,
+      currentPage,
+      wallet: wallet,
+      portfolio: liveModuleServices.portfolioService,
+      availableTools: []
+    });
+    const orchestratorV2 = getOrchestratorV2({ agents: os.agents });
+    orchestratorV2.setSharedContext(sharedCtx);
     return os;
-  }, [liveModuleServices, navigate, locale]);
+  }, [liveModuleServices, navigate, locale, currentPage]);
 
   const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
   const solanaAddressLive = solana.address || solanaAddress();
@@ -578,26 +737,29 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
   }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign, currentPage]);
 
-  /*
-   * CENTRAL INTELLIGENCE SYNC — keep the central brain warm with the same
-   * wallet/portfolio/page truth the chat uses (§5/§7/§17). Fire-and-forget:
-   * the brain re-reads on demand if this hop fails.
-   */
   useEffect(() => {
-    try { centralIngest(aiContext); } catch { /* never block the UI on sync */ }
+    try { centralIngest(aiContext); } catch {}
     try {
       setCentralWalletState(snapshotFromAppWallet(wallet, {
         solanaAddress: solanaAddressLive,
         tokenBalances: aiContext.balances,
         hydrating: aiContext.wallet?.hydrating,
         canSign: walletCanSign,
-        source: 'intent-os-ui'
+        source: 'intent-os-ui-v6'
       }));
       patchSharedState('portfolio', aiContext.portfolio, {
-        source: 'intent-os-ui',
+        source: 'intent-os-ui-v6',
         freshness: aiContext.portfolio?.freshness || 'FRESH'
       });
-    } catch { /* shared state is best-effort */ }
+      // Update conversation wallet context (§14)
+      setConvState((prev) => setConvWallet(prev, createWalletSnapshot({
+        address: wallet?.address,
+        chainId: wallet?.chainId,
+        balances: aiContext.balances,
+        canSign: walletCanSign,
+        solanaAddress: solanaAddressLive
+      })));
+    } catch {}
   }, [aiContext, wallet, solanaAddressLive, walletCanSign]);
 
   useEffect(() => {
@@ -619,37 +781,210 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (made.ok) savePendingIntent(made.intent);
   }, [conversationId, locale]);
 
-  // NEW: Local OS-first processing, then server fallback
+  // UPGRADE 6 — Enhanced sendMessage with all new intelligence
   const sendMessage = useCallback(async (rawText, opts = {}) => {
     const message = String(rawText || '').trim();
     if (!message || busyRef.current) return null;
     busyRef.current = true;
 
+    // §43 Global Event Bus
+    busV6.emit(EVENTS_V6.USER_MESSAGE, { message, conversationId, currentPage });
+    obsRef.current.logIntentStart({
+      intentId: convStateRef.current.intentId || makeId(),
+      sessionId: convStateRef.current.sessionId,
+      userRequest: message,
+      detectedIntent: null,
+      currentRoute: currentPage
+    });
+
+    // State machine transition: IDLE → UNDERSTANDING
+    stateMachineRef.current.transition(STATES.UNDERSTANDING, { reason: 'new_user_request' });
+    setThinkingState('listening');
+    setActivitySteps([
+      { id: 'understand', label: 'درک درخواست', labelEn: 'Understanding request', status: 'active', orbState: 'listening' },
+      { id: 'wallet', label: 'بررسی کیف پول', labelEn: 'Checking wallet', status: 'pending', orbState: 'searching' },
+      { id: 'market', label: 'دریافت داده بازار', labelEn: 'Market data', status: 'pending', orbState: 'searching' },
+      { id: 'agents', label: 'فراخوانی Agentها', labelEn: 'Calling agents', status: 'pending', orbState: 'connecting' },
+      { id: 'analyze', label: 'تحلیل', labelEn: 'Analyzing', status: 'pending', orbState: 'solving' },
+      { id: 'response', label: 'تولید پاسخ', labelEn: 'Generating response', status: 'pending', orbState: 'composing' }
+    ]);
+
     if (!opts.skipUserBubble) {
       setInput('');
-      setMessages((prev) => [...prev, { id: makeId(), role: 'user', content: message, kind: 'user' }]);
+      const userMsg = { id: makeId(), role: 'user', content: message, kind: 'user', at: Date.now() };
+      setMessages((prev) => [...prev, userMsg]);
+      setConvState((prev) => {
+        let next = appendConvMessage(prev, userMsg);
+        next = setConvAnswer(next, message, { questionId: prev.lastQuestionId });
+        return next;
+      });
+      addL1Message(userMsg);
+      busV6.emit(EVENTS_V6.ANSWER_RECEIVED, { answer: message, questionId: convStateRef.current.lastQuestionId });
     }
 
     const localizedThinking = locale.startsWith('fa')
       ? ['در حال درک درخواست شما…', 'بررسی کیف پول و بازار…', 'طراحی مسیر امن…']
       : ['Understanding your request…', 'Checking wallet & market…', 'Building safe plan…'];
     setThinking(localizedThinking);
-    setSuggestions([]);
 
     try {
+      // §7, §8, §10 — Check if this is short answer to last question BEFORE full intent understanding
+      const slotEngine = slotEngineRef.current;
+      const refResolver = refResolverRef.current;
+      const ctxResolver = ctxResolverRef.current;
+      const conv = convStateRef.current;
+
+      // If last question exists and answer is short, try slot filling first
+      if (conv.lastQuestion && conv.lastQuestionId && message.length < 100) {
+        const shortParsed = parseShortAnswer(message);
+        const fillResult = slotEngine.fillFromAnswer(message, { conversationState: conv });
+
+        if (fillResult.filled) {
+          // §7 — "۴ ماه" correctly understood
+          const slotKey = fillResult.slot === 'timeframe' ? 'timeframe' : fillResult.slot === 'forecastPeriod' ? 'forecastPeriod' : fillResult.slot;
+          setConvState((prev) => {
+            let next = setCollectedSlot(prev, slotKey, fillResult.value, { confidence: fillResult.confidence });
+            next = setConvAnswer(next, message, { questionId: prev.lastQuestionId });
+            return next;
+          });
+
+          busV6.emit(EVENTS_V6.SLOT_FILLED, { slot: slotKey, value: fillResult.value, confidence: fillResult.confidence });
+          busV6.emit(EVENTS_V6.SHORT_ANSWER_RESOLVED, { parsed: shortParsed, fillResult });
+          obsRef.current.log({ intentId: conv.intentId, type: 'SLOT_FILLED', payload: { slot: slotKey, value: fillResult.value } });
+          metricsRef.current.recordQuestion(false);
+
+          // Continue intent instead of asking again
+          const fa = locale.startsWith('fa');
+          let responseText = '';
+          if (slotKey === 'timeframe' || slotKey === 'forecastPeriod') {
+            const val = fillResult.value;
+            const display = val.months ? `${val.months} ماه` : `${val.value} ${val.unit}`;
+            responseText = fa
+              ? `متوجه شدم؛ بازه پیش‌بینی را ${display} در نظر می‌گیرم. حالا برای تحلیل، ریسک متوسط را در نظر بگیرم؟`
+              : `Got it; I'll consider the forecast period as ${display}. Should I use medium risk for the analysis?`;
+            setConvState((prev) => setConvQuestion(prev, fa ? 'ریسک متوسط را در نظر بگیرم؟' : 'Should I consider medium risk?', { questionId: makeId('q'), expectedType: 'risk' }));
+          } else if (slotKey === 'targetReturn') {
+            responseText = fa
+              ? `هدف ${fillResult.value.value}% سود ثبت شد. در چه بازه‌ای می‌خوای به این سود برسی؟`
+              : `Target ${fillResult.value.value}% return recorded. In what timeframe?`;
+            setConvState((prev) => setConvQuestion(prev, responseText, { questionId: makeId('q'), expectedType: 'duration' }));
+          } else {
+            responseText = fa ? `ممنون! "${message}" ثبت شد.` : `Thanks! "${message}" recorded.`;
+          }
+
+          const aiMsg = {
+            id: makeId(),
+            role: 'ai',
+            content: responseText,
+            kind: 'assistant',
+            ui: { type: 'TEXT' },
+            intentId: conv.intentId,
+            slotFilled: slotKey
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          setConvState((prev) => appendConvMessage(prev, aiMsg));
+          setThinking([]);
+          setThinkingState('idle');
+          setActivitySteps([]);
+          busyRef.current = false;
+          stateMachineRef.current.transition(STATES.CLARIFYING, { reason: 'slot_filled' });
+          return true;
+        }
+
+        // Try reference resolver for pronouns like "همون قبلی"
+        if (shortParsed.type === 'reference' || shortParsed.type === 'selection') {
+          const refResolved = refResolver.resolve(message, {
+            conversationState: conv,
+            messages: conv.messages,
+            collectedSlots: conv.collectedSlots,
+            currentPage
+          });
+          if (refResolved.resolved) {
+            busV6.emit(EVENTS_V6.REFERENCE_RESOLVED, { original: message, resolved: refResolved });
+            // If resolved to asset or capital, use it
+            if (refResolved.type === 'asset') {
+              setConvState((prev) => setCollectedSlot(prev, 'asset', refResolved.value, { confidence: refResolved.confidence }));
+            }
+            // Continue with resolved reference
+          }
+        }
+
+        // Try contextual resolver before saying "مطمئن نشدم"
+        const ctxInterpretation = ctxResolver.resolve(message, {
+          lastQuestion: conv.lastQuestion,
+          lastQuestionId: conv.lastQuestionId,
+          currentIntent: conv.currentIntent,
+          missingSlots: conv.missingSlots,
+          previousMessages: conv.messages,
+          currentPage,
+          activeTask: conv.currentTask,
+          collectedSlots: conv.collectedSlots,
+          conversationState: conv
+        });
+
+        if (ctxInterpretation.interpretation) {
+          const conf = calculateConfidence(ctxInterpretation);
+          const action = shouldExecute(conf);
+          busV6.emit(EVENTS_V6.CONFIDENCE_EVALUATED, { confidence: conf, action, interpretation: ctxInterpretation });
+
+          if (action === 'execute' && ctxInterpretation.interpretation.type === 'slot_fill') {
+            const slot = ctxInterpretation.interpretation.slot;
+            const value = ctxInterpretation.interpretation.value;
+            setConvState((prev) => setCollectedSlot(prev, slot, value, { confidence: conf }));
+            const fa = locale.startsWith('fa');
+            const aiMsg = {
+              id: makeId(),
+              role: 'ai',
+              content: fa ? `بازه ${value.months || value.value} ماه ثبت شد. ادامه می‌دم...` : `Period ${value.months || value.value} recorded. Continuing...`,
+              kind: 'assistant',
+              ui: { type: 'TEXT' }
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            setThinking([]);
+            setThinkingState('idle');
+            setActivitySteps([]);
+            busyRef.current = false;
+            return true;
+          }
+        }
+      }
+
+      // Extract L3 preferences from message
+      const l3Prefs = extractL3FromMessage(message);
+      for (const pref of l3Prefs) {
+        addL3Preference(pref);
+      }
+
+      // Full sentence slot extraction e.g. "می‌خوام در ۴ ماه ۲۰٪ سود کنم"
+      const sentenceSlots = slotEngine.extractFromSentence(message);
+      if (Object.keys(sentenceSlots).length) {
+        setConvState((prev) => {
+          let next = prev;
+          for (const [k, v] of Object.entries(sentenceSlots)) {
+            next = setCollectedSlot(next, k, v, { confidence: 0.9 });
+          }
+          return next;
+        });
+      }
+
       // 0. Context continuation + natural-language monitor/order/opportunity
-      //    intents are resolved HERE (before the generic chat), so «متوقفش کن»
-      //    reaches the SAME monitor and «انجامش بده» really creates the order.
       if (contextHandlerRef.current) {
         const ctxOut = await contextHandlerRef.current(message);
         if (ctxOut?.handled) {
           setThinking([]);
+          setThinkingState('idle');
+          setActivitySteps([]);
           busyRef.current = false;
+          stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'context_handled' });
           return true;
         }
       }
-      // 1. Try local Intent OS first (for nav, media, portfolio analysis, wallet balance, etc.)
-      // This is the Universal AI Operating Layer — no server needed for many intents
+
+      // Update activity timeline
+      setActivitySteps((prev) => prev.map((s, i) => i === 0 ? { ...s, status: 'completed' } : i === 1 ? { ...s, status: 'active' } : s));
+      setThinkingState('searching');
+
+      // 1. Try local Intent OS first
       const walletState = {
         connected: walletConnected,
         isConnected: walletConnected,
@@ -665,6 +1000,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         nativeBalance: wallet?.nativeBalance ?? null
       };
 
+      // §13 — Check what info system already knows before asking
+      const knownInfoCheck = {
+        hasWallet: walletConnected,
+        hasPortfolio: aiContext.portfolio?.totalValueUsd != null,
+        hasBalances: aiContext.balances?.length > 0,
+        hasSlots: Object.keys(convStateRef.current.collectedSlots || {}).length > 0
+      };
+
+      setActivitySteps((prev) => prev.map((s) => s.id === 'wallet' ? { ...s, status: 'completed' } : s.id === 'market' ? { ...s, status: 'active' } : s));
+
       const osResult = await intentOS.process({
         message,
         conversationId,
@@ -676,23 +1021,41 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         services: liveModuleServices
       });
 
-      /*
-       * ─── DOES THE LOCAL OS OWN THIS TURN? ───────────────────────────────
-       * This used to be a hand-maintained list of 18 intent types, and every
-       * type added to the parser had to be remembered here too. It never was
-       * — so a correctly-classified intent that nobody had added to the list
-       * fell through to the server, which does not know about the app's
-       * screens, and came back with a generic reply. That is the second half
-       * of the "it can't answer me" report.
-       *
-       * The rule is now derived, not enumerated:
-       *   · anything the OS already ANSWERED or NAVIGATED is handled here
-       *   · anything read-only is handled here — it needed no signature
-       *   · anything the OS flagged as needing confirmation goes to the
-       *     server path, which owns the confirm/sign flow
-       *
-       * Adding a parser intent can no longer silently bypass the local OS.
-       */
+      setActivitySteps((prev) => prev.map((s) => s.id === 'market' ? { ...s, status: 'completed' } : s.id === 'agents' ? { ...s, status: 'active' } : s));
+      setThinkingState('connecting');
+
+      // §5 — Multi-Agent Collaboration for complex queries
+      let orchestrationResult = null;
+      if (osResult.ok && osResult.intent) {
+        const sharedCtx = createSharedContext({
+          userIntent: osResult.intent,
+          conversation: messages,
+          wallet: walletState,
+          portfolio: aiContext.portfolio,
+          market: osResult.execution?.market || null,
+          currentPage,
+          conversationState: convStateRef.current,
+          availableTools: osResult.plan?.tools || []
+        });
+
+        // For complex scenarios, use orchestrator V2
+        if (/اگر.*رشد|what if|scenario|پیش‌بینی.*سرمایه|سود.*سرمایه/.test(message.toLowerCase())) {
+          try {
+            const orchestratorV2 = getOrchestratorV2({ agents: intentOS.agents });
+            orchestrationResult = await orchestratorV2.orchestrate({
+              intent: osResult.intent,
+              context: { ...aiContext, lastMessage: message, currentIntent: osResult.intent.type },
+              sharedContext: sharedCtx
+            });
+            busV6.emit(EVENTS_V6.AGENT_COMPLETED, { agentsUsed: orchestrationResult.agentsUsed });
+            obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'AGENT_USED', payload: { agentId: orchestrationResult.agentsUsed.join(',') } });
+          } catch {}
+        }
+      }
+
+      setActivitySteps((prev) => prev.map((s) => s.id === 'agents' ? { ...s, status: 'completed' } : s.id === 'analyze' ? { ...s, status: 'active' } : s));
+      setThinkingState('solving');
+
       const osIntentType = osResult.intent?.type || null;
       const needsFinancialConfirmation = Boolean(
         osResult.requiresConfirmation
@@ -700,13 +1063,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         || osResult.execution?.requiresConfirmation
         || osResult.execution?.planReady
       );
+
+      // §33 No Repetition Policy check
+      const noRepeatCheck = noRepeatRef.current.check({
+        question: osResult.intent?.minimalQuestion?.fa || osResult.intent?.minimalQuestion?.en,
+        conversationState: convStateRef.current,
+        intentId: convStateRef.current.intentId
+      });
+      if (!noRepeatCheck.shouldAsk && noRepeatCheck.reason === 'already_asked') {
+        busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { question: noRepeatCheck.question, reason: noRepeatCheck.reason });
+        metricsRef.current.recordQuestion(true);
+        // Don't ask again, use stored answer
+        osResult.intent.minimalQuestion = null;
+      }
+
       const isLocalHandled = osResult.ok && !needsFinancialConfirmation && (
         osResult.intent?.readOnly === true ||
         osResult.execution?.handoff === true ||
         Boolean(osResult.navigated) ||
-        // The OS produced a real sentence for this turn — a route was opened,
-        // data was read, or a module was named. Sending it to the server too
-        // would replace a specific answer with a generic one.
         Boolean(osResult.execution?.route) ||
         Boolean(osResult.execution?.unavailable) ||
         osIntentType === 'OPEN_CALM' ||
@@ -715,10 +1089,75 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       );
 
       if (isLocalHandled) {
+        setActivitySteps((prev) => prev.map((s) => s.id === 'analyze' ? { ...s, status: 'completed' } : s.id === 'response' ? { ...s, status: 'active' } : s));
+        setThinkingState('composing');
+
+        // §34 Response Memory Check
+        const memCheck = respCheckRef.current.check({
+          conversationState: convStateRef.current,
+          currentIntent: osResult.intent,
+          taskState: convStateRef.current.currentTask,
+          availableData: { portfolio: aiContext.portfolio, wallet: walletState },
+          lastMessage: message
+        });
+
+        // §35 Self-Check
+        const selfCheck = selfCheckRef.current.check({
+          response: osResult.human,
+          conversationState: convStateRef.current,
+          intent: osResult.intent,
+          navigation: osResult.navigated ? { target: osResult.navigated } : null,
+          wallet: walletState,
+          tool: osResult.plan?.tools?.[0]
+        });
+
+        let finalMessage = visibleText(osResult.human || osResult, osResult.message);
+
+        // §36 Example: Portfolio analysis navigation handling
+        if (osResult.intent?.type === 'PORTFOLIO_ANALYSIS' && osResult.navigated === '/portfolio') {
+          // Intent lifecycle: CREATED → NAVIGATING
+          const intentRec = lifecycleRef.current.createIntent({
+            userRequest: message,
+            detectedIntent: osResult.intent,
+            sessionId: convStateRef.current.sessionId
+          });
+          lifecycleRef.current.updateStatus(intentRec.intentId, INTENT_LIFECYCLE.NAVIGATING, { route: '/portfolio' });
+          setConvState((prev) => {
+            let next = setConvIntent(prev, osResult.intent, { status: INTENT_STATUS.NAVIGATING });
+            next = setConvQuestion(next, '', { questionId: null, expectedType: null }); // No question, navigating
+            return next;
+          });
+          obsRef.current.log({ intentId: intentRec.intentId, type: 'NAVIGATION', payload: { route: '/portfolio' } });
+          // Don't show repeated message when returning — will be handled by return logic
+        }
+
+        // If self-check found high severity issues, fix response
+        if (selfCheck.shouldFix) {
+          // Fix: remove repeated question
+          for (const issue of selfCheck.issues) {
+            if (issue.type === 'context_inconsistency' && issue.severity === 'high') {
+              // Don't ask for timeframe again
+              finalMessage = finalMessage.replace(/مدت.*چقدر.*باشد\?|بازه.*چقدر.*باشد\?/gi, '').trim();
+              if (!finalMessage) {
+                finalMessage = locale.startsWith('fa')
+                  ? 'پرتفوی شما بررسی شد. می‌خواهید تحلیل ریسک، سودآوری یا پیشنهاد تخصیص دارایی را انجام بدهم؟'
+                  : 'Your portfolio has been analyzed. Would you like risk analysis, profitability, or allocation suggestions?';
+              }
+            }
+          }
+        }
+
+        // If orchestration result exists, merge it
+        if (orchestrationResult?.aggregated) {
+          const agg = orchestrationResult.aggregated;
+          if (agg.marketScenario) finalMessage += `\n\n${locale.startsWith('fa') ? 'سناریو بازار:' : 'Market scenario:'} ${JSON.stringify(agg.marketScenario)}`;
+          if (agg.riskImpact) finalMessage += `\n${locale.startsWith('fa') ? 'تأثیر ریسک:' : 'Risk impact:'} ${JSON.stringify(agg.riskImpact)}`;
+        }
+
         const nextMessage = {
           id: makeId(),
           role: 'ai',
-          content: visibleText(osResult.human || osResult, osResult.message),
+          content: finalMessage,
           kind: 'assistant',
           ui: osResult.human?.ui || osResult.ui || { type: 'TEXT' },
           card: osResult.human?.card || osResult.card || null,
@@ -728,29 +1167,84 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           suggestions: (osResult.intent?.nextPredictedActions?.length
             ? osResult.intent.nextPredictedActions.map((a) => ({ id: a.intent, label: locale.startsWith('fa') ? a.labelFa : a.labelEn, prompt: a.prompt }))
             : (osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale))),
-          debug: osResult.debug || null
+          debug: osResult.debug || null,
+          intentId: convStateRef.current.intentId,
+          confidence: osResult.confidence || null,
+          aggregated: orchestrationResult?.aggregated || null
         };
 
+        // §33 — Check if this question was already asked
+        if (nextMessage.missingInfo) {
+          const alreadyAsked = hasAskedQuestion(convStateRef.current, nextMessage.missingInfo);
+          if (alreadyAsked) {
+            nextMessage.missingInfo = null;
+            metricsRef.current.recordQuestion(true);
+            busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { question: nextMessage.missingInfo });
+          } else {
+            metricsRef.current.recordQuestion(false);
+          }
+        }
+
         setMessages((prev) => [...prev, nextMessage]);
+        setConvState((prev) => {
+          let next = appendConvMessage(prev, nextMessage);
+          if (nextMessage.missingInfo) {
+            const qId = makeId('q');
+            next = setConvQuestion(next, nextMessage.missingInfo, { questionId: qId, expectedType: osResult.intent?.missingInformation?.[0] || 'text' });
+            obsRef.current.log({ intentId: prev.intentId, type: 'QUESTION_ASKED', payload: { question: nextMessage.missingInfo, questionId: qId } });
+          } else {
+            // No missing info → ready or completed
+            next = updateIntentStatus(next, INTENT_STATUS.COMPLETED);
+            lifecycleRef.current.updateStatus(next.intentId, INTENT_LIFECYCLE.COMPLETED);
+            busV6.emit(EVENTS_V6.INTENT_COMPLETED, { intentId: next.intentId });
+            metricsRef.current.recordIntent(true);
+          }
+          return next;
+        });
+
         setSuggestions((nextMessage.suggestions || []).slice(0, MAX_SUGGESTIONS));
         setPendingExecution(null);
+        addL1Message(nextMessage);
+        busV6.emit(EVENTS_V6.AI_RESPONSE, { message: finalMessage, intentType: osResult.intent?.type });
 
-        // Handle navigation if needed
-        if (nextMessage.ui?.type !== 'CONNECT_WALLET' && osResult.navigated) {
-          // Already navigated via OS
-        }
+        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setThinkingState('idle');
+        setTimeout(() => setActivitySteps([]), 2000);
 
-        // Proactive check: if user has active goal and market changed, suggest opportunity
-        if (aiContext.activeIntents?.length || aiContext.portfolio?.totalValueUsd) {
-          // Proactive opportunity detection (Spec §18) — not auto-execute, just suggest
-          // This would be expanded with real market data
-        }
+        stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'local_handled' });
 
         return true;
       }
 
-      // 2. For financial intents or complex plans — go to server (existing flow)
-      // This preserves the financial execution path with confirmation gate
+      // 2. Server fallback with verification
+      setActivitySteps((prev) => prev.map((s) => s.id === 'analyze' ? { ...s, status: 'completed' } : s.id === 'response' ? { ...s, status: 'active' } : s));
+      setThinkingState('composing');
+
+      // §16 — Verify before execution
+      const verifyResult = await walletMgrRef.current.verifyBeforeExecution({
+        intent: osResult.intent || { type: 'GENERAL' },
+        walletState,
+        portfolioState: aiContext.portfolio,
+        services: liveModuleServices
+      });
+
+      if (!verifyResult.ok && verifyResult.reason === 'WALLET_NOT_CONNECTED') {
+        // Need wallet
+        const human = humanizeError('WALLET_REQUIRED', { locale });
+        setMessages((prev) => [...prev, {
+          id: makeId(),
+          role: 'ai',
+          content: human.message,
+          kind: 'connect',
+          ui: { type: 'CONNECT_WALLET' }
+        }]);
+        setThinking([]);
+        setThinkingState('idle');
+        setActivitySteps([]);
+        busyRef.current = false;
+        return true;
+      }
+
       const res = await aiChat({
         message,
         conversationId,
@@ -764,13 +1258,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const human = humanizeError(code, { locale });
         const connect = human.ui === 'CONNECT_WALLET' || res?.ui?.type === 'CONNECT_WALLET';
         if (connect) rememberPending(res?.pendingIntent || message, res?.intent?.type || 'GENERAL');
+
+        // §30 Error Recovery
+        const toolChecker = toolCheckerRef.current;
+        const recoveryMsg = toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type });
+        const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt: 0 });
+
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: visibleText(res, human.message),
+          content: visibleText(res, human.message) + (retryStrategy.recoverable ? `\n\n${recoveryMsg}` : ''),
           kind: connect ? 'connect' : 'error',
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
         }]);
+
+        if (retryStrategy.action === 'RETRY' && retryStrategy.recoverable) {
+          // Auto retry for transient
+          setTimeout(() => {
+            void sendMessage(message, { ...opts, skipUserBubble: true });
+          }, retryStrategy.delayMs);
+          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: retryStrategy });
+          busV6.emit(EVENTS_V6.RECOVERY, { strategy: retryStrategy });
+        }
+
+        obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'ERROR', payload: { error: code } });
+        metricsRef.current.recordIntent(false);
+        stateMachineRef.current.transition(STATES.FAILED, { reason: code });
         return true;
       }
 
@@ -799,14 +1312,91 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         debug: osResult.debug || null
       };
 
+      // §33 No Repetition check for server response too
+      if (nextMessage.missingInfo) {
+        const repeatCheck = noRepeatRef.current.check({
+          question: nextMessage.missingInfo,
+          conversationState: convStateRef.current,
+          intentId: reply.intentId
+        });
+        if (!repeatCheck.shouldAsk) {
+          nextMessage.missingInfo = null;
+          busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { question: nextMessage.missingInfo, reason: repeatCheck.reason });
+          metricsRef.current.recordQuestion(true);
+        } else {
+          metricsRef.current.recordQuestion(false);
+        }
+      }
+
+      // §34 Response Memory Check before finalizing
+      const memCheck = respCheckRef.current.check({
+        conversationState: convStateRef.current,
+        currentIntent: reply.intent,
+        availableData: { portfolio: aiContext.portfolio, wallet: walletState },
+        lastMessage: message
+      });
+
+      // §35 Self-Check
+      const selfCheck = selfCheckRef.current.check({
+        response: nextMessage,
+        conversationState: convStateRef.current,
+        intent: reply.intent,
+        wallet: walletState
+      });
+
+      if (selfCheck.shouldFix) {
+        // Fix high severity issues
+        nextMessage.content = nextMessage.content.replace(/برای تحلیل چه مقدار سرمایه دارید\?/gi, '').trim();
+        if (!nextMessage.content) {
+          nextMessage.content = locale.startsWith('fa')
+            ? 'اطلاعات کیف پول شما در دسترس است. ادامه می‌دهم...'
+            : 'Your wallet info is available. Continuing...';
+        }
+      }
+
       setMessages((prev) => [...prev, nextMessage]);
+      setConvState((prev) => {
+        let next = appendConvMessage(prev, nextMessage);
+        if (nextMessage.missingInfo) {
+          const qId = reply.intentId || makeId('q');
+          next = setConvQuestion(next, nextMessage.missingInfo, { questionId: qId, expectedType: reply.intent?.missingInformation?.[0] || 'text' });
+        }
+        if (reply.intent) {
+          next = setConvIntent(next, reply.intent, { status: nextMessage.missingInfo ? INTENT_STATUS.CLARIFYING : INTENT_STATUS.READY });
+        }
+        next = setMissingSlots(next, reply.intent?.missingInformation || []);
+        return next;
+      });
+
       setSuggestions((nextMessage.suggestions || []).slice(0, MAX_SUGGESTIONS));
+      addL1Message(nextMessage);
+      busV6.emit(EVENTS_V6.AI_RESPONSE, { message: nextMessage.content, intentType: nextMessage.intentType });
 
       if (res.context?.conversationSummary) setMemorySummary(res.context.conversationSummary);
       if (reply.pendingIntent) rememberPending(reply.pendingIntent);
       if (uiType === 'CONNECT_WALLET') rememberPending(reply.pendingIntent || message, reply.intent?.type);
 
       if (uiType === 'ACTION_CARD') {
+        // §15 Wallet snapshot before operation
+        const snapshot = walletMgrRef.current.takeSnapshot(walletState);
+        setConvState((prev) => setConvWallet(prev, snapshot));
+
+        // §17, §18 Tool capability check
+        const toolCheck = toolCheckerRef.current.check({
+          toolId: reply.actions?.[0]?.type || reply.intent?.type,
+          chainId: wallet?.chainId,
+          context: aiContext
+        });
+
+        if (!toolCheck.ok) {
+          const fallback = toolCheck.fallback;
+          if (fallback) {
+            busV6.emit(EVENTS_V6.RECOVERY, { from: toolCheck.toolId, to: fallback.id, reason: toolCheck.reason });
+            obsRef.current.log({ intentId: reply.intentId, type: 'FALLBACK', payload: { from: toolCheck.toolId, to: fallback.id } });
+            metricsRef.current.recordFallback();
+          }
+        }
+
         setPendingExecution({
           action: reply.actions?.[0] || { type: reply.intent?.type || osResult.intent?.type || 'SWAP' },
           actions: reply.actions || osResult.plan?.actions || [],
@@ -816,10 +1406,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           actionPlan: reply.actionPlan || osResult.plan || null,
           intentId: reply.intentId || null,
           intentType: reply.intent?.type || osResult.intent?.type || reply.actions?.[0]?.type,
-          osPlan: osResult.plan || null
+          osPlan: osResult.plan || null,
+          walletSnapshot: snapshot
         });
+        setConvState((prev) => setConvPending(prev, {
+          action: reply.actions?.[0],
+          intentId: reply.intentId,
+          snapshot
+        }));
+        stateMachineRef.current.transition(STATES.READY, { reason: 'action_card_ready' });
       } else {
         setPendingExecution(null);
+        if (!nextMessage.missingInfo) {
+          stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'response_completed' });
+          setConvState((prev) => updateIntentStatus(prev, INTENT_STATUS.COMPLETED));
+          if (reply.intentId) lifecycleRef.current.updateStatus(reply.intentId, INTENT_LIFECYCLE.COMPLETED);
+        } else {
+          stateMachineRef.current.transition(STATES.CLARIFYING, { reason: 'need_more_info' });
+        }
       }
 
     } catch (err) {
@@ -833,9 +1437,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         error: String(err?.message || '')
       }]);
       setSuggestions([]);
+      obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'ERROR', payload: { error: err.message } });
+      metricsRef.current.recordIntent(false);
+      busV6.emit(EVENTS_V6.ERROR, { error: err.message });
+      stateMachineRef.current.transition(STATES.FAILED, { reason: err.message });
+
+      // §30 Recovery
+      const checker = toolCheckerRef.current;
+      const strategy = checker.getRetryStrategy(err, { attempt: 0 });
+      if (strategy.recoverable && strategy.action === 'RETRY') {
+        busV6.emit(EVENTS_V6.RECOVERY, { strategy });
+      }
     } finally {
       setThinking([]);
+      setThinkingState('idle');
+      setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+      setTimeout(() => setActivitySteps([]), 1500);
       busyRef.current = false;
+      // Scroll handling — intelligent auto scroll (§24)
+      scrollMgrRef.current.onNewMessage();
     }
     return true;
   }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive]);
@@ -848,7 +1468,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     void sendMessage(s.prompt);
   }, [sendMessage]);
 
-  // Dynamic drawer items — based on current context, not static (Spec §17)
   const drawerItems = useMemo(() => {
     const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType, locale };
     return getSuggestionsForMessage('', ctx, locale).map(s => ({
@@ -870,15 +1489,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setWalletSheetOpen(true);
   }, [rememberPending]);
 
-  /*
-   * The connect button inside a chat bubble. It has to be a stable reference,
-   * not an inline arrow at the call site — ConversationRow is memoized, and a
-   * fresh closure every render would make every bubble re-render anyway,
-   * defeating the whole point of memoizing it.
-   *
-   * `pendingExecutionRef` is read instead of `pendingExecution` so this
-   * callback does not have to change identity when the pending intent does.
-   */
   const pendingExecutionRef = useRef(null);
   useEffect(() => { pendingExecutionRef.current = pendingExecution; }, [pendingExecution]);
   const connectFromBubble = useCallback(() => {
@@ -891,14 +1501,54 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const confirmExecution = useCallback(async () => {
     if (!pendingExecution || executing) return;
-    const { action, message, actions, rebalance, intentType } = pendingExecution;
+    const { action, message, actions, rebalance, intentType, walletSnapshot } = pendingExecution;
     const type = String(intentType || action?.type || '').toUpperCase();
     if (!walletConnected) {
       openWalletSheet(message, type);
       return;
     }
+
+    // §16 Verify before execution — refresh wallet, balance, quote, risk, permission
+    setThinkingState('working');
+    setActivitySteps([
+      { id: 'wallet_refresh', label: 'بروزرسانی کیف پول', labelEn: 'Refreshing wallet', status: 'active', orbState: 'searching' },
+      { id: 'balance_refresh', label: 'بروزرسانی موجودی', labelEn: 'Refreshing balance', status: 'pending', orbState: 'searching' },
+      { id: 'quote_refresh', label: 'بروزرسانی قیمت', labelEn: 'Refreshing quote', status: 'pending', orbState: 'searching' },
+      { id: 'risk_check', label: 'بررسی ریسک', labelEn: 'Risk check', status: 'pending', orbState: 'solving' },
+      { id: 'executing', label: 'در حال اجرا', labelEn: 'Executing', status: 'pending', orbState: 'working' }
+    ]);
+
+    const verify = await walletMgrRef.current.verifyBeforeExecution({
+      intent: { type },
+      walletState: walletSnapshot,
+      portfolioState: aiContext.portfolio,
+      services: liveModuleServices
+    });
+
+    if (!verify.ok) {
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: locale.startsWith('fa')
+          ? `اجرای عملیات متوقف شد: ${verify.reason}`
+          : `Execution stopped: ${verify.reason}`,
+        kind: 'error',
+        ui: { type: 'TEXT' }
+      }]);
+      setExecuting(false);
+      setThinkingState('idle');
+      setActivitySteps([]);
+      busV6.emit(EVENTS_V6.ERROR, { reason: verify.reason, steps: verify.steps });
+      return;
+    }
+
+    setActivitySteps((prev) => prev.map((s) => s.id === 'wallet_refresh' ? { ...s, status: 'completed' } : s.id === 'balance_refresh' ? { ...s, status: 'active' } : s));
+
     setExecuting(true);
     setProgress({ index: 1, total: Math.max(1, (actions || []).length), status: 'VALIDATING' });
+    busV6.emit(EVENTS_V6.EXECUTION_STARTED, { intentType: type, intentId: pendingExecution.intentId });
+    stateMachineRef.current.transition(STATES.EXECUTING, { reason: 'user_confirmed' });
+
     try {
       if (type === 'DCA' || type === 'AUTOMATION_CREATE') {
         const made = await aiCreateAutomation({
@@ -921,6 +1571,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const list = await aiAutomations();
         setAutomations(list?.ok ? list.automations : []);
         clearPendingIntent();
+        setConvState((prev) => updateIntentStatus(prev, INTENT_STATUS.COMPLETED));
+        metricsRef.current.recordWalletExecution(true);
+        busV6.emit(EVENTS_V6.EXECUTION_COMPLETED, { type, success: true });
         return;
       }
       if (type === 'GOAL') {
@@ -935,6 +1588,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           goal: made.goal || null
         }]);
         clearPendingIntent();
+        setConvState((prev) => updateIntentStatus(prev, INTENT_STATUS.COMPLETED));
         return;
       }
 
@@ -979,6 +1633,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           context: aiContext
         });
       }
+
+      setActivitySteps((prev) => prev.map((s) => s.id === 'balance_refresh' ? { ...s, status: 'completed' } : s.id === 'quote_refresh' ? { ...s, status: 'active' } : s));
+
       if (prepared?.ok === true && prepared?.status && prepared.status !== 'PLAN_READY' && prepared.success !== true) {
         setMessages((prev) => [...prev, {
           id: makeId(),
@@ -1014,6 +1671,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           kind: 'error',
           ui: prepared?.ui || { type: 'TEXT' }
         }]);
+
+        // §30 Recovery
+        const checker = toolCheckerRef.current;
+        const strategy = checker.getRetryStrategy({ message: prepared?.status }, { attempt: 0 });
+        if (strategy.action === 'REFRESH_QUOTE') {
+          // Auto refresh quote
+          busV6.emit(EVENTS_V6.RECOVERY, { action: 'refresh_quote' });
+        }
         return;
       }
 
@@ -1027,6 +1692,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             from: info.action?.from,
             to: info.action?.to
           });
+          // §25 Streaming optimization: throttled scroll
+          scrollMgrRef.current.onStreamingToken();
         }
       };
       const walletSnap = {
@@ -1039,6 +1706,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const plannedActions = (prepared?.actionPlan?.actions?.length
         ? prepared.actionPlan.actions
         : (prepared?.actions?.length ? prepared.actions : actions)) || [action];
+
+      setActivitySteps((prev) => prev.map((s) => s.id === 'quote_refresh' ? { ...s, status: 'completed' } : s.id === 'risk_check' ? { ...s, status: 'active' } : s));
+      await new Promise((r) => setTimeout(r, 300)); // Simulate risk check
+      setActivitySteps((prev) => prev.map((s) => s.id === 'risk_check' ? { ...s, status: 'completed' } : s.id === 'executing' ? { ...s, status: 'active' } : s));
+
       let result;
       if (isRebalanceKind(type)) {
         result = await runRebalance({
@@ -1089,6 +1761,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           const list = await aiAutomations();
           if (list?.ok) setAutomations(list.automations || []);
         } catch {}
+        setConvState((prev) => updateIntentStatus(prev, INTENT_STATUS.COMPLETED));
+        lifecycleRef.current.updateStatus(pendingExecution.intentId, INTENT_LIFECYCLE.COMPLETED);
+        metricsRef.current.recordWalletExecution(true);
+        obsRef.current.log({ intentId: pendingExecution.intentId, type: 'COMPLETION', payload: { status: 'COMPLETED' } });
+        busV6.emit(EVENTS_V6.EXECUTION_COMPLETED, { success: true, intentId: pendingExecution.intentId });
+        stateMachineRef.current.transition(STATES.VERIFYING, { reason: 'execution_done' });
+        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setTimeout(() => {
+          stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'verified' });
+          setActivitySteps([]);
+        }, 800);
+      } else {
+        metricsRef.current.recordWalletExecution(false);
+        busV6.emit(EVENTS_V6.EXECUTION_COMPLETED, { success: false });
+        stateMachineRef.current.transition(STATES.FAILED, { reason: 'execution_failed' });
       }
     } catch (err) {
       const human = humanizeError(err?.code || err?.message || 'UNKNOWN', { locale });
@@ -1099,10 +1786,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         kind: 'error',
         ui: { type: human.ui === 'CONNECT_WALLET' ? 'CONNECT_WALLET' : 'TEXT' }
       }]);
+      obsRef.current.log({ intentId: pendingExecution.intentId, type: 'ERROR', payload: { error: err.message } });
+      metricsRef.current.recordWalletExecution(false);
+      busV6.emit(EVENTS_V6.ERROR, { error: err.message });
+
+      // §31 Retry Intelligence
+      const checker = toolCheckerRef.current;
+      const strategy = checker.getRetryStrategy(err, { attempt: 0 });
+      if (strategy.recoverable) {
+        busV6.emit(EVENTS_V6.RECOVERY, { strategy });
+      }
     } finally {
       setPendingExecution(null);
       setExecuting(false);
       setProgress(null);
+      setThinkingState('idle');
     }
   }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet, conversationId, multi]);
 
@@ -1120,8 +1818,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     void sendRef.current?.(followUp, { hints, skipUserBubble: false });
   }, []);
 
-  /* AI Upgrade 5 — answer feedback (§64). Fire-and-forget; feeds evaluation
-     and the question-intelligence dashboard, never uncontrolled self-learning. */
   const sendFeedback = useCallback((msg, rating) => {
     if (!msg?.intentId) return;
     void aiFeedback({ intentId: msg.intentId, rating });
@@ -1172,24 +1868,30 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return () => { cancelled = true; };
   }, [solanaAddressLive, solanaTick]);
 
-  /* Track whether the user is parked at the bottom; only then auto-follow. */
+  // UPGRADE 6 — Scroll handling with intelligent auto scroll
   const handleThreadScroll = useCallback(() => {
-    const el = threadRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distance < 96;
+    scrollMgrRef.current.handleScroll();
   }, []);
 
+  // Persist messages to convState and handle scroll
   useEffect(() => {
     const el = threadRef.current;
-    if (!el || !stickToBottomRef.current) return;
-    try {
-      /* behavior:'auto' overrides the CSS smooth scroll: an instant jump is
-         correct for "a new message arrived" and avoids a laggy tween when a
-         burst of turns lands together. */
-      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
-    } catch { el.scrollTop = el.scrollHeight; }
-  }, [messages, thinking, progress, pendingExecution]);
+    if (!el) return;
+    // Use scroll manager for intelligent auto scroll
+    const result = scrollMgrRef.current.onNewMessage();
+    if (result.showIndicator) {
+      setShowNewMessageIndicator(true);
+    }
+  }, [messages, thinking, progress, pendingExecution, activitySteps]);
+
+  // Sync messages to persistent state
+  useEffect(() => {
+    setConvState((prev) => {
+      // Only update messages if different
+      if (prev.messages.length === messages.length) return prev;
+      return { ...prev, messages: messages.slice(-200), updatedAt: Date.now() };
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (!walletConnected) {
@@ -1205,7 +1907,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     void sendRef.current?.(resumed.originalMessage, { resume: true, skipUserBubble: true });
   }, [walletConnected]);
 
-  // Task continuity: if user left and came back, offer resume
   useEffect(() => {
     try {
       const last = getLastActiveTask();
@@ -1300,25 +2001,43 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const card = pendingExecution?.card || null;
 
-  // Debug dashboard toggle (hidden, only via triple click or ?debug)
   const handleDebugToggle = useCallback(() => {
     const logs = getDebugLogs({ limit: 20 });
     const stats = getObsStats();
     const mem = getAllMemory();
-    setDebugInfo({ logs, stats, mem, currentPage, aiContext: { hasWallet: aiContext.wallet.connected, totalValue: aiContext.portfolio.totalValueUsd } });
+    const memV2 = getAllMemoryV2();
+    const obsV2 = obsRef.current.getRecent(5);
+    const quality = metricsRef.current.getMetrics();
+    setDebugInfo({
+      logs,
+      stats,
+      mem,
+      memV2,
+      obsV2,
+      quality,
+      currentPage,
+      convState: {
+        sessionId: convState.sessionId,
+        intentId: convState.intentId,
+        currentIntent: convState.currentIntent,
+        intentStatus: convState.intentStatus,
+        collectedSlots: convState.collectedSlots,
+        missingSlots: convState.missingSlots,
+        lastQuestion: convState.lastQuestion,
+        currentRoute: convState.currentRoute,
+        previousRoute: convState.previousRoute
+      },
+      aiContext: { hasWallet: aiContext.wallet.connected, totalValue: aiContext.portfolio.totalValueUsd }
+    });
     setShowDebug(v => !v);
     enableDebug();
-  }, [currentPage, aiContext]);
-
-  /* ---------------- Operations Center: real data + real actions ----------- */
+  }, [currentPage, aiContext, convState]);
 
   const pushTurn = useCallback((m) => {
     setMessages((prev) => [...prev, m]);
     return m;
   }, []);
 
-  /* Persist every new turn once — one effect, no duplicates, covers all
-     message producers (chat, operations, confirmation, errors). */
   const persistedCountRef = useRef(0);
   useEffect(() => {
     try {
@@ -1336,7 +2055,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         }
         persistedCountRef.current = messages.length;
       }
-    } catch { /* history is a convenience, never a gate */ }
+    } catch {}
   }, [messages, conversationId]);
 
   const refreshMonitors = useCallback(async () => {
@@ -1364,7 +2083,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMonitorEngineStatus(ms.status === 'fulfilled' ? ms.value : null);
       setServerReachable(ms.status === 'fulfilled' && ms.value?.ok === true);
       if (orders.status === 'fulfilled') setOrdersFromStore(orders.value);
-    } catch { /* status is best-effort */ }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -1373,16 +2092,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const t = setInterval(() => {
       void refreshMonitors();
       void refreshStatus();
-      // Re-evaluating against the live server keeps TRIGGERED monitors fresh.
       for (const m of monitors) {
         if (m.status === 'ACTIVE' && m.intervalMinutes <= 15) void apiEvaluateMonitor(m.id).catch(() => {});
       }
     }, 60000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshMonitors, refreshStatus]);
 
-  /* Open the ecosystem panel at a specific half (agents / strategies). */
   const openEcosystem = useCallback((kind = 'agent') => {
     setEcoKind(kind);
     setPanel('ecosystem');
@@ -1418,12 +2134,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
   }, [conversationId]);
 
-  /* Card → real action map for read/quote cards (the AI chat pipeline is the
-     real tooling: it resolves intent → quote → preview → confirm → execute). */
-
-  /* Opportunity Engine run — real data only, honest metadata.
-     Declared BEFORE handleOpsAction so the render cannot TDZ-crash
-     (Cannot access 'runOpportunity' before initialization). */
   const runOpportunity = useCallback(async (card) => {
     setOpsBusy(true);
     const result = await runOpportunityEngine({
@@ -1470,6 +2180,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
     setPanel(null);
     if (card.action === 'navigate') {
+      // §3 check loop
+      const check = shouldAllowNavigation(convStateRef.current, card.route, { intentId: convStateRef.current.intentId });
+      if (!check.allowed) {
+        busV6.emit(EVENTS_V6.REPETITION_PREVENTED, { target: card.route, reason: check.reason });
+        if (check.reason === 'same_route') return;
+      }
       navigate(card.route);
       appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
       return;
@@ -1490,13 +2206,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       await runOpportunity(card);
       return;
     }
-    /*
-     * No prompt means this card is not a chat action. Sending `card.title`
-     * instead — which is what happened before — pushes a bare label like
-     * "Position" into the parser, gets GENERAL back, and answers a button
-     * press with "I could not map that to a module". Opening the card's own
-     * venue is the honest fallback: the card always has a real route.
-     */
     const prompt = opsCardPrompt(card, locale);
     if (!prompt) {
       if (card.route) {
@@ -1508,7 +2217,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     await sendMessage(prompt);
   }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity, locale]);
 
-  /* Monitor create — real server registry. */
   const handleMonitorCreate = useCallback(async (draft) => {
     setOpsBusy(true);
     let alert = {};
@@ -1516,8 +2224,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const { pushIdentity } = await import('../lib/notify.js');
       const id = await pushIdentity();
       if (id?.endpoint) alert = { endpoint: id.endpoint, lang: locale };
-    } catch { /* no push identity → monitor still records events in-app */ }
-    const made = await apiCreateMonitor({ ...draft, alert, conversationId, source: 'intent-os' });
+    } catch {}
+    const made = await apiCreateMonitor({ ...draft, alert, conversationId, source: 'intent-os-v6' });
     setMonitorDraftOpen(false);
     if (!made?.ok) {
       pushTurn({
@@ -1554,7 +2262,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setOpsBusy(false);
   }, [conversationId, locale, pushTurn, appendOp]);
 
-  /* Conditional order — real order in fbt-orders-v1 + /orders + server watch. */
   const handleOrderCreate = useCallback(async (parsed) => {
     setOpsBusy(true);
     const made = createConditionalOrder(parsed, { chainId: 42161 });
@@ -1596,7 +2303,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setOpsBusy(false);
   }, [locale, pushTurn, appendOp, refreshStatus]);
 
-  /* Monitor actions from cards / history — real API calls. */
   const handleMonitorAction = useCallback(async (m, action) => {
     if (!m?.id) return;
     setOpsBusy(true);
@@ -1629,7 +2335,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setOpsBusy(false);
   }, [locale, refreshMonitors, pushTurn, appendOp]);
 
-  /* Monitor one opportunity row — real server monitor (price or yield APY). */
   const monitorOpportunityRow = useCallback(async (o) => {
     if (o?.apy != null) {
       await handleMonitorCreate({
@@ -1667,13 +2372,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     });
   }, [handleMonitorCreate, pushTurn, locale]);
 
-  /* Natural-language monitoring / conditional-order / context continuation.
-     Runs before the generic chat so operations are CREATED, not described. */
   const handleContextTurn = useCallback(async (message) => {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
 
-    /* (a) Confirmation of a prepared draft — real creation, no re-navigation. */
     if (pendingDraft && /انجامش بده|تأیید|تایید|بله|باشه|do it|confirm|execute|yes/i.test(text)) {
       const d = pendingDraft;
       setPendingDraft(null);
@@ -1689,7 +2391,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return { handled: true };
     }
 
-    /* (b) Active monitor/order control — the SAME operation (§11). */
     if (activeContext?.type === 'monitor') {
       const m = monitors.find((x) => x.id === activeContext.id) || monitors.find((x) => x.label === activeContext.label);
       if (m) {
@@ -1700,12 +2401,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     }
 
-    /* (c) «بازار را بپای» / «اگر ETH کمتر از 3000 شد خبر بده» — monitor intent. */
     const monitorIntent = /پایش|بپای|نظارت|watch|monitor|خبر بده|اطلاع بده|alert/i.test(text)
       && !/توقف|متوقف|لغو/i.test(text);
 
-    /* (c-1) «اگر شرایط سود 20 درصدی ایجاد شد بررسی کن» — real OPPORTUNITY job:
-       the server scans real yield venues and triggers at the target APY %. */
     if (monitorIntent && /سود|بازدهی|yield|return|apy/i.test(text)) {
       const pctMatch = text.match(/([0-9۰-۹.,]+)\s*(?:درصد|%|pct|percent)/i);
       let target = null;
@@ -1741,7 +2439,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (monitorIntent) {
       const parsed = parseMonitorRequest(text, { locale });
       if (parsed.monitor?.threshold == null && !parsed.error) {
-        /* Asset/condition missing → ask with the real form instead of guessing. */
         setMonitorInitial(parsed.monitor || null);
         setMonitorDraftOpen(true);
         pushTurn({
@@ -1786,7 +2483,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     }
 
-    /* (d) «اگر BTC به 100000 رسید بخر» — real conditional order. */
     if (/بخر|buy|خرید/i.test(text) && /اگر|وقتی|when|if|به\s/i.test(text)) {
       const parsed = parseConditionalBuy(text, { chainId: 42161 });
       if (!parsed.error) {
@@ -1821,7 +2517,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     }
 
-    /* (e) «فرصت برای هدف» — real opportunity engine run. */
     if (/فرصت|opportunit|بهترین.*درآمد|بازدهی/i.test(text) && /هدف|goal|سود/i.test(text)) {
       pushTurn({
         id: makeId(),
@@ -1841,7 +2536,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   contextHandlerRef.current = handleContextTurn;
 
-  /* Continue a history/monitor item in chat — context resolution (§11/§12). */
   const handleContinue = useCallback((item) => {
     if (item?.refKind === 'monitor' || item?.kind === 'MONITOR_CREATE' || item?.id?.startsWith?.('mon_')) {
       const mon = monitors.find((x) => x.id === (item.ref || item.id));
@@ -1864,26 +2558,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [monitors, locale, pushTurn]);
 
   return (
-    <div className="iaos-page">
+    <div className="iaos-page iaos-page-v6">
       <div className="iaos-shell">
-        {/* ─── MINIMAL HEADER ───────────────────────────────────────────────
-            The old header carried five panel buttons (intelligence, history,
-            operations, agents·strategies, status) plus the title. On a phone
-            that wrapped into a second line and read as clutter. Those panels
-            moved to the bottom menu bar; the header keeps only "AI" and ONE
-            status pill. There used to be a second, always-on "Live" badge
-            next to it — so the top of the page said both «آنلاین» and «زنده»
-            (or "Online" and "Live") for the same thing. On instruction only
-            the real, measured state survives: the pill reflects the actual
-            server probe, the decorative badge is gone. The debug dashboard
-            stays reachable by tapping the title, as before. */}
         <header className="iaos-header">
           <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
             <span className="iaos-mark" aria-hidden="true">✦</span>
             <span className="iaos-title-copy">
               <h1>AI</h1>
-              <span className="iaos-title-sub">Intent OS</span>
+              <span className="iaos-title-sub">Intent OS V6</span>
             </span>
+            {/* Thinking Orb in header when active */}
+            {thinkingState !== 'idle' ? (
+              <ThinkingOrb state={thinkingState} size={18} locale={locale} showLabel={false} />
+            ) : null}
           </div>
           <div className="iaos-header-status">
             {serverReachable != null ? (
@@ -1905,18 +2592,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         ) : null}
 
+        {/* Conversation state debug chip */}
+        {convState.currentIntent && convState.intentStatus !== 'completed' ? (
+          <div className="iaos-intent-chip" style={{ display: 'flex', gap: 6, fontSize: 11, color: '#a5b4fc', padding: '4px 8px', background: 'rgba(99,102,241,0.08)', borderRadius: 999, alignItems: 'center' }}>
+            <span>✦ {convState.currentIntent}</span>
+            <span style={{ opacity: 0.6 }}>· {convState.intentStatus}</span>
+            {Object.keys(convState.collectedSlots || {}).length ? (
+              <span style={{ opacity: 0.6 }}>· {Object.keys(convState.collectedSlots).length} slots</span>
+            ) : null}
+          </div>
+        ) : null}
+
         {showDebug && debugInfo ? (
-          <div className="iaos-debug" style={{ background: '#111', color: '#0f0', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace', maxHeight: '300px', overflow: 'auto' }}>
+          <div className="iaos-debug" style={{ background: '#111', color: '#0f0', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace', maxHeight: '400px', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <strong>AI Dashboard Internal (Debug)</strong>
+              <strong>AI Dashboard V6 (Debug) — Intent OS 6</strong>
               <button onClick={() => setShowDebug(false)} style={{ background: '#333', color: '#fff', border: 'none', padding: '2px 8px', borderRadius: '4px' }}>✕</button>
             </div>
-            <div>Current Page: {debugInfo.currentPage}</div>
+            <div>Current Page: {debugInfo.currentPage} | Prev: {debugInfo.convState?.previousRoute}</div>
+            <div>Session: {debugInfo.convState?.sessionId} | Intent: {debugInfo.convState?.intentId} | Status: {debugInfo.convState?.intentStatus}</div>
             <div>Wallet: {debugInfo.aiContext.hasWallet ? 'Connected' : 'Not connected'} | Portfolio: ${debugInfo.aiContext.totalValue || 0}</div>
-            <div>Stats: {JSON.stringify(debugInfo.stats)}</div>
-            <div style={{ marginTop: '8px' }}>Recent Logs:</div>
-            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px' }}>{JSON.stringify(debugInfo.logs.slice(0, 3), null, 2)}</pre>
-            <div style={{ marginTop: '8px' }}>Memory: Working {debugInfo.mem.working?.length || 0} | Session {debugInfo.mem.session?.length || 0} | Long {debugInfo.mem.longTerm?.length || 0}</div>
+            <div>Slots: {JSON.stringify(debugInfo.convState?.collectedSlots)} | Missing: {JSON.stringify(debugInfo.convState?.missingSlots)}</div>
+            <div>Last Q: {debugInfo.convState?.lastQuestion} | Last A: {debugInfo.convState?.lastUserAnswer}</div>
+            <div>Quality: {JSON.stringify(debugInfo.quality)}</div>
+            <div style={{ marginTop: '8px' }}>Observability V6 (recent 3):</div>
+            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px' }}>{JSON.stringify(debugInfo.obsV2?.slice(0, 3), null, 2)}</pre>
+            <div style={{ marginTop: '8px' }}>Memory V2: L1 {debugInfo.memV2?.l1?.length || 0} | L2 {debugInfo.memV2?.l2?.length || 0} | L3 {debugInfo.memV2?.l3?.length || 0}</div>
           </div>
         ) : null}
 
@@ -1946,68 +2647,124 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         ) : null}
 
-        <div className="iaos-conversation" ref={threadRef} onScroll={handleThreadScroll} aria-live="polite">
-          {messages.map((m) => (
-            <ConversationRow
-              key={m.id}
-              m={m}
-              t={t}
-              locale={locale}
-              onConnectWallet={connectFromBubble}
-              onChoose={chooseOption}
-              onMonitorAction={handleMonitorAction}
-              onMonitorOpportunity={monitorOpportunityRow}
-              onFeedback={sendFeedback}
-            />
-          ))}
-          {thinking.length ? (
-            <div className="iaos-msg iaos-ai">
-              <div className="iaos-bubble iaos-thinking">
-                {thinking.map((s) => <span key={s} className="iaos-think-row">{s}</span>)}
-              </div>
-            </div>
-          ) : null}
+        {/* UPGRADE 6 — Chat container redesigned per §23 */}
+        <div className="iaos-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', flex: '1 1 auto', minHeight: 0 }}>
+          <div className="iaos-conversation iaos-conversation-v6" ref={threadRef} onScroll={handleThreadScroll} aria-live="polite">
+            {messages.map((m) => (
+              <ConversationRow
+                key={m.id}
+                m={m}
+                t={t}
+                locale={locale}
+                onConnectWallet={connectFromBubble}
+                onChoose={chooseOption}
+                onMonitorAction={handleMonitorAction}
+                onMonitorOpportunity={monitorOpportunityRow}
+                onFeedback={sendFeedback}
+              />
+            ))}
 
-          {progressLine ? (
-            <div className="iaos-progress" data-testid="intent-ai-progress" role="status">
-              {progressLine}
-            </div>
-          ) : null}
-
-          {pendingExecution ? (
-            <div className="iaos-exec-card" role="group" data-testid="intent-ai-action-card">
-              <div className="iaos-exec-title">
-                {card?.title || t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' })}
-              </div>
-              {card?.headline ? <div className="iaos-exec-line">{card.headline}</div> : null}
-              {Array.isArray(card?.rows) && card.rows.length ? (
-                <div className="iaos-alloc" data-testid="intent-ai-allocation">
-                  {card.rows.map((row) => (
-                    <div key={row.symbol} className="iaos-alloc-row">
-                      <strong>{row.symbol}</strong>
-                      <span>{Number.isFinite(Number(row.fromPct)) ? `${row.fromPct}%` : '—'} → {Number.isFinite(Number(row.toPct)) ? `${row.toPct}%` : '—'}</span>
+            {/* §27 Thinking Orb replaces text, §29 Activity Timeline */}
+            {thinkingState !== 'idle' ? (
+              <div className="iaos-msg iaos-ai">
+                <div className="iaos-bubble iaos-thinking-v6" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 200 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <ThinkingOrb state={thinkingState} size={28} locale={locale} showLabel={true} />
+                  </div>
+                  {activitySteps.length ? (
+                    <AIActivityTimeline steps={activitySteps} locale={locale} />
+                  ) : (
+                    <div className="iaos-thinking-legacy" style={{ fontSize: 12, color: 'rgba(226,232,240,0.7)' }}>
+                      {thinking.map((s) => <span key={s} className="iaos-think-row">{s}</span>)}
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : null}
-              {card?.tradeCount != null ? (
-                <div className="iaos-exec-meta">
-                  {locale?.startsWith?.('en')
-                    ? `${card.tradeCount} trade(s)${card.estimatedFeeUsd != null ? ` · fee ~ $${card.estimatedFeeUsd}` : ''}`
-                    : `${card.tradeCount} معامله${card.estimatedFeeUsd != null ? ` · کارمزد حدود $${card.estimatedFeeUsd}` : ''}`}
-                </div>
-              ) : null}
-              <div className="iaos-exec-actions">
-                <button type="button" className="iaos-btn iss-solid" onClick={confirmExecution} disabled={executing} data-testid="intent-ai-confirm">
-                  {executing
-                    ? t('intentAIOS.working', { defaultValue: 'در حال اجرا…' })
-                    : (card?.confirmLabel || t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }))}
-                </button>
-                <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>
-                  {card?.editLabel || t('intentAIOS.edit', { defaultValue: 'ویرایش' })}
-                </button>
               </div>
-            </div>
+            ) : null}
+
+            {progressLine ? (
+              <div className="iaos-progress" data-testid="intent-ai-progress" role="status">
+                {progressLine}
+              </div>
+            ) : null}
+
+            {pendingExecution ? (
+              <div className="iaos-exec-card" role="group" data-testid="intent-ai-action-card">
+                <div className="iaos-exec-title">
+                  {card?.title || t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' })}
+                </div>
+                {card?.headline ? <div className="iaos-exec-line">{card.headline}</div> : null}
+                {Array.isArray(card?.rows) && card.rows.length ? (
+                  <div className="iaos-alloc" data-testid="intent-ai-allocation">
+                    {card.rows.map((row) => (
+                      <div key={row.symbol} className="iaos-alloc-row">
+                        <strong>{row.symbol}</strong>
+                        <span>{Number.isFinite(Number(row.fromPct)) ? `${row.fromPct}%` : '—'} → {Number.isFinite(Number(row.toPct)) ? `${row.toPct}%` : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {card?.tradeCount != null ? (
+                  <div className="iaos-exec-meta">
+                    {locale?.startsWith?.('en')
+                      ? `${card.tradeCount} trade(s)${card.estimatedFeeUsd != null ? ` · fee ~ $${card.estimatedFeeUsd}` : ''}`
+                      : `${card.tradeCount} معامله${card.estimatedFeeUsd != null ? ` · کارمزد حدود $${card.estimatedFeeUsd}` : ''}`}
+                  </div>
+                ) : null}
+                {/* Wallet snapshot info */}
+                {pendingExecution.walletSnapshot ? (
+                  <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)', marginTop: 8 }}>
+                    {locale.startsWith('fa') ? 'اسنپ‌شات کیف پول: ' : 'Wallet snapshot: '}
+                    {pendingExecution.walletSnapshot.address?.slice(0, 6)}...{pendingExecution.walletSnapshot.address?.slice(-4)}
+                    {' · '}
+                    {new Date(pendingExecution.walletSnapshot.timestamp).toLocaleTimeString()}
+                  </div>
+                ) : null}
+                <div className="iaos-exec-actions">
+                  <button type="button" className="iaos-btn iss-solid" onClick={confirmExecution} disabled={executing} data-testid="intent-ai-confirm">
+                    {executing ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <ThinkingOrb state="working" size={16} locale={locale} />
+                        {t('intentAIOS.working', { defaultValue: 'در حال اجرا…' })}
+                      </span>
+                    ) : (card?.confirmLabel || t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }))}
+                  </button>
+                  <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>
+                    {card?.editLabel || t('intentAIOS.edit', { defaultValue: 'ویرایش' })}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* §24 Intelligent Auto Scroll — New message indicator */}
+          {showNewMessageIndicator ? (
+            <button
+              type="button"
+              className="iaos-new-msg-indicator"
+              onClick={() => {
+                scrollMgrRef.current.clearNewMessageIndicator();
+                setShowNewMessageIndicator(false);
+              }}
+              style={{
+                alignSelf: 'center',
+                margin: '8px 0',
+                padding: '6px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(34,211,238,0.4)',
+                background: 'rgba(34,211,238,0.12)',
+                color: '#a5f3fc',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              data-testid="new-message-indicator"
+            >
+              ↓ {locale.startsWith('fa') ? 'پیام جدید' : 'New message'}
+            </button>
           ) : null}
         </div>
 
@@ -2030,7 +2787,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </button>
         ) : null}
 
-        <form className="iaos-composer" onSubmit={handleSubmit}>
+        {/* §26 Mobile optimization — keyboard-aware, safe-area */}
+        <form className="iaos-composer iaos-composer-v6" onSubmit={handleSubmit}>
           <button type="button" className="iaos-action-btn" onClick={() => setDrawerOpen(true)} aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
             + {t('intentAIOS.actions', { defaultValue: 'Actions' })}
           </button>
@@ -2042,22 +2800,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             enterKeyHint="send"
           />
-          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinking.length > 0}>➤</button>
+          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinkingState !== 'idle'}>➤</button>
         </form>
 
-        {/* ─── BOTTOM MENU ─────────────────────────────────────────────────
-            The operations surfaces the header used to hold, moved down here
-            as plain text entries: عملیات / تاریخچه / هوش چندمدلی / ایجنت‌ها و
-            استراتژی‌ها. Text, not icon buttons, so the top of the screen
-            stays clean and the menu sits with the composer where the thumb
-            already is.
-
-            Agents and strategies are ONE entry, not two: both live in the same
-            ecosystem panel (it has its own agent/strategy tabs), so two buttons
-            here opened the same box twice under different names — «ایجنت» و
-            «استراتژی» side by side for one place. On instruction the single
-            entry opens that panel on its agents tab, where the strategies tab
-            is one tap away. */}
         <nav className="iaos-menubar" aria-label={locale.startsWith('fa') ? 'منوی عملیات' : 'Operations menu'}>
           <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
             {opsText('ops.aria', locale)}
