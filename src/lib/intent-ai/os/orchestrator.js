@@ -96,9 +96,9 @@ export function createOrchestrator({
             readOnly: true
           });
         }
-      } else if (['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'RISK_ANALYSIS', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'ANALYZE_TOKEN', 'FARM', 'LEND', 'STAKING'].includes(type)) {
+      } else if (['PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'RISK_ANALYSIS', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'ANALYZE_TOKEN', 'FARM', 'LEND', 'STAKING', 'GOAL'].includes(type)) {
         actions.length = 0;
-      } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'REBALANCE', 'DCA', 'GOAL'].includes(type)) {
+      } else if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND', 'REBALANCE', 'DCA'].includes(type)) {
         const tradingTools = tools.filter(t => !t.readOnly && t.requiresConfirmation);
         const primary = tradingTools[0] || tools[0];
         

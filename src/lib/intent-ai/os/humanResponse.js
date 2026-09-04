@@ -524,6 +524,33 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
+  /**
+   * «سود ۲۰ درصد» is a GOAL (a target the user wants to reach), not a request
+   * to scan the yield market. The distinction is what the return field
+   * captures: without it the chat fell through to the generic tail and never
+   * acknowledged the number.
+   */
+  if (type === 'GOAL') {
+    const target = intent?.entities?.targetReturn;
+    const timeframe = intent?.entities?.timeframe?.raw;
+    if (target != null) {
+      const targetText = lang === 'fa' ? `${target}٪` : `${target}%`;
+      return {
+        message: lang === 'fa'
+          ? `هدف مالی شما ثبت شد: رسیدن به ${targetText} سود${timeframe ? ` در ${timeframe}` : ''}.\n\nاین یک هدف است، نه کشف بازده و نه تضمین تحقق — برای برنامه‌ریزی واقعی به بازه زمانی و سطح ریسک نیاز دارم. اگر بگویید (مثلاً «۶ ماه، متعادل»)، برنامه را روی همان هدف می‌سازم.`
+          : `Financial goal recorded: a ${targetText} return${timeframe ? ` over ${timeframe}` : ''}.\n\nThis is a target, not a yield scan and not a guarantee. To build a real plan I need a timeframe and a risk level — say it (e.g. “6 months, balanced”) and I will plan around exactly this goal.`,
+        ui: { type: 'TEXT' },
+        goal: { targetReturn: target, timeframe: intent?.entities?.timeframe || null }
+      };
+    }
+    return {
+      message: lang === 'fa'
+        ? 'یک هدف مالی برایت تعیین می‌کنم. چه مقدار سود را هدف گرفته‌ای؟ (مثلاً «۲۰ درصد»)'
+        : 'Let us set a financial goal. What return are you targeting? (e.g. “20%”)',
+      ui: { type: 'TEXT' }
+    };
+  }
+
   if (['SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND'].includes(type)) {
     const action = plan?.actions?.[0] || results.action || {};
     const from = action.input?.fromSymbol || action.from || intent?.entities?.fromToken || intent?.entities?.token || 'USDC';

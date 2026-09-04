@@ -410,6 +410,15 @@ const INTENT_PATTERNS = [
     ]
   },
   {
+    type: 'GOAL',
+    weight: 7,
+    patterns: [
+      /سود.*درصد|درصد.*سود|بازده.*درصد|درصد.*بازده/i,
+      /return.*percent|percent.*return|profit.*percent|percent.*profit/i,
+      /سود.*داشته باشم|بازده.*داشته باشم/i
+    ]
+  },
+  {
     type: 'CONTINUE',
     weight: 7,
     patterns: [
@@ -859,7 +868,7 @@ export function understandIntent(message, context = {}) {
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
       'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND',
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
-      'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES'
+      'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES', 'GOAL'
     ].includes(selectedType),
     handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
   };

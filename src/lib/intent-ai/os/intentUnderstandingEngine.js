@@ -534,6 +534,12 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
     entities.targetReturn = parseFloat(r[1]);
   }
 
+  // «سود ۲۰ درصد» — the goal comes before the number, not after it.
+  if (entities.targetReturn == null) {
+    const goalBeforePct = norm.match(/(?:سود|بازدهی|بازده|رشد|return|profit)\s*[^.!?]{0,20}?\s*(\d+(?:\.\d+)?)\s*(?:درصد|%|percent)/i);
+    if (goalBeforePct) entities.targetReturn = parseFloat(goalBeforePct[1]);
+  }
+
   if (entities.targetReturn != null) {
     entities.targetReturnNote = 'این یک هدف است و تضمینی برای تحقق سود وجود ندارد.';
   }
