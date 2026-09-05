@@ -275,6 +275,23 @@ console.log('▸ probing FBT Intent AI — understanding & planning (43-utteranc
   report('intent-ai understanding & planning', await runUnderstanding());
 }
 
+console.log('▸ probing FBT Intent AI — Persian alef folding in short answers…');
+{
+  const { spawnSync } = await import('node:child_process');
+  const alef = spawnSync(process.execPath, [new URL('./intent-ai/upgrade6-short-answer-alef-probe.mjs', import.meta.url).pathname], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  const alefOk = alef.status === 0;
+  report('intent-ai short-answer alef', [[`upgrade6 alef probe${alefOk ? '' : ` — ${(alef.stderr || alef.stdout || '').trim().split('\n').slice(-1)[0]}`}`, alefOk]]);
+}
+
+console.log('▸ probing FBT Intent OS — follow-up resume (اره / pending page-open)…');
+{
+  const { default: followRows } = await import('./intent-ai/upgrade6-followup-resume-probe.mjs');
+  if (Array.isArray(followRows)) report('intent-os follow-up resume', followRows);
+}
+
 /* Pure logic + source wiring, no DOM and no network: the product limits
    (400k total / 5k per tx / 60% goal / 30 days) enforced with a friendly
    warning, the step-by-step guided chat flow, the visible two-agent

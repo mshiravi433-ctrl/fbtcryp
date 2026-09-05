@@ -105,6 +105,10 @@ export class ObservabilityV2 {
       case 'FALLBACK':
         rec.fallbacks.push({ ...payload, at: now() });
         break;
+      case 'INTENT_DETECTED':
+        rec.detectedIntent = payload.detectedIntent || payload.type || rec.detectedIntent;
+        rec.detectedDetail = payload.detail || payload.detectedDetail || rec.detectedDetail;
+        break;
       case 'COMPLETION':
         rec.completion = { status: payload.status, at: now(), ...payload };
         rec.duration = rec.updatedAt - rec.createdAt;

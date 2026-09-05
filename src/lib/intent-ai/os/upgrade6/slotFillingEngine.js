@@ -57,8 +57,10 @@ export function parseShortAnswer(text) {
   const t = normalizeText(text);
   if (!t) return { type: 'empty', confidence: 0 };
 
-  // Confirmation
-  if (/^(بله|اره|آره|اری|آری|باشه|اوکی|ok|yes|yep|yeah|confirm|انجام بده|انجامش بده|ادامه بده|ادامه|تایید|تأیید)$/.test(t)) {
+  // Confirmation — bare yes, plus “yes open it / yes confirmed / continue”
+  if (/^(بله|اره|آره|اری|آری|باشه|اوکی|ok|okay|yes|yep|yeah|confirm|انجام بده|انجامش بده|ادامه بده|ادامه|تایید|تأیید)(\s+(تایید|تأیید)?\s*(شد|کن|بده|باز کن|بازکن)?)?$/.test(t)
+    || /^(بله|اره|آره)\s+(تایید|تأیید)\s*شد$/.test(t)
+    || /^(بله|اره|آره)\s+(باز کن|بازکن|ادامه بده|ادامه)$/.test(t)) {
     return { type: 'confirm', value: true, confidence: 0.99, raw: text };
   }
   if (/^(نه|نخیر|نه فعلا|فعلا نه|لغو کن|کنسل|بی خیال|no|nope|cancel|stop)$/.test(t)) {
@@ -142,6 +144,8 @@ export function parsePercent(text) {
 
 export function parseAmount(text) {
   const t = normalizeText(text);
+  // «سود ۲۰ درصد» is a return target, never $20 of capital.
+  if (/(درصد|٪|%)/.test(t) && !/(دلار|usd|\$)/i.test(t)) return null;
   // $10,000 or 10000 دلار
   let m = t.match(/\$?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(دلار|usd|\$)?/i);
   if (m) {
@@ -205,8 +209,10 @@ export class SlotFillingEngine {
     const parsed = parseShortAnswer(answerText);
     const expected = this.expectedType || conversationState?.lastQuestionType || null;
 
-    // If expected type matches parsed type, fill directly
-    if (expected && parsed.type === expected) {
+    // If expected type matches parsed type, fill directly — but never treat
+    // free `text` as a slot. That is what ate «افق جهانی را باز کن» when a
+    // leftover lastQuestionType of `text` was still sitting in state.
+    if (expected && parsed.type === expected && parsed.type !== 'text') {
       return {
         filled: true,
         slot: expected,
@@ -242,8 +248,10 @@ export class SlotFillingEngine {
       }
     }
 
-    // If short answer is confirm/reject, treat as answer to last question
-    if (parsed.type === 'confirm' || parsed.type === 'reject') {
+    // Confirm/reject only fills when we actually asked a yes/no. Otherwise
+    // «اره» after “open the market page?” is a follow-up resume, not a slot.
+    const yesNoExpected = !expected || /^(confirm|confirmation|risk|yesno|boolean)$/i.test(String(expected));
+    if ((parsed.type === 'confirm' || parsed.type === 'reject') && expected && yesNoExpected) {
       return { filled: true, slot: expected || 'confirmation', value: parsed.value, confidence: parsed.confidence, parsed };
     }
 
@@ -270,7 +278,11 @@ export class SlotFillingEngine {
     if (pct) slots.targetReturn = pct;
 
     const amt = parseAmount(t);
-    if (amt) slots.capital = amt;
+    // Never copy the percent number into capital (the dump showed capital=20 USD
+    // from «میخام سود 20 درصد داشته باشم»).
+    if (amt && !(slots.targetReturn && amt.value === slots.targetReturn.value)) {
+      slots.capital = amt;
+    }
 
     // Risk
     if (/ریسک کم|محافظه|low risk/i.test(t)) slots.risk = 'low';

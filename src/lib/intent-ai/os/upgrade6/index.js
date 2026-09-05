@@ -17,6 +17,7 @@ export * from './observability.js';
 export * from './chatScrollManager.js';
 export * from './eventBusV2.js';
 export * from './memoryV2.js';
+export * from './followUpResolver.js';
 
 // Convenience initializer for Upgrade 6
 import { loadConversationState, saveConversationState } from './conversationState.js';

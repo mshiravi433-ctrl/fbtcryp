@@ -138,10 +138,9 @@ const YIELD = [
   /*
    * FOREX / METALS / INDICES.
    *
-   * Gated on the SAME flag that gates the route in App.jsx. In a store build
-   * `/ostium` does not exist, so a card pointing at it would land on the
-   * catch-all and look broken — and "cannot work completely" means absent,
-   * not half-built.
+   * Gated on the SAME flag that gates Ostium in App.jsx. The live surface is
+   * the Ostium tab on /stocks (افق جهانی) — not /invest (virtual NX) and not
+   * a standalone /ostium URL.
    */
   ...(SPECULATION_ENABLED
     ? [{
@@ -149,7 +148,7 @@ const YIELD = [
       Icon: IconTrend,
       risk: 'high',
       color: 'var(--rgb-3)',
-      internal: '/ostium'
+      internal: '/stocks'
     }]
     : []),
   /*

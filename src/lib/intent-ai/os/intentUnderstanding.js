@@ -7,6 +7,7 @@
  */
 
 import { aliasChainId, aliasToken, wantsPageOpen } from './moduleRouter.js';
+import { classifyFollowUp, isBareFollowUp } from './upgrade6/followUpResolver.js';
 import {
   normalizeUpgrade4,
   extractEntitiesUpgrade4,
@@ -170,7 +171,7 @@ const KEYWORD_LEXICON = Object.freeze([
   { type: 'REBALANCE', words: ['متعادل', 'متوازن', 'ریبالانس', 'rebalance', 'rebalancing'] },
   { type: 'GOAL', words: ['هدف', 'هدف مالی', 'goal', 'goals', 'target'] },
   { type: 'DCA', words: ['دی سی ای', 'خرید پلکانی', 'خرید دورهای', 'dca', 'recurring'] },
-  { type: 'CONTINUE', words: ['ادامه', 'ادامهاش', 'continue', 'resume', 'go on'] },
+  { type: 'CONTINUE', words: ['ادامه', 'ادامهاش', 'continue', 'resume', 'go on', 'تایید شد', 'تأیید شد'] },
   { type: 'DETAILS', words: ['جزئیات', 'جزییات', 'بیشتر', 'details', 'more'] },
 
   /* ── app surfaces the assistant must be able to reach ─────────────────── */
@@ -220,7 +221,7 @@ function scoreKeywords(normalized) {
  * a token analysis, not a swap and not GENERAL. Kept separate from the lexicon
  * because it needs the extracted entity, not a word.
  */
-const TOKEN_QUESTION = /(چطور|چطوره|چگونه|وضعیت|قیمت|نرخ|تحلیل|بخرم|ارزش|چیه|چیست|how is|how's|what is|what about|price of|outlook|worth)/i;
+const TOKEN_QUESTION = /(چطور|چطوره|چگونه|وضعیت|قیمت|نرخ|تحلیل|بخرم|ارزش|چیه|چیست|پیش\s*بینی|پیشبینی|forecast|prediction|how is|how's|what is|what about|price of|outlook|worth)/i;
 
 // Persian + English patterns
 const INTENT_PATTERNS = [
@@ -633,8 +634,9 @@ const NAV_TARGETS = [
   { route: '/orders', keywords: ['سفارش خودکار', 'سفارش', 'orders'], type: 'ORDERS' },
   { route: '/perp', keywords: ['فیوچرز', 'futures', 'perp', 'پرپچوال'], type: 'FUTURES' },
   { route: '/dydx', keywords: ['dydx'], type: 'DYDX' },
+  { route: '/stocks', keywords: ['افق جهانی', 'فارکس', 'forex', 'جفت ارز', 'طلا', 'نفت', 'فلزات', 'gold', 'metals'], type: 'HORIZON' },
   { route: '/stocks', keywords: ['سهام', 'stocks'], type: 'STOCKS' },
-  { route: '/invest', keywords: ['افق جهانی', 'فارکس', 'forex', 'جفت ارز'], type: 'HORIZON' },
+  { route: '/invest', keywords: ['سرمایه‌گذاری مجازی', 'پول مجازی'], type: 'INVESTMENT_PLAN' },
   { route: '/p2p', keywords: ['p2p', 'پی تو پی'], type: 'P2P' },
   { route: '/rewards', keywords: ['امتیاز', 'rewards', 'پاداش'], type: 'REWARDS' },
   { route: '/intent', keywords: ['اینتنت', 'intent os'], type: 'INTENT_OS' },
@@ -673,6 +675,17 @@ export function understandIntent(message, context = {}) {
   const normalized = normalizeText(text);
   const scores = new Map();
   const matched = [];
+
+  /*
+   * Bare «اره» / «بله تایید شد» / «اره باز کن» is a continuation of the last
+   * offer, not GENERAL and not a trip to /news because the word «باز» appeared.
+   * A real new request (buy, horizon, portfolio…) still wins below.
+   */
+  const follow = classifyFollowUp(text);
+  if ((follow.type === 'confirm' || follow.type === 'best') && isBareFollowUp(text) && String(text).trim().length < 80) {
+    scores.set('CONTINUE', (scores.get('CONTINUE') || 0) + 9);
+    matched.push({ type: 'CONTINUE', score: 9, follow: follow.type });
+  }
 
   for (const rule of INTENT_PATTERNS) {
     let hits = 0;
@@ -924,7 +937,7 @@ function extractEntities(text, context = {}) {
     }
   }
 
-  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
+  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'اربیتروم', 'اریتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
   const foundChains = [];
   for (const w of chainWords) {
     const lower = raw.toLowerCase();
@@ -1016,6 +1029,12 @@ export const ACCEPTANCE_TESTS = Object.freeze([
    */
   { input: 'بیت کوین چطوره', expected: 'ANALYZE_TOKEN' },
   { input: 'قیمت اتریوم', expected: 'ANALYZE_TOKEN' },
+  { input: 'پیش بینی بیت کویین', expected: 'ANALYZE_TOKEN' },
+  { input: 'تحلیل اریتروم', expected: 'ANALYZE_TOKEN' },
+  { input: 'افق جهانی را باز کن', expected: 'HORIZON' },
+  { input: 'اره', expected: 'CONTINUE' },
+  { input: 'بله تایید شد', expected: 'CONTINUE' },
+  { input: 'اره باز کن', expected: 'CONTINUE' },
 
   /* ── MIXED SCRIPT / ARABIC KEYBOARD ──────────────────────────────────────
    * Arabic ي and ك arrive from iOS keyboards; normalisation must fold them.

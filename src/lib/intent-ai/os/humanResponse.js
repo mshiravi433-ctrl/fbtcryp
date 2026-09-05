@@ -354,6 +354,20 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     }
 
     if (!holdings.length) {
+      const empty = portfolio?.dataStatus === 'empty' || (!hydrating && portfolio?.freshness === 'FRESH');
+      if (empty) {
+        return {
+          message: lang === 'fa'
+            ? 'کیف پول متصل است و ایندکسر پاسخ داده، اما دارایی قابل‌نمایش نیست — پرتفوی خالی است، نه قطع اتصال. می‌توانم فارم، سواپ یا بازار را باز کنم.'
+            : 'Wallet is connected and the indexer answered, but there are no holdings — the portfolio is empty, not disconnected. I can open farm, swap or markets.',
+          ui: { type: 'TEXT' },
+          code: 'EMPTY_PORTFOLIO',
+          actions: [
+            { id: 'open-farm', route: '/farm', label: lang === 'fa' ? 'فارم' : 'Farm' },
+            { id: 'open-market', route: '/market', label: lang === 'fa' ? 'بازار' : 'Market' }
+          ]
+        };
+      }
       return {
         message: lang === 'fa'
           ? 'کیف پول متصل است، اما هنوز دارایی قابل‌نمایش از زنجیره/ایندکسر نرسیده. این به‌معنی قطع اتصال نیست — داده در حال تازه‌سازی است.'
@@ -498,7 +512,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         ui: { type: 'TEXT' },
         opportunities: best,
         actions: [
-          { id: 'open-invest', label: lang === 'fa' ? 'افق جهانی' : 'Horizon', route: '/invest' },
+          { id: 'open-horizon', label: lang === 'fa' ? 'افق جهانی' : 'Horizon', route: '/stocks' },
           { id: 'open-perp', label: lang === 'fa' ? 'فیوچرز' : 'Perpetuals', route: '/perp' },
           { id: 'open-stocks', label: lang === 'fa' ? 'سهام' : 'Stocks', route: '/stocks' }
         ]
@@ -672,9 +686,26 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
+  if (results.cancelled) {
+    return {
+      message: lang === 'fa' ? 'لغو شد. کاری اجرا نشد.' : 'Cancelled. Nothing was executed.',
+      ui: { type: 'TEXT' }
+    };
+  }
+
   if (type === 'CONTINUE' || type === 'EXECUTE_CURRENT' || type === 'DETAILS') {
     const slots = context.operational || {};
     const bits = [slots.asset, slots.operation, slots.amount].filter(Boolean);
+    if (results.route) {
+      const name = pageName(results.route, locale);
+      return {
+        message: lang === 'fa'
+          ? `صفحه ${name} را باز کردم. اگر این کار پول جابه‌جا می‌کند، تأیید و امضا همان‌جا انجام می‌شود — در چت اجرا نمی‌کنم.`
+          : `Opened ${name}. Money-moving confirmations stay on that page — I will not execute them in chat.`,
+        ui: { type: 'TEXT' },
+        navigated: results.route
+      };
+    }
     if (bits.length) {
       return {
         message: lang === 'fa'

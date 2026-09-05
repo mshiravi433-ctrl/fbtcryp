@@ -39,6 +39,7 @@ const TYPO_REPLACEMENTS = [
   [/\bاتر+وم\b/g, 'اتریوم'],
   [/\bبی\s*کوین\b/g, 'بیت کوین'],
   [/\bبیتکویین\b/g, 'بیت کوین'],
+  [/بیت\s*کویین/g, 'بیت کوین'],
   [/\bسواپ\s*کنش\b/g, 'سواپ کن این'],
   [/\bتبدیلش\s*کن\b/g, 'تبدیل کن این'],
   [/\bبخرش\b/g, 'بخر این'],
@@ -106,6 +107,7 @@ export const SLANG_ASSET_MAP = Object.freeze({
   'bnb': 'BNB',
   'آربیتروم': 'ARB',
   'اربیتروم': 'ARB',
+  'اریتروم': 'ARB',
   'arbitrum': 'ARB',
   'arb': 'ARB',
   'پالیگان': 'MATIC',
@@ -196,7 +198,7 @@ export function classifyQuestionType(text) {
   }
 
   // 6. Market analysis question ("بیت کوین الان چطوره؟", "وضعیت بازار")
-  if (/(چطوره|چگونه است|وضعیت|تحلیل|روند|قیمت|how is|how's|price of|market status)/i.test(norm)) {
+  if (/(چطوره|چگونه است|وضعیت|تحلیل|روند|قیمت|پیش\s*بینی|پیشبینی|how is|how's|price of|market status|forecast|prediction)/i.test(norm)) {
     return QUESTION_TYPES.MARKET_QUERY;
   }
 
@@ -575,7 +577,7 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
   }
 
   // 7. Network / Chain Resolution
-  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
+  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'اربیتروم', 'اریتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
   const foundChains = [];
   for (const w of chainWords) {
     const idx = norm.indexOf(w);
