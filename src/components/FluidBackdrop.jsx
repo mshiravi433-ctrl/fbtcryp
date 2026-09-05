@@ -235,8 +235,11 @@ const GRADIENT_FRAG = `
 
 /* Paint → screen. Velocities give the paint a subtle "wet light" sheen and
    curl highlights, which is most of what makes a fluid read as fluid rather
-   than as smeared ink. No vignette here — a CSS overlay handles legibility
-   so the two can be tuned independently per theme. */
+   than as smeared ink. Two things make the colour feel ALIVE: a slow hue
+   cycle that keeps shifting even when the paint has settled, and a filmic
+   soft knee so overlapping thin strokes saturate to vivid colour instead of
+   clipping to white. No vignette here — a CSS overlay handles legibility so
+   the two can be tuned independently per theme. */
 const DISPLAY_FRAG = `
   precision highp float;
   precision highp sampler2D;
@@ -248,8 +251,20 @@ const DISPLAY_FRAG = `
   uniform sampler2D uDye;
   uniform sampler2D uVelocity;
   uniform vec2 uTexelSize;
+  uniform float uTime;
   void main () {
     vec3 dye = texture2D(uDye, vUv).rgb;
+    /* Slow hue rotation (~5°/s): resting swirls keep changing colour, so the
+       screen never feels like a frozen poster. Luminance-preserving matrix
+       (Hoskins), so bright paint stays bright while the hue drifts. */
+    float c = cos(uTime * 0.09);
+    float s = sin(uTime * 0.09);
+    mat3 hr = mat3(
+      vec3(0.299 + 0.701*c + 0.168*s, 0.299 - 0.701*c - 0.168*s, 0.299 - 0.700*c + 1.168*s),
+      vec3(0.299 - 0.299*c + 0.330*s, 0.299 + 0.299*c + 0.330*s, 0.299 - 0.299*c - 0.330*s),
+      vec3(0.299 - 0.300*c - 0.497*s, 0.299 - 0.300*c + 1.497*s, 0.299 + 0.300*c - 0.497*s)
+    );
+    dye = clamp(hr * dye, 0.0, 1.0);
     float lum = dot(dye, vec3(0.299, 0.587, 0.114));
     vec3 col = dye * (0.9 + lum * 0.55);
     vec2 vel = texture2D(uVelocity, vUv).xy;
@@ -258,7 +273,10 @@ const DISPLAY_FRAG = `
     float Tv = texture2D(uVelocity, vT).x;
     float Bv = texture2D(uVelocity, vB).x;
     float spin = Rv - Lv - Tv + Bv;
-    col += vec3(0.85, 0.92, 1.0) * smoothstep(0.35, 1.6, abs(spin)) * 0.12;
+    col += vec3(0.85, 0.92, 1.0) * smoothstep(0.3, 1.4, abs(spin)) * 0.16;
+    /* Soft knee: thin strokes stack additively fast, so map the tail off with
+       a filmic curve — saturated colour stays saturated. */
+    col = 1.0 - exp(-col * 1.35);
     gl_FragColor = vec4(col, 1.0);
   }
 `
@@ -374,8 +392,9 @@ class FluidEngine {
     this.hueCursor = 200 // start cyan-ish, advances with every gesture
     this.rafId = 0
     this.lastTime = 0
+    this.elapsed = 0 // seconds since start; drives the display hue cycle
     this.ambientTimer = 0
-    this.ambientGap = 1.4
+    this.ambientGap = 1.2
     this.alive = true
     this.boundHandlers = null
 
@@ -395,7 +414,10 @@ class FluidEngine {
     this.ok = true
 
     const lowEnd = lowEndDevice()
-    const dyeShort = lowEnd ? 288 : window.innerWidth >= 900 ? 560 : 448
+    // Dye resolution sets how crisp the painted LINES read: thin strokes
+    // alias and smear if the dye grid is too coarse, so it is a notch higher
+    // than the old blob-tuned values. Still a few hundred px, not screen res.
+    const dyeShort = lowEnd ? 320 : window.innerWidth >= 900 ? 640 : 512
     const simShort = lowEnd ? 64 : 96
 
     this.dyeShort = dyeShort
@@ -415,7 +437,7 @@ class FluidEngine {
     this.vorticityProg = makeProgram(gl, VERT_SRC, VORTICITY_FRAG, ['uVelocity', 'uCurl', 'uDt'])
     this.pressureProg = makeProgram(gl, VERT_SRC, PRESSURE_FRAG, ['uPressure', 'uDivergence'])
     this.gradientProg = makeProgram(gl, VERT_SRC, GRADIENT_FRAG, ['uPressure', 'uVelocity'])
-    this.displayProg = makeProgram(gl, VERT_SRC, DISPLAY_FRAG, ['uDye', 'uVelocity', 'uTexelSize'])
+    this.displayProg = makeProgram(gl, VERT_SRC, DISPLAY_FRAG, ['uDye', 'uVelocity', 'uTexelSize', 'uTime'])
     this.programList = [
       this.clearProg.prog, this.splatProg.prog, this.advectProg.prog,
       this.divergenceProg.prog, this.curlProg.prog, this.vorticityProg.prog,
@@ -425,13 +447,26 @@ class FluidEngine {
 
     this.resize()
 
-    // Tuning — deliberate: dye fades over a couple of seconds so a held
-    // finger cannot paint the whole screen white; velocity lasts a little
-    // longer so swirls keep curling after the hand stops.
-    this.dyeDissipation = 0.85
-    this.velDissipation = 0.28
-    this.curlStrength = 16
+    // Tuning — deliberate, and retuned for the THIN-STROKE look (small
+    // splats, "zoomed-out" lines) instead of big blobs:
+    //   • dye still fades over a couple of seconds so a held finger cannot
+    //     flood the screen — but a little slower so the painted line lingers
+    //     long enough to read as a line, not a flicker;
+    //   • velocity decays slowly so the hand's motion keeps travelling
+    //     through the paint after the finger stops;
+    //   • vorticity is on the strong side so swirls are an obvious,
+    //     mesmerising feature of the motion rather than a hint.
+    this.dyeDissipation = 0.72
+    this.velDissipation = 0.2
+    this.curlStrength = 30
     this.pressureIterations = 14
+
+    // Stroke geometry — the heart of the "line, not blob" look. The radius
+    // is the Gaussian exponent in UV², so the visible stroke width is
+    // ~2*sqrt(radius) UV: 0.006 → a ~15%-of-screen-wide ribbon on a phone,
+    // continuous because onMove interpolates every pixel of the path.
+    this.strokeRadius = 0.006
+    this.tapRadius = 0.014
   }
 
   resize() {
@@ -645,29 +680,38 @@ class FluidEngine {
     gl.uniform1i(p.loc.uDye, 0)
     gl.uniform1i(p.loc.uVelocity, 1)
     gl.uniform2fv(p.loc.uTexelSize, this.dyeTexel)
+    gl.uniform1f(p.loc.uTime, this.elapsed)
     this.drawScreen(p)
   }
 
   /* A starting wash so the screen is already colourful before the first
-     touch — three brand hues, placed so none sits under the wordmark. */
+     touch. Deliberately a field of SMALL wisps, not a few giant blobs —
+     six 0.3-radius blobs read as a zoomed-in photo of paint, while a scatter
+     of thin streaks reads as a zoomed-out view of the same fluid: you see
+     the whole surface at once, and the drift below keeps it breathing.
+     Placed so none sits under the wordmark (roughly uv 0.35–0.65 × 0.3–0.7). */
   burst() {
     const spots = [
-      [0.3, 0.62, 196, 0.34],
-      [0.68, 0.55, 272, 0.34],
-      [0.5, 0.78, 324, 0.3],
-      [0.22, 0.4, 230, 0.26],
-      [0.78, 0.38, 300, 0.26],
-      [0.45, 0.3, 185, 0.24]
+      [0.16, 0.24, 198, 0.034],
+      [0.34, 0.12, 212, 0.024],
+      [0.58, 0.16, 232, 0.028],
+      [0.84, 0.2, 272, 0.032],
+      [0.88, 0.5, 300, 0.022],
+      [0.72, 0.84, 324, 0.034],
+      [0.46, 0.9, 342, 0.026],
+      [0.18, 0.68, 240, 0.03],
+      [0.08, 0.42, 186, 0.024]
     ]
     for (const [x, y, hue, rad] of spots) {
-      const rgb = hslToRgb(hue, 0.95, 0.62).map((v) => v * 0.5)
+      const rgb = hslToRgb(hue, 0.95, 0.6).map((v) => v * 0.45)
       this.splat(this.dye[this.dyeIdx ^ 1], x, y, rgb, rad)
       this.splat(this.dye[this.dyeIdx], x, y, rgb, rad)
       // A little initial stirring so the wash is alive, not a poster — a slow
-      // ~0.15 uv/s drift, converted to sim-texels/s per axis like paintSplat.
+      // drift outwards from centre, converted to sim-texels/s per axis. The
+      // velocity splat is a touch wider than the dye so the whole wisp moves.
       const ux = (0.5 - x) * 0.22
       const uy = (y - 0.5) * 0.22
-      this.splat(this.vel[this.velIdx], x, y, [ux * this.simRes.w, uy * this.simRes.h, 0], rad)
+      this.splat(this.vel[this.velIdx], x, y, [ux * this.simRes.w, uy * this.simRes.h, 0], rad * 1.6)
     }
   }
 
@@ -688,31 +732,40 @@ class FluidEngine {
       vx *= k
       vy *= k
     }
-    const rgb = hslToRgb(s.hue, 0.92, 0.62)
-    const dyeAmp = 0.45 * (dtEv / (1 / 60))
+    // Thin strokes add their energy into a small area, so they need a higher
+    // amplitude than the old wide blobs to read as vivid lines; the display
+    // soft-knee keeps the overlap from clipping to white.
+    const rgb = hslToRgb(s.hue, 0.95, 0.6)
+    const dyeAmp = 0.62 * (dtEv / (1 / 60))
     const dye = [rgb[0] * dyeAmp, rgb[1] * dyeAmp, rgb[2] * dyeAmp]
-    const vel = [vx * 0.9, vy * 0.9, 0]
+    // A bit stronger than 1:1 so the hand's motion is the obvious driver of
+    // the flow — the user should SEE the colour moving where the hand moved.
+    const vel = [vx * 1.15, vy * 1.15, 0]
 
-    const writeDye = this.dye[this.dyeIdx ^ 1]
-    const writeVel = this.vel[this.velIdx ^ 1]
-    // Paint both buffers (dye ping-pong double-buffer and the display source)
-    // so a splat applied before the next simulation step is not lost.
+    // Splat into the buffer the upcoming advection reads (step() always
+    // applies the queue before it advects), so the stroke lands on the
+    // very next display frame. One write per field — writing both ping-pong
+    // buffers doubled the draw cost for no visual difference, which matters
+    // now that a stroke is many small splats, not one big one.
     this.splat(this.dye[this.dyeIdx], s.x, s.y, dye, s.radius)
-    this.splat(writeDye, s.x, s.y, dye, s.radius)
     this.splat(this.vel[this.velIdx], s.x, s.y, vel, s.radius)
-    this.splat(writeVel, s.x, s.y, vel, s.radius)
   }
 
   step(dt) {
+    this.elapsed += dt
     // Interactivity splats queued by pointer events since the last frame.
-    const budget = Math.min(this.splatQueue.length, 14)
+    // The budget is per stroke-segment (a swipe of one frame can queue 10+
+    // tiny splats); the surplus just waits one frame and the line stays
+    // continuous.
+    const budget = Math.min(this.splatQueue.length, 24)
     for (let i = 0; i < budget; i++) {
       const s = this.splatQueue[i]
       if (s.dyeOnly) {
-        const rgb = hslToRgb(s.hue, 0.9, 0.6)
-        const dye = [rgb[0] * 0.35, rgb[1] * 0.35, rgb[2] * 0.35]
+        // Same reasoning as paintSplat: small radius needs a touch more
+        // amplitude to read, and one write to the buffer the advection reads.
+        const rgb = hslToRgb(s.hue, 0.92, 0.6)
+        const dye = [rgb[0] * 0.55, rgb[1] * 0.55, rgb[2] * 0.55]
         this.splat(this.dye[this.dyeIdx], s.x, s.y, dye, s.radius)
-        this.splat(this.dye[this.dyeIdx ^ 1], s.x, s.y, dye, s.radius)
       } else {
         this.paintSplat(s)
       }
@@ -723,7 +776,7 @@ class FluidEngine {
     this.ambientTimer += dt
     if (this.ambientTimer > this.ambientGap) {
       this.ambientTimer = 0
-      this.ambientGap = 1.3 + NOISE() * 1.4
+      this.ambientGap = 1.2 + NOISE() * 1.2
       this.queueAmbient()
     }
 
@@ -744,10 +797,12 @@ class FluidEngine {
     const x = 0.5 + 0.38 * Math.sin(t * 0.21)
     const y = 0.62 + 0.3 * Math.sin(t * 0.17 + 1.7)
     const hue = (t * 9 + 200) % 360
-    // Tiny wandering dye, almost no velocity: colour drifts rather than stirs.
+    // Small wandering dye (matching the stroke scale), almost no velocity:
+    // colour drifts rather than stirs, so untouched screen still shows fine
+    // colour movement instead of one big smudge.
     this.splatQueue.push({
       x, y, dyeOnly: true, hue,
-      radius: 0.1 + 0.04 * Math.sin(t * 0.5),
+      radius: 0.022 + 0.012 * Math.sin(t * 0.5),
       dt: 0.016
     })
   }
@@ -765,8 +820,9 @@ class FluidEngine {
     if (e.pointerType === 'mouse' && e.button !== 0) return
     this.hueCursor = (this.hueCursor + 41) % 360
     this.pointerMap.set(id, { x, y, hue: this.hueCursor, t: performance.now(), down: true })
-    // A press with no drag still releases a puff of paint.
-    this.splatQueue.push({ x, y, dyeOnly: true, hue: this.hueCursor, radius: 0.16, dt: 0.016 })
+    // A press with no drag still releases a dot of paint (thin, like the
+    // stroke — a tap should read as a point on a line, not a balloon).
+    this.splatQueue.push({ x, y, dyeOnly: true, hue: this.hueCursor, radius: this.tapRadius, dt: 0.016 })
   }
 
   onMove(e) {
@@ -788,10 +844,14 @@ class FluidEngine {
     const dt = Math.max((now - p.t) / 1000, 1 / 240)
     const dist = Math.hypot(dx, dy)
     if (dist > 0.4) {
-      // Stretch the stroke across the gap so fast flicks leave a trail
-      // instead of teleporting a single blob. The hue eases along the stroke
-      // (~0.2°/px), so a moving hand visibly shifts the colour as it paints.
-      const steps = Math.min(Math.max(1, Math.round(dist / 14)), 6)
+      // Stitch the stroke together point by point so the paint reads as a
+      // CONTINUOUS LINE at any speed — this is what a thin stroke needs,
+      // because (unlike the old wide blobs) two 8-apart splats do not blend
+      // on their own. Steps of ~8px keep the line unbroken even when
+      // pointermove fires sparsely during a fast flick. The hue eases along
+      // the stroke (~0.2°/px), so a moving hand visibly shifts the colour
+      // as it paints — a short swipe is a visible rainbow.
+      const steps = Math.min(Math.max(1, Math.round(dist / 8)), 10)
       const shift = (dist * 0.2) % 360
       for (let i = 0; i < steps; i++) {
         const f = (i + 1) / steps
@@ -802,7 +862,7 @@ class FluidEngine {
           dy: dy / steps,
           hue: (p.hue + shift * f) % 360,
           dt,
-          radius: 0.15
+          radius: this.strokeRadius
         })
       }
       p.hue = (p.hue + shift) % 360

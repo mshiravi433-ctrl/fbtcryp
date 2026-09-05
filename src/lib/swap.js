@@ -160,7 +160,13 @@ export const NATIVE_GAS_FLOOR = {
   10: 0.0003,    // ETH on Optimism
   43114: 0.01,   // AVAX
   59144: 0.0003, // ETH on Linea
-  146: 0.05      // S on Sonic
+  146: 0.05,     // S on Sonic
+  // 2026-09 additions — same err-high principle: these chains' gas is cheap,
+  // so a slightly generous floor strands cents, never dollars.
+  5000: 0.01,     // MNT
+  80094: 0.1,     // BERA
+  130: 0.0003,    // ETH on Unichain
+  143: 0.01       // MON
 };
 
 /**

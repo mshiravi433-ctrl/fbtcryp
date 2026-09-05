@@ -5768,13 +5768,14 @@ input, select, textarea { font-size: 16px !important; }
 
 /* Keeps the paint vivid centre-screen while giving the footer (Start button
    and socials) a darker bed to sit on. Painted above the canvas, below the
-   glow wash. */
+   glow wash. Kept light: the paint is now thin strokes, and users swipe the
+   whole screen, so a heavy gradient would eat the lines near Start. */
 .fluid-vignette {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(120% 65% at 50% 20%, transparent 52%, rgba(6, 7, 12, 0.3) 100%),
-    linear-gradient(to top, rgba(6, 7, 12, 0.66), rgba(6, 7, 12, 0.2) 32%, transparent 48%);
+    radial-gradient(120% 65% at 50% 20%, transparent 52%, rgba(6, 7, 12, 0.26) 100%),
+    linear-gradient(to top, rgba(6, 7, 12, 0.55), rgba(6, 7, 12, 0.14) 32%, transparent 48%);
 }
 
 /* Static gradient wash — cheaper than an animated blur and visually similar. */

@@ -131,8 +131,12 @@ export function venueRoute(venue, { side = 'buy' } = {}) {
   const entries = Object.entries(venue.chains ?? {});
   if (!entries.length) return null;
 
-  /* Same preference order as coinToSwap.js: cheapest chain first. */
-  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 1];
+  /* Same preference order as coinToSwap.js: cheapest chain first.
+     MUST cover every chain in EVM_CHAIN_ORDER — a chain missing here makes
+     `entries.find(...)` return null for a coin whose ONLY contract lives on
+     that chain, and the coin page prints "not swappable" for a coin the swap
+     screen can trade. */
+  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 1];
   entries.sort(
     (a, b) => PREFERENCE.indexOf(Number(a[0])) - PREFERENCE.indexOf(Number(b[0]))
   );

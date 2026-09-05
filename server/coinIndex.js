@@ -76,7 +76,18 @@ export const PLATFORM_SLUGS = {
   42161: 'arbitrum-one',
   43114: 'avalanche',
   59144: 'linea',
-  146: 'sonic'
+  146: 'sonic',
+  /*
+   * 2026-09 additions — must mirror EVM_CHAINS in src/lib/chains.js. A chain
+   * missing here means the coin page's venue resolver can never see a
+   * contract on it, so coins that only live on a new network print
+   * "not swappable" on their own page even though the swap screen trades
+   * the chain fine. The values are CoinGecko's own platform ids.
+   */
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
 /** Six hours. New listings are not urgent; hammering a free API is rude. */

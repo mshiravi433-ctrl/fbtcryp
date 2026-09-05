@@ -72,10 +72,24 @@ const OO_BASE = 'https://open-api.openocean.finance/v4';
 /**
  * Chain id -> OpenOcean slug.
  *
- * Deliberately limited to the chains we already support on the KyberSwap
- * path. OpenOcean covers 40+, but a chain we cannot execute on is a quote we
- * cannot honour, and showing a better price we are unable to deliver is worse
- * than not showing it.
+ * Every chain we support on the KyberSwap path is here too — and it MUST be,
+ * for a reason the 2026-09 chain additions made concrete: on the newer
+ * networks OpenOcean is not just a price second-opinion, it is the ONLY
+ * second routing source at all (Velora covers the seven originals). A chain
+ * where KyberSwap alone has to find every route is a chain where "no route
+ * between these two tokens" shows up for pairs the other aggregator would
+ * have routed.
+ *
+ * The "a chain we cannot execute on is a quote we cannot honour" rule still
+ * holds and is enforced by the same machinery as on the original seven:
+ * execution goes through OpenOcean's own /swap endpoint (their router, their
+ * calldata), and verifyOpenOceanFee() refuses to sign unless the built
+ * calldata provably carries our referrer. A slug OpenOcean does not serve
+ * simply fails its quote — the comparison layer drops it and KyberSwap
+ * continues alone. That is strictly better than the chain having no second
+ * source at all.
+ *
+ * Mirrored in server/swapProxy.js (OO_SLUG there) — keep both in lockstep.
  */
 const OO_SLUG = {
   56: 'bsc',
@@ -84,7 +98,13 @@ const OO_SLUG = {
   42161: 'arbitrum',
   10: 'optimism',
   8453: 'base',
-  43114: 'avax'
+  43114: 'avax',
+  59144: 'linea',
+  146: 'sonic',
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
 export const openOceanSupports = (chainId) => Boolean(OO_SLUG[chainId]);
@@ -534,7 +554,15 @@ function defaultGasPriceWei(chainId) {
     42161: 0.1,   // Arbitrum
     10: 0.001,    // Optimism
     8453: 0.005,  // Base
-    43114: 25     // Avalanche
+    43114: 25,    // Avalanche
+    // 2026-09 additions. Order-of-magnitude only: a wrong guess costs a
+    // slightly suboptimal route split, never user money.
+    59144: 0.05,  // Linea
+    146: 5,       // Sonic
+    5000: 2,      // Mantle
+    80094: 1,     // Berachain
+    130: 0.05,    // Unichain
+    143: 1        // Monad
   }[chainId] ?? 5;
   // Kept integral: the endpoint wants wei with no decimal point.
   return Math.round(gwei * 1e9);
