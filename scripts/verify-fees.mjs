@@ -29,8 +29,11 @@
  */
 
 import { PAYOUT_DIRECTORY, isValidFor, resolvePayout } from '../src/lib/payout.js';
-
-const FEE_BPS = 50; // keep in sync with src/lib/chains.js
+// The platform fee's single source of truth (src/lib/feeBps.js). Importing it
+// here — instead of hard-coding a number — means this gate always checks the
+// SAME basis points the swap screen actually requests, so the echo can never
+// drift from what real quotes carry.
+import { FEE_BPS } from '../src/lib/feeBps.js';
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 const AGG = 'https://aggregator-api.kyberswap.com';
 
@@ -41,10 +44,22 @@ const SLUG = {
   42161: 'arbitrum',
   10: 'optimism',
   8453: 'base',
-  43114: 'avalanche'
+  43114: 'avalanche',
+  /* The four 2026-09 additions (see docs/NETWORKS-ADD-FA.md). Linea + Sonic
+     already route fees but are intentionally not re-added here to keep this
+     tool's existing behaviour unchanged. */
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
-/** A liquid stablecoin per chain to quote against. */
+/**
+ * A liquid token per chain to quote native -> token against. Only used to make
+ * the aggregator return a route so we can inspect extraFee — never signed, so
+ * an address here is read-only. VERIFY each address on the chain's own explorer
+ * / official docs before trusting the result of this gate.
+ */
 const STABLE = {
   56: '0x55d398326f99059fF775485246999027B3197955',
   1: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
@@ -52,7 +67,15 @@ const STABLE = {
   42161: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
   10: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
   8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  43114: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7'
+  43114: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+  /* New 2026-09 chains. Outputs are wrapped-native / bridged-USDC so the pair
+     native -> token is liquid. Source of each: Mantle = official bridge FAQ,
+     Berachain = official contracts page (WBERA), Unichain = Uniswap deployment
+     table (WETH), Monad = Uniswap deployment table (WMON). */
+  5000: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', // Mantle bridged USDC
+  80094: '0x6969696969696969696969696969696969696969', // WBERA
+  130: '0x4200000000000000000000000000000000000006', // WETH
+  143: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' // WMON
 };
 
 const arg = (name) => {

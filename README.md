@@ -3,10 +3,11 @@
 **Official website:** [https://fbtswap.ir](https://fbtswap.ir/)
 
 FBT Swap is a non-custodial DEX interface available as a Telegram Mini App,
-web app and Android app. It supports real on-chain swaps across **10 networks**:
+web app and Android app. It supports real on-chain swaps across **14 networks**:
 BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea,
-Sonic and Solana. You connect a wallet you control and sign every trade
-there—FBT Swap does not take deposits or hold a recovery phrase.
+Sonic, Mantle, Berachain, Unichain, Monad and Solana. You connect a wallet you
+control and sign every trade there—FBT Swap does not take deposits or hold a
+recovery phrase.
 
 **Fanous Bazaar Pishgam** · Isfahan, Khomeyni Shahr
 
@@ -14,7 +15,7 @@ there—FBT Swap does not take deposits or hold a recovery phrase.
 
 | | |
 |---|---|
-| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana |
+| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad and Solana |
 | **Platform fee** | 0.70% of the input amount on supported swap routes, shown in the quote before signing; network gas is separate |
 | **Tokens** | Public token lists per chain — thousands — plus ~90 bundled hand-verified tokens that work offline, plus import-any-contract |
 | **Gas** | Paid in each chain's own native coin, warned about before signing. Not only BNB, and never taken from the platform fee |

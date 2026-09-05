@@ -177,11 +177,79 @@ export const EVM_CHAINS = {
     wrapped: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', // wS
     dexName: 'KyberSwap',
     color: '#fe9a4d'
+  },
+  /*
+   * ─── MANTLE · BERACHAIN · UNICHAIN · MONAD ────────────────────────────────
+   * Added 2026-09 to close the biggest "important network we don't support"
+   * gaps by global TVL. Each is on KyberSwap's OFFICIAL supported-EVM-chain
+   * list (aggregator slug below in lib/aggregator.js), which is the same gate
+   * Linea and Sonic already passed — so the aggregator can route swaps AND
+   * collect our fee on-chain for these chains.
+   *
+   * ⚠️ BEFORE REAL VOLUME, rerun the live fee-echo quote test that Linea and
+   * Sonic went through (see docs/NETWORKS-ADD-FA.md): for a liquid pair on each
+   * new chain the aggregator must return a route whose `extraFee` echoes our
+   * feeAmount AND feeReceiver. A network that quotes but never echoes the fee
+   * must NOT be kept. This sandbox cannot reach the aggregator, so that check
+   * has NOT been run here — the chain-level metadata below (RPC / explorer /
+   * native coin / chain id) IS cross-checked against official sources.
+   *
+   * Direct-DEX fallback (router/wrapped) is only used when FEE_MODE=contract;
+   * these chains trade through the aggregator, so router/wrapped are omitted
+   * where a canonical value has not been confirmed rather than guessed.
+   */
+  5000: {
+    id: 5000,
+    hexId: '0x1388',
+    name: 'Mantle',
+    short: 'MNT',
+    native: { symbol: 'MNT', decimals: 18, coingeckoId: 'mantle' },
+    rpc: ['https://rpc.mantle.xyz', 'https://mantle-rpc.publicnode.com'],
+    explorer: 'https://explorer.mantle.xyz',
+    dexName: 'KyberSwap',
+    color: '#f0b90b' /* placeholder brand tone — cosmetic only */
+  },
+  80094: {
+    id: 80094,
+    hexId: '0x138de',
+    name: 'Berachain',
+    short: 'BERA',
+    native: { symbol: 'BERA', decimals: 18, coingeckoId: 'berachain' },
+    rpc: ['https://rpc.berachain.com', 'https://berachain-rpc.publicnode.com'],
+    explorer: 'https://berascan.com',
+    /* Official WBERA deployment — see Berachain docs, contracts/tokens table. */
+    wrapped: '0x6969696969696969696969696969696969696969', // WBERA
+    dexName: 'KyberSwap',
+    color: '#a855f7'
+  },
+  130: {
+    id: 130,
+    hexId: '0x82',
+    name: 'Unichain',
+    short: 'UNI',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://mainnet.unichain.org', 'https://unichain.llamarpc.com'],
+    explorer: 'https://uniscan.xyz',
+    /* Official Uniswap WETH deployment on Unichain (OP-stack canonical). */
+    wrapped: '0x4200000000000000000000000000000000000006', // WETH
+    dexName: 'KyberSwap',
+    color: '#ff007a'
+  },
+  143: {
+    id: 143,
+    hexId: '0x8f',
+    name: 'Monad',
+    short: 'MON',
+    native: { symbol: 'MON', decimals: 18, coingeckoId: 'monad' },
+    rpc: ['https://rpc.monad.xyz', 'https://monad-rpc.publicnode.com'],
+    explorer: 'https://monadvision.com',
+    dexName: 'KyberSwap',
+    color: '#7c3aed'
   }
 };
 
 export const DEFAULT_CHAIN = 56;
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143];
 
 /**
  * Platform fee — always charged, on every chain.
@@ -350,6 +418,28 @@ export const TOKENS = {
     { symbol: 'S', name: 'Sonic', address: null, decimals: 18, native: true, coingeckoId: 'sonic-3' },
     { symbol: 'USDC', name: 'USD Coin', address: '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', decimals: 6, coingeckoId: 'usd-coin' },
     { symbol: 'wS', name: 'Wrapped Sonic', address: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', decimals: 18, coingeckoId: 'sonic-3' }
+  ],
+  /*
+   * Curated defaults for the four chains added in EVM_CHAINS above are kept
+   * deliberately small (native coin + wrapped native where a canonical
+   * address is confirmed). The full per-chain token universe — USDC, USDT,
+   * and the long tail — is supplied at runtime by the CoinGecko token lists
+   * declared in lib/tokenLists.js, so no unverified ERC-20 contract address
+   * is committed into this file. See docs/NETWORKS-ADD-FA.md.
+   */
+  5000: [
+    { symbol: 'MNT', name: 'Mantle', address: null, decimals: 18, native: true, coingeckoId: 'mantle' }
+  ],
+  80094: [
+    { symbol: 'BERA', name: 'Berachain', address: null, decimals: 18, native: true, coingeckoId: 'berachain' },
+    { symbol: 'WBERA', name: 'Wrapped BERA', address: '0x6969696969696969696969696969696969696969', decimals: 18, coingeckoId: 'berachain' }
+  ],
+  130: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x4200000000000000000000000000000000000006', decimals: 18, coingeckoId: 'ethereum' }
+  ],
+  143: [
+    { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

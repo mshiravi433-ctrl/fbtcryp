@@ -74,6 +74,18 @@ const LIST_SOURCES = {
   ],
   146: [
     { id: 'coingecko-sonic', url: 'https://tokens.coingecko.com/sonic/all.json' }
+  ],
+  5000: [
+    { id: 'coingecko-mantle', url: 'https://tokens.coingecko.com/mantle/all.json' }
+  ],
+  80094: [
+    { id: 'coingecko-berachain', url: 'https://tokens.coingecko.com/berachain/all.json' }
+  ],
+  130: [
+    { id: 'coingecko-unichain', url: 'https://tokens.coingecko.com/unichain/all.json' }
+  ],
+  143: [
+    { id: 'coingecko-monad', url: 'https://tokens.coingecko.com/monad/all.json' }
   ]
 };
 
