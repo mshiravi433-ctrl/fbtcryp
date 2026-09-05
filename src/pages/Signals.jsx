@@ -219,7 +219,11 @@ function Chevron({ open, className = '' }) {
 
 function PulseCard({ pulse, brief }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
+  // Starts COLLAPSED like every other intelligence surface on this page
+  // (the signal hub, the detail tabs): the header row is the summary, and
+  // the user expands the full AI pulse in place. test/signals-page-probe.jsx
+  // pins this contract ("AI market pulse starts collapsed / expands in place").
+  const [open, setOpen] = useState(false);
   if (!pulse) return null;
   const s = pulse.sentiment ?? {};
   const tone = s.label === 'bullish' ? 'bullish' : s.label === 'bearish' ? 'bearish' : 'neutral';
