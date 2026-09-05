@@ -100,7 +100,8 @@
     "swap": "Swap",
     "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network",
     "trendTitle": "Total market cap · {{days}} days",
-    "trendNote": "Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window."
+    "trendNote": "Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.",
+    "compare": "Compare"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -126,7 +127,9 @@
     "noCandles": "Candles are not available for this coin right now. We do not draw them from closing prices — the high and the low would be invented, and those are the two numbers a candle exists to show.",
     "tempUnavailable": "Taking longer than usual",
     "tempUnavailableHelp": "The price service is busy right now, so this coin's data has not arrived yet. It is almost always back within a few seconds — we are retrying automatically.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "compare": "Compare",
+    "tvHint": "Drag to pan · pinch to zoom"
   },
   "trade": {
     "title": "Trade",
@@ -2341,6 +2344,28 @@
       "closed": "market closed",
       "openNow": "market open",
       "note": "Reference prices only. These are not for sale here and we do not route you anywhere to buy them — this app sells the tokenised shares listed above, and nothing on this row earns us anything."
+    },
+    "topGainers": "Top gainers · 24h",
+    "topGainersCoinsSub": "The strongest movers in this list right now — tap one to open it.",
+    "topGainersEquitySub": "The strongest movers in this list right now — tap one to buy it.",
+    "sector": {
+      "all": "All",
+      "index": "Indices",
+      "ai": "AI",
+      "crypto": "Crypto",
+      "energy": "Energy",
+      "other": "Other"
+    },
+    "sort": {
+      "mcap": "By size",
+      "gainers": "Top gainers",
+      "volume": "By volume"
+    },
+    "stats": {
+      "listed": "Listed",
+      "avgChange": "Avg 24h",
+      "depth": "Total depth",
+      "mcap": "Combined size"
     }
   },
   "help": {
@@ -10507,5 +10532,47 @@
       "readinessTitle": "Why direct payment is still off",
       "readinessIntro": "Direct payment stays off in this tab until the items below are complete — but the bitpin route is open right now, so this is not a dead end."
     }
+  },
+  "compare": {
+    "title": "Compare tokens",
+    "subtitle": "Two tokens, measured side by side — price action, size, liquidity and risk.",
+    "tokenA": "A",
+    "tokenB": "B",
+    "choose": "Choose a token",
+    "change": "Change",
+    "swap": "Swap the two tokens",
+    "pickA": "First token",
+    "pickB": "Second token",
+    "searchPlaceholder": "Search name or symbol…",
+    "noResults": "Nothing matched your search",
+    "rounds": "{{n}} scored rounds",
+    "leadsA": "{{a}} wins more of the measured rounds. That is a scoreboard, not advice — it says nothing about tomorrow.",
+    "leadsB": "{{b}} wins more of the measured rounds. That is a scoreboard, not advice — it says nothing about tomorrow.",
+    "tie": "Dead even across the measured rounds.",
+    "perfTitle": "Performance",
+    "noPerf": "Price history is unavailable for one of these right now.",
+    "rebasedNote": "Both lines start at 100 on day one of the last {{days}} days, so the chart shows who moved more — not who costs more. Dollar prices stay in the tooltip.",
+    "m": {
+      "price": "Price",
+      "ch1h": "Change · 1h",
+      "ch24h": "Change · 24h",
+      "ch7d": "Change · 7d",
+      "mcap": "Market cap",
+      "volume": "Volume · 24h",
+      "rank": "Market-cap rank",
+      "ath": "Distance from ATH",
+      "liq": "Turnover (vol ÷ mcap)",
+      "window": "Window return",
+      "vol": "Volatility"
+    },
+    "h": {
+      "mcap": "bigger wins",
+      "volume": "deeper wins",
+      "ath": "closer wins",
+      "liq": "more active wins",
+      "window": "in this window",
+      "vol": "calmer wins"
+    },
+    "viewCoin": "Open {{symbol}}"
   }
 }

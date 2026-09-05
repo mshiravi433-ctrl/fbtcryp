@@ -85,7 +85,9 @@ export default function EquityRow({ asset, amountUsd, onBuy }) {
           {t(
             asset.unit
               ? 'stocks.kindCommodity'
-              : asset.kind === 'index'
+              /* The server sends kind:'equity' + assetKind:'index'|'single' —
+                 reading `kind` alone labelled every index as a single company. */
+              : (asset.assetKind ?? asset.kind) === 'index'
                 ? 'stocks.kindIndex'
                 : 'stocks.kindSingle'
           )}

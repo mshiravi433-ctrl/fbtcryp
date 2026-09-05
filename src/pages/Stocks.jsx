@@ -7,6 +7,7 @@ import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
+import TopMovers from '../components/TopMovers';
 import HistoryPanel from '../components/HistoryPanel';
 import { useChart, useMarkets } from '../hooks/useMarket';
 import { getCategory } from '../lib/api';
@@ -128,6 +129,49 @@ const STOCK_TABS = SPECULATION_ENABLED
   ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
 
+/*
+ * ─── EQUITY SECTOR TAGS — DISPLAY ONLY ─────────────────────────────────────
+ * These group the ALREADY-VERIFIED xStock list for the filter chips; they
+ * never add, remove or re-identify an asset. A wrong tag here mis-sorts a
+ * chip, it cannot offer a wrong token — the mint, the issuer check and the
+ * buy flow all live below this layer and never read it.
+ */
+const EQUITY_SECTORS = {
+  ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax'],
+  crypto: ['coinx', 'mstrx', 'crclx', 'hoodx'],
+  energy: ['xomx', 'cvxx']
+};
+const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'other'];
+
+function sectorOf(a) {
+  /* The server sends kind:'equity' + assetKind:'index'|'single' — an index is
+     a sector of its own because it is a materially different risk. */
+  if ((a?.assetKind ?? a?.kind) === 'index') return 'index';
+  for (const [sector, ids] of Object.entries(EQUITY_SECTORS)) {
+    if (ids.includes(a?.id)) return sector;
+  }
+  return 'other';
+}
+
+const RWA_SORTS = ['mcap', 'gainers', 'volume'];
+
+function avgChange(rows, pick) {
+  const vals = rows.map(pick).filter((v) => Number.isFinite(v));
+  if (!vals.length) return null;
+  return vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+
+function StatMini({ label, value, tone }) {
+  return (
+    <div className="card card-tight" style={{ textAlign: 'center', padding: '10px 6px' }}>
+      <div className="faint" style={{ fontSize: 10.5, marginBottom: 3 }}>{label}</div>
+      <div className={`mono ${tone === 'up' ? 'up' : tone === 'down' ? 'down' : ''}`} style={{ fontSize: 13, fontWeight: 700 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function Stocks() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -204,6 +248,10 @@ export default function Stocks() {
     return (coins ?? []).filter((c) => RWA_IDS.includes(c.id));
   }, [rwaFeed, coins]);
 
+  /* ── equity sector filter + RWA sort. Both are views over loaded data. ── */
+  const [eqSector, setEqSector] = useState('all');
+  const [rwaSort, setRwaSort] = useState('mcap');
+
   /*
    * ─── ONLY THE TICKERS WE CANNOT SELL ────────────────────────────────────
    * The reference table exists to answer "is my ticker here at all". Listing
@@ -264,6 +312,72 @@ export default function Stocks() {
   const commodities = useMemo(
     () => (assets?.commodities ?? []).filter((a) => a.liquidity >= MIN_EQUITY_LIQUIDITY),
     [assets]
+  );
+
+  /* Sector-filtered equities, and the top-gainers carousel above them. The
+     carousel always shows the whole list's movers — filtering to "Energy"
+     must not shrink the highlight reel to two cards. */
+  const filteredEquities = useMemo(
+    () => (equities ?? []).filter((a) => eqSector === 'all' || sectorOf(a) === eqSector),
+    [equities, eqSector]
+  );
+
+  const topEquities = useMemo(
+    () =>
+      [...(equities ?? [])]
+        .filter((a) => Number.isFinite(a.change24h))
+        .sort((a, b) => b.change24h - a.change24h)
+        .slice(0, 6)
+        .map((a) => ({
+          key: a.id,
+          symbol: a.symbol,
+          name: a.name,
+          price: a.usdPrice,
+          change: a.change24h,
+          depth: `⛁ ${fmtCompact(a.liquidity)}`,
+          logo: a,
+          raw: a
+        })),
+    [equities]
+  );
+
+  const equityAvg = useMemo(() => avgChange(equities ?? [], (a) => a.change24h), [equities]);
+  const equityDepth = useMemo(
+    () => (equities ?? []).reduce((s, a) => s + (Number(a.liquidity) || 0), 0),
+    [equities]
+  );
+
+  /* RWA, sorted by the user's chip — and its own movers carousel. */
+  const sortedRwa = useMemo(() => {
+    const rows = [...rwaCoins];
+    if (rwaSort === 'gainers') rows.sort((a, b) => (b.change24h ?? -Infinity) - (a.change24h ?? -Infinity));
+    else if (rwaSort === 'volume') rows.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+    return rows;
+  }, [rwaCoins, rwaSort]);
+
+  const topRwa = useMemo(
+    () =>
+      [...rwaCoins]
+        .filter((c) => Number.isFinite(c.change24h))
+        .sort((a, b) => b.change24h - a.change24h)
+        .slice(0, 6)
+        .map((c) => ({
+          key: c.id,
+          symbol: c.symbol,
+          name: c.name,
+          price: c.price,
+          change: c.change24h,
+          sparkline: c.sparkline ?? [],
+          logo: c,
+          raw: c
+        })),
+    [rwaCoins]
+  );
+
+  const rwaAvg = useMemo(() => avgChange(rwaCoins, (c) => c.change24h), [rwaCoins]);
+  const rwaMcap = useMemo(
+    () => rwaCoins.reduce((s, c) => s + (Number(c.mcap) || 0), 0),
+    [rwaCoins]
   );
 
   /*
@@ -367,6 +481,34 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
+          {/*
+            ─── TOP MOVERS + STATS, ABOVE THE LIST ────────────────────────────
+            The most profitable tokens get their own highlight reel at the top
+            rather than hiding inside a sorted table. Tapping an equity card
+            buys it — the same hand-off as the row's own Buy button.
+          */}
+          {!assetsLoading && !assetsError && equities.length > 0 && (
+            <motion.div variants={riseIn} initial="hidden" animate="show">
+              <TopMovers
+                title={t('stocks.topGainers')}
+                subtitle={t('stocks.topGainersEquitySub')}
+                items={topEquities}
+                logoKind="token"
+                onSelect={(it) => buy(it.raw)}
+                testId="stocks-top-equities"
+              />
+              <div className="grid-3" style={{ marginTop: 4 }}>
+                <StatMini label={t('stocks.stats.listed')} value={equities.length} />
+                <StatMini
+                  label={t('stocks.stats.avgChange')}
+                  value={equityAvg != null ? fmtPct(equityAvg, 1) : '—'}
+                  tone={equityAvg != null ? (equityAvg >= 0 ? 'up' : 'down') : undefined}
+                />
+                <StatMini label={t('stocks.stats.depth')} value={fmtCompact(equityDepth)} />
+              </div>
+            </motion.div>
+          )}
+
           <section>
             <p className="section-label">{t('stocks.available')}</p>
 
@@ -418,7 +560,23 @@ export default function Stocks() {
               <p className="notice">{t('stocks.noneTradeable')}</p>
             )}
 
-            {equities.length > 0 && (
+            {/* Sector chips — a view over the verified list, never a new list. */}
+            {!assetsLoading && !assetsError && equities.length > 0 && (
+              <div className="tag-scroll" style={{ marginTop: 10 }}>
+                {SECTOR_ORDER.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`tag ${eqSector === s ? 'active' : ''}`}
+                    onClick={() => { haptic?.('select'); setEqSector(s); }}
+                  >
+                    {t(`stocks.sector.${s}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {filteredEquities.length > 0 ? (
               <motion.div
                 className="stack"
                 style={{ gap: 10, marginTop: 8 }}
@@ -426,10 +584,14 @@ export default function Stocks() {
                 initial="hidden"
                 animate="show"
               >
-                {equities.map((a) => (
+                {filteredEquities.map((a) => (
                   <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
                 ))}
               </motion.div>
+            ) : (
+              !assetsLoading && !assetsError && equities.length > 0 && (
+                <p className="notice" style={{ marginTop: 8 }}>{t('market.sectorEmpty')}</p>
+              )
             )}
 
             <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.verifyNote')}</p>
@@ -637,8 +799,45 @@ export default function Stocks() {
             <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.rwaBody')}</p>
           </motion.section>
 
+          {/* The RWA highlight reel + stats — same treatment as the equities. */}
+          {rwaCoins.length > 0 && (
+            <motion.div variants={riseIn} initial="hidden" animate="show">
+              <TopMovers
+                title={t('stocks.topGainers')}
+                subtitle={t('stocks.topGainersCoinsSub')}
+                items={topRwa}
+                logoKind="coin"
+                onSelect={(it) => navigate(`/coin/${it.raw.id}`)}
+                testId="stocks-top-rwa"
+              />
+              <div className="grid-3" style={{ marginTop: 4 }}>
+                <StatMini label={t('stocks.stats.listed')} value={rwaCoins.length} />
+                <StatMini
+                  label={t('stocks.stats.avgChange')}
+                  value={rwaAvg != null ? fmtPct(rwaAvg, 1) : '—'}
+                  tone={rwaAvg != null ? (rwaAvg >= 0 ? 'up' : 'down') : undefined}
+                />
+                <StatMini label={t('stocks.stats.mcap')} value={fmtCompact(rwaMcap)} />
+              </div>
+            </motion.div>
+          )}
+
           <section>
             <p className="section-label">{t('stocks.rwaTokens')}</p>
+            {rwaCoins.length > 0 && (
+              <div className="tag-scroll" style={{ marginBottom: 4 }}>
+                {RWA_SORTS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`tag ${rwaSort === s ? 'active' : ''}`}
+                    onClick={() => { haptic?.('select'); setRwaSort(s); }}
+                  >
+                    {t(`stocks.sort.${s}`)}
+                  </button>
+                ))}
+              </div>
+            )}
             {rwaLoading || (rwaFeed === null && loading) ? (
               <div className="stack" style={{ gap: 8, marginTop: 8 }}>
                 {Array.from({ length: 8 }).map((_, i) => (
@@ -657,7 +856,7 @@ export default function Stocks() {
               </div>
             ) : (
               <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-                {rwaCoins.map((c) => (
+                {sortedRwa.map((c) => (
                   <motion.div
                     key={c.id}
                     className="coin-row"
