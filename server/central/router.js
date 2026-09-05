@@ -33,6 +33,7 @@ import { recentEvents, eventStats } from './eventBus.js';
 import { getAction, listActions, actionSummary } from './actionEngine.js';
 import { getMemory } from './contextEngine.js';
 import { CENTRAL_OS_VERSION } from './constants.js';
+import { getUpgrade8State, patchUpgrade8State, startUpgrade8Intent, askUpgrade8Question, answerUpgrade8Question, checkpointUpgrade8Task, createUpgrade8Simulation } from './upgrade8Store.js';
 
 export const centralRouter = Router();
 
@@ -178,6 +179,19 @@ centralRouter.get('/system/events', (req, res) => {
 });
 
 centralRouter.get('/system/modules', (_req, res) => ok(res, { ok: true, modules: listModules(), coverage: moduleCoverage() }));
+
+/* ------------------------------ Upgrade 8 ----------------------------------
+ * Lifecycle resources are deliberately separate from the legacy action map.
+ * They are resumable records, not UI flags, and all writes are scoped to the
+ * same owner used by /intent and /system/state.
+ */
+centralRouter.get('/intent-os/state', async (req, res) => ok(res, { ok: true, state: await getUpgrade8State(ownerFor(req)) }));
+centralRouter.post('/intent-os/state', async (req, res) => ok(res, { ok: true, state: await patchUpgrade8State(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/intents', async (req, res) => ok(res, { ok: true, state: await startUpgrade8Intent(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/questions', async (req, res) => ok(res, { ok: true, state: await askUpgrade8Question(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/questions/answer', async (req, res) => { const out = await answerUpgrade8Question(ownerFor(req), req.body?.answer ?? req.body?.value); return out.ok === false ? bad(res, 409, out.error) : ok(res, out); });
+centralRouter.post('/intent-os/tasks/checkpoint', async (req, res) => { const out = await checkpointUpgrade8Task(ownerFor(req), req.body?.stepId, req.body || {}); return out.ok === false ? bad(res, 409, out.error) : ok(res, out); });
+centralRouter.post('/intent-os/simulate', (req, res) => ok(res, { ok: true, simulation: createUpgrade8Simulation(req.body || {}) }));
 
 centralRouter.get('/system/module/:id', (req, res) => {
   const adapter = getModule(req.params.id);

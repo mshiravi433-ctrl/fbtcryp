@@ -173,6 +173,15 @@ export const syncPageContext = (page) => call('/system/context', { method: 'POST
 export const toolCall = (operation, module, input = {}, actionId = null) =>
   call(`/tools/${operation}`, { method: 'POST', timeout: TIMEOUTS.action, body: { module, input, ...(actionId ? { actionId } : {}) } });
 
+/* ── Upgrade 8 lifecycle resources ─────────────────────────────────────── */
+export const intentOSState = () => call('/intent-os/state');
+export const patchIntentOSState = (patch) => call('/intent-os/state', { method: 'POST', body: patch });
+export const createIntentOSIntent = (input) => call('/intent-os/intents', { method: 'POST', timeout: TIMEOUTS.intent, body: input });
+export const createIntentOSQuestion = (input) => call('/intent-os/questions', { method: 'POST', body: input });
+export const answerIntentOSQuestion = (answer) => call('/intent-os/questions/answer', { method: 'POST', body: { answer } });
+export const checkpointIntentOSTask = (stepId, patch = {}) => call('/intent-os/tasks/checkpoint', { method: 'POST', body: { stepId, ...patch } });
+export const simulateIntentOS = (input) => call('/intent-os/simulate', { method: 'POST', body: input });
+
 /* ── §17: SSE first, polling fallback ──────────────────────────────────── */
 
 /**
