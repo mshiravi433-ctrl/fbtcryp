@@ -33,6 +33,7 @@ import { recentEvents, eventStats } from './eventBus.js';
 import { getAction, listActions, actionSummary } from './actionEngine.js';
 import { getMemory } from './contextEngine.js';
 import { CENTRAL_OS_VERSION } from './constants.js';
+import { getUpgrade8State, patchUpgrade8State, startUpgrade8Intent, askUpgrade8Question, createUpgrade8Simulation } from './upgrade8Store.js';
 
 export const centralRouter = Router();
 
@@ -178,6 +179,17 @@ centralRouter.get('/system/events', (req, res) => {
 });
 
 centralRouter.get('/system/modules', (_req, res) => ok(res, { ok: true, modules: listModules(), coverage: moduleCoverage() }));
+
+/* ------------------------------ Upgrade 8 ----------------------------------
+ * Lifecycle resources are deliberately separate from the legacy action map.
+ * They are resumable records, not UI flags, and all writes are scoped to the
+ * same owner used by /intent and /system/state.
+ */
+centralRouter.get('/intent-os/state', (req, res) => ok(res, { ok: true, state: getUpgrade8State(ownerFor(req)) }));
+centralRouter.post('/intent-os/state', (req, res) => ok(res, { ok: true, state: patchUpgrade8State(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/intents', (req, res) => ok(res, { ok: true, state: startUpgrade8Intent(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/questions', (req, res) => ok(res, { ok: true, state: askUpgrade8Question(ownerFor(req), req.body || {}) }));
+centralRouter.post('/intent-os/simulate', (req, res) => ok(res, { ok: true, simulation: createUpgrade8Simulation(req.body || {}) }));
 
 centralRouter.get('/system/module/:id', (req, res) => {
   const adapter = getModule(req.params.id);

@@ -88,6 +88,11 @@ export * from './agents/executionAgent.js';
 // Exported under a namespace so no existing top-level name can be shadowed.
 export * as upgrade7 from './upgrade7/index.js';
 
+// Upgrade 8 — stateful lifecycle, resumable tasks, bound questions, safe
+// simulation, parallel agent contracts and execution idempotency.
+export * as upgrade8 from './upgrade8/index.js';
+export * from './upgrade8/index.js';
+
 // Multi-AI Phase 3 Extensions
 export * from './aiGateway.js';
 export * from './consensusEngine.js';
