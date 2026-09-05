@@ -104,6 +104,7 @@ const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
+const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'));
 /*
  * The vault's own route, so the Earn row for it has somewhere to go. The page
  * renders the live <VaultCard /> when a vault is deployed and an honest "none
@@ -348,6 +349,7 @@ function AnimatedRoutes() {
                 working, but there is only one brain, mounted at /intent. */}
             <Route path="/intent" element={<IntentAIUnified />} />
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
+            <Route path="/ai-control" element={<AiControlCenter />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />

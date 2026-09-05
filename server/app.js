@@ -5516,6 +5516,24 @@ app.use('/api/brain', (req, res, next) => {
 });
 app.set('centralIntelligence', centralIntelligence);
 app.use('/api/brain', centralIntelligence.router);
+
+/* ─── FBT FINANCIAL OS — Upgrade 11+12 Brain Routes ──────────────────────
+ * Predictive Brain, Opportunity Engine, Financial Guardian, Daily Brief,
+ * Knowledge Graph, Ecosystem Router, and Cross-Module Workflows.
+ * Mounted on /api/brain alongside the existing central intelligence.
+ * ─────────────────────────────────────────────────────────────────────────── */
+import('./brain/index.js').then(({ createBrainRouter }) => {
+  const brainRouter = createBrainRouter({
+    kernel: centralIntelligence.kernel,
+    stateStore: centralIntelligence.stateStore,
+    events: centralIntelligence.events,
+    log: (line) => app.locals.ciLog?.push?.(line)
+  });
+  app.use('/api/brain', brainRouter);
+}).catch((err) => {
+  console.error('Failed to mount brain routes:', err?.message || err);
+});
+
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of ciHits) if (now > v.reset) ciHits.delete(k);
