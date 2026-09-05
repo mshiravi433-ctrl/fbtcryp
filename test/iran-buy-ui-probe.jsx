@@ -100,8 +100,8 @@ export async function run(container) {
     const topTab = container.querySelector('[data-testid="iran-buy-top-tab"]');
     check('exact fa plus a server capability renders the Iranian-only top tab', Boolean(topTab) && topTab.textContent.includes('فقط برای ایرانیان'));
     check('the ordinary Buy/Sell wizard remains the initial surface', Boolean(container.querySelector('.buy-sell-switch')) && !container.querySelector('[data-testid="iran-buy-panel"]'));
-    check('the live direct rail renders no referral card or guide anywhere',
-      !container.querySelector('[data-testid="iran-buy-referral"]') && !container.querySelector('[data-testid="iran-buy-referral-guide"]'));
+    check('the Iranian tab is present even while Wallex is unused',
+      Boolean(topTab));
 
     await act(async () => { topTab?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(80); });
     const iranPanel = container.querySelector('[data-testid="iran-buy-panel"]');
@@ -140,16 +140,12 @@ export async function run(container) {
       await sleep(80);
     });
     const closedPanel = container.querySelector('[data-testid="iran-buy-panel"]');
-    check('a disabled deployment still shows the rate, calculator, wallet check and journey',
-      Boolean(closedPanel?.querySelector('[data-testid="iran-buy-rate"]'))
-      && Boolean(closedPanel?.querySelector('.iran-buy-amount input'))
-      && Boolean(closedPanel?.querySelector('.iran-buy-destination'))
-      && closedPanel?.querySelectorAll('.iran-buy-guide li').length === 4);
-    check('a disabled deployment explains what is missing and offers no payable action',
-      closedPanel?.querySelectorAll('.iran-buy-readiness li').length === 2
-      && Boolean(closedPanel?.querySelector('[data-testid="iran-buy-unavailable"]'))
-      && closedPanel?.querySelector('[data-testid="iran-buy-disabled-cta"]')?.disabled === true
-      && !closedPanel?.querySelector('[data-testid="iran-buy-pay"]'));
+    check('a disabled Wallex deployment still offers Bitpin only, with no Wallex calculator or pay CTA',
+      Boolean(closedPanel?.querySelector('[data-testid="iran-buy-referral"]'))
+      && !closedPanel?.querySelector('[data-testid="iran-buy-rate"]')
+      && !closedPanel?.querySelector('.iran-buy-amount')
+      && !closedPanel?.querySelector('[data-testid="iran-buy-pay"]')
+      && !closedPanel?.querySelector('[data-testid="iran-buy-disabled-cta"]'));
 
     /* ── Referral mode: rail closed + a server-approved bitpin link ────────── */
     await act(async () => { root.unmount(); });
@@ -175,9 +171,10 @@ export async function run(container) {
       && !flow?.querySelector('[data-testid="iran-buy-address-value"]'));
     check('the referral flow adds no manual address field and no asset/network picker',
       !flow?.querySelector('input, textarea, select') && referralPanel?.querySelectorAll('select').length === 0);
-    check('the swap CTA sits outside the guide, so it is reachable while the guide is closed',
-      Boolean(flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]'))
-      && !flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')?.closest('details'));
+    check('purchase stays on Bitpin USDT — no in-app swap CTA on this tab',
+      !flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')
+      && Boolean(flow?.querySelector('[data-testid="iran-buy-networks"]'))
+      && Boolean(flow?.querySelector('[data-testid="iran-buy-network-BEP20"]')));
     check('the referral block names only USDT and no other asset',
       !/BTC|SOL|BNB|DOGE|TRX|XRP|ADA|LTC|SHIB|ETC\b/i.test(flow?.textContent || ''));
 
@@ -246,11 +243,7 @@ export async function run(container) {
     check('the copy button copies exactly the address and nothing else', copiedValue === WALLET_ADDRESS);
     check('the guide warns that a wrong network selection loses the funds',
       /شبکهٔ اشتباه|از دست رفتن/.test(connectedFlow?.querySelector('.iran-buy-address-warning')?.textContent || ''));
-    await act(async () => {
-      connectedFlow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-      await sleep(30);
-    });
-    check('opening the guide, swapping and unmounting produced no unexpected React error', errors.length === 0);
+    check('opening the guide and unmounting produced no unexpected React error', errors.length === 0);
     delete window.ethereum;
     try { delete window.navigator.clipboard; } catch { /* optional stub cleanup */ }
 
