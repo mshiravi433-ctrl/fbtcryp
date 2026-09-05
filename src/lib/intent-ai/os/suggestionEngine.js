@@ -170,7 +170,7 @@ function chips(ids, locale) {
 
 /** Per-intent chip sets, by id only — the text lives in CHIPS. */
 const BY_INTENT = Object.freeze({
-  // FIX: YIELD/INVESTMENT intents now route to real products only: /invest, /perp, /stocks
+  // YIELD/INVESTMENT chips: افق جهانی → /stocks, plus /perp and /stocks
   // No lab/virtual/پول خیالی. Keeps old chips but prioritizes real markets.
   YIELD: ['invest_horizon', 'perp_futures', 'stocks_real', 'yield_discover'],
   PORTFOLIO: ['analyze_portfolio', 'rebalance', 'risk', 'invest_horizon'],

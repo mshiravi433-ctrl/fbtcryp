@@ -24,8 +24,9 @@ function safeWrite(list) {
   } catch {}
 }
 
-export function createTask({ intent, plan, context = {} } = {}) {
+export function createTask({ intent, plan, context = {}, status = 'PENDING' } = {}) {
   const now = Date.now();
+  const st = status || 'PENDING';
   return {
     id: `task_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
     schema: TASK_SCHEMA,
@@ -33,11 +34,11 @@ export function createTask({ intent, plan, context = {} } = {}) {
     intentDetail: intent,
     plan,
     context: { currentPage: context.currentPage, walletConnected: context.wallet?.connected },
-    status: 'PENDING',
+    status: st,
     pendingAction: plan?.actions?.[0] || null,
     createdAt: now,
     updatedAt: now,
-    completedAt: null
+    completedAt: st === 'COMPLETED' || st === 'FAILED' ? now : null
   };
 }
 
@@ -61,6 +62,12 @@ export function getActiveTasks() {
 export function getLastActiveTask() {
   const active = getActiveTasks();
   return active.length ? active[active.length - 1] : null;
+}
+
+/** Most recent task of any status — used to resume a finished page-open offer. */
+export function getLastTask() {
+  const list = safeRead();
+  return list.length ? list[list.length - 1] : null;
 }
 
 export function updateTaskStatus(id, status, extra = {}) {

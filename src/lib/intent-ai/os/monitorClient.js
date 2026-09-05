@@ -102,8 +102,9 @@ export function parseMonitorRequest(text, { asset = null, intervalMinutes = 60, 
 
   const above = raw.match(/(?:بالاتر|بالای|بیشتر|فوق|بیش از|above|over|≥|>)\s*([0-9۰-۹.,kK]+)/i);
   const below = raw.match(/(?:کمتر از|کمتر|پایین‌تر از|پایین‌تر|زیر|below|under|≤|<)\s*([0-9۰-۹.,kK]+)/i);
+  const at = raw.match(/(?:به)\s*([0-9۰-۹.,kK]+)\s*(?:رسید(?:ه)?|برسه|برسد)|(?:رسید(?:ه)?(?:\s*به)?)\s*([0-9۰-۹.,kK]+)|(?:hits?|reaches|at)\s*([0-9۰-۹.,kK]+)/i);
   const pct = /%|درصد|pct/i.test(raw);
-  const threshold = numFrom(pct ? (above?.[1] || below?.[1]) : (above?.[1] || below?.[1]));
+  const threshold = numFrom(pct ? (above?.[1] || below?.[1] || at?.[1] || at?.[2] || at?.[3]) : (above?.[1] || below?.[1] || at?.[1] || at?.[2] || at?.[3]));
 
   if (!isMarketWide && !threshold) return { error: 'NO_CONDITION', asset: foundAsset };
   const operator = above ? 'ABOVE' : (below ? 'BELOW' : 'ABOVE');

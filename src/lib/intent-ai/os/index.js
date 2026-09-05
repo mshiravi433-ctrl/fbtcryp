@@ -118,7 +118,8 @@ import { createOrchestrator } from './orchestrator.js';
 import { createAgentLoop } from './agentLoop.js';
 import { buildHumanResponse, stripInternalLeaks } from './humanResponse.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from './suggestionEngine.js';
-import { createTask, saveTask, getActiveTasks, getLastActiveTask, resumeTask, updateTaskStatus } from './taskContinuity.js';
+import { createTask, saveTask, getActiveTasks, getLastActiveTask, getLastTask, resumeTask, updateTaskStatus } from './taskContinuity.js';
+import { resolveFollowUp, PAGE_OPEN_INTENTS, INTENT_DEFAULT_ROUTE } from './upgrade6/followUpResolver.js';
 import { searchMemory, addWorkingMemory, addSessionMemory, addLongTermMemory, createMemory, extractPreferenceFromMessage } from './memoryEngine.js';
 import { createActionMemory, saveActionMemory } from './actionMemory.js';
 import { logTask } from './observability.js';
@@ -221,7 +222,7 @@ export function createIntentOS({
     getServices() { return liveServices; },
     
     // Main entry: User Intent → Understand → Context → Plan → Execute → Verify → Memory → Response
-    async process({ message, conversationId = null, sessionId = null, currentPage = '/', selectedAsset = null, selectedNetwork = null, activeTab = null, walletState = null, portfolioState = null, conversation = [], locale: loc = locale, services: svc } = {}) {
+    async process({ message, conversationId = null, sessionId = null, currentPage = '/', selectedAsset = null, selectedNetwork = null, activeTab = null, walletState = null, portfolioState = null, conversation = [], pendingOffer = null, locale: loc = locale, services: svc } = {}) {
       const start = Date.now();
       const currentLocale = loc || locale;
       const mergedServices = mergeServices(liveServices, svc);
@@ -314,41 +315,87 @@ export function createIntentOS({
           // the ops surfaces answer with their own live panels
           'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS'
         ];
-        const stayInChat = ANSWER_IN_CHAT.includes(intent.type);
-        const openPage = wantsPageOpen(intent.raw) || !stayInChat;
+        let workingIntent = intent;
+        const stayInChat = ANSWER_IN_CHAT.includes(workingIntent.type);
+        let openPage = wantsPageOpen(workingIntent.raw) || !stayInChat;
+
+        /*
+         * CONTINUE / «اره» / «بله تایید شد» must resume the last offer
+         * (open Horizon, open market, open the best farm) instead of asking
+         * “confirm?” forever and leaving a PENDING HORIZON task.
+         */
+        if (workingIntent.type === 'CONTINUE' || workingIntent.type === 'EXECUTE_CURRENT') {
+          const lastTask = getLastActiveTask() || getLastTask();
+          const follow = resolveFollowUp(message, {
+            pendingOffer,
+            lastIntentType: operationalSlots.intent || operationalSlots.operation || lastTask?.intent,
+            operational: operationalSlots,
+            lastTask,
+            lastAiContent: Array.isArray(conversation)
+              ? [...conversation].reverse().find((m) => m?.role === 'ai' || m?.role === 'assistant')?.content
+              : null
+          });
+          if (follow.handled && follow.action === 'resume' && follow.route) {
+            openPage = true;
+            workingIntent = {
+              ...workingIntent,
+              type: follow.intentType && follow.intentType !== 'CONTINUE' ? follow.intentType : (lastTask?.intent || workingIntent.type),
+              primaryIntent: follow.intentType && follow.intentType !== 'CONTINUE' ? follow.intentType : (lastTask?.intent || workingIntent.primaryIntent),
+              navigation: { ...(workingIntent.navigation || {}), route: follow.route },
+              entities: { ...(workingIntent.entities || {}), selection: follow.selection || workingIntent.entities?.selection }
+            };
+          } else if (follow.handled && follow.action === 'cancel') {
+            if (lastTask?.id) updateTaskStatus(lastTask.id, 'COMPLETED');
+            executionResult = { ok: true, cancelled: true };
+          } else if (lastTask?.intent && PAGE_OPEN_INTENTS.includes(lastTask.intent)) {
+            const resumeRoute = INTENT_DEFAULT_ROUTE[lastTask.intent] || lastTask.intentDetail?.navigation?.route;
+            if (resumeRoute) {
+              openPage = true;
+              workingIntent = {
+                ...workingIntent,
+                type: lastTask.intent,
+                primaryIntent: lastTask.intent,
+                navigation: { ...(workingIntent.navigation || {}), route: resumeRoute }
+              };
+            }
+          }
+        }
+
         // SSOT-first routing, with an adapter for follow-up slots, SEND→wallet,
         // speculation gating and entity-driven swap/bridge fallback.
-        const routing = resolveIntent(intent, message, { openPage, slots: getOperationalSlots() });
+        const routing = resolveIntent(workingIntent, message, { openPage, slots: getOperationalSlots() });
         const handoffRoute = routing.route;
         const forceOpen = routing.openPage === true;
 
-        if (routing.unavailable) {
+        if (executionResult?.cancelled) {
+          // already handled
+        } else if (routing.unavailable) {
           // The module exists in the spec but not in this build — say so,
           // never navigate to a dead URL.
           executionResult = { ok: true, unavailable: routing.unavailable };
-        } else if (intent.type === 'OPEN_CALM' || intent.type === 'PLAY_MUSIC') {
-          executionResult = await mediaAgent.handleIntent(intent, { locale: currentLocale });
-        } else if (handoffRoute && (openPage || forceOpen || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH')) {
+        } else if (workingIntent.type === 'OPEN_CALM' || workingIntent.type === 'PLAY_MUSIC') {
+          executionResult = await mediaAgent.handleIntent(workingIntent, { locale: currentLocale });
+        } else if (handoffRoute && (openPage || forceOpen || workingIntent.type === 'NAVIGATION' || workingIntent.type === 'NEWS_SEARCH')) {
           if (liveNavigation?.navigate) {
             await liveNavigation.navigate({ route: handoffRoute });
           } else {
-            await navAgent.handleIntent({ ...intent, navigation: { route: handoffRoute } }, context);
+            await navAgent.handleIntent({ ...workingIntent, navigation: { route: handoffRoute } }, context);
           }
           executionResult = { ok: true, route: handoffRoute, handoff: true };
-        } else if (plan.readOnly || intent.readOnly || intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
-          if (intent.type === 'NAVIGATION' || intent.type === 'NEWS_SEARCH') {
-            executionResult = await navAgent.handleIntent(intent, context);
+        } else if (plan.readOnly || workingIntent.readOnly || workingIntent.type === 'NAVIGATION' || workingIntent.type === 'NEWS_SEARCH') {
+          if (workingIntent.type === 'NAVIGATION' || workingIntent.type === 'NEWS_SEARCH') {
+            executionResult = await navAgent.handleIntent(workingIntent, context);
             if (executionResult.ok && executionResult.route && liveNavigation?.navigate) {
               await liveNavigation.navigate({ route: executionResult.route });
             }
           } else {
-            const toolRun = await executeIntentTools({ intent, context, services: mergedServices });
+            const toolRun = await executeIntentTools({ intent: workingIntent, context, services: mergedServices });
             const agentResults = {};
             for (const agentId of plan.agents) {
               const agent = agents[agentId];
               if (agent?.handleIntent) {
                 try {
-                  const res = await agent.handleIntent(intent, { ...context, services: mergedServices });
+                  const res = await agent.handleIntent(workingIntent, { ...context, services: mergedServices });
                   agentResults[agentId] = res;
                 } catch { /* one agent failing must not blank the whole turn */ }
               }
@@ -386,8 +433,8 @@ export function createIntentOS({
         
         // 7. HUMAN RESPONSE
         try {
-          const ent = intent.entities || {};
-          const op = routing.operation || intent.type;
+          const ent = workingIntent.entities || {};
+          const op = routing.operation || workingIntent.type;
           rememberOperationalSlots({
             asset: ent.token
               || (['SELL', 'SEND'].includes(op) ? ent.fromToken : ent.toToken)
@@ -403,7 +450,7 @@ export function createIntentOS({
         } catch { /* memory is best-effort */ }
 
         const human = buildHumanResponse({
-          intent,
+          intent: workingIntent,
           context,
           results: executionResult || {},
           plan,
@@ -411,11 +458,25 @@ export function createIntentOS({
         });
         
         // 8. SUGGESTIONS — dynamic contextual
-        const suggestions = getSuggestionsForIntent(intent.type, { ...context, lastIntentType: intent.type }, intent.entities);
+        const suggestions = getSuggestionsForIntent(workingIntent.type, { ...context, lastIntentType: workingIntent.type }, workingIntent.entities);
         
-        // 9. TASK CONTINUITY
-        const task = createTask({ intent, plan, context });
+        // 9. TASK CONTINUITY — a finished read/navigation is COMPLETED, not
+        // an “unfinished HORIZON” nag the next time the chat remounts.
+        const finished = Boolean(
+          executionResult?.ok
+          && !executionResult.planReady
+          && !executionResult.requiresConfirmation
+          && (executionResult.route || workingIntent.readOnly || PAGE_OPEN_INTENTS.includes(workingIntent.type) || workingIntent.type === 'CONTINUE' || workingIntent.type === 'CANCEL' || executionResult.cancelled)
+        );
+        const task = createTask({
+          intent: workingIntent,
+          plan,
+          context,
+          status: executionResult?.cancelled ? 'COMPLETED' : (finished ? 'COMPLETED' : (executionResult?.planReady ? 'PENDING' : (executionResult?.ok ? 'COMPLETED' : 'FAILED')))
+        });
         saveTask(task);
+        const prevPending = getActiveTasks().filter((t) => t.id !== task.id && PAGE_OPEN_INTENTS.includes(t.intent));
+        for (const t of prevPending) updateTaskStatus(t.id, 'COMPLETED');
         
         // 10. OBSERVABILITY
         const latency = Date.now() - start;
@@ -447,7 +508,7 @@ export function createIntentOS({
         
         // 12. ACTION MEMORY
         const actionMem = createActionMemory({
-          intent: intent.type,
+          intent: workingIntent.type,
           tools: plan.tools?.map(t => t.id) || [],
           inputs: plan.actions?.[0]?.input || {},
           result: executionResult,
@@ -460,9 +521,9 @@ export function createIntentOS({
         // 13. WORKING MEMORY
         addWorkingMemory(createMemory({
           type: 'conversation',
-          content: `${message} → ${routing.operation || intent.type}`,
+          content: `${message} → ${routing.operation || workingIntent.type}`,
           importance: 0.6,
-          metadata: { intent: intent.type, route: currentPage }
+          metadata: { intent: workingIntent.type, route: currentPage }
         }));
 
         // 14. CONFIDENCE & LEARNING
@@ -474,7 +535,7 @@ export function createIntentOS({
         });
 
         learningLoop.record({
-          intentType: intent.type,
+          intentType: workingIntent.type,
           providerUsed: 'intent-os-v3',
           confidenceScore: confidence.confidenceScore,
           executionSuccess: executionResult?.ok !== false,
@@ -484,7 +545,7 @@ export function createIntentOS({
         
         return {
           ok: true,
-          intent,
+          intent: workingIntent,
           context,
           plan,
           execution: executionResult,
@@ -547,6 +608,7 @@ export function createIntentOS({
     searchMemory,
     getActiveTasks,
     getLastActiveTask,
+    getLastTask,
     resumeTask,
     emitEvent,
     onEvent,

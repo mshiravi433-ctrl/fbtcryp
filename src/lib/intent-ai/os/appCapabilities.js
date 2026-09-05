@@ -433,8 +433,8 @@ export const APP_CAPABILITIES = Object.freeze([
   Object.freeze({
     id: 'horizon',
     name: 'Global Horizon',
-    description: 'Forex, funds, RWA and global pairs',
-    route: '/invest',
+    description: 'Forex, gold, metals and global pairs on /stocks',
+    route: '/stocks',
     actions: ['horizon.open', 'horizon.invest'],
     queries: ['horizon.markets'],
     events: ['horizon.opened'],

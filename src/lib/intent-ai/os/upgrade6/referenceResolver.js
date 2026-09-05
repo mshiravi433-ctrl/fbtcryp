@@ -279,7 +279,7 @@ export class ContextualAnswerResolver {
 
   tryParseConfirm(text) {
     const t = String(text).toLowerCase().trim();
-    if (/^(بله|آره|آری|باشه|اوکی|ok|yes|confirm|انجام بده|ادامه بده)$/.test(t)) return true;
+    if (/^(بله|اره|آره|آری|اری|باشه|اوکی|ok|okay|yes|confirm|انجام بده|ادامه بده|تایید|تأیید|تایید شد|تأیید شد)$/.test(t)) return true;
     if (/^(نه|نخیر|لغو|کنسل|no|cancel)$/.test(t)) return false;
     return null;
   }

@@ -57,9 +57,9 @@ function extractAmount(intent) {
   return m ? String(m).replace(/,/g, '') : null;
 }
 
-const BARE_FOLLOWUPS = /^(ادامه بده|ادامه‌اش را بده|بخرش|بفروشش|بخر|بفروش|انجامش بده|همین کار|ارسالش کن|بفرستش|بریجش کن|سواپش کن)\s*[!.؟?]*$/i;
+const BARE_FOLLOWUPS = /^(اره|آره|بله|باشه|اوکی|ok|yes|تایید شد|تأیید شد|بله تایید شد|ادامه بده|ادامه‌اش را بده|بخرش|بفروشش|بخر|بفروش|انجامش بده|همین کار|ارسالش کن|بفرستش|بریجش کن|سواپش کن)\s*[!.؟?]*$/i;
 
-const SPECULATION_TYPES = ['HORIZON', 'FOREX', 'DYDX', 'FUTURES'];
+const SPECULATION_TYPES = ['DYDX', 'FUTURES'];
 
 /**
  * Resolve a parsed intent into a page route, applying the SSOT first and

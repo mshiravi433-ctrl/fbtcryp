@@ -81,6 +81,7 @@ export function createConversationState({ sessionId = null, currentRoute = '/int
     lastUserAnswer: null,
     lastUserAnswerAt: null,
     pendingAction: null,
+    pendingOffer: null,
     executionContext: null,
     walletContext: null,
     walletSnapshot: null,
@@ -340,6 +341,14 @@ export function setPendingAction(state, action) {
   return {
     ...state,
     pendingAction: action,
+    updatedAt: now()
+  };
+}
+
+export function setPendingOffer(state, offer) {
+  return {
+    ...state,
+    pendingOffer: offer || null,
     updatedAt: now()
   };
 }

@@ -149,6 +149,7 @@ import {
   setCollectedSlot,
   setMissingSlots,
   setPendingAction as setConvPending,
+  setPendingOffer as setConvOffer,
   setWalletContext as setConvWallet,
   appendMessage as appendConvMessage,
   hasAskedQuestion,
@@ -158,6 +159,7 @@ import {
 } from '../lib/intent-ai/os/upgrade6/conversationState.js';
 import { getNavigationManager } from '../lib/intent-ai/os/upgrade6/navigationManager.js';
 import { getSlotFillingEngine, parseShortAnswer } from '../lib/intent-ai/os/upgrade6/slotFillingEngine.js';
+import { isBareFollowUp, PAGE_OPEN_INTENTS } from '../lib/intent-ai/os/upgrade6/followUpResolver.js';
 import { getReferenceResolver, getContextualResolver, calculateConfidence, shouldExecute } from '../lib/intent-ai/os/upgrade6/referenceResolver.js';
 import { createSharedContext, getOrchestratorV2 } from '../lib/intent-ai/os/upgrade6/sharedContext.js';
 import { getWalletContextManager, createWalletSnapshot } from '../lib/intent-ai/os/upgrade6/walletContextManager.js';
@@ -562,7 +564,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       evmAddresses: wallet?.address ? [wallet.address] : []
     };
     const portfolioSnap = {
-      dataStatus: multi?.loading ? 'pending' : (holdings.length ? 'live' : 'unavailable'),
+      dataStatus: multi?.loading ? 'pending' : (holdings.length ? 'live' : (walletSnap.connected ? 'empty' : 'unavailable')),
       freshness: multi?.loading ? 'PENDING' : 'FRESH',
       hydrating: Boolean(walletSnap.connected && multi?.loading),
       totalValueUsd: Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null,
@@ -815,8 +817,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
     // §43 Global Event Bus
     busV6.emit(EVENTS_V6.USER_MESSAGE, { message, conversationId, currentPage });
+    const obsIntentId = convStateRef.current.intentId || makeId();
     obsRef.current.logIntentStart({
-      intentId: convStateRef.current.intentId || makeId(),
+      intentId: obsIntentId,
       sessionId: convStateRef.current.sessionId,
       userRequest: message,
       detectedIntent: null,
@@ -860,8 +863,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const ctxResolver = ctxResolverRef.current;
       const conv = convStateRef.current;
 
-      // If last question exists and answer is short, try slot filling first
-      if (conv.lastQuestion && conv.lastQuestionId && message.length < 100) {
+      // Bare «اره» / «بله تایید شد» is a resume, not a slot fill — even if a
+      // leftover lastQuestionId is sitting in conversation state.
+      if (isBareFollowUp(message)) {
+        /* fall through to context + OS process() */
+      } else if (conv.lastQuestion && conv.lastQuestionId && message.length < 100) {
         const shortParsed = parseShortAnswer(message);
         const fillResult = slotEngine.fillFromAnswer(message, { conversationState: conv });
 
@@ -1043,9 +1049,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         walletState,
         portfolioState: aiContext.portfolio,
         conversation: messages.map(m => ({ role: m.role, content: m.content })).slice(-10),
+        pendingOffer: convStateRef.current.pendingOffer || null,
         locale,
         services: liveModuleServices
       });
+      try {
+        obsRef.current.log({
+          intentId: obsIntentId,
+          type: 'INTENT_DETECTED',
+          payload: {
+            detectedIntent: osResult?.intent?.type || osResult?.intent?.primaryIntent || null,
+            detail: osResult?.intent || null
+          }
+        });
+      } catch { /* observability is best-effort */ }
 
       setActivitySteps((prev) => prev.map((s) => s.id === 'market' ? { ...s, status: 'completed' } : s.id === 'agents' ? { ...s, status: 'active' } : s));
       setThinkingState('connecting');
@@ -1214,13 +1231,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, nextMessage]);
         setConvState((prev) => {
           let next = appendConvMessage(prev, nextMessage);
-          if (nextMessage.missingInfo) {
+          const offerRoute = osResult.human?.actions?.[0]?.route || osResult.navigated || osResult.execution?.route || null;
+          const offeredOpen = /باز کنم|open (the )?(market |farm |horizon )?page|Want me to open/i.test(String(finalMessage || ''));
+          if (offeredOpen && offerRoute) {
+            const qId = makeId('q');
+            const q = locale.startsWith('fa') ? 'صفحه را باز کنم؟' : 'Open the page?';
+            next = setConvQuestion(next, q, { questionId: qId, expectedType: 'confirmation' });
+            next = setConvOffer(next, { route: offerRoute, intentType: osResult.intent?.type || null, selection: null });
+            obsRef.current.log({ intentId: prev.intentId, type: 'QUESTION_ASKED', payload: { question: q, questionId: qId } });
+          } else if (nextMessage.missingInfo) {
             const qId = makeId('q');
             next = setConvQuestion(next, nextMessage.missingInfo, { questionId: qId, expectedType: osResult.intent?.missingInformation?.[0] || 'text' });
             obsRef.current.log({ intentId: prev.intentId, type: 'QUESTION_ASKED', payload: { question: nextMessage.missingInfo, questionId: qId } });
           } else {
             // No missing info → ready or completed
             next = updateIntentStatus(next, INTENT_STATUS.COMPLETED);
+            next = setConvOffer(next, null);
             lifecycleRef.current.updateStatus(next.intentId, INTENT_LIFECYCLE.COMPLETED);
             busV6.emit(EVENTS_V6.INTENT_COMPLETED, { intentId: next.intentId });
             metricsRef.current.recordIntent(true);
@@ -1936,7 +1962,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   useEffect(() => {
     try {
       const last = getLastActiveTask();
-      if (last && last.status === 'PENDING' && Date.now() - last.createdAt < 30 * 60 * 1000) {
+      if (last && last.status === 'PENDING' && Date.now() - last.createdAt < 30 * 60 * 1000 && !PAGE_OPEN_INTENTS.includes(last.intent)) {
         setMessages(prev => {
           if (prev.some(m => m.taskId === last.id)) return prev;
           return [...prev, {
@@ -2406,7 +2432,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
 
-    if (pendingDraft && /انجامش بده|تأیید|تایید|بله|باشه|do it|confirm|execute|yes/i.test(text)) {
+    if (pendingDraft && /انجامش بده|تأیید|تایید|بله|اره|آره|باشه|do it|confirm|execute|yes/i.test(text)) {
       const d = pendingDraft;
       setPendingDraft(null);
       if (d.kind === 'monitor') await handleMonitorCreate(d.parsed);

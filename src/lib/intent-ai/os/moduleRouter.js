@@ -17,6 +17,8 @@ export const TOKEN_ALIASES = Object.freeze({
   بیتکوین: 'BTC',
   'بیت کوین': 'BTC',
   'بیت‌کوین': 'BTC',
+  'بیت کویین': 'BTC',
+  بیتکویین: 'BTC',
   solana: 'SOL',
   سولانا: 'SOL',
   binance: 'BNB',
@@ -64,8 +66,8 @@ export const PAGE_CATALOG = Object.freeze([
   { route: '/portfolio', names: { fa: 'پرتفوی', en: 'Portfolio' }, keywords: ['پرتفوی', 'سبد', 'portfolio'] },
   { route: '/signals', names: { fa: 'سیگنال', en: 'Signals' }, keywords: ['سیگنال', 'signals'] },
   { route: '/smart-money', names: { fa: 'اسمارت مانی', en: 'Smart Money' }, keywords: ['smart money', 'اسمارت', 'نهنگ', 'کیف پول بزرگ'] },
-  { route: '/stocks', names: { fa: 'سهام', en: 'Stocks' }, keywords: ['سهام', 'stocks', 'شرکتی'] },
-  { route: '/invest', names: { fa: 'افق جهانی', en: 'Horizon' }, keywords: ['افق جهانی', 'فارکس', 'forex', 'جفت ارز', 'صندوق', 'rwa'] },
+  { route: '/stocks', names: { fa: 'سهام', en: 'Stocks' }, keywords: ['سهام', 'stocks', 'شرکتی', 'افق جهانی', 'فارکس', 'forex', 'جفت ارز', 'طلا', 'نفت', 'کالا', 'فلزات', 'gold', 'metals', 'commodities'] },
+  { route: '/invest', names: { fa: 'سرمایه‌گذاری', en: 'Invest' }, keywords: ['سرمایه‌گذاری مجازی', 'پول مجازی', 'virtual invest', 'nx invest'] },
   { route: '/perp', names: { fa: 'فیوچرز', en: 'Perpetuals' }, keywords: ['فیوچرز', 'پرپچوال', 'perp', 'futures'] },
   { route: '/dydx', names: { fa: 'dYdX', en: 'dYdX' }, keywords: ['dydx', 'دی وای دی ایکس'] },
   { route: '/ostium', names: { fa: 'Ostium', en: 'Ostium' }, keywords: ['ostium', 'اوسشیوم'] },
@@ -143,6 +145,8 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
 
   switch (type) {
     case 'NAVIGATION':
+      // A bare “open it” is not news. Only land on /news when the user named it.
+      return nav || null;
     case 'NEWS_SEARCH':
       return nav || '/news';
     case 'SWAP':
@@ -166,22 +170,22 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
     case 'GOAL':
     case 'GOAL_PLANNING':
     case 'PROFIT_PLAN': {
-      // ── FIX: investment/profit intents must NEVER go to /earn (points tab = پول خیالی)
-      // nor to /lab (virtual). Must route to real products only: /perp, /invest, /stocks.
+      // Real products only: /stocks (افق جهانی / forex / gold / metals), /perp.
+      // /invest is simulated NX — never the default for افق جهانی.
       const raw = String(intent.raw || intent.message || '').toLowerCase();
       const e = intent.entities || {};
       const risk = String(e.riskPreference || e.riskTolerance || '').toLowerCase();
       const tokens = (e.tokens || []).map((t) => String(t).toLowerCase());
+      const hasVirtual = /پول مجازی|سرمایه‌گذاری مجازی|virtual (money|invest)|nx invest/i.test(raw);
       const hasStocks = tokens.some((t) => ['stock', 'stocks', 'xstock', 'rwa'].includes(t))
-        || /سهام|بورس|xstock|stocks|equities|tokenized|rwa|دارایی واقعی|توکن شده/i.test(raw);
+        || /سهام|بورس|xstock|stocks|equities|tokenized|rwa|دارایی واقعی|توکن شده|افق جهانی|فارکس|forex|طلا|نفت|کالا|فلزات|gold|metals/i.test(raw);
       const hasHighRisk = risk === 'high' || risk === 'aggressive'
-        || /اهرم|لوریج|leverage|فیوچرز|پرپچوال|perp|futures|زلا|پول خیالی|مجازی|سود میبره|سود می‌بره/i.test(raw)
+        || /اهرم|لوریج|leverage|فیوچرز|پرپچوال|perp|futures|زلا|سود میبره|سود می‌بره/i.test(raw)
         || /high.*risk|پرریسک|ریسک.*زیاد|تهاجمی/i.test(raw);
-      // If user explicitly mentioned stocks → /stocks, high risk/leverage → /perp, otherwise → /invest (افق جهانی)
+      if (hasVirtual) return '/invest';
       if (hasStocks) return '/stocks';
       if (hasHighRisk) return '/perp';
-      // Default for any investment / profit intent: افق جهانی (real global markets)
-      return '/invest';
+      return '/stocks';
     }
     case 'SIGNALS':
     case 'ANALYZE_TOKEN':
@@ -191,7 +195,7 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
       return '/stocks';
     case 'HORIZON':
     case 'FOREX':
-      return '/invest';
+      return '/stocks';
     case 'FUTURES':
       return '/perp';
     case 'DYDX':
