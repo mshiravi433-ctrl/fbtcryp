@@ -171,6 +171,21 @@ import { getChatScrollManager } from '../lib/intent-ai/os/upgrade6/chatScrollMan
 import { busV6, EVENTS_V6 } from '../lib/intent-ai/os/upgrade6/eventBusV2.js';
 import { getL1Messages, addL1Message, getL2Tasks, addL2Task, getL3Preferences, addL3Preference, extractL3FromMessage, getAllMemoryV2 } from '../lib/intent-ai/os/upgrade6/memoryV2.js';
 import { ThinkingOrb, ThinkingOrbLarge, AIActivityTimeline } from './ai/ThinkingOrb.jsx';
+import {
+  loadLocalIntentOSState,
+  saveLocalIntentOSState,
+  hydrateLegacyStateFromIntentOS,
+  deriveIntentOSStateFromLegacy,
+  shouldSyncToServer,
+  bootstrapIntentOSSession,
+  persistIntentOSSession,
+  ingestUserTurn,
+  orchestrateIntent,
+  prepareExecution,
+  activateMonitoring,
+  resumeConversationState,
+  parseAnswerValue
+} from '../lib/intent-ai/os/upgrade8/index.js';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
 const MAX_SUGGESTIONS = 4;
@@ -415,6 +430,66 @@ function sameWalletFacts(a, b) {
   return key(a) === key(b);
 }
 
+function choiceLabel(choice) {
+  return choice?.label || choice?.title || choice?.value || choice?.id || 'option';
+}
+
+function buildTargetAllocation(optionId, portfolio = {}) {
+  const positions = Array.isArray(portfolio.positions) ? portfolio.positions : [];
+  const total = Number(portfolio.totalValue) || 0;
+  const sorted = [...positions].sort((a, b) => (Number(b?.valueUsd) || 0) - (Number(a?.valueUsd) || 0));
+  const top = sorted[0]?.symbol || 'CORE';
+  if (!sorted.length || total <= 0) {
+    return [
+      { symbol: 'BTC', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 40 : optionId === 'balanced-rotation' ? 35 : 25 },
+      { symbol: 'ETH', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 25 : optionId === 'balanced-rotation' ? 30 : 25 },
+      { symbol: 'STABLES', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 35 : optionId === 'balanced-rotation' ? 20 : 10 }
+    ];
+  }
+  if (optionId === 'defensive-rebalance') {
+    return [
+      { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 30 },
+      { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 30 },
+      { symbol: 'STABLES', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 40 }
+    ];
+  }
+  if (optionId === 'opportunistic-tilt') {
+    return [
+      { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 35 },
+      { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 25 },
+      { symbol: 'TACTICAL', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 20 },
+      { symbol: 'STABLES', fromPct: Number(sorted[3]?.weightPct) || 0, toPct: 20 }
+    ];
+  }
+  return [
+    { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 35 },
+    { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 30 },
+    { symbol: 'ETH', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 20 },
+    { symbol: 'STABLES', fromPct: Number(sorted[3]?.weightPct) || 0, toPct: 15 }
+  ];
+}
+
+function buildRecommendationAction(state, portfolio = {}) {
+  const selected = state?.agentState?.lastPresentedOptions?.find?.((item) => item.selected)
+    || state?.agentState?.lastPresentedOptions?.[1]
+    || null;
+  const optionId = selected?.id || 'balanced-rotation';
+  const allocation = buildTargetAllocation(optionId, portfolio);
+  return {
+    type: 'REBALANCE',
+    asset: 'PORTFOLIO',
+    strategyId: optionId,
+    title: selected?.label || 'Balanced rotation',
+    impactSummary: selected?.meta?.rationale || 'Reduce concentration and rotate into a more diversified mix.',
+    parameters: {
+      targetAllocation: allocation,
+      horizonMonths: state?.collectedSlots?.timeframe || null,
+      riskProfile: state?.collectedSlots?.riskProfile || null
+    },
+    estimatedGasUsd: 6.5
+  };
+}
+
 export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const { t, i18n } = useTranslation();
   const locale = i18n?.language || 'fa';
@@ -442,7 +517,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   // Initialize once
   if (!convStateRef.current) {
-    convStateRef.current = loadConversationState();
+    const bootState = os8StateRef.current || loadLocalIntentOSState('intent-unified');
+    const hydrated = hydrateLegacyStateFromIntentOS(bootState);
+    const loadedConv = loadConversationState();
+    convStateRef.current = (!loadedConv?.messages?.length && hydrated?.messages?.length)
+      ? {
+          ...loadedConv,
+          ...(hydrated?.convStatePatch || {}),
+          messages: hydrated.messages
+        }
+      : loadedConv;
     navManagerRef.current = getNavigationManager();
     lifecycleRef.current = getIntentLifecycleManager();
     walletMgrRef.current = getWalletContextManager();
@@ -545,12 +629,39 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const osRef = useRef(null);
   const pendingU7QuestionRef = useRef(null);
   const prevRouteRef = useRef(currentPage);
+  const os8StateRef = useRef(loadLocalIntentOSState('intent-unified'));
+  const os8SyncSigRef = useRef('');
+  const os8RemoteSyncAtRef = useRef(0);
+  const os8HydratedRef = useRef(false);
 
   // UPGRADE 6 — Persist conversation state on every change
   useEffect(() => {
     convStateRef.current = convState;
     saveConversationState(convState);
   }, [convState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const remoteBoot = await bootstrapIntentOSSession({ ownerKey: 'intent-unified', hydrateRemote: true });
+      if (cancelled || !remoteBoot) return;
+      os8StateRef.current = remoteBoot;
+      os8HydratedRef.current = true;
+      const hydrated = hydrateLegacyStateFromIntentOS(remoteBoot);
+      if (hydrated?.messages?.length && (!convStateRef.current?.messages?.length || remoteBoot.lastUpdated > Number(convStateRef.current?.updatedAt || 0))) {
+        setMessages((prev) => prev.length > 1 ? prev : hydrated.messages);
+        setConvState((prev) => ({
+          ...prev,
+          ...(hydrated.convStatePatch || {}),
+          messages: hydrated.messages,
+          currentRoute: remoteBoot.currentRoute || prev.currentRoute,
+          previousRoute: remoteBoot.previousRoute || prev.previousRoute,
+          updatedAt: Date.now()
+        }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // UPGRADE 6 — Route change handling: preserve context, detect return
   useEffect(() => {
@@ -605,6 +716,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         metricsRef.current.recordNavigation(true);
       }
 
+      try {
+        os8StateRef.current = resumeConversationState(os8StateRef.current, currentPage);
+        saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
+      } catch {}
       prevRouteRef.current = currentPage;
     }
   }, [currentPage, convState.intentId]);
@@ -875,6 +990,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
   }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign, currentPage]);
 
+  const portfolioContextForOs8 = useMemo(() => ({
+    totalValue: aiContext.portfolio?.totalValueUsd ?? null,
+    concentrationPct: (() => {
+      const holdings = Array.isArray(aiContext.portfolio?.holdings) ? aiContext.portfolio.holdings : [];
+      const total = Number(aiContext.portfolio?.totalValueUsd) || 0;
+      if (!holdings.length || total <= 0) return null;
+      const biggest = Math.max(...holdings.map((row) => Number(row?.valueUsd) || 0));
+      return biggest > 0 ? Number(((biggest / total) * 100).toFixed(2)) : null;
+    })(),
+    positions: (aiContext.portfolio?.holdings || []).map((row) => ({
+      symbol: row.symbol,
+      valueUsd: row.valueUsd,
+      amount: row.amount,
+      weightPct: Number(aiContext.portfolio?.totalValueUsd) > 0 && Number.isFinite(Number(row?.valueUsd))
+        ? Number((((Number(row.valueUsd) || 0) / Number(aiContext.portfolio.totalValueUsd)) * 100).toFixed(2))
+        : null
+    }))
+  }), [aiContext]);
+
   /*
    * ─── A STABLE SIGNATURE, BECAUSE THIS EFFECT POSTS ──────────────────────
    * `aiContext` is rebuilt by a `useMemo` whose dependency list contains whole
@@ -949,6 +1083,52 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [aiContextSig, aiContext, wallet, solanaAddressLive, walletCanSign]);
 
   useEffect(() => {
+    const walletContextForOs8 = {
+      address: aiContext.wallet?.address || aiContext.wallet?.evmAddresses?.[0] || aiContext.wallet?.solanaAddresses?.[0] || null,
+      chainId: aiContext.wallet?.chainId || null,
+      chainType: aiContext.wallet?.solanaAddresses?.length ? 'solana' : 'evm',
+      connected: aiContext.wallet?.connected === true,
+      canSign: aiContext.wallet?.canSign === true,
+      lastUpdated: Date.now()
+    };
+    const derived = deriveIntentOSStateFromLegacy({
+      existingState: os8StateRef.current,
+      convState,
+      messages,
+      currentRoute: currentPage,
+      previousRoute: convState?.previousRoute || prevRouteRef.current || null,
+      walletContext: walletContextForOs8,
+      portfolioContext: portfolioContextForOs8,
+      pendingExecution,
+      monitoring: os8StateRef.current?.monitoringState || null
+    });
+    const signature = JSON.stringify({
+      route: derived.currentRoute,
+      previousRoute: derived.previousRoute,
+      pendingQuestion: derived.pendingQuestion,
+      activeIntent: derived.activeIntent,
+      activeGoal: derived.activeGoal,
+      activeTask: derived.activeTask,
+      collectedSlots: derived.collectedSlots,
+      messageCount: derived.conversation?.turns?.length || 0,
+      lastTurnId: derived.conversation?.turns?.[derived.conversation?.turns?.length - 1]?.id || null,
+      executionStatus: derived.executionState?.status || null,
+      monitoringStatus: derived.monitoringState?.status || null
+    });
+    if (signature === os8SyncSigRef.current) return;
+    os8SyncSigRef.current = signature;
+    os8StateRef.current = derived;
+    saveLocalIntentOSState(derived, 'intent-unified');
+    if (shouldSyncToServer(os8RemoteSyncAtRef.current) || !os8HydratedRef.current) {
+      os8RemoteSyncAtRef.current = Date.now();
+      os8HydratedRef.current = true;
+      void persistIntentOSSession(derived, { ownerKey: 'intent-unified', remote: true }).then((saved) => {
+        if (saved) os8StateRef.current = saved;
+      }).catch(() => {});
+    }
+  }, [convState, messages, currentPage, pendingExecution, aiContext, portfolioContextForOs8]);
+
+  useEffect(() => {
     clearContextCache();
   }, [wallet?.address, wallet?.chainId, walletConnected]);
 
@@ -972,6 +1152,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const message = String(rawText || '').trim();
     if (!message || busyRef.current) return null;
     busyRef.current = true;
+
+    const os8Before = os8StateRef.current || loadLocalIntentOSState('intent-unified');
+    let os8Turn = null;
+    try {
+      os8Turn = ingestUserTurn({ state: os8Before, text: message, currentRoute: currentPage });
+      if (os8Turn?.state) {
+        os8StateRef.current = os8Turn.state;
+        saveLocalIntentOSState(os8Turn.state, 'intent-unified');
+      }
+    } catch {
+      os8Turn = null;
+    }
 
     // Phase 2 (§21): an answer to our single question binds to the slot that
     // asked for it. Only a short reply to the still-open question binds — a
@@ -1016,6 +1208,28 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setConvState((prev) => {
         let next = appendConvMessage(prev, userMsg);
         next = setConvAnswer(next, message, { questionId: prev.lastQuestionId });
+        if (os8Turn?.created?.intent) {
+          next = setConvIntent(next, { type: os8Turn.created.intent.type, primaryIntent: os8Turn.created.intent.type }, {
+            status: os8Turn.state?.pendingQuestion ? INTENT_STATUS.CLARIFYING : INTENT_STATUS.READY
+          });
+          next = setMissingSlots(next, os8Turn.created.intent.requiredSlots || []);
+          const q = (os8Turn.state?.questions || []).find((item) => item.questionId === os8Turn.state.pendingQuestion);
+          if (q?.prompt) {
+            next = setConvQuestion(next, q.prompt, { questionId: q.questionId, expectedType: q.expectedType });
+          }
+        }
+        if (os8Turn?.binding) {
+          const slotKey = os8Turn.binding.slot === 'riskProfile'
+            ? 'riskProfile'
+            : os8Turn.binding.slot === 'durationMonths'
+              ? 'timeframe'
+              : os8Turn.binding.slot;
+          next = setCollectedSlot(next, slotKey, os8Turn.binding.value, { confidence: os8Turn.binding.confidence });
+          next = setMissingSlots(next, os8Turn.state?.missingSlots || []);
+          if (!os8Turn.state?.pendingQuestion) {
+            next = setConvQuestion(next, '', { questionId: null, expectedType: null });
+          }
+        }
         return next;
       });
       addL1Message(userMsg);
@@ -1033,6 +1247,144 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const refResolver = refResolverRef.current;
       const ctxResolver = ctxResolverRef.current;
       const conv = convStateRef.current;
+      const os8Current = os8StateRef.current || os8Turn?.state || os8Before;
+      const os8Intent = (os8Current?.intents || []).find((item) => item.intentId === os8Current?.activeIntent) || null;
+      const os8Goal = (os8Current?.goals || []).find((item) => item.goalId === os8Current?.activeGoal) || null;
+      const fa = locale.startsWith('fa');
+
+      const selectedReference = message.length <= 120
+        ? parseAnswerValue({ text: message, question: { expectedType: 'selection', options: [] }, state: os8Current })
+        : null;
+      if (!pendingExecution && selectedReference?.optionIndex != null && Array.isArray(os8Current?.agentState?.lastPresentedOptions) && os8Current.agentState.lastPresentedOptions.length) {
+        const nextOptions = os8Current.agentState.lastPresentedOptions.map((item, index) => ({ ...item, selected: index === selectedReference.optionIndex }));
+        os8StateRef.current = {
+          ...os8Current,
+          agentState: {
+            ...(os8Current.agentState || {}),
+            lastPresentedOptions: nextOptions
+          },
+          lastUpdated: Date.now()
+        };
+        saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
+        const picked = nextOptions[selectedReference.optionIndex];
+        const pickMsg = {
+          id: makeId(),
+          role: 'ai',
+          content: fa
+            ? `متوجه شدم — ${choiceLabel(picked)} را به‌عنوان مسیر منتخب ادامه می‌دهم. اگر بخواهی می‌توانم همین حالا شبیه‌سازی و آماده‌سازی اجرای امن را انجام بدهم.`
+            : `Got it — I'll continue with ${choiceLabel(picked)} as the selected path. If you want, I can simulate it now and prepare a safe execution flow.`,
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          intentType: os8Intent?.type || null,
+          detectedIntent: os8Intent?.type || null
+        };
+        setMessages((prev) => [...prev, pickMsg]);
+        setConvState((prev) => appendConvMessage(prev, pickMsg));
+        setThinking([]);
+        setThinkingState('idle');
+        setActivitySteps([]);
+        busyRef.current = false;
+        return true;
+      }
+
+      if (os8Turn?.binding?.slot === 'riskProfile' && os8Intent?.type === 'PORTFOLIO_ANALYSIS' && !(os8Turn.state?.missingSlots || []).length) {
+        const orchestrated = await orchestrateIntent({
+          state: os8Turn.state,
+          message,
+          walletContext: aiContext.wallet,
+          portfolioContext: portfolioContextForOs8
+        });
+        os8StateRef.current = orchestrated.state;
+        saveLocalIntentOSState(orchestrated.state, 'intent-unified');
+        const consensus = orchestrated.orchestration?.consensus || {};
+        const options = Array.isArray(consensus.options) ? consensus.options : [];
+        const optionLines = options.map((option, index) => `${index + 1}) ${option.label} — ${option.rationale}`).join('\n');
+        const responseText = fa
+          ? `ریسک ${os8Turn.binding.value === 'medium' ? 'متوسط' : os8Turn.binding.value === 'low' ? 'کم' : 'زیاد'} ثبت شد. برای افق ${os8Goal?.horizonMonths || os8Turn.state?.collectedSlots?.timeframe || 4} ماهه، این برنامه را می‌بینم:\n${optionLines}\n\nپیشنهاد اصلی: ${consensus.preferredOption?.label || 'Balanced rotation'}. اگر خواستی بگو «همون گزینه دوم» یا «انجام بده».`
+          : `${os8Turn.binding.value} risk recorded. For a ${os8Goal?.horizonMonths || os8Turn.state?.collectedSlots?.timeframe || 4}-month horizon, here is the plan:\n${optionLines}\n\nPrimary recommendation: ${consensus.preferredOption?.label || 'Balanced rotation'}. Say “same second option” or “do it” when you want to continue.`;
+        const aiMsg = {
+          id: makeId(),
+          role: 'ai',
+          content: responseText,
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          intentType: os8Intent?.type || 'PORTFOLIO_ANALYSIS',
+          detectedIntent: os8Intent?.type || 'PORTFOLIO_ANALYSIS',
+          choices: options.map((option, index) => ({ id: option.id || `opt-${index}`, label: `${fa ? 'گزینه' : 'Option'} ${index + 1}: ${option.label}`, value: option.id || option.label })),
+          choiceKind: 'STRATEGY_OPTION'
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        setConvState((prev) => {
+          let next = appendConvMessage(prev, aiMsg);
+          next = setConvQuestion(next, '', { questionId: null, expectedType: null });
+          next = updateIntentStatus(next, INTENT_STATUS.READY);
+          return next;
+        });
+        setPredictedNext(options.map((option, index) => ({ id: option.id || `opt-${index}`, label: option.label, prompt: option.label })));
+        setSuggestions([]);
+        setThinking([]);
+        setThinkingState('idle');
+        setActivitySteps([]);
+        busyRef.current = false;
+        return true;
+      }
+
+      if (!pendingExecution && /(?:^|\s)(?:انجامش بده|انجام بده|تأیید|تایید|do it|go ahead|confirm)(?:\s|$)/i.test(message) && os8Intent?.type === 'PORTFOLIO_ANALYSIS' && os8Current?.agentState?.lastPresentedOptions?.some?.((item) => item.selected)) {
+        const preparedV8 = prepareExecution({
+          state: os8Current,
+          action: buildRecommendationAction(os8Current, portfolioContextForOs8),
+          walletContext: aiContext.wallet
+        });
+        os8StateRef.current = preparedV8.state;
+        saveLocalIntentOSState(preparedV8.state, 'intent-unified');
+        const selected = os8Current.agentState.lastPresentedOptions.find((item) => item.selected) || os8Current.agentState.lastPresentedOptions[0];
+        setPendingExecution({
+          action: preparedV8.execution.action,
+          actions: [preparedV8.execution.action],
+          message,
+          card: {
+            title: fa ? '✦ آماده‌سازی اجرای امن' : '✦ Safe execution prepared',
+            headline: fa
+              ? `استراتژی ${choiceLabel(selected)} انتخاب شد. قبل از اجرا شبیه‌سازی، مجوز و وضعیت کیف پول بررسی می‌شود.`
+              : `${choiceLabel(selected)} selected. Simulation, permissions and wallet freshness will be checked before execution.`,
+            rows: preparedV8.execution.action?.parameters?.targetAllocation || [],
+            tradeCount: (preparedV8.execution.action?.parameters?.targetAllocation || []).length,
+            estimatedFeeUsd: preparedV8.simulation?.estimatedGasUsd || preparedV8.execution.action?.estimatedGasUsd || null,
+            confirmLabel: fa ? 'تأیید و اجرای امن' : 'Confirm safe execution',
+            editLabel: fa ? 'ویرایش' : 'Edit'
+          },
+          rebalance: { target: preparedV8.execution.action?.parameters?.targetAllocation || [] },
+          intentId: os8Intent?.intentId || null,
+          intentType: 'REBALANCE',
+          walletSnapshot: walletMgrRef.current.takeSnapshot({
+            connected: walletConnected,
+            canSign: walletCanSign,
+            address: wallet?.address || null,
+            chainId: wallet?.chainId || null,
+            balances: aiContext.balances,
+            tokenBalances: aiContext.balances
+          })
+        });
+        setConvState((prev) => setConvPending(prev, { action: preparedV8.execution.action, intentId: os8Intent?.intentId || null }));
+        const prepMsg = {
+          id: makeId(),
+          role: 'ai',
+          content: fa
+            ? `آماده‌ام. اول شبیه‌سازی و بررسی ایمنی را انجام می‌دهم؛ بعد از تأیید نهایی، اجرا و مانیتورینگ شروع می‌شود.${preparedV8.simulation?.warnings?.length ? ` هشدارها: ${preparedV8.simulation.warnings.join('، ')}` : ''}`
+            : `Ready. I will simulate and run safety checks first; after your final confirmation, execution and monitoring will start.${preparedV8.simulation?.warnings?.length ? ` Warnings: ${preparedV8.simulation.warnings.join(', ')}` : ''}`,
+          kind: 'assistant',
+          ui: { type: 'TEXT' },
+          intentType: 'REBALANCE',
+          detectedIntent: 'REBALANCE'
+        };
+        setMessages((prev) => [...prev, prepMsg]);
+        setConvState((prev) => appendConvMessage(prev, prepMsg));
+        setThinking([]);
+        setThinkingState('idle');
+        setActivitySteps([]);
+        busyRef.current = false;
+        return true;
+      }
 
       // Bare «اره» / «بله تایید شد» and named page-opens («افق جهانی را باز کن»)
       // must reach the OS — leftover lastQuestion must not swallow them.
@@ -1705,7 +2057,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       scrollMgrRef.current.onNewMessage();
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8]);
 
   sendRef.current = sendMessage;
 
@@ -1803,6 +2155,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
 
     setActivitySteps((prev) => prev.map((s) => s.id === 'wallet_refresh' ? { ...s, status: 'completed' } : s.id === 'balance_refresh' ? { ...s, status: 'active' } : s));
+
+    try {
+      os8StateRef.current = {
+        ...(os8StateRef.current || {}),
+        executionState: {
+          ...(os8StateRef.current?.executionState || {}),
+          status: 'SIGNING',
+          pendingExecution: pendingExecution?.action || null,
+          lastConfirmation: pendingExecution?.card || os8StateRef.current?.executionState?.lastConfirmation || null
+        },
+        lastUpdated: Date.now()
+      };
+      saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
+      void persistIntentOSSession(os8StateRef.current, { ownerKey: 'intent-unified', remote: true }).catch(() => {});
+    } catch {}
 
     setExecuting(true);
     setProgress({ index: 1, total: Math.max(1, (actions || []).length), status: 'VALIDATING' });
@@ -2014,6 +2381,36 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         execution: formatted.execution
       }]);
       if (formatted.execution?.success) {
+        try {
+          const current = os8StateRef.current || loadLocalIntentOSState('intent-unified');
+          const executionHistory = Array.isArray(current.executionState?.history) ? current.executionState.history.slice() : [];
+          executionHistory.push({
+            executionId: current.executionState?.executionId || makeId('exec'),
+            intentId: current.activeIntent || pendingExecution.intentId || null,
+            status: 'CONFIRMED',
+            txHash: formatted.execution?.txHash || result?.txHash || null,
+            verification: formatted.execution || result || null,
+            updatedAt: Date.now(),
+            createdAt: Date.now()
+          });
+          const monitored = activateMonitoring({
+            state: {
+              ...current,
+              executionState: {
+                ...(current.executionState || {}),
+                status: 'CONFIRMED',
+                txHash: formatted.execution?.txHash || result?.txHash || null,
+                lastVerification: formatted.execution || result || null,
+                history: executionHistory.slice(-24)
+              }
+            },
+            execution: executionHistory[executionHistory.length - 1],
+            recommendations: current.agentState?.lastPresentedOptions?.filter?.((item) => item.selected).map((item) => item.label) || []
+          });
+          os8StateRef.current = monitored;
+          saveLocalIntentOSState(monitored, 'intent-unified');
+          void persistIntentOSSession(monitored, { ownerKey: 'intent-unified', remote: true }).catch(() => {});
+        } catch {}
         clearPendingIntent();
         try { await multi?.refresh?.(); } catch {}
         setSolanaTick((v) => v + 1);
@@ -2066,6 +2463,35 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const chooseOption = useCallback((msg, choice) => {
     if (!choice) return;
+    if (msg?.choiceKind === 'STRATEGY_OPTION') {
+      const current = os8StateRef.current || loadLocalIntentOSState('intent-unified');
+      const nextOptions = (current.agentState?.lastPresentedOptions || []).map((item) => ({
+        ...item,
+        selected: String(item.id) === String(choice.value || choice.id)
+      }));
+      os8StateRef.current = {
+        ...current,
+        agentState: {
+          ...(current.agentState || {}),
+          lastPresentedOptions: nextOptions
+        },
+        lastUpdated: Date.now()
+      };
+      saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
+      const selected = nextOptions.find((item) => item.selected) || nextOptions[0] || choice;
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: locale.startsWith('fa')
+          ? `${choiceLabel(selected)} انتخاب شد. اگر بخواهی می‌توانم با «انجام بده» اجرای امن را آماده کنم.`
+          : `${choiceLabel(selected)} selected. Say “do it” when you want me to prepare safe execution.`,
+        kind: 'assistant',
+        ui: { type: 'TEXT' },
+        intentType: 'PORTFOLIO_ANALYSIS',
+        detectedIntent: 'PORTFOLIO_ANALYSIS'
+      }]);
+      return;
+    }
     const hints = {};
     if (msg?.choiceKind === 'WALLET') hints.walletAddress = choice.value;
     else if (msg?.choiceKind === 'SOURCE_ASSET') { hints.sourceAsset = choice.value; hints.chainId = choice.chainId ?? null; }
@@ -2076,7 +2502,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       ? `${original} ${choice.value}`.trim()
       : original || choice.label;
     void sendRef.current?.(followUp, { hints, skipUserBubble: false });
-  }, []);
+  }, [locale]);
 
   const sendFeedback = useCallback((msg, rating) => {
     if (!msg?.intentId) return;
@@ -2864,7 +3290,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <span className="iaos-mark" aria-hidden="true">✦</span>
             <span className="iaos-title-copy">
               <h1>AI</h1>
-              <span className="iaos-title-sub">Intent OS V6</span>
+              <span className="iaos-title-sub">Intent OS V8</span>
             </span>
             {/* Thinking Orb in header when active */}
             {thinkingState !== 'idle' ? (

@@ -201,6 +201,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
+import intentOsUpgrade8Routes from './intentOsUpgrade8.js';
 import { createCentralIntelligence } from './ci/api.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
@@ -5444,6 +5445,13 @@ app.post('/api/ai/ask', async (req, res) => {
 app.use('/api/ai', aiCommandRoutes);
 
 /* ---------------------- FBT INTENT AI OS (unified V1) ---------------------- */
+/*
+ * Upgrade 8 durable session routes. Mounted under the V1 AI gateway so the
+ * live /intent surface keeps one backend family instead of adding a fourth.
+ * The state row is still wallet-safe: no signer, no secrets, no private key
+ * material ever persists.
+ */
+app.use('/api/v1/ai/os', intentOsUpgrade8Routes);
 /*
  * The single AI gateway introduced by the AI OS refactor. It is mounted on
  * /api/v1/ai so it coexists with the older /api/ai command-center routes
