@@ -33,6 +33,14 @@ import './intent-ai/ci-brain-turns-probe.mjs';
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
 import './intent-ai/ops-i18n-probe.mjs';
+/* Upgrade 10 — the Financial OS layer: financial state, decision engine,
+   council, guardians, permissions, kill switches, memory, scenarios, twin,
+   monitoring and replanning. It belongs in `npm test` because the failures it
+   catches — a recommendation with no evidence, an unread balance rendered as
+   zero, a grant that survives a kill switch — are product failures. The HTTP
+   half is its own script (`npm run test:upgrade10-http`) since it boots a
+   server. */
+import './intent-ai/upgrade10-financial-os-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe
