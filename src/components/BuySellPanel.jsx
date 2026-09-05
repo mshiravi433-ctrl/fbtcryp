@@ -228,7 +228,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const slideDir = stepDir * (rtl ? -1 : 1);
   /* Persian UI only. `fa` and `fa-IR` both count; English/Arabic never see
      this tab. Server `enabled` gates checkout, not whether Iranians can find
-     the Wallex tab at all. */
+     the Iranian tab at all. */
   const iranBuyLanguageAllowed = String(i18n.resolvedLanguage || i18n.language || '').split(/[-_]/)[0] === 'fa';
   const iranBuyVisible = iranBuyLanguageAllowed;
 

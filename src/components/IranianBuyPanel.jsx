@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useInRouterContext, useNavigate } from 'react-router-dom';
+
 import SegIndicator from './SegIndicator';
 import WalletConnectSheet from './WalletConnectSheet';
 import { IconCheck, IconChevronRight, IconClock, IconCopy, IconExternal, IconLock, IconRefresh, IconShield, IconWallet } from './Icons';
@@ -46,20 +46,16 @@ const RATE_POLL_MS = 60_000;
 const QUICK_AMOUNTS = ['500000', '1000000', '2000000', '5000000'];
 /* The referral guide's fixed order. Withdraw is the network-sensitive step. */
 const REFERRAL_STEPS = ['signup', 'kyc', 'deposit', 'buy', 'withdraw', 'return'];
-/* The only route the internal swap lives on (src/App.jsx: path="/swap"). */
-const SWAP_ROUTE = '/swap';
-
-/**
- * The internal swap CTA navigates with the project router when the panel is
- * mounted under one. Probes mount the panel bare, so the hook is guarded —
- * and the guard is stable for a mounted instance: a panel never migrates
- * between router and no-router between renders.
- */
-function useSwapNavigate() {
-  const inRouter = useInRouterContext();
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- router presence is fixed by the enclosing tree
-  return inRouter ? useNavigate() : null;
-}
+/* Bitpin USDT withdrawal networks that match this app's EVM wallet.
+   TRC20/TON/Solana are omitted: a different address family would burn funds. */
+const BITPIN_USDT_NETWORKS = [
+  { id: 'BEP20', label: 'BEP20', chainId: 56 },
+  { id: 'ERC20', label: 'ERC20', chainId: 1 },
+  { id: 'POLYGON', label: 'Polygon', chainId: 137 },
+  { id: 'ARBITRUM', label: 'Arbitrum', chainId: 42161 },
+  { id: 'OPTIMISM', label: 'Optimism', chainId: 10 },
+  { id: 'AVALANCHE', label: 'Avalanche', chainId: 43114 }
+];
 
 /** Best-effort clipboard write; a missing/blocked API never throws upward. */
 async function copyText(value) {
@@ -353,12 +349,12 @@ function OrderProgress({ order, t }) {
  * rendered (no truncation: a wallet form needs the whole string) and the copy
  * button copies exactly the address, nothing around it.
  */
-function ReferralAddressCard({ onConnect, onSwitch, referral, t, wallet }) {
+function ReferralAddressCard({ onConnect, onSwitch, onSelectNetwork, referral, selectedNetwork, t, wallet }) {
   const [copied, setCopied] = useState(false);
   const address = String(wallet?.address || '');
   const connected = Boolean(wallet?.isConnected && address);
-  const networkLabel = String(referral?.network?.label || referral?.network?.id || '').trim();
-  const targetChain = Number(referral?.network?.chainId);
+  const networkLabel = String(selectedNetwork?.label || referral?.network?.label || referral?.network?.id || '').trim();
+  const targetChain = Number(selectedNetwork?.chainId || referral?.network?.chainId);
   const chainMismatch = connected && Number.isFinite(targetChain) && targetChain > 0
     && Number(wallet?.chainId) !== targetChain;
 
@@ -375,6 +371,19 @@ function ReferralAddressCard({ onConnect, onSwitch, referral, t, wallet }) {
       <div className="iran-buy-address-head">
         <span>{t('iranBuy.referral.addressLabel')}</span>
         {networkLabel && <em className="iran-buy-address-network">{t('iranBuy.referral.addressNetwork', { network: networkLabel })}</em>}
+      </div>
+      <div className="iran-buy-chips iran-buy-network-chips" role="group" aria-label={t('iranBuy.network')} data-testid="iran-buy-networks">
+        {BITPIN_USDT_NETWORKS.map((network) => (
+          <button
+            key={network.id}
+            type="button"
+            className={selectedNetwork?.id === network.id ? 'is-active' : ''}
+            onClick={() => onSelectNetwork?.(network)}
+            data-testid={`iran-buy-network-${network.id}`}
+          >
+            {network.label}
+          </button>
+        ))}
       </div>
       {connected ? (
         <>
@@ -414,8 +423,8 @@ function ReferralAddressCard({ onConnect, onSwitch, referral, t, wallet }) {
  * reading. No step promises a price or a delivery time — the partner sets
  * both, and the closing note says exactly that.
  */
-function ReferralGuide({ onConnect, onSwitch, referral, t, wallet }) {
-  const networkLabel = String(referral?.network?.label || referral?.network?.id || '').trim();
+function ReferralGuide({ onConnect, onSwitch, onSelectNetwork, referral, selectedNetwork, t, wallet }) {
+  const networkLabel = String(selectedNetwork?.label || referral?.network?.label || referral?.network?.id || '').trim();
   return (
     <details className="iran-buy-referral-guide" data-testid="iran-buy-referral-guide">
       <summary>
@@ -424,7 +433,15 @@ function ReferralGuide({ onConnect, onSwitch, referral, t, wallet }) {
         <span aria-hidden="true">▾</span>
       </summary>
       <div className="iran-buy-referral-guide-body">
-        <ReferralAddressCard referral={referral} wallet={wallet} t={t} onConnect={onConnect} onSwitch={onSwitch} />
+        <ReferralAddressCard
+          referral={referral}
+          selectedNetwork={selectedNetwork}
+          wallet={wallet}
+          t={t}
+          onConnect={onConnect}
+          onSwitch={onSwitch}
+          onSelectNetwork={onSelectNetwork}
+        />
         <ol className="iran-buy-referral-steps" aria-label={t('iranBuy.referral.guideTitle')}>
           {REFERRAL_STEPS.map((step, index) => (
             <li key={step}>
@@ -489,7 +506,8 @@ export default function IranianBuyPanel({ capability }) {
   const orderRequestId = useRef(null);
   const gatewayHandled = useRef(false);
 
-  const enabled = Boolean(capability?.enabled && capability.asset === 'USDT' && capability.network?.walletFamily === 'EVM');
+  /* Wallex/direct rail is hidden until it actually works. This tab is Bitpin-only. */
+  const enabled = false;
   const targetChain = Number(capability?.network?.chainId);
   const walletCompatible = Boolean(wallet?.isConnected && wallet?.address
     && capability?.asset === 'USDT'
@@ -505,8 +523,15 @@ export default function IranianBuyPanel({ capability }) {
   /* The referral block exists only while the direct rail is closed, and only
      when the server approved a link. When the direct rail is live the server
      sends referral: null and none of this renders. */
-  const referral = !enabled && capability?.referral?.url ? capability.referral : null;
-  const swapNavigate = useSwapNavigate();
+  const referral = capability?.referral?.url
+    ? capability.referral
+    : {
+      partner: 'bitpin',
+      url: 'https://bitpin.ir',
+      discountNote: capability?.referral?.discountNote || null,
+      network: capability?.referral?.network || BITPIN_USDT_NETWORKS[0]
+    };
+  const [selectedNetwork, setSelectedNetwork] = useState(() => BITPIN_USDT_NETWORKS[0]);
 
   useEffect(() => {
     if (!preview?.expiresAt) return undefined;
@@ -536,22 +561,21 @@ export default function IranianBuyPanel({ capability }) {
     else if (result?.code !== 'REFERRAL_POPUP_BLOCKED') setError(result?.code || 'REFERRAL_LINK_UNAVAILABLE');
   }, [referral?.partner, referral?.url]);
 
-  const goSwap = useCallback(() => {
-    try { swapNavigate?.(SWAP_ROUTE); } catch { /* navigation is cosmetic here */ }
-  }, [swapNavigate]);
-
   const switchNetwork = useCallback(async () => {
     setError('');
     /* Direct-rail chain when configured; otherwise the referral journey's
        withdrawal chain. No chain is ever guessed from the wallet itself. */
+    const selectedChain = Number(selectedNetwork?.chainId);
     const referralChain = Number(referral?.network?.chainId);
-    const target = Number.isFinite(targetChain) && targetChain > 0
-      ? targetChain
-      : (Number.isFinite(referralChain) && referralChain > 0 ? referralChain : null);
+    const target = Number.isFinite(selectedChain) && selectedChain > 0
+      ? selectedChain
+      : (Number.isFinite(targetChain) && targetChain > 0
+        ? targetChain
+        : (Number.isFinite(referralChain) && referralChain > 0 ? referralChain : null));
     if (!target) { setError('WALLET_NETWORK_INCOMPATIBLE'); return; }
     const ok = await wallet.switchChain?.(target);
     if (!ok) setError('WALLET_NETWORK_INCOMPATIBLE');
-  }, [referral?.network?.chainId, targetChain, wallet]);
+  }, [referral?.network?.chainId, selectedNetwork?.chainId, targetChain, wallet]);
 
   const preparePreview = useCallback(async () => {
     if (!telegramReady) { setError('AUTH_REQUIRED'); return; }
@@ -731,65 +755,19 @@ export default function IranianBuyPanel({ capability }) {
         <motion.section className="lab-card iran-buy-ticket" variants={riseIn} initial="hidden" animate="show">
           {header}
           {subTabs}
-          <RateStrip rate={rate} loading={rateLoading} onRefresh={refreshRate} t={t} />
-          <div className="iran-buy-entry">
-            {lockedRows}
-            <AmountField
-              amountToman={amountToman}
-              capability={capability}
-              disabled={false}
-              estimate={estimate}
-              onChange={(value) => { setAmountToman(value); setError(''); }}
+          {error && <div className="notice notice-danger iran-buy-error" role="alert">{errorText}</div>}
+          <div className="iran-buy-referral-flow" data-testid="iran-buy-referral-flow">
+            <ReferralCard referral={referral} t={t} onOpen={openReferral} manualFallback={referralManualFallback} />
+            <ReferralGuide
+              referral={referral}
+              selectedNetwork={selectedNetwork}
+              wallet={wallet}
               t={t}
+              onConnect={() => setConnectOpen(true)}
+              onSwitch={switchNetwork}
+              onSelectNetwork={setSelectedNetwork}
             />
-            <DestinationCard capability={capability} wallet={wallet} t={t} onConnect={() => setConnectOpen(true)} onSwitch={switchNetwork} />
-            {error && <div className="notice notice-danger iran-buy-error" role="alert">{errorText}</div>}
-            {!referral && (
-              <>
-                <div className="notice iran-buy-error" role="status" data-testid="iran-buy-unavailable">
-                  {t('iranBuy.errors.IRAN_BUY_DISABLED')}
-                </div>
-                <ul className="iran-buy-readiness" aria-label={t('iranBuy.readinessTitle')}>
-                  {readiness.map((group) => (
-                    <li key={group}>
-                      <IconClock width={13} height={13} />
-                      {t(`iranBuy.readiness.${group}`, { defaultValue: t('iranBuy.readiness.ACTIVATION') })}
-                    </li>
-                  ))}
-                </ul>
-                <button type="button" className="btn btn-primary iran-buy-cta" disabled data-testid="iran-buy-disabled-cta">
-                  {t('iranBuy.disabledCta')}
-                </button>
-                <p className="iran-buy-inline-note">{t('iranBuy.disabledNote')}</p>
-              </>
-            )}
           </div>
-          {referral && (
-            <div className="iran-buy-referral-flow" data-testid="iran-buy-referral-flow">
-              <ReferralCard referral={referral} t={t} onOpen={openReferral} manualFallback={referralManualFallback} />
-              <ReferralGuide
-                referral={referral}
-                wallet={wallet}
-                t={t}
-                onConnect={() => setConnectOpen(true)}
-                onSwitch={switchNetwork}
-              />
-              <button type="button" className="btn btn-ghost iran-buy-swap-cta" onClick={goSwap} data-testid="iran-buy-referral-swap-cta">
-                {t('iranBuy.referral.swapCta')} <IconChevronRight width={16} height={16} />
-              </button>
-              <p className="iran-buy-referral-readiness-intro">{t('iranBuy.referral.readinessIntro')}</p>
-              <ul className="iran-buy-readiness" aria-label={t('iranBuy.referral.readinessTitle')}>
-                {readiness.map((group) => (
-                  <li key={group}>
-                    <IconClock width={13} height={13} />
-                    {t(`iranBuy.readiness.${group}`, { defaultValue: t('iranBuy.readiness.ACTIVATION') })}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <FlowGuide t={t} />
-          {terms}
         </motion.section>
         <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       </section>
