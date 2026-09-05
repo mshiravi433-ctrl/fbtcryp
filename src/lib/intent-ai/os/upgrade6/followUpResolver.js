@@ -211,6 +211,18 @@ export function resolveFollowUp(message, context = {}) {
   };
 }
 
+/**
+ * Named page / “open it” utterances must reach the OS, not slot-fill.
+ * The live dump: leftover lastQuestionType=text swallowed «افق جهانی را باز کن»
+ * and Observability stayed at detectedIntent: null.
+ */
+export function isPageOpenUtterance(text) {
+  const t = String(text || '');
+  if (!t.trim()) return false;
+  if (/(باز کن|بازکن|بازش کن|برو به|صفحه|open|go to|navigate|take me)/i.test(t)) return true;
+  return /افق جهانی|فارکس|horizon|forex|طلا|نفت|فلزات|سهام|فیوچرز|سیگنال|اخبار|فارم|بازار/.test(t);
+}
+
 /** True when this utterance should never start a brand-new intent. */
 export function isBareFollowUp(text) {
   const kind = classifyFollowUp(text);

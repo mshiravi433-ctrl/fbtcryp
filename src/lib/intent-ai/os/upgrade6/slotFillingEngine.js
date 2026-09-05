@@ -209,8 +209,10 @@ export class SlotFillingEngine {
     const parsed = parseShortAnswer(answerText);
     const expected = this.expectedType || conversationState?.lastQuestionType || null;
 
-    // If expected type matches parsed type, fill directly
-    if (expected && parsed.type === expected) {
+    // If expected type matches parsed type, fill directly — but never treat
+    // free `text` as a slot. That is what ate «افق جهانی را باز کن» when a
+    // leftover lastQuestionType of `text` was still sitting in state.
+    if (expected && parsed.type === expected && parsed.type !== 'text') {
       return {
         filled: true,
         slot: expected,

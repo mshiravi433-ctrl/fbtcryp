@@ -13,7 +13,8 @@ import { understandIntent } from '../../src/lib/intent-ai/os/intentUnderstanding
 import {
   classifyFollowUp,
   resolveFollowUp,
-  isBareFollowUp
+  isBareFollowUp,
+  isPageOpenUtterance
 } from '../../src/lib/intent-ai/os/upgrade6/followUpResolver.js';
 import { parseShortAnswer } from '../../src/lib/intent-ai/os/upgrade6/slotFillingEngine.js';
 import { parseMonitorRequest } from '../../src/lib/intent-ai/os/monitorClient.js';
@@ -64,6 +65,15 @@ t('bare follow-up does not steal slots when no yes/no was asked', (() => {
     conversationState: { lastQuestion: 'صفحه بازار را باز کنم؟', lastQuestionId: 'q1', lastQuestionType: 'text', missingSlots: [] }
   });
   return fill.filled === false;
+})());
+
+t('leftover lastQuestionType=text does not swallow »افق جهانی را باز کن«', (() => {
+  const engine = getSlotFillingEngine();
+  engine.setExpectedQuestion('دارایی مشخص است ولی شرط را بنویس', 'q2', 'text');
+  const fill = engine.fillFromAnswer('افق جهانی را باز کن', {
+    conversationState: { lastQuestion: 'دارایی مشخص است ولی شرط را بنویس', lastQuestionId: 'q2', lastQuestionType: 'text', missingSlots: [] }
+  });
+  return fill.filled === false && isPageOpenUtterance('افق جهانی را باز کن') && !isBareFollowUp('افق جهانی را باز کن');
 })());
 
 t('»به ۲۷۰۰ رسید« parses a PRICE threshold', (() => {

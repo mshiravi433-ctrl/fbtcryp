@@ -92,7 +92,7 @@ import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
 import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
 import { useRadioStore } from '../store/useRadioStore.js';
-import { getLastActiveTask, getActiveTasks } from '../lib/intent-ai/os/taskContinuity.js';
+import { getLastActiveTask, getActiveTasks, updateTaskStatus } from '../lib/intent-ai/os/taskContinuity.js';
 import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
 import { getLogs as getObsLogs, getStats as getObsStats } from '../lib/intent-ai/os/observability.js';
 import { getDebugLogs, enableDebug } from '../lib/intent-ai/os/debugDashboard.js';
@@ -159,7 +159,7 @@ import {
 } from '../lib/intent-ai/os/upgrade6/conversationState.js';
 import { getNavigationManager } from '../lib/intent-ai/os/upgrade6/navigationManager.js';
 import { getSlotFillingEngine, parseShortAnswer } from '../lib/intent-ai/os/upgrade6/slotFillingEngine.js';
-import { isBareFollowUp, PAGE_OPEN_INTENTS } from '../lib/intent-ai/os/upgrade6/followUpResolver.js';
+import { isBareFollowUp, isPageOpenUtterance, PAGE_OPEN_INTENTS } from '../lib/intent-ai/os/upgrade6/followUpResolver.js';
 import { getReferenceResolver, getContextualResolver, calculateConfidence, shouldExecute } from '../lib/intent-ai/os/upgrade6/referenceResolver.js';
 import { createSharedContext, getOrchestratorV2 } from '../lib/intent-ai/os/upgrade6/sharedContext.js';
 import { getWalletContextManager, createWalletSnapshot } from '../lib/intent-ai/os/upgrade6/walletContextManager.js';
@@ -863,9 +863,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const ctxResolver = ctxResolverRef.current;
       const conv = convStateRef.current;
 
-      // Bare «اره» / «بله تایید شد» is a resume, not a slot fill — even if a
-      // leftover lastQuestionId is sitting in conversation state.
-      if (isBareFollowUp(message)) {
+      // Bare «اره» / «بله تایید شد» and named page-opens («افق جهانی را باز کن»)
+      // must reach the OS — leftover lastQuestion must not swallow them.
+      if (isBareFollowUp(message) || isPageOpenUtterance(message)) {
         /* fall through to context + OS process() */
       } else if (conv.lastQuestion && conv.lastQuestionId && message.length < 100) {
         const shortParsed = parseShortAnswer(message);
@@ -1000,7 +1000,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
 
       // 0. Context continuation + natural-language monitor/order/opportunity
-      if (contextHandlerRef.current) {
+      // Page-open utterances skip this: «افق جهانی را باز کن» is not a monitor.
+      if (contextHandlerRef.current && !isPageOpenUtterance(message)) {
         const ctxOut = await contextHandlerRef.current(message);
         if (ctxOut?.handled) {
           setThinking([]);
@@ -1053,6 +1054,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         locale,
         services: liveModuleServices
       });
+      // Belt: named Horizon/forex never stays in chat as an unfinished task.
+      const osType = String(osResult?.intent?.type || osResult?.intent?.primaryIntent || '').toUpperCase();
+      if (osResult?.ok && (osType === 'HORIZON' || osType === 'FOREX') && !osResult.navigated && !osResult.execution?.route) {
+        try {
+          navigate('/stocks');
+          osResult.navigated = '/stocks';
+          osResult.execution = { ...(osResult.execution || {}), ok: true, route: '/stocks' };
+        } catch { /* router optional */ }
+      }
       try {
         obsRef.current.log({
           intentId: obsIntentId,
@@ -1510,7 +1520,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       scrollMgrRef.current.onNewMessage();
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate]);
 
   sendRef.current = sendMessage;
 
@@ -1962,7 +1972,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   useEffect(() => {
     try {
       const last = getLastActiveTask();
-      if (last && last.status === 'PENDING' && Date.now() - last.createdAt < 30 * 60 * 1000 && !PAGE_OPEN_INTENTS.includes(last.intent)) {
+      if (!last || last.status !== 'PENDING') return;
+      // Opening a page is done. Never nag “unfinished HORIZON”.
+      if (PAGE_OPEN_INTENTS.includes(last.intent) || last.intent === 'HORIZON' || last.intent === 'FOREX') {
+        updateTaskStatus(last.id, 'COMPLETED');
+        return;
+      }
+      if (Date.now() - last.createdAt < 30 * 60 * 1000) {
         setMessages(prev => {
           if (prev.some(m => m.taskId === last.id)) return prev;
           return [...prev, {
@@ -2432,7 +2448,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
 
-    if (pendingDraft && /انجامش بده|تأیید|تایید|بله|اره|آره|باشه|do it|confirm|execute|yes/i.test(text)) {
+    // Only a bare yes confirms a leftover draft. «اره پر سوده را» / «افق جهانی»
+    // are new requests and must not fire the old monitor/order.
+    if (pendingDraft && isBareFollowUp(text)) {
       const d = pendingDraft;
       setPendingDraft(null);
       if (d.kind === 'monitor') await handleMonitorCreate(d.parsed);
