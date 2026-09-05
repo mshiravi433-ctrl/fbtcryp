@@ -50,6 +50,7 @@ import { createFuturesTxMachine, FUTURES_TX_STATE } from '../lib/futures-engine/
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { registerMobileWalletAdapter, publicAppUrl, canUseMwa } from '../lib/solanaWallet.js';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
+import ModernSelect from '../components/ModernSelect';
 
 /*
  * The on-chain engine drives EVERY venue whose order path this tab can build
@@ -686,10 +687,21 @@ export default function FuturesOnchain() {
               {marketsState.stale && (
                 <div className="feed-offline-note"><span className="pulse-dot" aria-hidden="true" />{t('futures.staleNotice')}</div>
               )}
-              <label className="field-label">{t('futures.market')}</label>
-              <select value={market?.uid || ''} onChange={(e) => setMarketUid(e.target.value)} data-testid="futures-market-select">
-                {visible.map((m) => <option key={m.uid} value={m.uid}>{m.symbol}</option>)}
-              </select>
+              <div className="field-label">{t('futures.market')}</div>
+              <ModernSelect
+                value={market?.uid || ''}
+                onChange={setMarketUid}
+                options={visible.map((m) => ({
+                  value: m.uid,
+                  label: m.symbol,
+                  sublabel: m.uiCategory || m.category || '',
+                  meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
+                }))}
+                title={t('futures.market')}
+                placeholder={market?.symbol || t('futures.market')}
+                searchable
+                testId="futures-market-select"
+              />
 
               {market && (
                 <div className="row-between" style={{ margin: '12px 0' }}>

@@ -37,6 +37,7 @@ import CrossChainHistory from '../components/crosschain/CrossChainHistory';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
+import ModernSelect from '../components/ModernSelect';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -689,34 +690,38 @@ export default function Bridge() {
       {/* what this is, before anything is tapped */}
       <WhatBridge />
 
-      {/* ------------------------------ ticket ------------------------------ */}
+      {/* ------------------------------ ticket — modern pickers ─────────── */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <div className="field-label">{t('bridge.from')}</div>
-        <div className="brg-row">
-          <select
-            className="brg-select"
+        <div style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: 8 }}>
+          <ModernSelect
             value={fromChain}
-            onChange={(e) => {
-              setFromChain(Number(e.target.value));
-              setQuote(null);
-            }}
-          >
-            {BRIDGE_CHAINS.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <select
-            className="brg-select"
+            onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
+            options={BRIDGE_CHAINS.map((c) => ({
+              value: c.id,
+              label: c.name,
+              sublabel: c.symbol,
+            }))}
+            title={t('bridge.from')}
+            placeholder={t('bridge.from')}
+            compact
+            testId="bridge-from-chain"
+          />
+          <ModernSelect
             value={tokenSymbol}
-            onChange={(e) => {
-              setTokenSymbol(e.target.value);
-              setQuote(null);
-            }}
-          >
-            {fromTokens.map((tk) => (
-              <option key={tk.symbol} value={tk.symbol}>{tk.symbol}</option>
-            ))}
-          </select>
+            onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
+            options={fromTokens.map((tk) => ({
+              value: tk.symbol,
+              label: tk.symbol,
+              sublabel: `${tk.symbol} \u00b7 ${BRIDGE_CHAINS.find(x=>x.id===fromChain)?.name || ''}`,
+              token: { address: tk.address, symbol: tk.symbol },
+              chainId: fromChain,
+            }))}
+            title={t('bridge.from')}
+            placeholder={tokenSymbol || 'USDT'}
+            compact
+            testId="bridge-from-token"
+          />
         </div>
 
         <input
@@ -734,25 +739,39 @@ export default function Bridge() {
         </button>
 
         <div className="field-label">{t('bridge.to')}</div>
-        <div className="brg-row">
-          <select
-            className="brg-select"
+        <div style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: 8 }}>
+          <ModernSelect
             value={toChain}
-            onChange={(e) => {
-              setToChain(Number(e.target.value));
-              setQuote(null);
-            }}
-          >
-            {BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          {/*
-            Read-only. The destination token is decided by what that chain
-            actually lists, not by the user — offering a token the chain does
-            not have produces an unroutable quote and a useless error.
-          */}
-          <div className="brg-select brg-select-static">{toToken?.symbol ?? '—'}</div>
+            onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
+            options={BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => ({
+              value: c.id,
+              label: c.name,
+              sublabel: c.symbol,
+            }))}
+            title={t('bridge.to')}
+            placeholder={t('bridge.to')}
+            compact
+            testId="bridge-to-chain"
+          />
+          <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
+            <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
+              <span className="modern-select-icon">
+                {toToken ? (
+                  (() => {
+                    const s = toToken.symbol || '?';
+                    let h = 0; for (let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))%360;
+                    return (
+                      <span style={{ width:36,height:36,display:'grid',placeItems:'center',borderRadius:10,background:`linear-gradient(140deg,hsl(${h} 70% 46%),hsl(${(h+42)%360} 68% 36%))`,color:'#fff',fontFamily:'var(--font-mono)',fontWeight:900,fontSize:10}}>{s.slice(0,3)}</span>
+                    );
+                  })()
+                ) : <span style={{ width:36,height:36,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12}}>—</span>}
+              </span>
+              <span className="modern-select-text">
+                <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>
+                <span className="modern-select-sublabel">{BRIDGE_CHAINS.find(x=>x.id===toChain)?.name || ''}</span>
+              </span>
+            </div>
+          </div>
         </div>
 
         {quoting && <QuoteSkeleton />}

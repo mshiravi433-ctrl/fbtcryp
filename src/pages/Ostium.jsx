@@ -14,6 +14,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import { assetKnowledgeFor } from '../lib/assetKnowledge';
+import ModernSelect from '../components/ModernSelect';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -453,10 +454,21 @@ export default function Ostium() {
               </div>
             )}
 
-            <label className="field-label">{t('ostium.market')}</label>
-            <select value={market?.pairId || ''} onChange={(e) => setPairId(e.target.value)}>
-              {visible.map((m) => <option key={m.pairId} value={m.pairId}>{m.name}</option>)}
-            </select>
+            <div className="field-label">{t('ostium.market')}</div>
+            <ModernSelect
+              value={market?.pairId || ''}
+              onChange={setPairId}
+              options={visible.map((m) => ({
+                value: m.pairId,
+                label: m.name,
+                sublabel: m.uiCategory || m.category || '',
+                meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
+              }))}
+              title={t('ostium.market')}
+              placeholder={market?.name || t('ostium.market')}
+              searchable
+              testId="ostium-market-select"
+            />
 
             {market && (
               <div className="row-between" style={{ margin: '12px 0' }}>
