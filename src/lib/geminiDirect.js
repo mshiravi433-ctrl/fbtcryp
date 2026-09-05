@@ -184,7 +184,7 @@ export async function directBrief({ global, top, lang }) {
 }
 
 const KB = `FBT Swap facts — answer only from these plus general crypto knowledge:
-- Non-custodial DEX on ten supported swap networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana.
+- Non-custodial DEX on fourteen supported swap networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad and Solana.
 - ${feePercentString()}% platform fee taken from the input token of every swap, on-chain, same transaction.
 - Network gas is separate and goes to validators, not FBT.
 - Quotes use public aggregators on the selected network; Solana has its own routing screen.

@@ -155,6 +155,10 @@ export const PAYOUT_DIRECTORY = [
   { id: 'avalanche', chainId: 43114, family: FAMILY.EVM, label: 'Avalanche C-Chain', gas: 'AVAX', color: '#e84142' },
   { id: 'linea', chainId: 59144, family: FAMILY.EVM, label: 'Linea', gas: 'ETH', color: '#61dfff' },
   { id: 'sonic', chainId: 146, family: FAMILY.EVM, label: 'Sonic', gas: 'S', color: '#fe9a4d' },
+  { id: 'mantle', chainId: 5000, family: FAMILY.EVM, label: 'Mantle', gas: 'MNT', color: '#f0b90b' },
+  { id: 'berachain', chainId: 80094, family: FAMILY.EVM, label: 'Berachain', gas: 'BERA', color: '#a855f7' },
+  { id: 'unichain', chainId: 130, family: FAMILY.EVM, label: 'Unichain', gas: 'ETH', color: '#ff007a' },
+  { id: 'monad', chainId: 143, family: FAMILY.EVM, label: 'Monad', gas: 'MON', color: '#7c3aed' },
   { id: 'solana', chainId: null, family: FAMILY.SOLANA, label: 'Solana', gas: 'SOL', color: '#14f195' },
   { id: 'tron', chainId: null, family: FAMILY.TRON, label: 'Tron (TRX / USDT TRC-20)', gas: 'TRX', color: '#ff060a' }
 ];

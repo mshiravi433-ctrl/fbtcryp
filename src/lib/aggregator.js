@@ -40,7 +40,14 @@ const NETWORK_SLUG = {
   /* Both verified live against the aggregator with our real fee receiver
      before being listed — see the note in chains.js. */
   59144: 'linea',
-  146: 'sonic'
+  146: 'sonic',
+  /* Official KyberSwap slugs — see docs/NETWORKS-ADD-FA.md. The live fee-echo
+     quote test that Linea/Sonic passed has NOT been rerun here (sandbox has no
+     access to the aggregator); run it before enabling these for real volume. */
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
 /** Identifies our app to KyberSwap. Not a secret, not an API key. */
