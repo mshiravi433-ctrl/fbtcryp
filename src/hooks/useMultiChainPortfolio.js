@@ -131,7 +131,15 @@ export function useMultiChainPortfolio(wallet) {
 
   const load = useCallback(async () => {
     if (!address || !getReadProvider) {
-      setChains({});
+      /*
+       * `setChains({})` here used to be unconditional. A fresh `{}` is never
+       * `Object.is` the previous `{}`, so every call re-rendered, and because
+       * `load` is re-created whenever `priceMap` moves (every market refresh)
+       * the empty state churned on a timer. Resetting only when there is
+       * actually something to reset keeps the identity — and with it the
+       * memoised aggregate below — stable for a disconnected wallet.
+       */
+      setChains((prev) => (prev && Object.keys(prev).length ? {} : prev));
       setLoading(false);
       return;
     }
@@ -195,7 +203,29 @@ export function useMultiChainPortfolio(wallet) {
     };
   }, [chains]);
 
-  return {
+  /*
+   * ─── THE RETURNED OBJECT IS MEMOISED, AND THAT IS LOAD-BEARING ──────────
+   * This hook used to `return { … }` a fresh literal on every render. Two
+   * consumers only ever read fields off it, so nobody noticed — until
+   * `IntentAIUnified` put the whole object in a `useMemo` dependency list:
+   *
+   *     const multi = useMultiChainPortfolio(…);            // new identity
+   *     const aiContext = useMemo(…, [ …, multi, … ]);      // new identity
+   *     useEffect(() => { centralIngest(aiContext); setConvState(…); },
+   *               [aiContext, …]);                          // fires again
+   *
+   * `setConvState` re-renders, `multi` is new again, and the effect re-fires:
+   * a self-sustaining loop measured at ~1,700 `POST /api/system/state` per
+   * second on the /intent page. That storm saturated the WebView's six
+   * connections per origin and tripped the server's per-IP budget, which is
+   * what made the rest of the app look like it had lost the internet, and
+   * what made the Multi-AI panel's own `/gateway/providers` read come back
+   * throttled so it printed «گیت‌وی پاسخ نداد» over an empty fleet.
+   *
+   * The hook owns its own output identity now: callers may safely depend on
+   * the object itself.
+   */
+  return useMemo(() => ({
     chains: aggregated.chains,
     rows: aggregated.allRows,
     totalValue: aggregated.totalValue,
@@ -208,5 +238,9 @@ export function useMultiChainPortfolio(wallet) {
     error,
     updatedAt,
     refresh: load
-  };
+  }), [
+    aggregated.chains, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
+    aggregated.totalCount, aggregated.partial, aggregated.failures,
+    activeChainId, loading, marketsLoading, error, updatedAt, load
+  ]);
 }
