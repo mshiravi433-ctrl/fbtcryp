@@ -36,6 +36,8 @@ import { classifyError, humanizeError } from '../../src/lib/central/errors.js';
 import { createCentralStateStore } from './stateStore.js';
 import { createEventBus, attachSse } from './eventBus.js';
 import { createCentralBrain } from './brain.js';
+import { createKernel } from './kernel.js';
+import { mountKernelRoutes } from './kernelRoutes.js';
 import { setCiSource, resetCiSources, healthSnapshot } from './sources.js';
 
 export const CI_ROUTES_SCHEMA = 'fbt.central-api.v1';
@@ -47,6 +49,13 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
   const stateStore = createCentralStateStore({ log });
   const events = createEventBus({ stateStore, log });
   const brain = createCentralBrain({ stateStore, events, io: ioOverride || {}, log });
+  /*
+   * Upgrade 10's Central Intelligence Kernel. It reads the SAME state store the
+   * brain writes, so the financial layer can never disagree with the numbers
+   * the chat quoted, and it holds no execution path of its own — every money
+   * move still goes through the brain's action engine and the user's wallet.
+   */
+  const kernel = createKernel({ stateStore, events, log });
   const router = Router();
 
   const ownerFor = (req) => {
@@ -274,7 +283,11 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
     return res.json({ ok: false, error: 'SOURCE_INJECTION_IS_PROCESS_LOCAL', detail: 'override sources with setCiSource() in the probe process, not over HTTP' });
   });
 
-  return { router, stateStore, events, brain, ownerFor, schema: CI_ROUTES_SCHEMA };
+  /* Upgrade 10's financial surface, mounted on the SAME gateway (see the note
+     in kernelRoutes.js): one origin, one budget, one owner derivation. */
+  mountKernelRoutes({ router, kernel, ownerFor, log });
+
+  return { router, stateStore, events, brain, kernel, ownerFor, schema: CI_ROUTES_SCHEMA };
 }
 
 /** Kept for the probes: the singleton shape mirrors the other server modules. */
