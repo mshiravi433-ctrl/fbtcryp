@@ -164,6 +164,29 @@ const SwapAmountInput = memo(function SwapAmountInput({ value, onChange, onFocus
 });
 
 /**
+ * The default target for a freshly switched network, from whatever token
+ * universe we already hold (curated + cached list — no network access).
+ *
+ * A stablecoin (USDT, else USDC) beats the wrapped native or a same-token
+ * default: those two are the degenerate pairs that make the 2026-09 networks
+ * answer «مسیری بین این دو توکن وجود ندارد» for the first amount typed.
+ * Returns null when nothing better is available, in which case the caller
+ * keeps its old default — a warm cached list almost always has the answer,
+ * and the self-heal effect in the component re-runs this when the full list
+ * loads.
+ */
+function pickDefaultCounter(chainId, curatedList) {
+  const from = curatedList[0];
+  const universe = [...(curatedList ?? []), ...(getTokensSync(chainId) ?? [])];
+  const key = tokenKey(from);
+  return (
+    universe.find((tk) => tk.symbol === 'USDT' && tokenKey(tk) !== key) ??
+    universe.find((tk) => tk.symbol === 'USDC' && tokenKey(tk) !== key) ??
+    null
+  );
+}
+
+/**
  * Real on-chain swap screen — fixed for:
  * - flicker (backdrop-filter + aurora + height:auto animation removed on native)
  * - input death (type=text + memo isolated input, no remount)
@@ -239,6 +262,13 @@ export default function Swap() {
     }
 
     prefillDone.current = true;
+    /*
+     * Symbols stay matched against the CURATED list only — a symbol from a
+     * URL selecting an arbitrary token is a one-tap phishing vector (see the
+     * wiring test that pins this line). Non-curated handoffs travel by
+     * ADDRESS instead, on the separate ?toAddress= / ?fromAddress= import
+     * path below, which is precisely why that path exists.
+     */
     const pick = (sym) => curated.find((x) => x.symbol === sym);
     const f = from && pick(from);
     const tk = to && pick(to);
@@ -251,11 +281,34 @@ export default function Swap() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, curated, chainId, wallet]);
 
+  /*
+   * ─── ?toAddress= / ?fromAddress= — address deep-links ────────────────────
+   * ONE effect, deliberately: the wiring tests pin the chain-switch
+   * pattern to exactly two occurrences in this file (symbol prefill +
+   * address prefill), and both address legs share the same switch logic
+   * anyway, so they share the effect.
+   *
+   * Why both parameters exist:
+   *  • ?toAddress=  — a resolved coin's contract (lib/coinVenue.js) that the
+   *    curated list does not know.
+   *  • ?fromAddress= — the coin page's Buy/Sell links on the 2026-09
+   *    networks, where the COUNTER leg (USDT/USDC) lives only in the runtime
+   *    token universe. `?from=<symbol>` is pinned to curated tokens only —
+   *    a symbol from a URL selecting an arbitrary token is a one-tap
+   *    phishing vector — so a non-curated leg travels by address, the exact
+   *    handoff path this effect provides. The symbol leg of every link stays
+   *    curated, so the guarantee survives.
+   *
+   * Known list entry → select it as-is; unknown → importTokenByAddress
+   * with the unverified warning.
+   */
   const addressPrefill = useRef(false);
   useEffect(() => {
     if (addressPrefill.current) return;
-    const wanted = searchParams.get('toAddress');
-    if (!wanted || !/^0x[a-fA-F0-9]{40}$/.test(wanted)) return;
+    const toWant = searchParams.get('toAddress');
+    const fromWant = searchParams.get('fromAddress');
+    const valid = (a) => Boolean(a) && /^0x[a-fA-F0-9]{40}$/.test(a);
+    if (!valid(toWant) && !valid(fromWant)) return;
 
     const wantedChain = Number(searchParams.get('chain'));
     if (EVM_CHAINS[wantedChain] && wantedChain !== chainId) {
@@ -265,29 +318,45 @@ export default function Swap() {
 
     addressPrefill.current = true;
     let alive = true;
-    (async () => {
+    const adopt = async (want, setter) => {
       const inList = (getTokensSync(chainId) ?? []).find(
-        (tk) => tk.address && tk.address.toLowerCase() === wanted.toLowerCase()
+        (tk) => tk.address && tk.address.toLowerCase() === want.toLowerCase()
       );
       if (inList) {
-        if (alive) setToToken(inList);
-      } else {
-        try {
-          const provider = await wallet.getReadProvider(chainId);
-          const tk = await importTokenByAddress(provider, chainId, wanted);
-          if (!alive) return;
-          setTokens(getTokensSync(chainId));
-          setToToken(tk);
-        } catch {}
+        if (alive) setter(inList);
+        return;
       }
+      try {
+        const provider = await wallet.getReadProvider(chainId);
+        const tk = await importTokenByAddress(provider, chainId, want);
+        if (!alive) return;
+        setTokens(getTokensSync(chainId));
+        setter(tk);
+      } catch {}
+    };
+    (async () => {
+      if (fromWant) await adopt(fromWant, setFromToken);
+      if (toWant) await adopt(toWant, setToToken);
       if (!alive) return;
-      const list = TOKENS[chainId] ?? [];
-      const stable =
-        list.find((x) => x.symbol === 'USDT') ?? list.find((x) => x.symbol === 'USDC');
-      if (stable && stable.address?.toLowerCase() !== wanted.toLowerCase()) setFromToken(stable);
+
+      /* The leg NOT named by address gets its sensible default:
+         toAddress handoff → from = the curated stable (unless it IS the
+         wanted token); fromAddress handoff → to = the curated ?to= symbol,
+         the coin the link is about. */
+      if (toWant) {
+        const list = TOKENS[chainId] ?? [];
+        const stable =
+          list.find((x) => x.symbol === 'USDT') ?? list.find((x) => x.symbol === 'USDC');
+        if (stable && stable.address?.toLowerCase() !== toWant.toLowerCase()) setFromToken(stable);
+      }
+      if (fromWant) {
+        const toTok = (TOKENS[chainId] ?? []).find((x) => x.symbol === searchParams.get('to'));
+        if (toTok && toTok.address?.toLowerCase() !== fromWant.toLowerCase()) setToToken(toTok);
+      }
 
       const next = new URLSearchParams(searchParams);
       next.delete('toAddress');
+      next.delete('fromAddress');
       next.delete('chain');
       next.delete('side');
       setSearchParams(next, { replace: true });
@@ -295,6 +364,7 @@ export default function Swap() {
 
     return () => { alive = false; };
   }, [searchParams, chainId]);
+
 
   const [balances, setBalances] = useState({});
   const [gasCost, setGasCost] = useState(null);
@@ -353,15 +423,63 @@ export default function Swap() {
     return () => { alive = false; };
   }, [chainId]);
 
+  const autoDefaultsRef = useRef(null);
+
   useEffect(() => {
-    if (searchParams.get('from') || searchParams.get('to') || searchParams.get('toAddress')) return;
+    if (
+      searchParams.get('from') || searchParams.get('to') ||
+      searchParams.get('toAddress') || searchParams.get('fromAddress')
+    ) return;
     const list = TOKENS[chainId] ?? [];
     if (!list.length) return;
     setFromToken(list[0]);
-    setToToken(list[1] ?? list[0]);
+    /*
+     * The 2026-09 networks ship a deliberately thin curated list (native
+     * coin, maybe the wrapped native — see chains.js), so `list[1]` on them
+     * is the wrapped native or the native itself. Opening on BERA→WBERA or
+     * MNT→MNT means the first amount a user types is answered with «مسیری
+     * بین این دو توکن وجود ندارد» — the screen reads as broken for a chain
+     * that routes fine. When the default pair would be degenerate, prefer a
+     * stablecoin from whatever universe we already hold (curated + cached
+     * list); the self-heal effect below does the same once the full list
+     * arrives.
+     */
+    const plainTo = list[1] ?? list[0];
+    const degenerate =
+      tokenKey(plainTo) === tokenKey(list[0]) ||
+      Boolean(EVM_CHAINS[chainId]?.wrapped && plainTo?.address &&
+        plainTo.address.toLowerCase() === EVM_CHAINS[chainId].wrapped.toLowerCase());
+    const to = degenerate
+      ? (pickDefaultCounter(chainId, list) ?? plainTo)
+      : plainTo;
+    setToToken(to);
+    autoDefaultsRef.current = { from: list[0], to };
     setAmount('');
     setQuote(null);
   }, [chainId]);
+
+  /*
+   * ─── SELF-HEAL THE DEFAULT PAIR ONCE THE FULL TOKEN LIST HAS ARRIVED ─────
+   * `pickDefaultCounter` above can only see what was already cached, and on
+   * a first visit to a new network that is the native coin alone. When the
+   * background list load lands (USDT, USDC and thousands more), the default
+   * target is swapped to the chain's stablecoin — but ONLY while the pair is
+   * still exactly the auto default. A token the user picked themselves is
+   * never touched, no matter how the list updates.
+   */
+  useEffect(() => {
+    const d = autoDefaultsRef.current;
+    if (!d || !tokens?.length) return;
+    if (fromToken !== d.from || toToken !== d.to) return;
+    const sameKey = tokenKey(fromToken) === tokenKey(toToken);
+    const wrappedNative = Boolean(EVM_CHAINS[chainId]?.wrapped && toToken?.address &&
+      toToken.address.toLowerCase() === EVM_CHAINS[chainId].wrapped.toLowerCase());
+    if (!sameKey && !wrappedNative) return;
+    const stable =
+      tokens.find((tk) => tk.symbol === 'USDT' && tokenKey(tk) !== tokenKey(fromToken)) ??
+      tokens.find((tk) => tk.symbol === 'USDC' && tokenKey(tk) !== tokenKey(fromToken));
+    if (stable) setToToken(stable);
+  }, [tokens, fromToken, toToken, chainId]);
 
   // ─── Quoting: debounce 380ms + abort + seq guard ──────────────────────────
   const quoteSeq = useRef(0);

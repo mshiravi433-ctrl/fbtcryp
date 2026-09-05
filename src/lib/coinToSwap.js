@@ -34,6 +34,7 @@
  */
 
 import { EVM_CHAINS, TOKENS } from './chains.js';
+import { getTokensSync } from './tokenLists.js';
 
 /**
  * Chain preference when a coin exists on several.
@@ -42,8 +43,14 @@ import { EVM_CHAINS, TOKENS } from './chains.js';
  * fees of the seven — a user tapping Buy on a coin available in three places
  * should land on the cheapest one rather than on whichever chain happened to
  * be first in the object. Ethereum last for the same reason, reversed.
+ *
+ * The 2026-09 networks sit after Linea/Sonic and before Ethereum: they are
+ * newer and their curated lists are thinner, so a coin present on an older
+ * chain almost always has better liquidity there. What matters most is that
+ * they are HERE AT ALL — a chain absent from this list is a chain whose
+ * curated tokens (MNT, BERA, MON) the coin page answers "cannot swap" for.
  */
-const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 1];
+const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 1];
 
 /**
  * ─── SOLANA ITSELF IS CURATED, NOT A COIN-VENUE LOOKUP ─────────────────────
@@ -160,10 +167,32 @@ export function swapUrlFor(coingeckoId, side = 'buy') {
   const { chainId, token } = target;
   const list = TOKENS[chainId] ?? [];
 
-  const stable =
+  let stable =
     list.find((tk) => tk.symbol === 'USDT') ??
     list.find((tk) => tk.symbol === 'USDC') ??
     null;
+
+  /*
+   * The 2026-09 networks ship a deliberately thin curated list (native coin,
+   * maybe the wrapped native — see chains.js: unverified addresses are not
+   * committed there), so `stable` is null on them and the old code fell back
+   * to the NATIVE coin as the counter-token. Buying MNT for MNT is not a
+   * pair; the swap screen would open on from === to and the user would type
+   * an amount into a trade that can never quote.
+   *
+   * The stablecoin IS there — in the runtime token universe that the swap
+   * screen loads (CoinGecko lists, see lib/tokenLists.js). getTokensSync is
+   * synchronous (memory, then a day of localStorage, then the curated floor),
+   * so this adds no network call and no new failure mode; on a cold offline
+   * launch it simply finds nothing and behaves exactly as before.
+   */
+  if (!stable) {
+    const all = getTokensSync(chainId) ?? [];
+    stable =
+      all.find((tk) => tk.symbol === 'USDT') ??
+      all.find((tk) => tk.symbol === 'USDC') ??
+      null;
+  }
 
   /* Pairing a token with itself is rejected downstream; fall back to native. */
   const counter =
@@ -179,8 +208,28 @@ export function swapUrlFor(coingeckoId, side = 'buy') {
    * would preload the exact opposite trade — the same class of mistake the
    * order-form `direction` field guards against.
    */
-  const from = side === 'sell' ? token.symbol : counter.symbol;
-  const to = side === 'sell' ? counter.symbol : token.symbol;
+  const fromTok = side === 'sell' ? token : counter;
+  const toTok = side === 'sell' ? counter : token;
 
-  return `/swap?chain=${chainId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  /*
+   * A leg the CURATED list knows travels by symbol — the swap screen's
+   * ?from=/?to= parameters are pinned to curated tokens only, and must stay
+   * that way (a symbol from a URL selecting an arbitrary token is a one-tap
+   * phishing vector; see the wiring test). A leg only the runtime universe
+   * knows — the 2026-09 stablecoins — travels by ADDRESS on the separate
+   * ?fromAddress=/?toAddress= import path, the one built for "this contract
+   * is not on the curated list". Both legs always name a token the swap
+   * screen can select.
+   */
+  const curated = TOKENS[chainId] ?? [];
+  const leg = (tk, key) => {
+    const bySymbol = curated.some((x) => x.symbol === tk.symbol && (
+      !x.address || (tk.address && x.address.toLowerCase() === tk.address.toLowerCase())
+    ));
+    return bySymbol
+      ? `${key}=${encodeURIComponent(tk.symbol)}`
+      : `${key}Address=${encodeURIComponent(tk.address)}`;
+  };
+
+  return `/swap?chain=${chainId}&${leg(fromTok, 'from')}&${leg(toTok, 'to')}`;
 }

@@ -172,13 +172,35 @@ function merge(chainId, base, remote, sourceId) {
   const seen = new Set(base.map((t) => norm(t.address)));
   const symbolSeen = new Set(base.map((t) => t.symbol?.toUpperCase()));
   const out = base.slice();
+  const byAddress = new Map();
+  for (const t of out) if (t.address) byAddress.set(norm(t.address), t);
 
   for (const r of remote) {
     if (out.length >= MAX_PER_CHAIN) break;
     if (Number(r.chainId) !== Number(chainId)) continue;
     const address = r.address;
     if (!/^0x[a-fA-F0-9]{40}$/.test(address || '')) continue;
-    if (seen.has(norm(address))) continue;
+    if (seen.has(norm(address))) {
+      /*
+       * Curated wins IDENTITY — a remote list can never redefine the symbol,
+       * decimals or verified status of an address we ship. But ARTWORK is
+       * inheritable: the curated entries carry no logoURI of their own, and
+       * on the newer networks (whose curated list is native + wrapped only)
+       * that left verified tokens drawing bare monograms — the
+       * «توکن تایید شده عکس ندارد» complaint. A list entry for the SAME
+       * verified address may carry a logoURI, and the address is the one
+       * thing that identifies the token: a fake USDT cannot occupy Tether's
+       * contract, so it cannot hand our curated USDT a fake face either.
+       * Only the first supplied https logo sticks; curated identity is
+       * untouched, and a token that stays logo-less still gets the
+       * TrustWallet lookup and the monogram in lib/tokenIcon.jsx.
+       */
+      const existing = byAddress.get(norm(address));
+      if (existing && !existing.logoURI && /^https:\/\//i.test(String(r.logoURI ?? ''))) {
+        existing.logoURI = String(r.logoURI);
+      }
+      continue;
+    }
 
     const symbol = String(r.symbol || '').slice(0, 16);
     if (!symbol) continue;

@@ -5,7 +5,7 @@ import { activateDca } from '../src/lib/dcaExecution.js';
  * the cheapest place to catch a regression in the parts that decide where
  * money goes.
  */
-import { searchTokens, tokenKey, getTokensSync } from '../src/lib/tokenLists.js';
+import { searchTokens, tokenKey, getTokensSync, loadTokens } from '../src/lib/tokenLists.js';
 import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from '../src/lib/payout.js';
 import { buildEcosystemData } from '../src/lib/ecosystemData.js';
 import { localAnswer } from '../src/lib/faqLocal.js';
@@ -211,6 +211,7 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
+import { venueRoute } from '../src/lib/coinVenue.js';
 import { FBT_TRADING_FEE, ORDER_STATES, ProviderRouter, RampNetworkHostedCheckoutProvider, validateDestination } from '../server/buySell.js';
 import {
   GUIDED_CATALOG,
@@ -592,6 +593,46 @@ export default async function run() {
 
   t('BSC ships a substantial offline list', getTokensSync(56).length >= 40);
 
+  /*
+   * ─── ARTWORK INHERITANCE ONTO CURATED ENTRIES ────────────────────────────
+   * Curated tokens carry no logoURI. On networks whose curated list is thin
+   * (the 2026-09 additions ship native + wrapped only), that left verified
+   * tokens drawing bare monograms — the «توکن تایید شده عکس ندارد»
+   * complaint. A remote list entry for the SAME verified address may carry
+   * a logoURI, and the address is the one thing that identifies a token —
+   * a fake cannot occupy USDC's contract — so the artwork is inherited while
+   * the curated identity (symbol, decimals, verified status) stays ours.
+   */
+  {
+    const realFetch = globalThis.fetch;
+    const USDC_POLY = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+    const fakeList = {
+      tokens: [
+        {
+          chainId: 137, address: USDC_POLY, symbol: 'USDC', name: 'USD Coin',
+          decimals: 6, logoURI: 'https://static.example.test/usdc.png'
+        },
+        {
+          chainId: 137, address: '0x0000000000000000000000000000000000000042',
+          symbol: 'LISTONLY', name: 'List only token', decimals: 18
+        }
+      ]
+    };
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => fakeList });
+    try {
+      const list = await loadTokens(137, { refresh: true });
+      const usdc = list.find((t) => t.address && t.address.toLowerCase() === USDC_POLY.toLowerCase());
+      t('a curated token inherits artwork from a same-address list entry',
+        Boolean(usdc) && usdc.logoURI === 'https://static.example.test/usdc.png');
+      t('...but its curated identity is untouched',
+        usdc?.symbol === 'USDC' && usdc?.decimals === 6);
+      t('a genuine list-only token is still added',
+        list.some((t) => t.symbol === 'LISTONLY'));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  }
+
   /* ------------------------------ payout ------------------------------ */
 
   t('EVM address validates', isValidFor(FAMILY.EVM, '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
@@ -825,7 +866,7 @@ export default async function run() {
 
   // Gas reserve is per-chain, because a flat constant is wrong in both
   // directions: 0.002 ETH strands ~$7, and on a busy L1 it can be too little.
-  t('every swappable chain declares a gas floor', [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146].every((c) => NATIVE_GAS_FLOOR[c] > 0));
+  t('every swappable chain declares a gas floor', EVM_CHAIN_ORDER.every((c) => NATIVE_GAS_FLOOR[c] > 0));
   t('the ETH floor is larger than the L2 floor', NATIVE_GAS_FLOOR[1] > NATIVE_GAS_FLOOR[42161]);
   t('no floor is absurdly large', Object.values(NATIVE_GAS_FLOOR).every((v) => v < 1));
 
@@ -2793,6 +2834,13 @@ export default async function run() {
     t('BNB Chain is supported', openOceanSupports(56));
     t('Ethereum is supported', openOceanSupports(1));
     t('an unknown chain is not', !openOceanSupports(999999));
+    /*
+     * The 2026-09 networks have NO other second routing source (Velora
+     * covers only the original seven), so OpenOcean support there is what
+     * stands between those chains and "no route" whenever KyberSwap alone
+     * has no path. Pin every swappable chain.
+     */
+    t('every swappable chain has an OpenOcean slug', EVM_CHAIN_ORDER.every((c) => openOceanSupports(c)));
 
     /* ---- OpenOcean EXECUTION (the "no route" fix) ---- */
     /*
@@ -5311,6 +5359,15 @@ export default async function run() {
     t('Optimism is optimistic-ethereum', PLATFORM_SLUGS[10] === 'optimistic-ethereum');
     t('Arbitrum is arbitrum-one', PLATFORM_SLUGS[42161] === 'arbitrum-one');
     t('Polygon is polygon-pos', PLATFORM_SLUGS[137] === 'polygon-pos');
+    /* 2026-09 additions — the same silent-failure class. A missing slug
+       makes a coin that only lives on that chain print "not swappable" on
+       its own page while the swap screen trades the chain fine. */
+    t('Mantle is mantle', PLATFORM_SLUGS[5000] === 'mantle');
+    t('Berachain is berachain', PLATFORM_SLUGS[80094] === 'berachain');
+    t('Unichain is unichain', PLATFORM_SLUGS[130] === 'unichain');
+    t('Monad is monad', PLATFORM_SLUGS[143] === 'monad');
+    t('every swappable EVM chain has a CoinGecko platform slug',
+      EVM_CHAIN_ORDER.every((id) => PLATFORM_SLUGS[id]));
 
     /* Real rows, copied verbatim from a live /coins/list response. */
     const rows = [
@@ -5618,6 +5675,80 @@ export default async function run() {
 
     /* An unswappable coin has no URL at all, so the UI cannot navigate. */
     t('no URL is produced for an unswappable coin', swapUrlFor('cardano', 'buy') === null);
+
+    /*
+     * ─── THE 2026-09 NETWORKS ON THEIR COIN PAGES ──────────────────────────
+     * Before the fix, CHAIN_PREFERENCE stopped at Linea/Sonic, so a coin
+     * curated ONLY on a new network (MNT, BERA, MON) resolved to null here —
+     * the coin page printed "cannot swap" for a coin the swap screen trades.
+     * The preference list must cover every swappable chain.
+     */
+    t('a new-network native resolves on its own chain',
+      swapTargetFor('mantle')?.chainId === 5000 &&
+      swapTargetFor('berachain')?.chainId === 80094 &&
+      swapTargetFor('monad')?.chainId === 143);
+    t('a new-network native is swappable',
+      isSwappable('mantle') && isSwappable('berachain') && isSwappable('monad'));
+
+    /*
+     * The 2026-09 stablecoins are NOT curated (unverified addresses are not
+     * committed there), so a counter-leg they fill cannot travel by symbol —
+     * `?from=<symbol>` is pinned to curated tokens only, the one-tap
+     * phishing guard. It travels by ADDRESS on the ?fromAddress= import
+     * path instead. Seed the token-list cache the way the swap screen fills
+     * it, and check the URL the coin page builds.
+     */
+    const store = new Map([[
+      'fbt-tokens-v2:80094',
+      JSON.stringify({
+        at: Date.now(),
+        tokens: [{
+          symbol: 'USDT', name: 'Tether USD', decimals: 18, chainId: 80094,
+          address: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+        }]
+      })
+    ]]);
+    globalThis.localStorage = {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, String(v)),
+      removeItem: (k) => store.delete(k),
+      key: (i) => [...store.keys()][i] ?? null,
+      get length() { return store.size; }
+    };
+    const buyBera = swapUrlFor('berachain', 'buy');
+    t('a new-network buy spends the list-only stablecoin BY ADDRESS',
+      /fromAddress=0xdAC17F958D2ee523a2206206994597C13D831ec7/.test(buyBera) && /to=BERA/.test(buyBera));
+    const sellBera = swapUrlFor('berachain', 'sell');
+    t('...and the sell keeps the curated side as a plain symbol',
+      /from=BERA/.test(sellBera) && /toAddress=0xdAC17F958D2ee523a2206206994597C13D831ec7/.test(sellBera));
+    t('...while a curated chain still uses symbols only',
+      /from=USDT&to=BNB/.test(swapUrlFor('binancecoin', 'buy')));
+    delete globalThis.localStorage;
+  }
+
+  /* ============ coin venue: resolved (non-curated) coin pages ============ */
+  {
+    /*
+     * venueRoute turns the server's "this coin has a contract on these
+     * chains" answer into a swap-screen link. A chain missing from its
+     * preference list made coins whose ONLY contract lives on a new network
+     * print "not swappable" on their own page — even though the swap screen
+     * imports that exact address fine.
+     */
+    const mantleOnly = venueRoute({ chains: { 5000: '0x78c1b0C915c4FAA5ffFa6E2a1b0AcAe47322043d' } });
+    t('a venue that only lives on a 2026-09 network is not refused',
+      mantleOnly?.kind === 'evm' && mantleOnly.chainId === 5000);
+    t('...and its link carries the chain + address',
+      /chain=5000/.test(mantleOnly?.href || '') && /toAddress=0x78c1b0C915c4FAA5ffFa6E2a1b0AcAe47322043d/.test(mantleOnly?.href || ''));
+
+    const monadOnly = venueRoute({ chains: { 143: '0x755D28200f5c4b8f2A12e98b053888234636e96c' } });
+    t('Monad-only venues resolve too', monadOnly?.chainId === 143);
+
+    const multi = venueRoute({ chains: { 1: '0x514910771AF9Ca656af840dff83E8264EcF986CA', 5000: '0x78c1b0C915c4FAA5ffFa6E2a1b0AcAe47322043d' } });
+    t('a multi-chain venue still picks the preferred (cheaper) chain first',
+      multi !== null && typeof multi.chainId === 'number');
+    t('solana venues still win for solana coins',
+      venueRoute({ solana: 'pMeYms3g3vVv2cvsY32cXy7CHG1yckXv3zdMGcA5HeZ' })?.kind === 'solana');
   }
 
 

@@ -54,7 +54,17 @@ const KYBER_SLUG = {
   8453: 'base',
   43114: 'avalanche',
   59144: 'linea',
-  146: 'sonic'
+  146: 'sonic',
+  /* The 2026-09 additions. These MUST stay in lockstep with lib/aggregator.js:
+     a slug missing HERE (but present client-side) is a silent outage for the
+     exact users the proxy exists for — anyone whose network cannot reach the
+     aggregator directly. Their client would retry through this proxy, get
+     CHAIN_UNSUPPORTED, and the swap screen would answer "no route" for a
+     perfectly routable pair. */
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
 /** OpenOcean chain id -> network slug. Must mirror lib/openocean.js. */
@@ -65,7 +75,14 @@ const OO_SLUG = {
   42161: 'arbitrum',
   10: 'optimism',
   8453: 'base',
-  43114: 'avax'
+  43114: 'avax',
+  /* Same lockstep rule as KYBER_SLUG above. */
+  59144: 'linea',
+  146: 'sonic',
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
 /** Chains Velora supports. Must mirror the SUPPORTED set in lib/velora.js. */

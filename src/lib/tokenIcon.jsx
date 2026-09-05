@@ -35,7 +35,15 @@ import { useMemo, useState } from 'react';
  * recognising a token at a glance.
  */
 
-/** TrustWallet's per-chain directory names. */
+/**
+ * TrustWallet's per-chain directory names.
+ *
+ * Must cover every chain in EVM_CHAIN_ORDER: a missing entry does not crash
+ * anything, it just deletes the TrustWallet icon source for that chain, so
+ * tokens there (especially the curated ones, which carry no logoURI of
+ * their own) degrade straight to the monogram — the «توکن تایید شده عکس ندارد»
+ * complaint, reproduced per network.
+ */
 const TW_CHAIN = {
   1: 'ethereum',
   56: 'smartchain',
@@ -43,10 +51,24 @@ const TW_CHAIN = {
   42161: 'arbitrum',
   10: 'optimism',
   8453: 'base',
-  43114: 'avalanchec'
+  43114: 'avalanchec',
+  59144: 'linea',
+  146: 'sonic',
+  5000: 'mantle',
+  80094: 'berachain',
+  130: 'unichain',
+  143: 'monad'
 };
 
-/** Native coins have no contract address, so they are keyed by chain. */
+/**
+ * Native coins have no contract address, so they are keyed by chain.
+ *
+ * Linea and Unichain's gas coin IS Ethereum, so they reuse Ethereum's info
+ * logo — the same coin, and a made-up "Linea logo" would be wrong. If a
+ * chain's own info logo does not exist in the assets repo, the onError walk
+ * degrades to the next candidate and finally the monogram: a 404 here can
+ * never produce an empty circle.
+ */
 const NATIVE_LOGO = {
   1: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png',
   56: 'https://assets-cdn.trustwallet.com/blockchains/smartchain/info/logo.png',
@@ -54,7 +76,13 @@ const NATIVE_LOGO = {
   42161: 'https://assets-cdn.trustwallet.com/blockchains/arbitrum/info/logo.png',
   10: 'https://assets-cdn.trustwallet.com/blockchains/optimism/info/logo.png',
   8453: 'https://assets-cdn.trustwallet.com/blockchains/base/info/logo.png',
-  43114: 'https://assets-cdn.trustwallet.com/blockchains/avalanchec/info/logo.png'
+  43114: 'https://assets-cdn.trustwallet.com/blockchains/avalanchec/info/logo.png',
+  59144: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png', // gas coin is ETH
+  146: 'https://assets-cdn.trustwallet.com/blockchains/sonic/info/logo.png',
+  5000: 'https://assets-cdn.trustwallet.com/blockchains/mantle/info/logo.png',
+  80094: 'https://assets-cdn.trustwallet.com/blockchains/berachain/info/logo.png',
+  130: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png', // gas coin is ETH
+  143: 'https://assets-cdn.trustwallet.com/blockchains/monad/info/logo.png'
 };
 
 /**
@@ -123,9 +151,23 @@ export function iconCandidates(token, chainId) {
     }
   }
 
-  if (token.coingeckoId) {
-    out.push(`https://assets.coingecko.com/coins/images/thumb/${token.coingeckoId}.png`);
-  }
+  /*
+   * NO CoinGecko GUESS HERE, ON PURPOSE.
+   *
+   * This used to push
+   *   `https://assets.coingecko.com/coins/images/thumb/${token.coingeckoId}.png`
+   * — but CoinGecko's image URLs are
+   *   `/coins/images/<numeric-id>/<size>/<file>.png`,
+   * and neither the numeric id nor the filename can be derived from the
+   * `coingeckoId` string ("tether" is image 325, file "tether.png"; "usd-coin"
+   * is image 2791, file "usdc.png"). The guessed URL 404'd for EVERY token,
+   * burning a network round trip before the monogram could render.
+   *
+   * Real CoinGecko artwork still reaches icons the honest way: the token
+   * lists (lib/tokenLists.js) carry a `logoURI` per entry, and that artwork
+   * is now inherited onto curated entries that share the same verified
+   * address — see merge() there.
+   */
 
   return out;
 }
