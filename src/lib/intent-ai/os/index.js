@@ -576,6 +576,14 @@ export function createIntentOS({
             smartMoney: executionResult?.smartMoney,
             agentResults: executionResult?.agentResults,
             baseConfidence: confidence,
+            // Phase 2 (freshness): hand the intelligence layer the observation
+            // time + provenance of each live read. Anything without a stamp
+            // reads as missing, never as fresh — see B-4 in the phase prompt.
+            dataSnapshots: {
+              price: executionResult?.market ? { fetchedAt: executionResult.market.fetchedAt, source: executionResult.market.source } : null,
+              balance: executionResult?.balances ? { fetchedAt: executionResult.balances.fetchedAt, source: executionResult.balances.source || 'rpc' } : null,
+              portfolio: context.portfolio ? { fetchedAt: context.portfolio.fetchedAt, source: context.portfolio.source || 'portfolio' } : null
+            },
             locale: currentLocale
           });
         } catch { /* the intelligence layer is never load-bearing */ }

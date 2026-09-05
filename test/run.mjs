@@ -305,6 +305,8 @@ console.log('▸ probing FBT Intent OS — Upgrade 7 intelligence…');
   if (Array.isArray(golden)) report('intent-os upgrade 7 golden conversations', golden);
   const { default: regression } = await import('./intent-ai/upgrade7-regression-probe.mjs');
   if (Array.isArray(regression)) report('intent-os upgrade 7 regression', regression);
+  const { default: phase2 } = await import('./intent-ai/upgrade7-phase2-surface-probe.mjs');
+  if (Array.isArray(phase2)) report('intent-os upgrade 7 phase 2 surface', phase2);
 }
 
 /* Pure logic + source wiring, no DOM and no network: the product limits
