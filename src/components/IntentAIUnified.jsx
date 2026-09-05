@@ -401,6 +401,20 @@ const ConversationRow = memo(function ConversationRow({
   );
 });
 
+/*
+ * Two snapshots describe the same wallet when the facts the assistant reasons
+ * about are the same. `createWalletSnapshot` stamps a fresh `snapshotId`,
+ * `timestamp` and `snapshotAt` on every call, so a naive `!==` comparison is
+ * always "changed" — which is exactly what turned the ingest effect below into
+ * a render loop. Only the financial facts are compared.
+ */
+function sameWalletFacts(a, b) {
+  if (!a || !b) return a === b;
+  const key = (s) => `${s.address || ''}|${s.solanaAddress || ''}|${s.chainId ?? ''}|${s.canSign ? 1 : 0}|${s.connected ? 1 : 0}|${s.nativeBalance ?? ''}|`
+    + (Array.isArray(s.balances) ? s.balances.map((r) => `${r?.symbol}:${r?.amount}`).join(',') : '');
+  return key(a) === key(b);
+}
+
 export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const { t, i18n } = useTranslation();
   const locale = i18n?.language || 'fa';
@@ -502,6 +516,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [serverReachable, setServerReachable] = useState(null);
   const [activeContext, setActiveContext] = useState(null);
   const [aiProviders, setAiProviders] = useState([]);
+  /*
+   * The fleet is read over the network, so "no rows yet" has two very
+   * different meanings and the panel has to be able to tell them apart:
+   *   idle    — never asked
+   *   loading — asked, answer still on its way
+   *   ready   — the gateway answered
+   *   error   — the gateway did not answer (network, timeout, throttled)
+   * Rendering `[]` alone made the panel announce an outage it had not
+   * observed. `providersError` carries the reason so the message can name it.
+   */
+  const [providersStatus, setProvidersStatus] = useState('idle');
+  const [providersError, setProvidersError] = useState(null);
   const [learningStats, setLearningStats] = useState(null);
   const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
   const [orderDraftOpen, setOrderDraftOpen] = useState(false);
@@ -849,7 +875,46 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
   }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign, currentPage]);
 
+  /*
+   * ─── A STABLE SIGNATURE, BECAUSE THIS EFFECT POSTS ──────────────────────
+   * `aiContext` is rebuilt by a `useMemo` whose dependency list contains whole
+   * objects (`multi`, `wallet`). Any one of them changing identity per render
+   * makes `aiContext` new per render, and this effect used to key on it
+   * directly. The effect also called `setConvState`, and `setWalletContext`
+   * returns a brand-new state object with a fresh `snapshotId` every time —
+   * so the effect re-rendered the component that fed it. Render → effect →
+   * setState → render, forever, each turn firing `POST /api/system/state`.
+   *
+   * Measured on this page before the fix: ~1,700 requests/second, ~10,300 in
+   * the first six seconds. That is what a user experiences as «کل اپ ارتباطش
+   * با اینترنت خراب میشه»: the WebView's per-origin connection pool is full of
+   * our own POSTs, and the server's per-IP budget trips so everything else —
+   * prices, portfolio, the Multi-AI fleet read — comes back throttled for
+   * minutes at a time.
+   *
+   * So the effect now keys on a signature of the FACTS rather than on object
+   * identity, and the state write is skipped when the wallet facts have not
+   * moved. Neither guard depends on an upstream hook behaving well: the loop
+   * is structurally impossible even if some other dependency churns again.
+   */
+  const aiContextSig = useMemo(() => JSON.stringify({
+    addr: wallet?.address || null,
+    chain: wallet?.chainId ?? null,
+    sol: solanaAddressLive || null,
+    sign: walletCanSign === true,
+    hydrating: aiContext.wallet?.hydrating === true,
+    balances: (Array.isArray(aiContext.balances) ? aiContext.balances : [])
+      .map((r) => `${r?.symbol}:${r?.amount}`).join('|'),
+    total: aiContext.portfolio?.totalValueUsd ?? null,
+    dataStatus: aiContext.portfolio?.dataStatus || null,
+    route: aiContext.currentRoute || null,
+    memory: aiContext.conversationSummary || ''
+  }), [aiContext, wallet?.address, wallet?.chainId, solanaAddressLive, walletCanSign]);
+
+  const lastIngestSigRef = useRef(null);
   useEffect(() => {
+    if (lastIngestSigRef.current === aiContextSig) return; // nothing moved → nothing to push
+    lastIngestSigRef.current = aiContextSig;
     try { centralIngest(aiContext); } catch {}
     try {
       setCentralWalletState(snapshotFromAppWallet(wallet, {
@@ -864,15 +929,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         freshness: aiContext.portfolio?.freshness || 'FRESH'
       });
       // Update conversation wallet context (§14)
-      setConvState((prev) => setConvWallet(prev, createWalletSnapshot({
-        address: wallet?.address,
-        chainId: wallet?.chainId,
-        balances: aiContext.balances,
-        canSign: walletCanSign,
-        solanaAddress: solanaAddressLive
-      })));
+      setConvState((prev) => {
+        const next = setConvWallet(prev, createWalletSnapshot({
+          address: wallet?.address,
+          chainId: wallet?.chainId,
+          balances: aiContext.balances,
+          canSign: walletCanSign,
+          solanaAddress: solanaAddressLive
+        }));
+        /*
+         * Return the SAME reference when only the timestamp would change.
+         * React then bails out of the update instead of re-rendering, which is
+         * the second half of breaking the cycle — and it also stops
+         * `saveConversationState` rewriting localStorage on every frame.
+         */
+        return sameWalletFacts(prev?.walletSnapshot, next?.walletSnapshot) ? prev : next;
+      });
     } catch {}
-  }, [aiContext, wallet, solanaAddressLive, walletCanSign]);
+  }, [aiContextSig, aiContext, wallet, solanaAddressLive, walletCanSign]);
 
   useEffect(() => {
     clearContextCache();
@@ -2296,6 +2370,35 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setPanel('ecosystem');
   }, []);
 
+  /*
+   * Reading the fleet. `fetchAiProviders` never rejects — the client bridge
+   * turns every failure into `{ ok: false, error: 'TIMEOUT' | … }` — so the
+   * old `.catch(() => {})` swallowed the only signal that something was wrong
+   * and left the panel sitting on an empty array forever. The failure is now
+   * recorded as a state the panel can render, with the reason, and there is a
+   * retry that calls this same function.
+   */
+  const loadAiProviders = useCallback(async () => {
+    setProvidersStatus('loading');
+    setProvidersError(null);
+    const res = await fetchAiProviders().catch(() => null);
+    if (res?.ok && Array.isArray(res.providers)) {
+      setAiProviders(res.providers);
+      setProvidersStatus('ready');
+      setProvidersError(null);
+      return;
+    }
+    /* A fleet already on screen survives a failed refresh; only a first read
+       that failed leaves the panel with nothing to show. */
+    setProvidersStatus('error');
+    setProvidersError(
+      res?.error === 'TIMEOUT' ? 'TIMEOUT'
+        : res?.status === 429 ? 'THROTTLED'
+          : res?.status ? `HTTP_${res.status}`
+            : (res?.error || 'NETWORK_UNAVAILABLE')
+    );
+  }, []);
+
   const openPanel = useCallback((name) => {
     setPanel(name);
     if (name === 'history') {
@@ -2307,14 +2410,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       void refreshStatus();
     }
     if (name === 'intelligence') {
-      fetchAiProviders().then((res) => {
-        if (res?.ok && Array.isArray(res.providers)) setAiProviders(res.providers);
-      }).catch(() => {});
+      void loadAiProviders();
       fetchLearningStats().then((res) => {
         if (res?.ok) setLearningStats(res);
       }).catch(() => {});
     }
-  }, [refreshMonitors, refreshStatus]);
+  }, [refreshMonitors, refreshStatus, loadAiProviders]);
 
   const appendOp = useCallback((op) => {
     try {
@@ -3072,6 +3173,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         open={panel === 'intelligence'}
         onClose={() => setPanel(null)}
         providers={aiProviders}
+        providersStatus={providersStatus}
+        providersError={providersError}
+        onRetryProviders={() => { void loadAiProviders(); }}
         learningStats={learningStats}
         locale={locale}
       />

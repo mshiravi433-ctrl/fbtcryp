@@ -6,6 +6,7 @@
  * boot test either — it fails silently at runtime for whoever taps that tab.
  * Rendering each one directly is the cheapest way to catch that.
  */
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { HashRouter } from 'react-router-dom';
@@ -50,6 +51,7 @@ import SmartMoneyWallet from '../src/pages/SmartMoneyWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
 import IntentOS from '../src/pages/IntentOS.jsx';
 import IntentAIUnified from '../src/components/IntentAIUnified.jsx';
+import { useMultiChainPortfolio } from '../src/hooks/useMultiChainPortfolio.js';
 import { EcosystemPanel } from '../src/components/IntentEcosystemPanel.jsx';
 import {
   OperationsPanel,
@@ -440,6 +442,113 @@ export async function run(container) {
   await mount('HistoryPanel', <HistoryPanel open onClose={() => {}} conversations={[]} operations={[]} monitors={[]} locale="fa" />, { portal: true });
   await mount('StatusPanel', <StatusPanel open onClose={() => {}} status={{}} locale="fa" />, { portal: true });
   await mount('IntelligencePanel', <IntelligencePanel open onClose={() => {}} providers={[]} locale="fa" />, { portal: true });
+
+  /*
+   * ─── THE /intent INGEST STORM ───────────────────────────────────────────
+   * Reported (fa): «وقتی میزنیم روی مدل هوش چند مدلی کل اپ ارتباطش با
+   * اینترنت خراب میشه و هوش چند مدلی صفر نشون میده».
+   *
+   * The cause was never the panel. `useMultiChainPortfolio` returned a fresh
+   * object literal on every render; `IntentAIUnified` put that object in a
+   * `useMemo` dependency list, and the effect keyed on the memo POSTed the
+   * context to `/api/system/state` and then wrote conversation state carrying
+   * a brand-new snapshot id. Render → effect → setState → render, forever —
+   * measured at ~1,700 requests/second, ~10,300 in the first six seconds, on
+   * a page the user is merely sitting on. That filled the WebView's
+   * per-origin connection pool with our own POSTs and tripped the server's
+   * per-IP budget, which is what made the rest of the app look like it had
+   * lost the internet for minutes, and what made this panel's own fleet read
+   * come back throttled so it printed an outage over an empty grid.
+   *
+   * Under `act()` that loop does not fail an assertion — it exhausts the
+   * heap, which is exactly how this suite used to die before it could report
+   * anything. So the invariant is pinned at its source: one object identity
+   * while nothing has changed.
+   */
+  {
+    const seen = [];
+    let bump = null;
+    function PortfolioIdentityProbe() {
+      const multi = useMultiChainPortfolio(null);
+      seen.push(multi);
+      const [, setN] = useState(0);
+      bump = () => setN((v) => v + 1);
+      return null;
+    }
+    const root = createRoot(container);
+    try {
+      await act(async () => { root.render(<Wrap><PortfolioIdentityProbe /></Wrap>); });
+      /* Let the market feed inside the hook settle first: while it is still
+         loading, `loading` genuinely flips and a new object is correct. The
+         invariant under test is narrower and it is the one that mattered —
+         a re-render that changed NOTHING must hand back the SAME object. */
+      await act(async () => { await sleep(1200); });
+      const settled = seen.length;
+      await act(async () => { bump(); });
+      await act(async () => { bump(); });
+      const last = seen[seen.length - 1];
+      const prev = seen[seen.length - 2];
+      const drift = last && prev
+        ? Object.keys(last).filter((k) => last[k] !== prev[k]).join(',') || 'none'
+        : 'n/a';
+      out.push([`useMultiChainPortfolio returns the same object when nothing changed (${seen.length - settled} idle re-renders; differing fields: ${drift})`,
+        seen.length > settled && seen.slice(settled).every((m) => m === seen[settled - 1])]);
+    } catch (e) {
+      errors.push(`portfolio identity: ${e.message}`);
+      out.push(['useMultiChainPortfolio returns the same object when nothing changed', false]);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  }
+
+  /*
+   * ─── "STILL READING" IS NOT "THE GATEWAY DID NOT ANSWER" ────────────────
+   * The fleet arrives over the network after the panel is on screen, so
+   * `providers` starts empty. That empty array used to be read as a verdict:
+   * «گیت‌وی پاسخ نداد» under a tab reading «مدل‌های هوش مصنوعی (۰)» — on every
+   * open, for the ~200ms before the answer landed, and permanently whenever
+   * the one read was throttled. Three states now, and only the last one is a
+   * number.
+   */
+  {
+    const read = () => ({
+      tab: (document.body.querySelector('[data-testid="intel-tab-models"]')?.textContent || '').trim(),
+      loading: Boolean(document.body.querySelector('[data-testid="intel-fleet-loading"]')),
+      failed: Boolean(document.body.querySelector('[data-testid="intel-fleet-error"]')),
+      retry: Boolean(document.body.querySelector('[data-testid="intel-fleet-retry"]')),
+      cards: document.body.querySelectorAll('[data-testid^="intel-provider-"]').length
+    });
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(<Wrap><IntelligencePanel open onClose={() => {}} providers={[]} providersStatus="loading" locale="fa" /></Wrap>);
+      });
+      let s = read();
+      out.push(['a fleet still being read says so instead of claiming an outage', s.loading && !s.failed]);
+      out.push(['a fleet still being read is not counted as zero', !/\(0\)/.test(s.tab)]);
+
+      await act(async () => {
+        root.render(<Wrap><IntelligencePanel open onClose={() => {}} providers={[]} providersStatus="error" providersError="THROTTLED" onRetryProviders={() => {}} locale="fa" /></Wrap>);
+      });
+      s = read();
+      out.push(['a failed fleet read is reported, with the reason',
+        s.failed && /THROTTLED/.test(document.body.querySelector('[data-testid="intel-fleet-error"]')?.textContent || '')]);
+      out.push(['a failed fleet read offers to try again', s.retry]);
+
+      await act(async () => {
+        root.render(<Wrap><IntelligencePanel open onClose={() => {}} providers={[
+          { id: 'internal', name: 'FBT Internal Reasoning Engine', configured: true, status: 'ACTIVE' },
+          { id: 'openrouter', name: 'OpenRouter', configured: false, status: 'NEEDS_KEY', envVar: 'OPENROUTER_API_KEY' }
+        ]} providersStatus="ready" locale="fa" /></Wrap>);
+      });
+      s = read();
+      out.push(['an answered fleet lists every model it was given', s.cards === 2 && !s.failed && !s.loading]);
+      out.push(['the tab counts the fleet it can see', /\(2\)/.test(s.tab)]);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  }
+
   /* Agents + strategies, restored to a reachable surface. */
   await mount('EcosystemPanel', <EcosystemPanel open onClose={() => {}} locale="fa" />, { portal: true });
 

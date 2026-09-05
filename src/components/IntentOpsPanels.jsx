@@ -530,7 +530,16 @@ export function OrderCard({ order, locale = 'fa' }) {
   );
 }
 
-export function IntelligencePanel({ open, onClose, providers = [], learningStats = null, locale = 'fa' }) {
+export function IntelligencePanel({
+  open,
+  onClose,
+  providers = [],
+  learningStats = null,
+  locale = 'fa',
+  providersStatus = 'ready',
+  providersError = null,
+  onRetryProviders = null
+}) {
   const [tab, setTab] = useState('models');
   const isEn = locale?.startsWith?.('en');
 
@@ -555,9 +564,32 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
   const fleet = Array.isArray(providers) ? providers : [];
   const activeProviders = fleet.filter((p) => p.configured || p.status === 'ACTIVE');
   const pendingProviders = fleet.filter((p) => !p.configured && p.status !== 'ACTIVE');
+  /*
+   * ─── "STILL READING" IS NOT "THE GATEWAY DID NOT ANSWER" ────────────────
+   * `providers` arrives over the network after the panel is already on
+   * screen, so it starts empty. The grid used to read that empty array as a
+   * verdict and printed «گیت‌وی پاسخ نداد» over a tab reading
+   * «مدل‌های هوش مصنوعی (0)» — for every single open, in the ~200ms before
+   * the answer landed, and permanently if the one read was throttled. A user
+   * who tapped the button during that window was told, confidently, that the
+   * fleet was empty and the gateway was down. It was neither; it was late.
+   *
+   * Three distinct states now: still reading (no count, no verdict), read and
+   * failed (the honest message, plus a retry), read and answered (the fleet).
+   * A fleet that was already loaded is never blanked by a later failed
+   * refresh — a stale-but-real list beats a fabricated outage.
+   */
+  const loadingFleet = fleet.length === 0 && (providersStatus === 'loading' || providersStatus === 'idle');
+  /*
+   * Anything that is not "still reading" and has no rows is a gap worth
+   * naming — a failed read, or a caller that simply never supplied a fleet
+   * (the default props). Both get the same honest sentence; only the first
+   * has a reason to print next to it.
+   */
+  const fleetMissing = fleet.length === 0 && !loadingFleet;
   const fleetLabel = isEn
-    ? `AI Models (${fleet.length})`
-    : `مدل‌های هوش مصنوعی (${fleet.length})`;
+    ? (loadingFleet ? 'AI Models…' : `AI Models (${fleet.length})`)
+    : (loadingFleet ? 'مدل‌های هوش مصنوعی…' : `مدل‌های هوش مصنوعی (${fleet.length})`);
 
   const agentFleet = [
     { id: 'intent-agent', name: isEn ? 'Intent Agent' : 'ایجنت درک قصد (Intent)', role: isEn ? 'Natural language parameter extraction & clarification' : 'استخراج سرمایه، افق زمانی، هدف و طرح سؤالات شفاف‌ساز' },
@@ -638,12 +670,26 @@ export function IntelligencePanel({ open, onClose, providers = [], learningStats
                   </div>
                 );
               })}
-              {!fleet.length ? (
-                <p className="iaos-empty">
+              {loadingFleet ? (
+                <p className="iaos-empty" data-testid="intel-fleet-loading" role="status" aria-live="polite">
                   {isEn
-                    ? 'The gateway did not answer, so the fleet cannot be listed. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.'
-                    : 'گیت‌وی پاسخ نداد، بنابراین فهرست مدل‌ها قابل نمایش نیست. دستیار همچنان کار می‌کند: درک قصد، مسیریابی و همه‌ی خواندن‌های داده‌ی زنده به‌صورت محلی و روی سرویس‌های خود اپ اجرا می‌شوند.'}
+                    ? 'Reading the model list from the gateway…'
+                    : 'در حال خواندن فهرست مدل‌ها از گیت‌وی…'}
                 </p>
+              ) : null}
+              {fleetMissing ? (
+                <div className="iaos-empty" data-testid="intel-fleet-error">
+                  <p>
+                    {isEn
+                      ? `The gateway did not answer${providersError ? ` (${providersError})` : ''}, so the fleet cannot be listed. The assistant still works: intent parsing, routing and every live data read run locally and on the app’s own services.`
+                      : `گیت‌وی پاسخ نداد${providersError ? ` (${providersError})` : ''}، بنابراین فهرست مدل‌ها قابل نمایش نیست. دستیار همچنان کار می‌کند: درک قصد، مسیریابی و همه‌ی خواندن‌های داده‌ی زنده به‌صورت محلی و روی سرویس‌های خود اپ اجرا می‌شوند.`}
+                  </p>
+                  {typeof onRetryProviders === 'function' ? (
+                    <button type="button" className="iaos-btn" data-testid="intel-fleet-retry" onClick={onRetryProviders}>
+                      {isEn ? 'Try again' : 'تلاش دوباره'}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               {fleet.length && !activeProviders.length ? (
                 <p className="iaos-empty" data-testid="intel-fleet-no-keys">
