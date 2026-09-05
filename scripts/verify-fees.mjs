@@ -29,8 +29,11 @@
  */
 
 import { PAYOUT_DIRECTORY, isValidFor, resolvePayout } from '../src/lib/payout.js';
-
-const FEE_BPS = 50; // keep in sync with src/lib/chains.js
+// The platform fee's single source of truth (src/lib/feeBps.js). Importing it
+// here — instead of hard-coding a number — means this gate always checks the
+// SAME basis points the swap screen actually requests, so the echo can never
+// drift from what real quotes carry.
+import { FEE_BPS } from '../src/lib/feeBps.js';
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 const AGG = 'https://aggregator-api.kyberswap.com';
 
