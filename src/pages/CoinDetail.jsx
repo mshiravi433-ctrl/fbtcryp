@@ -10,7 +10,7 @@ import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
-import CandleChart from '../components/CandleChart';
+import TradingChart from '../components/TradingChart';
 import CoinLogo from '../components/CoinLogo';
 import { useOhlc } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
@@ -328,10 +328,20 @@ export default function CoinDetail() {
 
         {chartMode === 'candle' ? (
           ohlcLoading ? (
-            <div className="skel" style={{ height: 190 }} />
+            <div className="skel" style={{ height: 280 }} />
           ) : ohlc?.length ? (
             <>
-              <CandleChart data={ohlc} height={190} />
+              {/*
+                The TradingView-powered chart (pinch-zoom, pan, crosshair OHLC,
+                MA overlays) — the same library PancakeSwap uses. Remounted per
+                range so the series is always exactly the requested window.
+              */}
+              <TradingChart
+                key={`${id}-${range.days}`}
+                data={ohlc}
+                symbol={coin?.symbol ?? ''}
+                height={280}
+              />
               <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>
                 {t('coin.candleNote')}
               </p>
@@ -514,6 +524,15 @@ export default function CoinDetail() {
 
         <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/trade?coin=${id}&side=buy`)}>
           {t('coin.practiceInstead')}
+        </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            haptic?.('light');
+            navigate(`/compare?a=${encodeURIComponent(id)}&b=ethereum`);
+          }}
+        >
+          ⚖️ {t('coin.compare')}
         </button>
       </motion.div>
 

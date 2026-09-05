@@ -43,6 +43,7 @@ import { reportActivity } from './lib/rewards/rewardsReporter';
 
 const Market = lazyRetry(() => import('./pages/Market'));
 const CoinDetail = lazyRetry(() => import('./pages/CoinDetail'));
+const Compare = lazyRetry(() => import('./pages/Compare'));
 const Trade = lazyRetry(() => import('./pages/Trade'));
 const Swap = lazyRetry(() => import('./pages/Swap'));
 const Bridge = lazyRetry(() => import('./pages/Bridge'));
@@ -295,6 +296,7 @@ function AnimatedRoutes() {
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Market />} />
             <Route path="/coin/:id" element={<CoinDetail />} />
+            <Route path="/compare" element={<Compare />} />
             <Route path="/trade" element={<Trade />} />
             <Route path="/swap" element={<Swap />} />
             <Route path="/bridge" element={<Bridge />} />

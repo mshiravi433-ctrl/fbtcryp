@@ -40,6 +40,7 @@ import Signals from '../src/pages/Signals.jsx';
 import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
+import Compare from '../src/pages/Compare.jsx';
 import Shop from '../src/pages/Shop.jsx';
 import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
@@ -236,6 +237,13 @@ export async function run(container) {
    * `assets.equities` of undefined.
    */
   await mount('Stocks (no network)', <Stocks />);
+  /*
+   * Compare under a dead network. Every data hook falls back (offline markets
+   * snapshot, empty charts), so the page must render its duel cards and
+   * "history unavailable" states rather than throw on `ca.price` of null —
+   * both contenders start as lookups that can legitimately miss.
+   */
+  await mount('Compare (no network)', <Compare />);
 
   /*
    * Shop with every host black-holed AND no country chosen — the very first

@@ -342,7 +342,17 @@ export default function Market() {
 
       {/* ---------- list ---------- */}
       <section>
-        <p className="section-label">{t('market.allCoins')}</p>
+        <div className="row-between" style={{ alignItems: 'center' }}>
+          <p className="section-label" style={{ margin: 0 }}>{t('market.allCoins')}</p>
+          <button
+            type="button"
+            className="tag"
+            onClick={() => navigate('/compare')}
+            aria-label={t('market.compare')}
+          >
+            ⚖️ {t('market.compare')}
+          </button>
+        </div>
 
         <input
           type="text"
