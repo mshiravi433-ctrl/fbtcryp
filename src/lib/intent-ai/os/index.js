@@ -84,6 +84,10 @@ export * from './agents/strategyAgent.js';
 export * from './agents/guardianAgent.js';
 export * from './agents/executionAgent.js';
 
+// Upgrade 7 — predictive intelligence, autonomous planning, deep understanding.
+// Exported under a namespace so no existing top-level name can be shadowed.
+export * as upgrade7 from './upgrade7/index.js';
+
 // Multi-AI Phase 3 Extensions
 export * from './aiGateway.js';
 export * from './consensusEngine.js';
@@ -130,6 +134,14 @@ import { executeIntentTools, flattenAgentResults } from './toolExecutor.js';
 import { getCentralWalletState, mergeWalletSnapshots, setCentralWalletState } from './centralWalletState.js';
 import { rememberOperationalSlots, getOperationalSlots, patchSharedState } from './sharedState.js';
 import { clearContextCache } from './contextEngine.js';
+/*
+ * UPGRADE 7 — the intelligence layer rides on top of this pipeline and never
+ * inside it. `enrich()` is total (it returns `{ ok:false }` instead of
+ * throwing) and purely additive: it reads the turn that already happened and
+ * returns a block we attach to the response. Deleting this import would restore
+ * pre-Upgrade-7 behaviour exactly.
+ */
+import { enrich as enrichUpgrade7 } from './upgrade7/index.js';
 
 export const INTENT_OS_SCHEMA = 'fbt.intent-os.v3';
 export const INTENT_OS_VERSION = '3.0.0';
@@ -542,7 +554,32 @@ export function createIntentOS({
           durationMs: latency,
           locale: currentLocale
         }).catch(() => {});
-        
+
+        /*
+         * 15. UPGRADE 7 — deep intent, plan/graph, cross-check, freshness,
+         * predictions. Purely additive: every existing key below is untouched,
+         * and a throw here is swallowed by `enrich` itself, so the turn is
+         * never lost to the intelligence layer.
+         */
+        let upgrade7 = null;
+        try {
+          upgrade7 = enrichUpgrade7({
+            message,
+            baseIntent: workingIntent,
+            context,
+            execution: executionResult,
+            conversationId: convId,
+            conversation,
+            wallet: liveWallet,
+            portfolio: executionResult?.portfolio || portfolioState || context.portfolio,
+            market: executionResult?.market || context.market,
+            smartMoney: executionResult?.smartMoney,
+            agentResults: executionResult?.agentResults,
+            baseConfidence: confidence,
+            locale: currentLocale
+          });
+        } catch { /* the intelligence layer is never load-bearing */ }
+
         return {
           ok: true,
           intent: workingIntent,
@@ -567,6 +604,7 @@ export function createIntentOS({
             riskScore: confidence.riskScore,
             dataFreshness: confidence.dataFreshness
           },
+          upgrade7,
           message: stripInternalLeaks(human.message),
           ui: human.ui,
           card: human.card,

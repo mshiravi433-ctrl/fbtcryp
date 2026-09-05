@@ -292,6 +292,21 @@ console.log('▸ probing FBT Intent OS — follow-up resume (اره / pending pa
   if (Array.isArray(followRows)) report('intent-os follow-up resume', followRows);
 }
 
+/* UPGRADE 7 — deep intent, planner/graph, agent cross-check, freshness,
+   no-hallucination, safety pipeline, monitoring, prediction. Three probes:
+   the DoD suite, the 52 golden conversations replayed through the real
+   understanding path, and the §45 regression guard proving Upgrades 1–6 and
+   the UI are untouched. */
+console.log('▸ probing FBT Intent OS — Upgrade 7 intelligence…');
+{
+  const { default: u7 } = await import('./intent-ai/upgrade7-intelligence-probe.mjs');
+  if (Array.isArray(u7)) report('intent-os upgrade 7 intelligence', u7);
+  const { default: golden } = await import('./intent-ai/upgrade7-golden-conversations-probe.mjs');
+  if (Array.isArray(golden)) report('intent-os upgrade 7 golden conversations', golden);
+  const { default: regression } = await import('./intent-ai/upgrade7-regression-probe.mjs');
+  if (Array.isArray(regression)) report('intent-os upgrade 7 regression', regression);
+}
+
 /* Pure logic + source wiring, no DOM and no network: the product limits
    (400k total / 5k per tx / 60% goal / 30 days) enforced with a friendly
    warning, the step-by-step guided chat flow, the visible two-agent
