@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '../lib/browser';
 import { IconInstagram, IconLinkedin, IconMail, IconXLogo } from '../components/Icons';
 import { SUPPORT_MAILTO } from '../lib/contact';
 import GalaxyBackdrop from '../components/GalaxyBackdrop';
+import FluidBackdrop, { fluidSupported } from '../components/FluidBackdrop';
 
 /*
  * The same accounts Contact links to — deliberately not a second, invented
@@ -32,24 +34,34 @@ const SOCIALS = [
  * where they belong — the name field's own label is unreadable until the
  * language is right.
  *
- * ─── ANIMATION BUDGET ───────────────────────────────────────────────────────
- * Everything here is a one-shot entrance. There is exactly one looping
- * element, the slow ring rotation, and it stops mattering the moment the user
- * taps Start because the whole screen unmounts.
+ * ─── THE BACKDROP ───────────────────────────────────────────────────────────
+ * Requested: the starfield behind this screen should become an interactive
+ * fluid — colours that swirl and change as the hand moves across the screen —
+ * with no foreign branding, and without slowing the app down.
  *
- * That restraint is deliberate. The Ecosystem screen shipped with nine
- * permanent `repeat: Infinity` blur pulses and felt broken on a mid-range
- * phone — the compositor never got to rest. A splash is on screen for seconds,
- * so it can afford a little more, but the same rule applies: no stacked
- * backdrop filters, and nothing that keeps running once it is off screen.
+ * So the backdrop is a WebGL2 fluid (FluidBackdrop.jsx) whenever the device
+ * can run one, and the galaxy starfield otherwise. The fluid is shown ONLY
+ * here, never behind Welcome/Onboarding/the Guide, and it is destroyed the
+ * moment the user taps Start — the whole engine (context, loop, listeners)
+ * unmounts with the screen, so the seconds it costs are the seconds the user
+ * is actually looking at it. Devices without WebGL2 float targets, or with
+ * reduced motion requested (Android battery saver forces it), get the galaxy
+ * — which renders static in that case.
  *
- * `useReducedMotion` is honoured because a spinning, pulsing first screen is a
- * genuine accessibility problem for people with vestibular disorders — and it
+ * Everything else here is a one-shot entrance: the only looping DOM element
+ * is the slow ring rotation, and it stops mattering when the screen unmounts.
+ * `useReducedMotion` is honoured for the same reason it always was — a
+ * spinning, pulsing first screen is a genuine accessibility problem, and this
  * is the one screen nobody can skip.
  */
 export default function Splash({ onStart, hideGalaxy }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
+
+  // Decided once, before first paint, so the screen never flashes one backdrop
+  // and then swaps to the other. `fluidSupported()` is a cheap one-off probe
+  // that also bails out for reduced-motion users.
+  const [fluid] = useState(() => fluidSupported());
 
   // With reduced motion the mark simply appears; nothing rotates or breathes.
   const ringSpin = reduce
@@ -58,15 +70,13 @@ export default function Splash({ onStart, hideGalaxy }) {
 
   return (
     <div className="splash">
-      {/*
-        The galaxy. Drawn rather than filmed — see GalaxyBackdrop.jsx for why
-        a video was the wrong build here: it would have tripled the APK for a
-        screen shown once, and on a slow Iranian connection it would still be
-        buffering while the user is deciding whether the app works.
-      */}
-      {!hideGalaxy && <GalaxyBackdrop />}
+      {/* The backdrop: an interactive WebGL fluid when the device can run one,
+          the drawn galaxy otherwise (see FluidBackdrop.jsx for why a video was
+          the wrong build — the same reasoning that originally kept the galaxy
+          drawn still holds). */}
+      {!hideGalaxy && (fluid ? <FluidBackdrop /> : <GalaxyBackdrop />)}
 
-      {/* Soft colour wash on top of the galaxy, tying it to the brand hues. */}
+      {/* Soft colour wash over the backdrop, tying it to the brand hues. */}
       <div className="splash-glow" aria-hidden="true" />
 
       <div className="splash-center">
