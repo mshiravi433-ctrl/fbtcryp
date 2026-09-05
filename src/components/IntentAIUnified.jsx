@@ -84,7 +84,7 @@ import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 
 // Existing OS
-import { getIntentOS } from '../lib/intent-ai/os/index.js';
+import { getIntentOS, upgrade7 as upgrade7ns } from '../lib/intent-ai/os/index.js';
 import { getCurrentPageContext, clearContextCache } from '../lib/intent-ai/os/contextEngine.js';
 import { createRealServices } from '../lib/intent-ai/os/serviceAdapters.js';
 import { setCentralWalletState, snapshotFromAppWallet, getCentralWalletState } from '../lib/intent-ai/os/centralWalletState.js';
@@ -191,6 +191,41 @@ function isRebalanceKind(type) {
   return t === 'REBALANCE' || t === 'REBALANCE_PORTFOLIO';
 }
 
+/* Phase 2 surface — pure mappers for the intelligence block the OS already
+ * attaches to every turn. No network, no state, safe to call during render. */
+function mapPlanStepsForTimeline(steps) {
+  if (!Array.isArray(steps)) return [];
+  return steps.map((s, i) => ({
+    id: s?.id || `p7-step-${i}`,
+    // Only the public label travels with the step; internal reasoning never
+    // leaves the planner (the status view strips it at the source).
+    label: s?.label || '',
+    status: s?.status === 'running' ? 'active' : (s?.status || 'pending')
+  }));
+}
+
+function pickSingleQuestion(u7) {
+  if (!u7 || u7.ok === false) return null;
+  const needy = (u7.contradictions || []).find((c) => c?.contradiction && c?.needsConfirmation && c?.question);
+  if (needy) return { text: needy.question, slot: needy.slot || 'confirmation', expectedType: 'confirmation' };
+  if (u7.clarification?.shouldAsk === true && u7.clarification?.question?.text) {
+    return { text: u7.clarification.question.text, slot: u7.clarification.question.slot || 'text', expectedType: u7.clarification.question.expectedType || 'text' };
+  }
+  return null;
+}
+
+function trimUpgrade7ForMessage(u7) {
+  if (!u7 || u7.ok === false) return null;
+  // Render slices only: the bubble shows progress, confidence and consensus.
+  // Deep intent, graphs and raw agent payloads stay out of React state.
+  return {
+    plan: u7.plan || null,
+    confidence: u7.confidence || null,
+    synthesis: u7.synthesis || null,
+    agentHealth: u7.agentHealth || null
+  };
+}
+
 const ConversationRow = memo(function ConversationRow({
   m,
   t,
@@ -279,6 +314,42 @@ const ConversationRow = memo(function ConversationRow({
               </span>
             ) : null}
           </div>
+        ) : null}
+        {m.upgrade7?.plan?.steps?.length ? (
+          <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} />
+        ) : null}
+        {m.upgrade7?.confidence ? (
+          <div data-testid="u7-confidence" style={{ marginTop: 8 }}>
+            <span className="iaos-conf-meter">
+              {m.upgrade7.confidence.display || (fa ? 'اطمینان' : 'Confidence')} · {m.upgrade7.confidence.score}%
+            </span>
+            {Array.isArray(m.upgrade7.confidence.notices) && m.upgrade7.confidence.notices.length ? (
+              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.85)', marginTop: 4, lineHeight: 1.6 }}>
+                {m.upgrade7.confidence.notices.map((n, i) => (<div key={i}>{n}</div>))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {m.upgrade7?.synthesis ? (
+          m.upgrade7.synthesis.divergence === true ? (
+            <div className="iaos-consensus-box" data-testid="u7-divergence">
+              <div className="iaos-divergence-warn">⚠ {m.upgrade7.synthesis.warning || (fa ? 'تحلیل‌ها اختلاف دارند.' : 'Analyses disagree.')}</div>
+            </div>
+          ) : (
+            <div className="iaos-consensus-box" data-testid="u7-consensus">
+              <strong>{fa ? 'اجماع Agentها' : 'Agent consensus'}</strong>
+              <span>
+                {(m.upgrade7.synthesis.contributingAgents || []).length} agent{(m.upgrade7.synthesis.contributingAgents || []).length === 1 ? '' : 's'}
+                {m.upgrade7.synthesis.agreement != null ? ` · ${Math.round(m.upgrade7.synthesis.agreement * 100)}%` : ''}
+                {m.upgrade7.synthesis.stance && m.upgrade7.synthesis.stance !== 'unknown' ? ` · ${m.upgrade7.synthesis.stance}` : ''}
+              </span>
+              {Array.isArray(m.upgrade7.agentHealth) && m.upgrade7.agentHealth.some((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown') ? (
+                <div className="iaos-divergence-warn">
+                  ⚠ {m.upgrade7.agentHealth.filter((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown').length} {fa ? 'عامل نیازمند توجه' : 'agent(s) need attention'}
+                </div>
+              ) : null}
+            </div>
+          )
         ) : null}
         {intel?.uncertainty?.level === 'HIGH' ? (
           <div className="iaos-uncertainty" data-testid="intent-ai-uncertainty">
@@ -397,6 +468,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [thinking, setThinking] = useState([]); // legacy for fallback
   const [activitySteps, setActivitySteps] = useState([]); // §29 activity timeline
   const [suggestions, setSuggestions] = useState([]);
+  // Phase 2: predicted follow-ups ride beside suggestions; the pending
+  // question ref binds the user's answer back to the slot that asked.
+  const [predictedNext, setPredictedNext] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingExecution, setPendingExecution] = useState(null);
   const [executing, setExecuting] = useState(false);
@@ -443,6 +517,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const resumeLock = useRef(false);
   const sendRef = useRef(null);
   const osRef = useRef(null);
+  const pendingU7QuestionRef = useRef(null);
   const prevRouteRef = useRef(currentPage);
 
   // UPGRADE 6 — Persist conversation state on every change
@@ -565,6 +640,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
     const portfolioSnap = {
       dataStatus: multi?.loading ? 'pending' : (holdings.length ? 'live' : (walletSnap.connected ? 'empty' : 'unavailable')),
+      // Only a verified read (live or empty) carries a timestamp; a pending
+      // or unavailable snapshot stays bare so freshness reports it missing.
+      ...(!multi?.loading && walletSnap.connected ? { fetchedAt: Date.now(), source: 'portfolio' } : {}),
       freshness: multi?.loading ? 'PENDING' : 'FRESH',
       hydrating: Boolean(walletSnap.connected && multi?.loading),
       totalValueUsd: Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null,
@@ -575,11 +653,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     real.walletService = {
       ...real.walletService,
       getContext: async () => walletSnap,
-      getBalances: async () => ({
-        ok: true,
-        balances,
-        dataStatus: multi?.loading ? 'pending' : (balances.length ? 'live' : (walletSnap.connected ? 'pending' : 'unavailable'))
-      })
+      getBalances: async () => {
+        const balStatus = multi?.loading ? 'pending' : (balances.length ? 'live' : (walletSnap.connected ? 'pending' : 'unavailable'));
+        return {
+          ok: true,
+          balances,
+          dataStatus: balStatus,
+          ...(balStatus === 'live' ? { fetchedAt: Date.now(), source: 'rpc' } : {})
+        };
+      }
     };
     real.portfolioService = {
       ...real.portfolioService,
@@ -595,7 +677,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           holdings: list,
           largest: sorted[0] || null,
           concentration: sorted[0] && total ? (Number(sorted[0].valueUsd) / total) * 100 : null,
-          dataStatus: list?.length ? 'live' : 'unavailable'
+          dataStatus: list?.length ? 'live' : 'unavailable',
+          ...(list?.length ? { fetchedAt: Date.now(), source: 'portfolio' } : {})
         };
       }
     };
@@ -745,6 +828,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       },
       portfolio: {
         dataStatus: hydrating ? 'pending' : (canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable'),
+        ...((canReadPortfolio || solanaRows.length) && !hydrating ? { fetchedAt: Date.now(), source: 'portfolio' } : {}),
         freshness: hydrating ? 'PENDING' : 'FRESH',
         hydrating,
         totalValueUsd: evmTotal != null ? evmTotal + solTotal : (solTotal || null),
@@ -814,6 +898,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const message = String(rawText || '').trim();
     if (!message || busyRef.current) return null;
     busyRef.current = true;
+
+    // Phase 2 (§21): an answer to our single question binds to the slot that
+    // asked for it. Only a short reply to the still-open question binds — a
+    // long message is a new request, not an answer. Plan resume runs inside
+    // enrich; it is never called by hand from here.
+    try {
+      const pending = pendingU7QuestionRef.current;
+      const openId = convStateRef.current?.lastQuestionId;
+      if (pending && openId && openId === pending.questionId && message.length <= 120) {
+        upgrade7ns.bindAnswer({ questionId: pending.questionId, intentId: pending.intentId, slot: pending.slot, expectedType: pending.expectedType, value: message, conversationId });
+      }
+      if (!pending || openId !== pending.questionId) pendingU7QuestionRef.current = null;
+    } catch { /* binding is best-effort; the turn continues regardless */ }
 
     // §43 Global Event Bus
     busV6.emit(EVENTS_V6.USER_MESSAGE, { message, conversationId, currentPage });
@@ -1207,6 +1304,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           if (agg.riskImpact) finalMessage += `\n${locale.startsWith('fa') ? 'تأثیر ریسک:' : 'Risk impact:'} ${JSON.stringify(agg.riskImpact)}`;
         }
 
+        // Phase 2 (§19/§20): at most ONE question, and only when nothing
+        // else asks. A money-sensitive contradiction outranks a clarification.
+        const u7q = pickSingleQuestion(osResult?.upgrade7);
+        let u7qText = (!osResult.intent?.minimalQuestion && u7q) ? u7q.text : null;
+        if (u7qText && hasAskedQuestion(convStateRef.current, u7qText)) u7qText = null;
+        if (u7qText) {
+          finalMessage = `${finalMessage}\n\n${u7qText}`;
+          pendingU7QuestionRef.current = { questionId: makeId(), intentId: convStateRef.current?.intentId || null, slot: u7q.slot, expectedType: u7q.expectedType };
+        }
+
         const nextMessage = {
           id: makeId(),
           role: 'ai',
@@ -1216,14 +1323,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           card: osResult.human?.card || osResult.card || null,
           intentType: osResult.intent?.type || null,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
-          missingInfo: osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null,
+          missingInfo: (osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null) || u7qText,
           suggestions: (osResult.intent?.nextPredictedActions?.length
             ? osResult.intent.nextPredictedActions.map((a) => ({ id: a.intent, label: locale.startsWith('fa') ? a.labelFa : a.labelEn, prompt: a.prompt }))
             : (osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale))),
           debug: osResult.debug || null,
           intentId: convStateRef.current.intentId,
           confidence: osResult.confidence || null,
-          aggregated: orchestrationResult?.aggregated || null
+          aggregated: orchestrationResult?.aggregated || null,
+          upgrade7: trimUpgrade7ForMessage(osResult?.upgrade7)
         };
 
         // §33 — Check if this question was already asked
@@ -1265,6 +1373,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         });
 
         setSuggestions((nextMessage.suggestions || []).slice(0, MAX_SUGGESTIONS));
+        setPredictedNext(osResult?.upgrade7?.predictedNext || []);
         setPendingExecution(null);
         addL1Message(nextMessage);
         busV6.emit(EVENTS_V6.AI_RESPONSE, { message: finalMessage, intentType: osResult.intent?.type });
@@ -1371,7 +1480,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext, {}, locale)),
         multiAi: reply.multiAi || null,
         intelligence: reply.intelligence || null,
-        debug: osResult.debug || null
+        debug: osResult.debug || null,
+        upgrade7: trimUpgrade7ForMessage(osResult?.upgrade7)
       };
 
       // §33 No Repetition check for server response too
@@ -1431,6 +1541,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       });
 
       setSuggestions((nextMessage.suggestions || []).slice(0, MAX_SUGGESTIONS));
+      setPredictedNext(osResult?.upgrade7?.predictedNext || []);
       addL1Message(nextMessage);
       busV6.emit(EVENTS_V6.AI_RESPONSE, { message: nextMessage.content, intentType: nextMessage.intentType });
 
@@ -1529,6 +1640,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setInput(s.prompt);
     void sendMessage(s.prompt);
   }, [sendMessage]);
+
+  // Phase 2: predicted chips merge with contextual suggestions; duplicates
+  // collapse on id and the row stays capped (prediction is an offer only).
+  const allChips = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const c of [...(suggestions || []), ...(predictedNext || [])]) {
+      if (!c || !c.id || seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
+    }
+    return out.slice(0, 6);
+  }, [suggestions, predictedNext]);
 
   const drawerItems = useMemo(() => {
     const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType, locale };
@@ -2842,11 +2966,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ) : null}
         </div>
 
-        {suggestions.length ? (
+        {allChips.length ? (
           <div className="iaos-suggestions">
             <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions', { defaultValue: 'پیشنهادهای مرتبط' })}</div>
             <div className="iaos-suggestions-row">
-              {suggestions.map((s) => (
+              {allChips.map((s) => (
                 <button key={s.id} type="button" className="iaos-suggestion" onClick={() => sendSuggested(s)}>
                   <span className="iaos-suggestion-label">{s.label}</span>
                 </button>

@@ -58,8 +58,11 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     walletService: {
       getBalances: async () => {
         try {
-          if (wallet?.balances) return { ok: true, balances: wallet.balances, dataStatus: 'live' };
-          if (portfolio?.balances) return { ok: true, balances: portfolio.balances, dataStatus: 'live' };
+          // Phase 2 (freshness): a timestamp travels with every successful read
+          // so the confidence layer can tell live data from a stale cache.
+          // Reads with no data behind them stay timestamp-less on purpose.
+          if (wallet?.balances) return { ok: true, balances: wallet.balances, dataStatus: 'live', fetchedAt: wallet.fetchedAt || Date.now(), source: wallet.source || 'rpc' };
+          if (portfolio?.balances) return { ok: true, balances: portfolio.balances, dataStatus: 'live', fetchedAt: portfolio.fetchedAt || Date.now(), source: portfolio.source || 'rpc' };
           return { ok: true, balances: [], dataStatus: 'unavailable', reason: 'NO_WALLET_SNAPSHOT' };
         } catch (e) {
           return failed(e, { balances: [] });
@@ -70,7 +73,12 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     },
 
     portfolioService: {
-      getSummary: async () => portfolio || { dataStatus: 'unavailable', holdings: [], totalValueUsd: null },
+      getSummary: async () => {
+        if (!portfolio) return { dataStatus: 'unavailable', holdings: [], totalValueUsd: null };
+        // A forwarded snapshot keeps its own observation time when the host
+        // stamped one; otherwise it is stamped at read time, never left bare.
+        return { ...portfolio, fetchedAt: portfolio.fetchedAt || Date.now(), source: portfolio.source || 'portfolio' };
+      },
       analyze: async ({ holdings } = {}) => {
         const h = holdings || portfolio?.holdings || [];
         const priced = h.filter((x) => Number.isFinite(Number(x.valueUsd)));
@@ -78,6 +86,8 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
         const sorted = [...h].sort((a, b) => (Number(b.valueUsd) || 0) - (Number(a.valueUsd) || 0));
         return {
           ok: true,
+          fetchedAt: Date.now(),
+          source: 'portfolio',
           totalValueUsd: priced.length ? total : null,
           holdings: h,
           largest: sorted[0] || null,
@@ -121,7 +131,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             ...(slippage ? { slippage } : {})
           });
           if (!quote) return { ok: false, dataStatus: 'unavailable', reason: 'NO_ROUTE' };
-          return { ok: true, quote, dataStatus: 'live' };
+          return { ok: true, quote, dataStatus: 'live', fetchedAt: Date.now(), source: 'aggregator' };
         } catch (e) {
           return failed(e);
         }
@@ -135,7 +145,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
         try {
           const { getBridgeQuote } = await import('../../bridge.js');
           const q = await getBridgeQuote({ fromChain, toChain, token, amount });
-          return { ok: true, quote: q, dataStatus: 'live' };
+          return { ok: true, quote: q, dataStatus: 'live', fetchedAt: Date.now(), source: 'aggregator' };
         } catch (e) {
           return failed(e);
         }
@@ -168,6 +178,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           return {
             ok: true,
             dataStatus: 'live',
+            fetchedAt: Date.now(),
             overview: {
               totalMarketCapUsd: num(global?.mcap),
               volume24hUsd: num(global?.volume),
@@ -224,6 +235,8 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           return {
             ok: true,
             dataStatus: 'live',
+            fetchedAt: Date.now(),
+            source: 'api',
             symbol: sym,
             name: coin.name || null,
             priceUsd: num(coin.price),
@@ -264,6 +277,10 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             news: items.slice(0, limit),
             at: res?.at || null,
             stale: res?.stale === true,
+            // The feed's own observation time wins over read time, so a stale
+            // upstream is reported stale instead of relabelled fresh.
+            fetchedAt: res?.at || Date.now(),
+            source: 'api',
             dataStatus: items.length ? 'live' : 'empty'
           };
         } catch (e) {
@@ -285,6 +302,8 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             query: q || null,
             at: res?.at || null,
             stale: res?.stale === true,
+            fetchedAt: res?.at || Date.now(),
+            source: 'api',
             // "no story matches your query" is different from "the feed is
             // down", and the reply needs to be able to tell them apart.
             dataStatus: hits.length ? 'live' : (items.length ? 'empty' : 'unavailable')
@@ -314,7 +333,9 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             dataStatus: filtered.length ? 'live' : (pools.length ? 'empty' : 'unavailable'),
             // The upstream timestamp only — never `new Date()`, which would
             // relabel a stale pool list as fresh.
-            updatedAt: res?.updatedAt || res?.at || null
+            updatedAt: res?.updatedAt || res?.at || null,
+            fetchedAt: res?.updatedAt || res?.at || Date.now(),
+            source: 'api'
           };
         } catch (e) {
           return failed(e, { opportunities: [] });
@@ -336,7 +357,9 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             pools: pools.slice(0, 20),
             chainId: chainId ?? null,
             dataStatus: pools.length ? 'live' : (all.length ? 'empty' : 'unavailable'),
-            updatedAt: res?.updatedAt || res?.at || null
+            updatedAt: res?.updatedAt || res?.at || null,
+            fetchedAt: res?.updatedAt || res?.at || Date.now(),
+            source: 'api'
           };
         } catch (e) {
           return failed(e, { pools: [] });
@@ -355,7 +378,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             markets = markets.filter((m) => String(m.symbol || '').toUpperCase() === want);
           }
           // 'catalog', not 'live': this is the supported-asset list, not rates.
-          return { ok: true, markets, dataStatus: 'catalog' };
+          return { ok: true, markets, dataStatus: 'catalog', fetchedAt: Date.now(), source: 'cache' };
         } catch (e) {
           return failed(e, { markets: [] });
         }
@@ -365,7 +388,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
         try {
           const { readUserAccount } = await import('../../lending.js');
           const account = await readUserAccount({ user: address, chainId });
-          return { ok: true, dataStatus: 'live', ...account };
+          return { ok: true, dataStatus: 'live', ...account, fetchedAt: Date.now(), source: 'rpc' };
         } catch (e) {
           return failed(e, { lending: [], borrowing: [] });
         }
@@ -422,11 +445,13 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             }
           }
 
+          const sigStatus = signals.length || regime ? 'live' : 'unavailable';
           return {
             ok: true,
             signals,
             regime: regime ? { label: regime.label ?? regime.regime ?? null, note: regime.note ?? null } : null,
-            dataStatus: signals.length || regime ? 'live' : 'unavailable'
+            dataStatus: sigStatus,
+            ...(sigStatus === 'live' ? { fetchedAt: Date.now(), source: 'api' } : {})
           };
         } catch (e) {
           return failed(e, { signals: [] });
@@ -440,6 +465,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           const { smartMoneyContext } = await import('../../smartMoneyAI.js');
           const ctx = await smartMoneyContext({ window, minUsd });
           const points = Array.isArray(ctx?.dataPoints) ? ctx.dataPoints : [];
+          const smStatus = points.length ? 'live' : 'unavailable';
           return {
             ok: true,
             overview: ctx?.overview || null,
@@ -447,7 +473,8 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             // Every data point carries its own source + observation time. That
             // is the contract the evidence layer relies on; do not flatten it.
             dataPoints: points,
-            dataStatus: points.length ? 'live' : 'unavailable'
+            dataStatus: smStatus,
+            ...(smStatus === 'live' ? { fetchedAt: Date.now(), source: 'onchain' } : {})
           };
         } catch (e) {
           return failed(e);
@@ -460,11 +487,13 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           const rows = Array.isArray(ranking) ? ranking : [];
           const want = String(token || '').toUpperCase();
           const hits = want ? rows.filter((r) => String(r.symbol || '').toUpperCase() === want) : rows;
+          const trackStatus = hits.length ? 'live' : (rows.length ? 'empty' : 'unavailable');
           return {
             ok: true,
             tokens: hits.slice(0, 10),
             window,
-            dataStatus: hits.length ? 'live' : (rows.length ? 'empty' : 'unavailable')
+            dataStatus: trackStatus,
+            ...(trackStatus !== 'unavailable' ? { fetchedAt: Date.now(), source: 'onchain' } : {})
           };
         } catch (e) {
           return failed(e, { tokens: [] });
@@ -484,12 +513,14 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           const hits = want
             ? events.filter((e) => String(e?.token?.symbol || e?.symbol || '').toUpperCase() === want)
             : events;
+          const whaleStatus = hits.length ? 'live' : (events.length ? 'empty' : 'unavailable');
           return {
             ok: true,
             events: hits.slice(0, 20),
             total: events.length,
             minUsd,
-            dataStatus: hits.length ? 'live' : (events.length ? 'empty' : 'unavailable')
+            dataStatus: whaleStatus,
+            ...(whaleStatus !== 'unavailable' ? { fetchedAt: Date.now(), source: 'onchain' } : {})
           };
         } catch (e) {
           return failed(e, { events: [] });
@@ -511,6 +542,9 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             ok: true,
             orders: rows,
             total: all.length,
+            // A local read: the store itself is the cache.
+            fetchedAt: Date.now(),
+            source: 'cache',
             dataStatus: rows.length ? 'live' : 'empty'
           };
         } catch (e) {
@@ -537,7 +571,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           const match = want
             ? tracks.find((t) => `${t.category || ''} ${t.mood || ''} ${t.title || ''}`.toLowerCase().includes(want))
             : null;
-          return { ok: true, track: match || tracks[0], total: tracks.length, dataStatus: 'live' };
+          return { ok: true, track: match || tracks[0], total: tracks.length, dataStatus: 'live', fetchedAt: Date.now(), source: 'cache' };
         } catch (e) {
           return failed(e);
         }
@@ -548,7 +582,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
         // must not, start playback from inside a service adapter.
         const resolved = await this.resolve(input);
         return resolved.ok
-          ? { ok: true, track: resolved.track, requiresStoreDispatch: true, dataStatus: 'live' }
+          ? { ok: true, track: resolved.track, requiresStoreDispatch: true, dataStatus: 'live', fetchedAt: resolved.fetchedAt || Date.now(), source: resolved.source || 'cache' }
           : resolved;
       },
       pause: async () => ({ ok: true, requiresStoreDispatch: true }),
