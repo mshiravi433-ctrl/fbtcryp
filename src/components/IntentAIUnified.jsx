@@ -498,6 +498,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const navigate = useNavigate();
   const currentPage = location.pathname || '/intent';
 
+  // UPGRADE 8 — OS state refs must be initialized BEFORE convState boot
+  const os8StateRef = useRef(loadLocalIntentOSState('intent-unified'));
+  const os8SyncSigRef = useRef('');
+  const os8RemoteSyncAtRef = useRef(0);
+  const os8HydratedRef = useRef(false);
+
   // UPGRADE 6 — Initialize all managers
   const convStateRef = useRef(null);
   const navManagerRef = useRef(null);
@@ -629,10 +635,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const osRef = useRef(null);
   const pendingU7QuestionRef = useRef(null);
   const prevRouteRef = useRef(currentPage);
-  const os8StateRef = useRef(loadLocalIntentOSState('intent-unified'));
-  const os8SyncSigRef = useRef('');
-  const os8RemoteSyncAtRef = useRef(0);
-  const os8HydratedRef = useRef(false);
 
   // UPGRADE 6 — Persist conversation state on every change
   useEffect(() => {
