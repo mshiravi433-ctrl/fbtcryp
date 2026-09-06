@@ -19,6 +19,11 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
+/* The shop's revenue wiring: the provider's margin over face value (and the
+   lira-denominated trap that would turn it into a confident wrong number), the
+   shareable deep link that carries a referral code back into this app, and the
+   single brand slug shared by the outbound URL and the inbound link. */
+import './shop-revenue-probe.mjs';
 /* Futures Engine v3: provider status derivation, the fee ceiling, the risk
    engine's liquidation model, the router's "never on FBT revenue" law, the
    tx state machine and the server encoder pinned to the SDK golden vectors. */

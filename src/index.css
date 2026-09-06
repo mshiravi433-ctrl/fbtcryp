@@ -9293,6 +9293,52 @@ body { overflow-x: clip; }
 .shop-denom-face { font-size: 14.5px; font-weight: 800; }
 .shop-denom-coin { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); margin-top: 2px; }
 
+/* ── the provider's margin, shown rather than discovered at checkout ─────────
+   `coin_amount` already contains it: a $50 card prices at $53.86 in USDC. The
+   number was in our payload and unrendered, so the shopper met it for the
+   first time on somebody else's payment page. `data-best` marks the cheapest
+   denomination in the brand — the only reason to compare them at all. */
+.shop-denom-spread {
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.shop-denom-spread[data-best='true'] {
+  color: var(--up);
+  font-weight: 700;
+}
+
+/* Buy keeps the primary slot; Share sits beside it, never below the small
+   print. `auto` on the second column so a long translation cannot squeeze the
+   call to action off the sheet. */
+.shop-sheet-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.shop-sheet-actions .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ── what to do when the shop has nothing for you ───────────────────────────
+   Two full-width targets for the screens where the catalogue is empty or the
+   country is not served: the parts of the app that need no partner and work
+   everywhere. */
+.shop-alt {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 /* ── restrictions list ──────────────────────────────────────────────────────
    Five separate facts instead of one paragraph. A wall of text in a
    collapsible is a wall of text nobody reads once they open it. */

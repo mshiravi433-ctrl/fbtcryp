@@ -5234,7 +5234,15 @@
       "email": "Delivered by email"
     },
     "digital": "DIGITAL",
-    "clear": "Clear search"
+    "clear": "Clear search",
+    "share": "Share",
+    "shareText": "{{brand}} — buy it with crypto on FBT Swap",
+    "spread": "{{pct}}% over face value",
+    "spreadWhy": "The provider's price already includes their margin. Face value is what the card is worth; the highlighted amount is the cheapest deal here.",
+    "alt": {
+      "swap": "Swap instead",
+      "earn": "Earn on your balance"
+    }
   },
   "fbt": {
     "title": "Your FBT balance",

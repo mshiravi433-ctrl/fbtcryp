@@ -59,6 +59,9 @@ export async function fetchShopProducts(country, family) {
     note: d?.note ?? null,
     howTo: d?.howTo ?? null,
     outOfStock: d?.outOfStock === true,
+    /* Cheapest margin in this brand. Strictly a number or null: a `?? null`
+       on its own would let a non-numeric value through into a sentence. */
+    bestSpreadPct: Number.isFinite(d?.bestSpreadPct) ? d.bestSpreadPct : null,
     live: Boolean(d)
   };
 }

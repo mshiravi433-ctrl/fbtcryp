@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /* The shop is a lazy route; keep its visual layer out of the first paint. */
 import '../styles/shop-modern.css';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
 import ShopCountrySheet from '../components/ShopCountrySheet';
 import ShopTile from '../components/ShopTile';
 import ShopPromo from '../components/ShopPromo';
+import ShareSheet from '../components/ShareSheet';
+import HardwareWalletCard from '../components/HardwareWalletCard';
 import { useTelegram } from '../context/TelegramContext';
+import { useAppStore } from '../store/useAppStore';
+import { useShare } from '../hooks/useShare';
+import { siteShareUrl } from '../lib/referral';
 import { IconChevronLeft, IconSearch } from '../components/Icons';
 import {
   fetchShopCatalogue,
@@ -19,8 +24,17 @@ import {
   getShopCountry,
   setShopCountry
 } from '../lib/shop';
-import { brandUrl, countryUrl, esimUrl, flightUrl, shopEarns, stayCityUrl, topUpUrl } from '../lib/shopLinks';
-import { IconBed, IconCard, IconMoney, IconPlane, IconSim, IconTopUp } from '../components/ShopIcons';
+import {
+  brandSlug,
+  brandUrl,
+  countryUrl,
+  esimUrl,
+  flightUrl,
+  shopEarns,
+  stayCityUrl,
+  topUpUrl
+} from '../lib/shopLinks';
+import { IconBed, IconCard, IconMoney, IconPlane, IconShare, IconSim, IconTopUp } from '../components/ShopIcons';
 import { openUrl } from '../lib/browser';
 import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
 import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
@@ -111,10 +125,37 @@ function LimitsBox() {
 export default function Shop() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
+  const { haptic, tg, user } = useTelegram();
+
+  /*
+   * ─── DEEP LINKS: `#/shop?c=TR&b=steam` ────────────────────────────────────
+   * Read, never written. The shop builds these links when somebody shares a
+   * card (see `shareBrand` below), and `captureReferral()` in App.jsx already
+   * reads `?ref=` out of the hash, so one link carries both the item and the
+   * person who sent it. Nothing here calls setSearchParams: a screen that
+   * rewrites its own URL on mount is how a back button starts doing nothing.
+   */
+  const [searchParams] = useSearchParams();
+  const linkedCountry = useMemo(() => {
+    const cc = String(searchParams.get('c') ?? '').trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(cc) ? cc : null;
+  }, [searchParams]);
+  /* Normalised through the SAME `brandSlug()` that builds the link, so a
+     hand-typed `?b=Steam` and a shared `?b=steam` both resolve. */
+  const linkedBrand = useMemo(() => brandSlug(searchParams.get('b')) || null, [searchParams]);
+  /* Applied once. Without this, closing the sheet would re-open it, because
+     the URL parameter never goes away. */
+  const deepLinkDone = useRef(false);
+
+  const [share, shareSheet] = useShare();
+  const ensureRefCode = useAppStore((s) => s.ensureRefCode);
+  const refCode = useMemo(() => ensureRefCode(user?.id), [ensureRefCode, user?.id]);
 
   const [tab, setTab] = useState('cards');
-  const [country, setCountry] = useState(() => getShopCountry());
+  /* A shared link wins over the remembered country: the card it points at is
+     only redeemable in the country it was bought for, which is the whole
+     reason this screen asks in the first place. */
+  const [country, setCountry] = useState(() => linkedCountry ?? getShopCountry());
   const [countries, setCountries] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -191,6 +232,52 @@ export default function Shop() {
       alive = false;
     };
   }, [openBrand, country]);
+
+  /*
+   * Open the brand a shared link named, once the catalogue it belongs to has
+   * arrived. It cannot happen earlier: the sheet is driven by the row object,
+   * and the rows only exist after the fetch.
+   *
+   * A link whose brand is not in this country's catalogue — sent from a
+   * different country, or for a brand that was delisted — silently selects
+   * nothing rather than opening an empty sheet. The shopper still lands on the
+   * right shop, which is the part of the promise we can always keep.
+   */
+  useEffect(() => {
+    if (deepLinkDone.current || !linkedBrand || !data?.rows?.length) return;
+    deepLinkDone.current = true;
+    const hit = data.rows.find((r) => brandSlug(r.family) === linkedBrand);
+    if (hit) setOpenBrand(hit);
+  }, [data, linkedBrand]);
+
+  /**
+   * Share one card as a link back into THIS app.
+   *
+   * ─── WHY THIS IS A REVENUE CHANGE AND NOT A CONVENIENCE ───────────────────
+   * Before this, every share of a shop item went out as a cryptorefills.com
+   * URL: the recipient landed on a third party's site, we earned at most one
+   * referral credit, and the app never saw them. Now the link opens our shop
+   * on that exact card, and carries the sender's referral code — the same code
+   * `captureReferral()` already honours, worth 1% of whatever that person swaps
+   * for the next 90 days (`src/lib/referral.js`).
+   *
+   * A gift card is the single most forwarded thing in this app. People send
+   * each other Steam and PlayStation cards without being asked to. That
+   * traffic used to leave and never come back.
+   *
+   * The result is deliberately not turned into a toast: `share` resolves
+   * `ok:false` when the sheet is dismissed, which is a decision and not an
+   * error, and reporting it as a failure is how an app starts nagging.
+   */
+  const shareBrand = useCallback(() => {
+    if (!openBrand || !country) return;
+    haptic?.('light');
+    const url = siteShareUrl(
+      `/shop?c=${encodeURIComponent(country)}&b=${encodeURIComponent(brandSlug(openBrand.family))}`,
+      refCode
+    );
+    void share({ url, text: t('shop.shareText', { brand: openBrand.name }) });
+  }, [openBrand, country, refCode, share, haptic, t]);
 
   /*
    * The `money` tab is the same catalogue narrowed to PayPal, Visa and Payz
@@ -284,15 +371,43 @@ export default function Shop() {
         <>
           <p className="section-label">{t('shop.amounts')}</p>
           <div className="shop-denoms">
-            {products.rows.map((p) => (
-              <div key={p.id} className="shop-denom">
-                <div className="shop-denom-face">{p.label}</div>
-                <div className="shop-denom-coin">
-                  {p.coinAmount ? `${p.coinAmount} ${p.coin}` : '—'}
+            {products.rows.map((p) => {
+              /*
+               * `spreadPct` is what the buyer pays OVER the card's face value —
+               * the provider's margin, already inside `coin_amount`. It was in
+               * our payload all along and we were not showing it, so the
+               * shopper discovered it on somebody else's checkout page.
+               *
+               * null means the server could not prove the two numbers were in
+               * the same currency, and it renders as NO line. A guess here
+               * would be a wrong price on a screen about money.
+               */
+              const hasSpread = typeof p.spreadPct === 'number';
+              const best =
+                hasSpread &&
+                typeof products.bestSpreadPct === 'number' &&
+                p.spreadPct === products.bestSpreadPct;
+              return (
+                <div key={p.id} className="shop-denom">
+                  <div className="shop-denom-face">{p.label}</div>
+                  <div className="shop-denom-coin">
+                    {p.coinAmount ? `${p.coinAmount} ${p.coin}` : '—'}
+                  </div>
+                  {hasSpread && (
+                    <div className="shop-denom-spread" data-best={best ? 'true' : 'false'}>
+                      {t('shop.spread', { pct: p.spreadPct })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {/* One sentence, and only when there is a number to explain. */}
+          {products.rows.some((p) => typeof p.spreadPct === 'number') && (
+            <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, marginTop: 8 }}>
+              {t('shop.spreadWhy')}
+            </p>
+          )}
         </>
       )}
 
@@ -321,13 +436,24 @@ export default function Shop() {
       )}
 
       {openBrand && (
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: 12 }}
-          onClick={() => open(brandUrl(country, openBrand.family))}
-        >
-          {t('shop.buyAt', { brand: openBrand.name })}
-        </button>
+        <div className="shop-sheet-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => open(brandUrl(country, openBrand.family))}
+          >
+            {t('shop.buyAt', { brand: openBrand.name })}
+          </button>
+          {/*
+            Shares a link back INTO the app, not the provider's URL — see
+            `shareBrand`. Sits beside Buy rather than under the limits box
+            because the moment to forward a card is the moment you are looking
+            at its price, not after you have read the small print.
+          */}
+          <button className="btn btn-ghost" onClick={shareBrand}>
+            <IconShare width={15} height={15} />
+            {t('shop.share')}
+          </button>
+        </div>
       )}
     </Sheet>
   );
@@ -345,6 +471,32 @@ export default function Shop() {
         <button className="btn btn-primary" onClick={() => setPickerOpen(true)}>
           {t('shop.chooseOne')}
         </button>
+
+        {/*
+          ─── THE SCREEN A SHOPPER WHO CANNOT BE SERVED ACTUALLY SEES ────────
+          Iran, Syria, Cuba and North Korea are not in the provider's 233
+          countries — their restriction, enforced server-side by them, and
+          stated in `shop.limits.l1`. For a large share of this audience the
+          picker therefore never resolves, and this dead end is the whole
+          shop.
+
+          Two of the things on it are ours to give and both are real: the swap
+          and earn screens work in every country with no partner's permission,
+          and both generate the 0.70% fee. Sending somebody who cannot buy a
+          gift card to a screen where nothing works is a wasted visit; sending
+          them to the two that do is not.
+        */}
+        <div className="shop-alt">
+          <button className="btn btn-ghost" onClick={() => navigate('/swap')}>
+            {t('shop.alt.swap')}
+          </button>
+          <button className="btn btn-ghost" onClick={() => navigate('/earn')}>
+            {t('shop.alt.earn')}
+          </button>
+        </div>
+
+        <HardwareWalletCard />
+
         <ShopCountrySheet
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
@@ -371,6 +523,7 @@ export default function Shop() {
           ))}
         </motion.div>
         {brandSheet}
+        <ShareSheet {...shareSheet} />
       </PageTransition>
     );
   }
@@ -481,6 +634,19 @@ export default function Shop() {
             <div className="empty">
               <span className="empty-icon">🛍</span>
               {t('shop.noneHere', { country: countryName })}
+              {/*
+                An empty catalogue is not the end of the visit. These two are
+                the parts of the app that need no partner and no country
+                support, and both are where our fee actually comes from.
+              */}
+              <div className="shop-alt">
+                <button className="btn btn-ghost" onClick={() => navigate('/swap')}>
+                  {t('shop.alt.swap')}
+                </button>
+                <button className="btn btn-ghost" onClick={() => navigate('/earn')}>
+                  {t('shop.alt.earn')}
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -688,6 +854,28 @@ export default function Shop() {
       )}
 
       {brandSheet}
+
+      <ShareSheet {...shareSheet} />
+
+      {/*
+        ─── WHY A HARDWARE WALLET SITS IN A GIFT-CARD SHOP ───────────────────
+        It is the only affiliate in the app (`src/lib/hardware.js` explains the
+        filter that removed the other twenty: anything settling through a bank
+        is closed to us, and anything that sends our swap customer to a rival
+        exchange is a loss dressed as a commission). Ledger pays 10% of net
+        sale in bitcoin; a hardware wallet is not a rival exchange, and the
+        person who buys one still swaps here — with more capital than before.
+
+        It was already built and already honest when unconfigured — the link is
+        the plain product URL until an affiliate id exists. It was simply
+        buried on one tab of the Wallet screen, where nobody is in a buying
+        mood. Here the reader is already spending.
+
+        Placed after the catalogue rather than in it: this is a
+        recommendation, not merchandise, and mixing it into the brand rails
+        would make it indistinguishable from the products we take a cut of.
+      */}
+      <HardwareWalletCard />
 
       <ShopCountrySheet
         open={pickerOpen}

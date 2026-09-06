@@ -729,6 +729,14 @@
     "tab": {
       "cards": "card",
       "topup": "simcard"
+    },
+    "share": "Paylaş",
+    "shareText": "{{brand}} — FBT Swap'te kripto ile satın al",
+    "spread": "Nominal değerin {{pct}}% üzerinde",
+    "spreadWhy": "Sağlayıcının fiyatı kendi kâr payını zaten içerir. Nominal değer kartın gerçek değeridir; vurgulanan tutar buradaki en uygun seçenek.",
+    "alt": {
+      "swap": "Bunun yerine takas et",
+      "earn": "Bakiyenden kazan"
     }
   },
   "calm": {

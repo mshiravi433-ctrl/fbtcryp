@@ -729,6 +729,14 @@
     "tab": {
       "cards": "card",
       "topup": "simcard"
+    },
+    "share": "Compartir",
+    "shareText": "{{brand}} — cómpralo con cripto en FBT Swap",
+    "spread": "{{pct}}% sobre el valor nominal",
+    "spreadWhy": "El precio del proveedor ya incluye su margen. El valor nominal es lo que vale la tarjeta; el importe resaltado es la mejor opción aquí.",
+    "alt": {
+      "swap": "Intercambiar",
+      "earn": "Gana con tu saldo"
     }
   },
   "calm": {

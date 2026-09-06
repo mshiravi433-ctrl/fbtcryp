@@ -729,6 +729,14 @@
     "tab": {
       "cards": "card",
       "topup": "simcard"
+    },
+    "share": "分享",
+    "shareText": "{{brand}} — 在 FBT Swap 用加密货币购买",
+    "spread": "高于面值 {{pct}}%",
+    "spreadWhy": "供应商的价格已经包含其利润。面值是这张卡本身的价值；高亮的金额是这里最划算的一档。",
+    "alt": {
+      "swap": "去兑换",
+      "earn": "用余额赚取收益"
     }
   },
   "calm": {
