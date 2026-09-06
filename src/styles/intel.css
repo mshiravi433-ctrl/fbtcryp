@@ -3,14 +3,19 @@
    Nothing here invents new colors, radii outside the family, or gradients
    beyond the soft card tint the app already uses. */
 
-/* --- section tab bar: FBT's .segmented, sized for six items on 320px ------ */
+/* --- section tab bar: FBT's .segmented, sized for the smaller screens ------ */
 .intel-seg {
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding: 4px;
-  gap: 4px;
+  gap: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012) 60%),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
 }
 .intel-seg::-webkit-scrollbar { display: none; }
 .intel-seg button {
@@ -18,13 +23,38 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-height: 42px;
+  padding: 8px 13px;
   font-size: 12px;
+  font-weight: 650;
   white-space: nowrap;
   border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
 }
-.intel-seg button svg { flex-shrink: 0; opacity: 0.85; }
+.intel-seg button:hover {
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.045);
+}
+.intel-seg button:active { transform: scale(0.97); }
+.intel-seg button.active {
+  color: var(--text-1);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 18%, transparent), color-mix(in srgb, var(--rgb-4) 10%, transparent) 60%, transparent);
+  border-color: color-mix(in srgb, var(--rgb-1) 26%, transparent);
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--rgb-1) 60%, transparent);
+}
+.intel-seg button svg {
+  flex-shrink: 0;
+  opacity: 0.72;
+  transition: color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+.intel-seg button.active svg {
+  opacity: 1;
+  color: var(--rgb-1);
+  transform: translateY(-0.5px);
+}
 .intel-seg-label { line-height: 1; }
 
 /* --- meta / freshness line ------------------------------------------------ */

@@ -1927,7 +1927,13 @@
         "AAVE_NATIVE_GAS_FLOOR": "You need more ETH on Base to cover gas."
       },
       "wrongChainNote": "Your wallet is on another network. Switch to {chain} to see your Aave position and withdraw."
-    }
+    },
+    "horizonChartTitle": "Earnings by horizon",
+    "horizonChartSub": "Projected return on {{amount}} at today’s rate",
+    "horizonChartEmpty": "No projection for this deposit",
+    "engineTitle": "FBT fee engine",
+    "engineMode": "Analysis only",
+    "engineNote": "Platform fee is estimated against the deposit amount. Gas and protocol-retained yield stay unavailable until a verified execution adapter is wired in — net APY is analysis, not a promise."
   },
   "signals": {
     "title": "AI Signals",

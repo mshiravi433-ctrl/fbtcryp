@@ -5356,7 +5356,11 @@ app.get('/api/revenue/readiness', (_req, res) => res.json(revenueReadiness()));
  * re-emit the same booleans. Stale-while-revalidate keeps it cheap.
  */
 app.get('/api/providers/status', (_req, res) => {
-  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  // No edge caching: the page immediately re-reads this after POST
+  // /api/providers/probe, and on serverless hosts a cached stale 60s response
+  // would keep showing 0/N even though the providers just answered. The report
+  // is cheap to build and is already backed by an in-process health tracker.
+  res.set('cache-control', 'private, no-cache, max-age=0');
   return res.json(providerStatusReport());
 });
 
