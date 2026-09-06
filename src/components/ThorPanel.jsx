@@ -197,8 +197,11 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
                 value: p.asset,
                 label: assetLabel(p.asset),
                 sublabel: assetChain(p.asset),
+                /* BTC.BTC → the coin's own mark; ETH.USDC-0X… → USDC with an
+                   Ethereum badge. Both offline, so a phone that cannot reach
+                   any icon CDN still sees pictures. */
                 symbol: assetLabel(p.asset),
-                assetType: 'crypto',
+                chain: assetLabel(p.asset) === assetChain(p.asset) ? undefined : assetChain(p.asset),
               }))}
               title={t('thor.from')}
               placeholder={t('thor.from')}
@@ -227,8 +230,11 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
                 value: p.asset,
                 label: assetLabel(p.asset),
                 sublabel: assetChain(p.asset),
+                /* BTC.BTC → the coin's own mark; ETH.USDC-0X… → USDC with an
+                   Ethereum badge. Both offline, so a phone that cannot reach
+                   any icon CDN still sees pictures. */
                 symbol: assetLabel(p.asset),
-                assetType: 'crypto',
+                chain: assetLabel(p.asset) === assetChain(p.asset) ? undefined : assetChain(p.asset),
               }))}
               title={t('thor.to')}
               placeholder={t('thor.to')}

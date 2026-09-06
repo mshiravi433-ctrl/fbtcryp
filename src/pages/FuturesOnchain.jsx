@@ -694,10 +694,11 @@ export default function FuturesOnchain() {
                 options={visible.map((m) => ({
                   value: m.uid,
                   label: m.symbol,
-                  sublabel: m.uiCategory || m.category || '',
-                  symbol: m.symbol,
-                  assetType: m.uiCategory || m.category || '',
+                  sublabel: t(`futures.category.${String(m.uiCategory || 'other').toLowerCase()}`, { defaultValue: m.uiCategory || m.category || '' }),
                   meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
+                  change: m.priceChange24hPct ?? undefined,
+                  base: m.base || String(m.symbol || '').split('/')[0],
+                  quote: m.quote || String(m.symbol || '').split('/')[1] || 'USD',
                 }))}
                 title={t('futures.market')}
                 placeholder={market?.symbol || t('futures.market')}

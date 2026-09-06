@@ -243,13 +243,18 @@ export default function Dydx() {
           <ModernSelect
             value={market?.ticker || ''}
             onChange={setTicker}
-            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => ({
-              value: m.ticker,
-              label: m.ticker,
-              sublabel: m.ticker.split('-')[1] ? `${m.ticker.split('-')[0]} / ${m.ticker.split('-')[1]}` : '',
-              symbol: m.ticker,
-              assetType: 'crypto',
-            }))}
+            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => {
+              const [base, quote] = m.ticker.split('-');
+              return {
+                value: m.ticker,
+                label: m.ticker,
+                sublabel: quote ? `${base} / ${quote}` : '',
+                base,
+                quote: quote || 'USD',
+                meta: m.oraclePrice > 0 ? `$${fmtPrice(m.oraclePrice)}` : undefined,
+                change: Number.isFinite(m.priceChange24H) && m.oraclePrice > 0 ? (m.priceChange24H / m.oraclePrice) * 100 : undefined,
+              };
+            })}
             title={t('dydx.market')}
             placeholder={market?.ticker || 'BTC-USD'}
             searchable

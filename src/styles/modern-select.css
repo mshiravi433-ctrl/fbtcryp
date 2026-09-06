@@ -9,18 +9,29 @@
 .modern-select {
   position: relative;
   width: 100%;
+  /* `min-width: 0` is the whole fix for the Bridge row. A grid item defaults
+     to min-width:auto, i.e. "as wide as my content", and the trigger's content
+     (icon + nowrap label + sublabel + chevron) was wider than the 1.35fr/.85fr
+     tracks the card allowed — so the two boxes grew to 392px inside a 326px
+     card, the second one slid off the start edge and the amount field ended
+     up misaligned. Letting the item shrink makes the ellipsis rules below
+     actually engage. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ── Trigger ──────────────────────────────────────────────────────────── */
 .modern-select-trigger {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  min-height: 58px;
-  padding: 10px 12px 10px 12px;
-  padding-inline: 12px 12px;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 12px;
   border-radius: 16px;
+  overflow: hidden;
   border: 1px solid var(--line);
   background: linear-gradient(135deg, var(--bg-raised), var(--bg-panel));
   color: var(--text-1);
@@ -57,39 +68,46 @@
 
 /* icon box inside trigger */
 .modern-select-icon {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   display: grid;
   place-items: center;
   border-radius: 12px;
-  overflow: hidden;
-  background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025));
-  border: 1px solid rgba(255,255,255,0.07);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  overflow: visible; /* the chain badge / pair leg hangs 2px over the corner */
   position: relative;
 }
 .modern-select-icon .coin-logo {
-  width: 42px !important;
-  height: 42px !important;
+  width: 40px !important;
+  height: 40px !important;
   border-radius: 12px;
   font-size: 10px;
 }
 .modern-select-icon .coin-logo img {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   object-fit: cover;
   border-radius: 12px;
 }
 .modern-select-icon .tok-icon {
-  width: 42px !important;
-  height: 42px !important;
+  width: 40px !important;
+  height: 40px !important;
   border-radius: 12px;
 }
 .modern-select-icon .tok-icon img {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
 }
+/* vendored SVG marks scale to their box; the pair/badge wrappers position
+   themselves, so only the direct svg needs sizing */
+.modern-select-icon svg,
+.modern-select-opt-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.asset-icon-badge svg,
+.asset-icon-leg2 svg { width: 100%; height: 100%; display: block; }
 /* fallback monogram inside trigger */
 .modern-select-fallback {
   width: 42px;
@@ -158,14 +176,15 @@
 /* compact variant for Bridge row (two side by side) */
 .modern-select--compact .modern-select-trigger {
   min-height: 52px;
-  padding: 8px 10px;
+  padding: 7px 9px;
+  gap: 8px;
   border-radius: 14px;
   gap: 8px;
 }
 .modern-select--compact .modern-select-icon {
-  width: 36px;
-  height: 36px;
-  flex-basis: 36px;
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
   border-radius: 10px;
 }
 .modern-select--compact .modern-select-chevron {
@@ -177,22 +196,34 @@
 .modern-select--compact .modern-select-chevron svg { width: 12px; height: 12px; }
 .modern-select--compact .modern-select-icon .coin-logo,
 .modern-select--compact .modern-select-icon .tok-icon {
-  width: 36px !important;
-  height: 36px !important;
+  width: 34px !important;
+  height: 34px !important;
 }
 .modern-select--compact .modern-select-icon .coin-logo img,
 .modern-select--compact .modern-select-icon .tok-icon img {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
 }
 .modern-select--compact .modern-select-fallback {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   font-size: 10px;
   border-radius: 10px;
 }
 .modern-select--compact .modern-select-label { font-size: 13px; }
 .modern-select--compact .modern-select-sublabel { font-size: 10px; }
+/* the chevron is the first thing to give up room in a narrow track */
+.modern-select--compact .modern-select-chevron {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  border-radius: 8px;
+}
+.modern-select--compact .modern-select-chevron svg { width: 12px; height: 12px; }
+@media (max-width: 400px) {
+  .modern-select--compact .modern-select-trigger { padding: 7px 8px; gap: 7px; }
+  .modern-select--compact .modern-select-chevron { display: none; }
+}
 
 /* ── Sheet content ───────────────────────────────────────────────────── */
 .modern-select-search {
@@ -253,7 +284,7 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 64px;
+  min-height: 62px;
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--line);
@@ -285,26 +316,24 @@
 }
 
 .modern-select-opt-icon {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   display: grid;
   place-items: center;
   border-radius: 12px;
-  overflow: hidden;
-  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 5px 16px rgba(0,0,0,0.16);
+  overflow: visible;
+  position: relative;
 }
 .modern-select-opt-icon .coin-logo {
-  width: 44px !important;
-  height: 44px !important;
+  width: 42px !important;
+  height: 42px !important;
   border-radius: 12px;
   font-size: 10px;
 }
-.modern-select-opt-icon .coin-logo img { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; }
-.modern-select-opt-icon .tok-icon { width: 44px !important; height: 44px !important; border-radius: 12px; }
-.modern-select-opt-icon .tok-icon img { width: 44px; height: 44px; }
+.modern-select-opt-icon .coin-logo img { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; }
+.modern-select-opt-icon .tok-icon { width: 42px !important; height: 42px !important; border-radius: 12px; }
+.modern-select-opt-icon .tok-icon img { width: 42px; height: 42px; }
 .modern-select-opt-fallback {
   width: 44px;
   height: 44px;
@@ -448,11 +477,14 @@
   background: linear-gradient(135deg, rgba(0,229,255,0.06), #ffffff);
   box-shadow: 0 10px 32px rgba(0,229,255,0.10);
 }
-:root[data-theme='light'] .modern-select-icon {
-  background: linear-gradient(145deg, #f8fafc, #f1f5f9);
-  border-color: rgba(15,23,42,0.06);
-  box-shadow: 0 4px 14px rgba(15,23,42,0.07);
-}
+/* the pair leg / chain badge ring must match the sheet and card surface */
+:root[data-theme='light'] .asset-icon-badge,
+:root[data-theme='light'] .asset-icon-leg2 { box-shadow: 0 0 0 2px #ffffff !important; }
+:root[data-theme='light'] .modern-select-label,
+:root[data-theme='light'] .modern-select-opt-label,
+:root[data-theme='light'] .modern-select-opt-price { color: #0f172a; }
+:root[data-theme='light'] .modern-select-sublabel,
+:root[data-theme='light'] .modern-select-opt-sublabel { color: #64748b; }
 :root[data-theme='light'] .modern-select-chevron {
   background: #f8fafc;
   border-color: rgba(15,23,42,0.08);
@@ -489,11 +521,6 @@
   background: linear-gradient(135deg, rgba(0,229,255,0.07), rgba(124,77,255,0.05));
   box-shadow: 0 6px 20px rgba(0,229,255,0.10);
 }
-:root[data-theme='light'] .modern-select-opt-icon {
-  background: linear-gradient(145deg, #ffffff, #f8fafc);
-  border-color: rgba(15,23,42,0.06);
-  box-shadow: 0 4px 12px rgba(15,23,42,0.06);
-}
 :root[data-theme='light'] .modern-select-empty-icon {
   background: #f8fafc;
   border-color: rgba(15,23,42,0.06);
@@ -501,21 +528,9 @@
 
 /* ── dense scroll on small phones ──────────────────────────────────── */
 @media (max-width: 380px) {
-  .modern-select-trigger { min-height: 54px; padding: 9px 10px; }
-  .modern-select-icon { width: 38px; height: 38px; flex-basis: 38px; }
-  .modern-select-icon .coin-logo,
-  .modern-select-icon .tok-icon { width: 38px !important; height: 38px !important; }
-  .modern-select-icon .coin-logo img,
-  .modern-select-icon .tok-icon img { width: 38px; height: 38px; }
-  .modern-select-fallback { width: 38px; height: 38px; font-size: 10px; }
+  .modern-select-trigger { min-height: 54px; padding: 8px 10px; }
   .modern-select-label { font-size: 13px; }
   .modern-select-option { min-height: 58px; padding: 9px 10px; }
-  .modern-select-opt-icon { width: 40px; height: 40px; flex-basis: 40px; }
-  .modern-select-opt-icon .coin-logo,
-  .modern-select-opt-icon .tok-icon { width: 40px !important; height: 40px !important; }
-  .modern-select-opt-icon .coin-logo img,
-  .modern-select-opt-icon .tok-icon img { width: 40px; height: 40px; }
-  .modern-select-opt-fallback { width: 40px; height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

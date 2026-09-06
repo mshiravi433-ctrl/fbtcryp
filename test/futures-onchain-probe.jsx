@@ -276,6 +276,27 @@ export async function run(container) {
     /* ═══════ A. UNAVAILABLE — the tab says so and builds nothing ═══════ */
     await act(async () => { click(strip[2]); });
     await act(async () => { await sleep(500); });
+
+  /*
+   * ModernSelect (PR #210) replaced the native <select>: options live in a
+   * portal sheet that only exists while open, and the trigger carries the
+   * selected label. These read the picker without opening it: options via
+   * the trigger's sibling list once opened, value via the label text.
+   */
+  const pickerLabels = async (id) => {
+    const trig = document.querySelector(`[data-testid="${id}"] .modern-select-trigger`);
+    if (!trig) return [];
+    await act(async () => { click(trig); });
+    await act(async () => { await sleep(150); });
+    /* the Sheet portals into document.body, outside the test container */
+    const labels = [...document.querySelectorAll('.modern-select-option .modern-select-opt-label')].map((o) => o.textContent.trim());
+    const close = document.querySelector('.sheet-close');
+    if (close) await act(async () => { click(close); });
+    await act(async () => { await sleep(150); });
+    return labels;
+  };
+  const pickerValue = (id) => document.querySelector(`[data-testid="${id}"] .modern-select-label`)?.textContent.trim() || '';
+
     t('the On-Chain tab mounts lazily when tapped', !!byId('futures-markets-unavailable') || !!byId('futures-market-select'));
     t('with every venue feed down the catalogue is honestly UNAVAILABLE', !!byId('futures-markets-unavailable') && !byId('futures-market-select'));
     t('no market list is invented while the feed is down', !!byId('futures-markets-unavailable') && !byId('futures-market-select'));
@@ -290,7 +311,7 @@ export async function run(container) {
     await act(async () => { click(strip[0]); });
     await act(async () => { click(strip[2]); });
     await act(async () => { await sleep(700); });
-    t('the Crypto category lists the Solana venue perps', !!byId('futures-market-select') && qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).join() === 'SOL/USDT,BTC/USDT');
+    t('the Crypto category lists the Solana venue perps', !!byId('futures-market-select') && (await pickerLabels('futures-market-select')).join() === 'SOL/USDT,BTC/USDT');
     t("the read-only sentence is shown verbatim (en)", byId('futures-readonly-notice')?.textContent.trim() === 'This market is currently available for viewing only.');
     /* The candle chart was REMOVED on instruction («نمودار … وجود ندارد — حذف
        کن»): it rendered as a permanent "unavailable" box on the live app, so
@@ -311,15 +332,15 @@ export async function run(container) {
     t('the engine is not crypto-only: Forex and Stocks category chips render from the live catalogue', chips().includes('Crypto') && chips().includes('Forex') && chips().includes('Stocks'));
     await act(async () => { const fx = qa('.tag').find((b) => b.textContent.trim() === 'Forex'); if (fx) click(fx); });
     await act(async () => { await sleep(800); });
-    t('the Forex category lists EUR/USD from the RWA venue', qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).includes('EUR/USD'));
+    t('the Forex category lists EUR/USD from the RWA venue', (await pickerLabels('futures-market-select')).includes('EUR/USD'));
     t('no chart block appears for the forex market either', !byId('futures-chart') && !byId('futures-trend'));
     t('the forex quote runs against its own venue (provider=ostium)', /\$250|\$500/.test(byId('futures-fee-breakdown')?.textContent || ''));
     await act(async () => { const st = qa('.tag').find((b) => b.textContent.trim() === 'Stocks'); if (st) click(st); });
     await act(async () => { await sleep(800); });
-    t('the Stocks category lists NVDA/USD', qa('[data-testid="futures-market-select"] option').map((o) => o.textContent).includes('NVDA/USD'));
+    t('the Stocks category lists NVDA/USD', (await pickerLabels('futures-market-select')).includes('NVDA/USD'));
     await act(async () => { const cr = qa('.tag').find((b) => b.textContent.trim() === 'Crypto'); if (cr) click(cr); });
     await act(async () => { await sleep(600); });
-    t('back on Crypto the Solana perp is selected again', byId('futures-market-select')?.value === 'drift:0');
+    t('back on Crypto the Solana perp is selected again', pickerValue('futures-market-select') === 'SOL/USDT');
 
     /* ═══════ C. quote input still re-computes fee/risk live ═══════ */
     await act(async () => { setInputValue(byId('futures-collateral'), '100'); });
@@ -427,7 +448,7 @@ export async function run(container) {
     await mountAt('#/perp?tab=onchain&market=BTC&side=short&collateral=120&leverage=7');
     await act(async () => { await sleep(900); });
     t('the deep link opens the On-Chain tab directly', tabs()[2]?.getAttribute('aria-selected') === 'true' && !!byId('futures-market-select'));
-    t('the requested market is selected: BTC/USDT', byId('futures-market-select')?.value === 'drift:1');
+    t('the requested market is selected: BTC/USDT', pickerValue('futures-market-select') === 'BTC/USDT');
     t('side, collateral and leverage are pre-filled from the draft', q('.dir-btn.short')?.classList.contains('active') === true && byId('futures-collateral')?.value === '120' && byId('futures-leverage')?.value === '7');
     t('a deep link builds and signs NOTHING by itself', bff.prepares === preparesBefore && !document.querySelector('[data-testid="futures-confirm"]'));
 

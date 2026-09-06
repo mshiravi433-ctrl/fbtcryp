@@ -203,8 +203,9 @@ export default function TronPanel() {
             value: c.id,
             label: c.name,
             sublabel: 'USDC',
+            /* what actually leaves the wallet: USDC, badged with its chain */
             symbol: 'USDC',
-            assetType: 'crypto',
+            chain: c.id,
           }))}
           title={t('tron.from')}
           placeholder={t('tron.from')}

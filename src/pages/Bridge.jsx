@@ -38,8 +38,7 @@ import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import ModernSelect from '../components/ModernSelect';
-import TokenIcon from '../lib/tokenIcon.jsx';
-import MarketIcon from '../components/MarketIcon';
+import AssetIcon from '../components/AssetIcon';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -701,7 +700,7 @@ export default function Bridge() {
       {/* ------------------------------ ticket — modern pickers ─────────── */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <div className="field-label">{t('bridge.from')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: 8 }}>
+        <div className="brg-pick-row">
           <ModernSelect
             value={fromChain}
             onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
@@ -709,8 +708,7 @@ export default function Bridge() {
               value: c.id,
               label: c.name,
               sublabel: c.symbol,
-              symbol: c.symbol,
-              assetType: 'crypto',
+              chain: c.id,
             }))}
             title={t('bridge.from')}
             placeholder={t('bridge.from')}
@@ -723,9 +721,10 @@ export default function Bridge() {
             options={fromTokens.map((tk) => ({
               value: tk.symbol,
               label: tk.symbol,
-              sublabel: `${tk.symbol} \u00b7 ${BRIDGE_CHAINS.find(x=>x.id===fromChain)?.name || ''}`,
-              token: { address: tk.address, symbol: tk.symbol },
-              chainId: fromChain,
+              sublabel: BRIDGE_CHAINS.find((x) => x.id === fromChain)?.name || '',
+              /* curated stablecoins: offline artwork + the origin chain badge */
+              symbol: tk.symbol,
+              chain: fromChain,
             }))}
             title={t('bridge.from')}
             placeholder={tokenSymbol || 'USDT'}
@@ -749,7 +748,7 @@ export default function Bridge() {
         </button>
 
         <div className="field-label">{t('bridge.to')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: 8 }}>
+        <div className="brg-pick-row">
           <ModernSelect
             value={toChain}
             onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
@@ -757,8 +756,7 @@ export default function Bridge() {
               value: c.id,
               label: c.name,
               sublabel: c.symbol,
-              symbol: c.symbol,
-              assetType: 'crypto',
+              chain: c.id,
             }))}
             title={t('bridge.to')}
             placeholder={t('bridge.to')}
@@ -768,9 +766,9 @@ export default function Bridge() {
           <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
             <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
               <span className="modern-select-icon">
-                {toToken ? <TokenIcon token={toToken} chainId={toChain} size={36} /> : (
-                  <MarketIcon symbol="USDC" category="crypto" size={36} />
-                )}
+                {toToken
+                  ? <AssetIcon symbol={toToken.symbol} chain={toChain} size={34} />
+                  : <span style={{ width:34,height:34,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12}}>—</span>}
               </span>
               <span className="modern-select-text">
                 <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>
