@@ -117,7 +117,9 @@ import { runOpportunityEngine } from '../lib/intent-ai/os/opportunityEngine.js';
 import {
   appendConversation,
   appendOperation,
-  readHistory
+  appendSeason,
+  readHistory,
+  seasonsFromHistory
 } from '../lib/intent-ai/os/historyStore.js';
 import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
 import { loadOrders } from '../lib/orders.js';
@@ -191,9 +193,43 @@ const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
 const MAX_SUGGESTIONS = 4;
 const DEFAULT_CHAIN = 42161;
 
+/*
+ * ─── SEASONS: A CLEAN THREAD ON RETURN, AN ARCHIVE THAT KEEPS THE PAST ─────
+ * A «season» is one continuous chat episode. Two storage keys make the
+ * semantics explicit:
+ *
+ *   SEASON_KEY       — which season the CURRENT thread belongs to.
+ *   LAST_ACTIVE_KEY  — when the user last left /intent (mount & unmount both
+ *                      stamp it). If they come back within VISIT_GAP_MS it is
+ *                      the same visit and the thread resumes where it left
+ *                      off (navigation ≠ new conversation); after that it is
+ *                      a new season and the thread starts clean.
+ *
+ * The old conversation is never thrown away: it is archived in the History
+ * panel under «سشن‌ها» and can be resumed with the Continue button.
+ */
+const SEASON_KEY = 'fbt.ai.os.active-season';
+const LAST_ACTIVE_KEY = 'fbt.ai.os.last-active';
+const VISIT_GAP_MS = 15 * 60 * 1000;
+
 function makeId() {
   try { return crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
   catch { return `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+}
+
+function makeSeasonId() { return `season_${makeId()}`; }
+
+function readSeasonId() {
+  try { return localStorage.getItem(SEASON_KEY) || ''; } catch { return ''; }
+}
+function writeSeasonId(id) {
+  try { localStorage.setItem(SEASON_KEY, String(id || '')); } catch { /* private mode */ }
+}
+function readLastActive() {
+  try { return Number(localStorage.getItem(LAST_ACTIVE_KEY)) || 0; } catch { return 0; }
+}
+function writeLastActive() {
+  try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* private mode */ }
 }
 
 function visibleText(reply, fallback) {
@@ -521,18 +557,47 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const respCheckRef = useRef(null);
   const selfCheckRef = useRef(null);
 
+  /*
+   * Decided exactly once per mount: is this the same visit (resume the thread)
+   * or a fresh one (start a new season)? Must be declared BEFORE the
+   * initialization block below, because the very first render uses it to
+   * choose between the archived thread and a clean conversation.
+   */
+  const [visitInfo] = useState(() => {
+    const lastActive = readLastActive();
+    const isReturning = Boolean(lastActive) && (Date.now() - lastActive) <= VISIT_GAP_MS;
+    let seasonId = readSeasonId();
+    if (!seasonId || !isReturning) {
+      seasonId = makeSeasonId();
+      writeSeasonId(seasonId);
+    }
+    writeLastActive();
+    return { seasonId, isReturning };
+  });
+  const seasonIdRef = useRef(visitInfo.seasonId);
+
   // Initialize once
   if (!convStateRef.current) {
     const bootState = os8StateRef.current || loadLocalIntentOSState('intent-unified');
     const hydrated = hydrateLegacyStateFromIntentOS(bootState);
     const loadedConv = loadConversationState();
-    convStateRef.current = (!loadedConv?.messages?.length && hydrated?.messages?.length)
+    /*
+     * A fresh visit does NOT pick up the previous thread: those messages are
+     * an archived season now, not the live conversation. `baseConv` is the
+     * previous conversation only when the user is genuinely returning within
+     * the visit window; otherwise it is a clean state that keeps the same
+     * sessionId so the identity never churns.
+     */
+    const baseConv = visitInfo.isReturning
+      ? loadedConv
+      : createConversationState({ sessionId: loadedConv?.sessionId, currentRoute: loadedConv?.currentRoute || currentPage });
+    convStateRef.current = (!baseConv?.messages?.length && hydrated?.messages?.length && visitInfo.isReturning)
       ? {
-          ...loadedConv,
+          ...baseConv,
           ...(hydrated?.convStatePatch || {}),
           messages: hydrated.messages
         }
-      : loadedConv;
+      : baseConv;
     navManagerRef.current = getNavigationManager();
     lifecycleRef.current = getIntentLifecycleManager();
     walletMgrRef.current = getWalletContextManager();
@@ -554,9 +619,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
   const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
 
-  // Messages now backed by persistent ConversationState (§1)
+  // Messages now backed by persistent ConversationState (§1). A returning
+  // visit resumes the stored thread; a fresh one starts clean with the hello
+  // message only — the previous season lives in the History panel.
   const [messages, setMessages] = useState(() => {
-    const persisted = convStateRef.current.messages || [];
+    const persisted = visitInfo.isReturning ? (convStateRef.current.messages || []) : [];
     if (persisted.length) return persisted;
     return [{
       id: makeId(),
@@ -622,7 +689,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
   const [orderDraftOpen, setOrderDraftOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState(null);
-  const [histData, setHistData] = useState({ conversations: [], operations: [] });
+  const [histData, setHistData] = useState({ conversations: [], operations: [], seasons: [] });
+  const seasons = useMemo(() => seasonsFromHistory({ history: histData }), [histData]);
   const [monitorInitial, setMonitorInitial] = useState(null);
   const [orderInitial, setOrderInitial] = useState(null);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
@@ -650,7 +718,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       os8StateRef.current = remoteBoot;
       os8HydratedRef.current = true;
       const hydrated = hydrateLegacyStateFromIntentOS(remoteBoot);
-      if (hydrated?.messages?.length && (!convStateRef.current?.messages?.length || remoteBoot.lastUpdated > Number(convStateRef.current?.updatedAt || 0))) {
+      /*
+       * Remote turns only resume the thread when this is a returning visit.
+       * On a fresh visit the remote history is an archived season, not the
+       * live conversation, so it must never be injected into the clean thread.
+       */
+      if (visitInfo.isReturning && hydrated?.messages?.length && (!convStateRef.current?.messages?.length || remoteBoot.lastUpdated > Number(convStateRef.current?.updatedAt || 0))) {
         setMessages((prev) => prev.length > 1 ? prev : hydrated.messages);
         setConvState((prev) => ({
           ...prev,
@@ -663,7 +736,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     })();
     return () => { cancelled = true; };
+    // visitInfo is decided once per mount; it never changes identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Leaving /intent stamps the visit, so returning within the window resumes
+  // instead of starting a new season. Reload/kill also writes on next mount.
+  useEffect(() => () => { writeLastActive(); }, []);
 
   // UPGRADE 6 — Route change handling: preserve context, detect return
   useEffect(() => {
@@ -2737,14 +2816,46 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     try {
       const fresh = messages.slice(persistedCountRef.current);
       if (fresh.length) {
+        const seasonId = seasonIdRef.current;
+        const at = Date.now();
+        let firstAt = null;
+        let lastAt = null;
+        let lastMessage = '';
+        let title = '';
+        let addCount = 0;
         for (const m of fresh) {
-          appendConversation({
+          // The greeting is not a conversation turn; it must not pollute the
+          // season archive or the message count.
+          if (m.kind === 'hello') continue;
+          const when = Number(m.at) || at;
+          const recorded = appendConversation({
             conversationId,
+            seasonId,
+            sourceId: m.id,
             role: m.role,
             content: m.content,
             kind: m.kind,
             intentType: m.intentType,
             operationId: m.operationId || null
+          }, { now: when });
+          // A restored (resumed) season re-persists its rows, but the archive
+          // already has them — only NEWLY recorded rows move the counters.
+          if (!recorded) continue;
+          firstAt = firstAt == null ? when : Math.min(firstAt, when);
+          lastAt = lastAt == null ? when : Math.max(lastAt, when);
+          lastMessage = String(m.content || '');
+          if (m.role === 'user' && !title) title = String(m.content || '');
+          addCount += 1;
+        }
+        if (addCount > 0) {
+          appendSeason({
+            seasonId,
+            conversationId,
+            title,
+            lastMessage,
+            firstAt,
+            lastAt,
+            addCount
           });
         }
         persistedCountRef.current = messages.length;
@@ -3263,7 +3374,61 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   contextHandlerRef.current = handleContextTurn;
 
+  const newSeason = useCallback(() => {
+    // The current thread is already archived (every turn is persisted as it
+    // happens); a new season is simply a clean conversation under a new id.
+    const next = makeSeasonId();
+    writeSeasonId(next);
+    seasonIdRef.current = next;
+    persistedCountRef.current = 0;
+    setActiveContext(null);
+    setPendingExecution(null);
+    setPendingDraft(null);
+    const hello = {
+      id: makeId(),
+      role: 'ai',
+      content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
+      kind: 'hello',
+      ui: { type: 'TEXT' }
+    };
+    setMessages([hello]);
+    setConvState((prev) => {
+      const clean = createConversationState({ sessionId: prev?.sessionId, currentRoute: currentPage });
+      return appendConvMessage(clean, hello);
+    });
+  }, [t, currentPage]);
+
   const handleContinue = useCallback((item) => {
+    if (item?.kind === 'season' && item?.seasonId) {
+      /*
+       * Continue on a SEASON restores that archived conversation into the
+       * thread, newest-last, and adopts its season id so the next turns
+       * continue the same episode instead of forking a new one.
+       */
+      const seasonId = item.seasonId;
+      const rows = readHistory().conversations
+        .filter((c) => c.seasonId === seasonId || (!c.seasonId && c.conversationId === seasonId))
+        .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+      if (rows.length) {
+        const restored = rows.map((c) => ({
+          id: c.sourceId || c.id,
+          role: c.role,
+          content: c.content,
+          kind: c.role === 'user' ? 'user' : (c.kind && c.kind !== 'hello' ? c.kind : 'assistant'),
+          at: Number(c.at) || Date.now()
+        }));
+        writeSeasonId(seasonId);
+        seasonIdRef.current = seasonId;
+        // The restored rows are, by definition, already in the archive — mark
+        // them as persisted so the persist effect never re-records (and thus
+        // never duplicates) them. Only the NEW turns that follow are appended.
+        persistedCountRef.current = restored.length;
+        setMessages(restored);
+      }
+      setActiveContext(null);
+      setPanel(null);
+      return;
+    }
     if (item?.refKind === 'monitor' || item?.kind === 'MONITOR_CREATE' || item?.id?.startsWith?.('mon_')) {
       const mon = monitors.find((x) => x.id === (item.ref || item.id));
       setActiveContext({ type: 'monitor', id: item.ref || item.id, label: item.title || mon?.label || 'monitor' });
@@ -3300,6 +3465,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             ) : null}
           </div>
           <div className="iaos-header-status">
+            <button
+              type="button"
+              className="iaos-new-season-btn"
+              onClick={newSeason}
+              aria-label={locale.startsWith('fa') ? 'شروع سشن جدید' : 'Start a new season'}
+              data-testid="intent-ai-new-season"
+            >
+              ＋ {locale.startsWith('fa') ? 'سشن جدید' : 'New season'}
+            </button>
             {serverReachable != null ? (
               <span className="iaos-status-pill" data-on={serverReachable ? 'true' : 'false'} data-testid="intent-ai-status-pill">
                 <i aria-hidden="true" />
@@ -3578,6 +3752,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         open={panel === 'history'}
         onClose={() => setPanel(null)}
         history={histData}
+        seasons={seasons}
         monitors={monitors}
         onContinue={handleContinue}
         onMonitorAction={handleMonitorAction}

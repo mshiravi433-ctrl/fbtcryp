@@ -140,12 +140,13 @@ export function HistoryPanel({
   onClose,
   history,
   monitors,
+  seasons = [],
   onContinue,
   onMonitorAction,
   busy = false,
   locale = 'fa'
 }) {
-  const [tab, setTab] = useState('conversations');
+  const [tab, setTab] = useState('seasons');
   if (!open) return null;
 
   const conversations = history?.conversations || [];
@@ -154,10 +155,13 @@ export function HistoryPanel({
 
   const L = {
     title: opsText('hist.title', locale),
+    seasons: opsText('hist.seasons', locale),
     conversations: opsText('hist.conversations', locale),
     operations: opsText('hist.operations', locale),
     monitoring: opsText('hist.monitoring', locale),
     empty: opsText('hist.empty', locale),
+    emptySeasons: opsText('hist.emptySeasons', locale),
+    lastMessage: opsText('hist.lastMessage', locale),
     pause: opsText('monitor.pause', locale),
     resume: opsText('monitor.resume', locale),
     cancel: opsText('monitor.cancel', locale),
@@ -175,6 +179,7 @@ export function HistoryPanel({
         </div>
         <div className="iaos-history-tabs" role="tablist">
           {[
+            { id: 'seasons', label: L.seasons, count: seasons.length },
             { id: 'conversations', label: L.conversations, count: conversations.length },
             { id: 'operations', label: L.operations, count: operations.length },
             { id: 'monitoring', label: L.monitoring, count: activeMonitors.length }
@@ -193,6 +198,31 @@ export function HistoryPanel({
         </div>
 
         <div className="iaos-history-body" data-testid="intent-ai-history-body">
+          {tab === 'seasons' && (
+            seasons.length
+              ? seasons.map((s) => (
+                <div key={s.seasonId} className="iaos-history-row iaos-history-season" data-testid="intent-ai-season-row">
+                  <div className="iaos-season-title-row">
+                    <strong>{s.title || L.seasons}</strong>
+                    <time>{new Date(s.lastAt || 0).toLocaleString(intlLocale(locale))}</time>
+                  </div>
+                  <small>{opsPhrase('messageCount', locale, s.messageCount || 0)}</small>
+                  {s.lastMessage ? (
+                    <p className="iaos-season-last"><span>{L.lastMessage}:</span> {s.lastMessage}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="iaos-history-continue iaos-season-continue"
+                    onClick={() => onContinue({ ...s, kind: 'season' })}
+                    disabled={busy}
+                    data-testid="intent-ai-season-continue"
+                  >
+                    {L.continue} ↗
+                  </button>
+                </div>
+              ))
+              : <p className="iaos-empty">{L.emptySeasons}</p>
+          )}
           {tab === 'conversations' && (
             conversations.length
               ? conversations.map((c) => (
