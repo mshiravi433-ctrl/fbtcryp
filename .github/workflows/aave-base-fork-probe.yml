@@ -1,0 +1,77 @@
+# ============================================================================
+# AAVE V3 BASE · MAINNET FORK PROBE (MANUAL RUN)
+#
+# ONE-TIME SETUP (this file cannot be committed to .github/workflows by an
+# agent — GitHub rejects app tokens there, so it is placed by hand, like
+# ci/build-apk.yml):
+#
+#   1. Open the repo: github.com/mshiravi433-ctrl/fbtcryp
+#   2. Add file  .github/workflows/aave-base-fork-probe.yml
+#      (typing / creates folders; commit straight to the branch you want)
+#   3. Actions tab → "Aave Base fork probe" → Run workflow.
+#      Optional input rpc_url defaults to https://mainnet.base.org — any
+#      public Base RPC works if the default is rate-limited.
+#
+# WHAT IT DOES: installs Foundry on the runner, forks Base mainnet state
+# locally with anvil, and runs the REAL acceptance probe
+# (test/aave-base-fork-probe.mjs --strict): verifyDeployment, reserve
+# decoding, supply 5 USDC with an exact approve, position read, withdraw max,
+# and a real revert-code check. The full output is saved as the
+# "aave-base-fork-probe.log" artifact and printed in the run log.
+#
+# SAFETY: nothing leaves the runner. anvil forks chain state locally; the
+# "transactions" move test USDC between forked accounts only. No secrets, no
+# deploy keys, no real funds. Public-repo Actions minutes are free.
+# ============================================================================
+name: Aave Base fork probe
+on:
+  workflow_dispatch:
+    inputs:
+      rpc_url:
+        description: 'Base mainnet RPC URL to fork'
+        required: false
+        default: 'https://mainnet.base.org'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Foundry (anvil)
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          export PATH="$HOME/.foundry/bin:$PATH"
+          foundryup
+          anvil --version
+
+      - name: Install dependencies (ethers + vite, used by the probe)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run the Base mainnet fork probe (strict)
+        id: probe
+        env:
+          BASE_RPC_URL: ${{ inputs.rpc_url }}
+        run: |
+          export PATH="$HOME/.foundry/bin:$PATH"
+          set -o pipefail
+          npm run test:aave-base-fork -- --strict 2>&1 | tee /tmp/aave-base-fork-probe.log
+          echo "probe_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "### Aave Base fork probe exit: ${{ steps.probe.outputs.probe_exit }}" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 /tmp/aave-base-fork-probe.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aave-base-fork-probe.log
+          path: /tmp/aave-base-fork-probe.log
+          if-no-files-found: error
