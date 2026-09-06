@@ -18,6 +18,7 @@ import {
   shouldSendDestination
 } from '../lib/thorAddress';
 import { copyText } from '../lib/share';
+import ModernSelect from './ModernSelect';
 import { useAppStore } from '../store/useAppStore';
 
 /**
@@ -188,19 +189,20 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
       ) : (
         <>
           <div className="card" style={{ marginTop: 10 }}>
-            <label className="faint" htmlFor="thor-from">{t('thor.from')}</label>
-            <select
-              id="thor-from"
+            <div className="field-label">{t('thor.from')}</div>
+            <ModernSelect
               value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              style={{ marginTop: 6 }}
-            >
-              {options.map((p) => (
-                <option key={p.asset} value={p.asset}>
-                  {assetLabel(p.asset)} · {assetChain(p.asset)}
-                </option>
-              ))}
-            </select>
+              onChange={setFrom}
+              options={options.map((p) => ({
+                value: p.asset,
+                label: assetLabel(p.asset),
+                sublabel: assetChain(p.asset),
+              }))}
+              title={t('thor.from')}
+              placeholder={t('thor.from')}
+              searchable
+              testId="thor-from-select"
+            />
 
             <label className="faint" htmlFor="thor-amt" style={{ display: 'block', marginTop: 12 }}>
               {t('thor.amount')}
@@ -215,21 +217,20 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
               style={{ marginTop: 6 }}
             />
 
-            <label className="faint" htmlFor="thor-to" style={{ display: 'block', marginTop: 12 }}>
-              {t('thor.to')}
-            </label>
-            <select
-              id="thor-to"
+            <div className="field-label" style={{ marginTop: 12 }}>{t('thor.to')}</div>
+            <ModernSelect
               value={to}
-              onChange={(e) => setTo(e.target.value)}
-              style={{ marginTop: 6 }}
-            >
-              {options.map((p) => (
-                <option key={p.asset} value={p.asset}>
-                  {assetLabel(p.asset)} · {assetChain(p.asset)}
-                </option>
-              ))}
-            </select>
+              onChange={setTo}
+              options={options.map((p) => ({
+                value: p.asset,
+                label: assetLabel(p.asset),
+                sublabel: assetChain(p.asset),
+              }))}
+              title={t('thor.to')}
+              placeholder={t('thor.to')}
+              searchable
+              testId="thor-to-select"
+            />
 
             <label className="faint" htmlFor="thor-dest" style={{ display: 'block', marginTop: 12 }}>
               {t('thor.destination')}

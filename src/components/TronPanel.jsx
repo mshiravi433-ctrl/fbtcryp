@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import InfoBox from '../components/InfoBox';
+import ModernSelect from './ModernSelect';
 import { fmtQty } from '../lib/format';
 import { toBaseUnits } from '../lib/bridge';
 import {
@@ -195,16 +196,18 @@ export default function TronPanel() {
     <>
       <section className="card">
         <div className="field-label">{t('tron.from')}</div>
-        <select
-          className="brg-select"
-          style={{ width: '100%' }}
+        <ModernSelect
           value={origin}
-          onChange={(e) => { setOrigin(Number(e.target.value)); setRes(null); }}
-        >
-          {TRON_ORIGINS.map((c) => (
-            <option key={c.id} value={c.id}>{c.name} · USDC</option>
-          ))}
-        </select>
+          onChange={(v) => { setOrigin(Number(v)); setRes(null); }}
+          options={TRON_ORIGINS.map((c) => ({
+            value: c.id,
+            label: c.name,
+            sublabel: 'USDC',
+          }))}
+          title={t('tron.from')}
+          placeholder={t('tron.from')}
+          testId="tron-origin-select"
+        />
 
         <input
           className="brg-amount"
