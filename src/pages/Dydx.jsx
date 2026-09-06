@@ -23,6 +23,7 @@ import {
   placeDydxOrder
 } from '../lib/dydx';
 import TrendChart from '../components/TrendChart';
+import ModernSelect from '../components/ModernSelect';
 
 export default function Dydx() {
   const { t } = useTranslation();
@@ -238,10 +239,20 @@ export default function Dydx() {
       {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
           {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
-          <label className="field-label">{t('dydx.market')}</label>
-          <select value={market?.ticker || ''} onChange={(e) => setTicker(e.target.value)}>
-            {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
-          </select>
+          <div className="field-label">{t('dydx.market')}</div>
+          <ModernSelect
+            value={market?.ticker || ''}
+            onChange={setTicker}
+            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => ({
+              value: m.ticker,
+              label: m.ticker,
+              sublabel: m.ticker.split('-')[1] ? `${m.ticker.split('-')[0]} / ${m.ticker.split('-')[1]}` : '',
+            }))}
+            title={t('dydx.market')}
+            placeholder={market?.ticker || 'BTC-USD'}
+            searchable
+            testId="dydx-market-select"
+          />
 
           {/*
             ─── THE MARKET HAD NO HISTORY AT ALL ──────────────────────────────

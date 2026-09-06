@@ -47,6 +47,7 @@ import {
   evaluateSignalAlerts, recordSignal, settleHistory, readHistory
 } from '../lib/signalStore';
 import { showLocalNotification } from '../lib/notify';
+import ModernSelect from '../components/ModernSelect';
 import '../styles/docs-modern.css';
 import '../styles/wallet-modern.css';
 import '../styles/signals-intel.css';
@@ -735,24 +736,39 @@ function SolanaIcon(props) {
   );
 }
 
-function TokenPicker({ coin, options, value, onChange }) {
+function TokenPicker({ coin, options, value, onChange, coins }) {
   const { t } = useTranslation();
-  const available = options.length ? options : (coin ? [{ id: coin.id, symbol: coin.symbol, name: coin.name }] : []);
+  const available = options.length ? options : (coin ? [{ id: coin.id, symbol: coin.symbol, name: coin.name, coin }] : []);
+  const modernOptions = useMemo(() => {
+    return available.map((option) => {
+      const matched = (coins ?? []).find((c) => c.id === option.id) || option.coin || null;
+      const iconCoin = matched || (coin && coin.id === option.id ? coin : null) || (option.symbol ? { symbol: option.symbol, name: option.name, image: matched?.image } : null);
+      const price = matched?.price ?? option.price;
+      const change = matched?.change24h ?? option.change24h;
+      return {
+        value: option.id,
+        label: option.symbol,
+        sublabel: option.name || matched?.name || '',
+        coin: iconCoin,
+        meta: price != null && Number.isFinite(price) ? `$${fmtPrice(price)}` : undefined,
+        change: Number.isFinite(change) ? change : undefined,
+      };
+    });
+  }, [available, coins, coin]);
+
   return (
-    <label className="sic-token-picker">
+    <div className="sic-token-picker">
       <span className="sic-token-picker-label">{t('signals.intel.assetPicker.label')}</span>
-      <span className="sic-token-select-shell">
-        <CoinLogo coin={coin} px={34} />
-        <select value={value} onChange={(event) => onChange(event.target.value)} aria-label={t('signals.intel.assetPicker.label')}>
-          {available.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.symbol}{option.name ? ` · ${option.name}` : ''}
-            </option>
-          ))}
-        </select>
-        <Chevron />
-      </span>
-    </label>
+      <ModernSelect
+        value={value}
+        onChange={onChange}
+        options={modernOptions}
+        title={t('signals.intel.assetPicker.label')}
+        placeholder={t('signals.intel.assetPicker.label')}
+        searchable
+        testId="signals-token-picker"
+      />
+    </div>
   );
 }
 
@@ -1511,7 +1527,7 @@ export default function Signals() {
           </button>
         </div>
 
-        <TokenPicker coin={coin} options={tokenOptions} value={activeId} onChange={selectToken} />
+        <TokenPicker coin={coin} options={tokenOptions} value={activeId} onChange={selectToken} coins={coins} />
 
         <SelectedSignalCard
           coin={coin}
