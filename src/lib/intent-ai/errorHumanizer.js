@@ -65,6 +65,10 @@ const COPY = Object.freeze({
     fa: 'پرتفوی شما خالی به نظر می‌رسد — یا هنوز موجودی خوانده نشده است.',
     en: 'The portfolio looks empty — or the balances have not been read yet.'
   },
+  PORTFOLIO_SYNC_RETRY: {
+    fa: 'کیف پول متصل است اما خواندن موجودی از زنجیره کامل نشد — در حال تلاش دوباره‌ام؛ دارایی‌ها پنهان نیستند.',
+    en: 'The wallet is connected but the chain read failed — retrying now; your assets are not hidden.'
+  },
   UNPRICED_HOLDINGS: {
     fa: 'دارایی‌هایی در کیف پول هست اما قیمت زنده‌ای برایشان ندارم، بنابراین نمی‌توانم سهم‌ها را به‌درستی حساب کنم.',
     en: 'There are holdings in the wallet but I do not have live prices, so I cannot compute honest weights.'

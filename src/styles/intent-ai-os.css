@@ -2534,3 +2534,695 @@ body:has(.iaos-page-v6) {
   color: #ffffff;
   box-shadow: 0 8px 24px rgba(99,102,241,0.25), 0 2px 8px rgba(15,23,42,0.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPERATIONS CENTER + CHAT CARDS — V7 REDESIGN
+   ---------------------------------------------------------------------------
+   The ops center (مرکز عملیات) and the rich chat cards share one visual
+   language: deep glass surfaces, one indigo→cyan accent system, hairline
+   borders, and generous RTL-safe spacing. Everything here is additive —
+   earlier rules above stay for the screens not touched by this pass.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Panel chrome: calmer overlay, luminous edge, roomier head ─────────── */
+
+.iaos-panel-overlay {
+  background:
+    radial-gradient(900px 480px at 50% 0%, rgba(99, 102, 241, .12), transparent 60%),
+    rgba(3, 6, 13, .7);
+}
+
+.iaos-panel {
+  background:
+    radial-gradient(760px 340px at 85% -20%, rgba(34, 211, 238, .10), transparent 55%),
+    radial-gradient(700px 360px at 12% -14%, rgba(99, 102, 241, .20), transparent 58%),
+    linear-gradient(180deg, rgba(15, 20, 38, .99), rgba(9, 13, 26, .99));
+  border: 1px solid rgba(129, 140, 248, .22);
+  box-shadow:
+    0 -24px 80px rgba(2, 6, 23, .65),
+    0 0 0 1px rgba(99, 102, 241, .06) inset;
+  padding: 18px 16px 14px;
+  gap: 14px;
+}
+
+.iaos-panel-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+}
+
+.iaos-panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.iaos-panel-head h2::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #818cf8, #22d3ee);
+  box-shadow: 0 0 10px rgba(99, 102, 241, .8);
+  flex: 0 0 auto;
+}
+
+.iaos-panel .iaos-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  transition: background .15s, color .15s;
+}
+
+.iaos-panel .iaos-close:hover {
+  background: rgba(244, 114, 182, .14);
+  color: #fbcfe8;
+}
+
+/* ── Live wiring strip (wallet / server / monitors / orders) ───────────── */
+
+.iaos-ops-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 420px) {
+  .iaos-ops-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.iaos-ops-strip-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, .13);
+  background: rgba(15, 23, 42, .55);
+  border-radius: 14px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.iaos-ops-strip-cell i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: rgba(100, 116, 139, .8);
+  box-shadow: none;
+}
+
+.iaos-ops-strip-cell[data-ok='true'] i {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, .7);
+}
+
+.iaos-ops-strip-cell[data-ok='false'] i {
+  background: #fb7185;
+  box-shadow: 0 0 8px rgba(251, 113, 133, .55);
+}
+
+.iaos-ops-strip-cell[data-ok='unknown'] i {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, .5);
+}
+
+.iaos-ops-strip-cell div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.iaos-ops-strip-cell small {
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: rgba(148, 163, 184, .85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iaos-ops-strip-cell strong {
+  font-size: 12px;
+  font-weight: 800;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Category chips ─────────────────────────────────────────────────────── */
+
+.iaos-ops-cats {
+  gap: 7px;
+  padding-bottom: 6px;
+}
+
+.iaos-ops-cat {
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  background: rgba(15, 23, 42, .55);
+  color: #b6c2d6;
+  transition: border-color .18s, background .18s, color .18s, transform .18s;
+}
+
+.iaos-ops-cat:hover {
+  border-color: rgba(129, 140, 248, .45);
+  color: #e0e7ff;
+}
+
+.iaos-ops-cat.is-on {
+  border-color: rgba(129, 140, 248, .65);
+  color: #e0e7ff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, .22), rgba(34, 211, 238, .14));
+  box-shadow: 0 4px 18px rgba(99, 102, 241, .18);
+  transform: translateY(-1px);
+}
+
+/* ── Operation cards: icon tiles, sheen, lift ──────────────────────────── */
+
+.iaos-ops-grid {
+  gap: 10px;
+  padding: 4px 2px 6px;
+}
+
+.iaos-ops-card {
+  position: relative;
+  overflow: hidden;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, .13);
+  background: linear-gradient(180deg, rgba(20, 28, 51, .72), rgba(13, 19, 37, .72));
+  transition: border-color .2s, transform .2s, box-shadow .2s, background .2s;
+}
+
+.iaos-ops-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(240px 120px at 88% -20%, rgba(34, 211, 238, .12), transparent 60%);
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+}
+
+.iaos-ops-card:hover:not(:disabled) {
+  border-color: rgba(129, 140, 248, .5);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, .45);
+}
+
+.iaos-ops-card:hover:not(:disabled)::after {
+  opacity: 1;
+}
+
+.iaos-ops-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  font-size: 20px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, .20), rgba(34, 211, 238, .12));
+  border: 1px solid rgba(129, 140, 248, .25);
+  color: #a5b4fc;
+  flex: 0 0 auto;
+}
+
+.iaos-ops-body strong {
+  font-size: 13.5px;
+  color: #eef2ff;
+  letter-spacing: .01em;
+}
+
+.iaos-ops-body small {
+  font-size: 11px;
+  color: rgba(148, 163, 184, .9);
+}
+
+.iaos-ops-state {
+  color: #818cf8;
+  font-weight: 800;
+}
+
+.iaos-ops-card:disabled .iaos-ops-state {
+  color: rgba(148, 163, 184, .6);
+  font-weight: 600;
+  font-size: 10.5px;
+}
+
+/* ── History rows & status grid: same card language ────────────────────── */
+
+.iaos-history-row {
+  border: 1px solid rgba(148, 163, 184, .12);
+  background: linear-gradient(180deg, rgba(20, 28, 51, .6), rgba(13, 19, 37, .6));
+  border-radius: 16px;
+  padding: 12px 14px;
+  transition: border-color .18s;
+}
+
+.iaos-history-row:hover {
+  border-color: rgba(129, 140, 248, .35);
+}
+
+.iaos-history-tab {
+  border-radius: 14px;
+  padding: 9px 12px;
+  background: rgba(15, 23, 42, .55);
+  transition: border-color .18s, background .18s, color .18s;
+}
+
+.iaos-history-tab.is-on {
+  border-color: rgba(129, 140, 248, .6);
+  color: #e0e7ff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, .20), rgba(34, 211, 238, .12));
+}
+
+.iaos-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 9px;
+}
+
+.iaos-status-cell {
+  border: 1px solid rgba(148, 163, 184, .12);
+  background: linear-gradient(180deg, rgba(20, 28, 51, .6), rgba(13, 19, 37, .6));
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.iaos-status-cell span {
+  font-size: 10px;
+  letter-spacing: .05em;
+  color: rgba(148, 163, 184, .9);
+}
+
+.iaos-status-cell strong {
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.iaos-field select,
+.iaos-field input {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, .2);
+  background: rgba(9, 13, 26, .8);
+  color: #e2e8f0;
+  padding: 10px 12px;
+}
+
+.iaos-field select:focus,
+.iaos-field input:focus {
+  outline: none;
+  border-color: rgba(129, 140, 248, .6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);
+}
+
+/* ── Route chips under an AI bubble ─────────────────────────────────────── */
+
+.iaos-msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.iaos-msg-action {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RICH CHAT CARDS — token chart card & portfolio allocation card
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.icc-token,
+.icc-portfolio {
+  margin-top: 10px;
+  border: 1px solid rgba(129, 140, 248, .22);
+  border-radius: 18px;
+  padding: 12px 12px 10px;
+  background:
+    radial-gradient(420px 180px at 90% -30%, rgba(34, 211, 238, .10), transparent 60%),
+    linear-gradient(180deg, rgba(17, 24, 45, .92), rgba(10, 15, 30, .95));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.icc-token-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.icc-token-title {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.icc-token-title strong {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  color: #eef2ff;
+}
+
+.icc-token-title span {
+  font-size: 11.5px;
+  color: rgba(148, 163, 184, .95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.icc-rank {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  color: #a5f3fc;
+  border: 1px solid rgba(103, 232, 249, .35);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.icc-token-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.icc-token-price b {
+  font-size: 17px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 10px;
+  padding: 4px 8px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .6);
+}
+
+.icc-chip small {
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  color: rgba(148, 163, 184, .9);
+}
+
+.icc-chip b {
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+}
+
+.icc-chip-up b { color: #34d399; }
+.icc-chip-up { border-color: rgba(52, 211, 153, .35); background: rgba(16, 185, 129, .08); }
+.icc-chip-down b { color: #fb7185; }
+.icc-chip-down { border-color: rgba(251, 113, 133, .35); background: rgba(244, 63, 94, .08); }
+.icc-chip-na b { color: rgba(148, 163, 184, .8); }
+.icc-chip-signal { border-color: rgba(129, 140, 248, .4); background: rgba(99, 102, 241, .1); }
+
+.icc-chart {
+  width: 100%;
+  height: 74px;
+  display: block;
+  border-radius: 12px;
+  background: rgba(2, 6, 18, .45);
+  border: 1px solid rgba(148, 163, 184, .08);
+}
+
+.icc-chart-empty {
+  display: grid;
+  place-items: center;
+  color: rgba(148, 163, 184, .5);
+  font-size: 12px;
+}
+
+.icc-chart-caption {
+  margin-top: -4px;
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  color: rgba(100, 116, 139, .95);
+}
+
+/* 24h low→high range with the live-price cursor */
+.icc-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.icc-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: rgba(148, 163, 184, .9);
+}
+
+.icc-range-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(244, 63, 94, .5), rgba(148, 163, 184, .35), rgba(16, 185, 129, .55));
+}
+
+.icc-range-cursor {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #eef2ff;
+  border: 3px solid #6366f1;
+  box-shadow: 0 0 10px rgba(99, 102, 241, .8);
+}
+
+.icc-range-values {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 800;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  gap: 6px;
+}
+
+.icc-stats > div {
+  border: 1px solid rgba(148, 163, 184, .1);
+  background: rgba(15, 23, 42, .5);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.icc-stats small {
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: rgba(148, 163, 184, .85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icc-stats b {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-open {
+  align-self: flex-start;
+  border: 1px solid rgba(129, 140, 248, .4);
+  background: rgba(99, 102, 241, .12);
+  color: #c7d2fe;
+  font-size: 11.5px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+
+.icc-open:hover {
+  background: rgba(99, 102, 241, .22);
+  border-color: rgba(129, 140, 248, .7);
+}
+
+/* Portfolio allocation card */
+.icc-portfolio-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.icc-portfolio-head span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: #c7d2fe;
+}
+
+.icc-portfolio-head b {
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-holding {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.icc-holding-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.icc-holding-line strong {
+  font-size: 12.5px;
+  color: #eef2ff;
+  min-width: 52px;
+}
+
+.icc-holding-line span {
+  flex: 1 1 auto;
+  font-size: 10.5px;
+  color: rgba(148, 163, 184, .9);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: end;
+}
+
+.icc-holding-line b {
+  font-size: 12px;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-holding-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .14);
+  overflow: hidden;
+}
+
+.icc-holding-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #22d3ee);
+  box-shadow: 0 0 8px rgba(99, 102, 241, .5);
+}
+
+.icc-holding > small {
+  align-self: flex-end;
+  font-size: 9.5px;
+  color: rgba(148, 163, 184, .8);
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-unpriced {
+  margin: 0;
+  font-size: 10.5px;
+  color: #fbbf24;
+}
+
+/* Light theme mirrors */
+:root[data-theme='light'] .icc-token,
+:root[data-theme='light'] .icc-portfolio {
+  background:
+    radial-gradient(420px 180px at 90% -30%, rgba(34, 211, 238, .14), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, .97), rgba(241, 245, 249, .97));
+  border-color: rgba(99, 102, 241, .3);
+}
+
+:root[data-theme='light'] .icc-token-price b,
+:root[data-theme='light'] .icc-portfolio-head b {
+  color: #0f172a;
+}
+
+:root[data-theme='light'] .icc-chip,
+:root[data-theme='light'] .icc-stats > div {
+  background: rgba(241, 245, 249, .9);
+}
+
+:root[data-theme='light'] .icc-token-title strong,
+:root[data-theme='light'] .icc-holding-line strong,
+:root[data-theme='light'] .icc-holding-line b,
+:root[data-theme='light'] .icc-stats b,
+:root[data-theme='light'] .icc-range-values b,
+:root[data-theme='light'] .icc-chip b {
+  color: #1e293b;
+}
+
+:root[data-theme='light'] .iaos-panel {
+  background:
+    radial-gradient(700px 340px at 85% -20%, rgba(14, 165, 233, .08), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(241, 245, 249, .98));
+  border-color: rgba(100, 116, 139, .25);
+}
+
+:root[data-theme='light'] .iaos-ops-card,
+:root[data-theme='light'] .iaos-history-row,
+:root[data-theme='light'] .iaos-status-cell,
+:root[data-theme='light'] .iaos-ops-strip-cell {
+  background: rgba(248, 250, 252, .95);
+  border-color: rgba(100, 116, 139, .2);
+}
+
+:root[data-theme='light'] .iaos-ops-body strong,
+:root[data-theme='light'] .iaos-ops-strip-cell strong,
+:root[data-theme='light'] .iaos-status-cell strong {
+  color: #0f172a;
+}
+
+:root[data-theme='light'] .iaos-ops-icon {
+  background: linear-gradient(135deg, rgba(99, 102, 241, .12), rgba(34, 211, 238, .1));
+}

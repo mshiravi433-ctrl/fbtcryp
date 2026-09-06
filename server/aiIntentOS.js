@@ -101,6 +101,8 @@ import { recordIntentOutcome, getLearningInsights } from './aiLearning.js';
    models/tools/web inside that budget; question-intel learns what users
    actually ask. Execution authority is untouched (§67). */
 import { planCollaboration } from '../src/lib/intent-ai/os/collaborationRouter.js';
+import { resolveAsset } from './intentMonitoring.js';
+import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
 import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
 import {
@@ -168,7 +170,9 @@ function safeMemoryText(v, max = 240) {
 
 async function marketContext() {
   try {
-    const { value } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'));
+    /* swr: a warm cache answers instantly and refreshes in the background —
+       a chat turn never waits on CoinGecko when a recent read exists. */
+    const { value } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
     const g = value || {};
     const price = (row) => (Number.isFinite(Number(row?.usd)) ? Number(row.usd) : null);
     return {
@@ -183,7 +187,7 @@ async function marketContext() {
 
 async function yieldContext() {
   try {
-    const { value } = await withCache('ai-os:yields', 5 * 60_000, fetchYields);
+    const { value } = await withCache('ai-os:yields', 5 * 60_000, fetchYields, { swr: true });
     const pools = Array.isArray(value?.pools) ? value.pools : (Array.isArray(value) ? value : []);
     return pools.slice(0, 40).map((p) => ({
       protocol: p?.protocol || p?.project || null,
@@ -199,7 +203,7 @@ async function yieldContext() {
 
 async function solanaAssetsContext() {
   try {
-    const { value } = await withCache('ai-os:solana-assets', 5 * 60_000, fetchSolanaAssets);
+    const { value } = await withCache('ai-os:solana-assets', 5 * 60_000, fetchSolanaAssets, { swr: true });
     const rows = Array.isArray(value?.lst) ? value.lst : [];
     return rows.map((r) => ({
       symbol: r.symbol,
@@ -209,6 +213,67 @@ async function solanaAssetsContext() {
       liquidity: Number(r.liquidity) || null,
       change24h: Number(r.change24h) || null
     }));
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------- live token card (chat) -------------------------- */
+
+/*
+ * ONE ASSET PER TURN, CHART INCLUDED.
+ * A token question used to be answered in prose only, so the user had to leave
+ * the chat to see the chart or the 24h high/low. When the turn names an asset
+ * we now read the SAME market detail the coin page renders (cached 60s,
+ * stale-while-revalidate, hard-capped so a slow upstream can never stall the
+ * turn) and ship a structured card: price, 1h/24h/7d changes, sparkline,
+ * 24h high/low, market cap, volume, rank and the backtested signal.
+ * Missing data stays null — the card renders «—», never a guess.
+ */
+const TOKEN_CARD_TTL = 60_000;
+
+async function buildTokenCard(symbolRaw) {
+  const sym = String(symbolRaw || '').trim().toUpperCase();
+  if (!sym) return null;
+  const asset = resolveAsset({ symbol: sym }) || { coinId: sym.toLowerCase(), symbol: sym };
+  try {
+    const withDeadline = (p, ms) => Promise.race([
+      p,
+      new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
+    ]);
+    const { value: coin } = await withCache(
+      `ai-os:tokencard:${asset.coinId}`,
+      TOKEN_CARD_TTL,
+      async () => {
+        const row = await fetchCoinDetail(asset.coinId, 'usd');
+        if (!row || !(Number(row.price) > 0)) throw new Error('NO_COIN_DATA');
+        return row;
+      },
+      { swr: true }
+    );
+    if (!coin) return null;
+    return {
+      kind: 'TOKEN',
+      symbol: String(coin.symbol || asset.symbol || sym).toUpperCase(),
+      coinId: coin.id || asset.coinId,
+      name: coin.name || null,
+      priceUsd: Number.isFinite(Number(coin.price)) ? Number(coin.price) : null,
+      change1hPct: Number.isFinite(Number(coin.change1h)) ? Number(coin.change1h) : null,
+      change24hPct: Number.isFinite(Number(coin.change24h)) ? Number(coin.change24h) : null,
+      change7dPct: Number.isFinite(Number(coin.change7d)) ? Number(coin.change7d) : null,
+      high24h: Number.isFinite(Number(coin.high24h)) && Number(coin.high24h) > 0 ? Number(coin.high24h) : null,
+      low24h: Number.isFinite(Number(coin.low24h)) && Number(coin.low24h) > 0 ? Number(coin.low24h) : null,
+      marketCapUsd: Number.isFinite(Number(coin.mcap)) && Number(coin.mcap) > 0 ? Number(coin.mcap) : null,
+      volume24hUsd: Number.isFinite(Number(coin.volume)) && Number(coin.volume) > 0 ? Number(coin.volume) : null,
+      rank: Number.isFinite(Number(coin.rank)) && Number(coin.rank) > 0 ? Number(coin.rank) : null,
+      ath: Number.isFinite(Number(coin.ath)) && Number(coin.ath) > 0 ? Number(coin.ath) : null,
+      sparkline: Array.isArray(coin.sparkline) ? coin.sparkline.slice(-168) : [],
+      signal: null,
+      rsi: null,
+      confidence: null,
+      at: Date.now(),
+      source: 'api'
+    };
   } catch {
     return null;
   }
@@ -246,7 +311,7 @@ function sanitizeBalances(value) {
 }
 
 function sanitizePortfolio(value) {
-  if (!value || typeof value !== 'object') return { dataStatus: 'unavailable', totalValueUsd: null, holdings: [] };
+  if (!value || typeof value !== 'object') return { dataStatus: 'unavailable', totalValueUsd: null, holdings: [], failedChains: [] };
   const holdings = sanitizeClientArray(value.holdings || value.rows, (h) => {
     const symbol = token(h?.symbol);
     if (!symbol) return null;
@@ -262,6 +327,12 @@ function sanitizePortfolio(value) {
     dataStatus: value.dataStatus || (totalValueUsd != null ? 'client' : 'unavailable'),
     totalValueUsd,
     holdings,
+    /* Chain-read diagnostics: lets the reply distinguish «portfolio is
+       empty» (a definitive on-chain answer) from «the chain read failed»
+       (a transport answer — assets are NOT missing). */
+    failedChains: sanitizeClientArray(value.failedChains, (c) => safe(c, 16), 24),
+    rowsCount: holdings.length,
+    hydrating: value.hydrating === true,
     partial: value.partial === true
   };
 }
@@ -289,11 +360,24 @@ async function buildAIContext(req, body = {}) {
    * open and connected.
    */
   const client = b.context && typeof b.context === 'object' ? b.context : b;
+  /*
+   * CONTEXT ASSEMBLY HAS A DEADLINE. Each read has its own upstream timeout
+   * (12s), so a cold cache could legally make the FIRST turn of a session
+   * wait out four slow providers before a single word of intent parsing —
+   * the «هوش مصنوعی خیلی دیر جواب میده» experience. The assembly races an
+   * 8s ceiling: whatever arrived in time is used, the rest degrades to
+   * `unavailable` exactly like a failed read. The swr caches make every
+   * subsequent turn instant either way.
+   */
+  const ctxDeadline = (p, ms = 8000) => Promise.race([
+    p,
+    new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
+  ]);
   const [market, yields, solanaAssets, goals] = await Promise.all([
-    marketContext(),
-    yieldContext(),
-    solanaAssetsContext(),
-    readGoals(userId)
+    ctxDeadline(marketContext()).then((v) => v || { dataStatus: 'unavailable', change24hPct: null, priceMap: null }),
+    ctxDeadline(yieldContext()).then((v) => v || null),
+    ctxDeadline(solanaAssetsContext()).then((v) => v || null),
+    ctxDeadline(readGoals(userId)).then((v) => v || { ok: true, dataStatus: 'unavailable', goals: [] })
   ]);
 
   const wallet = sanitizeWallet(client.wallet || b.wallet);
@@ -1074,6 +1158,23 @@ router.post('/chat', async (req, res) => {
     }
   }
 
+  /* ─── LIVE TOKEN CARD — one asset per turn, chart + 24h high/low ──────
+     Fires only when the turn is actually about an asset, uses the same
+     cached market read the coin page renders, and can only ADD a card —
+     it never rewrites the deterministic text or the execution state. */
+  const chatToken = u4?.entities?.token || null;
+  const chatIntentType = String(human.intent?.type || intent || '').toUpperCase();
+  let tokenCard = null;
+  if (
+    chatToken
+    && !human.card
+    && !human.pendingIntent
+    && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
+    && ['ANALYZE_TOKEN', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'GENERAL', 'RISK_ANALYSIS', 'WHALE'].includes(chatIntentType)
+  ) {
+    tokenCard = await buildTokenCard(chatToken);
+  }
+
   /* Only replace the reply when the collaboration produced a real, grounded
      answer — a degraded no-evidence answer never overwrites the existing
      deterministic reply. */
@@ -1085,6 +1186,42 @@ router.post('/chat', async (req, res) => {
   let finalText = human.message;
   if (collaborationUsable) {
     finalText = collaboration.answer;
+  } else if (tokenCard) {
+    /* No model pass (or a degraded one) — the card still carries REAL data,
+       so the deterministic text answers with numbers instead of a pointer
+       to the market page. Same numbers, same source, chart attached. */
+    const faAns = String(locale || 'fa').toLowerCase().startsWith('fa');
+    const fmtUsd = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      if (n >= 1e12) return `$${(Math.round((n / 1e12) * 100) / 100).toLocaleString('en-US')}T`;
+      if (n >= 1e9) return `$${(Math.round((n / 1e9) * 100) / 100).toLocaleString('en-US')}B`;
+      if (n >= 1e6) return `$${(Math.round((n / 1e6) * 100) / 100).toLocaleString('en-US')}M`;
+      if (n >= 1000) return `$${Math.round(n).toLocaleString('en-US')}`;
+      return `$${(Math.round(n * 100) / 100).toLocaleString('en-US')}`;
+    };
+    const sgnPct = (v) => (Number.isFinite(Number(v)) ? `${Number(v) >= 0 ? '+' : ''}${Math.round(Number(v) * 100) / 100}%` : 'N/A');
+    const lines = [];
+    lines.push(faAns ? `📊 ${tokenCard.name || ''} (${tokenCard.symbol})` : `📊 ${tokenCard.name || ''} (${tokenCard.symbol})`);
+    lines.push(faAns
+      ? `قیمت لحظه‌ای: ${fmtUsd(tokenCard.priceUsd) || 'N/A'} (${sgnPct(tokenCard.change24hPct)} در ۲۴ ساعت)`
+      : `Live price: ${fmtUsd(tokenCard.priceUsd) || 'N/A'} (${sgnPct(tokenCard.change24hPct)} in 24h)`);
+    if (tokenCard.high24h != null || tokenCard.low24h != null) {
+      lines.push(faAns
+        ? `بالاترین ۲۴ ساعت: ${fmtUsd(tokenCard.high24h) || 'N/A'} · کمترین: ${fmtUsd(tokenCard.low24h) || 'N/A'}`
+        : `24h high: ${fmtUsd(tokenCard.high24h) || 'N/A'} · low: ${fmtUsd(tokenCard.low24h) || 'N/A'}`);
+    }
+    const bits = [];
+    if (tokenCard.change1hPct != null) bits.push(`${faAns ? '۱ساعت' : '1h'} ${sgnPct(tokenCard.change1hPct)}`);
+    if (tokenCard.change7dPct != null) bits.push(`${faAns ? '۷روز' : '7d'} ${sgnPct(tokenCard.change7dPct)}`);
+    if (tokenCard.marketCapUsd != null) bits.push(`${faAns ? 'حجم بازار' : 'Mkt cap'} ${fmtUsd(tokenCard.marketCapUsd)}`);
+    if (tokenCard.volume24hUsd != null) bits.push(`${faAns ? 'معاملات' : 'Vol'} ${fmtUsd(tokenCard.volume24hUsd)}`);
+    if (tokenCard.rank != null) bits.push(`#${tokenCard.rank}`);
+    if (bits.length) lines.push(bits.join(' · '));
+    lines.push(faAns
+      ? 'نمودار ۷ روزه و بازه بالاترین/کمترین قیمت در کارت زیر است.'
+      : 'The 7-day chart and the 24h high/low range are in the card below.');
+    finalText = lines.join('\n');
   } else {
     /* Even without a model pass, an emotional turn gets acknowledged (§25). */
     const ack = formatEmotionalAcknowledgement({ emotion: u5.emotion, fomo: u5.fomo, locale: locale || 'fa' });
@@ -1137,7 +1274,7 @@ router.post('/chat', async (req, res) => {
       latencyMs: collaboration?.latencyMs || 0
     },
     ui: human.ui,
-    card: human.card,
+    card: human.card || tokenCard,
     actions: human.actions,
     suggestions: human.suggestions,
     rebalance: human.rebalance || null,

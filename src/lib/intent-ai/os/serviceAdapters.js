@@ -224,7 +224,7 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           try {
             const [{ analyze }, chart] = await Promise.all([
               import('../../ai.js'),
-              getChart(id, 90).catch(() => null)
+              getChart(id, 30).catch(() => null)
             ]);
             const prices = (chart?.prices || []).map((p) => (Array.isArray(p) ? p[1] : p?.price)).filter(Number.isFinite);
             // analyze() returns null below 30 bars — that is a real answer
@@ -238,11 +238,22 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
             fetchedAt: Date.now(),
             source: 'api',
             symbol: sym,
+            coinId: coin.id || id,
             name: coin.name || null,
             priceUsd: num(coin.price),
             change24hPct: num(coin.change24h),
+            change1hPct: num(coin.change1h),
+            change7dPct: num(coin.change7d),
+            /* The chat card draws the 7-day sparkline and the 24h high/low
+               range from these pass-through fields — the same numbers the
+               coin page renders, never a re-computed guess. */
+            high24h: num(coin.high24h),
+            low24h: num(coin.low24h),
             marketCapUsd: num(coin.mcap),
             volume24hUsd: num(coin.volume),
+            rank: num(coin.rank),
+            ath: num(coin.ath),
+            sparkline: Array.isArray(coin.sparkline) ? coin.sparkline : [],
             analysis: analysis
               ? {
                   signal: analysis.signal || null,
