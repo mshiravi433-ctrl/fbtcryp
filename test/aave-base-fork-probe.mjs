@@ -53,8 +53,6 @@ const RPC = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const STRICT = process.argv.includes('--strict');
 const ANVIL_ACCOUNT_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANVIL_ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-const ERC20 = new Interface(['function transfer(address,uint256) returns (bool)', 'function balanceOf(address) view returns (uint256)']);
-const ATOKEN = new Interface(['function balanceOf(address) view returns (uint256)']);
 
 const rows = [];
 const t = (name, ok, detail = '') => {
@@ -141,21 +139,80 @@ try {
     t('total cap is the shipped 500 USDC', adapter.AAVE_BASE_SUPPLY_MAX_USDC_TOTAL === 500,
       `got ${adapter.AAVE_BASE_SUPPLY_MAX_USDC_TOTAL}`);
 
-    /* ── fund the account: the aToken itself holds the underlying USDC, so no
-          whale address has to be hardcoded and kept current ──────────────── */
+    /* ── fund the test account ────────────────────────────────────────────── */
     rule('1 · funding the test account from forked state');
-    await rpc(url, 'anvil_impersonateAccount', [AAVE_V3_BASE.aUsdc]);
-    const funded = await rpc(url, 'eth_sendTransaction', [{
-      from: AAVE_V3_BASE.aUsdc,
-      to: AAVE_V3_BASE.usdc,
-      data: ERC20.encodeFunctionData('transfer', [ANVIL_ACCOUNT, 1_000_000_000n])
-    }]);
-    await rpc(url, 'anvil_stopImpersonatingAccount', [AAVE_V3_BASE.aUsdc]);
-    t('impersonated aBasUSDC and moved 1000 USDC to the test account', Boolean(funded), String(funded).slice(0, 18));
+    /*
+     * On a fork every account keeps its REAL Base state: the protocol
+     * contracts hold USDC but — being contracts — no ETH to pay gas, and the
+     * anvil dev account's ETH is whatever Base says it is. First give the
+     * accounts a little ETH from thin air (anvil_setBalance touches only the
+     * local fork, never mainnet); then get USDC into the test account by
+     * impersonating the USDC minter and minting on the fork (mint is how USDC
+     * enters circulation — no whale address hardcoded, none kept current).
+     * If minting is not enabled in the forked state, fall back to moving
+     * tokens from whichever of the pinned protocol contracts actually holds
+     * the reserve's USDC (aBasUSDC in v3; the Pool in some deployments).
+     */
+    await rpc(url, 'anvil_setBalance', [AAVE_V3_BASE.aUsdc, '0xDE0B6B3A7640000']); // 1 ETH — gas if aToken has to move its own balance
+    await rpc(url, 'anvil_setBalance', [ANVIL_ACCOUNT, '0xDE0B6B3A7640000']);     // 1 ETH — gas for approve/supply/withdraw
 
-    const usdc = new Contract(AAVE_V3_BASE.usdc, ['function balanceOf(address) view returns (uint256)'], provider);
+    const usdc = new Contract(AAVE_V3_BASE.usdc, [
+      'function balanceOf(address) view returns (uint256)',
+      'function minter() view returns (address)',
+      'function mint(address,uint256) returns (bool)',
+      'function transfer(address,uint256) returns (bool)'
+    ], provider);
+
+    const fundingErrors = [];
+    let fundedVia = null;
+    const tryFund = async (label, fn) => {
+      if (fundedVia) return;
+      try {
+        const hash = await fn();
+        if (hash) fundedVia = label;
+      } catch (err) {
+        fundingErrors.push(`${label}: ${err.message}`);
+      }
+    };
+    await tryFund('mint (impersonating the USDC minter)', async () => {
+      const minter = await usdc.minter();
+      await rpc(url, 'anvil_impersonateAccount', [minter]);
+      try {
+        return await rpc(url, 'eth_sendTransaction', [{
+          from: minter,
+          to: AAVE_V3_BASE.usdc,
+          data: usdc.interface.encodeFunctionData('mint', [ANVIL_ACCOUNT, 1_000_000_000n])
+        }]);
+      } finally {
+        await rpc(url, 'anvil_stopImpersonatingAccount', [minter]);
+      }
+    });
+    for (const holder of [AAVE_V3_BASE.aUsdc, AAVE_V3_BASE.pool]) {
+      await tryFund(`transfer from ${holder === AAVE_V3_BASE.aUsdc ? 'aBasUSDC' : 'Pool'}`, async () => {
+        await rpc(url, 'anvil_impersonateAccount', [holder]);
+        try {
+          return await rpc(url, 'eth_sendTransaction', [{
+            from: holder,
+            to: AAVE_V3_BASE.usdc,
+            data: usdc.interface.encodeFunctionData('transfer', [ANVIL_ACCOUNT, 1_000_000_000n])
+          }]);
+        } finally {
+          await rpc(url, 'anvil_stopImpersonatingAccount', [holder]);
+        }
+      });
+    }
     const walletUsdc = await usdc.balanceOf(ANVIL_ACCOUNT);
-    t('the test account holds the USDC', walletUsdc >= 1_000_000_000n, `${formatUnits(walletUsdc, 6)} USDC`);
+    if (!fundedVia) {
+      const aTokenHeld = await usdc.balanceOf(AAVE_V3_BASE.aUsdc);
+      const poolHeld = await usdc.balanceOf(AAVE_V3_BASE.pool);
+      let minter = 'n/a';
+      try { minter = await usdc.minter(); } catch { /* read-only probe of the probe */ }
+      throw new Error(
+        `funding failed (${fundingErrors.join(' | ')}) — for diagnostics: aBasUSDC holds ${formatUnits(aTokenHeld, 6)} USDC, Pool holds ${formatUnits(poolHeld, 6)} USDC, minter ${minter}`
+      );
+    }
+    t('test account funded with USDC on the fork', walletUsdc >= 1_000_000_000n,
+      `${fundedVia} → ${formatUnits(walletUsdc, 6)} USDC`);
 
     /* ── 2. deployment verification against real state ─────────────────────── */
     rule('2 · verifyDeployment against the forked chain');
@@ -198,7 +255,7 @@ try {
     const approveValue = BigInt('0x' + supplyPlan.steps[0].data.slice(10 + 64, 10 + 128));
     t('the approval is for EXACTLY 5 USDC (not an unbounded allowance)',
       approveValue === 5_000_000n && approveValue !== MaxUint256, formatUnits(approveValue, 6));
-    const onBehalf = '0x' + supplyPlan.steps[1].data.slice(10 + 64 + 24, 10 + 64 + 64);
+    const onBehalf = '0x' + supplyPlan.steps[1].data.slice(10 + 128 + 24, 10 + 128 + 64);
     t('onBehalfOf is the connected account',
       onBehalf.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
 
