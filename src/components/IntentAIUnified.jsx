@@ -349,6 +349,12 @@ const ConversationRow = memo(function ConversationRow({
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
   const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
+  /* Only the actions that actually name a destination can be chips. Keeping
+     the filter here (rather than trusting every payload to be uniform) is
+     what stops one route-less action from hiding the whole row. */
+  const actionRoutes = Array.isArray(m.actions)
+    ? m.actions.filter((a) => a && typeof a.route === 'string' && a.route.trim())
+    : [];
   const showFeedback = m.role === 'ai' && (m.kind === 'assistant' || m.kind === 'result') && m.intentId && !fbSent;
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
@@ -390,10 +396,18 @@ const ConversationRow = memo(function ConversationRow({
           <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
         ) : null}
         {/* Route chips («فارم», «بازار», «نمودار کامل»…) built by the human
-           layer from real results — one tap navigates, no re-typing. */}
-        {Array.isArray(m.actions) && m.actions.length && m.actions.every((a) => a && a.route) ? (
+           layer from real results — one tap navigates, no re-typing.
+
+           The gate used to be `m.actions.every(a => a.route)`: ONE action
+           without a route hid the ENTIRE row, so a payload like
+           [{ id:'copy-tx' }, { id:'open-ops', route:'/intent?tab=ops' }]
+           rendered no buttons at all and both were dead. Filter instead of
+           all-or-nothing: every action that names a destination gets its
+           chip, and one that does not is dropped rather than taking its
+           neighbours down with it. */}
+        {actionRoutes.length ? (
           <div className="iaos-msg-actions" data-testid="intent-ai-msg-actions">
-            {m.actions.map((a) => (
+            {actionRoutes.map((a) => (
               <button
                 key={a.id || a.route}
                 type="button"
