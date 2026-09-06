@@ -128,6 +128,9 @@ export const SPECULATION_ENABLED =
  */
 
 const envFlag = (name) => (typeof import.meta !== 'undefined' ? import.meta.env?.[name] : undefined);
+const buildEnv =
+  typeof __AAVE_BASE_BUILD_ENV__ !== 'undefined' ? __AAVE_BASE_BUILD_ENV__ : null;
+const buildOrEnv = (key) => (buildEnv ? buildEnv[key] : envFlag(key));
 
 /** True only when the build was explicitly told to expose in-app Aave supply. */
 export const AAVE_BASE_SUPPLY_ENABLED =
@@ -144,7 +147,7 @@ export const AAVE_BASE_SUPPLY_ENABLED =
  * is clamped to a sane ceiling so a typo cannot type 1e18 into a cap.
  */
 function envCap(name, fallback, ceiling) {
-  const raw = envFlag(name);
+  const raw = buildOrEnv(name);
   if (raw == null || String(raw).trim() === '') return fallback;
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return fallback;
