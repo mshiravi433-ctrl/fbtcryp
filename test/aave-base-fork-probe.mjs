@@ -28,6 +28,9 @@
  *   4. both transactions land; the position reflects the supply
  *   5. buildWithdrawPlan('max') → one step, MaxUint256
  *   6. the withdraw lands; the aToken balance is zero
+ *   7. explainRevert maps REAL on-chain reverts (a zero-amount supply and an
+ *      over-withdraw, fired with eth_call) to i18n keys — in whichever revert
+ *      era the forked pool runs (numeric code ≤ v3.3, custom error v3.4+)
  *
  * ─── REQUIREMENTS ───────────────────────────────────────────────────────────
  * `anvil` (Foundry) on PATH and an RPC that can serve Base mainnet state. This
@@ -244,6 +247,48 @@ try {
 
     /* ── 7. revert mapping against a real revert ───────────────────────────── */
     rule('7 · explainRevert against a real on-chain revert');
+    /*
+     * Aave changed how it reverts: instances on v3.0.x–v3.3 revert with the
+     * numeric Error(string) codes ("26"), instances on v3.4+ revert with the
+     * equivalent custom error (InvalidAmount()). Which one THIS fork answers
+     * with is decided by the chain, not by us — so the check is
+     * version-agnostic: the revert must be real, and explainRevert must map
+     * it to the right i18n key either way.
+     */
+    const poolIface = new Interface([
+      'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+      'function withdraw(address asset, uint256 amount, address to)'
+    ]);
+    const ethCallRevert = async (data) => {
+      try {
+        await provider.call({ to: AAVE_V3_BASE.pool, data });
+        return null; // no revert — the caller decides what that means
+      } catch (err) {
+        return err;
+      }
+    };
+    const zeroSupply = await ethCallRevert(poolIface.encodeFunctionData('supply', [
+      AAVE_V3_BASE.usdc, 0n, ANVIL_ACCOUNT, AAVE_V3_BASE.referralCode
+    ]));
+    const zeroSupplyExplained = zeroSupply ? adapter.explainRevert(zeroSupply) : null;
+    t('a zero-amount supply really reverts on the fork', Boolean(zeroSupply));
+    t('explainRevert maps it to the invalid-amount key (code 26 or InvalidAmount)',
+      zeroSupplyExplained?.known === true
+        && (zeroSupplyExplained.code === '26' || zeroSupplyExplained.code === null)
+        && zeroSupplyExplained.key === 'farm.aave.err.invalidAmount',
+      zeroSupplyExplained ? `${zeroSupplyExplained.code ?? 'custom'}: ${zeroSupplyExplained.key}` : 'no revert');
+
+    const overWithdraw = await ethCallRevert(poolIface.encodeFunctionData('withdraw', [
+      AAVE_V3_BASE.usdc, 1n, ANVIL_ACCOUNT
+    ]));
+    const overWithdrawExplained = overWithdraw ? adapter.explainRevert(overWithdraw) : null;
+    t('withdrawing past an empty position really reverts on the fork', Boolean(overWithdraw));
+    t('explainRevert maps it to the not-enough-balance key (code 32 or custom)',
+      overWithdrawExplained?.known === true
+        && (overWithdrawExplained.code === '32' || overWithdrawExplained.code === null)
+        && overWithdrawExplained.key === 'farm.aave.err.notEnoughBalance',
+      overWithdrawExplained ? `${overWithdrawExplained.code ?? 'custom'}: ${overWithdrawExplained.key}` : 'no revert');
+
     try {
       const tooMuch = await adapter.buildSupplyPlan({
         provider, owner: ANVIL_ACCOUNT, amountUsdc: String(adapter.AAVE_BASE_SUPPLY_MAX_USDC_PER_TX + 1),

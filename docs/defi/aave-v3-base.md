@@ -56,12 +56,28 @@ Pinned constants are never trusted alone. Before any write:
 2. The USDC reserve's aToken must equal the pinned aBasUSDC.
 
 Check 2 normally reads `Pool.getReserveData(USDC)`. That call returns the whole
-`DataTypes.ReserveData` struct, and **Aave changed that struct between releases**
-(v3.3.0 dropped `currentStableBorrowRate` and `stableDebtTokenAddress`, moving
-`aTokenAddress` from word 8 to word 7). Declaring one shape and hoping is how an
-integration starts reading a debt token as an aToken. So both layouts are
-declared explicitly (`RESERVE_DATA_SHAPES`) and each decode is validated against
-facts the wrong layout cannot satisfy:
+`DataTypes.ReserveData` struct, and **Aave changed that struct between releases**.
+The change is NOT what an early draft of the adapter assumed: v3.3.0 did not
+drop the stable-rate fields (v3.2.0 deprecated them and v3.3.0 repurposed one
+slot for `deficit`, but both slots are still in the struct). What moved
+`aTokenAddress` was the v3.1.0 release of the `aave-v3-origin` codebase
+(`liquidationGracePeriodUntil` inserted after `id`, `virtualUnderlyingBalance`
+appended), and the governance upgrades have been running that codebase since.
+The real lineage, verified against the released source (2026-09-06):
+
+- **v3.0.x (`aave-v3-core`, master/v1.19.x)** — 15 words, aToken at word 8:
+  the layout of the original 2023 deployments.
+- **v3.1+ (`aave-v3-origin`, tags v3.1.0 … v3.7.0)** — 17 words, aToken at
+  word 9, timestamp at 6, reserve id at 7 (identical in every tag; only the
+  tail words differ).
+
+Declaring one shape and hoping is how an integration starts reading a debt
+token as an aToken, so both real layouts are declared explicitly
+(`RESERVE_DATA_SHAPES`) and each decode is validated against facts the wrong
+layout cannot satisfy — a 13-word "v3.3+" layout with the aToken at word 7
+appeared in an early version of this table, matches **no** released pool, and
+is pinned as rejected in `test/farm-defi.test.js`. Each decoded candidate must
+pass:
 
 - word 0's decimals field must be 6 (ReserveConfiguration bits 48–55)
 - the timestamp word must be a real block timestamp (> 2017, fits uint40)
@@ -85,10 +101,18 @@ Verified against `aave-v3-core` source, not memory:
 - `Pool.getConfiguration(address) → uint256`; bitmap positions taken from
   `contracts/protocol/libraries/configuration/ReserveConfiguration.sol`
   (active = bit 56, frozen = 57, paused = 60, supply cap = bits 116–151).
-- Revert codes taken from `contracts/protocol/libraries/helpers/Errors.sol`
+- Reverts, in BOTH eras: instances on v3.0.x–v3.3 revert with the numeric
+  `Error(string)` codes from `contracts/protocol/libraries/helpers/Errors.sol`
   (26 invalid amount, 27 inactive, 28 frozen, 29 paused, 32 not enough balance,
   35/45 health factor, 51 supply cap exceeded, 59 oracle sentinel, 77 zero
-  address, 82 not listed).
+  address, 82 not listed); instances on v3.4+ (aave-v3-origin v3.4.0…v3.7.0)
+  revert with the same-named no-argument custom errors (`InvalidAmount()`,
+  `NotEnoughAvailableUserBalance()`, …), whose 4-byte selectors
+  `explainRevert` maps to the same i18n keys (`AAVE_V3_CUSTOM_ERRORS`,
+  selector-verified in `test/farm-defi.test.js`). The fork probe exercises
+  both paths against real reverts: a zero-amount supply must map to the
+  invalid-amount key and an over-withdraw to the not-enough-balance key,
+  whichever era the forked pool runs.
 
 ---
 

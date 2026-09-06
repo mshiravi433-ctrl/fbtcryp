@@ -148,50 +148,74 @@ const ORACLE_ABI = ['function getAssetPrice(address asset) view returns (uint256
 /* -------------------------------------------------------------------------- */
 /*
  * `Pool.getReserveData(asset)` returns the whole `DataTypes.ReserveData`
- * struct, and Aave CHANGED that struct between releases: v3.3.0 removed
- * `currentStableBorrowRate` and `stableDebtTokenAddress`, so `aTokenAddress`
- * sits at a different word offset than it did in v3.0–v3.2. Declaring one
- * shape in the ABI and hoping is how an integration silently starts reading a
- * debt token address as an aToken address.
+ * struct, and Aave CHANGED that struct between releases — but NOT the way an
+ * early draft of this comment claimed. The struct's deprecated stable-rate
+ * fields were never removed: v3.2.0 (aave-v3-origin) deprecated them and v3.3.0
+ * repurposed one slot (`deficit`), but both fields are still present in the
+ * ABI-encoded struct today. What actually moved `aTokenAddress` was the v3.1.0
+ * introduction of `liquidationGracePeriodUntil` (inserted between `id` and
+ * `aTokenAddress`) and of `virtualUnderlyingBalance` (appended at the end).
+ * Declaring one shape in the ABI and hoping is how an integration silently
+ * starts reading a debt token address as an aToken address.
  *
- * So the candidates are declared explicitly, oldest-and-newest, and each
- * decode is validated against facts that cannot be satisfied by the wrong
- * shape: word 0 is the configuration bitmap, and its decimals field (bits
- * 48-55, per ReserveConfiguration.sol) MUST equal USDC's 6 decimals; the
- * liquidity index MUST be >= 1e27. A candidate that fails validation is
- * rejected even if it "decoded".
+ * The real lineage, verified 2026-09-06 against the released protocol source
+ * (aave-v3-core master/v1.19.x = the v3.0.x code every 2023–24 deployment ran;
+ * aave-v3-origin tags v3.1.0, v3.2.0, v3.2.1, v3.3.0, v3.4.0, v3.5.0, v3.6.0,
+ * v3.7.0 = the code the Aave governance upgrades have been running since):
  *
- * Word offsets (all members are static, so ABI encoding pads each to 32 bytes):
+ *   v3.0.x (aave-v3-core)            — 15 words, aToken at word 8:
+ *       0 configuration · 1 liquidityIndex · 2 currentLiquidityRate
+ *       3 variableBorrowIndex · 4 currentVariableBorrowRate
+ *       5 currentStableBorrowRate · 6 lastUpdateTimestamp · 7 id
+ *       8 aTokenAddress · 9 stableDebtTokenAddress · 10 variableDebtTokenAddress
+ *       11 interestRateStrategyAddress · 12 accruedToTreasury · 13 unbacked
+ *       14 isolationModeTotalDebt
  *
- *   v3.3+   0 configuration · 1 liquidityIndex · 2 currentLiquidityRate
- *           3 variableBorrowIndex · 4 currentVariableBorrowRate
- *           5 lastUpdateTimestamp · 6 id · 7 aTokenAddress
- *           8 variableDebtTokenAddress · … · 12 virtualUnderlyingBalance
+ *   v3.1+ (aave-v3-origin, all tags) — 17 words, aToken at word 9:
+ *       0 configuration · 1 liquidityIndex · 2 currentLiquidityRate
+ *       3 variableBorrowIndex · 4 currentVariableBorrowRate
+ *       5 stableBorrowRate|deficit · 6 lastUpdateTimestamp · 7 id
+ *       8 liquidationGracePeriodUntil · 9 aTokenAddress
+ *       10 deprecatedStableDebtTokenAddress · 11 variableDebtTokenAddress
+ *       12 interestRateStrategyAddress · 13 accruedToTreasury
+ *       14 unbacked|virtualUnderlyingBalance · 15 isolationModeTotalDebt
+ *       16 virtualUnderlyingBalance|deprecated (v3.2/v3.3 and v3.4+ order the
+ *       tail differently; the words this adapter reads — 0 through 9 — and
+ *       their types are identical in every v3.1+ release, so one shape covers
+ *       them all).
  *
- *   v3.0-3.2 same, plus 5 currentStableBorrowRate and 9 stableDebtTokenAddress,
- *           which pushes aTokenAddress to word 8.
+ * A 13-word "v3.3+" layout with aToken at word 7 (the version of this table
+ * before this fix) matches NO released pool: it is rejected by the same
+ * validation below, and test/farm-defi.test.js pins that rejection so a
+ * phantom layout cannot quietly re-enter the table.
  *
- * Sources: aave-v3-core contracts/protocol/libraries/types/DataTypes.sol and
- * .../libraries/configuration/ReserveConfiguration.sol.
+ * The candidates are declared explicitly, oldest-and-newest, and each decode
+ * is validated against facts that cannot be satisfied by the wrong shape:
+ * word 0 is the configuration bitmap, and its decimals field (bits 48-55, per
+ * ReserveConfiguration.sol) MUST equal USDC's 6 decimals; the liquidity index
+ * MUST be >= 1e27. A candidate that fails validation is rejected even if it
+ * "decoded" (ethers tolerates trailing words, so a 15-word tuple will happily
+ * "decode" a 17-word payload and read word 8 — the grace period — as the
+ * aToken; the word-8/word-7 reads then fail the address checks below).
  */
 export const RESERVE_DATA_SHAPES = Object.freeze([
   {
-    id: 'v3.3+',
-    aTokenWord: 7,
-    timestampWord: 5,
-    idWord: 6,
-    words: 13,
-    types:
-      'tuple(uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address variableDebtTokenAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt, uint128 virtualUnderlyingBalance)'
-  },
-  {
-    id: 'v3.0-v3.2',
+    id: 'v3.0.x (aave-v3-core, 15w)',
     aTokenWord: 8,
     timestampWord: 6,
     idWord: 7,
     words: 15,
     types:
       'tuple(uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)'
+  },
+  {
+    id: 'v3.1+ (aave-v3-origin, 17w)',
+    aTokenWord: 9,
+    timestampWord: 6,
+    idWord: 7,
+    words: 17,
+    types:
+      'tuple(uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 stableBorrowRateOrDeficit, uint40 lastUpdateTimestamp, uint16 id, uint40 liquidationGracePeriodUntil, address aTokenAddress, address deprecatedStableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbackedOrVirtualUnderlyingBalance, uint128 isolationModeTotalDebt, uint128 virtualUnderlyingBalanceOrDeprecated)'
   }
 ]);
 
@@ -875,14 +899,28 @@ export async function buildRevokePlan({ provider, owner }) {
 /**
  * Aave v3 revert codes → i18n keys.
  *
- * Aave reverts with `require(cond, Errors.X)` where Errors.X is a SHORT NUMERIC
- * STRING, so the revert reason a wallet shows is literally "26". The numbers
- * and their meanings are copied from the deployed protocol's own error table:
+ * Aave changed HOW it reverts once, and the two eras overlap on live
+ * instances while governance upgrades them one by one:
  *
- *   aave-v3-core contracts/protocol/libraries/helpers/Errors.sol
+ *   · v3.0.x–v3.3 (aave-v3-core, and aave-v3-origin up to v3.3.0):
+ *     `require(cond, Errors.X)` where Errors.X is a SHORT NUMERIC STRING, so
+ *     the revert reason a wallet shows is literally "26". The numbers below
+ *     and their meanings are copied from the deployed protocol's own error
+ *     table (aave-v3-core / aave-v3-origin @v3.3.0
+ *     contracts/.../helpers/Errors.sol).
  *
- * Only the codes reachable from supply/withdraw/allowance paths are mapped;
- * everything else falls through to `decodeRevertReason`, so an unmapped code
+ *   · v3.4+ (aave-v3-origin v3.4.0, v3.5.0, v3.6.0, v3.7.0 — the code Aave
+ *     governance has been upgrading instances to since July 2025): every
+ *     string constant became a no-argument CUSTOM ERROR with the same name
+ *     and meaning (`error InvalidAmount();` etc.), so a reverting call no
+ *     longer carries "26" anywhere. The revert payload is the 4-byte error
+ *     selector, and AAVE_V3_CUSTOM_ERRORS below maps those selectors to the
+ *     same i18n keys. The mapping is verified in test/farm-defi.test.js
+ *     against keccak256 of the error signature, so a mistyped selector fails
+ *     the suite rather than shipping a silent miss.
+ *
+ * Only the errors reachable from supply/withdraw/allowance paths are mapped;
+ * everything else falls through to `decodeRevertReason`, so an unmapped error
  * still surfaces its raw reason instead of a wrong sentence.
  */
 export const AAVE_V3_ERROR_KEYS = Object.freeze({
@@ -901,11 +939,39 @@ export const AAVE_V3_ERROR_KEYS = Object.freeze({
 });
 
 /**
+ * v3.4+ custom errors → i18n keys, by 4-byte revert selector (lowercase,
+ * 0x-prefixed). Selectors are keccak256(name + "()") — all of Aave's custom
+ * errors are no-argument — precomputed so explainRevert stays synchronous;
+ * the suite re-derives each selector from the signature and compares.
+ */
+export const AAVE_V3_CUSTOM_ERRORS = Object.freeze({
+  '0x2c5211c6': 'farm.aave.err.invalidAmount',        // InvalidAmount()
+  '0x2075cc10': 'farm.aave.err.invalidBurnAmount',    // InvalidBurnAmount()
+  '0x90cd6f24': 'farm.aave.err.reserveInactive',      // ReserveInactive()
+  '0x6d305815': 'farm.aave.err.reserveFrozen',        // ReserveFrozen()
+  '0xd37f5f1c': 'farm.aave.err.reservePaused',        // ReservePaused()
+  '0x47bc4b2c': 'farm.aave.err.notEnoughBalance',     // NotEnoughAvailableUserBalance()
+  '0x6679996d': 'farm.aave.err.healthFactor',         // HealthFactorLowerThanLiquidationThreshold()
+  '0x930bb771': 'farm.aave.err.healthFactorNotBelow', // HealthFactorNotBelowThreshold()
+  '0xf58f733a': 'farm.aave.err.supplyCapExceeded',    // SupplyCapExceeded()
+  '0x91037009': 'farm.aave.err.oracleSentinel',       // PriceOracleSentinelCheckFailed()
+  '0x3bf95ba7': 'farm.aave.err.zeroAddress',          // ZeroAddressNotValid()
+  '0xb77e1e0f': 'farm.aave.err.assetNotListed'        // AssetNotListed()
+});
+
+/**
  * Map a failed call to something a user can read.
  *
+ * Understands both revert eras: the v3.4+ custom-error selector (usually on
+ * `err.data`) and the legacy numeric string ("26", in `reason`/prose). The
+ * legacy path first looks for a hex selector in any field — ethers' prose can
+ * embed the raw revert data — and then falls back to the numeric code.
+ *
  * @returns {{ code: string|null, key: string|null, known: boolean, reason: string|null }}
- *   `key` is an i18n key when Aave's own code was recognised; otherwise `reason`
- *   carries the decoded revert string. Never returns a fabricated explanation.
+ *   `key` is an i18n key when Aave's own error was recognised; `code` is the
+ *   legacy numeric code when the revert was a legacy string code, else null.
+ *   `reason` carries the decoded revert string only for unrecognised errors.
+ *   Never returns a fabricated explanation.
  */
 export function explainRevert(err) {
   const reason = decodeRevertReason(err);
@@ -914,8 +980,25 @@ export function explainRevert(err) {
     (typeof err?.shortMessage === 'string' && err.shortMessage) ||
     (typeof err?.message === 'string' && err.message) ||
     '';
-  /* The code arrives either bare ("26") or embedded in ethers' prose
-     ("execution reverted: 26" / 'reverted with reason string "26"'). */
+  const rawData =
+    (typeof err?.data === 'string' && err.data) ||
+    (typeof err?.info?.error?.data === 'string' && err.info.error.data) ||
+    '';
+
+  /* v3.4+ custom errors: a known 4-byte selector in the revert payload. */
+  for (const candidate of [rawData, raw]) {
+    const sel = String(candidate).match(/0x([0-9a-fA-F]{8})/);
+    if (sel) {
+      const key = AAVE_V3_CUSTOM_ERRORS[`0x${sel[1].toLowerCase()}`];
+      if (key) {
+        return { code: null, key, known: true, reason: null };
+      }
+    }
+  }
+
+  /* Legacy v3.0–v3.3: the code arrives either bare ("26") or embedded in
+     ethers' prose ("execution reverted: 26" / 'reverted with reason string
+     "26"'). */
   const m = String(raw).match(/(?:^|[^0-9])(\d{1,3})(?![0-9])/);
   const code = m ? m[1] : null;
   const key = code && AAVE_V3_ERROR_KEYS[code] ? AAVE_V3_ERROR_KEYS[code] : null;
