@@ -20,6 +20,7 @@ import {
 } from './executionStateMachine.js';
 import { adapterForChain } from './chainAdapters.js';
 import { planRebalance } from './rebalanceEngine.js';
+import { resolveVenueHooks } from './autonomy/venueExecutors.js';
 
 export const EXECUTION_RUNTIME_SCHEMA = 'fbt.ai-execution-runtime.v1';
 
@@ -57,12 +58,30 @@ async function step(action, next, extra = {}) {
  */
 export async function runAction(actionInput, {
   adapter = null,
-  hooks = {},
+  hooks: injectedHooks = {},
   wallet = null,
+  drivers = null,
   now = Date.now()
 } = {}) {
+  /*
+   * VENUE DISPATCH. Before autonomy, every action was handed one swap-shaped
+   * hook set, so anything that was not a swap died at QUOTING. The venue
+   * executor for this action now supplies the hooks (lending → lib/lending.js,
+   * perp → lib/velocityTrade.js, equity → the Stocks buy path…), and the state
+   * machine below is unchanged — one bar for every venue: no receipt, no
+   * success. `swap-evm` deliberately contributes nothing, so the live swap
+   * flow keeps the exact hooks it always had.
+   */
+  const dispatched = resolveVenueHooks(actionInput, {
+    wallet,
+    drivers: drivers || {},
+    hooks: injectedHooks
+  });
+  const hooks = dispatched.hooks;
+  const venue = dispatched.executor?.id || null;
+
   const plan = createExecutionPlan({ actions: [actionInput], now });
-  let action = plan.actions[0];
+  let action = { ...plan.actions[0], venue };
   const notify = typeof hooks.onProgress === 'function' ? hooks.onProgress : () => {};
 
   const bump = async (status, extra = {}) => {
@@ -185,7 +204,12 @@ export async function runAction(actionInput, {
     const sent = await sendFn(built.tx || built);
     txHash = typeof sent === 'string' ? sent : (sent?.txHash || sent?.hash || sent?.signature || null);
     if (!txHash) {
-      moved = await bump('BROADCAST_FAILED', { error: 'NO_TX_HASH' });
+      /* A venue that answered `{ ok: false, code }` named its own reason
+         (SUPPLY_FAILED, NO_SOLANA_WALLET…). Collapsing that into NO_TX_HASH
+         would tell the user nothing they could act on, so the venue's code is
+         carried through as the error detail. */
+      const venueCode = sent && sent.ok === false ? String(sent.code || 'VENUE_REJECTED') : 'NO_TX_HASH';
+      moved = await bump('BROADCAST_FAILED', { error: venueCode });
       return toExecutionResult({ ...plan, actions: [moved.action || action] });
     }
   } catch (err) {
@@ -244,6 +268,7 @@ export async function runExecutionPlan({
   adapters = null,
   hooks = {},
   wallet = null,
+  drivers = null,
   now = Date.now()
 } = {}) {
   const plan = createExecutionPlan({ intentId, actions, now });
@@ -264,6 +289,10 @@ export async function runExecutionPlan({
         onProgress: (info) => hooks.onProgress?.({ ...info, index: i + 1, total: plan.actions.length })
       },
       wallet,
+      /* A multi-venue plan (swap → farm → lend) is the whole point of the
+         autonomy layer; without forwarding the drivers every step after the
+         swap would fail as VENUE_DRIVER_MISSING. */
+      drivers,
       now
     });
     const last = result.plan?.actions?.[0] || { ...action, status: result.status };
@@ -285,6 +314,7 @@ export async function runRebalance({
   adapter,
   adapters,
   wallet,
+  drivers = null,
   now = Date.now()
 } = {}) {
   const planned = planRebalance({ holdings, balances, target, now });
@@ -308,6 +338,7 @@ export async function runRebalance({
     adapter,
     adapters,
     wallet,
+    drivers,
     now
   });
   return { ...result, rebalance: planned };

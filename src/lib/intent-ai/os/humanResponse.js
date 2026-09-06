@@ -371,7 +371,15 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       card: results?.token && results.token.dataStatus !== 'unavailable'
         ? tokenCard(results.token, lang)
         : null,
-      actions: [{ id: `view-${sym.toLowerCase()}`, route: '/market', label: lang === 'fa' ? `صفحه بازار ${sym}` : `${sym} Market` }]
+      /* The chip says "the BTC market page", so it must go to the coin page
+         and not to `/market` — a path the router does not have, which the
+         catch-all turned into the market home. Same id rule as
+         TokenMarketCard so the chip and the card agree. */
+      actions: [{
+        id: `view-${sym.toLowerCase()}`,
+        route: `/coin/${String(results?.token?.coinId || sym).toLowerCase()}`,
+        label: lang === 'fa' ? `صفحه بازار ${sym}` : `${sym} Market`
+      }]
     };
   }
 
@@ -406,6 +414,74 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         navigated: route
       };
     }
+  }
+
+  /*
+   * ─── «سودم دو برابر شود» ───────────────────────────────────────────────
+   * This used to score as YIELD_DISCOVERY and answer with a route chip — the
+   * exact complaint: «وقتی میگم سود زیاد فقط میبره صفحه سهام». A named multiple
+   * is a GOAL: it needs a target, a horizon, the live rates and a verdict, and
+   * the answer is arithmetic, not a link.
+   *
+   * The plan itself is compiled by the chat (autonomy/goalPlanCompiler via
+   * autonomy/goalSources) because that is where the live balances and the
+   * scanner output for this turn already are, and because this function is
+   * synchronous by contract. What this layer decides is WHICH question was
+   * asked — and that the answer must be a card that can be executed, not a
+   * navigation.
+   */
+  if (type === 'GOAL_PLAN') {
+    const multiple = Number(intent?.entities?.goalMultiple) > 1 ? Number(intent.entities.goalMultiple) : 2;
+    const horizonDays = Number(intent?.entities?.horizonDays) > 0 ? Number(intent.entities.horizonDays) : 365;
+    const hasCapital = Boolean(context?.portfolio?.totalValueUsd
+      || context?.portfolio?.holdings?.length
+      || context?.balances?.length
+      || Number(intent?.entities?.amountUsd) > 0);
+    if (!hasCapital && !connected) {
+      return {
+        message: lang === 'fa'
+          ? `برای اینکه بگویم ${multiple} برابر شدن واقعاً چقدر طول می‌کشد، باید سرمایه واقعی‌ات را ببینم — نه یک عدد فرضی. کیف پول را وصل کن یا مبلغ را بنویس.`
+          : `To tell you how long ${multiple}× actually takes, I need your real capital — not an assumed number. Connect the wallet or type the amount.`,
+        ui: { type: 'CONNECT_WALLET' },
+        goalRequest: { multiple, horizonDays },
+        pendingIntent: intent?.raw || null
+      };
+    }
+    return {
+      message: lang === 'fa'
+        ? `هدف را گرفتم: ${multiple} برابر در ${horizonDays} روز. حالا نرخ‌های واقعیِ همین لحظه را می‌خوانم و می‌گویم شدنی است یا نه — با عدد، نه با وعده.`
+        : `Goal noted: ${multiple}× in ${horizonDays} days. Reading the live rates now and telling you whether it is reachable — with numbers, not a promise.`,
+      ui: { type: 'GOAL_PLAN_CARD' },
+      goalRequest: { multiple, horizonDays },
+      requiresExecution: true
+    };
+  }
+
+  /*
+   * ─── «اتوماسیون را روشن کن» ─────────────────────────────────────────────
+   * The autonomy loop (autonomy/botLoop.js) is real: protections, positions,
+   * mark-to-market, PAPER / ARMED / LIVE. What it can never do in a
+   * self-custody app is sign on its own — this app holds no key — so the card
+   * states the mode it will run in before anything is armed.
+   */
+  if (type === 'AUTONOMY') {
+    const raw = String(intent?.raw || context?.lastMessage || '').toLowerCase();
+    const wantsStop = /بند|خاموش|متوقف|stop/i.test(raw);
+    const wantsPaper = /کاغذی|پیپر|paper/i.test(raw);
+    const mode = wantsPaper ? 'PAPER' : 'ARMED';
+    return {
+      message: lang === 'fa'
+        ? (wantsStop
+          ? 'اتوماسیون را متوقف کردم. هیچ موقعیت جدیدی باز نمی‌شود؛ موقعیت‌های باز سر جای خودشان می‌مانند تا خودت تصمیم بگیری.'
+          : `اتوماسیون آماده است. در حالت «${mode === 'PAPER' ? 'کاغذی' : 'نیمه‌خودکار'}» کار می‌کند: تصمیم با آن، امضا با تو. اول استراتژی را روی داده واقعی بک‌تست می‌کنم و عددش را نشان می‌دهم — بعد می‌توانی مسلحش کنی.`)
+        : (wantsStop
+          ? 'Automation stopped. No new positions will be opened; open ones stay where they are until you decide.'
+          : `Automation is ready. It runs in ${mode} mode: it decides, you sign. I backtest the strategy on real data first and show you the number — then you can arm it.`),
+      ui: { type: 'AUTONOMY_CARD' },
+      autonomyRequest: { wantsStop, mode },
+      requiresExecution: true,
+      actions: [{ id: 'open-ops', route: '/intent?tab=ops', label: lang === 'fa' ? 'مرکز عملیات' : 'Ops Center' }]
+    };
   }
 
   if (type === 'OPEN_CALM' || type === 'PLAY_MUSIC') {
@@ -480,7 +556,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
           code: 'EMPTY_PORTFOLIO',
           actions: [
             { id: 'open-farm', route: '/farm', label: lang === 'fa' ? 'فارم' : 'Farm' },
-            { id: 'open-market', route: '/market', label: lang === 'fa' ? 'بازار' : 'Market' }
+            { id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }
           ]
         };
       }
@@ -898,7 +974,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
           : `Market snapshot from live data:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nAsk for any coin by name for the chart with 24h high/low — e.g. "analyze bitcoin".`),
         ui: { type: 'TEXT' },
         market,
-        actions: [{ id: 'open-market', route: '/market', label: lang === 'fa' ? 'بازار' : 'Market' }]
+        actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
       };
     }
     return {
@@ -906,7 +982,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         ? `بازار${token ? ` ${token}` : ''} را از ماژول زنده خواندم. جزئیات کامل روی صفحه بازار است — می‌خواهید آنجا را باز کنم؟`
         : `I read live market data${token ? ` for ${token}` : ''}. Want me to open the market page?`,
       ui: { type: 'TEXT' },
-      actions: [{ id: 'open-market', route: '/market', label: lang === 'fa' ? 'بازار' : 'Market' }]
+      actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
     };
   }
 

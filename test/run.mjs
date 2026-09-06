@@ -38,6 +38,31 @@ import './intent-ai/ci-brain-turns-probe.mjs';
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
 import './intent-ai/ops-i18n-probe.mjs';
+/*
+ * Autonomy core — the layer that turns "the assistant links you to a page" into
+ * "the assistant executes". Three suites, all against the real source:
+ *
+ *   execution  every venue (swap / lending / the fork-probed Base USDC pool /
+ *              Solana perps / tokenised equities) reaches CONFIRMED only through
+ *              a receipt, and a matched venue with no driver fails by name at
+ *              that venue instead of silently falling through to the swapper —
+ *              which is the exact bug behind «فقط میبره صفحه مورد نظر».
+ *   engine     the goal compiler's arithmetic (2× in a year needs 100% APY, the
+ *              best live rate is what it is) and the loop: protections before
+ *              entries, one strategy object shared with the backtester, and a
+ *              mode that cannot sign never reporting a fill.
+ *   routes     every route the AI emits lands on a mounted route or an in-page
+ *              target — the contract whose absence made «باز کن» a dead button.
+ */
+import './intent-ai/autonomy-execution-probe.mjs';
+import './intent-ai/autonomy-engine-probe.mjs';
+import './intent-ai/chat-route-contract-probe.mjs';
+/* The pipeline seam the unit probes above cannot see: the goal compiler
+   refuses rather than guesses, so a wiring gap UPSTREAM of it surfaces as
+   "every goal card refuses". This drives the real chain — understandIntent →
+   executeIntentTools → buildHumanResponse → planFromIntent — and fails if the
+   live rates do not actually arrive at the compiler. */
+import './intent-ai/goal-pipeline-probe.mjs';
 /* Upgrade 10 — the Financial OS layer: financial state, decision engine,
    council, guardians, permissions, kill switches, memory, scenarios, twin,
    monitoring and replanning. It belongs in `npm test` because the failures it

@@ -55,7 +55,8 @@ export const CHAIN_ALIASES = Object.freeze({
 });
 
 export const PAGE_CATALOG = Object.freeze([
-  { route: '/market', names: { fa: 'بازار', en: 'Market' }, keywords: ['بازار', 'market'] },
+  /* The market screen IS the root route; `/market` was never in the router. */
+  { route: '/', names: { fa: 'بازار', en: 'Market' }, keywords: ['بازار', 'market'] },
   { route: '/swap', names: { fa: 'سواپ', en: 'Swap' }, keywords: ['سواپ', 'swap', 'تبدیل'] },
   { route: '/solana', names: { fa: 'سواپ سولانا', en: 'Solana Swap' }, keywords: ['سواپ سولانا', 'solana swap'] },
   { route: '/bridge', names: { fa: 'بریج', en: 'Bridge' }, keywords: ['بریج', 'پل', 'bridge'] },
@@ -225,7 +226,7 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
     case 'PORTFOLIO_ANALYSIS':
       return openPage ? '/portfolio' : null;
     case 'MARKET_ANALYSIS':
-      return openPage ? '/market' : null;
+      return openPage ? '/' : null;
     case 'INTENT_OS':
       return e.tab ? `/intent?tab=${encodeURIComponent(e.tab)}` : '/intent';
     /*

@@ -104,12 +104,15 @@ export const MODULE_GRAPH = Object.freeze({
   wallet: { connects: ['portfolio', 'swap', 'futures'], route: '/wallet' },
   portfolio: { connects: ['wallet', 'swap', 'lending', 'farm', 'market'], route: '/portfolio' },
   swap: { connects: ['wallet', 'portfolio', 'market'], route: '/swap' },
-  lending: { connects: ['portfolio', 'wallet'], route: '/lend' },
+  /* `/lend` and `/futures` are not routes — the real pages are /loan and
+     /perp. Both used to land on the catch-all (Market), which is how a
+     module graph ends up advertising screens that do not exist. */
+  lending: { connects: ['portfolio', 'wallet'], route: '/loan' },
   farm: { connects: ['portfolio', 'wallet'], route: '/farm' },
-  futures: { connects: ['wallet', 'market', 'signals'], route: '/futures' },
+  futures: { connects: ['wallet', 'market', 'signals'], route: '/perp' },
   signals: { connects: ['market', 'smartMoney'], route: '/signals' },
   smartMoney: { connects: ['market', 'signals'], route: '/smart-money' },
-  market: { connects: ['signals', 'smartMoney', 'portfolio'], route: '/market' }
+  market: { connects: ['signals', 'smartMoney', 'portfolio'], route: '/' }
 });
 
 const GOAL_MODULES = {

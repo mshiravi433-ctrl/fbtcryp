@@ -83,7 +83,15 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
     data.portfolio = portfolioRow.result || analysisRow?.result;
   }
 
-  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'INVESTMENT_PLAN', 'STAKING'].includes(type)) {
+  /*
+   * GOAL_PLAN needs the same scan. The goal compiler builds its verdict from
+   * the rates it can actually read (`results.yieldOpportunities`), and its
+   * honesty rule is to REFUSE rather than guess: with no scan it can only
+   * answer `NO_LIVE_RATES`. So a goal request that skipped this branch
+   * produced a card that always said "I could not read any live rate" — even
+   * on a network where the rates were right there.
+   */
+  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'INVESTMENT_PLAN', 'STAKING', 'GOAL_PLAN'].includes(type)) {
     const scan = await scanOpportunities({
       services,
       portfolio: context.portfolio,
