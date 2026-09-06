@@ -2457,6 +2457,27 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const startAutonomy = useCallback(() => { autonomyEngineRef.current?.start(); rerenderAutonomy(); }, [rerenderAutonomy]);
   const stopAutonomy = useCallback(() => { autonomyEngineRef.current?.stop(); rerenderAutonomy(); }, [rerenderAutonomy]);
 
+  /*
+   * «اتوماسیون را متوقف کن» has to actually stop something.
+   *
+   * buildHumanResponse is synchronous by contract, so it cannot call the
+   * engine — it can only ask. Until this effect existed it asked and nobody
+   * listened: the bubble announced «اتوماسیون را متوقف کردم» in the past
+   * tense while the loop kept ticking. That is the worst shape of this bug,
+   * because the UI reads as done.
+   *
+   * Placed below startAutonomy/stopAutonomy on purpose. A dependency array is
+   * evaluated during render, so this block cannot sit above them — the same
+   * TDZ trap that took the whole screen down once already.
+   */
+  const lastStopMessageId = useRef(null);
+  useEffect(() => {
+    const pending = messages.find((m) => m.autonomyRequest?.wantsStop && m.id !== lastStopMessageId.current);
+    if (!pending) return;
+    lastStopMessageId.current = pending.id;
+    stopAutonomy();
+  }, [messages, stopAutonomy]);
+
   const armAutomation = useCallback(async ({ strategy, asset, stakeUsd }) => {
     const engine = autonomyEngineRef.current;
     if (!engine) return;
