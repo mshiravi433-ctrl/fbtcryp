@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Sheet from './Sheet';
 import CoinLogo from './CoinLogo';
 import TokenIcon from '../lib/tokenIcon.jsx';
+import MarketIcon from './MarketIcon';
 import '../styles/modern-select.css';
 
 function hueFor(symbol) {
@@ -22,21 +23,6 @@ function FallbackIcon({ symbol, size = 42 }) {
         background: `linear-gradient(140deg, hsl(${hue} 70% 46%), hsl(${(hue + 42) % 360} 68% 36%))`,
         borderRadius: size <= 36 ? 10 : 12,
         fontSize: size <= 36 ? 10 : 11,
-      }}
-      aria-hidden="true"
-    >
-      {String(symbol || '?').slice(0, 3).toUpperCase()}
-    </span>
-  );
-}
-
-function OptFallback({ symbol }) {
-  const hue = hueFor(symbol);
-  return (
-    <span
-      className="modern-select-opt-fallback"
-      style={{
-        background: `linear-gradient(140deg, hsl(${hue} 70% 46%), hsl(${(hue + 42) % 360} 68% 36%))`,
       }}
       aria-hidden="true"
     >
@@ -68,7 +54,19 @@ function renderTriggerIcon(opt, compact) {
       />
     );
   }
-  return <FallbackIcon symbol={opt.label || opt.symbol || '?'} size={compact ? 36 : 42} />;
+  /*
+   * No image anywhere → a type-aware icon. The market pickers (Thor, dYdX,
+   * Futures, Ostium, Tron) pass only a label, so we derive the asset kind from
+   * the symbol/category and render flags for forex, a metal coin for
+   * commodities, a company logo for stocks, and so on — never a plain monogram.
+   */
+  return (
+    <MarketIcon
+      symbol={opt.symbol || opt.baseSymbol || opt.label || opt.value}
+      category={opt.assetType || opt.category}
+      size={compact ? 36 : 42}
+    />
+  );
 }
 
 function renderOptIcon(opt) {
@@ -89,7 +87,13 @@ function renderOptIcon(opt) {
       />
     );
   }
-  return <OptFallback symbol={opt.label || opt.symbol || '?'} />;
+  return (
+    <MarketIcon
+      symbol={opt.symbol || opt.baseSymbol || opt.label || opt.value}
+      category={opt.assetType || opt.category}
+      size={44}
+    />
+  );
 }
 
 /**

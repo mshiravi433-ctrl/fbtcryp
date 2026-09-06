@@ -247,6 +247,8 @@ export default function Dydx() {
               value: m.ticker,
               label: m.ticker,
               sublabel: m.ticker.split('-')[1] ? `${m.ticker.split('-')[0]} / ${m.ticker.split('-')[1]}` : '',
+              symbol: m.ticker,
+              assetType: 'crypto',
             }))}
             title={t('dydx.market')}
             placeholder={market?.ticker || 'BTC-USD'}

@@ -203,6 +203,8 @@ export default function TronPanel() {
             value: c.id,
             label: c.name,
             sublabel: 'USDC',
+            symbol: 'USDC',
+            assetType: 'crypto',
           }))}
           title={t('tron.from')}
           placeholder={t('tron.from')}

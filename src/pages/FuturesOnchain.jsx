@@ -695,6 +695,8 @@ export default function FuturesOnchain() {
                   value: m.uid,
                   label: m.symbol,
                   sublabel: m.uiCategory || m.category || '',
+                  symbol: m.symbol,
+                  assetType: m.uiCategory || m.category || '',
                   meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
                 }))}
                 title={t('futures.market')}

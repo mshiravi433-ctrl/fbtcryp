@@ -38,6 +38,8 @@ import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import ModernSelect from '../components/ModernSelect';
+import TokenIcon from '../lib/tokenIcon.jsx';
+import MarketIcon from '../components/MarketIcon';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -707,6 +709,8 @@ export default function Bridge() {
               value: c.id,
               label: c.name,
               sublabel: c.symbol,
+              symbol: c.symbol,
+              assetType: 'crypto',
             }))}
             title={t('bridge.from')}
             placeholder={t('bridge.from')}
@@ -753,6 +757,8 @@ export default function Bridge() {
               value: c.id,
               label: c.name,
               sublabel: c.symbol,
+              symbol: c.symbol,
+              assetType: 'crypto',
             }))}
             title={t('bridge.to')}
             placeholder={t('bridge.to')}
@@ -762,15 +768,9 @@ export default function Bridge() {
           <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
             <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
               <span className="modern-select-icon">
-                {toToken ? (
-                  (() => {
-                    const s = toToken.symbol || '?';
-                    let h = 0; for (let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))%360;
-                    return (
-                      <span style={{ width:36,height:36,display:'grid',placeItems:'center',borderRadius:10,background:`linear-gradient(140deg,hsl(${h} 70% 46%),hsl(${(h+42)%360} 68% 36%))`,color:'#fff',fontFamily:'var(--font-mono)',fontWeight:900,fontSize:10}}>{s.slice(0,3)}</span>
-                    );
-                  })()
-                ) : <span style={{ width:36,height:36,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12}}>—</span>}
+                {toToken ? <TokenIcon token={toToken} chainId={toChain} size={36} /> : (
+                  <MarketIcon symbol="USDC" category="crypto" size={36} />
+                )}
               </span>
               <span className="modern-select-text">
                 <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>

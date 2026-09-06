@@ -197,6 +197,8 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
                 value: p.asset,
                 label: assetLabel(p.asset),
                 sublabel: assetChain(p.asset),
+                symbol: assetLabel(p.asset),
+                assetType: 'crypto',
               }))}
               title={t('thor.from')}
               placeholder={t('thor.from')}
@@ -225,6 +227,8 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
                 value: p.asset,
                 label: assetLabel(p.asset),
                 sublabel: assetChain(p.asset),
+                symbol: assetLabel(p.asset),
+                assetType: 'crypto',
               }))}
               title={t('thor.to')}
               placeholder={t('thor.to')}

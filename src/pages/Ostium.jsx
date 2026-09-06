@@ -462,6 +462,8 @@ export default function Ostium() {
                 value: m.pairId,
                 label: m.name,
                 sublabel: m.uiCategory || m.category || '',
+                symbol: m.name,
+                assetType: m.uiCategory || m.category || '',
                 meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
               }))}
               title={t('ostium.market')}
