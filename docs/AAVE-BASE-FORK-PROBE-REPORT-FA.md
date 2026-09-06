@@ -21,12 +21,17 @@ Foundry هم در همین لایه قطع می‌شود؛ و توکن agent ا�
 تست پین شدند:
 
 1. **جدول `RESERVE_DATA_SHAPES` یک layout موهوم «۱۳-word / v3.3+» را اعلان کرده
-   بود** که در هیچ release ای از Aave وجود ندارد. واقعیت (از سورس تگ‌ها):
-   نسخه‌های v3.0.x (aave-v3-core) ۱۵ word با aToken در word 8 هستند و **تمام**
-   نسخه‌های v3.1.0 تا v3.7.0 (aave-v3-origin) ۱۷ word با aToken در word 9.
-   اگر Pool اصلی Base روی هر کد ≥ v3.1 باشد (و شواهد ارتقای governance در
-   ۲۰۲۵–۲۰۲۶ همین را می‌گوید)، جدول قبلی روی دادهٔ زنده حتماً
-   `AAVE_RESERVE_DATA_UNDECODABLE` می‌داد و کل مسیر پول مسدود می‌شد.
+   بود** که در هیچ release ای از Aave وجود ندارد؛ و پس از حذف آن، برچسب‌ها هم
+   هنوز lineage را درست نمی‌گفتند. واقعیت کامل (از سورس release ها، ۲۰۲۶-۰۹-۰۶،
+   و بعداً تأیید زنده روی fork): struct داخلی در v3.1.0 به ۱۷ فیلد رشد کرد ولی
+   `Pool.getReserveData()` در **تمام** تگ‌های منتشرشده — core v3.0.x و origin
+   v3.1.0 تا v3.7.0 — همان ABI قدیمیِ ۱۵ فیلدی (`ReserveDataLegacy` در origin
+   ها، aToken در word 8) را برمی‌گرداند. پس شکل ABI به‌تنهایی **نشانگر نسخه
+   نیست**؛ نسخه از سبک revert معلوم می‌شود. اجرای زنده هم این را ثابت کرد:
+   Base امروز **کد origin v3.4+** است (خطای custom) با همان ABI ۱۵کلمه‌ای —
+   یعنی جدول «۱۵w = فقط v3.0.x» هم اگر مانده بود، برچسب گمراه‌کننده می‌داد
+   (هرچند دیکد درست کار می‌کرد). برچسب‌ها و مستندات به نسخهٔ خنثی و درست
+   اصلاح شدند.
 2. **`explainRevert` فقط revert های قدیمیِ رشته‌ای عددی را می‌شناخت.** Aave از
    نسخهٔ v3.4.0 (ژوئیه ۲۰۲۵) همهٔ کدهای رشته‌ای (مثل `'26'`) را به custom
    error های بدون آرگومان با همان نام (`InvalidAmount()` و…) تبدیل کرده است؛
@@ -97,20 +102,30 @@ FAIL  anvil available (--strict)                not found on PATH
 
 ### lineage واقعی (راستی‌آزمایی ۲۰۲۶-۰۹-۰۶ از سورس release ها)
 
-| کد | مخزن/تگ | واژه‌ها | aToken | ts | id |
-|---|---|---|---|---|---|
-| v3.0.x (deploy های ۲۰۲۳–۲۴) | `aave/aave-v3-core` master/v1.19.4 | ۱۵ | word **8** | 6 | 7 |
-| v3.1.0 | `aave-dao/aave-v3-origin` | ۱۷ | word **9** | 6 | 7 |
-| v3.2.0 / v3.2.1 | همان (stable-rate منسوخ، اسلات حفظ شد) | ۱۷ | word **9** | 6 | 7 |
-| v3.3.0 (۲۰۲۵-۰۲-۲۴) | همان (اسلات ۵ ← deficit) | ۱۷ | word **9** | 6 | 7 |
-| v3.4.0 (۲۰۲۵-۰۷-۳۰) | همان | ۱۷ | word **9** | 6 | 7 |
-| v3.5.0 / v3.6.0 / v3.7.0 (۲۰۲۶-۰۸-۰۵) | همان | ۱۷ | word **9** | 6 | 7 |
+دو چیز را باید از هم جدا کرد: **struct داخلی** و **خروجی عمومی `getReserveData()`**.
 
-نکتهٔ تاریخی مهم: ادعای قبلی («v3.3.0 فیلدهای stable را حذف کرد») غلط است —
-v3.2 آن‌ها را منسوخ کرد ولی **در struct نگه داشت** و v3.3 فقط یک اسلات را به
-`deficit` تغییر کاربری داد. چیزی که aToken را جابه‌جا کرد، v3.1.0 بود
-(درج `liquidationGracePeriodUntil` بعد از id و افزودن `virtualUnderlyingBalance`
-در انتها). layout «۱۳-word با aToken در word 7» در **هیچ** release ای وجود ندارد.
+| کد | struct داخلی | خروجی getReserveData (ABI) | aToken | خطاها |
+|---|---|---|---|---|
+| v3.0.x (`aave-v3-core`) | همان struct، ۱۵ فیلد | ۱۵ واژه | word **8** | رشتهٔ عددی |
+| v3.1.0 – v3.3.x (origin) | ۱۷ فیلد (رشد در v3.1.0) | **`ReserveDataLegacy` = ۱۵ واژه** | word **8** | رشتهٔ عددی (تا v3.3.0) |
+| v3.4.0 – v3.7.0 (origin) | ۱۷ فیلد (v3.4 ترتیب tail را عوض کرد) | **`ReserveDataLegacy` = ۱۵ واژه** | word **8** | custom errors |
+
+نکته‌های تاریخی مهم:
+- ادعای قبلی («v3.3.0 فیلدهای stable را حذف کرد») غلط است — v3.2 آن‌ها را
+  منسوخ کرد ولی **در struct نگه داشت** و v3.3 فقط یک اسلات را به `deficit`
+  تغییر کاربری داد.
+- **ادعای میانیِ خودِ این مرحله هم غلط از آب درآمد:** «v3.1+ همهٔ تگ‌ها ۱۷ واژه
+  با aToken در word 9» — آن ۱۷ فیلد، struct **داخلی** است؛ امضای
+  `IPool.getReserveData` در v3.1.0، v3.2.0، v3.3.0، v3.4.0 (و DataTypes در
+  v3.5.0/v3.6.0/main) همگی `ReserveDataLegacy` (۱۵ فیلد) را برمی‌گردانند
+  («This exists specifically to maintain the `getReserveData()` interface»).
+  یعنی **هیچ پول منتشرشده‌ای خروجی ۱۷واژه‌ای نمی‌دهد**؛ کاندیدای ۱۷-word در
+  آداپتر فقط دفاعی نگه داشته شده (اگر روزی variant ای struct داخلی را برگرداند).
+- پس شکل ABI نشانگر نسخه نیست — یک پاسخ ۱۵واژه‌ای می‌تواند پول v3.0.x-core
+  باشد یا origin v3.4+. **تشخیص نسخه فقط از سبک revert ممکن است** (دوران
+  رشته‌ای تا v3.3.0، custom از v3.4.0) — همان که rule 7 پروب روی revert های
+  زنده می‌سنجد.
+- layout «۱۳-word با aToken در word 7» در **هیچ** release ای وجود ندارد.
 
 علاوه بر این، رفتار ethers بررسی شد: decode یک tuple کوتاه‌تر روی دادهٔ بلندتر
 ساکتانه موفق می‌شود (واژه‌های اضافه نادیده گرفته می‌شوند) — پس شکل ۱۵-word روی
@@ -120,16 +135,19 @@ grace period (uint40) → رد؛ همین الان هم این‌طور بود �
 
 ### تغییرات
 - `src/lib/defi/aaveV3Base.js` — کامنت provenance بازنویسی شد؛ `RESERVE_DATA_SHAPES`
-  حالا فقط دو شکل واقعی دارد:
-  - `'v3.0.x (aave-v3-core, 15w)'` — aTokenWord 8، words 15
-  - `'v3.1+ (aave-v3-origin, 17w)'` — aTokenWord 9، words 17
+  حالا دو کاندیدا با برچسب درست دارد:
+  - `'15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)'`
+    — aTokenWord 8، words 15 (خروجیِ همهٔ پول‌های منتشرشده)
+  - `'17w internal ReserveData (defensive; no released getReserveData returns it)'`
+    — aTokenWord 9، words 17 (دفاعی)
 - `test/helpers/aaveMockProvider.mjs` — ثابت‌های `SHAPE_CORE_V30X` /
   `SHAPE_ORIGIN_V31` / `SHAPE_PHANTOM_13W`؛ encoder هر سه شکل (۱۵/۱۷/۱۳-word) را
   با ترتیب فیلدهای منطبق بر `DataTypes.sol` می‌سازد و shape ناشناس را throw می‌کند؛
-  پیش‌فرض mock روی ۱۷-word (واقعیت فعلی Base) رفت.
-- `test/farm-defi.test.js` — دو تست جدید:
-  - «declares exactly the two shapes the released protocol source actually has»
-    (words/aTokenWord/timestampWord/idWord هر دو شکل + مجموعهٔ دقیق دو عضوی)
+  پیش‌فرض mock روی ۱۵-word (واقعیتِ همهٔ پول‌ها، از جمله Base امروز) رفت.
+- `test/farm-defi.test.js` — تست‌های پین با lineage تصحیح‌شده هم‌سو شدند:
+  - «declares the 15-word legacy getReserveData ABI plus the defensive 17-word
+    internal struct» (words/aTokenWord/timestampWord/idWord هر دو کاندیدا +
+    مجموعهٔ دقیق دو عضوی)
   - «rejects the phantom 13-word "v3.3+" layout that matches no released pool»
 - `docs/defi/aave-v3-base.md` — بخش Runtime verification با lineage درست بازنویسی شد.
 

@@ -16,9 +16,12 @@ import { AbiCoder, Interface } from 'ethers';
 
 const coder = AbiCoder.defaultAbiCoder();
 
-/** The two real layouts, named exactly as RESERVE_DATA_SHAPES in the adapter. */
-export const SHAPE_CORE_V30X = 'v3.0.x (aave-v3-core, 15w)';
-export const SHAPE_ORIGIN_V31 = 'v3.1+ (aave-v3-origin, 17w)';
+/** The two declared layouts, named exactly as RESERVE_DATA_SHAPES in the adapter.
+ * Every released pool answers getReserveData with the 15-word legacy ABI
+ * (v3.0.x core struct, or origin v3.1+ via ReserveDataLegacy); the 17-word
+ * internal struct is encoded here defensively. */
+export const SHAPE_CORE_V30X = '15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)';
+export const SHAPE_ORIGIN_V31 = '17w internal ReserveData (defensive; no released getReserveData returns it)';
 /** A struct layout that matches no released Aave pool — regression only. */
 export const SHAPE_PHANTOM_13W = 'phantom-13w (never shipped)';
 
@@ -75,7 +78,7 @@ export function encodeReserveConfig({
 }
 
 /** Encode the raw ReserveData tuple for one of the two real layouts. */
-export function encodeReserveData({ shape = SHAPE_ORIGIN_V31, config, liquidityRateRay, aToken, liquidityIndex = RAY }) {
+export function encodeReserveData({ shape = SHAPE_CORE_V30X, config, liquidityRateRay, aToken, liquidityIndex = RAY }) {
   if (shape === SHAPE_ORIGIN_V31) {
     /*
      * v3.1+ (aave-v3-origin v3.1.0–v3.7.0): 17 words, aToken at word 9.
@@ -120,8 +123,8 @@ export function encodeReserveData({ shape = SHAPE_ORIGIN_V31, config, liquidityR
  * @param {string} cfg.usdc              the underlying USDC address (chains.js value)
  * @param {string} cfg.pinnedPool        what the adapter pinned as the Pool
  * @param {string} cfg.pinnedAToken      what the adapter pinned as aBasUSDC
- * @param {string} [cfg.reserveDataShape] 'v3.1+ (aave-v3-origin, 17w)' (default) |
- *                                        'v3.0.x (aave-v3-core, 15w)' |
+ * @param {string} [cfg.reserveDataShape] '15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)' (default) |
+ *                                        '17w internal ReserveData (defensive; no released getReserveData returns it)' |
  *                                        'phantom-13w (never shipped)' | 'garbage'
  * @param {bigint} [cfg.configBitmap]
  * @param {bigint} [cfg.liquidityRateRay]
@@ -138,7 +141,7 @@ export function makeAaveProvider({
   usdc,
   pinnedPool,
   pinnedAToken,
-  reserveDataShape = SHAPE_ORIGIN_V31,
+  reserveDataShape = SHAPE_CORE_V30X,
   configBitmap,
   liquidityRateRay = RAY / 20n, // 5.00% APY
   allowanceWei = 0n,

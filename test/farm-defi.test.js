@@ -156,7 +156,7 @@ describe('aave v3 base adapter', () => {
     expect(evidence.ok).toBe(true);
     expect(evidence.pool).toBe(AAVE_V3_BASE.pool);
     expect(evidence.verifiedVia).toBe('pool.getReserveData');
-    expect(evidence.reserveDataShape).toBe(SHAPE_ORIGIN_V31);
+    expect(evidence.reserveDataShape).toBe(SHAPE_CORE_V30X);
     // The same provider resolves from the session cache, not a second RPC round trip.
     const before = provider.calls.length;
     await verifyDeployment(provider);
@@ -208,14 +208,18 @@ describe('aave v3 base adapter', () => {
     )).rejects.toMatchObject({ code: 'AAVE_RESERVE_DATA_UNDECODABLE' });
   });
 
-  it('declares exactly the two shapes the released protocol source actually has', () => {
+  it('declares the 15-word legacy getReserveData ABI plus the defensive 17-word internal struct', () => {
     /*
      * Word offsets were verified against the released source, not assumed:
-     * aave-v3-core (v3.0.x) has 15 words with aToken at word 8; every
-     * aave-v3-origin tag (v3.1.0 through v3.7.0) has 17 words with aToken at
-     * word 9, lastUpdateTimestamp at 6 and reserve id at 7 in both. If a
-     * future Aave release moves aToken again, this pin forces the adapter and
-     * its fixture encoder to be updated together.
+     * every released pool answers getReserveData() with the SAME 15-field
+     * legacy ABI — aave-v3-core v3.0.x returns its own struct directly, and
+     * every aave-v3-origin tag (v3.1.0 through v3.7.0) returns the dedicated
+     * DataTypes.ReserveDataLegacy — so aToken sits at word 8, timestamp at 6,
+     * reserve id at 7. The 17-word layout is the INTERNAL struct of origin
+     * v3.1+ (aToken at word 9), never returned by a released getReserveData;
+     * it is kept as a defensive candidate. If a future Aave release moves
+     * aToken again, this pin forces the adapter and its fixture encoder to be
+     * updated together.
      */
     const byId = Object.fromEntries(RESERVE_DATA_SHAPES.map((s) => [s.id, s]));
     expect(byId[SHAPE_CORE_V30X]).toMatchObject({ words: 15, aTokenWord: 8, timestampWord: 6, idWord: 7 });

@@ -148,59 +148,51 @@ const ORACLE_ABI = ['function getAssetPrice(address asset) view returns (uint256
 /* -------------------------------------------------------------------------- */
 /*
  * `Pool.getReserveData(asset)` returns the whole `DataTypes.ReserveData`
- * struct, and Aave CHANGED that struct between releases — but NOT the way an
- * early draft of this comment claimed. The struct's deprecated stable-rate
- * fields were never removed: v3.2.0 (aave-v3-origin) deprecated them and v3.3.0
- * repurposed one slot (`deficit`), but both fields are still present in the
- * ABI-encoded struct today. What actually moved `aTokenAddress` was the v3.1.0
- * introduction of `liquidationGracePeriodUntil` (inserted between `id` and
- * `aTokenAddress`) and of `virtualUnderlyingBalance` (appended at the end).
- * Declaring one shape in the ABI and hoping is how an integration silently
- * starts reading a debt token address as an aToken address.
+ * struct, and Aave CHANGED that struct between releases — but the change is
+ * NOT visible on the wire the way an early draft of this comment claimed.
+ * What actually happened, verified 2026-09-06 against the released protocol
+ * source (aave-v3-core master/v1.19.x; aave-v3-origin tags v3.1.0 … v3.7.0):
  *
- * The real lineage, verified 2026-09-06 against the released protocol source
- * (aave-v3-core master/v1.19.x = the v3.0.x code every 2023–24 deployment ran;
- * aave-v3-origin tags v3.1.0, v3.2.0, v3.2.1, v3.3.0, v3.4.0, v3.5.0, v3.6.0,
- * v3.7.0 = the code the Aave governance upgrades have been running since):
+ *   · aave-v3-core (v3.0.x) has ONE struct, 15 ABI fields, and
+ *     getReserveData() returns it directly: 15 words, aToken at word 8.
  *
- *   v3.0.x (aave-v3-core)            — 15 words, aToken at word 8:
- *       0 configuration · 1 liquidityIndex · 2 currentLiquidityRate
- *       3 variableBorrowIndex · 4 currentVariableBorrowRate
- *       5 currentStableBorrowRate · 6 lastUpdateTimestamp · 7 id
- *       8 aTokenAddress · 9 stableDebtTokenAddress · 10 variableDebtTokenAddress
- *       11 interestRateStrategyAddress · 12 accruedToTreasury · 13 unbacked
- *       14 isolationModeTotalDebt
+ *   · aave-v3-origin (v3.1.0 … v3.7.0) grew the INTERNAL ReserveData struct
+ *     to 17 fields (liquidationGracePeriodUntil inserted between id and
+ *     aTokenAddress; virtualUnderlyingBalance added; stable-rate slots kept,
+ *     then reused — deficit on v3.3.0, a v3.4.0 tail reorder). But the Pool's
+ *     public getReserveData() returns a dedicated `DataTypes.ReserveDataLegacy`
+ *     — 15 fields, aToken at word 8 — in EVERY origin tag (verified in
+ *     IPool.sol at v3.1.0, v3.2.0, v3.3.0, v3.4.0 and in DataTypes.sol at
+ *     v3.5.0, v3.6.0, main: "This exists specifically to maintain the
+ *     getReserveData() interface"). So every released pool answers
+ *     getReserveData with the SAME 15-word ABI.
  *
- *   v3.1+ (aave-v3-origin, all tags) — 17 words, aToken at word 9:
- *       0 configuration · 1 liquidityIndex · 2 currentLiquidityRate
- *       3 variableBorrowIndex · 4 currentVariableBorrowRate
- *       5 stableBorrowRate|deficit · 6 lastUpdateTimestamp · 7 id
- *       8 liquidationGracePeriodUntil · 9 aTokenAddress
- *       10 deprecatedStableDebtTokenAddress · 11 variableDebtTokenAddress
- *       12 interestRateStrategyAddress · 13 accruedToTreasury
- *       14 unbacked|virtualUnderlyingBalance · 15 isolationModeTotalDebt
- *       16 virtualUnderlyingBalance|deprecated (v3.2/v3.3 and v3.4+ order the
- *       tail differently; the words this adapter reads — 0 through 9 — and
- *       their types are identical in every v3.1+ release, so one shape covers
- *       them all).
+ *   · Therefore the ABI shape is NOT a version fingerprint: a 15-word answer
+ *     can be a v3.0.x-core pool OR an origin v3.4+ pool. The version is told
+ *     apart by the REVERT style instead — numeric Error(string) codes through
+ *     v3.3.0, equivalent no-argument custom errors from v3.4.0 — which is
+ *     what probe rule 7 checks against real reverts.
  *
- * A 13-word "v3.3+" layout with aToken at word 7 (the version of this table
- * before this fix) matches NO released pool: it is rejected by the same
- * validation below, and test/farm-defi.test.js pins that rejection so a
- * phantom layout cannot quietly re-enter the table.
+ * The 17-word candidate below is kept DEFENSIVELY: no released getReserveData
+ * returns the internal struct, but if any deployed variant ever does, the
+ * aToken sits at word 9 there. A 13-word "v3.3+" layout with aToken at word 7
+ * (the version of this table before the previous fix) matches NO released
+ * pool: it is rejected by the same validation below, and
+ * test/farm-defi.test.js pins that rejection so a phantom layout cannot
+ * quietly re-enter the table.
  *
- * The candidates are declared explicitly, oldest-and-newest, and each decode
- * is validated against facts that cannot be satisfied by the wrong shape:
- * word 0 is the configuration bitmap, and its decimals field (bits 48-55, per
+ * The candidates are declared explicitly, and each decode is validated
+ * against facts that cannot be satisfied by the wrong shape: word 0 is the
+ * configuration bitmap, and its decimals field (bits 48-55, per
  * ReserveConfiguration.sol) MUST equal USDC's 6 decimals; the liquidity index
  * MUST be >= 1e27. A candidate that fails validation is rejected even if it
  * "decoded" (ethers tolerates trailing words, so a 15-word tuple will happily
  * "decode" a 17-word payload and read word 8 — the grace period — as the
- * aToken; the word-8/word-7 reads then fail the address checks below).
+ * aToken; the shifted reads then fail the address checks below).
  */
 export const RESERVE_DATA_SHAPES = Object.freeze([
   {
-    id: 'v3.0.x (aave-v3-core, 15w)',
+    id: '15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)',
     aTokenWord: 8,
     timestampWord: 6,
     idWord: 7,
@@ -209,7 +201,7 @@ export const RESERVE_DATA_SHAPES = Object.freeze([
       'tuple(uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)'
   },
   {
-    id: 'v3.1+ (aave-v3-origin, 17w)',
+    id: '17w internal ReserveData (defensive; no released getReserveData returns it)',
     aTokenWord: 9,
     timestampWord: 6,
     idWord: 7,

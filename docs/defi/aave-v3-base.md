@@ -55,29 +55,33 @@ Pinned constants are never trusted alone. Before any write:
 1. `PoolAddressesProvider.getPool()` must equal the pinned Pool.
 2. The USDC reserve's aToken must equal the pinned aBasUSDC.
 
-Check 2 normally reads `Pool.getReserveData(USDC)`. That call returns the whole
-`DataTypes.ReserveData` struct, and **Aave changed that struct between releases**.
-The change is NOT what an early draft of the adapter assumed: v3.3.0 did not
-drop the stable-rate fields (v3.2.0 deprecated them and v3.3.0 repurposed one
-slot for `deficit`, but both slots are still in the struct). What moved
-`aTokenAddress` was the v3.1.0 release of the `aave-v3-origin` codebase
-(`liquidationGracePeriodUntil` inserted after `id`, `virtualUnderlyingBalance`
-appended), and the governance upgrades have been running that codebase since.
-The real lineage, verified against the released source (2026-09-06):
+Check 2 normally reads `Pool.getReserveData(USDC)`. The struct behind that
+call CHANGED between releases — but in a way that is NOT visible on the wire.
+Verified against the released source (2026-09-06):
 
-- **v3.0.x (`aave-v3-core`, master/v1.19.x)** — 15 words, aToken at word 8:
-  the layout of the original 2023 deployments.
-- **v3.1+ (`aave-v3-origin`, tags v3.1.0 … v3.7.0)** — 17 words, aToken at
-  word 9, timestamp at 6, reserve id at 7 (identical in every tag; only the
-  tail words differ).
+- **aave-v3-core (v3.0.x, the original 2023 deployments)** — one struct, 15
+  ABI fields; `getReserveData()` returns it directly: 15 words, aToken at
+  word 8, timestamp at 6, reserve id at 7.
+- **aave-v3-origin (v3.1.0 … v3.7.0, the governance-upgrade codebase)** — the
+  INTERNAL `ReserveData` struct grew to 17 fields (stable-rate slots kept and
+  repurposed — `deficit` on v3.3.0 — plus `liquidationGracePeriodUntil` and
+  `virtualUnderlyingBalance`), but `Pool.getReserveData()` returns a dedicated
+  `DataTypes.ReserveDataLegacy` — **15 fields, aToken at word 8 — in every
+  origin tag** (verified in `IPool.sol` at v3.1.0/v3.2.0/v3.3.0/v3.4.0 and in
+  `DataTypes.sol` at v3.5.0/v3.6.0/main, which says it "exists specifically to
+  maintain the `getReserveData()` interface").
+
+So every released pool answers `getReserveData` with the SAME 15-word ABI, and
+**the ABI shape is not a version fingerprint**. The code version is told apart
+by the revert style (see below) — which is why probe rule 7 fires real reverts.
 
 Declaring one shape and hoping is how an integration starts reading a debt
-token as an aToken, so both real layouts are declared explicitly
-(`RESERVE_DATA_SHAPES`) and each decode is validated against facts the wrong
-layout cannot satisfy — a 13-word "v3.3+" layout with the aToken at word 7
-appeared in an early version of this table, matches **no** released pool, and
-is pinned as rejected in `test/farm-defi.test.js`. Each decoded candidate must
-pass:
+token as an aToken, so the 15-word legacy ABI and a defensive 17-word internal
+layout are both declared explicitly (`RESERVE_DATA_SHAPES`, aToken at word 9
+in the latter) and each decode is validated against facts the wrong layout
+cannot satisfy — a 13-word "v3.3+" layout with the aToken at word 7 appeared
+in an early version of this table, matches **no** released pool, and is pinned
+as rejected in `test/farm-defi.test.js`. Each decoded candidate must pass:
 
 - word 0's decimals field must be 6 (ReserveConfiguration bits 48–55)
 - the timestamp word must be a real block timestamp (> 2017, fits uint40)
