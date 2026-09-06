@@ -160,6 +160,11 @@ export default defineConfig({
      * See src/lib/features.js and docs/defi/aave-v3-base.md.
      */
     __AAVE_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_BASE_SUPPLY === 'true'),
+    __AAVE_BASE_BUILD_ENV__: JSON.stringify({
+      VITE_AAVE_BASE_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_BASE_SUPPLY_ALLOWLIST ?? '',
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+    }),
     /*
      * Version string, read from package.json at build time.
      *
