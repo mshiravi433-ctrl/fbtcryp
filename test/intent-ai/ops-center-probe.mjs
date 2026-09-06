@@ -34,8 +34,10 @@ import { validateOrder, createOrder } from '../../src/lib/orders.js';
 import {
   appendConversation,
   appendOperation,
+  appendSeason,
   readHistory,
-  clearHistory
+  clearHistory,
+  seasonsFromHistory
 } from '../../src/lib/intent-ai/os/historyStore.js';
 import { OPERATIONS, CATEGORIES, cardAvailability } from '../../src/lib/intent-ai/os/opsCatalog.js';
 import { runOpportunityEngine } from '../../src/lib/intent-ai/os/opportunityEngine.js';
@@ -205,6 +207,29 @@ try {
   check('history persists operations with real status', hist.operations.length === 1 && hist.operations[0].status === 'ACTIVE' && hist.operations[0].refKind === 'monitor');
   const leaked = appendOperation({ kind: 'X', status: 'COMPLETED', title: 'leak', secret: 'privateKey', privateKey: 'k' }, { store: memStore });
   check('history never stores credential fields', !JSON.stringify(leaked).includes('privateKey'));
+
+  /* ------------------------- E2. seasons (grouped history) --------------- */
+  const sStore = { data: {}, getItem(k) { return this.data[k] ?? null; }, setItem(k, v) { this.data[k] = v; } };
+  clearHistory({ store: sStore });
+  const s1 = appendSeason({ seasonId: 'season_a', conversationId: 'c1', title: 'خرید BTC', lastMessage: 'اگر BTC ارزان شد خبر بده', firstAt: NOW, lastAt: NOW + 10, addCount: 3 }, { store: sStore, now: NOW });
+  check('a season is recorded with its id and count', s1?.seasonId === 'season_a' && s1.messageCount === 3);
+  const s1b = appendSeason({ seasonId: 'season_a', conversationId: 'c1', lastMessage: 'بررسی شد', firstAt: NOW, lastAt: NOW + 20, addCount: 2 }, { store: sStore, now: NOW + 20 });
+  check('re-opening a season updates it in place (no duplicate)', s1b?.messageCount === 5 && seasonsFromHistory({ store: sStore }).length === 1);
+  appendSeason({ seasonId: 'season_b', conversationId: 'c2', title: '', lastMessage: 'موجودی چقدر است؟', firstAt: NOW + 30, lastAt: NOW + 30, addCount: 1 }, { store: sStore, now: NOW + 30 });
+  const ordered = seasonsFromHistory({ store: sStore });
+  check('seasons are listed newest first', ordered[0]?.seasonId === 'season_b' && ordered[1]?.seasonId === 'season_a');
+  const dup = appendConversation({ role: 'user', content: 'تکراری', conversationId: 'c1', seasonId: 'season_a', sourceId: 'msg_1' }, { store: sStore, now: NOW });
+  const dupAgain = appendConversation({ role: 'user', content: 'تکراری', conversationId: 'c1', seasonId: 'season_a', sourceId: 'msg_1' }, { store: sStore, now: NOW });
+  check('the same source message is archived exactly once', dup !== null && dupAgain === null && readHistory({ store: sStore }).conversations.filter((c) => c.sourceId === 'msg_1').length === 1);
+  clearHistory({ store: sStore });
+  check('clearing history also clears seasons', seasonsFromHistory({ store: sStore }).length === 0);
+  /* Legacy (v1) rows with no season records still surface as seasons. */
+  const legStore = { data: {}, getItem(k) { return this.data[k] ?? null; }, setItem(k, v) { this.data[k] = v; } };
+  clearHistory({ store: legStore });
+  appendConversation({ role: 'user', content: 'پرتفوی من را تحلیل کن', conversationId: 'legacy_c' }, { store: legStore, now: NOW });
+  appendConversation({ role: 'ai', content: 'تحلیل انجام شد', conversationId: 'legacy_c' }, { store: legStore, now: NOW + 5 });
+  const derived = seasonsFromHistory({ store: legStore });
+  check('a legacy v1 history is derived into seasons without data loss', derived.length === 1 && derived[0].messageCount === 2 && derived[0].title === 'پرتفوی من را تحلیل کن');
 
   /* ------------------------------ F. catalog ----------------------------- */
   check('catalog has all spec categories', ['portfolio', 'wallet', 'swap', 'bridge', 'lending', 'farm', 'liquidity', 'futures', 'dydx', 'markets', 'intelligence', 'goals', 'automation', 'monitoring', 'rewards'].every((id) => CATEGORIES.some((c) => c.id === id)));

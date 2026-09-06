@@ -145,6 +145,26 @@
   box-shadow: none;
 }
 
+/* «سشن جدید» — starts a clean thread; the current one is archived as a season. */
+.iaos-new-season-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, .08);
+  border: 1px solid rgba(103, 232, 249, .3);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.iaos-new-season-btn:active {
+  background: rgba(34, 211, 238, .18);
+}
+
 .iaos-autos {
   border: 1px solid rgba(148, 163, 184, .14);
   background: rgba(13, 20, 36, .56);
@@ -1293,6 +1313,66 @@
   color: #fda4af;
 }
 
+/*
+ * The Continue control is a PRIMARY action, not a badge: it must be a real
+ * tap target (≥44px) on its own line so it is impossible to miss on a phone.
+ * The old rule above styled it as an 11px pill that sat inline with the
+ * timestamp — the «دکمهٔ ادامه» a user cannot actually press.
+ */
+.iaos-history-continue.iaos-season-continue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  border-radius: 12px;
+  border: 1px solid rgba(103, 232, 249, .4);
+  background: rgba(34, 211, 238, .14);
+  color: #a5f3fc;
+  cursor: pointer;
+}
+
+.iaos-history-continue.iaos-season-continue:active {
+  background: rgba(34, 211, 238, .24);
+}
+
+.iaos-history-season {
+  background: rgba(15, 23, 42, .55);
+  border: 1px solid rgba(103, 232, 249, .18);
+}
+
+.iaos-season-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.iaos-season-title-row strong {
+  font-size: 14px;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 72%;
+}
+
+.iaos-season-last {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(148, 163, 184, .9);
+  margin: 2px 0 0;
+}
+
+.iaos-season-last span {
+  color: #818cf8;
+  font-weight: 700;
+}
+
 .iaos-empty {
   text-align: center;
   color: rgba(148, 163, 184, .7);
@@ -1612,7 +1692,8 @@
 :root[data-theme='light'] .iaos-history-row p,
 :root[data-theme='light'] .iaos-status-cell strong,
 :root[data-theme='light'] .iaos-monitor-card-head strong,
-:root[data-theme='light'] .iaos-order-card strong {
+:root[data-theme='light'] .iaos-order-card strong,
+:root[data-theme='light'] .iaos-season-title-row strong {
   color: #0f172a;
 }
 
