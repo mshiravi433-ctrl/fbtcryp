@@ -5,14 +5,25 @@
  * real ABIs, real bitmap decoding and real ethers encoding. Only the CHAIN is
  * replaced: `provider.call` answers each selector the way a Base node would.
  *
- * It speaks both ReserveData struct layouts (v3.3+ and v3.0–v3.2) so the
- * adapter's shape-validation is exercised, and it can be told to lie — a wrong
- * Pool, a wrong aToken, a paused reserve — because the point of these tests is
- * that the adapter refuses those.
+ * It speaks both real ReserveData struct layouts — the v3.0.x (aave-v3-core)
+ * 15-word one and the v3.1+ (aave-v3-origin) 17-word one, whose exact field
+ * order is taken from the released protocol source — plus a deliberately
+ * fake 13-word "v3.3+" layout (kept only to prove the adapter rejects it), and
+ * it can be told to lie — a wrong Pool, a wrong aToken, a paused reserve —
+ * because the point of these tests is that the adapter refuses those.
  */
 import { AbiCoder, Interface } from 'ethers';
 
 const coder = AbiCoder.defaultAbiCoder();
+
+/** The two declared layouts, named exactly as RESERVE_DATA_SHAPES in the adapter.
+ * Every released pool answers getReserveData with the 15-word legacy ABI
+ * (v3.0.x core struct, or origin v3.1+ via ReserveDataLegacy); the 17-word
+ * internal struct is encoded here defensively. */
+export const SHAPE_CORE_V30X = '15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)';
+export const SHAPE_ORIGIN_V31 = '17w internal ReserveData (defensive; no released getReserveData returns it)';
+/** A struct layout that matches no released Aave pool — regression only. */
+export const SHAPE_PHANTOM_13W = 'phantom-13w (never shipped)';
 
 const IFACES = {
   addressesProvider: new Interface([
@@ -66,9 +77,34 @@ export function encodeReserveConfig({
   return data;
 }
 
-/** Encode the raw ReserveData tuple for one of the two known layouts. */
-export function encodeReserveData({ shape = 'v3.3+', config, liquidityRateRay, aToken, liquidityIndex = RAY }) {
-  if (shape === 'v3.3+') {
+/** Encode the raw ReserveData tuple for one of the two real layouts. */
+export function encodeReserveData({ shape = SHAPE_CORE_V30X, config, liquidityRateRay, aToken, liquidityIndex = RAY }) {
+  if (shape === SHAPE_ORIGIN_V31) {
+    /*
+     * v3.1+ (aave-v3-origin v3.1.0–v3.7.0): 17 words, aToken at word 9.
+     * Field order copied from the released DataTypes.sol; word 5 is
+     * currentStableBorrowRate (v3.1) or deficit (v3.3+), both uint128.
+     */
+    return coder.encode(
+      ['tuple(uint256, uint128, uint128, uint128, uint128, uint128, uint40, uint16, uint40, address, address, address, address, uint128, uint128, uint128, uint128)'],
+      [[
+        config, liquidityIndex, liquidityRateRay, RAY + 1n, RAY + 2n, 0n,
+        1700000000, 3, 0n, aToken, ZERO_ADDRESS, ZERO_ADDRESS, ZERO_ADDRESS,
+        0n, 0n, 0n, 0n
+      ]]
+    );
+  }
+  if (shape === SHAPE_CORE_V30X) {
+    return coder.encode(
+      ['tuple(uint256, uint128, uint128, uint128, uint128, uint128, uint40, uint16, address, address, address, address, uint128, uint128, uint128)'],
+      [[
+        config, liquidityIndex, liquidityRateRay, RAY + 1n, RAY + 2n, 0n,
+        1700000000, 3, aToken, ZERO_ADDRESS, ZERO_ADDRESS, ZERO_ADDRESS, 0n, 0n, 0n
+      ]]
+    );
+  }
+  if (shape === SHAPE_PHANTOM_13W) {
+    // The layout that never shipped: aToken claimed at word 7, 13 words.
     return coder.encode(
       ['tuple(uint256, uint128, uint128, uint128, uint128, uint40, uint16, address, address, uint128, uint128, uint128, uint128)'],
       [[
@@ -77,13 +113,7 @@ export function encodeReserveData({ shape = 'v3.3+', config, liquidityRateRay, a
       ]]
     );
   }
-  return coder.encode(
-    ['tuple(uint256, uint128, uint128, uint128, uint128, uint128, uint40, uint16, address, address, address, address, uint128, uint128, uint128)'],
-    [[
-      config, liquidityIndex, liquidityRateRay, RAY + 1n, RAY + 2n, 0n,
-      1700000000, 3, aToken, ZERO_ADDRESS, ZERO_ADDRESS, ZERO_ADDRESS, 0n, 0n, 0n
-    ]]
-  );
+  throw new Error(`aaveMockProvider: unknown reserve data shape "${shape}"`);
 }
 
 /**
@@ -93,7 +123,9 @@ export function encodeReserveData({ shape = 'v3.3+', config, liquidityRateRay, a
  * @param {string} cfg.usdc              the underlying USDC address (chains.js value)
  * @param {string} cfg.pinnedPool        what the adapter pinned as the Pool
  * @param {string} cfg.pinnedAToken      what the adapter pinned as aBasUSDC
- * @param {string} [cfg.reserveDataShape] 'v3.3+' | 'v3.0-v3.2' | 'garbage'
+ * @param {string} [cfg.reserveDataShape] '15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)' (default) |
+ *                                        '17w internal ReserveData (defensive; no released getReserveData returns it)' |
+ *                                        'phantom-13w (never shipped)' | 'garbage'
  * @param {bigint} [cfg.configBitmap]
  * @param {bigint} [cfg.liquidityRateRay]
  * @param {bigint} [cfg.allowanceWei]    USDC allowance the Pool already holds
@@ -109,7 +141,7 @@ export function makeAaveProvider({
   usdc,
   pinnedPool,
   pinnedAToken,
-  reserveDataShape = 'v3.3+',
+  reserveDataShape = SHAPE_CORE_V30X,
   configBitmap,
   liquidityRateRay = RAY / 20n, // 5.00% APY
   allowanceWei = 0n,

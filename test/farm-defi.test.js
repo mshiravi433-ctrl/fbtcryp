@@ -101,7 +101,7 @@ describe('farm DeFi architecture', () => {
    would otherwise cost a user money. */
 import { MaxUint256 } from 'ethers';
 import {
-  AAVE_V3_BASE, AAVE_V3_ERROR_KEYS, AaveAdapterError, RESERVE_DATA_SHAPES,
+  AAVE_V3_BASE, AAVE_V3_CUSTOM_ERRORS, AAVE_V3_ERROR_KEYS, AaveAdapterError, RESERVE_DATA_SHAPES,
   buildRevokePlan, buildSupplyPlan, buildWithdrawPlan, decodeReserveConfiguration,
   decodeReserveData, explainRevert, fromUsdcWei, getReserveStatus, getPosition,
   isAaveBaseUsdcPool, rayToApyPct, verifyDeployment
@@ -111,7 +111,10 @@ import {
   AAVE_BASE_SUPPLY_MAX_USDC_TOTAL, aaveBaseSupplyAllowedFor, aaveBaseWithdrawAllowedFor
 } from '../src/lib/features';
 import { derivePartialApprovalState } from '../src/lib/defi/aaveV3History';
-import { encodeReserveConfig, makeAaveProvider, decodeCall, ZERO_ADDRESS } from './helpers/aaveMockProvider.mjs';
+import {
+  SHAPE_CORE_V30X, SHAPE_ORIGIN_V31, SHAPE_PHANTOM_13W,
+  encodeReserveConfig, encodeReserveData, makeAaveProvider, decodeCall, ZERO_ADDRESS
+} from './helpers/aaveMockProvider.mjs';
 
 const OWNER = '0x1111111111111111111111111111111111111111';
 const USDC_1 = 10n ** BigInt(AAVE_V3_BASE.usdcDecimals);
@@ -153,7 +156,7 @@ describe('aave v3 base adapter', () => {
     expect(evidence.ok).toBe(true);
     expect(evidence.pool).toBe(AAVE_V3_BASE.pool);
     expect(evidence.verifiedVia).toBe('pool.getReserveData');
-    expect(evidence.reserveDataShape).toBe('v3.3+');
+    expect(evidence.reserveDataShape).toBe(SHAPE_CORE_V30X);
     // The same provider resolves from the session cache, not a second RPC round trip.
     const before = provider.calls.length;
     await verifyDeployment(provider);
@@ -173,7 +176,7 @@ describe('aave v3 base adapter', () => {
   });
 
   it('falls back to the aToken describing itself when no struct layout validates', async () => {
-    // The v3.3+ aToken, but ReserveData returns a word count no declared shape accepts.
+    // The real pinned aToken, but ReserveData returns something no declared shape accepts.
     const provider = healthy({ reserveDataShape: 'garbage' });
     const evidence = await verifyDeployment(provider);
     expect(evidence.verifiedVia).toBe('atoken.self-report');
@@ -185,11 +188,11 @@ describe('aave v3 base adapter', () => {
     await expect(plan(provider, '5')).rejects.toMatchObject({ code: 'AAVE_POOL_MISMATCH' });
   });
 
-  it('decodes both ReserveData struct layouts and rejects a wrong one', async () => {
+  it('decodes both real ReserveData layouts and rejects a wrong one', async () => {
     for (const shape of RESERVE_DATA_SHAPES) {
       const decoded = await decodeReserveData(
         // Encode with this shape, decode with the adapter's own candidate list.
-        (await import('./helpers/aaveMockProvider.mjs')).encodeReserveData({
+        encodeReserveData({
           shape: shape.id, config: goodConfig(), liquidityRateRay: 10n ** 27n / 10n, aToken: AAVE_V3_BASE.aUsdc
         }),
         { expectedDecimals: 6 }
@@ -199,9 +202,39 @@ describe('aave v3 base adapter', () => {
     }
     // A struct claiming 18 decimals cannot be the USDC reserve, whatever shape it has.
     const wrongDecimals = encodeReserveConfig({ decimals: 18, active: true });
-    const { encodeReserveData } = await import('./helpers/aaveMockProvider.mjs');
     await expect(decodeReserveData(
-      encodeReserveData({ shape: 'v3.3+', config: wrongDecimals, liquidityRateRay: 10n ** 27n, aToken: AAVE_V3_BASE.aUsdc }),
+      encodeReserveData({ shape: SHAPE_ORIGIN_V31, config: wrongDecimals, liquidityRateRay: 10n ** 27n, aToken: AAVE_V3_BASE.aUsdc }),
+      { expectedDecimals: 6 }
+    )).rejects.toMatchObject({ code: 'AAVE_RESERVE_DATA_UNDECODABLE' });
+  });
+
+  it('declares the 15-word legacy getReserveData ABI plus the defensive 17-word internal struct', () => {
+    /*
+     * Word offsets were verified against the released source, not assumed:
+     * every released pool answers getReserveData() with the SAME 15-field
+     * legacy ABI — aave-v3-core v3.0.x returns its own struct directly, and
+     * every aave-v3-origin tag (v3.1.0 through v3.7.0) returns the dedicated
+     * DataTypes.ReserveDataLegacy — so aToken sits at word 8, timestamp at 6,
+     * reserve id at 7. The 17-word layout is the INTERNAL struct of origin
+     * v3.1+ (aToken at word 9), never returned by a released getReserveData;
+     * it is kept as a defensive candidate. If a future Aave release moves
+     * aToken again, this pin forces the adapter and its fixture encoder to be
+     * updated together.
+     */
+    const byId = Object.fromEntries(RESERVE_DATA_SHAPES.map((s) => [s.id, s]));
+    expect(byId[SHAPE_CORE_V30X]).toMatchObject({ words: 15, aTokenWord: 8, timestampWord: 6, idWord: 7 });
+    expect(byId[SHAPE_ORIGIN_V31]).toMatchObject({ words: 17, aTokenWord: 9, timestampWord: 6, idWord: 7 });
+    expect(Object.keys(byId).sort()).toEqual([SHAPE_CORE_V30X, SHAPE_ORIGIN_V31]);
+  });
+
+  it('rejects the phantom 13-word "v3.3+" layout that matches no released pool', async () => {
+    // An earlier version of the adapter declared a 13-word layout with the
+    // aToken at word 7. It was inferred from v3.3 release notes, not from the
+    // struct source: v3.2 deprecated the stable-rate fields but never removed
+    // them, and v3.3's ReserveData is still 17 words. No pool returns 13.
+    // Feed the phantom payload: it must decode to nothing, not to a "shape".
+    await expect(decodeReserveData(
+      encodeReserveData({ shape: SHAPE_PHANTOM_13W, config: goodConfig(), liquidityRateRay: 10n ** 27n, aToken: AAVE_V3_BASE.aUsdc }),
       { expectedDecimals: 6 }
     )).rejects.toMatchObject({ code: 'AAVE_RESERVE_DATA_UNDECODABLE' });
   });
@@ -400,6 +433,56 @@ describe('aave v3 base adapter', () => {
     expect(unknown.reason).toBeTruthy();
     // A revert with no digits at all must not be misread as a code.
     expect(explainRevert({ reason: 'insufficient funds for gas', message: 'insufficient funds for gas' }).key).toBeNull();
+  });
+
+  it('maps v3.4+ custom-error reverts by selector to the same i18n keys', async () => {
+    /*
+     * Aave v3.4+ (aave-v3-origin v3.4.0 … v3.7.0) replaced the numeric string
+     * codes with no-argument custom errors of the same name. The revert
+     * payload is then just the 4-byte selector — the number "26" appears
+     * nowhere. explainRevert must read the selector from err.data (the real
+     * ethers shape) and from a bare hex reason (the simulation shape).
+     */
+    const { id } = await import('ethers');
+    // Every selector in the table must BE keccak256 of its error signature —
+    // a mistyped selector would silently ship a mapping that never fires.
+    const byKey = new Map();
+    for (const [selector, key] of Object.entries(AAVE_V3_CUSTOM_ERRORS)) byKey.set(key, selector);
+    for (const [code, key] of Object.entries(AAVE_V3_ERROR_KEYS)) {
+      if (!byKey.has(key)) continue;
+      const name = {
+        'farm.aave.err.invalidAmount': 'InvalidAmount',
+        'farm.aave.err.invalidBurnAmount': 'InvalidBurnAmount',
+        'farm.aave.err.reserveInactive': 'ReserveInactive',
+        'farm.aave.err.reserveFrozen': 'ReserveFrozen',
+        'farm.aave.err.reservePaused': 'ReservePaused',
+        'farm.aave.err.supplyCapExceeded': 'SupplyCapExceeded',
+        'farm.aave.err.notEnoughBalance': 'NotEnoughAvailableUserBalance',
+        'farm.aave.err.healthFactor': 'HealthFactorLowerThanLiquidationThreshold',
+        'farm.aave.err.healthFactorNotBelow': 'HealthFactorNotBelowThreshold',
+        'farm.aave.err.oracleSentinel': 'PriceOracleSentinelCheckFailed',
+        'farm.aave.err.zeroAddress': 'ZeroAddressNotValid',
+        'farm.aave.err.assetNotListed': 'AssetNotListed'
+      }[key];
+      expect(id(`${name}()`).slice(0, 10).toLowerCase(), `${name} selector`).toBe(byKey.get(key));
+    }
+    // Behaviour: real ethers shape (data carries the selector) and the
+    // simulation shape (the hex lands in reason/message).
+    expect(explainRevert({ data: byKey.get('farm.aave.err.invalidAmount') }))
+      .toMatchObject({ code: null, key: 'farm.aave.err.invalidAmount', known: true, reason: null });
+    expect(explainRevert({ data: byKey.get('farm.aave.err.notEnoughBalance') }).key)
+      .toBe('farm.aave.err.notEnoughBalance');
+    expect(explainRevert({ reason: byKey.get('farm.aave.err.reservePaused'), message: byKey.get('farm.aave.err.reservePaused') }).key)
+      .toBe('farm.aave.err.reservePaused');
+    expect(explainRevert({ data: byKey.get('farm.aave.err.supplyCapExceeded') }).key)
+      .toBe('farm.aave.err.supplyCapExceeded');
+    // An unknown custom selector falls back honestly, never as a known code.
+    const unknownCustom = explainRevert({ data: '0xdeadbeef' });
+    expect(unknownCustom.known).toBe(false);
+    expect(unknownCustom.key).toBeNull();
+    // Numeric legacy reverts are still recognised after the selector pass.
+    expect(explainRevert({ reason: '26' }).key).toBe('farm.aave.err.invalidAmount');
+    expect(explainRevert(new Error('execution reverted: 51')).key).toBe('farm.aave.err.supplyCapExceeded');
   });
 
   it('matches only the exact Aave v3 / Base / USDC pool', () => {
