@@ -57,6 +57,38 @@ export function siteInviteUrl(code) {
   return publicAppUrl(`/#/?ref=${encodeURIComponent(code)}`);
 }
 
+/**
+ * A shareable deep link INTO this app, carrying the sharer's code.
+ * ---------------------------------------------------------------------------
+ * `siteInviteUrl` always lands on the home screen, which is right for "join
+ * this app" and wrong for "look at this thing". The Shop is the case that
+ * forced the distinction: a gift card is the most shareable product in the
+ * app — people send each other Steam and PlayStation cards constantly — and
+ * every one of those shares used to leave through a third party's URL, taking
+ * the recipient somewhere we earn nothing from and never bringing them back.
+ *
+ * So the share points at OUR route with the item already selected, and rides
+ * the same `?ref=` parameter `captureReferral()` already reads from the hash
+ * (see `hashSearch` above). The recipient lands on the card they were sent;
+ * if they ever swap, the sender's 1% share applies exactly as it does for a
+ * plain invite. No new attribution mechanism, no new promise.
+ *
+ * The path is normalised rather than trusted: it must start with `/`, and any
+ * query it already carries is preserved and appended to rather than replaced,
+ * so `/shop?c=TR&b=steam` keeps both of its own parameters.
+ *
+ * @param {string} path  an in-app route, e.g. `/shop?c=TR&b=steam`
+ * @param {string} code  the sharer's referral code
+ * @returns {string} an absolute public URL — never null, never relative.
+ */
+export function siteShareUrl(path, code) {
+  const raw = String(path ?? '/');
+  const clean = raw.startsWith('/') ? raw : `/${raw}`;
+  if (!isValidRefCode(code)) return publicAppUrl(`/#${clean}`);
+  const sep = clean.includes('?') ? '&' : '?';
+  return publicAppUrl(`/#${clean}${sep}ref=${encodeURIComponent(code)}`);
+}
+
 function read(key) {
   try {
     return localStorage.getItem(key);

@@ -31,6 +31,7 @@
     "test": "node test/run.mjs",
     "test:aave-base-fork": "node test/aave-base-fork-probe.mjs",
     "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs",
+    "test:shop-revenue": "node test/shop-revenue-probe.mjs",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:upgrade4": "node test/intent-ai/phase204-upgrade4-intent-intelligence-probe.mjs",

@@ -80,8 +80,17 @@ const COUNTRY_SLUG = {
  * (`travel_&_flights` appears in their category list, but brand names use the
  * plain form), and everything else that is not a letter, digit or dot
  * collapses to a single underscore.
+ *
+ * ─── WHY THIS IS EXPORTED, AND WHY THAT IS THE POINT ────────────────────────
+ * The same slug is the form a brand's name takes in a SHARED deep link
+ * (`/#/shop?c=TR&b=steam`), so the function that builds an outbound URL and
+ * the one that reads an inbound link cannot disagree about the shape. Brand
+ * families are display names with spaces, ampersands and dots in them
+ * ("Amazon.com", "Travel & Flights"); two implementations of "make that
+ * URL-safe" is exactly how a shared link ends up opening the shop looking
+ * perfectly healthy and selecting nothing.
  */
-function brandSlug(family) {
+export function brandSlug(family) {
   return String(family ?? '')
     .trim()
     .toLowerCase()

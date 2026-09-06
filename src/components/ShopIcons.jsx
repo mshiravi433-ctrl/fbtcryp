@@ -80,3 +80,15 @@ export const IconMoney = (p) => (
     <path d="M6 12h.01M18 12h.01" />
   </svg>
 );
+
+/** Share: three nodes joined by two spokes. Drawn here for the same reason as
+ *  the rest — components/Icons.jsx has no share glyph, and one path is cheaper
+ *  than a dependency. */
+export const IconShare = (p) => (
+  <svg {...base(p)}>
+    <circle cx="18" cy="5.2" r="2.7" />
+    <circle cx="6" cy="12" r="2.7" />
+    <circle cx="18" cy="18.8" r="2.7" />
+    <path d="m8.4 10.8 7.2-4.2M8.4 13.2l7.2 4.2" />
+  </svg>
+);

@@ -10,7 +10,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
-import { IconPools, IconShield, IconSwap } from '../components/Icons';
+import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { TOKENS } from '../lib/chains';
 import {
@@ -31,6 +31,7 @@ import {
  * unchanged. Gated by AAVE_BASE_SUPPLY_ENABLED; see docs/defi/aave-v3-base.md.
  */
 import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
+import TrendChart from '../components/TrendChart';
 
 const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
@@ -73,6 +74,99 @@ function Metric({ label, value, unavailable, strong }) {
       <span className="faint">{label}</span>
       <span className={`mono ${strong ? 'farm-metric-strong' : ''}`}>{unavailable ? '—' : value}</span>
     </div>
+  );
+}
+
+/*
+ * Horizon earnings chart — day → week → month → year at today's rate.
+ * Uses the same projectEarnings() maths the metric tiles already show, so
+ * the line can never disagree with the numbers beside it. No invented
+ * history: the curve is the cumulative projection across the four horizons.
+ */
+function HorizonEarningsChart({ pool, amount, t }) {
+  const proj = useMemo(() => projectEarnings(pool, amount), [pool, amount]);
+  const points = useMemo(() => {
+    if (!proj) return [];
+    return HORIZONS.map((h, i) => ({ x: i, y: Math.max(0, Number(proj[h]) || 0) }));
+  }, [proj]);
+  if (!proj || points.length < 2) return null;
+  const yearUp = Number(proj.year) >= 0;
+  return (
+    <section className="farm-horizon-chart" aria-label={t('farm.horizonChartTitle')}>
+      <div className="farm-horizon-chart-head">
+        <p className="farm-horizon-chart-title">{t('farm.horizonChartTitle')}</p>
+        <p className="farm-horizon-chart-sub">{t('farm.horizonChartSub', { amount: fmtUsd(amount) })}</p>
+      </div>
+      <TrendChart
+        points={points}
+        height={96}
+        up={yearUp}
+        emptyLabel={t('farm.horizonChartEmpty')}
+        formatValue={(v) => fmtUsd(v)}
+        testId={`farm-horizon-${pool.id}`}
+      />
+      <div className="farm-horizon-rail">
+        {HORIZONS.map((h) => (
+          <div key={h} className={`farm-horizon-cell${h === 'year' ? ' is-year' : ''}`}>
+            <span>{t(`farm.${h}`)}</span>
+            <span className="mono" dir="ltr">{fmtUsd(proj[h])}</span>
+          </div>
+        ))}
+      </div>
+      <p className="faint farm-calc-cond" style={{ marginTop: 8 }}>
+        {t('farm.rateConditional')}
+        {proj.fromRealYield != null && (
+          <> · {t('farm.realShareMoney', { amount: fmtUsd(proj.fromRealYield) })}</>
+        )}
+      </p>
+    </section>
+  );
+}
+
+/* Fee engine summary — same fbtFeeEngine the cards already use, just readable. */
+function FeeEngineCard({ pool, amount, t }) {
+  const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
+  const yieldEst = fbtFeeEngine.estimateNetYield({
+    grossApy: Number(pool.apy),
+    protocolCostApy: 0,
+    gasUsd: null,
+    amountUsd: amount
+  });
+  if (fee?.status === 'UNAVAILABLE' && yieldEst?.status === 'UNAVAILABLE') return null;
+  const beforeGas = Number.isFinite(Number(pool.apy))
+    ? Math.max(-100, Number(pool.apy) - (yieldEst?.fbtFeeApy || 0))
+    : null;
+  return (
+    <section className="farm-engine-card" aria-label={t('farm.engineTitle')}>
+      <div className="farm-engine-card-head">
+        <p className="farm-engine-card-title">{t('farm.engineTitle')}</p>
+        <span className="pill pill-neutral">{t('farm.engineMode')}</span>
+      </div>
+      <div className="farm-engine-grid">
+        <Metric label={t('farm.amount')} value={fmtUsd(amount)} />
+        <Metric
+          label={t('farm.fbtFee')}
+          value={fee?.status === 'AVAILABLE'
+            ? `${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`
+            : null}
+          unavailable={fee?.status !== 'AVAILABLE'}
+        />
+        <Metric
+          label={t('farm.grossApy')}
+          value={Number.isFinite(Number(pool.apy)) ? `${pool.apy}%` : null}
+          unavailable={!Number.isFinite(Number(pool.apy))}
+        />
+        <Metric
+          label={t('farm.netBeforeGas')}
+          value={beforeGas == null ? null : `${beforeGas.toFixed(2)}%`}
+          unavailable={beforeGas == null}
+          strong
+        />
+      </div>
+      <p className="faint" style={{ margin: '8px 1px 0', fontSize: 10.8, lineHeight: 1.6 }}>
+        {t('farm.engineNote')}
+      </p>
+    </section>
   );
 }
 
@@ -212,24 +306,42 @@ function ProtocolStatusCard({ protocol, t }) {
 
   return (
     <motion.section className="card card-rgb card-glow-cyan farm-protocol-card" variants={riseIn} initial="hidden" animate="show">
-      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
-        <div className="row" style={{ gap: 10, alignItems: 'center', minWidth: 0 }}>
-          <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconShield width={22} height={22} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>{t('farm.protocolConnected')}</div>
-            <div className="muted" style={{ fontSize: 11.5, margin: '2px 0 0' }}>
-              {FARM_PROTOCOL.name} · {t('farm.protocolMode')}
-            </div>
-          </div>
-        </div>
+      <div className="farm-protocol-head">
+        <span className="farm-protocol-icon" aria-hidden="true">
+          <IconShield width={20} height={20} />
+        </span>
+        <span className="farm-protocol-id" style={{ minWidth: 0 }}>
+          <span className="farm-protocol-title">{t('farm.protocolConnected')}</span>
+          <span className="farm-protocol-sub">{FARM_PROTOCOL.name}</span>
+        </span>
         <span className={`pill ${status === 'ACTIVE' ? 'pill-neutral' : status === 'UNAVAILABLE' ? 'pill-down' : 'pill-rgb'}`}>{statusLabel}</span>
       </div>
 
+      <div className="farm-protocol-readout">
+        <span className="pill pill-neutral"><IconLock width={12} height={12} /> {t('farm.readOnly')}</span>
+        <span className="farm-protocol-live" aria-hidden="true">
+          <i />
+          <span className="faint">{t('farm.protocolMode')}</span>
+        </span>
+      </div>
+
       <div className="farm-protocol-meta">
-        <div><span className="faint">{t('farm.protocolSource')}</span><span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span></div>
-        <div><span className="faint">{t('farm.protocolPools')}</span><span className="mono">{protocol?.poolCount ?? 0}</span></div>
-        <div><span className="faint">{t('farm.protocolLastSync')}</span><span className="mono">{updated}</span></div>
-        <div><span className="faint">{t('farm.protocolCapabilities')}</span><span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span></div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolSource')}</span>
+          <span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span>
+        </div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolPools')}</span>
+          <span className="mono">{protocol?.poolCount ?? 0}</span>
+        </div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolLastSync')}</span>
+          <span className="mono">{updated}</span>
+        </div>
+        <div className="farm-protocol-meta-cell farm-protocol-meta-cell--wide">
+          <span className="faint">{t('farm.protocolCapabilities')}</span>
+          <span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span>
+        </div>
       </div>
       {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{protocol.error}</p>}
     </motion.section>
@@ -317,7 +429,6 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
   const mean30 = research.apyMean30d ?? research.unusual?.mean ?? null;
   const updateTime = pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
   const isPair = pairTokens(pool).length > 1 || pool.ilRisk;
-  const proj = projectEarnings(pool, amount);
 
   return (
     <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
@@ -360,24 +471,8 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         <Metric label={t('farm.rateVs30d')} value={mean30 == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null} />
       </div>
 
-      {proj && (
-        <div>
-          <p style={{ fontWeight: 700, fontSize: 12.8, margin: '12px 0 6px' }}>
-            {t('farm.wouldEarn', { amount: fmtUsd(amount) })}
-          </p>
-          <div className="farm-economics">
-            {HORIZONS.map((h) => (
-              <Metric key={h} label={t(`farm.${h}`)} value={fmtUsd(proj[h])} strong={h === 'year'} />
-            ))}
-          </div>
-          <p className="faint farm-calc-cond">
-            {t('farm.rateConditional')}
-            {proj.fromRealYield != null && (
-              <> · {t('farm.realShareMoney', { amount: fmtUsd(proj.fromRealYield) })}</>
-            )}
-          </p>
-        </div>
-      )}
+      <HorizonEarningsChart pool={pool} amount={amount} t={t} />
+      <FeeEngineCard pool={pool} amount={amount} t={t} />
 
       <p className="notice">{t('farm.analysisActivated')}</p>
       <p className="faint">{t('farm.netIsAnalysis')}</p>

@@ -729,6 +729,14 @@
     "tab": {
       "cards": "card",
       "topup": "simcard"
+    },
+    "share": "Partager",
+    "shareText": "{{brand}} — achetez-le en crypto sur FBT Swap",
+    "spread": "{{pct}}% au-dessus de la valeur faciale",
+    "spreadWhy": "Le prix du fournisseur inclut déjà sa marge. La valeur faciale est ce que vaut la carte ; le montant surligné est la meilleure offre ici.",
+    "alt": {
+      "swap": "Échanger plutôt",
+      "earn": "Gagnez sur votre solde"
     }
   },
   "calm": {

@@ -729,6 +729,14 @@
     "tab": {
       "cards": "card",
       "topup": "simcard"
+    },
+    "share": "Bagikan",
+    "shareText": "{{brand}} — beli dengan kripto di FBT Swap",
+    "spread": "{{pct}}% di atas nilai nominal",
+    "spreadWhy": "Harga penyedia sudah termasuk margin mereka. Nilai nominal adalah nilai kartu; nominal yang disorot adalah yang termurah di sini.",
+    "alt": {
+      "swap": "Tukar saja",
+      "earn": "Hasilkan dari saldomu"
     }
   },
   "calm": {

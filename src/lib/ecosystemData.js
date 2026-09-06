@@ -173,16 +173,21 @@ export async function fetchProviderStatus({ timeout = 8000 } = {}) {
 
 /** At most one upstream probe per minute per browser session. */
 let lastProbeAt = 0;
+let lastProbeBody = null;
 
 /**
  * Ask the server to re-check the fee-earning DEX/liquidity sources with one
  * small real call each. This is what turns `reachable` from false to true on a
  * fresh server instance; it is POST, read-only, and never signs anything.
+ *
+ * Returns the probe response body (the per-provider `ok` evidence) or `null`
+ * when the probe could not be run. The same evidence is re-used for the rest
+ * of the browser session, so opening /ecosystem again within a minute keeps
+ * showing the result instead of dropping back to 0/N.
  */
-export async function probeProviderStatuses({ timeout = 30000 } = {}) {
+export async function probeProviderStatuses({ timeout = 30000, force = false } = {}) {
   const now = Date.now();
-  if (now - lastProbeAt < 60000) return true;
-  lastProbeAt = now;
+  if (!force && now - lastProbeAt < 60000) return lastProbeBody;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -192,22 +197,77 @@ export async function probeProviderStatuses({ timeout = 30000 } = {}) {
       headers: { accept: 'application/json', 'content-type': 'application/json' }
     });
     clearTimeout(timer);
-    return res.ok;
+    if (!res.ok) return null;
+    const body = await res.json();
+    lastProbeAt = Date.now();
+    lastProbeBody = body || null;
+    return lastProbeBody;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Merge the live probe evidence into the standard status report.
+ *
+ * A `/providers/status` read is cached and, on serverless hosts, may be served
+ * by a different instance than the one that just recorded the probe, so the
+ * only reliable place to apply "we actually just reached KyberSwap / LI.FI"
+ * is here, from the probe body the client just received. This keeps the
+ * Ecosystem page honest: a provider only becomes OPERATIONAL when the probe
+ * reported a real success, never merely because it is configured.
+ */
+export function applyProbeEvidence(providerReport, probe) {
+  if (!providerReport || providerReport.status !== 'success' || !Array.isArray(probe?.results)) {
+    return providerReport;
+  }
+
+  const okById = new Map();
+  for (const r of probe.results || []) {
+    if (r?.provider && r?.ok) okById.set(r.provider, r);
+  }
+  if (okById.size === 0) return providerReport;
+
+  const data = providerReport.data || {};
+  const providers = (data.providers || []).map((p) => {
+    const ev = okById.get(p.id);
+    if (!ev) return p;
+    return {
+      ...p,
+      // A successful tiny quote is direct evidence of both fields — and it is
+      // the opposite of the "configured ⇒ reachable" shortcut the status module
+      // deliberately avoids.
+      configured: true,
+      reachable: true,
+      authenticated: true,
+      feeReady: p.feeReady == null ? true : p.feeReady,
+      lastSuccessAt: probe.generatedAt || data.generatedAt || p.lastSuccessAt,
+      lastFailureAt: null,
+      lastError: null,
+      retryable: false
+    };
+  });
+
+  return {
+    ...providerReport,
+    data: {
+      ...data,
+      providers,
+      generatedAt: probe.generatedAt || data.generatedAt
+    }
+  };
 }
 
 /**
  * Build the complete ecosystem data from real API responses.
  * Returns all sections needed by the UI.
  */
-export function buildEcosystemData(providerReport) {
+export function buildEcosystemData(providerReport, probeEvidence) {
   if (!providerReport || providerReport.status !== 'success') {
     return { status: 'unavailable', sections: null, summary: null };
   }
 
-  const report = providerReport.data;
+  const report = (applyProbeEvidence(providerReport, probeEvidence) || providerReport).data;
   const providers = report?.providers || [];
 
   // Map providers to ecosystem sections
