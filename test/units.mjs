@@ -28,7 +28,7 @@ import {
 } from '../src/lib/solanaAssets.js';
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
-import { pairTokens, pairSwapRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare, farmScore, impermanentLoss } from '../src/lib/yields.js';
+import { pairTokens, pairSwapRoute, singleToken, singleSwapRoute, investRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare, farmScore, impermanentLoss } from '../src/lib/yields.js';
 /* LST_ASSETS / EQUITY_ASSETS / COMMODITY_ASSETS are imported above (solanaAssets). */
 import { SOL_MINT, USDC_MINT, USDT_MINT } from '../src/lib/solana.js';
 import { SOLANA_SIGNAL_ASSETS } from '../src/lib/solanaSignals.js';
@@ -3727,6 +3727,94 @@ export default async function run() {
       const r = pairSwapRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' });
       return r?.kind === undefined && r.chainId === 56;
     })());
+
+    /*
+     * ─── MORE INVESTABLE POOLS (added 2026-09-06) ──────────────────────────
+     * The Farm screen was short on rows a user could actually act on, so the
+     * feed widened in three ways that all keep the safety rules intact: more
+     * vetted protocols, two more app chains, and a $5m TVL floor instead of
+     * $10m. Every widening gets a boundary test, and every rule that did NOT
+     * move gets re-pinned so a future widening cannot silently drag it along.
+     */
+    t('the $5m TVL floor admits a $6m pool', isEligible({ ...good, tvlUsd: 6_000_000 }));
+    t('...while $4m is still below it', !isEligible({ ...good, tvlUsd: 4_000_000 }));
+    t('Linea is an app chain now', isEligible({ ...good, chain: 'Linea' }));
+    t('Sonic is an app chain now', isEligible({ ...good, chain: 'Sonic' }));
+    t('...while Fantom is still unreachable', !isEligible({ ...good, chain: 'Fantom' }));
+    t('a yearn vault pool passes', isEligible({ ...good, project: 'yearn-finance' }));
+    t('a beefy vault pool passes', isEligible({ ...good, project: 'beefy' }));
+    t('a jupiter-staked-sol pool passes', isEligible({ ...good, project: 'jupiter-staked-sol' }));
+    t('...while meteora stays out (broken adapter)', !isEligible({ ...good, project: 'meteora' }));
+    t('...and ajna-v2 stays out (mislabeled asset)', !isEligible({ ...good, project: 'ajna-v2' }));
+    t('the pool label and 7d volume are forwarded', (() => {
+      const row = normalizePool({ ...good, poolMeta: '0.05% fee tier', volumeUsd7d: 123456.7 });
+      return row.poolMeta === '0.05% fee tier' && row.volumeUsd7d === 123457;
+    })());
+    t('...and both are null when the feed omits them', (() => {
+      const row = normalizePool(good);
+      return row.poolMeta === null && row.volumeUsd7d === null;
+    })());
+
+    /*
+     * ─── SAME ASSET, DIFFERENT SPELLING ────────────────────────────────────
+     * The feed says WETH where our registry carries the native ETH entry (and
+     * ETH where it carries WETH). Resolving those pairs is what turns rows
+     * that used to show "Get pair: UNAVAILABLE" into working invest buttons.
+     * The alias map is deliberately short: only wrapped↔native pairs and the
+     * MATIC→POL rename. Everything that looks similar but IS a different
+     * token stays unresolved — a swap prefilled into the wrong token is worse
+     * than no button at all.
+     */
+    t('a WETH leg resolves to the native ETH entry', (() => {
+      const r = pairSwapRoute({ symbol: 'WETH-USDC', exposure: 'multi', chain: 'Ethereum' });
+      return r?.chainId === 1 && r.from === 'ETH' && r.to === 'USDC';
+    })());
+    t('...and an ETH leg resolves to WETH where that is the entry', (() => {
+      const r = pairSwapRoute({ symbol: 'ETH-USDC', exposure: 'multi', chain: 'Polygon' });
+      return r?.chainId === 137 && r.from === 'WETH' && r.to === 'USDC';
+    })());
+    t('...while BTCB is not WBTC and stays unresolved',
+      pairSwapRoute({ symbol: 'WBTC-BNB', exposure: 'multi', chain: 'BSC' }) === null);
+    t('...and wstETH never aliases to stETH',
+      pairSwapRoute({ symbol: 'WSTETH-ETH', exposure: 'multi', chain: 'Ethereum' }) === null);
+
+    /*
+     * ─── SINGLE-ASSET POOLS GET AN INVEST PATH TOO ─────────────────────────
+     * Most of the screen is single-asset pools (Aave USDC, Lido stETH), and
+     * "no pair" used to mean "no button". The depositor still needs exactly
+     * one token, so singleSwapRoute prefills THAT purchase: a stablecoin as
+     * the payment leg on EVM, the verified mint on Solana. The route carries
+     * registry symbols, never feed spellings, because the swap screen matches
+     * case-sensitively against its curated list.
+     */
+    t('a single-asset symbol yields its one token',
+      singleToken({ symbol: 'USDC', exposure: 'single' }) === 'USDC');
+    t('...while a pair symbol never does',
+      singleToken({ symbol: 'CAKE-BNB', exposure: 'multi' }) === null);
+    t('...even when the feed forgot the exposure flag',
+      singleToken({ symbol: 'A-B' }) === null);
+    t('a USDC lending pool prefills USDT→USDC, never USDC→USDC', (() => {
+      const r = singleSwapRoute({ symbol: 'USDC', exposure: 'single', chain: 'Ethereum' });
+      return r?.chainId === 1 && r.from === 'USDT' && r.to === 'USDC' && r.single === true;
+    })());
+    t('...and the feed spelling STETH travels as the canonical stETH', (() => {
+      const r = singleSwapRoute({ symbol: 'STETH', exposure: 'single', chain: 'Ethereum' });
+      return r?.to === 'stETH' && r.from === 'USDC';
+    })());
+    t('an unlisted single token stays an honest null',
+      singleSwapRoute({ symbol: 'FOO', exposure: 'single', chain: 'Ethereum' }) === null);
+    t('a pair fed to the single router stays null',
+      singleSwapRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' }) === null);
+    t('a Solana LST single routes by its verified mint', (() => {
+      const r = singleSwapRoute({ symbol: 'JITOSOL', exposure: 'single', chain: 'Solana' });
+      return r?.kind === 'solana' && r.single === true && typeof r.toMint === 'string';
+    })());
+    t('...while a USDC single on Solana is null (it would prefill USDC→USDC)',
+      singleSwapRoute({ symbol: 'USDC', exposure: 'single', chain: 'Solana' }) === null);
+    t('investRoute prefers the pair, then the single, then null',
+      investRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' })?.chainId === 56
+      && investRoute({ symbol: 'USDC', exposure: 'single', chain: 'Ethereum' })?.single === true
+      && investRoute({ symbol: 'FOO', exposure: 'single', chain: 'Ethereum' }) === null);
 
     /*
      * ─── uniswap-v4 IN THE ALLOW-LIST (added 2026-08-24) ───────────────────
