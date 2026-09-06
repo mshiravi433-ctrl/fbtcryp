@@ -374,6 +374,73 @@ function money(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/*
+ * ─── THE SPREAD: WHAT A GIFT CARD REALLY COSTS ──────────────────────────────
+ * `coin_amount` is what the buyer pays and it ALREADY contains the provider's
+ * margin — their own field, not something we add. A $50 Steam card prices at
+ * $53.86 in USDC. That number was sitting in our payload, unrendered, while
+ * the tile showed only the face value: the shopper found out at checkout, on
+ * somebody else's site, after they had already decided.
+ *
+ * Showing it is the honest half. The revenue half is that it is also our only
+ * window into their margin — commission is a percentage of GROSS MARGIN (their
+ * FAQ, quoted in docs/STORE-FEASIBILITY-FA.md), so the widest spread is very
+ * likely the most valuable brand for us to surface. Being able to see it is
+ * the precondition for ordering by it later.
+ *
+ * ─── WHY THIS REFUSES TO GUESS ──────────────────────────────────────────────
+ * A spread is a subtraction between two numbers that must be in the SAME
+ * currency, and the face value frequently is not USD: the Turkish catalogue
+ * prices Steam in lira. Dividing a lira face value by a USDC price produces a
+ * confident, plausible, completely wrong percentage — in a finance app, on a
+ * screen about money. So the rule is: prove the face value is USD or say
+ * nothing. `null` renders as no line at all, never as 0%.
+ */
+const USD_STABLECOINS = new Set(['USDC', 'USDT', 'DAI', 'FDUSD', 'TUSD', 'USDP', 'PYUSD', 'USDE']);
+
+/**
+ * The face value in USD, or null when the payload does not prove it.
+ *
+ * Two accepted proofs, in order: an explicit USD denomination currency, or a
+ * localised string that is unambiguously dollars ("$50", "$1,000.00"). A
+ * stated NON-USD currency is a definite "no". Anything else is unknown, and
+ * unknown is null.
+ */
+function usdFaceValue(p) {
+  const cur = String(p?.denomination_currency ?? '').trim().toUpperCase();
+  const n = Number(p?.denomination);
+  if (cur === 'USD') return Number.isFinite(n) && n > 0 ? n : null;
+  if (cur) return null;
+
+  const m = /^\$\s*([\d,]+(?:\.\d+)?)$/.exec(String(p?.localized_denomination ?? '').trim());
+  if (!m) return null;
+  const parsed = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * The provider's margin over face value, as a percentage, or null.
+ *
+ * Only computed when the buyer pays in a dollar stablecoin — comparing a face
+ * value in dollars to a price in SOL would be meaningless.
+ */
+function spreadOverFace(p, coin) {
+  if (!USD_STABLECOINS.has(String(coin ?? '').trim().toUpperCase())) return null;
+  const face = usdFaceValue(p);
+  const paid = money(p?.coin_amount);
+  if (face === null || paid === null) return null;
+
+  const pct = ((paid - face) / face) * 100;
+  /*
+   * Outside this band it is a parse mistake, not a price. A discount is
+   * possible (hence the small negative allowance) and gift-card margins above
+   * ~40% do not exist in this market — a reading that high means we subtracted
+   * two different currencies and must stay silent instead.
+   */
+  if (!Number.isFinite(pct) || pct < -5 || pct > 40) return null;
+  return Math.round(pct * 10) / 10;
+}
+
 /**
  * Buyable denominations for one brand, priced in a stablecoin.
  *
@@ -403,11 +470,22 @@ export async function fetchShopProducts({ country, family, coin = 'USDC' }, req)
     .map((p) => {
       const id = cleanText(p?.product_id, 64);
       if (!id) return null;
+      /*
+       * The coin the price is ACTUALLY in, which is theirs to state and not
+       * ours to assume. We request USDC, but the spread gate has to test the
+       * coin beside the number it is dividing — gating on the requested coin
+       * would happily subtract a USD face value from a SOL price the moment
+       * they answered in something else.
+       */
+      const coin = cleanText(p.coin, 10) || safeCoin;
       return {
         id,
         label: cleanText(p.localized_denomination || p.denomination, 40),
         coinAmount: money(p.coin_amount),
-        coin: cleanText(p.coin, 10) || safeCoin,
+        coin,
+        /* The provider's own margin over face value, when it can be proven.
+           null means "we could not tell", never "zero". */
+        spreadPct: spreadOverFace(p, coin),
         /* A dynamic product takes any amount in a range — the UI must not
            render it as a fixed button. */
         dynamic: p.is_dynamic === true,
@@ -435,10 +513,22 @@ export async function fetchShopProducts({ country, family, coin = 'USDC' }, req)
 
   const rich = first.rich_description ?? {};
 
+  /*
+   * The cheapest denomination in this brand, by spread rather than by price.
+   *
+   * Sorted separately rather than taken from `rows[0]` because the list is
+   * ordered by absolute price, and on a card whose margin varies by size —
+   * which is the normal case — the smallest note is not automatically the
+   * best deal. One number, computed here so every client shows the same one.
+   */
+  const spreads = rows.map((r) => r.spreadPct).filter((v) => v !== null && v !== undefined);
+  const bestSpreadPct = spreads.length ? Math.min(...spreads) : null;
+
   return {
     brand: cleanText(first.brand || first.family, 80),
     logo: cleanLogo(first.logo_url),
     outOfStock: first.is_out_of_stock === true,
+    bestSpreadPct,
     /*
      * `note` carries the redemption traps — Steam's is "region-locked, VPN
      * will not work, no refunds". That is the single most useful sentence on
