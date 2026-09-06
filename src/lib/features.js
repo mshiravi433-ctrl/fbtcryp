@@ -91,3 +91,110 @@ export const SPECULATION_ENABLED =
   typeof __SPECULATION_ENABLED__ !== 'undefined'
     ? __SPECULATION_ENABLED__
     : import.meta.env?.VITE_ENABLE_SPECULATION !== 'false';
+
+/* -------------------------------------------------------------------------- */
+/* AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD               */
+/* -------------------------------------------------------------------------- */
+/*
+ * This is the app's first adapter that MOVES VALUE INTO A THIRD-PARTY SMART
+ * CONTRACT (lib/defi/aaveV3Base.js). It is not the arcade and it is not the
+ * speculation screens: what it does is real and useful, so unlike those it is
+ * worth keeping behind a flag rather than deleting. But it is the one feature
+ * in this file where a mistake costs the user money rather than their opinion
+ * of the product, so the default is the opposite of SPECULATION_ENABLED.
+ *
+ * ─── WHY `=== 'true'` AND NOT `!== 'false'` ─────────────────────────────────
+ * SPECULATION_ENABLED is ON unless explicitly switched off, because the
+ * website is the common case. This flag is OFF unless explicitly switched ON:
+ * a build that forgets an env var must ship with the money path closed, not
+ * open. `!== 'false'` would invert that and fail open.
+ *
+ * ─── HOW TO TURN IT ON ──────────────────────────────────────────────────────
+ * Set the env var at build time (the same mechanism every other flag uses):
+ *
+ *     VITE_ENABLE_AAVE_BASE_SUPPLY=true npm run build
+ *
+ * or pin it in the build script, the way `android:sync` pins
+ * VITE_ENABLE_SPECULATION=false. Do NOT enable it in a store build without the
+ * rollout checklist in docs/defi/aave-v3-base.md being completed: independent
+ * review of the adapter, a passing Base-mainnet fork probe, and an allowlist.
+ *
+ * ─── KILL SWITCH ────────────────────────────────────────────────────────────
+ * Turn the flag off and rebuild. Supply disappears everywhere, for everyone.
+ * Position and WITHDRAW DO NOT — see `aaveBaseWithdrawAllowedFor` below. A
+ * user who supplied while the flag was on must still be able to get their
+ * money out afterwards; gating the exit would turn a safety feature into a
+ * trap on their funds.
+ */
+
+const envFlag = (name) => (typeof import.meta !== 'undefined' ? import.meta.env?.[name] : undefined);
+
+/** True only when the build was explicitly told to expose in-app Aave supply. */
+export const AAVE_BASE_SUPPLY_ENABLED =
+  typeof __AAVE_BASE_SUPPLY_ENABLED__ !== 'undefined'
+    ? __AAVE_BASE_SUPPLY_ENABLED__
+    : envFlag('VITE_ENABLE_AAVE_BASE_SUPPLY') === 'true';
+
+/**
+ * A finite, parseable number from the environment, or the default.
+ *
+ * A cap is a safety limit, so an unusable value must NOT silently become 0
+ * (which would block everything and look like a bug) nor Infinity (which would
+ * remove the limit). Non-finite input falls back to the default, and the value
+ * is clamped to a sane ceiling so a typo cannot type 1e18 into a cap.
+ */
+function envCap(name, fallback, ceiling) {
+  const raw = envFlag(name);
+  if (raw == null || String(raw).trim() === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, ceiling);
+}
+
+/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
+export const AAVE_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
+  'VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
+);
+
+/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
+export const AAVE_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
+  'VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
+);
+
+/**
+ * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
+ * flag is on for". Compared case-insensitively against the connected owner.
+ *
+ *     VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xabc...,0xdef...
+ */
+export const AAVE_BASE_SUPPLY_ALLOWLIST = Object.freeze(
+  String(envFlag('VITE_AAVE_BASE_SUPPLY_ALLOWLIST') ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
+);
+
+/**
+ * Can THIS wallet open a NEW supply?
+ *
+ * All three gates, in order: the build flag, then the allowlist (when one is
+ * configured), then the caller's own hard caps. Withdrawal never calls this.
+ */
+export function aaveBaseSupplyAllowedFor(owner) {
+  if (!AAVE_BASE_SUPPLY_ENABLED) return false;
+  if (AAVE_BASE_SUPPLY_ALLOWLIST.length === 0) return true;
+  const who = String(owner ?? '').trim().toLowerCase();
+  return AAVE_BASE_SUPPLY_ALLOWLIST.includes(who);
+}
+
+/**
+ * Can THIS wallet withdraw?
+ *
+ * Deliberately independent of the flag, the caps and the allowlist: the only
+ * requirement is that there is something to withdraw. `hasPosition` is the
+ * caller's on-chain aToken balance > 0.
+ */
+export function aaveBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
+  if (!owner) return false;
+  return Boolean(hasPosition);
+}

@@ -13191,5 +13191,243 @@ export default function run() {
       !/className="wallet-badge"[^\n}]*\{r\.symbol\.slice/.test(stk));
   }
 
+  /* ---- 87. Aave v3 (Base/USDC) supply adapter — the money path ------------ */
+  /*
+   * The first adapter in this repo that moves value into a third-party smart
+   * contract. Every pin here guards a decision that, if it silently changed,
+   * would cost a user money or strand their funds: the default state of the
+   * flag, the caps, who the approval is for and how large it is, and whether
+   * the way OUT is still open after the kill switch.
+   */
+  {
+    const adapter = read('src/lib/defi/aaveV3Base.js');
+    /*
+     * Comment-stripped source. Several pins below assert the ABSENCE of
+     * something, and this file's own history is full of absence checks that
+     * matched the prose explaining a rule instead of the code enforcing it.
+     */
+    const code = adapter
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const features = read('src/lib/features.js');
+    const panel = read('src/components/Farm/AaveBaseUsdcPanel.jsx');
+    const history = read('src/lib/defi/aaveV3History.js');
+    const viteCfg = read('vite.config.js');
+    /*
+     * …and with string literals blanked. The Pool ABI declares Aave's own
+     * `supply(address asset, uint256 amount, address onBehalfOf, uint16
+     * referralCode)` — that parameter name has to be in the ABI string, so a
+     * pin that scanned raw source saw it and reported our own signature as
+     * parameterised. Blanking strings leaves real code behind.
+     */
+    const codeNoStrings = code.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+
+    /* ── the flag defaults OFF in every build ─────────────────────────────── */
+    t('the Aave supply flag defaults to false (=== \'true\', not !== \'false\')',
+      features.includes("envFlag('VITE_ENABLE_AAVE_BASE_SUPPLY') === 'true'")
+      && !/VITE_ENABLE_AAVE_BASE_SUPPLY'\)\s*!==\s*'false'/.test(features));
+    t('...and the build define is inverted the same way, so a forgotten env var fails CLOSED',
+      viteCfg.includes("__AAVE_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_BASE_SUPPLY === 'true')"));
+    t('...and the documented default is off',
+      features.includes('AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD'));
+
+    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
+    t('per-transaction cap defaults to 100 USDC',
+      /VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
+    t('total position cap defaults to 500 USDC',
+      /VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
+    t('an unusable cap env value falls back to the default instead of becoming 0 or Infinity',
+      features.includes('if (!Number.isFinite(n) || n <= 0) return fallback;'));
+    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
+      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
+      && adapter.includes("block('AAVE_PER_TX_CAP')"));
+    t('...and the total cap counts the existing position, not just this transfer',
+      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
+      && adapter.includes("block('AAVE_TOTAL_CAP')"));
+
+    /* ── USDC comes from the token table, never retyped ───────────────────── */
+    const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+    t('the adapter reads USDC from lib/chains.js',
+      adapter.includes("getToken(8453, 'USDC')") && adapter.includes('usdc: USDC_ON_BASE.address'));
+    t('...and never types the USDC address itself',
+      !adapter.toLowerCase().includes(USDC_BASE));
+    t('...and throws rather than running against a stale registry',
+      adapter.includes("throw new Error('AAVE_ADAPTER_MISSING_USDC_ON_BASE')"));
+
+    /* ── no infinite approve anywhere ─────────────────────────────────────── */
+    /*
+     * Sliced from the COMMENT-STRIPPED source. The withdraw builder's own doc
+     * comment explains why Aave wants the max uint there, and a pin that read
+     * that prose would fail on a correct file — the third time this exact
+     * mistake has been made in this audit.
+     */
+    const beforeWithdraw = code.slice(0, code.indexOf('export async function buildWithdrawPlan'));
+    const afterWithdraw = code.slice(code.indexOf('export async function buildRevokePlan'));
+    t('no MaxUint256 exists before the withdraw builder (approve + supply live there)',
+      beforeWithdraw.length > 0 && !beforeWithdraw.includes('MaxUint256'));
+    t('...nor in the revoke path', afterWithdraw.length > 0 && !afterWithdraw.includes('MaxUint256'));
+    t('...and every approve encodes the exact amount or zero',
+      adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_BASE.pool, amountWei])")
+      && adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_BASE.pool, 0n])"));
+    t('the approval is granted to the Aave Pool only',
+      !/approve'\s*,\s*\[(?!AAVE_V3_BASE\.pool)/.test(adapter));
+    t('the approve step is skipped when the allowance already covers the amount',
+      adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
+
+    /* ── onBehalfOf / recipient are always the connected owner ─────────────── */
+    /*
+     * `onBehalfOf` legitimately appears once in the source — as the parameter
+     * NAME inside the Pool ABI string, which is how Aave declares supply(). So
+     * the pin is not "the word never appears" but "no function of ours accepts
+     * it, and the call site passes the connected owner".
+     */
+    t('supply credits the connected owner (onBehalfOf is never parameterised)',
+      /encodeFunctionData\('supply',\s*\[\s*AAVE_V3_BASE\.usdc,\s*amountWei,\s*owner,\s*AAVE_V3_BASE\.referralCode\s*\]/.test(code)
+      && !/(export )?(async )?function\s+\w+\s*\([^)]*onBehalfOf/.test(codeNoStrings)
+      && !/buildSupplyPlan\(\{[^}]*onBehalfOf/.test(codeNoStrings));
+    t('withdraw pays the connected owner',
+      adapter.includes("pool.encodeFunctionData('withdraw', [AAVE_V3_BASE.usdc, amountWei, owner])"));
+
+    /* ── the kill switch cannot trap funds ────────────────────────────────── */
+    t('withdraw is decided by its own helper, not by the supply flag',
+      /export function aaveBaseWithdrawAllowedFor\(\{ owner, hasPosition \} = \{\}\) \{\n  if \(!owner\) return false;\n  return Boolean\(hasPosition\);\n\}/.test(features));
+    t('...and that helper never reads the supply flag, the caps or the allowlist',
+      !features
+        .slice(features.indexOf('export function aaveBaseWithdrawAllowedFor'))
+        .includes('AAVE_BASE_SUPPLY_ENABLED'));
+    t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
+      panel.includes('withdrawAllowed && (') && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    t('the panel renders nothing once the flag is off with no position and no ledger history',
+      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+
+    /* ── the deployment is verified before any write ──────────────────────── */
+    t('verifyDeployment compares PoolAddressesProvider.getPool() to the pinned Pool',
+      adapter.includes('await c.addressesProvider.getPool()')
+      && adapter.includes("throw new AaveAdapterError('AAVE_POOL_MISMATCH'"));
+    t('...and the USDC reserve\'s aToken to the pinned aBasUSDC',
+      adapter.includes("throw new AaveAdapterError('AAVE_ATOKEN_MISMATCH'"));
+    t('...throws rather than proceeding when it cannot verify',
+      adapter.includes("throw new AaveAdapterError('AAVE_DEPLOYMENT_UNVERIFIABLE'"));
+    t('supply, withdraw and revoke all verify before building',
+      (adapter.match(/await verifyDeployment\(provider\)/g) || []).length >= 3);
+
+    /* ── every write goes through the existing simulation path ────────────── */
+    t('the panel builds unsigned transactions with the repo\'s own helper',
+      panel.includes("from '../../lib/preSignSimulation'") && panel.includes('buildUnsignedTransaction'));
+    t('...simulates before signing, and reuses the repo\'s execution gate',
+      panel.includes('simulateUnsignedTransaction') && panel.includes('evaluateExecutionGate'));
+    t('...and only enables signing on a CLEAN simulation (a busy RPC is not clean)',
+      panel.includes("simulation?.status === 'simulated-clean'"));
+    t('the adapter never signs: no signer or sendTransaction in it',
+      !adapter.includes('sendTransaction') && !adapter.includes('getSigner'));
+
+    /* ── the Aave addresses live in exactly one module ────────────────────── */
+    /*
+     * The two addresses this feature ADDS (the registry and the aToken) belong
+     * to the adapter alone. The Pool proxy is different: lib/lending.js already
+     * pinned it for the read-only lending rates before this adapter existed,
+     * and deleting it from there would break the Loan screen. So the rule is
+     * not "one file mentions it" but "one file is authoritative, and the other
+     * cannot drift" — which the adapter enforces with a load-time assertion.
+     */
+    const POOL_ADDR = '0xa238dd80c259a72e81d7e4664a9801593f98d1c5';
+    const newOnly = [
+      '0xe20fcbdbffc4dd138ce8b2e6fbb6cb49777ad64d', // PoolAddressesProvider
+      '0x4e65fe4dba92790696d040ac24aa414708f5c0ab'  // aBasUSDC
+    ];
+    const filesWith = (addr) => files.filter((f) => read(f).toLowerCase().includes(addr));
+    const leaked = [];
+    for (const addr of newOnly) {
+      for (const f of filesWith(addr)) {
+        if (!f.endsWith('src/lib/defi/aaveV3Base.js')) leaked.push(`${addr} in ${f}`);
+      }
+    }
+    t(`the registry and aToken addresses appear only in the adapter${leaked.length ? ` — also in: ${leaked.join(', ')}` : ''}`,
+      leaked.length === 0);
+    const poolFiles = filesWith(POOL_ADDR);
+    t('the Pool proxy appears only in the adapter and the pre-existing rate table',
+      poolFiles.length === 2
+      && poolFiles.some((f) => f.endsWith('src/lib/defi/aaveV3Base.js'))
+      && poolFiles.some((f) => f.endsWith('src/lib/lending.js')));
+    t('...and the adapter refuses to load if those two copies ever disagree',
+      adapter.includes("import { AAVE_V3_POOLS } from '../lending'")
+      && adapter.includes("throw new Error('AAVE_ADAPTER_POOL_TABLE_DISAGREEMENT')"));
+    t('each pinned address cites the official Aave Address Book',
+      (adapter.match(/bgd-labs\/aave-address-book|Aave Address Book/g) || []).length >= 3);
+
+    /* ── scope: two write actions, one asset, one chain ───────────────────── */
+    t('the adapter exposes only supply and withdraw as writes',
+      !adapter.includes('function borrow') && !adapter.includes('function repay')
+      && !adapter.includes('setUserUseReserveAsCollateral') && !adapter.includes('flashLoan'));
+    t('...and is pinned to Base 8453',
+      adapter.includes('chainId: 8453') && adapter.includes("throw new AaveAdapterError('AAVE_WRONG_CHAIN'"));
+
+    /* ── local persistence, and nothing secret in it ──────────────────────── */
+    t('actions are recorded to a capped local ledger',
+      history.includes("export const AAVE_HISTORY_KEY = 'fbt-aave-base-history-v1'")
+      && history.includes('rows.slice(0, MAX_ROWS)'));
+    /* Checked against the CODE (the persisted field list), not the header
+       comment that describes the rule. */
+    const fieldsSrc = /const FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(history);
+    const persisted = fieldsSrc
+      ? [...fieldsSrc[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1])
+      : [];
+    /*
+     * ANCHORED on purpose. A loose /key/ flagged `revertKey` — the i18n key an
+     * unmapped revert resolves to, which is the opposite of a secret — and a
+     * pin that cries wolf gets deleted.
+     */
+    const forbiddenField = /^(privatekey|publickey|key|secret|secretkey|mnemonic|seed|seedphrase|passphrase|password|signature|signedtx|rawtx|rawtransaction)$/i;
+    t('...through a field whitelist, so no key or signature can be persisted',
+      persisted.length > 0 && !persisted.some((f) => forbiddenField.test(f)));
+    t('the stuck-approval state is derived from the chain, not the ledger alone',
+      history.includes("source: onChain ? 'chain' : recorded ? 'record' : null"));
+
+    /* ── copy exists in the complete locales ──────────────────────────────── */
+    const errCodes = ['invalidAmount', 'reserveInactive', 'reserveFrozen', 'reservePaused', 'supplyCapExceeded'];
+    const blockCodes = ['AAVE_PER_TX_CAP', 'AAVE_TOTAL_CAP', 'AAVE_RESERVE_PAUSED', 'AAVE_SUPPLY_CAP_EXCEEDED'];
+    for (const lang of ['en', 'fa', 'ar']) {
+      const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const a = j.farm?.aave ?? {};
+      t(`${lang} carries the Aave supply surface`,
+        ['panelTitle', 'supplyInApp', 'withdraw', 'supplyTitle', 'withdrawTitle', 'max', 'revoke', 'continue']
+          .every((k) => typeof a[k] === 'string' && a[k].length > 0));
+      t(`${lang} names every plain-language step`,
+        ['approve', 'supply', 'withdraw', 'withdrawMax', 'revoke'].every((k) => Boolean(a.step?.[k])));
+      t(`${lang} states the four risks: contract, custody, variable APY and no fee`,
+        ['risk1', 'risk2', 'risk3', 'risk4'].every((k) => typeof a[k] === 'string' && a[k].length > 20));
+      t(`${lang} explains the partial-approval recovery`,
+        Boolean(a.partialBody) && Boolean(a.revoke) && Boolean(a.continue));
+      t(`${lang} maps the Aave revert codes it can hit`,
+        errCodes.every((k) => Boolean(a.err?.[k])));
+      t(`${lang} explains every refusal reason`,
+        blockCodes.every((k) => Boolean(a.block?.[k])));
+    }
+    /*
+     * Wrong-chain escape hatch. With the flag off and the wallet on another
+     * network, the panel must still surface the ledger-known position rather
+     * than render nothing — otherwise the kill switch hides the exit.
+     */
+    t('panel shows the switch prompt from the local ledger, not from a chain read',
+      panel.includes('knownHere')
+      && panel.includes("t('farm.aave.wrongChainNote'")
+      && panel.indexOf('setHistory(loadAaveHistoryFor(owner));')
+         < panel.indexOf('if (wallet.chainId !== AAVE_V3_BASE.chainId) return;'));
+    t('the switch prompt is gated on the ledger so it cannot spam strangers',
+      /knownHere\s*=\s*wrongChain && !hasPosition && history\.some\(/.test(panel));
+    for (const lang of ['en', 'fa', 'ar']) {
+      const a = JSON.parse(read(`src/i18n/locales/${lang}.json`)).farm.aave;
+      t(`${lang} explains the wrong-chain case`,
+        typeof a.wrongChainNote === 'string' && a.wrongChainNote.includes('{chain}'));
+    }
+
+    /* The adapter's error table must not name a key no locale defines. */
+    const keyRefs = [...adapter.matchAll(/'(farm\.aave\.err\.[a-zA-Z]+)'/g)].map((m) => m[1]);
+    const enFarmAave = JSON.parse(read('src/i18n/locales/en.json')).farm.aave;
+    const missingErr = keyRefs.filter((k) => !hasKey(enFarmAave, k.replace('farm.aave.', '')));
+    t(`every explainRevert key resolves in en.json${missingErr.length ? ` — missing: ${missingErr.join(', ')}` : ''}`,
+      keyRefs.length > 0 && missingErr.length === 0);
+  }
+
   return rows;
 }
