@@ -14,7 +14,10 @@ export default function SmartMoneyToken() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { chain, address } = useParams();
-  const chainId = Number(chain) || 1;
+  /* A Solana URL (/smart-money/token/solana/<mint>) must stay Solana — the
+     intel route serves base58 mints, and coercing the slug to 1 would ask it
+     for an Ethereum contract. */
+  const chainId = chain === 'solana' ? 'solana' : Number(chain) || 1;
 
   return (
     <PageTransition>

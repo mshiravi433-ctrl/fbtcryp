@@ -3666,7 +3666,10 @@ app.get('/api/v1/smart-money/wallet/:address', async (req, res) => {
 /* Token intelligence — liquidity, holders, accumulation/distribution, flows. */
 app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
   try {
-    const chainId = Number(req.params.chain) || 1;
+    /* 'solana' is a chain id here, not a number: the token route must serve
+       Solana mints, and coercing the slug to 1 would analyze an Ethereum
+       contract with a base58 address — BAD_ADDRESS for every Solana token. */
+    const chainId = req.params.chain === 'solana' ? 'solana' : Number(req.params.chain) || 1;
     const [intel, signals] = await Promise.all([
       smartMoney.analyzeToken(req.params.address, chainId),
       smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null)

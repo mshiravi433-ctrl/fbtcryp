@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin."
+    "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin.",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Solana kaynağı, cüzdanınızda imzalanır",
+      "whatBody": "SOL, USDC veya USDT'yi Solana cüzdanınızdan bir EVM ağına taşıyın. deBridge emri oluşturur, Solana cüzdanınız imzalar. Fonlarınızı asla saklamayız — ancak köprü geri alınamaz, bu yüzden hedef adresi karakter karakter kontrol edin.",
+      "origin": "Kimden (Solana)",
+      "onSolana": "Solana'da",
+      "amount": "Tutar",
+      "destination": "Kime (EVM)",
+      "recipient": "Hedef adres",
+      "badDestination": "Bu geçerli bir EVM adresi değil.",
+      "sender": "Kimden: {{address}}",
+      "connectSolana": "Bir Solana cüzdanı bağla",
+      "recipientRequired": "Fonları alacak EVM adresini girin.",
+      "value": "Yaklaşık değer",
+      "fixedFee": "Sabit ağ ücreti (SOL)",
+      "affiliateFee": "Bizim payımız",
+      "fixedFeeWarn": "Sabit SOL ücreti bu transferin %{{pct}}'i. Sabit ücretler küçük transferleri çok etkiler — daha büyük bir tutar düşünün veya küçük stablecoin işlemleri için EVM token sekmesini kullanın.",
+      "noRoute": "Şu anda bu tutar için rota yok. Farklı bir tutar veya ağ deneyin.",
+      "quoteFailed": "Rota bulunamadı. Biraz sonra veya farklı bir çiftle tekrar deneyin.",
+      "sendFailed": "İşlem gönderilmedi. Cüzdanınızdan hiçbir şey çıkmadı.",
+      "affiliateNote": "deBridge her istekte sabit ücreti ve payımızı bildirir — bu rakamlar onların, bizim tahminimiz değil.",
+      "tokensTitle": "Yalnızca yukarıdaki üç varlık",
+      "tokensBody": "Yalnızca SOL ve Solana'nın resmi USDC/USDT mint'leri sunulur. Sembole göre arama, klon bir mint'in gerçek token adını ödünç almasına izin verir; bu yüzden liste sabittir ve adrese göre doğrulanır."
+    }
   },
   "dydx": {
     "steps": {

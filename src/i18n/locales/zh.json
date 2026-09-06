@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "输入金额以查看最佳路径和费用。"
+    "emptyHint": "输入金额以查看最佳路径和费用。",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Solana 出发，在您的钱包内签名",
+      "whatBody": "将 SOL、USDC 或 USDT 从您的 Solana 钱包转移到 EVM 网络。deBridge 构建订单，您的 Solana 钱包进行签名。我们绝不托管您的资金——但跨链桥不可撤销，请逐字核对目标地址。",
+      "origin": "从（Solana）",
+      "onSolana": "在 Solana 上",
+      "amount": "金额",
+      "destination": "到（EVM）",
+      "recipient": "目标地址",
+      "badDestination": "这不是有效的 EVM 地址。",
+      "sender": "来自：{{address}}",
+      "connectSolana": "连接 Solana 钱包",
+      "recipientRequired": "请输入应接收资金的 EVM 地址。",
+      "value": "约值",
+      "fixedFee": "固定网络费（SOL）",
+      "affiliateFee": "我们的份额",
+      "fixedFeeWarn": "固定 SOL 费用占本次转账的 {{pct}}%。固定费用对小额转账非常不利——请考虑更大金额，或小额稳定币转账使用 EVM 代币标签页。",
+      "noRoute": "当前此金额没有可用路线。请尝试其他金额或网络。",
+      "quoteFailed": "未找到路线。请稍后或换一对再试。",
+      "sendFailed": "交易未发送。您的钱包未有任何转出。",
+      "affiliateNote": "deBridge 会在每次请求中给出固定费用和我们的份额——这些数字来自对方，并非我们的估算。",
+      "tokensTitle": "仅上述三种资产",
+      "tokensBody": "仅提供 SOL 以及 Solana 上官方 USDC/USDT 铸币地址。按符号搜索会让仿冒铸币借用真实代币的名称，因此列表固定并按地址验证。"
+    }
   },
   "dydx": {
     "steps": {

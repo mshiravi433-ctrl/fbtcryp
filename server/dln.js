@@ -154,9 +154,17 @@ export const TRON_CHAIN = 100000026;
  */
 export const DLN_EVM_CHAINS = new Set([1, 10, 56, 137, 8453, 42161, 43114, 59144]);
 
+/** EVM destinations (and EVM origins) we offer. */
 export const dlnSupports = (chainId) => DLN_EVM_CHAINS.has(Number(chainId));
 
+/** Solana is an ORIGIN only: the source token is a base58 mint, the fee
+ *  receiver is a Solana address, and the order is signed in the user's
+ *  Solana wallet. The destination stays EVM — same address format, same
+ *  stablecoin set. */
+export const dlnSolanaOrigin = (chainId) => Number(chainId) === SOLANA_CHAIN;
+
 const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
+const SOL_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 async function dlnFetch(path) {
   const ctrl = new AbortController();
@@ -202,6 +210,20 @@ export function affiliateFeeFrom(estimation) {
 }
 
 /**
+ * The fixed protocol fee, in the source chain's native smallest unit.
+ *
+ * EVM: `fixFee` (matches tx.value). Solana: absent, so the flat fee plus the
+ * order-account rents and tx costs are read from `estimatedTransactionFee.total`
+ * (lamports) — the number the wallet must actually fund. Returning null when a
+ * Solana quote arrives with neither field keeps the UI honest instead of
+ * showing "no fee".
+ */
+function dlnFixedFee(body, solOrigin) {
+  if (!solOrigin) return body?.fixFee ?? null;
+  return body?.fixFee ?? String(body?.estimatedTransactionFee?.total ?? null) ?? null;
+}
+
+/**
  * Build the parameter set shared by /quote and /create-tx.
  *
  * `affiliateFeePercent` and `affiliateFeeRecipient` are set HERE and are never
@@ -211,8 +233,13 @@ export function affiliateFeeFrom(estimation) {
 function baseParams(q) {
   const srcChainId = Number(q?.srcChainId);
   const dstChainId = Number(q?.dstChainId);
+  const solOrigin = dlnSolanaOrigin(srcChainId);
 
-  if (!dlnSupports(srcChainId) || !dlnSupports(dstChainId)) {
+  /* Solana is accepted as a SOURCE (a real Solana wallet signs the order).
+     Destinations stay EVM — a Solana destination needs a Solana receiver,
+     a different fee/order shape, and its own UI, so offering it half-wired
+     would produce a route the user can select and not complete. */
+  if (!(dlnSupports(srcChainId) || solOrigin) || !dlnSupports(dstChainId)) {
     return { error: 'UNSUPPORTED_CHAIN' };
   }
   if (srcChainId === dstChainId) return { error: 'SAME_CHAIN' };
@@ -222,7 +249,8 @@ function baseParams(q) {
 
   const tokenIn = String(q?.srcChainTokenIn ?? '');
   const tokenOut = String(q?.dstChainTokenOut ?? '');
-  if (!EVM_ADDRESS.test(tokenIn) || !EVM_ADDRESS.test(tokenOut)) {
+  const okIn = solOrigin ? SOL_ADDRESS.test(tokenIn) : EVM_ADDRESS.test(tokenIn);
+  if (!okIn || !EVM_ADDRESS.test(tokenOut)) {
     return { error: 'BAD_TOKEN' };
   }
 
@@ -261,6 +289,7 @@ export async function dlnQuote(query) {
   if (!res.ok) return res;
 
   const est = res.body?.estimation;
+  const solOrigin = dlnSolanaOrigin(Number(query?.srcChainId));
   return {
     ok: true,
     status: 200,
@@ -269,13 +298,20 @@ export async function dlnQuote(query) {
       toAmountUsd: Number(est?.dstChainTokenOut?.approximateUsdValue) || null,
       fromAmountUsd: Number(est?.srcChainTokenIn?.originApproximateUsdValue) || null,
       /*
-       * The fixed fee, in the ORIGIN chain's native coin, in wei. Passed
-       * through raw and unconverted — see the header. This is the field that
-       * decides whether deBridge is a bargain or a disaster, and it is
-       * reported at the top level rather than buried so the UI cannot forget
-       * to show it.
+       * The fixed fee, in the ORIGIN chain's native coin, in the smallest
+       * unit (wei for EVM, lamports for Solana). Passed through raw and
+       * unconverted — see the header. This is the field that decides whether
+       * deBridge is a bargain or a disaster, and it is reported at the top
+       * level rather than buried so the UI cannot forget to show it.
+       *
+       * On EVM it is `fixFee` (== tx.value). On Solana deBridge does not put
+       * a `fixFee` at all — the flat fee is inside the order state account
+       * and comes back as `estimatedTransactionFee.total` in lamports
+       * (giveOrderState rent+fixedFee, account rents, txFee, priorityFee),
+       * per their own response docs. Using that total is the only honest
+       * number; `fixFee` being missing is not the same as the fee being zero.
        */
-      fixFee: res.body?.fixFee ?? null,
+      fixFee: dlnFixedFee(res.body, solOrigin),
       /* Their own statement of what they will pay us. Never our own guess. */
       affiliateFee: affiliateFeeFrom(est),
       /* Seconds. Their estimate of how long fulfilment takes. */
@@ -301,17 +337,29 @@ export async function dlnCreateTx(query) {
   const built = baseParams(query);
   if (built.error) return { ok: false, status: 400, body: { error: built.error } };
 
+  const solOrigin = dlnSolanaOrigin(Number(query?.srcChainId));
   const sender = String(query?.senderAddress ?? '');
-  if (!EVM_ADDRESS.test(sender)) return { ok: false, status: 400, body: { error: 'BAD_ADDRESS' } };
+  if (!(solOrigin ? SOL_ADDRESS.test(sender) : EVM_ADDRESS.test(sender))) {
+    return { ok: false, status: 400, body: { error: 'BAD_ADDRESS' } };
+  }
 
   /*
    * An explicitly supplied recipient is honoured — bridging to an exchange
    * deposit address is a normal thing to want — but it must be a well-formed
    * address. Anything malformed falls back to the sender rather than being
    * passed upstream, because "funds sent somewhere unparseable" has no remedy.
+   *
+   * EXCEPTION: a Solana origin always lands on an EVM chain, so the recipient
+   * lives on a DIFFERENT network and the sender's base58 address is not a
+   * valid fallback. A Solana-origin order therefore requires an explicit EVM
+   * recipient rather than silently burning funds to an address the destination
+   * chain cannot parse.
    */
   const wanted = String(query?.dstChainTokenOutRecipient ?? '');
-  const recipient = EVM_ADDRESS.test(wanted) ? wanted : sender;
+  const recipient = solOrigin
+    ? (EVM_ADDRESS.test(wanted) ? wanted : null)
+    : (EVM_ADDRESS.test(wanted) ? wanted : sender);
+  if (!recipient) return { ok: false, status: 400, body: { error: 'BAD_ADDRESS' } };
 
   const params = built.params;
   params.set('dstChainTokenOutRecipient', recipient);
@@ -331,7 +379,7 @@ export async function dlnCreateTx(query) {
       orderId: res.body?.orderId ?? null,
       toAmount: est?.dstChainTokenOut?.amount ?? null,
       toAmountUsd: Number(est?.dstChainTokenOut?.approximateUsdValue) || null,
-      fixFee: res.body?.fixFee ?? null,
+      fixFee: dlnFixedFee(res.body, solOrigin),
       affiliateFee: affiliateFeeFrom(est),
       delaySec: Number(res.body?.order?.approximateFulfillmentDelay) || null
     }
@@ -352,6 +400,14 @@ export function dlnStatus() {
     keyRequired: false,
     feePercent: dlnFeePercent(),
     feeRecipientEvm: dlnFeeRecipient(1),
+    /* Solana origin is live: the fee lands on a Solana address, so the status
+       names that address too — a fee going to the right size and the wrong
+       format is the exact failure this module exists to prevent. */
+    solana: {
+      originChainId: SOLANA_CHAIN,
+      feeRecipient: dlnFeeRecipient(SOLANA_CHAIN),
+      nativeDecimals: 9
+    },
     chains: [...DLN_EVM_CHAINS],
     note: 'Fixed protocol fee is charged in the origin chain native coin on top of the percentage'
   };

@@ -63,6 +63,15 @@
   0% { transform: translate3d(0,0,0) scale(1); }
   100% { transform: translate3d(14px, -10px, 0) scale(1.05); }
 }
+/* RewardsDashboard's wallet avatar chip. It is sized and coloured inline
+   (connected gradient vs. disconnected grey), so this rule only carries the
+   stable layout — but the class must be declared in a stylesheet or the
+   project-class sweep counts it as unstyled. */
+.wallet-chip {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
 .wallet-chip-modern {
   display: inline-flex;
   align-items: center;

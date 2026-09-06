@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones."
+    "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones.",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Origen en Solana, firmado en tu cartera",
+      "whatBody": "Envía SOL, USDC o USDT desde tu cartera de Solana a una red EVM. deBridge construye la orden y tu cartera de Solana la firma. Nunca custodiamos tus fondos, pero un puente no se puede revertir: revisa la dirección destino carácter por carácter.",
+      "origin": "Desde (Solana)",
+      "onSolana": "en Solana",
+      "amount": "Importe",
+      "destination": "Destino (EVM)",
+      "recipient": "Dirección de destino",
+      "badDestination": "Esa no es una dirección EVM válida.",
+      "sender": "Desde: {{address}}",
+      "connectSolana": "Conectar una cartera de Solana",
+      "recipientRequired": "Escribe la dirección EVM que debe recibir los fondos.",
+      "value": "Valor aprox.",
+      "fixedFee": "Tarifa fija de red (SOL)",
+      "affiliateFee": "Nuestra parte",
+      "fixedFeeWarn": "La tarifa fija en SOL es el {{pct}}% de esta transferencia. Las tarifas fijas penalizan mucho los envíos pequeños: considera un importe mayor o usa la pestaña de tokens EVM para movimientos pequeños.",
+      "noRoute": "No hay ruta para este importe ahora mismo. Prueba otro importe o red.",
+      "quoteFailed": "No se encontró ninguna ruta. Inténtalo en un momento o con otro par.",
+      "sendFailed": "La transacción no se envió. Nada salió de tu cartera.",
+      "affiliateNote": "deBridge cotiza la tarifa fija y nuestra parte en cada solicitud: estos números son suyos, no nuestra estimación.",
+      "tokensTitle": "Solo los tres activos de arriba",
+      "tokensBody": "Solo se ofrecen SOL y los mints canónicos de USDC/USDT en Solana. Buscar por símbolo permitiría que un mint clonado tome el nombre de un token real, así que la lista es fija y verificada por dirección."
+    }
   },
   "dydx": {
     "steps": {

@@ -456,12 +456,17 @@ export async function tokenFlow(tokenAddress, chainId, windowKey = '24h') {
   const ms = WINDOWS[windowKey] || WINDOWS.H24;
   const cutoff = Date.now() - ms;
   const { events } = await labelledEvents({ minUsd: FLOORS.bigTradeUsd, since: cutoff });
-  const ta = String(tokenAddress || '').toLowerCase();
+  /* Solana mints are base58 and case-sensitive; lowercasing would rewrite
+     the address and never match. EVM addresses stay normalised. */
+  const ta = chainId === 'solana'
+    ? String(tokenAddress || '').trim()
+    : String(tokenAddress || '').toLowerCase();
+  const want = chainId === 'solana' ? 'solana' : Number(chainId);
 
   const buyers = new Map();
   const sellers = new Map();
   for (const e of events) {
-    if (e.chainId !== Number(chainId)) continue;
+    if (e.chainId !== want) continue;
     const match = e.token?.address === ta || e.token?.coingeckoId === ta;
     if (!match && e.token?.symbol !== String(tokenAddress || '').toUpperCase()) continue;
     if (e.timestamp && e.timestamp < cutoff) continue;

@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya."
+    "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya.",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Asal Solana, ditandatangani di dompet Anda",
+      "whatBody": "Pindahkan SOL, USDC, atau USDT dari dompet Solana Anda ke jaringan EVM. deBridge membuat pesanan dan dompet Solana Anda menandatanganinya. Kami tidak pernah menyimpan dana Anda — tetapi jembatan tidak dapat dibatalkan, jadi periksa alamat tujuan karakter demi karakter.",
+      "origin": "Dari (Solana)",
+      "onSolana": "di Solana",
+      "amount": "Jumlah",
+      "destination": "Ke (EVM)",
+      "recipient": "Alamat tujuan",
+      "badDestination": "Itu bukan alamat EVM yang valid.",
+      "sender": "Dari: {{address}}",
+      "connectSolana": "Hubungkan dompet Solana",
+      "recipientRequired": "Masukkan alamat EVM yang harus menerima dana.",
+      "value": "Perkiraan nilai",
+      "fixedFee": "Biaya jaringan tetap (SOL)",
+      "affiliateFee": "Bagian kami",
+      "fixedFeeWarn": "Biaya tetap SOL adalah {{pct}}% dari transfer ini. Biaya tetap sangat merugikan transfer kecil — pertimbangkan jumlah lebih besar, atau gunakan tab token EVM untuk transfer kecil.",
+      "noRoute": "Tidak ada rute untuk jumlah ini saat ini. Coba jumlah atau jaringan lain.",
+      "quoteFailed": "Rute tidak ditemukan. Coba lagi sebentar lagi atau dengan pasangan lain.",
+      "sendFailed": "Transaksi tidak terkirim. Tidak ada yang keluar dari dompet Anda.",
+      "affiliateNote": "deBridge mengutip biaya tetap dan bagian kami di setiap permintaan — angka ini dari mereka, bukan estimasi kami.",
+      "tokensTitle": "Hanya tiga aset di atas",
+      "tokensBody": "Hanya SOL dan mint USDC/USDT kanonik Solana yang ditawarkan. Pencarian berdasarkan simbol akan memungkinkan mint tiruan meminjam nama token asli, jadi daftar ini tetap dan diverifikasi berdasarkan alamat."
+    }
   },
   "dydx": {
     "steps": {
