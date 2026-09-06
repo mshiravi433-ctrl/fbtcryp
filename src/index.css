@@ -7247,6 +7247,115 @@ body { overflow-x: clip; }
 .farm-tabs::-webkit-scrollbar { display: none; }
 .farm-tabs button { flex: 1 0 auto; }
 
+/* ─── farm protocol read-only card ─────────────────────────────────────── */
+.farm-protocol-card {
+  padding: 14px;
+  border-radius: 18px;
+}
+.farm-protocol-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.farm-protocol-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--rgb-1);
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.12));
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.16);
+}
+.farm-protocol-id {
+  flex: 1 1 auto;
+}
+.farm-protocol-title {
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+}
+.farm-protocol-sub {
+  display: block;
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-top: 2px;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-protocol-readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+}
+.farm-protocol-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.farm-protocol-live > .faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-protocol-live i {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.45);
+  animation: farm-protocol-pulse 2.4s ease-out infinite;
+}
+@keyframes farm-protocol-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(0, 255, 157, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 157, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .farm-protocol-live i { animation: none; }
+}
+.farm-protocol-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+.farm-protocol-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.farm-protocol-meta-cell > span:last-child {
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+  text-align: start;
+}
+.farm-protocol-meta-cell--wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 360px) {
+  .farm-protocol-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .farm-search,
 .farm-amt-input,
 .farm-chain-select {

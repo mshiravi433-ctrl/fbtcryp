@@ -272,9 +272,10 @@ export default function Ecosystem() {
   const [selectedItem, setSelectedItem] = useState(null);
   const lastFetch = useRef(0);
   const cacheRef = useRef(null);
+  const probeCacheRef = useRef(null);
 
   /** Fetch real provider status */
-  const loadData = useCallback(async (force = false) => {
+  const loadData = useCallback(async (force = false, probeEvidence = null) => {
     const now = Date.now();
     // Cache for 30 seconds
     if (!force && cacheRef.current && now - lastFetch.current < 30000) {
@@ -286,7 +287,7 @@ export default function Ecosystem() {
     setError(false);
     try {
       const result = await fetchProviderStatus();
-      const data = buildEcosystemData(result);
+      const data = buildEcosystemData(result, probeEvidence || probeCacheRef.current);
       cacheRef.current = data;
       lastFetch.current = now;
       setEcosystemData(data);
@@ -301,10 +302,14 @@ export default function Ecosystem() {
     let cancelled = false;
     loadData();
     // Ask the server for fresh liveness evidence for the DEX/liquidity sources,
-    // then re-read the standard status once the probe has recorded it.
-    probeProviderStatuses().finally(() => {
+    // then re-read the standard status once the probe has recorded it. Without
+    // carrying the probe body into the next build, a serverless instance that
+    // didn't record the health event (or an edge cache) would keep showing 0/5
+    // on every visit even though the providers answered.
+    probeProviderStatuses().then((body) => {
       if (cancelled) return;
-      setTimeout(() => { if (!cancelled) loadData(true); }, 450);
+      probeCacheRef.current = body;
+      setTimeout(() => { if (!cancelled) loadData(true, body); }, 450);
     });
     return () => { cancelled = true; };
   }, [loadData]);
