@@ -155,6 +155,13 @@ try {
      */
     await rpc(url, 'anvil_setBalance', [AAVE_V3_BASE.aUsdc, '0xDE0B6B3A7640000']); // 1 ETH — gas if aToken has to move its own balance
     await rpc(url, 'anvil_setBalance', [ANVIL_ACCOUNT, '0xDE0B6B3A7640000']);     // 1 ETH — gas for approve/supply/withdraw
+    // The dev key is a REAL address on Base and has sent real transactions
+    // there (its mainnet nonce is ~3.4M), so anvil's pending-nonce accounting
+    // for it is unreliable across consecutive local sends (observed: approve
+    // mined, then supply rejected as "nonce too low"). Reset the nonce in the
+    // LOCAL fork state and drive every send with explicit sequential nonces.
+    await rpc(url, 'anvil_setNonce', [ANVIL_ACCOUNT, '0x0']);
+    let nextNonce = 0;
 
     const usdc = new Contract(AAVE_V3_BASE.usdc, [
       'function balanceOf(address) view returns (uint256)',
@@ -261,7 +268,7 @@ try {
 
     const hashes = [];
     for (const step of supplyPlan.steps) {
-      const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n });
+      const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n, nonce: nextNonce++ });
       const receipt = await tx.wait();
       hashes.push(receipt.hash);
       t(`${step.kind} landed on the fork`, receipt.status === 1, receipt.hash.slice(0, 18));
@@ -291,7 +298,7 @@ try {
     t('the recipient is the connected account', wTo.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
 
     const wTx = await signer.sendTransaction({
-      to: withdrawPlan.steps[0].to, data: withdrawPlan.steps[0].data, value: 0n
+      to: withdrawPlan.steps[0].to, data: withdrawPlan.steps[0].data, value: 0n, nonce: nextNonce++
     });
     const wReceipt = await wTx.wait();
     t('the withdraw landed on the fork', wReceipt.status === 1, wReceipt.hash.slice(0, 18));
