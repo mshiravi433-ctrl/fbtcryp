@@ -181,10 +181,13 @@ export const OPS_PANEL_STRINGS = {
   'eco.limitations':   { fa: 'محدودیت‌های اعلام‌شده', en: 'Stated limitations', ar: 'القيود المعلنة' },
   /* ---- History panel chrome --------------------------------------------- */
   'hist.title':         { fa: 'تاریخچه',      en: 'History',        ar: 'السجل' },
+  'hist.seasons':       { fa: 'سشن‌ها',       en: 'Seasons',        ar: 'الجلسات' },
   'hist.conversations': { fa: 'گفتگوها',      en: 'Conversations',  ar: 'المحادثات' },
   'hist.operations':    { fa: 'عملیات',       en: 'Operations',     ar: 'العمليات' },
   'hist.monitoring':    { fa: 'پایش فعال',    en: 'Active Monitoring', ar: 'المراقبة النشطة' },
   'hist.empty':         { fa: 'هنوز چیزی ثبت نشده', en: 'Nothing recorded yet', ar: 'لم يُسجَّل شيء بعد' },
+  'hist.emptySeasons':  { fa: 'هنوز سشنی ثبت نشده؛ اولین گفتگو همین‌جا تبدیل به سشن می‌شود.', en: 'No season recorded yet; your first conversation becomes one here.', ar: 'لم تُسجَّل جلسة بعد؛ أول محادثة تصبح جلسة هنا.' },
+  'hist.lastMessage':   { fa: 'آخرین پیام',   en: 'Last message',   ar: 'آخر رسالة' },
   'hist.continue':      { fa: 'ادامه',        en: 'Continue',       ar: 'متابعة' },
   'hist.close':         { fa: 'بستن',         en: 'Close',          ar: 'إغلاق' },
 
@@ -248,6 +251,11 @@ export const OPS_PANEL_PHRASES = {
     fa: (pct) => `هدف: ${pct}٪ → این تخمین است، نه تضمین`,
     en: (pct) => `Goal: ${pct}% → this is an estimate, never a guarantee`,
     ar: (pct) => `الهدف: ${pct}٪ ← هذا تقدير وليس ضماناً`
+  },
+  messageCount: {
+    fa: (n) => `${n} پیام`,
+    en: (n) => `${n} messages`,
+    ar: (n) => `${n} رسالة`
   }
 };
 
