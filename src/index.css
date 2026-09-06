@@ -295,13 +295,14 @@ body {
 }
 
 /*
- * Headerless routes (the AI chat) drop only the top bar. The bottom nav is
- * still rendered there (on instruction — the user must always see where they
- * are and be able to leave), so the shell keeps its normal bottom padding
- * and no override is needed. The class is kept as a styling hook only.
+ * Headerless routes (the AI chat) drop the top bar AND the app bottom nav:
+ * the AI page carries its own Trenchers-style tab bar now (see
+ * `trench-agent.css`), so this shell contributes neither bar. Its bottom
+ * padding — sized for the app nav — is removed so the AI page owns that
+ * space. The class stays as the styling hook for both rules.
  */
 .app-shell.app-shell--headerless {
-  /* intentionally inherits `.app-shell` padding-bottom — the nav is present */
+  padding-bottom: 0;
 }
 
 .page {
