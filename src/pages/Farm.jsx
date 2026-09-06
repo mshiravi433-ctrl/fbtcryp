@@ -23,6 +23,14 @@ import {
   AUTOCOMPOUND_PROJECTS, buildYieldStrategies, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
   farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, VAULT_PROJECTS
 } from '../lib/farmDeFi';
+/*
+ * The one in-app DeFi execution surface: Aave v3 on Base, USDC only. It renders
+ * itself only for that exact pool and returns null for everything else, so the
+ * "buy the token on the protocol site" guidance below is untouched for every
+ * other pool — and still available for this one, since the grid underneath is
+ * unchanged. Gated by AAVE_BASE_SUPPLY_ENABLED; see docs/defi/aave-v3-base.md.
+ */
+import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
 
 const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
@@ -400,6 +408,10 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         {t('farm.sourceLine', { source: research.source, time: updateTime })}
         {research.freshness && <> · {research.freshness}</>}
       </div>
+
+      {/* In-app supply / withdraw, only for Aave v3 · Base · USDC. Null
+          everywhere else, so this cannot move a CTA on any other pool. */}
+      <AaveBaseUsdcPanel pool={pool} />
 
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}

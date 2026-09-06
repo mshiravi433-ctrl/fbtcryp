@@ -154,6 +154,13 @@ export default defineConfig({
      */
     __SPECULATION_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_SPECULATION !== 'false'),
     /*
+     * In-app Aave v3 (Base/USDC) supply. Note the inverted test against
+     * SPECULATION above: this one is OFF unless the env var is exactly 'true',
+     * so a build that forgets the variable ships with the money path closed.
+     * See src/lib/features.js and docs/defi/aave-v3-base.md.
+     */
+    __AAVE_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_BASE_SUPPLY === 'true'),
+    /*
      * Version string, read from package.json at build time.
      *
      * Settings used to print a hardcoded 'v1.0.0' while the app shipped 1.5.x.

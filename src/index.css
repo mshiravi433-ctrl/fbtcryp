@@ -11566,6 +11566,16 @@ button.settings-quick-action {
 .farm-apy-label { font-size: 10.5px; line-height: 1.35; }
 .farm-card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .farm-metrics-grid,
+/*
+ * Aave v3 (Base/USDC) in-app supply panel. Deliberately plain: it sits inside
+ * the Farm pool detail next to the existing guidance flow and must not read as
+ * a different product. The step list is ordered prose, not a table, because it
+ * is the last thing a user reads before signing.
+ */
+.farm-aave-panel { margin-top: 12px; }
+.farm-aave-steps { list-style: decimal; }
+.farm-aave-steps li { color: var(--text); }
+
 .farm-economics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 11px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: var(--line); }
 .farm-metric { min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 9px; background: var(--bg-panel); font-size: 11px; }
 .farm-metric > span:last-child { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: start; }
