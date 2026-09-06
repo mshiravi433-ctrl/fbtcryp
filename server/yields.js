@@ -117,7 +117,43 @@ const ALLOWED_PROJECTS = new Set([
   // stablecoin yield with a real, explainable source
   'sky-lending',
   'ethena-usde',
-  'maple'
+  'maple',
+  /*
+   * ─── SECOND WAVE — added 2026-09-06, same filters, no exceptions ─────────
+   * Users asked for more investable pools («استخرهای بیشتر برای سرمایه‌گذاری»).
+   * Every slug below clears the SAME rules as the first wave (TVL floor, APY
+   * band, 70% emission ceiling, outlier flag, app chains) — the allow-list is
+   * only the first gate, never a free pass. Each protocol is large, audited
+   * and multi-year old; none of them is a safety guarantee and the UI never
+   * says otherwise.
+   *
+   * A slug that matches nothing in the live feed renders nothing — a wrong
+   * guess here is an empty contribution, never a wrong row. Re-verify against
+   * DefiLlama/yield-server adapter folder names on the next upstream check
+   * (same procedure as the uniswap-v4 evidence in test/wiring.mjs).
+   */
+  // battle-tested lending + second-generation money markets
+  'aave-v2',
+  'benqi',
+  // auto-compounding vaults — these make the Farm "vault" filter real
+  'yearn-finance',
+  'convex-finance',
+  'beefy',
+  // bridge + yield-trading liquidity with deep, old pools
+  'stargate',
+  'pendle',
+  // Solana liquid staking the Farm staking section joins onto
+  'jupiter-staked-sol',
+  // Solana lending + AMMs with multi-year track records
+  'kamino',
+  'raydium',
+  'orca',
+  // long-running AMMs / liquidity venues
+  'sushiswap',
+  'gmx',
+  // restaking + stablecoin-adjacent yield with explainable sources
+  'eigenlayer',
+  'frax'
 ]);
 
 /**
@@ -126,7 +162,10 @@ const ALLOWED_PROJECTS = new Set([
  * Listing a pool on a chain the user cannot reach from here is a dead end —
  * they tap through, discover they need a different wallet setup, and the
  * screen has wasted their time. Solana is included because the app has a
- * dedicated Solana swap screen.
+ * dedicated Solana swap screen. Linea and Sonic are included because the
+ * swap registry (lib/chains.js TOKENS) and the yield chain map
+ * (lib/yields.js LLAMA_CHAIN_IDS) both already cover them — a pool there
+ * resolves to a real in-app swap route instead of a dead end.
  */
 const ALLOWED_CHAINS = new Set([
   'Ethereum',
@@ -136,16 +175,22 @@ const ALLOWED_CHAINS = new Set([
   'Optimism',
   'Base',
   'Avalanche',
-  'Solana'
+  'Solana',
+  'Linea',
+  'Sonic'
 ]);
 
 /**
  * FLOORS AND CEILINGS.
  *
- * MIN_TVL — $10m. Below this a pool can be drained or exited by one whale,
- * and the APY figure is computed on a base too small to be stable. It is also
- * the single most effective scam filter available: a fake pool almost never
- * has eight figures of real deposits in it.
+ * MIN_TVL — $5m (lowered from $10m on 2026-09-06 so the Farm screen lists
+ * more investable pools). Below this a pool can be drained or exited by one
+ * whale, and the APY figure is computed on a base too small to be stable.
+ * The floor is still the single most effective scam filter available — a
+ * fake pool almost never has millions of real deposits in it — and it now
+ * works together with the protocol allow-list above: a pool must BOTH sit
+ * in a large audited protocol AND clear $5m. The unit fixtures (a $900k
+ * pool and a $4m pool, both rejected) still pin this boundary.
  *
  * MAX_APY — 60%. This is the rule people argue with, so: any sustainable
  * yield is paid out of real revenue (borrowing interest, swap fees, staking
@@ -158,7 +203,7 @@ const ALLOWED_CHAINS = new Set([
  * MIN_APY — 0.5%. A pool paying less than this is not a yield opportunity,
  * it is a line of noise between the user and something useful.
  */
-const MIN_TVL = 10_000_000;
+const MIN_TVL = 5_000_000;
 const MAX_APY = 60;
 const MIN_APY = 0.5;
 
@@ -248,8 +293,21 @@ export function normalizePool(p) {
     apyMean30d: Number.isFinite(Number(p.apyMean30d)) ? Math.round(Number(p.apyMean30d) * 10) / 10 : null,
     tvlUsd: Math.round(Number(p.tvlUsd) || 0),
     volumeUsd1d: Number.isFinite(Number(p.volumeUsd1d)) ? Math.round(Number(p.volumeUsd1d)) : null,
+    /*
+     * The 7-day volume next to the 24h one. A pool whose entire volume
+     * happened yesterday is a different proposition from one that trades
+     * every day, and the analytics panel shows both so the user can tell.
+     * Null when the feed did not send it — never interpolated.
+     */
+    volumeUsd7d: Number.isFinite(Number(p.volumeUsd7d)) ? Math.round(Number(p.volumeUsd7d)) : null,
     apr: Number.isFinite(base) ? Math.round(base * 10) / 10 : null,
     rewardApr: Number.isFinite(reward) ? Math.round(reward * 10) / 10 : null,
+    /*
+     * The pool's own label from the feed (e.g. a Curve factory tag or a
+     * Uniswap fee tier). Display-only: it identifies WHICH pool this is
+     * inside a protocol that runs hundreds of them.
+     */
+    poolMeta: typeof p.poolMeta === 'string' && p.poolMeta.trim() ? p.poolMeta.trim().slice(0, 120) : null,
     underlyingTokens: Array.isArray(p.underlyingTokens) ? p.underlyingTokens.slice(0, 3) : [],
     stablecoin: Boolean(p.stablecoin),
     ilRisk: p.ilRisk === 'yes',
@@ -329,13 +387,13 @@ export async function fetchYields() {
   const updatedAt = new Date().toISOString();
   const ranked = eligible
     .sort((a, b) => score(b) - score(a))
-    .slice(0, 40)
+    .slice(0, 60)
     .map((pool) => ({ ...pool, source: 'defillama', updatedAt, freshness: 'FRESH' }));
 
   return {
     pools: ranked,
     /*
-     * Reported so the UI can say "40 of 312 pools passed the filter". That
+     * Reported so the UI can say "60 of 312 pools passed the filter". That
      * single line does more to explain what this screen is than any amount of
      * body copy: it makes the filtering visible instead of implicit.
      */

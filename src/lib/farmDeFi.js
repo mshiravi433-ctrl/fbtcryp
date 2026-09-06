@@ -1,5 +1,26 @@
 import { FEE_BPS } from './feeBps';
-import { farmScore, pairSwapRoute, pairTokens, rateIsUnusual, realShare } from './yields';
+import { farmScore, investRoute, pairTokens, rateIsUnusual, realShare } from './yields';
+
+/**
+ * Which feed projects are auto-compounding vaults, for the Farm "vault"
+ * filter. These protocols take a deposit and handle the compounding
+ * themselves — the user never touches the underlying LP. The set only
+ * contains slugs from the server allow-list, so a filter chip can never
+ * promise a vault the feed cannot deliver.
+ */
+export const VAULT_PROJECTS = Object.freeze(['yearn-finance', 'convex-finance', 'beefy']);
+
+/**
+ * Which feed projects compound by themselves, for the Farm "auto compound"
+ * filter. Liquid-staking tokens grow against their underlying on their own —
+ * there is no reward to claim and nothing to restake — which is exactly what
+ * "auto compound" means on this screen. Same rule as above: allow-list slugs
+ * only.
+ */
+export const AUTOCOMPOUND_PROJECTS = Object.freeze([
+  'lido', 'rocket-pool', 'binance-staked-eth', 'ether.fi-stake',
+  'jito-liquid-staking', 'marinade-liquid-staking', 'jupiter-staked-sol'
+]);
 
 export const FARM_EXECUTION_STATES = Object.freeze([
   'IDLE', 'VALIDATING', 'QUOTING', 'PREPARING', 'SIMULATING',
@@ -220,6 +241,8 @@ export function farmPoolResearch(pool) {
     ilRisk: Boolean(pool?.ilRisk),
     stablecoin: Boolean(pool?.stablecoin),
     type: pool?.exposure === 'single' ? 'staking' : 'lp',
+    poolMeta: pool?.poolMeta ?? null,
+    volumeUsd7d: pool?.volumeUsd7d ?? null,
     source: pool?.source || 'defillama',
     updatedAt: pool?.updatedAt || null,
     freshness: pool?.freshness || 'UNAVAILABLE',
@@ -229,7 +252,7 @@ export function farmPoolResearch(pool) {
 
 export function normalizeFarmOpportunity(pool, metadata = {}) {
   const score = farmScore(pool);
-  const route = pairSwapRoute(pool);
+  const route = investRoute(pool);
   return {
     ...pool,
     score,
@@ -258,6 +281,8 @@ export function buildYieldStrategies(pools, metadata = {}) {
     ['highYield', pick((p) => p.risk === 'high', byApy)],
     ['blueChip', pick((p) => Number(p.tvlUsd) >= 500_000_000, byScore)],
     ['lowGas', pick((p) => !['Ethereum'].includes(p.chain), byScore)],
-    ['lp', pick((p) => p.type === 'lp', byScore)]
+    ['lp', pick((p) => p.type === 'lp', byScore)],
+    ['staking', pick((p) => p.type === 'staking', byScore)],
+    ['vault', pick((p) => VAULT_PROJECTS.includes(p.project), byScore)]
   ].filter(([, pool]) => pool).map(([category, pool]) => ({ category, pool }));
 }

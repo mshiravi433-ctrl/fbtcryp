@@ -1024,7 +1024,20 @@
     "custodyNotice": "These farms are operated by PancakeSwap, not by فانوس بازار بيشغام. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
     "rewardsLink": "App rewards & quests",
     "rewardsLinkSub": "Daily streak, XP and referrals",
-    "custodyTitle": "من يحتفظ بالأموال؟"
+    "custodyTitle": "من يحتفظ بالأموال؟",
+    "noRouteHint": "رمز هذا المجمّع غير مدرج في المبادلة بعد — راجع صفحة المجمّع لمسار الإيداع.",
+    "howToInvestTitle": "كيف تستثمر هنا",
+    "howToInvest1": "احصل على رمز الدخول بالزر أعلاه — يصل إلى محفظتك، ولا نحتفظ به أبداً.",
+    "howToInvest2": "أودعه في موقع البروتوكول عبر «رؤية المجمّع» — الإيداع يجري في عقده، لا عندنا.",
+    "poolMeta": "تفاصيل المجمّع",
+    "volume7d": "حجم ٧ أيام",
+    "apyBase": "العائد الأساسي",
+    "apyReward": "عائد المكافآت",
+    "inappIntro": "اشترِه هنا وامتلك المركز — بلا إيداع إضافي ولا قفل ولا موقع خارجي.",
+    "strategy": {
+      "staking": "استراتيجية الستيكينغ",
+      "vault": "استراتيجية الخزانة"
+    }
   },
   "signals": {
     "title": "إشارات ذكية",

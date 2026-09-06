@@ -7976,6 +7976,11 @@ export default function run() {
       /0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84/.test(chains) &&
       /0xae78736Cd615f374D3085123A210448E74Fc6393/.test(chains));
     t('...and are flagged so Farm can route them in-app', /stake: 'eth'/.test(chains));
+    t('Farm offers an in-app staking route instead of only linking away',
+      /farm\.ethStakingTitle/.test(code(read('src/pages/Farm.jsx'))));
+    /* Addresses must come from the token table, never retyped. */
+    t('...and reads the token list rather than duplicating addresses',
+      /TOKENS\[1\] \?\? \[\]\)\.filter\(\(tk\) => tk\.stake === 'eth'\)/.test(read('src/pages/Farm.jsx')));
     t('Farm routes the pair through our own swap instead of only linking away',
       /navigate\(`\/swap\?chain=\$\{route\.chainId\}&from=/.test(code(read('src/pages/Farm.jsx')))
       && /\/solana\?toMint=\$\{encodeURIComponent\(route\.toMint\)\}/.test(code(read('src/pages/Farm.jsx'))));
@@ -7984,16 +7989,32 @@ export default function run() {
     t('...and reads the pair from the verified route, not a retyped address',
       /pairSwapRoute\(pool\)/.test(code(read('src/pages/Farm.jsx')))
       && /export function pairSwapRoute/.test(read('src/lib/yields.js')));
-    t('Farm default tab is the recommended view, not the market dump',
-      /FARM_TABS = \['recommended', 'market', 'strategies', 'pools'\]/.test(read('src/pages/Farm.jsx'))
-      && /: 'recommended'/.test(read('src/pages/Farm.jsx')));
+    /*
+     * --- MERGED 2026-09-06: the parallel wiring audit on main pinned the
+     * 4-tab recommended-first Farm; this branch restores the in-app invest
+     * tab on top of it. Both halves survive: five tabs, recommended default,
+     * in-app first. The old three-tab (inapp/market/trade) design with its
+     * /stocks /ostium /dydx CTAs stays retired — /ostium and /dydx exist
+     * only behind SPECULATION_ENABLED, so unconditional trade CTAs in Farm
+     * would navigate to missing routes in every store-safe build.
+     */
+    t('Farm opens on curated investable discovery, not the raw pool dump',
+      /FARM_TABS = \['inapp', 'recommended', 'market', 'strategies', 'pools'\]/.test(read('src/pages/Farm.jsx'))
+      && /FARM_TABS\.includes\(legacyTab\) \? legacyTab : 'recommended'/.test(read('src/pages/Farm.jsx')));
     t('Farm primary CTAs stay in-app',
       /navigate\(`\/swap\?chain=\$\{route\.chainId\}&from=/.test(code(read('src/pages/Farm.jsx')))
       && /navigate\(`\/solana\?toMint=/.test(code(read('src/pages/Farm.jsx'))));
+    t('Farm working CTAs stay in-app (own EVM + Solana swaps)',
+      /navigate\(`\/swap/.test(read('src/pages/Farm.jsx'))
+      && /navigate\(`\/solana/.test(read('src/pages/Farm.jsx'))
+      && (read('src/pages/Farm.jsx').match(/window\.open\(/g) || []).length === 1);
     t('the GMX outbound is referral-gated through one module, never a bare URL',
       /export function isValidGmxCode/.test(read('src/lib/venueReferral.js'))
       && /VENUE_REFERRAL/.test(read('src/lib/venueReferral.js'))
       && /withReferral\(venueId, url\)/.test(read('src/pages/Perp.jsx')));
+    t('Farm carries no venue-referral outbounds (those live in Earn perks)',
+      !/withReferral\(/.test(read('src/pages/Farm.jsx'))
+      && !/GMX_CODE|isValidGmxCode/.test(read('src/pages/Farm.jsx')));
     t('Farm market get-tokens uses a verified pair swap route',
       /pairSwapRoute/.test(read('src/pages/Farm.jsx')));
     {

@@ -163,11 +163,51 @@ function solanaMintFor(symbol) {
   return SOLANA_SYMBOL_MINTS.get(String(symbol ?? '').trim().toUpperCase()) ?? null;
 }
 
+/**
+ * Symbols the feed spells differently from our registry, for the SAME asset.
+ *
+ * ─── WHY THIS MAP IS SHORT ON PURPOSE ───────────────────────────────────────
+ * Every entry here must be the same underlying asset under a different
+ * spelling: a wrapped↔native pair (the router wraps automatically, so ETH and
+ * WETH are the same liquidity) or a rename (MATIC became POL). Anything else
+ * is a DIFFERENT token and must stay unresolved:
+ *
+ *   • USDC.e / USDbC are NOT USDC — different contracts, different issuers.
+ *   • BTCB (Binance-pegged) is NOT WBTC — different custodians.
+ *   • wstETH is NOT stETH — different contracts, different mechanics.
+ *
+ * Aliasing any of those would prefill a swap into the wrong token, which is
+ * worse than no button at all. When in doubt this map says nothing and the
+ * pool keeps its honest pool-page link.
+ */
+const EQUIVALENT_SYMBOLS = {
+  ETH: ['WETH'],
+  WETH: ['ETH'],
+  BNB: ['WBNB'],
+  WBNB: ['BNB'],
+  AVAX: ['WAVAX'],
+  WAVAX: ['AVAX'],
+  MATIC: ['WMATIC', 'POL', 'WPOL'],
+  WMATIC: ['MATIC', 'POL', 'WPOL'],
+  POL: ['WPOL', 'MATIC', 'WMATIC'],
+  WPOL: ['POL', 'MATIC', 'WMATIC'],
+  S: ['WS'],
+  WS: ['S']
+};
+
 function tokenOnChain(chainId, symbol) {
   const list = TOKENS[chainId] ?? [];
   const want = String(symbol ?? '').trim().toUpperCase();
-  if (!want) return null;
-  return list.find((tk) => String(tk.symbol).toUpperCase() === want) ?? null;
+  if (!want || list.length === 0) return null;
+  const byUpper = (s) => list.find((tk) => String(tk.symbol).toUpperCase() === s) ?? null;
+  const exact = byUpper(want);
+  if (exact) return exact;
+  /* Same asset, different spelling — wrapped/native pairs and renames only. */
+  for (const alt of EQUIVALENT_SYMBOLS[want] ?? []) {
+    const hit = byUpper(alt);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /**
@@ -203,8 +243,88 @@ export function pairSwapRoute(pool) {
 
   const chainId = llamaChainId(pool?.chain);
   if (!chainId) return null;
-  if (!tokenOnChain(chainId, pair[0]) || !tokenOnChain(chainId, pair[1])) return null;
-  return { chainId, from: pair[0], to: pair[1] };
+  const legA = tokenOnChain(chainId, pair[0]);
+  const legB = tokenOnChain(chainId, pair[1]);
+  if (!legA || !legB) return null;
+  /*
+   * Registry symbols, not feed spellings. The swap screen resolves `from`/`to`
+   * against its curated list case-sensitively, so a feed spelling of "WETH"
+   * resolving to our "ETH" entry must travel as "ETH" — echoing the feed
+   * string would prefill a leg the swap screen cannot select.
+   */
+  return { chainId, from: legA.symbol, to: legB.symbol };
+}
+
+/**
+ * The ONE token a single-asset pool needs, or null.
+ *
+ * Most of the Farm screen is single-asset pools — Aave USDC, Lido stETH,
+ * Marinade mSOL — and for every one of them `pairTokens` correctly returns
+ * nothing. But "no pair" is not "no investment path": the depositor still
+ * needs exactly one token, and when our swap lists it the honest UI is a
+ * button that prefills that purchase. A pair symbol is never a single token,
+ * even when the feed forgot to set `exposure`.
+ */
+export function singleToken(pool) {
+  if (!pool || pairTokens(pool).length > 0) return null;
+  const sym = String(pool?.symbol ?? '').trim();
+  return sym || null;
+}
+
+/**
+ * Where "get the token" leads for a single-asset pool, or null.
+ *
+ * EVM: the token must exist in OUR registry on that chain (aliases included),
+ * and the payment leg is picked for the user — a stablecoin first, the native
+ * coin as fallback, never the token itself (a USDC pool prefills USDT→USDC,
+ * not USDC→USDC).
+ *
+ * Solana: the symbol must resolve against the mint-verified lists, exactly
+ * like a pair leg. The one exception is USDC itself: the Solana swap pays
+ * with USDC by default, so a USDC-single pool would prefill USDC→USDC — a
+ * form that looks broken. It returns null and keeps the pool-page link; SOL
+ * and USDT singles still route, because USDC→SOL and USDC→USDT are real.
+ */
+export function singleSwapRoute(pool) {
+  const sym = singleToken(pool);
+  if (!sym) return null;
+
+  if (String(pool?.chain ?? '').trim().toLowerCase() === 'solana') {
+    const mint = solanaMintFor(sym);
+    if (!mint || mint === USDC_MINT) return null;
+    return { kind: 'solana', from: sym, to: sym, toMint: mint, single: true };
+  }
+
+  const chainId = llamaChainId(pool?.chain);
+  if (!chainId) return null;
+  const entry = tokenOnChain(chainId, sym);
+  if (!entry) return null;
+  const list = TOKENS[chainId] ?? [];
+  const entryUp = String(entry.symbol).toUpperCase();
+  const byUpper = (s) => list.find((tk) => String(tk.symbol).toUpperCase() === s) ?? null;
+  let pay = null;
+  for (const stable of ['USDC', 'USDT', 'DAI']) {
+    const hit = byUpper(stable);
+    if (hit && String(hit.symbol).toUpperCase() !== entryUp) { pay = hit; break; }
+  }
+  if (!pay) {
+    const native = list.find((tk) => tk.native);
+    pay = native && String(native.symbol).toUpperCase() !== entryUp
+      ? native
+      : (list.find((tk) => String(tk.symbol).toUpperCase() !== entryUp) ?? null);
+  }
+  if (!pay) return null;
+  return { chainId, from: pay.symbol, to: entry.symbol, single: true };
+}
+
+/**
+ * The in-app investment path for ANY pool: the pair route for LP pools, the
+ * single-token route for staking/lending pools, null when neither leg is
+ * something our swap can actually buy. One function so the card, the details
+ * panel and the availability flags can never disagree.
+ */
+export function investRoute(pool) {
+  return pairSwapRoute(pool) ?? singleSwapRoute(pool);
 }
 
 /**

@@ -1806,7 +1806,9 @@
       "highYield": "High yield",
       "blueChip": "Blue-chip strategy",
       "lowGas": "Low-gas strategy",
-      "lp": "LP strategy"
+      "lp": "LP strategy",
+      "staking": "Staking strategy",
+      "vault": "Vault strategy"
     },
     "action": {
       "addLiquidity": "Add liquidity",
@@ -1826,7 +1828,16 @@
       "lock": "Lock risk",
       "bridge": "Bridge risk",
       "concentration": "Concentration risk"
-    }
+    },
+    "noRouteHint": "Our swap doesn't list this pool's token yet — the pool page below shows the deposit path.",
+    "howToInvestTitle": "How to invest here",
+    "howToInvest1": "Get the entry token with the button above — it lands in your own wallet, we never hold it.",
+    "howToInvest2": "Deposit it on the protocol’s own site via “See the pool” — the deposit runs in their contract, not ours.",
+    "poolMeta": "Pool detail",
+    "volume7d": "7d volume",
+    "apyBase": "Base APY",
+    "apyReward": "Reward APY",
+    "inappIntro": "Buy it here and you own the position — no extra deposit, no lock-up, no external site."
   },
   "signals": {
     "title": "AI Signals",

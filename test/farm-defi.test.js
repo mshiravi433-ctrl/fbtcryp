@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FARM_EXECUTION_STATES, FbtFeeEngine, FarmAdapter,
-  buildYieldStrategies, metricFreshness, normalizeFarmOpportunity
+  AUTOCOMPOUND_PROJECTS, FARM_EXECUTION_STATES, FbtFeeEngine, FarmAdapter, VAULT_PROJECTS,
+  buildYieldStrategies, farmPoolResearch, metricFreshness, normalizeFarmOpportunity
 } from '../src/lib/farmDeFi';
 
 const pool = {
   id: 'pool-1', symbol: 'USDC-USDT', project: 'uniswap-v3', chain: 'Base',
   apy: 10, apyBase: 8, apyReward: 2, apr: 8, rewardApr: 2,
   tvlUsd: 500_000_000, stablecoin: true, ilRisk: true, exposure: 'multi'
+};
+
+const single = {
+  id: 'pool-2', symbol: 'USDC', project: 'aave-v3', chain: 'Ethereum',
+  apy: 5, apyBase: 5, apyReward: 0, apr: 5, rewardApr: 0,
+  tvlUsd: 500_000_000, stablecoin: true, ilRisk: false, exposure: 'single'
 };
 
 describe('farm DeFi architecture', () => {
@@ -46,5 +52,41 @@ describe('farm DeFi architecture', () => {
     expect(FARM_EXECUTION_STATES[0]).toBe('IDLE');
     expect(FARM_EXECUTION_STATES.at(-1)).toBe('COMPLETED');
     expect(FARM_EXECUTION_STATES.indexOf('SIMULATING')).toBeLessThan(FARM_EXECUTION_STATES.indexOf('AWAITING_SIGNATURE'));
+  });
+
+  it('offers the invest path for single-asset pools, not just pairs', () => {
+    const row = normalizeFarmOpportunity(single, { source: 'defillama', updatedAt: new Date().toISOString() });
+    expect(row.type).toBe('staking');
+    expect(row.actions.getTokens).toBe('AVAILABLE');
+    expect(row.actions.addLiquidity).toBe('UNAVAILABLE');
+  });
+
+  it('keeps a pair with an unlisted leg honestly unavailable', () => {
+    // Base lists USDC but no USDT, so USDC-USDT cannot prefill a swap.
+    const row = normalizeFarmOpportunity(pool, { source: 'defillama', updatedAt: new Date().toISOString() });
+    expect(row.type).toBe('lp');
+    expect(row.actions.getTokens).toBe('UNAVAILABLE');
+  });
+
+  it('maps the vault and auto-compound filters to real allow-list projects', () => {
+    expect(VAULT_PROJECTS).toContain('yearn-finance');
+    expect(VAULT_PROJECTS).toContain('beefy');
+    expect(AUTOCOMPOUND_PROJECTS).toContain('lido');
+    expect(AUTOCOMPOUND_PROJECTS).toContain('jupiter-staked-sol');
+    const strategies = buildYieldStrategies([
+      { ...single, project: 'beefy' },
+      { ...single, id: 'pool-3', project: 'lido' }
+    ]);
+    expect(strategies.some((row) => row.category === 'vault')).toBe(true);
+    expect(strategies.some((row) => row.category === 'staking')).toBe(true);
+  });
+
+  it('passes pool detail and 7d volume through to the analytics view', () => {
+    const research = farmPoolResearch({ ...single, poolMeta: '0.05% fee tier', volumeUsd7d: 42 });
+    expect(research.poolMeta).toBe('0.05% fee tier');
+    expect(research.volumeUsd7d).toBe(42);
+    const missing = farmPoolResearch(single);
+    expect(missing.poolMeta).toBeNull();
+    expect(missing.volumeUsd7d).toBeNull();
   });
 });
