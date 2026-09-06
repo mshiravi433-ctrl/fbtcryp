@@ -108,9 +108,19 @@ const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pip
  * arcade/speculation chunk scans). The gate/flow/screens suites intentionally
  * keep the inherited value: they need react.development for act().
  */
+/*
+ * Both ship builds run with a raised V8 heap. Measured on a 4 GB box: the
+ * single-file IIFE build OOMs at Node's default ~1.95 GB limit (exit 134,
+ * SIGABRT inside JsonParser) because src/i18n/index.js pulls every locale JSON
+ * in through import.meta.glob, and a lib/IIFE output has to inline all of them
+ * (~1.9 MB of JSON) rather than emit a chunk per file. It finished at 3 GB,
+ * which is what is set here. Raise this number, not the locale glob.
+ */
+const SHIP_NODE_OPTIONS = '--max-old-space-size=3072';
 const npxShip = (args) => {
   const env = { ...process.env };
   delete env.NODE_ENV;
+  env.NODE_OPTIONS = [env.NODE_OPTIONS, SHIP_NODE_OPTIONS].filter(Boolean).join(' ');
   return execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'], env });
 };
 
