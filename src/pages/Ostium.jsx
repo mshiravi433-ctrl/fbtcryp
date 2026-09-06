@@ -15,6 +15,7 @@ import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import { assetKnowledgeFor } from '../lib/assetKnowledge';
 import ModernSelect from '../components/ModernSelect';
+import AssetIcon from '../components/AssetIcon';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -67,14 +68,7 @@ function TokenChip({ symbol, lang, onClick }) {
   return (
     <button type="button" className="pair-info-token" onClick={onClick}>
       <span className="pit-sym">
-        <span style={{
-          width: 20, height: 20, borderRadius: 7, display: 'inline-grid', placeItems: 'center',
-          background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))',
-          color: '#fff', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
-          flexShrink: 0,
-        }}>
-          {symbol.slice(0, 3)}
-        </span>
+        <AssetIcon symbol={symbol} size={20} radius={6} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
         {symbol}
       </span>
       <span className="pit-name">{row.name}</span>
@@ -458,12 +452,20 @@ export default function Ostium() {
             <ModernSelect
               value={market?.pairId || ''}
               onChange={setPairId}
-              options={visible.map((m) => ({
-                value: m.pairId,
-                label: m.name,
-                sublabel: m.uiCategory || m.category || '',
-                meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
-              }))}
+              options={visible.map((m) => {
+                const know = assetKnowledgeFor(m.from);
+                const isFa = /^fa\b/i.test(String(i18n.language || 'fa'));
+                const nm = (know[isFa ? 'fa' : 'en'] ?? know.en)?.name;
+                return {
+                  value: m.pairId,
+                  label: m.name,
+                  /* «طلای جهانی · کالا» reads better than a bare category */
+                  sublabel: nm && nm !== m.from ? `${nm} · ${CATEGORY_HELP.find((c) => c.id === m.uiCategory)?.fa ?? m.uiCategory}` : (m.uiCategory || m.category || ''),
+                  meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
+                  base: m.from,
+                  quote: m.to,
+                };
+              })}
               title={t('ostium.market')}
               placeholder={market?.name || t('ostium.market')}
               searchable

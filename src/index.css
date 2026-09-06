@@ -7608,6 +7608,18 @@ body { overflow-x: clip; }
   color-scheme: light;
 }
 
+/* The two pickers of one bridge leg: network (wider) + token. `minmax(0, …)`
+   is what lets each track shrink below its content, so the row can never be
+   wider than the card — the previous 1.35fr/.85fr grid used implicit
+   minmax(auto, …) tracks and overflowed on every phone width. */
+.brg-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
 .brg-amount {
   width: 100%;
   min-height: 52px;
