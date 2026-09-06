@@ -1,11 +1,30 @@
 /**
  * Execute REAL tools for a classified intent before any sentence is generated.
  * Priority: tool result → shared state → cache with freshness → explicit unavailable.
+ *
+ * ─── EVERY TOOL IS BOUNDED, INDEPENDENT READS RUN IN PARALLEL ───────────────
+ * The turn used to await tools one-by-one with no ceiling of its own: a slow
+ * market fetch delayed the wallet answer that never needed it, and one hung
+ * upstream stalled the whole conversation. Each call now races a per-tool
+ * deadline (the tool loses, the turn continues), and reads that do not depend
+ * on each other fire together.
  */
 
 import { getTool, resolveToolsForIntent } from './toolRegistry.js';
 import { scanOpportunities } from './opportunityScanner.js';
 import { getCentralWalletState, isWalletConnected } from './centralWalletState.js';
+
+const TOOL_TIMEOUT_MS = Number(globalThis.__FBT_TOOL_TIMEOUT_MS || 8000);
+
+function withTimeout(promise, ms = TOOL_TIMEOUT_MS, label = 'tool') {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ ok: false, dataStatus: 'unavailable', reason: `${label.toUpperCase()}_TIMEOUT`, timeoutMs: ms }), ms);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
 
 export function flattenAgentResults(agentResults = {}) {
   const out = {};
@@ -24,7 +43,7 @@ async function callTool(id, input, ctx) {
     return { id, ok: false, reason: 'TOOL_NOT_FOUND', latencyMs: 0 };
   }
   try {
-    const result = await tool.execute(input || {}, ctx);
+    const result = await withTimeout(Promise.resolve(tool.execute(input || {}, ctx)), TOOL_TIMEOUT_MS, id);
     return {
       id,
       ok: result?.ok !== false,
@@ -51,9 +70,17 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
   });
 
   if (['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'RISK_ANALYSIS', 'REBALANCE'].includes(type)) {
-    data.wallet = (await need('wallet.getBalances', { address: walletSnap?.address || walletSnap?.evmAddresses?.[0] })).result;
-    data.portfolio = (await need('wallet.getPortfolio', {})).result
-      || (await need('portfolio.analysis', { holdings: context.portfolio?.holdings, detailed: true })).result;
+    /* Balance read, portfolio summary and local analysis are independent —
+       they used to run one-after-another, tripling the wait for no reason. */
+    const [walletRow, portfolioRow, analysisRow] = await Promise.all([
+      need('wallet.getBalances', { address: walletSnap?.address || walletSnap?.evmAddresses?.[0] }),
+      need('wallet.getPortfolio', {}),
+      context.portfolio?.holdings?.length
+        ? need('portfolio.analysis', { holdings: context.portfolio.holdings, detailed: true })
+        : Promise.resolve(null)
+    ]);
+    data.wallet = walletRow.result;
+    data.portfolio = portfolioRow.result || analysisRow?.result;
   }
 
   if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'INVESTMENT_PLAN', 'STAKING'].includes(type)) {
@@ -75,10 +102,14 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
   }
 
   if (['MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN'].includes(type)) {
-    data.market = (await need('market.overview', {})).result;
-    if (intent?.entities?.token) {
-      data.token = (await need('market.tokenDetail', { symbol: intent.entities.token })).result;
-    }
+    /* Overview and the per-token read answer different questions and share
+       no state — running them together keeps a token ask off the overview's
+       critical path. */
+    const jobs = [need('market.overview', {})];
+    if (intent?.entities?.token) jobs.push(need('market.tokenDetail', { symbol: intent.entities.token }));
+    const [overviewRow, tokenRow] = await Promise.all(jobs);
+    data.market = overviewRow.result;
+    if (tokenRow) data.token = tokenRow.result;
   }
 
   if (['SMART_MONEY'].includes(type)) {

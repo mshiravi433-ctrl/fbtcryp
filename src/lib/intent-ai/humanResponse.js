@@ -104,6 +104,19 @@ function formatPortfolioAnalysis({ context, locale }) {
   });
   if (!plan.ok) {
     if (context?.wallet?.connected) {
+      /* A failed chain read also arrives as «no holdings». It must never be
+         worded as an empty portfolio: the client re-reads chains on its own,
+         so the honest answer names the failed chains and asks for one retry. */
+      const failed = Array.isArray(context?.portfolio?.failedChains) ? context.portfolio.failedChains : [];
+      if (failed.length || context?.portfolio?.dataStatus === 'error') {
+        return {
+          message: lang === 'fa'
+            ? `کیف پول متصل است، اما خواندن موجودی از زنجیره کامل نشد${failed.length ? ` (${failed.join('، ')})` : ''}.\nدارایی‌ها پنهان نیستند — برنامه در حال خواندن دوباره است؛ چند لحظه دیگر دوباره بپرسید تا موجودی واقعی را ببینیم.`
+            : `Your wallet is connected, but the chain read failed${failed.length ? ` (${failed.join(', ')})` : ''}.\nYour assets are not hidden — the app is re-reading now; ask again shortly for live balances.`,
+          ui: 'TEXT',
+          code: 'PORTFOLIO_SYNC_RETRY'
+        };
+      }
       return { message: humanizeError(plan.code || 'EMPTY_PORTFOLIO', { locale: lang }).message, ui: 'TEXT' };
     }
     return {

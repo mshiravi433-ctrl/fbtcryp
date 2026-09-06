@@ -123,6 +123,19 @@ function moneyOrNa(n) {
   return money(n) || 'N/A';
 }
 
+/** $1.01T / $32.5B / $940.2M — compaction for market-cap / volume rows. */
+function moneyCompact(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const abs = Math.abs(v);
+  const fmt = (d) => (Math.round(abs / d * 100) / 100).toLocaleString('en-US');
+  if (abs >= 1e12) return `$${fmt(1e12)}T`;
+  if (abs >= 1e9) return `$${fmt(1e9)}B`;
+  if (abs >= 1e6) return `$${fmt(1e6)}M`;
+  if (abs >= 1e3) return `$${fmt(1e3)}K`;
+  return `$${(Math.round(abs * 100) / 100).toLocaleString('en-US')}`;
+}
+
 function pct(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return 'N/A';
@@ -166,6 +179,78 @@ function allocationLines(holdings, total) {
 
 function toolsRan(results = {}) {
   return Array.isArray(results.toolsUsed) && results.toolsUsed.length > 0;
+}
+
+/*
+ * ─── STRUCTURED CARDS ────────────────────────────────────────────────────────
+ * The chat surface renders these as real UI (allocation bars, price charts,
+ * 24h high/low ranges) instead of prose. Numbers only travel inside the card
+ * when a tool actually produced them — the card never invents a field.
+ */
+function portfolioCard(total, sortedHoldings, pricedCount, unpricedCount, lang) {
+  const den = Number.isFinite(Number(total)) && Number(total) > 0 ? Number(total) : null;
+  const rows = (sortedHoldings || []).slice(0, 8).map((h) => {
+    const value = Number.isFinite(Number(h.valueUsd)) ? Number(h.valueUsd) : null;
+    return {
+      symbol: h.symbol || '—',
+      amount: Number.isFinite(Number(h.amount)) ? Number(h.amount) : null,
+      valueUsd: value,
+      pct: value != null && den ? (value / den) * 100 : null
+    };
+  });
+  return {
+    kind: 'PORTFOLIO',
+    title: lang === 'fa' ? 'پرتفوی من' : 'My portfolio',
+    totalValueUsd: den,
+    pricedCount,
+    unpricedCount,
+    rows,
+    at: Date.now()
+  };
+}
+
+const numOr = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+
+/**
+ * Build the TOKEN card that powers the chat chart UI: sparkline series,
+ * 24h high/low range, changes across 1h/24h/7d and the backtested signal.
+ * Every field is pass-through from a real read; missing stays null.
+ */
+function tokenCard(token, lang) {
+  if (!token || typeof token !== 'object') return null;
+  const spark = Array.isArray(token.sparkline)
+    ? token.sparkline.map(numOr).filter((v) => v != null)
+    : [];
+  return {
+    kind: 'TOKEN',
+    symbol: token.symbol || null,
+    name: token.name || null,
+    priceUsd: numOr(token.priceUsd),
+    change1hPct: numOr(token.change1hPct),
+    change24hPct: numOr(token.change24hPct),
+    change7dPct: numOr(token.change7dPct),
+    high24h: numOr(token.high24h),
+    low24h: numOr(token.low24h),
+    marketCapUsd: numOr(token.marketCapUsd),
+    volume24hUsd: numOr(token.volume24hUsd),
+    rank: numOr(token.rank),
+    ath: numOr(token.ath),
+    sparkline: spark.slice(-168),
+    signal: token.analysis?.signal || null,
+    rsi: numOr(token.analysis?.rsi),
+    confidence: numOr(token.analysis?.confidence),
+    at: token.fetchedAt || Date.now(),
+    source: token.source || 'api'
+  };
+}
+
+/** Compact high/low line for the message text — the card draws the visual. */
+function rangeLine(token, lang) {
+  const hi = numOr(token?.high24h);
+  const lo = numOr(token?.low24h);
+  if (hi == null && lo == null) return null;
+  if (lang === 'fa') return `بالاترین قیمت ۲۴ ساعت: ${moneyOrNa(hi)} · کمترین: ${moneyOrNa(lo)}`;
+  return `24h high: ${moneyOrNa(hi)} · low: ${moneyOrNa(lo)}`;
 }
 
 export function buildHumanResponse({ intent, context = {}, results = {}, plan = null, locale = 'fa' } = {}) {
@@ -282,7 +367,10 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
     return {
       message: lang === 'fa' ? tokenInfo.fa : tokenInfo.en,
-      ui: { type: 'TEXT' },
+      ui: results?.token?.dataStatus === 'unavailable' || !results?.token ? { type: 'TEXT' } : { type: 'TOKEN_CARD' },
+      card: results?.token && results.token.dataStatus !== 'unavailable'
+        ? tokenCard(results.token, lang)
+        : null,
       actions: [{ id: `view-${sym.toLowerCase()}`, route: '/market', label: lang === 'fa' ? `صفحه بازار ${sym}` : `${sym} Market` }]
     };
   }
@@ -353,13 +441,41 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
 
+    /*
+     * ─── EMPTY IS NOT THE ONLY REASON A WALLET READS BACK ZERO ROWS ──────────
+     * The old code treated «connected + zero holdings + FRESH» as «the indexer
+     * answered and the portfolio is genuinely empty». But a chain read that
+     * FAILED (RPC down, rate-limited, timeout) also produces zero rows, and
+     * the hook reports that through `failedChains` / `dataStatus: 'error'`.
+     * Telling a user with a funded wallet «پرتفوی خالی است» was the exact
+     * false answer this branch existed to avoid. Failed reads are now named
+     * as failed reads, a refresh is requested, and only a read that truly
+     * completed with zero rows is allowed to say «empty».
+     */
+    const failedChains = Array.isArray(portfolio?.failedChains) ? portfolio.failedChains : [];
+    const readFailed = failedChains.length > 0
+      || portfolio?.dataStatus === 'error'
+      || (portfolio?.dataStatus === 'unavailable' && Boolean(context.wallet?.connected ?? connected));
+
     if (!holdings.length) {
+      if (readFailed) {
+        return {
+          message: lang === 'fa'
+            ? `کیف پول متصل است، اما خواندن موجودی از زنجیره کامل نشد${failedChains.length ? ` (${failedChains.join('، ')})` : ''}.\nدارایی‌های شما پنهان نشده‌اند — خواندن دوباره همین حالا انجام می‌شود و به‌محض رسیدن پاسخ، موجودی را نشان می‌دهم.`
+            : `Your wallet is connected, but reading balances from the chain failed${failedChains.length ? ` (${failedChains.join(', ')})` : ''}.\nYour assets are not hidden — I am re-reading now and will show balances as soon as they arrive.`,
+          ui: { type: 'TEXT' },
+          code: 'PORTFOLIO_SYNC_RETRY',
+          refresh: true,
+          pendingRefresh: true,
+          failedChains
+        };
+      }
       const empty = portfolio?.dataStatus === 'empty' || (!hydrating && portfolio?.freshness === 'FRESH');
       if (empty) {
         return {
           message: lang === 'fa'
-            ? 'کیف پول متصل است و ایندکسر پاسخ داده، اما دارایی قابل‌نمایش نیست — پرتفوی خالی است، نه قطع اتصال. می‌توانم فارم، سواپ یا بازار را باز کنم.'
-            : 'Wallet is connected and the indexer answered, but there are no holdings — the portfolio is empty, not disconnected. I can open farm, swap or markets.',
+            ? 'پرتفوی این کیف پول در حال حاضر خالی است — این یک پاسخ قطعی از زنجیره است، نه قطع اتصال.\nاگر تازگی دارایی جدید دارید، چند لحظه دیگر دوباره بپرسید؛ در غیر این صورت می‌توانم فارم، سواپ یا بازار را برایتان باز کنم.'
+            : 'This wallet currently holds no assets — that is a definitive on-chain answer, not a disconnect.\nIf you just received assets, ask again shortly; otherwise I can open farm, swap or markets.',
           ui: { type: 'TEXT' },
           code: 'EMPTY_PORTFOLIO',
           actions: [
@@ -373,7 +489,9 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
           ? 'کیف پول متصل است، اما هنوز دارایی قابل‌نمایش از زنجیره/ایندکسر نرسیده. این به‌معنی قطع اتصال نیست — داده در حال تازه‌سازی است.'
           : 'Wallet is connected, but no readable holdings have arrived from the indexer yet. That is not a disconnect — data is still refreshing.',
         ui: { type: 'TEXT' },
-        code: 'PORTFOLIO_INDEXER_DELAY'
+        code: 'PORTFOLIO_INDEXER_DELAY',
+        refresh: true,
+        pendingRefresh: true
       };
     }
 
@@ -410,13 +528,24 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         parts.push('');
         parts.push(`تازگی داده: ${portfolio.freshness}`);
       }
-      return { message: parts.join('\n'), ui: { type: 'TEXT' }, portfolio, actions: [{ id: 'open-lending', label: lang === 'fa' ? 'فرصت‌های وام' : 'Lending', route: '/loan' }] };
+      return {
+        message: parts.join('\n'),
+        ui: { type: 'PORTFOLIO_CARD' },
+        portfolio,
+        card: portfolioCard(den, sorted, priced.length, unpriced.length, lang),
+        actions: [{ id: 'open-lending', label: lang === 'fa' ? 'فرصت‌های وام' : 'Lending', route: '/loan' }]
+      };
     }
     const parts = ['Read the portfolio from the wallet and current prices.', ''];
     parts.push(totalLabel ? `Approx. value: ${totalLabel}` : 'Full USD value unavailable (some prices are N/A).');
     parts.push('', 'Assets:', ...lines);
     if (largest && largestPct != null) parts.push('', `Largest share: ${largest.symbol} — ${pct(largestPct)}`);
-    return { message: parts.join('\n'), ui: { type: 'TEXT' }, portfolio };
+    return {
+      message: parts.join('\n'),
+      ui: { type: 'PORTFOLIO_CARD' },
+      portfolio,
+      card: portfolioCard(den, sorted, priced.length, unpriced.length, lang)
+    };
   }
 
   if (type === 'WALLET_BALANCE') {
@@ -442,12 +571,26 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
     if (!list.length) {
+      const failed = Array.isArray(context.portfolio?.failedChains) ? context.portfolio.failedChains : [];
+      if (failed.length || context.portfolio?.dataStatus === 'error') {
+        return {
+          message: lang === 'fa'
+            ? `کیف پول متصل است اما خواندن موجودی از زنجیره کامل نشد${failed.length ? ` (${failed.join('، ')})` : ''} — در حال خواندن دوباره‌ام؛ دارایی‌ها پنهان نیستند.`
+            : `Wallet is connected but the chain read failed${failed.length ? ` (${failed.join(', ')})` : ''} — re-reading now; your assets are not hidden.`,
+          ui: { type: 'TEXT' },
+          code: 'PORTFOLIO_SYNC_RETRY',
+          refresh: true,
+          pendingRefresh: true
+        };
+      }
       return {
         message: lang === 'fa'
           ? 'کیف پول متصل است اما موجودی زنجیره‌ای هنوز نرسیده. در حال تازه‌سازی‌ام، نه قطع اتصال.'
           : 'Wallet is connected but on-chain balances have not arrived yet.',
         ui: { type: 'TEXT' },
-        code: 'PORTFOLIO_INDEXER_DELAY'
+        code: 'PORTFOLIO_INDEXER_DELAY',
+        refresh: true,
+        pendingRefresh: true
       };
     }
     const lines = list.slice(0, 12).map((b) => {
@@ -668,13 +811,94 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
   if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE', 'ANALYZE_TOKEN'].includes(type)) {
     const token = intent?.entities?.token;
-    const market = results.market || results.token || results.smartMoney || results.whale;
-    if (market && market.dataStatus === 'unavailable' && !market.overview) {
+    const market = results.market || results.smartMoney || results.whale || null;
+    /* A real per-token read beats an overview: when the tool answered with a
+       price, answer with numbers + a chart card, never with «open the page». */
+    const tk = results.token
+      && results.token.ok !== false
+      && results.token.dataStatus !== 'unavailable'
+      ? results.token
+      : null;
+    if (tk && (tk.priceUsd != null || tk.price != null)) {
+      const price = numOr(tk.priceUsd ?? tk.price);
+      const c24 = numOr(tk.change24hPct ?? tk.change24h);
+      const c1h = numOr(tk.change1hPct ?? tk.change1h);
+      const c7d = numOr(tk.change7dPct ?? tk.change7d);
+      const sig = tk.analysis?.signal || null;
+      const sgn = (v) => (v == null ? 'N/A' : `${v >= 0 ? '+' : ''}${Math.round(v * 100) / 100}%`);
+      if (lang === 'fa') {
+        const parts = [];
+        parts.push(`📊 ${tk.name || token || ''} (${String(tk.symbol || token || '').toUpperCase()})`);
+        parts.push(`قیمت لحظه‌ای: ${moneyOrNa(price)}${c24 != null ? `  (${sgn(c24)} در ۲۴ ساعت)` : ''}`);
+        const rl = rangeLine(tk, 'fa');
+        if (rl) parts.push(rl);
+        const stats = [];
+        if (c1h != null) stats.push(`۱ساعت ${sgn(c1h)}`);
+        if (c7d != null) stats.push(`۷روز ${sgn(c7d)}`);
+        if (numOr(tk.marketCapUsd ?? tk.mcap) != null) stats.push(`حجم بازار ${moneyCompact(numOr(tk.marketCapUsd ?? tk.mcap))}`);
+        if (numOr(tk.volume24hUsd ?? tk.volume) != null) stats.push(`معاملات ۲۴ساعت ${moneyCompact(numOr(tk.volume24hUsd ?? tk.volume))}`);
+        if (numOr(tk.rank) != null) stats.push(`رتبه #${numOr(tk.rank)}`);
+        if (stats.length) parts.push(stats.join(' · '));
+        if (sig) parts.push(`سیگنال تحلیل فنی (بک‌تست‌شده): ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
+        parts.push('');
+        parts.push('نمودار ۷ روز اخیر در کارت زیر است — روی صفحه بازار کندل کامل را ببین.');
+        return {
+          message: parts.join('\n'),
+          ui: { type: 'TOKEN_CARD' },
+          card: tokenCard({ ...tk, priceUsd: price, change1hPct: c1h, change24hPct: c24, change7dPct: c7d, marketCapUsd: tk.marketCapUsd ?? tk.mcap, volume24hUsd: tk.volume24hUsd ?? tk.volume }, 'fa'),
+          actions: [{ id: `open-${String(tk.symbol || token || 'market').toLowerCase()}`, route: `/coin/${tk.coinId || String(tk.symbol || '').toLowerCase()}`, label: lang === 'fa' ? 'نمودار کامل' : 'Full chart' }]
+        };
+      }
+      const parts = [];
+      parts.push(`📊 ${tk.name || token || ''} (${String(tk.symbol || token || '').toUpperCase()})`);
+      parts.push(`Live price: ${moneyOrNa(price)}${c24 != null ? `  (${sgn(c24)} in 24h)` : ''}`);
+      const rl = rangeLine(tk, 'en');
+      if (rl) parts.push(rl);
+      const stats = [];
+      if (c1h != null) stats.push(`1h ${sgn(c1h)}`);
+      if (c7d != null) stats.push(`7d ${sgn(c7d)}`);
+      if (numOr(tk.marketCapUsd ?? tk.mcap) != null) stats.push(`Mkt cap ${moneyCompact(numOr(tk.marketCapUsd ?? tk.mcap))}`);
+      if (numOr(tk.volume24hUsd ?? tk.volume) != null) stats.push(`Vol 24h ${moneyCompact(numOr(tk.volume24hUsd ?? tk.volume))}`);
+      if (numOr(tk.rank) != null) stats.push(`Rank #${numOr(tk.rank)}`);
+      if (stats.length) parts.push(stats.join(' · '));
+      if (sig) parts.push(`Backtested signal: ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
+      parts.push('', 'The 7-day chart is in the card below — the market page has the full candles.');
+      return {
+        message: parts.join('\n'),
+        ui: { type: 'TOKEN_CARD' },
+        card: tokenCard({ ...tk, priceUsd: price, change1hPct: c1h, change24hPct: c24, change7dPct: c7d, marketCapUsd: tk.marketCapUsd ?? tk.mcap, volume24hUsd: tk.volume24hUsd ?? tk.volume }, 'en'),
+        actions: [{ id: `open-${String(tk.symbol || token || 'market').toLowerCase()}`, route: `/coin/${tk.coinId || String(tk.symbol || '').toLowerCase()}`, label: 'Full chart' }]
+      };
+    }
+    /* Tool-level failure (no service wired, upstream down, timeout) — the
+       read is re-armed so the next ask (or the UI auto-retry) gets data. */
+    if (market && (market.dataStatus === 'unavailable' || market.ok === false) && !market.overview) {
       return {
         message: lang === 'fa'
-          ? `بازار را از منبع زنده پرسیدم${token ? ` (${token})` : ''}، اما داده تازه برنگشت.`
-          : `I queried live market data${token ? ` (${token})` : ''}, but nothing fresh came back.`,
-        ui: { type: 'TEXT' }
+          ? `بازار را از منبع زنده پرسیدم${token ? ` (${token})` : ''}، اما داده تازه برنگشت. چند لحظه دیگر دوباره می‌پرسم — منبع را همین حالا دوباره صدا می‌زنم.`
+          : `I queried live market data${token ? ` (${token})` : ''}, but nothing fresh came back. Retrying the source now — ask again in a moment.`,
+        ui: { type: 'TEXT' },
+        refresh: true
+      };
+    }
+    /* Whole-market ask: name the leaders with real numbers from the read. */
+    const top = Array.isArray(market?.top) ? market.top.filter((r) => numOr(r.priceUsd) != null) : [];
+    if (top.length) {
+      const rows = top.slice(0, 6).map((r) => {
+        const c = numOr(r.change24hPct);
+        return `${String(r.symbol || '').toUpperCase()}: ${moneyOrNa(r.priceUsd)}${c != null ? ` (${c >= 0 ? '+' : ''}${Math.round(c * 100) / 100}%)` : ''}`;
+      });
+      const ov = market.overview || {};
+      const capLine = numOr(ov.totalMarketCapUsd) != null
+        ? (lang === 'fa' ? `حجم کل بازار: ${money(numOr(ov.totalMarketCapUsd))}` : `Total market cap: ${money(numOr(ov.totalMarketCapUsd))}`)
+        : null;
+      return {
+        message: (lang === 'fa'
+          ? `نمای کلی بازار از داده زنده:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nبرای هر کوین نمودار و بالاترین/کمترین قیمت را جداگانه بپرس — مثلاً «تحلیل بیت کوین».`
+          : `Market snapshot from live data:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nAsk for any coin by name for the chart with 24h high/low — e.g. "analyze bitcoin".`),
+        ui: { type: 'TEXT' },
+        market,
+        actions: [{ id: 'open-market', route: '/market', label: lang === 'fa' ? 'بازار' : 'Market' }]
       };
     }
     return {

@@ -123,7 +123,7 @@ import {
 } from '../lib/intent-ai/os/historyStore.js';
 import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
 import { loadOrders } from '../lib/orders.js';
-import { fetchAiProviders, fetchLearningStats } from '../lib/aiGatewayClient.js';
+import { fetchAiProviders, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
 import {
   OperationsPanel,
   HistoryPanel,
@@ -137,6 +137,7 @@ import {
 } from './IntentOpsPanels.jsx';
 import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
+import { TokenMarketCard, PortfolioChatCard } from './IntentChatCards.jsx';
 
 // UPGRADE 6 — New modules
 import {
@@ -285,7 +286,8 @@ const ConversationRow = memo(function ConversationRow({
   onChoose,
   onMonitorAction,
   onMonitorOpportunity,
-  onFeedback
+  onFeedback,
+  onOpenRoute
 }) {
   const [fbSent, setFbSent] = useState(null);
   const fa = locale.startsWith('fa');
@@ -322,6 +324,30 @@ const ConversationRow = memo(function ConversationRow({
         ) : null}
         {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
           <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
+        ) : null}
+        {/* Rich tool-output cards: live token chart + 24h high/low, and the
+            allocation view for portfolio answers. */}
+        {m.card?.kind === 'TOKEN' ? (
+          <TokenMarketCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+        ) : null}
+        {m.card?.kind === 'PORTFOLIO' ? (
+          <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+        ) : null}
+        {/* Route chips («فارم», «بازار», «نمودار کامل»…) built by the human
+           layer from real results — one tap navigates, no re-typing. */}
+        {Array.isArray(m.actions) && m.actions.length && m.actions.every((a) => a && a.route) ? (
+          <div className="iaos-msg-actions" data-testid="intent-ai-msg-actions">
+            {m.actions.map((a) => (
+              <button
+                key={a.id || a.route}
+                type="button"
+                className="iaos-btn iss-ghost iaos-msg-action"
+                onClick={() => onOpenRoute(a.route)}
+              >
+                {a.label || a.route} ↗
+              </button>
+            ))}
+          </div>
         ) : null}
         {m.kind === 'monitor' && m.monitor ? (
           <MonitorCard monitor={m.monitor} onAction={onMonitorAction} locale={locale} />
@@ -686,6 +712,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [providersStatus, setProvidersStatus] = useState('idle');
   const [providersError, setProvidersError] = useState(null);
   const [learningStats, setLearningStats] = useState(null);
+  /* Server-side tool registry — the wiring report shown in the Status panel:
+     how many tools the AI can actually reach through /v1/ai. */
+  const [aiToolsInfo, setAiToolsInfo] = useState(null);
   const [monitorDraftOpen, setMonitorDraftOpen] = useState(false);
   const [orderDraftOpen, setOrderDraftOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState(null);
@@ -1036,6 +1065,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const evmTotal = Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null;
     const solTotal = solRows.reduce((s, r) => s + (Number(r.valueUsd) || 0), 0);
     const hydrating = Boolean(walletConnected && Boolean(multi?.loading));
+    /* Zero rows can mean «empty wallet» OR «every chain read failed» — the
+       AI must be able to tell those apart, so the per-chain failure list
+       travels with the portfolio snapshot (and a fully-failed read is
+       reported as an ERROR, never as a fresh empty book). */
+    const failedChains = Array.isArray(multi?.failedChains) ? multi.failedChains : [];
+    const rowsCount = holdings.length;
+    const readFailed = Boolean(
+      walletConnected
+      && !hydrating
+      && rowsCount === 0
+      && (failedChains.length > 0 || (Array.isArray(multi?.chains) && multi.chains.length > 0))
+    );
     return {
       wallet: {
         connected: walletConnected,
@@ -1049,12 +1090,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         solanaAddresses: solanaAddressLive ? [solanaAddressLive] : []
       },
       portfolio: {
-        dataStatus: hydrating ? 'pending' : (canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable'),
+        dataStatus: hydrating ? 'pending' : readFailed ? 'error' : (canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable'),
         ...((canReadPortfolio || solanaRows.length) && !hydrating ? { fetchedAt: Date.now(), source: 'portfolio' } : {}),
         freshness: hydrating ? 'PENDING' : 'FRESH',
         hydrating,
         totalValueUsd: evmTotal != null ? evmTotal + solTotal : (solTotal || null),
         holdings,
+        rowsCount,
+        chainCount: Array.isArray(multi?.chains) ? multi.chains.length : 0,
+        failedChains,
         partial: multi?.partial === true
       },
       balances,
@@ -1828,6 +1872,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           kind: 'assistant',
           ui: osResult.human?.ui || osResult.ui || { type: 'TEXT' },
           card: osResult.human?.card || osResult.card || null,
+          /* Route chips, opportunity rows and holdings the human layer built
+             from real tool output — the bubble renderer turns these into
+             buttons/lists instead of dropping them. */
+          actions: Array.isArray(osResult.human?.actions) ? osResult.human.actions : null,
+          opportunities: Array.isArray(osResult.human?.opportunities) ? osResult.human.opportunities : null,
+          holdings: Array.isArray(osResult.human?.holdings) ? osResult.human.holdings : null,
+          statusCode: osResult.human?.code || null,
           intentType: osResult.intent?.type || null,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
           missingInfo: (osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null) || u7qText,
@@ -1840,6 +1891,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           aggregated: orchestrationResult?.aggregated || null,
           upgrade7: trimUpgrade7ForMessage(osResult?.upgrade7)
         };
+
+        /* ─── SELF-HEALING PORTFOLIO READ ───────────────────────────────────
+           The human layer asked for a refresh (failed chain read or data not
+           arrived yet). Trigger the wallet re-read and re-ask ONCE when it
+           settles, so the follow-up answer carries real balances instead of
+           leaving the user stuck with the retry notice. */
+        if ((osResult.human?.refresh || osResult.human?.pendingRefresh) && !opts.isAutoRetry) {
+          try { if (typeof multi?.refresh === 'function') multi.refresh(); } catch { /* refresh is best-effort */ }
+          setTimeout(() => {
+            if (busyRef.current) return;
+            void sendMessage(message, { ...opts, skipUserBubble: true, isAutoRetry: true });
+          }, 4200);
+        }
 
         // §33 — Check if this question was already asked
         if (nextMessage.missingInfo) {
@@ -2181,6 +2245,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (message) rememberPending(message, intentType);
     setWalletSheetOpen(true);
   }, [rememberPending]);
+
+  /* Route chips on AI bubbles («بازار», «فارم», «نمودار کامل»…) navigate the
+     same way the OS navigation agent does — closing panels first so the
+     target page is never rendered behind a stuck overlay. */
+  const openBubbleRoute = useCallback((route) => {
+    if (!route) return;
+    setPanel(null);
+    setDrawerOpen(false);
+    try { navigate(route); } catch { /* router ready */ }
+  }, [navigate]);
 
   const pendingExecutionRef = useRef(null);
   useEffect(() => { pendingExecutionRef.current = pendingExecution; }, [pendingExecution]);
@@ -2881,13 +2955,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const refreshStatus = useCallback(async () => {
     try {
-      const [ms, orders] = await Promise.allSettled([
+      const [ms, orders, tools] = await Promise.allSettled([
         apiMonitorEngineStatus(),
-        Promise.resolve(loadOrders())
+        Promise.resolve(loadOrders()),
+        fetchAiTools()
       ]);
       setMonitorEngineStatus(ms.status === 'fulfilled' ? ms.value : null);
       setServerReachable(ms.status === 'fulfilled' && ms.value?.ok === true);
       if (orders.status === 'fulfilled') setOrdersFromStore(orders.value);
+      if (tools.status === 'fulfilled' && tools.value?.ok) {
+        const list = Array.isArray(tools.value.tools) ? tools.value.tools : [];
+        setAiToolsInfo({ count: list.length, online: true });
+      } else {
+        setAiToolsInfo((prev) => ({ count: prev?.count ?? 0, online: false }));
+      }
     } catch {}
   }, []);
 
@@ -3562,6 +3643,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onMonitorAction={handleMonitorAction}
                 onMonitorOpportunity={monitorOpportunityRow}
                 onFeedback={sendFeedback}
+                onOpenRoute={openBubbleRoute}
               />
             ))}
 
@@ -3747,6 +3829,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         onAction={handleOpsAction}
         busy={opsBusy}
         locale={locale}
+        summary={{
+          walletConnected: walletConnected ? true : false,
+          serverReachable,
+          monitorsActive: Array.isArray(monitors) ? monitors.filter((m) => m.status === 'ACTIVE').length : 0,
+          monitorsTotal: Array.isArray(monitors) ? monitors.length : 0,
+          ordersCount: storedOrders.length,
+          automationsCount: automations.length
+        }}
       />
       <HistoryPanel
         open={panel === 'history'}
@@ -3768,7 +3858,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           monitors: monitorEngineStatus || { active: monitors.filter((m) => m.status === 'ACTIVE').length, total: monitors.length },
           ordersCount: storedOrders.length,
           automationsCount: automations.length,
-          engine: monitorEngineStatus || {}
+          engine: monitorEngineStatus || {},
+          aiTools: aiToolsInfo,
+          providersActive: Array.isArray(aiProviders) ? aiProviders.filter((p) => p.configured || p.status === 'ACTIVE').length : null,
+          providersTotal: Array.isArray(aiProviders) ? aiProviders.length : null
         }}
         locale={locale}
       />

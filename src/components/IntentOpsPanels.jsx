@@ -58,7 +58,8 @@ export function OperationsPanel({
   availability,
   onAction,
   busy = false,
-  locale = 'fa'
+  locale = 'fa',
+  summary = null
 }) {
   const [cat, setCat] = useState('portfolio');
   /*
@@ -74,6 +75,46 @@ export function OperationsPanel({
   );
 
   if (!open) return null;
+
+  /* Live wiring strip — the same four truths the Status panel shows, so the
+     user sees at a glance that the center is actually connected: wallet,
+     server, monitors, orders. Nothing here is invented; an unknown stays
+     «checking», never a fake green dot. */
+  const strip = summary ? [
+    {
+      id: 'wallet',
+      label: opsText('st.wallet', locale),
+      ok: summary.walletConnected === true,
+      unknown: summary.walletConnected == null,
+      value: summary.walletConnected
+        ? opsText('status.connected', locale)
+        : opsText('status.notConnected', locale)
+    },
+    {
+      id: 'server',
+      label: opsText('st.server', locale),
+      ok: summary.serverReachable === true,
+      unknown: summary.serverReachable == null,
+      value: summary.serverReachable === false
+        ? opsText('ops.unavailable', locale)
+        : opsText('status.online', locale)
+    },
+    {
+      id: 'monitors',
+      label: opsText('st.monitors', locale),
+      ok: (summary.monitorsActive ?? 0) > 0,
+      unknown: summary.monitorsActive == null,
+      value: `${summary.monitorsActive ?? 0}/${summary.monitorsTotal ?? 0}`
+    },
+    {
+      id: 'orders',
+      label: opsText('st.orders', locale),
+      ok: null,
+      unknown: false,
+      value: String(summary.ordersCount ?? 0)
+    }
+  ] : null;
+
   return (
     <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={opsText('ops.aria', locale)}>
       <div className="iaos-panel iaos-ops-panel">
@@ -81,6 +122,19 @@ export function OperationsPanel({
           <h2>{opsText('ops.title', locale)}</h2>
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
+        {strip ? (
+          <div className="iaos-ops-strip" data-testid="ops-status-strip">
+            {strip.map((c) => (
+              <div key={c.id} className="iaos-ops-strip-cell" data-ok={c.unknown ? 'unknown' : c.ok ? 'true' : 'false'}>
+                <i aria-hidden="true" />
+                <div>
+                  <small>{c.label}</small>
+                  <strong>{c.value}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="iaos-ops-cats" role="tablist">
           {CATEGORIES.map((c) => (
             <button
@@ -310,6 +364,21 @@ export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
     </div>
   );
 
+  /* Wiring report — every row is a REAL probe result the parent already
+     fetched: the server tool registry, the model fleet and the store mode.
+     This is the «is the AI actually connected to everything» answer, not a
+     status lamp that is green because nobody checked it. */
+  const aiTools = status?.aiTools || null;
+  const isEn = String(locale || 'fa').startsWith('en');
+  const wiringLabel = isEn ? 'AI tools (server registry)' : 'ابزارهای متصل به هوش مصنوعی';
+  const wiringValue = aiTools
+    ? (aiTools.online ? `${aiTools.count} ✓` : `${aiTools.count} · ${opsText('ops.unavailable', locale)}`)
+    : '…';
+  const providersLabel = isEn ? 'AI models active' : 'مدل‌های فعال هوش مصنوعی';
+  const providersValue = status?.providersTotal != null
+    ? `${status.providersActive ?? 0}/${status.providersTotal}`
+    : '…';
+
   return (
     <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
       <div className="iaos-panel iaos-status-panel">
@@ -318,6 +387,8 @@ export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="iaos-status-grid">
+          <Cell label={wiringLabel} value={wiringValue} ok={Boolean(aiTools?.online)} />
+          <Cell label={providersLabel} value={providersValue} />
           <Cell label={L.wallet} value={opsText(status?.walletConnected ? 'status.connected' : 'status.notConnected', locale)} ok={status?.walletConnected} />
           <Cell label={L.server} value={opsText(status?.serverReachable ? 'status.online' : 'ops.unavailable', locale)} ok={status?.serverReachable} />
           <Cell

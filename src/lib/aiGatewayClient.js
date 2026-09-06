@@ -44,6 +44,11 @@ export async function fetchAiProviders() {
   return request('/v1/ai/gateway/providers');
 }
 
+/** The server-side tool registry — the wiring list of what the AI can reach. */
+export async function fetchAiTools() {
+  return request('/v1/ai/tools');
+}
+
 export async function fetchGatewaySelfTest() {
   return request('/v1/ai/gateway/selftest');
 }

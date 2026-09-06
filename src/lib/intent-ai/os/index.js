@@ -423,6 +423,10 @@ export function createIntentOS({
               yieldOpportunities: toolRun.data.yieldOpportunities || flat.yieldOpportunities,
               opportunities: toolRun.data.opportunities || flat.yieldOpportunities?.opportunities,
               market: flat.market || toolRun.data.market,
+              /* The per-token read (price, 24h high/low, sparkline, signal)
+                 — without this pass-through the rich token answer could
+                 never see the tool that fetched it. */
+              token: flat.token || toolRun.data.token,
               smartMoney: flat.smartMoney || toolRun.data.smartMoney,
               whale: flat.whale || toolRun.data.whale,
               toolsUsed: toolRun.toolsUsed,
