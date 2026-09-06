@@ -170,13 +170,19 @@ export const DEX_CHAIN_IDS = Object.freeze({
   optimism: 10,
   avalanche: 43114,
   linea: 59144,
-  sonic: 146
+  sonic: 146,
+  /* Solana rows from the early-token feed now open the in-app intel page. */
+  solana: 'solana'
 });
 
-/** Numeric chain id for a DexScreener slug, or null when we cannot serve an
- *  on-chain intel page for it (e.g. solana tokens from the early feed). */
+/** Chain id for a DexScreener slug. Solana is served in-app too — the token
+ *  intel route accepts the base58 mint — so the slug maps to the string
+ *  'solana' rather than null (which used to exile the row to an external
+ *  DexScreener page). */
 export function chainIdForSlug(slug) {
-  return DEX_CHAIN_IDS[String(slug || '').toLowerCase()] ?? null;
+  const s = String(slug || '').toLowerCase();
+  if (s === 'solana') return 'solana';
+  return DEX_CHAIN_IDS[s] ?? null;
 }
 
 /** Default EVM chain for an address lookup (Ethereum mainnet). */

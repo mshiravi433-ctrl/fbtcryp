@@ -522,9 +522,6 @@ export default function CoinDetail() {
           <p className="notice">{t('coin.notSwappable')}</p>
         )}
 
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/trade?coin=${id}&side=buy`)}>
-          {t('coin.practiceInstead')}
-        </button>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => {
@@ -551,10 +548,14 @@ export default function CoinDetail() {
         real contract address to anchor to; it reports unavailability rather
         than inventing a signal. Not a buy recommendation.
       */}
-      {realSwap?.kind !== 'thor' && realSwap?.token?.address && realSwap?.chainId !== 'solana' && (
+      {realSwap?.kind !== 'thor' && (realSwap?.token?.address || resolvedRoute?.address) && (
         <TokenSmartMoney
-          chainId={Number(realSwap.chainId) || 1}
-          address={realSwap.token.address}
+          chainId={
+            realSwap?.token?.address
+              ? realSwap.chainId === 'solana' ? 'solana' : Number(realSwap.chainId) || 1
+              : resolvedRoute?.kind === 'solana' ? 'solana' : Number(resolvedRoute?.chainId) || 1
+          }
+          address={realSwap?.token?.address || resolvedRoute?.address}
         />
       )}
 

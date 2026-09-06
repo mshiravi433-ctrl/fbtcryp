@@ -750,12 +750,13 @@ export default function Stocks() {
               >
                 {refRows.map((r) => (
                   <motion.div key={r.id} className="coin-row" variants={riseIn}>
-                    <span
-                      className="wallet-badge"
-                      style={{ color: 'var(--rgb-5)', fontSize: 10.5, fontFamily: 'var(--font-mono)', flexShrink: 0 }}
-                    >
-                      {r.symbol.slice(0, 4)}
-                    </span>
+                    {/*
+                      Real company logo from the ticker — the same visual
+                      language as the buyable rows above, not a text stub.
+                      CoinLogo degrades to the monogram if the CDN fails, so a
+                      dead logo cannot leave a blank circle.
+                    */}
+                    <CoinLogo ticker={r.symbol} px={26} />
                     <div className="coin-meta">
                       <div className="coin-sym">{r.symbol}</div>
                       <div className="coin-name">

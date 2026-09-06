@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { coinHue, coinImage } from '../lib/coinImage';
+import { coinHue, coinImage, tickerLogo } from '../lib/coinImage';
 
 /**
  * ONE COIN AVATAR, USED EVERYWHERE.
@@ -35,12 +35,19 @@ import { coinHue, coinImage } from '../lib/coinImage';
  */
 export default function CoinLogo({
   coin,
+  ticker,
   size = 'small',
   px,
   className = 'coin-logo',
   style
 }) {
-  const src = coinImage(coin?.image, size);
+  /*
+   * A coin image when the feed supplies one; otherwise a REAL company logo
+   * derived from a US-equity ticker (the Stocks reference table). No image
+   * at all → the monogram below, and `ticker` also feeds that monogram so a
+   * failed logo still identifies the company.
+   */
+  const src = coinImage(coin?.image, size) ?? (ticker ? tickerLogo(ticker) : null);
   const [failed, setFailed] = useState(false);
 
   /*
@@ -51,7 +58,7 @@ export default function CoinLogo({
    */
   useEffect(() => setFailed(false), [src]);
 
-  const symbol = String(coin?.symbol ?? '?').slice(0, 3);
+  const symbol = String(coin?.symbol ?? ticker ?? '?').slice(0, 3);
 
   /* The box is sized by CSS unless the caller pins it (Ticker, tag chips). */
   const box = px ? { width: px, height: px, ...style } : style;

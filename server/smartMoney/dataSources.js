@@ -105,10 +105,17 @@ function shapePair(p) {
   };
 }
 
-/** All pairs for one or more token addresses (max 30). */
+/** All pairs for one or more token addresses (max 30).
+ *
+ * Solana mints are base58 and CASE-SENSITIVE — lowercasing them rewrites the
+ * address (5tzFki… ≠ 5tzfki…) and DexScreener answers nothing for the
+ * mutated string. EVM addresses are hex and insensitive, so they keep being
+ * normalised to lowercase for dedupe. */
+const SOL_MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export async function dexPairsForTokens(addresses) {
   const addrs = (Array.isArray(addresses) ? addresses : [addresses])
-    .map((a) => String(a || '').trim().toLowerCase())
+    .map((a) => String(a || '').trim())
+    .map((a) => (SOL_MINT.test(a) ? a : a.toLowerCase()))
     .filter(Boolean)
     .slice(0, 30);
   if (!addrs.length) return { dataStatus: 'unavailable', pairs: [] };
@@ -488,6 +495,59 @@ export async function bsTokenHolders(chainId, tokenAddress, { limit = 20 } = {})
     };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
+  }
+}
+
+/* ════════════════════ Solana public RPC: token holders ══════════════════ */
+/*
+ * Keyless public Solana RPC (no API key; rate-limited but fine for one mint).
+ * getTokenSupply gives the real total supply; getTokenLargestAccounts gives
+ * the largest holders, which is what a token page can honestly show. The
+ * MINT ACCOUNT — the first entry whenever tokens are still unissued — holds
+ * no one's tokens and would otherwise rank as the top "holder" with ~100%,
+ * so it is excluded when its balance equals the total supply.
+ *
+ * totalHolders is deliberately null: a real census needs getProgramAccounts,
+ * which at ~400k accounts per popular mint would hammer a public node. An
+ * unknown count is reported as unknown, never as the number of rows we got.
+ */
+/* `solRpc` itself is declared below in the general Solana section — this
+   block reuses it rather than re-declaring a second RPC client. */
+
+export async function solanaTokenHolders(mint) {
+  if (!SOL_MINT.test(String(mint || ''))) return { dataStatus: 'unavailable', rows: [], totalHolders: null };
+  try {
+    const [supply, largest] = await Promise.all([
+      solRpc('getTokenSupply', [mint]),
+      solRpc('getTokenLargestAccounts', [mint])
+    ]);
+    const total = Number(supply?.value?.uiAmount);
+    const accounts = Array.isArray(largest?.value) ? largest.value : [];
+    const rows = accounts
+      .map((a) => ({
+        address: String(a?.address || ''),
+        balance: Number(a?.uiAmount),
+        amount: String(a?.amount || '')
+      }))
+      /* The mint account holds unissued supply, not a holder's tokens. */
+      .filter((r) => !(total > 0 && r.amount && r.balance != null && Math.abs(r.balance - total) < 1e-9))
+      .filter((r) => r.address && Number.isFinite(r.balance) && r.balance > 0)
+      .map((r) => ({
+        address: r.address,
+        name: null,
+        kind: null,
+        exchange: null,
+        isContract: false,
+        balance: r.balance,
+        share: total > 0 ? r.balance / total : null
+      }));
+    return {
+      dataStatus: rows.length ? 'live' : 'quiet',
+      rows,
+      totalHolders: null
+    };
+  } catch {
+    return { dataStatus: 'unavailable', rows: [], totalHolders: null };
   }
 }
 

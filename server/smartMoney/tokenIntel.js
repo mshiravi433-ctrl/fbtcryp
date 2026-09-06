@@ -18,12 +18,13 @@
  */
 
 import { withCache } from '../cache.js';
-import { dexPairsForTokens, bsTokenHolders } from './dataSources.js';
+import { dexPairsForTokens, bsTokenHolders, solanaTokenHolders } from './dataSources.js';
 import { exchangeFor } from './registry.js';
 import { detectAccumulation, detectDistribution } from './engines.js';
 import { TTL, WINDOWS } from './config.js';
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
+const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function windowMs(key) {
   return WINDOWS[key] || WINDOWS.H24;
@@ -48,12 +49,18 @@ function riskBand({ liquidityUsd, ageMs, topShare }) {
 
 /**
  * Analyse one token on one chain.
- * @param {string} tokenAddress EVM token contract (lowercase)
- * @param {number} chainId
+ *
+ * EVM: token contract address, lowercase hex, numeric chainId.
+ * Solana: base58 mint, `chainId === 'solana'` (base58 is case-sensitive, so
+ * the address is passed through verbatim — lowercasing would rewrite it).
+ * @param {string} tokenAddress token contract (EVM) or mint (Solana)
+ * @param {number|'solana'} chainId
  */
 export async function analyzeToken(tokenAddress, chainId = 1) {
-  const address = String(tokenAddress || '').toLowerCase();
-  if (!EVM_ADDR.test(address)) {
+  const isSol = chainId === 'solana';
+  const address = isSol ? String(tokenAddress || '').trim() : String(tokenAddress || '').toLowerCase();
+  const valid = isSol ? SOL_ADDR.test(address) : EVM_ADDR.test(address);
+  if (!valid) {
     const e = new Error('BAD_ADDRESS'); e.code = 'BAD_ADDRESS'; throw e;
   }
 
@@ -64,9 +71,12 @@ export async function analyzeToken(tokenAddress, chainId = 1) {
 }
 
 async function buildTokenIntel(address, chainId) {
+  const isSol = chainId === 'solana';
   const [pairsRes, holdersRes] = await Promise.all([
     dexPairsForTokens([address]),
-    bsTokenHolders(chainId, address, { limit: 50 }).catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
+    isSol
+      ? solanaTokenHolders(address).catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
+      : bsTokenHolders(chainId, address, { limit: 50 }).catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
   ]);
 
   const pairs = pairsRes.pairs || [];
@@ -95,7 +105,7 @@ async function buildTokenIntel(address, chainId) {
     // Blockscout returns share when available; otherwise leave null
     const share = h.share ?? null;
     if (i < 10 && share != null) top10Share = (top10Share || 0) + share;
-    const cex = exchangeFor(chainId, h.address);
+    const cex = exchangeFor(isSol ? 'solana' : chainId, h.address);
     const exchange = cex?.exchange || (h.kind === 'exchange' ? h.exchange : null);
     if (exchange && share != null) exchangeSupply += share;
     topHolders.push({
