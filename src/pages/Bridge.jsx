@@ -699,81 +699,98 @@ export default function Bridge() {
 
       {/* ------------------------------ ticket — modern pickers ─────────── */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="field-label">{t('bridge.from')}</div>
-        <div className="brg-pick-row">
-          <ModernSelect
-            value={fromChain}
-            onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
-            options={BRIDGE_CHAINS.map((c) => ({
-              value: c.id,
-              label: c.name,
-              sublabel: c.symbol,
-              chain: c.id,
-            }))}
-            title={t('bridge.from')}
-            placeholder={t('bridge.from')}
-            compact
-            testId="bridge-from-chain"
-          />
-          <ModernSelect
-            value={tokenSymbol}
-            onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
-            options={fromTokens.map((tk) => ({
-              value: tk.symbol,
-              label: tk.symbol,
-              sublabel: BRIDGE_CHAINS.find((x) => x.id === fromChain)?.name || '',
-              /* curated stablecoins: offline artwork + the origin chain badge */
-              symbol: tk.symbol,
-              chain: fromChain,
-            }))}
-            title={t('bridge.from')}
-            placeholder={tokenSymbol || 'USDT'}
-            compact
-            testId="bridge-from-token"
+        {/*
+          ─── THE TICKET IS TWO LEGS, NOT SIX LOOSE FIELDS ────────────────────
+          Each leg is its own raised surface: the pickers live in one row and
+          the amount gets its own breathing room below them (the «بهم نچسبیده
+          باشد» report). The flip control sits BETWEEN the legs — the direction
+          changes the whole transfer, so it belongs to neither leg.
+        */}
+        <div className="brg-leg">
+          <span className="field-label">{t('bridge.from')}</span>
+          <div className="brg-pick-row">
+            <ModernSelect
+              value={fromChain}
+              onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
+              options={BRIDGE_CHAINS.map((c) => ({
+                value: c.id,
+                label: c.name,
+                sublabel: c.symbol,
+                chain: c.id,
+              }))}
+              title={t('bridge.from')}
+              placeholder={t('bridge.from')}
+              compact
+              testId="bridge-from-chain"
+            />
+            <ModernSelect
+              value={tokenSymbol}
+              onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
+              options={fromTokens.map((tk) => ({
+                value: tk.symbol,
+                label: tk.symbol,
+                sublabel: BRIDGE_CHAINS.find((x) => x.id === fromChain)?.name || '',
+                /* curated stablecoins: offline artwork + the origin chain badge */
+                symbol: tk.symbol,
+                chain: fromChain,
+              }))}
+              title={t('bridge.from')}
+              placeholder={tokenSymbol || 'USDT'}
+              compact
+              testId="bridge-from-token"
+            />
+          </div>
+
+          <input
+            className="brg-amount"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            placeholder="0.0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            aria-label={t('bridge.amount')}
           />
         </div>
 
-        <input
-          className="brg-amount"
-          type="number"
-          inputMode="decimal"
-          min="0"
-          placeholder="0.0"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-
         <button type="button" className="brg-flip" onClick={flip} aria-label={t('bridge.flip')}>
-          ⇅
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7 4v13" />
+            <path d="m3.5 13.5 3.5 4 3.5-4" />
+            <path d="M17 20V7" />
+            <path d="m13.5 10.5 3.5-4 3.5 4" />
+          </svg>
         </button>
 
-        <div className="field-label">{t('bridge.to')}</div>
-        <div className="brg-pick-row">
-          <ModernSelect
-            value={toChain}
-            onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
-            options={BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => ({
-              value: c.id,
-              label: c.name,
-              sublabel: c.symbol,
-              chain: c.id,
-            }))}
-            title={t('bridge.to')}
-            placeholder={t('bridge.to')}
-            compact
-            testId="bridge-to-chain"
-          />
-          <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
-            <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
-              <span className="modern-select-icon">
-                {toToken
-                  ? <AssetIcon symbol={toToken.symbol} chain={toChain} size={34} />
-                  : <span style={{ width:34,height:34,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12}}>—</span>}
-              </span>
-              <span className="modern-select-text">
-                <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>
-                <span className="modern-select-sublabel">{BRIDGE_CHAINS.find(x=>x.id===toChain)?.name || ''}</span>
-              </span>
+        <div className="brg-leg">
+          <span className="field-label">{t('bridge.to')}</span>
+          <div className="brg-pick-row">
+            <ModernSelect
+              value={toChain}
+              onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
+              options={BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => ({
+                value: c.id,
+                label: c.name,
+                sublabel: c.symbol,
+                chain: c.id,
+              }))}
+              title={t('bridge.to')}
+              placeholder={t('bridge.to')}
+              compact
+              testId="bridge-to-chain"
+            />
+            <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
+              <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
+                <span className="modern-select-icon">
+                  {toToken
+                    ? <AssetIcon symbol={toToken.symbol} chain={toChain} size={34} />
+                    : <span style={{ width:34,height:34,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12 }}>—</span>}
+                </span>
+                <span className="modern-select-text">
+                  <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>
+                  <span className="modern-select-sublabel">{BRIDGE_CHAINS.find(x=>x.id===toChain)?.name || ''}</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -863,10 +880,21 @@ export default function Bridge() {
               <span className="faint">{t('bridge.totalCost')}</span>
               <span className="mono" style={{ fontSize: 12 }}>{fmtUsd(summary.totalCostUsd)}</span>
             </div>
+            {/*
+              ─── OUR FEE, NAMED AND NUMBERS ──────────────────────────────────
+              The integrator cut is rendered as its own tinted row rather than
+              folded into "fees", with the live percentage next to the dollar
+              figure («کارمزد ما میاد»). The percentage is derived from THIS
+              quote, so it always matches what the server actually charged —
+              when there is no fee the row simply does not exist.
+            */}
             {summary.ourFeeUsd != null && (
-              <div className="row-between">
+              <div className="row-between brg-fee-ours">
                 <span className="faint">{t('bridge.ourFee')}</span>
-                <span className="mono" style={{ fontSize: 12 }}>{fmtUsd(summary.ourFeeUsd)}</span>
+                <span className="mono" style={{ fontSize: 12 }}>
+                  {fmtUsd(summary.ourFeeUsd)}
+                  {summary.fromAmountUsd > 0 && ` · ${((summary.ourFeeUsd / summary.fromAmountUsd) * 100).toFixed(2)}%`}
+                </span>
               </div>
             )}
             {summary.durationSec != null && (
@@ -1096,8 +1124,19 @@ export default function Bridge() {
         </>
       )}
 
-      {/* Shared by both modes: the risk applies either way. */}
-      <p className="notice notice-danger">{t('bridge.disclaimer')}</p>
+      {/*
+        ─── THE CUSTODY DISCLOSURE, AS A BOX THAT OPENS ──────────────────────
+        It used to be a permanently-open red paragraph under every tab. The
+        wording is now the trustTitle/trustBody pair — same facts, sentences
+        that read like product copy instead of legal rubble — and it lives in
+        an InfoBox so the page opens calm and the disclosure is one tap away
+        (the same treatment every non-blocking explanation on this screen got).
+        It stays tone="danger": "we cannot recover your transfer" is the one
+        sentence here that must never look decorative.
+      */}
+      <InfoBox title={t('bridge.trustTitle')} tone="danger" id="bridge-trust">
+        <p>{t('bridge.trustBody')}</p>
+      </InfoBox>
     </PageTransition>
   );
 }

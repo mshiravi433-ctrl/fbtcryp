@@ -597,14 +597,18 @@
   },
   "bridge": {
     "emptyHint": "输入金额以查看最佳路径和费用。",
+    "amount": "金额",
     "mode": {
       "solana": "Solana"
     },
+    "trustTitle": "来源网络",
+    "trustBody": "本转账由 LI.FI 与其底层的跨链桥执行；Fanous Bazaar Pishgam 只负责比较路线并为你准备好界面。我们在任何环节都不保管你的资金——也正因为如此，我们无法暂停、取消或找回任何转账。这一限制是有意为之，恰恰是在保护你：你的资金永远不会经过任何中介之手。我们的份额（LI.FI 路线 0.3%，deBridge 路线 0.4%）会在签名前、在报价中单独而清晰地列出；签名之后不会追加任何费用。",
     "solana": {
       "whatTitle": "Solana 出发，在您的钱包内签名",
       "whatBody": "将 SOL、USDC 或 USDT 从您的 Solana 钱包转移到 EVM 网络。deBridge 构建订单，您的 Solana 钱包进行签名。我们绝不托管您的资金——但跨链桥不可撤销，请逐字核对目标地址。",
       "origin": "从（Solana）",
       "onSolana": "在 Solana 上",
+      "network": "来源网络",
       "amount": "金额",
       "destination": "到（EVM）",
       "recipient": "目标地址",

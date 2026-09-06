@@ -7549,64 +7549,15 @@ body { overflow-x: clip; }
 /* ==========================================================================
    BRIDGE  —  .brg-*
 
-   Deliberately plainer than the swap ticket. A cross-chain transfer has more
-   ways to go wrong and more numbers the user must actually read, so the
-   screen gets out of the way of the quote breakdown rather than competing
-   with it.
+   The ticket reads as one instrument, not six loose fields: each leg (FROM /
+   TO) is a raised surface holding its pickers and its amount, the flip
+   control sits between the legs, and the quote is a separate summary plate.
+   Kept quieter than the swap ticket on purpose — a cross-chain transfer has
+   more numbers the user must actually read.
+
+   The pickers themselves are ModernSelect everywhere (tokens, chains, the
+   Solana origin), so this block owns only the surfaces around them.
    ========================================================================== */
-
-.brg-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.brg-select {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 44px;
-  padding-block: 10px;
-  padding-inline-start: 12px;
-  /* Keep the selected value clear of the custom chevron. The old `padding`
-     shorthand overrode the global select padding and let long Tron labels run
-     through the arrow, which looked like broken horizontal lines in RTL. */
-  padding-inline-end: 34px;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  /* Do not use the `background` shorthand here: it erases the custom select
-     arrow declared above. `background-color` changes only the surface. */
-  background-color: var(--bg-raised);
-  background-clip: padding-box;
-  color: var(--text-1);
-  font-family: inherit;
-  font-size: 13px;
-}
-
-/* The destination token, which the chain decides rather than the user. Styled
-   like the selects beside it so the row stays visually even, but obviously
-   not interactive. */
-.brg-select-static {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 96px;
-  /* This is a read-only div, not a select, so it needs no chevron space. */
-  padding-inline: 12px;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-}
-
-/* The light canvas has an animated grid behind the page. A translucent select
-   let that grid show through the native control (most visibly on the Tokens
-   and Tron tabs), while some WebViews also picked dark system form chrome.
-   Give the control an opaque light surface and an explicit light colour scheme;
-   dark mode keeps the existing glass treatment unchanged. */
-:root[data-theme='light'] .brg-select {
-  background-color: #ffffff;
-  border-color: rgba(51, 65, 85, 0.18);
-  box-shadow: 0 2px 9px -5px rgba(15, 23, 42, 0.28);
-  color-scheme: light;
-}
 
 /* The two pickers of one bridge leg: network (wider) + token. `minmax(0, …)`
    is what lets each track shrink below its content, so the row can never be
@@ -7615,58 +7566,184 @@ body { overflow-x: clip; }
 .brg-pick-row {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
 }
 
+/*
+ * ─── A LEG — the grouped surface ───────────────────────────────────────────
+ * One bridge direction = one object. Without it the pickers, the amount and
+ * the labels floated as loose fields inside the card («چسبیده به هم»). The
+ * two-stop gradient is the same treatment `.infobox` uses: a flat wash on the
+ * dark panel is invisible, two stops give the surface a lit top edge.
+ */
+.brg-leg {
+  padding: 12px 12px 13px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.015)
+  );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+.brg-leg .field-label { margin-bottom: 8px; }
+
+/*
+ * The amount gets its own line BELOW the pickers with real air above it —
+ * reported directly: «فاصله وارد کردن قیمت و انتخاب توکن را رعایت کن بهم
+ * نچسبیده باشد». 12px is the same rhythm the pickers row itself uses.
+ */
 .brg-amount {
   width: 100%;
-  min-height: 52px;
+  min-height: 56px;
+  margin-top: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--bg-raised);
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
-  margin-bottom: 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.brg-amount::placeholder { color: var(--text-3); opacity: 0.7; }
+.brg-amount:focus {
+  outline: 0;
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12);
+  background: var(--bg-panel);
 }
 
-.brg-flip {
-  display: block;
-  margin: 0 auto 10px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+/*
+ * The Solana panel's destination address. A text field wearing the amount
+ * field's clothes at text size: same surface, same focus ring, quiet mono.
+ */
+.brg-recipient {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 16px;
-  cursor: pointer;
+  color: var(--text-1);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.brg-recipient::placeholder { color: var(--text-3); opacity: 0.7; }
+.brg-recipient:focus {
+  outline: 0;
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12);
+  background: var(--bg-panel);
+}
+:root[data-theme='light'] .brg-recipient {
+  background: #ffffff;
+  border-color: rgba(51, 65, 85, 0.18);
 }
 
+/*
+ * The flip control lives BETWEEN the legs, owned by neither: flipping changes
+ * the whole transfer. A quiet circle that lights up on press is enough — the
+ * button is a control, not a decoration.
+ */
+.brg-flip {
+  display: grid;
+  place-items: center;
+  margin: 10px auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(135deg, var(--bg-raised), var(--bg-panel));
+  color: var(--text-1);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  transition: border-color 160ms ease, color 160ms ease, box-shadow 160ms ease,
+    transform 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.brg-flip svg { width: 18px; height: 18px; }
+.brg-flip:hover {
+  border-color: rgba(0, 229, 255, 0.32);
+  color: var(--rgb-1);
+  box-shadow: 0 6px 18px rgba(0, 229, 255, 0.14);
+}
 .brg-flip:active { transform: scale(0.94); }
+.brg-flip:focus-visible {
+  outline: 2px solid rgba(0, 229, 255, 0.6);
+  outline-offset: 2px;
+}
 
+/* ── The quote plate ────────────────────────────────────────────────────── */
 .brg-quote {
   margin-top: 12px;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 13px 14px;
+  border-radius: 16px;
   border: 1px solid var(--line);
-  background: var(--bg-panel);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.012)
+  );
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 9px;
   font-size: 12.5px;
 }
 
 .brg-out {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   /* Not green. The amount received is a fact, not a win — same reasoning as
      .farm-apy and .eq-price. */
   color: var(--text-1);
+}
+
+/*
+ * OUR FEE, on its own tinted row. Named rather than folded into "fees" — a
+ * fee the user cannot see is a fee they will feel tricked by later. The tint
+ * is the quote plate's own cyan at low alpha: visible, never loud.
+ */
+.brg-fee-ours {
+  margin: -3px -6px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.13);
+}
+
+:root[data-theme='light'] .brg-leg,
+:root[data-theme='light'] .brg-quote {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+:root[data-theme='light'] .brg-amount {
+  background: #ffffff;
+  border-color: rgba(51, 65, 85, 0.18);
+  box-shadow: 0 2px 9px -5px rgba(15, 23, 42, 0.28);
+}
+:root[data-theme='light'] .brg-amount:focus {
+  border-color: rgba(0, 153, 204, 0.35);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.14);
+}
+:root[data-theme='light'] .brg-flip {
+  background: #ffffff;
+  border-color: rgba(51, 65, 85, 0.16);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+}
+:root[data-theme='light'] .brg-flip:hover {
+  border-color: rgba(0, 153, 204, 0.35);
+  color: #0099cc;
+  box-shadow: 0 4px 14px rgba(0, 153, 204, 0.14);
+}
+:root[data-theme='light'] .brg-fee-ours {
+  background: rgba(0, 153, 204, 0.06);
+  border-color: rgba(0, 153, 204, 0.16);
 }
 
 /* ==========================================================================

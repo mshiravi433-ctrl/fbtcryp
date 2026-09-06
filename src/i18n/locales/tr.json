@@ -597,14 +597,18 @@
   },
   "bridge": {
     "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin.",
+    "amount": "Miktar",
     "mode": {
       "solana": "Solana"
     },
+    "trustTitle": "Kaynak ağ",
+    "trustBody": "Bu transferi LI.FI ve altındaki köprü yürütür; Fanous Bazaar Pishgem yalnızca rotaları karşılaştırır ve ekranı sizin için hazırlar. Paranızı hiçbir aşamada teslim almıyoruz — ve tam da bu yüzden bir transferi duraklatamaz, iptal edemez veya geri getiremeyiz. Bu sınır bilinçli bir tercih ve sizi korur: varlıklarınız hiçbir zaman bir aracının elinden geçmez. Payımız (LI.FI rotasında %0,3, deBridge’de %0,4) imzadan önce teklif içinde ayrı ve okunabilir şekilde gösterilir; imzadan sonra hiçbir şey eklenmez.",
     "solana": {
       "whatTitle": "Solana kaynağı, cüzdanınızda imzalanır",
       "whatBody": "SOL, USDC veya USDT'yi Solana cüzdanınızdan bir EVM ağına taşıyın. deBridge emri oluşturur, Solana cüzdanınız imzalar. Fonlarınızı asla saklamayız — ancak köprü geri alınamaz, bu yüzden hedef adresi karakter karakter kontrol edin.",
       "origin": "Kimden (Solana)",
       "onSolana": "Solana'da",
+      "network": "Kaynak ağ",
       "amount": "Tutar",
       "destination": "Kime (EVM)",
       "recipient": "Hedef adres",
