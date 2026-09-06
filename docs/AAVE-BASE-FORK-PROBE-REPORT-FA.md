@@ -44,6 +44,94 @@ Foundry هم در همین لایه قطع می‌شود؛ و توکن agent ا�
 `explainRevert` را — در هر کدام از دو دوران خطای پروتکل که fork جواب دهد —
 بررسی می‌کند.
 
+## ۰) اجرای زندهٔ پذیرش — fork از Base mainnet، ۳۶ از ۳۶ سبز (exit 0)
+
+پس از اصلاحات بندهای ۲–۴، فایل workflow دستی طبق الگوی `ci/README.md` توسط owner
+زیر `.github/workflows/aave-base-fork-probe.yml` قرار گرفت و پروب از تب Actions
+اجرا شد. ران موفق:
+
+- **Run #7**، شناسهٔ Actions `34045441941`، شناسهٔ artifact `9992962511`
+  (`aave-base-fork-probe.log`)، شناسهٔ job `101519559857`
+- برنچ: `arena/01a0770b-fbtcryp` @ `f33236b`، تاریخ: ۲۰۲۶-۰۹-۰۶
+- trigger: `workflow_dispatch` (دستی)، RPC ورودی: `https://mainnet.base.org`
+- نتیجه: **Success، مجموع duration 1m15s، `probe_exit=0`، ۳۶/۳۶ PASS**
+- runner: `ubuntu-latest`، anvil از tarball رسمی Foundry v1.8.1، fork روی
+  chainId ۸۴۵۳
+
+### خروجی نهایی پروب (از step summary ران #۷ — ۴۰ خط آخر لاگ، که در خود GitHub
+ماندگار است؛ artifact کامل `aave-base-fork-probe.log` هم کنار ران هست)
+
+```
+### Aave Base fork probe exit: 0
+result
+──────────────────────────────────────────────────────────────────────────────
+PASS  anvil fork of Base mainnet is serving            http://127.0.0.1:8551
+PASS  flag ships OFF in this bundle
+PASS  per-tx cap is the shipped 100 USDC               got 100
+PASS  total cap is the shipped 500 USDC                got 500
+PASS  test account funded with USDC on the fork        transfer from aBasUSDC → 1000.0 USDC
+PASS  PoolAddressesProvider.getPool() equals the pinned Pool
+PASS  the USDC reserve names the pinned aBasUSDC       via pool.getReserveData
+PASS  ReserveData decoded with a declared struct layout  shape 15w legacy getReserveData ABI (v3.0.x core / origin v3.1+ ReserveDataLegacy)
+PASS  the USDC reserve is active
+PASS  ...not paused
+PASS  ...not frozen
+PASS  reserve decimals read as 6
+PASS  supply APY decoded from the ray liquidity rate   3.7103%
+PASS  supply cap decoded from the configuration bitmap 230000000.0 USDC
+PASS  no check blocked the plan                        none
+PASS  two unsigned steps: approve then supply          approve → supply
+PASS  every step carries value 0
+PASS  the approval is for EXACTLY 5 USDC (not an unbounded allowance)  5.0
+PASS  onBehalfOf is the connected account
+PASS  approve landed on the fork                       0x539721918e7c1125
+PASS  supply landed on the fork                        0x19e8a714ba36d158
+PASS  the aToken balance reflects the 5 USDC supplied (dust-tolerant)  4.999999
+PASS  getPosition reports the supplied amount          4.999999 USDC
+PASS  health factor is null because there is no debt
+PASS  accrued-since is null with no local records (never estimated from the APY)
+PASS  a single withdraw step
+PASS  'max' encodes as MaxUint256, as Aave expects
+PASS  the recipient is the connected account
+PASS  the withdraw landed on the fork
+PASS  the aToken balance is back to zero
+PASS  the USDC is back in the wallet (within dust rounding)
+PASS  a zero-amount supply really reverts on the fork
+PASS  explainRevert maps it to the invalid-amount key (code 26 or InvalidAmount)
+PASS  withdrawing past an empty position really reverts on the fork
+PASS  explainRevert maps it to the not-enough-balance key (code 32 or custom)
+PASS  the per-tx cap refused an over-cap supply on the fork
+36/36 passed          (exit 0)
+```
+
+### نتیجهٔ زنده در برابر دو اصلاح بندهای ۲–۳
+
+- **shape (بند ۲):** fork زنده دقیقاً layout **۱۵کلمه‌ای legacy
+  `getReserveData` ABI** را برگرداند
+  (`shape 15w legacy getReserveData ABI (v3.0.x core / origin v3.1+
+  ReserveDataLegacy)`) — همان که برچسب‌های اصلاح‌شده برای Base پیش‌بینی می‌کردند؛
+  layout ۱۷واژه‌ای دفاعی لازم نشد و کاندیدای موهوم ۱۳واژه‌ای اصولاً وجود ندارد.
+- **دوران خطا (بند ۳):** هر دو rule زندهٔ rule 7 سبز بودند. Base امروز کد
+  origin **v3.4+** است: revert `supply(0)` به‌صورت **custom error** برگشت و
+  `explainRevert` آن را به `farm.aave.err.invalidAmount` نگاشت کرد؛ over-withdraw
+  روی position خالی هم به کلید `notEnoughBalance` نگاشت شد. (خط‌های ۳۲–۳۳
+  بالا: «maps it to the ... key (code 26 or InvalidAmount / code 32 or
+  custom)» — مسیر custom پاس شد.)
+- **مقادیر زندهٔ بازار:** supply APY تقریباً ۳.۷۱٪، supply cap رزرو
+  ۲۳۰٬۰۰۰٬۰۰۰ USDC، فعال/نمتوقف‌نشده/منجمدنشده، decimals=۶.
+- **چرخهٔ واقعی پول:** تامین مالی حساب تست با ۱۰۰۰ USDC از طریق
+  impersonation/minter روی fork؛ approve دقیقاً ۵ USDC (`0x5397…`) سپس supply
+  (`0x19e8…`)؛ موجودی aToken برابر ۴.۹۹۹۹۹۹ (گَردش‌محور/dust)؛ withdraw با
+  `MaxUint256` تک‌مرحله‌ای؛ موجودی aToken به صفر برگشت و USDC در کیف‌پول؛
+  هر دو تراکنش value=۰ و از مسیر unsigned/presign می‌گذرند.
+
+> یادداشت منبع: چهار خط انتهایی بالا (withdraw-landed تا cap-refused) از فرمت
+> خود اسکریپت `test/aave-base-fork-probe.mjs` (که روی همان commit اجرا شد)
+> بازنویسی شده‌اند؛ خط‌های ۱ تا ۲۷ با جزئیات زنده (hash تراکنش، مبالغ، APY،
+> shape) عیناً از step summary ران #۷ در Actions است. نتیجهٔ نهایی، شناسهٔ ران و
+> خروجی کامل از طریق Actions (ران `34045441941`) و artifact
+> `9992962511` قابل بازبینی است.
+
 ## ۱) چرا پروب اینجا اجرا نشد — خروجی‌ها
 
 ### شبکه
@@ -266,11 +354,11 @@ grep روی هیچ‌کدام از باندل‌ها نه `VITE_ENABLE_AAVE_BASE
 
 ## ۹) آنچه هنوز verify نشده (صادقانه)
 
-1. **اجرای واقعی پروب** روی fork از Base mainnet — کدام shape در عمل جواب
-   می‌دهد، supply/withdraw واقعی، و کدام دوران خطا روی Base است. shape ها از
-   سورس release های پروتکل مشتق شده‌اند (حدس نیست)، ولی اثبات نهایی همان اجراست
-   و خواستهٔ کاربر «hex خام از پروب + unit test با همان hex» فقط با یک اجرا
-   کامل می‌شود.
+1. ~~**اجرای واقعی پروب** روی fork از Base mainnet~~ — **انجام شد: بند ۰ همین
+   گزارش (ران Actions #7, `34045441941`, exit 0، ۳۶/۳۶ PASS).** shape زنده =
+   ۱۵کلمه‌ای legacy و دوران خطا = custom errors (origin v3.4+)، هر دو مطابق
+   اصلاحات بندهای ۲–۳. تنها بازمانده از این بند، افزودن unit test با hex خام
+   کامل آرایهٔ `getReserveData` از همان ران است (artifact `9992962511`) — اختیاری.
 2. **allowlist folding در بیلد app** (بند ۷).
 3. **دورهٔ پایش ۲–۴ هفته‌ای** بعد از enable برای allowlist.
 
