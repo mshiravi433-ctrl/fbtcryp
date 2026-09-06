@@ -13124,3 +13124,52 @@ button.settings-quick-action {
   background: #fff;
   border-color: var(--line);
 }
+
+/* Farm navigation and hierarchy refresh */
+.farm-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 7px;
+  margin: 0 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  scrollbar-width: thin;
+}
+.farm-tabs button {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-start;
+  text-align: start;
+  padding-inline: 14px;
+  border-radius: 11px;
+}
+.farm-tabs button.active {
+  box-shadow: 0 6px 18px -12px color-mix(in srgb, var(--rgb-1) 70%, transparent);
+}
+.farm-yield-center { padding: 0; overflow: hidden; }
+.farm-yield-center-toggle {
+  display: flex; width: 100%; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 15px; color: inherit; text-align: start; background: transparent;
+}
+.farm-yield-center-toggle:hover { background: color-mix(in srgb, var(--rgb-1) 5%, transparent); }
+.farm-yield-chevron { color: var(--rgb-1); font-size: 20px; line-height: 1; }
+.farm-yield-center-body { padding: 0 15px 15px; border-top: 1px solid var(--line); }
+.farm-yield-center-body p { margin: 12px 0 10px; font-size: 12px; line-height: 1.7; }
+.farm-yield-center-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.farm-yield-center-stats span { padding: 8px 6px; border: 1px solid var(--line); border-radius: 9px; color: var(--text-2); font-size: 10px; text-align: center; }
+.farm-pool-with-details { min-width: 0; }
+.farm-pool-with-details > .farm-details { margin-top: 8px; }
+.farm-hot { margin: 12px 0 14px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: color-mix(in srgb, var(--rgb-2) 5%, var(--bg-panel)); }
+.farm-hot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.farm-hot-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; text-align: start; }
+@media (max-width: 420px) {
+  .farm-yield-center-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .farm-hot-grid { grid-template-columns: 1fr; }
+}

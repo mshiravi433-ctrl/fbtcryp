@@ -33,7 +33,7 @@ import {
 import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
 import TrendChart from '../components/TrendChart';
 
-const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
+const FARM_TABS = ['inapp', 'market', 'pools', 'recommended', 'strategies'];
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
 const AMOUNTS = [100, 1000, 10000];
 const HORIZONS = ['day', 'week', 'month', 'year'];
@@ -348,7 +348,7 @@ function ProtocolStatusCard({ protocol, t }) {
   );
 }
 
-function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, t }) {
+function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, onShowDetails, t }) {
   const route = investRoute(pool);
   const economics = fbtFeeEngine.estimateNetYield({
     grossApy: pool.apy,
@@ -403,7 +403,7 @@ function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, t
 
       <div className="farm-actions">
         <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
-        <button className="btn btn-ghost farm-btn" onClick={() => onSelect(pool)}>{t('farm.viewAnalytics')}</button>
+        <button className="btn btn-ghost farm-btn" onClick={() => onShowDetails(pool)} aria-expanded={selected}>{selected ? t('farm.hideAnalytics') : t('farm.viewAnalytics')}</button>
       </div>
       {pool.url && (
         <div className="farm-actions">
@@ -573,6 +573,7 @@ export default function Farm() {
   const [amount, setAmount] = useState(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
+  const [yieldCenterOpen, setYieldCenterOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -700,7 +701,12 @@ export default function Farm() {
 
   const renderCards = (rows) => (
     <motion.div className="farm-pool-grid" variants={stagger} initial="hidden" animate="show">
-      {rows.map((pool) => <PoolCard key={pool.id} pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />)}
+      {rows.map((pool) => (
+        <div key={pool.id} className="farm-pool-with-details">
+          <PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
+          {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
+        </div>
+      ))}
     </motion.div>
   );
 
@@ -717,8 +723,13 @@ export default function Farm() {
         {FARM_TABS.map((id) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => selectTab(id)} style={{ isolation: 'isolate' }}>{tab === id && <SegIndicator id="farmtab" />}{t(`farm.tab.${id}`)}</button>)}
       </div>
 
-      <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" /><div className="row" style={{ gap: 11, alignItems: 'flex-start' }}><span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconPools width={22} height={22} /></span><div><div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('farm.yieldCenterTitle')}</div><p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('farm.whatBody')}</p></div></div>
+      <motion.section className={`card card-rgb card-glow-cyan farm-yield-center ${yieldCenterOpen ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
+        <div className="sheen" />
+        <button type="button" className="farm-yield-center-toggle" onClick={() => setYieldCenterOpen((v) => !v)} aria-expanded={yieldCenterOpen}>
+          <span className="row" style={{ gap: 11, alignItems: 'flex-start' }}><span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconPools width={22} height={22} /></span><span><span style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('farm.yieldCenterTitle')}</span><span className="muted" style={{ display: 'block', fontSize: 12.3 }}>{t('farm.whatBody')}</span></span></span>
+          <span className="farm-yield-chevron" aria-hidden="true">{yieldCenterOpen ? '⌃' : '⌄'}</span>
+        </button>
+        {yieldCenterOpen && <div className="farm-yield-center-body"><p className="muted">{t('farm.scoreExplanation')}</p><div className="farm-yield-center-stats"><span>Live APY</span><span>TVL</span><span>Risk</span><span>Freshness</span></div></div>}
       </motion.section>
 
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
@@ -745,11 +756,10 @@ export default function Farm() {
         <InAppTab pools={opportunities} deposit={deposit} liveByMint={liveByMint} onStakeLst={stakeLst} onBuyEth={buyEthStake} onBuyGold={buyGold} t={t} />
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
-      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
-      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered)}</section>}
 
-      {selected && <PoolDetails pool={selected} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
       <PositionPanel wallet={wallet} t={t} navigate={navigate} />
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
