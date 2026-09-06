@@ -8327,17 +8327,19 @@ export default function run() {
     t('...and an option list that is dark on the dark theme',
       /select option \{[\s\S]{0,120}color: #e8ecf4/.test(css));
 
-    /* Bridge adds a more specific select class after the global rule. A
-       `background` or `padding` shorthand there silently erased both the
-       custom chevron and the space reserved for it. */
     const uncommentedCss = css.replace(/\/\*[\s\S]*?\*\//g, '');
-    const bridgeSelect = /\.brg-select\s*\{[^}]*\}/.exec(uncommentedCss)?.[0] ?? '';
-    t('bridge selects preserve the global chevron and its reserved space',
-      /background-color:\s*var\(--bg-raised\)/.test(bridgeSelect) &&
-      !/(?:^|[;\s])background\s*:/.test(bridgeSelect) &&
-      /padding-inline-end:\s*34px/.test(bridgeSelect));
-    t('bridge selects use an opaque, native-light surface in the light theme',
-      /:root\[data-theme='light'\] \.brg-select\s*\{[^}]*background-color:\s*#ffffff[^}]*color-scheme:\s*light/.test(uncommentedCss));
+    /*
+     * Bridge no longer owns a native select: tokens, chains and the Solana
+     * origin all pick through ModernSelect's bottom sheet, so the two checks
+     * that guarded `.brg-select`'s chevron were retired with it. What must
+     * hold NOW is that the bridge ticket keeps its own surfaces (leg, amount,
+     * quote plate) and that nothing reintroduced a background shorthand that
+     * could erase the global select styling elsewhere.
+     */
+    t('bridge ticket keeps its grouped leg surfaces and amount field',
+      /\.brg-leg\s*\{[^}]*border-radius/.test(uncommentedCss) &&
+      /\.brg-amount\s*\{[^}]*min-height/.test(uncommentedCss) &&
+      /\.brg-amount\s*\{[^}]*margin-top/.test(uncommentedCss));
 
     /* The swap stylesheet is route-scoped and therefore cannot be inferred
        from index.css. Its dark smoked field must have an explicit light-mode

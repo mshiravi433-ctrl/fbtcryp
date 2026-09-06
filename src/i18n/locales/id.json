@@ -597,14 +597,18 @@
   },
   "bridge": {
     "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya.",
+    "amount": "Jumlah",
     "mode": {
       "solana": "Solana"
     },
+    "trustTitle": "Jaringan asal",
+    "trustBody": "Transfer ini dijalankan oleh LI.FI dan bridge di bawahnya; Fanous Bazaar Pishgam hanya membandingkan rute dan menyiapkan layar untuk Anda. Kami tidak pernah memegang dana Anda sed pun — dan justru karena itulah kami tidak dapat menjeda, membatalkan, atau memulihkan sebuah transfer. Batasan ini disengaja dan justru melindungi Anda: dana Anda tidak pernah berada di tangan perantara. Bagian kami (0,3% di rute LI.FI, 0,4% di deBridge) ditampilkan terpisah dan terbaca di kutipan sebelum Anda menandatangani; tidak ada yang ditambahkan setelah tanda tangan.",
     "solana": {
       "whatTitle": "Asal Solana, ditandatangani di dompet Anda",
       "whatBody": "Pindahkan SOL, USDC, atau USDT dari dompet Solana Anda ke jaringan EVM. deBridge membuat pesanan dan dompet Solana Anda menandatanganinya. Kami tidak pernah menyimpan dana Anda — tetapi jembatan tidak dapat dibatalkan, jadi periksa alamat tujuan karakter demi karakter.",
       "origin": "Dari (Solana)",
       "onSolana": "di Solana",
+      "network": "Jaringan asal",
       "amount": "Jumlah",
       "destination": "Ke (EVM)",
       "recipient": "Alamat tujuan",

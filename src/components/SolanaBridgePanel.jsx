@@ -16,6 +16,8 @@ import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { IconPhone } from './Icons';
 import InfoBox from './InfoBox';
+import ModernSelect from './ModernSelect';
+import AssetIcon from './AssetIcon';
 
 /**
  * SOLANA ORIGIN — deBridge DLN, signed in the user's Solana wallet.
@@ -43,9 +45,9 @@ import InfoBox from './InfoBox';
  * destination token must be a canonical address we can verify. Linea is in
  * `DLN_EXTRA_CHAINS` for the EVM comparison, but this panel has no token
  * table for it yet, so offering it would produce a dest-token dropdown that
- * is empty at runtime.
+ * is empty at runtime. `symbol` rides along for the picker's network mark.
  */
-const DLN_DST_CHAINS = BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name }));
+const DLN_DST_CHAINS = BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
 
 export default function SolanaBridgePanel() {
   useHideBalances();
@@ -213,15 +215,46 @@ export default function SolanaBridgePanel() {
       </InfoBox>
 
       <motion.section className="card">
-        <div className="field-label">{t('bridge.solana.origin')}</div>
-        <div className="brg-row">
-          <select
-            className="brg-select"
-            value={srcToken.symbol}
-            onChange={(e) => { setSrcToken(DLN_SOLANA.tokens.find((x) => x.symbol === e.target.value) ?? DLN_SOLANA.tokens[0]); setQuote(null); }}
-          >
-            {DLN_SOLANA.tokens.map((x) => <option key={x.symbol} value={x.symbol}>{x.symbol} · {t('bridge.solana.onSolana')}</option>)}
-          </select>
+        {/*
+          ─── SAME TICKET GRAMMAR AS THE EVM TAB ─────────────────────────────
+          Two legs, ModernSelect pickers with real artwork, the amount on its
+          own line with air above it. The origin chain cannot change (this tab
+          IS Solana), so instead of a dead dropdown it gets a static network
+          chip — honest about being read-only, visually even with the picker
+          beside it.
+        */}
+        <div className="brg-leg">
+          <span className="field-label">{t('bridge.solana.origin')}</span>
+          <div className="brg-pick-row">
+            <ModernSelect
+              value={srcToken.symbol}
+              onChange={(v) => { setSrcToken(DLN_SOLANA.tokens.find((x) => x.symbol === v) ?? DLN_SOLANA.tokens[0]); setQuote(null); }}
+              options={DLN_SOLANA.tokens.map((tk) => ({
+                value: tk.symbol,
+                label: tk.symbol,
+                sublabel: tk.name,
+                /* offline artwork for SOL / USDC / USDT + the Solana badge */
+                symbol: tk.symbol,
+                chain: 'solana',
+              }))}
+              title={t('bridge.solana.origin')}
+              placeholder={srcToken.symbol}
+              compact
+              testId="solana-from-token"
+            />
+            <div className="modern-select modern-select--compact">
+              <div className="modern-select-trigger" style={{ pointerEvents: 'none', opacity: 0.92 }}>
+                <span className="modern-select-icon" aria-hidden="true">
+                  <AssetIcon chain="solana" size={34} />
+                </span>
+                <span className="modern-select-text">
+                  <span className="modern-select-label">Solana</span>
+                  <span className="modern-select-sublabel">{t('bridge.solana.network')}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
           <input
             className="brg-amount"
             type="number"
@@ -234,47 +267,67 @@ export default function SolanaBridgePanel() {
           />
         </div>
 
-        <div className="field-label" style={{ marginTop: 12 }}>{t('bridge.solana.destination')}</div>
-        <div className="brg-row">
-          <select
-            className="brg-select"
-            value={dstChain}
-            onChange={(e) => { setDstChain(Number(e.target.value)); setQuote(null); }}
-          >
-            {DLN_DST_CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name} · {dstTokens.length ? dstTokens[0]?.symbol : 'USDC'}</option>)}
-          </select>
-          <select
-            className="brg-select"
-            value={dstToken?.symbol ?? ''}
-            onChange={(e) => { setDstTokenSymbol(e.target.value); setQuote(null); }}
-          >
-            {dstTokens.map((x) => <option key={x.symbol} value={x.symbol}>{x.symbol}</option>)}
-          </select>
+        <div className="brg-leg" style={{ marginTop: 12 }}>
+          <span className="field-label">{t('bridge.solana.destination')}</span>
+          <div className="brg-pick-row">
+            <ModernSelect
+              value={dstChain}
+              onChange={(v) => { setDstChain(Number(v)); setQuote(null); }}
+              options={DLN_DST_CHAINS.map((c) => ({
+                value: c.id,
+                label: c.name,
+                sublabel: c.symbol,
+                chain: c.id,
+              }))}
+              title={t('bridge.solana.destination')}
+              placeholder={t('bridge.solana.destination')}
+              compact
+              testId="solana-to-chain"
+            />
+            <ModernSelect
+              value={dstToken?.symbol ?? ''}
+              onChange={(v) => { setDstTokenSymbol(v); setQuote(null); }}
+              options={dstTokens.map((tk) => ({
+                value: tk.symbol,
+                label: tk.symbol,
+                sublabel: DLN_DST_CHAINS.find((c) => c.id === dstChain)?.name || '',
+                symbol: tk.symbol,
+                chain: dstChain,
+              }))}
+              title={t('bridge.solana.destination')}
+              placeholder={dstToken?.symbol || 'USDC'}
+              compact
+              testId="solana-to-token"
+            />
+          </div>
         </div>
 
-        <div className="field-label" style={{ marginTop: 12 }}>{t('bridge.solana.recipient')}</div>
-        <input
-          className="brg-amount"
-          type="text"
-          spellCheck={false}
-          autoCapitalize="none"
-          autoCorrect="off"
-          placeholder="0x…"
-          value={toAddress}
-          onChange={(e) => setToAddress(e.target.value.trim())}
-          style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 12 }}
-        />
-        {toAddress !== '' && !toAddressValid && (
-          <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('bridge.solana.badDestination')}</p>
-        )}
-        {!!address && (
-          <div className="row" style={{ gap: 7, marginTop: 7 }}>
-            <span className="dot" style={{ background: 'var(--up)' }} />
-            <span className="faint" style={{ fontSize: 11.5 }}>
-              {t('bridge.solana.sender', { address: `${address.slice(0, 4)}…${address.slice(-4)}` })}
-            </span>
-          </div>
-        )}
+        <div style={{ marginTop: 12 }}>
+          <label className="field-label" htmlFor="sol-recipient">{t('bridge.solana.recipient')}</label>
+          <input
+            id="sol-recipient"
+            className="brg-recipient"
+            type="text"
+            spellCheck={false}
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="0x…"
+            value={toAddress}
+            onChange={(e) => setToAddress(e.target.value.trim())}
+            style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+          />
+          {toAddress !== '' && !toAddressValid && (
+            <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('bridge.solana.badDestination')}</p>
+          )}
+          {!!address && (
+            <div className="row" style={{ gap: 7, marginTop: 7 }}>
+              <span className="dot" style={{ background: 'var(--up)' }} />
+              <span className="faint" style={{ fontSize: 11.5 }}>
+                {t('bridge.solana.sender', { address: `${address.slice(0, 4)}…${address.slice(-4)}` })}
+              </span>
+            </div>
+          )}
+        </div>
 
         {!address ? (
           <button className="btn btn-primary" style={{ marginTop: 12, width: '100%' }} onClick={() => navigate('/wallet?tab=solana')}>

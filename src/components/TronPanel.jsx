@@ -201,9 +201,11 @@ export default function TronPanel() {
           onChange={(v) => { setOrigin(Number(v)); setRes(null); }}
           options={TRON_ORIGINS.map((c) => ({
             value: c.id,
-            label: c.name,
-            sublabel: 'USDC',
-            /* what actually leaves the wallet: USDC, badged with its chain */
+            /* The chain is the choice; USDC is what rides on it. Labelled as
+               «chain · USDC» so the option text matches the thing the user
+               picks, and the network mark + USDC badge carry the picture. */
+            label: `${c.name} · USDC`,
+            sublabel: c.name,
             symbol: 'USDC',
             chain: c.id,
           }))}

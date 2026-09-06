@@ -597,14 +597,18 @@
   },
   "bridge": {
     "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones.",
+    "amount": "Importe",
     "mode": {
       "solana": "Solana"
     },
+    "trustTitle": "Red de origen",
+    "trustBody": "Este puente lo ejecutan LI.FI y el puente subyacente; Fanous Bazaar Pishgam solo compara rutas y te prepara la pantalla. Nunca custodiamos tu dinero en ningún momento — y precisamente por eso no podemos pausar, cancelar ni recuperar una transferencia. El límite es deliberado y te protege: tus fondos nunca pasan por manos de un intermediario. Nuestra comisión (0,3 % en la ruta LI.FI, 0,4 % en deBridge) se muestra por separado, de forma legible, en la cotización antes de firmar; después de la firma no se añade nada.",
     "solana": {
       "whatTitle": "Origen en Solana, firmado en tu cartera",
       "whatBody": "Envía SOL, USDC o USDT desde tu cartera de Solana a una red EVM. deBridge construye la orden y tu cartera de Solana la firma. Nunca custodiamos tus fondos, pero un puente no se puede revertir: revisa la dirección destino carácter por carácter.",
       "origin": "Desde (Solana)",
       "onSolana": "en Solana",
+      "network": "Red de origen",
       "amount": "Importe",
       "destination": "Destino (EVM)",
       "recipient": "Dirección de destino",
