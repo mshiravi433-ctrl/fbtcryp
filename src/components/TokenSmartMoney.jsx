@@ -13,6 +13,9 @@ import { FlowBar } from '../pages/SmartMoney';
  */
 export default function TokenSmartMoney({ chainId = 1, address, embedded = true }) {
   const { t } = useTranslation();
+  /* 'solana' is a first-class chain here (base58 mints are served by the
+     intel route); it must survive the prop instead of being coerced to 1. */
+  const chain = chainId === 'solana' ? 'solana' : Number(chainId) || 1;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,12 +25,12 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
     if (!address) return undefined;
     let on = true;
     setLoading(true);
-    fetchToken(chainId, address, win)
+    fetchToken(chain, address, win)
       .then((d) => { if (on) { setData(d); setError(null); } })
       .catch((e) => { if (on) setError(e.message); })
       .finally(() => { if (on) setLoading(false); });
     return () => { on = false; };
-  }, [chainId, address, win]);
+  }, [chain, address, win]);
 
   if (!address) return null;
 

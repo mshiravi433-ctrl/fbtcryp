@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais."
+    "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais.",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Origine Solana, signé dans votre portefeuille",
+      "whatBody": "Envoyez du SOL, de l’USDC ou de l’USDT depuis votre portefeuille Solana vers un réseau EVM. deBridge construit l’ordre et votre portefeuille Solana le signe. Nous ne prenons jamais vos fonds en garde, mais un bridge est irréversible : vérifiez l’adresse de destination caractère par caractère.",
+      "origin": "Depuis (Solana)",
+      "onSolana": "sur Solana",
+      "amount": "Montant",
+      "destination": "Destination (EVM)",
+      "recipient": "Adresse de destination",
+      "badDestination": "Ce n’est pas une adresse EVM valide.",
+      "sender": "Depuis : {{address}}",
+      "connectSolana": "Connecter un portefeuille Solana",
+      "recipientRequired": "Saisissez l’adresse EVM qui doit recevoir les fonds.",
+      "value": "Valeur approx.",
+      "fixedFee": "Frais réseau fixes (SOL)",
+      "affiliateFee": "Notre part",
+      "fixedFeeWarn": "Les frais fixes en SOL représentent {{pct}}% de ce transfert. Les frais fixes pénalisent fortement les petits transferts : envisagez un montant plus élevé ou l’onglet tokens EVM pour les petits mouvements.",
+      "noRoute": "Aucune route pour ce montant pour l’instant. Essayez un autre montant ou un autre réseau.",
+      "quoteFailed": "Aucune route trouvée. Réessayez dans un instant ou avec une autre paire.",
+      "sendFailed": "La transaction n’a pas été envoyée. Rien n’a quitté votre portefeuille.",
+      "affiliateNote": "deBridge indique les frais fixes et notre part à chaque requête : ces chiffres viennent de lui, pas de notre estimation.",
+      "tokensTitle": "Uniquement les trois actifs ci-dessus",
+      "tokensBody": "Seuls SOL et les mints canoniques USDC/USDT de Solana sont proposés. Une recherche par symbole permettrait à un mint cloné d’emprunter le nom d’un vrai token : la liste est donc fixe et vérifiée par adresse."
+    }
   },
   "dydx": {
     "steps": {

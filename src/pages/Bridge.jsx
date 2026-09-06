@@ -68,16 +68,18 @@ import { POINT_VALUES } from '../lib/ranks';
 const DEBOUNCE_MS = 500;
 
 /*
- * The three tabs. `native` (THORChain) and `tron` are entirely different
- * operations from the LI.FI token path — each pulls its own client library
- * and its own set of rules — so they are loaded on demand rather than paid
- * for on every visit to the bridge. Keeping them behind `lazy()` is the same
- * decision the router already makes for every page; these are sub-pages.
+ * The four tabs. `native` (THORChain), `tron` and `solana` are entirely
+ * different operations from the LI.FI token path — each pulls its own client
+ * library and its own set of rules — so they are loaded on demand rather
+ * than paid for on every visit to the bridge. Keeping them behind `lazy()`
+ * is the same decision the router already makes for every page; these are
+ * sub-pages.
  */
 const ThorPanel = lazy(() => import('../components/ThorPanel'));
 const TronPanel = lazy(() => import('../components/TronPanel'));
+const SolanaBridgePanel = lazy(() => import('../components/SolanaBridgePanel'));
 
-const MODES = ['tokens', 'native', 'tron'];
+const MODES = ['tokens', 'native', 'tron', 'solana'];
 const PROVIDERS = ['lifi', 'dln'];
 
 /*
@@ -676,7 +678,11 @@ export default function Bridge() {
         needs its own warning. Folding it into the token form would produce
         fields that change meaning depending on a dropdown.
       */}
-      {mode === 'tron' ? (
+      {mode === 'solana' ? (
+        <Suspense fallback={<PanelSkeleton />}>
+          <SolanaBridgePanel />
+        </Suspense>
+      ) : mode === 'tron' ? (
         <Suspense fallback={<PanelSkeleton />}>
           <TronPanel />
         </Suspense>

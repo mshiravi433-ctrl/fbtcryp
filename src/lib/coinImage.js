@@ -74,6 +74,28 @@ export function coinImage(url, size = 'small') {
 }
 
 /**
+ * A real company logo for a US-equity ticker, no API key.
+ *
+ * Parqet's public asset-logo API (https://developers.parqet.com/docs/assets/logos)
+ * serves NASDAQ/NYSE ticker symbols as images, e.g. AAPL → its Apple logo.
+ * The Stocks reference table shows US tickers that have no buyable xStock
+ * version; those rows used to carry a plain monogram. A real logo identifies
+ * the company the way the crypto rows identify a coin — and it is optional on
+ * purpose: if the CDN ever stops answering, CoinLogo's existing onError path
+ * falls back to the same monogram, so a dead image can never leave a blank
+ * circle.
+ *
+ * The input is validated against a strict ticker alphabet instead of being
+ * interpolated raw: the value ends up in a URL path, and a slash there would
+ * turn one symbol into a different resource.
+ */
+export function tickerLogo(symbol) {
+  const s = String(symbol ?? '').trim().toUpperCase();
+  if (!/^[A-Z0-9.^=\-]{1,12}$/.test(s)) return null;
+  return `https://assets.parqet.com/logos/symbol/${s}`;
+}
+
+/**
  * A stable hue for a symbol, so the placeholder for a given coin is the same
  * colour on every screen and every launch.
  *

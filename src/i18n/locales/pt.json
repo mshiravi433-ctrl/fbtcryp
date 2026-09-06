@@ -596,7 +596,33 @@
     }
   },
   "bridge": {
-    "emptyHint": "Introduza um valor para ver a melhor rota e as suas taxas."
+    "emptyHint": "Introduza um valor para ver a melhor rota e as suas taxas.",
+    "mode": {
+      "solana": "Solana"
+    },
+    "solana": {
+      "whatTitle": "Origem Solana, assinado na sua carteira",
+      "whatBody": "Envie SOL, USDC ou USDT da sua carteira Solana para uma rede EVM. A deBridge constrói a ordem e a sua carteira Solana assina. Nunca guardamos os seus fundos, mas uma ponte não pode ser revertida: confira o endereço de destino caractere por caractere.",
+      "origin": "De (Solana)",
+      "onSolana": "na Solana",
+      "amount": "Valor",
+      "destination": "Para (EVM)",
+      "recipient": "Endereço de destino",
+      "badDestination": "Esse não é um endereço EVM válido.",
+      "sender": "De: {{address}}",
+      "connectSolana": "Conectar uma carteira Solana",
+      "recipientRequired": "Informe o endereço EVM que deve receber os fundos.",
+      "value": "Valor aproximado",
+      "fixedFee": "Taxa fixa de rede (SOL)",
+      "affiliateFee": "Nossa parte",
+      "fixedFeeWarn": "A taxa fixa em SOL é {{pct}}% desta transferência. Taxas fixas prejudicam muito transferências pequenas — considere um valor maior ou use a aba de tokens EVM para valores pequenos.",
+      "noRoute": "Sem rota para este valor agora. Tente outro valor ou rede.",
+      "quoteFailed": "Nenhuma rota encontrada. Tente novamente em instantes ou com outro par.",
+      "sendFailed": "A transação não foi enviada. Nada saiu da sua carteira.",
+      "affiliateNote": "A deBridge cotia a taxa fixa e a nossa parte a cada solicitação: esses números são deles, não a nossa estimativa.",
+      "tokensTitle": "Apenas os três ativos acima",
+      "tokensBody": "Apenas SOL e os mints canônicos USDC/USDT da Solana são oferecidos. Buscar por símbolo permitiria que um mint clonado tomasse o nome de um token real, então a lista é fixa e verificada por endereço."
+    }
   },
   "dydx": {
     "steps": {

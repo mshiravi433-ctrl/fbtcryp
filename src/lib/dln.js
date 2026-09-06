@@ -33,15 +33,32 @@
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
-/**
- * Chains DLN reaches that our LI.FI list does not include.
- *
- * Linea is the practical addition today. Solana and Tron are supported by DLN
- * as origins but need a non-EVM fee address and a non-EVM signer, so they are
- * deliberately not offered here yet — half-support would produce a route the
- * user can select and not complete.
- */
+/** Chains DLN reaches that our LI.FI list does not include. */
 export const DLN_EXTRA_CHAINS = [{ id: 59144, name: 'Linea', symbol: 'ETH' }];
+
+/**
+ * SOLANA ORIGIN (deBridge internal chain id, not a real chain id — 7565164).
+ *
+ * The source token is a base58 mint, the fee receiver is a Solana address
+ * (server/dln.js decides it and the UI never sees it), and the order is a
+ * serialized VersionedTransaction the user's Solana wallet signs — no ERC-20
+ * approval, no `to`, no `value`. Destinations are the EVM chains DLN already
+ * serves, so the recipient stays the standard 0x address.
+ */
+export const DLN_SOLANA = Object.freeze({
+  chainId: 7565164,
+  name: 'Solana',
+  nativeSymbol: 'SOL',
+  nativeDecimals: 9,
+  tokens: Object.freeze([
+    /* Native SOL. The "mint" is Solana's canonical native-mint address. */
+    { symbol: 'SOL', name: 'Solana', address: 'So11111111111111111111111111111111111111112', decimals: 9, native: true },
+    /* Canonical SPL mints on Solana mainnet. Address-keyed, same rule as
+       everything else in this repo: never a symbol lookup. */
+    { symbol: 'USDC', name: 'USD Coin', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals: 6 },
+    { symbol: 'USDT', name: 'Tether USD', address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', decimals: 6 }
+  ])
+});
 
 /** Native coin symbol per chain, for labelling the fixed fee honestly. */
 export const NATIVE_SYMBOL = {
@@ -52,8 +69,27 @@ export const NATIVE_SYMBOL = {
   8453: 'ETH',
   42161: 'ETH',
   43114: 'AVAX',
-  59144: 'ETH'
+  59144: 'ETH',
+  [DLN_SOLANA.chainId]: 'SOL'
 };
+
+/**
+ * deBridge's Solana tx payload is `data` as 0x-hex of the serialized
+ * (versioned) transaction. The wallet layer takes base64 (it deserializes
+ * with @solana/web3.js), so the payload is converted here and only the bytes
+ * pass through — no transaction code in the panel.
+ */
+export function dlnHexToBase64(hex) {
+  const raw = String(hex ?? '');
+  if (!/^0x[0-9a-fA-F]+$/.test(raw)) return null;
+  const bytes = raw.slice(2).match(/.{1,2}/g) || [];
+  if (!bytes.length) return null;
+  try {
+    return btoa(String.fromCharCode(...bytes.map((b) => parseInt(b, 16))));
+  } catch {
+    return null;
+  }
+}
 
 async function get(path, params, { timeout = 25000 } = {}) {
   const ctrl = new AbortController();

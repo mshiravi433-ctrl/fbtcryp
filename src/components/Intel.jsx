@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { IconExternal, IconRefresh } from './Icons';
 import { freshnessLabel, sourceLabel } from '../lib/intelApi';
 import { riseIn } from './PageTransition';
+import SegIndicator from './SegIndicator';
 
 /**
  * INTEL SHARED UI — the small primitives Explore and Security Center share.
@@ -27,6 +28,7 @@ export function SectionTabs({ tabs, active, onChange, ariaLabelKey = 'intel.sect
           style={{ isolation: 'isolate' }}
           title={t(tab.labelKey)}
         >
+          {active === tab.id && <SegIndicator id={`intel-seg-${ariaLabelKey}`} />}
           {tab.Icon && <tab.Icon width={14} height={14} aria-hidden="true" />}
           <span className="intel-seg-label">{t(tab.labelKey)}</span>
         </button>

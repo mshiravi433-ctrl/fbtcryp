@@ -3398,7 +3398,8 @@
       "shareApp": "Share the app",
       "connectWallet": "Connect a wallet",
       "backupWallet": "Back up your wallet",
-      "enable2fa": "Turn on two-factor"
+      "enable2fa": "Turn on two-factor",
+      "sync": "Engine sync"
     },
     "noneYet": "You haven't earned any points yet. Make a swap, back up your wallet or check in — the first one lands here straight away.",
     "historyTitle": "How you earned them",
@@ -4626,7 +4627,8 @@
     "mode": {
       "tokens": "Tokens",
       "native": "Native (BTC, ETH…)",
-      "tron": "Tron (USDT)"
+      "tron": "Tron (USDT)",
+      "solana": "Solana"
     },
     "routesTitle": "Compare routes",
     "fixedFee": "Fixed network fee",
@@ -4640,7 +4642,30 @@
     "routesCompared": "{{count}} routes compared · best: {{name}}",
     "quoteChanged": "The rate changed while confirming. Review the new rate before sending.",
     "acceptNewRate": "Accept new rate",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "solana": {
+      "whatTitle": "Solana origin, signed in your wallet",
+      "whatBody": "Move SOL, USDC or USDT from your Solana wallet to an EVM network. deBridge builds the order and your Solana wallet signs it. We never take custody — but a bridge cannot be reversed, so check the destination address character by character.",
+      "origin": "From (Solana)",
+      "onSolana": "on Solana",
+      "amount": "Amount",
+      "destination": "Destination (EVM)",
+      "recipient": "Destination address",
+      "badDestination": "That is not a valid EVM address.",
+      "sender": "From: {{address}}",
+      "connectSolana": "Connect a Solana wallet",
+      "recipientRequired": "Enter the EVM address that should receive the funds.",
+      "value": "Approx. value",
+      "fixedFee": "Flat network fee (SOL)",
+      "affiliateFee": "Our share",
+      "fixedFeeWarn": "The flat SOL fee is {{pct}}% of this transfer. Flat fees hurt small transfers badly — consider a larger amount, or the EVM token tab for small stablecoin moves.",
+      "noRoute": "No route for this amount right now. Try a different amount or network.",
+      "quoteFailed": "No route could be found. Try again in a moment or with a different pair.",
+      "sendFailed": "The transaction was not sent. Nothing left your wallet.",
+      "affiliateNote": "The flat fee and our share are quoted by deBridge on every request — these numbers are theirs, not our estimate.",
+      "tokensTitle": "Only the three assets above",
+      "tokensBody": "Only SOL and the canonical Solana USDC/USDT mints are offered. A symbol search would let a cloned mint borrow a real token's name, so the list is fixed and address-verified."
+    }
   },
   "autopilot": {
     "title": "Autopilot",
