@@ -242,10 +242,12 @@ function prefetchLikelyRoutes() {
  * + settings) is NOT rendered there, so the conversation starts at the very
  * top of the viewport instead of sitting under a bar it does not need.
  *
- * The BottomNav STAYS, on instruction («فقط هدر حذف شود، نه منوی پایین»):
- * it is how the user knows where they are and how they reach the rest of the
- * app — without it the AI page was a dead end that could only be left with
- * the browser's back button. The shell keeps its bottom padding for it.
+ * The BottomNav is now hidden there TOO — on the newer instruction to make
+ * the AI surface look like Trenchers' ai-agent («تب‌های پایین مینیمال با
+ * آیکون»): the page ships its OWN bottom tabs (chat / agents / activity /
+ * more) and stacking the app bar under them read as two competing navs.
+ * The old dead-end concern is answered by the MORE tab, which links straight
+ * to Market, Portfolio, Wallet and Swap.
  *
  * This has to live inside <HashRouter> because it reads `useLocation()`, and
  * it is the single place that decides which routes are headerless — so
@@ -261,7 +263,7 @@ function AppChrome() {
       <PullToRefresh>
         <AnimatedRoutes />
       </PullToRefresh>
-      <BottomNav />
+      {!headerless && <BottomNav />}
     </div>
   );
 }

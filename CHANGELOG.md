@@ -1,3 +1,40 @@
+# Unreleased — Trench-style AI surface: `/intent` as a black, tabbed agent terminal
+
+The AI page keeps its brain and grows a Trenchers-shaped body: «شکل و ظاهر
+هوش مصنوعی مثل ai-agent ترنچرز — صفحه سیاه مینیمال، تب‌های پایین با آیکون،
+گزینه عملیات مینیمال کنار باکس نوشتن». Everything the page already did
+(persistent conversations, slot filling, execution cards, panels) survives
+unchanged — this is a reskin plus three real tab views, not a rewrite.
+
+- **The skin** (`src/styles/trench-agent.css`, loaded after `intent-ai-os.css`
+  by `IntentAIUnified`): pure-black canvas (`#050506`), one faint top glow,
+  quiet `1px` borders, white-on-black primary buttons. Scoped entirely under
+  the new `tag-page` class the component adds to `.iaos-page`; every existing
+  `iaos-*` class, hook and `data-testid` stays, so the source-shape probes
+  pass untouched. The page is deliberately black in both app themes — /intent
+  mounts headerless and never has to blend with a light shell.
+- **Bottom tabs** (chat · agents · activity · more): a fixed floating bar with
+  stroke SVG icons and a mint badge when an agent is running. Chat is the
+  legacy conversation; the app-wide `BottomNav` is hidden on `/intent` only
+  (superseding «فقط هدر حذف شود» — the MORE tab links to Market, Portfolio,
+  Wallet and Swap so the page is not a dead end); `app-shell--headerless` now
+  drops the shell's nav-sized bottom padding and `trench-agent.css` owns that
+  space.
+- **Agents tab**: automations and monitors rendered as one stack of agent
+  cards — status dot (pulsing when ACTIVE), kind badge, real cadence/amount
+  meta, and pause/resume/run/delete wired to the same handlers the old autos
+  strip used. Empty state explains spawning and drops the starter prompt into
+  the composer. No invented PnL: the card shows only fields the executor
+  actually owns.
+- **Activity tab**: seasons (tap to continue one), orders and recent
+  operations from the stores the page already reads, plus a shortcut into the
+  full history panel.
+- **More tab**: the old menubar (operations / history / intelligence /
+  ecosystem, same test ids) as minimal rows, plus system status and app links.
+- **Composer**: a black pill with a round `+` (opens the recolored Actions
+  sheet — «گزینه عملیات» کنار باکس نوشتن) and a round white send button; the
+  header collapses to brand · live pill · round `+` for a new season.
+
 # Unreleased — «فقط برای ایرانیان»: مسیر ارجاع بیت‌پین تا روشن شدن پرداخت مستقیم
 
 The direct Toman rail stays off for now — turning it on means treasury float,

@@ -1,0 +1,849 @@
+/*
+ * FBT AI — TRENCH-AGENT SKIN (Trenchers-style black minimal)
+ * ---------------------------------------------------------------------------
+ * A pure-black, minimal reskin of the /intent AI surface, asked for as
+ * «شکل و ظاهر هوش مصنوعی مثل ai-agent ترنچرز: صفحه سیاه، مینیمال، تب‌های
+ * پایین با آیکون، گزینه عملیات مینیمال کنار باکس نوشتن».
+ *
+ * How it is built (and why it is safe):
+ *
+ *  - It ADDS a `tag-page` class on the existing `.iaos-page` root and scopes
+ *    every rule under `.tag-page`, overriding the violet/glass look of
+ *    `intent-ai-os.css` without touching it. All `iaos-*` classes, hooks and
+ *    test ids survive — the source-shape probes keep passing untouched.
+ *  - The page is ALWAYS black. That is the point of the request (Trenchers is
+ *    a black terminal); /intent is mounted headerless, so it never has to
+ *    blend with a light app shell. No light overrides exist on purpose.
+ *  - Nothing here draws fake data. Status dots, counts and PnL-ish fields are
+ *    only ever driven by the real automation/monitor state in the component.
+ *
+ * Layout contract with the component:
+ *   .tag-page > .iaos-shell   (top bar + ONE active .tag-view + composer)
+ *          + nav.tag-tabbar   (fixed bottom tabs: chat / agents / activity / more)
+ */
+
+/* ── 1. Page: pure black canvas ──────────────────────────────────────────── */
+.iaos-page.tag-page {
+  --tag-bg: #050506;
+  --tag-card: #0b0b0e;
+  --tag-card-2: #101014;
+  --tag-line: rgba(255, 255, 255, 0.07);
+  --tag-line-soft: rgba(255, 255, 255, 0.045);
+  --tag-text: #f4f4f6;
+  --tag-muted: #8d8d99;
+  --tag-dim: #5c5c66;
+  --tag-mint: #34d399;
+  --tag-amber: #fbbf24;
+  --tag-red: #f87171;
+  --tag-blue: #7dd3fc;
+  --tag-tab-h: 64px;
+
+  flex: 1 1 auto;
+  min-height: 100dvh;
+  background:
+    radial-gradient(720px 340px at 50% -120px, rgba(122, 122, 140, 0.10), transparent 70%),
+    var(--tag-bg);
+  color: var(--tag-text);
+  position: relative;
+}
+
+/* The shell keeps its gutter but reserves room for the fixed tab bar.
+   `min-height` keeps the composer pinned near the bottom of the viewport
+   while a thread is still short — the conversation column stretches
+   (`.iaos-chat-container` is flex) instead of the composer floating up. */
+.tag-page .iaos-shell {
+  width: min(620px, calc(100% - 20px));
+  padding: 10px 0 calc(var(--tag-tab-h) + env(safe-area-inset-bottom) + 30px);
+  gap: 10px;
+  min-height: calc(100dvh - var(--tag-tab-h) - env(safe-area-inset-bottom) - 24px);
+}
+
+/* ── 2. Top bar: brand · live · new season ───────────────────────────────── */
+.tag-page .iaos-header {
+  padding: 8px 2px 10px;
+  border-bottom: 1px solid var(--tag-line-soft);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, rgba(5, 5, 6, 0.96), rgba(5, 5, 6, 0.86));
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.tag-page .iaos-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #101014;
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  font-size: 14px;
+  box-shadow: none;
+}
+
+.tag-page .iaos-title-copy h1 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--tag-text);
+}
+
+.tag-page .iaos-title-sub {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--tag-dim);
+}
+
+.tag-page .iaos-new-season-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--tag-text);
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tag-page .iaos-new-season-btn:hover,
+.tag-page .iaos-new-season-btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--tag-card-2);
+}
+
+.tag-page .iaos-status-pill {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--tag-muted);
+  background: transparent;
+  border: 1px solid var(--tag-line);
+}
+
+.tag-page .iaos-status-pill[data-on='true'] {
+  color: var(--tag-mint);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.tag-page .iaos-status-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── 3. Context / intent chips ───────────────────────────────────────────── */
+.tag-page .iaos-context-chip,
+.tag-page .iaos-intent-chip {
+  background: var(--tag-card) !important;
+  border: 1px solid var(--tag-line) !important;
+  border-radius: 999px !important;
+  color: var(--tag-muted) !important;
+  font-size: 11px !important;
+}
+
+.tag-page .iaos-context-chip strong {
+  color: var(--tag-text);
+}
+
+/* ── 4. Conversation: flat black thread ──────────────────────────────────── */
+.tag-page .iaos-conversation {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.tag-page .iaos-conversation::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tag-page .iaos-conversation::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+/* AI answers: no bubble — plain text on black (terminal feel). */
+.tag-page .iaos-ai .iaos-bubble {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--tag-text);
+  padding: 2px 2px 2px 0;
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+
+/* User messages: one quiet dark pill. */
+.tag-page .iaos-user .iaos-bubble {
+  background: var(--tag-card-2);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  border-radius: 18px;
+  border-end-end-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  box-shadow: none;
+}
+
+[dir='rtl'] .tag-page .iaos-user .iaos-bubble {
+  border-radius: 18px;
+  border-end-start-radius: 6px;
+  border-end-end-radius: 18px;
+}
+
+.tag-page .iaos-user {
+  align-items: flex-end;
+}
+
+.tag-page .iaos-msg-actions {
+  opacity: 0.55;
+}
+
+.tag-page .iaos-btn {
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.tag-page .iaos-btn.iss-solid {
+  background: #ffffff;
+  color: #09090b;
+  border: none;
+  font-weight: 700;
+}
+
+.tag-page .iaos-btn.iss-solid:hover {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.tag-page .iaos-btn.iss-ghost {
+  background: transparent;
+  color: var(--tag-muted);
+  border: 1px solid var(--tag-line);
+}
+
+.tag-page .iaos-btn.iss-ghost:hover {
+  color: var(--tag-text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tag-page .iaos-choices {
+  gap: 8px;
+}
+
+.tag-page .iaos-choice {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+}
+
+/* Thinking + progress */
+.tag-page .iaos-thinking-v6 {
+  background: transparent !important;
+  border: none !important;
+  min-width: 0 !important;
+}
+
+.tag-page .iaos-progress {
+  color: var(--tag-dim);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+/* Execution card: the one place that stays a "card". */
+.tag-page .iaos-exec-card {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.tag-page .iaos-exec-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tag-text);
+}
+
+.tag-page .iaos-alloc-row {
+  border-color: var(--tag-line-soft);
+}
+
+.tag-page .iaos-result-hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--tag-dim);
+}
+
+/* Suggestions: quiet chips above the composer. */
+.tag-page .iaos-suggestions-title {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--tag-dim);
+}
+
+.tag-page .iaos-suggestion {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-muted);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tag-page .iaos-suggestion:hover {
+  color: var(--tag-text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tag-page .iaos-solana-connect {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  border-radius: 12px;
+}
+
+/* ── 5. Composer: black pill · + actions · send ──────────────────────────── */
+.tag-page .iaos-composer {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  border-radius: 999px;
+  padding: 6px;
+  gap: 6px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  position: sticky;
+  bottom: calc(var(--tag-tab-h) + env(safe-area-inset-bottom) + 10px);
+  z-index: 15;
+}
+
+.tag-page .iaos-action-btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tag-card-2);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.tag-page .iaos-action-btn:hover,
+.tag-page .iaos-action-btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: rotate(90deg);
+}
+
+.tag-page .iaos-input {
+  background: transparent;
+  border: none;
+  color: var(--tag-text);
+  font-size: 15px;
+  padding: 0 6px;
+}
+
+.tag-page .iaos-input::placeholder {
+  color: var(--tag-dim);
+}
+
+.tag-page .iaos-send {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #09090b;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.tag-page .iaos-send svg {
+  display: block;
+}
+
+[dir='rtl'] .tag-page .iaos-send svg {
+  transform: scaleX(-1);
+}
+
+.tag-page .iaos-send:disabled {
+  background: var(--tag-card-2);
+  color: var(--tag-dim);
+  cursor: default;
+}
+
+.tag-page .iaos-send:not(:disabled):hover {
+  transform: scale(1.06);
+}
+
+/* ── 6. Bottom tab bar: chat · agents · activity · more ──────────────────── */
+.tag-tabbar {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(496px, calc(100% - 24px));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 6px;
+  border-radius: 20px;
+  background: rgba(12, 12, 15, 0.92);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--tag-line);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  z-index: 40;
+}
+
+.tag-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px 7px;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  color: var(--tag-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+  font: inherit;
+}
+
+.tag-tab svg {
+  display: block;
+}
+
+.tag-tab-label {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.tag-tab[data-active='true'] {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tag-tab:hover {
+  color: #ffffff;
+}
+
+.tag-tab-badge {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: calc(50% - 20px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tag-mint);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+
+/* ── 7. Tab views ────────────────────────────────────────────────────────── */
+.tag-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 8px;
+  animation: tag-view-in 0.22s ease both;
+}
+
+@keyframes tag-view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag-view { animation: none; }
+}
+
+.tag-view-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 2px;
+}
+
+.tag-view-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--tag-text);
+}
+
+.tag-view-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--tag-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-spawn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #ffffff;
+  color: #09090b;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  font-family: inherit;
+}
+
+.tag-spawn:hover {
+  transform: scale(1.03);
+}
+
+/* Agent cards */
+.tag-card {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  border-radius: 16px;
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tag-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--tag-dim);
+}
+
+.tag-dot[data-status='ACTIVE'] {
+  background: var(--tag-mint);
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+  animation: tag-pulse 2.4s ease-out infinite;
+}
+
+.tag-dot[data-status='PAUSED'] { background: var(--tag-amber); }
+.tag-dot[data-status='CANCELLED'] { background: var(--tag-red); }
+
+@keyframes tag-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag-dot[data-status='ACTIVE'] { animation: none; }
+}
+
+.tag-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tag-text);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-card-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tag-dim);
+  border: 1px solid var(--tag-line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  flex: 0 0 auto;
+}
+
+.tag-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  font-size: 11.5px;
+  color: var(--tag-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-card-meta span + span::before {
+  content: '·';
+  margin: 0 7px;
+  color: var(--tag-dim);
+}
+
+.tag-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tag-line-soft);
+}
+
+.tag-icon-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--tag-line);
+  color: var(--tag-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  font-family: inherit;
+}
+
+.tag-icon-btn:hover {
+  color: var(--tag-text);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tag-icon-btn[data-variant='danger']:hover {
+  color: var(--tag-red);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+/* Activity + More rows */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 4px;
+  border: none;
+  border-bottom: 1px solid var(--tag-line-soft);
+  background: transparent;
+  color: var(--tag-text);
+  text-align: start;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.tag-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.tag-row-glyph {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tag-card-2);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-muted);
+  font-size: 15px;
+}
+
+.tag-row-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tag-row-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--tag-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-row-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--tag-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-row-end {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--tag-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-row-chevron {
+  flex: 0 0 auto;
+  color: var(--tag-dim);
+}
+
+[dir='rtl'] .tag-row-chevron svg {
+  transform: scaleX(-1);
+}
+
+/* Empty state */
+.tag-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 44px 20px;
+  text-align: center;
+}
+
+.tag-empty-glyph {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-dim);
+  font-size: 21px;
+  margin-bottom: 4px;
+}
+
+.tag-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tag-text);
+}
+
+.tag-empty-sub {
+  font-size: 12px;
+  color: var(--tag-muted);
+  line-height: 1.7;
+  max-width: 300px;
+}
+
+/* Section label inside a view */
+.tag-section {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--tag-dim);
+  padding: 8px 2px 0;
+}
+
+/* ── 8. Actions sheet (the + next to the composer) ───────────────────────── */
+.tag-page .iaos-overlay {
+  background: rgba(0, 0, 0, 0.62);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  z-index: 60;
+  padding: 0 10px; /* flush to the bottom edge — a real sheet, not a floating card */
+}
+
+.tag-page .iaos-drawer {
+  background: #0a0a0d;
+  border: 1px solid var(--tag-line);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  padding: 18px 16px calc(max(16px, env(safe-area-inset-bottom)));
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.tag-page .iaos-drawer-head h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--tag-text);
+}
+
+.tag-page .iaos-close {
+  background: var(--tag-card-2);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-muted);
+  border-radius: 10px;
+}
+
+.tag-page .iaos-drawer-grid {
+  gap: 8px;
+}
+
+.tag-page .iaos-drawer-item {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: start;
+  transition: border-color 0.15s ease;
+}
+
+.tag-page .iaos-drawer-item:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.tag-page .iaos-drawer-item span {
+  color: var(--tag-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.tag-page .iaos-drawer-item small {
+  color: var(--tag-muted);
+  font-size: 11.5px;
+}
+
+.tag-page .iaos-drawer-note {
+  color: var(--tag-dim);
+  font-size: 11px;
+}
+
+/* ── 9. New-message indicator (kept, recolored) ──────────────────────────── */
+.tag-page .iaos-new-msg-indicator {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: var(--tag-card-2) !important;
+  color: var(--tag-text) !important;
+}
+
+/* ── 10. Automations strip is gone from chat — it lives in Agents now ────── */
+.tag-page .iaos-autos {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  border-radius: 16px;
+}

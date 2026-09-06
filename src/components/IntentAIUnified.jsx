@@ -82,6 +82,12 @@ import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
 import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
 import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
+/*
+ * Trench-agent skin: pure-black, minimal, tabbed (chat / agents / activity /
+ * more) — the Trenchers-style look requested for the AI surface. Loads after
+ * intent-ai-os.css on purpose: same-specificity rules there must lose.
+ */
+import '../styles/trench-agent.css';
 
 // Existing OS
 import { getIntentOS, upgrade7 as upgrade7ns } from '../lib/intent-ai/os/index.js';
@@ -661,6 +667,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   });
 
   const [input, setInput] = useState('');
+  /*
+   * Trench-style surface tabs. `chat` is the whole legacy conversation; the
+   * other three are new views over state the page already owns (automations,
+   * monitors, history, panels) — nothing here introduces a second brain.
+   */
+  const [aiTab, setAiTab] = useState('chat');
   const [thinkingState, setThinkingState] = useState('idle'); // §28 smart thinking state
   const [thinking, setThinking] = useState([]); // legacy for fallback
   const [activitySteps, setActivitySteps] = useState([]); // §29 activity timeline
@@ -675,7 +687,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
   const [memorySummary, setMemorySummary] = useState('');
   const [automations, setAutomations] = useState([]);
-  const [autosOpen, setAutosOpen] = useState(false);
+  /* `autosOpen` died with the chat-view autos strip — agents now render as
+     cards on the AGENTS tab, which needs no collapsed/expanded mode. */
   const [solanaTick, setSolanaTick] = useState(0);
   const [solanaRows, setSolanaRows] = useState([]);
   const [conversationId] = useState(() => {
@@ -3530,15 +3543,53 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     });
   }, [monitors, locale, pushTurn]);
 
+  /* ── Trench-style surface: helpers for the tab views ───────────────────
+     All of it reads state the page already owns — automations and monitors
+     are the agent cards, seasons/orders/operations are the activity feed. */
+  const fa = locale.startsWith('fa');
+  const tagFmtTime = (ts) => {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const d = new Date(n < 1e12 ? n * 1000 : n);
+    const diff = Date.now() - d.getTime();
+    if (diff >= 0 && diff < 60000) return fa ? 'همین حالا' : 'now';
+    if (diff >= 0 && diff < 3600000) return fa ? `${Math.floor(diff / 60000)} دقیقه پیش` : `${Math.floor(diff / 60000)}m ago`;
+    if (diff >= 0 && diff < 86400000) return fa ? `${Math.floor(diff / 3600000)} ساعت پیش` : `${Math.floor(diff / 3600000)}h ago`;
+    return d.toLocaleDateString(fa ? 'fa-IR' : undefined, { month: 'short', day: 'numeric' });
+  };
+  const spawnAgent = () => {
+    setAiTab('chat');
+    setInput(fa ? 'برام یک ایجنت بساز که ' : 'Spawn an agent that ');
+  };
+  const agentCards = [
+    ...(Array.isArray(automations) ? automations : []).map((a) => ({
+      id: `auto-${a.id}`,
+      kind: 'automation',
+      raw: a,
+      name: `${a.asset || '—'} ${String(a.kind || a.type || '').toUpperCase()}`,
+      status: a.status || 'ACTIVE',
+      meta: [a.frequency || a.cadence || null, a.amountUsd != null ? `$${a.amountUsd}` : null]
+    })),
+    ...(Array.isArray(monitors) ? monitors : []).map((m) => ({
+      id: `mon-${m.id}`,
+      kind: 'monitor',
+      raw: m,
+      name: m.label || m.asset?.symbol || (fa ? 'دیده‌بان' : 'Monitor'),
+      status: m.status || 'ACTIVE',
+      meta: [m.metric || null, m.asset?.symbol || null]
+    }))
+  ];
+  const agentActiveCount = agentCards.filter((c) => c.status === 'ACTIVE').length;
+
   return (
-    <div className="iaos-page iaos-page-v6">
+    <div className="iaos-page iaos-page-v6 tag-page">
       <div className="iaos-shell">
         <header className="iaos-header">
           <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
             <span className="iaos-mark" aria-hidden="true">✦</span>
             <span className="iaos-title-copy">
-              <h1>AI</h1>
-              <span className="iaos-title-sub">Intent OS V8</span>
+              <h1>FBT AGENT</h1>
+              <span className="iaos-title-sub">{locale.startsWith('fa') ? 'سیستم عامل ایجنت' : 'AGENT OS'}</span>
             </span>
             {/* Thinking Orb in header when active */}
             {thinkingState !== 'idle' ? (
@@ -3551,9 +3602,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               className="iaos-new-season-btn"
               onClick={newSeason}
               aria-label={locale.startsWith('fa') ? 'شروع سشن جدید' : 'Start a new season'}
+              title={locale.startsWith('fa') ? 'شروع سشن جدید' : 'New season'}
               data-testid="intent-ai-new-season"
             >
-              ＋ {locale.startsWith('fa') ? 'سشن جدید' : 'New season'}
+              +
             </button>
             {serverReachable != null ? (
               <span className="iaos-status-pill" data-on={serverReachable ? 'true' : 'false'} data-testid="intent-ai-status-pill">
@@ -3566,6 +3618,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </div>
         </header>
 
+        {aiTab === 'chat' && (
+        <>
         {activeContext ? (
           <div className="iaos-context-chip" data-testid="intent-ai-context">
             <span>{locale.startsWith('fa') ? 'در حال ادامه:' : 'Continuing:'}</span>
@@ -3600,32 +3654,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <div style={{ marginTop: '8px' }}>Observability V6 (recent 3):</div>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px' }}>{JSON.stringify(debugInfo.obsV2?.slice(0, 3), null, 2)}</pre>
             <div style={{ marginTop: '8px' }}>Memory V2: L1 {debugInfo.memV2?.l1?.length || 0} | L2 {debugInfo.memV2?.l2?.length || 0} | L3 {debugInfo.memV2?.l3?.length || 0}</div>
-          </div>
-        ) : null}
-
-        {automations.length ? (
-          <div className="iaos-autos" data-testid="intent-ai-active-automations">
-            <div className="iaos-autos-head">
-              <span>{t('intentAIOS.autosTitle', { defaultValue: 'ACTIVE AUTOMATIONS' })}</span>
-              <button type="button" className="iaos-autos-manage" onClick={() => setAutosOpen((v) => !v)}>
-                {t('intentAIOS.manage', { defaultValue: 'Manage' })}
-              </button>
-            </div>
-            <div className="iaos-autos-list">
-              {(autosOpen ? automations : automations.filter((a) => a?.status === 'ACTIVE')).slice(0, autosOpen ? 24 : 4).map((a) => (
-                <div key={a.id} className="iaos-auto-row" data-status={a.status || ''}>
-                  <strong>{a.asset || '—'} {String(a.kind || a.type || '').toUpperCase()}</strong>
-                  <span>{a.frequency || a.cadence} · {a.amountUsd != null ? `$${a.amountUsd}` : ''} · {a.status || 'ACTIVE'}</span>
-                  {autosOpen ? (
-                    <div className="iaos-auto-actions">
-                      <button type="button" onClick={() => toggleAutomation(a)}>{a.status === 'ACTIVE' ? 'Pause' : 'Resume'}</button>
-                      <button type="button" onClick={() => runAutomationNow(a)}>Run</button>
-                      <button type="button" className="iaos-auto-danger" onClick={() => deleteAutomationRow(a)}>×</button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
           </div>
         ) : null}
 
@@ -3770,10 +3798,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </button>
         ) : null}
 
-        {/* §26 Mobile optimization — keyboard-aware, safe-area */}
+        {/* §26 Mobile optimization — keyboard-aware, safe-area.
+            Trench-style composer: a black pill with a round “+ actions” button
+            (opens the Actions sheet) and a round send button. Nothing else. */}
         <form className="iaos-composer iaos-composer-v6" onSubmit={handleSubmit}>
-          <button type="button" className="iaos-action-btn" onClick={() => setDrawerOpen(true)} aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
-            + {t('intentAIOS.actions', { defaultValue: 'Actions' })}
+          <button
+            type="button"
+            className="iaos-action-btn"
+            onClick={() => setDrawerOpen(true)}
+            aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}
+            title={t('intentAIOS.actions', { defaultValue: 'Actions' })}
+          >
+            +
           </button>
           <input
             className="iaos-input"
@@ -3783,24 +3819,268 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             enterKeyHint="send"
           />
-          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinkingState !== 'idle'}>➤</button>
+          <button
+            type="submit"
+            className="iaos-send"
+            aria-label={t('intentAIOS.send', { defaultValue: 'Send' })}
+            disabled={!input.trim() || thinkingState !== 'idle'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 19V5" />
+              <path d="m5 12 7-7 7 7" />
+            </svg>
+          </button>
         </form>
+        </>
+        )}
 
-        <nav className="iaos-menubar" aria-label={locale.startsWith('fa') ? 'منوی عملیات' : 'Operations menu'}>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
-            {opsText('ops.aria', locale)}
-          </button>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
-            {opsText('hist.title', locale)}
-          </button>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
-            {opsText('menu.multiAi', locale)}
-          </button>
-          <button type="button" className="iaos-menubar-btn" data-testid="intent-ai-ecosystem" onClick={() => openEcosystem('agent')}>
-            {opsText('eco.menu', locale)}
-          </button>
-        </nav>
+        {/* ── AGENTS: every running automation + monitor as one card ─────────
+            Real state only — status, cadence and amount come from the same
+            records the executor consults; the actions call the same handlers
+            the old autos strip used. No PnL theatre for data we do not have. */}
+        {aiTab === 'agents' ? (
+          <section className="tag-view" data-testid="tag-view-agents">
+            <div className="tag-view-head">
+              <div>
+                <h2>{fa ? 'ایجنت‌ها' : 'Agents'}</h2>
+                <span className="tag-view-sub">
+                  {agentActiveCount} {fa ? 'فعال از' : 'active of'} {agentCards.length} {fa ? 'ایجنت' : 'agents'}
+                </span>
+              </div>
+              <button type="button" className="tag-spawn" onClick={spawnAgent}>
+                + {fa ? 'ایجنت جدید' : 'New agent'}
+              </button>
+            </div>
+
+            {agentCards.length ? (
+              <div data-testid="intent-ai-active-automations">
+                {agentCards.map((c) => (
+                  <div key={c.id} className="tag-card">
+                    <div className="tag-card-head">
+                      <span className="tag-dot" data-status={c.status} aria-hidden="true" />
+                      <span className="tag-card-name">{c.name}</span>
+                      <span className="tag-card-kind">{c.kind === 'monitor' ? (fa ? 'مانیتور' : 'MONITOR') : (fa ? 'خودکار' : 'AUTO')}</span>
+                    </div>
+                    <div className="tag-card-meta">
+                      {c.meta.filter(Boolean).map((m, i) => <span key={i}>{m}</span>)}
+                      <span>{c.status === 'ACTIVE' ? (fa ? 'در حال اجرا' : 'running') : c.status === 'PAUSED' ? (fa ? 'متوقف' : 'paused') : c.status}</span>
+                    </div>
+                    <div className="tag-card-actions">
+                      {c.kind === 'automation' ? (
+                        <>
+                          <button type="button" className="tag-icon-btn" onClick={() => toggleAutomation(c.raw)}>
+                            {c.raw?.status === 'ACTIVE' ? (fa ? 'توقف' : 'Pause') : (fa ? 'ادامه' : 'Resume')}
+                          </button>
+                          <button type="button" className="tag-icon-btn" onClick={() => runAutomationNow(c.raw)}>{fa ? 'اجرا' : 'Run'}</button>
+                          <button type="button" className="tag-icon-btn" data-variant="danger" onClick={() => deleteAutomationRow(c.raw)}>{fa ? 'حذف' : 'Delete'}</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, c.raw?.status === 'ACTIVE' ? 'pause' : 'resume')}>
+                            {c.raw?.status === 'ACTIVE' ? (fa ? 'توقف' : 'Pause') : (fa ? 'ادامه' : 'Resume')}
+                          </button>
+                          <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, 'evaluate')}>{fa ? 'بررسی' : 'Check'}</button>
+                          <button type="button" className="tag-icon-btn" data-variant="danger" onClick={() => handleMonitorAction(c.raw, 'cancel')}>{fa ? 'لغو' : 'Cancel'}</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="tag-empty">
+                <span className="tag-empty-glyph" aria-hidden="true">✦</span>
+                <span className="tag-empty-title">{fa ? 'هنوز ایجنتی نداری' : 'No agents yet'}</span>
+                <span className="tag-empty-sub">
+                  {fa
+                    ? 'از چت بگو چه کاری مدام انجام شود — خرید دوره‌ای، بازبینی پرتفوی یا دیده‌بانی قیمت — و برایت ایجنت می‌سازم.'
+                    : 'Describe a recurring job in chat — DCA buys, portfolio rebalances or price watches — and it becomes an agent.'}
+                </span>
+                <button type="button" className="tag-spawn" onClick={spawnAgent}>+ {fa ? 'ساخت اولین ایجنت' : 'Spawn your first agent'}</button>
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {/* ── ACTIVITY: seasons, orders and recent operations ─────────────── */}
+        {aiTab === 'activity' ? (
+          <section className="tag-view" data-testid="tag-view-activity">
+            <div className="tag-view-head">
+              <div>
+                <h2>{fa ? 'فعالیت' : 'Activity'}</h2>
+                <span className="tag-view-sub">
+                  {seasons.length} {fa ? 'سشن' : 'seasons'} · {storedOrders.length} {fa ? 'سفارش' : 'orders'}
+                </span>
+              </div>
+              <button type="button" className="tag-spawn" onClick={() => openPanel('history')}>
+                {fa ? 'تاریخچه کامل' : 'Full history'}
+              </button>
+            </div>
+
+            {seasons.length ? (
+              <>
+                <div className="tag-section">{fa ? 'سشن‌ها' : 'Seasons'}</div>
+                {seasons.slice(0, 12).map((s) => (
+                  <button
+                    key={s.seasonId || s.conversationId}
+                    type="button"
+                    className="tag-row"
+                    onClick={() => { handleContinue({ kind: 'season', seasonId: s.seasonId || s.conversationId, title: s.title }); setAiTab('chat'); }}
+                  >
+                    <span className="tag-row-glyph" aria-hidden="true">✦</span>
+                    <span className="tag-row-copy">
+                      <span className="tag-row-title">{s.title || (fa ? 'سشن بدون عنوان' : 'Untitled season')}</span>
+                      <span className="tag-row-sub">{s.messageCount || 0} {fa ? 'پیام' : 'messages'}{s.lastMessage ? ` · ${String(s.lastMessage).slice(0, 60)}` : ''}</span>
+                    </span>
+                    <span className="tag-row-end">{tagFmtTime(s.lastAt || s.updatedAt)}</span>
+                  </button>
+                ))}
+              </>
+            ) : null}
+
+            {storedOrders.length ? (
+              <>
+                <div className="tag-section">{fa ? 'سفارش‌ها' : 'Orders'}</div>
+                {storedOrders.slice(0, 8).map((o, i) => (
+                  <div key={o.id || i} className="tag-row" style={{ cursor: 'default' }}>
+                    <span className="tag-row-glyph" aria-hidden="true">⇄</span>
+                    <span className="tag-row-copy">
+                      <span className="tag-row-title">{o.fromToken || '—'} → {o.toToken || '—'}</span>
+                      <span className="tag-row-sub">{String(o.type || 'order').toUpperCase()} · {o.status === 'active' ? (fa ? 'فعال' : 'active') : o.status === 'paused' ? (fa ? 'متوقف' : 'paused') : (o.status || '')}{o.runsDone ? ` · ${o.runsDone} ${fa ? 'اجرا' : 'runs'}` : ''}</span>
+                    </span>
+                    <span className="tag-row-end">{tagFmtTime(o.createdAt)}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+
+            {Array.isArray(histData.operations) && histData.operations.length ? (
+              <>
+                <div className="tag-section">{fa ? 'عملیات‌ها' : 'Operations'}</div>
+                {histData.operations.slice(0, 8).map((op, i) => (
+                  <div key={op.id || i} className="tag-row" style={{ cursor: 'default' }}>
+                    <span className="tag-row-glyph" aria-hidden="true">⌁</span>
+                    <span className="tag-row-copy">
+                      <span className="tag-row-title">{op.type || op.kind || op.title || (fa ? 'عملیات' : 'Operation')}</span>
+                      <span className="tag-row-sub">{String(op.title || op.summary || op.content || '').slice(0, 70)}</span>
+                    </span>
+                    <span className="tag-row-end">{tagFmtTime(op.at || op.createdAt)}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+
+            {!seasons.length && !storedOrders.length && !(Array.isArray(histData.operations) && histData.operations.length) ? (
+              <div className="tag-empty">
+                <span className="tag-empty-glyph" aria-hidden="true">⌁</span>
+                <span className="tag-empty-title">{fa ? 'فعالیتی ثبت نشده' : 'Nothing yet'}</span>
+                <span className="tag-empty-sub">{fa ? 'هرچه با هوش مصنوعی انجام شود، اینجا ثبت می‌شود.' : 'Everything you do with the AI lands here.'}</span>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* ── MORE: the old menubar as minimal rows + links back to the app ── */}
+        {aiTab === 'more' ? (
+          <section className="tag-view" data-testid="tag-view-more">
+            <div className="tag-view-head">
+              <div>
+                <h2>{fa ? 'بیشتر' : 'More'}</h2>
+                <span className="tag-view-sub">{fa ? 'عملیات، تاریخچه و تنظیمات هوش' : 'Operations, history & intelligence'}</span>
+              </div>
+            </div>
+
+            <button type="button" className="tag-row" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
+              <span className="tag-row-glyph" aria-hidden="true">⌁</span>
+              <span className="tag-row-copy">
+                <span className="tag-row-title">{opsText('ops.aria', locale)}</span>
+                <span className="tag-row-sub">{fa ? 'مونیتور، سفارش و خودکارسازی' : 'Monitors, orders & automations'}</span>
+              </span>
+              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+            </button>
+            <button type="button" className="tag-row" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
+              <span className="tag-row-glyph" aria-hidden="true">✦</span>
+              <span className="tag-row-copy">
+                <span className="tag-row-title">{opsText('hist.title', locale)}</span>
+                <span className="tag-row-sub">{fa ? 'سشن‌ها و گفتگوهای قبلی' : 'Past seasons & conversations'}</span>
+              </span>
+              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+            </button>
+            <button type="button" className="tag-row" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
+              <span className="tag-row-glyph" aria-hidden="true">◉</span>
+              <span className="tag-row-copy">
+                <span className="tag-row-title">{opsText('menu.multiAi', locale)}</span>
+                <span className="tag-row-sub">{fa ? 'مدل‌ها، اجماع و اعتماد پاسخ‌ها' : 'Models, consensus & confidence'}</span>
+              </span>
+              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+            </button>
+            <button type="button" className="tag-row" data-testid="intent-ai-ecosystem" onClick={() => openEcosystem('agent')}>
+              <span className="tag-row-glyph" aria-hidden="true">⬡</span>
+              <span className="tag-row-copy">
+                <span className="tag-row-title">{opsText('eco.menu', locale)}</span>
+                <span className="tag-row-sub">{fa ? 'ایجنت‌ها و استراتژی‌های ثبت‌شده' : 'Registered agents & strategies'}</span>
+              </span>
+              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+            </button>
+            <button type="button" className="tag-row" onClick={() => openPanel('status')}>
+              <span className="tag-row-glyph" aria-hidden="true">◍</span>
+              <span className="tag-row-copy">
+                <span className="tag-row-title">{fa ? 'وضعیت سیستم' : 'System status'}</span>
+                <span className="tag-row-sub">{fa ? 'موتور، ابزارها و اتصال سرور' : 'Engine, tools & server link'}</span>
+              </span>
+              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+            </button>
+
+            <div className="tag-section">{fa ? 'اپلیکیشن' : 'App'}</div>
+            {[
+              { to: '/', title: fa ? 'بازار' : 'Market', sub: fa ? 'قیمت‌ها و جریان بازار' : 'Prices & market flow', glyph: '◈' },
+              { to: '/portfolio', title: fa ? 'پرتفوی' : 'Portfolio', sub: fa ? 'دارایی‌ها و عملکرد' : 'Holdings & performance', glyph: '▤' },
+              { to: '/wallet', title: fa ? 'کیف پول' : 'Wallet', sub: fa ? 'موجودی و تراکنش‌ها' : 'Balances & transactions', glyph: '◎' },
+              { to: '/swap', title: fa ? 'سواپ' : 'Swap', sub: fa ? 'تبادل توکن' : 'Token exchange', glyph: '⇄' }
+            ].map((r) => (
+              <button key={r.to} type="button" className="tag-row" onClick={() => { try { navigate(r.to); } catch { /* router ready */ } }}>
+                <span className="tag-row-glyph" aria-hidden="true">{r.glyph}</span>
+                <span className="tag-row-copy">
+                  <span className="tag-row-title">{r.title}</span>
+                  <span className="tag-row-sub">{r.sub}</span>
+                </span>
+                <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
+              </button>
+            ))}
+          </section>
+        ) : null}
       </div>
+
+      {/* ── Bottom tabs: chat · agents · activity · more ──────────────────── */}
+      <nav className="tag-tabbar" aria-label={fa ? 'تب‌های دستیار' : 'Assistant tabs'}>
+        <button type="button" className="tag-tab" data-active={aiTab === 'chat'} onClick={() => setAiTab('chat')}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+          <span className="tag-tab-label">{fa ? 'چت' : 'Chat'}</span>
+        </button>
+        <button type="button" className="tag-tab" data-active={aiTab === 'agents'} onClick={() => setAiTab('agents')} data-testid="tag-tab-agents">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+            <rect x="9" y="9" width="6" height="6" />
+            <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+          </svg>
+          {agentActiveCount > 0 ? <span className="tag-tab-badge" aria-hidden="true" /> : null}
+          <span className="tag-tab-label">{fa ? 'ایجنت‌ها' : 'Agents'}</span>
+        </button>
+        <button type="button" className="tag-tab" data-active={aiTab === 'activity'} onClick={() => setAiTab('activity')}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+          <span className="tag-tab-label">{fa ? 'فعالیت' : 'Activity'}</span>
+        </button>
+        <button type="button" className="tag-tab" data-active={aiTab === 'more'} onClick={() => setAiTab('more')}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" />
+          </svg>
+          <span className="tag-tab-label">{fa ? 'بیشتر' : 'More'}</span>
+        </button>
+      </nav>
 
       {drawerOpen ? (
         <div className="iaos-overlay" role="dialog" aria-modal="true" aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
