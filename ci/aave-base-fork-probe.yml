@@ -56,6 +56,13 @@ jobs:
           chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
           "$HOME/.foundry/bin/anvil" --version
 
+      - name: Lockfile platform guard (before npm ci)
+        # Same step ci/build-apk.sh runs first: ganache's shrinkwrapped lockfile
+        # pins macOS-only fsevents as a REQUIRED dependency, which makes `npm ci`
+        # die with EBADPLATFORM on every Linux runner. The guard flips that one
+        # entry to optional, in place, idempotently.
+        run: node ci/lock-platform-guard.mjs
+
       - name: Install dependencies (ethers + vite, used by the probe)
         run: npm ci --no-audit --no-fund
 
