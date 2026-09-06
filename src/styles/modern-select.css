@@ -179,7 +179,6 @@
   padding: 7px 9px;
   gap: 8px;
   border-radius: 14px;
-  gap: 8px;
 }
 .modern-select--compact .modern-select-icon {
   width: 34px;
@@ -187,13 +186,6 @@
   flex-basis: 34px;
   border-radius: 10px;
 }
-.modern-select--compact .modern-select-chevron {
-  width: 26px;
-  height: 26px;
-  flex-basis: 26px;
-  border-radius: 8px;
-}
-.modern-select--compact .modern-select-chevron svg { width: 12px; height: 12px; }
 .modern-select--compact .modern-select-icon .coin-logo,
 .modern-select--compact .modern-select-icon .tok-icon {
   width: 34px !important;
