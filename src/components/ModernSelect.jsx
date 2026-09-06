@@ -2,94 +2,62 @@ import { useEffect, useMemo, useState } from 'react';
 import Sheet from './Sheet';
 import CoinLogo from './CoinLogo';
 import TokenIcon from '../lib/tokenIcon.jsx';
+import AssetIcon from './AssetIcon';
 import '../styles/modern-select.css';
 
-function hueFor(symbol) {
-  const s = String(symbol ?? '?');
-  let h = 0;
-  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return h;
-}
-
-function FallbackIcon({ symbol, size = 42 }) {
-  const hue = hueFor(symbol);
-  return (
-    <span
-      className={size <= 36 ? 'modern-select-fallback' : 'modern-select-fallback'}
-      style={{
-        width: size,
-        height: size,
-        background: `linear-gradient(140deg, hsl(${hue} 70% 46%), hsl(${(hue + 42) % 360} 68% 36%))`,
-        borderRadius: size <= 36 ? 10 : 12,
-        fontSize: size <= 36 ? 10 : 11,
-      }}
-      aria-hidden="true"
-    >
-      {String(symbol || '?').slice(0, 3).toUpperCase()}
-    </span>
-  );
-}
-
-function OptFallback({ symbol }) {
-  const hue = hueFor(symbol);
-  return (
-    <span
-      className="modern-select-opt-fallback"
-      style={{
-        background: `linear-gradient(140deg, hsl(${hue} 70% 46%), hsl(${(hue + 42) % 360} 68% 36%))`,
-      }}
-      aria-hidden="true"
-    >
-      {String(symbol || '?').slice(0, 3).toUpperCase()}
-    </span>
-  );
-}
-
-function renderTriggerIcon(opt, compact) {
-  if (!opt) return <FallbackIcon symbol="?" size={compact ? 36 : 42} />;
+/**
+ * ─── HOW AN OPTION GETS ITS PICTURE ─────────────────────────────────────────
+ * In priority order:
+ *   iconNode          caller-rendered element
+ *   coin              a market coin → CoinLogo (CoinGecko artwork, monogram fallback)
+ *   base + quote      a market pair → AssetIcon pair (EUR/USD, XAU/USD, AAPL/USD)
+ *   symbol [+ chain]  a curated token / currency → AssetIcon (offline SVG)
+ *   chain             a network → AssetIcon network mark
+ *   token             an address-keyed token → TokenIcon (TrustWallet, CDN),
+ *                     with the offline artwork as the LAST resort, never first
+ *   iconUrl           a plain URL
+ *   otherwise         the deterministic monogram
+ *
+ * `symbol`/`chain`/`base` are the offline path. They render from vendored
+ * SVG, so a picker looks the same on a phone that cannot reach any icon CDN —
+ * which is where the «توکن عکس نداره» reports came from.
+ */
+function renderIcon(opt, px) {
+  if (!opt) return <AssetIcon symbol="?" size={px} />;
   if (opt.iconNode) return opt.iconNode;
-  if (opt.coin) {
-    return <CoinLogo coin={opt.coin} px={compact ? 36 : 42} />;
-  }
-  if (opt.token) {
-    return <TokenIcon token={opt.token} chainId={opt.chainId} size={compact ? 36 : 42} />;
-  }
+  if (opt.coin) return <CoinLogo coin={opt.coin} px={px} />;
+  if (opt.base) return <AssetIcon base={opt.base} quote={opt.quote} size={px} />;
+  if (opt.symbol) return <AssetIcon symbol={opt.symbol} chain={opt.chain} size={px} />;
+  if (opt.chain != null) return <AssetIcon chain={opt.chain} size={px} />;
+  if (opt.token) return <OfflineFirstToken token={opt.token} chainId={opt.chainId} px={px} />;
   if (opt.iconUrl) {
     return (
       <img
         src={opt.iconUrl}
         alt=""
-        width={compact ? 36 : 42}
-        height={compact ? 36 : 42}
-        style={{ borderRadius: compact ? 10 : 12, objectFit: 'cover' }}
+        width={px}
+        height={px}
+        style={{ borderRadius: Math.round(px * 0.28), objectFit: 'cover' }}
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={(e) => { e.currentTarget.style.display = 'none'; }}
       />
     );
   }
-  return <FallbackIcon symbol={opt.label || opt.symbol || '?'} size={compact ? 36 : 42} />;
+  return <AssetIcon symbol={opt.label || '?'} size={px} />;
 }
 
-function renderOptIcon(opt) {
-  if (opt.iconNode) return opt.iconNode;
-  if (opt.coin) return <CoinLogo coin={opt.coin} px={44} />;
-  if (opt.token) return <TokenIcon token={opt.token} chainId={opt.chainId} size={44} />;
-  if (opt.iconUrl) {
-    return (
-      <img
-        src={opt.iconUrl}
-        alt=""
-        width={44}
-        height={44}
-        style={{ borderRadius: 12, objectFit: 'cover' }}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-  return <OptFallback symbol={opt.label || opt.symbol || '?'} />;
+/*
+ * A token option that carries an address. Curated bridge tokens (USDT, USDC)
+ * have offline artwork; use it and skip the network entirely. Anything else
+ * goes through the address-keyed resolver so a look-alike symbol can never
+ * borrow the real token's face.
+ */
+function OfflineFirstToken({ token, chainId, px }) {
+  const sym = String(token?.symbol || '').toUpperCase();
+  const curated = ['USDT', 'USDC', 'DAI', 'WETH', 'WBTC', 'BTCB', 'WBNB'].includes(sym);
+  if (curated) return <AssetIcon symbol={sym} chain={chainId} size={px} />;
+  return <TokenIcon token={token} chainId={chainId} size={px} />;
 }
 
 /**
@@ -97,14 +65,14 @@ function renderOptIcon(opt) {
  *
  * Props
  *  - value: currently selected value (matched against option.value)
- *  - onChange: (value) => void
- *  - options: Array<{ value, label, sublabel?, meta?, coin?, token?, chainId?, iconNode?, iconUrl? }>
- *  - title: sheet title (shown at top)
- *  - placeholder: text when nothing selected
- *  - searchable: boolean (default true, auto-hides when options < 6)
- *  - compact: boolean — tighter trigger for side-by-side bridge rows
- *  - disabled: boolean
- *  - testId: string for e2e
+ *  - onChange: (value, option) => void
+ *  - options: Array<{ value, label, sublabel?, meta?, change?, coin?, token?, chainId?,
+ *                     symbol?, chain?, base?, quote?, iconNode?, iconUrl? }>
+ *  - title: sheet title
+ *  - placeholder: text when nothing is selected
+ *  - searchable: boolean (default true; the box appears from 6 options up)
+ *  - compact: boolean — tighter trigger for the side-by-side bridge rows
+ *  - disabled, testId
  */
 export default function ModernSelect({
   value,
@@ -130,7 +98,7 @@ export default function ModernSelect({
     const s = q.trim().toLowerCase();
     if (!s) return options;
     return options.filter((o) => {
-      const hay = `${o.label ?? ''} ${o.sublabel ?? ''} ${o.value ?? ''} ${o.meta ?? ''}`.toLowerCase();
+      const hay = `${o.label ?? ''} ${o.sublabel ?? ''} ${o.value ?? ''} ${o.meta ?? ''} ${o.symbol ?? ''} ${o.base ?? ''} ${o.quote ?? ''}`.toLowerCase();
       return hay.includes(s);
     });
   }, [options, q]);
@@ -140,6 +108,7 @@ export default function ModernSelect({
   }, [open]);
 
   const showSearch = searchable && options.length > 5;
+  const triggerPx = compact ? 34 : 40;
 
   return (
     <div className={`modern-select ${compact ? 'modern-select--compact' : ''}`} data-testid={testId}>
@@ -152,7 +121,7 @@ export default function ModernSelect({
         disabled={disabled}
       >
         <span className="modern-select-icon" aria-hidden="true">
-          {selected ? renderTriggerIcon(selected, compact) : <FallbackIcon symbol="?" size={compact ? 36 : 42} />}
+          {renderIcon(selected, triggerPx)}
         </span>
 
         <span className="modern-select-text">
@@ -224,7 +193,7 @@ export default function ModernSelect({
                   }}
                 >
                   <span className="modern-select-opt-icon" aria-hidden="true">
-                    {renderOptIcon(opt)}
+                    {renderIcon(opt, 42)}
                   </span>
 
                   <span className="modern-select-opt-text">
