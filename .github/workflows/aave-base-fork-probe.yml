@@ -44,10 +44,17 @@ jobs:
 
       - name: Install Foundry (anvil)
         run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          export PATH="$HOME/.foundry/bin:$PATH"
-          foundryup
-          anvil --version
+          # anvil straight from the official GitHub release tarball — the same
+          # artifact foundryup installs, without depending on the third-party
+          # installer domain foundry.paradigm.xyz (which intermittently fails
+          # to serve the script, seen as exit 127 on `foundryup`).
+          set -euo pipefail
+          VER=v1.8.1
+          mkdir -p "$HOME/.foundry/bin"
+          curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/${VER}/foundry_${VER}_linux_amd64.tar.gz" -o /tmp/foundry.tar.gz
+          tar -xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
+          "$HOME/.foundry/bin/anvil" --version
 
       - name: Install dependencies (ethers + vite, used by the probe)
         run: npm ci --no-audit --no-fund
