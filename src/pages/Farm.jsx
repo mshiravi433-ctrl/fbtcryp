@@ -10,7 +10,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
-import { IconPools, IconShield, IconSwap } from '../components/Icons';
+import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { TOKENS } from '../lib/chains';
 import {
@@ -212,24 +212,42 @@ function ProtocolStatusCard({ protocol, t }) {
 
   return (
     <motion.section className="card card-rgb card-glow-cyan farm-protocol-card" variants={riseIn} initial="hidden" animate="show">
-      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
-        <div className="row" style={{ gap: 10, alignItems: 'center', minWidth: 0 }}>
-          <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconShield width={22} height={22} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>{t('farm.protocolConnected')}</div>
-            <div className="muted" style={{ fontSize: 11.5, margin: '2px 0 0' }}>
-              {FARM_PROTOCOL.name} · {t('farm.protocolMode')}
-            </div>
-          </div>
-        </div>
+      <div className="farm-protocol-head">
+        <span className="farm-protocol-icon" aria-hidden="true">
+          <IconShield width={20} height={20} />
+        </span>
+        <span className="farm-protocol-id" style={{ minWidth: 0 }}>
+          <span className="farm-protocol-title">{t('farm.protocolConnected')}</span>
+          <span className="farm-protocol-sub">{FARM_PROTOCOL.name}</span>
+        </span>
         <span className={`pill ${status === 'ACTIVE' ? 'pill-neutral' : status === 'UNAVAILABLE' ? 'pill-down' : 'pill-rgb'}`}>{statusLabel}</span>
       </div>
 
+      <div className="farm-protocol-readout">
+        <span className="pill pill-neutral"><IconLock width={12} height={12} /> {t('farm.readOnly')}</span>
+        <span className="farm-protocol-live" aria-hidden="true">
+          <i />
+          <span className="faint">{t('farm.protocolMode')}</span>
+        </span>
+      </div>
+
       <div className="farm-protocol-meta">
-        <div><span className="faint">{t('farm.protocolSource')}</span><span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span></div>
-        <div><span className="faint">{t('farm.protocolPools')}</span><span className="mono">{protocol?.poolCount ?? 0}</span></div>
-        <div><span className="faint">{t('farm.protocolLastSync')}</span><span className="mono">{updated}</span></div>
-        <div><span className="faint">{t('farm.protocolCapabilities')}</span><span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span></div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolSource')}</span>
+          <span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span>
+        </div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolPools')}</span>
+          <span className="mono">{protocol?.poolCount ?? 0}</span>
+        </div>
+        <div className="farm-protocol-meta-cell">
+          <span className="faint">{t('farm.protocolLastSync')}</span>
+          <span className="mono">{updated}</span>
+        </div>
+        <div className="farm-protocol-meta-cell farm-protocol-meta-cell--wide">
+          <span className="faint">{t('farm.protocolCapabilities')}</span>
+          <span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span>
+        </div>
       </div>
       {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{protocol.error}</p>}
     </motion.section>

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import CoinLogo from './CoinLogo';
+import FlameIcon from './FlameIcon';
 import TokenIcon from '../lib/tokenIcon';
 import Sparkline from './Sparkline';
 import { fmtPct, fmtPrice } from '../lib/format';
@@ -39,7 +40,9 @@ export default function TopMovers({
           <p className="section-label tm-title">{title}</p>
           {subtitle ? <p className="faint tm-sub">{subtitle}</p> : null}
         </div>
-        <span className="tm-flame" aria-hidden="true">🔥</span>
+        <span className="tm-flame" aria-hidden="true">
+          <FlameIcon size={20} />
+        </span>
       </div>
 
       <div className="tm-scroll" role="list">
