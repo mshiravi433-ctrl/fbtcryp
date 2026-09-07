@@ -283,6 +283,17 @@ baseline (بدون تغییرات این شاخه) روی همان سویی‌ت
 `POST /referral/bind`، پیش‌فرض سیگنال‌ها، guided flow، گارد واژگان arcade، گارد پلتفرم
 `package-lock` روی linux، و فهرست زنجیره‌های cross-chain.
 
+**درباره‌ی دو شکست guided flow — عمداً دنبال نشدند.** آن دو
+(`a vague request opens the guided flow task question with chips` و
+`answering the task chip advances the flow…`) درباره‌ی chipهایی است که کار
+نمی‌کنند، یعنی ظاهراً همان شکایت «بعضی دکمه‌ها کار نمی‌کنه». ولی در
+`IntentAIPanel` هستند، و `IntentAIPanel` فقط از `IntentAIRoute` import می‌شود —
+فایلی که **هیچ‌کس در `src/` آن را import نمی‌کند** (تنها ارجاع، یک کامنت است).
+`App.jsx:354-355` مسیر `/intent` را به `IntentAIUnified` می‌دهد و `/intent-ai`
+را به آن redirect می‌کند. پس آن chipها برای کاربر کد مرده‌اند و رفعشان چیزی
+را که کاربر می‌بیند تغییر نمی‌داد. دکمه‌های مرده‌ی واقعی در
+`IntentAIUnified` بودند و همه رفع شدند.
+
 ---
 
 ## ۵) چه چیزی عمداً انجام نشد
