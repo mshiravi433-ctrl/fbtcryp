@@ -89,6 +89,13 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
 
     (async () => {
       try {
+        /* lightweight-charts reads window.matchMedia / ResizeObserver at
+           construction (device-pixel-ratio tracking). A stripped WebView or a
+           headless DOM without them must fall through to the recharts candle
+           instead of throwing from inside a canvas binding. */
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function' || typeof ResizeObserver === 'undefined') {
+          throw new Error('CHART_ENV_UNSUPPORTED');
+        }
         const lib = await import('lightweight-charts');
         if (dead || !hostRef.current || candles.length < 2) return;
         const { createChart, CandlestickSeries, LineSeries, CrosshairMode } = lib;

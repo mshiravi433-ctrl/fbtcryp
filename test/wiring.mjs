@@ -6274,12 +6274,13 @@ export default function run() {
 
       /*
        * ─── PLACEMENT ──────────────────────────────────────────────────────
-       * Real tab only. Recommending a $79 device to protect virtual practice
-       * credits would be absurd and would read as a plain advert.
+       * The Shop page only. The wallet screen used to repeat the same card
+       * at the bottom of the real tab; the owner asked for the duplicate to
+       * go, so the hardware pitch now lives where things are actually sold.
        */
-      t('the card is wired into the wallet screen', /HardwareWalletCard/.test(wallet));
-      t("...on the real tab, not over practice credits",
-        /\{tab === 'real' && <HardwareWalletCard \/>\}/.test(code(wallet)));
+      const shop = read('src/pages/Shop.jsx');
+      t('the card is wired into the shop screen', /HardwareWalletCard/.test(shop));
+      t('...and no longer duplicated on the wallet screen', !/HardwareWalletCard/.test(wallet));
 
       /* Both env vars documented, or nobody can ever turn this on. */
       const envx = read('.env.example');
@@ -12959,11 +12960,19 @@ export default function run() {
        read-only/unavailable notices remain, driven by the registry. */
     t('the tab shows READ_ONLY / UNAVAILABLE from the registry, and no venue card',
       /readOnlyNotice/.test(tab) && /unavailableNotice/.test(tab) && !/futures-venue-card/.test(tab));
-    /* The chart block was removed on instruction («نمودار … وجود ندارد — حذف
-       کن»): the tab renders no chart at all, so it must neither read candles
-       nor carry any saved/demo series. */
-    t('the tab draws NO chart: no candles read, no chart block, no saved series',
-      !/getFuturesCandles\(/.test(tab) && !/TrendChart|futures-chart|chartUnavailable/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
+    /* The chart is BACK on instruction (2026-09-07: «هیچکدام نموداری ندارند
+       … لاقل یک کدام را بزار»): a TradingView candlestick fed by the venue's
+       own candles through the shared FuturesMarketChart. The tab itself still
+       reads no candles and carries no saved/demo series — the component owns
+       the read and says "unavailable" instead of drawing a flat line. */
+    const chartCmp = existsSync('src/components/FuturesMarketChart.jsx') ? read('src/components/FuturesMarketChart.jsx') : '';
+    t('the shared futures chart exists, reads the venue candle route and renders TradingView candles',
+      /getFuturesCandles\(/.test(chartCmp) && /import\('\.\/TradingChart'\)/.test(chartCmp) && /chartUnavailable/.test(chartCmp));
+    t('the shared futures chart never fabricates a series (no demo/offline candles, no flat line)',
+      !/offlineDydxCandles|ostiumDemoSeries|chartDemo|candlesOffline|synthetic/i.test(chartCmp) && /setCandles\(\[\]\)/.test(chartCmp));
+    t('the on-chain tab mounts the chart on the selected market and reads no candles itself',
+      /<FuturesMarketChart/.test(tab) && /provider=\{market\.providerId\}/.test(tab) && /market=\{market\.marketId\}/.test(tab)
+      && !/getFuturesCandles\(/.test(tab) && !/offlineDydxCandles|ostiumDemoSeries/.test(tab));
     t('the tab reports every hash and rejection back to /verify',
       (tab.match(/verifyFutures\(/g) || []).length >= 3 && /status: 'REJECTED'/.test(tab));
     t('the confirmation preview shows fee, risk, liquidation distance and route from /prepare',
@@ -13025,11 +13034,12 @@ export default function run() {
       !/ostiumOffline|offlineOstium/.test(ostLib) && /pairs: \[\],\s*live: false,\s*generatedAt: null,\s*unavailable: true/.test(ostLib));
     const ostPage = read('src/pages/Ostium.jsx');
     const dydxPage = read('src/pages/Dydx.jsx');
-    /* The chart was REMOVED on instruction («نمودار افق جهانی وجود ندارد —
-       حذف کن»): the page renders no chart block, reads no candles and — as
-       before — carries no synthetic series that could pretend to be one. */
-    t('the Ostium page draws NO chart: no candle read, no chart block, no synthetic series',
-      !/ostiumDemoSeries|chartDemo/.test(ostPage) && !/getFuturesCandles\(/.test(ostPage) && !/TrendChart|OstiumChart|ostium-chart|sessionPoints/.test(ostPage));
+    /* The chart is BACK on instruction (2026-09-07): the same shared
+       FuturesMarketChart, on the `ostium` provider's own keyless OHLC. The
+       page still reads no candles itself and carries no synthetic series. */
+    t('the Ostium page mounts the shared venue chart and carries no synthetic series',
+      /<FuturesMarketChart/.test(ostPage) && /provider="ostium"/.test(ostPage) && /market=\{market\.pairId\}/.test(ostPage)
+      && !/ostiumDemoSeries|chartDemo/.test(ostPage) && !/getFuturesCandles\(/.test(ostPage) && !/TrendChart|sessionPoints/.test(ostPage));
     t('the dYdX page has no "sample chart" path left', !/chartDemo|candlesOffline|marketsOffline/.test(dydxPage));
     /*
      * THE DEPLOY FIX (2026-09-03): public/vendor/ is gitignored, and Vercel

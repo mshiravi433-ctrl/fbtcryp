@@ -1,3 +1,47 @@
+# Unreleased — Loan hero & "how it works" restyled, Ecosystem status probes from the browser, hardware pitch off the wallet, charts back on On-Chain and Global Horizon
+
+Five reports in one round:
+
+- **Loan — «وام‌دهی و وام‌گیری غیرمتمرکز» is a modern hero** (`src/pages/Loan.jsx`):
+  borderless glass card, deeper gradient wash, blurred glow orbs, gradient
+  title text and a stronger icon badge; the three stat tiles beneath it lost
+  their 1px lines for frosted surfaces.
+- **Loan — «چطور کار می‌کند» has no white border any more**: the collapsible
+  used `1px solid var(--line)` around the box and a vertical `var(--line)`
+  connector between steps — the white hairlines reported at the margin. Both
+  are gone. The box is now a borderless gradient surface that deepens when
+  open, and each step is its own soft tile with a numbered icon badge.
+  `loan.stepsLabel` added (fa/en).
+- **Ecosystem — «۰ از ۵ فعال / کاهش عملکرد» for DEX sources and bridges**
+  (`src/lib/ecosystemData.js`, `src/pages/Ecosystem.jsx`): the card relied
+  solely on the server probe, and on the serverless host the instance that
+  answers `/providers/status` is often not the one that ran the probe, while
+  datacenter egress to some aggregators is throttled — so the card sat at 0/N
+  even though the swap screen in the same browser was quoting through those
+  very providers. The browser now runs its own tiny quote per provider through
+  the exact endpoints the swap/bridge screens use (direct upstream first for
+  the keyless aggregators, same-origin routes for the rest), and the two
+  evidence sets are merged (`mergeProbeEvidence`): a provider is OPERATIONAL
+  when either path returned a real quote. Nothing is signed or stored, and no
+  status is invented — an unreachable provider still reads DEGRADED. A new
+  `PARTIAL` row state («فعال (جزئی)») replaces the misleading «کاهش عملکرد» when
+  some, but not all, sources answered.
+- **Wallet — hardware-wallet section removed** (`src/pages/Wallet.jsx`): the
+  block from «کلیدت را جایی نگه دار…» to «هیچ‌وقت دست‌دوم نخر…» was
+  `HardwareWalletCard`, already rendered on the Shop page. The wallet no longer
+  duplicates it; `test/wiring.mjs` now pins the card to Shop and asserts it is
+  absent from Wallet.
+- **Futures → On-Chain and Stocks → Global Horizon have a chart again**
+  (`src/components/FuturesMarketChart.jsx`): a TradingView (lightweight-charts)
+  candlestick with 15m/1h/4h/1d, fed by the existing `/api/v1/futures/candles`
+  route — Velocity's public Data API for crypto, the keyless Ostium OHLC API for
+  forex/commodities/indices/stocks. Two bounded retries, then an honest
+  «نمودار در دسترس نیست»; never a flat or synthetic line. `TradingChart` now
+  falls back to the recharts candle when `matchMedia`/`ResizeObserver` are
+  missing (stripped WebViews, headless DOM) instead of throwing from inside the
+  canvas binding. `futures.res.*` added (fa/en); wiring + on-chain UI probes
+  updated to pin the new design.
+
 # Unreleased — Farm: a 2 × 2 protocol readout, two horizontal rails, and one uniform yield-center box
 
 Four layout reports on `/farm`, every one of them about a box that had grown a

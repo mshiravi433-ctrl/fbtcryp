@@ -1216,24 +1216,59 @@ function HowItWorks({ t }) {
   ];
 
   return (
-    <div style={{
-      background: 'var(--surface-1)',
-      border: '1px solid var(--line)',
-      borderRadius: 14, overflow: 'hidden',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-    }}>
+    <div
+      data-testid="loan-how-it-works"
+      style={{
+        background: open
+          ? 'linear-gradient(160deg, rgba(59,130,246,0.10) 0%, rgba(139,92,246,0.08) 55%, rgba(6,182,212,0.06) 100%)'
+          : 'linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))',
+        border: 'none',
+        borderRadius: 20, overflow: 'hidden',
+        boxShadow: open ? '0 18px 44px rgba(0,0,0,0.28)' : '0 6px 20px rgba(0,0,0,0.14)',
+        transition: 'background 0.3s ease, box-shadow 0.3s ease',
+        position: 'relative',
+      }}
+    >
+      {open && (
+        <div style={{
+          position: 'absolute', top: -60, left: -40, width: 200, height: 200, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.22) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+      )}
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '15px 18px', background: 'transparent',
-          cursor: 'pointer', gap: 8,
+          width: '100%', padding: '15px 16px', background: 'transparent', border: 'none',
+          cursor: 'pointer', gap: 10, position: 'relative',
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text-1)' }}>{t('loan.howTitle')}</span>
-        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }}>
-          <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span style={{
+            width: 36, height: 36, borderRadius: 12, display: 'grid', placeItems: 'center', flexShrink: 0,
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.35), rgba(139,92,246,0.35))',
+            color: '#fff', boxShadow: '0 6px 16px rgba(99,102,241,0.30)',
+          }}>
+            <IconTrend width={18} height={18} />
+          </span>
+          <span style={{ textAlign: 'start' }}>
+            <span style={{ display: 'block', fontWeight: 800, fontSize: 14, color: 'var(--text-1)' }}>{t('loan.howTitle')}</span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+              {steps.length} {t('loan.stepsLabel', { defaultValue: 'قدم ساده' })}
+            </span>
+          </span>
+        </span>
+        <motion.span
+          animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.22 }}
+          style={{
+            width: 30, height: 30, borderRadius: 10, display: 'grid', placeItems: 'center',
+            background: 'rgba(255,255,255,0.07)', color: 'var(--text-2)', flexShrink: 0,
+          }}
+        >
+          <IconChevronRight width={16} height={16} />
         </motion.span>
       </button>
 
@@ -1242,36 +1277,43 @@ function HowItWorks({ t }) {
           <motion.div
             initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            style={{ overflow: 'hidden' }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden', position: 'relative' }}
           >
-            <div style={{ padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {steps.map((s, i) => (
-                <div key={s.key} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', position: 'relative' }}>
-                  {i !== steps.length - 1 && (
-                    <div style={{
-                      position: 'absolute', top: 40, bottom: -16, right: 18, width: 2,
-                      background: 'var(--line)', borderRadius: 2
-                    }} />
-                  )}
+                <motion.div
+                  key={s.key}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 * i, duration: 0.22 }}
+                  style={{
+                    display: 'flex', gap: 12, alignItems: 'flex-start',
+                    padding: '12px 12px', borderRadius: 14,
+                    background: 'rgba(255,255,255,0.04)',
+                  }}
+                >
                   <div style={{
-                    width: 38, height: 38, borderRadius: 12,
-                    background: `linear-gradient(135deg, ${s.color}22, ${s.color}11)`,
-                    border: `1px solid ${s.color}33`,
+                    width: 40, height: 40, borderRadius: 13, position: 'relative',
+                    background: `linear-gradient(135deg, ${s.color}33, ${s.color}14)`,
                     display: 'grid', placeItems: 'center', flexShrink: 0,
-                    color: s.color, zIndex: 1
+                    color: s.color, boxShadow: `0 6px 16px ${s.color}22`,
                   }}>
                     <s.Icon width={20} height={20} />
+                    <span style={{
+                      position: 'absolute', top: -6, insetInlineStart: -6,
+                      width: 18, height: 18, borderRadius: 9, fontSize: 10, fontWeight: 800,
+                      background: s.color, color: '#0b0f19', display: 'grid', placeItems: 'center',
+                    }}>{i + 1}</span>
                   </div>
-                  <div style={{ paddingTop: 2 }}>
-                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: 'var(--text-1)' }}>
+                  <div style={{ paddingTop: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 3, color: 'var(--text-1)' }}>
                       {t(`loan.${s.key}Title`)}
                     </div>
                     <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.7 }}>
                       {t(`loan.${s.key}Body`)}
                     </p>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </motion.div>
@@ -1298,16 +1340,18 @@ function HeroStats({ t }) {
           key={s.label}
           whileTap={{ scale: 0.96 }}
           style={{
-            flex: '1 1 0', padding: '12px 10px', borderRadius: 14, textAlign: 'center',
-            background: 'var(--surface-1)',
-            border: '1px solid var(--line)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            flex: '1 1 0', padding: '12px 10px', borderRadius: 16, textAlign: 'center',
+            background: 'rgba(255,255,255,0.06)',
+            border: 'none',
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.16)',
             display: 'flex', flexDirection: 'column', alignItems: 'center'
           }}
         >
           <div style={{
             width: 32, height: 32, borderRadius: 10, marginBottom: 8, display: 'grid', placeItems: 'center',
-            background: `linear-gradient(135deg, ${s.color}22, ${s.color}11)`,
+            background: `linear-gradient(135deg, ${s.color}33, ${s.color}12)`,
+            boxShadow: `0 4px 12px ${s.color}22`,
             color: s.color
           }}>
             <s.Icon width={18} height={18} />
@@ -1754,24 +1798,27 @@ export default function Loan() {
       <motion.div
         variants={riseIn} initial="hidden" animate="show"
         style={{
-          borderRadius: 20, overflow: 'hidden',
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(124,58,237,0.14) 50%, rgba(6,182,212,0.10) 100%)',
-          border: '1px solid rgba(255,255,255,0.09)',
-          padding: '18px 18px 14px',
+          borderRadius: 24, overflow: 'hidden',
+          background: 'linear-gradient(140deg, rgba(37,99,235,0.28) 0%, rgba(124,58,237,0.22) 48%, rgba(6,182,212,0.16) 100%)',
+          border: 'none',
+          boxShadow: '0 22px 54px rgba(37,99,235,0.22), inset 0 1px 0 rgba(255,255,255,0.10)',
+          padding: '20px 18px 16px',
           marginBottom: 14,
           position: 'relative',
         }}
       >
         <div style={{
           position: 'absolute', top: -40, right: -40,
-          width: 170, height: 170, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)',
+          width: 220, height: 220, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.42) 0%, transparent 70%)',
+          filter: 'blur(6px)',
           pointerEvents: 'none',
         }} />
         <div style={{
           position: 'absolute', bottom: -50, left: -30,
-          width: 130, height: 130, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(6,182,212,0.18) 0%, transparent 70%)',
+          width: 170, height: 170, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.30) 0%, transparent 70%)',
+          filter: 'blur(6px)',
           pointerEvents: 'none',
         }} />
 
@@ -1779,17 +1826,21 @@ export default function Loan() {
           <motion.div
             whileHover={{ rotate: 6, scale: 1.04 }}
             style={{
-              width: 46, height: 46, borderRadius: 14, display: 'grid', placeItems: 'center',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              boxShadow: '0 10px 28px rgba(99,102,241,0.45)',
+              width: 50, height: 50, borderRadius: 16, display: 'grid', placeItems: 'center',
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6 60%, #06b6d4)',
+              boxShadow: '0 12px 30px rgba(99,102,241,0.55), inset 0 1px 0 rgba(255,255,255,0.35)',
               flexShrink: 0, color: '#fff',
             }}
           >
             <IconPools width={22} height={22} />
           </motion.div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 16.5, lineHeight: 1.25 }}>{t('loan.heroTitle')}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{t('loan.heroSub')}</div>
+            <div style={{
+              fontWeight: 900, fontSize: 17.5, lineHeight: 1.25, letterSpacing: '-0.01em',
+              background: 'linear-gradient(90deg, #fff 0%, #c7d2fe 100%)',
+              WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+            }}>{t('loan.heroTitle')}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3, opacity: 0.85 }}>{t('loan.heroSub')}</div>
           </div>
         </div>
 

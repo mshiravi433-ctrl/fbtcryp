@@ -51,6 +51,7 @@ import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { registerMobileWalletAdapter, publicAppUrl, canUseMwa } from '../lib/solanaWallet.js';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
 import ModernSelect from '../components/ModernSelect';
+import FuturesMarketChart from '../components/FuturesMarketChart';
 
 /*
  * The on-chain engine drives EVERY venue whose order path this tab can build
@@ -705,6 +706,17 @@ export default function FuturesOnchain() {
                 searchable
                 testId="futures-market-select"
               />
+
+              {/* The price shape is the first thing read after choosing a
+                  market: real venue candles, or an honest "unavailable". */}
+              {market && (
+                <FuturesMarketChart
+                  provider={market.providerId}
+                  market={market.marketId}
+                  symbol={market.symbol}
+                  testId="futures-onchain-chart"
+                />
+              )}
 
               {market && (
                 <div className="row-between" style={{ margin: '12px 0' }}>
