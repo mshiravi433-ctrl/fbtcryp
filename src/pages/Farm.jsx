@@ -40,6 +40,14 @@ import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
  * See docs/defi/compound-v3-base.md.
  */
 import CompoundBaseUsdcPanel from '../components/Farm/CompoundBaseUsdcPanel';
+/*
+ * The third in-app DeFi execution surface: Aave v3 on Arbitrum One, native
+ * USDC only. Same contract as the two panels above — it renders itself only
+ * for that exact pool and returns null for everything else — with its OWN
+ * flag (AAVE_ARB_SUPPLY_ENABLED), so either chain can be switched off without
+ * touching the other. See docs/defi/aave-v3-arbitrum.md.
+ */
+import AaveArbUsdcPanel from '../components/Farm/AaveArbUsdcPanel';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -535,10 +543,14 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
           everywhere else, so this cannot move a CTA on any other pool. */}
       <AaveBaseUsdcPanel pool={pool} />
 
-      {/* Same, for Compound V3 · Base · USDC. The two matchers are mutually
-          exclusive (they test different `project` slugs), so at most one of
-          these panels can ever render for a given pool. */}
+      {/* Same, for Compound V3 · Base · USDC. The three matchers are mutually
+          exclusive (different `project` slugs, and the two Aave panels test
+          different `chain` slugs), so at most one of these panels can ever
+          render for a given pool. */}
       <CompoundBaseUsdcPanel pool={pool} />
+
+      {/* Same, for Aave V3 · Arbitrum One · USDC (native). */}
+      <AaveArbUsdcPanel pool={pool} />
 
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}

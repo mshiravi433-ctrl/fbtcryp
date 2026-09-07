@@ -179,6 +179,19 @@ export default defineConfig({
       VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
     }),
     /*
+     * In-app Aave v3 (Arbitrum/USDC) supply — the third execution adapter.
+     * Same deployment, different chain is still a different blast radius, so
+     * it gets its own flag and its own cap table rather than riding on the
+     * Base ones. Same inverted test: OFF unless exactly 'true'.
+     * See src/lib/features.js and docs/defi/aave-v3-arbitrum.md.
+     */
+    __AAVE_ARB_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_ARBITRUM_SUPPLY === 'true'),
+    __AAVE_ARB_BUILD_ENV__: JSON.stringify({
+      VITE_AAVE_ARB_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_ARB_SUPPLY_ALLOWLIST ?? '',
+      VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX ?? '',
+      VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL ?? ''
+    }),
+    /*
      * Version string, read from package.json at build time.
      *
      * Settings used to print a hardcoded 'v1.0.0' while the app shipped 1.5.x.
