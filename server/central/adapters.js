@@ -24,6 +24,9 @@ import { listGoals } from '../financialGoals.js';
 import { crossChainHealth, getQuote as ccGetQuote, supportedChains } from '../crossChain.js';
 import { getTransaction as ccGetTransaction, listTransactions as ccListTransactions, crossChainStoreHealth } from '../crossChainStore.js';
 import { registerModule } from './registry.js';
+import { listCoverages, getCoverage as insuranceGetCoverage, dashboard as insuranceDashboard } from '../insurance/coverage.js';
+import { aggregateQuotes as insuranceAggregateQuotes } from '../insurance/service.js';
+import { listProviders as insuranceProviders } from '../insurance/provider-registry.js';
 import { publish } from './eventBus.js';
 import { withTimeout } from './errorEngine.js';
 
@@ -514,6 +517,43 @@ export function installAdapters() {
       read: async () => live({ channels: ['push', 'telegram'], note: 'delivery is handled by the push/telegram services' }),
       healthCheck: async () => ({ ok: true, status: 'READ_ONLY' }),
       capabilities: () => ({ status: 'READ_ONLY', operations: ['read'] })
+    }
+  });
+
+  /* ── insurance / protection (FBT Insurance OS §37/§55) ─────────────────── */
+  const insuranceRead = async () => {
+    try {
+      const providers = insuranceProviders().map((p) => ({ providerId: p.providerId, name: p.name, healthStatus: p.healthStatus, settlementModel: p.settlementModel }));
+      return live({ providers, module: 'insurance', autoExecuteAllowed: false, sandboxOnly: true, note: 'full coverage/risk lives under /api/insurance' });
+    } catch (err) { return unavailable(String(err?.message || 'INSURANCE_READ_FAILED').slice(0, 120)); }
+  };
+  const insuranceHealth = async () => {
+    try { const p = insuranceProviders(); return p.length ? { ok: true, status: 'AVAILABLE', providers: p.length } : { ok: false, status: 'DEGRADED', reason: 'NO_PROVIDERS' }; }
+    catch { return { ok: false, status: 'DEGRADED', reason: 'HEALTH_ERROR' }; }
+  };
+  registerModule({
+    id: 'protection', label: 'Insurance / Protection', permissionLevel: 'EXECUTE',
+    dependsOn: ['wallet'],
+    declares: ['capability', 'tool', 'state', 'health', 'read', 'quote', 'prepare', 'verify', 'error', 'recovery', 'events', 'permissions'],
+    operations: {
+      read: insuranceRead,
+      quote: async (input) => {
+        const res = await insuranceAggregateQuotes(input || {});
+        if (!res.ok) return { ok: false, status: 'UNAVAILABLE', error: 'NO_ELIGIBLE_PROTECTION', detail: res.reason };
+        return live({ quotes: res.quotes.map((q) => ({ quoteId: q.quoteId, provider: q.provider, coverageAmountUsd: q.coverageAmountUsd, premiumUsd: q.premiumUsd, totalCostUsd: q.totalCostUsd, protectionType: q.protectionType, termsHash: q.termsHash })) });
+      },
+      prepare: async (input) => {
+        // Hand-off only: never signs, never broadcasts (§54). Purchase-intent is
+        // created under /api/insurance/purchase-intent with idempotency.
+        return live({ prepared: true, handOff: true, signer: 'user-wallet', detail: 'call POST /api/insurance/purchase-intent to obtain the prepared payload' });
+      },
+      execute: async () => ({ ok: false, status: 'POLICY', error: 'UNSIGNED_EXECUTION_ATTEMPT', detail: 'coverage is purchased by the user wallet; the AI never auto-executes (§15)' }),
+      verify: async (input) => {
+        const cov = await insuranceGetCoverage(String(input?.coverageId || ''), String(input?.wallet || '').toLowerCase() || undefined).catch(() => null);
+        return cov ? live({ verified: true, status: cov.status }) : unavailable('COVERAGE_NOT_FOUND');
+      },
+      healthCheck: insuranceHealth,
+      capabilities: () => ({ status: 'AVAILABLE', operations: ['read', 'quote', 'prepare', 'verify'] })
     }
   });
 }

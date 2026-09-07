@@ -120,6 +120,18 @@ const Vault = lazyRetry(() => import('./pages/Vault'));
  */
 const Loan = lazyRetry(() => import('./pages/Loan'));
 
+/* FBT Insurance OS — /insurance module (§ "FBT Insurance OS"). */
+const InsuranceShell = lazyRetry(() => import('./pages/insurance/InsuranceShell'));
+const InsuranceDashboard = lazyRetry(() => import('./pages/insurance/InsuranceDashboard'));
+const InsuranceMarketplace = lazyRetry(() => import('./pages/insurance/InsuranceMarketplace'));
+const InsuranceQuote = lazyRetry(() => import('./pages/insurance/InsuranceQuote'));
+const InsuranceCoverage = lazyRetry(() => import('./pages/insurance/InsuranceCoverage'));
+const InsuranceCoverageDetail = lazyRetry(() => import('./pages/insurance/InsuranceCoverageDetail'));
+const InsuranceClaims = lazyRetry(() => import('./pages/insurance/InsuranceClaims'));
+const InsuranceRisk = lazyRetry(() => import('./pages/insurance/InsuranceRisk'));
+const InsuranceProviders = lazyRetry(() => import('./pages/insurance/InsuranceProviders'));
+const InsuranceSettings = lazyRetry(() => import('./pages/insurance/InsuranceSettings'));
+const InsuranceAdmin = lazyRetry(() => import('./pages/insurance/InsuranceAdmin'));
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -357,6 +369,21 @@ function AnimatedRoutes() {
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />
+
+            {/* FBT Insurance OS (§ spec). Sandbox providers; non-custodial. */}
+            <Route path="/insurance" element={<InsuranceShell />}>
+              <Route index element={<InsuranceDashboard />} />
+              <Route path="marketplace" element={<InsuranceMarketplace />} />
+              <Route path="quote/:quoteId" element={<InsuranceQuote />} />
+              <Route path="coverage" element={<InsuranceCoverage />} />
+              <Route path="coverage/:id" element={<InsuranceCoverageDetail />} />
+              <Route path="claims" element={<InsuranceClaims />} />
+              <Route path="risk" element={<InsuranceRisk />} />
+              <Route path="providers" element={<InsuranceProviders />} />
+              <Route path="settings" element={<InsuranceSettings />} />
+            </Route>
+            <Route path="/insurance/admin" element={<InsuranceAdmin />} />
+            <Route path="/admin/insurance" element={<InsuranceAdmin />} />
 
             <Route path="*" element={<Market />} />
           </Routes>

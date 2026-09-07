@@ -1,0 +1,36 @@
+/* FBT Insurance OS — module styling (namespaced under .ins-). */
+.ins-shell { max-width: 960px; margin: 0 auto; padding: 18px 16px 96px; font-family: inherit; color: var(--text, #122); }
+.ins-banner { display:flex; gap:10px; align-items:center; background: rgba(120,180,255,.12); border:1px solid rgba(120,160,255,.35); border-radius:12px; padding:10px 12px; font-size:13px; margin-bottom:14px; }
+.ins-tabs { display:flex; gap:6px; flex-wrap:wrap; margin: 14px 0 20px; }
+.ins-tab { background: transparent; border:1px solid rgba(0,0,0,.12); border-radius:20px; padding:7px 14px; font-size:13px; cursor:pointer; color: inherit; }
+.ins-tab.active { background: var(--accent, #2563eb); color:#fff; border-color: transparent; }
+.ins-card { border:1px solid rgba(0,0,0,.1); border-radius:14px; padding:16px; margin-bottom:12px; background: rgba(255,255,255,.6); }
+.ins-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:12px; }
+.ins-stat { border:1px solid rgba(0,0,0,.1); border-radius:14px; padding:16px; }
+.ins-stat .lbl { font-size:12px; opacity:.7; }
+.ins-stat .val { font-size:24px; font-weight:700; margin-top:4px; }
+.ins-chip { display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+.ins-chip.LOW,.ins-chip.HEALTHY,.ins-chip.ACTIVE { background:#dcfce7; color:#15803d; }
+.ins-chip.MEDIUM { background:#fef9c3; color:#a16207; }
+.ins-chip.HIGH { background:#ffe4e6; color:#be123c; }
+.ins-chip.CRITICAL,.ins-chip.UNAVAILABLE { background:#fee2e2; color:#b91c1c; }
+.ins-chip.PENDING { background:#e0e7ff; color:#3730a3; }
+.ins-chip.DEGRADED,.ins-chip.EXPIRED { background:#e5e7eb; color:#374151; }
+.ins-btn { border:0; border-radius:12px; padding:10px 16px; font-weight:600; cursor:pointer; background: var(--accent,#2563eb); color:#fff; font-size:14px; }
+.ins-btn.ghost { background: transparent; border:1px solid rgba(0,0,0,.2); color:inherit; }
+.ins-btn.warn { background:#b91c1c; }
+.ins-btn.small { padding:6px 12px; font-size:13px; }
+.ins-btn:disabled { opacity:.5; cursor:not-allowed; }
+.ins-input,.ins-select { width:100%; box-sizing:border-box; border:1px solid rgba(0,0,0,.18); border-radius:10px; padding:9px 11px; font-size:14px; background:rgba(255,255,255,.7); margin:4px 0 10px; }
+.ins-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; font-size:14px; border-bottom:1px dashed rgba(0,0,0,.08); }
+.ins-row:last-child { border-bottom:0; }
+.ins-muted { opacity:.65; font-size:12px; }
+.ins-total { font-weight:700; }
+.ins-title { font-size:20px; font-weight:800; margin:4px 0; }
+.ins-sub { font-size:13px; opacity:.7; margin-bottom:12px; }
+.ins-table { width:100%; border-collapse:collapse; font-size:13px; }
+.ins-table th,.ins-table td { text-align:left; padding:8px 6px; border-bottom:1px solid rgba(0,0,0,.08); }
+.ins-excl { font-size:13px; background: rgba(255,240,230,.5); border:1px solid rgba(200,120,60,.3); border-radius:10px; padding:10px 12px; margin:8px 0; }
+.ins-tag { background: rgba(0,0,0,.05); border-radius:6px; padding:2px 8px; font-size:12px; }
+.ins-alert { background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; color:#7f1d1d; font-size:13px; }
+.ins-ok { background:#dcfce7; border:1px solid #bbf7d0; border-radius:12px; padding:12px 14px; color:#14532d; font-size:13px; }
