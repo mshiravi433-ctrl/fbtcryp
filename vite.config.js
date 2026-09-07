@@ -166,6 +166,19 @@ export default defineConfig({
       VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
     }),
     /*
+     * In-app Compound V3 (Base/USDC) supply — the second execution adapter,
+     * with its own flag so one protocol can be switched off without taking
+     * the other with it. Same inverted test as the Aave define above: OFF
+     * unless the env var is exactly 'true'.
+     * See src/lib/features.js and docs/defi/compound-v3-base.md.
+     */
+    __COMPOUND_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_COMPOUND_BASE_SUPPLY === 'true'),
+    __COMPOUND_BASE_BUILD_ENV__: JSON.stringify({
+      VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST: process.env.VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST ?? '',
+      VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
+      VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+    }),
+    /*
      * Version string, read from package.json at build time.
      *
      * Settings used to print a hardcoded 'v1.0.0' while the app shipped 1.5.x.

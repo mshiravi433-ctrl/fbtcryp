@@ -130,7 +130,26 @@ export const SPECULATION_ENABLED =
 const envFlag = (name) => (typeof import.meta !== 'undefined' ? import.meta.env?.[name] : undefined);
 const buildEnv =
   typeof __AAVE_BASE_BUILD_ENV__ !== 'undefined' ? __AAVE_BASE_BUILD_ENV__ : null;
-const buildOrEnv = (key) => (buildEnv ? buildEnv[key] : envFlag(key));
+/*
+ * The second adapter's caps arrive through their own build define. They are
+ * looked up in BOTH tables (each define only carries its own protocol's keys)
+ * before falling back to import.meta.env, so a Compound cap set at build time
+ * is not silently ignored because the Aave table answered first with
+ * `undefined`.
+ */
+const compoundBuildEnv =
+  typeof __COMPOUND_BASE_BUILD_ENV__ !== 'undefined' ? __COMPOUND_BASE_BUILD_ENV__ : null;
+const buildOrEnv = (key) => {
+  if (buildEnv && buildEnv[key] != null && String(buildEnv[key]) !== '') return buildEnv[key];
+  if (compoundBuildEnv && compoundBuildEnv[key] != null && String(compoundBuildEnv[key]) !== '') {
+    return compoundBuildEnv[key];
+  }
+  // In an app build both defines exist, so an unset variable must resolve to
+  // "unset" here rather than falling through to an import.meta.env that the
+  // bundler has already folded away.
+  if (buildEnv || compoundBuildEnv) return undefined;
+  return envFlag(key);
+};
 
 /** True only when the build was explicitly told to expose in-app Aave supply. */
 export const AAVE_BASE_SUPPLY_ENABLED =
@@ -198,6 +217,92 @@ export function aaveBaseSupplyAllowedFor(owner) {
  * caller's on-chain aToken balance > 0.
  */
 export function aaveBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
+  if (!owner) return false;
+  return Boolean(hasPosition);
+}
+
+/* -------------------------------------------------------------------------- */
+/* COMPOUND V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD           */
+/* -------------------------------------------------------------------------- */
+/*
+ * The SECOND in-app DeFi execution adapter (lib/defi/compoundV3Base.js), and
+ * it gets its own flag rather than riding on the Aave one. Two protocols, two
+ * blast radii: a bug or a governance incident in Compound III must be
+ * switchable off without also taking away the Aave path that thousands of
+ * dollars might already be sitting in, and vice versa. One shared flag would
+ * make the kill switch an all-or-nothing lever exactly when it needs to be
+ * precise.
+ *
+ * Everything else follows the Aave flag's rules deliberately, because they
+ * were argued once and should not be re-litigated per protocol:
+ *
+ *   · `=== 'true'`, never `!== 'false'`. A build that forgets the env var
+ *     ships with the money path CLOSED.
+ *   · Caps default to 100 USDC per transaction and 500 USDC in total, are
+ *     enforced inside the adapter (not just the UI), and an unparseable env
+ *     value falls back to the default rather than becoming 0 or Infinity.
+ *   · The kill switch never gates the EXIT. See
+ *     `compoundBaseWithdrawAllowedFor` below.
+ *
+ * HOW TO TURN IT ON:
+ *
+ *     VITE_ENABLE_COMPOUND_BASE_SUPPLY=true npm run build
+ *
+ * Do NOT enable it without the rollout checklist in
+ * docs/defi/compound-v3-base.md: independent review of the adapter and a
+ * passing Base-mainnet fork probe (`npm run test:compound-base-fork`).
+ */
+
+/** True only when the build was explicitly told to expose in-app Compound supply. */
+export const COMPOUND_BASE_SUPPLY_ENABLED =
+  typeof __COMPOUND_BASE_SUPPLY_ENABLED__ !== 'undefined'
+    ? __COMPOUND_BASE_SUPPLY_ENABLED__
+    : envFlag('VITE_ENABLE_COMPOUND_BASE_SUPPLY') === 'true';
+
+/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
+export const COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
+  'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
+);
+
+/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
+export const COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
+  'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
+);
+
+/**
+ * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
+ * flag is on for". Compared case-insensitively against the connected owner.
+ *
+ *     VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xabc...,0xdef...
+ */
+export const COMPOUND_BASE_SUPPLY_ALLOWLIST = Object.freeze(
+  String(envFlag('VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST') ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
+);
+
+/**
+ * Can THIS wallet open a NEW Compound supply?
+ *
+ * The build flag, then the allowlist (when one is configured). Withdrawal
+ * never calls this.
+ */
+export function compoundBaseSupplyAllowedFor(owner) {
+  if (!COMPOUND_BASE_SUPPLY_ENABLED) return false;
+  if (COMPOUND_BASE_SUPPLY_ALLOWLIST.length === 0) return true;
+  const who = String(owner ?? '').trim().toLowerCase();
+  return COMPOUND_BASE_SUPPLY_ALLOWLIST.includes(who);
+}
+
+/**
+ * Can THIS wallet withdraw from Compound?
+ *
+ * Deliberately independent of the flag, the caps and the allowlist: the only
+ * requirement is that there is something to withdraw. `hasPosition` is the
+ * caller's on-chain Comet base balance > 0.
+ */
+export function compoundBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
   if (!owner) return false;
   return Boolean(hasPosition);
 }

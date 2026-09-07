@@ -31,6 +31,15 @@ import {
  * unchanged. Gated by AAVE_BASE_SUPPLY_ENABLED; see docs/defi/aave-v3-base.md.
  */
 import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
+/*
+ * The second in-app DeFi execution surface: Compound V3 (Comet) on Base, USDC
+ * only. Same contract with the screen as the Aave panel above — it renders
+ * itself only for that exact pool and returns null for everything else — and
+ * it has its OWN flag (COMPOUND_BASE_SUPPLY_ENABLED), so either protocol can
+ * be switched off without touching the other.
+ * See docs/defi/compound-v3-base.md.
+ */
+import CompoundBaseUsdcPanel from '../components/Farm/CompoundBaseUsdcPanel';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -525,6 +534,11 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
       {/* In-app supply / withdraw, only for Aave v3 · Base · USDC. Null
           everywhere else, so this cannot move a CTA on any other pool. */}
       <AaveBaseUsdcPanel pool={pool} />
+
+      {/* Same, for Compound V3 · Base · USDC. The two matchers are mutually
+          exclusive (they test different `project` slugs), so at most one of
+          these panels can ever render for a given pool. */}
+      <CompoundBaseUsdcPanel pool={pool} />
 
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}

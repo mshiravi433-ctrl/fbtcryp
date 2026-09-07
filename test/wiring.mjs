@@ -13116,8 +13116,18 @@ export default function run() {
      * On-Chain order path failed closed at the signing step. build:full now
      * regenerates the bundle itself; pinned so it can never silently regress.
      */
+    /*
+     * The pin is on the ORDER — vendor script, then `vite build` — not on the
+     * exact list of environment variables in between. It originally spelled
+     * `VITE_ENABLE_SPECULATION=true vite build` literally, and then broke the
+     * day a second build flag (VITE_ENABLE_AAVE_BASE_SUPPLY) was added to the
+     * same command: a correct change failing a pin that was really checking
+     * something else. `[\w=.-]+ ` allows any further `KEY=value ` prefixes
+     * while still proving both halves are present and in the right order.
+     */
     t('the production build command regenerates the Velocity SDK bundle (vendor dir is gitignored)',
-      /node scripts\/vendor-velocity\.mjs && VITE_ENABLE_SPECULATION=true vite build/.test(read('package.json')));
+      /node scripts\/vendor-velocity\.mjs && (?:[\w.-]+=[\w.-]* )*VITE_ENABLE_SPECULATION=true (?:[\w.-]+=[\w.-]* )*vite build/
+        .test(read('package.json')));
     t('the "what is this pair" knowledge survived the deletion in its own module',
       existsSync('src/lib/assetKnowledge.js') && /from '\.\.\/lib\/assetKnowledge'/.test(ostPage));
     t('the Perpetual overview never puts the offline market snapshot under an index-price label',
@@ -13504,6 +13514,306 @@ export default function run() {
     const missingErr = keyRefs.filter((k) => !hasKey(enFarmAave, k.replace('farm.aave.', '')));
     t(`every explainRevert key resolves in en.json${missingErr.length ? ` — missing: ${missingErr.join(', ')}` : ''}`,
       keyRefs.length > 0 && missingErr.length === 0);
+  }
+
+  /* ---- 114. Compound V3 (Base/USDC) supply adapter — the second money path */
+  /*
+   * The second adapter that moves value into a third-party contract, and the
+   * first time this repo has TWO of them. So these pins guard the same
+   * decisions as section 87 — flag default, caps, approval size, whether the
+   * exit stays open — plus the ones that only exist because there are now two:
+   * separate flags, separate ledger keys, mutually exclusive pool matchers, and
+   * Comet's own semantics (per-second rates, no base-asset supply cap,
+   * over-withdraw becoming a LOAN) not being copied from Aave's.
+   */
+  {
+    const adapter = read('src/lib/defi/compoundV3Base.js');
+    /* Comment-stripped, for the pins that assert an ABSENCE — the same trap
+       section 87 fell into three times: matching the prose that explains a
+       rule instead of the code that enforces it. */
+    const code = adapter
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const codeNoStrings = code.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+    const features = read('src/lib/features.js');
+    const panel = read('src/components/Farm/CompoundBaseUsdcPanel.jsx');
+    const history = read('src/lib/defi/compoundV3History.js');
+    const viteCfg = read('vite.config.js');
+    const farmPage = read('src/pages/Farm.jsx');
+
+    /* ── the flag defaults OFF, and is its OWN flag ───────────────────────── */
+    t('the Compound supply flag defaults to false (=== \'true\', not !== \'false\')',
+      features.includes("envFlag('VITE_ENABLE_COMPOUND_BASE_SUPPLY') === 'true'")
+      && !/VITE_ENABLE_COMPOUND_BASE_SUPPLY'\)\s*!==\s*'false'/.test(features));
+    t('...and the build define is inverted the same way, so a forgotten env var fails CLOSED',
+      viteCfg.includes("__COMPOUND_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_COMPOUND_BASE_SUPPLY === 'true')"));
+    t('...and the documented default is off',
+      features.includes('COMPOUND V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD'));
+    /*
+     * Two protocols, two kill switches. If Compound ever read the Aave flag,
+     * switching one off would silently switch the other, and the lever would
+     * be useless exactly when an incident needs it to be precise.
+     */
+    const compoundFlagBlock = features.slice(features.indexOf('export const COMPOUND_BASE_SUPPLY_ENABLED'));
+    t('the Compound flag is independent of the Aave flag',
+      !compoundFlagBlock.includes('AAVE_BASE_SUPPLY_ENABLED')
+      && !compoundFlagBlock.includes('VITE_ENABLE_AAVE_BASE_SUPPLY'));
+
+    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
+    t('Compound per-transaction cap defaults to 100 USDC',
+      /VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
+    t('Compound total position cap defaults to 500 USDC',
+      /VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
+    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
+      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
+      && adapter.includes("block('COMPOUND_PER_TX_CAP')"));
+    t('...and the total cap counts the existing position, not just this transfer',
+      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
+      && adapter.includes("block('COMPOUND_TOTAL_CAP')"));
+
+    /* ── USDC comes from the token table, never retyped ───────────────────── */
+    const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+    t('the Compound adapter reads USDC from lib/chains.js',
+      adapter.includes("getToken(8453, 'USDC')") && adapter.includes('usdc: USDC_ON_BASE.address'));
+    t('...and never types the USDC address itself',
+      !adapter.toLowerCase().includes(USDC_BASE));
+    t('...and throws rather than running against a stale registry',
+      adapter.includes("throw new Error('COMPOUND_ADAPTER_MISSING_USDC_ON_BASE')"));
+
+    /* ── no infinite approve; MaxUint256 belongs to the exit only ─────────── */
+    /*
+     * In Comet, MaxUint256 has a legitimate meaning on the way OUT:
+     * `withdraw(base, type(uint256).max)` is how the protocol expresses
+     * "withdraw everything", and it resolves to exactly balanceOf(src). What
+     * must never happen is a max APPROVE, so the pin is positional: nothing
+     * before the withdraw builder, and nothing in the revoke path.
+     */
+    const beforeWithdraw = code.slice(0, code.indexOf('export async function buildWithdrawPlan'));
+    const afterWithdraw = code.slice(code.indexOf('export async function buildRevokePlan'));
+    t('no MaxUint256 exists before the withdraw builder (approve + supply live there)',
+      beforeWithdraw.length > 0 && !beforeWithdraw.includes('MaxUint256'));
+    t('...nor in the revoke path', afterWithdraw.length > 0 && !afterWithdraw.includes('MaxUint256'));
+    t('...and every approve encodes the exact amount or zero',
+      adapter.includes("erc20.encodeFunctionData('approve', [COMPOUND_V3_BASE.comet, amountWei])")
+      && adapter.includes("erc20.encodeFunctionData('approve', [COMPOUND_V3_BASE.comet, 0n])"));
+    t('the approval is granted to the Comet market only',
+      !/approve'\s*,\s*\[(?!COMPOUND_V3_BASE\.comet)/.test(adapter));
+    t('the approve step is skipped when the allowance already covers the amount',
+      adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
+
+    /* ── the recipient cannot be anyone but msg.sender ────────────────────── */
+    /*
+     * Comet has no onBehalfOf parameter on supply/withdraw — but it DOES have
+     * supplyTo / supplyFrom / withdrawTo / withdrawFrom, which take one. The
+     * protection is that those variants are not in the adapter's ABI at all,
+     * so there is no way to encode a call that pays a third party.
+     */
+    t('supply and withdraw use the two-argument forms (no recipient parameter exists)',
+      /encodeFunctionData\('supply',\s*\[COMPOUND_V3_BASE\.usdc,\s*amountWei\]/.test(code)
+      && /encodeFunctionData\('withdraw',\s*\[COMPOUND_V3_BASE\.usdc,\s*amountWei\]/.test(code));
+    /* Read from `code`: the adapter's own ABI comment LISTS the variants it
+       deliberately omits, so a raw-source scan matches the prose that proves
+       the rule and reports the correct file as broken. */
+    t('...and the third-party variants are absent from the ABI, so they cannot be encoded',
+      !code.includes('supplyTo') && !code.includes('supplyFrom')
+      && !code.includes('withdrawTo') && !code.includes('withdrawFrom')
+      && !/function allow\(/.test(code) && !/function allowBySig/.test(code));
+    t('...and no builder of ours accepts a recipient argument',
+      !/(export )?(async )?function\s+\w+\s*\([^)]*(onBehalfOf|recipient|dst|beneficiary)/.test(codeNoStrings));
+
+    /* ── the kill switch cannot trap funds ────────────────────────────────── */
+    t('Compound withdraw is decided by its own helper, not by the supply flag',
+      /export function compoundBaseWithdrawAllowedFor\(\{ owner, hasPosition \} = \{\}\) \{\n  if \(!owner\) return false;\n  return Boolean\(hasPosition\);\n\}/.test(features));
+    t('...and that helper never reads the supply flag, the caps or the allowlist',
+      !features
+        .slice(features.indexOf('export function compoundBaseWithdrawAllowedFor'))
+        .includes('COMPOUND_BASE_SUPPLY_ENABLED'));
+    t('the withdraw builder is ungated by the caps, and says so in its checks',
+      /perTxCapOk: true,\s*\n\s*totalCapOk: true,/.test(adapter));
+    t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
+      panel.includes('withdrawAllowed && (')
+      && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    t('the panel renders nothing once the flag is off with no position and no ledger history',
+      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+
+    /* ── Comet's own semantics, not Aave's, copied by accident ────────────── */
+    /*
+     * The single most expensive mistake available here: Comet quotes a
+     * PER-SECOND 1e18 rate, Aave a per-year ray. Reusing Aave's rayToApyPct
+     * would print a number about 1e9 times wrong, and it would look plausible.
+     */
+    t('rates are converted from Comet\'s per-second 1e18 form, never Aave\'s ray',
+      code.includes('perSecondRateToAprPct') && code.includes('perSecondRateToApyPct')
+      && !code.includes('rayToApyPct') && !/\bRAY\b/.test(code));
+    t('...and the simple APR and the compounded APY are BOTH reported, separately',
+      adapter.includes('supplyAprPct: perSecondRateToAprPct(rate)')
+      && adapter.includes('supplyApyPct: perSecondRateToApyPct(rate)')
+      && panel.includes("t('farm.compound.apr')") && panel.includes("t('farm.compound.apy')"));
+    t('...with the APY compounded via expm1/log1p rather than a lossy (1+r)**n',
+      adapter.includes('Math.expm1(SECONDS_PER_YEAR * Math.log1p(perSecond))'));
+    /*
+     * Comet caps COLLATERAL assets only; supplyBase has no cap check. Stating
+     * a cap here would invent a protocol limit, so the field is present, null,
+     * and explained.
+     */
+    t('the absence of a base-asset supply cap is stated as a fact, not left as a hole',
+      adapter.includes('hasSupplyCap: false') && adapter.includes('supplyCapUsdc: null'));
+    /*
+     * And the one that actually loses money: withdrawing more than you have
+     * does not revert in Comet for a collateralised account — it opens a debt.
+     */
+    t('an over-withdraw is refused, because in Comet the excess becomes a borrow',
+      adapter.includes("block('COMPOUND_WITHDRAW_EXCEEDS_POSITION')")
+      && adapter.includes('checks.withinPosition = amountWei <= position'));
+    t('supplying into an open borrow is refused, because it would repay not earn',
+      adapter.includes("block('COMPOUND_EXISTING_BORROW')"));
+    t('the position is read from Comet.balanceOf — there is no aToken to read',
+      code.includes('c.comet.balanceOf(owner)') && !code.includes('aToken'));
+
+    /* ── the deployment is verified before any write ──────────────────────── */
+    t('verifyDeployment asserts the market\'s own baseToken is USDC',
+      adapter.includes("throw new CompoundAdapterError('COMPOUND_BASE_TOKEN_MISMATCH'"));
+    t('...cross-checks the Configurator\'s governance record',
+      adapter.includes('await c.configurator.getConfiguration(COMPOUND_V3_BASE.comet)')
+      && adapter.includes("throw new CompoundAdapterError('COMPOUND_CONFIGURATOR_MISMATCH'"));
+    t('...records WHICH evidence was available rather than pretending both ran',
+      adapter.includes("verifiedVia = 'comet.self-report'")
+      && adapter.includes("let verifiedVia = 'comet.baseToken+configurator'"));
+    t('...throws rather than proceeding when it cannot verify',
+      adapter.includes("throw new CompoundAdapterError('COMPOUND_DEPLOYMENT_UNVERIFIABLE'"));
+    t('...and caches only successes, so a failed check is retried not remembered',
+      adapter.includes('verifiedByProvider.set(provider, evidence)')
+      && /Cache only a SUCCESSFUL verification/.test(adapter));
+    t('supply, withdraw and revoke all verify before building',
+      (adapter.match(/await verifyDeployment\(provider\)/g) || []).length >= 3);
+
+    /* ── every write goes through the existing simulation path ────────────── */
+    t('the Compound panel builds unsigned transactions with the repo\'s own helper',
+      panel.includes("from '../../lib/preSignSimulation'") && panel.includes('buildUnsignedTransaction'));
+    t('...simulates before signing, and reuses the repo\'s execution gate',
+      panel.includes('simulateUnsignedTransaction') && panel.includes('evaluateExecutionGate'));
+    t('...and only enables signing on a CLEAN simulation (a busy RPC is not clean)',
+      panel.includes("simulation?.status === 'simulated-clean'"));
+    t('the Compound adapter never signs: no signer or sendTransaction in it',
+      !adapter.includes('sendTransaction') && !adapter.includes('getSigner'));
+
+    /* ── the Compound addresses live in exactly one module ────────────────── */
+    const compoundOnly = [
+      '0xb125e6687d4313864e53df431d5425969c15eb2f', // Comet (cUSDCv3)
+      '0x45939657d1ca34a8fa39a924b71d28fe8431e581', // Configurator
+      '0x123964802e6ababbe1bc9547d72ef1b69b00a6b1'  // CometRewards
+    ];
+    const filesWithAddr = (addr) => files.filter((f) => read(f).toLowerCase().includes(addr));
+    const compoundLeaked = [];
+    for (const addr of compoundOnly) {
+      for (const f of filesWithAddr(addr)) {
+        if (!f.endsWith('src/lib/defi/compoundV3Base.js')) compoundLeaked.push(`${addr} in ${f}`);
+      }
+    }
+    t(`the Comet, Configurator and Rewards addresses appear only in the adapter${compoundLeaked.length ? ` — also in: ${compoundLeaked.join(', ')}` : ''}`,
+      compoundLeaked.length === 0);
+    t('each pinned address cites the official comet deployment file',
+      (adapter.match(/deployments\/base\/usdc\/roots\.json|Same source/g) || []).length >= 3);
+
+    /* ── scope: two write actions, one asset, one chain ───────────────────── */
+    /*
+     * Structural, not a blocklist of names. A blocklist here first failed on
+     * `borrowBalanceOf` — a READ the adapter needs in order to refuse a supply
+     * that would silently repay a debt — which is the wrong answer twice over:
+     * it calls a correct file broken, and it would still pass for any Comet
+     * write nobody thought to add to the list. So instead: parse every
+     * signature out of the ABI and assert that the ones which are NOT `view`
+     * are exactly supply and withdraw. Comet has a dozen other writes
+     * (supplyTo, transferAsset, absorb, buyCollateral, withdrawReserves,
+     * allow, approveThis…) and this pin catches all of them, named or not.
+     */
+    const abiSigs = [...code.matchAll(/'function ([a-zA-Z0-9_]+)\(([^']*)'/g)]
+      .map((m) => ({ name: m[1], rest: m[2] }));
+    const writes = abiSigs.filter((s) => !/\bview\b|\bpure\b/.test(s.rest)).map((s) => s.name);
+    t(`the Compound adapter's ABIs declare only supply and withdraw as writes — found: ${writes.join(', ') || 'none'}`,
+      abiSigs.length > 5
+      && writes.every((n) => ['supply', 'withdraw', 'approve', 'getRewardOwed'].includes(n)));
+    t('...and no collateral, liquidation or governance entry point is declared at all',
+      !/\bsupplyCollateral\b|\bbuyCollateral\b|\babsorb\b|\bwithdrawReserves\b|\btransferAsset\b|\bapproveThis\b/.test(code));
+    t('...and is pinned to Base 8453',
+      adapter.includes('chainId: 8453') && adapter.includes("throw new CompoundAdapterError('COMPOUND_WRONG_CHAIN'"));
+    t('...and no claim path is built for rewards this market cannot pay at these caps',
+      !adapter.includes("encodeFunctionData('claim'") && adapter.includes('rewardsMinUsdc'));
+
+    /* ── local persistence, and nothing secret in it ──────────────────────── */
+    t('Compound actions are recorded to a capped local ledger with its OWN key',
+      history.includes("export const COMPOUND_HISTORY_KEY = 'fbt-compound-base-history-v1'")
+      && history.includes('rows.slice(0, MAX_ROWS)')
+      && !history.includes('fbt-aave-base-history-v1'));
+    const cFieldsSrc = /const FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(history);
+    const cPersisted = cFieldsSrc
+      ? [...cFieldsSrc[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1])
+      : [];
+    /* Anchored, so `revertKey` — an i18n key, the opposite of a secret — does
+       not trip it. Same reasoning as section 87. */
+    const cForbidden = /^(privatekey|publickey|key|secret|secretkey|mnemonic|seed|seedphrase|passphrase|password|signature|signedtx|rawtx|rawtransaction)$/i;
+    t('...through a field whitelist, so no key or signature can be persisted',
+      cPersisted.length > 0 && !cPersisted.some((f) => cForbidden.test(f)));
+    t('the stuck-approval state is derived from the chain, not the ledger alone',
+      history.includes("source: onChain ? 'chain' : recorded ? 'record' : null"));
+
+    /* ── the two protocols cannot be confused for one another ─────────────── */
+    t('the pool matchers are mutually exclusive, so at most one panel renders',
+      adapter.includes("project === 'compound-v3'")
+      && read('src/lib/defi/aaveV3Base.js').includes("project === 'aave-v3'"));
+    t('both panels are mounted on the Farm screen',
+      farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
+      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />'));
+    t('the Compound adapter does not import the Aave one',
+      !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
+
+    /* ── copy exists in all three locales ─────────────────────────────────── */
+    const cErrCodes = ['paused', 'notCollateralized', 'transferInFailed', 'transferOutFailed', 'supplyCapExceeded'];
+    const cBlockCodes = [
+      'COMPOUND_PER_TX_CAP', 'COMPOUND_TOTAL_CAP', 'COMPOUND_EXISTING_BORROW',
+      'COMPOUND_WITHDRAW_EXCEEDS_POSITION', 'COMPOUND_SUPPLY_PAUSED'
+    ];
+    for (const lang of ['en', 'fa', 'ar']) {
+      const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const cc = j.farm?.compound ?? {};
+      t(`${lang} carries the Compound supply surface`,
+        ['panelTitle', 'supplyInApp', 'withdraw', 'supplyTitle', 'withdrawTitle', 'max', 'revoke', 'continue']
+          .every((k) => typeof cc[k] === 'string' && cc[k].length > 0));
+      t(`${lang} names every plain-language Compound step`,
+        ['approve', 'supply', 'withdraw', 'withdrawMax', 'revoke'].every((k) => Boolean(cc.step?.[k])));
+      t(`${lang} states the four Compound risks: contract, custody, variable rate and no fee`,
+        ['risk1', 'risk2', 'risk3', 'risk4'].every((k) => typeof cc[k] === 'string' && cc[k].length > 20));
+      t(`${lang} explains the Compound partial-approval recovery`,
+        Boolean(cc.partialBody) && Boolean(cc.revoke) && Boolean(cc.continue));
+      t(`${lang} maps the Comet revert codes it can hit`,
+        cErrCodes.every((k) => Boolean(cc.err?.[k])));
+      t(`${lang} explains every Compound refusal reason`,
+        cBlockCodes.every((k) => Boolean(cc.block?.[k])));
+      t(`${lang} labels the simple APR apart from the compounded APY`,
+        Boolean(cc.apr) && Boolean(cc.apy) && cc.apr !== cc.apy);
+      t(`${lang} explains the Compound wrong-chain case`,
+        typeof cc.wrongChainNote === 'string' && cc.wrongChainNote.includes('{chain}'));
+      t(`${lang} warns that COMP rewards are out of reach at these caps`,
+        typeof cc.rewardsFloor === 'string' && cc.rewardsFloor.length > 20);
+    }
+    t('the Compound panel shows the switch prompt from the local ledger, not a chain read',
+      panel.includes('knownHere')
+      && panel.includes("t('farm.compound.wrongChainNote'")
+      && panel.indexOf('setHistory(loadCompoundHistoryFor(owner));')
+         < panel.indexOf('if (wallet.chainId !== COMPOUND_V3_BASE.chainId) return;'));
+
+    /* The adapter's error table must not name a key no locale defines. */
+    const cKeyRefs = [...adapter.matchAll(/'(farm\.compound\.err\.[a-zA-Z]+)'/g)].map((m) => m[1]);
+    const enFarmCompound = JSON.parse(read('src/i18n/locales/en.json')).farm.compound;
+    const cMissingErr = cKeyRefs.filter((k) => !hasKey(enFarmCompound, k.replace('farm.compound.', '')));
+    t(`every Compound explainRevert key resolves in en.json${cMissingErr.length ? ` — missing: ${cMissingErr.join(', ')}` : ''}`,
+      cKeyRefs.length > 0 && cMissingErr.length === 0);
+
+    /* Same for the refusal codes the panel renders and the plan can emit. */
+    const cBlockRefs = [...adapter.matchAll(/block\('(COMPOUND_[A-Z_]+)'\)/g)].map((m) => m[1]);
+    const cBlockMissing = [...new Set(cBlockRefs)].filter((k) => !enFarmCompound.block?.[k]);
+    t(`every refusal code the adapter can emit has copy${cBlockMissing.length ? ` — missing: ${cBlockMissing.join(', ')}` : ''}`,
+      cBlockRefs.length > 0 && cBlockMissing.length === 0);
   }
 
   /* ----------------------- 5z. the settings hub, structurally ------------- */
