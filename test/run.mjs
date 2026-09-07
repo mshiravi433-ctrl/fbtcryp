@@ -961,6 +961,20 @@ installDom();
 const { run: runIntentAIPanel } = await import('./.out/intentai/intent-ai-panel-probe.js');
 report('intent AI panel (guided flow · interactive confirm · real execution)', await runIntentAIPanel(document.getElementById('r')));
 
+/*
+ * The two autonomy cards, RENDERED. The screens suite proves IntentAIUnified
+ * mounts; it cannot reach these cards, because they only appear once a message
+ * carries a goalRequest / autonomyRequest. A throw in either one would take
+ * the whole chat screen down the first time a user asked «سودم دو برابر شود»,
+ * which is the feature this layer exists for — so both are mounted with a
+ * real compiled plan and a real engine, and their buttons are clicked.
+ */
+console.log('\n▸ building autonomy cards suite…');
+npx(['vite', 'build', '-c', 'test/vite.autonomycards.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runAutonomyCards } = await import('./.out/autonomycards/autonomy-cards-probe.js');
+report('autonomy cards (goal plan · automation loop, mounted and clicked)', await runAutonomyCards(document.getElementById('r')));
+
 /* ------------------- 4b2. Phase 201-207 upgrades (mounted) ------------------- */
 /*
  * Everything the owner reported on #/intent-ai, driven as a user: the visible

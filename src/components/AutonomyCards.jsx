@@ -77,7 +77,14 @@ export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExe
         <span className="iaos-goal-target">
           {fa ? `${Number(plan.target?.multiple || 1).toFixed(2)}× در ${plan.horizonDays} روز` : `${Number(plan.target?.multiple || 1).toFixed(2)}× in ${plan.horizonDays} days`}
         </span>
-        <span className={`iaos-goal-verdict ${v.reachable ? 'is-ok' : 'is-bad'}`}>
+        {/* The verdict is carried as data, not only as colour: a screen reader
+            and a test both need the state without parsing a class name. This
+            is the same rule the settings region-availability rows are held to. */}
+        <span
+          className={`iaos-goal-verdict ${v.reachable ? 'is-ok' : 'is-bad'}`}
+          data-verdict={v.reachable ? 'reachable' : 'not-reachable'}
+          data-code={plan.code || null}
+        >
           {v.reachable ? (fa ? 'شدنی' : 'Reachable') : (fa ? 'با نرخ واقعی شدنی نیست' : 'Not reachable at live rates')}
         </span>
       </div>
@@ -191,7 +198,12 @@ export function AutonomyCard({
     <div className="iaos-auto-card" data-testid="autonomy-card">
       <div className="iaos-goal-head">
         <span className="iaos-goal-target">{fa ? 'اتوماسیون' : 'Automation'}</span>
-        <span className={`iaos-goal-verdict ${status?.running ? 'is-ok' : ''}`}>
+        {/* State as data, for the same reason as the goal card's verdict. */}
+        <span
+          className={`iaos-goal-verdict ${status?.running ? 'is-ok' : ''}`}
+          data-state={status?.running ? 'running' : 'stopped'}
+          data-mode={status?.mode || null}
+        >
           {status?.running ? (fa ? 'در حال اجرا' : 'Running') : (fa ? 'متوقف' : 'Stopped')}
           {status?.mode ? ` · ${status.mode}` : ''}
         </span>
