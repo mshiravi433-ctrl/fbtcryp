@@ -148,6 +148,37 @@ try {
       console.log(`DIAG fork-state read FAILED: ${String(err?.message ?? err).slice(0, 300)}`);
     }
 
+    /* ── DIAG2: storage reads vs EVM execution. getCode above already works;
+       these pinpoint whether storage reads fail, all execution fails, or only
+       USDC fails — each points at a different fix. */
+    try {
+      const implSlot = await provider.getStorage(
+        AAVE_V3_ARBITRUM.usdc,
+        '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
+      );
+      console.log(`DIAG2 USDC implementation slot: ${implSlot}`);
+    } catch (err) {
+      console.log(`DIAG2 USDC implementation slot FAILED: ${String(err?.message ?? err).slice(0, 200)}`);
+    }
+    {
+      const balData = (acct) => '0x70a08231' + '000000000000000000000000' + acct.slice(2).toLowerCase();
+      const diagCalls = [
+        ['USDC.decimals()', { to: AAVE_V3_ARBITRUM.usdc, data: '0x313ce567' }],
+        ['USDC.balanceOf(acct)', { to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT) }],
+        ['USDC.balanceOf(acct,gas=200k)', { to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT), gasLimit: 200000 }],
+        ['USDC.balanceOf(acct,from=acct)', { from: ANVIL_ACCOUNT, to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT) }],
+        ['aToken.balanceOf(acct)', { to: AAVE_V3_ARBITRUM.aUsdc, data: balData(ANVIL_ACCOUNT) }]
+      ];
+      for (const [label, tx] of diagCalls) {
+        try {
+          const ret = await provider.call(tx);
+          console.log(`DIAG2 ${label} OK → ${ret.length > 66 ? ret.slice(0, 66) + '…' : ret}`);
+        } catch (err) {
+          console.log(`DIAG2 ${label} FAILED: ${String(err?.message ?? err).slice(0, 160)}`);
+        }
+      }
+    }
+
     rule('0 · pinned constants and shipped defaults');
     t('flag ships OFF in this bundle', adapter.AAVE_ARB_SUPPLY_ENABLED === false);
     t('per-tx cap is the shipped 100 USDC', adapter.AAVE_ARB_SUPPLY_MAX_USDC_PER_TX === 100,
