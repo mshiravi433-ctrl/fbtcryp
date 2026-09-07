@@ -86,7 +86,7 @@ export function InsuranceCoverageDetail() {
         <div className="ins-row"><span>Duration</span><span>{cov.durationDays} days</span></div>
         <div className="ins-row"><span>Started</span><span>{cov.startedAt ? new Date(cov.startedAt).toLocaleDateString() : '—'}</span></div>
         <div className="ins-row"><span>Expires</span><span>{cov.expiresAt ? new Date(cov.expiresAt).toLocaleDateString() : '—'}</span></div>
-        <div className="ins-row"><span>Chain</span><span>{cov.chainId} (Solana sandbox = 900)</span></div>
+        <div className="ins-row"><span>Chain</span><span>{cov.chainId}</span></div>
         <div className="ins-row"><span>Terms hash</span><code style={{ fontSize: 11 }}>{cov.termsHash?.slice(0, 24)}…</code></div>
         <div className="ins-row"><span>Settlement</span><span>{cov.settlementModel} — non-custodial</span></div>
       </div>

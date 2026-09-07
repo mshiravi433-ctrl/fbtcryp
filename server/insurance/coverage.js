@@ -96,7 +96,10 @@ export async function createPurchaseIntent({ quoteId, walletAddress, idempotency
       const intent = await providerAdapter(quote.provider).createPurchaseIntent({ ...quote, quoteId, coverageAmountMicro: quote.coverageAmountMicro, coverageId, recipient: reference.recipient });
       const tx = await providerAdapter(quote.provider).buildPurchaseTransaction({
         quoteId, termsHash: quote.termsHash, coverageAmountMicro: quote.coverageAmountMicro,
-        premiumMicro: quote.premiumMicro, recipient: reference.recipient
+        premiumMicro: quote.premiumMicro, recipient: reference.recipient,
+        walletAddress: owner,
+        providerProductId: quote.providerProductId ?? quote.productId,
+        raw: quote.providerQuoteRaw || null
       });
       await store.createTx({ owner, type: 'PURCHASE', quoteId, providerId: quote.provider, chainId: quote.chainId, state: 'QUOTE_VALID', payload: { coverageId } });
 
@@ -133,7 +136,12 @@ export async function activateCoverage({ coverageId, owner, txHash, chainId, ide
           chainId: chainId ?? cov.chainId, owner: cov.owner, recipient: cov.contractAddress,
           amountMicro: cov.premiumMicro, coverageId
         });
-        if (!receipt.verified) throw Object.assign(new Error('COVERAGE_NOT_VERIFIED'), { code: 'COVERAGE_NOT_VERIFIED' });
+        if (!receipt.verified) throw Object.assign(new Error('COVERAGE_NOT_VERIFIED'), { code: 'COVERAGE_NOT_VERIFIED', reason: receipt.reason || null });
+        // Live-provider verification artefacts (on-chain truth, recorded for audit).
+        if (receipt.coverId != null) cov.coverId = receipt.coverId;
+        if (receipt.blockNumber != null) cov.blockNumber = receipt.blockNumber;
+        cov.verificationMethod = receipt.method || null;
+        cov.verifiedAt = receipt.at || now();
       }
       cov.status = COVERAGE_STATUS.ACTIVE;
       cov.startedAt = now();

@@ -26,8 +26,8 @@ export default function InsuranceRisk() {
     const exposures = rows.filter((r) => Number(r.amount) > 0).map((r) => ({ kind: r.kind, amountUsd: r.amount, chainId: 56 }));
     if (!exposures.length) { setErr('Add at least one exposure.'); setBusy(false); return; }
     try {
-      const res = await insuranceApi.protectPortfolio({ walletAddress: wallet, chainId: 56, durationDays: 30, exposures });
-      setResult(res);
+      const res = await insuranceApi.protectPortfolio({ walletAddress: wallet, chainId: 1, durationDays: 30, exposures });
+      setResult(res.data || res);
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
   }

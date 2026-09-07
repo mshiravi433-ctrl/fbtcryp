@@ -106,7 +106,11 @@ export const ROUTED_PATHS = Object.freeze([
   '/order/result/:orderId', '/smart-wallet', '/smart-money',
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',
   '/portfolio', '/intent', '/intent-ai', '/ai-control', '/flash-liquidity',
-  '/vault', '/loan'
+  '/vault', '/loan',
+  // FBT Insurance OS (protection marketplace) — nested under the shell route.
+  '/insurance', '/insurance/marketplace', '/insurance/quote/:quoteId',
+  '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',
+  '/insurance/risk', '/insurance/providers', '/insurance/settings'
 ]);
 
 /** Does a pathname exist in the router? Params (`:id`) match by segment count. */
