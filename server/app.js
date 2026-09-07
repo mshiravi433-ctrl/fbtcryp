@@ -207,6 +207,7 @@ import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { futuresRouter } from './futures/router.js';
 import { rewardsRouter } from './rewards/index.js';
+import { insuranceRouter } from './insurance/index.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 /*
  * EXPLORE + SECURITY CENTER — the blockchain-intelligence and
@@ -5612,6 +5613,18 @@ app.use('/api/v1/futures', futuresRouter());
  * (FBT_REWARDS_DISTRIBUTOR_*). No key, no custody, no broadcast.
  */
 app.use('/api/v1/rewards', rewardsRouter());
+
+/* ---------------------------- FBT INSURANCE OS ----------------------------- */
+/*
+ * Insurance / Protection (FBT Insurance OS — spec). Provider-agnostic,
+ * non-custodial protection marketplace: discovery, quotes, purchase-intent
+ * (prepared + unsigned), coverage, claims, risk, incidents, events. Every
+ * money-move ends at a prepared hand-off the user's wallet signs and settles
+ * DIRECTLY with the (sandbox) provider. No key, no custody, no broadcast; the
+ * AI only recommends and never auto-executes (§15/§54). Sandbox providers only
+ * in v1 — real providers are wired after their docs/contracts are verified.
+ */
+app.use('/api/insurance', insuranceRouter());
 
 /* ------------------------------ order watch -------------------------------- */
 /*
