@@ -908,17 +908,17 @@
       "devnetSub": "Test funds only",
       "storesUnit": "data stores",
       "hints": {
-        "profile": "Display name, wallet and language",
-        "notify": "Sound, vibration and which alerts to send",
-        "appearance": "Theme, accent colour, motion and density",
-        "trading": "Default slippage, deadline and display currency",
-        "security": "Biometrics, two-factor sign-in and auto-lock",
-        "privacy": "What the learning model is allowed to see",
-        "networks": "EVM chain, Solana cluster and custom RPC",
-        "data": "Cache, backup, export and deletion",
-        "sync": "Settings across your devices",
-        "region": "The status of every feature where you are",
-        "about": "About, support and the legal documents"
+        "profile": "Display name, wallet and language — the identity the app talks to",
+        "notify": "Sound, vibration and which alerts are allowed to reach you",
+        "appearance": "Light/dark theme, accent colour, motion and compact layout",
+        "trading": "Default swap slippage and deadline, and the price currency",
+        "security": "Biometrics, two-factor sign-in and the app's auto-lock",
+        "privacy": "Privacy — what the learning model may see, strictly optional",
+        "networks": "EVM and Solana networks, plus your own custom RPC",
+        "data": "Cache, backup, export and deletion of your data",
+        "sync": "Cloud sync — the same settings on every device",
+        "region": "Which features are on or limited where you are right now",
+        "about": "About the app, support, terms and legal documents"
       }
     }
   },

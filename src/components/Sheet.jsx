@@ -27,7 +27,7 @@ import { IconX } from './Icons';
  * animated: the animated layer and the positioned layer must not be the same
  * element.)
  */
-export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center' }) {
+export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className }) {
   /*
    * prefers-reduced-motion (and the in-app reduce-motion setting): the dialog
    * appears/disappears instantly. A drop shadow that springs is a nicety; for
@@ -72,7 +72,7 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
           />
           <div className={`sheet-layer ${anchor === 'bottom' ? 'sheet-layer-bottom' : ''}`}>
             <motion.div
-              className={`sheet sheet-${size} ${anchor === 'bottom' ? 'sheet-bottom' : ''}`}
+              className={`sheet sheet-${size} ${anchor === 'bottom' ? 'sheet-bottom' : ''}${className ? ` ${className}` : ''}`}
               role="dialog"
               aria-modal="true"
               initial={still ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 12 }}

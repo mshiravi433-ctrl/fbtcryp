@@ -21,7 +21,7 @@ import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import Sheet from '../components/Sheet';
 import { useStill } from '../components/AnimatedIcon';
-import { SETTINGS_ICONS, SetIconAutoTheme, SetIconBack, SetIconTick, SetIconTileNext } from '../components/SettingsIcons';
+import { SETTINGS_ICONS, SetIconAutoTheme, SetIconBack, SetIconPrivacy, SetIconSections, SetIconTick, SetIconTileNext, SetChipBolt } from '../components/SettingsIcons';
 import '../styles/settings-hub.css';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
@@ -72,6 +72,7 @@ import {
   IconSparkle,
   IconCopy,
   IconChevronRight,
+  IconClock,
   IconFingerprint,
   IconNews,
   IconVibrate,
@@ -228,11 +229,15 @@ function Row({ icon: Icon, label, sub, right, onClick, ...rest }) {
 }
 
 /** A small state pill. Tokens only — a literal white wash disappears in the
- *  light theme, which is exactly how the old hero chips went invisible. */
-function Chip({ children, tone, dot }) {
+ *  light theme, which is exactly how the old hero chips went invisible.
+ *  `dot` paints a coloured disc, `icon` renders a tiny drawn mark — the
+ *  chips used emoji («⚡ 0.5%», «🔒 2FA») and emoji cannot be recoloured,
+ *  so the live values now ride on small SVGs like everything else here. */
+function Chip({ children, tone, dot, icon: Icon }) {
   return (
     <span className={`set-chip${tone ? ` is-${tone}` : ''}`}>
       {dot ? <span className="set-chip-dot" style={{ background: dot }} /> : null}
+      {Icon ? <Icon width={11} height={11} /> : null}
       {children}
     </span>
   );
@@ -1831,8 +1836,8 @@ export default function Settings() {
       tone: 'mint',
       label: t('settings.trading'),
       chips: [
-        <Chip key="slip">⚡ {s.defaultSlippage}%</Chip>,
-        <Chip key="dl">⏱ {s.defaultDeadlineMin || 20}{t('settings.minutesShort', 'min')}</Chip>,
+        <Chip key="slip" icon={SetChipBolt}>{s.defaultSlippage}%</Chip>,
+        <Chip key="dl" icon={IconClock}>{s.defaultDeadlineMin || 20}{t('settings.minutesShort', 'min')}</Chip>,
         <Chip key="cur">{currencyOf(s.currency).code}</Chip>,
         s.expertMode ? <Chip key="exp" tone="warn">{t('settings.expertMode')}</Chip> : null
       ].filter(Boolean)
@@ -1843,9 +1848,9 @@ export default function Settings() {
       label: t('settings.security'),
       alert: !s.twoFactorEnabled,
       chips: [
-        <Chip key="2fa" tone={s.twoFactorEnabled ? 'good' : undefined}>🔒 2FA</Chip>,
-        <Chip key="bio" tone={s.biometricEnabled ? 'good' : undefined}>🛡 {t('settings.biometric')}</Chip>,
-        <Chip key="lock">⏻ {s.autoLockMinutes === 0 ? t('settings.never') : `${s.autoLockMinutes}m`}</Chip>
+        <Chip key="2fa" icon={IconLock} tone={s.twoFactorEnabled ? 'good' : undefined}>2FA</Chip>,
+        <Chip key="bio" icon={IconFingerprint} tone={s.biometricEnabled ? 'good' : undefined}>{t('settings.biometric')}</Chip>,
+        <Chip key="lock" icon={IconClock}>{s.autoLockMinutes === 0 ? t('settings.never') : `${s.autoLockMinutes}m`}</Chip>
       ]
     },
     {
@@ -1957,9 +1962,11 @@ export default function Settings() {
             ProfileBadge is itself a button (it opens the unread-notifications
             popup), and a <button> inside a <button> is invalid HTML: browsers
             un-nest it, so the avatar either vanished or its tap silently opened
-            the profile popup as well.
+            the profile popup as well. The wrapper only carries the ring's glow.
           */}
-          <ProfileBadge />
+          <span className="set-hero-avatar">
+            <ProfileBadge />
+          </span>
           <button
             type="button"
             className="set-hero-open"
@@ -1971,7 +1978,7 @@ export default function Settings() {
             <span className="set-hero-id">
               <span className="set-hero-name">{s.username || t('profile.usernameUnset')}</span>
               <span className="set-hero-sub">
-                {wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
+                <strong>{wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}</strong>
                 {' · '}
                 {t('settings.hub.openShort')}
               </span>
@@ -2003,24 +2010,34 @@ export default function Settings() {
               aria-label={t('settings.hideBalances')}
               aria-pressed={Boolean(s.hideBalances)}
             >
-              <IconInfo width={17} height={17} />
+              <SetIconPrivacy width={17} height={17} />
             </button>
           </div>
         </div>
 
         <div className="set-hero-chips">
           {chain ? <Chip dot={chain.color}>{chain.short}</Chip> : <Chip>EVM</Chip>}
-          <Chip>{t('swap.slippage')}: {s.defaultSlippage}%</Chip>
-          <Chip>{s.defaultDeadlineMin || 20} {t('settings.minutesShort', 'min')}</Chip>
-          {s.twoFactorEnabled && <Chip tone="good">2FA</Chip>}
-          {s.biometricEnabled && <Chip tone="good">{t('settings.biometric')}</Chip>}
+          <Chip icon={SetChipBolt}>{t('swap.slippage')}: {s.defaultSlippage}%</Chip>
+          <Chip icon={IconClock}>{s.defaultDeadlineMin || 20} {t('settings.minutesShort', 'min')}</Chip>
+          {s.twoFactorEnabled && <Chip icon={IconLock} tone="good">2FA</Chip>}
+          {s.biometricEnabled && <Chip icon={IconFingerprint} tone="good">{t('settings.biometric')}</Chip>}
         </div>
       </motion.section>
 
-      {/* ─── THE GRID: one tile per section ───────────────────────────────── */}
+      {/* ─── THE LIST: one full-width box per section ────────────────────────
+          The heading is a designed part of the screen now: its own SVG glyph
+          (a 2×2 layout mark, the active cell ticked), the section count and
+          the tap hint — not faint uppercase text with nothing to look at. */}
       <div className="set-hub-label">
+        <span className="set-hub-label-ico" aria-hidden="true">
+          <SetIconSections width={18} height={18} />
+        </span>
         <h2>{t('settings.hub.groups')}</h2>
-        <span className="faint" style={{ fontSize: 11 }}>{t('settings.hub.tapHint')}</span>
+        <span className="set-hub-label-count" aria-hidden="true">{sections.length}</span>
+        <span className="set-hub-label-hint">
+          <SetIconSections width={12} height={12} />
+          {t('settings.hub.tapHint')}
+        </span>
       </div>
 
       <div className="set-hub">
@@ -2109,6 +2126,11 @@ export default function Settings() {
         open={Boolean(active)}
         onClose={closeSection}
         size="lg"
+        /* The popup is portalled to <body>, outside every tone element, so
+           the section's tone class travels ON the sheet itself — that is what
+           paints the header icon, the row wells and the chosen chips in the
+           same colour as the box that opened them. */
+        className={current ? `st-tone-${current.tone}` : undefined}
         title={
           current ? (
             <span className="set-sheet-title">
