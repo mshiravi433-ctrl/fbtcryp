@@ -1,7 +1,7 @@
 # FBT Insurance OS — Architecture & Integration
 
-Status: **v2 — production activation (Nexus Mutual live · InsurAce live/key-gated · OpenCover registry)** · Owner: FBT Web3 Architecture
-Date: 2026-09-07
+Status: **v2 — production activation (Nexus Mutual live · InsurAce deactivated · OpenCover registry)** · Owner: FBT Web3 Architecture
+Date: 2026-09-08
 
 This document describes how **FBT Insurance OS** integrates into the existing FBT
 Swap monorepo without breaking any existing module (Swap, Bridge, Wallet,
@@ -18,12 +18,12 @@ Lending, Futures, Intent OS, Rewards, …).
 
 | Item | State |
 |---|---|
-| Nexus Mutual | **LIVE** — Public API v2 (`/v2/products`, `/v2/capacity/{id}`, `/v2/pricing/products/{id}`, `/v2/quote`), unsigned `CoverBroker.buyCover` prepared server-side (ABI + addresses from `@nexusmutual/deployments@3.4.0`, provenance in `adapters/config/nexus-mainnet.json`), activation verified independently via `CoverNFT` mint receipt (tokenId == coverId). Period 28–365d, terms acceptance mandatory, commission 0 (no agreement), PoS off. |
-| InsurAce | **LIVE, key-gated** — `getProductList/getCurrencyList/getCoverPremiumV2/confirmCoverPremiumV2` against `https://api.insurace.io/ops/v1` (`INSURACE_API_CODE`, env-only secret). Purchase via `buyCoverV3` requires an operator-verified Cover contract address (docs provide addresses to integrators only) — otherwise purchase is `NOT_CONFIGURED` and disabled. |
+| Nexus Mutual | **LIVE** — Public API v2 (`https://api.nexusmutual.io/v2` — `/products`, `/product-types`, `/cover-metadata`, `/quote`, `/capacity/{id}`; re-verified 2026-09-08 against the live API and `@nexusmutual/sdk@3.1.1`), unsigned `CoverBroker.buyCover` prepared server-side (ABI + addresses from `@nexusmutual/deployments@3.4.0`, provenance in `adapters/config/nexus-mainnet.json`), activation verified independently via `CoverNFT` mint receipt (tokenId == coverId). Period 28–365d, terms acceptance mandatory, commission 0 (no agreement), PoS off. |
+| InsurAce | **DEACTIVATED (operator decision 2026-09-08)** — `INSURACE_ENABLED` defaults `false` in code and `.env.example`; the adapter still implements `getProductList/getCurrencyList/getCoverPremiumV2/confirmCoverPremiumV2` against `https://api.insurace.io/ops/v1` (`INSURACE_API_CODE`, env-only secret) and purchase via `buyCoverV3` (operator-verified Cover contract address required) — re-activate deliberately after re-verification. |
 | OpenCover | **Verified Vault Coverage Registry** — reference links only (protocol, vault, asset, chain, Nexus productId, official Policy/Annex URLs, `source: opencover`, human-verified date). No scraping; capacity fetched live from the Nexus capacity API or reported `UNKNOWN` + stale. |
 | Sandbox | Registered **only** when `NODE_ENV !== 'production'`; production registration throws `SANDBOX_PROVIDER_DISABLED_IN_PRODUCTION` (enforced in `provider-registry.js` + `adapters/index.js`). No simulated payouts or fabricated quotes in production. |
 | Response envelope | All routes: `requestId, timestamp, version, data, warnings, errors, source, freshness` (`server/insurance/envelope.js`); stale data flagged `STALE_DATA_REFRESH_REQUIRED`, never shown as live. |
-| Fees | `FBT_INSURANCE_FEE_BPS` / `FBT_INSURANCE_FLAT_FEE_MICRO` / `FBT_PROVIDER_COMMISSION_BPS` — default **exact $0** with disclosure `FBT Marketplace Fee: $0`; any non-zero fee is a deliberate operator setting and always displayed pre-signature. |
+| Fees | `FBT_INSURANCE_FEE_BPS` / `FBT_INSURANCE_FLAT_FEE_MICRO` / `FBT_PROVIDER_COMMISSION_BPS` — operator decision 2026-09-08: FBT marketplace fee **ACTIVE at 100 bps (1% of provider premium)**; the fee is part of the user's total and always displayed pre-signature. Provider commission stays 0 (never assumed). |
 | Verification | `server/insurance/verification.js` — `eth_getTransactionReceipt` with confirmation depth, contract match, and CoverNFT-mint-to-owner check; no RPC ⇒ `verified:false` (never approval-by-default). |
 | Ranking | `server/insurance/recommendation.js` — 14-factor explainable scoring; `UNAVAILABLE/PAUSED/STALE/NOT_CONFIGURED/UNKNOWN` providers are never recommended for new purchases (existing coverage stays visible). |
 | Admin | User-UI admin page **removed**; `/api/insurance/admin/*` key-gated and **404 in production** without `INSURANCE_ADMIN_KEY` (multisig-operated). |

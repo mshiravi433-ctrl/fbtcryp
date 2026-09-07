@@ -24,7 +24,8 @@ Companion docs: `docs/insurance-architecture.md`, `docs/insurance-acceptance.md`
 - Verification: receipt must hit `CoverBroker` AND mint a `CoverNFT` token to the buyer; `tokenId` is recorded as `coverId`, plus `blockNumber`.
 - Environment: `NEXUS_ENABLED`, `NEXUS_API_BASE_URL`, `NEXUS_CHAIN_ALLOWLIST`, `NEXUS_PRODUCT_IDS` (optional operator allowlist).
 
-### InsurAce (secondary, key-gated)
+### InsurAce (secondary — DEACTIVATED by operator decision 2026-09-08)
+Set `INSURACE_ENABLED=false` (the default in code and `.env.example`) until the integration is re-verified with a dedicated key. When reactivating:
 - API `https://api.insurace.io/ops/v1` — `getProductList`, `getCurrencyList`, `getCoverPremiumV2`, `confirmCoverPremiumV2` (flow verified from official docs). Access key in `INSURACE_API_CODE` (env-only secret; docs publish a low-volume key — request a dedicated one for production traffic).
 - Purchase: `buyCoverV3(...)` on the InsurAce Cover contract. **The docs provide addresses only to integrators**, so FBT reads them from operator-verified env (`INSURACE_COVER_CONTRACT_ADDRESS_{ETH,BSC,POLYGON,AVALANCHE}`). Missing address ⇒ purchase `NOT_CONFIGURED`, quoting still possible.
 - Chains: `INSURACE_CHAIN_ALLOWLIST=ETH,BSC,POLYGON,AVALANCHE`.
@@ -38,9 +39,9 @@ Companion docs: `docs/insurance-architecture.md`, `docs/insurance-acceptance.md`
 # 1. Configure environment (secret manager — never committed)
 NODE_ENV=production
 NEXUS_ENABLED=true
-INSURACE_ENABLED=true
-INSURACE_API_CODE=<secret>            # optional until InsurAce goes live
-FBT_INSURANCE_FEE_BPS=0               # marketplace fee: $0
+INSURACE_ENABLED=false               # deactivated (operator decision 2026-09-08)
+INSURACE_API_CODE=<secret>            # needed only when re-activating InsurAce
+FBT_INSURANCE_FEE_BPS=100             # marketplace fee ACTIVE: 1% of provider premium
 FBT_PROTECTION_POOL_ENABLED=false
 INSURANCE_AUTO_PURCHASE=false
 INSURANCE_CUSTODY_ENABLED=false

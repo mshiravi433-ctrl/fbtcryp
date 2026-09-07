@@ -1,12 +1,12 @@
 # FBT Insurance OS — §63 Acceptance Checklist
 
-Status date: 2026-09-07 (v2 production activation). Legend: ✅ implemented ·
+Status date: 2026-09-08 (v2 production activation — Nexus v2 API re-verified, fee active at 1%, InsurAce deactivated). Legend: ✅ implemented ·
 🟡 scaffolded / pending live-provider or production milestone · ⬜ not started.
 
 | # | §63 criterion | Status | Where |
 |---|---|---|---|
 | 1 | User can view protection products | ✅ | `GET /api/insurance/products`, marketplace page |
-| 2 | User can obtain a real provider quote | 🟡 sandbox quote; live provider pending | `POST /api/insurance/quote`, quote-engine |
+| 2 | User can obtain a real provider quote | ✅ Nexus Mutual live quoting via Public API v2 (product discovery, cover-metadata, cover-router quote) | `POST /api/insurance/quote`, quote-engine |
 | 3 | Quote expiration works | ✅ | quote-engine `expiresAt`, probe asserts QUOTE_EXPIRED |
 | 4 | User can compare providers | ✅ | aggregate quote + marketplace comparison |
 | 5 | User can see every fee | ✅ | fee-engine breakdown (premium/FBT/network/total) |
@@ -34,9 +34,10 @@ Status date: 2026-09-07 (v2 production activation). Legend: ✅ implemented ·
 | 27 | Documentation is complete | ✅ | `docs/insurance-architecture.md` + this file |
 
 ### Pending production milestones (explicitly not fabricated)
-- **InsurAce purchase path**: needs the operator-verified Cover contract address
-  (docs provide addresses to integrators only) — quoting already works with
-  `INSURACE_API_CODE`; purchase stays `NOT_CONFIGURED` until then.
+- **InsurAce path**: deactivated by default (operator decision 2026-09-08).
+  Re-activation needs `INSURACE_ENABLED=true` + `INSURACE_API_CODE` (quoting)
+  and the operator-verified Cover contract address (purchase), which docs
+  provide to integrators only.
 - **Multisig + timelock admin** key rotation runbook executed by ops (the code
   path is key-gated and 404s in production without a key).
 - **FBT internal protection pool / reserve / oracle TWAP** (§29–§31): architecture

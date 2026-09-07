@@ -38,7 +38,8 @@ export const isTest = NODE_ENV === 'test' || bool(process.env.FBT_TEST);
 
 /* ------------------------------ Nexus Mutual ------------------------------ */
 export const NEXUS_ENABLED = bool(process.env.NEXUS_ENABLED, true);
-export const NEXUS_API_BASE_URL = (process.env.NEXUS_API_BASE_URL || 'https://api.nexusmutual.io').replace(/\/+$/, '');
+/** Official public API base (v2) — same default as @nexusmutual/sdk `NexusSDKBase.apiUrl`. */
+export const NEXUS_API_BASE_URL = (process.env.NEXUS_API_BASE_URL || 'https://api.nexusmutual.io/v2').replace(/\/+$/, '');
 /** EVM chain ids Nexus cover may be bought on (allowlist; default: Ethereum mainnet only). */
 export const NEXUS_CHAIN_ALLOWLIST = list(process.env.NEXUS_CHAIN_ALLOWLIST || '1').map(Number);
 /** Restrict discovery to these Nexus product ids when set (operator allowlist). */
@@ -76,11 +77,11 @@ export const OPENCOVER_REGISTRY_ENABLED = bool(process.env.OPENCOVER_REGISTRY_EN
 
 /* ---------------------------------- Fees ---------------------------------- */
 /**
- * FBT marketplace fee. DEFAULT ZERO — displayed to the user as "FBT
- * Marketplace Fee: $0". A non-zero value is a deliberate operator decision
- * (e.g. after a real distribution agreement) and is always shown pre-signature.
+ * FBT marketplace fee. Operator decision 2026-09-08: ACTIVE at 100 bps (1% of
+ * the provider premium) — the fee is added to the user's total and always
+ * shown pre-signature. Override with FBT_INSURANCE_FEE_BPS (set 0 to disable).
  */
-export const FBT_INSURANCE_FEE_BPS = Math.max(0, int(process.env.FBT_INSURANCE_FEE_BPS, 0));
+export const FBT_INSURANCE_FEE_BPS = Math.max(0, int(process.env.FBT_INSURANCE_FEE_BPS, 100));
 /** Optional flat fee in micro-units (1e6) charged on top, default zero. */
 export const FBT_INSURANCE_FLAT_FEE_MICRO = BigInt(process.env.FBT_INSURANCE_FLAT_FEE_MICRO || '0');
 /**

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
+import { statusLabel } from './insStatus.js';
 
-const CATEGORIES = ['Smart Contract', 'Bridge', 'Stablecoin', 'Lending', 'LP', 'Wallet', 'Oracle', 'DeFi Protocol'];
+const TYPES = ['smart-contract', 'bridge', 'stablecoin', 'lending', 'lp', 'wallet', 'oracle', 'defi-protocol'];
 
 export default function InsuranceDashboard() {
-  const { wallet, notify, connected } = useOutletContext();
+  const { t } = useTranslation();
+  const { wallet, notify } = useOutletContext();
   const [data, setData] = useState(null);
   const [providers, setProviders] = useState([]);
   const [err, setErr] = useState('');
@@ -17,65 +20,77 @@ export default function InsuranceDashboard() {
     if (!wallet) { setData(null); return; }
     insuranceApi.coverage(wallet)
       .then((d) => setData(d.summary))
-      .catch((e) => { setErr(e.message || String(e)); notify?.(e.message || 'Could not load coverage', 'error'); });
-  }, [wallet, notify]);
+      .catch((e) => { setErr(e.message || String(e)); notify?.(e.message || t('insurance.dashboard.loadError'), 'error'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet]);
 
+  const liveProviders = providers.filter((p) => p.status === 'LIVE' && p.enabled);
+  const allProviders = providers.filter((p) => p.configured);
   const risk = data?.activeCovers ? 'LOW' : '—';
 
   return (
     <div>
       <div className="ins-hero">
-        <h1>FBT Protection</h1>
-        <p>Discover, compare and purchase on-chain protection from external providers. You sign and settle directly — FBT never underwrites or custodies your funds.</p>
-        {connected && <span className="ins-chip ACTIVE" style={{ marginTop: 10, display: 'inline-block' }}>Wallet connected</span>}
+        <div className="ins-hero-badge">{t('insurance.dashboard.heroBadge')}</div>
+        <h1>{t('insurance.dashboard.title')}</h1>
+        <p>{t('insurance.dashboard.subtitle')}</p>
+        <div className="ins-hero-actions">
+          <button className="ins-btn" onClick={() => nav('/insurance/marketplace')}>{t('insurance.dashboard.explore')}</button>
+          {wallet && <button className="ins-btn ghost" onClick={() => nav('/insurance/risk')}>{t('insurance.dashboard.riskCheck')}</button>}
+        </div>
       </div>
 
       {err && <div className="ins-alert">{err}</div>}
 
       <div className="ins-grid">
-        <div className="ins-stat"><div className="lbl">Total Protected</div><div className="val acc">${usd(data?.totalProtectedUsd || '0')}</div></div>
-        <div className="ins-stat"><div className="lbl">Active Covers</div><div className="val">{data?.activeCovers ?? '—'}</div></div>
-        <div className="ins-stat"><div className="lbl">Total Premium</div><div className="val">${usd(data?.totalPremiumUsd || '0')}</div></div>
-        <div className="ins-stat"><div className="lbl">Portfolio Risk</div><div className="val"><span className={'ins-chip ' + (risk || 'LOW')}>{risk}</span></div></div>
+        <div className="ins-stat"><div className="lbl">{t('insurance.dashboard.totalProtected')}</div><div className="val acc">${usd(data?.totalProtectedUsd || '0')}</div></div>
+        <div className="ins-stat"><div className="lbl">{t('insurance.dashboard.activeCovers')}</div><div className="val">{data?.activeCovers ?? '—'}</div></div>
+        <div className="ins-stat"><div className="lbl">{t('insurance.dashboard.totalPremium')}</div><div className="val">${usd(data?.totalPremiumUsd || '0')}</div></div>
+        <div className="ins-stat"><div className="lbl">{t('insurance.dashboard.portfolioRisk')}</div><div className="val"><span className={'ins-chip ' + (risk || 'LOW')}>{risk === '—' ? t('insurance.dashboard.unknown') : statusLabel(t, risk)}</span></div></div>
       </div>
 
-      <button className="ins-btn" onClick={() => nav('/insurance/risk')}>Protect My Assets</button>
+      {!wallet && <div className="ins-ok">{t('insurance.dashboard.walletEmpty')}</div>}
 
       {data?.active?.length > 0 && (
         <>
-          <div className="ins-sub" style={{ marginTop: 18 }}>Active Protection</div>
+          <div className="ins-sub ins-sec-title">{t('insurance.dashboard.activeTitle')}</div>
           {data.active.map((c) => (
             <Link key={c.coverageId} to={`/insurance/coverage/${c.coverageId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div className="ins-card">
-                <div className="ins-row"><span><b style={{ textTransform: 'capitalize' }}>{c.protectionType}</b> · {c.providerName}</span><span className={'ins-chip ' + c.status}>{c.status}</span></div>
-                <div className="ins-row"><span>Protected</span><b>${usd(c.coverageAmountMicro)}</b></div>
-                <div className="ins-row"><span>Expires</span><span>{c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : '—'}</span></div>
+              <div className="ins-card ins-cover-row">
+                <div className="ins-cover-ico">🛡️</div>
+                <div className="ins-cover-main">
+                  <div className="ins-cover-name"><b style={{ textTransform: 'capitalize' }}>{t(`insurance.types.${c.protectionType}`, { defaultValue: c.protectionType })}</b> · {c.providerName}</div>
+                  <div className="ins-muted">{t('insurance.dashboard.protected')} <b>${usd(c.coverageAmountMicro)}</b> · {t('insurance.dashboard.expires')} {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : '—'}</div>
+                </div>
+                <span className={'ins-chip ' + c.status}>{statusLabel(t, c.status)}</span>
               </div>
             </Link>
           ))}
         </>
       )}
 
-      <div className="ins-sub" style={{ marginTop: 18 }}>Available Protection</div>
-      <div className="ins-grid">
-        {CATEGORIES.map((c) => (
-          <button key={c} className="ins-card" style={{ textAlign: 'left', cursor: 'pointer', display: 'block' }}
-            onClick={() => nav(`/insurance/marketplace?type=${encodeURIComponent(c.toLowerCase().replace(' ', '-'))}`)}>
-            <b>{c}</b>
-            <div className="ins-muted" style={{ marginTop: 4 }}>Protect {c} exposure</div>
+      <div className="ins-sub ins-sec-title">{t('insurance.dashboard.availableTitle')}</div>
+      <div className="ins-grid ins-cat-grid">
+        {TYPES.map((typeId) => (
+          <button key={typeId} className="ins-cat"
+            onClick={() => nav(`/insurance/marketplace?type=${typeId}`)}>
+            <span className="ins-cat-ico">{typeId === 'wallet' ? '👛' : typeId === 'bridge' ? '🌉' : typeId === 'stablecoin' ? '💲' : typeId === 'lending' ? '🏦' : typeId === 'lp' ? '💧' : typeId === 'oracle' ? '📡' : typeId === 'defi-protocol' ? '🧩' : '⚙️'}</span>
+            <b>{t(`insurance.types.${typeId}`)}</b>
+            <span className="ins-muted">{t('insurance.dashboard.cardProtect', { type: t(`insurance.types.${typeId}`) })}</span>
           </button>
         ))}
       </div>
 
       <div className="ins-card">
-        <div className="ins-sub" style={{ marginTop: 0 }}>Connected providers</div>
-        {providers.filter((p) => p.configured).map((p) => (
+        <div className="ins-sub" style={{ marginTop: 0 }}>{t('insurance.dashboard.providersConnected')}</div>
+        {allProviders.length === 0 && <div className="ins-muted">{t('insurance.dashboard.providersEmpty')}</div>}
+        {allProviders.map((p) => (
           <div key={p.providerId} className="ins-row">
-            <span>{p.displayName || p.name}</span>
-            <span className={'ins-chip ' + (p.healthStatus || 'UNKNOWN')}>{p.healthStatus}</span>
+            <span>{p.displayName || p.name} {p.status === 'SANDBOX' && <span className="ins-tag">{statusLabel(t, 'SANDBOX')}</span>}</span>
+            <span className={'ins-chip ' + (p.healthStatus || 'UNKNOWN')}>{p.healthStatus ? statusLabel(t, p.healthStatus) : '—'}</span>
           </div>
         ))}
-        <div className="ins-muted">Nexus Mutual is registered but disabled until its live integration is verified.</div>
+        {liveProviders.length > 0 && <div className="ins-muted" style={{ marginTop: 8 }}>{t('insurance.dashboard.providersNote')}</div>}
       </div>
     </div>
   );

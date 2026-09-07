@@ -1,15 +1,17 @@
 /**
  * FBT Insurance OS — Nexus Mutual adapter (LIVE provider integration).
  *
- * Everything here is wired against the OFFICIAL Nexus Mutual surfaces only:
+ * Everything here is wired against the OFFICIAL Nexus Mutual surfaces only
+ * (re-verified against the live API and @nexusmutual/sdk@3.1.1 on 2026-09-08):
  *
  *   - Public API v2 ............ https://api.nexusmutual.io/v2
- *       GET /products            (product discovery — real product ids)
- *       GET /capacity/{id}       (real available capacity per product)
- *       GET /pricing/products/{id}
- *       GET /quote               (real premium quote + buyCoverInput)
- *     (verified against https://api.nexusmutual.io/v2/api/docs/ and the
- *      official @nexusmutual/sdk v3 — `NexusSDKBase.apiUrl` default.)
+ *       GET  /products          (product discovery — real product ids)
+ *       GET  /product-types     (product type ids → names + commission defaults)
+ *       POST /cover-metadata    (proof-of-loss cover metadata → ipfs cid)
+ *       GET  /quote             (real premium quote + pool allocations)
+ *       GET  /capacity/{id}     (real available capacity per product)
+ *     (base URL and paths match `@nexusmutual/sdk` `NexusSDKBase.apiUrl` and
+ *      its ProductAPI / Quote / CoverData REST calls.)
  *
  *   - PoS purchase flow ........ https://docs.nexusmutual.io/developers/pos-integrations/
  *       CoverBroker.buyCover(buyCoverParams, poolAllocationRequests)
@@ -29,10 +31,15 @@
  *   - cover assets: ETH(0), DAI(1), USDC(6), cbBTC(7)
  *   - claims require Nexus Mutual MEMBERSHIP; purchase does not (PoS)
  *   - KYC-restricted jurisdictions apply (membership docs)
+ *   - products that require proof-of-loss input: the PoS retail flow records
+ *     the policyholder's own wallet as the covered address (the wallet that
+ *     would suffer the loss). Products requiring non-address inputs (AUM /
+ *     quota-share / validator lists) need a dedicated input UI, so the
+ *     marketplace does not surface them — no guessed metadata.
  */
 import { Interface } from 'ethers';
 import { InsuranceProviderAdapter } from '../adapter.js';
-import { httpGet } from '../http.js';
+import { httpGet, httpPost } from '../http.js';
 import * as store from '../store.js';
 import {
   NEXUS_API_BASE_URL, NEXUS_ENABLED, NEXUS_CHAIN_ALLOWLIST,
@@ -55,6 +62,25 @@ export const MIN_PERIOD_DAYS = 28;
 export const MAX_PERIOD_DAYS = 365;
 
 const PRODUCTS_TTL_MS = 60_000;
+const PRODUCT_TYPES_TTL_MS = 10 * 60_000;
+
+/**
+ * Map a Nexus product row to an FBT protection kind. Uses the product's own
+ * `category` when it is meaningful and only falls back to product-type-name
+ * heuristics (single-protocol etc.) for uncategorised rows — never guessed.
+ */
+function kindFromProduct(p, typeName) {
+  const cat = String(p?.category || '').toLowerCase();
+  const tname = String(typeName || '').toLowerCase();
+  if (cat === 'custody' || cat === 'smart-wallet' || tname.includes('custody')) return 'wallet';
+  if (cat === 'depeg' || cat === 'stablecoin' || tname.includes('depeg') || tname.includes('stablecoin')) return 'stablecoin';
+  if (cat === 'lending') return 'lending';
+  if (cat === 'bridge') return 'bridge';
+  if (cat === 'oracle') return 'oracle';
+  if (cat === 'lp') return 'lp';
+  if (cat === 'yield-token' || cat === 'yield-optimizer' || tname.includes('yield token')) return 'defi-protocol';
+  return 'smart-contract'; // dex / protocol / bundled / uncategorised families
+}
 
 /** Operator-verified address overrides beat the pinned provenance file. */
 function addressOf(name, envVar) {
@@ -63,12 +89,13 @@ function addressOf(name, envVar) {
   return configData.addresses[name] || null;
 }
 
-function classificationFromProductType(productType) {
-  const label = String(productType || '').toLowerCase();
-  if (label.includes('custody')) return 'wallet';
-  if (label.includes('depeg') || label.includes('stablecoin')) return 'stablecoin';
-  if (label.includes('yield token')) return 'defi-protocol';
-  return 'smart-contract'; // protocol / bundled-protocol / SLM family
+/** Products the PoS retail flow can quote honestly: no input, or only the
+ *  buyer's own wallet address as proof-of-loss metadata. Everything else
+ *  (AUM / quota-share / validator forms) is excluded until a matching input
+ *  UI exists — the marketplace never guesses provider-specific metadata. */
+function quoteableProofOfLoss(types) {
+  if (!Array.isArray(types) || types.length === 0) return true;
+  return types.every((t) => String(t || '').toLowerCase() === 'address');
 }
 
 export class NexusMutualAdapter extends InsuranceProviderAdapter {
@@ -83,6 +110,7 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     this.posEnabled = opts.posEnabled ?? NEXUS_POS_ENABLED;
     this.configured = this.enabled && !!this.apiBase && this.chainAllowlist.length > 0;
     this._productsCache = null; // { at, rows }
+    this._productTypesCache = null; // { at, rows }
     this.coverAssetAllowlist = (process.env.NEXUS_COVER_ASSETS || 'USDC').split(',')
       .map((s) => s.trim().toUpperCase()).filter((s) => s in COVER_ASSETS);
     this.slippageBps = Math.max(0, Number(process.env.NEXUS_PREMIUM_SLIPPAGE_BPS || 100)); // 1% default, operator-tunable
@@ -157,45 +185,86 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
 
   /* ------------------------------ discovery ------------------------------ */
 
+  /** Product-type id → type row cache (small list; refreshed hourly). */
+  async getProductTypes() {
+    if (!this.configured) return [];
+    const cached = this._productTypesCache;
+    if (cached && Date.now() - cached.at < PRODUCT_TYPES_TTL_MS) return cached.rows;
+    const raw = await this._get('/product-types');
+    const arr = Array.isArray(raw) ? raw : Array.isArray(raw?.productTypes) ? raw.productTypes : [];
+    const rows = [];
+    for (const t of arr) {
+      const id = Number(t?.id);
+      if (!Number.isFinite(id)) continue;
+      rows.push({
+        id,
+        name: String(t?.name || 'UNKNOWN'),
+        claimMethod: String(t?.claimMethod ?? '0'),
+        gracePeriodDays: Number.isFinite(Number(t?.gracePeriod)) ? Math.round(Number(t.gracePeriod) / 86400) : null,
+        commissionRatioBps: Number.isFinite(Number(t?.commissionRatio)) ? Number(t.commissionRatio) : null,
+        commissionDestination: t?.commissionDestination || null,
+        ipfsContentType: t?.ipfsContentType || null
+      });
+    }
+    this._productTypesCache = { at: Date.now(), rows };
+    return rows;
+  }
+
   async getProducts() {
     if (!this.configured) return [];
     const cached = this._productsCache;
     if (cached && Date.now() - cached.at < PRODUCTS_TTL_MS) return cached.rows;
 
-    const raw = await this._get('/products');
+    // Narrow the discovery server-side (same filters @nexusmutual/sdk exposes).
+    const [rawRes, typesRes] = await Promise.allSettled([
+      this._get('/products', { 'filters[isDeprecated]': false, 'filters[isPrivate]': false }),
+      this.getProductTypes()
+    ]);
+    const raw = rawRes.status === 'fulfilled' ? rawRes.value : null;
+    if (!raw) throw (rawRes.reason || new Error('Nexus API unreachable (product discovery failed)'));
     const arr = Array.isArray(raw) ? raw : Array.isArray(raw?.products) ? raw.products : [];
+    const types = typesRes.status === 'fulfilled' ? typesRes.value : [];
+    const typeById = new Map(types.map((t) => [t.id, t]));
     const rows = [];
     for (const p of arr) {
       const id = Number(p?.id);
       if (!Number.isFinite(id)) continue;
       if (p?.isDeprecated === true || p?.isPrivate === true) continue;
       if (this.productIdAllowlist.length && !this.productIdAllowlist.includes(id)) continue;
-      // productType may arrive as an expanded object or a bare id — never guess.
-      const ptId = typeof p?.productType === 'object' ? p?.productType?.id : p?.productType;
-      const ptName = typeof p?.productType === 'object' ? (p?.productType?.name || 'UNKNOWN') : 'UNKNOWN';
+      // Specialised cover forms (AUM/quota-share/validators…) need their own
+      // input UI — only products a retail wallet can quote are surfaced.
+      if (!quoteableProofOfLoss(p?.proofOfLossInputTypes)) continue;
+      // The product must be purchasable in one of the operator's cover assets.
       const coverAssets = Array.isArray(p?.coverAssets)
         ? p.coverAssets.map((a) => ({ assetId: Number(a?.assetId), symbol: String(a?.assetSymbol || 'UNKNOWN') }))
         : [];
-      const metadata = typeof p?.metadata === 'object' && p.metadata ? p.metadata : {};
+      if (!coverAssets.some((a) => this.coverAssetAllowlist.includes(a.symbol))) continue;
+      const ptId = Number(p?.productType);
+      const pt = Number.isFinite(ptId) ? (typeById.get(ptId) || null) : null;
+      const ptName = pt?.name || 'UNKNOWN';
+      const metadata = (typeof p?.metadata === 'object' && p.metadata) ? p.metadata : {};
+      const exclusions = Array.isArray(metadata?.exclusions)
+        ? metadata.exclusions.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)))
+        : [];
       rows.push({
         providerProductId: String(id),
         id: `nexus-${id}`,
-        kind: classificationFromProductType(ptName),
+        kind: kindFromProduct(p, ptName),
         label: p?.name || `Nexus Product #${id}`,
         name: p?.name || `Nexus Product #${id}`,
-        nexusProductTypeId: Number.isFinite(Number(ptId)) ? Number(ptId) : null,
+        nexusProductTypeId: pt?.id ?? null,
         productTypeName: ptName,
         supportedChains: this.supportedChains,
         coverAssets,
-        minPrice: p?.minPrice ?? null,
+        minPrice: p?.minPrice != null && p?.minPrice !== '' ? Number(p.minPrice) : null,
         claimMethod: 'nexus-assessment',
         claimMembershipRequired: true,
-        gracePeriodDays: typeof p?.productType === 'object' && p?.productType?.gracePeriod ? Number(p.productType.gracePeriod) : null,
+        gracePeriodDays: pt?.gracePeriodDays ?? null,
         proofOfLossInputTypes: Array.isArray(p?.proofOfLossInputTypes) ? p.proofOfLossInputTypes : [],
         requiresProofOfLoss: (p?.proofOfLossInputTypes || []).length > 0,
-        exclusions: metadata?.exclusions ? [{ source: 'nexus-mutual-metadata', url: metadata.exclusions }] : [],
-        annexUrl: metadata?.annex || `https://app.nexusmutual.io/cover/product/${id}/annex`,
-        termsUrl: metadata?.schedule || `https://app.nexusmutual.io/cover/product/${id}/cover-wording`,
+        exclusions,
+        annexUrl: `https://app.nexusmutual.io/cover/product/${id}/annex`,
+        termsUrl: `https://app.nexusmutual.io/cover/product/${id}/cover-wording`,
         sandbox: false,
         sandboxProduct: false
       });
@@ -266,6 +335,35 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       return { ok: false, error: 'TERMS_ACCEPTANCE_REQUIRED', detail: 'Nexus Mutual wording + annex and the membership/KYC notice must be accepted before quoting for purchase.' };
     }
 
+    // Official v2 flow (@nexusmutual/sdk 3.1.1): products that require
+    // proof-of-loss metadata get it created first (POST /cover-metadata,
+    // creator = the buyer), then the Cover Router /quote prices the cover.
+    let cid = '';
+    try {
+      const products = await this.getProducts().catch(() => []);
+      const product = products.find((x) => x.providerProductId === String(productId));
+      if (product && (product.proofOfLossInputTypes || []).length > 0) {
+        const meta = {
+          creatorAddress: params.walletAddress,
+          proofOfLoss: [{ type: 'address', content: [{ address: params.walletAddress }] }]
+        };
+        const metaRes = await httpPost(`${this.apiBase}/cover-metadata`, meta, { timeoutMs: this.timeoutMs });
+        if (!metaRes.ok) {
+          const detail = metaRes.error?.kind === 'status'
+            ? `Nexus API HTTP ${metaRes.status} (cover metadata rejected)`
+            : `Nexus API unreachable (${metaRes.error?.kind || 'network error'})`;
+          const err = new Error(detail);
+          err.code = metaRes.error?.kind === 'status' ? 'PROVIDER_HTTP_ERROR' : 'PROVIDER_UNAVAILABLE';
+          err.providerStatus = metaRes.error?.kind === 'status' ? 'DEGRADED' : 'UNAVAILABLE';
+          throw err;
+        }
+        cid = metaRes.data?.cid || '';
+        if (!cid) return { ok: false, error: 'QUOTE_MALFORMED', detail: 'cover-metadata response carried no cid' };
+      }
+    } catch (err) {
+      return { ok: false, error: err.code === 'PROVIDER_HTTP_ERROR' ? 'QUOTE_REJECTED_BY_PROVIDER' : 'PROVIDER_UNAVAILABLE', detail: err.message, providerStatus: err.providerStatus };
+    }
+
     let q;
     try {
       q = await this._get('/quote', {
@@ -273,21 +371,44 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
         amount: amountBase,
         period: days,
         coverAsset: asset.id,
-        buyerAddress: params.walletAddress
+        paymentAsset: asset.id
       });
     } catch (err) {
       return { ok: false, error: err.code === 'PROVIDER_HTTP_ERROR' ? 'QUOTE_REJECTED_BY_PROVIDER' : 'PROVIDER_UNAVAILABLE', detail: err.message, providerStatus: err.providerStatus };
     }
 
-    // Response shape per official SDK types: { displayInfo, buyCoverInput }.
-    const displayInfo = q?.displayInfo || {};
-    const buyCoverInput = q?.buyCoverInput || null;
-    const premiumBase = displayInfo?.premiumInAsset ?? buyCoverInput?.buyCoverParams?.maxPremiumInAsset ?? null;
+    // Official response shape: { quote: { premiumInAsset, annualPrice, poolAllocationRequests } }.
+    const quote = q?.quote || q;
+    const premiumBase = quote?.premiumInAsset ?? null;
     if (premiumBase == null) return { ok: false, error: 'QUOTE_MALFORMED', detail: 'quote response carried no premiumInAsset' };
 
     const premiumMicro = this.baseUnitsToMicro(premiumBase, asset);
-    const poolAllocationRequests = Array.isArray(buyCoverInput?.poolAllocationRequests) ? buyCoverInput.poolAllocationRequests : null;
-    const buyCoverParams = buyCoverInput?.buyCoverParams || null;
+    const poolAllocationRequests = Array.isArray(quote?.poolAllocationRequests) ? quote.poolAllocationRequests : [];
+    // Slippage guard: the unsigned buy caps the premium at (1 + slippage) × price.
+    const maxPremium = BigInt(premiumBase) + (BigInt(premiumBase) * BigInt(this.slippageBps)) / 10000n;
+
+    let maxCapacityBase = null;
+    try {
+      const capRes = await this._get(`/capacity/${Number(productId)}`, { period: days });
+      const list = Array.isArray(capRes?.availableCapacity) ? capRes.availableCapacity : [];
+      const capRow = list.find((av) => Number(av?.assetId) === asset.id);
+      maxCapacityBase = capRow?.amount != null ? String(capRow.amount) : null;
+    } catch { /* display-only — a priced quote never fails on capacity */ }
+
+    // buyCoverParams mirrors @nexusmutual/sdk (period in SECONDS on-chain).
+    const buyCoverParams = {
+      coverId: 0,
+      owner: params.walletAddress,
+      productId: Number(productId),
+      coverAsset: asset.id,
+      amount: amountBase,
+      period: days * 86400,
+      maxPremiumInAsset: maxPremium.toString(),
+      paymentAsset: asset.id,
+      commissionRatio: this.commissionRatioBps, // 0 unless a real agreement exists
+      commissionDestination: this.commissionRatioBps > 0 ? this.commissionDestination : '0x0000000000000000000000000000000000000000',
+      ipfsData: cid
+    };
 
     return {
       ok: true,
@@ -297,13 +418,13 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       providerProductId: String(productId),
       currency: asset.symbol,
       coverAssetId: asset.id,
-      yearlyCostPerc: displayInfo?.yearlyCostPerc ?? null,
-      maxCapacityBase: displayInfo?.maxCapacity ?? null,
+      yearlyCostPerc: null, // annualPrice is provider-internal; never displayed as a made-up %
+      maxCapacityBase,
       estimatedGas: null, // filled at prepare time; never fabricated here
       at: Date.now(),
-      purchaseReady: !!(buyCoverParams && poolAllocationRequests),
+      purchaseReady: poolAllocationRequests.length > 0 && BigInt(premiumBase) > 0n,
       // Keep the provider's own quote artefacts verbatim for the unsigned tx.
-      raw: { buyCoverParams, poolAllocationRequests, premiumInAsset: premiumBase, coverAmount: displayInfo?.coverAmount ?? amountBase }
+      raw: { buyCoverParams, poolAllocationRequests, premiumInAsset: premiumBase, coverAmount: amountBase }
     };
   }
 
@@ -438,7 +559,9 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     if (!this.configured) return { ok: false, status: 'NOT_CONFIGURED', at: Date.now() };
     const t0 = Date.now();
     try {
-      await this._get('/products');
+      // Liveness probe on the light product-types endpoint — never downloads
+      // the whole product catalogue just to answer "is the API up?".
+      await this._get('/product-types');
       return { ok: true, status: 'HEALTHY', latencyMs: Date.now() - t0, at: Date.now(), live: true };
     } catch (err) {
       return {

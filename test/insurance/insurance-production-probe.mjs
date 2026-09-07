@@ -7,7 +7,10 @@
  *
  *   1. Sandbox is structurally impossible in production.
  *   2. Live adapters degrade honestly (no fabricated quotes/capacity/terms).
- *   3. Fee transparency: FBT Marketplace Fee is EXACTLY $0 by default.
+ *   3. Fee transparency: FBT Marketplace Fee defaults to 100 bps (1% of the
+ *      provider premium — operator decision 2026-09-08), is part of the total
+ *      and is disclosed verbatim before any signature; commission is never
+ *      assumed. FBT_INSURANCE_FEE_BPS=0 disables the fee.
  *   4. Standard response envelope on every route (HTTP smoke).
  *   5. Provider ranking gates (UNAVAILABLE/PAUSED/STALE/NOT_CONFIGURED/UNKNOWN
  *      never recommended) and multi-factor scoring.
@@ -111,17 +114,32 @@ const ROOT = new URL('../../', import.meta.url).pathname;
 {
   const { computeFees } = await import('../../server/insurance/fee-engine.js');
   const fees = computeFees({ premiumMicro: 1_500_000n, provider: {}, network: 1 });
-  assert.equal(fees.fbtFeeMicro, 0n);
-  assert.equal(fees.fbtFeeUsd, '0');
-  assert.equal(fees.fbtMarketplaceFeeDisclosure, 'FBT Marketplace Fee: $0');
-  assert.equal(fees.totalCostMicro, 1_500_000n);
-  ok('fee engine default: FBT Marketplace Fee exactly $0 and disclosed verbatim');
+  // Operator decision 2026-09-08: 100 bps (1%) of provider premium by default.
+  assert.equal(fees.fbtFeeBps, 100);
+  assert.equal(fees.fbtFeeMicro, 15_000n);
+  assert.equal(fees.fbtFeeUsd, '0.015');
+  assert.equal(fees.fbtMarketplaceFeeDisclosure, 'FBT Marketplace Fee: $0.015');
+  assert.equal(fees.totalCostMicro, 1_515_000n);
+  ok('fee engine default: FBT Marketplace Fee = 1% of premium (100 bps), part of total, disclosed verbatim');
   // Commission never assumed.
   assert.equal(fees.commissionBps, 0);
   assert.equal(fees.commissionMicro, 0n);
   ok('provider commission defaults to 0 — never assumed');
 
-  // Non-zero fee must be an explicit env decision (child process, env read at import).
+  // The fee is overridable per env — disabling it is an explicit decision.
+  const disabled = execFileSync(process.execPath, ['--input-type=module', '-e', `
+    process.env.FBT_INSURANCE_FEE_BPS = '0';
+    const { computeFees } = await import('${ROOT}server/insurance/fee-engine.js');
+    const f = computeFees({ premiumMicro: 1500000n, provider: {} });
+    console.log(JSON.stringify({ micro: f.fbtFeeMicro.toString(), disclosure: f.fbtMarketplaceFeeDisclosure, total: f.totalCostMicro.toString() }));
+  `], { encoding: 'utf8' });
+  const dis = JSON.parse(disabled);
+  assert.equal(dis.micro, '0');
+  assert.equal(dis.disclosure, 'FBT Marketplace Fee: $0');
+  assert.equal(dis.total, '1500000');
+  ok('FBT_INSURANCE_FEE_BPS=0 disables the fee (disclosure $0, total = premium)');
+
+  // Any other rate is an explicit env decision (child process, env read at import).
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', `
     process.env.FBT_INSURANCE_FEE_BPS = '50';
     const { computeFees } = await import('${ROOT}server/insurance/fee-engine.js');
@@ -301,6 +319,10 @@ const ROOT = new URL('../../', import.meta.url).pathname;
   assert.ok(!/Admin/.test(shell), 'InsuranceShell must not render an Admin tab');
   assert.ok(shell.includes('role="tablist"') && shell.includes('aria-label'), 'tab rail must expose tablist semantics');
   assert.ok(shell.includes('onKeyDown') && shell.includes('ArrowRight'), 'tab rail must support keyboard navigation');
+  assert.ok(shell.includes('<InsuranceExplain />'), 'InsuranceShell must render the shared transparency box');
+  const outletIdx = shell.indexOf('<Outlet');
+  const explainIdx = shell.indexOf('<InsuranceExplain />');
+  assert.ok(outletIdx !== -1 && explainIdx > outletIdx, 'transparency box must sit BELOW the routed page (bottom of every insurance page)');
   ok('InsuranceShell: Admin tab removed; tab rail has role=tablist + aria-label + keyboard navigation');
 
   const css = readFileSync(`${ROOT}src/pages/insurance/insurance.css`, 'utf8');
@@ -311,12 +333,14 @@ const ROOT = new URL('../../', import.meta.url).pathname;
   ok('tab rail CSS: horizontal rail, nowrap, overflow-x auto, touch scrolling, flex: 0 0 auto');
 
   const market = readFileSync(`${ROOT}src/pages/insurance/InsuranceMarketplace.jsx`, 'utf8');
-  assert.ok(market.includes('<details'), 'marketplace needs the expandable accordion');
+  assert.ok(!market.includes('<details'), 'marketplace must not duplicate the accordion (shell renders it once)');
+  const explain = readFileSync(`${ROOT}src/pages/insurance/InsuranceExplain.jsx`, 'utf8');
+  assert.ok(explain.includes('<details'), 'InsuranceExplain needs the expandable accordion');
   for (const icon of ['Icon.Wallet', 'Icon.Shield', 'Icon.Risk', 'Icon.Fee', 'Icon.Chain', 'Icon.Claim']) {
-    assert.ok(market.includes(icon), `accordion missing icon ${icon}`);
+    assert.ok(explain.includes(icon), `accordion missing icon ${icon}`);
   }
-  assert.ok(!/Icon\.\w+\(\).*iconfont/i.test(market));
-  ok('marketplace transparency accordion present with inline SVG icons (wallet/shield/risk/fee/chain/claim)');
+  assert.ok(!/Icon\.\w+\(\).*iconfont/i.test(explain));
+  ok('transparency accordion lives once in InsuranceExplain (bottom of every page via shell) with inline SVG icons (wallet/shield/risk/fee/chain/claim)');
 
   const client = readFileSync(`${ROOT}src/lib/insuranceClient.js`, 'utf8');
   assert.ok(!client.includes('/admin/'), 'client must not expose admin endpoints');
