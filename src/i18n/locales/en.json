@@ -1927,7 +1927,7 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "We could not read your ETH balance on Base.",
         "AAVE_NATIVE_GAS_FLOOR": "You need more ETH on Base to cover gas."
       },
-      "wrongChainNote": "Your wallet is on another network. Switch to {chain} to see your Aave position and withdraw."
+      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Aave position and withdraw."
     },
     "horizonChartTitle": "Earnings by horizon",
     "horizonChartSub": "Projected return on {{amount}} at today’s rate",
@@ -6979,8 +6979,8 @@
     "netWorth": "Net worth",
     "coverage": {
       "partial": "Partial coverage",
-      "reads": "{read} of {total} chains read",
-      "priced": "{priced} of {total} holdings priced"
+      "reads": "{{read}} of {{total}} chains read",
+      "priced": "{{priced}} of {{total}} holdings priced"
     },
     "goal": {
       "title": "Goal",
@@ -6992,11 +6992,11 @@
       "yieldLabel": "Expected annual yield (%) — optional",
       "save": "Save goal",
       "remove": "Remove",
-      "progressLabel": "Progress: {pct}%",
+      "progressLabel": "Progress: {{pct}}%",
       "reached": "Goal reached — the live total covers the target.",
       "noSchedule": "Deadline is past or this month — no monthly schedule reaches the target.",
       "funded": "Already funded by the live total. No contribution required.",
-      "requiredMonthly": "About {amount} per month to reach it on time.",
+      "requiredMonthly": "About {{amount}} per month to reach it on time.",
       "missed": "Deadline has passed. The live progress bar above is the only honest number now.",
       "awaitingConfirmation": "Awaiting your confirmation.",
       "ordersLink": "Open orders",
