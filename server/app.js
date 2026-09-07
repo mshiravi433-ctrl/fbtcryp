@@ -7,8 +7,6 @@
  * the one you test locally.
  */
 import 'dotenv/config';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
@@ -412,8 +410,6 @@ import {
 } from './intentLaterPhaseProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /*
  * normalizeBotToken(): a trailing newline, stray spaces, wrapping quotes or an
@@ -6450,97 +6446,19 @@ app.get('/api/cron/train', async (req, res) => {
 });
 
 /* ----------------------------- static frontend ---------------------------- */
-
-const distDir = path.join(__dirname, '..', 'dist');
-
 /*
- * ─── WHY THE CACHE LIFETIME DEPENDS ON THE FILENAME ─────────────────────────
- * This was a flat `maxAge: '1h'` for everything, and it was the main reason
- * the site felt slow on a second visit: a returning user re-downloaded the
- * entire ~770 KB first-paint payload — the entry bundle, React, framer-motion,
- * the stylesheet and the 109 KB Persian font — every hour, forever.
- *
- * Reported directly: «سرعت لود سایت خیلی کم شده و طول میکشه بیاد».
- *
- * The fix is not one number, because these files have genuinely different
- * lifetimes:
- *
- *   /assets/*  — Vite writes a CONTENT HASH into every filename
- *                (index-y4UH__tA.js). The URL changes whenever the bytes
- *                change, so a stale file can never be served: a new build
- *                produces new URLs and the old ones are never requested
- *                again. A year plus `immutable` is exactly correct here, and
- *                `immutable` additionally stops the browser sending a
- *                revalidation request at all.
- *
- *   /fonts/*   — not hashed, but replaced by editing index.html to point
- *                elsewhere rather than by swapping bytes under the same name.
- *
- *   index.html — MUST be revalidated every time. It is the one file naming
- *                the current hashed asset URLs, so caching it pins a
- *                returning visitor to the previous deploy's JavaScript. That
- *                is how somebody stays on an old build for hours after a fix
- *                ships, which is worse than a slow load. It keeps its
- *                must-revalidate policy below, served through this same
- *                middleware rather than only through the fallback.
- *
- *   <slug>/index.html — static landing guides (the Persian DEX landing
- *                first among them). With `index: false` this middleware
- *                REFUSED to serve directory indexes at all, so the SPA
- *                fallback answered /صرافی-غیرمتمرکز/ with the app shell on
- *                every self-hosted deployment while Vercel served the real
- *                guide. The two platforms disagreed, silently. Serving the
- *                index here restores parity; every index.html in dist —
- *                guide or app shell — gets the identical must-revalidate
- *                policy that only-ever-applied to the app shell.
- *
- * Vercel serves /assets and /fonts from its edge using the headers in
- * vercel.json and never reaches this code. This matters for the APK, which
- * bundles the server, and for anyone self-hosting — the two paths must agree
- * or the app behaves differently depending on where it runs.
+ * Static file serving and the SPA fallback live ONLY in server/index.js
+ * (the long-running local/self-hosted/APK entrypoint). They must NOT be
+ * duplicated here, because api/index.js imports this module and Vercel's
+ * @vercel/nft traces every static reference at build time. An
+ * `express.static(distDir)` here would pull the entire `dist/` tree into the
+ * serverless function bundle, and nft's static-evaluator crashes on a
+ * minified chunk that mixes BigInt with a plain Number — producing the
+ * "Cannot mix BigInt and other types" build failure that killed every
+ * Vercel deploy while the frontend build itself stayed green. On Vercel the
+ * edge serves dist directly (outputDirectory: dist in vercel.json), so
+ * nothing loses its static layer by keeping the reference out of app.js.
  */
-app.use(
-  express.static(distDir, {
-    index: 'index.html',
-    setHeaders(res, filePath) {
-      if (/[\\/](assets|fonts)[\\/]/.test(filePath)) {
-        res.setHeader('cache-control', 'public, max-age=31536000, immutable');
-        return;
-      }
-      if (/index\.html$/.test(filePath)) {
-        /* The whole point above: HTML is never stale-pinned. Applies to the
-           app shell AND to every static landing guide in dist. */
-        res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
-        return;
-      }
-      /*
-       * Icons and the manifest are unhashed AND do get replaced in place when
-       * the branding changes, so a year would strand a stale icon on a home
-       * screen with no way to force a refresh. A week is effectively free on
-       * repeat visits and still lets a fix propagate.
-       */
-      res.setHeader('cache-control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2419200');
-    }
-  })
-);
-
-// SPA fallback. Written as bare middleware because Express 5's router no
-// longer accepts a plain '*' path pattern.
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'NOT_FOUND' });
-  /*
-   * Never cached, and this is the counterpart to the year-long asset cache
-   * above rather than an inconsistency with it. index.html is the only file
-   * that names the current hashed asset URLs; caching it would pin a
-   * returning visitor to the previous deploy's JavaScript while the assets it
-   * points at are cached for a year. The revalidation costs a few hundred
-   * bytes and usually answers 304.
-   */
-  res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
-  return res.sendFile(path.join(distDir, 'index.html'), (err) => {
-    if (err) res.status(404).json({ error: 'NOT_BUILT', hint: 'run `npm run build` first' });
-  });
-});
 
 /* ── Wave 2: Auto-evidence collection on server start ─────────────────── */
 /* Collects REAL evidence from local services and registers them in-memory.
