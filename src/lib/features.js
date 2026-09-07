@@ -139,15 +139,25 @@ const buildEnv =
  */
 const compoundBuildEnv =
   typeof __COMPOUND_BASE_BUILD_ENV__ !== 'undefined' ? __COMPOUND_BASE_BUILD_ENV__ : null;
+/*
+ * The third adapter's caps arrive through their own build define, same as the
+ * first two: each define only carries its own deployment's keys, and every
+ * table is consulted before falling back to import.meta.env.
+ */
+const arbBuildEnv =
+  typeof __AAVE_ARB_BUILD_ENV__ !== 'undefined' ? __AAVE_ARB_BUILD_ENV__ : null;
 const buildOrEnv = (key) => {
   if (buildEnv && buildEnv[key] != null && String(buildEnv[key]) !== '') return buildEnv[key];
   if (compoundBuildEnv && compoundBuildEnv[key] != null && String(compoundBuildEnv[key]) !== '') {
     return compoundBuildEnv[key];
   }
-  // In an app build both defines exist, so an unset variable must resolve to
+  if (arbBuildEnv && arbBuildEnv[key] != null && String(arbBuildEnv[key]) !== '') {
+    return arbBuildEnv[key];
+  }
+  // In an app build the defines exist, so an unset variable must resolve to
   // "unset" here rather than falling through to an import.meta.env that the
   // bundler has already folded away.
-  if (buildEnv || compoundBuildEnv) return undefined;
+  if (buildEnv || compoundBuildEnv || arbBuildEnv) return undefined;
   return envFlag(key);
 };
 
@@ -217,6 +227,91 @@ export function aaveBaseSupplyAllowedFor(owner) {
  * caller's on-chain aToken balance > 0.
  */
 export function aaveBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
+  if (!owner) return false;
+  return Boolean(hasPosition);
+}
+
+/* -------------------------------------------------------------------------- */
+/* AAVE V3 · ARBITRUM · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD           */
+/* -------------------------------------------------------------------------- */
+/*
+ * The THIRD in-app DeFi execution adapter (lib/defi/aaveV3Arbitrum.js): the
+ * same Aave v3 Pool interface as the Base adapter, but a different deployment
+ * (Arbitrum One 42161), a different USDC (native 0xaf88…, the USDCn reserve —
+ * NOT the bridged USDC.e reserve) and a different aToken. Same protocol does
+ * NOT mean same flag: a governance incident, a paused reserve or a bad rate
+ * on one chain must be switchable off without taking the other chain's supply
+ * with it. Two deployments, two blast radii, two kill switches.
+ *
+ * Everything else follows the Base flag's rules deliberately:
+ *
+ *   · `=== 'true'`, never `!== 'false'`. A build that forgets the env var
+ *     ships with the money path CLOSED.
+ *   · Caps default to 100 USDC per transaction and 500 USDC in total, are
+ *     enforced inside the adapter (not just the UI), and an unparseable env
+ *     value falls back to the default rather than becoming 0 or Infinity.
+ *   · The kill switch never gates the EXIT. See
+ *     `aaveArbWithdrawAllowedFor` below.
+ *
+ * HOW TO TURN IT ON:
+ *
+ *     VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=true npm run build
+ *
+ * Do NOT enable it without the rollout checklist in
+ * docs/defi/aave-v3-arbitrum.md: independent review of the adapter and a
+ * passing Arbitrum-mainnet fork probe (`npm run test:aave-arbitrum-fork`).
+ */
+
+/** True only when the build was explicitly told to expose in-app Aave Arbitrum supply. */
+export const AAVE_ARB_SUPPLY_ENABLED =
+  typeof __AAVE_ARB_SUPPLY_ENABLED__ !== 'undefined'
+    ? __AAVE_ARB_SUPPLY_ENABLED__
+    : envFlag('VITE_ENABLE_AAVE_ARBITRUM_SUPPLY') === 'true';
+
+/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
+export const AAVE_ARB_SUPPLY_MAX_USDC_PER_TX = envCap(
+  'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
+);
+
+/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
+export const AAVE_ARB_SUPPLY_MAX_USDC_TOTAL = envCap(
+  'VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
+);
+
+/**
+ * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
+ * flag is on for". Compared case-insensitively against the connected owner.
+ *
+ *     VITE_AAVE_ARB_SUPPLY_ALLOWLIST=0xabc...,0xdef...
+ */
+export const AAVE_ARB_SUPPLY_ALLOWLIST = Object.freeze(
+  String(envFlag('VITE_AAVE_ARB_SUPPLY_ALLOWLIST') ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
+);
+
+/**
+ * Can THIS wallet open a NEW supply on Aave Arbitrum?
+ *
+ * All three gates, in order: the build flag, then the allowlist (when one is
+ * configured), then the caller's own hard caps. Withdrawal never calls this.
+ */
+export function aaveArbSupplyAllowedFor(owner) {
+  if (!AAVE_ARB_SUPPLY_ENABLED) return false;
+  if (AAVE_ARB_SUPPLY_ALLOWLIST.length === 0) return true;
+  const who = String(owner ?? '').trim().toLowerCase();
+  return AAVE_ARB_SUPPLY_ALLOWLIST.includes(who);
+}
+
+/**
+ * Can THIS wallet withdraw from Aave Arbitrum?
+ *
+ * Deliberately independent of the flag, the caps and the allowlist: the only
+ * requirement is that there is something to withdraw. `hasPosition` is the
+ * caller's on-chain aToken balance > 0.
+ */
+export function aaveArbWithdrawAllowedFor({ owner, hasPosition } = {}) {
   if (!owner) return false;
   return Boolean(hasPosition);
 }

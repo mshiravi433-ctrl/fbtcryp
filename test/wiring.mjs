@@ -13829,6 +13829,261 @@ export default function run() {
       cBlockRefs.length > 0 && cBlockMissing.length === 0);
   }
 
+  /* ---- 115. Aave v3 (Arbitrum/USDC) supply adapter — the third money path */
+  /*
+   * Same Pool interface as section 87, different deployment: Arbitrum One
+   * 42161, Circle-native USDC, its own aToken. So these pins guard the same
+   * decisions — flag default, caps, approval size, open exit — plus the ones
+   * that only exist because there are now TWO Aave deployments: separate
+   * flags, separate ledgers, mutually exclusive chain matchers, and the
+   * USDCn/USDC.e trap (Arbitrum has two USDCs; the adapter must pin native,
+   * never bridged).
+   */
+  {
+    const adapter = read('src/lib/defi/aaveV3Arbitrum.js');
+    /* Comment-stripped, for the pins that assert an ABSENCE — the same trap
+       section 87 fell into three times: matching the prose that explains a
+       rule instead of the code that enforces it. */
+    const code = adapter
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const codeNoStrings = code.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+    const features = read('src/lib/features.js');
+    const panel = read('src/components/Farm/AaveArbUsdcPanel.jsx');
+    const history = read('src/lib/defi/aaveV3ArbHistory.js');
+    const viteCfg = read('vite.config.js');
+    const farmPage = read('src/pages/Farm.jsx');
+
+    /* ── the flag defaults OFF, and is its OWN flag ───────────────────────── */
+    t('the Arbitrum supply flag defaults to false (=== \'true\', not !== \'false\')',
+      features.includes("envFlag('VITE_ENABLE_AAVE_ARBITRUM_SUPPLY') === 'true'")
+      && !/VITE_ENABLE_AAVE_ARBITRUM_SUPPLY'\)\s*!==\s*'false'/.test(features));
+    t('...and the build define is inverted the same way, so a forgotten env var fails CLOSED',
+      viteCfg.includes("__AAVE_ARB_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_ARBITRUM_SUPPLY === 'true')"));
+    t('...and the documented default is off',
+      features.includes('AAVE V3 · ARBITRUM · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD'));
+    /*
+     * Same protocol, different deployment is still a different blast radius:
+     * a paused reserve on one chain must be switchable off without taking
+     * the other chain's supply with it. Bounded slice — the Compound block
+     * that follows is pinned independent by section 114, but this pin must
+     * not pass on its silence.
+     */
+    const arbFlagBlock = features.slice(
+      features.indexOf('export const AAVE_ARB_SUPPLY_ENABLED'),
+      features.indexOf('export const COMPOUND_BASE_SUPPLY_ENABLED')
+    );
+    t('the Arbitrum flag is independent of the Base flag',
+      arbFlagBlock.length > 0
+      && !arbFlagBlock.includes('AAVE_BASE_SUPPLY_ENABLED')
+      && !arbFlagBlock.includes('VITE_ENABLE_AAVE_BASE_SUPPLY'));
+    t('...and the Arbitrum caps ride their own build-env table, not the Base one',
+      viteCfg.includes('__AAVE_ARB_BUILD_ENV__')
+      && features.includes("typeof __AAVE_ARB_BUILD_ENV__ !== 'undefined'"));
+
+    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
+    t('Arbitrum per-transaction cap defaults to 100 USDC',
+      /VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
+    t('Arbitrum total position cap defaults to 500 USDC',
+      /VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
+    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
+      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
+      && adapter.includes("block('AAVE_PER_TX_CAP')"));
+    t('...and the total cap counts the existing position, not just this transfer',
+      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
+      && adapter.includes("block('AAVE_TOTAL_CAP')"));
+
+    /* ── USDC comes from the token table, never retyped ───────────────────── */
+    const USDC_ARB = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
+    t('the Arbitrum adapter reads USDC from lib/chains.js',
+      adapter.includes("getToken(42161, 'USDC')") && adapter.includes('usdc: USDC_ON_ARBITRUM.address'));
+    t('...and never types the USDC address itself',
+      !adapter.toLowerCase().includes(USDC_ARB));
+    t('...and throws rather than running against a stale registry',
+      adapter.includes("throw new Error('AAVE_ADAPTER_MISSING_USDC_ON_ARBITRUM')"));
+
+    /* ── the USDCn/USDC.e trap ────────────────────────────────────────────── */
+    /*
+     * Arbitrum has two USDCs and Aave lists both. The bridged one (USDC.e,
+     * 0xFF97…) and ITS aToken (0x625E…) must appear NOWHERE in this file —
+     * not even in a comment, because a documented address gets copy-pasted
+     * into code. The header warns about the trap with truncated prefixes only.
+     */
+    t('the bridged USDC.e reserve and its aToken appear nowhere in the adapter',
+      !adapter.toLowerCase().includes('0xff970a61a04b1ca14834a43f5de4533ebddb5cc8')
+      && !adapter.toLowerCase().includes('0x625e7708f30ca75bfd92586e17077590c60eb4cd'));
+    t('...and the header says which of the two USDCs is pinned, explicitly',
+      adapter.includes('USDCn') && adapter.includes('NOT the bridged USDC.e entry'));
+
+    /* ── no infinite approve; MaxUint256 belongs to the exit only ─────────── */
+    const arbBeforeWithdraw = code.slice(0, code.indexOf('export async function buildWithdrawPlan'));
+    const arbAfterWithdraw = code.slice(code.indexOf('export async function buildRevokePlan'));
+    t('no MaxUint256 exists before the withdraw builder (approve + supply live there)',
+      arbBeforeWithdraw.length > 0 && !arbBeforeWithdraw.includes('MaxUint256'));
+    t('...nor in the revoke path', arbAfterWithdraw.length > 0 && !arbAfterWithdraw.includes('MaxUint256'));
+    t('...and every approve encodes the exact amount or zero',
+      adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_ARBITRUM.pool, amountWei])")
+      && adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_ARBITRUM.pool, 0n])"));
+    t('the approval is granted to the Aave Pool only',
+      !/approve'\s*,\s*\[(?!AAVE_V3_ARBITRUM\.pool)/.test(adapter));
+    t('the approve step is skipped when the allowance already covers the amount',
+      adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
+
+    /* ── the recipient cannot be anyone but the connected owner ───────────── */
+    t('supply passes the owner as onBehalfOf, with no other possible value',
+      /encodeFunctionData\('supply',\s*\[\s*AAVE_V3_ARBITRUM\.usdc,\s*amountWei,\s*owner,\s*AAVE_V3_ARBITRUM\.referralCode\s*\]/.test(code));
+    t('...and withdraw pays the owner, not a parameter',
+      adapter.includes("pool.encodeFunctionData('withdraw', [AAVE_V3_ARBITRUM.usdc, amountWei, owner])"));
+    t('...and no builder of ours accepts a recipient argument',
+      !/(export )?(async )?function\s+\w+\s*\([^)]*(onBehalfOf|recipient|dst|beneficiary)/.test(codeNoStrings));
+
+    /* ── the kill switch cannot trap funds ────────────────────────────────── */
+    t('Arbitrum withdraw is decided by its own helper, not by the supply flag',
+      /export function aaveArbWithdrawAllowedFor\(\{ owner, hasPosition \} = \{\}\) \{\n  if \(!owner\) return false;\n  return Boolean\(hasPosition\);\n\}/.test(features));
+    t('...and that helper never reads the supply flag, the caps or the allowlist',
+      !features
+        .slice(features.indexOf('export function aaveArbWithdrawAllowedFor'))
+        .includes('AAVE_ARB_SUPPLY_ENABLED'));
+    t('the withdraw builder is ungated by the caps, and says so in its checks',
+      /perTxCapOk: true,\s*\n\s*totalCapOk: true,/.test(adapter));
+    t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
+      panel.includes('withdrawAllowed && (')
+      && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    t('the panel renders nothing once the flag is off with no position and no ledger history',
+      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+
+    /* ── the deployment is verified before any write ──────────────────────── */
+    t('verifyDeployment throws on a Pool mismatch',
+      adapter.includes("throw new AaveAdapterError('AAVE_POOL_MISMATCH'"));
+    t('...and on an aToken mismatch',
+      adapter.includes("throw new AaveAdapterError('AAVE_ATOKEN_MISMATCH'"));
+    t('...and when it cannot verify at all',
+      adapter.includes("throw new AaveAdapterError('AAVE_DEPLOYMENT_UNVERIFIABLE'"));
+    t('...and caches only successes, so a failed check is retried not remembered',
+      adapter.includes('verifiedByProvider.set(provider, settled)')
+      && /Cache only a SUCCESSFUL verification/.test(adapter));
+    t('supply, withdraw and revoke all verify before building',
+      (adapter.match(/await verifyDeployment\(provider\)/g) || []).length >= 3);
+
+    /* ── every write goes through the existing simulation path ────────────── */
+    t('the Arbitrum panel builds unsigned transactions with the repo\'s own helper',
+      panel.includes("from '../../lib/preSignSimulation'") && panel.includes('buildUnsignedTransaction'));
+    t('...simulates before signing, and reuses the repo\'s execution gate',
+      panel.includes('simulateUnsignedTransaction') && panel.includes('evaluateExecutionGate'));
+    t('...and only enables signing on a CLEAN simulation (a busy RPC is not clean)',
+      panel.includes("simulation?.status === 'simulated-clean'"));
+    t('the Arbitrum adapter never signs: no signer or sendTransaction in it',
+      !adapter.includes('sendTransaction') && !adapter.includes('getSigner'));
+
+    /* ── the Arbitrum addresses live in exactly the right modules ─────────── */
+    const arbOnly = [
+      '0xa97684ead0e402dc232d5a977953df7ecbab3cdb', // PoolAddressesProvider
+      '0x724dc807b04555b71ed48a6896b6f41593b8c637'  // aArbUSDC (native-USDC reserve)
+    ];
+    const arbFilesWith = (addr) => files.filter((f) => read(f).toLowerCase().includes(addr));
+    const arbLeaked = [];
+    for (const addr of arbOnly) {
+      for (const f of arbFilesWith(addr)) {
+        if (!f.endsWith('src/lib/defi/aaveV3Arbitrum.js')) arbLeaked.push(`${addr} in ${f}`);
+      }
+    }
+    t(`the registry and aToken addresses appear only in the adapter${arbLeaked.length ? ` — also in: ${arbLeaked.join(', ')}` : ''}`,
+      arbLeaked.length === 0);
+    /*
+     * The Pool proxy is shared with the pre-existing rate table on purpose —
+     * and the adapter asserts the two copies agree at load. This Pool address
+     * is the canonical v3 Pool, so it is ALSO the Optimism/Polygon entry in
+     * the same table: still two FILES, which is what this pin counts.
+     */
+    const arbPoolFiles = arbFilesWith('0x794a61358d6845594f94dc1db02a252b5b4814ad');
+    t('the Pool proxy appears only in the adapter and the pre-existing rate table',
+      arbPoolFiles.length === 2
+      && arbPoolFiles.some((f) => f.endsWith('src/lib/defi/aaveV3Arbitrum.js'))
+      && arbPoolFiles.some((f) => f.endsWith('src/lib/lending.js')));
+    t('...and the adapter refuses to load if those two copies ever disagree',
+      adapter.includes("import { AAVE_V3_POOLS } from '../lending'")
+      && adapter.includes("throw new Error('AAVE_ADAPTER_POOL_TABLE_DISAGREEMENT')"));
+    t('each pinned address cites the official Aave Address Book',
+      (adapter.match(/bgd-labs\/aave-address-book|Aave Address Book/g) || []).length >= 3);
+
+    /* ── scope: two write actions, one asset, one chain ───────────────────── */
+    const arbAbiSigs = [...code.matchAll(/'function ([a-zA-Z0-9_]+)\(([^']*)'/g)]
+      .map((m) => ({ name: m[1], rest: m[2] }));
+    const arbWrites = arbAbiSigs.filter((s) => !/\bview\b|\bpure\b/.test(s.rest)).map((s) => s.name);
+    t(`the Arbitrum adapter's ABIs declare only supply and withdraw as writes — found: ${arbWrites.join(', ') || 'none'}`,
+      arbAbiSigs.length > 5
+      && arbWrites.every((n) => ['supply', 'withdraw'].includes(n)));
+    t('...and is pinned to Arbitrum 42161',
+      adapter.includes('chainId: 42161') && adapter.includes("throw new AaveAdapterError('AAVE_WRONG_CHAIN'"));
+
+    /* ── local persistence, and nothing secret in it ──────────────────────── */
+    t('Arbitrum actions are recorded to a capped local ledger with its OWN key',
+      history.includes("export const AAVE_ARB_HISTORY_KEY = 'fbt-aave-arbitrum-history-v1'")
+      && history.includes('rows.slice(0, MAX_ROWS)')
+      && !history.includes('fbt-aave-base-history-v1'));
+    const aFieldsSrc = /const FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(history);
+    const aPersisted = aFieldsSrc
+      ? [...aFieldsSrc[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1])
+      : [];
+    /* Anchored, so `revertKey` — an i18n key, the opposite of a secret — does
+       not trip it. Same reasoning as section 87. */
+    const aForbidden = /^(privatekey|publickey|key|secret|secretkey|mnemonic|seed|seedphrase|passphrase|password|signature|signedtx|rawtx|rawtransaction)$/i;
+    t('...through a field whitelist, so no key or signature can be persisted',
+      aPersisted.length > 0 && !aPersisted.some((f) => aForbidden.test(f)));
+    t('the stuck-approval state is derived from the chain, not the ledger alone',
+      history.includes("source: onChain ? 'chain' : recorded ? 'record' : null"));
+
+    /* ── the three deployments cannot be confused for one another ─────────── */
+    t('the pool matchers are mutually exclusive, so at most one panel renders',
+      adapter.includes("project === 'aave-v3'") && adapter.includes("chain === 'arbitrum'")
+      && read('src/lib/defi/aaveV3Base.js').includes("chain === 'base'")
+      && read('src/lib/defi/compoundV3Base.js').includes("project === 'compound-v3'"));
+    t('all three panels are mounted on the Farm screen',
+      farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
+      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />')
+      && farmPage.includes('<AaveArbUsdcPanel pool={pool} />'));
+    t('the Arbitrum adapter does not import the Base one',
+      !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
+
+    /* ── copy exists in all three locales ─────────────────────────────────── */
+    const aErrCodes = ['invalidAmount', 'invalidBurnAmount', 'reserveInactive', 'reserveFrozen', 'reservePaused', 'notEnoughBalance', 'healthFactor', 'healthFactorNotBelow', 'supplyCapExceeded', 'oracleSentinel', 'zeroAddress', 'assetNotListed'];
+    for (const lang of ['en', 'fa', 'ar']) {
+      const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const aa = j.farm?.aaveArb ?? {};
+      t(`${lang} carries the Arbitrum supply surface`,
+        ['panelTitle', 'supplyInApp', 'withdraw', 'supplyTitle', 'withdrawTitle', 'max', 'revoke', 'continue']
+          .every((k) => typeof aa[k] === 'string' && aa[k].length > 0));
+      t(`${lang} names every plain-language Arbitrum step`,
+        ['approve', 'supply', 'withdraw', 'withdrawMax', 'revoke'].every((k) => Boolean(aa.step?.[k])));
+      t(`${lang} states the four Arbitrum risks: contract, custody, variable rate and no fee`,
+        ['risk1', 'risk2', 'risk3', 'risk4'].every((k) => typeof aa[k] === 'string' && aa[k].length > 20));
+      t(`${lang} explains the Arbitrum partial-approval recovery`,
+        Boolean(aa.partialBody) && Boolean(aa.revoke) && Boolean(aa.continue));
+      t(`${lang} maps the Aave revert codes it can hit`,
+        aErrCodes.every((k) => Boolean(aa.err?.[k])));
+      t(`${lang} explains the Arbitrum wrong-chain case`,
+        typeof aa.wrongChainNote === 'string' && aa.wrongChainNote.includes('{chain}'));
+    }
+    t('the Arbitrum panel shows the switch prompt from the local ledger, not a chain read',
+      panel.includes('knownHere')
+      && panel.includes("t('farm.aaveArb.wrongChainNote'")
+      && panel.indexOf('setHistory(loadAaveArbHistoryFor(owner));')
+         < panel.indexOf('if (wallet.chainId !== AAVE_V3_ARBITRUM.chainId) return;'));
+
+    /* The adapter's error table must not name a key no locale defines. */
+    const aKeyRefs = [...adapter.matchAll(/'(farm\.aaveArb\.err\.[a-zA-Z]+)'/g)].map((m) => m[1]);
+    const enFarmAaveArb = JSON.parse(read('src/i18n/locales/en.json')).farm.aaveArb;
+    const aMissingErr = aKeyRefs.filter((k) => !hasKey(enFarmAaveArb, k.replace('farm.aaveArb.', '')));
+    t(`every Arbitrum explainRevert key resolves in en.json${aMissingErr.length ? ` — missing: ${aMissingErr.join(', ')}` : ''}`,
+      aKeyRefs.length > 0 && aMissingErr.length === 0);
+
+    /* Same for the refusal codes the panel renders and the plan can emit. */
+    const aBlockRefs = [...adapter.matchAll(/block\('(AAVE_[A-Z_]+)'\)/g)].map((m) => m[1]);
+    const aBlockMissing = [...new Set(aBlockRefs)].filter((k) => !enFarmAaveArb.block?.[k]);
+    t(`every refusal code the adapter can emit has copy${aBlockMissing.length ? ` — missing: ${aBlockMissing.join(', ')}` : ''}`,
+      aBlockRefs.length > 0 && aBlockMissing.length === 0);
+  }
+
   /* ----------------------- 5z. the settings hub, structurally ------------- */
   /*
    * Settings is a grid of tiles — one box per section — and every control of a
