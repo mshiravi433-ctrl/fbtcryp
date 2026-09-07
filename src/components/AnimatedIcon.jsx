@@ -82,6 +82,125 @@ export function AnimatedActivity({ active, still, ...p }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Signal — a sourced pulse trace (signal page)                               */
+/* -------------------------------------------------------------------------- */
+
+export function AnimatedSignal({ active, still, ...p }) {
+  const on = active && !still;
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M3 13h4l2.2-5.2 3.2 8.4 2.4-5 2 1.8h4.2"
+        initial={false}
+        animate={on ? { pathLength: [0, 1], opacity: [0.3, 1] } : { pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      />
+      <motion.circle
+        cx="21"
+        cy="6.5"
+        r="1.4"
+        fill="currentColor"
+        stroke="none"
+        initial={false}
+        animate={on ? { scale: [1, 1.55, 1], opacity: [1, 0.75, 1] } : { scale: 1, opacity: 1 }}
+        transition={{ duration: 0.55, delay: 0.08 }}
+        style={{ transformOrigin: '21px 6.5px' }}
+      />
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Token — hexagon token with an inner letterform that turns on tap           */
+/* -------------------------------------------------------------------------- */
+
+export function AnimatedToken({ active, still, ...p }) {
+  const on = active && !still;
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M12 2.7 20.2 7.3v9.4L12 21.3 3.8 16.7V7.3L12 2.7z"
+        initial={false}
+        animate={on ? { pathLength: [0.5, 1], scale: [0.98, 1, 1] } : { pathLength: 1, scale: 1 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        style={{ transformOrigin: '12px 12px' }}
+      />
+      <motion.g
+        initial={false}
+        animate={on ? { rotate: [0, 8, -8, 0], scale: [0.94, 1.05, 1] } : { rotate: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        style={{ transformOrigin: '12px 12px' }}
+      >
+        <circle cx="12" cy="12" r="3.2" />
+        <path d="M10.1 10.8a3 3 0 0 1 5-1M13.9 13.2a3 3 0 0 1-5 1" />
+      </motion.g>
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Chat — bubble with dots, used by the AI bottom bar                         */
+/* -------------------------------------------------------------------------- */
+
+export function AnimatedChat({ active, still, ...p }) {
+  const on = active && !still;
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+        initial={false}
+        animate={on ? { pathLength: [0, 1], opacity: [0.4, 1] } : { pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+      />
+      {[8, 12, 16].map((x, i) => (
+        <motion.circle
+          key={x}
+          cx={x}
+          cy="12"
+          r="1.05"
+          fill="currentColor"
+          stroke="none"
+          initial={false}
+          animate={on ? { scale: [1, 1.5, 1], opacity: [0.55, 1, 0.75] } : { scale: 1, opacity: 0.6 }}
+          transition={on ? { duration: 0.45, delay: i * 0.09 } : { duration: 0.2 }}
+          style={{ transformOrigin: `${x}px 12px` }}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Agent — robot/automation glyph that opens like a chip on tap               */
+/* -------------------------------------------------------------------------- */
+
+export function AnimatedAgent({ active, still, ...p }) {
+  const on = active && !still;
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M7 7h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3z"
+        initial={false}
+        animate={on ? { pathLength: [0, 1], opacity: [0.4, 1] } : { pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+      />
+      <motion.path
+        d="M12 7v-2M9 18v2M15 18v2"
+        initial={false}
+        animate={on ? { y: [0, -1.4, 0] } : { y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      />
+      <motion.path
+        d="M8.2 10.5v1.8M11 10.5v1.8M13.8 10.5v1.8M9.5 15.2h5l1.5-1.8"
+        initial={false}
+        animate={on ? { pathLength: [0, 1], opacity: [0.3, 1] } : { pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.08 }}
+      />
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Wallet — the flap opens                                                     */
 /* -------------------------------------------------------------------------- */
 

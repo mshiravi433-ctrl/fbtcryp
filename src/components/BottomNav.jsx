@@ -5,9 +5,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
 import MoreSheet from './MoreSheet';
 import {
-  AnimatedActivity,
   AnimatedPlus,
-  AnimatedSwap,
+  AnimatedSignal,
+  AnimatedToken,
   AnimatedWallet,
   useStill
 } from './AnimatedIcon';
@@ -35,8 +35,8 @@ import SegIndicator from './SegIndicator';
  * whole visual point.
  */
 const ITEMS = [
-  { to: '/swap', key: 'nav.swap', Icon: AnimatedSwap },
-  { to: '/signals', key: 'nav.signals', Icon: AnimatedActivity },
+  { to: '/swap', key: 'nav.swap', Icon: AnimatedToken },
+  { to: '/signals', key: 'nav.signals', Icon: AnimatedSignal },
   { to: '/wallet', key: 'nav.wallet', Icon: AnimatedWallet }
 ];
 

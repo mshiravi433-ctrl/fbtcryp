@@ -121,6 +121,16 @@ async function fetchCandlesFor(asset, { days = 30 } = {}) {
 const usdFmt = (v) => (Number.isFinite(Number(v))
   ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   : '—');
+
+/* A monitor is "live" while it is still watching the market: ready (ACTIVE),
+   deliberately held (PAUSED) or already matched (TRIGGERED). Terminal states
+   (COMPLETED / CANCELLED / ERROR) are not counted as live. The Operations and
+   Status surfaces must use the same definition as the History monitoring tab —
+   otherwise the same set of monitors can be reported as "4 active / 8 total"
+   by one panel and "8 active" by another. */
+const LIVE_MONITOR_STATUSES = new Set(['ACTIVE', 'PAUSED', 'TRIGGERED']);
+const isMonitorLive = (m) => LIVE_MONITOR_STATUSES.has(String(m?.status || '').toUpperCase());
+const countLiveMonitors = (list) => (Array.isArray(list) ? list.filter(isMonitorLive).length : 0);
 import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 /*
@@ -140,9 +150,13 @@ import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent
 import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
 import { useRadioStore } from '../store/useRadioStore.js';
 import { getLastActiveTask, getActiveTasks, updateTaskStatus } from '../lib/intent-ai/os/taskContinuity.js';
-import { getAllMemory } from '../lib/intent-ai/os/memoryEngine.js';
-import { getLogs as getObsLogs, getStats as getObsStats } from '../lib/intent-ai/os/observability.js';
-import { getDebugLogs, enableDebug } from '../lib/intent-ai/os/debugDashboard.js';
+import {
+  AnimatedActivity,
+  AnimatedAgent,
+  AnimatedChat,
+  AnimatedPlus,
+  useStill
+} from './AnimatedIcon';
 import { setupGlobalBus, emitEvent, onEvent } from '../lib/intent-ai/os/eventBus.js';
 import {
   listMonitors,
@@ -219,7 +233,7 @@ import { getStateMachine, getNoRepetitionPolicy, getResponseMemoryCheck, getSelf
 import { getObservabilityV2, getQualityMetrics } from '../lib/intent-ai/os/upgrade6/observability.js';
 import { getChatScrollManager } from '../lib/intent-ai/os/upgrade6/chatScrollManager.js';
 import { busV6, EVENTS_V6 } from '../lib/intent-ai/os/upgrade6/eventBusV2.js';
-import { getL1Messages, addL1Message, getL2Tasks, addL2Task, getL3Preferences, addL3Preference, extractL3FromMessage, getAllMemoryV2 } from '../lib/intent-ai/os/upgrade6/memoryV2.js';
+import { getL1Messages, addL1Message, getL2Tasks, addL2Task, getL3Preferences, addL3Preference, extractL3FromMessage } from '../lib/intent-ai/os/upgrade6/memoryV2.js';
 import { ThinkingOrb, ThinkingOrbLarge, AIActivityTimeline } from './ai/ThinkingOrb.jsx';
 import {
   loadLocalIntentOSState,
@@ -762,6 +776,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * monitors, history, panels) — nothing here introduces a second brain.
    */
   const [aiTab, setAiTab] = useState('chat');
+  const still = useStill();
   const [thinkingState, setThinkingState] = useState('idle'); // §28 smart thinking state
   const [thinking, setThinking] = useState([]); // legacy for fallback
   const [activitySteps, setActivitySteps] = useState([]); // §29 activity timeline
@@ -791,8 +806,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return makeId();
     }
   });
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState(null);
   const [panel, setPanel] = useState(null);
   const [ecoKind, setEcoKind] = useState('agent');
   const [opsBusy, setOpsBusy] = useState(false);
@@ -3261,38 +3274,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const card = pendingExecution?.card || null;
 
-  const handleDebugToggle = useCallback(() => {
-    const logs = getDebugLogs({ limit: 20 });
-    const stats = getObsStats();
-    const mem = getAllMemory();
-    const memV2 = getAllMemoryV2();
-    const obsV2 = obsRef.current.getRecent(5);
-    const quality = metricsRef.current.getMetrics();
-    setDebugInfo({
-      logs,
-      stats,
-      mem,
-      memV2,
-      obsV2,
-      quality,
-      currentPage,
-      convState: {
-        sessionId: convState.sessionId,
-        intentId: convState.intentId,
-        currentIntent: convState.currentIntent,
-        intentStatus: convState.intentStatus,
-        collectedSlots: convState.collectedSlots,
-        missingSlots: convState.missingSlots,
-        lastQuestion: convState.lastQuestion,
-        currentRoute: convState.currentRoute,
-        previousRoute: convState.previousRoute
-      },
-      aiContext: { hasWallet: aiContext.wallet.connected, totalValue: aiContext.portfolio.totalValueUsd }
-    });
-    setShowDebug(v => !v);
-    enableDebug();
-  }, [currentPage, aiContext, convState]);
-
   const pushTurn = useCallback((m) => {
     setMessages((prev) => [...prev, m]);
     return m;
@@ -4047,14 +4028,34 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       meta: [m.metric || null, m.asset?.symbol || null]
     }))
   ];
-  const agentActiveCount = agentCards.filter((c) => c.status === 'ACTIVE').length;
+  const agentActiveCount = agentCards.filter((c) => (c.kind === 'monitor' ? isMonitorLive(c.raw) : c.status === 'ACTIVE')).length;
 
   return (
-    <div className="iaos-page iaos-page-v6 tag-page">
+    <div className="iaos-page iaos-page-v6 tag-page" data-ai-tab={aiTab}>
       <div className="iaos-shell">
         <header className="iaos-header">
-          <div className="iaos-title" onClick={handleDebugToggle} style={{ cursor: 'pointer' }}>
-            <span className="iaos-mark" aria-hidden="true">✦</span>
+          <div className="iaos-title">
+            <span className="iaos-mark iaos-mark-logo" aria-hidden="true">
+              <svg width="30" height="30" viewBox="0 0 40 40" fill="none" role="img" aria-label="FBT Agent">
+                <defs>
+                  <linearGradient id="iaosBrandGrad" x1="3" y1="3" x2="37" y2="37" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#34d399" />
+                    <stop offset="0.52" stopColor="#22d3ee" />
+                    <stop offset="1" stopColor="#a78bfa" />
+                  </linearGradient>
+                  <linearGradient id="iaosBrandFill" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#101014" />
+                    <stop offset="1" stopColor="#08080c" />
+                  </linearGradient>
+                </defs>
+                <rect x="1.2" y="1.2" width="37.6" height="37.6" rx="11.5" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.5" />
+                <circle cx="20" cy="20" r="10.2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" />
+                <path d="M14.7 16.8a5.4 5.4 0 0 1 9.1-2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />
+                <path d="M25.3 23.2a5.4 5.4 0 0 1-9.1 2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />
+                <path d="M21.6 18.3h3.2v-3.2M18.4 21.7h-3.2v3.2" stroke="url(#iaosBrandGrad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="29.6" cy="8.6" r="1.2" fill="#34d399" />
+              </svg>
+            </span>
             <span className="iaos-title-copy">
               <h1>FBT AGENT</h1>
               <span className="iaos-title-sub">{locale.startsWith('fa') ? 'سیستم عامل ایجنت' : 'AGENT OS'}</span>
@@ -4104,24 +4105,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             {Object.keys(convState.collectedSlots || {}).length ? (
               <span style={{ opacity: 0.6 }}>· {Object.keys(convState.collectedSlots).length} slots</span>
             ) : null}
-          </div>
-        ) : null}
-
-        {showDebug && debugInfo ? (
-          <div className="iaos-debug" style={{ background: '#111', color: '#0f0', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', fontFamily: 'monospace', maxHeight: '400px', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <strong>AI Dashboard V6 (Debug) — Intent OS 6</strong>
-              <button onClick={() => setShowDebug(false)} style={{ background: '#333', color: '#fff', border: 'none', padding: '2px 8px', borderRadius: '4px' }}>✕</button>
-            </div>
-            <div>Current Page: {debugInfo.currentPage} | Prev: {debugInfo.convState?.previousRoute}</div>
-            <div>Session: {debugInfo.convState?.sessionId} | Intent: {debugInfo.convState?.intentId} | Status: {debugInfo.convState?.intentStatus}</div>
-            <div>Wallet: {debugInfo.aiContext.hasWallet ? 'Connected' : 'Not connected'} | Portfolio: ${debugInfo.aiContext.totalValue || 0}</div>
-            <div>Slots: {JSON.stringify(debugInfo.convState?.collectedSlots)} | Missing: {JSON.stringify(debugInfo.convState?.missingSlots)}</div>
-            <div>Last Q: {debugInfo.convState?.lastQuestion} | Last A: {debugInfo.convState?.lastUserAnswer}</div>
-            <div>Quality: {JSON.stringify(debugInfo.quality)}</div>
-            <div style={{ marginTop: '8px' }}>Observability V6 (recent 3):</div>
-            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px' }}>{JSON.stringify(debugInfo.obsV2?.slice(0, 3), null, 2)}</pre>
-            <div style={{ marginTop: '8px' }}>Memory V2: L1 {debugInfo.memV2?.l1?.length || 0} | L2 {debugInfo.memV2?.l2?.length || 0} | L3 {debugInfo.memV2?.l3?.length || 0}</div>
           </div>
         ) : null}
 
@@ -4531,30 +4514,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       {/* ── Bottom tabs: chat · agents · activity · more ──────────────────── */}
       <nav className="tag-tabbar" aria-label={fa ? 'تب‌های دستیار' : 'Assistant tabs'}>
         <button type="button" className="tag-tab" data-active={aiTab === 'chat'} onClick={() => setAiTab('chat')}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
+          <AnimatedChat active={aiTab === 'chat'} still={still} width={21} height={21} strokeWidth={aiTab === 'chat' ? 1.9 : 1.7} />
           <span className="tag-tab-label">{fa ? 'چت' : 'Chat'}</span>
         </button>
         <button type="button" className="tag-tab" data-active={aiTab === 'agents'} onClick={() => setAiTab('agents')} data-testid="tag-tab-agents">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="4" y="4" width="16" height="16" rx="2" />
-            <rect x="9" y="9" width="6" height="6" />
-            <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
-          </svg>
+          <AnimatedAgent active={aiTab === 'agents'} still={still} width={21} height={21} strokeWidth={aiTab === 'agents' ? 1.9 : 1.7} />
           {agentActiveCount > 0 ? <span className="tag-tab-badge" aria-hidden="true" /> : null}
           <span className="tag-tab-label">{fa ? 'ایجنت‌ها' : 'Agents'}</span>
         </button>
         <button type="button" className="tag-tab" data-active={aiTab === 'activity'} onClick={() => setAiTab('activity')}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-          </svg>
+          <AnimatedActivity active={aiTab === 'activity'} still={still} width={21} height={21} strokeWidth={aiTab === 'activity' ? 2 : 1.7} />
           <span className="tag-tab-label">{fa ? 'فعالیت' : 'Activity'}</span>
         </button>
         <button type="button" className="tag-tab" data-active={aiTab === 'more'} onClick={() => setAiTab('more')}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-            <circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" />
-          </svg>
+          <AnimatedPlus active={aiTab === 'more'} still={still} width={21} height={21} strokeWidth={2} />
           <span className="tag-tab-label">{fa ? 'بیشتر' : 'More'}</span>
         </button>
       </nav>
@@ -4589,7 +4562,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         summary={{
           walletConnected: walletConnected ? true : false,
           serverReachable,
-          monitorsActive: Array.isArray(monitors) ? monitors.filter((m) => m.status === 'ACTIVE').length : 0,
+          monitorsActive: countLiveMonitors(monitors),
           monitorsTotal: Array.isArray(monitors) ? monitors.length : 0,
           ordersCount: storedOrders.length,
           automationsCount: automations.length
@@ -4612,7 +4585,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         status={{
           walletConnected,
           serverReachable,
-          monitors: monitorEngineStatus || { active: monitors.filter((m) => m.status === 'ACTIVE').length, total: monitors.length },
+          monitors: monitorEngineStatus || { active: countLiveMonitors(monitors), total: monitors.length },
           ordersCount: storedOrders.length,
           automationsCount: automations.length,
           engine: monitorEngineStatus || {},

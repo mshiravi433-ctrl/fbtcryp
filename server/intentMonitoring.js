@@ -495,12 +495,18 @@ export async function monitorEngineStatus({ now = Date.now() } = {}) {
     acc[s] = (acc[s] || 0) + 1;
     return acc;
   }, {});
+  /* "Active" in the Operations/Status strip means a monitor that is still
+     armed and watching: ACTIVE (ready), PAUSED (user-held) and TRIGGERED
+     (condition matched but still a live record). Counting only `ACTIVE` made
+     the summary disagree with History's monitoring tab, which uses all three
+     — one panel said 4/8 where the other showed 8. */
+  const live = (byStatus.ACTIVE || 0) + (byStatus.PAUSED || 0) + (byStatus.TRIGGERED || 0);
   return {
     ok: true,
     schema: MONITOR_SCHEMA,
     total: all.length,
     byStatus,
-    active: byStatus.ACTIVE || 0,
+    active: live,
     triggered: byStatus.TRIGGERED || 0,
     paused: byStatus.PAUSED || 0,
     lastCheckAt: all.reduce((max, m) => Math.max(max, m.lastCheckAt || 0), 0) || null,
