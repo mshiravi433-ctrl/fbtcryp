@@ -100,7 +100,7 @@ export function buildAutonomyDrivers({
       : null)
   };
 
-  return {
+  const drivers = {
     wallet: walletApi,
 
     /* ── EVM swap ─────────────────────────────────────────────────────── */
@@ -219,4 +219,35 @@ export function buildAutonomyDrivers({
       solana: Boolean(solana?.connected)
     }
   };
+
+  /*
+   * ── GATE EVERY VENUE ON WHAT ACTUALLY LOADED ───────────────────────────
+   * `warmAutonomyDrivers` uses Promise.allSettled, so it never throws — a
+   * module that failed to resolve leaves its cache slot null and warm() still
+   * reports ok. The wrappers above are lazy closures, so they exist either
+   * way, and an executor's `hasDrivers()` predicate (which checks for the
+   * METHOD) was satisfied by a wrapper around a module that was never there.
+   *
+   * Measured, with the lending module unloaded:
+   *   hasDrivers(lend-aave) === true, then runLendingPlan threw
+   *   `Cannot find module '.../src/lib/chains'` — a raw TypeError from deep
+   *   inside, where the design intends the named VENUE_DRIVER_MISSING. And
+   *   equity.resolveAsset returned a silent null instead of refusing.
+   *
+   * So drop the namespace rather than hand over a hollow wrapper. The
+   * executor then reports its own named failure at the gate, which is the
+   * whole reason VENUE_DRIVER_MISSING exists.
+   */
+  const gates = {
+    swap: swapMod && chainsMod,
+    lending: lendingMod,
+    aaveBase: aaveBaseMod,
+    perp: perpMod && perpMarketsMod,
+    equity: solanaMod && solanaWalletMod
+  };
+  for (const [venue, loaded] of Object.entries(gates)) {
+    if (!loaded) drivers[venue] = {};
+  }
+
+  return drivers;
 }

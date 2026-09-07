@@ -63,6 +63,13 @@ import './intent-ai/chat-route-contract-probe.mjs';
    executeIntentTools → buildHumanResponse → planFromIntent — and fails if the
    live rates do not actually arrive at the compiler. */
 import './intent-ai/goal-pipeline-probe.mjs';
+/* The seam between the app's real trading primitives and the venue
+   executors. browserDrivers.js was build-verified and never executed; if a
+   method name drifts on either side every venue fails at runtime with
+   VENUE_DRIVER_MISSING while the rest of the suite stays green, because
+   autonomy-execution-probe drives the executors with fakes that already
+   agree. This pins the real contract on both ends. */
+import './intent-ai/autonomy-drivers-probe.mjs';
 /* Upgrade 10 — the Financial OS layer: financial state, decision engine,
    council, guardians, permissions, kill switches, memory, scenarios, twin,
    monitoring and replanning. It belongs in `npm test` because the failures it
