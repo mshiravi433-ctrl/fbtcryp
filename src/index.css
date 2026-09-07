@@ -7240,13 +7240,24 @@ body { overflow-x: clip; }
   text-overflow: ellipsis;
 }
 
+/*
+ * The Farm tab bar — «داخل اپ · بازار · استخرها · پیشنهادی · استراتژی‌ها» — is
+ * one horizontal RAIL: a single row of buttons at their natural width that
+ * scrolls left/right by flick or drag, with the scrollbar hidden.
+ * `flex: 0 0 auto` is what makes that work: a long Persian label never gets
+ * squeezed into a sliver, the row simply overflows into the scroll instead.
+ * `overscroll-behavior-x: contain` keeps a flick that reaches the end of the
+ * rail from being handed to the page behind it.
+ */
 .farm-tabs {
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 .farm-tabs::-webkit-scrollbar { display: none; }
-.farm-tabs button { flex: 1 0 auto; }
+.farm-tabs button { flex: 0 0 auto; white-space: nowrap; }
 
 /* ─── farm protocol read-only card ─────────────────────────────────────── */
 .farm-protocol-head {
@@ -7417,49 +7428,146 @@ body { overflow-x: clip; }
   margin: 6px 0 0;
 }
 
-/* --- hot strip (top of the filtered list by score) ------------------------- */
-
+/* --- «داغ همین حالا» — a horizontal rail of the top-scoring pools ---------- */
+/*
+ * This row is a RAIL, not a grid: the cards sit side by side and the strip
+ * scrolls left/right (flick, drag or trackpad), scrollbar hidden, with
+ * scroll-snap so a flick settles on a card instead of stopping mid-way.
+ * A grid collapsed to one column under 420px, which is exactly the screen
+ * where the rail matters.
+ */
 .farm-hot {
-  margin-bottom: 8px;
+  margin: 12px 0 14px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--rgb-3) 9%, transparent), transparent 58%),
+    var(--bg-panel);
+}
+.farm-hot-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 9px;
+}
+.farm-hot-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rgb-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-3) 20%, transparent);
+}
+.farm-hot-title {
+  margin: 0;
+  min-width: 0;
+  font-size: 12.4px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .farm-hot-grid {
   display: flex;
-  gap: 8px;
+  gap: 9px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  overflow-y: hidden;
+  padding-bottom: 3px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 .farm-hot-grid::-webkit-scrollbar { display: none; }
 .farm-hot-card {
   flex: 0 0 auto;
-  min-width: 118px;
+  width: 156px;
   min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-panel);
-  padding: 9px 10px;
-  text-align: start;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-raised) 65%, transparent);
+  text-align: start;
   cursor: pointer;
   color: var(--text-1);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+.farm-hot-card:hover {
+  border-color: color-mix(in srgb, var(--rgb-3) 42%, var(--line));
+  transform: translateY(-1px);
+}
+.farm-hot-card:active { transform: translateY(0) scale(0.985); }
+.farm-hot-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.farm-hot-rank {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #0a0c12;
+  background: linear-gradient(135deg, var(--rgb-5), var(--rgb-3));
 }
 .farm-hot-sym {
-  font-weight: 700;
-  font-size: 12.3px;
+  flex: 1 1 auto;
+  font-weight: 750;
+  font-size: 12.6px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.farm-hot-meta {
+  min-width: 0;
+  font-size: 10.2px;
+  line-height: 1.4;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .farm-hot-apy {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink-mint, var(--rgb-4));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .farm-hot-score {
-  font-size: 10.4px;
-  opacity: 0.74;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-1) 4%, transparent);
+  font-size: 10.2px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .farm-hot-card { transition: none; }
+  .farm-hot-card:hover,
+  .farm-hot-card:active { transform: none; }
 }
 
 /* --- the simple advisor (risk band + deposit amount) ------------------------ */
@@ -11765,9 +11873,23 @@ button.settings-quick-action {
   padding: 15px;
   border-radius: 18px;
 }
+/*
+ * The protocol readout is a fixed 2 × 2: two equal columns, two equal rows,
+ * four identical cells. «قابلیت‌های پروتکل» used to carry a `--wide` modifier
+ * and span both columns, which made that tile visibly larger than
+ * «آخرین همگام‌سازی» beside it; it is now an ordinary cell like the others,
+ * and the 2 × 2 shape is held at every width (see the 720px block below,
+ * which deliberately no longer widens this grid to four columns).
+ *
+ * Nothing may resize a tile: each label is clamped to one line and each value
+ * clips with an ellipsis instead of wrapping, `grid-auto-rows: 1fr` keeps the
+ * two rows the same height, and `min-height` gives all four boxes the same
+ * floor. The full value stays reachable through the element's `title`.
+ */
 .farm-protocol-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 1px;
   margin-top: 11px;
   border: 1px solid var(--line);
@@ -11779,11 +11901,13 @@ button.settings-quick-action {
 .farm-protocol-meta-cell {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 4px;
   padding: 10px 11px;
   background: var(--bg-panel);
   font-size: 10.8px;
   min-width: 0;
+  min-height: 58px;
   border: 0;
   border-radius: 0;
 }
@@ -11792,6 +11916,11 @@ button.settings-quick-action {
   color: var(--text-3);
   font-size: 10.2px;
   line-height: 1.35;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .farm-protocol-meta .mono,
 .farm-protocol-meta-cell > span:last-child {
@@ -11803,8 +11932,9 @@ button.settings-quick-action {
   text-align: start;
   font-size: 12px;
   font-weight: 650;
+  min-width: 0;
+  max-width: 100%;
 }
-.farm-protocol-meta-cell--wide { grid-column: 1 / -1; }
 .farm-details-head { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .farm-details {
   margin-top: 14px;
@@ -11967,17 +12097,9 @@ button.settings-quick-action {
 }
 .farm-apy-wrap { min-width: 84px; }
 .farm-apy { font-size: 20px; letter-spacing: -0.02em; }
-.farm-hot-card {
-  min-width: 124px;
-  border-radius: 14px;
-  padding: 10px 12px;
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--rgb-1) 8%, transparent), transparent 70%),
-    var(--bg-panel);
-}
-.farm-hot-card:hover {
-  border-color: color-mix(in srgb, var(--rgb-1) 40%, var(--line));
-}
+/* `.farm-hot-card` is owned by the «داغ همین حالا» rail block above — the
+   duplicate surface/padding rules that used to sit here fought that block and
+   are gone, so the rail cards keep one geometry and one background. */
 
 /* Light theme — readable inks, solid cells, no neon wash. */
 :root[data-theme='light'] .farm-pool,
@@ -12036,12 +12158,15 @@ button.settings-quick-action {
   .farm-search { margin: 0; }
   .farm-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .farm-economics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .farm-protocol-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* .farm-protocol-meta deliberately does NOT widen to four columns: the
+     protocol readout is specified as a fixed 2 × 2 — two cells across, two
+     rows down — at every width, so the «قابلیت‌های پروتکل» tile can never end
+     up a different size from «آخرین همگام‌سازی». */
   .farm-engine-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 420px) {
-  .farm-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
-  .farm-tabs button { min-width: 0; width: 100%; }
+  /* The tab bar stays a horizontal rail here too — it used to become a
+     two-column grid, which stacked the five destinations vertically. */
   .farm-action-grid { grid-template-columns: minmax(0, 1fr); }
   .farm-amt-input { width: 100%; flex-basis: 100%; }
   .farm-horizon-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -13125,51 +13250,164 @@ button.settings-quick-action {
   border-color: var(--line);
 }
 
-/* Farm navigation and hierarchy refresh */
+/* ---------------------------------------------------------------------------
+   Farm navigation and hierarchy refresh
+   --------------------------------------------------------------------------- */
+
+/*
+ * The five destinations as ONE horizontal rail — «داخل اپ · بازار · استخرها ·
+ * پیشنهادی · استراتژی‌ها» side by side, flicking left/right. This block used to
+ * be a vertical column capped at `max-height: 280px`, which turned the page's
+ * primary navigation into a list you scrolled DOWN inside a box.
+ * Buttons keep their natural width (`flex: 0 0 auto`, declared with the base
+ * rail rule above) so a long Persian label is never squeezed into a sliver —
+ * the row overflows into the flick instead, and Farm.jsx centres the selected
+ * tab into view when it changes.
+ */
 .farm-tabs {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: stretch;
-  gap: 7px;
-  max-height: 280px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 7px;
+  gap: 6px;
+  max-height: none;
   margin: 0 0 13px;
+  padding: 6px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
-  scrollbar-width: thin;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 8px;
+  scrollbar-width: none;
 }
+.farm-tabs::-webkit-scrollbar { display: none; }
 .farm-tabs button {
   position: relative;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
   min-height: 44px;
-  justify-content: flex-start;
-  text-align: start;
-  padding-inline: 14px;
+  padding-inline: 15px;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
   border-radius: 11px;
 }
 .farm-tabs button.active {
   box-shadow: 0 6px 18px -12px color-mix(in srgb, var(--rgb-1) 70%, transparent);
 }
-.farm-yield-center { padding: 0; overflow: hidden; }
+
+/*
+ * «مرکز بازده و نقدینگی FBT» — one uniform, modern surface.
+ *
+ * The collapsible box used to stack three decorations on a clipping
+ * container: the `card-rgb` conic ring drawn 1px OUTSIDE the box, the
+ * `card-glow-cyan` halo, and a `.sheen` wash. `.card` clips to its own
+ * rounded padding box, so where those layers met the clip the corners kept a
+ * bright sliver sitting out in the margin — the white bars that were
+ * reported — and the body's `border-top` cut a second hairline across the
+ * same surface. The JSX no longer renders `card-rgb`, `card-glow-cyan` or
+ * `.sheen` here, and these rules pin the result down: one hairline border,
+ * one soft gradient, even padding all the way round and nothing drawn across
+ * the middle. The `::before/::after/.sheen` guard stays so a decoration
+ * re-added by a shared class cannot bring the artifact back.
+ */
+.farm-yield-center {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    linear-gradient(158deg, color-mix(in srgb, var(--rgb-1) 8%, transparent), transparent 55%),
+    var(--bg-panel);
+  box-shadow: 0 14px 34px -26px rgba(0, 0, 0, 0.9);
+}
+.farm-yield-center::before,
+.farm-yield-center::after,
+.farm-yield-center .sheen { display: none; }
+.farm-yield-center.is-open { border-color: color-mix(in srgb, var(--rgb-1) 26%, var(--line)); }
 .farm-yield-center-toggle {
-  display: flex; width: 100%; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 15px; color: inherit; text-align: start; background: transparent;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 15px;
+  border: 0;
+  color: inherit;
+  text-align: start;
+  background: transparent;
+  cursor: pointer;
 }
 .farm-yield-center-toggle:hover { background: color-mix(in srgb, var(--rgb-1) 5%, transparent); }
-.farm-yield-chevron { color: var(--rgb-1); font-size: 20px; line-height: 1; }
-.farm-yield-center-body { padding: 0 15px 15px; border-top: 1px solid var(--line); }
-.farm-yield-center-body p { margin: 12px 0 10px; font-size: 12px; line-height: 1.7; }
+.farm-yield-center-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  outline-offset: -2px;
+  border-radius: 18px;
+}
+.farm-yield-center-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--ink-cyan, var(--rgb-1));
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 22%, transparent);
+}
+.farm-yield-center-text { flex: 1 1 auto; min-width: 0; }
+.farm-yield-center-title {
+  display: block;
+  font-weight: 750;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+.farm-yield-center-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.3px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.farm-yield-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-cyan, var(--rgb-1));
+  font-size: 20px;
+  line-height: 1;
+}
+/* No divider: the open body is the same surface as the header, separated by
+   spacing alone. */
+.farm-yield-center-body { padding: 0 15px 15px; }
+.farm-yield-center-body p { margin: 0 0 11px; font-size: 12px; line-height: 1.7; }
 .farm-yield-center-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.farm-yield-center-stats span { padding: 8px 6px; border: 1px solid var(--line); border-radius: 9px; color: var(--text-2); font-size: 10px; text-align: center; }
+.farm-yield-center-stats span {
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+  color: var(--text-2);
+  font-size: 10px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .farm-pool-with-details { min-width: 0; }
 .farm-pool-with-details > .farm-details { margin-top: 8px; }
-.farm-hot { margin: 12px 0 14px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: color-mix(in srgb, var(--rgb-2) 5%, var(--bg-panel)); }
-.farm-hot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.farm-hot-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; text-align: start; }
+
+/* The «داغ همین حالا» rail keeps its flex geometry from the hot-strip block
+   above — nothing here may turn it back into a grid. Only the surfaces are
+   themed, for both themes. */
+:root[data-theme='light'] .farm-yield-center,
+:root[data-theme='light'] .farm-hot {
+  background: #ffffff;
+  border-color: rgba(16, 20, 40, 0.1);
+  box-shadow: 0 2px 14px -8px rgba(16, 20, 40, 0.12);
+}
+:root[data-theme='light'] .farm-yield-center-icon,
+:root[data-theme='light'] .farm-yield-chevron { color: var(--ink-cyan); }
+:root[data-theme='light'] .farm-hot-card { background: #f7f8fc; }
+:root[data-theme='light'] .farm-hot-score { background: #f4f5fa; }
 @media (max-width: 420px) {
   .farm-yield-center-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .farm-hot-grid { grid-template-columns: 1fr; }
 }

@@ -1735,6 +1735,7 @@
     "netBeforeGas": "بازده خالص پیش از گس",
     "sourceLine": "منبع: {{source}} · به‌روزرسانی {{time}}",
     "viewAnalytics": "مشاهده تحلیل",
+    "hideAnalytics": "بستن تحلیل",
     "statusUnavailable": "ناموجود",
     "poolExecutionUnavailable": "اجرای مستقیم قرارداد LP برای این آداپتور تأیید نشده است. عملیات پشتیبانی‌نشده ناموجود می‌ماند و به سایت خارجی نمی‌رود.",
     "poolAnalytics": "تحلیل استخر",

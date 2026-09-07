@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -33,7 +33,15 @@ import {
 import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
 import TrendChart from '../components/TrendChart';
 
-const FARM_TABS = ['inapp', 'market', 'pools', 'recommended', 'strategies'];
+/*
+ * Rail order, as pinned by the wiring audit («Farm opens on curated investable
+ * discovery, not the raw pool dump»): in-app first, then the curated
+ * recommended list — which is also the DEFAULT tab — then market, strategies,
+ * and the raw pool dump last. Keeping the selected tab near the start matters
+ * more now that the bar is a horizontal rail: the tab you land on should not
+ * be the one you have to flick to find.
+ */
+const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
 const AMOUNTS = [100, 1000, 10000];
 const HORIZONS = ['day', 'week', 'month', 'year'];
@@ -303,6 +311,8 @@ function ProtocolStatusCard({ protocol, t }) {
   const updated = protocol?.updatedAt
     ? new Date(protocol.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
+  const source = protocol?.source || FARM_PROTOCOL.source;
+  const capabilities = (protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ');
 
   return (
     <motion.section className="card card-rgb card-glow-cyan farm-protocol-card" variants={riseIn} initial="hidden" animate="show">
@@ -325,10 +335,18 @@ function ProtocolStatusCard({ protocol, t }) {
         </span>
       </div>
 
+      {/*
+        A strict 2 × 2 readout: two columns, two rows, every cell the same box.
+        «قابلیت‌های پروتکل» used to carry a `--wide` modifier and span both
+        columns, which made that tile visibly larger than «آخرین همگام‌سازی»
+        next to it. It is now one ordinary cell like the other three, and a
+        value too long for the cell is clipped with an ellipsis instead of
+        stretching the tile — the full string stays reachable through `title`.
+      */}
       <div className="farm-protocol-meta">
         <div className="farm-protocol-meta-cell">
           <span className="faint">{t('farm.protocolSource')}</span>
-          <span className="mono" dir="ltr">{protocol?.source || FARM_PROTOCOL.source}</span>
+          <span className="mono" dir="ltr" title={source}>{source}</span>
         </div>
         <div className="farm-protocol-meta-cell">
           <span className="faint">{t('farm.protocolPools')}</span>
@@ -338,9 +356,9 @@ function ProtocolStatusCard({ protocol, t }) {
           <span className="faint">{t('farm.protocolLastSync')}</span>
           <span className="mono">{updated}</span>
         </div>
-        <div className="farm-protocol-meta-cell farm-protocol-meta-cell--wide">
+        <div className="farm-protocol-meta-cell">
           <span className="faint">{t('farm.protocolCapabilities')}</span>
-          <span className="mono" dir="ltr">{(protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ')}</span>
+          <span className="mono" dir="ltr" title={capabilities}>{capabilities}</span>
         </div>
       </div>
       {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{protocol.error}</p>}
@@ -535,22 +553,38 @@ function PositionPanel({ wallet, t, navigate }) {
   );
 }
 
+/*
+ * «داغ همین حالا» — a horizontal RAIL, not a 3-column grid.
+ *
+ * The cards sit side by side in one fixed-height strip that scrolls left/right
+ * (scroll-snap + hidden scrollbar, same pattern as the tab rail above), so the
+ * row keeps its shape on a narrow phone instead of collapsing into a single
+ * column. Each card now carries the rank, the pair, its project · chain line
+ * and the score pill, all clipped with an ellipsis rather than wrapping.
+ */
 function HotStrip({ rows, onSelect, t }) {
   const hot = useMemo(() => [...rows].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).slice(0, 3), [rows]);
   if (hot.length === 0) return null;
   return (
-    <div className="farm-hot">
-      <p className="farm-market-label">{t('farm.hot')}</p>
+    <section className="farm-hot" aria-label={t('farm.hot')}>
+      <div className="farm-hot-head">
+        <span className="farm-hot-dot" aria-hidden="true" />
+        <p className="farm-hot-title">{t('farm.hot')}</p>
+      </div>
       <div className="farm-hot-grid">
-        {hot.map((pool) => (
-          <button key={pool.id} type="button" className="farm-hot-card" onClick={() => onSelect(pool)}>
-            <span className="farm-hot-sym" dir="ltr">{pool.symbol}</span>
+        {hot.map((pool, i) => (
+          <button key={pool.id} type="button" className="farm-hot-card" onClick={() => onSelect(pool)} title={`${pool.symbol} · ${pool.project} · ${pool.chain}`}>
+            <span className="farm-hot-top">
+              <span className="farm-hot-rank" aria-hidden="true">{i + 1}</span>
+              <span className="farm-hot-sym" dir="ltr">{pool.symbol}</span>
+            </span>
+            <span className="farm-hot-meta">{pool.project} · {pool.chain}</span>
             <span className="farm-hot-apy mono" dir="ltr">{pool.apy}%</span>
             {pool.score != null && <span className="farm-hot-score">{t('farm.score', { score: pool.score })}</span>}
           </button>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -574,6 +608,14 @@ export default function Farm() {
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
   const [yieldCenterOpen, setYieldCenterOpen] = useState(false);
+  const tabsRef = useRef(null);
+
+  /* Keep the selected tab visible inside the horizontal rail. `block:
+     'nearest'` is what stops this from nudging the page itself vertically —
+     only the rail scrolls, and RTL/LTR is resolved by the browser. */
+  useEffect(() => {
+    tabsRef.current?.querySelector('button.active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [tab]);
 
   useEffect(() => {
     let alive = true;
@@ -719,17 +761,40 @@ export default function Farm() {
 
       <ProtocolStatusCard protocol={protocol} t={t} />
 
-      <div className="segmented seg-lg farm-tabs" role="tablist">
+      {/* The five destinations as ONE horizontal rail: it scrolls left/right
+          (flick or drag) instead of stacking into a column, and the selected
+          tab is centred into view whenever it changes so a deep link never
+          lands on a rail scrolled to the wrong end. */}
+      <div className="segmented seg-lg farm-tabs" role="tablist" aria-orientation="horizontal" ref={tabsRef}>
         {FARM_TABS.map((id) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => selectTab(id)} style={{ isolation: 'isolate' }}>{tab === id && <SegIndicator id="farmtab" />}{t(`farm.tab.${id}`)}</button>)}
       </div>
 
-      <motion.section className={`card card-rgb card-glow-cyan farm-yield-center ${yieldCenterOpen ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
+      {/*
+        «مرکز بازده و نقدینگی FBT» — ONE uniform surface.
+        It used to stack three decorative layers on the collapsible box:
+        `card-rgb` paints an animated conic ring 1px OUTSIDE the box
+        (`inset: -1px`) while `.card` clips to its own rounded padding box, and
+        `card-glow-cyan` throws a bright cyan halo plus a `.sheen` wash over the
+        same clipped corners. Where the ring, the glow and the clip disagreed,
+        the corners kept a bright sliver — the white bars in the margin that
+        were reported. The decorative layers are gone; the box is a single
+        border, one soft gradient and even padding all the way round.
+      */}
+      <motion.section className={`card farm-yield-center ${yieldCenterOpen ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
         <button type="button" className="farm-yield-center-toggle" onClick={() => setYieldCenterOpen((v) => !v)} aria-expanded={yieldCenterOpen}>
-          <span className="row" style={{ gap: 11, alignItems: 'flex-start' }}><span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}><IconPools width={22} height={22} /></span><span><span style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('farm.yieldCenterTitle')}</span><span className="muted" style={{ display: 'block', fontSize: 12.3 }}>{t('farm.whatBody')}</span></span></span>
+          <span className="farm-yield-center-icon" aria-hidden="true"><IconPools width={20} height={20} /></span>
+          <span className="farm-yield-center-text">
+            <span className="farm-yield-center-title">{t('farm.yieldCenterTitle')}</span>
+            <span className="farm-yield-center-sub">{t('farm.whatBody')}</span>
+          </span>
           <span className="farm-yield-chevron" aria-hidden="true">{yieldCenterOpen ? '⌃' : '⌄'}</span>
         </button>
-        {yieldCenterOpen && <div className="farm-yield-center-body"><p className="muted">{t('farm.scoreExplanation')}</p><div className="farm-yield-center-stats"><span>Live APY</span><span>TVL</span><span>Risk</span><span>Freshness</span></div></div>}
+        {yieldCenterOpen && (
+          <div className="farm-yield-center-body">
+            <p className="muted">{t('farm.scoreExplanation')}</p>
+            <div className="farm-yield-center-stats"><span>Live APY</span><span>TVL</span><span>Risk</span><span>Freshness</span></div>
+          </div>
+        )}
       </motion.section>
 
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
