@@ -13,23 +13,32 @@
  * global default.
  */
 import { toMicro, fromMicro } from './constants.js';
+import {
+  FBT_INSURANCE_FEE_BPS, FBT_INSURANCE_FLAT_FEE_MICRO, FBT_PROVIDER_COMMISSION_BPS
+} from './env.js';
 
 export const DEFAULT_FEES = Object.freeze({
-  // Global FBT integration/referral bps applied ONLY when a provider has an
-  // agreement. Sandbox providers declare commission: { type:'none' } => 0.
-  integrationFeeBps: 0,
+  /**
+   * FBT marketplace fee. DEFAULT EXACT ZERO (env: FBT_INSURANCE_FEE_BPS=0).
+   * The UI shows "FBT Marketplace Fee: $0". Any non-zero value is a deliberate
+   * operator configuration and must still be displayed before signing (§18).
+   */
+  integrationFeeBps: FBT_INSURANCE_FEE_BPS,
   // Per-network estimated settlement fee in micro-units (USDC-style). This is
-  // an estimate; the wallet's actual gas is shown at signing time.
+  // an estimate; the wallet's actual gas is shown at signing time. Estimates
+  // are opt-in via networkFeeMicro from a real gas source — never invented.
   networkFeeMicro: { 1: 0n, 56: 0n, 137: 0n, 42161: 0n, 10: 0n, 8453: 0n, 43114: 0n, 59144: 0n, 900: 0n },
-  commissionBps: 0
+  // Provider commission: NEVER assumed. Zero unless FBT_PROVIDER_COMMISSION_BPS
+  // is set after a real agreement, or the provider record itself declares bps.
+  commissionBps: FBT_PROVIDER_COMMISSION_BPS
 });
 
 /** Determine the provider's effective commission (bps) from its agreement. */
 function providerCommissionBps(provider) {
   const model = provider?.commissionModel;
-  if (!model) return 0;
+  if (!model) return DEFAULT_FEES.commissionBps;
   if (model.type === 'bps') return Number(model.bps) || 0;
-  return 0; // none / flat / unknown — treat as 0 unless explicit bps agreement
+  return DEFAULT_FEES.commissionBps; // none / flat / unknown — 0 unless an explicit agreement exists
 }
 
 function providerIntegrationBps(provider) {
@@ -68,13 +77,19 @@ export function computeFees(input) {
   }
 
   const providerPremium = premium; // provider receives the full labelled premium
-  const totalCost = premium + fbtFee + networkFee;
+  const flatFee = FBT_INSURANCE_FLAT_FEE_MICRO; // default 0n — exact, never rounded
+  const fbtFeeTotal = fbtFee + flatFee;
+  const totalCost = premium + fbtFeeTotal + networkFee;
 
   return {
     providerPremiumMicro: providerPremium,
     providerPremiumUsd: fromMicro(providerPremium),
-    fbtFeeMicro: fbtFee,
-    fbtFeeUsd: fromMicro(fbtFee),
+    fbtFeeMicro: fbtFeeTotal,
+    fbtFeeUsd: fromMicro(fbtFeeTotal),
+    fbtMarketplaceFeeMicro: fbtFeeTotal,
+    fbtMarketplaceFeeUsd: fromMicro(fbtFeeTotal),
+    // Exact-zero disclosure: the UI prints this verbatim when fee == 0.
+    fbtMarketplaceFeeDisclosure: fbtFeeTotal === 0n ? 'FBT Marketplace Fee: $0' : `FBT Marketplace Fee: $${fromMicro(fbtFeeTotal)}`,
     networkFeeMicro: networkFee,
     networkFeeUsd: fromMicro(networkFee),
     commissionMicro,
@@ -85,9 +100,9 @@ export function computeFees(input) {
     fbtFeeBps: integrationBps,
     commissionBps,
     breakdown: [
-      { label: 'Provider Premium', amountMicro: providerPremium, usd: fromMicro(providerPremium) },
-      { label: 'FBT Fee', amountMicro: fbtFee, usd: fromMicro(fbtFee) },
-      { label: 'Network Fee (est.)', amountMicro: networkFee, usd: fromMicro(networkFee) }
+      { label: 'Provider Premium', labelKey: 'insurance.fee.providerPremium', amountMicro: providerPremium, usd: fromMicro(providerPremium) },
+      { label: 'FBT Marketplace Fee', labelKey: 'insurance.fee.fbtFee', amountMicro: fbtFeeTotal, usd: fromMicro(fbtFeeTotal) },
+      { label: 'Network Fee (est.)', labelKey: 'insurance.fee.networkFee', amountMicro: networkFee, usd: fromMicro(networkFee) }
     ]
   };
 }

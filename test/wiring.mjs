@@ -53,7 +53,20 @@ export default function run() {
   const app = read('src/App.jsx');
   const en = JSON.parse(read('src/i18n/locales/en.json'));
 
-  const routes = [...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+  /* Nested children (`<Route path="/insurance"> <Route path="marketplace">`)
+     carry relative literals; join them onto their parent so route matching
+     works on full paths — the same shape nav links use. */
+  const rawRoutes = [...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]);
+  const routes = [];
+  let lastAbsoluteRoot = null;
+  for (const p of rawRoutes) {
+    if (p.startsWith('/')) {
+      lastAbsoluteRoot = p;
+      routes.push(p);
+    } else {
+      routes.push(lastAbsoluteRoot ? `${lastAbsoluteRoot.replace(/\/$/, '')}/${p}` : `/${p}`);
+    }
+  }
 
   /* ------------------------- 1. translation keys ------------------------- */
   /*

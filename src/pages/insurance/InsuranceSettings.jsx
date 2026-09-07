@@ -30,7 +30,7 @@ export default function InsuranceSettings() {
         <div className="ins-muted">
           FBT is not an insurance company and does not underwrite. Coverage is offered by external providers according to their own legal structure
           (protection/mutual/insurance/warranty). Nothing here is "guaranteed protection", "zero risk" or "guaranteed profit". Real provider terms,
-          exclusions, jurisdiction and claim process are shown before purchase. Sandbox providers are simulations.
+          exclusions, jurisdiction and claim process are shown before purchase.
         </div>
       </div>
     </div>

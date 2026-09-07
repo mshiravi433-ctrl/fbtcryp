@@ -15,6 +15,7 @@
 
 import { assertAdapterShape } from './adapter.js';
 import { PROVIDER_STATUS } from './constants.js';
+import { isProduction } from './env.js';
 
 const registry = new Map(); // providerId -> record
 
@@ -27,11 +28,17 @@ function defaultHealth() {
 /**
  * registerProvider({ id, name, adapter, chains, enabled, ...meta })
  * `configured` must be false unless a REAL, verified provider integration exists.
+ * PRODUCTION GATE: a provider with status SANDBOX can never be registered in
+ * production — the request throws SANDBOX_PROVIDER_DISABLED_IN_PRODUCTION.
  */
 export function registerProvider(spec) {
   const id = String(spec?.id || '').toLowerCase().trim();
   if (!id) throw new Error('PROVIDER_ID_REQUIRED');
-  assertAdapterShape(spec.adapter, id);
+  if (isProduction && String(spec?.status || '').toUpperCase() === 'SANDBOX') {
+    const err = new Error(`SANDBOX_PROVIDER_DISABLED_IN_PRODUCTION: refusing to register "${id}" while NODE_ENV=production`);
+    err.code = 'SANDBOX_PROVIDER_DISABLED_IN_PRODUCTION';
+    throw err;
+  }
   registry.set(id, {
     providerId: id,
     name: spec.name || id,

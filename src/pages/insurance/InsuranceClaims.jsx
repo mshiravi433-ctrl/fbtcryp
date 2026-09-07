@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useOutletContext } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 
 const STATUS_CHIP = {
@@ -9,6 +10,7 @@ const STATUS_CHIP = {
 };
 
 export default function InsuranceClaims() {
+  const { t } = useTranslation();
   const { wallet, notify } = useOutletContext();
   const loc = useLocation();
   const initialCoverage = loc.state?.coverageId || '';
@@ -32,8 +34,8 @@ export default function InsuranceClaims() {
       };
       if (amount) body.affectedAmountMicro = amount;
       const r = await insuranceApi.createClaim(body);
-      setMsg(`Claim ${r.claim.claimNumber} created (${r.claim.status}). Now submit it.`);
-      notify(`Claim ${r.claim.claimNumber} created`, 'success');
+      setMsg(t('insurance.claims.created', { number: r.data.claim.claimNumber, status: r.data.claim.status }));
+      notify(t('insurance.claims.createdToast', { number: r.data.claim.claimNumber }), 'success');
       const d = await insuranceApi.claims(wallet); setClaims(d.claims);
     } catch (e) { setErr(e.message || String(e)); notify(e.message || 'Claim creation failed', 'error'); }
     setBusy(false);

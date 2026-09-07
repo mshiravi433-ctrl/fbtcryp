@@ -15,6 +15,7 @@
 import { getProvider, healthOf } from './provider-registry.js';
 import * as store from './store.js';
 import { emit } from './events.js';
+import { verifyEvmReceipt } from './verification.js';
 
 export const SANDBOX_MODE = process.env.INSURANCE_RPC_URL ? false : true;
 
@@ -23,10 +24,34 @@ function requireTxHash(txHash) {
   return txHash;
 }
 
+/** Per-provider on-chain expectations for independent verification. */
+function expectationsFor(provider, input) {
+  const owner = String(input.owner || '').toLowerCase();
+  if (provider.providerId === 'nexus-mutual') {
+    const addr = provider.adapter?.addresses || {};
+    return {
+      to: addr.CoverBroker || null,
+      nftContract: addr.CoverNFT || null,
+      nftRecipient: owner || null
+    };
+  }
+  if (provider.providerId === 'insurace') {
+    // InsurAce Cover contract buyCoverV3: verify the tx hit the operator-
+    // verified contract; cover NFT check via their CoverNFT when configured.
+    return { to: provider.adapter?.coverContractFor?.(input.chainId) || null };
+  }
+  return {};
+}
+
 /**
  * verifyReceipt({ kind: 'coverage-activation'|'payout', providerId, txHash,
  *   chainId, owner, recipient?, amountMicro?, coverageId?, claimId? })
  * Returns { verified, method, txHash, at } or throws on mismatch.
+ *
+ * SANDBOX providers (dev/test only): simulated receipt check against the
+ * prepared reference — clearly labelled, never in production.
+ * LIVE providers: independent eth_getTransactionReceipt verification against
+ * the provider's verified contracts (CoverNFT mint → coverId for Nexus).
  */
 export async function verifyReceipt(input) {
   const txHash = requireTxHash(input.txHash);
@@ -35,22 +60,27 @@ export async function verifyReceipt(input) {
   if (healthOf(provider.providerId).status === 'UNAVAILABLE') throw new Error('PROVIDER_UNAVAILABLE');
 
   const expected = await store.get('provider-ledger', `reference-${input.coverageId || input.claimId || ''}`);
-  let verified = false;
-  let method = SANDBOX_MODE ? 'sandbox-simulated' : 'on-chain-confirmation';
+  const isSandboxProvider = String(provider.status || '').toUpperCase() === 'SANDBOX';
 
-  if (SANDBOX_MODE) {
-    // Sandbox: no real chain. Accept an explicit simulated receipt matching our
-    // prepared reference. Never claims a real chain confirmed anything. When the
-    // prepared reference already carries a txHash it must match exactly; a fresh
-    // reference accepts its first presented receipt.
+  let verified = false;
+  let method;
+  let detail = null;
+
+  if (isSandboxProvider) {
+    method = 'sandbox-simulated';
+    // Sandbox (dev/test): no real chain. Accept an explicit simulated receipt
+    // matching our prepared reference. Never claims a real chain confirmed
+    // anything. A reference that already carries a txHash must match exactly.
     verified = !!txHash && (expected ? (expected.txHash ? expected.txHash === txHash : true) : true);
-    // Real-chain verification (added in the provider milestone) checks recipient,
-    // amount and confirmation depth against the actual transaction here.
   } else {
-    // REAL mode (not wired in v1): fetch + confirm tx receipt from the RPC /
-    // provider contract logs, check recipient + amount + confirmations. The
-    // sandbox code-path above is replaced here in a later provider milestone.
-    verified = false;
+    method = 'on-chain-confirmation';
+    const res = await verifyEvmReceipt({
+      chainId: Number(input.chainId ?? 1),
+      txHash,
+      expect: expectationsFor(provider, input)
+    });
+    verified = res.verified === true;
+    detail = res.verified ? { coverId: res.coverId ?? null, blockNumber: res.blockNumber ?? null, confirmations: res.confirmations ?? null } : { reason: res.reason, pending: !!res.pending };
   }
 
   const record = {
@@ -65,6 +95,7 @@ export async function verifyReceipt(input) {
     amountMicro: input.amountMicro ?? null,
     method,
     verified,
+    detail,
     at: Date.now()
   };
   await store.set('receipts', txHash.toLowerCase(), record);
@@ -80,9 +111,9 @@ export async function verifyReceipt(input) {
 
   if (!verified) {
     // Never silently mark paid (§25).
-    return { verified: false, method, txHash, at: record.at, reason: SANDBOX_MODE ? 'sandbox receipt mismatch' : 'on-chain verification pending' };
+    return { verified: false, method, txHash, at: record.at, reason: detail?.reason || (method === 'sandbox-simulated' ? 'sandbox receipt mismatch' : 'on-chain verification pending'), ...(detail || {}) };
   }
-  return { verified: true, method, txHash, at: record.at };
+  return { verified: true, method, txHash, at: record.at, ...(detail || {}) };
 }
 
 /** Replay / duplicate-tx guard: never process the same txHash twice. */

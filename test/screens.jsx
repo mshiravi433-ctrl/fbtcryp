@@ -305,6 +305,7 @@ export async function run(container) {
       zh: /[\u4E00-\u9FFF]/, hi: /[\u0900-\u097F]/, ru: /[\u0400-\u04FF]/,
       es: /Quiénes|cartera/i, fr: /Qui nous sommes|portefeuille/i, tr: /Biz kimiz|cüzdan/i,
       id: /Siapa kami|dompet/i, pt: /Quem somos|carteira/i, en: /Who we are/,
+      de: /Über uns|Wallet/i,
     };
     for (const lang of LANGUAGES) {
       const host = document.createElement('div');

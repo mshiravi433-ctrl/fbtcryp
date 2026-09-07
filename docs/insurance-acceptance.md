@@ -1,6 +1,6 @@
 # FBT Insurance OS — §63 Acceptance Checklist
 
-Status date: 2026-09-07. Legend: ✅ implemented (runnable on sandbox providers) ·
+Status date: 2026-09-07 (v2 production activation). Legend: ✅ implemented ·
 🟡 scaffolded / pending live-provider or production milestone · ⬜ not started.
 
 | # | §63 criterion | Status | Where |
@@ -34,18 +34,19 @@ Status date: 2026-09-07. Legend: ✅ implemented (runnable on sandbox providers)
 | 27 | Documentation is complete | ✅ | `docs/insurance-architecture.md` + this file |
 
 ### Pending production milestones (explicitly not fabricated)
-- **Live provider wiring** (Nexus Mutual first): requires verified cover products,
-  programmatic cover-buying, fees/commissions, supported chains and terms — the
-  adapter is a disabled stub until those are integrated (§ honesty).
-- **Multisig + timelock admin** and OpenZeppelin swap-in + independent security
-  review (§49) before any production deployment.
-- **Real on-chain indexer** (`INSURANCE_RPC_URL` mode) for EVM + Solana
-  confirmation thresholds; sandbox mode is used today.
+- **InsurAce purchase path**: needs the operator-verified Cover contract address
+  (docs provide addresses to integrators only) — quoting already works with
+  `INSURACE_API_CODE`; purchase stays `NOT_CONFIGURED` until then.
+- **Multisig + timelock admin** key rotation runbook executed by ops (the code
+  path is key-gated and 404s in production without a key).
 - **FBT internal protection pool / reserve / oracle TWAP** (§29–§31): architecture
-  reserved, feature intentionally inactive.
+  reserved, feature intentionally inactive (`FBT_PROTECTION_POOL_ENABLED=false`).
+- **German locale**: complete insurance namespace prepared; UI registration
+  awaits full-surface translation per the repo's measured-coverage policy.
 
 ### Test commands
 ```bash
 npm run compile:fbt-insurance   # contracts/FBTInsuranceRouter.sol -> artifact
-npm run test:insurance          # compile + core + security + contract probes
+npm run test:insurance          # compile + core + security + production + contract probes
+npm run test:insurance-production  # production activation contract (sandbox gate, envelope, fees, UI)
 ```

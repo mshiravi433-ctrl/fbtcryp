@@ -97,6 +97,7 @@ export function normalizeQuoteInput(body) {
     deductibleMicro: body.deductibleMicro != null ? toMicro(body.deductibleMicro) : null,
     providerId: body.providerId || null,
     currency: body.currency || 'usdc',
+    termsAccepted: body.termsAccepted === true,
     networkFeeMicro: body.networkFeeMicro != null ? toMicro(body.networkFeeMicro) : undefined
   };
 }
@@ -134,8 +135,13 @@ export async function aggregateQuotes(body) {
         premiumMicro: raw.premiumMicro,
         network: Number(params.chainId),
         currency: params.currency,
-        productTerms: e.product
+        productTerms: e.product,
+        raw: raw.raw || null
       });
+      quote.providerStatus = p.status;
+      quote.termsUrl = e.product?.termsUrl || p.termsUrl || null;
+      quote.annexUrl = e.product?.annexUrl || null;
+      quote.sandbox = p.status === 'SANDBOX';
       quote.estimatedGas = raw.estimatedGas || null;
       await store.set('quotes', quote.quoteId, quote);
       await emit({ type: 'InsuranceQuoteCreated', wallet: params.walletAddress, providerId: p.providerId, quoteId: quote.quoteId, payload: { quoteId: quote.quoteId, provider: p.providerId } });

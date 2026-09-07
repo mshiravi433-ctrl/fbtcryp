@@ -5,6 +5,11 @@
  * directly and never builds its own numbers: quotes, fees and eligibility are
  * server-computed. Amounts travel as strings (integer micro-units) to avoid
  * float money errors in the UI (§46).
+ *
+ * Every response uses the standard envelope:
+ *   { ok, requestId, timestamp, version, data, warnings, errors, source, freshness }
+ * The helpers below unwrap `data` and surface `warnings`/`freshness` so the UI
+ * can always show Source + Freshness (§12 data transparency).
  */
 import { apiBase } from './apiBase.js';
 
@@ -14,13 +19,16 @@ async function json(res) {
   if (!res.ok) {
     let detail = null;
     try { detail = await res.json(); } catch { /* ignore */ }
-    const err = new Error(detail?.error || `HTTP ${res.status}`);
-    err.code = detail?.error || 'HTTP_ERROR';
-    err.detail = detail?.detail || detail;
+    const err = new Error(detail?.errors?.[0]?.detail || detail?.errors?.[0]?.code || `HTTP ${res.status}`);
+    err.code = detail?.errors?.[0]?.code || detail?.error || 'HTTP_ERROR';
+    err.warnings = detail?.warnings || [];
+    err.data = detail?.data || null;
     err.status = res.status;
     throw err;
   }
-  return res.json();
+  const body = await res.json();
+  // Envelope passthrough: keep meta, unwrap data.
+  return { ...body, data: body.data ?? body, warnings: body.warnings || [], freshness: body.freshness || null, source: body.source || null };
 }
 
 function qs(obj) {
@@ -29,54 +37,51 @@ function qs(obj) {
   return parts.length ? `?${parts.join('&')}` : '';
 }
 
+const post = (path, body) => fetch(`${base()}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) }).then(json);
+
 export const insuranceApi = {
-  capabilities: async () => json(await fetch(`${base()}/capabilities`)),
+  capabilities: () => fetch(`${base()}/capabilities`).then(json),
 
-  providers: async () => (await json(await fetch(`${base()}/providers`))).providers,
-  providerHealth: async (id) => json(await fetch(`${base()}/providers/${id}/health`)),
-  products: async (chainId) => (await json(await fetch(`${base()}/products${qs({ chainId })}`))).products,
-  product: async (id, chainId) => (await json(await fetch(`${base()}/products/${encodeURIComponent(id)}${qs({ chainId })}`))).product,
+  providers: async () => (await fetch(`${base()}/providers`).then(json)).data.providers,
+  providerHealth: async (id) => (await fetch(`${base()}/providers/${encodeURIComponent(id)}/health`).then(json)).data.health,
+  providerHealthAll: async () => (await fetch(`${base()}/provider-health`).then(json)).data,
+  products: async (chainId) => (await fetch(`${base()}/products${qs({ chainId })}`).then(json)).data.products,
+  product: async (id, chainId) => (await fetch(`${base()}/products/${encodeURIComponent(id)}${qs({ chainId })}`).then(json)).data.product,
 
-  quote: async (body) => json(await fetch(`${base()}/quote`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  eligibility: async (body) => (await json(await fetch(`${base()}/eligibility`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).answers,
-  quoteById: async (id) => json(await fetch(`${base()}/quotes/${encodeURIComponent(id)}`)),
+  quote: (body) => post('/quote', body),
+  compare: (body) => post('/compare', body),
+  recommend: (body) => post('/recommend', body),
+  eligibility: async (body) => (await post('/eligibility', body)).data.answers,
+  quoteById: (id) => fetch(`${base()}/quotes/${encodeURIComponent(id)}`).then(json),
 
-  purchaseIntent: async (body) => json(await fetch(`${base()}/purchase-intent`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  activate: async (body) => json(await fetch(`${base()}/transaction/activate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
+  purchaseIntent: (body) => post('/purchase-intent', body),
+  activate: (body) => post('/transaction/activate', body),
+  verifyTx: (body) => post('/transaction/verify', body),
 
-  coverage: async (wallet) => json(await fetch(`${base()}/coverage${qs({ wallet })}`)),
-  coverageById: async (id, wallet) => json(await fetch(`${base()}/coverage/${encodeURIComponent(id)}${qs({ wallet })}`)),
-  renew: async (body) => json(await fetch(`${base()}/renew`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  cancel: async (body) => json(await fetch(`${base()}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
+  coverage: async (wallet) => (await fetch(`${base()}/coverage${qs({ wallet })}`).then(json)).data,
+  coverageById: async (id, wallet) => (await fetch(`${base()}/coverage/${encodeURIComponent(id)}${qs({ wallet })}`).then(json)).data,
+  renew: (body) => post('/renew', body),
+  cancel: (body) => post('/cancel', body),
 
-  createClaim: async (body) => json(await fetch(`${base()}/claim`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  submitClaim: async (id, body) => json(await fetch(`${base()}/claim/${encodeURIComponent(id)}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  claims: async (wallet) => json(await fetch(`${base()}/claims${qs({ wallet })}`)),
-  claimById: async (id, wallet) => json(await fetch(`${base()}/claims/${encodeURIComponent(id)}${qs({ wallet })}`)),
+  createClaim: (body) => post('/claim', body),
+  submitClaim: (id, body) => post(`/claim/${encodeURIComponent(id)}/submit`, body),
+  claims: async (wallet) => (await fetch(`${base()}/claims${qs({ wallet })}`).then(json)).data,
+  claimById: async (id, wallet) => (await fetch(`${base()}/claims/${encodeURIComponent(id)}${qs({ wallet })}`).then(json)).data,
 
-  risk: async (body) => json(await fetch(`${base()}/risk`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  protectPortfolio: async (body) => json(await fetch(`${base()}/intent/protect-portfolio`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })),
-  incidents: async () => (await json(await fetch(`${base()}/incidents`))).incidents,
-  events: async (limit) => (await json(await fetch(`${base()}/events${qs({ limit })}`))).events,
+  risk: (body) => post('/risk', body),
+  coverageGap: (wallet, exposures) => fetch(`${base()}/coverage-gap${qs({ wallet, exposuresJson: exposures ? JSON.stringify(exposures) : undefined })}`).then(json),
+  protectPortfolio: (body) => post('/intent/protect-portfolio', body),
+  incidents: async () => (await fetch(`${base()}/incidents`).then(json)).data.incidents,
+  events: async (limit) => (await fetch(`${base()}/events${qs({ limit })}`).then(json)).data.events,
 
-  // admin (needs INSURANCE_ADMIN_KEY server-side)
-  admin: {
-    decide: async (claimId, body, token) => authPost(`${base()}/admin/claims/${encodeURIComponent(claimId)}/decide`, body, token),
-    recordPayout: async (claimId, body, token) => authPost(`${base()}/admin/claims/${encodeURIComponent(claimId)}/record-payout`, body, token),
-    registerIncident: async (body, token) => authPost(`${base()}/admin/incidents`, body, token),
-    pause: async (paused, token) => authPost(`${base()}/admin/pause`, { paused }, token),
-    providersEnable: async (id, enabled, token) => authPost(`${base()}/admin/providers/${encodeURIComponent(id)}/enable`, { enabled }, token),
-    dashboard: async (token) => authGet(`${base()}/admin/dashboard`, token)
-  }
+  // Verified Vault Coverage Registry (OpenCover reference registry)
+  vaults: async (chainId) => (await fetch(`${base()}/vaults${qs({ chainId })}`).then(json)).data,
+  pool: async () => (await fetch(`${base()}/pool`).then(json)).data,
+  poolSolvency: async () => (await fetch(`${base()}/pool/solvency`).then(json)).data
+
+  // NOTE: no admin client. Insurance admin operations are server-side only,
+  // key-gated, and are not exposed to the user UI in production.
 };
-
-function authHeaders(token) {
-  const h = { 'content-type': 'application/json' };
-  if (token) h.authorization = `Bearer ${token}`;
-  return h;
-}
-async function authPost(url, body, token) { return json(await fetch(url, { method: 'POST', headers: authHeaders(token), body: JSON.stringify(body) })); }
-async function authGet(url, token) { return json(await fetch(url, { headers: { authorization: token ? `Bearer ${token}` : '' } })); }
 
 /** micro (base-6) -> display number/string. */
 export function usd(micro) {
@@ -91,7 +96,7 @@ export function usd(micro) {
 }
 export function microOrDollar(v) { return usd(v); }
 
-/** localStorage-persisted demo/connected wallet helper. */
+/** localStorage-persisted connected/view-only wallet helper. */
 const KEY = 'fbt-insurance-wallet-v1';
 export function getInsuranceWallet() {
   try { return localStorage.getItem(KEY) || ''; } catch { return ''; }

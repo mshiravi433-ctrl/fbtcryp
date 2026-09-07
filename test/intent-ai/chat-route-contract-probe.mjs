@@ -39,10 +39,23 @@ const check = (name, ok, extra = null) => { results.push({ name, ok: Boolean(ok)
 
 const appSource = read('src/App.jsx');
 /* The catch-all (`path="*"`) is not a target — it is the reason a bad route
-   looks like it works, so it is deliberately excluded from the contract. */
-const routerPaths = [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)]
+   looks like it works, so it is deliberately excluded from the contract.
+   Nested child routes (`<Route path="/insurance"> <Route path="marketplace">`)
+   carry relative literals; they are joined onto their parent so the contract
+   compares full paths, the same shape the chat actually navigates. */
+const rawRouterPaths = [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)]
   .map((m) => m[1])
   .filter((p) => p !== '*');
+const routerPaths = [];
+let lastAbsoluteRoot = null;
+for (const p of rawRouterPaths) {
+  if (p.startsWith('/')) {
+    lastAbsoluteRoot = p;
+    routerPaths.push(p);
+  } else {
+    routerPaths.push(lastAbsoluteRoot ? `${lastAbsoluteRoot.replace(/\/$/, '')}/${p}` : `/${p}`);
+  }
+}
 check('App.jsx router table was readable and non-trivial', routerPaths.length >= 40, `found ${routerPaths.length}`);
 
 const missingFromContract = routerPaths.filter((p) => !ROUTED_PATHS.includes(p));

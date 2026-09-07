@@ -47,7 +47,7 @@ export function productEligible(products, params) {
  * buildQuote({ provider, product, params, premiumMicro, network, currency,
  *              productTerms }) -> canonical quote.
  */
-export function buildQuote({ provider, product, params, premiumMicro, network, currency = 'usdc', productTerms }) {
+export function buildQuote({ provider, product, params, premiumMicro, network, currency = 'usdc', productTerms, raw }) {
   const now = Date.now();
   const expiresAt = now + QUOTE_TTL_MS;
   const coverageAmount = params.coverageAmountMicro ?? params.coverageAmount;
@@ -97,6 +97,9 @@ export function buildQuote({ provider, product, params, premiumMicro, network, c
     estimatedGas: params.estimatedGas ?? null,
     contractAddress: provider.contractAddresses?.[Number(params.chainId)] || provider.contractAddresses?.default || null,
     settlementModel: provider.settlementModel || 'DIRECT',
+    providerQuoteRaw: raw || null,
+    quoteSource: provider.source || 'provider-api',
+    quoteUpdatedAt: now,
     termsHash: sha256(termsObj),
     terms: termsObj
   };

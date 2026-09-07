@@ -131,7 +131,6 @@ const InsuranceClaims = lazyRetry(() => import('./pages/insurance/InsuranceClaim
 const InsuranceRisk = lazyRetry(() => import('./pages/insurance/InsuranceRisk'));
 const InsuranceProviders = lazyRetry(() => import('./pages/insurance/InsuranceProviders'));
 const InsuranceSettings = lazyRetry(() => import('./pages/insurance/InsuranceSettings'));
-const InsuranceAdmin = lazyRetry(() => import('./pages/insurance/InsuranceAdmin'));
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -370,7 +369,8 @@ function AnimatedRoutes() {
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />
 
-            {/* FBT Insurance OS (§ spec). Sandbox providers; non-custodial. */}
+            {/* FBT Insurance OS — production marketplace. Non-custodial;
+                live providers only (sandbox exists only in dev/test builds). */}
             <Route path="/insurance" element={<InsuranceShell />}>
               <Route index element={<InsuranceDashboard />} />
               <Route path="marketplace" element={<InsuranceMarketplace />} />
@@ -382,8 +382,6 @@ function AnimatedRoutes() {
               <Route path="providers" element={<InsuranceProviders />} />
               <Route path="settings" element={<InsuranceSettings />} />
             </Route>
-            <Route path="/insurance/admin" element={<InsuranceAdmin />} />
-            <Route path="/admin/insurance" element={<InsuranceAdmin />} />
 
             <Route path="*" element={<Market />} />
           </Routes>
