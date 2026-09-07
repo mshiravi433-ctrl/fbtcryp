@@ -1126,7 +1126,7 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "تعذّرت قراءة رصيد ETH الخاص بك على Base.",
         "AAVE_NATIVE_GAS_FLOOR": "تحتاج إلى ETH إضافي على Base لتغطية الرسوم."
       },
-      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {chain} لعرض مركزك في Aave والسحب."
+      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {{chain}} لعرض مركزك في Aave والسحب."
     }
   },
   "signals": {
