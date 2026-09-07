@@ -1,0 +1,3 @@
+# Deployment
+
+Deploy marketplace-only first with verified provider adapters. Configure no pool flag in production. Validate provider terms, health, chains, contracts, jurisdiction controls, fee disclosure, transaction verification, monitoring and audit logs. Run the insurance probes and contract security checks before release. Enable future pool functionality only after independent legal, actuarial, security and capital validation.

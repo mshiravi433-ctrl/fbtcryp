@@ -1,0 +1,3 @@
+# Claims engine
+
+Claims require coverage, incident details and evidence. Evidence includes transaction hash, block, chain, contract, wallet, asset, amount, timestamp, oracle/protocol events, terms hash and evidence hash. Fraud checks detect duplicate incidents/claims, expiry, unsupported protocols and invalid evidence; suspicious claims go to manual review. Approval and payout are separate. A claim is paid only after a verified on-chain transfer, never an API acknowledgement.

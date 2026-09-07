@@ -1,0 +1,3 @@
+# Threat model
+
+Threats include provider outage/manipulation, stale quotes, oracle manipulation, replay, duplicate purchase/claim, false evidence, payout double spend, insolvency, concentration and unauthorized administration. Mitigations are adapter health gates, quote expiry, evidence verification, idempotency, independent claim governance, solvency limits, event/audit logs, pause controls and verified blockchain receipts.

@@ -28,7 +28,12 @@ export default function InsuranceMarketplace() {
         walletAddress: wallet, chainId, protectionType: type,
         coverageAmount: amount, durationDays: Number(duration)
       });
-      if (!res.ok) setErr(res.reason || 'No eligible protection is currently available.');
+      if (!res.ok) {
+        const detail = Array.isArray(res.detail) && res.detail.length
+          ? ` (${res.detail.map((x) => `${x.providerId}: ${x.reason}`).join(' · ')})`
+          : '';
+        setErr(`${res.reason || 'No eligible protection is currently available.'}${detail}`);
+      }
       else setResult(res.quotes);
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
@@ -38,8 +43,13 @@ export default function InsuranceMarketplace() {
     <div>
       <div className="ins-hero">
         <h1>Protection Marketplace</h1>
-        <p>Compare protection across providers. Every fee is shown before signing and nothing is purchased without your wallet signature. Sandbox providers only in this deployment.</p>
+        <p>Compare verified provider offers. Nothing is purchased without your wallet signature. FBT adds no hidden transaction fee; network fees, if any, are shown before signing.</p>
       </div>
+
+      <details className="ins-card ins-howto">
+        <summary><span className="ins-feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><b>چگونه کار می‌کند؟ / How it works</b></summary>
+        <div className="ins-help-grid"><span><b>◈ Wallet</b><br/>فقط آدرس و امضای کیف پول شما؛ کلید خصوصی هرگز ارسال نمی‌شود.</span><span><b>◌ Risk</b><br/>ریسک بر اساس زنجیره، پروتکل، دارایی، تمرکز و شرایط واقعی ارائه‌دهنده محاسبه می‌شود.</span><span><b>₿ Fees</b><br/>کارمزد FBT صفر است. فقط مبلغ ارائه‌دهنده و کارمزد شبکه احتمالی، پیش از امضا نمایش داده می‌شود.</span><span><b>✓ Claims</b><br/>ادعا با مدرک تراکنش و شرایط همان ارائه‌دهنده بررسی می‌شود؛ خرید خودکار نیست.</span></div>
+      </details>
 
       <div className="ins-card">
         <div className="ins-sub" style={{ marginTop: 0 }}>Protection type</div>

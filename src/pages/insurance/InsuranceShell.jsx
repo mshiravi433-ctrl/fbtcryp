@@ -84,7 +84,7 @@ export default function InsuranceShell() {
     ...(serverOk === false ? [{ sev: 'HIGH', title: 'Server unreachable', body: 'Could not reach /api/insurance. Live quotes are unavailable.' }] : []),
     ...(lowHealth.map((p) => ({ sev: p.healthStatus === 'DEGRADED' ? 'MEDIUM' : 'HIGH', title: `${p.name} health: ${p.healthStatus}`, body: 'Not recommended for new purchases while degraded.' }))),
     ...(!wallet ? [{ sev: 'INFO', title: 'No wallet', body: 'Connect a wallet to quote against a real address and to sign.' }] : []),
-    { sev: 'INFO', title: 'Sandbox protection only', body: 'Providers are simulations. Nothing here is a live underwriting offer and FBT never custodies funds.' }
+    { sev: 'INFO', title: 'Provider-based protection', body: 'Availability, terms and claims depend on the connected provider. FBT does not underwrite or custody funds.' }
   ].slice(0, 8);
   const unread = alerts.length;
 
@@ -126,7 +126,6 @@ export default function InsuranceShell() {
         {TABS.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'ins-tab' + (isActive ? ' active' : '')}>{t.label}</NavLink>
         ))}
-        <NavLink to="/insurance/admin" className="ins-tab">Admin</NavLink>
       </div>
 
       <Outlet context={{ wallet, connected: connectedAddr, chainId: w.chainId, chainLabel, notify, confirm, switchChain: w.switchChain, getEip1193Provider: w.getEip1193Provider, getSigner: w.getSigner, mode: w.mode }} key={loc.pathname} />

@@ -25,7 +25,10 @@
   background: linear-gradient(90deg, var(--text-1), color-mix(in srgb, var(--rgb-1) 70%, #fff)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .ins-hero p { margin:0; font-size:var(--fs-sm); color:var(--text-2); max-width:64ch; }
 
-.ins-tabs { display:flex; gap:6px; flex-wrap:wrap; margin: 14px 0 18px; }
+.ins-tabs { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-inline:contain; scrollbar-width:thin; margin: 14px 0 18px; padding: 2px 2px 8px; -webkit-overflow-scrolling:touch; }
+.ins-tabs::-webkit-scrollbar { height:4px; }
+.ins-tabs::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:8px; }
+.ins-tabs .ins-tab { flex:0 0 auto; white-space:nowrap; }
 .ins-tab { background: var(--bg-panel); border:1px solid var(--line); color:var(--text-2); border-radius:999px;
   padding:8px 15px; font-size:var(--fs-sm); cursor:pointer; text-decoration:none; }
 .ins-tab:hover { color:var(--text-1); }
@@ -116,3 +119,14 @@
 /* Fee highlight */
 .ins-fee-line { display:flex; justify-content:space-between; padding:6px 0; font-size:var(--fs-sm); }
 .ins-fee-line .fee-val { font-variant-numeric:tabular-nums; color:var(--text-1); font-weight:600; }
+
+/* Expandable, icon-led explanations; inherits light/dark and RTL tokens. */
+.ins-howto summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:10px; color:var(--text-1); }
+.ins-howto summary::-webkit-details-marker { display:none; }
+.ins-howto summary:after { content:'＋'; margin-inline-start:auto; color:var(--rgb-1); font-size:20px; }
+.ins-howto[open] summary:after { content:'−'; }
+.ins-feature-icon { width:34px; height:34px; display:grid; place-items:center; border-radius:11px; background:color-mix(in srgb,var(--rgb-1) 16%,transparent); color:var(--rgb-1); }
+.ins-feature-icon svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.ins-help-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; color:var(--text-2); font-size:var(--fs-sm); line-height:1.65; }
+.ins-help-grid span { border:1px solid var(--line); border-radius:12px; padding:11px; background:color-mix(in srgb,var(--bg-panel) 70%,transparent); }
+.ins-help-grid b { color:var(--text-1); }

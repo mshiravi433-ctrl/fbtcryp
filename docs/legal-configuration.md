@@ -1,0 +1,3 @@
+# Legal configuration
+
+FBT is not assumed to be an insurer. Provider, product and jurisdiction eligibility are configurable. Unknown legal facts return `UNKNOWN` and show: “Availability depends on applicable terms and jurisdiction.” Before any FBT-native pool: obtain jurisdiction-specific legal review, licensing analysis, disclosures, tax treatment, capital/reserve requirements, claims governance and eligible-region configuration. Never infer eligibility from IP alone.

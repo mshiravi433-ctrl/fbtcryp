@@ -1,0 +1,3 @@
+# Security model
+
+Non-custodial by default. No private keys or seed phrases in source. Provider allowlists, rate limits, circuit breakers, emergency pause, chain/token/amount validation, nonce/deadline/replay protection and auditable terms hashes are mandatory. Critical pool changes require ADMIN/RISK_MANAGER/CLAIM_MANAGER/TREASURY/ORACLE_MANAGER/PAUSER/UPGRADER separation plus multisig and timelock.

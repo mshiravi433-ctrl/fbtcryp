@@ -83,6 +83,12 @@ export async function checkEligibility(input) {
 }
 
 /* ------------------------------ normalisation ---------------------------- */
+export function normalizeProtectionType(value) {
+  const key = String(value || '').trim().toLowerCase().replace(/[ _]+/g, '-');
+  const aliases = { 'smartcontract': 'smart-contract', 'smart-contract-protection': 'smart-contract', 'defi': 'defi-protocol', 'defi-protocol-protection': 'defi-protocol', 'stablecoin-protection': 'stablecoin', 'lp-protection': 'lp', 'wallet-protection': 'wallet' };
+  return aliases[key] || key || 'smart-contract';
+}
+
 export function normalizeQuoteInput(body) {
   const amount = body.coverageAmountMicro ?? body.coverageAmount;
   return {
@@ -90,7 +96,7 @@ export function normalizeQuoteInput(body) {
     chainId: Number(body.chainId ?? body.network),
     protocol: body.protocol || null,
     asset: body.asset || null,
-    protectionType: String(body.protectionType || body.coverageType || body.kind || 'smart-contract'),
+    protectionType: normalizeProtectionType(body.protectionType || body.coverageType || body.kind || 'smart-contract'),
     productId: body.productId || null,
     coverageAmountMicro: typeof amount === 'bigint' ? amount : toMicro(amount),
     durationDays: Number(body.durationDays ?? body.duration ?? 30),
