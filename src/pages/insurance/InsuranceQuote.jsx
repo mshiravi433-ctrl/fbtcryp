@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ethers } from 'ethers';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
+import { statusLabel, typeLabel, reasonLabel, claimLabel } from './insStatus.js';
 
 export default function InsuranceQuote() {
   const { t } = useTranslation();
@@ -121,7 +122,17 @@ export default function InsuranceQuote() {
     }
   }
 
-  if (err) return (<div className="ins-alert">{t('insurance.quote.unavailable', { error: err })} <button className="ins-btn ghost" onClick={() => nav('/insurance/marketplace')}>{t('insurance.quote.backToMarket')}</button></div>);
+  if (err) return (
+    <div className="ins-state-card ins-state-card--sm">
+      <div className="ins-state-ico">⏳</div>
+      <h2>{t('insurance.quote.unavailableTitle')}</h2>
+      <p>{t('insurance.quote.unavailable', { error: reasonLabel(t, err) })}</p>
+      <div className="ins-state-actions">
+        <button className="ins-btn ghost small" onClick={() => nav('/insurance/marketplace')}>{t('insurance.quote.backToMarket')}</button>
+        <Link className="ins-btn ghost small" to="/insurance/marketplace">{t('insurance.unavailable.retry')}</Link>
+      </div>
+    </div>
+  );
   if (!quote) return <div className="ins-muted">{t('insurance.quote.loading')}</div>;
 
   const feeZero = String(quote.fbtFeeMicro ?? '0') === '0';
@@ -141,7 +152,7 @@ export default function InsuranceQuote() {
         </div>
       ) : (
         <div className="ins-card">
-          <div className="ins-row"><span>{t('insurance.quote.protection')}</span><b style={{ textTransform: 'capitalize' }}>{quote.protectionType}</b></div>
+          <div className="ins-row"><span>{t('insurance.quote.protection')}</span><b>{typeLabel(t, quote.protectionType)}</b></div>
           <div className="ins-row"><span>{t('insurance.market.coverage')}</span><b>${usd(quote.coverageAmountMicro)}</b></div>
           <div className="ins-row"><span>{t('insurance.market.duration')}</span><span>{t('insurance.quote.days', { count: quote.durationDays })}</span></div>
           <div style={{ margin: '6px 0', borderTop: '1px dashed var(--line)' }} />
@@ -158,6 +169,7 @@ export default function InsuranceQuote() {
           <div className="ins-row ins-total"><span>{t('insurance.fee.total')}</span><span>${quote.totalCostUsd}</span></div>
           <div className="ins-row"><span>{t('insurance.quote.provider')}</span><span>{quote.providerName}</span></div>
           <div className="ins-row"><span>{t('insurance.quote.currency')}</span><span>{quote.currency}</span></div>
+          <div className="ins-row"><span>{t('insurance.market.claimMethod')}</span><span>{claimLabel(t, quote.claimMethod)}</span></div>
           <div className="ins-source">
             <span><span className="k">{t('insurance.source.label')}:</span> {quote.quoteSource === 'provider-api' ? t('insurance.source.providerApi') : quote.quoteSource || 'UNKNOWN'} · {quote.providerName}</span>
             <span><span className="k">{t('insurance.source.freshness')}:</span> {t('insurance.source.live')}</span>
@@ -179,10 +191,19 @@ export default function InsuranceQuote() {
               {quote.annexUrl && <a href={quote.annexUrl} target="_blank" rel="noreferrer">{t('insurance.quote.annexLink')} ↗</a>}
             </div>
           )}
-          <div className={connected ? 'ins-ok' : 'ins-excl'}>
-            {connected ? t('insurance.quote.walletConnected', { chain: chainLabel }) : t('insurance.quote.walletNotConnected')}
-          </div>
-          <button className="ins-btn" onClick={createIntent}>{t('insurance.quote.confirmPrepare')}</button>
+          {connected ? (
+            <>
+              <div className="ins-ok">{t('insurance.quote.walletConnected', { chain: chainLabel })}</div>
+              <button className="ins-btn" onClick={createIntent}>{t('insurance.quote.confirmPrepare')}</button>
+            </>
+          ) : (
+            <div className="ins-state-card ins-state-card--sm">
+              <div className="ins-state-ico">👛</div>
+              <h2>{t('insurance.shell.walletRequiredTitle')}</h2>
+              <p>{t('insurance.shell.walletRequiredBody')}</p>
+              <div className="ins-state-actions"><Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')}</Link></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -193,14 +214,14 @@ export default function InsuranceQuote() {
           {isLive && liveTx ? (
             <>
               <div className="ins-row"><span>{t('insurance.quote.contract')}</span><code style={{ fontSize: 11 }}>{liveTx.to}</code></div>
-              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">LIVE · {t('insurance.quote.unsigned')}</span></div>
+              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">{statusLabel(t, 'LIVE')} · {t('insurance.quote.unsigned')}</span></div>
               <div className="ins-sub" style={{ marginTop: 8 }}>{t('insurance.quote.liveSignNote')}</div>
               <button className="ins-btn" onClick={signAndActivate} disabled={stage === 'signing' || !connected}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signLive')}</button>
             </>
           ) : (
             <>
               <div className="ins-row"><span>{t('insurance.quote.sendTo')}</span><code style={{ fontSize: 11 }}>{prepared?.to}</code></div>
-              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">SANDBOX</span></div>
+              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">{statusLabel(t, 'SANDBOX')}</span></div>
               <div className="ins-sub" style={{ marginTop: 8 }}>{t('insurance.quote.sandboxNote')}</div>
               <button className="ins-btn" onClick={signAndActivate} disabled={stage === 'signing'}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signSandbox')}</button>
             </>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useWallet } from '../../context/WalletContext';
-import { getInsuranceWallet, setInsuranceWallet, insuranceApi } from '../../lib/insuranceClient.js';
+import { insuranceApi } from '../../lib/insuranceClient.js';
+import { statusLabel } from './insStatus.js';
+import InsuranceExplain from './InsuranceExplain.jsx';
 import './insurance.css';
 
 const TABS = [
@@ -20,10 +22,8 @@ export default function InsuranceShell() {
   const loc = useLocation();
   const tablistRef = useRef(null);
 
-  // Connected-wallet aware. Manual address is only a fallback when nothing is connected.
   const connectedAddr = (w.isConnected ? w.address : '') || '';
-  const [manual, setManual] = useState(() => (connectedAddr ? '' : getInsuranceWallet()));
-  const [showConnect, setShowConnect] = useState(false);
+  const [showWallet, setShowWallet] = useState(false); // wallet dialog (connected: manage/disconnect)
   const [serverOk, setServerOk] = useState(null); // null checking | true | false
 
   // alerts
@@ -57,29 +57,22 @@ export default function InsuranceShell() {
     return () => { alive = false; };
   }, []);
 
-  // When a real wallet connects, prefer it and drop any stale manual address.
-  useEffect(() => { if (connectedAddr) setManual(''); }, [connectedAddr]);
+  // Derived alerts. The sandbox notice appears ONLY while sandbox providers are
+  // actually registered (dev/test) — production never shows it.
+  const sandboxPresent = providers.some((p) => p.status === 'SANDBOX');
+  const livePresent = providers.some((p) => p.status === 'LIVE' && p.enabled);
+  const noLiveProvider = !sandboxPresent && !livePresent && serverOk === true;
+  const lowHealth = providers.filter((p) => p.healthStatus && p.healthStatus !== 'HEALTHY' && p.status !== 'SANDBOX');
+  const alerts = [
+    ...(serverOk === false ? [{ sev: 'HIGH', title: t('insurance.alerts.serverDownTitle'), body: t('insurance.alerts.serverDownBody') }] : []),
+    ...(!livePresent && !sandboxPresent && serverOk === true ? [{ sev: 'MEDIUM', title: t('insurance.alerts.noProviderTitle'), body: t('insurance.alerts.noProviderBody') }] : []),
+    ...(sandboxPresent ? [{ sev: 'INFO', title: t('insurance.alerts.sandboxTitle'), body: t('insurance.alerts.sandboxBody') }] : []),
+    ...(lowHealth.map((p) => ({ sev: p.healthStatus === 'DEGRADED' ? 'MEDIUM' : 'HIGH', title: t('insurance.alerts.healthTitle', { name: p.name, status: t(`insurance.status.${p.healthStatus}`, { defaultValue: p.healthStatus }) }), body: t('insurance.alerts.healthBody') }))),
+    ...(!connectedAddr ? [{ sev: 'INFO', title: t('insurance.alerts.noWalletTitle'), body: t('insurance.alerts.noWalletBody') }] : [])
+  ].slice(0, 8);
+  const unread = alerts.length;
 
-  const wallet = (connectedAddr || manual || '').trim();
-  const addrValid = /^0x[a-fA-F0-9]{40}$/.test(wallet);
-
-  const saveManual = () => {
-    if (manual && !/^0x[a-fA-F0-9]{40}$/.test(manual.trim())) {
-      notify(t('insurance.shell.invalidAddress'), 'error'); return;
-    }
-    setInsuranceWallet(manual.trim()); setShowConnect(false);
-  };
-
-  const connectW = (kind) => {
-    setShowConnect(false);
-    if (kind === 'injected') {
-      w.connectInjected().then(() => notify(t('insurance.shell.injectedConnected'), 'success')).catch((e) => notify(e?.message || t('insurance.shell.connectFailed'), 'error'));
-    } else if (kind === 'wc') {
-      w.connectWalletConnect().then(() => notify(t('insurance.shell.wcConnected'), 'success')).catch((e) => notify(e?.message || t('insurance.shell.connectFailed'), 'error'));
-    } else if (kind === 'local') {
-      setShowConnect(false); setManual(''); notify(t('insurance.shell.useInAppWallet'), 'info');
-    }
-  };
+  const chainLabel = w.chain?.short || w.chainId || '—';
 
   // Keyboard navigation for the tab rail (ArrowLeft/ArrowRight/Home/End).
   const onTablistKeyDown = (e) => {
@@ -99,29 +92,12 @@ export default function InsuranceShell() {
     links[next]?.focus();
   };
 
-  // Derived alerts. The sandbox notice appears ONLY while sandbox providers are
-  // actually registered (dev/test) — production never shows it.
-  const sandboxPresent = providers.some((p) => p.status === 'SANDBOX');
-  const livePresent = providers.some((p) => p.status === 'LIVE' && p.enabled);
-  const noLiveProvider = !sandboxPresent && !livePresent && serverOk === true;
-  const lowHealth = providers.filter((p) => p.healthStatus && p.healthStatus !== 'HEALTHY' && p.status !== 'SANDBOX');
-  const alerts = [
-    ...(serverOk === false ? [{ sev: 'HIGH', title: t('insurance.alerts.serverDownTitle'), body: t('insurance.alerts.serverDownBody') }] : []),
-    ...(!livePresent && !sandboxPresent && serverOk === true ? [{ sev: 'MEDIUM', title: t('insurance.alerts.noProviderTitle'), body: t('insurance.alerts.noProviderBody') }] : []),
-    ...(sandboxPresent ? [{ sev: 'INFO', title: t('insurance.alerts.sandboxTitle'), body: t('insurance.alerts.sandboxBody') }] : []),
-    ...(lowHealth.map((p) => ({ sev: p.healthStatus === 'DEGRADED' ? 'MEDIUM' : 'HIGH', title: t('insurance.alerts.healthTitle', { name: p.name, status: p.healthStatus }), body: t('insurance.alerts.healthBody') }))),
-    ...(!wallet ? [{ sev: 'INFO', title: t('insurance.alerts.noWalletTitle'), body: t('insurance.alerts.noWalletBody') }] : [])
-  ].slice(0, 8);
-  const unread = alerts.length;
-
-  const chainLabel = w.chain?.short || w.chainId || '—';
-
   return (
     <div className="ins-shell">
       <div className="ins-topbar">
         <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-0.01em' }}>🛡️ {t('insurance.shell.brand')}</div>
         <div className="ins-topbar-right">
-          <button className="ins-status-pill" onClick={() => setShowConnect(true)} title={t('insurance.shell.walletStatus')}>
+          <button className="ins-status-pill" onClick={() => setShowWallet(true)} title={t('insurance.shell.walletStatus')}>
             <span className={'ins-dot ' + (connectedAddr ? 'ok' : serverOk === false ? 'bad' : 'warn')} />
             {connectedAddr ? `${chainLabel} · ${connectedAddr.slice(0, 6)}…${connectedAddr.slice(-4)}` : serverOk === false ? t('insurance.shell.apiOffline') : t('insurance.shell.notConnected')}
           </button>
@@ -132,19 +108,19 @@ export default function InsuranceShell() {
         </div>
       </div>
 
-      {!wallet && (
-        <div className="ins-card">
-          <div className="ins-title">{t('insurance.shell.connectTitle')}</div>
-          <div className="ins-sub">{t('insurance.shell.connectBody')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            <button className="ins-btn" onClick={() => connectW('injected')}>{t('insurance.shell.browserWallet')}</button>
-            <button className="ins-btn ghost" onClick={() => connectW('wc')}>{t('insurance.shell.walletConnect')}</button>
-            <button className="ins-btn ghost" onClick={() => connectW('local')}>{t('insurance.shell.inAppWallet')}</button>
-            <button className="ins-btn ghost small" onClick={() => setShowConnect(true)}>{t('insurance.shell.manualAddress')}</button>
+      {/* Wallet is connected inside the app's Wallet page — this screen only
+          links there when nothing is connected (no in-page key handling). */}
+      {!connectedAddr && (
+        <div className="ins-card ins-wallet-card">
+          <div className="ins-wallet-ico">🔗</div>
+          <div>
+            <div className="ins-title" style={{ marginTop: 0 }}>{t('insurance.shell.walletRequiredTitle')}</div>
+            <div className="ins-sub">{t('insurance.shell.walletRequiredBody')}</div>
+            <div className="ins-wallet-actions">
+              <Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')}</Link>
+              <span className="ins-muted">{t('insurance.shell.walletRequiredHint')}</span>
+            </div>
           </div>
-          <button className="ins-btn ghost small" onClick={w.isConnected ? w.disconnect : undefined} style={{ opacity: w.isConnected ? 1 : 0.4 }}>
-            {w.isConnected ? t('insurance.shell.disconnect') : t('insurance.shell.notConnectedYet')}
-          </button>
         </div>
       )}
 
@@ -161,32 +137,30 @@ export default function InsuranceShell() {
         ))}
       </div>
 
-      <Outlet context={{ wallet, connected: connectedAddr, chainId: w.chainId, chainLabel, notify, confirm, switchChain: w.switchChain, getEip1193Provider: w.getEip1193Provider, getSigner: w.getSigner, mode: w.mode }} key={loc.pathname} />
+      <Outlet context={{ wallet: connectedAddr, connected: !!connectedAddr, chainId: w.chainId, chainLabel, notify, confirm, switchChain: w.switchChain, getEip1193Provider: w.getEip1193Provider, getSigner: w.getSigner, mode: w.mode }} key={loc.pathname} />
 
-      {/* Connect / manual modal */}
-      {showConnect && (
-        <div className="ins-modal-backdrop" onClick={() => setShowConnect(false)}>
+      {/* Transparency box at the bottom of every insurance page */}
+      <InsuranceExplain />
+
+      {/* Wallet dialog (connected wallet management only) */}
+      {showWallet && (
+        <div className="ins-modal-backdrop" onClick={() => setShowWallet(false)}>
           <div className="ins-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{t('insurance.shell.wallet')}</h3>
             {connectedAddr ? (
               <>
-                <p>{t('insurance.shell.connectedAs')}: <b style={{ color: 'var(--text-1)' }}>{connectedAddr}</b> ({chainLabel})</p>
+                <p>{t('insurance.shell.connectedAs')}: <b style={{ color: 'var(--text-1)', wordBreak: 'break-all' }}>{connectedAddr}</b> ({chainLabel})</p>
                 <div className="ins-modal-actions">
                   <button className="ins-btn ghost" onClick={() => { w.disconnect(); notify(t('insurance.shell.disconnected'), 'info'); }}>{t('insurance.shell.disconnect')}</button>
-                  <button className="ins-btn" onClick={() => setShowConnect(false)}>{t('insurance.common.done')}</button>
+                  <button className="ins-btn" onClick={() => setShowWallet(false)}>{t('insurance.common.done')}</button>
                 </div>
               </>
             ) : (
               <>
-                <p>{t('insurance.shell.chooseSigning')}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button className="ins-btn" onClick={() => connectW('injected')}>{t('insurance.shell.metamask')}</button>
-                  <button className="ins-btn ghost" onClick={() => connectW('wc')}>{t('insurance.shell.wcQr')}</button>
-                </div>
-                <div style={{ marginTop: 14 }} className="ins-sub">{t('insurance.shell.orEnterAddress')}</div>
-                <input className="ins-input" placeholder="0x…" value={manual} onChange={(e) => setManual(e.target.value)} aria-label={t('insurance.shell.manualAddress')} />
+                <p>{t('insurance.shell.walletRequiredBody')}</p>
                 <div className="ins-modal-actions">
-                  <button className="ins-btn" onClick={saveManual} disabled={manual !== '' && !addrValid}>{t('insurance.shell.useAddress')}</button>
+                  <Link className="ins-btn" to="/wallet" onClick={() => setShowWallet(false)}>{t('insurance.shell.goWallet')}</Link>
+                  <button className="ins-btn ghost" onClick={() => setShowWallet(false)}>{t('insurance.common.close')}</button>
                 </div>
               </>
             )}
@@ -206,13 +180,26 @@ export default function InsuranceShell() {
             {alerts.length === 0 && <div className="ins-ok">{t('insurance.shell.noAlerts')}</div>}
             {alerts.map((a, i) => (
               <div className="ins-alert-item" key={i}>
-                <span className="ins-chip" style={{ background: a.sev === 'HIGH' ? '#fee2e2' : a.sev === 'MEDIUM' ? '#fef9c3' : '#e0e7ff', color: a.sev === 'HIGH' ? '#991b1b' : a.sev === 'MEDIUM' ? '#854d0e' : '#312e81' }}>{a.sev}</span>
+                <span className="ins-chip" style={{ background: a.sev === 'HIGH' ? '#fee2e2' : a.sev === 'MEDIUM' ? '#fef9c3' : '#e0e7ff', color: a.sev === 'HIGH' ? '#991b1b' : a.sev === 'MEDIUM' ? '#854d0e' : '#312e81' }}>{statusLabel(t, a.sev)}</span>
                 <div>
                   <div style={{ fontWeight: 700, color: 'var(--text-1)', fontSize: 13 }}>{a.title}</div>
                   <div style={{ color: 'var(--text-2)', fontSize: 12 }}>{a.body}</div>
                 </div>
               </div>
             ))}
+            {events.length > 0 && (
+              <>
+                <div className="ins-sheet-head" style={{ marginTop: 12 }}>
+                  <h3>{t('insurance.shell.recentEvents')}</h3>
+                </div>
+                {events.map((ev, i) => (
+                  <div className="ins-alert-item" key={i}>
+                    <span style={{ color: 'var(--text-2)', fontSize: 11, flex: '0 0 auto' }}>{new Date(ev.at || ev.timestamp || Date.now()).toLocaleString()}</span>
+                    <div style={{ fontSize: 12, color: 'var(--text-1)' }}>{ev.type || ev.message}</div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </>
       )}

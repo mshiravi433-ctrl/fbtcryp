@@ -160,3 +160,173 @@
 /* Fee highlight */
 .ins-fee-line { display:flex; justify-content:space-between; padding:6px 0; font-size:var(--fs-sm); }
 .ins-fee-line .fee-val { font-variant-numeric:tabular-nums; color:var(--text-1); font-weight:600; }
+
+/* ==========================================================================
+   Layout extras — page wrappers, section titles, hero badge/actions
+   ========================================================================== */
+.ins-market { width: 100%; }
+.ins-explain { margin: 4px 0 10px; }
+.ins-sec-title { margin: 4px 0 12px; }
+.ins-hero-badge { display:inline-block; background: color-mix(in srgb, var(--rgb-1) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--rgb-1) 30%, transparent); color:var(--rgb-1); border-radius:999px;
+  padding:4px 12px; font-size:11px; font-weight:700; margin-bottom:10px; letter-spacing:.02em; }
+:root[data-theme='light'] .ins-hero-badge { color:var(--rgb-2); border-color:color-mix(in srgb, var(--rgb-2) 30%, transparent); background: color-mix(in srgb, var(--rgb-2) 12%, transparent); }
+.ins-hero-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.ins-btn svg { vertical-align:-2px; }
+.ins-btn-lg { padding:13px 22px; font-size:var(--fs-md); border-radius:16px; }
+
+/* ==========================================================================
+   Unified state card (honest, fully translated unavailable/empty states)
+   ========================================================================== */
+.ins-state-card { border:1px solid var(--line); border-radius:var(--radius-lg); padding:24px 20px; margin:14px 0;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--rgb-5) 10%, var(--bg-panel)), var(--bg-panel));
+  text-align:center; }
+.ins-state-card--sm { padding:20px 18px; }
+.ins-state-ico { width:52px; height:52px; margin:0 auto 12px; display:grid; place-items:center; font-size:26px;
+  border-radius:16px; background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--rgb-1) 24%, transparent); }
+.ins-state-card h2 { margin:0 0 8px; font-size:var(--fs-lg); color:var(--text-1); }
+.ins-state-card p { margin:0 auto 6px; max-width:46ch; color:var(--text-2); font-size:var(--fs-sm); line-height:1.7; }
+.ins-state-actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:14px; }
+.ins-state-row { margin-top:10px; color:var(--text-2); font-size:var(--fs-sm); display:flex; gap:6px; align-items:center; justify-content:center; flex-wrap:wrap; }
+.ins-state-row .k { opacity:.8; }
+.ins-state-detail { margin:12px auto 0; max-width:46ch; text-align:start; font-size:var(--fs-xs); color:var(--text-2);
+  border-top:1px dashed var(--line); padding-top:10px; }
+.ins-state-detail .k { font-weight:700; color:var(--text-1); margin-bottom:4px; display:block; }
+.ins-state-detail-row { line-height:1.7; }
+
+/* ==========================================================================
+   Wallet card (shown only while disconnected — links to /wallet)
+   ========================================================================== */
+.ins-wallet-card { display:flex; gap:12px; align-items:flex-start; border-style:dashed;
+  background: color-mix(in srgb, var(--rgb-5) 7%, var(--bg-panel)); }
+.ins-wallet-ico { flex:0 0 auto; width:40px; height:40px; border-radius:12px; display:grid; place-items:center;
+  font-size:19px; background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--rgb-1) 24%, transparent); }
+.ins-wallet-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:4px; }
+.ins-wallet-cta { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap;
+  margin-top:10px; color:var(--text-2); font-size:var(--fs-sm); }
+
+/* ==========================================================================
+   Dashboard category grid
+   ========================================================================== */
+.ins-cat-grid { grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); }
+.ins-cat { border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-panel); padding:14px 10px;
+  display:flex; flex-direction:column; gap:6px; align-items:center; cursor:pointer; color:var(--text-1);
+  font-family:inherit; font-size:var(--fs-sm); transition:border-color .15s ease, transform .06s ease; }
+.ins-cat:hover { border-color:var(--rgb-1); }
+.ins-cat:active { transform:translateY(1px); }
+.ins-cat-ico { width:38px; height:38px; display:grid; place-items:center; font-size:20px; border-radius:12px;
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent); }
+.ins-cat b { color:var(--text-1); }
+.ins-cat .ins-muted { font-size:11px; line-height:1.5; text-align:center; }
+
+/* ==========================================================================
+   Form chips (duration / amount), terms checkbox
+   ========================================================================== */
+.ins-form-card { border-top:3px solid transparent; border-image: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3)) 1; }
+.ins-form-grid { grid-template-columns: 1fr 1fr; }
+.ins-chip-row { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 10px; }
+.ins-mini { border:1px solid var(--line-strong); background:var(--bg-panel); color:var(--text-2); border-radius:999px;
+  padding:6px 13px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+.ins-mini:hover { color:var(--text-1); border-color:var(--rgb-1); }
+.ins-mini.active { background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2)); color:#04121a; border-color:transparent; font-weight:800; }
+:root[data-theme='light'] .ins-mini.active { color:#fff; }
+.ins-terms { display:flex; gap:9px; align-items:flex-start; margin:8px 0 4px; color:var(--text-2); font-size:var(--fs-sm); cursor:pointer; line-height:1.6; }
+.ins-terms input { margin-top:4px; accent-color:var(--rgb-1); width:16px; height:16px; flex:0 0 auto; }
+.ins-form-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.ins-form-actions .ins-btn { display:inline-flex; align-items:center; gap:7px; }
+
+/* ==========================================================================
+   Coverage rows (dashboard + coverage list) and coverage detail actions
+   ========================================================================== */
+.ins-cover-row { display:flex; gap:12px; align-items:center; transition:border-color .15s ease, transform .06s ease; }
+.ins-cover-row:hover { border-color:var(--rgb-1); }
+.ins-cover-ico { flex:0 0 auto; width:42px; height:42px; border-radius:13px; display:grid; place-items:center; font-size:20px;
+  background: color-mix(in srgb, var(--rgb-2) 13%, transparent);
+  border:1px solid color-mix(in srgb, var(--rgb-2) 25%, transparent); }
+.ins-cover-main { flex:1 1 auto; min-width:0; }
+.ins-cover-name { color:var(--text-1); font-size:var(--fs-sm); margin-bottom:2px; word-break:break-word; }
+.ins-cover-name b { font-weight:800; }
+.ins-cover-main .ins-muted { line-height:1.6; }
+
+/* ==========================================================================
+   Quote cards (marketplace results)
+   ========================================================================== */
+.ins-quote-card { position:relative; overflow:hidden; }
+.ins-quote-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.ins-quote-provider { font-weight:800; color:var(--text-1); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.ins-quote-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin:6px 0 8px; }
+.ins-quote-stat { border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; background:var(--bg-panel-solid); }
+.ins-quote-stat .lbl { font-size:10px; color:var(--text-2); letter-spacing:.03em; display:block; margin-bottom:3px; }
+.ins-quote-stat b { color:var(--text-1); font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
+.ins-quote-stat.acc { border-color:color-mix(in srgb, var(--rgb-1) 40%, var(--line)); background: color-mix(in srgb, var(--rgb-1) 7%, var(--bg-panel)); }
+
+/* ==========================================================================
+   Providers page
+   ========================================================================== */
+.ins-provider-card[data-disabled] { opacity:.78; }
+.ins-provider-head { display:flex; gap:12px; align-items:center; margin-bottom:10px; }
+.ins-provider-ico { flex:0 0 auto; width:44px; height:44px; border-radius:14px; display:grid; place-items:center; font-size:19px;
+  background: color-mix(in srgb, var(--rgb-4) 13%, transparent);
+  border:1px solid color-mix(in srgb, var(--rgb-4) 28%, transparent); }
+.ins-provider-name { font-weight:800; color:var(--text-1); }
+.ins-provider-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:6px 16px;
+  font-size:var(--fs-xs); color:var(--text-2); }
+.ins-provider-meta b { color:var(--text-1); }
+.ins-provider-disclaimer { margin-top:10px; font-size:var(--fs-xs); border-top:1px dashed var(--line); padding-top:8px; line-height:1.7; }
+
+/* ==========================================================================
+   Risk page: exposure rows + recommendation cards
+   ========================================================================== */
+.ins-risk-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.ins-rec-card { border-style:dashed; }
+.ins-rec-head { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.ins-rec-head b { color:var(--text-1); }
+
+/* ==========================================================================
+   Chip colour palette — status / health / bands / provider states
+   ========================================================================== */
+.ins-chip.LIVE, .ins-chip.APPROVED, .ins-chip.PAID, .ins-chip.HEALTHY, .ins-chip.LOW { background:#dcfce7; color:#14532d; }
+.ins-chip.SANDBOX, .ins-chip.INFO, .ins-chip.PENDING, .ins-chip.SUBMITTED, .ins-chip.UNDER_REVIEW { background:#e0e7ff; color:#312e81; }
+.ins-chip.MEDIUM { background:#fef9c3; color:#854d0e; }
+.ins-chip.HIGH, .ins-chip.CRITICAL, .ins-chip.UNAVAILABLE, .ins-chip.REJECTED { background:#fee2e2; color:#991b1b; }
+.ins-chip.DISPUTED { background:#fce7f3; color:#86198f; }
+.ins-chip.NOT_CONFIGURED, .ins-chip.DISABLED, .ins-chip.UNKNOWN { background:var(--bg-panel); color:var(--text-2); border:1px solid var(--line-strong); }
+.ins-chip.DEGRADED, .ins-chip.EXPIRED, .ins-chip.CANCELLED, .ins-chip.DRAFT, .ins-chip.ADDITIONAL_INFORMATION_REQUIRED,
+.ins-chip.PARTIALLY_APPROVED { background:color-mix(in srgb, var(--rgb-5) 16%, var(--bg-panel)); color:var(--text-1); border:1px solid var(--line); }
+
+/* ==========================================================================
+   Legal note (transparency box footer)
+   ========================================================================== */
+.ins-legal-note { font-size:var(--fs-xs); color:var(--text-2); line-height:1.7; border:1px dashed var(--line-strong);
+  border-radius:var(--radius); padding:10px 12px; background:color-mix(in srgb, var(--rgb-5) 6%, transparent); }
+
+/* ==========================================================================
+   Responsive hardening — mobile centering & scroll safety
+   The app frame is ≤520px; inside it everything must wrap, never pin the
+   viewport, and overlays must stay usable on small screens.
+   ========================================================================== */
+.ins-shell { width:100%; min-width:0; overflow-x:clip; }
+.ins-shell * { max-width:100%; }
+.ins-row { flex-wrap:wrap; }
+.ins-row > :last-child { text-align:end; word-break:break-word; }
+.ins-topbar, .ins-tabs { min-width:0; }
+@media (max-width: 480px) {
+  .ins-form-grid { grid-template-columns: 1fr; }
+  .ins-grid { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); }
+  .ins-cat-grid { grid-template-columns: repeat(auto-fill,minmax(104px,1fr)); }
+  .ins-hero { padding:18px 14px; }
+  .ins-shell { padding-inline:12px; }
+  .ins-sheet { width:100%; }
+  .ins-toast-wrap { bottom:calc(var(--nav-h,64px) + 10px); }
+  .ins-quote-stats { grid-template-columns:1fr 1fr; }
+}
+[dir='rtl'] .ins-sheet { left:0; right:auto; border-left:0; border-right:1px solid var(--line); box-shadow:20px 0 60px rgba(0,0,0,.4); }
+.ins-modal-backdrop, .ins-sheet, .ins-toast-wrap { overscroll-behavior:contain; }
+.ins-modal, .ins-sheet { -webkit-overflow-scrolling:touch; }
+
+/* Amount chip row (extends .ins-chip-row) */
+.ins-chip-row-amount { margin-top:2px; }
+/* Provider card accent frame */
+.ins-provider-card { border-top:3px solid transparent; border-image: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3)) 1; }

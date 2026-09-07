@@ -19,9 +19,10 @@ import {
 
 export const DEFAULT_FEES = Object.freeze({
   /**
-   * FBT marketplace fee. DEFAULT EXACT ZERO (env: FBT_INSURANCE_FEE_BPS=0).
-   * The UI shows "FBT Marketplace Fee: $0". Any non-zero value is a deliberate
-   * operator configuration and must still be displayed before signing (§18).
+   * FBT marketplace fee. Operator decision 2026-09-08: 100 bps (1%) of the
+   * provider premium by default (env: FBT_INSURANCE_FEE_BPS). The fee is
+   * added to the user's total and always displayed before signing (§18).
+   * Set FBT_INSURANCE_FEE_BPS=0 to disable.
    */
   integrationFeeBps: FBT_INSURANCE_FEE_BPS,
   // Per-network estimated settlement fee in micro-units (USDC-style). This is

@@ -65,11 +65,12 @@ export function setupProviders() {
     apiEndpoints: {
       base: nexus.apiBase,
       products: `${nexus.apiBase}/products`,
+      productTypes: `${nexus.apiBase}/product-types`,
       capacity: `${nexus.apiBase}/capacity/{productId}`,
-      pricing: `${nexus.apiBase}/pricing/products/{productId}`,
+      coverMetadata: `${nexus.apiBase}/cover-metadata`,
       quote: `${nexus.apiBase}/quote`
     },
-    sdkVersion: '@nexusmutual/sdk@3.x (verified 2026-09-07)',
+    sdkVersion: '@nexusmutual/sdk@3.1.1 (verified 2026-09-08)',
     documentationUrl: 'https://docs.nexusmutual.io/developers/pos-integrations/',
     termsUrl: 'https://app.nexusmutual.io/cover/product/{id}/cover-wording',
     auditStatus: 'provider-published (Nexus Mutual audits)',
@@ -77,6 +78,9 @@ export function setupProviders() {
     disclaimer: nexus.getProviderInfo().disclaimer
   });
 
+  // InsurAce: deactivated by operator decision 2026-09-08 (INSURACE_ENABLED
+  // defaults false in env.js). Reactivating requires INSURACE_ENABLED=true +
+  // INSURACE_API_CODE + operator-verified cover contract addresses.
   const insurace = new InsurAceAdapter();
   registerProvider({
     id: 'insurace',
