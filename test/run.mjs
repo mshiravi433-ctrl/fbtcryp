@@ -1358,6 +1358,20 @@ console.log('\n▸ auditing wiring (keys · routes · dead files)…');
   report('wiring', runWiring());
 }
 
+/*
+ * The /intent AI surface in BOTH themes. wiring.mjs pins the stylesheet text
+ * that fixes «در تم روشن استایل هوش مصنوعی بخصوص باکس‌ها خیلی زشته»; this probe
+ * resolves the real cascade in jsdom and MEASURES the contrast, because the
+ * bug was never a missing rule — it was two stylesheets disagreeing about
+ * specificity, which only a computed style can show. It also asserts the dark
+ * theme is unchanged, so the light theme cannot be "fixed" by dulling both.
+ */
+console.log('\n▸ measuring the AI surface in light and dark…');
+{
+  const { default: aiThemeRows } = await import('./ai-light-theme-probe.mjs');
+  report('AI surface theme', aiThemeRows);
+}
+
 /* Real HTTP coverage for registry discovery, signature authentication,
    immutable nonce admission, and public inclusion evidence. */
 console.log('\n▸ probing the signed solver commitment API…');
