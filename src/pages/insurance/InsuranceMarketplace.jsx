@@ -36,8 +36,10 @@ export default function InsuranceMarketplace() {
 
   return (
     <div>
-      <div className="ins-title">Protection Marketplace</div>
-      <div className="ins-sub">Compare quotes across providers. You see every fee before signing; nothing is purchased without your signature.</div>
+      <div className="ins-hero">
+        <h1>Protection Marketplace</h1>
+        <p>Compare protection across providers. Every fee is shown before signing and nothing is purchased without your wallet signature. Sandbox providers only in this deployment.</p>
+      </div>
 
       <div className="ins-card">
         <div className="ins-sub" style={{ marginTop: 0 }}>Protection type</div>

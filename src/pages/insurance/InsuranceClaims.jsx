@@ -9,7 +9,7 @@ const STATUS_CHIP = {
 };
 
 export default function InsuranceClaims() {
-  const { wallet } = useOutletContext();
+  const { wallet, notify } = useOutletContext();
   const loc = useLocation();
   const initialCoverage = loc.state?.coverageId || '';
   const [claims, setClaims] = useState([]);
@@ -33,13 +33,14 @@ export default function InsuranceClaims() {
       if (amount) body.affectedAmountMicro = amount;
       const r = await insuranceApi.createClaim(body);
       setMsg(`Claim ${r.claim.claimNumber} created (${r.claim.status}). Now submit it.`);
+      notify(`Claim ${r.claim.claimNumber} created`, 'success');
       const d = await insuranceApi.claims(wallet); setClaims(d.claims);
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(e.message || String(e)); notify(e.message || 'Claim creation failed', 'error'); }
     setBusy(false);
   }
 
   async function submit(claimId) {
-    try { await insuranceApi.submitClaim(claimId, { walletAddress: wallet }); const d = await insuranceApi.claims(wallet); setClaims(d.claims); } catch (e) { alert(e.message); }
+    try { await insuranceApi.submitClaim(claimId, { walletAddress: wallet }); const d = await insuranceApi.claims(wallet); setClaims(d.claims); notify('Claim submitted to provider', 'success'); } catch (e) { notify(e.message || 'Submit failed', 'error'); }
   }
 
   return (

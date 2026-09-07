@@ -43,7 +43,7 @@ export default function InsuranceCoverageList() {
 
 export function InsuranceCoverageDetail() {
   const { id } = useParams();
-  const { wallet } = useOutletContext();
+  const { wallet, notify, confirm } = useOutletContext();
   const [cov, setCov] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
@@ -55,10 +55,19 @@ export function InsuranceCoverageDetail() {
   };
   useEffect(load, [id, wallet]);
 
-  async function renew() { setBusy('renew'); try { await insuranceApi.renew({ coverageId: id, walletAddress: wallet, durationDays: 30 }); load(); } catch (e) { alert(e.message); } setBusy(''); }
+  async function renew() {
+    setBusy('renew');
+    try { await insuranceApi.renew({ coverageId: id, walletAddress: wallet, durationDays: 30 }); load(); notify('Coverage renewed +30 days', 'success'); }
+    catch (e) { notify(e.message || 'Renew failed', 'error'); }
+    setBusy('');
+  }
   async function cancel() {
-    if (!window.confirm('Cancel this coverage?')) return;
-    setBusy('cancel'); try { await insuranceApi.cancel({ coverageId: id, walletAddress: wallet }); load(); } catch (e) { alert(e.message); } setBusy('');
+    const ok2 = await confirm({ title: 'Cancel coverage?', message: 'This ends your active certificate. Past coverage remains in your history.', confirmLabel: 'Cancel coverage', danger: true });
+    if (!ok2) return;
+    setBusy('cancel');
+    try { await insuranceApi.cancel({ coverageId: id, walletAddress: wallet }); load(); notify('Coverage cancelled', 'success'); }
+    catch (e) { notify(e.message || 'Cancel failed', 'error'); }
+    setBusy('');
   }
 
   if (err) return <div className="ins-alert">{err}</div>;
