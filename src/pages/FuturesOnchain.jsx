@@ -151,6 +151,7 @@ export default function FuturesOnchain() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [errorDetail, setErrorDetail] = useState(null);
   const [txState, setTxState] = useState(FUTURES_TX_STATE.IDLE);
   const [lastTx, setLastTx] = useState(null);
   const [managing, setManaging] = useState(null);
@@ -389,6 +390,7 @@ export default function FuturesOnchain() {
      venue — the venue SDK builds + signs in this tab when that path exists) ── */
   const openReview = async () => {
     setError(null);
+    setErrorDetail(null);
     if (isSolanaVenue) {
       if (!solWallet.isConnected) { goConnectSolana(); return; }
     } else if (!wallet.isConnected) return setWalletOpen(true);
@@ -417,6 +419,7 @@ export default function FuturesOnchain() {
       setConfirming(true);
     } catch (e) {
       setError(errCode(e));
+      setErrorDetail(e?.detail || null);
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -428,6 +431,7 @@ export default function FuturesOnchain() {
     if (!prepared) return;
     setBusy(true);
     setError(null);
+    setErrorDetail(null);
     try {
       if (Date.now() > prepared.expiresAt) throw Object.assign(new Error('QUOTE_EXPIRED'), { code: 'QUOTE_EXPIRED' });
 
@@ -456,7 +460,7 @@ export default function FuturesOnchain() {
           const code = /reject|denied|cancel|4001/i.test(String(e?.message)) ? 'USER_REJECTED' : (e?.code || 'SIMULATION_FAILED');
           setMachine(code === 'USER_REJECTED' ? FUTURES_TX_STATE.REJECTED : FUTURES_TX_STATE.FAILED, { code });
           if (code === 'USER_REJECTED') await verifyFutures({ executionId: prepared.executionId, status: 'REJECTED' });
-          throw Object.assign(new Error(code), { code });
+          throw Object.assign(new Error(code), { code, detail: e?.detail || null });
         }
         const hash = result?.signature;
         if (!hash) throw Object.assign(new Error('BROADCAST_FAILED'), { code: 'BROADCAST_FAILED' });
@@ -538,6 +542,7 @@ export default function FuturesOnchain() {
       setPrepared(null);
     } catch (e) {
       setError(errCode(e));
+      setErrorDetail(e?.detail || null);
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -549,6 +554,7 @@ export default function FuturesOnchain() {
     if (!managing) return;
     setBusy(true);
     setError(null);
+    setErrorDetail(null);
     try {
       /* Velocity (Solana): close (reduce-only market) and TP/SL (reduce-only
          trigger orders) are built + signed in tab with the user's wallet.
@@ -614,6 +620,7 @@ export default function FuturesOnchain() {
       const code = errCode(e);
       if (code === 'USER_REJECTED') { /* not retried; the sheet stays open for the user */ }
       setError(code);
+      setErrorDetail(e?.detail || null);
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -636,6 +643,23 @@ export default function FuturesOnchain() {
   const canReview = !busy && executable && market && quote && !risk?.blocked && !insufficient && !quoting;
 
   const reasonLabel = (p) => (p?.reason ? t(`futures.reason.${p.reason}`, { defaultValue: p.reason }) : '');
+
+  /* Extra machine-provided numbers that back a balance error (the exact
+     USDT/SOL the wallet holds) — rendered under the translated message. */
+  const errorDetailLine = (d) => {
+    if (!d || typeof d !== 'object') return null;
+    const parts = [];
+    if (d.needUsdt != null) parts.push(`${t('futures.err.needsUsdt')}: ${Number(d.needUsdt).toFixed(2)} USDT`);
+    if (d.quoteUsdt != null) parts.push(`${t('futures.err.walletUsdt')}: ${Number(d.quoteUsdt).toFixed(2)} USDT`);
+    if (d.solLamports != null) parts.push(`${t('futures.err.walletSol')}: ${(Number(d.solLamports) / 1e9).toFixed(4)} SOL`);
+    return parts.length ? parts.join(' · ') : null;
+  };
+
+  /* The Solana venue (Velocity) collateralises in USDT and pays fees in SOL;
+     the EVM venue keeps the generic balance/gas wording. */
+  const errorKey = (code) => (
+    isSolanaVenue && (code === 'INSUFFICIENT_BALANCE' || code === 'NO_GAS') ? `${code}_SOLANA` : code
+  );
 
   return (
     <PageTransition>
@@ -818,7 +842,8 @@ export default function FuturesOnchain() {
                 </div>
               )}
               {insufficient && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t('futures.err.INSUFFICIENT_BALANCE')}</p>}
-              {error && <p className="notice notice-danger" style={{ marginTop: 9 }} data-testid="futures-error">{t(`futures.err.${error}`, { defaultValue: error })}</p>}
+              {error && <p className="notice notice-danger" style={{ marginTop: 9 }} data-testid="futures-error">{t(`futures.err.${errorKey(error)}`, { defaultValue: error })}</p>}
+              {error && errorDetailLine(errorDetail) && <p className="faint mono" style={{ marginTop: 6 }} data-testid="futures-error-detail">{errorDetailLine(errorDetail)}</p>}
 
               <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={readOnly || (connected && !canReview)} onClick={openReview} data-testid="futures-review">
                 {busy ? t('common.loading') : buttonLabel}
@@ -934,7 +959,8 @@ export default function FuturesOnchain() {
                 <p className="faint" style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>{prepared.executionId}</p>
               </div>
               <p className="notice notice-danger">{t('futures.confirmRisk')}</p>
-              {error && <p className="notice notice-danger" data-testid="futures-confirm-error">{t(`futures.err.${error}`, { defaultValue: error })}</p>}
+              {error && <p className="notice notice-danger" data-testid="futures-confirm-error">{t(`futures.err.${errorKey(error)}`, { defaultValue: error })}</p>}
+              {error && errorDetailLine(errorDetail) && <p className="faint mono" style={{ margin: 0 }}>{errorDetailLine(errorDetail)}</p>}
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy} onClick={() => { setConfirming(false); setPrepared(null); resetMachine(); }}>{t('common.cancel')}</button>
                 <button className={`btn ${prepared.order.side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ flex: 1 }} disabled={busy || (prepared.simulation?.attempted && prepared.simulation.ok === false)} onClick={submit} data-testid="futures-confirm-submit">
@@ -966,7 +992,8 @@ export default function FuturesOnchain() {
                 <input type="number" min="0" inputMode="decimal" value={manageValue} onChange={(e) => setManageValue(e.target.value)} />
               </label>
               <p className="faint" style={{ margin: 0 }}>{t(`futures.manageHint.${manageAction}`)}</p>
-              {error && <p className="notice notice-danger">{t(`futures.err.${error}`, { defaultValue: error })}</p>}
+              {error && <p className="notice notice-danger">{t(`futures.err.${errorKey(error)}`, { defaultValue: error })}</p>}
+              {error && errorDetailLine(errorDetail) && <p className="faint mono">{errorDetailLine(errorDetail)}</p>}
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy} onClick={() => setManaging(null)}>{t('common.cancel')}</button>
                 <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy || !isBps(manageValue) || (Number(manageValue) <= 0 && manageAction !== 'tp' && manageAction !== 'sl')} onClick={submitManagement}>
