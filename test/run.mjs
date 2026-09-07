@@ -995,6 +995,20 @@ installDom();
 const { run: runOpsHandoff } = await import('./.out/opshandoff/ops-handoff-probe.js');
 report('ops hand-off (/intent?tab=ops opens the real operations panel)', await runOpsHandoff(document.getElementById('r')));
 
+/*
+ * Typing a goal into the REAL page must produce a goal card. Every link is
+ * covered elsewhere — the parser, the human layer, the compiler, the card —
+ * but the glue lives in IntentAIUnified, and that is exactly where this branch
+ * kept finding bugs: logic correct, wiring broken, invisible to every unit
+ * probe. This one found a self-cancelling effect that left the card spinning
+ * forever.
+ */
+console.log('\n▸ building goal chat suite…');
+npx(['vite', 'build', '-c', 'test/vite.goalchat.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runGoalChat } = await import('./.out/goalchat/goal-chat-probe.js');
+report('goal chat («سودم ۲ برابر شود» produces a real plan card)', await runGoalChat(document.getElementById('r')));
+
 /* ------------------- 4b2. Phase 201-207 upgrades (mounted) ------------------- */
 /*
  * Everything the owner reported on #/intent-ai, driven as a user: the visible

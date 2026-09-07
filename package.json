@@ -229,7 +229,8 @@
     "verify:apk-lock": "node ci/lock-platform-guard.mjs --check",
     "test:iran-buy": "node test/iran-buy-probe.mjs && node test/iran-buy-lifecycle-probe.mjs && vite build --config test/vite.iranbuy.mjs && node test/run-one-probe.mjs ./.out/iranbuy/iran-buy-ui-probe.js",
     "test:ops-handoff": "vite build -c test/vite.opshandoff.mjs --logLevel error && node test/run-one-probe.mjs ./.out/opshandoff/ops-handoff-probe.js",
-    "test:autonomy-drivers": "node test/intent-ai/autonomy-drivers-probe.mjs"
+    "test:autonomy-drivers": "node test/intent-ai/autonomy-drivers-probe.mjs",
+    "test:goal-chat": "vite build -c test/vite.goalchat.mjs --logLevel error && node test/run-one-probe.mjs ./.out/goalchat/goal-chat-probe.js"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

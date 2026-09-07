@@ -2562,11 +2562,28 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * balances and the scanner output from THIS turn.
    */
   const lastGoalMessageId = useRef(null);
+  /*
+   * The compile runs OUTSIDE the effect's cancel scope, guarded only by an
+   * unmount flag.
+   *
+   * It used to be a local `let cancelled` set by the effect's cleanup. But
+   * this effect depends on `messages`, and its own first action is
+   * `setMessages(… goalBusy: true …)` — which changes `messages`, re-runs the
+   * effect, and runs the previous run's cleanup. So `cancelled` flipped true
+   * before the compiler ever resolved, the plan was dropped on the floor, and
+   * because `lastGoalMessageId` was already recorded the message was never
+   * picked up again. The card sat on «در حال خواندن نرخ‌های زنده…» forever.
+   *
+   * That is the whole feature — «سودم ۲ برابر شود» — spinning in the real
+   * page while every unit probe stayed green, because the wiring is only
+   * observable once the component is mounted and driven.
+   */
+  const goalMountedRef = useRef(true);
+  useEffect(() => () => { goalMountedRef.current = false; }, []);
   useEffect(() => {
-    const pending = messages.find((m) => m.goalRequest && !m.goalPlan && !m.goalError && m.id !== lastGoalMessageId.current);
+    const pending = messages.find((m) => m.goalRequest && !m.goalPlan && !m.goalError && !m.goalBusy && m.id !== lastGoalMessageId.current);
     if (!pending) return;
     lastGoalMessageId.current = pending.id;
-    let cancelled = false;
     void (async () => {
       setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, goalBusy: true } : m)));
       try {
@@ -2576,10 +2593,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           results: pending.goalResults || {},
           locale
         });
-        if (cancelled) return;
+        if (!goalMountedRef.current) return;
         setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, goalPlan: plan, goalBusy: false } : m)));
       } catch (err) {
-        if (cancelled) return;
+        if (!goalMountedRef.current) return;
         setMessages((prev) => prev.map((m) => (m.id === pending.id
           ? { ...m, goalBusy: false, goalError: locale.startsWith('fa')
             ? `برنامه ساخته نشد: ${String(err?.message || err).slice(0, 120)}`
@@ -2587,7 +2604,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           : m)));
       }
     })();
-    return () => { cancelled = true; };
   }, [messages, aiContext, locale]);
 
   /**
