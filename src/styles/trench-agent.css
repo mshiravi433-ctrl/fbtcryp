@@ -847,3 +847,74 @@
   border: 1px solid var(--tag-line);
   border-radius: 16px;
 }
+
+/* ── 11. Mobile scroll unlock ──────────────────────────────────────────────
+   Reported: «دیزاین صفحه چت در هر منو نمیشه بالا و پایین کرد صفحه را» and
+   «صفحه بخصوص داخل منوها فریز شده و امکان حرکت نداره … در موبایل».
+   `.iaos-page-v6` (intent-ai-os.css) locks the page to exactly one viewport
+   (`height/max-height: 100dvh`, `overflow: hidden`). That is fine for the chat
+   thread, which scrolls internally, but it also locks the Agents / Activity /
+   More views — those are ordinary lists and the composition box below them,
+   so on a phone the whole page has to be able to grow and let the browser
+   scroll. This override gives the page back to the document while keeping a
+   bounded, internally-scrolling conversation column in chat.
+
+   `data-ai-tab` is set on the root by IntentAIUnified, so the two behaviours
+   can coexist:
+     · chat   → one conversation column with its own scroll, page height
+                fills one viewport
+     · others → normal page flow, can grow and scroll */
+
+@media (max-width: 768px) {
+  /* The page itself is back in the document flow so a long Agents/Activity/
+     More view can grow and the browser can scroll the whole page. */
+  .iaos-page.tag-page {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* The shell only fills the viewport on chat; on the other tabs it takes
+     its natural height so the rows below can extend beyond the fold. */
+  .iaos-page.tag-page .iaos-shell {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .iaos-page.tag-page[data-ai-tab='chat'] .iaos-shell {
+    min-height: calc(100dvh - var(--tag-tab-h) - env(safe-area-inset-bottom) - 24px) !important;
+  }
+
+  /* Chat keeps one internally scrolling column instead of letting the whole
+     page scroll; it is capped so a long reply cannot push the composer off
+     the screen. */
+  .iaos-page.tag-page .iaos-chat-container,
+  .iaos-page.tag-page .iaos-chat-container-v6 {
+    height: auto !important;
+    min-height: min(420px, 58dvh) !important;
+    max-height: calc(100dvh - var(--tag-tab-h) - env(safe-area-inset-bottom) - 164px) !important;
+    overflow: hidden !important;
+  }
+
+  .iaos-page.tag-page .iaos-conversation-v6 {
+    min-height: 0 !important;
+    max-height: inherit !important;
+  }
+
+  /* Menu views must never inherit the page overflow lock. */
+  .iaos-page.tag-page .tag-view {
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+}
+
+/* ── 12. Designed logo in the AI header ──────────────────────────────────── */
+.tag-page .iaos-mark.iaos-mark-logo {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
