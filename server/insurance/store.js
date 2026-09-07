@@ -39,7 +39,7 @@ export const durableConfigured = () => blobConfigured();
 async function ownerList(kind, owner, op = 'read') {
   const key = `owner:${kind}:${String(owner).toLowerCase()}`;
   return op === 'fresh'
-    ? getFresh('idx', key) || []
+    ? (await getFresh('idx', key)) || []
     : (await get('idx', key)) || [];
 }
 
