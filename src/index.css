@@ -11824,6 +11824,17 @@ button.settings-quick-action {
 .farm-aave-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
 .farm-aave-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
 
+/*
+ * Compound V3 (Base/USDC), the second in-app supply panel. It shares the Aave
+ * rules verbatim rather than getting a look of its own: the two cards can only
+ * ever appear on different pools, and if they ever did sit side by side, a
+ * protocol styled more attractively than the other would be a recommendation
+ * the app has no business making.
+ */
+.farm-compound-panel { margin-top: 12px; }
+.farm-compound-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
+.farm-compound-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
+
 .farm-economics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

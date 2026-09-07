@@ -72,7 +72,15 @@ export function listAdapters() {
 /** The §31 protocol allowlist: which protocols may exist in the engine at all. */
 export const PROTOCOL_ALLOWLIST = Object.freeze([
   { id: 'aave-v3', enabled: true, note: 'Aave V3 — wired end-to-end (src/lib/lending.js)' },
-  { id: 'compound-v3', enabled: false, note: 'Adapter pending' },
+  /*
+   * Deliberately still false. Compound III DOES now have a supply/withdraw
+   * adapter — src/lib/defi/compoundV3Base.js, Base/USDC, behind its own flag —
+   * but that is the Farm money path, not this engine. THIS registry gates the
+   * lending engine's borrow/repay/health-factor surface, and no Comet adapter
+   * for that exists. Flipping this to true because "Compound is integrated
+   * now" would let the engine dial a protocol it has no code to drive.
+   */
+  { id: 'compound-v3', enabled: false, note: 'Borrow adapter pending — supply/withdraw lives in src/lib/defi/compoundV3Base.js' },
   { id: 'morpho', enabled: false, note: 'Adapter pending' },
   { id: 'solana-lending', enabled: false, note: 'Adapter pending' }
 ]);
