@@ -902,6 +902,27 @@ installDom();
 const { run: runBuySellWizard } = await import('./.out/buysellwizard/buy-sell-wizard-probe.js');
 report('Buy / Sell wizard (every step keeps a back AND a forward action)', await runBuySellWizard(document.getElementById('r')));
 
+/* ------------- 4a₃. the settings hub, driven like a user ------------------ */
+/*
+ * Settings was rebuilt as a hub: one tile per section, every control of a
+ * section moved behind that tile into a popup. Greps cannot see what that
+ * rearrangement breaks — a tile that renders but opens nothing, a popup whose
+ * chips read correctly and write nothing, two sheets stacked so Escape closes
+ * both, a <button> nested in a <button> that a browser un-nests and the avatar
+ * silently vanishes. All of those look right in a source diff.
+ *
+ * So the real screen is mounted and walked: every tile is opened, the state of
+ * each choice is read from the store, from <html data-theme/data-accent>, from
+ * localStorage and from the notification settings file, and each popup is
+ * closed again to prove the dialog count returns to what the screen should
+ * show. `npm run test:settings-hub` runs it on its own.
+ */
+console.log('\n▸ building the settings hub interaction suite…');
+npx(['vite', 'build', '-c', 'test/vite.settings-hub.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSettingsHub } = await import('./.out/settingshub/settings-hub-probe.js');
+report('Settings hub (tiles, popups and every store write)', await runSettingsHub(document.getElementById('r')));
+
 /* --------------------- 4b. coin detail under real data -------------------- */
 /*
  * The screen suite mounts `<CoinDetail />` with NO id, which takes the

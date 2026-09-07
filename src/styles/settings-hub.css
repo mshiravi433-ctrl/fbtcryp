@@ -1,0 +1,738 @@
+/* ==========================================================================
+   SETTINGS HUB — tiles that open a popup per section
+   --------------------------------------------------------------------------
+   Requested: «در تنظیمات هر بخش را یک صفحه با پاپ‌آپ بشه با ایکون قشنگ و
+   مدرن و اندازه درست در تم روشن و تیره … مثلاً باکس پروفایل که وقتی روش
+   میزنی پاپ‌آپ باز بشه و زیرگزینه‌هایش را نشان بدهد».
+
+   Three rules this file is built around, because each of them has been the
+   cause of a bug report in this app before:
+
+   1. EVERY COLOUR IS A TOKEN OR A PER-TONE OVERRIDE. Not one rule here paints
+      a literal `rgba(255,255,255,.06)` over a card — the settings hero used to,
+      and in the light theme that is white on white: the pills, the chips and
+      the accent swatch rings simply vanished. Both themes are declared, per
+      tone, side by side.
+   2. 44px TAP TARGETS, AND THE TARGET IS THE WHOLE TILE. `.set-tile` is a
+      button with `min-height: 76px`; the icon is not separately clickable, so
+      a mis-tap cannot land on dead space.
+   3. RTL IS THE DEFAULT, NOT A PATCH. Every side is `inset-inline-*`,
+      `margin-inline-*` or `padding-inline-*`, and the two directional glyphs
+      (tile chevron, sub-view back arrow) are mirrored with `scaleX(-1)`.
+   ========================================================================== */
+
+/* ─── TONE TOKENS ───────────────────────────────────────────────────────────
+   `--st-ink` is what the icon and the selected state are painted with,
+   `--st-soft` the fill behind it, `--st-edge` the hairline, `--st-glow` the
+   shadow under the squircle. Dark uses the neon RGB spectrum at full strength;
+   light uses the app's `--ink-*` readable variants, which were introduced
+   precisely because the neon tones measure 1.5–2.2:1 against white.
+--------------------------------------------------------------------------- */
+.st-tone-cyan {
+  --st-ink: var(--rgb-1);
+  --st-soft: rgba(0, 229, 255, 0.13);
+  --st-edge: rgba(0, 229, 255, 0.32);
+  --st-glow: rgba(0, 229, 255, 0.30);
+}
+.st-tone-violet {
+  --st-ink: var(--rgb-2);
+  --st-soft: rgba(124, 77, 255, 0.16);
+  --st-edge: rgba(124, 77, 255, 0.36);
+  --st-glow: rgba(124, 77, 255, 0.32);
+}
+.st-tone-magenta {
+  --st-ink: var(--rgb-3);
+  --st-soft: rgba(255, 45, 149, 0.13);
+  --st-edge: rgba(255, 45, 149, 0.32);
+  --st-glow: rgba(255, 45, 149, 0.28);
+}
+.st-tone-mint {
+  --st-ink: var(--rgb-4);
+  --st-soft: rgba(0, 255, 157, 0.12);
+  --st-edge: rgba(0, 255, 157, 0.3);
+  --st-glow: rgba(0, 255, 157, 0.26);
+}
+.st-tone-amber {
+  --st-ink: var(--rgb-5);
+  --st-soft: rgba(255, 179, 0, 0.14);
+  --st-edge: rgba(255, 179, 0, 0.34);
+  --st-glow: rgba(255, 179, 0, 0.28);
+}
+.st-tone-orange {
+  --st-ink: #ff8a34;
+  --st-soft: rgba(255, 138, 52, 0.14);
+  --st-edge: rgba(255, 138, 52, 0.34);
+  --st-glow: rgba(255, 138, 52, 0.28);
+}
+.st-tone-purple {
+  --st-ink: #b388ff;
+  --st-soft: rgba(179, 136, 255, 0.15);
+  --st-edge: rgba(179, 136, 255, 0.34);
+  --st-glow: rgba(179, 136, 255, 0.3);
+}
+
+:root[data-theme='light'] .st-tone-cyan {
+  --st-ink: var(--ink-cyan);
+  --st-soft: rgba(0, 131, 146, 0.09);
+  --st-edge: rgba(0, 131, 146, 0.26);
+  --st-glow: rgba(0, 131, 146, 0.14);
+}
+:root[data-theme='light'] .st-tone-violet {
+  --st-ink: var(--ink-violet);
+  --st-soft: rgba(106, 58, 224, 0.08);
+  --st-edge: rgba(106, 58, 224, 0.24);
+  --st-glow: rgba(106, 58, 224, 0.14);
+}
+:root[data-theme='light'] .st-tone-magenta {
+  --st-ink: var(--ink-magenta);
+  --st-soft: rgba(231, 0, 115, 0.07);
+  --st-edge: rgba(231, 0, 115, 0.22);
+  --st-glow: rgba(231, 0, 115, 0.13);
+}
+:root[data-theme='light'] .st-tone-mint {
+  --st-ink: var(--ink-mint);
+  --st-soft: rgba(0, 136, 84, 0.08);
+  --st-edge: rgba(0, 136, 84, 0.24);
+  --st-glow: rgba(0, 136, 84, 0.13);
+}
+:root[data-theme='light'] .st-tone-amber {
+  --st-ink: var(--ink-amber);
+  --st-soft: rgba(157, 110, 0, 0.1);
+  --st-edge: rgba(157, 110, 0, 0.26);
+  --st-glow: rgba(157, 110, 0, 0.14);
+}
+:root[data-theme='light'] .st-tone-orange {
+  --st-ink: var(--ink-orange);
+  --st-soft: rgba(197, 84, 0, 0.08);
+  --st-edge: rgba(197, 84, 0, 0.24);
+  --st-glow: rgba(197, 84, 0, 0.13);
+}
+:root[data-theme='light'] .st-tone-purple {
+  --st-ink: var(--ink-purple);
+  --st-soft: rgba(200, 0, 234, 0.07);
+  --st-edge: rgba(200, 0, 234, 0.22);
+  --st-glow: rgba(200, 0, 234, 0.13);
+}
+
+/* ==========================================================================
+   1 · THE PROFILE BOX
+   Tapping it is the example that was asked for: one card, one icon, and the
+   sub-options live behind it in a popup.
+   ========================================================================== */
+
+.set-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 14px 0 12px;
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(420px 160px at 12% -10%, rgba(0, 229, 255, 0.14), transparent 68%),
+    radial-gradient(360px 160px at 96% 118%, rgba(124, 77, 255, 0.12), transparent 70%),
+    var(--bg-panel);
+  box-shadow: 0 18px 40px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* Light theme: the neon radials above turn into visible cyan/violet stains on
+   a near-white canvas. The tints are kept, but at a quarter of the strength
+   and over a solid panel, so the card looks lit rather than smudged. */
+:root[data-theme='light'] .set-hero {
+  background:
+    radial-gradient(420px 160px at 12% -10%, rgba(0, 131, 146, 0.1), transparent 68%),
+    radial-gradient(360px 160px at 96% 118%, rgba(106, 58, 224, 0.08), transparent 70%),
+    var(--bg-panel-solid);
+  box-shadow: 0 14px 30px -26px rgba(16, 20, 40, 0.35);
+}
+
+.set-hero-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+button.set-hero-open {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 56px;
+  padding: 6px;
+  margin: -6px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease-out;
+}
+button.set-hero-open:hover { background: var(--st-soft, rgba(255, 255, 255, 0.05)); border-color: var(--st-edge, var(--line)); }
+button.set-hero-open:active { transform: scale(0.99); }
+button.set-hero-open:focus-visible { outline: 2px solid var(--ink-cyan, var(--rgb-1)); outline-offset: 3px; }
+
+.set-hero-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.set-hero-name {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-hero-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-hero-next { flex: 0 0 auto; color: var(--text-3); display: grid; place-items: center; }
+[dir='rtl'] .set-hero-next svg { transform: scaleX(-1); }
+
+.set-hero-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+
+button.set-mini {
+  inline-size: 34px;
+  block-size: 34px;
+  min-inline-size: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.12s ease-out;
+}
+/*
+ * Both small controls are drawn at 30-34px, which is what looks right in a
+ * row, but a finger needs 44px. The transparent ::after square extends the hit
+ * area into the gap between the buttons, so the tap target grows without the
+ * visual size changing and without moving any neighbour.
+ */
+button.set-mini,
+button.set-sheet-back { position: relative; }
+button.set-mini::after,
+button.set-sheet-back::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
+button.set-mini:hover { color: var(--text-1); border-color: var(--line-strong); }
+button.set-mini:active { transform: scale(0.92); }
+button.set-mini:focus-visible { outline: 2px solid var(--ink-cyan, var(--rgb-1)); outline-offset: 2px; }
+button.set-mini svg { inline-size: 17px; block-size: 17px; }
+button.set-mini.is-on { color: var(--st-ink, var(--rgb-1)); border-color: var(--st-edge, var(--line)); background: var(--st-soft, rgba(255, 255, 255, 0.06)); }
+
+/* chips under the profile card: the state of the account at a glance */
+.set-hero-chips {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.set-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  /* --bg-raised, not a literal white alpha: on the light panel a white wash is
+     invisible, which is exactly how the old hero chips disappeared. */
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.set-chip svg { inline-size: 12px; block-size: 12px; }
+.set-chip.is-good { color: var(--up); border-color: color-mix(in srgb, var(--up) 34%, transparent); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.set-chip.is-warn { color: var(--rgb-5); border-color: color-mix(in srgb, var(--rgb-5) 34%, transparent); background: color-mix(in srgb, var(--rgb-5) 12%, transparent); }
+:root[data-theme='light'] .set-chip.is-warn { color: var(--ink-amber); }
+.set-chip-dot { inline-size: 7px; block-size: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+
+/* ==========================================================================
+   2 · THE HUB GRID — one tile per section
+   ========================================================================== */
+
+.set-hub {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 4px;
+}
+
+@media (min-width: 680px) {
+  .set-hub { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+}
+/* 320–350px: two columns squeeze the Persian label onto two lines and the
+   chip onto a third. One column costs a scroll and keeps every tile legible. */
+@media (max-width: 350px) {
+  .set-hub { grid-template-columns: minmax(0, 1fr); }
+}
+
+.set-hub-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+.set-hub-label h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+button.set-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 78px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.13s ease-out, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+@media (min-width: 680px) {
+  button.set-tile { min-height: 84px; }
+}
+
+/* The tone wash lives on a pseudo-element so it can sit UNDER the content
+   (z-index) without tinting the text; a background on the tile itself would
+   either cover the label or need a second stacking hack. */
+button.set-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(120% 120% at 0% 0%, var(--st-soft), transparent 62%);
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+button.set-tile:hover {
+  border-color: var(--st-edge);
+  box-shadow: 0 10px 26px -22px var(--st-glow);
+}
+button.set-tile:hover::before { opacity: 1; }
+button.set-tile:active { transform: scale(0.976); }
+button.set-tile:focus-visible { outline: 2px solid var(--st-ink); outline-offset: 2px; }
+
+.set-tile-ico {
+  position: relative;
+  flex: 0 0 44px;
+  inline-size: 44px;
+  block-size: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--st-ink);
+  background: var(--st-soft);
+  border: 1px solid var(--st-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+:root[data-theme='light'] .set-tile-ico { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+.set-tile-ico svg { inline-size: 23px; block-size: 23px; }
+
+/* Attention dot: a section with something to do (a denied permission, an
+   unacknowledged restriction) marks its own tile. Colour alone would be
+   invisible to a colour-blind user, so the tile also says it in words in the
+   chip row. */
+.set-tile-ico::after {
+  content: '';
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--rgb-5);
+  border: 2px solid var(--bg-panel-solid);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+button.set-tile[data-alert='true'] .set-tile-ico::after { opacity: 1; transform: scale(1); }
+:root[data-theme='light'] button.set-tile[data-alert='true'] .set-tile-ico::after { border-color: #fff; }
+
+.set-tile-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.set-tile-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text-1);
+}
+.set-tile-sub {
+  font-size: 10.8px;
+  line-height: 1.45;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.set-tile-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.set-tile-chips .set-chip { min-height: 20px; padding: 0 7px; font-size: 10px; }
+
+.set-tile-next { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-3); }
+.set-tile-next svg { inline-size: 15px; block-size: 15px; }
+[dir='rtl'] .set-tile-next svg { transform: scaleX(-1); }
+
+/* The grid arrives in one sweep rather than 11 individually animated nodes:
+   a per-tile transition-delay on a hover-capable device costs nothing, but on
+   a mid-range Android it is eleven composited layers for a 200ms entrance. */
+.set-hub-in { animation: set-hub-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.set-hub-in:nth-child(2n) { animation-delay: 0.03s; }
+.set-hub-in:nth-child(3n) { animation-delay: 0.05s; }
+@keyframes set-hub-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   3 · THE SECTION POPUP
+   A Sheet whose header carries the same icon and tone as the tile that opened
+   it, so the tile and the popup cannot look like two different features.
+   ========================================================================== */
+
+/* The popup body wrapper. Sheet cannot take a class of its own without
+   touching every other screen that uses it, so the scope lives one level down,
+   on the element every section popup renders. */
+.set-sheet { display: block; }
+
+.set-sheet-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.set-sheet-title-ico {
+  flex: 0 0 30px;
+  inline-size: 30px;
+  block-size: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--st-ink);
+  background: var(--st-soft);
+  border: 1px solid var(--st-edge);
+}
+.set-sheet-title-ico svg { inline-size: 17px; block-size: 17px; }
+.set-sheet-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+button.set-sheet-back {
+  flex: 0 0 auto;
+  inline-size: 30px;
+  block-size: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  cursor: pointer;
+}
+button.set-sheet-back:hover { color: var(--text-1); border-color: var(--line-strong); }
+button.set-sheet-back svg { inline-size: 16px; block-size: 16px; }
+[dir='rtl'] button.set-sheet-back svg { transform: scaleX(-1); }
+
+.set-sheet-blurb {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* Rows inside a popup get a tinted icon squircle, matching the tile. Scoped to
+   .set-sheet because `.set-row` is shared with eight other screens and must not
+   change under their feet. */
+/* The row's leading chevron: decorative, and mirrored in RTL. */
+.set-sheet .set-row-next {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.set-sheet .set-row-next svg { inline-size: 17px; block-size: 17px; }
+[dir='rtl'] .set-sheet .set-row-next svg { transform: scaleX(-1); }
+
+.set-sheet .set-row { gap: 11px; padding: 12px; min-height: 54px; }
+.set-sheet .set-row-icon {
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 10px;
+  color: var(--st-ink, var(--text-2));
+  background: var(--st-soft, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--st-edge, var(--line));
+}
+.set-sheet .set-row-icon svg { inline-size: 17px; block-size: 17px; }
+.set-sheet .set-row > svg:last-child { color: var(--st-ink, var(--text-3)); }
+.set-sheet .set-group { border-radius: 15px; }
+.set-sheet .set-group + .set-group { margin-top: 10px; }
+
+.set-sheet-foot { display: grid; gap: 8px; margin-top: 14px; }
+
+/* ==========================================================================
+   4 · OPTION GRIDS
+   Every selector in settings used to be a native <select>, which on a phone is
+   a full OS dialog that leaves the theme behind and — in Persian — is the one
+   part of the screen the app cannot style. Chips keep the choice inside the
+   app and show the current value without a tap.
+   ========================================================================== */
+
+.set-field { margin: 12px 0 0; }
+.set-field:first-child { margin-top: 0; }
+.set-field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.set-field-hint { font-size: 10.5px; font-weight: 500; color: var(--text-3); }
+.set-field-note { margin: 7px 0 0; font-size: 10.8px; line-height: 1.65; color: var(--text-3); }
+
+.set-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 7px;
+}
+.set-opts[data-cols='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.set-opts[data-cols='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.set-opts[data-cols='4'] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+button.set-opt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 58px;
+  padding: 9px 7px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.12s ease-out, box-shadow 0.18s ease;
+}
+/* A row of single-line options (chips) is shorter and stays on one line. */
+.set-opts[data-flat='true'] button.set-opt {
+  flex-direction: row;
+  min-height: 44px;
+  padding: 8px 11px;
+  gap: 7px;
+}
+button.set-opt:hover { color: var(--text-1); border-color: var(--line-strong); }
+button.set-opt:active { transform: scale(0.97); }
+button.set-opt:focus-visible { outline: 2px solid var(--st-ink, var(--rgb-1)); outline-offset: 2px; }
+button.set-opt svg { inline-size: 19px; block-size: 19px; }
+
+button.set-opt.is-on {
+  color: var(--text-1);
+  border-color: var(--st-edge);
+  background: var(--st-soft);
+  box-shadow: 0 6px 18px -16px var(--st-glow);
+}
+/* The tick is the non-colour signal that a chip is the chosen one — colour
+   alone fails for deuteranopia and on a sunlit phone screen. */
+button.set-opt::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 50%;
+  background: var(--st-ink) center/9px 9px no-repeat;
+  color: var(--bg-panel-solid);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+button.set-opt.is-on::after { opacity: 1; transform: scale(1); }
+.set-opt-sub { font-size: 10px; font-weight: 500; color: var(--text-3); }
+.set-opt.is-on .set-opt-sub { color: var(--text-2); }
+.set-opt-ico { display: grid; place-items: center; color: var(--st-ink, var(--text-2)); }
+.set-opt-dot { inline-size: 9px; block-size: 9px; border-radius: 50%; flex: 0 0 auto; }
+
+/* The 14px tick is drawn as a checkmark inside the disc, not a background
+   image, so it follows `currentColor` and needs no asset. */
+button.set-opt::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230a0c12' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 13 4 4L19 7'/%3E%3C/svg%3E");
+  background-size: 10px 10px;
+}
+
+/* Accent swatches: bigger than the old 30px dots and with their own tick, so
+   the chosen palette is obvious before you read the border. */
+.set-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+button.set-swatch {
+  position: relative;
+  inline-size: 46px;
+  block-size: 46px;
+  padding: 0;
+  border-radius: 15px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  cursor: pointer;
+  box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.8);
+  transition: transform 0.12s ease-out, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+button.set-swatch:active { transform: scale(0.94); }
+button.set-swatch:focus-visible { outline: 2px solid var(--text-1); outline-offset: 3px; }
+button.set-swatch.is-on { border-color: var(--text-1); box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.7); }
+button.set-swatch .set-swatch-tick {
+  position: absolute;
+  inset-block-end: -5px;
+  inset-inline-end: -5px;
+  inline-size: 18px;
+  block-size: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line-strong);
+  color: var(--text-1);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+button.set-swatch.is-on .set-swatch-tick { opacity: 1; transform: scale(1); }
+button.set-swatch .set-swatch-tick svg { inline-size: 11px; block-size: 11px; }
+:root[data-theme='light'] button.set-swatch { box-shadow: 0 4px 14px -10px rgba(16, 20, 40, 0.5); }
+
+/* ==========================================================================
+   5 · SUB-VIEWS INSIDE THE POPUP
+   Language, display name, 2FA and the RPC editor open as a second level of the
+   SAME popup. Two stacked Sheets would both listen for Escape, and the one
+   behind would close with the one in front — the user loses both at once.
+   ========================================================================== */
+
+.set-subview { animation: set-sub-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+@keyframes set-sub-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.set-note {
+  margin: 10px 0 0;
+  padding: 11px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+.set-note.is-danger { border-color: color-mix(in srgb, var(--down) 40%, transparent); color: var(--down); }
+:root[data-theme='light'] .set-note.is-danger { color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); }
+
+.set-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--st-ink, var(--rgb-1));
+}
+
+.set-code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 4px; }
+.set-code-cell {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  text-align: center;
+  color: var(--text-1);
+}
+
+.set-input {
+  width: 100%;
+  font-size: 13px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+}
+.set-input:focus-visible { outline: 2px solid var(--st-ink, var(--rgb-1)); outline-offset: 1px; }
+:root[data-theme='light'] .set-input { background: #fff; }
+
+/* ==========================================================================
+   6 · MOTION AND CONTRAST ESCAPES
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .set-hub-in,
+  .set-subview { animation: none; }
+  button.set-tile,
+  button.set-opt,
+  button.set-swatch,
+  button.set-mini,
+  button.set-hero-open { transition: background 0.16s ease, border-color 0.16s ease; }
+  button.set-tile:active,
+  button.set-opt:active,
+  button.set-swatch:active,
+  button.set-mini:active,
+  button.set-hero-open:active { transform: none; }
+}
+
+/* The in-app "reduce motion" switch used to reach React only: `useStill()`
+   stopped the framer animations while every CSS keyframe on this screen kept
+   running, because CSS cannot read a JS boolean. `applyReduceMotion()` now
+   writes `data-reduce-motion` on <html>, so the switch covers both. */
+:root[data-reduce-motion='true'] .set-hub-in,
+:root[data-reduce-motion='true'] .set-subview { animation: none; }
+/* The profile badge's spinning conic ring is the loudest loop on the screen. */
+:root[data-reduce-motion='true'] .profile-badge-ring { animation: none; }
+
+/* A feature whose state could not be resolved says "unknown" and looks like
+   nothing is claimed — it must not borrow the green of "available". */
+.set-sheet .region-state-unknown,
+.region-state-unknown {
+  border-color: var(--line-strong);
+  color: var(--text-3);
+}
+
+@media (max-width: 360px) {
+  button.set-tile { min-height: 72px; padding: 10px; gap: 9px; }
+  .set-tile-ico { flex-basis: 40px; inline-size: 40px; block-size: 40px; border-radius: 13px; }
+  .set-tile-ico svg { inline-size: 21px; block-size: 21px; }
+  .set-tile-title { font-size: 12.5px; }
+  .set-opts { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
+}

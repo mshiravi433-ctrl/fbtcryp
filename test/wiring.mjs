@@ -13439,5 +13439,111 @@ export default function run() {
       keyRefs.length > 0 && missingErr.length === 0);
   }
 
+  /* ----------------------- 5z. the settings hub, structurally ------------- */
+  /*
+   * Settings is a grid of tiles — one box per section — and every control of a
+   * section lives behind its tile, in a popup. That shape has several ways to
+   * rot quietly, and none of them break a build or a first render:
+   *
+   *   · a section added to the grid with no body: a tile that opens an empty
+   *     dialog, which is worse than no tile at all;
+   *   · a section with no icon in the registry: a hole in the grid;
+   *   · a tone painted for the dark theme with no light pair: a tile that goes
+   *     invisible on a white background, which no dark-theme screenshot shows;
+   *   · a `settings.hub.*` line written in en and forgotten in fa: Persian, the
+   *     primary market, shows the raw key under every tile.
+   *
+   * So the lists — sections, icons, bodies, tones, locale keys — are counted
+   * against each other here. What the screen DOES (a tap that opens one popup
+   * and writes a real store value) is walked by test/settings-hub-probe.jsx;
+   * this block guards the wiring table underneath it.
+   */
+  {
+    const settings = read('src/pages/Settings.jsx');
+    const iconSrc = read('src/components/SettingsIcons.jsx');
+    const hubCss = read('src/styles/settings-hub.css');
+    const storeSrc = read('src/store/useSettingsStore.js');
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const noComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    /* The grid declaration: a section names its id and its tone together. */
+    const sections = [...settings.matchAll(/id: '([a-z]+)',\s*\n\s*tone: '([a-z]+)'/g)]
+      .map((m) => ({ id: m[1], tone: m[2] }));
+    const ids = sections.map((x) => x.id);
+    t('the settings hub declares every section with a tone of its own',
+      ids.length >= 11 && new Set(ids).size === ids.length && sections.every((x) => x.tone));
+    t('the grid maps that list, so a new section gets a tile without new markup',
+      /sections\.map\(\(sec\)/.test(settings));
+
+    /* A tile that opens nothing is exactly the complaint this screen was
+       rebuilt to answer, so the body table is checked key by key. */
+    t('no tile is a dead end: every section has a popup body',
+      ids.every((id) => settings.includes(`\n    ${id}: body`)));
+    t('and every popup can go one level deeper without stacking a second dialog',
+      /SUB_BODIES\[active\]\?\.\[sub\]/.test(settings) && /set-subview/.test(settings));
+
+    const registered = [...iconSrc.matchAll(/^ {2}([a-z]+): SetIcon/gm)].map((m) => m[1]);
+    t('every section has a drawn icon in the registry', ids.every((id) => registered.includes(id)));
+    t('and the registry holds nothing the grid does not use', registered.every((id) => ids.includes(id)));
+
+    /* Colours: every tone has to be written twice, or the light theme loses it. */
+    const tones = [...new Set(sections.map((x) => x.tone))];
+    t(`all ${tones.length} tile tones set their variables`,
+      tones.every((tone) => new RegExp('\\.st-tone-' + tone + '\\s*\\{[^}]*--st-ink').test(hubCss)));
+    t(`and all ${tones.length} are re-declared for the light theme`,
+      tones.every((tone) => new RegExp("data-theme='light'\\][^{]*\\.st-tone-" + tone + "\\b[^}]*--st-ink").test(hubCss)));
+    t('the accent the tiles inherit is applied to <html>, not to the page',
+      /applyAccent/.test(storeSrc) && /data-accent/.test(storeSrc));
+
+    /* Scoping: .set-row / .set-group / .pill belong to nine other screens too,
+       so the hub may only restyle them under its own popup. */
+    t('the popup styles are scoped, so no other screen inherits them',
+      !/^\.set-row\s*\{/m.test(hubCss) && !/^\.set-group\s*\{/m.test(hubCss) && /\.set-sheet \.set-row/.test(hubCss));
+    t('and the hub stylesheet is actually imported by the page',
+      /import '\.\.\/styles\/settings-hub\.css'/.test(settings));
+    t('the grid entrance class sits on the tiles, so the keyframes have a target',
+      /set-tile set-hub-in/.test(settings) && /\.set-hub-in\s*\{/.test(hubCss));
+
+    /* RTL: the page reads right to left in Persian, so every glyph that means
+       "go on" has to point the other way. An inline style cannot carry that,
+       which is why the row chevron is a class. */
+    const arrows = ['.set-hero-next', '.set-tile-next', '.set-row-next', 'button.set-sheet-back'];
+    t('every directional glyph flips with the writing direction',
+      arrows.every((sel) => new RegExp("\\[dir='rtl'\\][^{]*" + sel.replace('.', '\\.') + "[^{]*\\{[^}]*scaleX\\(-1\\)").test(hubCss)));
+    t('and no row chevron is left as an inline style',
+      !/style=\{\{ color: 'var\(--text-3\)', display: 'grid'/.test(settings));
+
+    /* The reduce-motion rules need a producer, or they are dead CSS. */
+    t('the motion switch has a producer, not only a CSS consumer',
+      /:root\[data-reduce-motion='true'\]/.test(hubCss)
+      && /setReduceMotion\(on\)[\s\S]{0,220}applyReduceMotion\(/.test(storeSrc)
+      && /s\.setReduceMotion\(/.test(settings));
+
+    /* Choice controls: chips, never a native select. */
+    t('a native <select> is still nowhere in the screen', !/<select/.test(noComments(settings)));
+
+    /* Locales: the hub namespace has to be whole in both languages. */
+    const flatKeys = (o, p = '') => Object.entries(o || {}).flatMap(([k, v]) => (
+      typeof v === 'string' ? [`${p}${k}`] : flatKeys(v, `${p}${k}.`)
+    ));
+    const enHub = flatKeys(en.settings?.hub);
+    const faHub = flatKeys(fa.settings?.hub);
+    t(`the hub speaks both languages (${enHub.length} lines each)`,
+      enHub.length >= 20 && faHub.length === enHub.length && enHub.every((k) => faHub.includes(k)));
+    t('every tile states what is inside it, in en and in fa',
+      ids.every((id) => hasKey(en, `settings.hub.hints.${id}`) && hasKey(fa, `settings.hub.hints.${id}`)));
+    const hubRefs = [...new Set([...noComments(settings).matchAll(/'settings\.hub\.([A-Za-z0-9_.]+)'/g)].map((m) => m[1]))];
+    const hubMissing = hubRefs.filter((k) => !hasKey(en, `settings.hub.${k}`) || !hasKey(fa, `settings.hub.${k}`));
+    t(`every settings.hub line the page asks for exists${hubMissing.length ? ` — missing: ${hubMissing.join(', ')}` : ''}`,
+      hubRefs.length >= 15 && hubMissing.length === 0);
+
+    /* Reachable from outside: a notification that points at one section has to
+       land inside that popup, not at the top of a long page. */
+    t('?section=<id> opens that popup on arrival',
+      /params\.get\('section'\)/.test(settings)
+      && /setParams\(/.test(settings)
+      && /next\.delete\('section'\)/.test(settings));
+  }
+
   return rows;
 }
