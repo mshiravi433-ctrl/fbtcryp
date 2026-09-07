@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import SolanaWalletTab from '../components/SolanaWalletTab';
 import InfoBox from '../components/InfoBox';
-import HardwareWalletCard from '../components/HardwareWalletCard';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sheet from '../components/Sheet';
 import SegIndicator from '../components/SegIndicator';
@@ -867,8 +866,6 @@ export default function Wallet() {
           )}
         </>
       )}
-
-      {tab === 'real' && <HardwareWalletCard />}
 
       {/* ----------------- internal bitcoin (same seed, BIP-84) -----------------
           Only the local vault can grow a BTC leg (zero law), and the card

@@ -313,12 +313,11 @@ export async function run(container) {
     await act(async () => { await sleep(700); });
     t('the Crypto category lists the Solana venue perps', !!byId('futures-market-select') && (await pickerLabels('futures-market-select')).join() === 'SOL/USDT,BTC/USDT');
     t("the read-only sentence is shown verbatim (en)", byId('futures-readonly-notice')?.textContent.trim() === 'This market is currently available for viewing only.');
-    /* The candle chart was REMOVED on instruction («نمودار … وجود ندارد — حذف
-       کن»): it rendered as a permanent "unavailable" box on the live app, so
-       the tab no longer mounts a chart block at all — and never calls
-       /candles. */
-    t('NO chart block is rendered on the On-Chain tab (removed on instruction)', !byId('futures-chart') && !byId('futures-trend') && !byId('futures-trend-empty'));
-    t('the tab never calls the candles endpoint any more', bff.candles === 0);
+    /* The candle chart is BACK on instruction (2026-09-07: «لاقل یک کدام را
+       بزار»): the shared FuturesMarketChart reads the BFF's /candles for the
+       selected market and draws the venue's own OHLC. */
+    t('the chart block is rendered on the On-Chain tab', !!byId('futures-onchain-chart'));
+    t('the tab read the candles endpoint for the selected market', bff.candles >= 1);
     t('market info shows funding and the protocol fee (4 bps) from the BFF', /8\.4/.test(byId('futures-market-info')?.textContent || '') && /4 bps/.test(byId('futures-market-info')?.textContent || ''));
     t('the fee breakdown comes from the engine: 50 × 5 = $250 notional, protocol 4 bps = $0.1, FBT 10 bps = $0.25', /\$250/.test(byId('futures-fee-breakdown')?.textContent || '') && /FBT fee \(10 bps\)\$0\.25/.test(byId('futures-fee-breakdown')?.textContent || ''));
     t('the total is NOT printed while the network fee is unknown', /shown at review/.test(byId('futures-fee-breakdown')?.textContent || ''));

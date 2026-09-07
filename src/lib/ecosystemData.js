@@ -1,4 +1,5 @@
 import { PAYOUT_ADDRESSES } from './payout.js';
+import { apiBase } from './apiBase.js';
 
 /**
  * ECOSYSTEM DATA ADAPTER
@@ -205,6 +206,123 @@ export async function probeProviderStatuses({ timeout = 30000, force = false } =
   } catch {
     return null;
   }
+}
+
+/* ─── Browser-side liveness probe ─────────────────────────────────────────────
+ * The server probe above is the preferred evidence, but on a serverless host
+ * the instance that answers /providers/status is frequently not the one that
+ * ran the probe, and datacenter egress to some aggregators is throttled. The
+ * result was an Ecosystem card stuck on "0/5 DEX sources" while the swap page
+ * — running in the SAME browser — was quoting through those very providers.
+ *
+ * So the browser asks the same question itself: one tiny quote per provider,
+ * through the exact endpoints the swap/bridge screens already use (direct
+ * upstream first for the keyless aggregators, our own same-origin routes for
+ * the rest). A provider only counts as reachable when it returned a real
+ * quote/registration; nothing is signed, broadcast or stored.
+ */
+const PROBE_USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const PROBE_WETH_BASE = '0x4200000000000000000000000000000000000006';
+const PROBE_USDT_BSC = '0x55d398326f99059fF775485246999027B3197955';
+const PROBE_USDC_BSC = '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d';
+const PROBE_USDC_ARB = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
+const PROBE_SOL_MINT = 'So11111111111111111111111111111111111111112';
+const PROBE_USDC_SOL = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const PROBE_TAKER = PAYOUT_ADDRESSES.evm;
+
+async function probeFetchJson(url, { timeout = 12000, headers = {} } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json', ...headers } });
+    const body = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return { ok: false, status: 0, body: null, error: String(err?.message || err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Try the direct upstream first, then our same-origin proxy; ok if either passes `accept`. */
+async function probeEither(provider, attempts) {
+  for (const { url, headers, accept } of attempts) {
+    const r = await probeFetchJson(url, { headers });
+    if (r.ok && (!accept || accept(r.body))) return { provider, ok: true, status: r.status, via: url.startsWith('http') ? 'direct' : 'proxy' };
+  }
+  return { provider, ok: false };
+}
+
+let lastBrowserProbeAt = 0;
+let lastBrowserProbeBody = null;
+
+export async function probeProvidersFromBrowser({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && lastBrowserProbeBody && now - lastBrowserProbeAt < 60000) return lastBrowserProbeBody;
+  const api = apiBase();
+
+  const kyberQs = new URLSearchParams({ tokenIn: PROBE_USDC_BASE, tokenOut: PROBE_WETH_BASE, amountIn: '1000000', gasInclude: 'true' }).toString();
+  const ooQs = new URLSearchParams({ inTokenAddress: PROBE_USDC_BASE, outTokenAddress: PROBE_WETH_BASE, amountDecimals: '1000000', gasPriceDecimals: '5000000000', slippage: '0.5' }).toString();
+  const veloraQs = new URLSearchParams({ srcToken: PROBE_USDC_BASE, destToken: PROBE_WETH_BASE, amount: '1000000', srcDecimals: '6', destDecimals: '18', side: 'SELL', network: '8453', partner: 'fbtswap' }).toString();
+  const gaslessQs = new URLSearchParams({ chainId: '56', sellToken: PROBE_USDT_BSC, buyToken: PROBE_USDC_BSC, sellAmount: '1000000000000000000', taker: PROBE_TAKER }).toString();
+  const solQs = new URLSearchParams({ inputMint: PROBE_SOL_MINT, outputMint: PROBE_USDC_SOL, amount: '1000000' }).toString();
+  const dlnQs = new URLSearchParams({ srcChainId: '8453', dstChainId: '42161', srcChainTokenIn: PROBE_USDC_BASE, dstChainTokenOut: PROBE_USDC_ARB, srcChainTokenInAmount: '1000000' }).toString();
+
+  const settled = await Promise.allSettled([
+    probeEither('kyberswap', [
+      { url: `https://aggregator-api.kyberswap.com/base/api/v1/routes?${kyberQs}`, headers: { 'x-client-id': 'fbt-swap' }, accept: (b) => b && b.code === 0 && b.data?.routeSummary },
+      { url: `${api}/swap/kyber/routes?chainId=8453&${kyberQs}`, accept: (b) => b && b.code === 0 && b.data?.routeSummary }
+    ]),
+    probeEither('openocean', [
+      { url: `https://open-api.openocean.finance/v4/base/quote?${ooQs}`, accept: (b) => b && b.code === 200 && b.data },
+      { url: `${api}/swap/oo/quote?chainId=8453&${ooQs}`, accept: (b) => b && b.code === 200 && b.data }
+    ]),
+    probeEither('velora', [
+      { url: `https://api.velora.xyz/prices?${veloraQs}`, accept: (b) => Boolean(b?.priceRoute) },
+      { url: `${api}/swap/velora/prices?${veloraQs}`, accept: (b) => Boolean(b?.priceRoute) }
+    ]),
+    probeEither('0x-gasless', [
+      { url: `${api}/gasless/price?${gaslessQs}`, accept: (b) => b && !b.error }
+    ]),
+    probeEither('solana-openocean', [
+      { url: `${api}/solana/oo/quote?${solQs}`, accept: (b) => b && !b.error }
+    ]),
+    probeEither('lifi', [
+      { url: `${api}/bridge/status`, accept: (b) => Boolean(b?.registered) }
+    ]),
+    probeEither('debridge-dln', [
+      { url: `${api}/dln/quote?${dlnQs}`, accept: (b) => b && !b.error }
+    ]),
+    probeEither('0x-cross-chain', [
+      { url: `${api}/xchain/probe`, accept: (b) => b && b.configured === true && Number(b.httpStatus) >= 200 && Number(b.httpStatus) < 400 }
+    ])
+  ]);
+
+  const body = {
+    schema: 'fbt.provider-probe.browser.v1',
+    generatedAt: new Date().toISOString(),
+    results: settled.map((r) => (r.status === 'fulfilled' ? r.value : { ok: false, error: 'PROBE_INTERNAL' }))
+  };
+  lastBrowserProbeAt = Date.now();
+  lastBrowserProbeBody = body;
+  return body;
+}
+
+/** Union of several probe bodies: a provider is ok when ANY probe reached it. */
+export function mergeProbeEvidence(...probes) {
+  const list = probes.filter((p) => p && Array.isArray(p.results));
+  if (list.length === 0) return null;
+  const byId = new Map();
+  let generatedAt = null;
+  for (const p of list) {
+    if (p.generatedAt && (!generatedAt || p.generatedAt > generatedAt)) generatedAt = p.generatedAt;
+    for (const r of p.results) {
+      if (!r?.provider) continue;
+      const prev = byId.get(r.provider);
+      if (!prev || (!prev.ok && r.ok)) byId.set(r.provider, r);
+    }
+  }
+  return { schema: 'fbt.provider-probe.merged.v1', generatedAt, results: [...byId.values()] };
 }
 
 /**

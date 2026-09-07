@@ -15,6 +15,7 @@ import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
 import { assetKnowledgeFor } from '../lib/assetKnowledge';
 import ModernSelect from '../components/ModernSelect';
+import FuturesMarketChart from '../components/FuturesMarketChart';
 import AssetIcon from '../components/AssetIcon';
 import {
   MIN_COLLATERAL_USD,
@@ -471,6 +472,17 @@ export default function Ostium() {
               searchable
               testId="ostium-market-select"
             />
+
+            {/* Same venue's own OHLC (keyless builder API) through the shared
+                futures candle route; nothing drawn when it does not answer. */}
+            {market && (
+              <FuturesMarketChart
+                provider="ostium"
+                market={market.pairId}
+                symbol={`${market.from}/${market.to}`}
+                testId="ostium-chart"
+              />
+            )}
 
             {market && (
               <div className="row-between" style={{ margin: '12px 0' }}>

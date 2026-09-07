@@ -9,6 +9,8 @@ import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
 import {
   fetchProviderStatus,
   probeProviderStatuses,
+  probeProvidersFromBrowser,
+  mergeProbeEvidence,
   buildEcosystemData,
   NETWORK_REGISTRY,
   monogram
@@ -25,6 +27,7 @@ import {
 /** Status dot colors */
 const STATUS_COLORS = {
   OPERATIONAL: '#00ff9d',
+  PARTIAL: '#7dd3fc',
   DEGRADED: '#ffb300',
   OFFLINE: '#ff3b6b',
   UNKNOWN: '#5b647f'
@@ -32,6 +35,7 @@ const STATUS_COLORS = {
 
 const STATUS_LABELS = {
   OPERATIONAL: 'eco.status.operational',
+  PARTIAL: 'eco.status.partial',
   DEGRADED: 'eco.status.degraded',
   OFFLINE: 'eco.status.offline',
   UNKNOWN: 'eco.status.unknown'
@@ -97,7 +101,7 @@ function StatusDot({ status, size = 8 }) {
   const color = STATUS_COLORS[status] || STATUS_COLORS.UNKNOWN;
   return (
     <span className="eco-status-dot" style={{ width: size, height: size, background: color }}>
-      {status === 'OPERATIONAL' && <span className="eco-status-pulse" style={{ borderColor: color }} />}
+      {(status === 'OPERATIONAL' || status === 'PARTIAL') && <span className="eco-status-pulse" style={{ borderColor: color }} />}
     </span>
   );
 }
@@ -306,10 +310,22 @@ export default function Ecosystem() {
     // carrying the probe body into the next build, a serverless instance that
     // didn't record the health event (or an edge cache) would keep showing 0/5
     // on every visit even though the providers answered.
+    // Two independent evidence sources, merged: the server probe (datacenter
+    // egress) and a browser probe through the same endpoints the swap/bridge
+    // screens use. Either one answering with a real quote flips a provider to
+    // OPERATIONAL, so the card no longer sits on 0/N when only one path is
+    // blocked (serverless instance mismatch, or filtered upstream egress).
+    let merged = null;
+    const apply = (body) => {
+      if (cancelled || !body) return;
+      merged = mergeProbeEvidence(merged, body);
+      probeCacheRef.current = merged;
+      loadData(true, merged);
+    };
+    probeProvidersFromBrowser().then(apply);
     probeProviderStatuses().then((body) => {
       if (cancelled) return;
-      probeCacheRef.current = body;
-      setTimeout(() => { if (!cancelled) loadData(true, body); }, 450);
+      setTimeout(() => apply(body), 450);
     });
     return () => { cancelled = true; };
   }, [loadData]);
@@ -463,19 +479,19 @@ export default function Ecosystem() {
             <StatusRow
               label={t('eco.networks', 'Networks')}
               value={`${summary.networks.operational}/${summary.networks.total}`}
-              status={summary.networks.operational === summary.networks.total ? 'OPERATIONAL' : 'DEGRADED'}
+              status={summaryStatus(summary.networks)}
               t={t}
             />
             <StatusRow
               label={t('eco.dexSources', 'DEX Sources')}
               value={`${summary.dex.operational}/${summary.dex.total}`}
-              status={summary.dex.operational === summary.dex.total ? 'OPERATIONAL' : 'DEGRADED'}
+              status={summaryStatus(summary.dex)}
               t={t}
             />
             <StatusRow
               label={t('eco.bridges', 'Bridges')}
               value={`${summary.bridges.operational}/${summary.bridges.total}`}
-              status={summary.bridges.operational === summary.bridges.total ? 'OPERATIONAL' : 'DEGRADED'}
+              status={summaryStatus(summary.bridges)}
               t={t}
             />
             <StatusRow
@@ -751,6 +767,15 @@ function SectionHeader({ title, count }) {
       {count !== undefined && <span className="eco-section-count">{count}</span>}
     </div>
   );
+}
+
+/** OPERATIONAL when every source answered, PARTIAL when some did, DEGRADED when none. */
+function summaryStatus(group) {
+  const total = Number(group?.total || 0);
+  const ok = Number(group?.operational || 0);
+  if (total > 0 && ok >= total) return 'OPERATIONAL';
+  if (ok > 0) return 'PARTIAL';
+  return 'DEGRADED';
 }
 
 function StatusRow({ label, value, status, t }) {
