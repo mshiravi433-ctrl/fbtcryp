@@ -104,11 +104,16 @@ try {
     console.log(`forking ${RPC} on 127.0.0.1:${PORT} …`);
     anvil = spawn('anvil', [
       '--fork-url', RPC,
+      '--fork-retries', '8',
+      '--fork-retry-backoff', '2',
       '--chain-id', '42161',
       '--port', String(PORT),
       '--accounts', '1',
       '--silent'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    anvil.stderrBuf = '';
+    anvil.stderr.on('data', (d) => { anvil.stderrBuf = (anvil.stderrBuf + d.toString()).slice(-3000); });
+    anvil.on('error', () => {});
 
     const url = `http://127.0.0.1:${PORT}`;
     const up = await (async () => {
@@ -131,6 +136,18 @@ try {
     execSync('npx vite build -c test/vite.aavearb.mjs --logLevel error', { stdio: 'ignore' });
     const adapter = await import('./.out/aavearb/aave-arbitrum-fork-adapter.js');
     const { AAVE_V3_ARBITRUM } = adapter;
+
+    /* ── fork-state diagnostics: prove the fork serves contract state BEFORE
+       funding spends it. If these fail, the fault is the fork or the upstream
+       RPC — the adapter below never ran. */
+    try {
+      const diagBlock = await provider.getBlockNumber();
+      const diagUsdc = await provider.getCode(AAVE_V3_ARBITRUM.usdc);
+      const diagPool = await provider.getCode(AAVE_V3_ARBITRUM.pool);
+      console.log(`DIAG fork block ${diagBlock} · USDC code ${diagUsdc.length > 2 ? `${diagUsdc.length} bytes` : 'EMPTY'} · Pool code ${diagPool.length > 2 ? `${diagPool.length} bytes` : 'EMPTY'}`);
+    } catch (err) {
+      console.log(`DIAG fork-state read FAILED: ${String(err?.message ?? err).slice(0, 300)}`);
+    }
 
     rule('0 · pinned constants and shipped defaults');
     t('flag ships OFF in this bundle', adapter.AAVE_ARB_SUPPLY_ENABLED === false);
@@ -208,7 +225,14 @@ try {
         }
       });
     }
-    const walletUsdc = await usdc.balanceOf(ANVIL_ACCOUNT);
+    let walletUsdc = 0n;
+    try {
+      walletUsdc = await usdc.balanceOf(ANVIL_ACCOUNT);
+    } catch (err) {
+      throw new Error(
+        `first USDC read failed (${String(err?.message ?? err).slice(0, 200)}) — funding attempts: ${fundingErrors.join(' | ') || 'none recorded'}`
+      );
+    }
     if (!fundedVia) {
       const aTokenHeld = await usdc.balanceOf(AAVE_V3_ARBITRUM.aUsdc);
       const poolHeld = await usdc.balanceOf(AAVE_V3_ARBITRUM.pool);
@@ -389,6 +413,7 @@ try {
   t('probe completed without an unexpected error', false, `${err?.name ?? 'Error'}: ${err?.message}`);
   exitCode = 1;
 } finally {
+  if (anvil?.stderrBuf?.trim()) console.log(`\n── anvil stderr (tail) ──\n${anvil.stderrBuf.trim()}\n── end anvil stderr ──`);
   if (anvil) {
     anvil.kill('SIGKILL');
     await new Promise((r) => setTimeout(r, 200));
