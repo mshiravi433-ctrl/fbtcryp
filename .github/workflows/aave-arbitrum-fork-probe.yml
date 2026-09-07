@@ -58,6 +58,26 @@ jobs:
           chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
           "$HOME/.foundry/bin/anvil" --version
 
+      - name: DEBUG direct RPC reads across providers (no fork) [TEMPORARY]
+        # Temporary diagnosis for the empty-storage fork failure: reads the
+        # SAME USDC slot via 4 providers x 4 methods, with NO anvil involved.
+        # If direct reads work everywhere, the fault is anvil's fork backend;
+        # if a method fails on some providers, the fault is provider support.
+        # Remove this step once the probe is green.
+        run: |
+          set +e
+          export PATH="$HOME/.foundry/bin:$PATH"
+          USDC=0xaf88d065e77c8cC2239327C5EDb3A432268e5831
+          SLOT=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+          ACCT=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+          for RPC in https://arbitrum-one.publicnode.com https://arb1.arbitrum.io/rpc https://arbitrum.llamarpc.com https://1rpc.io/arb; do
+            echo "===== $RPC ====="
+            echo "-- code:"; cast code $USDC --rpc-url "$RPC" 2>&1 | head -c 120; echo
+            echo "-- storage:"; cast storage $USDC $SLOT --rpc-url "$RPC" 2>&1 | head -c 120; echo
+            echo "-- balanceOf:"; cast call $USDC "balanceOf(address)" $ACCT --rpc-url "$RPC" 2>&1 | head -c 200; echo
+            echo "-- proof:"; curl -s -m 20 -X POST -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getProof\",\"params\":[\"$USDC\",[\"$SLOT\"],\"latest\"]}" "$RPC" 2>&1 | head -c 300; echo
+          done
+
       - name: Lockfile platform guard (before npm ci)
         # Same step ci/build-apk.sh runs first: ganache's shrinkwrapped lockfile
         # pins macOS-only fsevents as a REQUIRED dependency, which makes `npm ci`
