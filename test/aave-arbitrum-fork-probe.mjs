@@ -104,8 +104,7 @@ try {
     console.log(`forking ${RPC} on 127.0.0.1:${PORT} …`);
     anvil = spawn('anvil', [
       '--fork-url', RPC,
-      '--fork-retries', '8',
-      '--fork-retry-backoff', '2',
+      '--retries', '8',
       '--chain-id', '42161',
       '--port', String(PORT),
       '--accounts', '1',
