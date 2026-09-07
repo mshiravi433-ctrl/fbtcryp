@@ -1735,6 +1735,7 @@
     "netBeforeGas": "Net before gas",
     "sourceLine": "Source: {{source}} · updated {{time}}",
     "viewAnalytics": "View analytics",
+    "hideAnalytics": "Hide analytics",
     "statusUnavailable": "UNAVAILABLE",
     "poolExecutionUnavailable": "Direct LP contract execution is not verified for this adapter. Unsupported actions stay unavailable instead of opening an external site.",
     "poolAnalytics": "Pool analytics",

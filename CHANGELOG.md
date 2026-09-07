@@ -1,3 +1,61 @@
+# Unreleased — Farm: a 2 × 2 protocol readout, two horizontal rails, and one uniform yield-center box
+
+Four layout reports on `/farm`, every one of them about a box that had grown a
+different shape from the box beside it: «قابلیت‌های پروتکل هم اندازه تب بالا
+شود و در کل دو ردیف عمودی و دو ردیف افقی باشد … داخل اپ · بازار · پیشنهادی ·
+استراتژی‌ها افقی باشه با امکان چپ و راست کردن یعنی ریلی باشد … داغ همین حالا
+افقی باشد با باکس خوشگل و مدرن … مرکز بازده و نقدینگی FBT یک نوار سفید در
+زوایهاش هست اونا پاک کن، باکس یکدست و مدرن باشد». No feed, no route and no CTA
+moved — this is geometry and surfaces only.
+
+- **The protocol readout is a fixed 2 × 2** (`src/pages/Farm.jsx`,
+  `.farm-protocol-meta`): «قابلیت‌های پروتکل» carried a `--wide` modifier and
+  spanned both columns, so that single tile was visibly larger than
+  «آخرین همگام‌سازی» beside it and the grid grew a third row. The modifier is
+  gone from the JSX and the stylesheet, `grid-auto-rows: 1fr` plus a shared
+  `min-height` make all four cells the same box, and the 720px rule that
+  widened the grid to four columns is removed so the shape holds at every
+  width. Labels clamp to one line and values clip with `text-overflow:
+  ellipsis` — `getPools · getPool · getAPY · getAPR · getTVL` does not fit a
+  half-width cell, so it now ends in … with the full string on the element's
+  `title`.
+- **The tab bar is a rail again** (`.farm-tabs`): the five destinations had
+  been turned into a vertical column capped at `max-height: 280px`, so the
+  page's primary navigation scrolled DOWN inside a box. It is one row now —
+  buttons at their natural width (`flex: 0 0 auto`), `overflow-x: auto` with
+  the scrollbar hidden, `overscroll-behavior-x: contain` so a flick that
+  reaches the end is not handed to the page behind it, and no
+  `max-width: 420px` fallback to a two-column grid. `Farm.jsx` centres the
+  selected tab into view (`scrollIntoView({ block: 'nearest', inline:
+  'center' })`) whenever the tab changes, so a deep link never lands on a rail
+  scrolled to the wrong end. Tab order returns to the one the wiring audit
+  pins — inapp · recommended · market · strategies · pools — which also puts
+  the DEFAULT tab second instead of fourth.
+- **«داغ همین حالا» is a horizontal rail with a real card** (`.farm-hot*`):
+  the strip was a three-column grid that collapsed to a single column under
+  420px, exactly the screen where a rail matters. It scrolls left/right now
+  with scroll-snap, and each card carries a rank chip, the pair, a
+  `project · chain` line, the APY in mint and the score as a pill — every line
+  clipped with an ellipsis instead of wrapping. The duplicate `.farm-hot-card`
+  surface rules further down the stylesheet, which were fighting this block,
+  are removed so the card has one geometry and one background.
+- **The yield center is one uniform surface** (`.farm-yield-center`): the
+  collapsible box stacked `card-rgb` + `card-glow-cyan` + `.sheen` on a
+  `.card`, and `.card` clips to its own rounded padding box. The conic ring is
+  painted 1px OUTSIDE that box (`inset: -1px`), so along the straight edges it
+  was clipped away entirely and only the corners leaked — bright slivers
+  sitting out in the margin, which is the reported «نوار سفید در زوایا». The
+  box drops all three decorations (with a `::before/::after/.sheen` guard so a
+  shared class cannot bring them back), loses the hairline `border-top` that
+  cut the open body in half, and gains one border, one soft gradient, an icon
+  tile and even padding all the way round. Its inline styles moved into the
+  stylesheet as `.farm-yield-center-icon/-text/-title/-sub`.
+- **`farm.hideAnalytics` now exists** (`en.json`, `fa.json`): the pool card's
+  collapse button rendered the raw key in every language — it is «بستن تحلیل»
+  / "Hide analytics" now. That and the tab order were the two failures the
+  wiring audit was already carrying on `main`; `test/wiring.mjs` is green again
+  at 2450/2450.
+
 # Unreleased — Trench-style AI surface: `/intent` as a black, tabbed agent terminal
 
 The AI page keeps its brain and grows a Trenchers-shaped body: «شکل و ظاهر
