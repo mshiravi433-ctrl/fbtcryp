@@ -4048,7 +4048,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     <stop offset="1" stopColor="#08080c" />
                   </linearGradient>
                 </defs>
-                <rect x="1.2" y="1.2" width="37.6" height="37.6" rx="11.5" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.5" />
+                {/*
+                  The plate is a classed element, not a bare attribute, because
+                  `fill` as a presentation ATTRIBUTE loses to any CSS rule —
+                  which is exactly what lets the light theme repaint it white
+                  (see `.iaos-logo-plate` in trench-agent.css). It is also
+                  inset from the viewBox edge and much rounder than it was:
+                  at 1.2/37.6 with rx 11.5 the tile touched all four sides of
+                  its own 30px box and read as a dark block jammed into the
+                  corner of the header («از صفحه زده بیرون»).
+                */}
+                <rect className="iaos-logo-plate" x="2.6" y="2.6" width="34.8" height="34.8" rx="15" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.4" />
                 <circle cx="20" cy="20" r="10.2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" />
                 <path d="M14.7 16.8a5.4 5.4 0 0 1 9.1-2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />
                 <path d="M25.3 23.2a5.4 5.4 0 0 1-9.1 2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />

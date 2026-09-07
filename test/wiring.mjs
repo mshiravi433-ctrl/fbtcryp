@@ -233,6 +233,73 @@ export default function run() {
       /:root\[data-theme='light'\] \.ios-tab-glow\s*\{[^}]*border-color:[^}]*background:/s.test(intentCss));
     t('Intent OS token and preference fields have light-mode surfaces',
       /:root\[data-theme='light'\] \.ios-token-flow > label,[\s\S]*:root\[data-theme='light'\] \.ios-field select/.test(intentCss));
+
+    /* ---------------- 5b'. the /intent AI surface survives BOTH themes ---- */
+    /*
+     * Three reports about /intent:
+     *   «در تم روشن استایل هوش مصنوعی بخصوص باکس‌ها خیلی زشته»
+     *   «باکسی که لوگو داخلش بالای صفحه در زاویه … از صفحه زده بیرون»
+     *   «در منو عملیات، گزینه‌ها فاصله رعایت نشده و درهم فرو رفته»
+     *
+     * All three are invisible to a render test — the component mounts, React
+     * is happy, the build is green, and in the DARK theme every one of them
+     * looks correct. Only the stylesheet can show them.
+     *
+     * The root cause of the first was a claim in trench-agent.css that "no
+     * light overrides exist on purpose", while intent-ai-os.css shipped
+     * partial `:root[data-theme='light'] .iaos-*` rules that OUT-SPECIFY the
+     * trench rules (`:root[data-theme='light'] .iaos-bubble` = 0-3-0 vs
+     * `.tag-page .iaos-bubble` = 0-2-0). The page flipped white, the
+     * trench-only classes stayed black, and `--tag-text: #f4f4f6` became
+     * near-white text on a near-white canvas.
+     */
+    const trench = read('src/styles/trench-agent.css');
+    const aiOs = read('src/styles/intent-ai-os.css');
+    /* Last match wins: several light rules target the same selector and CSS
+       resolves them by source order, so asserting on the first one would
+       happily pass while the browser paints something else. */
+    const lastBlock = (start, src) => {
+      const at = src.lastIndexOf(start);
+      return at < 0 ? '' : src.slice(at, src.indexOf('}', at));
+    };
+
+    t('the trench skin re-declares its text token for the light theme',
+      /:root\[data-theme='light'\] \.iaos-page\.tag-page\s*\{[^}]*--tag-text:\s*#0e1729/.test(trench));
+    t('the trench tab bar has a light surface',
+      /:root\[data-theme='light'\] \.tag-tabbar\s*\{[^}]*background:\s*rgba\(255, 255, 255/.test(trench));
+    t('the trench rows/cards do not paint near-white text in light mode',
+      /:root\[data-theme='light'\] \.tag-page \.iaos-title-copy h1\s*\{[^}]*color:\s*var\(--tag-text\)/.test(trench));
+
+    /* The logo tile: it must be a fixed-size box the header lays out around,
+       and its plate must be repaintable — `fill` as a presentation attribute
+       loses to any CSS rule, which is what makes the light tile white. */
+    const intentUi = read('src/components/IntentAIUnified.jsx');
+    t('the AI logo plate is a classed element', intentUi.includes('className="iaos-logo-plate"'));
+    t('the light theme repaints the logo plate instead of leaving it black',
+      /:root\[data-theme='light'\] \.iaos-logo-plate\s*\{[^}]*fill:\s*#ffffff/.test(trench));
+    t('the logo wrapper is pinned so the header cannot overflow the shell',
+      /\.tag-page \.iaos-mark\.iaos-mark-logo\s*\{[^}]*flex: 0 0 auto/.test(trench));
+    t('the header title is the only part allowed to shrink',
+      /\.tag-page \.iaos-title\s*\{[^}]*min-width: 0/.test(trench)
+        && /\.tag-page \.iaos-header-status\s*\{[^}]*flex: 0 0 auto/.test(trench));
+
+    /* Operations panel: the cards were pressed together because the grid had
+       no flex basis inside a height-capped flex column, and — in light mode —
+       because card and panel were within 3/255 of the same colour. */
+    t('operation cards are separated by more than a hairline',
+      /\.iaos-ops-grid\s*\{[^}]*gap:\s*12px/.test(aiOs));
+    t('the operations grid takes the space the panel actually leaves it',
+      /\.iaos-ops-grid\s*\{[^}]*flex: 1 1 auto/.test(aiOs));
+    const lightPanel = lastBlock(":root[data-theme='light'] .iaos-panel {", aiOs);
+    const lightBoxes = lastBlock(":root[data-theme='light'] .iaos-ops-card,", aiOs);
+    t('the light panel is paper, not the same white as the cards on it',
+      lightPanel.includes('#edf1f8') && !lightPanel.includes('rgba(248, 250, 252'));
+    t('the light boxes are white, bordered and lifted off that paper',
+      lightBoxes.includes('background: #ffffff')
+        && lightBoxes.includes('border-color: rgba(15, 23, 42, .09)')
+        && lightBoxes.includes('box-shadow'));
+    t('the selected operations tab is not styled like an unselected one',
+      /:root\[data-theme='light'\] \.iaos-ops-cat\.is-on/.test(aiOs));
   }
 
   /* ------------------ 5c. execution core v2 is really wired -------------- */

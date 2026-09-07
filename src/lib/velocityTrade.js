@@ -56,9 +56,10 @@ let envReady = false;
 const OWN_ERROR_CODES = new Set(['PROVIDER_UNAVAILABLE', 'WALLET_NOT_CONNECTED', 'TX_TOO_LARGE', 'CANNOT_SIGN', 'NO_SIGNATURE', 'NO_POSITION', 'USER_REJECTED']);
 
 /** Build an error that carries a stable code + a human-readable sentence. */
-function velocityError(code, message, cause) {
+function velocityError(code, message, cause, detail) {
   const err = new Error(message, cause === undefined ? undefined : { cause });
   err.code = code;
+  if (detail !== undefined) err.detail = detail;
   return err;
 }
 
@@ -160,6 +161,61 @@ function withTimeout(promise, ms, action) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * Solana's simulation logs → a stable FBT code. `insufficient lamports` / rent
+ * means the wallet has no SOL for fees; a failed token debit or Velocity's
+ * `InsufficientCollateral` (Anchor error 6001 / custom error 0x1) means the
+ * USDT side. Anything unrecognised stays null and the caller falls back to a
+ * generic SIMULATION_FAILED.
+ */
+function classifySolanaSimulation(err) {
+  const hay = `${String(err?.message || '')}\n${(err?.logs || []).join('\n')}`.toLowerCase();
+  if (/(insufficient lamports|insufficient funds for rent)/.test(hay)) return 'NO_GAS';
+  if (/(attempt to debit an account but found no record of a prior credit|insufficient collateral|error number: 6001|error code: insufficientcollateral)/.test(hay)) return 'INSUFFICIENT_BALANCE';
+  if (/custom program error: 0x1\b/.test(hay)) return 'INSUFFICIENT_BALANCE';
+  if (/insufficient funds/.test(hay)) return 'NO_GAS';
+  return null;
+}
+
+/** Read the wallet's native SOL and its Velocity quote (USDT) token balance in
+    one pass, so a balance problem is reported BEFORE any signature is asked
+    for. Never throws: an unreadable balance is null and the caller decides
+    whether that blocks the trade. */
+async function readVelocityBalances(sdk, ctx) {
+  const { PublicKey } = sdk;
+  const quoteMint = sdk.getConfig().QUOTE_MINT_ADDRESS;
+  const out = { solLamports: null, quoteRaw: null };
+  try {
+    const lamports = await ctx.connection.getBalance(ctx.authority, 'confirmed');
+    out.solLamports = Number(lamports ?? 0);
+  } catch { /* an unreadable SOL balance is not a block by itself */ }
+  try {
+    const rows = await ctx.connection.getParsedTokenAccountsByOwner(
+      ctx.authority,
+      { mint: new PublicKey(quoteMint) },
+      'confirmed'
+    );
+    const sum = rows.value.reduce(
+      (acc, row) => acc + BigInt(row.account?.data?.parsed?.info?.tokenAmount?.amount || 0),
+      0n
+    );
+    out.quoteRaw = sum;
+  } catch { /* an unreadable USDT balance is not a block by itself */ }
+  return out;
+}
+
+/** Every management transaction still pays Solana fees in SOL; refuse to walk
+    the user into a signature when the wallet provably has none. Unreadable =
+    not a block. */
+async function ensureSolForFees(ctx) {
+  let lamports = null;
+  try { lamports = await ctx.connection.getBalance(ctx.authority, 'confirmed'); } catch { return; }
+  if (lamports == null) return;
+  if (Number(lamports) === 0) {
+    throw velocityError('NO_GAS', 'No SOL in the wallet to pay Solana network fees. Add a small amount of SOL and try again.', null, { solLamports: 0 });
+  }
+}
+
 const SOL_RPC = (
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_SOLANA_RPC || import.meta.env.VITE_SOLANA_RPC_URL))
   || (typeof process !== 'undefined' && process.env && (process.env.VITE_SOLANA_RPC || process.env.SOLANA_RPC_URL))
@@ -194,10 +250,25 @@ async function signWith(signing, tx) {
   if (signing.kind === 'mwa') {
     const feature = signing.provider.features?.['solana:signAndSendTransaction'];
     if (!feature) throw Object.assign(new Error('CANNOT_SIGN'), { code: 'CANNOT_SIGN' });
-    const results = await feature.signAndSendTransaction({
-      account: mwaAccountInfo(), transaction: tx.serialize(), chain: 'solana:mainnet',
-      options: { commitment: 'confirmed', skipPreflight: false, maxRetries: 3 }
-    });
+    let results;
+    try {
+      results = await feature.signAndSendTransaction({
+        account: mwaAccountInfo(), transaction: tx.serialize(), chain: 'solana:mainnet',
+        options: { commitment: 'confirmed', skipPreflight: false, maxRetries: 3 }
+      });
+    } catch (e) {
+      if (/reject|denied|cancel|4001/i.test(String(e?.message))) {
+        throw Object.assign(new Error('USER_REJECTED'), { code: 'USER_REJECTED' });
+      }
+      /* MWA simulates before broadcasting (skipPreflight: false): a refusal
+         here is the SAME simulation rejection the injected-wallet path sees —
+         surface it as the real reason (no SOL / no USDT), not a raw string. */
+      const mapped = classifySolanaSimulation(e);
+      if (mapped) {
+        throw velocityError(mapped, `The Solana network rejected this transaction in simulation: ${String(e?.message || e).slice(0, 200)}`, e);
+      }
+      throw e;
+    }
     const signature = results?.[0]?.signature;
     if (!(signature instanceof Uint8Array)) throw Object.assign(new Error('NO_SIGNATURE'), { code: 'NO_SIGNATURE' });
     return { tx, signature: base58(signature) };
@@ -299,11 +370,29 @@ async function sendInstructions(sdk, ctx, instructions) {
   try {
     await ctx.connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
     await ctx.connection.confirmTransaction({ signature, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight }, 'confirmed');
-  } catch {
-    /* MWA already broadcasts; confirm the signature directly. */
-    await ctx.connection.confirmTransaction(signature, 'confirmed').catch(() => {});
+    return signature;
+  } catch (sendErr) {
+    /* skipPreflight: false means the network simulated first. A refusal here
+       must surface with the RIGHT code — a wallet with no USDT/SOL gets
+       "insufficient funds", never a phantom signature or a generic
+       "simulation rejected". */
+    const mapped = classifySolanaSimulation(sendErr);
+    if (mapped) {
+      throw velocityError(mapped, `The Solana network rejected this transaction in simulation: ${String(sendErr?.message || sendErr).slice(0, 200)}`, sendErr, { signature });
+    }
+    /* MWA already broadcast inside signWith(); a non-simulation send failure
+       just means the signature is already in flight — confirm it directly. */
+    try {
+      await ctx.connection.confirmTransaction({ signature, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight }, 'confirmed');
+      return signature;
+    } catch (confirmErr) {
+      const mapped2 = classifySolanaSimulation(confirmErr);
+      if (mapped2) {
+        throw velocityError(mapped2, `The Solana network rejected this transaction: ${String(confirmErr?.message || confirmErr).slice(0, 200)}`, confirmErr, { signature });
+      }
+      throw asProviderError('send', confirmErr);
+    }
   }
-  return signature;
 }
 
 /**
@@ -348,6 +437,40 @@ export async function openVelocityPosition({ wallet, marketIndex, side, notional
   try {
     const referrer = await fbtReferrerInfo(sdk, ctx.connection);
 
+    /* 0) pre-flight balance check — BEFORE the first signature. Velocity
+       collateral is USDT, and every transaction still pays Solana fees in SOL.
+       A wallet that cannot fund the order must be told so up front, with the
+       real numbers, instead of being walked through account-creation and
+       deposit signatures only to hit a generic "simulation rejected" on the
+       final order. */
+    const balances = await readVelocityBalances(sdk, ctx);
+    let existingQuote = 0;
+    try {
+      if (ctx.userExists && typeof ctx.client.getQuoteAssetTokenAmount === 'function') {
+        existingQuote = ctx.client.getQuoteAssetTokenAmount().toNumber() / 1_000_000;
+      }
+    } catch { /* first account: existing stays 0 */ }
+    const needUsdt = Math.max(0, deposit - existingQuote);
+    if (needUsdt >= 1 && balances.quoteRaw != null) {
+      const needRaw = BigInt(Math.max(0, Math.round(needUsdt * 1_000_000)));
+      if (balances.quoteRaw < needRaw) {
+        throw velocityError(
+          'INSUFFICIENT_BALANCE',
+          `Insufficient USDT: this order needs ${needUsdt.toFixed(2)} USDT on top of the ${existingQuote.toFixed(2)} USDT already in the Velocity account, but the wallet holds ${(Number(balances.quoteRaw) / 1e6).toFixed(2)} USDT.`,
+          null,
+          { quoteUsdt: Number(balances.quoteRaw) / 1e6, needUsdt, existingQuote, solLamports: balances.solLamports }
+        );
+      }
+    }
+    if (balances.solLamports === 0) {
+      throw velocityError(
+        'NO_GAS',
+        'No SOL in the wallet to pay Solana network fees (and account rent on the first trade). Add a small amount of SOL and try again.',
+        null,
+        { solLamports: 0, quoteUsdt: balances.quoteRaw != null ? Number(balances.quoteRaw) / 1e6 : null }
+      );
+    }
+
     /* 1) first-time Velocity user account (records FBT as the referrer when it
           has one on chain) */
     if (!ctx.userExists) {
@@ -388,17 +511,10 @@ export async function openVelocityPosition({ wallet, marketIndex, side, notional
        twice the margin; compare against what the account already holds. The
        ATA is the USDT one — Velocity's quote market, never USDC. */
     if (deposit > 0) {
-      let existing = 0;
-      try {
-        if (ctx.userExists && typeof ctx.client.getQuoteAssetTokenAmount === 'function') {
-          existing = ctx.client.getQuoteAssetTokenAmount().toNumber() / 1_000_000;
-        }
-      } catch { /* first account: existing stays 0 */ }
-      const need = Math.max(0, deposit - existing);
-      if (need >= 1) {
+      if (needUsdt >= 1) {
         const quoteMint = sdk.getConfig().QUOTE_MINT_ADDRESS;
         const ata = getAssociatedTokenAddressSync(new PublicKey(quoteMint), ctx.authority);
-        const ix = await ctx.client.getDepositInstruction(new BN(Math.round(need * 1_000_000)), 0, ata, 0, false, ctx.userExists);
+        const ix = await ctx.client.getDepositInstruction(new BN(Math.round(needUsdt * 1_000_000)), 0, ata, 0, false, ctx.userExists);
         txs.push({ kind: 'deposit', signature: await sendInstructions(sdk, ctx, [ix]) });
       }
     }
@@ -440,6 +556,7 @@ export async function closeVelocityPosition({ wallet, marketIndex }) {
     const pos = user?.getPerpPosition ? user.getPerpPosition(Number(marketIndex)) : null;
     const amount = pos?.baseAssetAmount;
     if (!amount || amount.isZero()) throw Object.assign(new Error('NO_POSITION'), { code: 'NO_POSITION' });
+    await ensureSolForFees(ctx);
     const isLong = !amount.isNeg();
     /* cancel any resting TP/SL triggers so a closed position can't be
        resurrected by a stale reduce-only order */
@@ -482,6 +599,7 @@ export async function setVelocityTpSl({ wallet, marketIndex, tpPrice = null, slP
     const pos = user?.getPerpPosition ? user.getPerpPosition(Number(marketIndex)) : null;
     const amount = pos?.baseAssetAmount;
     if (!amount || amount.isZero()) throw Object.assign(new Error('NO_POSITION'), { code: 'NO_POSITION' });
+    await ensureSolForFees(ctx);
     const isLong = !amount.isNeg();
     const size = amount.abs();
 
@@ -533,6 +651,7 @@ export async function cancelVelocityOrders({ wallet, marketIndex }) {
   const { MarketType } = sdk;
   const ctx = await createVelocityClient(sdk, wallet);
   try {
+    await ensureSolForFees(ctx);
     const ix = await ctx.client.getCancelOrdersIx(MarketType.PERP, Number(marketIndex), null, 0);
     if (!ix) return { marketIndex: Number(marketIndex), signature: null, nothingToCancel: true };
     const signature = await sendInstructions(sdk, ctx, [ix]);
