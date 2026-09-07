@@ -37,6 +37,12 @@ export const INTENT_TYPES = Object.freeze([
   'BUY',
   'SELL',
   'INVESTMENT_PLAN',
+  /* A profit GOAL («سودم دو برابر شود») is not a page request and not a single
+     trade: it needs a target, a horizon, the live rates and a verdict. It gets
+     its own type so the compiler — not a link — answers it. */
+  'GOAL_PLAN',
+  /* Arming / stopping the autonomy loop itself. */
+  'AUTONOMY',
   'DCA',
   'GOAL',
   'FARM',
@@ -250,6 +256,39 @@ const INTENT_PATTERNS = [
       /موجودی.*چقدر|چقدر.*موجودی/i,
       /balance|how much.*have|how many.*have|my balance/i,
       /کیف پول.*موجودی|موجودی.*کیف/i
+    ]
+  },
+  {
+    /*
+     * «سودم دو برابر شود» used to score as YIELD_DISCOVERY, whose only answer
+     * was a route chip — the user's exact complaint: «وقتی میگم سود زیاد فقط
+     * میبره صفحه سهام». A named multiple is a GOAL_PLAN: it gets arithmetic
+     * against live rates and an executable plan.
+     */
+    type: 'GOAL_PLAN',
+    weight: 9,
+    patterns: [
+      /سودم?[\s‌]*(?:دو|۲|2|سه|۳|3|[\d۰-۹]+)\s*برابر/i,
+      /(?:دو|۲|2|سه|۳|3|[\d۰-۹]+)\s*برابر\s*(?:شود|شه|بشه|کن|کنم|می‌خوام|میخوام)/i,
+      /برابر\s*(?:شدن|بکن|کن)\s*سود/i,
+      /double\s+(?:my\s+)?(?:profit|money|capital|portfolio)/i,
+      /(?:2x|3x|two\s*times|three\s*times)\s+(?:my\s+)?(?:profit|money|capital)/i,
+      /سودم\s*را?\s*(?:دو|سه|[\d۰-۹]+)\s*برابر/i,
+      /رشد\s*(?:دو|سه|[\d۰-۹]+)\s*برابری/i
+    ]
+  },
+  {
+    type: 'AUTONOMY',
+    weight: 8,
+    patterns: [
+      /اتوماسیون(?:م)?\s*(?:رو|را)?\s*(?:روشن|فعال|استارت|اجرا)/i,
+      /(?:روشن|فعال|استارت)\s*(?:کن)?\s*اتوماسیون/i,
+      /ربات\s*(?:معامله|ترید|خودکار)/i,
+      /خودت\s*(?:بخر|بفروش|ترید کن|معامله کن)/i,
+      /start\s+(?:the\s+)?(?:bot|automation|auto\s*trad)/i,
+      /stop\s+(?:the\s+)?(?:bot|automation)/i,
+      /اتوماسیون\s*(?:رو)?\s*(?:بند|خاموش|متوقف)/i,
+      /حالت\s*(?:کاغذی|پِیپر|paper)/i
     ]
   },
   {
@@ -619,7 +658,8 @@ const NAV_TARGETS = [
   { route: '/farm', keywords: ['فارم', 'farm', 'استخر'], type: 'FARM' },
   { route: '/wallet', keywords: ['کیف پول', 'والت', 'wallet'], type: 'NAVIGATION' },
   { route: '/portfolio', keywords: ['پرتفوی', 'portfolio', 'سبد'], type: 'PORTFOLIO_ANALYSIS' },
-  { route: '/market', keywords: ['بازار', 'market'], type: 'MARKET_ANALYSIS' },
+  /* The market screen is the root route — `/market` is not in the router. */
+  { route: '/', keywords: ['بازار', 'market'], type: 'MARKET_ANALYSIS' },
   { route: '/swap', keywords: ['سواپ', 'swap'], type: 'SWAP' },
   { route: '/solana', keywords: ['سواپ سولانا', 'solana swap'], type: 'SWAP' },
   { route: '/bridge', keywords: ['بریج', 'bridge', 'پل'], type: 'BRIDGE' },
@@ -641,7 +681,12 @@ const NAV_TARGETS = [
   { route: '/rewards', keywords: ['امتیاز', 'rewards', 'پاداش'], type: 'REWARDS' },
   { route: '/intent', keywords: ['اینتنت', 'intent os'], type: 'INTENT_OS' },
   { route: '/buy', keywords: ['خرید و فروش'], type: 'BUY' },
-  { route: '/calm', keywords: ['آرامش', 'calm', 'relax'], type: 'OPEN_CALM' }
+  /* No `/calm` route exists in the router (App.jsx) — the old entry sent the
+     user to the catch-all, which silently renders Market, so «آرامش را باز
+     کن» looked like a broken button. Calm is answered in the chat itself
+     (humanResponse: `playing: true`), so this target has no route on
+     purpose; chatRoutes.isRoutedPath is what now enforces that. */
+  { route: null, keywords: ['آرامش', 'calm', 'relax'], type: 'OPEN_CALM' }
 ];
 
 export function extractNavigationIntent(text) {
@@ -897,6 +942,38 @@ function extractEntities(text, context = {}) {
     deep.amountSymbol = aliasToken(amountMatch[2]) || amountMatch[2];
   }
 
+  /*
+   * The multiplier in «سودم دو برابر شود» / "double my profit" / "3x". Persian
+   * digits and the Persian words are both handled, because the goal compiler
+   * needs a NUMBER: a target it has to guess is a target it will get wrong.
+   */
+  const FA_DIGITS = { '۰': 0, '۱': 1, '۲': 2, '۳': 3, '۴': 4, '۵': 5, '۶': 6, '۷': 7, '۸': 8, '۹': 9 };
+  const FA_WORDS = { 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'ده': 10 };
+  const toNumber = (token) => {
+    const t = String(token || '').trim();
+    if (!t) return null;
+    const ascii = t.replace(/[۰-۹]/g, (d) => String(FA_DIGITS[d]));
+    if (/^\d+(?:\.\d+)?$/.test(ascii)) return Number(ascii);
+    return FA_WORDS[t] ?? null;
+  };
+  const multipleMatch = raw.match(/([\d۰-۹]+(?:\.\d+)?|دو|سه|چهار|پنج|ده)\s*برابر/)
+    || raw.match(/(?:double|2x|3x|two\s*times|three\s*times)/i);
+  if (multipleMatch && !deep.goalMultiple) {
+    const literal = multipleMatch[0].match(/([\d۰-۹]+(?:\.\d+)?|دو|سه|چهار|پنج|ده)/);
+    const value = literal
+      ? toNumber(literal[1])
+      : (/3x|three/i.test(multipleMatch[0]) ? 3 : 2);
+    if (Number.isFinite(value) && value > 1) deep.goalMultiple = value;
+  }
+  const horizonMatch = raw.match(/(\d+|۳۰|۶۰|۹۰)\s*(?:روز|day)/i)
+    || raw.match(/(\d+|[\d۰-۹]+)\s*(?:ماه|month)/i);
+  if (horizonMatch && !deep.horizonDays) {
+    const n = toNumber(horizonMatch[1]);
+    if (Number.isFinite(n) && n > 0) {
+      deep.horizonDays = /ماه|month/i.test(horizonMatch[0]) ? n * 30 : n;
+    }
+  }
+
   const dollarMatch = raw.match(/(?:\$|usd|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)/i);
   if (dollarMatch && !deep.amountUsd) {
     deep.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
@@ -1006,6 +1083,9 @@ export const ACCEPTANCE_TESTS = Object.freeze([
    */
   { input: 'پرتفوی', expected: 'PORTFOLIO_ANALYSIS' },
   { input: 'سود', expected: 'YIELD_DISCOVERY' },
+  { input: 'سودم دو برابر شود', expected: 'GOAL_PLAN' },
+  { input: 'double my profit', expected: 'GOAL_PLAN' },
+  { input: 'اتوماسیون را روشن کن', expected: 'AUTONOMY' },
   { input: 'تحلیل', expected: 'MARKET_ANALYSIS' },
   { input: 'کیف پول من', expected: 'WALLET_BALANCE' },
   { input: 'استراتژی', expected: 'STRATEGY' },

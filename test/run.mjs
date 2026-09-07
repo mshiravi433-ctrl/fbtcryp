@@ -38,6 +38,38 @@ import './intent-ai/ci-brain-turns-probe.mjs';
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
 import './intent-ai/ops-i18n-probe.mjs';
+/*
+ * Autonomy core — the layer that turns "the assistant links you to a page" into
+ * "the assistant executes". Three suites, all against the real source:
+ *
+ *   execution  every venue (swap / lending / the fork-probed Base USDC pool /
+ *              Solana perps / tokenised equities) reaches CONFIRMED only through
+ *              a receipt, and a matched venue with no driver fails by name at
+ *              that venue instead of silently falling through to the swapper —
+ *              which is the exact bug behind «فقط میبره صفحه مورد نظر».
+ *   engine     the goal compiler's arithmetic (2× in a year needs 100% APY, the
+ *              best live rate is what it is) and the loop: protections before
+ *              entries, one strategy object shared with the backtester, and a
+ *              mode that cannot sign never reporting a fill.
+ *   routes     every route the AI emits lands on a mounted route or an in-page
+ *              target — the contract whose absence made «باز کن» a dead button.
+ */
+import './intent-ai/autonomy-execution-probe.mjs';
+import './intent-ai/autonomy-engine-probe.mjs';
+import './intent-ai/chat-route-contract-probe.mjs';
+/* The pipeline seam the unit probes above cannot see: the goal compiler
+   refuses rather than guesses, so a wiring gap UPSTREAM of it surfaces as
+   "every goal card refuses". This drives the real chain — understandIntent →
+   executeIntentTools → buildHumanResponse → planFromIntent — and fails if the
+   live rates do not actually arrive at the compiler. */
+import './intent-ai/goal-pipeline-probe.mjs';
+/* The seam between the app's real trading primitives and the venue
+   executors. browserDrivers.js was build-verified and never executed; if a
+   method name drifts on either side every venue fails at runtime with
+   VENUE_DRIVER_MISSING while the rest of the suite stays green, because
+   autonomy-execution-probe drives the executors with fakes that already
+   agree. This pins the real contract on both ends. */
+import './intent-ai/autonomy-drivers-probe.mjs';
 /* Upgrade 10 — the Financial OS layer: financial state, decision engine,
    council, guardians, permissions, kill switches, memory, scenarios, twin,
    monitoring and replanning. It belongs in `npm test` because the failures it
@@ -935,6 +967,47 @@ npx(['vite', 'build', '-c', 'test/vite.intentai.mjs', '--logLevel', 'error']);
 installDom();
 const { run: runIntentAIPanel } = await import('./.out/intentai/intent-ai-panel-probe.js');
 report('intent AI panel (guided flow · interactive confirm · real execution)', await runIntentAIPanel(document.getElementById('r')));
+
+/*
+ * The two autonomy cards, RENDERED. The screens suite proves IntentAIUnified
+ * mounts; it cannot reach these cards, because they only appear once a message
+ * carries a goalRequest / autonomyRequest. A throw in either one would take
+ * the whole chat screen down the first time a user asked «سودم دو برابر شود»,
+ * which is the feature this layer exists for — so both are mounted with a
+ * real compiled plan and a real engine, and their buttons are clicked.
+ */
+console.log('\n▸ building autonomy cards suite…');
+npx(['vite', 'build', '-c', 'test/vite.autonomycards.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runAutonomyCards } = await import('./.out/autonomycards/autonomy-cards-probe.js');
+report('autonomy cards (goal plan · automation loop, mounted and clicked)', await runAutonomyCards(document.getElementById('r')));
+
+/*
+ * The reported dead button: «می‌زنم مرکز عملیات و گزینه باز کردن را می‌زنم کار
+ * نمی‌کنه». The human layer emitted /intent?tab=ops, the chat navigated there,
+ * and the page never read location.search — the URL changed and the screen
+ * did not. chat-route-contract pins the RESOLVER; only mounting the real page
+ * at that URL can prove the wiring behind it.
+ */
+console.log('\n▸ building ops hand-off suite…');
+npx(['vite', 'build', '-c', 'test/vite.opshandoff.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runOpsHandoff } = await import('./.out/opshandoff/ops-handoff-probe.js');
+report('ops hand-off (/intent?tab=ops opens the real operations panel)', await runOpsHandoff(document.getElementById('r')));
+
+/*
+ * Typing a goal into the REAL page must produce a goal card. Every link is
+ * covered elsewhere — the parser, the human layer, the compiler, the card —
+ * but the glue lives in IntentAIUnified, and that is exactly where this branch
+ * kept finding bugs: logic correct, wiring broken, invisible to every unit
+ * probe. This one found a self-cancelling effect that left the card spinning
+ * forever.
+ */
+console.log('\n▸ building goal chat suite…');
+npx(['vite', 'build', '-c', 'test/vite.goalchat.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runGoalChat } = await import('./.out/goalchat/goal-chat-probe.js');
+report('goal chat («سودم ۲ برابر شود» produces a real plan card)', await runGoalChat(document.getElementById('r')));
 
 /* ------------------- 4b2. Phase 201-207 upgrades (mounted) ------------------- */
 /*

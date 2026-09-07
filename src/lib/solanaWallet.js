@@ -718,3 +718,84 @@ function bytesToBase58(bytes) {
   for (let i = digits.length - 1; i >= 0; i -= 1) out += alphabet[digits[i]];
   return out;
 }
+
+/**
+ * Prove a Solana signature actually landed, and say which slot it landed in.
+ * ---------------------------------------------------------------------------
+ * This did not exist. The Solana swap and perp paths broadcast a transaction,
+ * read the signature back, and called that success — `signAndSendSolana`
+ * resolves when the WALLET accepts the send, not when a validator includes it.
+ * A dropped or reverted trade therefore reported exactly like a filled one.
+ *
+ * The Intent AI execution runtime refuses to report CONFIRMED without a
+ * receipt (executionStateMachine.isSuccessfulReceipt wants a slot or a
+ * confirmation count), so the autonomy layer needs a real reader. This is that
+ * reader: it polls getSignatureStatuses until the node answers, and returns the
+ * slot, the confirmation count and the transaction error if there was one.
+ *
+ * Honest failure is the whole point: a timeout is `{ ok: false,
+ * code: 'TIMEOUT' }`, never a synthesised receipt. The caller then reports
+ * CONFIRMATION_FAILED, which is the truth about "we sent it and could not prove
+ * it landed".
+ */
+export async function confirmSolanaSignature(signature, {
+  timeoutMs = 45_000,
+  intervalMs = 1500,
+  commitment = 'confirmed',
+  now = () => Date.now(),
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+} = {}) {
+  const sig = String(signature || '').trim();
+  if (!sig) return { ok: false, code: 'NO_SIGNATURE' };
+  let connection;
+  try {
+    const { Connection } = await import('@solana/web3.js');
+    connection = new Connection(await solanaRpcUrl(), commitment);
+  } catch (err) {
+    return { ok: false, code: 'NO_RPC', detail: String(err?.message || '').slice(0, 140) };
+  }
+
+  const deadline = now() + Math.max(1000, Number(timeoutMs) || 45_000);
+  let lastCode = 'TIMEOUT';
+  while (now() < deadline) {
+    try {
+      const res = await connection.getSignatureStatuses([sig], { searchTransactionHistory: true });
+      const value = res?.value?.[0] || null;
+      if (value) {
+        const status = String(value.confirmationStatus || '').toLowerCase();
+        const err = value.err ?? null;
+        const settled = status === 'confirmed' || status === 'finalized';
+        if (err) {
+          return {
+            ok: false,
+            code: 'TRANSACTION_ERROR',
+            signature: sig,
+            slot: Number.isFinite(Number(value.slot)) ? Number(value.slot) : null,
+            confirmations: Number.isFinite(Number(value.confirmations)) ? Number(value.confirmations) : null,
+            err
+          };
+        }
+        if (settled) {
+          return {
+            ok: true,
+            code: 'CONFIRMED',
+            signature: sig,
+            slot: Number.isFinite(Number(value.slot)) ? Number(value.slot) : null,
+            confirmations: Number.isFinite(Number(value.confirmations)) ? Number(value.confirmations) : 1,
+            confirmationStatus: status,
+            err: null
+          };
+        }
+        lastCode = 'PENDING';
+      } else {
+        /* A null status right after a send is normal — the node has not seen it
+           yet. Keep polling until the deadline rather than calling it failed. */
+        lastCode = 'NOT_FOUND_YET';
+      }
+    } catch (err) {
+      lastCode = `RPC_ERROR:${String(err?.message || '').slice(0, 60)}`;
+    }
+    await sleep(Math.max(250, Number(intervalMs) || 1500));
+  }
+  return { ok: false, code: lastCode, signature: sig };
+}

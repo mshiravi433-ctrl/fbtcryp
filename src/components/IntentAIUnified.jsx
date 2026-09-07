@@ -80,6 +80,47 @@ import {
 } from '../lib/intent-ai/humanResponse.js';
 import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
 import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
+import { resolveChatRoute } from '../lib/intent-ai/autonomy/chatRoutes.js';
+import { buildAutonomyDrivers, warmAutonomyDrivers } from '../lib/intent-ai/autonomy/browserDrivers.js';
+import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
+import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
+import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
+import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
+import { getOhlc } from '../lib/api';
+
+/*
+ * Candles for the autonomy loop and its backtester.
+ *
+ * The loop is only as honest as the data it trades on, so this goes through the
+ * same OHLC reader the chart uses (lib/api.getOhlc) — which deliberately has no
+ * offline fallback, because a candle with an invented high/low is exactly the
+ * data a backtest must not be measured on. No candles means no backtest number,
+ * and the card says so instead of showing a flattering zero-trade result.
+ *
+ * The symbol → id map is the small set this app actually trades; an unknown
+ * symbol resolves through the id itself, and a miss is a thrown error the
+ * caller turns into "not enough data", never a silent empty run.
+ */
+const COIN_IDS = Object.freeze({
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', USDC: 'usd-coin', USDT: 'tether',
+  BNB: 'binancecoin', ARB: 'arbitrum', OP: 'optimism', MATIC: 'matic-network',
+  AVAX: 'avalanche-2', DAI: 'dai', LINK: 'chainlink', TON: 'the-open-network'
+});
+
+async function fetchCandlesFor(asset, { days = 30 } = {}) {
+  const symbol = String(asset || '').toUpperCase();
+  const id = COIN_IDS[symbol] || String(asset || '').toLowerCase();
+  if (!id) return [];
+  const rows = await getOhlc(id, days, 'usd');
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => ({ time: r.t ?? r.time ?? null, open: r.o, high: r.h, low: r.l, close: r.c }))
+    .filter((r) => Number.isFinite(r.close) && Number.isFinite(r.high) && Number.isFinite(r.low));
+}
+
+const usdFmt = (v) => (Number.isFinite(Number(v))
+  ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  : '—');
 import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 /*
@@ -293,12 +334,27 @@ const ConversationRow = memo(function ConversationRow({
   onMonitorAction,
   onMonitorOpportunity,
   onFeedback,
-  onOpenRoute
+  onOpenRoute,
+  onGoalExecute,
+  autonomyEngine,
+  autonomyStrategies,
+  onAutonomyArm,
+  onAutonomyDisarm,
+  onAutonomyMode,
+  onAutonomyStart,
+  onAutonomyStop,
+  onAutonomyTick
 }) {
   const [fbSent, setFbSent] = useState(null);
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
   const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
+  /* Only the actions that actually name a destination can be chips. Keeping
+     the filter here (rather than trusting every payload to be uniform) is
+     what stops one route-less action from hiding the whole row. */
+  const actionRoutes = Array.isArray(m.actions)
+    ? m.actions.filter((a) => a && typeof a.route === 'string' && a.route.trim())
+    : [];
   const showFeedback = m.role === 'ai' && (m.kind === 'assistant' || m.kind === 'result') && m.intentId && !fbSent;
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
@@ -340,10 +396,18 @@ const ConversationRow = memo(function ConversationRow({
           <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
         ) : null}
         {/* Route chips («فارم», «بازار», «نمودار کامل»…) built by the human
-           layer from real results — one tap navigates, no re-typing. */}
-        {Array.isArray(m.actions) && m.actions.length && m.actions.every((a) => a && a.route) ? (
+           layer from real results — one tap navigates, no re-typing.
+
+           The gate used to be `m.actions.every(a => a.route)`: ONE action
+           without a route hid the ENTIRE row, so a payload like
+           [{ id:'copy-tx' }, { id:'open-ops', route:'/intent?tab=ops' }]
+           rendered no buttons at all and both were dead. Filter instead of
+           all-or-nothing: every action that names a destination gets its
+           chip, and one that does not is dropped rather than taking its
+           neighbours down with it. */}
+        {actionRoutes.length ? (
           <div className="iaos-msg-actions" data-testid="intent-ai-msg-actions">
-            {m.actions.map((a) => (
+            {actionRoutes.map((a) => (
               <button
                 key={a.id || a.route}
                 type="button"
@@ -354,6 +418,31 @@ const ConversationRow = memo(function ConversationRow({
               </button>
             ))}
           </div>
+        ) : null}
+        {m.goalRequest ? (
+          <GoalPlanCard
+            plan={m.goalPlan}
+            capital={m.goalPlan?.capitalUsd}
+            locale={locale}
+            busy={Boolean(m.goalBusy)}
+            error={m.goalError || null}
+            onExecute={onGoalExecute ? (option) => onGoalExecute(m, option) : null}
+            onOpenRoute={onOpenRoute}
+          />
+        ) : null}
+        {m.autonomyRequest ? (
+          <AutonomyCard
+            strategies={autonomyStrategies}
+            engine={autonomyEngine}
+            locale={locale}
+            onArm={onAutonomyArm}
+            onDisarm={onAutonomyDisarm}
+            onMode={onAutonomyMode}
+            onStart={onAutonomyStart}
+            onStop={onAutonomyStop}
+            onTick={onAutonomyTick}
+            onOpenRoute={onOpenRoute}
+          />
         ) : null}
         {m.kind === 'monitor' && m.monitor ? (
           <MonitorCard monitor={m.monitor} onAction={onMonitorAction} locale={locale} />
@@ -1041,6 +1130,41 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [liveModuleServices, navigate, locale, currentPage]);
 
   const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
+
+  /*
+   * ── VENUE DRIVERS ──────────────────────────────────────────────────────
+   * The execution runtime used to receive swap-shaped hooks for every action,
+   * which is why a farm / lending / perp / equity request could only end in a
+   * link to its page. The drivers bind the app's OWN primitives for each venue
+   * (lib/swap.js, lib/lending.js, lib/defi/aaveV3Base.js, lib/velocityTrade.js,
+   * lib/solana.js) so the chat can actually execute, and they are warmed here —
+   * not at import time — so no probe or first paint pays for ethers.
+   */
+  const autonomyDriversRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await warmAutonomyDrivers();
+        if (cancelled) return;
+        autonomyDriversRef.current = buildAutonomyDrivers({
+          wallet,
+          solana: { connected: Boolean(solana?.address), address: solana?.address || null },
+          /* A lending plan is several signatures; the chat shows which one is
+             up. TOOL_COMPLETED is the existing event for "a unit of work
+             finished" — no new event is invented for this. */
+          onStep: (step) => busV6.emit(EVENTS_V6.TOOL_COMPLETED, { toolId: `lending.${step?.id || 'step'}`, step })
+        });
+      } catch {
+        /* A driver set that failed to warm leaves the venue executors to report
+           their own named failure — never a silent fallthrough to the swapper. */
+        autonomyDriversRef.current = null;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [wallet, solana?.address, solana?.available, solanaTick]);
+
+
   const solanaAddressLive = solana.address || solanaAddress();
   const evmConnected = Boolean(wallet?.isConnected && wallet?.address);
   const solanaConnected = Boolean(solanaAddressLive);
@@ -1892,6 +2016,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           opportunities: Array.isArray(osResult.human?.opportunities) ? osResult.human.opportunities : null,
           holdings: Array.isArray(osResult.human?.holdings) ? osResult.human.holdings : null,
           statusCode: osResult.human?.code || null,
+          /* A goal («سودم دو برابر شود») and an automation request travel with
+             the message; the bubble compiles the real plan / arms the loop from
+             them instead of the human layer guessing at live numbers it cannot
+             read synchronously. */
+          goalRequest: osResult.human?.goalRequest || null,
+          goalIntent: osResult.human?.goalRequest ? (osResult.intent || null) : null,
+          /* The tool payload travels WITH the request. The compiler reads the
+             live rates off it (`results.yieldOpportunities`); without it the
+             only honest verdict available is NO_LIVE_RATES, so every goal
+             card would refuse even on a network that had the data. */
+          goalResults: osResult.human?.goalRequest ? (osResult.data || null) : null,
+          autonomyRequest: osResult.human?.autonomyRequest || null,
           intentType: osResult.intent?.type || null,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
           missingInfo: (osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null) || u7qText,
@@ -2259,15 +2395,275 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setWalletSheetOpen(true);
   }, [rememberPending]);
 
+  /*
+   * Placement matters: this block reads `walletConnected`, `walletCanSign`,
+   * `aiContext` and `openWalletSheet`, and a hook's DEPENDENCY ARRAY is
+   * evaluated during render — so declaring it above those consts is a TDZ
+   * ReferenceError that takes the whole page down (the boot probe caught
+   * exactly that: "Cannot access 'walletConnected' before initialization").
+   * It sits after the last of them, before the JSX that consumes it.
+   */
+  /*
+   * ── AUTONOMY SURFACE ───────────────────────────────────────────────────
+   * The loop lives here, not in the message list: it is one engine per chat
+   * session, persisted through the same local-state helpers the rest of the OS
+   * uses, and every card reads the SAME instance so the numbers cannot drift.
+   */
+  const autonomyEngineRef = useRef(null);
+  const [autonomyEngine, setAutonomyEngine] = useState(null);
+  const [autonomyBusy, setAutonomyBusy] = useState(false);
+  const [, forceAutonomyRender] = useState(0);
+  const autonomyStrategies = useMemo(() => BUILTIN_STRATEGIES.map((strategy) => ({
+    ...strategy,
+    /* Every strategy is measured on real candles before it is offered. A
+       strategy with no backtest is not shown as if it had an edge. */
+    backtest: null
+  })), []);
+
+  useEffect(() => {
+    const engine = createAutonomyEngine({
+      mode: AUTONOMY_MODES.PAPER,
+      execute: async (action) => runExecutionPlan({
+        actions: [action],
+        hooks: buildBrowserHooks(wallet),
+        wallet: {
+          connected: walletConnected,
+          canSign: walletCanSign,
+          address: wallet?.address || null,
+          evmAddresses: aiContext.wallet?.evmAddresses,
+          chainId: wallet?.chainId || defaultChainId
+        },
+        drivers: autonomyDriversRef.current
+      }),
+      store: {
+        save: (state) => { try { localStorage.setItem('fbt.autonomy.state', JSON.stringify(state)); } catch { /* private mode */ } },
+        load: () => { try { return JSON.parse(localStorage.getItem('fbt.autonomy.state') || 'null'); } catch { return null; } }
+      }
+    });
+    let restored = null;
+    try { restored = JSON.parse(localStorage.getItem('fbt.autonomy.state') || 'null'); } catch { restored = null; }
+    if (restored && typeof restored === 'object') engine.restore(restored);
+    autonomyEngineRef.current = engine;
+    setAutonomyEngine(engine);
+  }, [wallet, walletConnected, walletCanSign, defaultChainId]);
+
+  const rerenderAutonomy = useCallback(() => forceAutonomyRender((v) => v + 1), []);
+
+  const setAutonomyMode = useCallback((mode) => {
+    autonomyEngineRef.current?.setMode(mode);
+    rerenderAutonomy();
+  }, [rerenderAutonomy]);
+
+  const startAutonomy = useCallback(() => { autonomyEngineRef.current?.start(); rerenderAutonomy(); }, [rerenderAutonomy]);
+  const stopAutonomy = useCallback(() => { autonomyEngineRef.current?.stop(); rerenderAutonomy(); }, [rerenderAutonomy]);
+
+  /*
+   * «اتوماسیون را متوقف کن» has to actually stop something.
+   *
+   * buildHumanResponse is synchronous by contract, so it cannot call the
+   * engine — it can only ask. Until this effect existed it asked and nobody
+   * listened: the bubble announced «اتوماسیون را متوقف کردم» in the past
+   * tense while the loop kept ticking. That is the worst shape of this bug,
+   * because the UI reads as done.
+   *
+   * Placed below startAutonomy/stopAutonomy on purpose. A dependency array is
+   * evaluated during render, so this block cannot sit above them — the same
+   * TDZ trap that took the whole screen down once already.
+   */
+  const lastStopMessageId = useRef(null);
+  useEffect(() => {
+    const pending = messages.find((m) => m.autonomyRequest?.wantsStop && m.id !== lastStopMessageId.current);
+    if (!pending) return;
+    lastStopMessageId.current = pending.id;
+    stopAutonomy();
+  }, [messages, stopAutonomy]);
+
+  const armAutomation = useCallback(async ({ strategy, asset, stakeUsd }) => {
+    const engine = autonomyEngineRef.current;
+    if (!engine) return;
+    setAutonomyBusy(true);
+    try {
+      /* Backtest on the same candles the page already has, so the number shown
+         next to the strategy is the number the loop will trade against. */
+      let backtest = null;
+      try {
+        const candles = await fetchCandlesFor(asset);
+        if (Array.isArray(candles) && candles.length > 40) {
+          backtest = backtestStrategy({ strategy, candles, initialUsd: 1000 });
+        }
+      } catch { backtest = null; }
+      engine.arm({ strategyId: strategy.id, strategy: { ...strategy, ...(backtest ? {} : {}) }, strategyTitle: strategy.title, asset, stakeUsd, backtest: backtest?.ok ? backtest : null });
+      engine.start();
+      rerenderAutonomy();
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: backtest?.ok
+          ? (locale.startsWith('fa')
+            ? `«${strategy.titleFa || strategy.title}» مسلح شد. بک‌تست روی ${backtest.candles} کندل واقعی: ${backtest.trades} معامله، بازدهی ${Number(backtest.returnPct).toFixed(2)}٪، بیشترین افت ${Number(backtest.maxDrawdownPct).toFixed(2)}٪. گذشته پیش‌بینی آینده نیست.`
+            : `"${strategy.title}" armed. Backtest on ${backtest.candles} real candles: ${backtest.trades} trades, ${Number(backtest.returnPct).toFixed(2)}% return, ${Number(backtest.maxDrawdownPct).toFixed(2)}% max drawdown. The past is not a forecast.`)
+          : (locale.startsWith('fa')
+            ? `«${strategy.titleFa || strategy.title}» مسلح شد، اما کندل کافی برای بک‌تست پیدا نکردم — پس عددی هم به عنوان انتظار نشان نمی‌دهم.`
+            : `"${strategy.title}" armed, but I could not find enough candles to backtest it — so I am not showing you a number to expect.`),
+        kind: 'assistant',
+        ui: { type: 'TEXT' }
+      }]);
+    } finally {
+      setAutonomyBusy(false);
+    }
+  }, [locale, rerenderAutonomy]);
+
+  const disarmAutomation = useCallback((auto) => {
+    if (auto?.id) autonomyEngineRef.current?.disarm(auto.id);
+    rerenderAutonomy();
+  }, [rerenderAutonomy]);
+
+  const tickAutonomy = useCallback(async () => {
+    const engine = autonomyEngineRef.current;
+    if (!engine) return;
+    setAutonomyBusy(true);
+    try {
+      const assets = [...new Set(engine.state.automations.filter((a) => a.active).map((a) => a.asset))];
+      const prices = {};
+      const candles = {};
+      for (const asset of assets) {
+        try {
+          const rows = await fetchCandlesFor(asset);
+          if (Array.isArray(rows) && rows.length) {
+            candles[asset] = rows;
+            prices[asset] = Number(rows[rows.length - 1]?.close);
+          }
+        } catch { /* an asset with no data simply does not trade this tick */ }
+      }
+      const res = await engine.tick({ prices, candles });
+      rerenderAutonomy();
+      const fa = locale.startsWith('fa');
+      const lines = [];
+      if (res.code) lines.push(fa ? `حلقه اجرا نشد: ${res.code}` : `Loop did not run: ${res.code}`);
+      for (const f of res.fills || []) lines.push(fa ? `باز شد: ${f.asset} @ ${Number(f.price).toFixed(2)} — ${usdFmt(f.stakeUsd)}` : `Opened: ${f.asset} @ ${Number(f.price).toFixed(2)} — ${usdFmt(f.stakeUsd)}`);
+      for (const x of res.exits || []) lines.push(fa ? `بسته شد: ${x.asset} (${x.reason}) ${Number(x.netPct).toFixed(2)}٪` : `Closed: ${x.asset} (${x.reason}) ${Number(x.netPct).toFixed(2)}%`);
+      for (const p of res.pending || []) lines.push(fa ? `در انتظار تأیید تو: ${p.action?.to || p.action?.from} @ ${Number(p.price).toFixed(2)}` : `Waiting for your signature: ${p.action?.to || p.action?.from} @ ${Number(p.price).toFixed(2)}`);
+      if (!lines.length) lines.push(fa ? `گام اجرا شد؛ سیگنالی نبود. ارزش حساب: ${usdFmt(res.equity)}` : `Ticked; no signal. Account value: ${usdFmt(res.equity)}`);
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: lines.join('\n'),
+        kind: 'assistant',
+        ui: { type: 'TEXT' }
+      }]);
+    } finally {
+      setAutonomyBusy(false);
+    }
+  }, [locale, rerenderAutonomy]);
+
+  /*
+   * Compile the goal plan for a bubble that asked for one. Done in an effect
+   * (not in the human layer) because the compiler is async and needs the live
+   * balances and the scanner output from THIS turn.
+   */
+  const lastGoalMessageId = useRef(null);
+  /*
+   * The compile runs OUTSIDE the effect's cancel scope, guarded only by an
+   * unmount flag.
+   *
+   * It used to be a local `let cancelled` set by the effect's cleanup. But
+   * this effect depends on `messages`, and its own first action is
+   * `setMessages(… goalBusy: true …)` — which changes `messages`, re-runs the
+   * effect, and runs the previous run's cleanup. So `cancelled` flipped true
+   * before the compiler ever resolved, the plan was dropped on the floor, and
+   * because `lastGoalMessageId` was already recorded the message was never
+   * picked up again. The card sat on «در حال خواندن نرخ‌های زنده…» forever.
+   *
+   * That is the whole feature — «سودم ۲ برابر شود» — spinning in the real
+   * page while every unit probe stayed green, because the wiring is only
+   * observable once the component is mounted and driven.
+   */
+  const goalMountedRef = useRef(true);
+  useEffect(() => () => { goalMountedRef.current = false; }, []);
+  useEffect(() => {
+    const pending = messages.find((m) => m.goalRequest && !m.goalPlan && !m.goalError && !m.goalBusy && m.id !== lastGoalMessageId.current);
+    if (!pending) return;
+    lastGoalMessageId.current = pending.id;
+    void (async () => {
+      setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, goalBusy: true } : m)));
+      try {
+        const { plan } = await planFromIntent({
+          intent: pending.goalIntent || { type: 'GOAL_PLAN', entities: { goalMultiple: pending.goalRequest.multiple, horizonDays: pending.goalRequest.horizonDays } },
+          context: aiContext,
+          results: pending.goalResults || {},
+          locale
+        });
+        if (!goalMountedRef.current) return;
+        setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, goalPlan: plan, goalBusy: false } : m)));
+      } catch (err) {
+        if (!goalMountedRef.current) return;
+        setMessages((prev) => prev.map((m) => (m.id === pending.id
+          ? { ...m, goalBusy: false, goalError: locale.startsWith('fa')
+            ? `برنامه ساخته نشد: ${String(err?.message || err).slice(0, 120)}`
+            : `The plan could not be built: ${String(err?.message || err).slice(0, 120)}` }
+          : m)));
+      }
+    })();
+  }, [messages, aiContext, locale]);
+
+  /**
+   * Execute one goal option for real. The steps are the venue actions the
+   * executors sign; the confirmation gate and the runtime's receipt rule still
+   * apply, so this can end in a receipt or in a named failure — never in a
+   * claim.
+   */
+  const executeGoalOption = useCallback(async (message, option) => {
+    if (!option?.actions?.length) return;
+    if (!walletConnected) {
+      openWalletSheet(message.content, 'GOAL_PLAN');
+      return;
+    }
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, goalBusy: true } : m)));
+    const fa = locale.startsWith('fa');
+    try {
+      const result = await runExecutionPlan({
+        actions: option.actions,
+        hooks: buildBrowserHooks(wallet),
+        wallet: {
+          connected: walletConnected,
+          canSign: walletCanSign,
+          address: wallet?.address || null,
+          evmAddresses: aiContext.wallet?.evmAddresses,
+          chainId: wallet?.chainId || defaultChainId
+        },
+        drivers: autonomyDriversRef.current
+      });
+      const ok = result?.success === true;
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: ok
+          ? (fa
+            ? `انجام شد. ${result.txHashes?.length || 1} تراکنش با رسید روی زنجیره تأیید شد.${result.txHash ? `\n${result.txHash}` : ''}`
+            : `Done. ${result.txHashes?.length || 1} transaction(s) confirmed with a receipt on chain.${result.txHash ? `\n${result.txHash}` : ''}`)
+          : (fa
+            ? `اجرا نشد: ${result?.error?.code || result?.status || 'FAILED'}${result?.error?.message && result.error.message !== result.error.code ? ` — ${result.error.message}` : ''}. هیچ چیزی به عنوان موفق گزارش نمی‌شود.`
+            : `Not executed: ${result?.error?.code || result?.status || 'FAILED'}${result?.error?.message && result.error.message !== result.error.code ? ` — ${result.error.message}` : ''}. Nothing is being reported as a success.`),
+        kind: ok ? 'result' : 'error',
+        ui: { type: 'RESULT_CARD' },
+        card: ok && result.txHash ? { txHash: result.txHash } : null
+      }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: fa ? `خطا در اجرا: ${String(err?.message || err).slice(0, 140)}` : `Execution error: ${String(err?.message || err).slice(0, 140)}`,
+        kind: 'error',
+        ui: { type: 'TEXT' }
+      }]);
+    } finally {
+      setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, goalBusy: false } : m)));
+    }
+  }, [walletConnected, walletCanSign, wallet, aiContext, defaultChainId, locale, openWalletSheet]);
+
   /* Route chips on AI bubbles («بازار», «فارم», «نمودار کامل»…) navigate the
      same way the OS navigation agent does — closing panels first so the
      target page is never rendered behind a stuck overlay. */
-  const openBubbleRoute = useCallback((route) => {
-    if (!route) return;
-    setPanel(null);
-    setDrawerOpen(false);
-    try { navigate(route); } catch { /* router ready */ }
-  }, [navigate]);
 
   const pendingExecutionRef = useRef(null);
   useEffect(() => { pendingExecutionRef.current = pendingExecution; }, [pendingExecution]);
@@ -2513,13 +2909,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           balances: aiContext.balances,
           target: rebalance?.target || prepared?.rebalance?.target,
           hooks,
-          wallet: walletSnap
+          wallet: walletSnap,
+          drivers: autonomyDriversRef.current
         });
       } else {
         result = await runExecutionPlan({
           actions: plannedActions,
           hooks,
-          wallet: walletSnap
+          wallet: walletSnap,
+          /* Without this every non-swap step fails as VENUE_DRIVER_MISSING —
+             the runtime needs the venue drivers to reach a real signature. */
+          drivers: autonomyDriversRef.current
         });
       }
       if (result?.success === true && result?.status === 'CONFIRMED' && !result?.noop) {
@@ -3049,6 +3449,74 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }).catch(() => {});
     }
   }, [refreshMonitors, refreshStatus, loadAiProviders]);
+
+  /*
+   * ONE way to open anything the assistant offers.
+   *
+   * The reported dead button («مرکز عملیات» → «باز کن» did nothing) was a route
+   * with nowhere to land: the human layer emits `/intent?tab=ops`, `navigate`
+   * changed the query string, and this page never read it — the pathname was
+   * already `/intent`, so nothing on screen moved. The legacy IntentOS page did
+   * read `?tab`, but it is no longer routed.
+   *
+   * Every route now goes through resolveChatRoute, which returns either a real
+   * navigation or an in-page target (panel / tab / ecosystem sheet). A route
+   * that resolves to nothing is reported in the chat instead of failing
+   * silently, and test/intent-ai/chat-route-contract-probe.mjs keeps the map
+   * and the router in App.jsx from drifting apart.
+   */
+  const openBubbleRoute = useCallback((route) => {
+    if (!route) return;
+    const target = resolveChatRoute(route, { currentPathname: location.pathname || '/intent' });
+    if (target.kind === 'panel') {
+      setDrawerOpen(false);
+      openPanel(target.panel);
+      return;
+    }
+    if (target.kind === 'tab') {
+      setPanel(null);
+      setDrawerOpen(false);
+      setAiTab(target.tab);
+      return;
+    }
+    if (target.kind === 'ecosystem') {
+      setDrawerOpen(false);
+      openEcosystem(target.ecoKind);
+      return;
+    }
+    if (target.kind === 'unknown') {
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: locale.startsWith('fa')
+          ? 'این بخش را پیدا نکردم. به جای حدس زدن، صریحاً می‌گویم: این مقصد در اپ وجود ندارد.'
+          : 'I could not find that screen. Rather than guess, I will say it plainly: that destination does not exist in the app.',
+        kind: 'error',
+        ui: { type: 'TEXT' }
+      }]);
+      return;
+    }
+    setPanel(null);
+    setDrawerOpen(false);
+    try { navigate(target.to); } catch { /* router ready */ }
+  }, [navigate, location.pathname, openPanel, openEcosystem, locale]);
+
+  /*
+   * `?tab=` also has to work when the user arrives from somewhere else in the
+   * app (the Financial Goals hand-off, the AI panel's chips, a shared link).
+   * Same resolver, so there is exactly one definition of what a tab means.
+   */
+  useEffect(() => {
+    const search = String(location.search || '');
+    if (!search) return;
+    let tab = null;
+    try { tab = new URLSearchParams(search).get('tab'); } catch { tab = null; }
+    if (!tab) return;
+    const target = resolveChatRoute(`/intent?tab=${encodeURIComponent(tab)}`, { currentPathname: '/intent' });
+    if (target.kind === 'panel') { setDrawerOpen(false); openPanel(target.panel); return; }
+    if (target.kind === 'ecosystem') { setDrawerOpen(false); openEcosystem(target.ecoKind); return; }
+    if (target.kind === 'tab') { setPanel(null); setDrawerOpen(false); setAiTab(target.tab); }
+  }, [location.search, openPanel, openEcosystem]);
 
   const appendOp = useCallback((op) => {
     try {
@@ -3672,6 +4140,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onMonitorOpportunity={monitorOpportunityRow}
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
+                onGoalExecute={executeGoalOption}
+                autonomyEngine={autonomyEngine}
+                autonomyStrategies={autonomyStrategies}
+                onAutonomyArm={armAutomation}
+                onAutonomyDisarm={disarmAutomation}
+                onAutonomyMode={setAutonomyMode}
+                onAutonomyStart={startAutonomy}
+                onAutonomyStop={stopAutonomy}
+                onAutonomyTick={tickAutonomy}
               />
             ))}
 
