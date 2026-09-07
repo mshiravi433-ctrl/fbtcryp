@@ -11,9 +11,11 @@
  *    every rule under `.tag-page`, overriding the violet/glass look of
  *    `intent-ai-os.css` without touching it. All `iaos-*` classes, hooks and
  *    test ids survive — the source-shape probes keep passing untouched.
- *  - The page is ALWAYS black. That is the point of the request (Trenchers is
- *    a black terminal); /intent is mounted headerless, so it never has to
- *    blend with a light app shell. No light overrides exist on purpose.
+ *  - In DARK theme the page is pure black. That is the point of the request
+ *    (Trenchers is a black terminal). The LIGHT theme is handled at the bottom
+ *    of this file (§13) by re-declaring the `--tag-*` tokens — the earlier
+ *    claim that "no light overrides exist on purpose" was wrong and is what
+ *    produced white-on-white text and black boxes on a white page.
  *  - Nothing here draws fake data. Status dots, counts and PnL-ish fields are
  *    only ever driven by the real automation/monitor state in the component.
  *
@@ -37,6 +39,10 @@
   --tag-red: #f87171;
   --tag-blue: #7dd3fc;
   --tag-tab-h: 64px;
+  /* Declared here (dark value) so the light-theme block below can re-declare
+     it: `var(--tag-shadow)` must resolve in BOTH themes. See test/run.mjs —
+     "no stylesheet may reference a custom property that is never defined". */
+  --tag-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 
   flex: 1 1 auto;
   min-height: 100dvh;
@@ -911,10 +917,314 @@
   }
 }
 
-/* ── 12. Designed logo in the AI header ──────────────────────────────────── */
+/* ── 12. Designed logo in the AI header ────────────────────────────────────
+   The tile is drawn by the SVG itself (`.iaos-logo-plate`), so the wrapper's
+   job is only to be a fixed-size box the header can lay out around. Two
+   things it must never do:
+
+     · grow — a 30px SVG inside an auto-sized inline-flex box lets the title
+       row push the status controls off the edge of a narrow phone, which is
+       the «از صفحه زده بیرون» report. `flex: 0 0 auto` pins it.
+     · paint a second box — the SVG already has its own rounded plate, so a
+       background/border here would double the frame. Hence transparent.
+
+   `overflow: visible` matters too: the plate's hairline stroke sits on the
+   SVG edge and clipping it made the corners look shaved. */
 .tag-page .iaos-mark.iaos-mark-logo {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
   background: transparent;
   border: none;
   box-shadow: none;
   padding: 0;
+  overflow: visible;
 }
+
+.tag-page .iaos-mark.iaos-mark-logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The header row must be able to shrink instead of overflowing: the title
+   copy is the only flexible part, the logo and the status controls are not. */
+.tag-page .iaos-title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tag-page .iaos-title-copy {
+  min-width: 0;
+}
+
+.tag-page .iaos-header-status {
+  flex: 0 0 auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13. LIGHT THEME
+   ---------------------------------------------------------------------------
+   This skin used to declare «the page is ALWAYS black … no light overrides
+   exist on purpose», on the reasoning that /intent is headerless and never
+   has to blend with the app shell. That reasoning missed what actually
+   happens: `intent-ai-os.css` DOES ship `:root[data-theme='light']` rules for
+   the shared `.iaos-*` classes, and most of them out-specify the trench rules
+   (`:root[data-theme='light'] .iaos-bubble` is 0-3-0, `.tag-page .iaos-bubble`
+   is 0-2-0). So in the light theme the PAGE flipped to white while every
+   trench-only class stayed black — a black tab bar and black cards on a white
+   canvas, and near-white text (`--tag-text: #f4f4f6`) on a near-white
+   background where it simply disappeared. That is the «در تم روشن استایل هوش
+   مصنوعی بخصوص باکس ها خیلی زشته» report.
+
+   The fix keeps the skin's structure and only re-skins it: one token block
+   flips the whole palette, and the handful of hardcoded `#fff` /
+   `rgba(255,255,255,·)` values get explicit light rules. Every selector here
+   carries `:root[data-theme='light']` on top of the trench selector, so it
+   out-specifies both the trench base rules and the older light rules.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-theme='light'] .iaos-page.tag-page {
+  --tag-bg: #eef1f7;
+  --tag-card: #ffffff;
+  --tag-card-2: #f3f5fa;
+  --tag-line: rgba(15, 23, 42, 0.10);
+  --tag-line-soft: rgba(15, 23, 42, 0.06);
+  --tag-text: #0e1729;
+  /*
+   * Measured, not picked. Against the paper canvas (#eef1f7) these clear
+   * WCAG AA for normal text: muted 6.3:1, dim 4.7:1, mint 4.9:1, red 4.9:1.
+   * The dark-theme greys (#8d8d99 / #5c5c66) would have measured 1.9:1 and
+   * 3.4:1 here — the same "neon palette designed for black" failure the
+   * light-theme contrast check in test/run.mjs exists for.
+   */
+  --tag-muted: #4e5871;
+  --tag-dim: #5f6b83;
+  --tag-mint: #047857;
+  --tag-amber: #b45309;
+  --tag-red: #dc2626;
+  --tag-blue: #0369a1;
+  --tag-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 26px rgba(15, 23, 42, 0.07);
+
+  background:
+    radial-gradient(720px 340px at 50% -120px, rgba(99, 102, 241, 0.07), transparent 70%),
+    var(--tag-bg);
+  color: var(--tag-text);
+}
+
+/* Top bar: same sticky blur, but a paper wash instead of a black one. */
+:root[data-theme='light'] .tag-page .iaos-header {
+  border-bottom-color: var(--tag-line-soft);
+  background: linear-gradient(180deg, rgba(238, 241, 247, 0.96), rgba(238, 241, 247, 0.84));
+}
+
+:root[data-theme='light'] .tag-page .iaos-mark {
+  background: var(--tag-card);
+  border-color: var(--tag-line);
+  color: var(--tag-text);
+}
+
+/* The logo tile stays frameless in both themes — the SVG plate is the frame. */
+:root[data-theme='light'] .tag-page .iaos-mark.iaos-mark-logo {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/*
+ * The plate's `fill` is a presentation attribute, so ANY rule beats it. Dark
+ * theme keeps the near-black gradient; light theme gets white with the same
+ * gradient hairline, which is what makes the mark read as a clean minimal
+ * chip instead of a black square dropped onto a white page.
+ */
+:root[data-theme='light'] .iaos-logo-plate {
+  fill: #ffffff;
+}
+
+:root[data-theme='light'] .tag-page .iaos-title-copy h1 {
+  color: var(--tag-text);
+}
+
+/* 0-4-0, because `:root[data-theme='light'] .iaos-title-sub` in
+   intent-ai-os.css is 0-3-0 and was painting the sub-line its own grey. */
+:root[data-theme='light'] .tag-page .iaos-title-sub {
+  color: var(--tag-dim);
+}
+
+/* The user's own message stays a quiet card in the light theme too — the
+   indigo→cyan gradient that intent-ai-os.css gives `.iaos-user .iaos-bubble`
+   is a different (louder) language than this skin, and at 0-4-0 it was
+   winning over the trench rule below it. */
+:root[data-theme='light'] .tag-page .iaos-user .iaos-bubble {
+  background: var(--tag-card);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
+  box-shadow: var(--tag-shadow);
+}
+
+:root[data-theme='light'] .tag-page .iaos-new-season-btn:hover,
+:root[data-theme='light'] .tag-page .iaos-new-season-btn:focus-visible {
+  border-color: rgba(15, 23, 42, 0.22);
+  background: var(--tag-card);
+}
+
+:root[data-theme='light'] .tag-page .iaos-status-pill[data-on='true'] {
+  color: var(--tag-mint);
+  border-color: rgba(15, 157, 110, 0.3);
+}
+
+:root[data-theme='light'] .tag-page .iaos-conversation {
+  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
+}
+
+:root[data-theme='light'] .tag-page .iaos-conversation::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+/* Primary controls invert: a dark pill on paper, not a white pill on paper. */
+:root[data-theme='light'] .tag-page .iaos-btn.iss-solid {
+  background: #0e1729;
+  color: #ffffff;
+}
+
+:root[data-theme='light'] .tag-page .iaos-btn.iss-solid:hover {
+  background: rgba(14, 23, 41, 0.88);
+}
+
+:root[data-theme='light'] .tag-page .iaos-btn.iss-ghost:hover {
+  color: var(--tag-text);
+  border-color: rgba(15, 23, 42, 0.22);
+}
+
+:root[data-theme='light'] .tag-page .iaos-suggestion:hover {
+  color: var(--tag-text);
+  border-color: rgba(15, 23, 42, 0.22);
+}
+
+:root[data-theme='light'] .tag-page .iaos-composer {
+  background: var(--tag-card);
+  border-color: var(--tag-line);
+  box-shadow: var(--tag-shadow);
+}
+
+:root[data-theme='light'] .tag-page .iaos-action-btn:hover,
+:root[data-theme='light'] .tag-page .iaos-action-btn:focus-visible {
+  border-color: rgba(15, 23, 42, 0.26);
+}
+
+:root[data-theme='light'] .tag-page .iaos-send {
+  background: #0e1729;
+  color: #ffffff;
+}
+
+:root[data-theme='light'] .tag-page .iaos-send:disabled {
+  background: var(--tag-card-2);
+  color: var(--tag-dim);
+}
+
+/* Bottom tab bar: frosted paper. */
+:root[data-theme='light'] .tag-tabbar {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--tag-line);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 40px rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme='light'] .tag-tab[data-active='true'] {
+  color: var(--tag-text);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme='light'] .tag-tab:hover {
+  color: var(--tag-text);
+}
+
+:root[data-theme='light'] .tag-tab-badge {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+/* The status DOT is a shape, not text, so it keeps the bright mint while
+   `--tag-mint` (used for the word «آنلاین» next to it) stays dark enough to
+   read. Same hue, two weights, both accessible. */
+:root[data-theme='light'] .tag-dot[data-status='ACTIVE'] {
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+}
+
+:root[data-theme='light'] .tag-dot[data-status='PAUSED'] { background: #d97706; }
+:root[data-theme='light'] .tag-dot[data-status='CANCELLED'] { background: #e11d48; }
+
+/* Views: white cards on the paper canvas, with a shadow so they read as
+   boxes at all — a border at 10% alpha on #eef1f7 does not. */
+:root[data-theme='light'] .tag-spawn {
+  background: #0e1729;
+  color: #ffffff;
+}
+
+:root[data-theme='light'] .tag-card {
+  box-shadow: var(--tag-shadow);
+}
+
+:root[data-theme='light'] .tag-icon-btn:hover {
+  color: var(--tag-text);
+  border-color: rgba(15, 23, 42, 0.24);
+  background: rgba(15, 23, 42, 0.03);
+}
+
+:root[data-theme='light'] .tag-icon-btn[data-variant='danger']:hover {
+  color: var(--tag-red);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+:root[data-theme='light'] .tag-row:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+:root[data-theme='light'] .tag-empty-glyph {
+  box-shadow: var(--tag-shadow);
+}
+
+/*
+ * Chat furniture. `intent-ai-os.css` has 0-3-0 light rules for these five
+ * (`.iaos-exec-card`, `.iaos-autos`, `.iaos-drawer-item`, `.iaos-suggestion`,
+ * `.iaos-action-btn`) that out-specify the trench rules at 0-2-0, so without
+ * this they kept a semi-transparent #f8fafc fill while everything around them
+ * is a solid white card — the mismatch is what reads as "boxes that do not
+ * belong to the same design".
+ */
+:root[data-theme='light'] .tag-page .iaos-exec-card,
+:root[data-theme='light'] .tag-page .iaos-autos {
+  background: var(--tag-card);
+  border-color: var(--tag-line);
+  box-shadow: var(--tag-shadow);
+}
+
+:root[data-theme='light'] .tag-page .iaos-suggestion,
+:root[data-theme='light'] .tag-page .iaos-drawer-item {
+  background: var(--tag-card-2);
+  border-color: var(--tag-line);
+  color: var(--tag-muted);
+}
+
+:root[data-theme='light'] .tag-page .iaos-action-btn {
+  background: var(--tag-card-2);
+  border-color: var(--tag-line);
+  color: var(--tag-text);
+}
+
+/* Actions sheet */
+:root[data-theme='light'] .tag-page .iaos-overlay {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+:root[data-theme='light'] .tag-page .iaos-drawer {
+  background: #ffffff;
+  border-color: var(--tag-line);
+  box-shadow: 0 -18px 50px rgba(15, 23, 42, 0.18);
+}
+
+:root[data-theme='light'] .tag-page .iaos-drawer-item:hover {
+  border-color: rgba(15, 23, 42, 0.24);
+}
+
