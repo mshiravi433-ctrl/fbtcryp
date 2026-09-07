@@ -1,3 +1,81 @@
+# Unreleased — Settings is a hub of tiles: one box per section, every control behind it, in both themes
+
+**«تنظیمات رو ساختار دهی مجدد کن، هر بخش خودش یک صفحه یا پاپ‌آپ داشته باشد — فقط
+باکس پروفایل با یک آیکون قشنگ بیاید، با کلیک شدن روی آن، زیرگزینه‌هایش باز
+شود»** — the file behind it was 1 586 lines and one long scroll: eleven `set-group`
+blocks — several of them a heading over a single row — six native `<select>`s
+whose closed state showed one word and nothing else, and eight emoji doing the
+work of icons. No section had a page or a popup of its own.
+
+- **The hub** (`src/pages/Settings.jsx`): the screen is now a profile box plus a
+  `2 × n` grid — one `<button class="set-tile">` per section (profile, alerts,
+  appearance, trading, security, privacy, networks, data, sync, regional
+  availability, company). Each tile carries its own drawn icon, its label, one
+  line saying what is inside it, and live chips for the values that section
+  owns (chain, slippage, deadline, 2FA…), so the grid answers «what is my
+  setting?» without opening anything. `min-height: 78px` per tile, 84px from
+  680px up, one column at ≤350px so a Persian label never wraps to three lines.
+- **One icon set, no emoji** (`src/components/SettingsIcons.jsx`): fifteen SVG
+  components on one shared 24×24 stroke grid — eleven keyed by section id in a
+  `SETTINGS_ICONS` registry, the rest for the auto-theme chip, the tile chevron,
+  the sub-view back arrow and the selected tick — so a tile and the popup it
+  opens can never disagree about which icon belongs to «حریم خصوصی». The eight
+  emoji that used to stand in for alerts, lock, fingerprint, eye and moon are
+  gone, including from inside the hero chips.
+- **Every section is a popup, and the popup is the section** (`src/pages/Settings.jsx`,
+  `src/styles/settings-hub.css`): one `<Sheet size="lg">` fed by a `BODIES`
+  table — header icon, title, hint, then the rows the section used to show on
+  the page. Deeper controls (display name, language, the 2FA setup, the custom
+  RPC) are a second level inside the same sheet (`sub`), never a sheet inside a
+  sheet: with two portals, Escape closed both and the user landed back on the
+  grid mid-task. Choice controls that used to be native `<select>`s are chip
+  grids (`OptionGrid`) showing the value AND why it matters.
+- **Light theme is a first-class state here** (`src/styles/settings-hub.css`):
+  seven tile tones (`st-tone-cyan|violet|magenta|mint|amber|purple|orange`) each
+  set four variables — `--st-ink/--st-soft/--st-edge/--st-glow` — and each is
+  re-declared under `:root[data-theme='light']` with inks dark enough to read on
+  white. No rule paints a `rgba(255,255,255,…)` fill without a light pair, which
+  is how the previous version's tiles disappeared on a white background.
+- **The avatar is a sibling again, and the small buttons are tappable**
+  (`src/pages/Settings.jsx`, `src/styles/settings-hub.css`): `ProfileBadge` is
+  itself a button — it opens the unread-notifications popup — so it sits BESIDE
+  the hero's open control, never inside it. A `<button>` inside a `<button>` is
+  invalid HTML, and a browser repairs it by un-nesting, which eats the bell.
+  The theme/privacy mini buttons (34px) and the popup back arrow (30px) keep
+  their drawn size but grow a transparent `::after` into the gap, so their hit
+  area is ≥44px as promised.
+- **A section can be linked to from outside** (`src/pages/Settings.jsx`):
+  `?section=<id>` opens that popup on arrival and the
+  parameter is written as the popup opens and cleared as it closes, so a
+  notification can point straight at the alerts section and the browser back
+  button leaves the popup instead of the screen.
+- **The reduce-motion switch has a producer** (`src/store/useSettingsStore.js`):
+  `setReduceMotion` sets `data-reduce-motion` on `<html>` immediately and
+  `initTheme` applies and re-applies it, so the `:root[data-reduce-motion='true']`
+  rules that still the tile entrance, the sub-view slide and the avatar ring are
+  reacting to a real attribute instead of a value only read at boot.
+- **A chain tap no longer throws when no wallet is listening**
+  (`src/pages/Settings.jsx`): the EVM chip writes the store and then asks the
+  wallet to switch, inside a `try` — refused or disconnected, the preference
+  still stands and the next quote uses it, rather than an unhandled rejection
+  from a click handler.
+- **Copy** (`src/i18n/locales/{en,fa}.json`): 35 lines under `settings.hub.*`,
+  including the eleven `settings.hub.hints.<section>` one-liners and the
+  popup-level notes (blocked notifications, custom RPC range, auto-lock «off»,
+  region counts, mainnet/devnet sub-labels). fa is complete for the namespace,
+  so no tile on the Persian screen shows a raw key.
+- **Tested by pressing it** (`test/settings-hub-probe.jsx`,
+  `test/vite.settings-hub.mjs`, `npm run test:settings-hub`, wired into
+  `test/run.mjs`): 58 assertions mount the real screen in jsdom and walk it —
+  every tile opens exactly one popup, every chip is confirmed in the store, the
+  theme tap is confirmed on `<html data-theme>`, the accent on `data-accent`, the
+  motion switch on `data-reduce-motion`, the alert cards in `src/lib/notify.js`,
+  the RPC draft through its second level and back, the deletion path up to its
+  own confirmation and then cancelled, region acknowledgements written to
+  `localStorage` and withdrawable, the deep link, and that no dialog survives
+  unmount. `test/wiring.mjs` gained 22 checks for the table underneath: sections,
+  icons, bodies, tones, light pairs, RTL mirroring of every directional glyph,
+  and en/fa completeness of `settings.hub`.
 # Unreleased — Loan hero & "how it works" restyled, Ecosystem status probes from the browser, hardware pitch off the wallet, charts back on On-Chain and Global Horizon
 
 Five reports in one round:

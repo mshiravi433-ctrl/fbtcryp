@@ -99,6 +99,17 @@ export const useSettingsStore = create(
         set({ accent });
         applyAccent(accent);
       },
+      /**
+       * Reduce-motion is applied here as well as from the boot subscription, so
+       * the switch works the moment it is flipped even in a harness (or a code
+       * path) that never ran initTheme(). The attribute on <html> is what every
+       * `:root[data-reduce-motion='true']` rule waits for; setting it twice is
+       * a no-op write, not a second animation.
+       */
+      setReduceMotion(on) {
+        set({ reduceMotion: Boolean(on) });
+        applyReduceMotion(Boolean(on));
+      },
       setUsername(username) {
         set({ username: String(username).slice(0, 24) });
       },
@@ -291,6 +302,24 @@ export function applyCompact(on) {
 }
 
 /**
+ * Mark the document when the in-app "reduce motion" switch is on.
+ *
+ * Until now that switch only reached React: `useStill()` reads the store and
+ * framer-motion animations stopped, while every CSS `@keyframes` in the app —
+ * the profile ring, the flowing button gradient, the settings hub's entrance
+ * — kept running, because CSS cannot read a JS boolean. The media query
+ * `prefers-reduced-motion` covers the people whose OS says so, and nobody
+ * whose preference lives only in this app.
+ *
+ * The attribute lets CSS see it too. See the `[data-reduce-motion='true']`
+ * rules in the stylesheets.
+ */
+export function applyReduceMotion(on) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('data-reduce-motion', on ? 'true' : 'false');
+}
+
+/**
  * Mark the document when running inside the packaged app.
  *
  * CSS needs to know: a Capacitor WebView composites through the host app and
@@ -335,10 +364,11 @@ export function applyNativeFlag() {
 }
 
 export function initTheme() {
-  const { theme, accent, compactMode } = useSettingsStore.getState();
+  const { theme, accent, compactMode, reduceMotion } = useSettingsStore.getState();
   applyTheme(theme);
   applyAccent(accent);
   applyCompact(compactMode);
+  applyReduceMotion(reduceMotion);
   applyCurrency(useSettingsStore.getState().currency);
   applyHideBalances(useSettingsStore.getState().hideBalances);
   applyNativeFlag();
@@ -346,6 +376,7 @@ export function initTheme() {
   useSettingsStore.subscribe((st) => applyCurrency(st.currency));
   useSettingsStore.subscribe((st) => applyHideBalances(st.hideBalances));
   useSettingsStore.subscribe((st) => applyCompact(st.compactMode));
+  useSettingsStore.subscribe((st) => applyReduceMotion(st.reduceMotion));
 
   if (typeof window !== 'undefined' && window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => {
