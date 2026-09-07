@@ -975,6 +975,19 @@ installDom();
 const { run: runAutonomyCards } = await import('./.out/autonomycards/autonomy-cards-probe.js');
 report('autonomy cards (goal plan · automation loop, mounted and clicked)', await runAutonomyCards(document.getElementById('r')));
 
+/*
+ * The reported dead button: «می‌زنم مرکز عملیات و گزینه باز کردن را می‌زنم کار
+ * نمی‌کنه». The human layer emitted /intent?tab=ops, the chat navigated there,
+ * and the page never read location.search — the URL changed and the screen
+ * did not. chat-route-contract pins the RESOLVER; only mounting the real page
+ * at that URL can prove the wiring behind it.
+ */
+console.log('\n▸ building ops hand-off suite…');
+npx(['vite', 'build', '-c', 'test/vite.opshandoff.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runOpsHandoff } = await import('./.out/opshandoff/ops-handoff-probe.js');
+report('ops hand-off (/intent?tab=ops opens the real operations panel)', await runOpsHandoff(document.getElementById('r')));
+
 /* ------------------- 4b2. Phase 201-207 upgrades (mounted) ------------------- */
 /*
  * Everything the owner reported on #/intent-ai, driven as a user: the visible
