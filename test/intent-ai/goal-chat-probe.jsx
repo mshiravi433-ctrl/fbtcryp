@@ -102,6 +102,30 @@ export async function run(container) {
     check('the refusal explains itself in words', (refused.textContent || '').trim().length > 10);
   }
 
+  /* ── Second message in the SAME mount: the automation card ─────────────
+     AUTONOMY needs neither a wallet nor live rates — the human layer returns
+     the card outright — so this is reachable with the network dead. It is the
+     other half of the reported complaint («اتوماسیون خوب کار نمی‌کنه») and the
+     same glue question: does the chat turn an autonomyRequest into a card. */
+  const input2 = q('.iaos-composer input.iaos-input');
+  await act(async () => { setInputValue(input2, 'اتوماسیون را با حالت کاغذی شروع کن'); });
+  await act(async () => { await sleep(10); });
+  const send2 = q('.iaos-composer button.iaos-send');
+  if (send2 && !send2.disabled) {
+    await act(async () => { send2.click(); });
+  }
+  for (let i = 0; i < 40; i += 1) {
+    await act(async () => { await sleep(50); });
+    if (container.querySelector('[data-testid="autonomy-card"]')) break;
+  }
+
+  const autoCard = q('[data-testid="autonomy-card"]');
+  check('an automation request produces the automation card', !!autoCard);
+  if (autoCard) {
+    check('the automation card states its state as data', !!autoCard.querySelector('.iaos-goal-verdict[data-state]'));
+    check('it offers the builtin strategies as armable rows', autoCard.querySelectorAll('[data-testid^="autonomy-arm-"]').length > 0);
+  }
+
   await act(async () => { root.unmount(); });
   return rows;
 }
