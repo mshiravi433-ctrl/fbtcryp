@@ -87,6 +87,48 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return { ok: true, schema: world.schema, world: fi.worldModelDigest ? fi.worldModelDigest(world) : world, durable: fi.collections.durable() };
   }));
 
+  /* ══════════════════════ research (data, not chatbot) ══════════════════════ */
+
+  router.post('/research', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const subject = String(body.subject || body.token || body.message || '').trim();
+    if (!subject) return reject(400, 'SUBJECT_REQUIRED', 'research needs a subject: an asset symbol, protocol or question');
+    const world = await fi.worldModelFor(owner);
+    const kinds = Array.isArray(body.kinds) && body.kinds.length
+      ? body.kinds.map((k) => String(k).toLowerCase()).slice(0, 10)
+      : undefined;
+    const out = await fi.research.research({
+      owner,
+      subject: subject.slice(0, 80),
+      kinds,
+      world,
+      token: body.token && typeof body.token === 'object' ? body.token : null,
+      correlationId: body.correlationId || null
+    });
+    /* The engine returns { ok:true, research:{ status:'UNAVAILABLE', … } }
+       when the provider had nothing — it still completed, honestly. The
+       status then lives on the research row, not on a thrown error. */
+    if (!out.ok) return reject(422, out.code || 'RESEARCH_UNAVAILABLE', out.detail || 'no provider returned usable data; nothing was estimated');
+    if (out.research?.status === 'UNAVAILABLE') {
+      return reject(422, 'RESEARCH_UNAVAILABLE', 'no provider returned usable data for this subject; nothing was estimated', { missing: out.research.missing || [] });
+    }
+    return { ok: true, research: out.research, durable: fi.collections.durable() };
+  }));
+
+  router.get('/research', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const rows = await fi.research.recent(owner, { limit: Math.min(30, Math.max(1, Number(req.query.limit) || 10)) });
+    return { ok: true, research: rows, count: rows.length, durable: fi.collections.durable() };
+  }));
+
+  router.get('/research/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.research.get(owner, req.params.id);
+    if (!got.ok) return reject(404, 'RESEARCH_NOT_FOUND', `no research ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, research: got.row, durable: fi.collections.durable() };
+  }));
+
   /* ══════════════════════ strategies + simulation ══════════════════════ */
 
   router.post('/strategies', route(async (req, res, owner) => {
@@ -111,6 +153,35 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     await ensureMigrated(owner);
     const rows = await fi.strategyEngine.recent(owner, { limit: Math.min(30, Math.max(1, Number(req.query.limit) || 10)) });
     return { ok: true, strategies: rows, durable: fi.collections.durable() };
+  }));
+
+  /* Strategy competition: the analyst / strategist / risk-auditor / judge
+     roles run over the supplied (or previously generated) strategies and
+     the ranked comparison + the judge's verdict are returned. A strategy
+     that lost carries its rejection reasons; disagreement is never hidden. */
+  router.post('/strategies/compare', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    let rows = Array.isArray(body.strategies) ? body.strategies.slice(0, 12) : null;
+    const prefs = await fi.preferences.resolve(owner);
+    if (!rows || rows.length < 2) {
+      const recentRows = await fi.strategyEngine.recent(owner, { limit: 12 });
+      rows = recentRows.slice(0, 12);
+    }
+    if (!rows || rows.length < 2) {
+      return reject(409, 'NEEDS_AT_LEAST_TWO_STRATEGIES', 'generate strategies first, or pass at least two in the body', { count: rows ? rows.length : 0 });
+    }
+    const out = await fi.competition.compete({
+      owner,
+      strategies: rows,
+      preferences: prefs,
+      goal: body.goal || null,
+      simulations: body.simulations || null,
+      correlationId: body.correlationId || null
+    });
+    return out.ok
+      ? { ok: true, comparison: out.competition, durable: fi.collections.durable() }
+      : reject(409, out.code, out.detail || null, { count: out.count || rows.length });
   }));
 
   router.post('/simulate', route(async (req, res, owner) => {
@@ -250,6 +321,25 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return { ok: true, trace: fi.traceStore.summary(trace), durable: fi.collections.durable() };
   }));
 
+  /* ══════════════════════ evidence (the audit surface) ══════════════════════ */
+
+  router.get('/evidence', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const type = req.query.type ? String(req.query.type).toLowerCase() : null;
+    const rows = await fi.evidence.recent(owner, {
+      limit: Math.min(100, Math.max(1, Number(req.query.limit) || 40)),
+      type
+    });
+    return { ok: true, evidence: rows, count: rows.length, durable: fi.collections.durable() };
+  }));
+
+  router.get('/evidence/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.evidence.get(owner, req.params.id);
+    if (!got.ok) return reject(404, 'EVIDENCE_NOT_FOUND', `no evidence ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, evidence: got.row, durable: fi.collections.durable() };
+  }));
+
   /* ══════════════════════ policies (the authority) ══════════════════════ */
 
   router.get('/policies', route(async (req, res, owner) => {
@@ -362,6 +452,13 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return fi.guardian.status(owner);
   }));
 
+  /* The durable event feed: every material change, warning and stop. */
+  router.get('/guardian/events', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.guardian.events(owner, { limit: Number(req.query.limit) || 40 });
+    return { ok: true, ...out };
+  }));
+
   router.post('/guardian/check', route(async (req, res, owner) => {
     await ensureMigrated(owner);
     const body = req.body || {};
@@ -459,6 +556,13 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     await ensureMigrated(owner);
     const out = await fi.learning.history(owner, { limit: Math.min(40, Math.max(1, Number(req.query.limit) || 10)) });
     return { ok: true, outcomes: out.outcomes, durable: fi.collections.durable() };
+  }));
+
+  /* Explicit outcomes alias (§14/§15): prediction → actual → error → lesson. */
+  router.get('/learning/outcomes', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.learning.history(owner, { limit: Math.min(100, Math.max(1, Number(req.query.limit) || 20)) });
+    return { ok: true, outcomes: out.outcomes, count: (out.outcomes || []).length, durable: fi.collections.durable() };
   }));
 
   router.get('/learning/calibration', route(async (req, res, owner) => {

@@ -92,6 +92,24 @@ export function createGuardian({ collections, observability = null, policyEngine
     const ring = alerts.get(owner) || [];
     ring.push(alert);
     alerts.set(owner, ring.slice(-MAX_ALERTS));
+    /* Persist every alert so the feed survives a restart and is queryable
+       across devices (the in-memory ring above is the fast status path).
+       A failed write is logged, never thrown — the alert is still emitted to
+       observability and the ring, and the response reports durability. */
+    const row = {
+      id: alert.id || `gv_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+      at: alert.at || now(),
+      owner: String(owner).slice(0, 80),
+      code: String(alert.code || 'GUARDIAN_EVENT').slice(0, 80),
+      severity: ['HIGH', 'MEDIUM', 'INFO'].includes(alert.severity) ? alert.severity : 'INFO',
+      detail: String(alert.detail || '').slice(0, 240),
+      suggestion: alert.suggestion ? String(alert.suggestion).slice(0, 240) : null,
+      ...(alert.field ? { field: alert.field } : {}),
+      ...(alert.before !== undefined ? { before: alert.before } : {}),
+      ...(alert.after !== undefined ? { after: alert.after } : {}),
+      ...(alert.distance !== undefined ? { distance: alert.distance } : {})
+    };
+    collections.put('guardian_events', owner, row).catch((err) => log(`guardian:persist-failed:${String(err?.message || err).slice(0, 80)}`));
     return ring;
   }
 
@@ -349,9 +367,26 @@ export function createGuardian({ collections, observability = null, policyEngine
     };
   }
 
+  /**
+   * The durable event feed — every material change, warning and stop the
+   * guardian has emitted for this owner, newest first. Falls back to the
+   * in-memory ring when the store has not been reached yet (e.g. a store
+   * failure), and says so rather than returning an empty list as if nothing
+   * had ever happened. */
+  async function events(owner, { limit = 40 } = {}) {
+    const cap = Math.max(1, Math.min(200, Number(limit) || 40));
+    const { ok, rows } = await collections.read('guardian_events', owner);
+    if (!ok) {
+      const ring = (alerts.get(owner) || []).slice(-cap).reverse();
+      return { ok: true, schema: GUARDIAN_SCHEMA, events: ring, count: ring.length, durable: false, source: 'memory-ring' };
+    }
+    const sorted = [...rows].sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0)).slice(0, cap);
+    return { ok: true, schema: GUARDIAN_SCHEMA, events: sorted, count: sorted.length, durable: collections.durable(), source: 'guardian_events' };
+  }
+
   return {
     schema: GUARDIAN_SCHEMA,
-    check, consult, replan, emergencyStop, status,
+    check, consult, replan, emergencyStop, status, events,
     monitoringShape,
     _alerts: (owner) => (alerts.get(owner) || []).slice(-20).reverse()
   };

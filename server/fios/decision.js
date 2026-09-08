@@ -122,7 +122,7 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     /* ── confidence ────────────────────────────────────────────────────── */
     const confidence = confidenceEngine.assess({
       intent, financial, world, research,
-      strategy: chosenStrategy, competition, risk,
+      strategy: chosenStrategy, competition, simulation, risk,
       quote: null, wallet: world?.domains?.user?.wallets?.value || null,
       capabilities: world?.capabilities || null, policy: policyVerdict,
       executionRequested, now: at
@@ -177,6 +177,22 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
       await step('WAITING_FOR_CONFIRMATION', chosen ? chosen.id : 'no winner');
     }
 
+    /* The spec's decision contract (§11): action, strategy, rationale,
+       alternatives, risks, expectedRange, confidence, evidence, assumptions,
+       invalidationConditions, nextReviewAt. The extra fields are DERIVED from
+       the chosen strategy's canonical contract + the risk/simulation reads —
+       never fabricated. */
+    const horizonMonths = chosen?.horizonMonths || goal?.months || null;
+    const reviewWindowMs = horizonMonths
+      ? Math.max(1, Math.min(Number(horizonMonths), 12)) * 30 * 24 * 3600_000
+      : 7 * 24 * 3600_000;
+    const risks = [
+      risk?.level ? `risk level: ${risk.level}` : 'no risk assessment was available',
+      ...(Array.isArray(risk?.securitySignals) && risk.securitySignals.length ? [`${risk.securitySignals.length} security signal(s)`] : []),
+      ...(simulation?.worstCase ? [`worst modelled case: ${simulation.worstCase.id} (${simulation.worstCase.deltaUsd} USD)`] : []),
+      ...(competition?.judge?.rejected?.length ? [`competition rejected: ${competition.judge.rejected.map((r) => r.strategyId).join(', ')}`] : [])
+    ];
+
     const record = {
       schema: DECISION_RECORD_SCHEMA,
       id: decisionId,
@@ -201,6 +217,11 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
       reason,
       confidence,
       alternatives: ranked.slice(1, 5).map((r) => ({ strategyId: r.id, name: r.name, type: r.type, score: r.score?.score ?? null, expectedReturnPct: r.expectedReturnPct })),
+      risks,
+      expectedRange: chosenStrategy?.expectedRange || null,
+      assumptions: Array.isArray(chosenStrategy?.assumptions) ? chosenStrategy.assumptions : [],
+      invalidationConditions: Array.isArray(chosenStrategy?.invalidationConditions) ? chosenStrategy.invalidationConditions : [],
+      nextReviewAt: at + reviewWindowMs,
       unscored: unscored.map((u) => ({ id: u.id, status: u.status, missing: u.missing || [] })),
       conditions,
       evidenceIds,

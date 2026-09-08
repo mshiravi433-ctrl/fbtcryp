@@ -80,7 +80,7 @@
     "test:rewards-api": "node test/rewards-api-probe.mjs",
     "test:cross-chain": "node test/cross-chain-probe.mjs",
     "test:central-os": "node test/central-os-probe.mjs",
-    "test:fios": "node test/fios/fios-core-probe.mjs && node test/fios/fios-autonomy-probe.mjs && node test/fios/fios-intelligence-probe.mjs",
+    "test:fios": "node test/fios/fios-core-probe.mjs && node test/fios/fios-autonomy-probe.mjs && node test/fios/fios-intelligence-probe.mjs && node test/intent-ai/phase210-financial-brain-probe.mjs",
     "test:fios:core": "node test/fios/fios-core-probe.mjs",
     "test:fios:autonomy": "node test/fios/fios-autonomy-probe.mjs",
     "test:fios:intelligence": "node test/fios/fios-intelligence-probe.mjs",
@@ -251,7 +251,8 @@
     "test:insurance-core": "node test/insurance/insurance-core-probe.mjs",
     "test:insurance-security": "node test/insurance/insurance-security-probe.mjs",
     "test:insurance-production": "node test/insurance/insurance-production-probe.mjs",
-    "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs"
+    "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs",
+    "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

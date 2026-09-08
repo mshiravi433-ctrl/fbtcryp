@@ -164,25 +164,39 @@ export function createSimulationEngine({ collections, evidence = null, observabi
 /* ── §16 What-if: natural language → a scenario, never an execution ───────── */
 
 const ASSET_WORDS = { btc: 'BTC', bitcoin: 'BTC', eth: 'ETH', ethereum: 'ETH', sol: 'SOL', solana: 'SOL' };
+/* Persian asset names map without word boundaries — Persian script has no
+   \w characters, so a `\b`-based lookup can never see them. */
+const FA_ASSET_WORDS = { 'بیت کوین': 'BTC', 'بیت‌کوین': 'BTC', 'اتریوم': 'ETH', 'سولانا': 'SOL' };
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 
 export const WHATIF_SCHEMA = 'fbt.fi.whatif.v1';
 
 /**
- * Parse a what-if sentence. Deterministic, and deliberately narrow: anything it
- * does not understand returns `{ understood: false }` so the caller asks the
- * user instead of simulating something they did not ask for.
+ * Parse a what-if sentence (English + Persian). Deterministic, and deliberately
+ * narrow: anything it does not understand returns `{ understood: false }` so
+ * the caller asks the user instead of simulating something they did not ask
+ * for.
+ *
+ * Persian is normalised before matching: ۰-۹ digits become ASCII digits and
+ * «درصد» becomes «%», so «اگر بیت‌کوین ۳۰ درصد سقوط کند» parses exactly like
+ * "what if BTC drops 30%".
  */
 export function parseWhatIf(text = '') {
-  const s = String(text || '').toLowerCase();
-  if (!/\b(what if|اگر|چه می‌شود|wh?at happens if)\b/.test(s) && !/\?\s*$/.test(s)) {
-    return { understood: false, code: 'NOT_A_WHAT_IF' };
-  }
+  const raw = String(text || '');
+  const s = raw.toLowerCase()
+    .replace(/[۰-۹]/g, (d) => String(FA_DIGITS.indexOf(d)))
+    .replace(/درصد|persen|percent|pct/g, '%');
+
+  const isWhatIf = /\bwhat if\b|\bwhat happens if\b|اگر|چه می‌شود|چه اتفاقی|چی می‌شه|؟\s*$|\?\s*$/.test(s);
+  if (!isWhatIf) return { understood: false, code: 'NOT_A_WHAT_IF' };
+
   const pctMatch = s.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
   const pct = pctMatch ? Number(pctMatch[1]) : null;
-  const drops = /\b(drop|drops|fall|falls|down|crash|ریزش|بریزد|کم شود)\b/.test(s);
-  const rises = /\b(rise|rises|pump|up|gain|increase|rally|بالا|رشد)\b/.test(s);
+  const drops = /\b(drop|drops|fall|falls|down|crash|dump)\b/.test(s) || /ریزش|بریزد|کم شود|سقوط|کاهش|پایین|افت/.test(s);
+  const rises = /\b(rise|rises|pump|up|gain|increase|rally|double|doubles|2x)\b/.test(s) || /بالا|رشد|زیاد شود|افزایش|دو برابر/.test(s);
   const assetWord = Object.keys(ASSET_WORDS).find((w) => new RegExp(`\\b${w}\\b`).test(s));
-  const asset = assetWord ? ASSET_WORDS[assetWord] : null;
+  const assetFa = Object.keys(FA_ASSET_WORDS).find((w) => s.includes(w));
+  const asset = assetWord ? ASSET_WORDS[assetWord] : (assetFa ? FA_ASSET_WORDS[assetFa] : null);
 
   /* "what if I invest $500 every month" */
   const invest = s.match(/\$\s?(\d+(?:\.\d+)?)\s*(?:every|per|a)\s*(month|week|day)/);
@@ -197,11 +211,11 @@ export function parseWhatIf(text = '') {
     return { understood: true, kind: 'REALLOCATION', movePct: Number(move[1]), targetAsset: target };
   }
   /* "what if gas doubles" */
-  if (/\bgas\b/.test(s) && /\b(double|doubles|2x|twice|dوبرابر)\b/.test(s)) {
+  if (/\bgas\b/.test(s) && (/\b(double|doubles|2x|twice)\b/.test(s) || /دو برابر|دوبرابر/.test(s))) {
     return { understood: true, kind: 'GAS', gasMultiplier: 2 };
   }
-  if (/\bvolatility\b/.test(s) && /\b(rise|rises|double|up|increase)\b/.test(s)) {
-    return { understood: true, kind: 'VOLATILITY', volatilityMultiplier: /\b(double|2x|twice)\b/.test(s) ? 2 : 1.5 };
+  if (/\bvolatility\b/.test(s) && (/\b(rise|rises|double|up|increase)\b/.test(s) || /بالا|رشد/.test(s))) {
+    return { understood: true, kind: 'VOLATILITY', volatilityMultiplier: (/\b(double|2x|twice)\b/.test(s) || /دو برابر/.test(s)) ? 2 : 1.5 };
   }
   if (pct !== null && (drops || rises)) {
     const shockPct = drops ? -Math.abs(pct) : Math.abs(pct);

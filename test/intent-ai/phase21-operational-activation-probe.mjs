@@ -1,4 +1,5 @@
 /* Phase 21 — operational activation, evidence verification, fail-closed launch. */
+import './helpers/fail-closed-boot.mjs'; // must precede server/app.js import
 import assert from 'node:assert/strict';
 import {
   aggregateOperationalReadiness,

@@ -23,12 +23,16 @@ import { normalizeSections, buildCanonicalFinancialState, financialStateDigest }
 
 export const WORLD_MODEL_SCHEMA = 'fbt.fi.world-model.v1';
 
-/** Which state sections feed which domain. */
+/** Which state sections feed which domain. The central brain stores live
+   market data under the `crypto` section (`{ symbols: [{symbol, priceUsd}] }`)
+   and news under `news`; the `markets`/`signals` names are the provider-shaped
+   sections the FI's own fixtures use. Both are read, so the domain works in
+   production and in tests. */
 export const DOMAIN_SECTIONS = Object.freeze({
   user: ['wallet', 'portfolio', 'positions', 'orders', 'lending', 'borrowing', 'farming', 'liquidity', 'futures', 'dydx', 'transactions'],
   goals: ['goals', 'profitPlan'],
   risk: ['risk', 'alerts'],
-  market: ['markets', 'signals'],
+  market: ['markets', 'crypto', 'signals'],
   external: ['news', 'events']
 });
 
@@ -41,6 +45,35 @@ const env = (meta, key, pick = null, fallbackKey = null) => {
     return unavailable(fallbackKey || `${String(key).toUpperCase()}_NOT_IN_SOURCE`, { source: meta[key].source || key });
   }
   return envelope;
+};
+
+/* First section among `keys` that actually carries a non-null picked value.
+   Used where the same fact can arrive under several section names (e.g. the
+   brain's `crypto` vs the provider-shaped `markets`). */
+const envFirst = (meta, keys, pick = null, fallbackKey = null) => {
+  for (const key of keys) {
+    if (!meta[key]) continue;
+    const envelope = fromSection(meta[key], { pick });
+    if (envelope.value === null || envelope.value === undefined) continue;
+    return envelope;
+  }
+  return unavailable(fallbackKey || `${String(keys[0] || 'field').toUpperCase()}_UNREAD`, { source: keys.join('|') });
+};
+
+/* Normalised price map from whichever section shape arrived: a literal
+   `prices` object, a `coins` array, or the brain's `crypto.symbols` array. */
+const pickPrices = (d) => {
+  if (d?.prices && typeof d.prices === 'object') return d.prices;
+  const rows = Array.isArray(d?.coins) ? d.coins : Array.isArray(d?.symbols) ? d.symbols : null;
+  if (rows) {
+    const map = {};
+    for (const row of rows) {
+      const symbol = String(row?.symbol || '').toUpperCase();
+      if (symbol && Number.isFinite(Number(row?.priceUsd))) map[symbol] = Number(row.priceUsd);
+    }
+    return Object.keys(map).length ? map : null;
+  }
+  return null;
 };
 
 /**
@@ -151,9 +184,10 @@ export function buildWorldModel({
 
   /* ── MARKET ───────────────────────────────────────────────────────────── */
   const markets = env(meta, 'markets');
+  const crypto = env(meta, 'crypto');
   const market = {
-    prices: env(meta, 'markets', (d) => d?.prices || (Array.isArray(d?.coins) ? Object.fromEntries(d.coins.map((c) => [c.symbol, c.priceUsd])) : null), 'PRICES_UNREAD'),
-    rows: markets,
+    prices: envFirst(meta, ['markets', 'crypto'], pickPrices, 'PRICES_UNREAD'),
+    rows: isUsable(markets) ? markets : crypto,
     volatilityPct: env(meta, 'markets', (d) => d?.volatilityPct || null, 'VOLATILITY_UNREAD'),
     volumeUsd: env(meta, 'markets', (d) => (Array.isArray(d?.coins) ? d.coins.reduce((a, c) => a + (Number(c.volumeUsd) || 0), 0) : d?.totalVolumeUsd ?? null), 'VOLUME_UNREAD'),
     liquidity: env(meta, 'signals', (d) => d?.liquidity || null, 'LIQUIDITY_UNREAD'),
