@@ -50,6 +50,8 @@ BASE_RPC_URL="$BASE_RPC_URL" npm run test:aave-base-fork -- --strict
 
 در حالت `--strict` نبود صریح `BASE_RPC_URL`، نبود Anvil، خطای fork/RPC، هر assertion ناموفق یا SKIP خروجی ناموفق است. probe واقعی روی fork محلی approval دقیق، `eth_call`، `estimateGas`، کنترل account/network پیش از امضا، supply، receipt/event/position proof، withdraw کامل، revert/cap و طبقه‌بندی rejection/timeout/replacement را بررسی می‌کند. هیچ تراکنشی به Base mainnet ارسال نمی‌شود.
 
+در ۲۰۲۶-۰۹-۰۹، اجرای اصلاح‌شدهٔ Aave Base در [CI job 102268394490](https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/34288150304/job/102268394490) هر ۵۰ assertion strict fork را PASS کرد. اجرای قبل از آن با `26/27` یک mismatch واقعی ABI رویداد `Supply` را پیدا کرد و به‌درستی evidence محسوب نشد. جزئیات در [`farm-execution-readiness-fa.md`](./farm-execution-readiness-fa.md) ثبت شده است. این PASS به‌تنهایی اجازهٔ فعال‌سازی نمی‌دهد؛ allowlist مورد تأیید صاحب wallet و canary زنده با خروج کامل هنوز لازم است.
+
 فقط پس از PASS و review evidence:
 
 ```env

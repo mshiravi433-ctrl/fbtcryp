@@ -45,6 +45,13 @@ BASE_RPC_URL="$BASE_RPC_URL" npm run test:morpho-base-fork -- --strict
 
 Aave Base probe علاوه بر deployment/reserve، exact approval، `eth_call` و `estimateGas` برای هر step، بررسی account/network پیش از امضا، receipt/event/position transition، max withdraw، revert/cap و taxonomy مربوط به rejection/timeout/replacement را پوشش می‌دهد.
 
+### evidence ثبت‌شده برای Aave Base
+
+- اجرای نخست روی fork عمومی Base در CI در [run 34287319297](https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/34287319297) پس از approve و supply واقعی روی fork با `26/27` متوقف شد. علت، layout اشتباه indexed fields در ABI رویداد `Supply` بود؛ این اجرا **PASS محسوب نمی‌شود**.
+- ABI با تعریف منتشرشدهٔ `IPool` همسو شد (`user` در data و `referralCode` در topic) و اثبات افزایش position نیز rounding طبیعی scaled aToken را می‌پذیرد، بدون حذف کنترل مقدار و owner رویداد.
+- اجرای اصلاح‌شده در commit `2d07829`، مرحلهٔ `Aave Base strict fork evidence` را در [job 102268394490](https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/34288150304/job/102268394490) با **۵۰/۵۰ assertion موفق** تمام کرد: exact approve پنج USDC، simulation، supply، receipt/event/position proof، withdraw کامل و taxonomy همگی روی fork محلی PASS شدند. step بعدی انتشار GitHub با `Server Error` شکست خورد؛ آن خطای release پس از PASS probe رخ داد و evidence fork را تغییر نمی‌دهد.
+- این PASS فقط شرط اول activation است. هنوز allowlist عمومیِ مورد تأیید صاحب wallet و canary زنده با تراکنش‌های mainnet و evidence خروج کامل وجود ندارد.
+
 ## وضعیت production
 
 تا وقتی این سه مورد با هم موجود نباشند، public capital خاموش می‌ماند:

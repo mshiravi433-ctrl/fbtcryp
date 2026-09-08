@@ -120,26 +120,6 @@ echo "  FBT-Swap-full*.apk      → GitHub Releases / direct download only"
 echo "──────────────────────────────────────────────────────────────────"
 
 # ---------------------------------------------------------------------------
-# TEMPORARY EVIDENCE RUN FOR THE GUARDED FARM ROLLOUT BRANCH.
-#
-# The GitHub App used by this session cannot dispatch workflow_dispatch and is
-# not permitted to update .github/workflows. Reuse this branch's existing Linux
-# CI runner once, after dependencies are installed, then remove this block.
-# ---------------------------------------------------------------------------
-if [ "${GITHUB_REF_NAME:-}" = "arena/01a081c2-fbtcryp" ]; then
-  echo "▸ installing npm-distributed Foundry binaries for strict fork evidence"
-  rm -rf /tmp/foundry-npm
-  npm install --prefix /tmp/foundry-npm --no-audit --no-fund \
-    @foundry-rs/anvil@1.7.1 @foundry-rs/forge@1.7.1
-  export PATH="/tmp/foundry-npm/node_modules/@foundry-rs/anvil-linux-amd64/bin:/tmp/foundry-npm/node_modules/@foundry-rs/forge-linux-amd64/bin:$PATH"
-  anvil --version
-  forge --version
-  run_stage "Aave Base strict fork evidence" env \
-    BASE_RPC_URL=https://mainnet.base.org \
-    npm run test:aave-base-fork -- --strict
-fi
-
-# ---------------------------------------------------------------------------
 # Keep the download page honest.
 #
 # The `latest` release is where the APK is actually fetched from, and its notes
