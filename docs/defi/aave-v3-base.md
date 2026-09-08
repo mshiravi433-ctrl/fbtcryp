@@ -129,7 +129,7 @@ Everything is in `src/lib/features.js`. **All four default to the safe value.**
 | `AAVE_BASE_SUPPLY_ENABLED` | `false` | `VITE_ENABLE_AAVE_BASE_SUPPLY=true` |
 | `AAVE_BASE_SUPPLY_MAX_USDC_PER_TX` | `100` | `VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX` |
 | `AAVE_BASE_SUPPLY_MAX_USDC_TOTAL` | `500` | `VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL` |
-| `AAVE_BASE_SUPPLY_ALLOWLIST` | `[]` (empty = no restriction beyond the flag) | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xabc…,0xdef…` |
+| `AAVE_BASE_SUPPLY_ALLOWLIST` | `[]` (empty = supply closed) | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xabc…,0xdef…` |
 
 ```bash
 # allowlist of two wallets, shipped caps

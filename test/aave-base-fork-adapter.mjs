@@ -27,3 +27,12 @@ export {
   AAVE_BASE_SUPPLY_MAX_USDC_PER_TX,
   AAVE_BASE_SUPPLY_MAX_USDC_TOTAL
 } from '../src/lib/features.js';
+
+export { simulateGuardedStep } from '../src/lib/defi/guardedExecution.js';
+export {
+  assertSignerContext,
+  isTransactionReplacement,
+  isTransactionTimeout,
+  isUserRejection,
+  waitForMinedReceipt
+} from '../src/lib/defi/executionGuards.js';

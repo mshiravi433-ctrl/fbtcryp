@@ -107,7 +107,8 @@ export default function LidoPanel({ pool }) {
   const refresh = useCallback(async () => {
     if (!isTarget || !owner) return;
     setHistory(loadLidoHistoryFor(owner));
-    if (wallet.chainId !== LIDO.chainId) return;
+    // Read Ethereum positions and withdrawal tickets on every active wallet
+    // network. Stake/exit signatures still require an explicit chain switch.
     setBusy('loading');
     try {
       const provider = await wallet.getReadProvider(LIDO.chainId);
@@ -357,7 +358,9 @@ export default function LidoPanel({ pool }) {
 
   if (!isTarget) return null;
   const wrongChain = wallet.isConnected && wallet.chainId !== LIDO.chainId;
-  const knownHere = wrongChain && !hasPosition && history.some((r) => r.action === 'stake' && (r.status === 'confirmed' || r.status === 'pending'));
+  const knownHere = wrongChain && (hasPosition || history.some(
+    (r) => r.action === 'stake' && (r.status === 'confirmed' || r.status === 'pending')
+  ));
 
   if (!stakeAllowed && !hasPosition && !knownHere) return null;
 

@@ -89,7 +89,7 @@ drift, the adapter imports that table and **throws at module load**
 | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | off (`=== 'true'`) | exposes in-app Arbitrum supply |
 | `VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX` | 100 | per-transaction ceiling, enforced in the adapter |
 | `VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL` | 500 | position ceiling (existing + new), enforced in the adapter |
-| `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | empty (everyone) | optional small-group gate |
+| `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | empty (supply closed) | required non-empty canary gate |
 
 Build defines in `vite.config.js`: `__AAVE_ARB_SUPPLY_ENABLED__` (inverted
 test — a forgotten env var fails CLOSED) and `__AAVE_ARB_BUILD_ENV__` (cap

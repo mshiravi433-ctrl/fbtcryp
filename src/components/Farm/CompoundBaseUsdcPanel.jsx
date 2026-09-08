@@ -105,13 +105,13 @@ export default function CompoundBaseUsdcPanel({ pool }) {
   const refresh = useCallback(async () => {
     if (!isTarget || !owner) return;
     /*
-     * The ledger is a pure localStorage read, so it is safe on any chain — and
-     * it is the only way to know this wallet has a Compound position when the
-     * wallet itself is sitting on the wrong network. Everything below needs a
-     * Base provider, so the chain guard comes after it, not before.
+     * Local history helps recovery, but is never the source of truth. The
+     * position is read from pinned Base contracts even when the wallet is on
+     * another network, so an imported wallet can still discover its exit.
      */
     setHistory(loadCompoundHistoryFor(owner));
-    if (wallet.chainId !== COMPOUND_V3_BASE.chainId) return;
+    // Position discovery uses the pinned Base read provider on every wallet
+    // network. Signing remains blocked until the wallet explicitly switches.
     setBusy('loading');
     try {
       const provider = await wallet.getReadProvider(COMPOUND_V3_BASE.chainId);
@@ -354,16 +354,12 @@ export default function CompoundBaseUsdcPanel({ pool }) {
    * position to withdraw, there is nothing left for this panel to say, so it
    * renders nothing rather than an empty card. A position still renders: the
    * withdrawal path is never gated.
-   *
-   * Third case: the wallet is on another network, so the chain read never ran
-   * and the position is unknown — but the local ledger says this owner supplied
-   * through this app. Hiding the card there would leave someone holding a
-   * Compound position with no in-app route to it, which is exactly what the
-   * kill switch must not do. Show the card and the switch prompt instead.
+   * On another network, a directly read position (or a recovery record) keeps
+   * the card visible and asks for an explicit switch before any signature.
    */
-  const knownHere = wrongChain && !hasPosition && history.some(
+  const knownHere = wrongChain && (hasPosition || history.some(
     (r) => r.action === 'supply' && (r.status === 'confirmed' || r.status === 'pending')
-  );
+  ));
   if (!supplyAllowed && !hasPosition && !knownHere) return null;
 
   const openSheet = (nextMode) => {

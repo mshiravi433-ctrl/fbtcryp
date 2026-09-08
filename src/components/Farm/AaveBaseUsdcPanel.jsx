@@ -101,13 +101,14 @@ export default function AaveBaseUsdcPanel({ pool }) {
   const refresh = useCallback(async () => {
     if (!isTarget || !owner) return;
     /*
-     * The ledger is a pure localStorage read, so it is safe on any chain — and
-     * it is the only way to know this wallet has an Aave position when the
-     * wallet itself is sitting on the wrong network. Everything below needs a
-     * Base provider, so the chain guard comes after it, not before.
+     * Local history helps recovery, but is never the source of truth. The
+     * position is read from pinned Base contracts even when the wallet is on
+     * another network, so an imported wallet can still discover its exit.
      */
     setHistory(loadAaveHistoryFor(owner));
-    if (wallet.chainId !== AAVE_V3_BASE.chainId) return;
+    // Read through the pinned Base RPC even when the signing wallet is on a
+    // different chain. Discovery must not depend on local history or the
+    // currently selected network; writes still require an explicit switch.
     setBusy('loading');
     try {
       const provider = await wallet.getReadProvider(AAVE_V3_BASE.chainId);
@@ -348,16 +349,11 @@ export default function AaveBaseUsdcPanel({ pool }) {
    * renders nothing rather than an empty card. A position still renders: the
    * withdrawal path is never gated.
    */
-  /*
-   * Third case: the wallet is on another network, so the chain read never ran
-   * and the position is unknown — but the local ledger says this owner supplied
-   * through this app. Hiding the card there would leave someone holding an Aave
-   * position with no in-app route to it, which is exactly what the kill switch
-   * must not do. Show the card and the switch prompt instead.
-   */
-  const knownHere = wrongChain && !hasPosition && history.some(
+  /* On another network, a directly read position (or a recovery record) keeps
+     the card visible and asks for an explicit switch before any signature. */
+  const knownHere = wrongChain && (hasPosition || history.some(
     (r) => r.action === 'supply' && (r.status === 'confirmed' || r.status === 'pending')
-  );
+  ));
   if (!supplyAllowed && !hasPosition && !knownHere) return null;
 
   const openSheet = (nextMode) => {

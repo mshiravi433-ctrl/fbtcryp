@@ -2,6 +2,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { assertFarmRollout } from './scripts/farm-rollout-policy.mjs';
+
+/*
+ * Evaluate the money-in rollout policy while Vite loads its config. This is
+ * deliberately not limited to `npm run build:farm-rollout`: production,
+ * Android, local and direct `vite build` entry points all pass through here,
+ * so a lone VITE_ENABLE_*=true can never bypass the fail-closed gate.
+ */
+assertFarmRollout(process.env);
 
 /**
  * STRIP LOCALE COPY FOR FEATURES THAT ARE NOT IN THIS BUILD.
