@@ -147,7 +147,7 @@ export async function aggregateQuotes(body) {
       await emit({ type: 'InsuranceQuoteCreated', wallet: params.walletAddress, providerId: p.providerId, quoteId: quote.quoteId, payload: { quoteId: quote.quoteId, provider: p.providerId } });
       quotes.push(quote);
     } catch (err) {
-      failures.push({ providerId: p.providerId, reason: String(err?.message || 'QUOTE_ERROR').slice(0, 120) });
+      failures.push({ providerId: p.providerId, reason: classifyQuoteError(err) });
     }
   }
   if (quotes.length === 0) {
@@ -159,6 +159,17 @@ export async function aggregateQuotes(body) {
     };
   }
   return { ok: true, none: false, quotes, failures, wallet: params.walletAddress, chainId: params.chainId, at: Date.now() };
+}
+
+/** Map thrown errors to stable codes — never leak JS TypeError text to the UI. */
+export function classifyQuoteError(err) {
+  const code = String(err?.code || '');
+  if (/^[A-Z][A-Z0-9_]{3,}$/.test(code) && code !== 'ERR_INVALID_ARG_TYPE') return code;
+  const msg = String(err?.message || 'QUOTE_ERROR');
+  if (/serialize a BigInt|Do not know how to serialize/i.test(msg)) return 'QUOTE_ERROR';
+  if (/timeout|timed out|ENOTFOUND|ECONN|EAI_AGAIN|network/i.test(msg)) return 'PROVIDER_UNAVAILABLE';
+  if (/HTTP \d{3}/.test(msg)) return 'QUOTE_REJECTED_BY_PROVIDER';
+  return 'QUOTE_ERROR';
 }
 
 function publicBrief(p) {

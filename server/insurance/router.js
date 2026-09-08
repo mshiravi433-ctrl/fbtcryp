@@ -36,19 +36,13 @@ import {
   OPENCOVER_REGISTRY_ENABLED
 } from './env.js';
 import { REGISTRY_META, listVaultRows } from './adapters/opencover.js';
+import { jsonSafe } from './constants.js';
 
 setupProviders();
 
 /** JSON-safe serialiser: BigInt money values are returned as strings (§46). */
 function safe(obj) {
-  if (typeof obj === 'bigint') return obj.toString();
-  if (Array.isArray(obj)) return obj.map(safe);
-  if (obj && typeof obj === 'object') {
-    const out = {};
-    for (const k of Object.keys(obj)) out[k] = safe(obj[k]);
-    return out;
-  }
-  return obj;
+  return jsonSafe(obj);
 }
 
 const ADMIN_KEY = INSURANCE_ADMIN_KEY;

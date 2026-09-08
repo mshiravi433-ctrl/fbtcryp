@@ -21,10 +21,11 @@
  *   getCoverPremiumV2 → confirmCoverPremiumV2 → (user reviews premium/terms)
  *   → wallet approval if ERC20 → wallet signs buyCoverV3 → receipt verified.
  */
-import { Interface, isAddress } from 'ethers';
+import { Interface, isAddress, getAddress } from 'ethers';
 import { InsuranceProviderAdapter } from '../adapter.js';
 import { httpPost } from '../http.js';
 import * as store from '../store.js';
+import { parseMicro } from '../constants.js';
 import {
   INSURACE_ENABLED, INSURACE_API_BASE_URL, INSURACE_API_CODE,
   INSURACE_CHAIN_ALLOWLIST, INSURACE_COVER_CONTRACTS, PROVIDER_HTTP_TIMEOUT_MS
@@ -165,9 +166,11 @@ export class InsurAceAdapter extends InsuranceProviderAdapter {
     }
     const days = Math.round(Number(params.durationDays ?? 30));
     if (!(days >= 1 && days <= 365)) return { ok: false, error: 'DURATION_OUT_OF_RANGE' };
-    const amountMicro = typeof params.coverageAmountMicro === 'bigint' ? params.coverageAmountMicro : null;
-    if (!amountMicro || amountMicro <= 0n) return { ok: false, error: 'COVERAGE_AMOUNT_REQUIRED' };
-    if (!params.walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(params.walletAddress)) {
+    const amountMicro = parseMicro(params.coverageAmountMicro);
+    if (amountMicro == null || amountMicro <= 0n) return { ok: false, error: 'COVERAGE_AMOUNT_REQUIRED' };
+    let owner;
+    try { owner = getAddress(String(params.walletAddress || '')); } catch { owner = null; }
+    if (!owner) {
       return { ok: false, error: 'VALID_WALLET_REQUIRED' };
     }
     if (params.termsAccepted !== true) {
@@ -191,13 +194,13 @@ export class InsurAceAdapter extends InsuranceProviderAdapter {
       premiumRes = await this._post('getCoverPremiumV2', {
         chain: chainCode,
         params: {
-          owner: params.walletAddress,
+          owner,
           coverCurrency: currencyAddr,
           premiumCurrency: currencyAddr, // docs: must be the same as coverCurrency
           productIds: [Number(productId)],
           coverDays: [days],
           coverAmounts: [amountMicro.toString()], // decimals already 6 == micro
-          coveredAddresses: [params.walletAddress],
+          coveredAddresses: [owner],
           referralCode: null
         }
       });

@@ -12,7 +12,7 @@
  * OR as a flat micro-amount (network). Provider-level overrides win over the
  * global default.
  */
-import { toMicro, fromMicro } from './constants.js';
+import { parseMicro, fromMicro } from './constants.js';
 import {
   FBT_INSURANCE_FEE_BPS, FBT_INSURANCE_FLAT_FEE_MICRO, FBT_PROVIDER_COMMISSION_BPS
 } from './env.js';
@@ -54,7 +54,7 @@ function providerIntegrationBps(provider) {
  *               network, networkFeeMicro? }) -> structured split (§18/§20)
  */
 export function computeFees(input) {
-  const premium = typeof input.premiumMicro === 'bigint' ? input.premiumMicro : toMicro(input.premiumMicro);
+  const premium = parseMicro(input.premiumMicro);
   if (premium === null) throw new Error('INVALID_PREMIUM');
   if (premium < 0n) throw new Error('NEGATIVE_PREMIUM');
   const provider = input.provider || {};
@@ -71,7 +71,7 @@ export function computeFees(input) {
   const networkDefault = DEFAULT_FEES.networkFeeMicro;
   let networkFee = 0n;
   if (input.networkFeeMicro !== undefined) {
-    const n = typeof input.networkFeeMicro === 'bigint' ? input.networkFeeMicro : toMicro(input.networkFeeMicro);
+    const n = parseMicro(input.networkFeeMicro);
     networkFee = n ?? 0n;
   } else if (network != null && networkDefault[network] !== undefined) {
     networkFee = networkDefault[network];
