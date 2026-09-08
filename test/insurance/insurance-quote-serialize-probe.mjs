@@ -14,7 +14,7 @@ const { computeFees } = await import('../../server/insurance/fee-engine.js');
 const store = await import('../../server/insurance/store.js');
 const { classifyQuoteError } = await import('../../server/insurance/service.js');
 const { reasonLabel } = await import('../../src/pages/insurance/insStatus.js');
-const { checksumAddress, NexusMutualAdapter } = await import('../../server/insurance/adapters/nexus-mutual.js');
+const { checksumAddress, classifyNexusHttpError, NexusMutualAdapter } = await import('../../server/insurance/adapters/nexus-mutual.js');
 
 assert.equal(parseMicro(1_500_000n), 1_500_000n);
 assert.equal(parseMicro('1500000'), 1_500_000n);
@@ -82,5 +82,30 @@ const nexus = new NexusMutualAdapter();
 assert.equal(nexus.amountToBaseUnits(10_000_000_000n, { decimals: 6 }), '10000000000');
 assert.equal(nexus.amountToBaseUnits('10000000000', { decimals: 6 }), '10000000000');
 ok('Nexus checksums wallet addresses (EIP-55) and treats *Micro integer strings as micro-units');
+
+assert.equal(classifyNexusHttpError({ kind: 'timeout', body: 'not enough capacity', action: '/quote' }), 'PROVIDER_UNAVAILABLE');
+assert.equal(classifyNexusHttpError({ kind: 'network', body: '', action: '/quote' }), 'PROVIDER_UNAVAILABLE');
+assert.equal(classifyNexusHttpError({ kind: 'parse', body: 'insufficient capacity', action: '/quote' }), 'PROVIDER_UNAVAILABLE');
+ok('classifyNexusHttpError: non-status → PROVIDER_UNAVAILABLE (never a fake capacity shortage)');
+
+assert.equal(classifyNexusHttpError({ kind: 'status', body: 'not enough capacity', action: '/quote' }), 'CAPACITY_UNAVAILABLE');
+assert.equal(classifyNexusHttpError({ kind: 'status', body: 'Insufficient capacity for this cover', action: '/quote' }), 'CAPACITY_UNAVAILABLE');
+assert.equal(classifyNexusHttpError({ kind: 'status', body: 'unable to allocate pool', action: '/quote' }), 'CAPACITY_UNAVAILABLE');
+ok('classifyNexusHttpError: /quote + real shortage → CAPACITY_UNAVAILABLE');
+
+const swaggerBody = 'Cannot GET /v2/capacity/{productId}';
+assert.equal(classifyNexusHttpError({ kind: 'status', body: swaggerBody, action: '/quote' }), 'PROVIDER_HTTP_ERROR');
+assert.equal(classifyNexusHttpError({ kind: 'status', body: '<html>GET /v2/capacity/{productId}</html>', action: '/quote' }), 'PROVIDER_HTTP_ERROR');
+ok('classifyNexusHttpError: swagger HTML GET /v2/capacity/{productId} on /quote stays PROVIDER_HTTP_ERROR');
+
+assert.equal(classifyNexusHttpError({ kind: 'status', body: 'not enough capacity', action: 'cover-metadata' }), 'PROVIDER_HTTP_ERROR');
+assert.equal(classifyNexusHttpError({ kind: 'status', body: swaggerBody, action: 'cover-metadata' }), 'PROVIDER_HTTP_ERROR');
+ok('classifyNexusHttpError: cover-metadata never becomes CAPACITY_UNAVAILABLE');
+
+assert.equal(nexus._httpError({ status: 0, error: { kind: 'timeout', body: 'not enough capacity' } }, '/quote').code, 'PROVIDER_UNAVAILABLE');
+assert.equal(nexus._httpError({ status: 400, error: { kind: 'status', body: 'not enough capacity' } }, '/quote').code, 'CAPACITY_UNAVAILABLE');
+assert.equal(nexus._httpError({ status: 404, error: { kind: 'status', body: swaggerBody } }, '/quote').code, 'PROVIDER_HTTP_ERROR');
+assert.equal(nexus._httpError({ status: 400, error: { kind: 'status', body: 'not enough capacity' } }, 'cover-metadata').code, 'PROVIDER_HTTP_ERROR');
+ok('_httpError wires classifyNexusHttpError (greedy /capacit|insufficient|not enough/ regex gone)');
 
 console.log(`\nPASS ${pass} insurance-quote-serialize assertions`);
