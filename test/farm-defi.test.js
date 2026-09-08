@@ -99,12 +99,12 @@ describe('farm DeFi architecture', () => {
    test/helpers/aaveMockProvider.mjs, which answers each selector the way a Base
    node would. Every assertion below is about a decision the adapter makes that
    would otherwise cost a user money. */
-import { MaxUint256 } from 'ethers';
+import { Interface, MaxUint256 } from 'ethers';
 import {
   AAVE_V3_BASE, AAVE_V3_CUSTOM_ERRORS, AAVE_V3_ERROR_KEYS, AaveAdapterError, RESERVE_DATA_SHAPES,
   buildRevokePlan, buildSupplyPlan, buildWithdrawPlan, decodeReserveConfiguration,
   decodeReserveData, explainRevert, fromUsdcWei, getReserveStatus, getPosition,
-  isAaveBaseUsdcPool, rayToApyPct, verifyDeployment
+  isAaveBaseUsdcPool, rayToApyPct, verifyAaveReceipt, verifyDeployment
 } from '../src/lib/defi/aaveV3Base';
 import {
   AAVE_BASE_SUPPLY_ENABLED, AAVE_BASE_SUPPLY_MAX_USDC_PER_TX,
@@ -295,6 +295,53 @@ describe('aave v3 base adapter', () => {
     expect(amount).toBe(5n * USDC_1);
     expect(onBehalfOf.toLowerCase()).toBe(OWNER.toLowerCase());
     expect(Number(referralCode)).toBe(0);
+  });
+
+  it('verifies the released IPool Supply event layout and a scaled-balance increase', async () => {
+    // Aave's actual IPool event keeps `user` in data and `referralCode` in
+    // topics. Reversing those indexed modifiers preserves topic0 but silently
+    // shifts decoded fields, which the strict Base fork probe caught.
+    const iface = new Interface([
+      'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)'
+    ]);
+    const encoded = iface.encodeEventLog(iface.getEvent('Supply'), [
+      AAVE_V3_BASE.usdc, OWNER, OWNER, 5n * USDC_1, 0
+    ]);
+    const proof = await verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: 5n * USDC_1 - 1n }),
+      receipt: {
+        status: 1,
+        hash: `0x${'ab'.repeat(32)}`,
+        logs: [{ address: AAVE_V3_BASE.pool, topics: encoded.topics, data: encoded.data }]
+      },
+      owner: OWNER,
+      action: 'supply',
+      amountWei: 5n * USDC_1,
+      beforePositionWei: 0n
+    });
+    expect(proof).toMatchObject({ ok: true, action: 'supply', event: 'Supply' });
+    expect(proof.position.aTokenBalance).toBe(5n * USDC_1 - 1n);
+  });
+
+  it('rejects a Supply event issued on behalf of another account', async () => {
+    const other = '0x2222222222222222222222222222222222222222';
+    const iface = new Interface([
+      'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)'
+    ]);
+    const encoded = iface.encodeEventLog(iface.getEvent('Supply'), [
+      AAVE_V3_BASE.usdc, OWNER, other, 5n * USDC_1, 0
+    ]);
+    await expect(verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: 5n * USDC_1 }),
+      receipt: {
+        status: 1,
+        logs: [{ address: AAVE_V3_BASE.pool, topics: encoded.topics, data: encoded.data }]
+      },
+      owner: OWNER,
+      action: 'supply',
+      amountWei: 5n * USDC_1,
+      beforePositionWei: 0n
+    })).rejects.toMatchObject({ code: 'AAVE_PROTOCOL_EVENT_MISMATCH' });
   });
 
   it('refuses a supply above the per-transaction cap', async () => {
