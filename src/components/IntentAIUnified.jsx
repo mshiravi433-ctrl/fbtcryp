@@ -4036,7 +4036,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         <header className="iaos-header">
           <div className="iaos-title">
             <span className="iaos-mark iaos-mark-logo" aria-hidden="true">
-              <svg width="30" height="30" viewBox="0 0 40 40" fill="none" role="img" aria-label="FBT Agent">
+              <svg width="32" height="32" viewBox="0 0 40 40" fill="none" role="img" aria-label="FBT Agent">
                 <defs>
                   <linearGradient id="iaosBrandGrad" x1="3" y1="3" x2="37" y2="37" gradientUnits="userSpaceOnUse">
                     <stop stopColor="#34d399" />
@@ -4048,22 +4048,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     <stop offset="1" stopColor="#08080c" />
                   </linearGradient>
                 </defs>
-                {/*
-                  The plate is a classed element, not a bare attribute, because
-                  `fill` as a presentation ATTRIBUTE loses to any CSS rule —
-                  which is exactly what lets the light theme repaint it white
-                  (see `.iaos-logo-plate` in trench-agent.css). It is also
-                  inset from the viewBox edge and much rounder than it was:
-                  at 1.2/37.6 with rx 11.5 the tile touched all four sides of
-                  its own 30px box and read as a dark block jammed into the
-                  corner of the header («از صفحه زده بیرون»).
-                */}
-                <rect className="iaos-logo-plate" x="2.6" y="2.6" width="34.8" height="34.8" rx="15" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.4" />
-                <circle cx="20" cy="20" r="10.2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" />
-                <path d="M14.7 16.8a5.4 5.4 0 0 1 9.1-2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M25.3 23.2a5.4 5.4 0 0 1-9.1 2" stroke="url(#iaosBrandGrad)" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M21.6 18.3h3.2v-3.2M18.4 21.7h-3.2v3.2" stroke="url(#iaosBrandGrad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="29.6" cy="8.6" r="1.2" fill="#34d399" />
+                {/* Rounded squircle plate with smooth corners and minimal AI Sparkle mark */}
+                <rect className="iaos-logo-plate" x="2.5" y="2.5" width="35" height="35" rx="12" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.4" />
+                <path
+                  d="M20 8.5C20 13.8 15.8 18 10.5 18C15.8 18 20 22.2 20 27.5C20 22.2 24.2 18 29.5 18C24.2 18 20 13.8 20 8.5Z"
+                  stroke="url(#iaosBrandGrad)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="20" cy="18" r="2.2" fill="url(#iaosBrandGrad)" />
+                <circle cx="28.5" cy="9.5" r="1.3" fill="#34d399" />
               </svg>
             </span>
             <span className="iaos-title-copy">
