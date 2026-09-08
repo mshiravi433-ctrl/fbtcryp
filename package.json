@@ -30,6 +30,8 @@
     "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
+    "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx",
+    "test:farm:live": "node scripts/farm-defillama-smoke.mjs",
     "test:aave-base-fork": "node test/aave-base-fork-probe.mjs",
     "test:aave-arbitrum-fork": "node test/aave-arbitrum-fork-probe.mjs",
     "test:compound-base-fork": "node test/compound-base-fork-probe.mjs",

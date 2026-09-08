@@ -45,7 +45,7 @@ export const RISK_BANDS = ['low', 'medium', 'high'];
  * — an unknown split must not be rendered as "100% real".
  */
 export function realShare(pool) {
-  if (!pool) return null;
+  if (!pool || pool.apyBase == null || pool.apyBase === '') return null;
   const apy = Number(pool.apy);
   const base = Number(pool.apyBase);
   if (!Number.isFinite(apy) || apy <= 0 || !Number.isFinite(base)) return null;
@@ -445,19 +445,38 @@ export function farmScore(pool) {
  * No client-side cache beyond the request itself: the server already caches
  * for an hour, and a second layer here would only make "pull to refresh" a lie.
  */
-export async function getYields({ timeout = 15000 } = {}) {
+async function fetchYieldData(url, { timeout = 15000, signal } = {}) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
+  const abort = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, timeout);
   try {
-    const res = await fetch(`${API_BASE}/yields`, {
-      signal: ctrl.signal,
+    const res = await fetch(url, {
+      signal: ctrl.signal, cache: 'no-store',
       headers: { accept: 'application/json' }
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    if (!Array.isArray(data?.pools)) throw new Error('BAD_SHAPE');
+    if (res.headers.get('x-data-stale') === '1') data.freshness = 'STALE';
     return data;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
+}
+
+export async function getYields(options = {}) {
+  const data = await fetchYieldData(`${API_BASE}/yields`, { timeout: 35_000, ...options });
+  if (!Array.isArray(data?.pools) || !Number.isFinite(data.at) || data.at <= 0 || data.at > Date.now() + 60_000) throw new Error('BAD_SHAPE');
+  // Never display an expired observation, even if an intermediary returns it.
+  if (Date.now() - data.at >= 2 * 60 * 60_000) throw new Error('YIELDS_EXPIRED');
+  return data;
+}
+
+export async function getYieldHistory(id, options = {}) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('INVALID_POOL_ID');
+  const data = await fetchYieldData(`${API_BASE}/yields/${encodeURIComponent(id)}/history`, { timeout: 65_000, ...options });
+  if (data?.pool !== id || !Array.isArray(data.points)) throw new Error('BAD_SHAPE');
+  return data;
 }

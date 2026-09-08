@@ -32,7 +32,7 @@ import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
 import { buildMarketPulse, buildSolanaRadar, explainSignal } from './signalEngine.js';
-import { fetchYields } from './yields.js';
+import { yieldsApi } from './yieldsApi.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
 import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
@@ -4542,7 +4542,7 @@ app.get('/api/dex/:network', (req, res) =>
  * a phone on an Iranian mobile connection to render eight rows would be
  * indefensible.
  *
- * Filtered here down to a few dozen rows. See server/yields.js for the safety
+ * Filtered here down to at most 500 rows. See server/yields.js for the safety
  * rules; the short version is that an unfiltered yield list sorted by APY is
  * a list sorted by scam.
  *
@@ -4552,7 +4552,8 @@ app.get('/api/dex/:network', (req, res) =>
  * number that would look identical. Being a good citizen of a free API is also
  * how it stays free.
  */
-app.get('/api/yields', (_req, res) => serve(res, 3_600_000)(fetchYields, 'yields'));
+app.get('/api/yields', yieldsApi.list);
+app.get('/api/yields/:id/history', yieldsApi.history);
 
 /**
  * LIVE DATA FOR THE CURATED SOLANA ASSETS — liquid staking + tokenized equities.

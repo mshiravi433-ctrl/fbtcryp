@@ -12,9 +12,11 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
+import { useFarmYields } from '../hooks/useFarmYields';
+import PoolHistory from '../components/Farm/PoolHistory';
 import { TOKENS } from '../lib/chains';
 import {
-  farmScore, getYields, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
+  farmScore, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
   projectEarnings, rateIsUnusual, realShare
 } from '../lib/yields';
 import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
@@ -332,7 +334,7 @@ function ProtocolStatusCard({ protocol, t }) {
   const status = protocol?.status || 'CONNECTING';
   const statusLabel = status === 'ACTIVE'
     ? t('farm.protocolActive')
-    : status === 'UNAVAILABLE' ? t('farm.protocolUnavailable') : t('farm.protocolConnecting');
+    : status === 'UNAVAILABLE' ? t('farm.protocolUnavailable') : status === 'STALE' ? t('farm.freshness.STALE') : t('farm.protocolConnecting');
   const updated = protocol?.updatedAt
     ? new Date(protocol.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
@@ -508,12 +510,13 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         <Metric label={t('farm.protocolFees')} value={t('farm.includedInApy')} />
         <Metric label={t('farm.gasEstimate')} unavailable />
         <Metric label={t('farm.fbtFee')} value={`${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`} />
-        <Metric label={t('farm.estimatedNetApy')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong />
+        <Metric label={t('farm.netBeforeGas')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong />
         <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} />
         <Metric label={t('farm.rewardYieldShare')} value={rewardPct == null ? null : `${rewardPct}%`} unavailable={rewardPct == null} />
         <Metric label={t('farm.rateVs30d')} value={mean30 == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null} />
       </div>
 
+      <PoolHistory poolId={pool.id} t={t} />
       <HorizonEarningsChart pool={pool} amount={amount} t={t} />
       <FeeEngineCard pool={pool} amount={amount} t={t} />
 
@@ -635,12 +638,13 @@ export default function Farm() {
   const legacyTab = params.get('tab');
   const tab = FARM_TABS.includes(legacyTab) ? legacyTab : 'recommended';
   const focus = params.get('focus');
-  const [data, setData] = useState(null);
+  const { data, error, loading, refreshing, refresh } = useFarmYields();
   const [solAssets, setSolAssets] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
+  const [chain, setChain] = useState('all');
+  const [sort, setSort] = useState('score');
+  const [visibleCount, setVisibleCount] = useState(24);
   const [amount, setAmount] = useState(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
@@ -653,21 +657,6 @@ export default function Farm() {
   useEffect(() => {
     tabsRef.current?.querySelector('button.active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [tab]);
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    getYields()
-      .then((result) => {
-        if (!alive) return;
-        setData(result);
-        setError(null);
-        emitFarmEvent('FARM_DISCOVERED', { count: result.pools.length, source: result.source });
-      })
-      .catch(setError)
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
-  }, []);
 
   /* The verified Solana asset list: icons + live liquidity for the staking
      rows. A failure here degrades to the curated rows without live extras —
@@ -704,12 +693,13 @@ export default function Farm() {
   }, [amount, customAmount]);
 
   const opportunities = useMemo(() => {
-    const metadata = { source: data?.source || 'defillama', updatedAt: data?.at || null };
+    const metadata = { source: data?.source || 'defillama', updatedAt: data?.at || null, freshness: data?.freshness };
     return (data?.pools || []).map((pool) => normalizeFarmOpportunity(pool, metadata));
   }, [data]);
 
   const filtered = useMemo(() => {
     let rows = opportunities;
+    if (chain !== 'all') rows = rows.filter((p) => p.chain === chain);
     if (filter === 'stable') rows = rows.filter((p) => p.stablecoin);
     if (filter === 'blueChip') rows = rows.filter((p) => p.tvlUsd >= 500_000_000);
     if (filter === 'highYield') rows = rows.filter((p) => p.apy >= 15);
@@ -720,10 +710,14 @@ export default function Farm() {
     if (filter === 'vault') rows = rows.filter((p) => VAULT_PROJECTS.includes(p.project));
     const needle = q.trim().toLowerCase();
     if (needle) rows = rows.filter((p) => `${p.symbol} ${p.project} ${p.chain}`.toLowerCase().includes(needle));
-    return rows;
-  }, [opportunities, filter, q]);
+    return [...rows].sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity));
+  }, [opportunities, filter, q, chain, sort]);
 
-  const recommended = useMemo(() => [...filtered].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).slice(0, 8), [filtered]);
+  useEffect(() => { setVisibleCount(24); }, [filter, q, chain, sort]);
+  const chains = useMemo(() => [...new Set(opportunities.map((p) => p.chain))].sort(), [opportunities]);
+  const selectedPool = opportunities.find((p) => p.id === selected?.id) || null;
+
+  const recommended = useMemo(() => filtered.slice(0, 8), [filtered]);
   const marketRows = useMemo(() => {
     const first = (sorter) => [...filtered].sort(sorter)[0];
     return [
@@ -740,13 +734,16 @@ export default function Farm() {
     pools: data?.pools || [],
     at: data?.at || null,
     source: data?.source || null,
-    error: error || null
+    error: error || null,
+    freshness: data?.freshness
   }), [data, error]);
 
   const selectTab = (id) => { haptic?.('select'); setSelected(null); setParams({ tab: id }, { replace: true }); };
   const selectPool = (pool) => {
-    haptic?.('light'); setSelected(pool);
-    const context = { page: 'farm', tab, selectedPool: pool.id, network: pool.chain, walletState: wallet.isConnected ? 'connected' : 'read-only', previousIntent: null, pendingAction: null };
+    haptic?.('light');
+    const next = selected?.id === pool.id ? null : pool;
+    setSelected(next);
+    const context = { page: 'farm', tab, selectedPool: next?.id || null, network: next?.chain || null, walletState: wallet.isConnected ? 'connected' : 'read-only', previousIntent: null, pendingAction: null };
     try { sessionStorage.setItem('fbt:farm-context', JSON.stringify(context)); } catch { /* storage optional */ }
     emitFarmEvent('POOL_UPDATED', context);
   };
@@ -797,6 +794,11 @@ export default function Farm() {
       </motion.div>
 
       <ProtocolStatusCard protocol={protocol} t={t} />
+      <div className="row-between" style={{ marginBlock: 10 }}>
+        <span className="faint" role="status">{refreshing ? t('farm.refreshing') : t('farm.feedRefreshNote')}</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={refresh} disabled={refreshing}>{error ? t('farm.retry') : t('farm.refresh')}</button>
+      </div>
+      {data?.freshness === 'STALE' && <p className="notice" role="status">{t('farm.staleNotice')}</p>}
 
       {/* The five destinations as ONE horizontal rail: it scrolls left/right
           (flick or drag) instead of stacking into a column, and the selected
@@ -837,6 +839,14 @@ export default function Farm() {
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
         {FILTERS.map((id) => <button key={id} className={`tag ${filter === id ? 'active' : ''}`} onClick={() => setFilter(id)}>{t(`farm.category.${id}`)}</button>)}
       </div>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginBlock: 10 }}>
+        <label className="faint">{t('farm.network')} <select className="farm-search" value={chain} onChange={(e) => setChain(e.target.value)} aria-label={t('farm.network')}>
+          <option value="all">{t('farm.allNetworks')}</option>{chains.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select></label>
+        {['recommended', 'pools'].includes(tab) && <label className="faint">{t('farm.sortBy')} <select className="farm-search" value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t('farm.sortBy')}>
+          {['score', 'apy', 'tvlUsd'].map((key) => <option key={key} value={key}>{t(`farm.sort.${key}`)}</option>)}
+        </select></label>}
+      </div>
       <div className="farm-controls">
         <input className="farm-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('farm.search')} aria-label={t('farm.search')} />
         <div className="farm-amounts"><span className="faint">{t('farm.ifIDeposit')}</span><div className="row farm-amount-row">{AMOUNTS.map((n) => <button key={n} className={`tag ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>{fmtUsd(n)}</button>)}<input className="farm-amt-input" inputMode="decimal" value={customAmount} onChange={(e) => setCustomAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder={t('farm.customAmt')} /></div></div>
@@ -846,8 +856,10 @@ export default function Farm() {
       {!loading && error && <p className="notice notice-danger">{t('farm.unavailable')}</p>}
       {!loading && !error && tab !== 'inapp' && filtered.length === 0 && <p className="notice">{t('farm.noneForFilter')}</p>}
       {!loading && !error && data && tab !== 'inapp' && filtered.length > 0 && (
-        <p className="farm-filtered faint">{t('farm.filteredNote', { shown: filtered.length, considered: data.considered ?? data.pools.length })}</p>
+        <p className="farm-filtered faint">{t('farm.filteredNote', { shown: filtered.length, returned: data.pools.length, passed: data.passed ?? data.pools.length, considered: data.considered ?? data.pools.length })}</p>
       )}
+
+      {data?.truncated && <p className="notice">{t('farm.feedTruncated', { count: data.pools.length })}</p>}
 
       {/*
         The in-app tab renders even when the yield feed is down: staking
@@ -858,9 +870,12 @@ export default function Farm() {
         <InAppTab pools={opportunities} deposit={deposit} liveByMint={liveByMint} onStakeLst={stakeLst} onBuyEth={buyEthStake} onBuyGold={buyGold} t={t} />
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
+      {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
       {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
-      {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered)}</section>}
+      {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
+
+      {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
 
       <PositionPanel wallet={wallet} t={t} navigate={navigate} />
 

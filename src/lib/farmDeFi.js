@@ -1,5 +1,5 @@
 import { FEE_BPS } from './feeBps';
-import { farmScore, investRoute, pairTokens, rateIsUnusual, realShare } from './yields';
+import { farmScore, getYields, getYieldHistory, investRoute, pairTokens, rateIsUnusual, realShare } from './yields';
 
 /**
  * Which feed projects are auto-compounding vaults, for the Farm "vault"
@@ -96,20 +96,48 @@ export class VaultAdapter extends FarmAdapter {}
 export class YieldAdapter extends FarmAdapter {}
 export class RewardAdapter extends FarmAdapter {}
 
+const finiteMetric = (value) => value != null && (typeof value === 'number' || typeof value === 'string') && String(value).trim() !== '' && Number.isFinite(Number(value));
+
 /** Discovery-only adapter for the real filtered DefiLlama feed. */
 export class DefiLlamaYieldAdapter extends YieldAdapter {
-  constructor(pools = []) {
-    super({ id: 'defillama', capabilities: ['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL'] });
-    this.pools = Array.isArray(pools) ? pools : [];
+  constructor(pools = null) {
+    super({ id: 'defillama', capabilities: ['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL', 'getHistory'] });
+    this.pools = Array.isArray(pools) ? pools : null;
+    this.snapshot = null;
+    this.pending = null;
   }
-  async getPools() { return { status: 'AVAILABLE', data: this.pools }; }
+  async getPools({ refresh = false, ...options } = {}) {
+    const expired = this.snapshot && Date.now() - this.snapshot.at >= 60 * 60_000;
+    if (this.pools && !refresh && !expired) return { status: 'AVAILABLE', data: this.pools, meta: this.snapshot };
+    if (!this.pending) {
+      this.pending = getYields(options).then((snapshot) => {
+        this.snapshot = snapshot;
+        this.pools = snapshot.pools;
+        return { status: 'AVAILABLE', data: this.pools, meta: snapshot };
+      }).catch(() => {
+        this.pools = null;
+        this.snapshot = null;
+        return this.unavailable('getPools');
+      }).finally(() => { this.pending = null; });
+    }
+    return this.pending;
+  }
   async getPool(id) {
-    const data = this.pools.find((pool) => pool.id === id) || null;
-    return data ? { status: 'AVAILABLE', data } : this.unavailable('getPool');
+    const rows = await this.getPools();
+    const data = rows.data?.find((pool) => pool.id === id) || null;
+    return data ? { status: 'AVAILABLE', data, meta: rows.meta } : this.unavailable('getPool');
   }
-  async getAPY(id) { const row = await this.getPool(id); return row.data ? { status: 'AVAILABLE', value: row.data.apy } : row; }
-  async getAPR(id) { const row = await this.getPool(id); return row.data ? { status: row.data.apr == null ? 'UNAVAILABLE' : 'AVAILABLE', value: row.data.apr ?? null } : row; }
-  async getTVL(id) { const row = await this.getPool(id); return row.data ? { status: 'AVAILABLE', value: row.data.tvlUsd } : row; }
+  async getMetric(id, key) {
+    const row = await this.getPool(id);
+    return row.data ? { status: finiteMetric(row.data[key]) ? 'AVAILABLE' : 'UNAVAILABLE', value: finiteMetric(row.data[key]) ? Number(row.data[key]) : null, freshness: row.meta?.freshness || row.data.freshness || 'UNAVAILABLE' } : row;
+  }
+  async getAPY(id) { return this.getMetric(id, 'apy'); }
+  async getAPR(id) { return this.getMetric(id, 'apr'); }
+  async getTVL(id) { return this.getMetric(id, 'tvlUsd'); }
+  async getHistory(id, options) {
+    try { return { status: 'AVAILABLE', data: await getYieldHistory(id, options) }; }
+    catch { return this.unavailable('getHistory'); }
+  }
 }
 
 export class FbtFeeEngine {
@@ -123,8 +151,8 @@ export class FbtFeeEngine {
     const amount = Number(amountUsd);
     if (!Number.isFinite(amount) || amount <= 0) return { status: 'UNAVAILABLE', reason: 'INVALID_AMOUNT' };
     const fbtFeeUsd = amount * this.platformFeeBps / 10_000;
-    const knownProtocol = Number.isFinite(Number(protocolFeeUsd));
-    const knownGas = Number.isFinite(Number(gasUsd));
+    const knownProtocol = finiteMetric(protocolFeeUsd) && Number(protocolFeeUsd) >= 0;
+    const knownGas = (finiteMetric(gasUsd) && Number(gasUsd) >= 0);
     const totalCostUsd = knownProtocol && knownGas ? Number(protocolFeeUsd) + Number(gasUsd) + fbtFeeUsd : null;
     return {
       status: 'AVAILABLE', amountUsd: amount, protocolFeeUsd: knownProtocol ? Number(protocolFeeUsd) : null,
@@ -152,10 +180,10 @@ export class FbtFeeEngine {
   estimateNetYield({ grossApy, protocolCostApy = null, gasUsd = null, amountUsd, operationsPerYear = 1 } = {}) {
     const gross = Number(grossApy);
     const amount = Number(amountUsd);
-    if (!Number.isFinite(gross) || !Number.isFinite(amount) || amount <= 0) return { status: 'UNAVAILABLE' };
+    if (!finiteMetric(grossApy) || !Number.isFinite(gross) || !Number.isFinite(amount) || amount <= 0) return { status: 'UNAVAILABLE' };
     const fbtFeeApy = (this.platformFeeBps / 100) * Math.max(1, Number(operationsPerYear) || 1);
-    const gasApy = Number.isFinite(Number(gasUsd)) ? (Number(gasUsd) * Math.max(1, Number(operationsPerYear) || 1) / amount) * 100 : null;
-    const protocolApy = Number.isFinite(Number(protocolCostApy)) ? Number(protocolCostApy) : null;
+    const gasApy = (finiteMetric(gasUsd) && Number(gasUsd) >= 0) ? (Number(gasUsd) * Math.max(1, Number(operationsPerYear) || 1) / amount) * 100 : null;
+    const protocolApy = (finiteMetric(protocolCostApy) && Number(protocolCostApy) >= 0) ? Number(protocolCostApy) : null;
     const allKnown = gasApy != null && protocolApy != null;
     return {
       status: 'AVAILABLE', grossApy: gross, protocolCostApy: protocolApy,
@@ -169,8 +197,9 @@ export class FbtFeeEngine {
 export const fbtFeeEngine = new FbtFeeEngine();
 
 export function metricFreshness(updatedAt, now = Date.now()) {
+  if (updatedAt == null || updatedAt === '') return 'UNAVAILABLE';
   const at = new Date(updatedAt).getTime();
-  if (!Number.isFinite(at)) return 'UNAVAILABLE';
+  if (!Number.isFinite(at) || at > now + 60_000) return 'UNAVAILABLE';
   return now - at <= 2 * 60 * 60 * 1000 ? 'FRESH' : 'STALE';
 }
 
@@ -202,7 +231,7 @@ export const FARM_PROTOCOL = Object.freeze({
   name: 'DefiLlama',
   source: 'yields.llama.fi',
   mode: 'READ_ONLY_ANALYSIS',
-  capabilities: Object.freeze(['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL'])
+  capabilities: Object.freeze(['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL', 'getHistory'])
 });
 
 export const LIDO_PROTOCOL = Object.freeze({
@@ -232,11 +261,11 @@ export function isLidoChain(chainId) {
 }
 
 /** A single source of truth for the Farm protocol status shown at the top. */
-export function farmProtocolSummary({ pools = [], at = null, source = null, error = null } = {}) {
+export function farmProtocolSummary({ pools = [], at = null, source = null, freshness = null, error = null } = {}) {
   const ok = !error && (at != null || (Array.isArray(pools) && pools.length > 0));
   return {
     ...FARM_PROTOCOL,
-    status: error ? 'UNAVAILABLE' : ok ? 'ACTIVE' : 'CONNECTING',
+    status: error ? 'UNAVAILABLE' : ok ? (freshness === 'STALE' || metricFreshness(at) === 'STALE' ? 'STALE' : 'ACTIVE') : 'CONNECTING',
     poolCount: Array.isArray(pools) ? pools.length : 0,
     updatedAt: at,
     source: source || FARM_PROTOCOL.source,
@@ -285,7 +314,7 @@ export function normalizeFarmOpportunity(pool, metadata = {}) {
     type: pool.exposure === 'single' ? 'staking' : 'lp',
     source: metadata.source || pool.source || 'defillama',
     updatedAt: metadata.updatedAt || pool.updatedAt || null,
-    freshness: metricFreshness(metadata.updatedAt || pool.updatedAt),
+    freshness: metadata.freshness === 'STALE' || pool.freshness === 'STALE' ? 'STALE' : metricFreshness(metadata.updatedAt || pool.updatedAt),
     riskFactors: poolRiskFactors(pool),
     actions: {
       view: 'AVAILABLE',
