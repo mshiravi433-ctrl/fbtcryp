@@ -150,7 +150,17 @@ export function createMemory2({ collections, observability = null, conversation 
       if (rec.expiresAt && rec.expiresAt <= at) continue;
       candidates.push({ store, ...rec, rank: RANK[rec.provenance] || 0 });
     }
-    candidates.sort((a, b) => (b.rank - a.rank) || (b.at - a.at));
+    /* User data always outranks inference. Among the user's OWN records the
+       NEWEST wins, because an explicit later setting is the user changing their
+       mind; rank alone would freeze the first thing they ever said. */
+    const userOrigin = ['USER_SAID', 'USER_PREFERRED'];
+    candidates.sort((a, b) => {
+      const au = userOrigin.includes(a.provenance) ? 1 : 0;
+      const bu = userOrigin.includes(b.provenance) ? 1 : 0;
+      if (au !== bu) return bu - au;
+      if (au === 1) return (b.at - a.at) || (b.rank - a.rank);
+      return (b.rank - a.rank) || (b.at - a.at);
+    });
     const winner = candidates[0] || null;
     return {
       ok: Boolean(winner),
