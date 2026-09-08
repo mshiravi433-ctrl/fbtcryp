@@ -2470,14 +2470,60 @@ body:has(.iaos-page-v6) {
 }
 
 /* ─── §29 AI Activity Timeline ─────────────────────────────────────────── */
+/*
+ * Collapsed by default. The eight planner status lines («بررسی پرتفوی»,
+ * «خواندن کیف پول», …) used to print as eight stacked rows on EVERY answer
+ * and pushed the real reply off the screen. They now sit behind a one-line
+ * disclosure with a progress bar; opening it shows exactly the same list.
+ */
 .ai-activity-timeline {
-  background: rgba(13, 20, 36, 0.6);
+  background: rgba(13, 20, 36, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 12px;
-  padding: 10px 12px;
-  margin: 8px 0;
+  padding: 4px 6px;
+  margin: 6px 0;
   backdrop-filter: blur(8px);
   animation: iaos-thinking-in 0.28s ease-out both;
+}
+
+.ai-activity-timeline.is-open {
+  padding: 4px 8px 8px;
+}
+
+.ai-timeline-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 5px 6px;
+  cursor: pointer;
+  font: inherit;
+  text-align: start;
+  border-radius: 9px;
+  transition: background .18s;
+}
+
+.ai-timeline-summary:hover {
+  background: rgba(148, 163, 184, .08);
+}
+
+.ai-timeline-summary-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-timeline-steps {
+  padding: 2px 6px 0;
+  animation: iaos-thinking-in .2s ease-out both;
 }
 
 .ai-timeline-step {
@@ -2488,8 +2534,8 @@ body:has(.iaos-page-v6) {
 .ai-timeline-step[data-status="active"] {
   background: rgba(34, 211, 238, 0.06);
   border-radius: 6px;
-  padding: 4px 8px !important;
-  margin: 2px -4px;
+  padding: 3px 8px !important;
+  margin: 1px -4px;
 }
 
 .ai-timeline-step[data-status="completed"] .ai-timeline-label {
@@ -2551,6 +2597,14 @@ body:has(.iaos-page-v6) {
 :root[data-theme='light'] .ai-activity-timeline {
   background: rgba(248,250,252,0.92);
   border-color: rgba(148,163,184,0.18);
+}
+
+:root[data-theme='light'] .ai-timeline-summary-text {
+  color: #334155;
+}
+
+:root[data-theme='light'] .ai-timeline-summary:hover {
+  background: rgba(15, 23, 42, .05);
 }
 
 :root[data-theme='light'] .iaos-intent-chip {
@@ -2705,10 +2759,17 @@ body:has(.iaos-page-v6) {
 
 .iaos-ops-cats {
   gap: 8px;
-  /* Room below the chips so the first row of cards does not sit on them. */
-  padding-bottom: 8px;
+  /* Room below the chips so the first row of cards does not sit on them.
+     The chip row is a fixed band of the panel: it must never be squeezed by
+     the scrolling grid underneath it (that squeeze is what made the chips and
+     the first card row read as one merged block). */
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  flex: 0 0 auto;
+  align-items: center;
   /* The row scrolls; a fade at the inline end says so without a scrollbar. */
   scroll-padding-inline-end: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
 }
 
 .iaos-ops-cat {
@@ -2738,16 +2799,30 @@ body:has(.iaos-page-v6) {
 
 .iaos-ops-grid {
   /* 12px between option cards: at 10px, with a hairline border as the only
-     other separator, adjacent cards still read as one block. */
-  gap: 12px;
-  padding: 6px 2px 10px;
+     other separator, adjacent cards still read as one block. A slightly
+     larger ROW gap because two stacked cards touch along their long edge and
+     need more air than two side-by-side ones. */
+  gap: 14px 12px;
+  padding: 10px 2px 12px;
+  /* Every card in a row is the same height instead of each shrink-wrapping
+     its own description — that ragged mix (a one-line «تراکنش‌ها» next to a
+     three-line «کیف پول EVM») is what read as boxes running into each other. */
+  align-items: stretch;
 }
 
 .iaos-ops-card {
   position: relative;
   overflow: hidden;
   gap: 12px;
-  padding: 13px 14px;
+  padding: 14px;
+  /* Fill the row height set by `align-items: stretch`, and keep a floor so a
+     card with a one-line description is not visibly shorter than its
+     neighbour. `align-items: center` puts the icon, text and state marker on
+     one baseline instead of jamming them at the top edge. */
+  height: 100%;
+  min-height: 76px;
+  align-items: center;
+  box-sizing: border-box;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, .13);
   background: linear-gradient(180deg, rgba(20, 28, 51, .72), rgba(13, 19, 37, .72));
@@ -2797,9 +2872,23 @@ body:has(.iaos-page-v6) {
   font-size: 11px;
   line-height: 1.6;
   color: rgba(148, 163, 184, .9);
+  /* Two lines maximum. A four-line description used to make one card twice as
+     tall as the one beside it and pushed the row below into it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .iaos-ops-state {
+  /* Never grows, never shrinks below its own text: the «کیف پول لازم است»
+     marker used to steal width from the title and overlap it. */
+  flex: 0 0 auto;
+  max-width: 38%;
+  text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
   color: #818cf8;
   font-weight: 800;
 }
@@ -2808,6 +2897,72 @@ body:has(.iaos-page-v6) {
   color: rgba(148, 163, 184, .6);
   font-weight: 600;
   font-size: 10.5px;
+}
+
+/* ── Panel bands: fixed chrome vs. the one scrolling body ───────────────── */
+/*
+ * Reported as «گزینه‌ها در هم فرو رفته و اندازه باکس‌ها اشتباه است» across the
+ * Ops tabs (Wallet was the clearest: «تراکنش‌ها» and «کیف پول EVM» overlapped).
+ * Root cause: `.iaos-panel` is a capped-height flex column and only the grid
+ * declared a flex basis, so the strip, the chip row and the footnote were all
+ * shrinkable — under pressure they collapsed into each other and the cards
+ * lost their padding. Pinning every band except the scrolling list fixes it
+ * for ALL tabs at once, not just Wallet.
+ */
+.iaos-panel > .iaos-panel-head,
+.iaos-ops-strip,
+.iaos-history-tabs,
+.iaos-panel > .iaos-panel-note {
+  flex: 0 0 auto;
+}
+
+.iaos-ops-strip {
+  margin-bottom: 2px;
+}
+
+.iaos-panel > .iaos-panel-note {
+  margin: 4px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, .1);
+}
+
+/* Titles wrap instead of pushing the state marker off the card. */
+.iaos-ops-body strong {
+  overflow-wrap: anywhere;
+}
+
+/* One column below 620px is already the rule; make the two-column layout use
+   real zero-basis tracks so a long title cannot widen its own column and
+   squash the neighbour. */
+@media (min-width: 620px) {
+  .iaos-ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Tight phones: shrink the tile before the text so nothing overlaps. */
+@media (max-width: 380px) {
+  .iaos-ops-card { padding: 12px; gap: 10px; min-height: 70px; }
+  .iaos-ops-icon { width: 36px; height: 36px; border-radius: 12px; font-size: 17px; }
+  .iaos-ops-cat { padding: 7px 12px; font-size: 11.5px; }
+}
+
+/* History / Ecosystem tabs get the same band treatment: a separator line, a
+   fixed height, and real space before the list underneath them. */
+.iaos-history-tabs {
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  flex-wrap: wrap;
+}
+
+.iaos-history-tab {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.iaos-eco-body,
+.iaos-panel-scroll {
+  padding-block: 8px 4px;
 }
 
 /* ── History rows & status grid: same card language ────────────────────── */
