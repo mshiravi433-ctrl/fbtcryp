@@ -20,13 +20,13 @@ Every Lido address is pinned in `src/lib/defi/lido.js` and **nowhere else** in `
 | Contract | Address | Source |
 |---|---|---|
 | stETH | `0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84` | https://docs.lido.fi/deployed-contracts/ |
-| wstETH | `0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca` | https://docs.lido.fi/deployed-contracts/ |
-| WithdrawalQueue | `0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B2c` | https://docs.lido.fi/deployed-contracts/ |
+| wstETH | `0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0` | https://docs.lido.fi/deployed-contracts/ |
+| WithdrawalQueue | `0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1` | https://docs.lido.fi/deployed-contracts/ |
 
 Verified on Etherscan:
 - https://etherscan.io/address/0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84
-- https://etherscan.io/address/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca
-- https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B2c
+- https://etherscan.io/address/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0
+- https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1
 
 ### Runtime verification
 

@@ -35,7 +35,7 @@ const FIELDS = Object.freeze([
 ]);
 
 const ACTIONS = Object.freeze(['supply', 'withdraw', 'approve', 'revoke']);
-const STATUSES = Object.freeze(['pending', 'confirmed', 'cancelled', 'failed']);
+const STATUSES = Object.freeze(['pending', 'confirmed', 'cancelled', 'failed', 'replaced', 'timeout']);
 
 function readJson(key, fallback) {
   try {
@@ -134,6 +134,12 @@ export const cancelAaveArbAction = (id, error = null) =>
 
 export const failAaveArbAction = (id, { error = null, revertKey = null } = {}) =>
   updateAaveArbAction(id, { status: 'failed', error, revertKey });
+
+export const replaceAaveArbAction = (id, { error = 'TRANSACTION_REPLACED', txHash = null } = {}) =>
+  updateAaveArbAction(id, { status: 'replaced', error, txHash });
+
+export const timeoutAaveArbAction = (id, { error = 'TRANSACTION_TIMEOUT' } = {}) =>
+  updateAaveArbAction(id, { status: 'timeout', error });
 
 export function removeAaveArbAction(id) {
   writeJson(AAVE_ARB_HISTORY_KEY, loadAaveArbHistory().filter((r) => r.id !== id));

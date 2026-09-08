@@ -28,13 +28,12 @@
  *
  *   https://docs.lido.fi/deployed-contracts/
  *   https://etherscan.io/address/0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84 (stETH)
- *   https://etherscan.io/address/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca (wstETH)
- *   https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B2c (WithdrawalQueue)
+ *   https://etherscan.io/address/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 (wstETH)
+ *   https://etherscan.io/address/0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1 (WithdrawalQueue)
  *
  * Pinned constants are never trusted on their own. Before any write is
  * allowed, verifyDeployment() checks:
  *   · wstETH.stETH() == pinned stETH
- *   · wstETH.WSTETH() self-consistency / stETH is contract
  *   · WithdrawalQueue.WSTETH() == pinned wstETH
  *   · WithdrawalQueue.STETH() == pinned stETH
  *   · stETH.getTotalPooledEther() is readable (contract is live)
@@ -61,6 +60,9 @@ import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains';
 import { NATIVE_GAS_FLOOR } from '../swap';
 import { decodeRevertReason } from '../preSignSimulation';
 import {
+  assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
+} from './executionGuards';
+import {
   LIDO_STAKE_MAX_ETH_PER_TX,
   LIDO_STAKE_MAX_ETH_TOTAL
 } from '../features';
@@ -79,9 +81,9 @@ export const LIDO = Object.freeze({
   /** Lido stETH — the main staking contract and the ERC20. */
   stETH: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
   /** Wrapped stETH — non-rebasing. */
-  wstETH: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca',
+  wstETH: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0',
   /** WithdrawalQueueERC721 — handles unstaking. */
-  withdrawalQueue: '0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B2c',
+  withdrawalQueue: '0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1',
   /** Lido referral — zero means no referral, which is the honest default. */
   referral: ZERO_ADDRESS,
   stETHSymbol: 'stETH',
@@ -144,6 +146,14 @@ const WITHDRAWAL_QUEUE_ABI = [
   'function isBunkerModeActive() view returns (bool)'
 ];
 
+const LIDO_EVENT_ABI = [
+  'event Submitted(address indexed sender, uint256 amount, address referral)',
+  'event Approval(address indexed owner, address indexed spender, uint256 value)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+  'event WithdrawalRequested(uint256 indexed requestId, address indexed requestor, address indexed owner, uint256 amountOfStETH, uint256 amountOfShares)',
+  'event WithdrawalClaimed(uint256 indexed requestId, address indexed owner, address indexed receiver, uint256 amountOfETH)'
+];
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -201,6 +211,17 @@ export function fromEthWei(wei) {
 /* -------------------------------------------------------------------------- */
 
 export async function verifyDeployment(provider) {
+  try {
+    await assertProviderChain(provider, LIDO.chainId);
+  } catch (err) {
+    if (err?.code === 'EXECUTION_WRONG_CHAIN') {
+      throw Object.assign(new Error('LIDO_WRONG_CHAIN'), { code: 'LIDO_WRONG_CHAIN', detail: err.detail });
+    }
+    if (err instanceof ExecutionGuardError) {
+      throw Object.assign(new Error('LIDO_NETWORK_UNREADABLE'), { code: 'LIDO_NETWORK_UNREADABLE', detail: err.detail });
+    }
+    throw err;
+  }
   const { Contract } = await loadEthers();
   const stETH = new Contract(LIDO.stETH, STETH_ABI, provider);
   const wstETH = new Contract(LIDO.wstETH, WSTETH_ABI, provider);
@@ -215,6 +236,15 @@ export async function verifyDeployment(provider) {
   }
   if (toBigInt(totalPooled) == null || toBigInt(totalPooled) <= 0n) {
     throw Object.assign(new Error('LIDO_STETH_INVALID'), { code: 'LIDO_STETH_INVALID' });
+  }
+  try {
+    const [symbol, decimals] = await Promise.all([stETH.symbol(), stETH.decimals()]);
+    if (String(symbol) !== 'stETH' || Number(decimals) !== 18) {
+      throw Object.assign(new Error('LIDO_STETH_IDENTITY_MISMATCH'), { code: 'LIDO_STETH_IDENTITY_MISMATCH', detail: { symbol, decimals } });
+    }
+  } catch (e) {
+    if (e?.code === 'LIDO_STETH_IDENTITY_MISMATCH') throw e;
+    throw Object.assign(new Error('LIDO_STETH_IDENTITY_UNREADABLE'), { cause: e, code: 'LIDO_STETH_IDENTITY_UNREADABLE' });
   }
 
   // wstETH.stETH() == LIDO.stETH
@@ -378,6 +408,7 @@ export async function getProtocolStatus(provider) {
 }
 
 export async function getPosition(provider, owner, { history = [] } = {}) {
+  await verifyDeployment(provider);
   const [balances, allowances, withdrawals, status] = await Promise.all([
     getBalances(provider, owner).catch(() => null),
     getAllowances(provider, owner).catch(() => ({ wstETHAllowanceWei: 0n, queueAllowanceWei: 0n })),
@@ -570,6 +601,7 @@ export async function buildWrapPlan({ provider, owner, amountStETH } = {}) {
   if (needsApprove) {
     steps.push({
       kind: 'approve',
+      spender: LIDO.wstETH,
       to: LIDO.stETH,
       data: stIface.encodeFunctionData('approve', [LIDO.wstETH, amountWei]),
       value: 0n,
@@ -683,6 +715,7 @@ export async function buildRequestWithdrawPlan({ provider, owner, amountStETH } 
   if (needsApprove) {
     steps.push({
       kind: 'approve',
+      spender: LIDO.withdrawalQueue,
       to: LIDO.stETH,
       data: stIface.encodeFunctionData('approve', [LIDO.withdrawalQueue, amountWei]),
       value: 0n,
@@ -760,6 +793,12 @@ export async function buildClaimPlan({ provider, owner, requestId } = {}) {
 }
 
 export async function buildRevokePlan({ provider, owner, spender } = {}) {
+  if (!isAddr(owner)) return { checks: { blocked: ['LIDO_BAD_OWNER'] }, steps: [] };
+  try {
+    await verifyDeployment(provider);
+  } catch (e) {
+    return { checks: { blocked: [e.code || 'LIDO_DEPLOYMENT_UNVERIFIED'] }, steps: [] };
+  }
   const target = spender === 'wstETH' ? LIDO.wstETH : spender === 'queue' ? LIDO.withdrawalQueue : spender;
   if (!isAddr(target)) {
     return { checks: { blocked: ['LIDO_INVALID_SPENDER'] }, steps: [] };
@@ -771,6 +810,7 @@ export async function buildRevokePlan({ provider, owner, spender } = {}) {
     steps: [
       {
         kind: 'revoke',
+        spender: target,
         to: LIDO.stETH,
         data: iface.encodeFunctionData('approve', [target, 0n]),
         value: 0n,
@@ -778,6 +818,141 @@ export async function buildRevokePlan({ provider, owner, spender } = {}) {
       }
     ]
   };
+}
+
+/**
+ * Verify a mined Lido receipt against the action that was signed. In
+ * particular, requestId is accepted only from the real WithdrawalRequested
+ * event; it is never guessed from a local counter or transaction index.
+ */
+export async function verifyLidoReceipt({
+  provider, receipt, owner, action, amountWei = null, expectedSpender = null,
+  beforePosition = null, requestId = null
+} = {}) {
+  assertSuccessfulReceipt(receipt);
+  if (!isAddr(owner)) throw Object.assign(new Error('LIDO_BAD_OWNER'), { code: 'LIDO_BAD_OWNER' });
+  const { Interface, Contract } = await loadEthers();
+  const iface = new Interface(LIDO_EVENT_ABI);
+  const amount = amountWei == null ? null : BigInt(String(amountWei));
+  const eventAddress = action === 'approve' || action === 'revoke' || action === 'stake'
+    ? LIDO.stETH
+    : action === 'wrap' || action === 'unwrap'
+      ? LIDO.wstETH
+      : LIDO.withdrawalQueue;
+  const eventName = action === 'approve' || action === 'revoke'
+    ? 'Approval'
+    : action === 'stake'
+      ? 'Submitted'
+      : action === 'wrap' || action === 'unwrap'
+        ? 'Transfer'
+        : action === 'requestWithdraw'
+          ? 'WithdrawalRequested'
+          : 'WithdrawalClaimed';
+  const events = parseReceiptLogs(receipt, iface, eventAddress, eventName);
+  if (events.length === 0) {
+    throw Object.assign(new Error('LIDO_EXPECTED_EVENT_MISSING'), { code: 'LIDO_EXPECTED_EVENT_MISSING', detail: { action } });
+  }
+  const args = events[0].parsed.args;
+
+  if (action === 'approve' || action === 'revoke') {
+    const spender = expectedSpender ?? (action === 'revoke' ? null : '');
+    if (!sameAddress(String(args.owner), owner) || (spender && !sameAddress(String(args.spender), spender))) {
+      throw Object.assign(new Error('LIDO_APPROVAL_EVENT_MISMATCH'), { code: 'LIDO_APPROVAL_EVENT_MISMATCH' });
+    }
+    const value = BigInt(String(args.value));
+    if (action === 'revoke' && value !== 0n) {
+      throw Object.assign(new Error('LIDO_REVOKE_AMOUNT_MISMATCH'), { code: 'LIDO_REVOKE_AMOUNT_MISMATCH' });
+    }
+    if (action === 'approve' && amount != null && value !== amount) {
+      throw Object.assign(new Error('LIDO_APPROVAL_AMOUNT_MISMATCH'), { code: 'LIDO_APPROVAL_AMOUNT_MISMATCH' });
+    }
+    return Object.freeze({ ok: true, action, event: 'Approval', position: null });
+  }
+
+  if (action === 'stake') {
+    const eventAmount = BigInt(String(args.amount));
+    if (!sameAddress(String(args.sender), owner) || (amount != null && eventAmount !== amount)) {
+      throw Object.assign(new Error('LIDO_STAKE_EVENT_MISMATCH'), { code: 'LIDO_STAKE_EVENT_MISMATCH' });
+    }
+    if (beforePosition) {
+      const after = await getPosition(provider, owner);
+      if (after.stETHWei <= BigInt(String(beforePosition.stETHWei ?? 0))) {
+        throw Object.assign(new Error('LIDO_POSITION_UNCHANGED'), { code: 'LIDO_POSITION_UNCHANGED' });
+      }
+      return Object.freeze({ ok: true, action, event: 'Submitted', position: after });
+    }
+    return Object.freeze({ ok: true, action, event: 'Submitted', position: null });
+  }
+
+  if (action === 'wrap' || action === 'unwrap') {
+    const zero = '0x0000000000000000000000000000000000000000';
+    const wstFrom = String(args.from);
+    const wstTo = String(args.to);
+    const wstValue = BigInt(String(args.value));
+    let protocolEventOk = false;
+    if (action === 'wrap') {
+      // The official WstETH contract emits standard ERC-20 Transfer events,
+      // not synthetic Wrap/Unwrap events: mint wstETH, then pull stETH.
+      const stEthTransfers = parseReceiptLogs(receipt, iface, LIDO.stETH, 'Transfer');
+      protocolEventOk = sameAddress(wstFrom, zero) && sameAddress(wstTo, owner) && wstValue > 0n
+        && stEthTransfers.some(({ parsed }) =>
+          sameAddress(String(parsed.args.from), owner)
+          && sameAddress(String(parsed.args.to), LIDO.wstETH)
+          && BigInt(String(parsed.args.value)) === amount
+        );
+    } else {
+      const stEthTransfers = parseReceiptLogs(receipt, iface, LIDO.stETH, 'Transfer');
+      protocolEventOk = sameAddress(wstFrom, owner) && sameAddress(wstTo, zero)
+        && (amount == null || wstValue === amount)
+        && stEthTransfers.some(({ parsed }) =>
+          sameAddress(String(parsed.args.from), LIDO.wstETH)
+          && sameAddress(String(parsed.args.to), owner)
+          && BigInt(String(parsed.args.value)) > 0n
+        );
+    }
+    if (!protocolEventOk) {
+      throw Object.assign(new Error('LIDO_PROTOCOL_EVENT_MISMATCH'), { code: 'LIDO_PROTOCOL_EVENT_MISMATCH', detail: { action } });
+    }
+    if (beforePosition) {
+      const after = await getPosition(provider, owner);
+      const before = BigInt(String(action === 'wrap' ? beforePosition.wstETHWei : beforePosition.stETHWei));
+      const changed = action === 'wrap' ? after.wstETHWei > before : after.stETHWei > before;
+      if (!changed) throw Object.assign(new Error('LIDO_POSITION_UNCHANGED'), { code: 'LIDO_POSITION_UNCHANGED' });
+      return Object.freeze({ ok: true, action, event: 'Transfer', position: after });
+    }
+    return Object.freeze({ ok: true, action, event: 'Transfer', position: null });
+  }
+
+  if (action === 'requestWithdraw') {
+    const eventAmount = BigInt(String(args.amountOfStETH));
+    if (!sameAddress(String(args.requestor), owner) || !sameAddress(String(args.owner), owner) || (amount != null && eventAmount !== amount)) {
+      throw Object.assign(new Error('LIDO_REQUEST_EVENT_MISMATCH'), { code: 'LIDO_REQUEST_EVENT_MISMATCH' });
+    }
+    const id = BigInt(String(args.requestId));
+    const queue = new Contract(LIDO.withdrawalQueue, WITHDRAWAL_QUEUE_ABI, provider);
+    const rows = await queue.getWithdrawalStatus([id]);
+    const row = rows?.[0];
+    if (!row || !sameAddress(String(row.owner), owner) || BigInt(String(row.amountOfStETH)) !== eventAmount || Boolean(row.isFinalized) || Boolean(row.isClaimed)) {
+      throw Object.assign(new Error('LIDO_REQUEST_STATE_MISMATCH'), { code: 'LIDO_REQUEST_STATE_MISMATCH', detail: { requestId: id } });
+    }
+    return Object.freeze({ ok: true, action, event: 'WithdrawalRequested', requestId: id, position: null });
+  }
+
+  if (action === 'claim') {
+    const id = BigInt(String(args.requestId));
+    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.receiver), owner) || (requestId != null && id !== BigInt(String(requestId)))) {
+      throw Object.assign(new Error('LIDO_CLAIM_EVENT_MISMATCH'), { code: 'LIDO_CLAIM_EVENT_MISMATCH' });
+    }
+    const queue = new Contract(LIDO.withdrawalQueue, WITHDRAWAL_QUEUE_ABI, provider);
+    const rows = await queue.getWithdrawalStatus([id]);
+    const row = rows?.[0];
+    if (!row || !sameAddress(String(row.owner), owner) || !Boolean(row.isFinalized) || !Boolean(row.isClaimed)) {
+      throw Object.assign(new Error('LIDO_CLAIM_STATE_MISMATCH'), { code: 'LIDO_CLAIM_STATE_MISMATCH', detail: { requestId: id } });
+    }
+    return Object.freeze({ ok: true, action, event: 'WithdrawalClaimed', requestId: id, position: null });
+  }
+
+  throw Object.assign(new Error('LIDO_UNSUPPORTED_ACTION'), { code: 'LIDO_UNSUPPORTED_ACTION', detail: { action } });
 }
 
 /* -------------------------------------------------------------------------- */

@@ -114,6 +114,24 @@ export function confirmLidoAction(id, { txHash, blockNumber, requestId } = {}) {
   return all[idx];
 }
 
+export function replaceLidoAction(id, { error = 'TRANSACTION_REPLACED', txHash = null } = {}) {
+  const all = loadAll();
+  const idx = all.findIndex((r) => r.id === id);
+  if (idx === -1) return null;
+  all[idx] = { ...all[idx], status: 'replaced', error, txHash: txHash ? String(txHash) : all[idx].txHash };
+  saveAll(all);
+  return all[idx];
+}
+
+export function timeoutLidoAction(id, { error = 'TRANSACTION_TIMEOUT' } = {}) {
+  const all = loadAll();
+  const idx = all.findIndex((r) => r.id === id);
+  if (idx === -1) return null;
+  all[idx] = { ...all[idx], status: 'timeout', error };
+  saveAll(all);
+  return all[idx];
+}
+
 export function failLidoAction(id, { error, revertKey } = {}) {
   const all = loadAll();
   const idx = all.findIndex((r) => r.id === id);

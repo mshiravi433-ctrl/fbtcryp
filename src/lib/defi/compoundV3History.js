@@ -41,7 +41,7 @@ const FIELDS = Object.freeze([
 ]);
 
 const ACTIONS = Object.freeze(['supply', 'withdraw', 'approve', 'revoke']);
-const STATUSES = Object.freeze(['pending', 'confirmed', 'cancelled', 'failed']);
+const STATUSES = Object.freeze(['pending', 'confirmed', 'cancelled', 'failed', 'replaced', 'timeout']);
 
 function readJson(key, fallback) {
   try {
@@ -140,6 +140,12 @@ export const cancelCompoundAction = (id, error = null) =>
 
 export const failCompoundAction = (id, { error = null, revertKey = null } = {}) =>
   updateCompoundAction(id, { status: 'failed', error, revertKey });
+
+export const replaceCompoundAction = (id, { error = 'TRANSACTION_REPLACED', txHash = null } = {}) =>
+  updateCompoundAction(id, { status: 'replaced', error, txHash });
+
+export const timeoutCompoundAction = (id, { error = 'TRANSACTION_TIMEOUT' } = {}) =>
+  updateCompoundAction(id, { status: 'timeout', error });
 
 export function removeCompoundAction(id) {
   writeJson(COMPOUND_HISTORY_KEY, loadCompoundHistory().filter((r) => r.id !== id));

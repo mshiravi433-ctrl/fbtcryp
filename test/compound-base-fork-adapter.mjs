@@ -20,6 +20,7 @@ export {
   getRewardsOwed,
   perSecondRateToAprPct,
   perSecondRateToApyPct,
+  verifyCompoundReceipt,
   verifyDeployment
 } from '../src/lib/defi/compoundV3Base.js';
 
