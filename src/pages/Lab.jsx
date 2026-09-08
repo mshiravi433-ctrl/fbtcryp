@@ -43,6 +43,7 @@ import LevelSystem from '../components/Lab/LevelSystem';
 import Leaderboard from '../components/Lab/Leaderboard';
 import '../styles/lab-v2.css';
 import '../styles/lab-modern.css'; // re-use the older glass / aurora styles that already exist
+import '../styles/lab-polish.css';
 
 const GROUPS = [
   { id: 'practice', Group: PracticeGroup },
