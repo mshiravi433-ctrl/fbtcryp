@@ -1551,7 +1551,28 @@
       "claimMethod": "Claim method",
       "termsHash": "Terms hash",
       "reviewBuy": "Review & Buy",
-      "howItWorks": "How it works, fees & claims"
+      "howItWorks": "How it works, fees & claims",
+      "product": "投保的协议",
+      "productPlaceholder": "选择要投保的协议",
+      "productCount_other": "{{count}} 个产品",
+      "productRequiredHint": "请先选择具体协议——服务商对每个产品单独定价。",
+      "loadingProducts": "正在从服务商加载产品…",
+      "productsLoadFailed": "无法加载服务商的产品列表。",
+      "noProductsForChain": "此网络暂无可用产品",
+      "noProductsForType": "此网络上没有该类型的产品",
+      "noProductsHint": "仅列出由在线服务商发布的真实产品——绝不虚构。请尝试其他网络或保障类型。",
+      "switchToEthereum": "切换到以太坊",
+      "minPrice": "最低年费率",
+      "minPriceValue": "每年 {{pct}}% 起",
+      "gracePeriod": "宽限期",
+      "graceDays_other": "{{count}} 天",
+      "coverAssets": "承保资产",
+      "productId": "产品 ID",
+      "priceNote": "最低年费率是服务商的下限；实时报价取决于容量和期限。",
+      "membershipRequired": "理赔需要 Nexus Mutual 会员资格（KYC）——会员 NFT 在购买时铸造。",
+      "productHint": "该产品的报价由服务商实时计算。",
+      "durationHint": "28–365 天",
+      "daysShort": "天"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -1670,6 +1691,17 @@
       "createdToast": "Claim {{number}} created"
     },
     "providerUnavailable": "Provider temporarily unavailable",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "reason": {
+      "PRODUCT_REQUIRED": "请先选择要投保的协议。"
+    },
+    "explain": {
+      "summaryHint": "资产托管、购买流程、风险参数、全部费用以及理赔处理方式",
+      "sectionWallet": "设计上即非托管",
+      "sectionFlow": "{{count}} 个经验证的步骤",
+      "sectionRisk": "{{count}} 项参数，绝不猜测",
+      "sectionFees": "签名前逐项列明",
+      "sectionClaims": "基于证据，绝不自动"
+    }
   }
 }

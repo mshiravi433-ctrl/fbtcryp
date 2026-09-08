@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Switch from '../../components/Switch.jsx';
+import { InsIconBell, InsIconLock } from './InsuranceIcons.jsx';
 
 export default function InsuranceSettings() {
   const { t } = useTranslation();
@@ -16,20 +18,20 @@ export default function InsuranceSettings() {
   ];
 
   return (
-    <div>
+    <div className="ins-tone-cyan">
       <div className="ins-title">{t('insurance.settings.title')}</div>
       <div className="ins-sub">{t('insurance.settings.subtitle')}</div>
       <div className="ins-card">
-        <div className="ins-sub" style={{ marginTop: 0 }}>{t('insurance.settings.notifTitle')}</div>
+        <div className="ins-card-title"><span className="ins-ico"><InsIconBell /></span>{t('insurance.settings.notifTitle')}</div>
         {toggles.map(([k, l]) => (
-          <label key={k} className="ins-row" style={{ cursor: 'pointer' }}>
+          <div key={k} className="ins-toggle-row">
             <span>{l}</span>
-            <input type="checkbox" checked={!!pref[k]} onChange={(e) => save({ [k]: e.target.checked })} />
-          </label>
+            <Switch on={!!pref[k]} onChange={() => save({ [k]: !pref[k] })} label={l} />
+          </div>
         ))}
       </div>
       <div className="ins-card">
-        <div className="ins-title" style={{ fontSize: 15 }}>{t('insurance.settings.legalTitle')}</div>
+        <div className="ins-card-title"><span className="ins-ico"><InsIconLock /></span>{t('insurance.settings.legalTitle')}</div>
         <div className="ins-muted">{t('insurance.settings.legalBody')}</div>
       </div>
     </div>

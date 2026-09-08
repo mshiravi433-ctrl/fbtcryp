@@ -5954,7 +5954,38 @@
       "claimMethod": "طريقة المطالبة",
       "termsHash": "هاش الشروط",
       "reviewBuy": "مراجعة وشراء",
-      "howItWorks": "كيف يعمل، الرسوم والمطالبات"
+      "howItWorks": "كيف يعمل، الرسوم والمطالبات",
+      "product": "البروتوكول المؤمَّن عليه",
+      "productPlaceholder": "اختر البروتوكول المراد تأمينه",
+      "productCount_zero": "{{count}} منتج",
+      "productCount_one": "منتج واحد",
+      "productCount_two": "منتجان",
+      "productCount_few": "{{count}} منتجات",
+      "productCount_many": "{{count}} منتجًا",
+      "productCount_other": "{{count}} منتج",
+      "productRequiredHint": "اختر البروتوكول المحدد أولًا — يسعّر المزوّد كل منتج على حدة.",
+      "loadingProducts": "جارٍ تحميل المنتجات من المزوّد…",
+      "productsLoadFailed": "تعذّر تحميل قائمة المنتجات من المزوّد.",
+      "noProductsForChain": "لا يوجد منتج متاح لهذه الشبكة",
+      "noProductsForType": "لا يوجد منتج من هذا النوع على هذه الشبكة",
+      "noProductsHint": "تُعرض فقط المنتجات الحقيقية المنشورة من مزوّد مباشر — لا شيء مُختلَق. جرّب شبكة أو نوع حماية آخر.",
+      "switchToEthereum": "التبديل إلى إيثريوم",
+      "minPrice": "الحد الأدنى للسعر السنوي",
+      "minPriceValue": "من {{pct}}٪ سنويًا",
+      "gracePeriod": "فترة السماح",
+      "graceDays_zero": "{{count}} يوم",
+      "graceDays_one": "يوم واحد",
+      "graceDays_two": "يومان",
+      "graceDays_few": "{{count}} أيام",
+      "graceDays_many": "{{count}} يومًا",
+      "graceDays_other": "{{count}} يوم",
+      "coverAssets": "أصول التغطية",
+      "productId": "معرّف المنتج",
+      "priceNote": "الحد الأدنى للسعر السنوي هو أرضية المزوّد؛ يعتمد عرض السعر المباشر على السعة والمدة.",
+      "membershipRequired": "تتطلب المطالبات عضوية Nexus Mutual (تحقق من الهوية) — تُصدر NFT العضوية عند الشراء.",
+      "productHint": "يُسعَّر عرض السعر مباشرةً من المزوّد لهذا المنتج بالتحديد.",
+      "durationHint": "28–365 يومًا",
+      "daysShort": "يوم"
     },
     "info": {
       "walletTitle": "محفظتك، مفاتيحك",
@@ -6073,6 +6104,17 @@
       "createdToast": "تم إنشاء المطالبة {{number}}"
     },
     "providerUnavailable": "المزود غير متاح مؤقتًا",
-    "unknown": "غير معروف"
+    "unknown": "غير معروف",
+    "reason": {
+      "PRODUCT_REQUIRED": "اختر البروتوكول المراد تأمينه أولًا."
+    },
+    "explain": {
+      "summaryHint": "الحفظ، مسار الشراء، مدخلات المخاطر، كل الرسوم وكيفية معالجة المطالبات",
+      "sectionWallet": "غير وصائي بالتصميم",
+      "sectionFlow": "{{count}} خطوات موثّقة",
+      "sectionRisk": "{{count}} مدخلًا، بلا تخمين",
+      "sectionFees": "مفصّلة قبل التوقيع",
+      "sectionClaims": "قائمة على الأدلة، وليست تلقائية أبدًا"
+    }
   }
 }

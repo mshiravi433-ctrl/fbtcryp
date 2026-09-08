@@ -1558,7 +1558,28 @@
       "claimMethod": "Claim method",
       "termsHash": "Terms hash",
       "reviewBuy": "Review & Buy",
-      "howItWorks": "How it works, fees & claims"
+      "howItWorks": "How it works, fees & claims",
+      "product": "Protokol yang diasuransikan",
+      "productPlaceholder": "Pilih protokol yang akan diasuransikan",
+      "productCount_other": "{{count}} produk",
+      "productRequiredHint": "Pilih protokol yang tepat terlebih dahulu — penyedia menetapkan harga setiap produk secara terpisah.",
+      "loadingProducts": "Memuat produk dari penyedia…",
+      "productsLoadFailed": "Daftar produk dari penyedia tidak dapat dimuat.",
+      "noProductsForChain": "Tidak ada produk yang tersedia untuk jaringan ini",
+      "noProductsForType": "Tidak ada produk jenis ini di jaringan ini",
+      "noProductsHint": "Hanya produk nyata yang diterbitkan penyedia aktif yang ditampilkan — tidak ada yang dikarang. Coba jaringan atau jenis perlindungan lain.",
+      "switchToEthereum": "Beralih ke Ethereum",
+      "minPrice": "Harga tahunan minimum",
+      "minPriceValue": "mulai {{pct}}% / tahun",
+      "gracePeriod": "Masa tenggang",
+      "graceDays_other": "{{count}} hari",
+      "coverAssets": "Aset pertanggungan",
+      "productId": "ID produk",
+      "priceNote": "Harga tahunan minimum adalah batas bawah penyedia; penawaran langsung bergantung pada kapasitas dan durasi.",
+      "membershipRequired": "Klaim memerlukan keanggotaan Nexus Mutual (KYC) — NFT keanggotaan dicetak saat pembelian.",
+      "productHint": "Penawaran dihitung langsung oleh penyedia untuk produk ini.",
+      "durationHint": "28–365 hari",
+      "daysShort": "hari"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -1677,6 +1698,17 @@
       "createdToast": "Claim {{number}} created"
     },
     "providerUnavailable": "Provider temporarily unavailable",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "reason": {
+      "PRODUCT_REQUIRED": "Pilih protokol yang akan diasuransikan terlebih dahulu."
+    },
+    "explain": {
+      "summaryHint": "Kustodi, alur pembelian, input risiko, setiap biaya, dan cara klaim ditangani",
+      "sectionWallet": "Non-kustodial sejak awal",
+      "sectionFlow": "{{count}} langkah terverifikasi",
+      "sectionRisk": "{{count}} input, tanpa tebakan",
+      "sectionFees": "Dirinci sebelum Anda menandatangani",
+      "sectionClaims": "Berbasis bukti, tidak pernah otomatis"
+    }
   }
 }
