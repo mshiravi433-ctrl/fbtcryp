@@ -13,6 +13,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { storeGet, storeSet, storeGetFresh } from '../store.js';
 import { blobConfigured } from '../blobCache.js';
 import { newId } from './quote-engine.js';
+import { jsonSafe } from './constants.js';
 
 const ns = (kind, id) => `insurance:${kind}:${id}`;
 
@@ -27,7 +28,8 @@ export async function getFresh(kind, id) {
   return storeGetFresh(ns(kind, String(id).toLowerCase()), null);
 }
 export async function set(kind, id, value) {
-  return storeSet(ns(kind, String(id).toLowerCase()), value);
+  // Durable backends JSON.stringify; BigInt money must be strings first.
+  return storeSet(ns(kind, String(id).toLowerCase()), jsonSafe(value));
 }
 export const durableConfigured = () => blobConfigured();
 

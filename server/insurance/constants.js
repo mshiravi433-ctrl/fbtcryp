@@ -30,6 +30,46 @@ export function fromMicro(bigint) {
   return (neg ? '-' : '') + body;
 }
 
+/**
+ * Parse a value that is ALREADY in micro-units (bigint, integer number, or
+ * integer string). Human decimals ("12.50") still go through `toMicro`.
+ * Named *Micro fields must never be re-scaled as dollars.
+ */
+export function parseMicro(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    if (Number.isInteger(value)) return BigInt(value);
+    return toMicro(value);
+  }
+  const s = String(value).trim();
+  if (/^[+-]?\d+$/.test(s)) return BigInt(s);
+  return toMicro(s);
+}
+
+/**
+ * Recursively convert BigInt money values to decimal strings so the object is
+ * JSON-serialisable. Durable store, HTTP, and sha256 all go through JSON and
+ * Node throws "Do not know how to serialize a BigInt" otherwise.
+ */
+export function jsonSafe(value) {
+  if (typeof value === 'bigint') return value.toString();
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(jsonSafe);
+  if (typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = jsonSafe(value[k]);
+    return out;
+  }
+  return value;
+}
+
+/** JSON.stringify that never throws on BigInt (strings the integer). */
+export function jsonStringify(value) {
+  return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+}
+
 /** Protection / exposure categories exposed to users & providers. */
 export const PROTECTION_TYPES = [
   { id: 'smart-contract', label: 'Smart Contract', riskKind: 'smartContract' },

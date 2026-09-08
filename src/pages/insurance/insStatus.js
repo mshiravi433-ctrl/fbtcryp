@@ -46,6 +46,8 @@ export function reasonLabel(t, reason) {
   // Network/timeout English leaks (ENOTFOUND / HTTP 4xx / timeout…) → honest generic line.
   if (/timeout|timed out|fetch|enetrefused|enotfound|network|ECONN/i.test(s)) return t('insurance.reason.PROVIDER_UNAVAILABLE');
   if (/HTTP \d|status|4\d\d|5\d\d/i.test(s)) return t('insurance.reason.QUOTE_REJECTED_BY_PROVIDER');
+  // Runtime / serialisation leaks (e.g. "Do not know how to serialize a BigInt").
+  if (/serialize|bigint|typeerror|is not a function|undefined is not|cannot read/i.test(s)) return t('insurance.reason.ADAPTER_ERROR');
   // Bare internal codes (e.g. QUOTE_NOT_FOUND) must never leak as UI text.
   if (/^[A-Z][A-Z0-9_]{3,}$/.test(s)) return t('insurance.reason.QUOTE_UNAVAILABLE');
   return s; // provider-specific certificate text; kept verbatim (server-controlled)

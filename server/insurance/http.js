@@ -46,7 +46,7 @@ export async function httpJson(method, url, opts = {}) {
         ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(opts.headers || {})
       },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined
+      body: opts.body !== undefined ? JSON.stringify(opts.body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : undefined
     });
     const latencyMs = Date.now() - started;
     if (!res.ok) {
