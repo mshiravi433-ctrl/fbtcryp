@@ -33,19 +33,40 @@
  *      era the forked pool runs (numeric code ≤ v3.3, custom error v3.4+)
  *
  * ─── REQUIREMENTS ───────────────────────────────────────────────────────────
- * `anvil` (Foundry) on PATH and an RPC that can serve Arbitrum One mainnet state. This
- * repository has no hardhat/foundry tooling in package.json, so the probe is
- * NOT wired into `npm test` or CI: it self-skips with a printed, copy-pasteable
- * command when anvil is absent. Install Foundry with:
+ * `anvil` (Foundry) on PATH and an RPC that can serve recent Arbitrum One
+ * state — plus one version caveat that matters more than either:
  *
+ * anvil v1.8.1 (what the CI workflow installs today) CANNOT execute calls
+ * against an Arbitrum fork. Nitro L2 headers intentionally omit the EIP-4844
+ * fields, REVM still demands a blob environment once the effective spec is
+ * Cancun+, and every eth_call dies with "Excess blob gas not set." (foundry
+ * #16514, merged 2026-09-01 — one tag too late for v1.8.1). getCode keeps
+ * working, which is exactly why the failing runs showed real contract code
+ * and then "missing revert data" on every read.
+ *
+ * This probe therefore health-checks the fork with a canary — a plain
+ * USDC.decimals() eth_call, the one operation that bug breaks — and when the
+ * anvil on PATH fails it, downloads a pinned nightly that carries the fix
+ * from the official foundry releases and retries with that. Env knobs:
+ *
+ *   ARBITRUM_RPC_URL        primary fork RPC (default https://arb1.arbitrum.io/rpc)
+ *   ARBITRUM_RPC_FALLBACKS  comma-separated fallback RPCs, tried after the primary
+ *   ANVIL_NIGHTLY_TAG       which nightly to fetch (default: the 2026-09-07 pin)
+ *   ANVIL_BIN               use this anvil binary instead of downloading one
+ *   ANVIL_NO_DOWNLOAD=1     never download; fail with instructions instead
+ *
+ * Install Foundry with:
  *     curl -L https://foundry.paradigm.xyz | bash && foundryup
  *
- * and run it against any Arbitrum archive-capable RPC:
+ * and run it against any Arbitrum RPC that serves recent state:
  *
  *     ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc node test/aave-arbitrum-fork-probe.mjs
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { execSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { arch as osArch, platform as osPlatform, tmpdir } from 'node:os';
+import { join as pathJoin } from 'node:path';
 import { Wallet, JsonRpcProvider, Contract, Interface, MaxUint256, formatUnits } from 'ethers';
 
 const PORT = Number(process.env.ANVIL_PORT || 8553);
@@ -53,6 +74,18 @@ const RPC = process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc';
 const STRICT = process.argv.includes('--strict');
 const ANVIL_ACCOUNT_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANVIL_ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+/* Pinned native USDC on Arbitrum One — the same address AAVE_V3_ARBITRUM.usdc
+   pins, repeated here because the fork health canary must run BEFORE the
+   adapter bundle is imported: a broken fork must never look like a broken
+   adapter. */
+const USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+/* Foundry nightly that carries the Nitro fork fix (foundry #16514, merged
+   2026-09-01 — AFTER v1.8.1, which is what the CI workflow installs). Any
+   release from 2026-09-02 onwards works; this is the newest at the time of
+   writing, and it stays overridable so a future stable can be pinned without
+   touching this file again. */
+const ANVIL_NIGHTLY_TAG =
+  process.env.ANVIL_NIGHTLY_TAG || 'nightly-f5868f92c9ed1c5e4673a07d7703adc581d9dc0c';
 
 const rows = [];
 const t = (name, ok, detail = '') => {
@@ -81,7 +114,55 @@ async function rpc(url, method, params) {
   return json.result;
 }
 
+/* Short host of an RPC URL, for labels that have to stay readable. */
+const hostOf = (u) => {
+  try { return new URL(u).host; } catch { return u; }
+};
+
+/* One-line anvil version, or a placeholder — never worth failing a run over. */
+const anvilVersionOf = (bin) => {
+  try {
+    return execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim().split('\n').pop().trim();
+  } catch {
+    return 'unknown build';
+  }
+};
+
+/* Download the pinned foundry nightly and return the path to its anvil.
+   Returns null when it cannot (offline, unsupported platform, failed fetch) —
+   the caller then falls through to the remaining fork attempts and, if they
+   all fail, a precise error message. */
+async function ensureNightlyAnvil() {
+  if (process.env.ANVIL_BIN) return existsSync(process.env.ANVIL_BIN) ? process.env.ANVIL_BIN : null;
+  if (process.env.ANVIL_NO_DOWNLOAD) return null;
+  const arch = { x64: 'amd64', arm64: 'arm64' }[osArch()];
+  const plat = { linux: 'linux', darwin: 'darwin' }[osPlatform()];
+  if (!arch || !plat) return null;
+  const dir = pathJoin(tmpdir(), 'fbt-anvil', ANVIL_NIGHTLY_TAG);
+  const bin = pathJoin(dir, 'anvil');
+  if (existsSync(bin)) return bin;
+  const asset = `foundry_nightly_${plat}_${arch}.tar.gz`;
+  try {
+    console.log(`⬇  fetching ${asset} from ${ANVIL_NIGHTLY_TAG} — the anvil on PATH cannot execute Nitro (Arbitrum) fork calls …`);
+    const res = await fetch(
+      `https://github.com/foundry-rs/foundry/releases/download/${ANVIL_NIGHTLY_TAG}/${asset}`
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    mkdirSync(dir, { recursive: true });
+    const tarball = pathJoin(dir, asset);
+    writeFileSync(tarball, Buffer.from(await res.arrayBuffer()));
+    execFileSync('tar', ['-xzf', tarball, '-C', dir]);
+    chmodSync(bin, 0o755);
+    if (!existsSync(bin)) throw new Error('anvil binary missing from the tarball');
+    return bin;
+  } catch (err) {
+    console.log(`nightly anvil download failed: ${String(err?.message ?? err).slice(0, 160)}`);
+    return null;
+  }
+}
+
 let anvil = null;
+let forkServedBy = null; // which anvil build actually served the fork (see header)
 let exitCode = 0;
 
 try {
@@ -100,33 +181,107 @@ try {
       exitCode = 1;
     }
   } else {
-    /* ── start the fork ───────────────────────────────────────────────────── */
-    console.log(`forking ${RPC} on 127.0.0.1:${PORT} …`);
-    anvil = spawn('anvil', [
-      '--fork-url', RPC,
-      '--retries', '8',
-      '--chain-id', '42161',
-      '--port', String(PORT),
-      '--accounts', '1',
-      '--silent'
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
-    anvil.stderrBuf = '';
-    anvil.stderr.on('data', (d) => { anvil.stderrBuf = (anvil.stderrBuf + d.toString()).slice(-3000); });
-    anvil.on('error', () => {});
+    /* ── start the fork ─────────────────────────────────────────────────────
+       A fork is only accepted after a health canary: a plain USDC.decimals()
+       eth_call — exactly the operation the v1.8.1 Nitro bug breaks (see the
+       header). If the anvil on PATH fails the canary, the pinned nightly that
+       carries the fix is downloaded and retried; public RPCs rotate as
+       fallbacks, because a dead upstream fails the same canary. */
+    const rpcCandidates = [...new Set([
+      RPC,
+      ...(process.env.ARBITRUM_RPC_FALLBACKS ||
+        'https://arbitrum-one.publicnode.com,https://arb1.arbitrum.io/rpc,https://arbitrum.llamarpc.com,https://1rpc.io/arb')
+        .split(',').map((s) => s.trim()).filter(Boolean)
+    ])];
+    const forkAttempts = [];
+    let url = null;
 
-    const url = `http://127.0.0.1:${PORT}`;
-    const up = await (async () => {
+    const startAnvil = async (bin, rpcUrl) => {
+      const proc = spawn(bin, [
+        '--fork-url', rpcUrl,
+        '--retries', '8',
+        '--chain-id', '42161',
+        '--port', String(PORT),
+        '--accounts', '1',
+        '--silent'
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+      proc.stderrBuf = '';
+      proc.stderr.on('data', (d) => { proc.stderrBuf = (proc.stderrBuf + d.toString()).slice(-3000); });
+      proc.on('error', () => {});
+      const target = `http://127.0.0.1:${PORT}`;
       for (let i = 0; i < 60; i += 1) {
         try {
-          if (await rpc(url, 'eth_blockNumber', [])) return true;
+          if (await rpc(target, 'eth_blockNumber', [])) return { proc, url: target };
         } catch { /* still booting */ }
         await new Promise((r) => setTimeout(r, 500));
       }
-      return false;
-    })();
-    if (!up) throw new Error('anvil did not come up within 30s');
-    t('anvil fork of Arbitrum One mainnet is serving', true, url);
+      throw new Error(
+        'anvil did not come up within 30s' +
+        (proc.stderrBuf.trim() ? ` — ${proc.stderrBuf.trim().split('\n').pop().slice(0, 160)}` : '')
+      );
+    };
+    const stopAnvil = async (proc) => {
+      if (!proc) return;
+      proc.kill('SIGKILL');
+      await new Promise((r) => setTimeout(r, 200));
+    };
+    const attemptFork = async (bin, label, rpcUrl) => {
+      let proc = null;
+      try {
+        console.log(`forking ${hostOf(rpcUrl)} on 127.0.0.1:${PORT} with ${label} …`);
+        const started = await startAnvil(bin, rpcUrl);
+        proc = started.proc;
+        try {
+          const decimals = await rpc(started.url, 'eth_call', [
+            { to: USDC, data: '0x313ce567' }, 'latest'
+          ]);
+          if (BigInt(decimals) !== 6n) throw new Error(`USDC.decimals() returned ${decimals.slice(0, 66)}`);
+        } catch (err) {
+          const why = String(err?.message ?? err).slice(0, 200);
+          const stderrTail = proc.stderrBuf.trim().split('\n').pop();
+          forkAttempts.push(`${label} × ${hostOf(rpcUrl)}: ${why}` +
+            (stderrTail ? ` · anvil stderr: ${stderrTail.slice(0, 120)}` : ''));
+          await stopAnvil(proc);
+          return false;
+        }
+        anvil = proc; // the winner — the outer finally kills it
+        url = started.url;
+        forkServedBy = label;
+        return true;
+      } catch (err) {
+        await stopAnvil(proc);
+        forkAttempts.push(`${label} × ${hostOf(rpcUrl)}: ${String(err?.message ?? err).slice(0, 160)}`);
+        return false;
+      }
+    };
 
+    await attemptFork('anvil', `anvil on PATH (${anvilVersionOf('anvil')})`, rpcCandidates[0]);
+    if (!url) {
+      const nightly = await ensureNightlyAnvil();
+      if (nightly) {
+        const nightlyLabel = `anvil ${ANVIL_NIGHTLY_TAG} (${anvilVersionOf(nightly)})`;
+        await attemptFork(nightly, nightlyLabel, rpcCandidates[0]);
+        for (const rpcUrl of rpcCandidates.slice(1)) {
+          if (url) break;
+          await attemptFork(nightly, nightlyLabel, rpcUrl);
+        }
+      }
+    }
+    for (const rpcUrl of rpcCandidates.slice(1)) {
+      if (url) break;
+      await attemptFork('anvil', `anvil on PATH (${anvilVersionOf('anvil')})`, rpcUrl);
+    }
+    if (!url) {
+      const nitroBug = forkAttempts.some((a) => /excess blob gas/i.test(a));
+      throw new Error(
+        'no fork passed the health canary (a plain USDC.decimals() eth_call) — attempts: ' +
+        `${forkAttempts.join(' | ')}` +
+        (nitroBug
+          ? ' — the anvil on PATH cannot execute Nitro (Arbitrum) fork calls: foundry #16514, fixed after v1.8.1. Update Foundry (or set ANVIL_BIN) and retry.'
+          : '')
+      );
+    }
+    t('anvil fork of Arbitrum One mainnet is serving', true, `${url} · ${forkServedBy}`);
     const provider = new JsonRpcProvider(url, 42161, { staticNetwork: true });
     const signer = new Wallet(ANVIL_ACCOUNT_KEY, provider);
 
@@ -136,47 +291,13 @@ try {
     const adapter = await import('./.out/aavearb/aave-arbitrum-fork-adapter.js');
     const { AAVE_V3_ARBITRUM } = adapter;
 
-    /* ── fork-state diagnostics: prove the fork serves contract state BEFORE
-       funding spends it. If these fail, the fault is the fork or the upstream
-       RPC — the adapter below never ran. */
+    /* ── one fork-state line for the log: the canary that admitted this fork
+       already proved eth_call executes against real Arbitrum state. */
     try {
       const diagBlock = await provider.getBlockNumber();
-      const diagUsdc = await provider.getCode(AAVE_V3_ARBITRUM.usdc);
-      const diagPool = await provider.getCode(AAVE_V3_ARBITRUM.pool);
-      console.log(`DIAG fork block ${diagBlock} · USDC code ${diagUsdc.length > 2 ? `${diagUsdc.length} bytes` : 'EMPTY'} · Pool code ${diagPool.length > 2 ? `${diagPool.length} bytes` : 'EMPTY'}`);
+      console.log(`DIAG fork block ${diagBlock} · USDC.decimals() = 6 · served by ${forkServedBy}`);
     } catch (err) {
       console.log(`DIAG fork-state read FAILED: ${String(err?.message ?? err).slice(0, 300)}`);
-    }
-
-    /* ── DIAG2: storage reads vs EVM execution. getCode above already works;
-       these pinpoint whether storage reads fail, all execution fails, or only
-       USDC fails — each points at a different fix. */
-    try {
-      const implSlot = await provider.getStorage(
-        AAVE_V3_ARBITRUM.usdc,
-        '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
-      );
-      console.log(`DIAG2 USDC implementation slot: ${implSlot}`);
-    } catch (err) {
-      console.log(`DIAG2 USDC implementation slot FAILED: ${String(err?.message ?? err).slice(0, 200)}`);
-    }
-    {
-      const balData = (acct) => '0x70a08231' + '000000000000000000000000' + acct.slice(2).toLowerCase();
-      const diagCalls = [
-        ['USDC.decimals()', { to: AAVE_V3_ARBITRUM.usdc, data: '0x313ce567' }],
-        ['USDC.balanceOf(acct)', { to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT) }],
-        ['USDC.balanceOf(acct,gas=200k)', { to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT), gasLimit: 200000 }],
-        ['USDC.balanceOf(acct,from=acct)', { from: ANVIL_ACCOUNT, to: AAVE_V3_ARBITRUM.usdc, data: balData(ANVIL_ACCOUNT) }],
-        ['aToken.balanceOf(acct)', { to: AAVE_V3_ARBITRUM.aUsdc, data: balData(ANVIL_ACCOUNT) }]
-      ];
-      for (const [label, tx] of diagCalls) {
-        try {
-          const ret = await provider.call(tx);
-          console.log(`DIAG2 ${label} OK → ${ret.length > 66 ? ret.slice(0, 66) + '…' : ret}`);
-        } catch (err) {
-          console.log(`DIAG2 ${label} FAILED: ${String(err?.message ?? err).slice(0, 160)}`);
-        }
-      }
     }
 
     rule('0 · pinned constants and shipped defaults');
@@ -200,8 +321,15 @@ try {
      * tokens from whichever of the pinned protocol contracts actually holds
      * the reserve's USDC (aArbUSDC in v3; the Pool in some deployments).
      */
-    await rpc(url, 'anvil_setBalance', [AAVE_V3_ARBITRUM.aUsdc, '0xDE0B6B3A7640000']); // 1 ETH — gas if aToken has to move its own balance
-    await rpc(url, 'anvil_setBalance', [ANVIL_ACCOUNT, '0xDE0B6B3A7640000']);     // 1 ETH — gas for approve/supply/withdraw
+    /* 1000 ETH each, not the 1 ETH this probe used to hand out: anvil checks
+       balance ≥ gas·price + value BEFORE estimating gas, and on a Nitro fork
+       the reported fee made 30M gas × price exceed 1 ETH — which is how the
+       aArbUSDC/Pool fallbacks failed with "Insufficient funds" in a run where
+       the balance had just been set. The Pool was never funded at all. */
+    const GAS_ETH = '0x' + (1000n * 10n ** 18n).toString(16);
+    for (const who of [ANVIL_ACCOUNT, AAVE_V3_ARBITRUM.aUsdc, AAVE_V3_ARBITRUM.pool]) {
+      await rpc(url, 'anvil_setBalance', [who, GAS_ETH]);
+    }
     // The dev key is a REAL address that may have sent real transactions on
     // this chain, so anvil's pending-nonce accounting
     // for it is unreliable across consecutive local sends (observed: approve
@@ -230,11 +358,13 @@ try {
     };
     await tryFund('mint (impersonating the USDC minter)', async () => {
       const minter = await usdc.minter();
+      await rpc(url, 'anvil_setBalance', [minter, GAS_ETH]); // the minter is a contract with no ETH on the fork
       await rpc(url, 'anvil_impersonateAccount', [minter]);
       try {
         return await rpc(url, 'eth_sendTransaction', [{
           from: minter,
           to: AAVE_V3_ARBITRUM.usdc,
+          gas: '0x' + (2_000_000n).toString(16),
           data: usdc.interface.encodeFunctionData('mint', [ANVIL_ACCOUNT, 1_000_000_000n])
         }]);
       } finally {
@@ -245,11 +375,12 @@ try {
       await tryFund(`transfer from ${holder === AAVE_V3_ARBITRUM.aUsdc ? 'aArbUSDC' : 'Pool'}`, async () => {
         await rpc(url, 'anvil_impersonateAccount', [holder]);
         try {
-          return await rpc(url, 'eth_sendTransaction', [{
-            from: holder,
-            to: AAVE_V3_ARBITRUM.usdc,
-            data: usdc.interface.encodeFunctionData('transfer', [ANVIL_ACCOUNT, 1_000_000_000n])
-          }]);
+        return await rpc(url, 'eth_sendTransaction', [{
+          from: holder,
+          to: AAVE_V3_ARBITRUM.usdc,
+          gas: '0x' + (2_000_000n).toString(16),
+          data: usdc.interface.encodeFunctionData('transfer', [ANVIL_ACCOUNT, 1_000_000_000n])
+        }]);
         } finally {
           await rpc(url, 'anvil_stopImpersonatingAccount', [holder]);
         }
@@ -458,4 +589,15 @@ for (const r of rows) {
 }
 console.log('─'.repeat(78));
 console.log(`${rows.length - failed.length}/${rows.length} passed`);
+
+/* A verdict the Actions check-run carries as an annotation, so the outcome is
+   readable from the GitHub API even where the run log is not reachable. */
+if (process.env.GITHUB_ACTIONS === 'true') {
+  const note = [
+    `${rows.length - failed.length}/${rows.length} passed`,
+    forkServedBy ? `fork served by ${forkServedBy}` : null,
+    ...failed.map((r) => `FAIL ${r.name} — ${r.detail}`)
+  ].filter(Boolean).join('%0A').replace(/::/g, '꞉꞉').slice(0, 3800);
+  console.log(`::notice title=aave-arbitrum-fork-probe::${note}`);
+}
 process.exit(exitCode || (failed.length ? 1 : 0));
