@@ -133,3 +133,55 @@ Feature flags (`server/fios/flags.js`): `FINANCIAL_WORLD_MODEL_ENABLED`,
 `LEARNING_ENGINE_ENABLED`, `PROACTIVE_GUARDIAN_ENABLED`.
 A disabled flag returns `{ ok:false, code:'FEATURE_DISABLED' }` — it never fakes
 success, and no broken feature is hidden behind a flag that reports healthy.
+
+---
+
+## Batch 7 — delivered (runtime-verified)
+
+The API layer, migrations, UI and the runtime verification the audit demanded.
+Every claim below is asserted by a probe that runs in CI (`npm test`); the
+numbers are the probe output, not a readiness statement.
+
+| piece | where | what it is |
+|---|---|---|
+| DB migrations | `fios/migrations.js` | versioned, idempotent, **per-owner lazy** (KV cannot enumerate owners); v2 normalises policy spend ledgers, recomputes live agent trust, pins `grantsExecution: false`, repairs trace links; applied version persisted at `fi:migrations:v1:<owner>` and surfaced on `/api/ai/health` |
+| Composition root | `fios/index.js` | `createFinancialIntelligence({stateStore, events, brain, ownerFor})` — ONE place every engine is assembled; sections come from the brain's state store; the autonomy executor is the brain's **unsigned** `swap/bridge.prepare` hand-off |
+| API router | `fios/router.js` | `/api/ai/{health, world-state, financial-state, strategies, simulate, what-if, decision, decision/:id, decision/:id/evidence, trace/:id, policies, policies/stop, policies/:id{,/stop,/resume,/revoke}, autonomy, autonomy/run, guardian/{status,check}, replan, council{,/:id}, external-agents{,/:id{,/interaction,/authorize,/revoke}}, learning{,/calibration}, preferences{,/statement}}` — mounted after the command-center routes; `/agents` and `/status` stay the command center's |
+| Client | `src/lib/financialIntelligence.js` | reuses the brain's device key (`fbt.central.device.v1`) so FI sees the SAME owner the brain has state for; fail-closed `{ok:false, code}` |
+| Panel | `src/components/FinancialIntelligencePanel.jsx` | mounted in `IntentOS.jsx`; **WHY?** (reason + six confidence dimensions), **SHOW EVIDENCE** (linked bundle + stale/untrusted counts), **ALTERNATIVES** (losers with scores + vetoed rows and why), **STOP** (per-policy + stop-all, with a confirmation step) |
+| Wiring | `server/app.js` | FI mounts under `/api/ai` after `centralIntelligence`; same budget, same `ownerFor`, one state store |
+
+### Runtime verification (the part that was missing)
+
+`test/fios/fios-api-probe.mjs` boots the REAL `server/app.js` over real HTTP
+(loopback, ephemeral port) and drives it exactly like `central-os-probe`
+drives the brain: upstream sources swapped through the documented
+`setCiSource` seam, everything else production code. It proves:
+
+- one state store — a `/api/brain` turn (and the brain's own
+  `tools/read` calls) writes the sections; `/api/ai/financial-state` then
+  answers with those numbers ($20,000 gross, $0 debt read, $20,000 net);
+  before any turn the same route answers UNAVAILABLE, never zero;
+- the full decision pipeline over HTTP: real strategies → competition →
+  decision → council (six votes, persisted disagreement), and the decision,
+  its evidence bundle and its trace are retrievable afterwards;
+- the policy engine fail-closed: flag off → `FEATURE_DISABLED`; stopped
+  policy → every run refused `EMERGENCY_STOP`; over the ceiling →
+  `PER_EXECUTION_LIMIT`; a run produces the brain's **unsigned** hand-off and
+  stops at `VERIFY`; only a verification id reaches `COMPLETED` and settles
+  the spend on the policy row; `canSign` is false on every answer;
+- routing hygiene: `/api/ai/agents` and `/api/ai/status` still belong to the
+  command center; unknown ids are named 404s.
+
+Probe scores: fios-core **156/156**, fios-autonomy **64/64**,
+fios-intelligence **54/54**, fios-api **42/42** (each stable across
+repeated runs). `npm test` runs all four as child processes.
+
+### Two plan rows, honestly restated
+
+The capability table above lists `fios/whatif.js`, `fios/modelRouter.js` and
+`fios/security.js` as planned files. As shipped: what-if parsing/execution
+lives in `fios/simulation.js` (`parseWhatIf`/`runWhatIf`); the model router
+and the dedicated security module are NOT built — the security boundary is
+the existing state-store redaction plus the raw-credential passport refusal
+in `fios/agents.js`, and no FI route can sign anything.

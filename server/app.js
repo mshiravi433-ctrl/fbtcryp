@@ -5522,6 +5522,37 @@ app.use('/api/brain', (req, res, next) => {
 app.set('centralIntelligence', centralIntelligence);
 app.use('/api/brain', centralIntelligence.router);
 
+/* ─── FBT FINANCIAL INTELLIGENCE OS (batch 7) ────────────────────────────
+ * The Financial Intelligence OS composes the central brain's state store
+ * (one state store, one execution path): it reads the sections the brain
+ * already read for the user, and hands execution back to the brain's
+ * unsigned hand-off. It is mounted under /api/ai AFTER the command-center
+ * routes, so it inherits that gateway's budget and the SAME owner
+ * derivation — a request FI sees as owner X owns X's state rows.
+ *
+ * Routes it owns (and nothing else): /health, /world-state,
+ * /financial-state, /strategies, /simulate, /what-if, /decision,
+ * /decision/:id, /decision/:id/evidence, /trace/:id, /policies,
+ * /policies/stop, /policies/:id{,/stop,/resume,/revoke}, /autonomy,
+ * /autonomy/run, /replan, /guardian/{status,check}, /council{,/:id},
+ * /external-agents{,/:id{,/interaction,/authorize,/revoke}},
+ * /learning{,/calibration}, /preferences{,/statement}.
+ * /agents and /status belong to the command center — FI deliberately does
+ * not touch them. */
+import('./fios/index.js').then(({ createFinancialIntelligence }) => {
+  const fi = createFinancialIntelligence({
+    stateStore: centralIntelligence.stateStore,
+    events: centralIntelligence.events,
+    brain: centralIntelligence.brain,
+    ownerFor: centralIntelligence.ownerFor,
+    log: (line) => app.locals.ciLog?.push?.(line)
+  });
+  app.set('financialIntelligence', fi);
+  app.use('/api/ai', fi.router);
+}).catch((err) => {
+  console.error('Failed to mount financial intelligence routes:', err?.message || err);
+});
+
 /* ─── FBT FINANCIAL OS — Upgrade 11+12 Brain Routes ──────────────────────
  * Predictive Brain, Opportunity Engine, Financial Guardian, Daily Brief,
  * Knowledge Graph, Ecosystem Router, and Cross-Module Workflows.

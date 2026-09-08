@@ -1,0 +1,498 @@
+/**
+ * FBT FINANCIAL INTELLIGENCE OS — API router (batch 7).
+ * ---------------------------------------------------------------------------
+ * Mounted under /api/ai AFTER the command-center routes, so it inherits the
+ * same /api/ai budget (GETs free, POSTs 10/min by default) and the same
+ * device identity as the rest of the AI surface. There is no third gateway:
+ * the owner is derived by the SAME ownerFor the central brain uses (tgUser →
+ * x-fbt-device → wallet → ip), so a request FI sees as owner X is the owner
+ * X's state store rows belong to.
+ *
+ * Route notes (the ones that are not self-evident):
+ *   /external-agents — NOT /agents: /api/ai/agents belongs to the existing
+ *                      command-center router; the registry lives here.
+ *   /health          — NOT /status: /api/ai/status belongs to the command
+ *                      center. /health reports flags + the last REAL results
+ *                      + the applied migration version + durability.
+ *   /decision/:id/evidence — the SHOW EVIDENCE button's bundle: the decision
+ *                      row's linked evidence rows plus their quality counts.
+ *   /policies/:id/stop     — the STOP button: one policy, or every active
+ *                      policy when policyId is absent. `by` is always 'user'
+ *                      from this surface; the machine cannot stop itself
+ *                      through the API any more than it can resume itself.
+ */
+import { Router } from 'express';
+
+export const FI_ROUTES_SCHEMA = 'fbt.fi.routes.v1';
+
+const MAX_TEXT = 2000;
+const MAX_AMOUNT = 100_000_000;
+const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
+  const router = Router();
+  const ownerOf = (req) => {
+    if (ownerFor) return ownerFor(req);
+    const device = String(req?.get?.('x-fbt-device') || '').trim();
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(device)) return `dev:${device.slice(0, 40)}`;
+    return `ip:${String(req?.ip || 'anon').slice(0, 48)}`;
+  };
+
+  /* Per-owner lazy migration, once in flight at a time per owner. A failed
+     migration must not take the API down: the route proceeds, and the next
+     call retries the (idempotent) steps. */
+  const inFlight = new Map();
+  const ensureMigrated = (owner) => {
+    if (!inFlight.has(owner)) {
+      inFlight.set(owner, fi.migrations.migrateOwner(owner)
+        .catch((err) => log(`migrations:failed:${owner}:${String(err?.message || err).slice(0, 120)}`))
+        .finally(() => inFlight.delete(owner)));
+    }
+    return inFlight.get(owner);
+  };
+
+  const reject = (status, code, detail = null, extra = {}) => ({ __reject: true, status, code, detail, extra });
+  const route = (handler) => async (req, res) => {
+    try {
+      const owner = ownerOf(req);
+      const out = await handler(req, res, owner);
+      if (out && out.__reject) {
+        res.status(out.status || 400).json({ ok: false, financialIntelligence: FI_ROUTES_SCHEMA, code: out.code, detail: out.detail || null, ...(out.extra || {}) });
+        return;
+      }
+      if (!res.headersSent && out !== undefined) res.json(out);
+    } catch (error) {
+      const detail = String(error?.detail || error?.message || error).slice(0, 240);
+      log(`fi-router:error:${detail}`);
+      res.status(502).json({ ok: false, financialIntelligence: FI_ROUTES_SCHEMA, code: error?.code || 'FI_ERROR', detail });
+    }
+  };
+
+  /* ══════════════════════ health + state ══════════════════════ */
+
+  router.get('/health', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return fi.health(owner);
+  }));
+
+  router.get('/financial-state', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const financial = await fi.financialStateFor(owner);
+    return { ok: true, schema: financial.schema, financial, durable: fi.collections.durable() };
+  }));
+
+  router.get('/world-state', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const world = await fi.worldModelFor(owner);
+    return { ok: true, schema: world.schema, world: fi.worldModelDigest ? fi.worldModelDigest(world) : world, durable: fi.collections.durable() };
+  }));
+
+  /* ══════════════════════ strategies + simulation ══════════════════════ */
+
+  router.post('/strategies', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const financial = await fi.financialStateFor(owner);
+    if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason);
+    const world = await fi.worldModelFor(owner);
+    const prefs = await fi.preferences.resolve(owner);
+    const out = await fi.strategyEngine.generate({
+      owner,
+      intent: { message: String(body.message || body.intent || '').slice(0, MAX_TEXT) },
+      financial, world,
+      goal: body.goal || null,
+      preferences: prefs,
+      correlationId: body.correlationId || null
+    });
+    return out.ok ? { ok: true, strategies: out.strategies, durable: out.durable ?? fi.collections.durable() } : reject(409, out.code, out.detail);
+  }));
+
+  router.get('/strategies', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const rows = await fi.strategyEngine.recent(owner, { limit: Math.min(30, Math.max(1, Number(req.query.limit) || 10)) });
+    return { ok: true, strategies: rows, durable: fi.collections.durable() };
+  }));
+
+  router.post('/simulate', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const financial = await fi.financialStateFor(owner);
+    if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason);
+    const out = await fi.simulationEngine.simulate({
+      owner,
+      sections: fi.flatSectionsFor(owner),
+      financial,
+      costs: body.costs || {},
+      goal: body.goal || null,
+      custom: Array.isArray(body.custom) ? body.custom.slice(0, 8) : [],
+      correlationId: body.correlationId || null
+    });
+    return out.ok ? { ok: true, simulation: out.simulation, durable: out.durable ?? fi.collections.durable() } : reject(409, out.code, out.detail);
+  }));
+
+  router.post('/what-if', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || body.message || '');
+    if (!text.trim()) return reject(400, 'TEXT_REQUIRED', 'a what-if question is required');
+    const financial = await fi.financialStateFor(owner);
+    if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason);
+    const out = await fi.runWhatIf(fi.simulationEngine, {
+      owner,
+      text: text.slice(0, MAX_TEXT),
+      sections: fi.flatSectionsFor(owner),
+      financial,
+      goal: body.goal || null,
+      correlationId: body.correlationId || null
+    });
+    return out.ok
+      ? { ok: true, whatIf: out, durable: fi.collections.durable() }
+      : reject(422, out.code || 'UNRECOGNIZED_WHAT_IF', out.detail || 'this question is outside the supported what-ifs', { interpretation: out.interpretation || null });
+  }));
+
+  /* ══════════════════════ the decision pipeline ══════════════════════ */
+
+  router.post('/decision', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const correlationId = body.correlationId || req.get?.('x-fbt-request-id') || null;
+
+    const financial = await fi.financialStateFor(owner);
+    if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason, { reason: financial.reason });
+    const world = await fi.worldModelFor(owner);
+    const prefs = await fi.preferences.resolve(owner);
+    const goal = body.goal || null;
+
+    let rows = Array.isArray(body.strategies) ? body.strategies.slice(0, 12) : null;
+    if (!rows || rows.length < 2) {
+      const gen = await fi.strategyEngine.generate({
+        owner,
+        intent: { message: String(body.message || body.intent || '').slice(0, MAX_TEXT) },
+        financial, world, goal, preferences: prefs, correlationId
+      });
+      if (!gen.ok) return reject(409, gen.code, gen.detail);
+      rows = gen.strategies;
+    }
+
+    const comp = await fi.competition.compete({ owner, strategies: rows, preferences: prefs, goal, correlationId });
+    if (!comp.ok) return reject(409, comp.code, comp.detail);
+
+    const sim = await fi.simulationEngine.simulate({ owner, sections: fi.flatSectionsFor(owner), financial, goal, correlationId }).catch(() => ({ ok: false, code: 'SIMULATION_UNAVAILABLE' }));
+    const risk = fi.riskFor(owner, world);
+
+    const decided = await fi.decisionEngine.decide({
+      owner,
+      intent: String(body.message || body.intent || '').trim() ? { message: String(body.message || body.intent).slice(0, MAX_TEXT) } : null,
+      financial, world,
+      strategies: rows,
+      competition: comp.competition,
+      simulation: sim.ok ? sim.simulation : null,
+      risk,
+      preferences: prefs,
+      goal,
+      executionRequested: body.execute === true,
+      correlationId
+    });
+    if (!decided.ok) return reject(409, decided.code, decided.detail, { state: decided.state || null });
+
+    /* The council judges the REAL decision (with its id), not a draft: the
+       Guardian reads the decision's risk, capital and downside as recorded. */
+    const decisionRow = decided.decision;
+    const cnc = await fi.council.convene({
+      owner,
+      strategies: rows,
+      preferences: prefs,
+      goal,
+      competition: comp,
+      risk,
+      financial,
+      world,
+      decision: decisionRow.decision ? { id: decisionRow.id, type: decisionRow.decision.type, riskLevel: decisionRow.decision.riskLevel, expectedReturnPct: decisionRow.decision.expectedReturnPct, capitalRequiredUsd: decisionRow.decision.amountUsd, downside: `modelled downside ${rows.find((r) => r.id === decisionRow.decision.strategyId)?.potentialLossPct ?? 'unmodelled'}%`, reversible: true } : null,
+      goalSpec: goal,
+      correlationId
+    });
+
+    return {
+      ok: true,
+      decision: decisionRow,
+      trace: decided.trace,
+      council: cnc.ok ? cnc.council : null,
+      competition: comp.competition,
+      simulation: sim.ok ? sim.simulation : null,
+      alternatives: decisionRow.alternatives,
+      reason: decisionRow.reason,
+      confidence: decisionRow.confidence,
+      conditions: decisionRow.conditions,
+      executionPermission: false,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/decision/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.decisionEngine.get(owner, req.params.id);
+    if (!got.ok) return reject(404, 'DECISION_NOT_FOUND', `no decision ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, decision: got.row, durable: fi.collections.durable() };
+  }));
+
+  router.get('/decision/:id/evidence', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const bundle = await fi.evidence.bundle(owner, 'decision', req.params.id);
+    if (!bundle.ok) return reject(404, bundle.code, 'no evidence is linked to that decision', { id: req.params.id });
+    return { ok: true, decisionId: req.params.id, evidence: bundle.evidence, quality: bundle.quality, durable: fi.collections.durable() };
+  }));
+
+  router.get('/trace/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.traceStore.get(owner, req.params.id);
+    const trace = got.trace || got.row;
+    if (!got.ok || !trace) return reject(404, got.code || 'TRACE_NOT_FOUND', `no trace ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, trace: fi.traceStore.summary(trace), durable: fi.collections.durable() };
+  }));
+
+  /* ══════════════════════ policies (the authority) ══════════════════════ */
+
+  router.get('/policies', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const st = await fi.policyEngine.status(owner);
+    return { ok: true, ...st, durable: fi.collections.durable() };
+  }));
+
+  router.get('/policies/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.policyEngine.get(owner, req.params.id);
+    if (!got.ok) return reject(404, got.code, `no policy ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, policy: got.policy, durable: fi.collections.durable() };
+  }));
+
+  router.post('/policies', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const p = body.policy || body;
+    if (num(p.maxDailyUsd) === null || num(p.maxCumulativeUsd) === null) {
+      return reject(400, 'LIMITS_REQUIRED', 'a policy without daily and lifetime ceilings is not a scope; name the limits');
+    }
+    const out = await fi.policyEngine.create(owner, p);
+    return out.ok ? { ok: true, policy: out.policy, durable: out.durable } : reject(409, out.code, out.detail || null, { errors: out.errors || null });
+  }));
+
+  /* The STOP button for one policy. `by` is always 'user' on this surface —
+     the machine has no API route to stop itself; the stop comes through a
+     human clicking, which is the whole point. */
+  router.post('/policies/:id/stop', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.policyEngine.emergencyStop(owner, { policyId: req.params.id, reason: String(body.reason || 'stopped by the user').slice(0, 160), by: 'user' });
+    if (!out.ok) return reject(409, out.code, out.detail || null);
+    return { ok: true, stopped: out.stopped, durable: fi.collections.durable() };
+  }));
+
+  router.post('/policies/stop', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.policyEngine.emergencyStop(owner, { policyId: null, reason: String(body.reason || 'stopped by the user').slice(0, 160), by: 'user' });
+    if (!out.ok) return reject(409, out.code, out.detail || null, { stopped: out.stopped || [] });
+    return { ok: true, stopped: out.stopped, count: (out.stopped || []).length, scope: out.scope, durable: fi.collections.durable() };
+  }));
+
+  router.post('/policies/:id/resume', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.policyEngine.resume(owner, req.params.id, { by: 'user', reason: body.reason ? String(body.reason).slice(0, 160) : null });
+    return out.ok ? { ok: true, policy: out.policy, durable: out.durable } : reject(409, out.code, out.detail || null);
+  }));
+
+  router.post('/policies/:id/revoke', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.policyEngine.revoke(owner, req.params.id, { reason: body.reason ? String(body.reason).slice(0, 160) : null });
+    return out.ok ? { ok: true, policy: out.policy, durable: out.durable } : reject(409, out.code, out.detail || null);
+  }));
+
+  /* ══════════════════════ autonomy ══════════════════════ */
+
+  router.get('/autonomy', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return { ok: true, capabilities: fi.autonomy.capabilities(), durable: fi.collections.durable() };
+  }));
+
+  router.post('/autonomy/run', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const request = body.request || (body.kind ? body : {});
+    const policyId = body.policyId;
+    if (!policyId) return reject(400, 'POLICY_ID_REQUIRED', 'a run is an execution under a standing policy; name the policy');
+    if (!request.kind || num(request.amountUsd) === null) {
+      return reject(400, 'INCOMPLETE_REQUEST', 'the run needs at least kind and amountUsd; the loop will not fill in the rest');
+    }
+    const amount = num(request.amountUsd);
+    if (amount <= 0 || amount > MAX_AMOUNT) return reject(400, 'AMOUNT_INVALID', `amount must be in (0, ${MAX_AMOUNT}]`);
+
+    const financial = await fi.financialStateFor(owner);
+    const world = await fi.worldModelFor(owner);
+    const risk = fi.riskFor(owner, world);
+
+    const report = await fi.autonomy.run({
+      owner,
+      policyId,
+      request,
+      financial: financial.status === 'UNAVAILABLE' ? null : financial,
+      world,
+      risk,
+      decision: body.decision || null,
+      correlationId: body.correlationId || req.get?.('x-fbt-request-id') || null
+    });
+    return {
+      ok: report.ok,
+      report,
+      state: report.state,
+      stopGate: report.stopGate,
+      stopCode: report.stopCode,
+      executedNothing: report.executedNothing,
+      verificationId: report.verificationId,
+      capabilities: fi.autonomy.capabilities(),
+      durable: fi.collections.durable()
+    };
+  }));
+
+  /* ══════════════════════ guardian + replan ══════════════════════ */
+
+  router.get('/guardian/status', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return fi.guardian.status(owner);
+  }));
+
+  router.post('/guardian/check', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const financial = await fi.financialStateFor(owner);
+    const out = await fi.guardian.check({
+      owner,
+      financial: financial.status === 'UNAVAILABLE' ? null : financial,
+      goalProgress: body.goalProgress || null,
+      strategy: body.strategy || null,
+      profile: body.profile || (await fi.preferences.resolve(owner)),
+      correlationId: body.correlationId || null
+    });
+    return out.ok ? { ok: true, ...out, durable: fi.collections.durable() } : reject(409, out.code, out.detail || null);
+  }));
+
+  router.post('/replan', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.guardian.replan({
+      owner,
+      strategy: body.strategy || null,
+      changes: body.changes || null,
+      warnings: body.warnings || null,
+      triggers: Array.isArray(body.triggers) ? body.triggers.slice(0, 12) : [],
+      goalProgress: body.goalProgress || null,
+      context: body.context || {},
+      correlationId: body.correlationId || null
+    });
+    return out.ok ? { ok: true, replan: out, durable: fi.collections.durable() } : reject(409, out.code, out.detail || null);
+  }));
+
+  /* ══════════════════════ council (persisted disagreement) ══════════════════════ */
+
+  router.get('/council', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.council.recent(owner, { limit: Math.min(30, Math.max(1, Number(req.query.limit) || 10)) });
+    return { ok: true, councils: out.records, durable: fi.collections.durable() };
+  }));
+
+  router.get('/council/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.council.get(owner, req.params.id);
+    if (!got.ok) return reject(404, got.code, `no council ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, council: got.record, durable: fi.collections.durable() };
+  }));
+
+  /* ══════════════════════ external agents (the registry) ══════════════════════ */
+
+  router.get('/external-agents', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.agents.list(owner);
+    return { ok: true, agents: out.agents, count: out.count, durable: fi.collections.durable() };
+  }));
+
+  router.get('/external-agents/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.agents.get(owner, req.params.id);
+    if (!got.ok) return reject(404, got.code, `no agent ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, agent: got.record, durable: fi.collections.durable() };
+  }));
+
+  router.post('/external-agents', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.agents.register(owner, body);
+    return out.ok ? { ok: true, agent: out.agent, durable: out.durable } : reject(409, out.code, out.detail || null);
+  }));
+
+  router.post('/external-agents/:id/interaction', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (typeof body.ok !== 'boolean') return reject(400, 'OK_REQUIRED', 'an interaction is a success or a failure');
+    const out = await fi.agents.recordInteraction(owner, req.params.id, body);
+    if (!out.ok && out.code) return reject(404, out.code, out.detail || null);
+    return { ok: true, counted: out.counted, reason: out.reason || null, trust: out.trust || null, durable: fi.collections.durable() };
+  }));
+
+  router.post('/external-agents/:id/authorize', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.agents.authorize(owner, req.params.id, { scope: body.scope || 'council-vote', by: 'user' });
+    return out.ok ? { ok: true, agent: out.agent, durable: out.durable } : reject(409, out.code, out.detail || null, { score: out.score ?? null, required: out.required ?? null });
+  }));
+
+  router.post('/external-agents/:id/revoke', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = await fi.agents.revoke(owner, req.params.id, { reason: body.reason ? String(body.reason).slice(0, 160) : null });
+    return out.ok ? { ok: true, agent: out.agent, durable: out.durable } : reject(409, out.code, out.detail || null);
+  }));
+
+  /* ══════════════════════ learning ══════════════════════ */
+
+  router.get('/learning', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.learning.history(owner, { limit: Math.min(40, Math.max(1, Number(req.query.limit) || 10)) });
+    return { ok: true, outcomes: out.outcomes, durable: fi.collections.durable() };
+  }));
+
+  router.get('/learning/calibration', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return fi.learning.calibration(owner);
+  }));
+
+  router.post('/learning', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const execution = body.execution || (body.verified !== undefined ? body : {});
+    if (execution.verified !== true) {
+      return reject(422, 'OUTCOME_NOT_VERIFIED', 'learning reads only verified completions; say so with verificationId once the chain confirms');
+    }
+    const out = await fi.learning.learn(owner, { execution, correlationId: body.correlationId || null });
+    return out.ok ? { ok: true, record: out.record, lessons: out.lessons, failures: out.failures, durable: out.durable } : reject(409, out.code, out.detail || null);
+  }));
+
+  /* ══════════════════════ preferences ══════════════════════ */
+
+  router.get('/preferences', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const p = await fi.preferences.resolve(owner);
+    return { ok: true, preferences: p, durable: fi.collections.durable() };
+  }));
+
+  router.post('/preferences/statement', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || '');
+    if (!text.trim()) return reject(400, 'TEXT_REQUIRED', 'the sentence to remember is required');
+    const out = await fi.preferences.learnFromStatement(owner, text.slice(0, MAX_TEXT));
+    return out.ok ? { ok: true, written: out.written, preferences: out.preferences, durable: fi.collections.durable() } : reject(422, out.code, out.detail || null);
+  }));
+
+  return router;
+}

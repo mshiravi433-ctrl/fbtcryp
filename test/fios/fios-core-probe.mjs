@@ -196,14 +196,24 @@ t('§4 the digest handed to a model is bounded', JSON.stringify(worldModelDigest
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* §7 Memory 2.0                                                             */
 /* ═════════════════════════════════════════════════════════════════════════ */
-const memory = createMemory2({ collections, observability: obs });
+/* A controlled clock: "the newest user record wins" is a TIMESTAMP rule, and
+   a wall-clock race between two remembers is exactly the kind of flake this
+   suite exists to rule out. */
+let memNow = now;
+const memory = createMemory2({ collections, observability: obs, now: () => memNow });
 t('§7 the four provenance classes exist', JSON.stringify(MEMORY_PROVENANCE) === JSON.stringify(['USER_SAID', 'USER_PREFERRED', 'USER_BEHAVIOR', 'AI_INFERRED']));
 await memory.remember(OWNER, { key: 'leverageTolerance', value: 'NONE', provenance: 'USER_SAID' });
 const downgrade = await memory.remember(OWNER, { key: 'leverageTolerance', value: 'MODERATE', provenance: 'AI_INFERRED' });
 t('§7 an inference may not overwrite what the user said', downgrade.code === 'WOULD_DOWNGRADE_MEMORY');
+memNow += 5000; /* later: the user changes their mind — the newer record must win */
 await memory.remember(OWNER, { key: 'leverageTolerance', value: 'LOW', provenance: 'USER_PREFERRED' });
 const resolved = await memory.resolve(OWNER, 'leverageTolerance');
-t('§7 resolution returns the highest-ranked value plus what it outranked', resolved.value === 'NONE' && resolved.provenance === 'USER_SAID' && resolved.outranked.length === 1);
+t('§7 among the user’s own records the NEWEST wins (a later setting changes the mind), outranked named',
+  resolved.value === 'LOW' && resolved.provenance === 'USER_PREFERRED' && resolved.outranked.length === 1 && resolved.outranked[0].provenance === 'USER_SAID');
+memNow += 1000;
+await memory.remember(OWNER, { key: 'tieKey', value: 'said', provenance: 'USER_SAID' });
+await memory.remember(OWNER, { key: 'tieKey', value: 'preferred', provenance: 'USER_PREFERRED' });
+t('§7 at the same instant the higher class wins the tie', (await memory.resolve(OWNER, 'tieKey')).value === 'said');
 t('§7 an unverified outcome cannot enter strategy outcome memory', (await memory.recordOutcome(OWNER, { strategyId: 's1' })).code === 'OUTCOME_NOT_VERIFIED');
 t('§7 a verified outcome can', (await memory.recordOutcome(OWNER, { strategyId: 's1', verified: true, pnlUsd: 12, feesUsd: 1.2 })).ok);
 t('§7 a secret never enters memory', (await memory.remember(OWNER, { key: 'k', value: 'my private key is 0xabc', provenance: 'USER_SAID' })).code === 'NOTHING_STORABLE');
@@ -233,6 +243,7 @@ for (let i = 0; i < MIN_INFERRED_EVENTS + 1; i += 1) {
 }
 const learned = await preferences.learnFromOutcome(OWNER, { strategyId: 'sN', verified: true, kind: 'recurring-dca', feesUsd: 1, slippagePct: 0.9, expected: { feeUsd: 1.2 } });
 t('§8 verified history infers fee sensitivity and DCA style', learned.ok && learned.inferred.some((i) => i.key === 'feeSensitivity') && learned.inferred.some((i) => i.key === 'preferredExecutionStyle'));
+memNow += 5000; /* the explicit setting is made LATER than the earlier statement */
 await preferences.setExplicit(OWNER, { feeSensitivity: 'LOW' });
 const afterExplicit = await preferences.learnFromOutcome(OWNER, { strategyId: 'sX', verified: true, kind: 'recurring-dca', feesUsd: 1, slippagePct: 0.9, expected: { feeUsd: 1.2 } });
 t('§8 an explicit preference survives a later inference', (await preferences.resolve(OWNER)).feeSensitivity === 'LOW' && afterExplicit.ok !== false);
