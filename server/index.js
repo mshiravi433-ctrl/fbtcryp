@@ -32,12 +32,25 @@ const WEBAPP_URL = process.env.WEBAPP_URL || '';
 /* ----------------------------- static frontend ---------------------------- */
 
 const distDir = path.join(__dirname, '..', 'dist');
-app.use(express.static(distDir, { maxAge: '1h', index: false }));
+app.use(express.static(distDir, {
+  index: false,
+  setHeaders(res, filePath) {
+    // Hashed assets and fonts are immutable; everything else must revalidate.
+    if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes('/assets/') || filePath.endsWith('.woff2') || filePath.endsWith('.woff')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+}));
 
 // SPA fallback. Written as bare middleware because Express 5's router no
 // longer accepts a plain '*' path pattern.
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'NOT_FOUND' });
+  res.set('Cache-Control', 'public, max-age=0, must-revalidate');
   return res.sendFile(path.join(distDir, 'index.html'), (err) => {
     if (err) res.status(404).json({ error: 'NOT_BUILT', hint: 'run `npm run build` first' });
   });

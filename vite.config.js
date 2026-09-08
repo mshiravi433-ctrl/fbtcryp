@@ -192,6 +192,18 @@ export default defineConfig({
       VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL ?? ''
     }),
     /*
+     * In-app Lido (Ethereum/stETH) — the fourth execution adapter.
+     * Same inverted test: OFF unless exactly 'true'. Own cap table.
+     * See src/lib/features.js and docs/defi/lido.md.
+     */
+    __LIDO_STAKE_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true'),
+    __LIDO_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true'),
+    __LIDO_BUILD_ENV__: JSON.stringify({
+      VITE_LIDO_STAKE_ALLOWLIST: process.env.VITE_LIDO_STAKE_ALLOWLIST ?? '',
+      VITE_LIDO_STAKE_MAX_ETH_PER_TX: process.env.VITE_LIDO_STAKE_MAX_ETH_PER_TX ?? '',
+      VITE_LIDO_STAKE_MAX_ETH_TOTAL: process.env.VITE_LIDO_STAKE_MAX_ETH_TOTAL ?? ''
+    }),
+    /*
      * Version string, read from package.json at build time.
      *
      * Settings used to print a hardcoded 'v1.0.0' while the app shipped 1.5.x.

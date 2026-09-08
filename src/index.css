@@ -11844,6 +11844,15 @@ button.settings-quick-action {
 .farm-aavearb-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
 .farm-aavearb-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
 
+/*
+ * Lido (Ethereum/stETH), the fourth in-app execution panel. Same plain rules
+ * as the three above: the four cards can only ever appear on different pools,
+ * and none should read as recommended over another.
+ */
+.farm-lido-panel { margin-top: 12px; }
+.farm-lido-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
+.farm-lido-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
+
 .farm-economics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

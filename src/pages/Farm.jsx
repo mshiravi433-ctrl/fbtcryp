@@ -48,6 +48,14 @@ import CompoundBaseUsdcPanel from '../components/Farm/CompoundBaseUsdcPanel';
  * touching the other. See docs/defi/aave-v3-arbitrum.md.
  */
 import AaveArbUsdcPanel from '../components/Farm/AaveArbUsdcPanel';
+/*
+ * The fourth in-app DeFi execution surface: Lido liquid staking on Ethereum
+ * mainnet — stake ETH -> stETH, wrap stETH <-> wstETH, request withdraw via
+ * WithdrawalQueue and claim. Same kill-switch pattern as the three above,
+ * with its own flag (LIDO_STAKE_ENABLED) and caps in ETH.
+ * See docs/defi/lido.md.
+ */
+import LidoPanel from '../components/Farm/LidoPanel';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -551,6 +559,9 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
 
       {/* Same, for Aave V3 · Arbitrum One · USDC (native). */}
       <AaveArbUsdcPanel pool={pool} />
+
+      {/* Fourth: Lido · Ethereum · stETH/wstETH — stake, wrap, unwrap, request, claim */}
+      <LidoPanel pool={pool} />
 
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}

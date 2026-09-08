@@ -146,6 +146,8 @@ const compoundBuildEnv =
  */
 const arbBuildEnv =
   typeof __AAVE_ARB_BUILD_ENV__ !== 'undefined' ? __AAVE_ARB_BUILD_ENV__ : null;
+const lidoBuildEnv =
+  typeof __LIDO_BUILD_ENV__ !== 'undefined' ? __LIDO_BUILD_ENV__ : null;
 const buildOrEnv = (key) => {
   if (buildEnv && buildEnv[key] != null && String(buildEnv[key]) !== '') return buildEnv[key];
   if (compoundBuildEnv && compoundBuildEnv[key] != null && String(compoundBuildEnv[key]) !== '') {
@@ -154,10 +156,13 @@ const buildOrEnv = (key) => {
   if (arbBuildEnv && arbBuildEnv[key] != null && String(arbBuildEnv[key]) !== '') {
     return arbBuildEnv[key];
   }
+  if (lidoBuildEnv && lidoBuildEnv[key] != null && String(lidoBuildEnv[key]) !== '') {
+    return lidoBuildEnv[key];
+  }
   // In an app build the defines exist, so an unset variable must resolve to
   // "unset" here rather than falling through to an import.meta.env that the
   // bundler has already folded away.
-  if (buildEnv || compoundBuildEnv || arbBuildEnv) return undefined;
+  if (buildEnv || compoundBuildEnv || arbBuildEnv || lidoBuildEnv) return undefined;
   return envFlag(key);
 };
 
@@ -398,6 +403,84 @@ export function compoundBaseSupplyAllowedFor(owner) {
  * caller's on-chain Comet base balance > 0.
  */
 export function compoundBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
+  if (!owner) return false;
+  return Boolean(hasPosition);
+}
+
+/* -------------------------------------------------------------------------- */
+/* LIDO · ETHEREUM · stETH — OFF BY DEFAULT, IN EVERY BUILD                   */
+/* -------------------------------------------------------------------------- */
+/*
+ * The FOURTH in-app DeFi execution adapter (lib/defi/lido.js): Lido liquid
+ * staking on Ethereum mainnet (chain 1). Same blast-radius principle as the
+ * three adapters above: a bug, a pause or a governance incident in Lido must
+ * be switchable off without touching Aave or Compound, and vice versa.
+ *
+ * Lido is NOT a lending market: staking ETH mints stETH 1:1 at the current
+ * share price, and unstaking goes through the WithdrawalQueue with a delay.
+ * The adapter therefore exposes five actions:
+ *
+ *   stake            ETH  -> stETH  (Lido.submit)
+ *   wrap             stETH -> wstETH
+ *   unwrap           wstETH -> stETH
+ *   requestWithdraw  stETH -> WithdrawalQueue ticket
+ *   claim            ticket -> ETH
+ *
+ * Caps are in whole ETH (not USDC), default 1 ETH per tx and 10 ETH total,
+ * enforced inside the adapter. An unparseable env value falls back to the
+ * default.
+ *
+ * HOW TO TURN IT ON:
+ *
+ *     VITE_ENABLE_LIDO_STAKE=true npm run build
+ *
+ * Do NOT enable it without:
+ *   · independent review of lib/defi/lido.js
+ *   · a passing mainnet-fork probe (stake -> wrap -> unwrap -> request)
+ *   · an allowlist for the first rollout
+ *
+ * KILL SWITCH:
+ * Turn the flag off and rebuild. Stake disappears. Position and all exits
+ * (unwrap, requestWithdraw, claim) remain — see `lidoWithdrawAllowedFor`.
+ */
+
+/** True only when the build was explicitly told to expose in-app Lido staking. */
+export const LIDO_STAKE_ENABLED =
+  typeof __LIDO_STAKE_ENABLED__ !== 'undefined'
+    ? __LIDO_STAKE_ENABLED__
+    : envFlag('VITE_ENABLE_LIDO_STAKE') === 'true';
+
+/** Per-transaction stake ceiling, in whole ETH. */
+export const LIDO_STAKE_MAX_ETH_PER_TX = envCap(
+  'VITE_LIDO_STAKE_MAX_ETH_PER_TX', 1, 100
+);
+
+/** Lifetime position ceiling, in whole ETH (existing stETH + new stake). */
+export const LIDO_STAKE_MAX_ETH_TOTAL = envCap(
+  'VITE_LIDO_STAKE_MAX_ETH_TOTAL', 10, 1000
+);
+
+/**
+ * Optional allowlist: lowercase 0x addresses. Empty means "anyone the flag is
+ * on for".
+ *
+ *     VITE_LIDO_STAKE_ALLOWLIST=0xabc...,0xdef...
+ */
+export const LIDO_STAKE_ALLOWLIST = Object.freeze(
+  String(envFlag('VITE_LIDO_STAKE_ALLOWLIST') ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
+);
+
+export function lidoStakeAllowedFor(owner) {
+  if (!LIDO_STAKE_ENABLED) return false;
+  if (LIDO_STAKE_ALLOWLIST.length === 0) return true;
+  const who = String(owner ?? '').trim().toLowerCase();
+  return LIDO_STAKE_ALLOWLIST.includes(who);
+}
+
+export function lidoWithdrawAllowedFor({ owner, hasPosition } = {}) {
   if (!owner) return false;
   return Boolean(hasPosition);
 }
