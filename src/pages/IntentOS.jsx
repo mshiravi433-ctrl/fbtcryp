@@ -39,6 +39,7 @@ import ProfitPlanner from '../components/ProfitPlanner';
 import DisclosureCard from '../components/DisclosureCard.jsx';
 import FinancialGoals from '../components/FinancialGoals';
 import CentralBrainPanel from '../components/CentralBrainPanel';
+import FinancialIntelligencePanel from '../components/FinancialIntelligencePanel';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import IntentTxHistory from '../components/IntentTxHistory';
 import { useWallet } from '../context/WalletContext';
@@ -2300,6 +2301,7 @@ export default function IntentOS() {
           <div style={{ marginTop: 12 }}>
             <CentralBrainPanel />
           </div>
+          <FinancialIntelligencePanel />
         </motion.div>
       )}
     </PageTransition>

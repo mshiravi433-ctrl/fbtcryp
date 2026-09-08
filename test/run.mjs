@@ -1163,7 +1163,10 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
 
   rmSync('dist', { recursive: true, force: true });
   {
-    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false' };
+    /* The same 4 GB-box heap trap the IIFE build hit (see npxShip above),
+       caught here instead of in the suite: these builds write dist/ for the
+       chunk assertions, so they run with the same raised heap. */
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false', NODE_OPTIONS: SHIP_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1178,8 +1181,11 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   /* ---- B. the speculation opt-in still works, and still has no games ---- */
   rmSync('dist', { recursive: true, force: true });
   {
-    /* Ship-flavor build too (see npxShip): this writes dist/ for the budget. */
-    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true' };
+    /* Ship-flavor build too (see npxShip): this writes dist/ for the budget.
+       The speculation build is the LARGER of the two and is the one that
+       OOMs on a 4 GB box at Node's default ~1.95 GB heap — verified on the
+       base commit in this environment — so it gets the same raised heap. */
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true', NODE_OPTIONS: SHIP_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1982,6 +1988,28 @@ console.log('\n▸ measuring light-theme contrast…');
     ['active certification requires evidence array', !validateCertification({ schema: 'fbt.certification.v1', subjectId: 'a', certificationType: 'api_verified', issuer: 'fbt', issuedAt: 1, status: 'active' }).ok],
     ['small reputation samples are insufficient', reputationRelationship({ sampleSize: 2 }).status === 'insufficient_data']
   ]);
+}
+
+/* ------------------------------ FBT Financial Intelligence OS ------------------- */
+/* Batches 1–7 (server/fios + /api/ai). Each probe runs as a CHILD process: the
+   probe decides its own success (exit 0) and keeps its env (rate limits, the
+   autonomy flag flip) away from this shared process, and the API probe's
+   server/app.js boot cannot influence any other suite's module state. */
+for (const [suite, file] of [
+  ['FI OS core (batches 1–4)', 'fios/fios-core-probe.mjs'],
+  ['FI OS autonomy (batch 5)', 'fios/fios-autonomy-probe.mjs'],
+  ['FI OS council/agents/learning (batch 6)', 'fios/fios-intelligence-probe.mjs'],
+  ['FI OS API over real HTTP (batch 7)', 'fios/fios-api-probe.mjs']
+]) {
+  console.log(`▸ ${suite}…`);
+  try {
+    execFileSync(process.execPath, [file], { stdio: 'pipe', cwd: new URL('.', import.meta.url).pathname });
+    report(suite, [[`${suite} — all assertions passed`, true]]);
+  } catch (err) {
+    const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+    if (tail) console.log(tail);
+    report(suite, [[`${suite} FAILED (see output)`, false]]);
+  }
 }
 
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
