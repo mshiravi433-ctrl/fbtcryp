@@ -3583,7 +3583,7 @@ export default function run() {
     t('the yield filter exists', existsSync('server/yields.js'));
     const appSrc = read('server/app.js');
     t('the API exposes it', /\/api\/yields/.test(appSrc));
-    t('...backed by the real fetcher', /fetchYields/.test(appSrc));
+    t('...backed by the real fetcher', /yieldsApi.list/.test(appSrc) && /pools = fetchYields/.test(read('server/yieldsApi.js')));
 
     const farm = read('src/pages/Farm.jsx');
     /*
@@ -3592,7 +3592,7 @@ export default function run() {
      * green — a dead screen that still looked wired. Verified by sabotage.
      * So the invocation itself must be present.
      */
-    t('Farm reads live yields', /getYields\s*\(/.test(farm));
+    t('Farm reads live yields', /useFarmYields\s*\(/.test(farm) && /getYields\s*\(/.test(read('src/hooks/useFarmYields.js')));
     t('...and imports it from the yields module', /from '\.\.\/lib\/yields'/.test(farm));
     /*
      * The old screen was four hard-coded pools with hand-written APR ranges.
@@ -3672,7 +3672,8 @@ export default function run() {
       /live\.mintAuthority !== XSTOCK_MINT_AUTHORITY/.test(read('server/solanaAssets.js')));
 
     /* ---- the live yield feed (DefiLlama, filtered server-side) ---- */
-    t('Farm fetches the live yield feed', /getYields\s*\(/.test(farm));
+    t('Farm fetches the live yield feed through its lifecycle hook',
+      /useFarmYields\s*\(/.test(farm) && /getYields\s*\(/.test(read('src/hooks/useFarmYields.js')));
     t('Farm joins the live yield rather than hard-coding one',
       /normalizeFarmOpportunity/.test(farm) && /data\?\.pools/.test(farm));
     t('the feed is filtered server-side, never the whole dump sent to a phone',

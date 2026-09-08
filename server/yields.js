@@ -14,9 +14,9 @@
  * of 20,000 of them and several megabytes. Sending that to a phone on an
  * Iranian mobile connection to display eight rows would be indefensible.
  *
- * So the server fetches it, filters it down to a few dozen rows and caches the
- * result for an hour. One upstream request per hour serves every user, and the
- * client downloads a few KB.
+ * So the server fetches it, filters it down to a bounded list and caches the
+ * result for an hour. At most 500 safety-filtered rows reach the client; the
+ * screen renders them in pages, never the raw upstream dump.
  *
  * ─── THE SAFETY FILTER IS THE ENTIRE VALUE OF THIS FILE ─────────────────────
  * An unfiltered yield list is how people lose everything. Anyone can deploy a
@@ -30,7 +30,19 @@
 
 const LLAMA_YIELDS = 'https://yields.llama.fi/pools';
 
-const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
+const configuredTimeout = Number(process.env.UPSTREAM_TIMEOUT_MS);
+const TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? Math.min(configuredTimeout, 30_000) : 12_000;
+
+// Missing metrics are unknown, not zero (Number(null) === 0).
+const metric = (value) => {
+  if (value == null || (typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+const rounded = (value, precision = 10) => {
+  const n = metric(value);
+  return n == null ? null : Math.round(n * precision) / precision;
+};
 
 /**
  * PROTOCOL ALLOW-LIST.
@@ -270,8 +282,8 @@ export function riskBand(pool) {
  */
 export function normalizePool(p) {
   const apy = Number(p.apy) || 0;
-  const base = Number(p.apyBase);
-  const reward = Number(p.apyReward);
+  const base = metric(p.apyBase);
+  const reward = metric(p.apyReward);
 
   return {
     id: p.pool,
@@ -284,32 +296,33 @@ export function normalizePool(p) {
      * headline is income or an incentive countdown, and it is the piece every
      * yield aggregator leaves out.
      */
-    apyBase: Number.isFinite(base) ? Math.round(base * 10) / 10 : null,
-    apyReward: Number.isFinite(reward) ? Math.round(reward * 10) / 10 : null,
+    apyBase: rounded(base),
+    apyReward: rounded(reward),
     /*
      * The 30-day mean, so the UI can show whether today's number is typical.
      * A pool at 40% today and 6% on average is not a 40% pool.
      */
-    apyMean30d: Number.isFinite(Number(p.apyMean30d)) ? Math.round(Number(p.apyMean30d) * 10) / 10 : null,
+    apyMean30d: rounded(p.apyMean30d),
     tvlUsd: Math.round(Number(p.tvlUsd) || 0),
-    volumeUsd1d: Number.isFinite(Number(p.volumeUsd1d)) ? Math.round(Number(p.volumeUsd1d)) : null,
+    volumeUsd1d: rounded(p.volumeUsd1d, 1),
     /*
      * The 7-day volume next to the 24h one. A pool whose entire volume
      * happened yesterday is a different proposition from one that trades
      * every day, and the analytics panel shows both so the user can tell.
      * Null when the feed did not send it — never interpolated.
      */
-    volumeUsd7d: Number.isFinite(Number(p.volumeUsd7d)) ? Math.round(Number(p.volumeUsd7d)) : null,
-    apr: Number.isFinite(base) ? Math.round(base * 10) / 10 : null,
-    rewardApr: Number.isFinite(reward) ? Math.round(reward * 10) / 10 : null,
+    volumeUsd7d: rounded(p.volumeUsd7d, 1),
+    // The pools API reports APY, not APR. Compounding frequency is unknown.
+    apr: rounded(p.apr),
+    rewardApr: rounded(p.rewardApr),
     /*
      * The pool's own label from the feed (e.g. a Curve factory tag or a
      * Uniswap fee tier). Display-only: it identifies WHICH pool this is
      * inside a protocol that runs hundreds of them.
      */
     poolMeta: typeof p.poolMeta === 'string' && p.poolMeta.trim() ? p.poolMeta.trim().slice(0, 120) : null,
-    underlyingTokens: Array.isArray(p.underlyingTokens) ? p.underlyingTokens.slice(0, 3) : [],
-    stablecoin: Boolean(p.stablecoin),
+    underlyingTokens: Array.isArray(p.underlyingTokens) ? p.underlyingTokens.filter((token) => typeof token === 'string').slice(0, 8) : [],
+    stablecoin: p.stablecoin === true,
     ilRisk: p.ilRisk === 'yes',
     exposure: p.exposure ?? null,
     risk: riskBand(p),
@@ -333,13 +346,15 @@ export function normalizePool(p) {
  */
 export function isEligible(p) {
   if (!p || typeof p !== 'object') return false;
+  if (typeof p.pool !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(p.pool)) return false;
+  if (typeof p.symbol !== 'string' || !p.symbol.trim() || p.symbol.length > 120) return false;
   if (!ALLOWED_PROJECTS.has(p.project)) return false;
   if (!ALLOWED_CHAINS.has(p.chain)) return false;
 
-  const tvl = Number(p.tvlUsd);
+  const tvl = metric(p.tvlUsd);
   if (!Number.isFinite(tvl) || tvl < MIN_TVL) return false;
 
-  const apy = Number(p.apy);
+  const apy = metric(p.apy);
   if (!Number.isFinite(apy) || apy < MIN_APY || apy > MAX_APY) return false;
 
   /*
@@ -372,9 +387,15 @@ export function isEligible(p) {
  */
 export async function fetchYields() {
   const raw = await fetchJson(LLAMA_YIELDS);
-  const rows = Array.isArray(raw?.data) ? raw.data : [];
+  if (raw?.status !== 'success' || !Array.isArray(raw.data) || !raw.data.length) throw new Error('INVALID_YIELDS_RESPONSE');
+  const rows = raw.data;
 
-  const eligible = rows.filter(isEligible).map(normalizePool);
+  const seen = new Set();
+  const eligible = rows.filter((p) => {
+    if (!isEligible(p) || seen.has(p.pool)) return false;
+    seen.add(p.pool);
+    return true;
+  }).map(normalizePool);
 
   const score = (p) => {
     const realShare = p.apy > 0 && p.apyBase != null ? Math.max(0, Math.min(1, p.apyBase / p.apy)) : 0.5;
@@ -387,19 +408,48 @@ export async function fetchYields() {
   const updatedAt = new Date().toISOString();
   const ranked = eligible
     .sort((a, b) => score(b) - score(a))
-    .slice(0, 60)
+    .slice(0, 500)
     .map((pool) => ({ ...pool, source: 'defillama', updatedAt, freshness: 'FRESH' }));
 
   return {
     pools: ranked,
     /*
-     * Reported so the UI can say "60 of 312 pools passed the filter". That
+     * Reported so the UI can show how many pools survived filtering. That
      * single line does more to explain what this screen is than any amount of
      * body copy: it makes the filtering visible instead of implicit.
      */
     considered: rows.length,
     passed: eligible.length,
     at: Date.now(),
-    source: 'defillama'
+    source: 'defillama',
+    freshness: 'FRESH',
+    truncated: eligible.length > ranked.length
   };
+}
+
+
+export const isYieldPoolId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+/** Real daily observations, never the earnings projection used by the calculator. */
+export async function fetchYieldHistory(id) {
+  if (!isYieldPoolId(id)) throw new Error('INVALID_POOL_ID');
+  const raw = await fetchJson(`https://yields.llama.fi/chart/${id}`);
+  if (raw?.status !== 'success' || !Array.isArray(raw.data)) throw new Error('INVALID_YIELD_HISTORY');
+  const byDay = new Map();
+  for (const row of raw.data) {
+    if (!row || typeof row.timestamp !== 'string') continue;
+    const at = Date.parse(row.timestamp);
+    if (!Number.isFinite(at) || at > Date.now() + 60_000) continue;
+    const apy = metric(row.apy);
+    const tvlUsd = metric(row.tvlUsd);
+    if (apy == null && tvlUsd == null) continue;
+    const day = new Date(at).toISOString().slice(0, 10);
+    if (byDay.has(day) && byDay.get(day).timestamp > at) continue;
+    byDay.set(day, {
+      timestamp: at, apy, tvlUsd: tvlUsd != null && tvlUsd >= 0 ? Math.round(tvlUsd) : null,
+      apyBase: rounded(row.apyBase), apyReward: rounded(row.apyReward)
+    });
+  }
+  const points = [...byDay.values()].sort((a, b) => a.timestamp - b.timestamp).slice(-365);
+  return { pool: id, points, at: Date.now(), source: 'defillama', freshness: 'FRESH' };
 }

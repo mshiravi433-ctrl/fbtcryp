@@ -1673,7 +1673,7 @@
     "ilTitle": "Impermanent loss — read before depositing",
     "ilBody": "If the two tokens move apart in price, you end up holding more of the loser and less of the winner — possibly worse off than just holding them, even after fees. The wider the gap, the worse it gets. Stablecoin pairs barely suffer; volatile pairs suffer a lot.",
     "pools": "Popular pools",
-    "aprNote": "Every figure here is today's live rate, refreshed hourly from DefiLlama. Rates are variable and change constantly with borrowing demand, trading volume and how much money is already in the pool. Nothing on this screen is a promise and nothing here is guaranteed.",
+    "aprNote": "Rates are fetched from DefiLlama and cached for up to one hour. The screen checks for updates every five minutes and marks older fallback data explicitly. Rates vary with demand, trading volume and deposits. No rate or return is guaranteed.",
     "custodyNotice": "These pools are run by their own protocols, not by Fanous Bazaar Pishgam. You deposit directly from your own wallet into their contracts — we never touch your funds and we take no cut of your yield. If you use our swap to get the tokens first, that swap pays our normal {{fee}}% fee and nothing else does.",
     "rewardsLink": "App rewards & quests",
     "rewardsLinkSub": "Daily streak, XP and referrals",
@@ -1687,7 +1687,7 @@
     "wouldEarn": "{{amount}} would earn about",
     "ifIDeposit": "If I deposit",
     "splitLine": "{{real}}% from real revenue · {{emissions}}% from token rewards",
-    "filteredNote": "Showing {{shown}} pools out of {{considered}} tracked. The rest were removed for being too small, too new, paying mostly in freshly-minted tokens, or run by a protocol we do not know well enough.",
+    "filteredNote": "Showing {{shown}} matching pools from {{returned}} loaded; {{passed}} of {{considered}} tracked pools passed our safety filters. No return is guaranteed.",
     "unavailable": "Live rates could not be loaded right now. We are deliberately not showing you saved figures instead — an out-of-date yield is how people end up depositing into a pool that no longer pays what the screen said.",
     "noneInBand": "No pools in this risk band right now.",
     "risk": {
@@ -1800,7 +1800,7 @@
     "poolCount": "{{count}} pools",
     "noneForFilter": "No live, verified opportunities match this filter.",
     "filters": "Yield filters",
-    "nativeCustodyNotice": "FBT Swap is non-custodial. The DefiLlama protocol is connected for discovery and analytics; a transaction is only offered when a verified execution adapter can prepare, simulate and verify it through the central wallet.",
+    "nativeCustodyNotice": "FBT Swap is non-custodial. DefiLlama supplies discovery and analytics, not deposit or withdrawal contracts. Transactions are offered only through a verified protocol execution adapter and require wallet approval.",
     "protocolConnected": "Protocol connected",
     "protocolActive": "Active",
     "protocolConnecting": "Connecting",
@@ -2293,7 +2293,30 @@
       "risk5": "No fee on this page — Lido stake/wrap/unwrap/request/claim costs only Ethereum gas here. Swaps elsewhere still carry the platform fee ({{fee}}%).",
       "fee": "Fee",
       "explorerTitle": "Lido contracts"
-    }
+    },
+    "refresh": "Refresh",
+    "retry": "Try again",
+    "refreshing": "Updating DefiLlama data…",
+    "feedRefreshNote": "Checks every 5 minutes · source cache up to 1 hour",
+    "staleNotice": "DefiLlama is temporarily unavailable. These are earlier observations (under 2 hours old), not current rates.",
+    "allNetworks": "All networks",
+    "sortBy": "Sort by",
+    "sort": {
+      "score": "Quality score",
+      "apy": "APY (highest first)",
+      "tvlUsd": "TVL (highest first)"
+    },
+    "showMore": "Show more pools",
+    "historyTitle": "Actual pool history",
+    "historyMetric": "History metric",
+    "historyRange": "History period",
+    "historyDays": "{{count}} days",
+    "historyDays_one": "{{count}} day",
+    "historyDays_other": "{{count}} days",
+    "historyUnavailable": "Pool history is unavailable right now. Current pool details remain available.",
+    "historyEmpty": "Not enough observations in this period.",
+    "historyNote": "Daily observations from DefiLlama, not a forecast. Missing metrics are not treated as zero. APR is unavailable unless explicitly reported; APY cannot be relabelled as APR.",
+    "feedTruncated": "Only the top {{count}} safety-filtered pools are loaded. Search and filters apply to this selection."
   },
   "signals": {
     "title": "AI Signals",

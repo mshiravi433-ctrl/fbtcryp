@@ -25,10 +25,19 @@ export default function TrendChart({
   loading = false,
   emptyLabel = '',
   formatValue = null,
+  timeScale = false,
   testId = 'trend-chart'
 }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(0);
+
+  const series = useMemo(() => {
+    const rows = points
+      .map((p, i) => (typeof p === 'number' ? { x: i, y: p } : p))
+      .filter((p) => p && Number.isFinite(p.y));
+    return rows.length >= 2 ? rows : [];
+  }, [points]);
+
 
   const measure = useCallback(() => {
     const el = wrapRef.current;
@@ -49,14 +58,8 @@ export default function TrendChart({
       observer?.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [measure]);
+  }, [measure, loading, series.length]);
 
-  const series = useMemo(() => {
-    const rows = points
-      .map((p, i) => (typeof p === 'number' ? { x: i, y: p } : p))
-      .filter((p) => p && Number.isFinite(p.y));
-    return rows.length >= 2 ? rows : [];
-  }, [points]);
 
   const geometry = useMemo(() => {
     if (!series.length || width <= 0) return null;
@@ -65,13 +68,16 @@ export default function TrendChart({
     const max = Math.max(...ys);
     const range = max - min || Math.abs(max) || 1;
     const step = width / (series.length - 1);
+    const firstX = series[0].x;
+    const spanX = series.at(-1).x - firstX;
+    const timed = timeScale && spanX > 0 && series.every((p) => Number.isFinite(p.x));
     const coords = series.map((p, i) => [
-      i * step,
+      timed ? ((p.x - firstX) / spanX) * width : i * step,
       height - PAD_Y - ((p.y - min) / range) * (height - PAD_Y * 2)
     ]);
     const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
     return { line, area: `${line} L${width},${height} L0,${height} Z`, last: coords[coords.length - 1], min, max };
-  }, [series, width, height]);
+  }, [series, width, height, timeScale]);
 
   const color = up ? 'var(--up, #00ff9d)' : 'var(--down, #ff3b6b)';
   const gid = useMemo(() => `trend-${Math.random().toString(36).slice(2, 9)}`, []);
