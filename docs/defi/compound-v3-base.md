@@ -203,7 +203,7 @@ VITE_ENABLE_COMPOUND_BASE_SUPPLY=true npm run build
 | `COMPOUND_BASE_SUPPLY_ENABLED` | `false` | `VITE_ENABLE_COMPOUND_BASE_SUPPLY=true` |
 | `COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX` | `100` | `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX` |
 | `COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL` | `500` | `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL` |
-| `COMPOUND_BASE_SUPPLY_ALLOWLIST` | `[]` (everyone) | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0x…,0x…` |
+| `COMPOUND_BASE_SUPPLY_ALLOWLIST` | `[]` (supply closed) | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0x…,0x…` |
 
 The flag is tested with `=== 'true'`, never `!== 'false'`: a build that forgets
 the variable ships with the money path **closed**. Caps are enforced inside the

@@ -120,11 +120,19 @@ describe('aave base/usdc panel gating', () => {
     expect(screen.queryByText('farm.aave.supplyInApp')).toBeNull();
   });
 
-  it('renders nothing when the wallet is on the wrong chain and has never supplied here', () => {
+  it('discovers an imported wallet position cross-chain without local history or the yield feed', async () => {
+    setWallet({ chainId: 1 });
+    render(<AaveBaseUsdcPanel pool={POOL_ROW} />);
+    await waitFor(() => expect(screen.getByText('farm.aave.switchChain')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('25.00 USDC')).toBeTruthy());
+    expect(screen.queryByText('farm.aave.supplyInApp')).toBeNull();
+  });
+
+  it('renders nothing when the wallet is on the wrong chain and has never supplied here', async () => {
     // The switch prompt must not appear for users with no Aave position at all.
     setWallet({ chainId: 1, provider: { aTokenBalanceWei: 0n } });
     const { container } = render(<AaveBaseUsdcPanel pool={POOL_ROW} />);
-    expect(container.firstChild).toBeNull();
+    await waitFor(() => expect(container.firstChild).toBeNull());
     expect(screen.queryByText('farm.aave.wrongChainNote')).toBeNull();
   });
 });

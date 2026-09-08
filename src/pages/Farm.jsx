@@ -26,38 +26,10 @@ import {
   farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, VAULT_PROJECTS
 } from '../lib/farmDeFi';
 /*
- * The one in-app DeFi execution surface: Aave v3 on Base, USDC only. It renders
- * itself only for that exact pool and returns null for everything else, so the
- * "buy the token on the protocol site" guidance below is untouched for every
- * other pool — and still available for this one, since the grid underneath is
- * unchanged. Gated by AAVE_BASE_SUPPLY_ENABLED; see docs/defi/aave-v3-base.md.
+ * Supported execution positions live in a feed-independent hub. DefiLlama is
+ * discovery/data only: a feed failure must never remove withdraw/claim/revoke.
  */
-import AaveBaseUsdcPanel from '../components/Farm/AaveBaseUsdcPanel';
-/*
- * The second in-app DeFi execution surface: Compound V3 (Comet) on Base, USDC
- * only. Same contract with the screen as the Aave panel above — it renders
- * itself only for that exact pool and returns null for everything else — and
- * it has its OWN flag (COMPOUND_BASE_SUPPLY_ENABLED), so either protocol can
- * be switched off without touching the other.
- * See docs/defi/compound-v3-base.md.
- */
-import CompoundBaseUsdcPanel from '../components/Farm/CompoundBaseUsdcPanel';
-/*
- * The third in-app DeFi execution surface: Aave v3 on Arbitrum One, native
- * USDC only. Same contract as the two panels above — it renders itself only
- * for that exact pool and returns null for everything else — with its OWN
- * flag (AAVE_ARB_SUPPLY_ENABLED), so either chain can be switched off without
- * touching the other. See docs/defi/aave-v3-arbitrum.md.
- */
-import AaveArbUsdcPanel from '../components/Farm/AaveArbUsdcPanel';
-/*
- * The fourth in-app DeFi execution surface: Lido liquid staking on Ethereum
- * mainnet — stake ETH -> stETH, wrap stETH <-> wstETH, request withdraw via
- * WithdrawalQueue and claim. Same kill-switch pattern as the three above,
- * with its own flag (LIDO_STAKE_ENABLED) and caps in ETH.
- * See docs/defi/lido.md.
- */
-import LidoPanel from '../components/Farm/LidoPanel';
+import FarmPositionHub from '../components/Farm/FarmPositionHub';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -550,22 +522,6 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         {research.freshness && <> · {research.freshness}</>}
       </div>
 
-      {/* In-app supply / withdraw, only for Aave v3 · Base · USDC. Null
-          everywhere else, so this cannot move a CTA on any other pool. */}
-      <AaveBaseUsdcPanel pool={pool} />
-
-      {/* Same, for Compound V3 · Base · USDC. The three matchers are mutually
-          exclusive (different `project` slugs, and the two Aave panels test
-          different `chain` slugs), so at most one of these panels can ever
-          render for a given pool. */}
-      <CompoundBaseUsdcPanel pool={pool} />
-
-      {/* Same, for Aave V3 · Arbitrum One · USDC (native). */}
-      <AaveArbUsdcPanel pool={pool} />
-
-      {/* Fourth: Lido · Ethereum · stETH/wstETH — stake, wrap, unwrap, request, claim */}
-      <LidoPanel pool={pool} />
-
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
         {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
@@ -587,8 +543,18 @@ function PositionPanel({ wallet, t, navigate }) {
         <div><p className="section-label" style={{ margin: 0 }}>{t('farm.myFarms')}</p><p className="faint" style={{ margin: '4px 0 0' }}>{t('farm.positionsIntro')}</p></div>
         {!wallet.isConnected && <span className="pill pill-neutral">{t('farm.readOnly')}</span>}
       </div>
-      <p className="notice">{wallet.isConnected ? t('farm.positionsUnavailable') : t('farm.connectForPositions')}</p>
-      {!wallet.isConnected && <button className="btn btn-ghost" onClick={() => navigate('/wallet')}>{t('wallet.connect')}</button>}
+      {wallet.isConnected ? (
+        <>
+          <p className="faint" style={{ margin: '10px 0', fontSize: 11.8 }}>{t('farm.positionsDirect')}</p>
+          <FarmPositionHub />
+          <p className="notice">{t('farm.positionsUnavailable')}</p>
+        </>
+      ) : (
+        <>
+          <p className="notice">{t('farm.connectForPositions')}</p>
+          <button className="btn btn-ghost" onClick={() => navigate('/wallet')}>{t('wallet.connect')}</button>
+        </>
+      )}
     </section>
   );
 }

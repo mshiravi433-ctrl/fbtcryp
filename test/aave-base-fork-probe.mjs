@@ -49,7 +49,8 @@ import { execSync } from 'node:child_process';
 import { Wallet, JsonRpcProvider, Contract, Interface, MaxUint256, formatUnits } from 'ethers';
 
 const PORT = Number(process.env.ANVIL_PORT || 8551);
-const RPC = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+const EXPLICIT_RPC = String(process.env.BASE_RPC_URL ?? '').trim();
+const RPC = EXPLICIT_RPC || 'https://mainnet.base.org';
 const STRICT = process.argv.includes('--strict');
 const ANVIL_ACCOUNT_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANVIL_ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -87,7 +88,10 @@ let exitCode = 0;
 try {
   rule('Aave v3 · Base (8453) · USDC — mainnet fork probe');
 
-  if (!haveAnvil()) {
+  if (STRICT && !EXPLICIT_RPC) {
+    t('BASE_RPC_URL provided (--strict)', false, 'missing; strict evidence requires an explicit read-only fork RPC');
+    exitCode = 1;
+  } else if (!haveAnvil()) {
     console.log(`\n⏭  SKIPPED — 'anvil' is not on PATH.\n
     This probe is the acceptance test for the Aave Base supply adapter, so it
     must be run by hand before the flag is enabled. Exact commands:
@@ -269,6 +273,20 @@ try {
     const hashes = [];
     const beforeSupplyPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
     for (const step of supplyPlan.steps) {
+      const simulation = await adapter.simulateGuardedStep({
+        provider,
+        owner: ANVIL_ACCOUNT,
+        step,
+        allowance: step.kind === 'supply'
+          ? { token: AAVE_V3_BASE.usdc, owner: ANVIL_ACCOUNT, spender: AAVE_V3_BASE.pool, amountWei: supplyPlan.checks.amountWei }
+          : undefined
+      });
+      t(`${step.kind} passed real eth_call and estimateGas`,
+        simulation.status === 'simulated-clean' && simulation.provenSafe === true && simulation.gasLimit > 0n,
+        `gas ${simulation.gasLimit}`);
+      const context = await adapter.assertSignerContext(signer, { owner: ANVIL_ACCOUNT, chainId: AAVE_V3_BASE.chainId });
+      t(`${step.kind} re-checked account and network before signing`,
+        context.chainId === AAVE_V3_BASE.chainId && context.owner.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
       const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n, nonce: nextNonce++ });
       const receipt = await tx.wait();
       hashes.push(receipt.hash);
@@ -312,6 +330,18 @@ try {
     t('the recipient is the connected account', wTo.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
 
     const beforeWithdrawPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
+    const withdrawSimulation = await adapter.simulateGuardedStep({
+      provider, owner: ANVIL_ACCOUNT, step: withdrawPlan.steps[0]
+    });
+    t('withdraw passed real eth_call and estimateGas',
+      withdrawSimulation.status === 'simulated-clean' && withdrawSimulation.provenSafe === true && withdrawSimulation.gasLimit > 0n,
+      `gas ${withdrawSimulation.gasLimit}`);
+    const withdrawContext = await adapter.assertSignerContext(signer, {
+      owner: ANVIL_ACCOUNT, chainId: AAVE_V3_BASE.chainId
+    });
+    t('withdraw re-checked account and network before signing',
+      withdrawContext.chainId === AAVE_V3_BASE.chainId
+        && withdrawContext.owner.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
     const wTx = await signer.sendTransaction({
       to: withdrawPlan.steps[0].to, data: withdrawPlan.steps[0].data, value: 0n, nonce: nextNonce++
     });
@@ -393,6 +423,61 @@ try {
     } catch (err) {
       t('the per-tx cap refused an over-cap supply on the fork', false, err.message);
     }
+
+    /* ── 8. wallet lifecycle failures stay distinct ──────────────────────── */
+    rule('8 · account/network/rejection/timeout/replacement taxonomy');
+    let changedAccount = null;
+    try {
+      await adapter.assertSignerContext({
+        provider,
+        getAddress: async () => '0x2222222222222222222222222222222222222222'
+      }, { owner: ANVIL_ACCOUNT, chainId: AAVE_V3_BASE.chainId });
+    } catch (err) {
+      changedAccount = err;
+    }
+    t('an account change before signing is rejected separately',
+      changedAccount?.code === 'EXECUTION_ACCOUNT_CHANGED', changedAccount?.code ?? 'no rejection');
+
+    let changedNetwork = null;
+    try {
+      await adapter.assertSignerContext({
+        provider: { getNetwork: async () => ({ chainId: 1 }) },
+        getAddress: async () => ANVIL_ACCOUNT
+      }, { owner: ANVIL_ACCOUNT, chainId: AAVE_V3_BASE.chainId });
+    } catch (err) {
+      changedNetwork = err;
+    }
+    t('a network change before signing is rejected separately',
+      changedNetwork?.code === 'EXECUTION_WRONG_CHAIN', changedNetwork?.code ?? 'no rejection');
+
+    t('wallet rejection has its own recovery class',
+      adapter.isUserRejection({ code: 4001, message: 'User rejected request' }) === true);
+
+    let timeoutError = null;
+    try {
+      await adapter.waitForMinedReceipt({ hash: '0xpending', wait: () => new Promise(() => {}) }, { timeoutMs: 5 });
+    } catch (err) {
+      timeoutError = err;
+    }
+    t('a pending transaction timeout is not marked confirmed',
+      timeoutError?.code === 'TRANSACTION_TIMEOUT' && adapter.isTransactionTimeout(timeoutError),
+      timeoutError?.code ?? 'no timeout');
+
+    const replacementReceipt = { status: 1, hash: '0xreplacement' };
+    const replacement = await adapter.waitForMinedReceipt({
+      hash: '0xoriginal',
+      wait: async () => {
+        throw {
+          code: 'TRANSACTION_REPLACED',
+          replacement: { hash: replacementReceipt.hash },
+          receipt: replacementReceipt
+        };
+      }
+    }, { timeoutMs: 50 });
+    t('a mined replacement is recorded as replacement, not original success',
+      replacement.replaced === true
+        && replacement.replacementHash === replacementReceipt.hash
+        && adapter.isTransactionReplacement({ code: 'TRANSACTION_REPLACED' }));
   }
 } catch (err) {
   t('probe completed without an unexpected error', false, `${err?.name ?? 'Error'}: ${err?.message}`);

@@ -49,7 +49,8 @@ import { execSync } from 'node:child_process';
 import { Wallet, JsonRpcProvider, Contract, Interface, MaxUint256, formatUnits } from 'ethers';
 
 const PORT = Number(process.env.ANVIL_PORT || 8552);
-const RPC = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+const EXPLICIT_RPC = String(process.env.BASE_RPC_URL ?? '').trim();
+const RPC = EXPLICIT_RPC || 'https://mainnet.base.org';
 const STRICT = process.argv.includes('--strict');
 const ANVIL_ACCOUNT_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANVIL_ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -87,7 +88,10 @@ let exitCode = 0;
 try {
   rule('Compound V3 (Comet) · Base (8453) · USDC — mainnet fork probe');
 
-  if (!haveAnvil()) {
+  if (STRICT && !EXPLICIT_RPC) {
+    t('BASE_RPC_URL provided (--strict)', false, 'missing; strict evidence requires an explicit read-only fork RPC');
+    exitCode = 1;
+  } else if (!haveAnvil()) {
     console.log(`\n⏭  SKIPPED — 'anvil' is not on PATH.\n
     This probe is the acceptance test for the Compound Base supply adapter, so
     it must be run by hand before the flag is enabled. Exact commands:

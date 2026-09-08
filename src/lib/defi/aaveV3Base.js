@@ -148,7 +148,10 @@ const ORACLE_ABI = ['function getAssetPrice(address asset) view returns (uint256
 
 /* Events are part of the post-transaction proof, not UI decoration. */
 const AAVE_EVENT_ABI = [
-  'event Supply(address indexed reserve, address indexed user, address indexed onBehalfOf, uint256 amount, uint16 referralCode)',
+  // IPool declares `user` in data and `referralCode` in topics. Indexed
+  // modifiers do not alter topic0, so the inverse layout can appear to parse
+  // while silently shifting onBehalfOf/amount into the wrong ABI fields.
+  'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)',
   'event Withdraw(address indexed reserve, address indexed user, address indexed to, uint256 amount)',
   'event Approval(address indexed owner, address indexed spender, uint256 value)',
   'event Transfer(address indexed from, address indexed to, uint256 value)'
@@ -948,7 +951,10 @@ export async function verifyAaveReceipt({
   const after = await getPosition(provider, owner);
   const before = beforePositionWei == null ? null : BigInt(String(beforePositionWei));
   if (before != null) {
-    const changed = action === 'supply' ? after.aTokenBalance >= before + eventAmount : after.aTokenBalance < before;
+    // aToken balance units are scaled by Aave's liquidity index and can round
+    // one or more base units below the Supply event amount. The protocol event
+    // proves the exact input; post-state independently proves direction.
+    const changed = action === 'supply' ? after.aTokenBalance > before : after.aTokenBalance < before;
     if (!changed) throw new AaveAdapterError('AAVE_POSITION_UNCHANGED', { action, before, after: after.aTokenBalance });
   }
   return Object.freeze({ ok: true, action, event: action === 'supply' ? 'Supply' : 'Withdraw', position: after });

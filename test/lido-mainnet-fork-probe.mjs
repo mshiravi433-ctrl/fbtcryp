@@ -16,7 +16,8 @@ import { spawn, execFileSync, execSync } from 'node:child_process';
 import { Contract, Interface, JsonRpcProvider, Wallet, formatEther, parseEther } from 'ethers';
 
 const PORT = Number(process.env.ANVIL_PORT || 8555);
-const RPC = process.env.ETHEREUM_RPC_URL || process.env.MAINNET_RPC_URL || 'https://eth.llamarpc.com';
+const EXPLICIT_RPC = String(process.env.ETHEREUM_RPC_URL ?? '').trim();
+const RPC = EXPLICIT_RPC || process.env.MAINNET_RPC_URL || 'https://eth.llamarpc.com';
 const STRICT = process.argv.includes('--strict');
 const KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -66,7 +67,9 @@ const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, bef
 let anvil = null;
 try {
   rule('Lido · Ethereum mainnet (1) · stake / wrap / unwrap / withdrawal queue');
-  if (!haveAnvil()) {
+  if (STRICT && !EXPLICIT_RPC) {
+    t('ETHEREUM_RPC_URL provided (--strict)', false, 'missing; strict evidence requires an explicit read-only fork RPC');
+  } else if (!haveAnvil()) {
     t('Anvil is available (--strict)', false, 'anvil not found on PATH');
   } else {
     anvil = spawn('anvil', [
