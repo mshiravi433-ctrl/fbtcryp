@@ -31,6 +31,7 @@
 
 import { TOKENS as CURATED } from './chains';
 import { BASE_TOKENS } from './tokensBase';
+import { remoteTokenListsAllowed, tokenImportAllowed } from './hyperevm';
 
 const DAY = 24 * 60 * 60 * 1000;
 const CACHE_PREFIX = 'fbt-tokens-v2:';
@@ -98,6 +99,9 @@ const inflight = new Map(); // chainId -> Promise
 const norm = (a) => String(a || '').toLowerCase();
 
 function readCache(chainId) {
+  // HyperEVM is curated-only at launch. Never revive a remote/import cache
+  // created by an older build or by a different policy.
+  if (!remoteTokenListsAllowed(chainId)) return null;
   try {
     const raw = localStorage.getItem(CACHE_PREFIX + chainId);
     if (!raw) return null;
@@ -110,6 +114,12 @@ function readCache(chainId) {
 }
 
 function writeCache(chainId, tokens) {
+  // The restrictive HyperEVM policy is deliberately persistent too: do not
+  // store unreviewed entries which a later load could mistake for curated.
+  if (!remoteTokenListsAllowed(chainId)) {
+    try { localStorage.removeItem(CACHE_PREFIX + chainId); } catch {}
+    return;
+  }
   try {
     localStorage.setItem(CACHE_PREFIX + chainId, JSON.stringify({ at: Date.now(), tokens }));
   } catch {
@@ -169,6 +179,9 @@ function curatedFor(chainId) {
  * address we ship for USDT.
  */
 function merge(chainId, base, remote, sourceId) {
+  // A provider supporting a chain is not a token review. HyperEVM starts with
+  // no remote-list surface until each asset is explicitly approved.
+  if (!remoteTokenListsAllowed(chainId)) return base.slice();
   const seen = new Set(base.map((t) => norm(t.address)));
   const symbolSeen = new Set(base.map((t) => t.symbol?.toUpperCase()));
   const out = base.slice();
@@ -234,6 +247,11 @@ function merge(chainId, base, remote, sourceId) {
  */
 export async function loadTokens(chainId, { refresh = true } = {}) {
   const cid = Number(chainId);
+  if (!remoteTokenListsAllowed(cid)) {
+    const curated = curatedFor(cid);
+    memory.set(cid, curated);
+    return curated;
+  }
   if (memory.has(cid) && !refresh) return memory.get(cid);
   if (inflight.has(cid)) return inflight.get(cid);
 
@@ -270,13 +288,22 @@ export async function loadTokens(chainId, { refresh = true } = {}) {
 /** Whatever we already have for this chain, with no network access. */
 export function getTokensSync(chainId) {
   const cid = Number(chainId);
+  // Do not expose stale cache/import entries to the HyperEVM picker.
+  if (!remoteTokenListsAllowed(cid)) return curatedFor(cid);
   return memory.get(cid) ?? readCache(cid) ?? curatedFor(cid);
 }
 
 /** How many tokens are currently swappable across every supported chain. */
 export function totalTokenCount() {
   let n = 0;
-  for (const cid of Object.keys(LIST_SOURCES)) n += getTokensSync(cid).length;
+  // Some deliberately curated-only chains have no remote list source. They
+  // still count as usable assets and must not disappear from the app total.
+  const chainIds = new Set([
+    ...Object.keys(CURATED),
+    ...Object.keys(BASE_TOKENS),
+    ...Object.keys(LIST_SOURCES)
+  ]);
+  for (const cid of chainIds) n += getTokensSync(cid).length;
   return n;
 }
 
@@ -330,6 +357,10 @@ export function searchTokens(tokens, query, limit = 120) {
  * This is exactly how PancakeSwap's "import token" works.
  */
 export async function importTokenByAddress(provider, chainId, address) {
+  const cid = Number(chainId);
+  // The first HyperEVM release is intentionally allowlist-only. In particular
+  // this keeps 0x2222…2222 from ever being treated as an ERC-20 contract.
+  if (!tokenImportAllowed(cid)) throw new Error('HYPEREVM_TOKEN_IMPORT_DISABLED');
   const { Contract, isAddress } = await import('ethers');
   if (!isAddress(address)) throw new Error('INVALID_ADDRESS');
 
@@ -357,7 +388,6 @@ export async function importTokenByAddress(provider, chainId, address) {
   };
 
   // Persist so it survives a reload, like a real DEX front end.
-  const cid = Number(chainId);
   const list = getTokensSync(cid);
   if (!list.some((t) => norm(t.address) === norm(address))) {
     const next = [...list, token];

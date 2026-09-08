@@ -36,6 +36,11 @@ import {
 import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean';
 import { getVeloraQuote, veloraSupports } from './velora';
 import { quoteAllSources } from './bestQuote';
+import {
+  assertRecipientAllowedOnChain,
+  assertTokenAllowedOnChain,
+  isTokenAllowedOnChain
+} from './hyperevm';
 
 const loadEthers = () => import('ethers');
 
@@ -193,7 +198,8 @@ export function formatUnitsExact(wei, decimals) {
 
 /* ------------------------------- balances -------------------------------- */
 
-export async function getTokenBalance(provider, token, owner) {
+export async function getTokenBalance(provider, token, owner, chainId = null) {
+  if (chainId != null) assertTokenAllowedOnChain(chainId, token);
   const { Contract, formatUnits } = await loadEthers();
   if (token.native) {
     const wei = await provider.getBalance(owner);
@@ -205,12 +211,12 @@ export async function getTokenBalance(provider, token, owner) {
 }
 
 /** Fetch balances for a token list in parallel; failures resolve to zero. */
-export async function getBalances(provider, tokens, owner) {
+export async function getBalances(provider, tokens, owner, chainId = null) {
   const out = {};
   await Promise.all(
     tokens.map(async (t) => {
       try {
-        out[t.symbol] = await getTokenBalance(provider, t, owner);
+        out[t.symbol] = await getTokenBalance(provider, t, owner, chainId);
       } catch {
         out[t.symbol] = { raw: 0n, formatted: 0 };
       }
@@ -227,6 +233,11 @@ export async function getBalances(provider, tokens, owner) {
  */
 export async function getQuote({ provider, chainId, fromToken, toToken, amountIn, slippage = DEFAULT_SLIPPAGE }) {
   if (!amountIn || Number(amountIn) <= 0) return null;
+  // A quote is the first executable step. Refuse an unreviewed HyperEVM asset
+  // here rather than allowing a route/approval prompt to form around it.
+  if (!isTokenAllowedOnChain(chainId, fromToken) || !isTokenAllowedOnChain(chainId, toToken)) {
+    return { error: 'HYPEREVM_TOKEN_NOT_ALLOWLISTED', retriable: false };
+  }
   const { Contract, parseUnits, formatUnits } = await loadEthers();
 
   // Preferred path: the aggregator finds a better route across every DEX AND
@@ -392,6 +403,7 @@ export function spenderFor(chainId, quote = null) {
 }
 
 export async function getAllowance({ provider, chainId, token, owner, quote = null }) {
+  assertTokenAllowedOnChain(chainId, token);
   if (token.native) return { raw: null, unlimited: true }; // gas coin needs no approval
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, provider);
@@ -410,6 +422,7 @@ export async function needsApproval({ provider, chainId, token, owner, amountWei
  * Some legacy tokens (USDT-style) require resetting to 0 first; we handle that.
  */
 export async function approveToken({ signer, chainId, token, amountWei, quote = null }) {
+  assertTokenAllowedOnChain(chainId, token);
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, signer);
   const spender = spenderFor(chainId, quote);
@@ -441,6 +454,8 @@ export async function executeSwap({
   deadlineMinutes = DEFAULT_DEADLINE_MIN,
   supportFeeOnTransfer = true
 }) {
+  assertTokenAllowedOnChain(chainId, fromToken);
+  assertTokenAllowedOnChain(chainId, toToken);
   // Aggregator quotes carry their own prebuilt route; execute that.
   if (quote.source === 'aggregator') {
     // Pass what we EXPECT to be charged so the aggregator layer can verify the
@@ -523,9 +538,15 @@ export async function executeSwap({
 /* ------------------------------ plain send ------------------------------- */
 
 /** Send native coin or an ERC-20 to an address the user typed in. */
-export async function sendToken({ signer, token, to, amount }) {
+export async function sendToken({ signer, chainId = null, token, to, amount }) {
   const { Contract, parseUnits, isAddress } = await loadEthers();
   if (!isAddress(to)) throw new Error('INVALID_ADDRESS');
+  if (chainId != null) {
+    assertTokenAllowedOnChain(chainId, token);
+    // 0x2222…2222 is not a normal HyperEVM recipient. FBT deliberately does
+    // not expose HyperCore transfers through its ordinary send sheet.
+    assertRecipientAllowedOnChain(chainId, to);
+  }
 
   const amountWei = parseUnits(String(amount), token.decimals);
 

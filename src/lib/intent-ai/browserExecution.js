@@ -71,7 +71,7 @@ export function buildBrowserHooks(wallet) {
       if (!provider || !addr) return { amount: null, valueUsd: null };
       const native = getToken(chainId, (wallet?.chain?.native?.symbol) || 'ETH') || { native: true, decimals: 18, symbol: 'ETH' };
       try {
-        const bal = await getTokenBalance(provider, native, addr);
+        const bal = await getTokenBalance(provider, native, addr, chainId);
         return { amount: bal.formatted, valueUsd: null };
       } catch {
         return { amount: null, valueUsd: null };

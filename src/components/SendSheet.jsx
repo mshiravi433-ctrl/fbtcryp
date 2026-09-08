@@ -239,7 +239,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
     (async () => {
       try {
         const provider = wallet.getReadProvider();
-        const raw = await getTokenBalance(provider, token, wallet.address);
+        const raw = await getTokenBalance(provider, token, wallet.address, wallet.chainId);
         if (alive) setBalance(raw);
       } catch {
         if (alive) setBalance(null);
@@ -372,7 +372,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
       }
       const signer = wallet.getSigner();
       if (!signer) throw new Error('NO_SIGNER');
-      const tx = await sendToken({ signer, token, to: to.trim(), amount });
+      const tx = await sendToken({ signer, chainId: wallet.chainId, token, to: to.trim(), amount });
       setHash(tx.hash);
       setStage('done');
       // Now this address is a counterparty, so the next send to it is not a
@@ -382,7 +382,8 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
       wallet.refreshBalance?.();
     } catch (e) {
       const msg = String(e?.message || '');
-      if (msg.includes('INVALID_ADDRESS')) setError('INVALID_ADDRESS');
+      if (msg.includes('HYPEREVM_CORE_TRANSFER_ADDRESS_BLOCKED')) setError('HYPEREVM_CORE_TRANSFER_ADDRESS_BLOCKED');
+      else if (msg.includes('INVALID_ADDRESS')) setError('INVALID_ADDRESS');
       else if (/user rejected|denied/i.test(msg)) setError('REJECTED');
       else if (/insufficient/i.test(msg)) setError('INSUFFICIENT');
       else setError('FAILED');

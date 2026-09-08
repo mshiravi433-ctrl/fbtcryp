@@ -13,6 +13,7 @@
     "velocity:referral-sweep": "node scripts/velocity-referral-sweep.mjs",
     "build": "NODE_OPTIONS=--max-old-space-size=3072 vite build && node scripts/gen-landing.mjs",
     "test:landing": "node scripts/landing-v2/qa-dist.mjs",
+    "test:hyperevm-gate": "node test/hyperevm-fee-gate-probe.mjs",
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",

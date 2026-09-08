@@ -80,6 +80,7 @@ export const toAggAddress = (token) => (token.native ? NATIVE_SENTINEL : token.a
  * exactly the users it exists for.
  */
 import { apiBase } from './apiBase';
+import { assertTokenAllowedOnChain } from './hyperevm';
 
 const proxyBase = () => apiBase() + '/swap/kyber';
 
@@ -166,6 +167,8 @@ export async function getAggregatorRoute({
   feeBps = 0,
   feeReceiver = null
 }) {
+  assertTokenAllowedOnChain(chainId, tokenIn);
+  assertTokenAllowedOnChain(chainId, tokenOut);
   const slug = NETWORK_SLUG[chainId];
   if (!slug) throw new Error('CHAIN_UNSUPPORTED');
 

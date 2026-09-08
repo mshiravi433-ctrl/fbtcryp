@@ -48,7 +48,7 @@ async function fetchChainHoldings({ chainId, address, getReadProvider, priceMap 
       nativeAmt = null;
     }
     // Token balances via swap.js helper (per-token try/catch inside)
-    const bals = await getBalances(provider, list, address);
+    const bals = await getBalances(provider, list, address, chainId);
 
     // Build rows: native first, then tokens.
     const rows = [];

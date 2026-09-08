@@ -4161,7 +4161,8 @@
       "FAILED": "The transfer failed. Nothing was sent.",
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
       "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again.",
-      "RECIPIENT_BLOCKED": "This recipient did not pass the address check, so nothing was sent."
+      "RECIPIENT_BLOCKED": "This recipient did not pass the address check, so nothing was sent.",
+      "HYPEREVM_CORE_TRANSFER_ADDRESS_BLOCKED": "This HyperEVM system address is reserved for HYPE-only Core transfers. FBT does not support Core transfers here, so no transaction was sent."
     },
     "asset": "Asset",
     "ensResolving": "Resolving ENS name…",

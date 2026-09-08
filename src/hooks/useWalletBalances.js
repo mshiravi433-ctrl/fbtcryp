@@ -123,7 +123,7 @@ export function useWalletBalances(wallet) {
 
     try {
       const provider = await wallet.getReadProvider(chainId);
-      const balances = await getBalances(provider, list, address);
+      const balances = await getBalances(provider, list, address, chainId);
       if (seq.current !== mine) return;
 
       /*

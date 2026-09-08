@@ -79,6 +79,33 @@ run_stage() {
 } > /tmp/env-summary.txt 2>&1 || true
 say "$(tr '\n' ' ' < /tmp/env-summary.txt)"
 
+# ---------------------------------------------------------------------------
+# HyperEVM release proof
+# ---------------------------------------------------------------------------
+# A HyperEVM swap must not become part of an APK merely because its metadata
+# compiles. The candidate itself is a signal that this release needs the live,
+# fail-closed proof: RPC health, a real HYPE -> native Circle USDC Kyber route,
+# exact input-side 70 bps fee echo to the configured receiver, and calldata
+# generation with the native value intact. The verifier never broadcasts.
+#
+# Keep this in the existing build workflow rather than a new workflow: the
+# repository GitHub App intentionally lacks workflow-write permission, while
+# this trusted runner already builds every downloadable APK. If the proof is
+# unavailable, no APK is produced or released.
+if [ -f "$HERE/../src/lib/hyperevm.js" ]; then
+  HYPEREVM_EVIDENCE="out/hyperevm-fee-route-evidence.json"
+  run_stage "HyperEVM fee route proof" node "$HERE/../scripts/verify-fees.mjs" \
+    --chain 999 --strict --evidence "$HYPEREVM_EVIDENCE"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$HYPEREVM_EVIDENCE" ]; then
+    {
+      echo '### HyperEVM live fee-route proof'
+      echo '```json'
+      cat "$HYPEREVM_EVIDENCE"
+      echo '```'
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
+fi
+
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║  1/2  FULL build — incl. speculation, for GitHub Releases      ║"
 echo "╚════════════════════════════════════════════════════════════════╝"

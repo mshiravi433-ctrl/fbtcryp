@@ -28,6 +28,7 @@ import {
   searchTokens,
   tokenKey
 } from '../lib/tokenLists';
+import { tokenImportAllowed } from '../lib/hyperevm';
 import { notifyTrade, primeAudio } from '../lib/notify';
 import { dispatchStageAlert } from '../lib/stagePush';
 import { holdRefreshGuard } from '../lib/refresh';
@@ -494,8 +495,8 @@ export default function Swap() {
 
   const importable = useMemo(() => {
     const q = pickerQuery.trim();
-    return /^0x[a-fA-F0-9]{40}$/.test(q) && pickerResults.length === 0 ? q : null;
-  }, [pickerQuery, pickerResults]);
+    return tokenImportAllowed(chainId) && /^0x[a-fA-F0-9]{40}$/.test(q) && pickerResults.length === 0 ? q : null;
+  }, [pickerQuery, pickerResults, chainId]);
 
   const choose = (tk) => {
     const other = picker === 'from' ? toToken : fromToken;
@@ -544,7 +545,7 @@ export default function Swap() {
       await Promise.all(
         wanted.map(async (tk) => {
           try {
-            const list = await getBalances(provider, [tk], wallet.address);
+            const list = await getBalances(provider, [tk], wallet.address, chainId);
             byKey[tokenKey(tk)] = list[tk.symbol];
           } catch {
             byKey[tokenKey(tk)] = { raw: 0n, formatted: 0 };
