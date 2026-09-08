@@ -1558,7 +1558,30 @@
       "claimMethod": "Méthode de réclamation",
       "termsHash": "Hash des conditions",
       "reviewBuy": "Vérifier et acheter",
-      "howItWorks": "Fonctionnement, frais et réclamations"
+      "howItWorks": "Fonctionnement, frais et réclamations",
+      "product": "Protocole assuré",
+      "productPlaceholder": "Choisissez le protocole à assurer",
+      "productCount_one": "{{count}} produit",
+      "productCount_other": "{{count}} produits",
+      "productRequiredHint": "Choisissez d’abord le protocole exact : le fournisseur tarife chaque produit séparément.",
+      "loadingProducts": "Chargement des produits du fournisseur…",
+      "productsLoadFailed": "Impossible de charger la liste des produits du fournisseur.",
+      "noProductsForChain": "Aucun produit disponible pour ce réseau",
+      "noProductsForType": "Aucun produit de ce type sur ce réseau",
+      "noProductsHint": "Seuls les produits réels publiés par un fournisseur en direct sont listés ; rien n’est inventé. Essayez un autre réseau ou un autre type de protection.",
+      "switchToEthereum": "Passer à Ethereum",
+      "minPrice": "Prix annuel minimum",
+      "minPriceValue": "à partir de {{pct}} % / an",
+      "gracePeriod": "Délai de grâce",
+      "graceDays_one": "{{count}} jour",
+      "graceDays_other": "{{count}} jours",
+      "coverAssets": "Actifs couverts",
+      "productId": "ID du produit",
+      "priceNote": "Le prix annuel minimum est le plancher du fournisseur ; le devis en direct dépend de la capacité et de la durée.",
+      "membershipRequired": "Les sinistres exigent l’adhésion à Nexus Mutual (KYC) ; le NFT d’adhésion est émis à l’achat.",
+      "productHint": "Le devis est calculé en direct par le fournisseur pour ce produit précis.",
+      "durationHint": "28 à 365 jours",
+      "daysShort": "jours"
     },
     "info": {
       "walletTitle": "Votre portefeuille, vos clés",
@@ -1677,6 +1700,17 @@
       "createdToast": "Réclamation {{number}} créée"
     },
     "providerUnavailable": "Fournisseur temporairement indisponible",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "reason": {
+      "PRODUCT_REQUIRED": "Choisissez d’abord le protocole à assurer."
+    },
+    "explain": {
+      "summaryHint": "Garde des fonds, parcours d’achat, critères de risque, chaque frais et traitement des sinistres",
+      "sectionWallet": "Non dépositaire par conception",
+      "sectionFlow": "{{count}} étapes vérifiées",
+      "sectionRisk": "{{count}} critères, sans approximation",
+      "sectionFees": "Détaillés avant signature",
+      "sectionClaims": "Fondés sur des preuves, jamais automatiques"
+    }
   }
 }

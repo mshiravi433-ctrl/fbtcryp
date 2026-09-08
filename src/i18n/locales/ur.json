@@ -1554,7 +1554,30 @@
       "claimMethod": "Claim method",
       "termsHash": "Terms hash",
       "reviewBuy": "Review & Buy",
-      "howItWorks": "How it works, fees & claims"
+      "howItWorks": "How it works, fees & claims",
+      "product": "بیمہ شدہ پروٹوکول",
+      "productPlaceholder": "بیمہ کروانے والا پروٹوکول منتخب کریں",
+      "productCount_one": "{{count}} پروڈکٹ",
+      "productCount_other": "{{count}} پروڈکٹس",
+      "productRequiredHint": "پہلے درست پروٹوکول منتخب کریں — فراہم کنندہ ہر پروڈکٹ کی قیمت الگ طے کرتا ہے۔",
+      "loadingProducts": "فراہم کنندہ سے پروڈکٹس لوڈ ہو رہی ہیں…",
+      "productsLoadFailed": "فراہم کنندہ کی پروڈکٹ فہرست لوڈ نہیں ہو سکی۔",
+      "noProductsForChain": "اس نیٹ ورک کے لیے کوئی پروڈکٹ دستیاب نہیں",
+      "noProductsForType": "اس نیٹ ورک پر اس قسم کی کوئی پروڈکٹ دستیاب نہیں",
+      "noProductsHint": "صرف لائیو فراہم کنندہ کی شائع کردہ حقیقی پروڈکٹس دکھائی جاتی ہیں — کچھ بھی گھڑا نہیں جاتا۔ کوئی اور نیٹ ورک یا تحفظ کی قسم آزمائیں۔",
+      "switchToEthereum": "Ethereum پر جائیں",
+      "minPrice": "کم از کم سالانہ قیمت",
+      "minPriceValue": "{{pct}}٪ سالانہ سے",
+      "gracePeriod": "رعایتی مدت",
+      "graceDays_one": "{{count}} دن",
+      "graceDays_other": "{{count}} دن",
+      "coverAssets": "کور اثاثے",
+      "productId": "پروڈکٹ شناخت",
+      "priceNote": "کم از کم سالانہ قیمت فراہم کنندہ کی نچلی حد ہے؛ لائیو کوٹ گنجائش اور مدت پر منحصر ہے۔",
+      "membershipRequired": "دعووں کے لیے Nexus Mutual رکنیت (KYC) درکار ہے — رکنیت NFT خریداری کے وقت جاری ہوتا ہے۔",
+      "productHint": "اس مخصوص پروڈکٹ کی قیمت فراہم کنندہ لائیو طے کرتا ہے۔",
+      "durationHint": "28 تا 365 دن",
+      "daysShort": "دن"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -1673,6 +1696,17 @@
       "createdToast": "Claim {{number}} created"
     },
     "providerUnavailable": "Provider temporarily unavailable",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "reason": {
+      "PRODUCT_REQUIRED": "پہلے بیمہ کروانے والا پروٹوکول منتخب کریں۔"
+    },
+    "explain": {
+      "summaryHint": "تحویل، خریداری کا عمل، رسک ان پٹس، ہر فیس اور دعووں کی کارروائی",
+      "sectionWallet": "ڈیزائن کے لحاظ سے غیر تحویلی",
+      "sectionFlow": "{{count}} تصدیق شدہ مراحل",
+      "sectionRisk": "{{count}} ان پٹس، کوئی اندازہ نہیں",
+      "sectionFees": "دستخط سے پہلے تفصیل وار",
+      "sectionClaims": "شواہد پر مبنی، کبھی خودکار نہیں"
+    }
   }
 }

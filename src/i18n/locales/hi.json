@@ -1558,7 +1558,30 @@
       "claimMethod": "Claim method",
       "termsHash": "Terms hash",
       "reviewBuy": "Review & Buy",
-      "howItWorks": "How it works, fees & claims"
+      "howItWorks": "How it works, fees & claims",
+      "product": "बीमित प्रोटोकॉल",
+      "productPlaceholder": "बीमा कराने वाला प्रोटोकॉल चुनें",
+      "productCount_one": "{{count}} उत्पाद",
+      "productCount_other": "{{count}} उत्पाद",
+      "productRequiredHint": "पहले सटीक प्रोटोकॉल चुनें — प्रदाता हर उत्पाद की कीमत अलग तय करता है।",
+      "loadingProducts": "प्रदाता से उत्पाद लोड हो रहे हैं…",
+      "productsLoadFailed": "प्रदाता की उत्पाद सूची लोड नहीं हो सकी।",
+      "noProductsForChain": "इस नेटवर्क के लिए कोई उत्पाद उपलब्ध नहीं है",
+      "noProductsForType": "इस नेटवर्क पर इस प्रकार का कोई उत्पाद उपलब्ध नहीं है",
+      "noProductsHint": "केवल लाइव प्रदाता द्वारा प्रकाशित वास्तविक उत्पाद ही दिखाए जाते हैं — कुछ भी गढ़ा नहीं जाता। दूसरा नेटवर्क या सुरक्षा प्रकार आज़माएँ।",
+      "switchToEthereum": "Ethereum पर जाएँ",
+      "minPrice": "न्यूनतम वार्षिक मूल्य",
+      "minPriceValue": "{{pct}}% प्रति वर्ष से",
+      "gracePeriod": "रियायती अवधि",
+      "graceDays_one": "{{count}} दिन",
+      "graceDays_other": "{{count}} दिन",
+      "coverAssets": "कवर संपत्तियाँ",
+      "productId": "उत्पाद आईडी",
+      "priceNote": "न्यूनतम वार्षिक मूल्य प्रदाता की निचली सीमा है; लाइव कोटेशन क्षमता और अवधि पर निर्भर करता है।",
+      "membershipRequired": "दावों के लिए Nexus Mutual सदस्यता (KYC) आवश्यक है — सदस्यता NFT खरीद के समय जारी होता है।",
+      "productHint": "इस सटीक उत्पाद की कीमत प्रदाता द्वारा लाइव तय की जाती है।",
+      "durationHint": "28–365 दिन",
+      "daysShort": "दिन"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -1677,6 +1700,17 @@
       "createdToast": "Claim {{number}} created"
     },
     "providerUnavailable": "Provider temporarily unavailable",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "reason": {
+      "PRODUCT_REQUIRED": "पहले बीमा कराने वाला प्रोटोकॉल चुनें।"
+    },
+    "explain": {
+      "summaryHint": "अभिरक्षा, खरीद प्रक्रिया, जोखिम इनपुट, हर शुल्क और दावों का निपटान",
+      "sectionWallet": "डिज़ाइन से गैर-अभिरक्षक",
+      "sectionFlow": "{{count}} सत्यापित चरण",
+      "sectionRisk": "{{count}} इनपुट, कोई अनुमान नहीं",
+      "sectionFees": "हस्ताक्षर से पहले मदवार",
+      "sectionClaims": "साक्ष्य-आधारित, कभी स्वचालित नहीं"
+    }
   }
 }

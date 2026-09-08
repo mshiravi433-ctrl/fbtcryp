@@ -1,83 +1,140 @@
 import { useTranslation } from 'react-i18next';
+import {
+  InsIconWallet, InsIconShield, InsIconRisk, InsIconFee, InsIconChain, InsIconClaim,
+  InsIconChevronDown, InsIconCheck, InsIconLock
+} from './InsuranceIcons.jsx';
 
-/* Inline theme-aware SVG icons (stroke: currentColor; no icon font). */
+/* Theme-aware SVG icons (stroke: currentColor; 24×24 grid, no icon font).
+   The names are kept so the probe can assert each section carries its glyph. */
 const Icon = {
-  Wallet: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="14" rx="3"/><path d="M16 12.5h2.5"/><path d="M2.5 9.5h19"/></svg>),
-  Shield: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.7 3.2 8 7.5 10 4.3-2 7.5-5.3 7.5-10v-6L12 2.5Z"/><path d="m9 12 2 2 4-4.5"/></svg>),
-  Risk: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r="0.4" fill="currentColor"/></svg>),
-  Fee: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 15.2c.5.8 1.4 1.3 2.5 1.3 1.7 0 3-.9 3-2.3 0-2.8-5.4-1.5-5.4-4.1 0-1.2 1.1-2.1 2.6-2.1 1 0 1.9.4 2.4 1.1"/><path d="M12 6.5V8m0 8v1.5"/></svg>),
-  Chain: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.5 14.5 14.5 9.5"/><path d="M7.5 11.5 5 14a3.5 3.5 0 0 0 5 5l2.5-2.5"/><path d="M16.5 12.5 19 10a3.5 3.5 0 0 0-5-5l-2.5 2.5"/></svg>),
-  Claim: () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3.5h9.5L19 7v13.5H6z"/><path d="M15 3.5V7h4"/><path d="M9 12h7M9 15.5h5"/></svg>),
-  Chev: () => (<svg className="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>)
+  Wallet: InsIconWallet,
+  Shield: InsIconShield,
+  Risk: InsIconRisk,
+  Fee: InsIconFee,
+  Chain: InsIconChain,
+  Claim: InsIconClaim,
+  Chev: InsIconChevronDown
 };
+
+const FLOW = ['flow1', 'flow2', 'flow3', 'flow4', 'flow5', 'flow6', 'flow7', 'flow8'];
+const RISKS = ['risk1', 'risk2', 'risk3', 'risk4', 'risk5', 'risk6', 'risk7', 'risk8', 'risk9', 'risk10', 'risk11', 'risk12'];
+const CLAIMS = ['claim1', 'claim2', 'claim3', 'claim4', 'claim5'];
+const FEES = [
+  ['insurance.fee.providerPremium', false],
+  ['insurance.fee.fbtFee', false],
+  ['insurance.fee.networkFee', false],
+  ['insurance.fee.commission', false],
+  ['insurance.fee.total', true]
+];
 
 /**
  * «توضیحات و ریسک» — the expandable transparency box rendered at the BOTTOM
  * of every insurance page (inside InsuranceShell): how the flow works, every
  * fee, the risk criteria, claims honesty and the compliance notice. One source
  * of truth for the whole module.
+ *
+ * Layout: one native <details> (works without JS, keyboard-accessible) whose
+ * body is a stack of tone-washed sections — numbered steps for the purchase
+ * flow, a two-column parameter grid for the risk inputs, an itemised fee
+ * table and a check-list for claims — instead of a wall of bullets.
  */
 export default function InsuranceExplain() {
   const { t } = useTranslation();
   return (
-    <details className="ins-details ins-explain">
+    <details className="ins-details ins-explain ins-tone-cyan">
       <summary>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon.Shield /> {t('insurance.explain.title')}
+        <span className="ins-ico"><Icon.Shield /></span>
+        <span className="ins-explain-sum-text">
+          <b>{t('insurance.explain.title')}</b>
+          <small>{t('insurance.explain.summaryHint')}</small>
         </span>
-        <Icon.Chev />
+        <span className="ins-explain-chev" aria-hidden="true"><Icon.Chev /></span>
       </summary>
-      <div className="ins-details-body">
-        <div className="ins-info-row">
-          <span className="ins-info-icon"><Icon.Wallet /></span>
-          <div>
-            <div className="ins-info-title">{t('insurance.info.walletTitle')}</div>
-            <div className="ins-info-text">{t('insurance.info.walletBody')}</div>
+
+      <div className="ins-explain-body">
+        {/* wallet & custody */}
+        <section className="ins-x ins-tone-magenta">
+          <div className="ins-x-head">
+            <span className="ins-ico"><Icon.Wallet /></span>
+            <div>
+              <h3>{t('insurance.info.walletTitle')}</h3>
+              <small>{t('insurance.explain.sectionWallet')}</small>
+            </div>
           </div>
-        </div>
-        <div className="ins-info-row">
-          <span className="ins-info-icon"><Icon.Chain /></span>
-          <div>
-            <div className="ins-info-title">{t('insurance.info.flowTitle')}</div>
-            <ol>
-              {['flow1', 'flow2', 'flow3', 'flow4', 'flow5', 'flow6', 'flow7', 'flow8'].map((k) => <li key={k}>{t(`insurance.info.${k}`)}</li>)}
-            </ol>
+          <p>{t('insurance.info.walletBody')}</p>
+        </section>
+
+        {/* purchase flow */}
+        <section className="ins-x ins-tone-cyan">
+          <div className="ins-x-head">
+            <span className="ins-ico"><Icon.Chain /></span>
+            <div>
+              <h3>{t('insurance.info.flowTitle')}</h3>
+              <small>{t('insurance.explain.sectionFlow', { count: FLOW.length })}</small>
+            </div>
           </div>
-        </div>
-        <div className="ins-info-row">
-          <span className="ins-info-icon"><Icon.Risk /></span>
-          <div>
-            <div className="ins-info-title">{t('insurance.info.riskTitle')}</div>
-            <div className="ins-info-text">{t('insurance.info.riskIntro')}</div>
-            <ul>
-              {['risk1', 'risk2', 'risk3', 'risk4', 'risk5', 'risk6', 'risk7', 'risk8', 'risk9', 'risk10', 'risk11', 'risk12'].map((k) => <li key={k}>{t(`insurance.info.${k}`)}</li>)}
-            </ul>
+          <ol className="ins-steps">
+            {FLOW.map((k, i) => (
+              <li key={k}><span className="ins-step-n">{i + 1}</span><span>{t(`insurance.info.${k}`)}</span></li>
+            ))}
+          </ol>
+        </section>
+
+        {/* risk parameters */}
+        <section className="ins-x ins-tone-amber">
+          <div className="ins-x-head">
+            <span className="ins-ico"><Icon.Risk /></span>
+            <div>
+              <h3>{t('insurance.info.riskTitle')}</h3>
+              <small>{t('insurance.explain.sectionRisk', { count: RISKS.length })}</small>
+            </div>
           </div>
-        </div>
-        <div className="ins-info-row">
-          <span className="ins-info-icon"><Icon.Fee /></span>
-          <div>
-            <div className="ins-info-title">{t('insurance.info.feesTitle')}</div>
-            <ul>
-              <li>{t('insurance.fee.providerPremium')}</li>
-              <li>{t('insurance.fee.fbtFee')}</li>
-              <li>{t('insurance.fee.networkFee')}</li>
-              <li>{t('insurance.fee.commission')}</li>
-              <li>{t('insurance.fee.total')}</li>
-            </ul>
-            <div className="ins-info-text" style={{ marginTop: 6 }}>{t('insurance.explain.feeNote')}</div>
+          <p>{t('insurance.info.riskIntro')}</p>
+          <ul className="ins-params">
+            {RISKS.map((k, i) => (
+              <li key={k}><span className="ins-param-n">{String(i + 1).padStart(2, '0')}</span><span>{t(`insurance.info.${k}`)}</span></li>
+            ))}
+          </ul>
+        </section>
+
+        {/* fees */}
+        <section className="ins-x ins-tone-mint">
+          <div className="ins-x-head">
+            <span className="ins-ico"><Icon.Fee /></span>
+            <div>
+              <h3>{t('insurance.info.feesTitle')}</h3>
+              <small>{t('insurance.explain.sectionFees')}</small>
+            </div>
           </div>
-        </div>
-        <div className="ins-info-row">
-          <span className="ins-info-icon"><Icon.Claim /></span>
-          <div>
-            <div className="ins-info-title">{t('insurance.info.claimsTitle')}</div>
-            <ul>
-              {['claim1', 'claim2', 'claim3', 'claim4', 'claim5'].map((k) => <li key={k}>{t(`insurance.info.${k}`)}</li>)}
-            </ul>
+          <ul className="ins-fee-table">
+            {FEES.map(([key, total], i) => (
+              <li key={key} className={total ? 'total' : ''}>
+                <span className="ins-fee-dot" aria-hidden="true" />
+                <span>{t(key)}</span>
+                <span className="ins-fee-plus" aria-hidden="true">{total ? '=' : i === 0 ? '' : '+'}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="ins-x-note">{t('insurance.explain.feeNote')}</p>
+        </section>
+
+        {/* claims */}
+        <section className="ins-x ins-tone-violet">
+          <div className="ins-x-head">
+            <span className="ins-ico"><Icon.Claim /></span>
+            <div>
+              <h3>{t('insurance.info.claimsTitle')}</h3>
+              <small>{t('insurance.explain.sectionClaims')}</small>
+            </div>
           </div>
-        </div>
-        <div className="ins-legal-note">{t('insurance.explain.legal')}</div>
+          <ul className="ins-checks">
+            {CLAIMS.map((k) => (
+              <li key={k}><InsIconCheck /><span>{t(`insurance.info.${k}`)}</span></li>
+            ))}
+          </ul>
+        </section>
+
+        <div className="ins-legal-note"><InsIconLock /><span>{t('insurance.explain.legal')}</span></div>
       </div>
     </details>
   );

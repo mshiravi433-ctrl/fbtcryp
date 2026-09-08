@@ -1558,7 +1558,30 @@
       "claimMethod": "Talep yöntemi",
       "termsHash": "Şartlar hash’i",
       "reviewBuy": "İncele & satın al",
-      "howItWorks": "Nasıl çalışır, ücretler ve talepler"
+      "howItWorks": "Nasıl çalışır, ücretler ve talepler",
+      "product": "Sigortalanan protokol",
+      "productPlaceholder": "Sigortalanacak protokolü seçin",
+      "productCount_one": "{{count}} ürün",
+      "productCount_other": "{{count}} ürün",
+      "productRequiredHint": "Önce tam protokolü seçin — sağlayıcı her ürünü ayrı fiyatlandırır.",
+      "loadingProducts": "Ürünler sağlayıcıdan yükleniyor…",
+      "productsLoadFailed": "Sağlayıcının ürün listesi yüklenemedi.",
+      "noProductsForChain": "Bu ağ için ürün bulunmuyor",
+      "noProductsForType": "Bu ağda bu türde ürün bulunmuyor",
+      "noProductsHint": "Yalnızca canlı bir sağlayıcının yayımladığı gerçek ürünler listelenir; hiçbir şey uydurulmaz. Başka bir ağ veya koruma türü deneyin.",
+      "switchToEthereum": "Ethereum’a geç",
+      "minPrice": "Asgari yıllık fiyat",
+      "minPriceValue": "yıllık %{{pct}}’den başlayan",
+      "gracePeriod": "Ek süre",
+      "graceDays_one": "{{count}} gün",
+      "graceDays_other": "{{count}} gün",
+      "coverAssets": "Teminat varlıkları",
+      "productId": "Ürün kimliği",
+      "priceNote": "Asgari yıllık fiyat sağlayıcının taban fiyatıdır; canlı teklif kapasiteye ve süreye bağlıdır.",
+      "membershipRequired": "Hasar talepleri Nexus Mutual üyeliği (KYC) gerektirir; üyelik NFT’si satın alma sırasında basılır.",
+      "productHint": "Teklif, tam olarak bu ürün için sağlayıcı tarafından canlı fiyatlandırılır.",
+      "durationHint": "28–365 gün",
+      "daysShort": "gün"
     },
     "info": {
       "walletTitle": "Cüzdanın, anahtarların",
@@ -1677,6 +1700,17 @@
       "createdToast": "Talep {{number}} oluşturuldu"
     },
     "providerUnavailable": "Sağlayıcı geçici olarak kullanılamıyor",
-    "unknown": "Bilinmiyor"
+    "unknown": "Bilinmiyor",
+    "reason": {
+      "PRODUCT_REQUIRED": "Önce sigortalanacak protokolü seçin."
+    },
+    "explain": {
+      "summaryHint": "Saklama, satın alma akışı, risk girdileri, tüm ücretler ve hasar taleplerinin işlenmesi",
+      "sectionWallet": "Tasarım gereği saklama yok",
+      "sectionFlow": "{{count}} doğrulanmış adım",
+      "sectionRisk": "{{count}} girdi, tahmin yok",
+      "sectionFees": "İmzadan önce kalem kalem",
+      "sectionClaims": "Kanıta dayalı, asla otomatik değil"
+    }
   }
 }

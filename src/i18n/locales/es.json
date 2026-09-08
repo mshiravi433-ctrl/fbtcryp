@@ -1558,7 +1558,30 @@
       "claimMethod": "Método de reclamación",
       "termsHash": "Hash de términos",
       "reviewBuy": "Revisar y comprar",
-      "howItWorks": "Cómo funciona, tarifas y reclamaciones"
+      "howItWorks": "Cómo funciona, tarifas y reclamaciones",
+      "product": "Protocolo asegurado",
+      "productPlaceholder": "Selecciona el protocolo a asegurar",
+      "productCount_one": "{{count}} producto",
+      "productCount_other": "{{count}} productos",
+      "productRequiredHint": "Elige primero el protocolo exacto: el proveedor tarifica cada producto por separado.",
+      "loadingProducts": "Cargando productos del proveedor…",
+      "productsLoadFailed": "No se pudo cargar la lista de productos del proveedor.",
+      "noProductsForChain": "No hay ningún producto disponible para esta red",
+      "noProductsForType": "No hay ningún producto de este tipo en esta red",
+      "noProductsHint": "Solo se muestran productos reales publicados por un proveedor en vivo; nada se inventa. Prueba otra red u otro tipo de protección.",
+      "switchToEthereum": "Cambiar a Ethereum",
+      "minPrice": "Precio anual mínimo",
+      "minPriceValue": "desde {{pct}} % al año",
+      "gracePeriod": "Periodo de gracia",
+      "graceDays_one": "{{count}} día",
+      "graceDays_other": "{{count}} días",
+      "coverAssets": "Activos de cobertura",
+      "productId": "ID del producto",
+      "priceNote": "El precio anual mínimo es el suelo del proveedor; la cotización en vivo depende de la capacidad y la duración.",
+      "membershipRequired": "Las reclamaciones requieren membresía de Nexus Mutual (KYC); el NFT de membresía se emite al comprar.",
+      "productHint": "El proveedor cotiza en vivo este producto exacto.",
+      "durationHint": "28–365 días",
+      "daysShort": "días"
     },
     "info": {
       "walletTitle": "Tu cartera, tus claves",
@@ -1677,6 +1700,17 @@
       "createdToast": "Reclamación {{number}} creada"
     },
     "providerUnavailable": "Proveedor no disponible temporalmente",
-    "unknown": "Desconocido"
+    "unknown": "Desconocido",
+    "reason": {
+      "PRODUCT_REQUIRED": "Selecciona primero el protocolo a asegurar."
+    },
+    "explain": {
+      "summaryHint": "Custodia, flujo de compra, criterios de riesgo, cada comisión y cómo se gestionan las reclamaciones",
+      "sectionWallet": "No custodial por diseño",
+      "sectionFlow": "{{count}} pasos verificados",
+      "sectionRisk": "{{count}} criterios, sin conjeturas",
+      "sectionFees": "Desglosadas antes de firmar",
+      "sectionClaims": "Basadas en pruebas, nunca automáticas"
+    }
   }
 }

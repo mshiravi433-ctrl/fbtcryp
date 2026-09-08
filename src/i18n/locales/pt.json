@@ -1558,7 +1558,30 @@
       "claimMethod": "Claim method",
       "termsHash": "Terms hash",
       "reviewBuy": "Review & Buy",
-      "howItWorks": "How it works, fees & claims"
+      "howItWorks": "How it works, fees & claims",
+      "product": "Protocolo segurado",
+      "productPlaceholder": "Selecione o protocolo a segurar",
+      "productCount_one": "{{count}} produto",
+      "productCount_other": "{{count}} produtos",
+      "productRequiredHint": "Escolha primeiro o protocolo exato — o provedor precifica cada produto separadamente.",
+      "loadingProducts": "Carregando produtos do provedor…",
+      "productsLoadFailed": "Não foi possível carregar a lista de produtos do provedor.",
+      "noProductsForChain": "Nenhum produto disponível para esta rede",
+      "noProductsForType": "Nenhum produto deste tipo nesta rede",
+      "noProductsHint": "Apenas produtos reais publicados por um provedor ativo são listados — nada é inventado. Tente outra rede ou tipo de proteção.",
+      "switchToEthereum": "Mudar para Ethereum",
+      "minPrice": "Preço anual mínimo",
+      "minPriceValue": "a partir de {{pct}}% / ano",
+      "gracePeriod": "Período de carência",
+      "graceDays_one": "{{count}} dia",
+      "graceDays_other": "{{count}} dias",
+      "coverAssets": "Ativos de cobertura",
+      "productId": "ID do produto",
+      "priceNote": "O preço anual mínimo é o piso do provedor; a cotação ao vivo depende da capacidade e da duração.",
+      "membershipRequired": "Sinistros exigem associação à Nexus Mutual (KYC) — o NFT de associação é emitido na compra.",
+      "productHint": "A cotação é calculada ao vivo pelo provedor para este produto exato.",
+      "durationHint": "28–365 dias",
+      "daysShort": "dias"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -1677,6 +1700,17 @@
       "createdToast": "Claim {{number}} created"
     },
     "providerUnavailable": "Provider temporarily unavailable",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "reason": {
+      "PRODUCT_REQUIRED": "Selecione primeiro o protocolo a segurar."
+    },
+    "explain": {
+      "summaryHint": "Custódia, fluxo de compra, critérios de risco, todas as taxas e como os sinistros são tratados",
+      "sectionWallet": "Não custodial por design",
+      "sectionFlow": "{{count}} etapas verificadas",
+      "sectionRisk": "{{count}} critérios, sem suposições",
+      "sectionFees": "Detalhadas antes de assinar",
+      "sectionClaims": "Baseados em evidências, nunca automáticos"
+    }
   }
 }

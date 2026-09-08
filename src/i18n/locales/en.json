@@ -11052,7 +11052,30 @@
         "insurace-claim": "InsurAce claim process",
         "on-chain-proof": "On-chain proof of loss",
         "user-signed": "User-signed"
-      }
+      },
+      "product": "Protocol being insured",
+      "productPlaceholder": "Select the protocol to insure",
+      "productCount_one": "{{count}} product",
+      "productCount_other": "{{count}} products",
+      "productRequiredHint": "Pick the exact protocol first — the provider prices each product separately.",
+      "loadingProducts": "Loading products from the provider…",
+      "productsLoadFailed": "Could not load the product list from the provider.",
+      "noProductsForChain": "No product is available for this network",
+      "noProductsForType": "No product of this type is available on this network",
+      "noProductsHint": "Only real products published by a live provider are listed — nothing is invented. Try another network or protection type.",
+      "switchToEthereum": "Switch to Ethereum",
+      "minPrice": "Minimum annual price",
+      "minPriceValue": "from {{pct}}% / year",
+      "gracePeriod": "Grace period",
+      "graceDays_one": "{{count}} day",
+      "graceDays_other": "{{count}} days",
+      "coverAssets": "Cover assets",
+      "productId": "Product ID",
+      "priceNote": "The minimum annual price is the provider’s floor; the live quote depends on capacity and duration.",
+      "membershipRequired": "Claims require Nexus Mutual membership (KYC) — the membership NFT is minted at purchase.",
+      "productHint": "The quote is priced live by the provider for this exact product.",
+      "durationHint": "28–365 days",
+      "daysShort": "days"
     },
     "info": {
       "walletTitle": "Your wallet, your keys",
@@ -11252,7 +11275,7 @@
       "ASSET_UNSUPPORTED": "The selected currency is not supported.",
       "COVERAGE_AMOUNT_REQUIRED": "A valid coverage amount is required.",
       "VALID_WALLET_REQUIRED": "A valid wallet address is required.",
-      "PRODUCT_REQUIRED": "No protection type selected.",
+      "PRODUCT_REQUIRED": "Select the protocol to insure first.",
       "CAPACITY_UNAVAILABLE": "Not enough capacity at the provider.",
       "HEALTH_UNKNOWN": "Provider health is unknown.",
       "ACTIVATION_FAILED": "Coverage activation failed.",
@@ -11324,7 +11347,13 @@
     "explain": {
       "title": "How it works, fees, risks & claims",
       "feeNote": "The FBT marketplace fee is 1% of the provider premium, always itemised and shown before you sign — there are no hidden fees.",
-      "legal": "FBT is a non-custodial interface: keys, premiums and assets stay with you and the provider. Coverage and payouts are governed by the provider’s own policy wording; FBT is neither an insurance advisor nor a guarantor of payment. Prices come live from the provider API and can change."
+      "legal": "FBT is a non-custodial interface: keys, premiums and assets stay with you and the provider. Coverage and payouts are governed by the provider’s own policy wording; FBT is neither an insurance advisor nor a guarantor of payment. Prices come live from the provider API and can change.",
+      "summaryHint": "Custody, purchase flow, risk inputs, every fee and how claims are handled",
+      "sectionWallet": "Non-custodial by design",
+      "sectionFlow": "{{count}} verified steps",
+      "sectionRisk": "{{count}} inputs, no guesswork",
+      "sectionFees": "Itemised before you sign",
+      "sectionClaims": "Evidence-based, never automatic"
     },
     "unavailable": {
       "title": "No eligible protection available right now",

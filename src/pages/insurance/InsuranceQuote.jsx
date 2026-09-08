@@ -4,6 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { ethers } from 'ethers';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel, typeLabel, reasonLabel, claimLabel } from './insStatus.js';
+import {
+  InsIconFee, InsIconHourglass, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconCheck, InsIconInfo, InsIconExternal, InsIconLock, InsIconShield,
+  INS_TYPE_ICONS, INS_TYPE_TONES
+} from './InsuranceIcons.jsx';
 
 export default function InsuranceQuote() {
   const { t } = useTranslation();
@@ -123,8 +127,8 @@ export default function InsuranceQuote() {
   }
 
   if (err) return (
-    <div className="ins-state-card ins-state-card--sm">
-      <div className="ins-state-ico">⏳</div>
+    <div className="ins-state-card ins-state-card--sm ins-tone-amber">
+      <div className="ins-ico lg"><InsIconHourglass /></div>
       <h2>{t('insurance.quote.unavailableTitle')}</h2>
       <p>{t('insurance.quote.unavailable', { error: reasonLabel(t, err) })}</p>
       <div className="ins-state-actions">
@@ -133,35 +137,51 @@ export default function InsuranceQuote() {
       </div>
     </div>
   );
-  if (!quote) return <div className="ins-muted">{t('insurance.quote.loading')}</div>;
+  if (!quote) return <div className="ins-skel" aria-busy="true">{t('insurance.quote.loading')}</div>;
 
   const feeZero = String(quote.fbtFeeMicro ?? '0') === '0';
+  const TypeGlyph = INS_TYPE_ICONS[quote.protectionType] || InsIconShield;
 
   return (
-    <div>
-      <div className="ins-hero"><h1>{t('insurance.quote.title')}</h1><p>{t('insurance.quote.subtitle')}</p></div>
+    <div className={`ins-tone-${INS_TYPE_TONES[quote.protectionType] || 'violet'}`}>
+      <div className="ins-hero">
+        <div className="ins-ico lg"><TypeGlyph /></div>
+        <div className="ins-hero-body">
+          <span className="ins-hero-badge"><InsIconLock /> {t('insurance.market.nonCustodial')}</span>
+          <h1>{t('insurance.quote.title')}</h1>
+          <p>{t('insurance.quote.subtitle')}</p>
+        </div>
+      </div>
 
       {stage === 'done' ? (
         <div className="ins-ok">
-          <b>{t('insurance.quote.doneTitle')}</b>{' '}
-          {signedBy && <span>{t('insurance.quote.signedBy')} <code>{signedBy.slice(0, 6)}…{signedBy.slice(-4)}</code>. </span>}
-          {txHash && <div style={{ marginTop: 6, wordBreak: 'break-all' }}>{t('insurance.quote.txHash')}: <code style={{ fontSize: 11 }}>{txHash}</code></div>}
-          <div style={{ marginTop: 10 }}>
-            <button className="ins-btn small" onClick={() => nav('/insurance/coverage')}>{t('insurance.quote.viewCoverage')}</button>
+          <InsIconCheck />
+          <div style={{ minWidth: 0 }}>
+            <b>{t('insurance.quote.doneTitle')}</b>{' '}
+            {signedBy && <span>{t('insurance.quote.signedBy')} <code>{signedBy.slice(0, 6)}…{signedBy.slice(-4)}</code>. </span>}
+            {txHash && <div style={{ marginTop: 6, wordBreak: 'break-all' }}>{t('insurance.quote.txHash')}: <code style={{ fontSize: 11 }}>{txHash}</code></div>}
+            <div style={{ marginTop: 10 }}>
+              <button className="ins-btn small" onClick={() => nav('/insurance/coverage')}>{t('insurance.quote.viewCoverage')} <InsIconChevronEnd /></button>
+            </div>
           </div>
         </div>
       ) : (
         <div className="ins-card">
-          <div className="ins-row"><span>{t('insurance.quote.protection')}</span><b>{typeLabel(t, quote.protectionType)}</b></div>
-          <div className="ins-row"><span>{t('insurance.market.coverage')}</span><b>${usd(quote.coverageAmountMicro)}</b></div>
-          <div className="ins-row"><span>{t('insurance.market.duration')}</span><span>{t('insurance.quote.days', { count: quote.durationDays })}</span></div>
-          <div style={{ margin: '6px 0', borderTop: '1px dashed var(--line)' }} />
+          <div className="ins-card-title"><span className="ins-ico"><InsIconFee /></span>{t('insurance.info.feesTitle')}</div>
+          <div className="ins-quote-stats">
+            <div className="ins-quote-stat"><span className="lbl">{t('insurance.quote.protection')}</span><b style={{ fontFamily: 'var(--font-display)' }}>{quote.product?.name || typeLabel(t, quote.protectionType)}</b></div>
+            <div className="ins-quote-stat"><span className="lbl">{t('insurance.market.coverage')}</span><b>${usd(quote.coverageAmountMicro)}</b></div>
+            <div className="ins-quote-stat"><span className="lbl">{t('insurance.market.duration')}</span><b>{t('insurance.quote.days', { count: quote.durationDays })}</b></div>
+            <div className="ins-quote-stat acc"><span className="lbl">{t('insurance.fee.total')}</span><b>${quote.totalCostUsd}</b></div>
+          </div>
+          {quote.product?.name && <div className="ins-row"><span>{t('insurance.market.product')}</span><b>{quote.product.name}</b></div>}
+          <div className="ins-divider" />
           <div className="ins-fee-line"><span>{t('insurance.fee.providerPremium')}</span><span className="fee-val">${quote.premiumUsd}</span></div>
           <div className="ins-fee-line">
             <span>{t('insurance.fee.fbtFee')}</span>
             <span className="fee-val">${quote.fbtFeeUsd}</span>
           </div>
-          {feeZero && <div className="ins-source" style={{ marginTop: 0 }}><span className="ins-fee-zero">{quote.fbtMarketplaceFeeDisclosure || t('insurance.fee.zero')}</span></div>}
+          {feeZero && <div className="ins-source" style={{ marginTop: 0 }}><span className="ins-fee-zero"><InsIconCheck style={{ width: 13, height: 13 }} /> {quote.fbtMarketplaceFeeDisclosure || t('insurance.fee.zero')}</span></div>}
           <div className="ins-fee-line"><span>{t('insurance.fee.networkFee')}</span><span className="fee-val">${quote.networkFeeUsd}</span></div>
           {String(quote.commissionMicro ?? '0') !== '0' && (
             <div className="ins-fee-line"><span>{t('insurance.fee.commission')}</span><span className="fee-val">${quote.commissionUsd}</span></div>
@@ -174,34 +194,34 @@ export default function InsuranceQuote() {
             <span><span className="k">{t('insurance.source.label')}:</span> {quote.quoteSource === 'provider-api' ? t('insurance.source.providerApi') : quote.quoteSource || 'UNKNOWN'} · {quote.providerName}</span>
             <span><span className="k">{t('insurance.source.freshness')}:</span> {t('insurance.source.live')}</span>
           </div>
-          <div className="ins-muted" style={{ marginTop: 6 }}>{t('insurance.quote.feeNote')}</div>
+          <div className="ins-note" style={{ marginTop: 10 }}><InsIconInfo /><span>{t('insurance.quote.feeNote')}</span></div>
         </div>
       )}
 
       {stage === 'ready' && (
         <div className="ins-card">
-          <div className="ins-title" style={{ fontSize: 16 }}>{t('insurance.quote.coverageBox')}</div>
-          <div className="ins-excl">{t('insurance.quote.coverageExplain', { type: quote.protectionType, max: usd(quote.coverageAmountMicro) })}</div>
+          <div className="ins-card-title"><span className="ins-ico"><InsIconShield /></span>{t('insurance.quote.coverageBox')}</div>
+          <div className="ins-note" style={{ marginTop: 0 }}><InsIconInfo /><span>{t('insurance.quote.coverageExplain', { type: quote.product?.name || typeLabel(t, quote.protectionType), max: usd(quote.coverageAmountMicro) })}</span></div>
           {quote.exclusions?.length > 0 && (
-            <div className="ins-excl"><b>{t('insurance.quote.exclusions')}:</b><ul style={{ margin: '6px 0 0 18px' }}>{quote.exclusions.map((x, i) => <li key={i}>{typeof x === 'string' ? x : x?.source || x?.url || JSON.stringify(x)}</li>)}</ul></div>
+            <div className="ins-excl"><b>{t('insurance.quote.exclusions')}</b><ul>{quote.exclusions.map((x, i) => <li key={i}>{typeof x === 'string' ? x : x?.source || x?.url || JSON.stringify(x)}</li>)}</ul></div>
           )}
           {(quote.termsUrl || quote.annexUrl) && (
-            <div className="ins-source" style={{ marginBottom: 8 }}>
-              {quote.termsUrl && <a href={quote.termsUrl} target="_blank" rel="noreferrer">{t('insurance.quote.termsLink')} ↗</a>}
-              {quote.annexUrl && <a href={quote.annexUrl} target="_blank" rel="noreferrer">{t('insurance.quote.annexLink')} ↗</a>}
+            <div className="ins-links" style={{ marginBottom: 10 }}>
+              {quote.termsUrl && <a className="ins-link" href={quote.termsUrl} target="_blank" rel="noopener noreferrer"><InsIconExternal /> {t('insurance.quote.termsLink')}</a>}
+              {quote.annexUrl && <a className="ins-link" href={quote.annexUrl} target="_blank" rel="noopener noreferrer"><InsIconExternal /> {t('insurance.quote.annexLink')}</a>}
             </div>
           )}
           {connected ? (
             <>
-              <div className="ins-ok">{t('insurance.quote.walletConnected', { chain: chainLabel })}</div>
-              <button className="ins-btn" onClick={createIntent}>{t('insurance.quote.confirmPrepare')}</button>
+              <div className="ins-ok"><InsIconCheck /><span>{t('insurance.quote.walletConnected', { chain: chainLabel })}</span></div>
+              <button className="ins-btn ins-cta" onClick={createIntent}>{t('insurance.quote.confirmPrepare')} <InsIconChevronEnd /></button>
             </>
           ) : (
-            <div className="ins-state-card ins-state-card--sm">
-              <div className="ins-state-ico">👛</div>
+            <div className="ins-state-card ins-state-card--sm ins-tone-magenta">
+              <div className="ins-ico lg"><InsIconWallet /></div>
               <h2>{t('insurance.shell.walletRequiredTitle')}</h2>
               <p>{t('insurance.shell.walletRequiredBody')}</p>
-              <div className="ins-state-actions"><Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')}</Link></div>
+              <div className="ins-state-actions"><Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')} <InsIconChevronEnd /></Link></div>
             </div>
           )}
         </div>
@@ -209,26 +229,26 @@ export default function InsuranceQuote() {
 
       {stage === 'prepared' && intent && (
         <div className="ins-card">
-          <div className="ins-ok"><b>{t('insurance.quote.preparedTitle')}</b> {t('insurance.quote.preparedBody')}</div>
+          <div className="ins-ok"><InsIconCheck /><span><b>{t('insurance.quote.preparedTitle')}</b> {t('insurance.quote.preparedBody')}</span></div>
           <div className="ins-row"><span>{t('insurance.quote.coverageId')}</span><code>{intent.coverageId}</code></div>
           {isLive && liveTx ? (
             <>
-              <div className="ins-row"><span>{t('insurance.quote.contract')}</span><code style={{ fontSize: 11 }}>{liveTx.to}</code></div>
-              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">{statusLabel(t, 'LIVE')} · {t('insurance.quote.unsigned')}</span></div>
-              <div className="ins-sub" style={{ marginTop: 8 }}>{t('insurance.quote.liveSignNote')}</div>
-              <button className="ins-btn" onClick={signAndActivate} disabled={stage === 'signing' || !connected}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signLive')}</button>
+              <div className="ins-row"><span>{t('insurance.quote.contract')}</span><code>{liveTx.to}</code></div>
+              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-chip LIVE">{statusLabel(t, 'LIVE')} · {t('insurance.quote.unsigned')}</span></div>
+              <div className="ins-note"><InsIconLock /><span>{t('insurance.quote.liveSignNote')}</span></div>
+              <div className="ins-form-actions"><button className="ins-btn ins-cta" onClick={signAndActivate} disabled={stage === 'signing' || !connected}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signLive')}</button></div>
             </>
           ) : (
             <>
-              <div className="ins-row"><span>{t('insurance.quote.sendTo')}</span><code style={{ fontSize: 11 }}>{prepared?.to}</code></div>
-              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-tag">{statusLabel(t, 'SANDBOX')}</span></div>
-              <div className="ins-sub" style={{ marginTop: 8 }}>{t('insurance.quote.sandboxNote')}</div>
-              <button className="ins-btn" onClick={signAndActivate} disabled={stage === 'signing'}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signSandbox')}</button>
+              <div className="ins-row"><span>{t('insurance.quote.sendTo')}</span><code>{prepared?.to}</code></div>
+              <div className="ins-row"><span>{t('insurance.quote.mode')}</span><span className="ins-chip SANDBOX">{statusLabel(t, 'SANDBOX')}</span></div>
+              <div className="ins-note"><InsIconInfo /><span>{t('insurance.quote.sandboxNote')}</span></div>
+              <div className="ins-form-actions"><button className="ins-btn ins-cta" onClick={signAndActivate} disabled={stage === 'signing'}>{stage === 'signing' ? t('insurance.quote.signing') : t('insurance.quote.signSandbox')}</button></div>
             </>
           )}
         </div>
       )}
-      {actErr && <div className="ins-alert">{actErr}</div>}
+      {actErr && <div className="ins-alert"><InsIconAlert /><span>{actErr}</span></div>}
     </div>
   );
 }
