@@ -139,13 +139,61 @@ export function ThinkingOrbLarge({ state = 'solving', size = 64, locale = 'fa', 
  * ○ Strategy
  * ○ Execution
  */
-export function AIActivityTimeline({ steps = [], locale = 'fa', className = '' }) {
+export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', defaultOpen = false }) {
   const fa = locale.startsWith('fa');
+  /*
+   * The eight status lines used to be printed one under the other on every
+   * single answer, which ate most of the screen on a phone. They now live
+   * inside one collapsed summary row: a compact progress line the user can
+   * open when they actually want the breakdown. Nothing is removed — the same
+   * steps render, just behind a disclosure.
+   */
+  const [open, setOpen] = useState(Boolean(defaultOpen));
+
+  const total = steps?.length || 0;
+  const doneCount = useMemo(
+    () => (steps || []).filter((s) => ['completed', 'done', 'ok', 'success'].includes(String(s?.status || ''))).length,
+    [steps]
+  );
+  const activeStep = useMemo(
+    () => (steps || []).find((s) => ['active', 'working', 'in_progress'].includes(String(s?.status || ''))),
+    [steps]
+  );
+  const failed = useMemo(
+    () => (steps || []).some((s) => ['failed', 'error'].includes(String(s?.status || ''))),
+    [steps]
+  );
 
   if (!steps || steps.length === 0) return null;
 
+  const stepLabel = (s) => (fa ? (s?.labelFa || s?.label) : (s?.labelEn || s?.label)) || '';
+  const headLabel = activeStep
+    ? stepLabel(activeStep)
+    : doneCount >= total
+      ? (fa ? 'همه مراحل انجام شد' : 'All steps done')
+      : stepLabel(steps[Math.min(doneCount, total - 1)]);
+  const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
   return (
-    <div className={`ai-activity-timeline ${className}`} data-testid="ai-activity-timeline">
+    <div
+      className={`ai-activity-timeline ${open ? 'is-open' : 'is-collapsed'} ${className}`}
+      data-testid="ai-activity-timeline"
+      data-open={open ? 'true' : 'false'}
+    >
+      <button
+        type="button"
+        className="ai-timeline-summary"
+        data-testid="ai-activity-timeline-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="ai-timeline-summary-dot" data-tone={failed ? 'bad' : activeStep ? 'busy' : doneCount >= total ? 'ok' : 'idle'} aria-hidden="true" />
+        <span className="ai-timeline-summary-text">{headLabel}</span>
+        <span className="ai-timeline-summary-count">{doneCount}/{total}</span>
+        <span className="ai-timeline-summary-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
+        <span className="ai-timeline-chevron" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
+      </button>
+      <div className="ai-timeline-steps" hidden={!open}>
       {steps.map((step, idx) => {
         const status = step.status || 'pending';
         let icon = '○';
@@ -162,32 +210,75 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '' }
         }
 
         return (
-          <div key={`${step.id || idx}-${step.label}`} className="ai-timeline-step" data-status={status} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12.5 }}>
-            <span className="ai-timeline-icon" style={{ color, fontWeight: 700, minWidth: 16, textAlign: 'center' }}>{icon}</span>
+          <div key={`${step.id || idx}-${step.label}`} className="ai-timeline-step" data-status={status} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
+            <span className="ai-timeline-icon" style={{ color, fontWeight: 700, minWidth: 14, textAlign: 'center' }}>{icon}</span>
             <span className="ai-timeline-label" style={{ color: status === 'completed' ? '#cbd5e1' : status === 'active' ? '#e2e8f0' : 'rgba(148,163,184,0.7)' }}>
               {fa ? (step.labelFa || step.label) : (step.labelEn || step.label)}
             </span>
-            {status === 'active' ? <ThinkingOrb state={step.orbState || 'working'} size={14} locale={locale} /> : null}
+            {status === 'active' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
           </div>
         );
       })}
+      </div>
       <style>{`
         .ai-activity-timeline {
-          background: rgba(13, 20, 36, 0.6);
+          background: rgba(13, 20, 36, 0.5);
           border: 1px solid rgba(148, 163, 184, 0.12);
           border-radius: 12px;
-          padding: 10px 12px;
-          margin: 8px 0;
+          padding: 4px 6px;
+          margin: 6px 0;
           backdrop-filter: blur(8px);
         }
+        .ai-activity-timeline.is-open { padding: 4px 8px 8px; }
+        .ai-timeline-summary {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          padding: 5px 6px;
+          cursor: pointer;
+          font: inherit;
+          text-align: start;
+        }
+        .ai-timeline-summary-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          flex: 0 0 auto; background: rgba(148,163,184,.7);
+        }
+        .ai-timeline-summary-dot[data-tone="busy"] { background: #22d3ee; animation: tlPulse 1.2s ease-in-out infinite; }
+        .ai-timeline-summary-dot[data-tone="ok"]   { background: #34d399; }
+        .ai-timeline-summary-dot[data-tone="bad"]  { background: #f87171; }
+        @keyframes tlPulse { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+        .ai-timeline-summary-text {
+          flex: 1 1 auto; min-width: 0;
+          font-size: 11.5px; font-weight: 600; color: #cbd5e1;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ai-timeline-summary-count {
+          flex: 0 0 auto; font-size: 10.5px; font-weight: 700;
+          color: rgba(148,163,184,.9); font-variant-numeric: tabular-nums;
+        }
+        .ai-timeline-summary-bar {
+          flex: 0 0 44px; height: 3px; border-radius: 999px;
+          background: rgba(148,163,184,.2); overflow: hidden;
+        }
+        .ai-timeline-summary-bar i {
+          display: block; height: 100%; border-radius: 999px;
+          background: linear-gradient(90deg, #6366f1, #22d3ee);
+          transition: width .3s ease;
+        }
+        .ai-timeline-chevron { flex: 0 0 auto; font-size: 11px; color: rgba(148,163,184,.8); }
+        .ai-timeline-steps { padding: 2px 6px 0; }
         .ai-timeline-step {
           transition: all 0.2s ease;
         }
         .ai-timeline-step[data-status="active"] {
           background: rgba(34, 211, 238, 0.06);
           border-radius: 6px;
-          padding: 4px 8px !important;
-          margin: 2px -4px;
+          padding: 3px 8px !important;
+          margin: 1px -4px;
         }
       `}</style>
     </div>
