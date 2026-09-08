@@ -83,6 +83,36 @@ function quoteFailureCode(err) {
   return 'PROVIDER_UNAVAILABLE';
 }
 
+/**
+ * Map a Nexus HTTP failure to a stable insurance error code.
+ *
+ * Honesty: CAPACITY_UNAVAILABLE is used ONLY when the /quote endpoint itself
+ * reports a real pool shortage. Swagger/HTML 4xx that merely mention the
+ * `/capacity` path, and cover-metadata 4xx, must never be labelled as a
+ * capacity shortage — that lie is what the marketplace showed after wallet
+ * connect (`insurance.reason.CAPACITY_UNAVAILABLE`).
+ */
+export function classifyNexusHttpError({ kind, body, action } = {}) {
+  if (kind !== 'status') return 'PROVIDER_UNAVAILABLE';
+  const act = String(action || '').split('?')[0].replace(/\/+$/, '');
+  const isQuote = act === '/quote' || act === 'quote';
+  // cover-metadata (and every non-quote path) must never become CAPACITY_UNAVAILABLE
+  if (!isQuote) return 'PROVIDER_HTTP_ERROR';
+  const raw = String(body || '');
+  // Swagger / HTML error pages list GET /v2/capacity/{productId} — not a shortage.
+  if (/<!doctype|<html[\s>]|swagger/i.test(raw) || /GET\s+\/(?:v2\/)?capacity\b/i.test(raw)) {
+    return 'PROVIDER_HTTP_ERROR';
+  }
+  const b = raw.toLowerCase();
+  const realShortage = /not enough(?: available)? capacity/.test(b)
+    || /insufficient(?: available)? capacity/.test(b)
+    || /unable to allocate/.test(b)
+    || /no available capacity/.test(b)
+    || /out of capacity/.test(b)
+    || /capacity (?:is )?(?:unavailable|insufficient|exhausted|too low)/.test(b);
+  return realShortage ? 'CAPACITY_UNAVAILABLE' : 'PROVIDER_HTTP_ERROR';
+}
+
 /** CoverAsset enum — verified from @nexusmutual/sdk v3 (index.d.ts). */
 export const COVER_ASSETS = Object.freeze({
   ETH: { id: 0, symbol: 'ETH', decimals: 18, contract: null },
@@ -210,17 +240,13 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       : `Nexus API unreachable (${res.error?.kind || 'network error'})`;
     const err = new Error(detail);
     err.httpStatus = res.status;
-    const b = body.toLowerCase();
-    if (res.error?.kind === 'status') {
-      if (/capacit|insufficient|not enough/.test(b)) err.code = 'CAPACITY_UNAVAILABLE';
-      else if (/period|duration/.test(b) && /invalid|must|range|minimum|maximum/.test(b)) err.code = 'DURATION_OUT_OF_RANGE';
+    err.code = classifyNexusHttpError({ kind: res.error?.kind, body, action });
+    if (err.code === 'PROVIDER_HTTP_ERROR') {
+      const b = body.toLowerCase();
+      if (/period|duration/.test(b) && /invalid|must|range|minimum|maximum/.test(b)) err.code = 'DURATION_OUT_OF_RANGE';
       else if (/asset/.test(b) && /invalid|unsupported|not supported/.test(b)) err.code = 'ASSET_UNSUPPORTED';
-      else err.code = 'PROVIDER_HTTP_ERROR';
-      err.providerStatus = 'DEGRADED';
-    } else {
-      err.code = 'PROVIDER_UNAVAILABLE';
-      err.providerStatus = 'UNAVAILABLE';
     }
+    err.providerStatus = err.code === 'PROVIDER_UNAVAILABLE' ? 'UNAVAILABLE' : 'DEGRADED';
     return err;
   }
 
