@@ -107,7 +107,10 @@ async function rpc(url, method, params) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    // bound every request: a black-holing public RPC must fail this attempt and
+    // move the probe on to the next candidate, not hang the run for hours
+    signal: AbortSignal.timeout(20_000)
   });
   const json = await res.json();
   if (json.error) throw new Error(`${method}: ${json.error.message}`);
