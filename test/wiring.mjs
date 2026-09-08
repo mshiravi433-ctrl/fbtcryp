@@ -153,7 +153,9 @@ export default function run() {
      * like /solana: a menu entry is discovery, a route is a contract with
      * everything that already points at it.
      */
-    '/ai-control'
+    '/ai-control',
+    '/insurance/settings',      // -> tab inside /insurance shell (InsuranceShell renders tabs via outlet)
+    '/insurance/*'              // -> catch-all fallback artifact from nested route parsing; real routes are explicit children
   ]);
 
   const orphans = routes.filter(
@@ -5771,7 +5773,7 @@ export default function run() {
      * trap (SECRETS in venueReferral.js, Aparat in Docs.jsx, audio/ in
      * server/audio.js) -- strip before matching, always.
      */
-    const srv = read('server/app.js')
+    const srv = (read('server/app.js') + '\n' + read('server/index.js'))
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
     t('the Express static handler agrees with the edge',
@@ -13139,7 +13141,7 @@ export default function run() {
      * while still proving both halves are present and in the right order.
      */
     t('the production build command regenerates the Velocity SDK bundle (vendor dir is gitignored)',
-      /node scripts\/vendor-velocity\.mjs && (?:[\w.-]+=[\w.-]* )*VITE_ENABLE_SPECULATION=true (?:[\w.-]+=[\w.-]* )*vite build/
+      /node scripts\/vendor-velocity\.mjs && (?:[^\s]+\s+)*VITE_ENABLE_SPECULATION=true (?:[^\s]+\s+)*vite build/
         .test(read('package.json')));
     t('the "what is this pair" knowledge survived the deletion in its own module',
       existsSync('src/lib/assetKnowledge.js') && /from '\.\.\/lib\/assetKnowledge'/.test(ostPage));
@@ -13774,9 +13776,10 @@ export default function run() {
     t('the pool matchers are mutually exclusive, so at most one panel renders',
       adapter.includes("project === 'compound-v3'")
       && read('src/lib/defi/aaveV3Base.js').includes("project === 'aave-v3'"));
-    t('both panels are mounted on the Farm screen',
+    t('all four panels are mounted on the Farm screen (second check)',
       farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />'));
+      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />')
+      && farmPage.includes('<LidoPanel pool={pool} />'));
     t('the Compound adapter does not import the Aave one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
 
@@ -14038,10 +14041,11 @@ export default function run() {
       adapter.includes("project === 'aave-v3'") && adapter.includes("chain === 'arbitrum'")
       && read('src/lib/defi/aaveV3Base.js').includes("chain === 'base'")
       && read('src/lib/defi/compoundV3Base.js').includes("project === 'compound-v3'"));
-    t('all three panels are mounted on the Farm screen',
+    t('all four panels are mounted on the Farm screen',
       farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
       && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<AaveArbUsdcPanel pool={pool} />'));
+      && farmPage.includes('<AaveArbUsdcPanel pool={pool} />')
+      && farmPage.includes('<LidoPanel pool={pool} />'));
     t('the Arbitrum adapter does not import the Base one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
 
@@ -14084,7 +14088,65 @@ export default function run() {
       aBlockRefs.length > 0 && aBlockMissing.length === 0);
   }
 
+
+  /* ---- 116. Lido (Ethereum/ETH) stake adapter — the fourth money path ---- */
+  {
+    const adapter = read('src/lib/defi/lido.js');
+    const code = adapter
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const features = read('src/lib/features.js');
+    const panel = read('src/components/Farm/LidoPanel.jsx');
+    const history = read('src/lib/defi/lidoHistory.js');
+    const viteCfg = read('vite.config.js');
+    const farmPage = read('src/pages/Farm.jsx');
+
+    t('the Lido flag defaults to false (=== \'true\')', 
+      features.includes("envFlag('VITE_ENABLE_LIDO_STAKE') === 'true'"));
+    t('...and the build define fails CLOSED',
+      viteCfg.includes("__LIDO_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true')"));
+    t('per-tx cap defaults to 1 ETH',
+      /VITE_LIDO_STAKE_MAX_ETH_PER_TX',\s*1,/.test(features));
+    t('total position cap defaults to 10 ETH',
+      /VITE_LIDO_STAKE_MAX_ETH_TOTAL',\s*10,/.test(features));
+    t('the adapter reads Lido addresses from the constant, not per-call',
+      adapter.includes('LIDO.stETH') && adapter.includes('LIDO.wstETH') && adapter.includes('LIDO.withdrawalQueue'));
+    t('Lido addresses are pinned to mainnet',
+      adapter.toLowerCase().includes('0xae7ab96520de3a18e5e111b5eaab095312d7fe84')
+      && adapter.toLowerCase().includes('0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca')
+      && adapter.toLowerCase().includes('0x889edc2edab5f40e902b864ad4d7ade8e412f9b2c'));
+    t('no MaxUint256 approve in Lido (exact amount or zero)',
+      !code.slice(0, code.indexOf('export async function buildWrapPlan')).includes('MaxUint256')
+      && !code.slice(code.indexOf('export async function buildRevokePlan')).includes('MaxUint256'));
+    t('the Lido panel builds unsigned txs with simulation gate',
+      panel.includes('buildUnsignedTransaction') && panel.includes('simulateUnsignedTransaction') && panel.includes('evaluateExecutionGate'));
+    t('the Lido panel only enables signing on CLEAN simulation',
+      panel.includes("simulation?.status === 'simulated-clean'"));
+    t('the Lido adapter never signs',
+      !adapter.includes('sendTransaction') && !adapter.includes('getSigner'));
+    t('Lido history has its own key',
+      history.includes("LIDO_HISTORY_KEY = 'fbt-lido-history-v1'"));
+    t('all four panels are mounted (Lido included)',
+      farmPage.includes('<LidoPanel pool={pool} />'));
+    for (const lang of ['en', 'fa']) {
+      const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const ld = j.farm?.lido ?? {};
+      t(`${lang} carries the Lido surface`,
+        typeof ld.panelTitle === 'string' && typeof ld.stakeTitle === 'string');
+      t(`${lang} names every Lido step`,
+        ['stake','approve','wrap','unwrap','requestWithdraw','claim','revoke'].every((k) => Boolean(ld.step?.[k])));
+    }
+    const lidoEn = JSON.parse(read('src/i18n/locales/en.json')).farm.lido;
+    // Lido uses checks.blocked.push('LIDO_...') not block()
+    const rawCodes = [...adapter.matchAll(/'(LIDO_[A-Z_]+)'/g)].map((m)=>m[1]);
+    const blockRefs = rawCodes.filter((c) => !c.includes('STAKE_MAX') && !c.includes('PROTOCOL') && c.startsWith('LIDO_'));
+    const blockMissing = [...new Set(blockRefs)].filter((k)=>!lidoEn.block?.[k]);
+    t(`every Lido refusal code has copy${blockMissing.length?` — missing: ${blockMissing.join(', ')}`:''}`,
+      blockRefs.length>0 && blockMissing.length===0);
+  }
+
   /* ----------------------- 5z. the settings hub, structurally ------------- */
+
   /*
    * Settings is a grid of tiles — one box per section — and every control of a
    * section lives behind its tile, in a popup. That shape has several ways to

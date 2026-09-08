@@ -205,6 +205,32 @@ export const FARM_PROTOCOL = Object.freeze({
   capabilities: Object.freeze(['getPools', 'getPool', 'getAPY', 'getAPR', 'getTVL'])
 });
 
+export const LIDO_PROTOCOL = Object.freeze({
+  id: 'lido',
+  name: 'Lido',
+  chainId: 1,
+  chainName: 'Ethereum',
+  contracts: Object.freeze({
+    stETH: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
+    wstETH: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca',
+    withdrawalQueue: '0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B2c'
+  }),
+  mode: 'EXECUTABLE',
+  capabilities: Object.freeze(['stake', 'wrap', 'unwrap', 'requestWithdraw', 'claim', 'getBalances', 'getWithdrawalRequests'])
+});
+
+export function isLidoPool(pool) {
+  if (!pool) return false;
+  const project = String(pool.project ?? '').toLowerCase();
+  const chain = String(pool.chain ?? '').toLowerCase();
+  const sym = String(pool.symbol ?? '').toUpperCase();
+  return project === 'lido' && chain === 'ethereum' && (sym.includes('STETH') || sym.includes('WSTETH') || sym === 'STETH' || sym === 'WSTETH');
+}
+
+export function isLidoChain(chainId) {
+  return Number(chainId) === LIDO_PROTOCOL.chainId;
+}
+
 /** A single source of truth for the Farm protocol status shown at the top. */
 export function farmProtocolSummary({ pools = [], at = null, source = null, error = null } = {}) {
   const ok = !error && (at != null || (Array.isArray(pools) && pools.length > 0));
