@@ -267,11 +267,18 @@ try {
       onBehalf.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
 
     const hashes = [];
+    const beforeSupplyPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
     for (const step of supplyPlan.steps) {
       const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n, nonce: nextNonce++ });
       const receipt = await tx.wait();
       hashes.push(receipt.hash);
       t(`${step.kind} landed on the fork`, receipt.status === 1, receipt.hash.slice(0, 18));
+      const proof = await adapter.verifyAaveReceipt({
+        provider, receipt, owner: ANVIL_ACCOUNT, action: step.kind,
+        amountWei: supplyPlan.checks.amountWei,
+        beforePositionWei: step.kind === 'supply' ? beforeSupplyPosition.aTokenBalance : null
+      });
+      t(`${step.kind} receipt contains the expected event and proof`, proof.ok === true, proof.event);
     }
 
     /* ── 5. the position reflects it ───────────────────────────────────────── */
@@ -304,11 +311,17 @@ try {
     const wTo = '0x' + withdrawPlan.steps[0].data.slice(10 + 128 + 24, 10 + 128 + 64);
     t('the recipient is the connected account', wTo.toLowerCase() === ANVIL_ACCOUNT.toLowerCase());
 
+    const beforeWithdrawPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
     const wTx = await signer.sendTransaction({
       to: withdrawPlan.steps[0].to, data: withdrawPlan.steps[0].data, value: 0n, nonce: nextNonce++
     });
     const wReceipt = await wTx.wait();
     t('the withdraw landed on the fork', wReceipt.status === 1, wReceipt.hash.slice(0, 18));
+    const withdrawProof = await adapter.verifyAaveReceipt({
+      provider, receipt: wReceipt, owner: ANVIL_ACCOUNT, action: 'withdraw',
+      amountWei: withdrawPlan.checks.amountWei, beforePositionWei: beforeWithdrawPosition.aTokenBalance
+    });
+    t('the withdraw receipt contains the expected event and position proof', withdrawProof.ok === true, withdrawProof.event);
 
     const afterWithdraw = await aToken.balanceOf(ANVIL_ACCOUNT);
     t('the aToken balance is back to zero', afterWithdraw === 0n, formatUnits(afterWithdraw, 6));

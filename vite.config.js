@@ -203,6 +203,13 @@ export default defineConfig({
       VITE_LIDO_STAKE_MAX_ETH_PER_TX: process.env.VITE_LIDO_STAKE_MAX_ETH_PER_TX ?? '',
       VITE_LIDO_STAKE_MAX_ETH_TOTAL: process.env.VITE_LIDO_STAKE_MAX_ETH_TOTAL ?? ''
     }),
+    /* Morpho is a separately scoped Base market, not an ERC-4626 vault. */
+    __MORPHO_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_MORPHO_BASE_SUPPLY === 'true'),
+    __MORPHO_BASE_BUILD_ENV__: JSON.stringify({
+      VITE_MORPHO_BASE_SUPPLY_ALLOWLIST: process.env.VITE_MORPHO_BASE_SUPPLY_ALLOWLIST ?? '',
+      VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
+      VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+    }),
     /*
      * Version string, read from package.json at build time.
      *

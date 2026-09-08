@@ -148,6 +148,8 @@ const arbBuildEnv =
   typeof __AAVE_ARB_BUILD_ENV__ !== 'undefined' ? __AAVE_ARB_BUILD_ENV__ : null;
 const lidoBuildEnv =
   typeof __LIDO_BUILD_ENV__ !== 'undefined' ? __LIDO_BUILD_ENV__ : null;
+const morphoBuildEnv =
+  typeof __MORPHO_BASE_BUILD_ENV__ !== 'undefined' ? __MORPHO_BASE_BUILD_ENV__ : null;
 const buildOrEnv = (key) => {
   if (buildEnv && buildEnv[key] != null && String(buildEnv[key]) !== '') return buildEnv[key];
   if (compoundBuildEnv && compoundBuildEnv[key] != null && String(compoundBuildEnv[key]) !== '') {
@@ -159,10 +161,13 @@ const buildOrEnv = (key) => {
   if (lidoBuildEnv && lidoBuildEnv[key] != null && String(lidoBuildEnv[key]) !== '') {
     return lidoBuildEnv[key];
   }
+  if (morphoBuildEnv && morphoBuildEnv[key] != null && String(morphoBuildEnv[key]) !== '') {
+    return morphoBuildEnv[key];
+  }
   // In an app build the defines exist, so an unset variable must resolve to
   // "unset" here rather than falling through to an import.meta.env that the
   // bundler has already folded away.
-  if (buildEnv || compoundBuildEnv || arbBuildEnv || lidoBuildEnv) return undefined;
+  if (buildEnv || compoundBuildEnv || arbBuildEnv || lidoBuildEnv || morphoBuildEnv) return undefined;
   return envFlag(key);
 };
 
@@ -199,13 +204,13 @@ export const AAVE_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
 );
 
 /**
- * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
- * flag is on for". Compared case-insensitively against the connected owner.
+ * Required small-group gate: lowercase 0x addresses. Empty means the money
+ * path stays closed. Compared case-insensitively against the connected owner.
  *
  *     VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xabc...,0xdef...
  */
 export const AAVE_BASE_SUPPLY_ALLOWLIST = Object.freeze(
-  String(envFlag('VITE_AAVE_BASE_SUPPLY_ALLOWLIST') ?? '')
+  String(buildOrEnv('VITE_AAVE_BASE_SUPPLY_ALLOWLIST') ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
@@ -219,7 +224,8 @@ export const AAVE_BASE_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function aaveBaseSupplyAllowedFor(owner) {
   if (!AAVE_BASE_SUPPLY_ENABLED) return false;
-  if (AAVE_BASE_SUPPLY_ALLOWLIST.length === 0) return true;
+  // An enabled money path without an explicit wallet list is still closed.
+  if (AAVE_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
   const who = String(owner ?? '').trim().toLowerCase();
   return AAVE_BASE_SUPPLY_ALLOWLIST.includes(who);
 }
@@ -284,13 +290,13 @@ export const AAVE_ARB_SUPPLY_MAX_USDC_TOTAL = envCap(
 );
 
 /**
- * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
- * flag is on for". Compared case-insensitively against the connected owner.
+ * Required small-group gate: lowercase 0x addresses. Empty means the money
+ * path stays closed. Compared case-insensitively against the connected owner.
  *
  *     VITE_AAVE_ARB_SUPPLY_ALLOWLIST=0xabc...,0xdef...
  */
 export const AAVE_ARB_SUPPLY_ALLOWLIST = Object.freeze(
-  String(envFlag('VITE_AAVE_ARB_SUPPLY_ALLOWLIST') ?? '')
+  String(buildOrEnv('VITE_AAVE_ARB_SUPPLY_ALLOWLIST') ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
@@ -304,7 +310,8 @@ export const AAVE_ARB_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function aaveArbSupplyAllowedFor(owner) {
   if (!AAVE_ARB_SUPPLY_ENABLED) return false;
-  if (AAVE_ARB_SUPPLY_ALLOWLIST.length === 0) return true;
+  // An enabled money path without an explicit wallet list is still closed.
+  if (AAVE_ARB_SUPPLY_ALLOWLIST.length === 0) return false;
   const who = String(owner ?? '').trim().toLowerCase();
   return AAVE_ARB_SUPPLY_ALLOWLIST.includes(who);
 }
@@ -370,13 +377,13 @@ export const COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
 );
 
 /**
- * Optional small-group gate: lowercase 0x addresses. Empty means "anyone the
- * flag is on for". Compared case-insensitively against the connected owner.
+ * Required small-group gate: lowercase 0x addresses. Empty means the money
+ * path stays closed. Compared case-insensitively against the connected owner.
  *
  *     VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xabc...,0xdef...
  */
 export const COMPOUND_BASE_SUPPLY_ALLOWLIST = Object.freeze(
-  String(envFlag('VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST') ?? '')
+  String(buildOrEnv('VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST') ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
@@ -390,7 +397,8 @@ export const COMPOUND_BASE_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function compoundBaseSupplyAllowedFor(owner) {
   if (!COMPOUND_BASE_SUPPLY_ENABLED) return false;
-  if (COMPOUND_BASE_SUPPLY_ALLOWLIST.length === 0) return true;
+  // An enabled money path without an explicit wallet list is still closed.
+  if (COMPOUND_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
   const who = String(owner ?? '').trim().toLowerCase();
   return COMPOUND_BASE_SUPPLY_ALLOWLIST.includes(who);
 }
@@ -405,6 +413,40 @@ export function compoundBaseSupplyAllowedFor(owner) {
 export function compoundBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
   if (!owner) return false;
   return Boolean(hasPosition);
+}
+
+/* -------------------------------------------------------------------------- */
+/* MORPHO BLUE · BASE · ONE USDC/cbBTC MARKET — OFF BY DEFAULT                 */
+/* -------------------------------------------------------------------------- */
+/*
+ * Morpho Blue is not a vault and this flag is not a discovery switch. The
+ * adapter pins one marketId and verifies its immutable loan/collateral/oracle/
+ * IRM/LLTV tuple on-chain. Keep the execution path dark until its strict fork
+ * probe and the documented market mapping have been reviewed.
+ */
+export const MORPHO_BASE_SUPPLY_ENABLED =
+  typeof __MORPHO_BASE_SUPPLY_ENABLED__ !== 'undefined'
+    ? __MORPHO_BASE_SUPPLY_ENABLED__
+    : envFlag('VITE_ENABLE_MORPHO_BASE_SUPPLY') === 'true';
+
+export const MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
+  'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
+);
+export const MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
+  'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
+);
+export const MORPHO_BASE_SUPPLY_ALLOWLIST = Object.freeze(
+  String(buildOrEnv('VITE_MORPHO_BASE_SUPPLY_ALLOWLIST') ?? '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter((s) => /^0x[a-f0-9]{40}$/.test(s))
+);
+export function morphoBaseSupplyAllowedFor(owner) {
+  if (!MORPHO_BASE_SUPPLY_ENABLED) return false;
+  // Public capital must never open accidentally when the list is empty.
+  if (MORPHO_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
+  return MORPHO_BASE_SUPPLY_ALLOWLIST.includes(String(owner ?? '').trim().toLowerCase());
+}
+export function morphoBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
+  return Boolean(owner && hasPosition);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -461,13 +503,13 @@ export const LIDO_STAKE_MAX_ETH_TOTAL = envCap(
 );
 
 /**
- * Optional allowlist: lowercase 0x addresses. Empty means "anyone the flag is
- * on for".
+ * Required allowlist: lowercase 0x addresses. Empty means the money path stays
+ * closed.
  *
  *     VITE_LIDO_STAKE_ALLOWLIST=0xabc...,0xdef...
  */
 export const LIDO_STAKE_ALLOWLIST = Object.freeze(
-  String(envFlag('VITE_LIDO_STAKE_ALLOWLIST') ?? '')
+  String(buildOrEnv('VITE_LIDO_STAKE_ALLOWLIST') ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s) => /^0x[a-f0-9]{40}$/.test(s))
@@ -475,7 +517,8 @@ export const LIDO_STAKE_ALLOWLIST = Object.freeze(
 
 export function lidoStakeAllowedFor(owner) {
   if (!LIDO_STAKE_ENABLED) return false;
-  if (LIDO_STAKE_ALLOWLIST.length === 0) return true;
+  // An enabled money path without an explicit wallet list is still closed.
+  if (LIDO_STAKE_ALLOWLIST.length === 0) return false;
   const who = String(owner ?? '').trim().toLowerCase();
   return LIDO_STAKE_ALLOWLIST.includes(who);
 }

@@ -76,6 +76,9 @@ import { AAVE_V3_POOLS } from '../lending';
 import { NATIVE_GAS_FLOOR } from '../swap';
 import { decodeRevertReason } from '../preSignSimulation';
 import {
+  assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
+} from './executionGuards';
+import {
   AAVE_ARB_SUPPLY_MAX_USDC_PER_TX,
   AAVE_ARB_SUPPLY_MAX_USDC_TOTAL
 } from '../features';
@@ -159,6 +162,11 @@ const ATOKEN_ABI = [
 ];
 
 const ORACLE_ABI = ['function getAssetPrice(address asset) view returns (uint256)'];
+const AAVE_EVENT_ABI = [
+  'event Supply(address indexed reserve, address indexed user, address indexed onBehalfOf, uint256 amount, uint16 referralCode)',
+  'event Withdraw(address indexed reserve, address indexed user, address indexed to, uint256 amount)',
+  'event Approval(address indexed owner, address indexed spender, uint256 value)'
+];
 
 /* -------------------------------------------------------------------------- */
 /* getReserveData decoding                                                     */
@@ -402,6 +410,17 @@ const verifiedByProvider = new WeakMap();
  */
 export async function verifyDeployment(provider, { force = false } = {}) {
   if (!provider) throw new AaveAdapterError('AAVE_NO_PROVIDER');
+  try {
+    await assertProviderChain(provider, AAVE_V3_ARBITRUM.chainId);
+  } catch (err) {
+    if (err?.code === 'EXECUTION_WRONG_CHAIN') {
+      throw new AaveAdapterError('AAVE_WRONG_CHAIN', err.detail);
+    }
+    if (err instanceof ExecutionGuardError) {
+      throw new AaveAdapterError('AAVE_NETWORK_UNREADABLE', err.detail);
+    }
+    throw err;
+  }
   if (!force && verifiedByProvider.has(provider)) return verifiedByProvider.get(provider);
 
   const promise = (async () => {
@@ -899,6 +918,49 @@ export async function buildRevokePlan({ provider, owner }) {
     }],
     checks: { schema: 'fbt.aave-arbitrum.revoke-checks.v1', blocked: [] }
   };
+}
+
+/** Verify the mined receipt and the expected on-chain position transition. */
+export async function verifyAaveReceipt({
+  provider, receipt, owner, action, amountWei, beforePositionWei = null
+} = {}) {
+  assertSuccessfulReceipt(receipt);
+  if (!isAddr(owner)) throw new AaveAdapterError('AAVE_BAD_OWNER', { owner });
+  const { Interface } = await loadEthers();
+  const iface = new Interface(AAVE_EVENT_ABI);
+  const amount = amountWei == null ? null : BigInt(String(amountWei));
+  const events = action === 'approve' || action === 'revoke'
+    ? parseReceiptLogs(receipt, iface, AAVE_V3_ARBITRUM.usdc, 'Approval')
+    : parseReceiptLogs(receipt, iface, AAVE_V3_ARBITRUM.pool, action === 'supply' ? 'Supply' : 'Withdraw');
+  if (events.length === 0) {
+    throw new AaveAdapterError('AAVE_EXPECTED_EVENT_MISSING', { action, hash: receipt.hash ?? null });
+  }
+  const args = events[0].parsed.args;
+  if (action === 'approve' || action === 'revoke') {
+    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.spender), AAVE_V3_ARBITRUM.pool)) {
+      throw new AaveAdapterError('AAVE_APPROVAL_EVENT_MISMATCH', { action });
+    }
+    if (action === 'approve' && amount != null && BigInt(String(args.value)) !== amount) {
+      throw new AaveAdapterError('AAVE_APPROVAL_AMOUNT_MISMATCH', { expected: amount, found: args.value });
+    }
+    if (action === 'revoke' && BigInt(String(args.value)) !== 0n) {
+      throw new AaveAdapterError('AAVE_REVOKE_AMOUNT_MISMATCH');
+    }
+    return Object.freeze({ ok: true, action, event: 'Approval', position: null });
+  }
+  const eventAmount = BigInt(String(args.amount));
+  const eventOwner = action === 'supply' ? args.onBehalfOf : args.to;
+  if (!sameAddress(String(eventOwner), owner) ||
+      (amount !== ((1n << 256n) - 1n) && amount != null && eventAmount !== amount)) {
+    throw new AaveAdapterError('AAVE_PROTOCOL_EVENT_MISMATCH', { action, eventAmount, expected: amount });
+  }
+  const after = await getPosition(provider, owner);
+  const before = beforePositionWei == null ? null : BigInt(String(beforePositionWei));
+  if (before != null) {
+    const changed = action === 'supply' ? after.aTokenBalance >= before + eventAmount : after.aTokenBalance < before;
+    if (!changed) throw new AaveAdapterError('AAVE_POSITION_UNCHANGED', { action, before, after: after.aTokenBalance });
+  }
+  return Object.freeze({ ok: true, action, event: action === 'supply' ? 'Supply' : 'Withdraw', position: after });
 }
 
 /* -------------------------------------------------------------------------- */

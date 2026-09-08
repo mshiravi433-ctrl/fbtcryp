@@ -17,6 +17,7 @@ export {
   fromUsdcWei,
   getPosition,
   getReserveStatus,
+  verifyAaveReceipt,
   verifyDeployment,
   explainRevert
 } from '../src/lib/defi/aaveV3Base.js';

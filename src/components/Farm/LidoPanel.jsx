@@ -27,12 +27,15 @@ import {
   buildClaimPlan,
   buildRevokePlan,
   explainRevert,
-  verifyDeployment
+  verifyDeployment,
+  verifyLidoReceipt
 } from '../../lib/defi/lido';
 import {
   cancelLidoAction,
   confirmLidoAction,
   failLidoAction,
+  replaceLidoAction,
+  timeoutLidoAction,
   loadLidoHistoryFor,
   recordLidoAction
 } from '../../lib/defi/lidoHistory';
@@ -41,6 +44,9 @@ import {
   simulateUnsignedTransaction
 } from '../../lib/preSignSimulation';
 import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
+import {
+  executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
+} from '../../lib/defi/guardedExecution';
 
 const fmt = (n, d = 4) => {
   if (n == null || !Number.isFinite(Number(n))) return '—';
@@ -235,39 +241,78 @@ export default function LidoPanel({ pool }) {
     if (!signer || !plan?.steps?.length) return;
     setBusy('signing');
     setError(null);
-    for (let i = 0; i < plan.steps.length; i += 1) {
-      const step = plan.steps[i];
-      const symbol = step.kind === 'stake' ? 'ETH' : step.kind === 'wrap' || step.kind === 'requestWithdraw' ? 'stETH' : step.kind === 'unwrap' ? 'wstETH' : '';
-      const record = recordLidoAction({
-        action: step.kind,
-        owner,
-        chainId: LIDO.chainId,
-        amountWei: plan.checks.amountWei == null ? null : String(plan.checks.amountWei),
-        amount: plan.checks.amountEth ?? plan.checks.amountStETH ?? plan.checks.amountWstETH ?? null,
-        symbol,
-        status: 'pending',
-        requestId: plan.checks.requestId != null ? String(plan.checks.requestId) : null
-      });
-      try {
-        const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: step.value ?? 0n });
-        const receipt = await tx.wait();
-        const confirmed = confirmLidoAction(record.id, {
-          txHash: receipt?.hash ?? tx.hash,
-          blockNumber: receipt?.blockNumber ?? null,
-          requestId: receipt?.logs ? undefined : undefined
+    let provider;
+    try {
+      provider = await wallet.getReadProvider(LIDO.chainId);
+      for (let i = 0; i < plan.steps.length; i += 1) {
+        const step = plan.steps[i];
+        const symbol = step.kind === 'stake' ? 'ETH' : step.kind === 'wrap' || step.kind === 'requestWithdraw' ? 'stETH' : step.kind === 'unwrap' ? 'wstETH' : '';
+        const record = recordLidoAction({
+          action: step.kind,
+          owner,
+          chainId: LIDO.chainId,
+          amountWei: plan.checks.amountWei == null ? null : String(plan.checks.amountWei),
+          amount: plan.checks.amountEth ?? plan.checks.amountStETH ?? plan.checks.amountWstETH ?? null,
+          symbol,
+          status: 'pending',
+          requestId: plan.checks.requestId != null ? String(plan.checks.requestId) : null
         });
-        // For requestWithdrawals, try to parse requestId from logs? Best effort: leave null and refresh will show new tickets.
-        setLastTx({ hash: receipt?.hash ?? tx.hash, kind: step.kind });
-      } catch (err) {
-        const explained = explainRevert(err);
-        const rejected = /reject|denied|user/i.test(String(err?.message ?? err?.shortMessage ?? ''));
-        if (rejected) cancelLidoAction(record.id, 'USER_REJECTED');
-        else failLidoAction(record.id, { error: explained.reason ?? err?.message ?? 'FAILED', revertKey: explained.key });
-        setError(explained.key ? t(explained.key) : (explained.reason ?? t('farm.lido.failed')));
-        setBusy('');
-        await refresh();
-        return;
+        try {
+          await simulateGuardedStep({
+            provider,
+            owner,
+            step,
+            allowance: step.kind === 'wrap' || step.kind === 'requestWithdraw'
+              ? { token: LIDO.stETH, owner, spender: step.kind === 'wrap' ? LIDO.wstETH : LIDO.withdrawalQueue, amountWei: plan.checks.amountWei ?? 0n }
+              : undefined
+          });
+          const before = step.kind === 'stake' || step.kind === 'wrap' || step.kind === 'unwrap'
+            ? await getPosition(provider, owner)
+            : null;
+          const result = await executeGuardedStep({
+            signer, provider, owner, chainId: LIDO.chainId, step,
+            verifyReceipt: ({ receipt }) => verifyLidoReceipt({
+              provider, receipt, owner, action: step.kind,
+              amountWei: plan.checks.amountWei,
+              expectedSpender: step.spender,
+              beforePosition: before,
+              requestId: plan.checks.requestId
+            })
+          });
+          const requestId = result.proof?.requestId ?? plan.checks.requestId ?? null;
+          confirmLidoAction(record.id, {
+            txHash: result.receipt?.hash ?? result.tx.hash,
+            blockNumber: result.receipt?.blockNumber ?? null,
+            requestId
+          });
+          setLastTx({ hash: result.receipt?.hash ?? result.tx.hash, kind: step.kind });
+        } catch (err) {
+          const explained = explainRevert(err);
+          if (isUserRejection(err)) cancelLidoAction(record.id, 'USER_REJECTED');
+          else if (isTransactionTimeout(err)) timeoutLidoAction(record.id);
+          else if (isTransactionReplacement(err)) replaceLidoAction(record.id, {
+            error: err?.code ?? 'TRANSACTION_REPLACED',
+            txHash: err?.replacement?.hash ?? err?.receipt?.hash ?? null
+          });
+          else failLidoAction(record.id, {
+            error: err?.code ?? explained.reason ?? err?.message ?? 'FAILED',
+            revertKey: explained.key
+          });
+          const label = isUserRejection(err)
+            ? t('farm.lido.userRejected', { defaultValue: 'Signature rejected' })
+            : isTransactionTimeout(err)
+              ? t('farm.lido.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
+              : isTransactionReplacement(err)
+                ? t('farm.lido.replaced', { defaultValue: 'Transaction was replaced or cancelled.' })
+                : (explained.key ? t(explained.key) : (explained.reason ?? err?.code ?? t('farm.lido.failed')));
+          setError(label);
+          setBusy('');
+          await refresh();
+          return;
+        }
       }
+    } catch (err) {
+      setError(err?.code ?? t('farm.lido.failed'));
     }
     setBusy('');
     setOpen(false);
@@ -284,14 +329,26 @@ export default function LidoPanel({ pool }) {
     try {
       const provider = await wallet.getReadProvider(LIDO.chainId);
       const { steps } = await buildRevokePlan({ provider, owner, spender: spenderKind });
-      const tx = await signer.sendTransaction({ to: steps[0].to, data: steps[0].data, value: 0n });
-      const receipt = await tx.wait();
+      await simulateGuardedStep({ provider, owner, step: steps[0] });
+      const result = await executeGuardedStep({
+        signer, provider, owner, chainId: LIDO.chainId, step: steps[0],
+        verifyReceipt: ({ receipt }) => verifyLidoReceipt({
+          provider, receipt, owner, action: 'revoke', amountWei: 0n,
+          expectedSpender: steps[0].spender
+        })
+      });
       recordLidoAction({
         action: 'revoke', owner, chainId: LIDO.chainId, amountWei: '0',
-        txHash: receipt?.hash ?? tx.hash, blockNumber: receipt?.blockNumber ?? null, status: 'confirmed'
+        txHash: result.receipt?.hash ?? result.tx.hash,
+        blockNumber: result.receipt?.blockNumber ?? null, status: 'confirmed'
       });
     } catch (err) {
-      setError(explainRevert(err).reason ?? t('farm.lido.failed'));
+      const explained = explainRevert(err);
+      setError(isUserRejection(err)
+        ? t('farm.lido.userRejected', { defaultValue: 'Signature rejected' })
+        : isTransactionTimeout(err)
+          ? t('farm.lido.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
+          : (explained.reason ?? err?.code ?? t('farm.lido.failed')));
     } finally {
       setBusy('');
       await refresh();

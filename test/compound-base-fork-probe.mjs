@@ -293,10 +293,17 @@ try {
     t('...and it is addressed to the pinned Comet market',
       supplyPlan.steps[1].to.toLowerCase() === COMPOUND_V3_BASE.comet.toLowerCase());
 
+    const beforeSupplyPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
     for (const step of supplyPlan.steps) {
       const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n, nonce: nextNonce++ });
       const receipt = await tx.wait();
       t(`${step.kind} landed on the fork`, receipt.status === 1, receipt.hash.slice(0, 18));
+      const proof = await adapter.verifyCompoundReceipt({
+        provider, receipt, owner: ANVIL_ACCOUNT, action: step.kind === 'approve' ? 'approve' : 'supply',
+        amountWei: supplyPlan.checks.amountWei,
+        beforePositionWei: step.kind === 'supply' ? beforeSupplyPosition.suppliedUsdc : null
+      });
+      t(`${step.kind} receipt contains the expected event and proof`, proof.ok === true, proof.event);
     }
 
     /* ── 5. the position reflects it ───────────────────────────────────────── */
@@ -392,11 +399,17 @@ try {
     t('withdraw is the two-argument form — no recipient word in the calldata',
       withdrawPlan.steps[0].data.length === 10 + 128);
 
+    const beforeWithdrawPosition = await adapter.getPosition(provider, ANVIL_ACCOUNT);
     const wTx = await signer.sendTransaction({
       to: withdrawPlan.steps[0].to, data: withdrawPlan.steps[0].data, value: 0n, nonce: nextNonce++
     });
     const wReceipt = await wTx.wait();
     t('the withdraw landed on the fork', wReceipt.status === 1, wReceipt.hash.slice(0, 18));
+    const withdrawProof = await adapter.verifyCompoundReceipt({
+      provider, receipt: wReceipt, owner: ANVIL_ACCOUNT, action: 'withdraw',
+      amountWei: withdrawPlan.checks.amountWei, beforePositionWei: beforeWithdrawPosition.suppliedUsdc
+    });
+    t('the withdraw receipt contains the expected event and position proof', withdrawProof.ok === true, withdrawProof.event);
 
     const afterWithdraw = await comet.balanceOf(ANVIL_ACCOUNT);
     t('the Comet base balance is back to zero', afterWithdraw === 0n, formatUnits(afterWithdraw, 6));

@@ -11,16 +11,20 @@ import {
 } from '../../lib/features';
 import {
   AAVE_V3_BASE, buildRevokePlan, buildSupplyPlan, buildWithdrawPlan,
-  explainRevert, fromUsdcWei, getPosition, getReserveStatus, isAaveBaseUsdcPool
+  explainRevert, fromUsdcWei, getPosition, getReserveStatus, isAaveBaseUsdcPool,
+  verifyAaveReceipt
 } from '../../lib/defi/aaveV3Base';
 import {
   cancelAaveAction, confirmAaveAction, derivePartialApprovalState, failAaveAction,
-  loadAaveHistoryFor, recordAaveAction
+  replaceAaveAction, timeoutAaveAction, loadAaveHistoryFor, recordAaveAction
 } from '../../lib/defi/aaveV3History';
 import {
   buildUnsignedTransaction, simulateUnsignedTransaction
 } from '../../lib/preSignSimulation';
 import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
+import {
+  executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
+} from '../../lib/defi/guardedExecution';
 
 /*
  * AAVE V3 · BASE · USDC — the in-app supply / withdraw surface.
@@ -224,37 +228,77 @@ export default function AaveBaseUsdcPanel({ pool }) {
     && !isBlocked(gate)
     && !busy;
 
-  /* ── execute: sign step by step, recording each one locally ─────────────── */
+  /* ── execute: re-check context, sign, mine, prove event + position ──────── */
   const execute = useCallback(async () => {
     const signer = wallet.getSigner?.();
     if (!signer || !plan?.steps?.length) return;
     setBusy('signing');
     setError(null);
-    for (let i = 0; i < plan.steps.length; i += 1) {
-      const step = plan.steps[i];
-      const record = recordAaveAction({
-        action: step.kind,
-        owner,
-        chainId: AAVE_V3_BASE.chainId,
-        amountUsdcWei: plan.checks.amountWei == null ? null : String(plan.checks.amountWei),
-        amountUsdc: plan.checks.amountUsdc ?? null,
-        status: 'pending'
-      });
-      try {
-        const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n });
-        const receipt = await tx.wait();
-        confirmAaveAction(record.id, { txHash: receipt?.hash ?? tx.hash, blockNumber: receipt?.blockNumber ?? null });
-        setLastTx({ hash: receipt?.hash ?? tx.hash, kind: step.kind });
-      } catch (err) {
-        const explained = explainRevert(err);
-        const rejected = /reject|denied|user/i.test(String(err?.message ?? err?.shortMessage ?? ''));
-        if (rejected) cancelAaveAction(record.id, 'USER_REJECTED');
-        else failAaveAction(record.id, { error: explained.reason ?? err?.message ?? 'FAILED', revertKey: explained.key });
-        setError(explained.key ? t(explained.key) : (explained.reason ?? t('farm.aave.failed')));
-        setBusy('');
-        await refresh();
-        return;
+    let provider;
+    try {
+      provider = await wallet.getReadProvider(AAVE_V3_BASE.chainId);
+      for (let i = 0; i < plan.steps.length; i += 1) {
+        const step = plan.steps[i];
+        const record = recordAaveAction({
+          action: step.kind,
+          owner,
+          chainId: AAVE_V3_BASE.chainId,
+          amountUsdcWei: plan.checks.amountWei == null ? null : String(plan.checks.amountWei),
+          amountUsdc: plan.checks.amountUsdc ?? null,
+          status: 'pending'
+        });
+        try {
+          await simulateGuardedStep({
+            provider,
+            owner,
+            step,
+            allowance: step.kind === 'supply'
+              ? { token: AAVE_V3_BASE.usdc, owner, spender: AAVE_V3_BASE.pool, amountWei: plan.checks.amountWei ?? 0n }
+              : undefined
+          });
+          const before = step.kind === 'supply' || step.kind === 'withdraw'
+            ? await getPosition(provider, owner)
+            : null;
+          const result = await executeGuardedStep({
+            signer, provider, owner, chainId: AAVE_V3_BASE.chainId, step,
+            verifyReceipt: ({ receipt }) => verifyAaveReceipt({
+              provider, receipt, owner, action: step.kind,
+              amountWei: plan.checks.amountWei,
+              beforePositionWei: before?.aTokenBalance ?? null
+            })
+          });
+          confirmAaveAction(record.id, {
+            txHash: result.receipt?.hash ?? result.tx.hash,
+            blockNumber: result.receipt?.blockNumber ?? null
+          });
+          setLastTx({ hash: result.receipt?.hash ?? result.tx.hash, kind: step.kind });
+        } catch (err) {
+          const explained = explainRevert(err);
+          if (isUserRejection(err)) cancelAaveAction(record.id, 'USER_REJECTED');
+          else if (isTransactionTimeout(err)) timeoutAaveAction(record.id);
+          else if (isTransactionReplacement(err)) replaceAaveAction(record.id, {
+            error: err?.code ?? 'TRANSACTION_REPLACED',
+            txHash: err?.replacement?.hash ?? err?.receipt?.hash ?? null
+          });
+          else failAaveAction(record.id, {
+            error: err?.code ?? explained.reason ?? err?.message ?? 'FAILED',
+            revertKey: explained.key
+          });
+          const label = isUserRejection(err)
+            ? t('farm.aave.userRejected', { defaultValue: 'Signature rejected' })
+            : isTransactionTimeout(err)
+              ? t('farm.aave.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
+              : isTransactionReplacement(err)
+                ? t('farm.aave.replaced', { defaultValue: 'Transaction was replaced or cancelled.' })
+                : (explained.key ? t(explained.key) : (explained.reason ?? err?.code ?? t('farm.aave.failed')));
+          setError(label);
+          setBusy('');
+          await refresh();
+          return;
+        }
       }
+    } catch (err) {
+      setError(err?.code ?? t('farm.aave.failed'));
     }
     setBusy('');
     setOpen(false);
@@ -270,15 +314,26 @@ export default function AaveBaseUsdcPanel({ pool }) {
     try {
       const provider = await wallet.getReadProvider(AAVE_V3_BASE.chainId);
       const { steps } = await buildRevokePlan({ provider, owner });
-      const tx = await signer.sendTransaction({ to: steps[0].to, data: steps[0].data, value: 0n });
-      const receipt = await tx.wait();
+      await simulateGuardedStep({ provider, owner, step: steps[0] });
+      const result = await executeGuardedStep({
+        signer, provider, owner, chainId: AAVE_V3_BASE.chainId, step: steps[0],
+        verifyReceipt: ({ receipt }) => verifyAaveReceipt({
+          provider, receipt, owner, action: 'revoke', amountWei: 0n
+        })
+      });
       recordAaveAction({
         action: 'revoke', owner, chainId: AAVE_V3_BASE.chainId, amountUsdcWei: '0',
-        txHash: receipt?.hash ?? tx.hash, blockNumber: receipt?.blockNumber ?? null, status: 'confirmed'
+        txHash: result.receipt?.hash ?? result.tx.hash,
+        blockNumber: result.receipt?.blockNumber ?? null, status: 'confirmed'
       });
       setPartial({ needed: false, allowanceUsdcWei: 0n, source: null, lastApprove: null });
     } catch (err) {
-      setError(explainRevert(err).reason ?? t('farm.aave.failed'));
+      const explained = explainRevert(err);
+      setError(isUserRejection(err)
+        ? t('farm.aave.userRejected', { defaultValue: 'Signature rejected' })
+        : isTransactionTimeout(err)
+          ? t('farm.aave.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
+          : (explained.reason ?? err?.code ?? t('farm.aave.failed')));
     } finally {
       setBusy('');
       await refresh();

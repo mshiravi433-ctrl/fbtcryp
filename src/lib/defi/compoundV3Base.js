@@ -91,6 +91,9 @@ import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains';
 import { NATIVE_GAS_FLOOR } from '../swap';
 import { decodeRevertReason } from '../preSignSimulation';
 import {
+  assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
+} from './executionGuards';
+import {
   COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX,
   COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL
 } from '../features';
@@ -188,6 +191,12 @@ const CONFIGURATOR_ABI = [
 const REWARDS_ABI = [
   'function getRewardOwed(address comet, address account) returns (tuple(address token, uint256 owed))',
   'function rewardConfig(address comet) view returns (address token, uint64 rescaleFactor, bool shouldUpscale)'
+];
+
+const COMET_EVENT_ABI = [
+  'event Supply(address indexed from, address indexed dst, address indexed asset, uint256 amount)',
+  'event Withdraw(address indexed src, address indexed to, address indexed asset, uint256 amount)',
+  'event Approval(address indexed owner, address indexed spender, uint256 value)'
 ];
 
 /**
@@ -316,6 +325,17 @@ const verifiedByProvider = new WeakMap();
  */
 export async function verifyDeployment(provider, { force = false } = {}) {
   if (!provider) throw new CompoundAdapterError('COMPOUND_NO_PROVIDER');
+  try {
+    await assertProviderChain(provider, COMPOUND_V3_BASE.chainId);
+  } catch (err) {
+    if (err?.code === 'EXECUTION_WRONG_CHAIN') {
+      throw new CompoundAdapterError('COMPOUND_WRONG_CHAIN', err.detail);
+    }
+    if (err instanceof ExecutionGuardError) {
+      throw new CompoundAdapterError('COMPOUND_NETWORK_UNREADABLE', err.detail);
+    }
+    throw err;
+  }
   if (!force && verifiedByProvider.has(provider)) return verifiedByProvider.get(provider);
 
   const c = await contracts(provider);
@@ -874,6 +894,50 @@ export async function buildRevokePlan({ provider, owner }) {
     }],
     checks: { schema: 'fbt.compound-base.revoke-checks.v1', blocked: [] }
   };
+}
+
+/** Verify the mined Comet receipt and the expected balance transition. */
+export async function verifyCompoundReceipt({
+  provider, receipt, owner, action, amountWei, beforePositionWei = null
+} = {}) {
+  assertSuccessfulReceipt(receipt);
+  if (!isAddr(owner)) throw new CompoundAdapterError('COMPOUND_BAD_OWNER', { owner });
+  const { Interface } = await loadEthers();
+  const iface = new Interface(COMET_EVENT_ABI);
+  const amount = amountWei == null ? null : BigInt(String(amountWei));
+  const events = action === 'approve' || action === 'revoke'
+    ? parseReceiptLogs(receipt, iface, COMPOUND_V3_BASE.usdc, 'Approval')
+    : parseReceiptLogs(receipt, iface, COMPOUND_V3_BASE.comet, action === 'supply' ? 'Supply' : 'Withdraw');
+  if (events.length === 0) {
+    throw new CompoundAdapterError('COMPOUND_EXPECTED_EVENT_MISSING', { action, hash: receipt.hash ?? null });
+  }
+  const args = events[0].parsed.args;
+  if (action === 'approve' || action === 'revoke') {
+    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.spender), COMPOUND_V3_BASE.comet)) {
+      throw new CompoundAdapterError('COMPOUND_APPROVAL_EVENT_MISMATCH', { action });
+    }
+    if (action === 'approve' && amount != null && BigInt(String(args.value)) !== amount) {
+      throw new CompoundAdapterError('COMPOUND_APPROVAL_AMOUNT_MISMATCH', { expected: amount, found: args.value });
+    }
+    if (action === 'revoke' && BigInt(String(args.value)) !== 0n) {
+      throw new CompoundAdapterError('COMPOUND_REVOKE_AMOUNT_MISMATCH');
+    }
+    return Object.freeze({ ok: true, action, event: 'Approval', position: null });
+  }
+  const eventAmount = BigInt(String(args.amount));
+  const first = action === 'supply' ? args.from : args.src;
+  const second = action === 'supply' ? args.dst : args.to;
+  if (!sameAddress(String(first), owner) || !sameAddress(String(second), owner) ||
+      (amount !== ((1n << 256n) - 1n) && amount != null && eventAmount !== amount)) {
+    throw new CompoundAdapterError('COMPOUND_PROTOCOL_EVENT_MISMATCH', { action, eventAmount, expected: amount });
+  }
+  const after = await getPosition(provider, owner);
+  const before = beforePositionWei == null ? null : BigInt(String(beforePositionWei));
+  if (before != null) {
+    const changed = action === 'supply' ? after.suppliedUsdc >= before + eventAmount : after.suppliedUsdc < before;
+    if (!changed) throw new CompoundAdapterError('COMPOUND_POSITION_UNCHANGED', { action, before, after: after.suppliedUsdc });
+  }
+  return Object.freeze({ ok: true, action, event: action === 'supply' ? 'Supply' : 'Withdraw', position: after });
 }
 
 /* -------------------------------------------------------------------------- */
