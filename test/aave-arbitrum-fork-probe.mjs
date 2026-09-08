@@ -148,7 +148,8 @@ async function ensureNightlyAnvil() {
   try {
     console.log(`⬇  fetching ${asset} from ${ANVIL_NIGHTLY_TAG} — the anvil on PATH cannot execute Nitro (Arbitrum) fork calls …`);
     const res = await fetch(
-      `https://github.com/foundry-rs/foundry/releases/download/${ANVIL_NIGHTLY_TAG}/${asset}`
+      `https://github.com/foundry-rs/foundry/releases/download/${ANVIL_NIGHTLY_TAG}/${asset}`,
+      { signal: AbortSignal.timeout(180_000) }
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     mkdirSync(dir, { recursive: true });
