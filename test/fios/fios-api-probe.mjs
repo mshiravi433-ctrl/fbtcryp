@@ -197,6 +197,42 @@ const sim = await post('/api/ai/simulate', { goal: { targetUsd: 40000, months: 1
 t('POST /api/ai/simulate answers with a real scenario set (or an honest code)',
   sim.status === 200 && (sim.body.ok === true || typeof sim.body.code === 'string'), { status: sim.status, ok: sim.body?.ok, code: sim.body?.code });
 
+/* ══════════════════════ 4b. the data-surface routes ══════════════════════ */
+/* research is DATA, not chatbot: it reads the world model and either returns
+   sourced evidence or names what is missing. */
+const research = await post('/api/ai/research', { subject: 'BTC', kinds: ['market'] });
+t('POST /api/ai/research returns sourced evidence + sources for BTC', research.status === 200 && research.body.ok === true && research.body.research?.status !== 'UNAVAILABLE' && research.body.research?.evidence?.length > 0 && Array.isArray(research.body.research?.sources), research.body);
+const researchMissing = await post('/api/ai/research', { subject: 'NO_SUCH_TOKEN_XYZ', kinds: ['market'] });
+t('research for an asset with no data is UNAVAILABLE, never fabricated', researchMissing.status === 422 && researchMissing.body.code === 'RESEARCH_UNAVAILABLE', researchMissing.body);
+const researchList = await call('/api/ai/research?limit=5');
+t('GET /api/ai/research lists the persisted research rows', researchList.status === 200 && researchList.body.ok === true && Array.isArray(researchList.body.research) && researchList.body.research.length >= 1, researchList.body);
+const researchId = research.body.research?.id || researchList.body.research?.[0]?.id;
+const researchGet = researchId ? await call(`/api/ai/research/${researchId}`) : { status: 0 };
+t('GET /api/ai/research/:id returns the persisted row', researchGet.status === 200 && researchGet.body.research?.id === researchId, researchGet.body);
+
+/* strategy competition over the strategies the decision already generated. */
+const compare = await post('/api/ai/strategies/compare', {});
+t('POST /api/ai/strategies/compare runs the analyst/strategist/risk/judge over real strategies', compare.status === 200 && compare.body.ok === true && compare.body.comparison?.judge && 'winnerId' in compare.body.comparison.judge, { status: compare.status, code: compare.body?.code, detail: compare.body?.detail });
+t('the comparison returns scored rows and a disagreement flag (never hidden)', compare.body.ok === true && Array.isArray(compare.body.comparison?.scored) && typeof compare.body.comparison?.disagreement === 'boolean', compare.body.comparison);
+
+/* evidence — the audit surface behind every decision. */
+const evidenceList = await call('/api/ai/evidence?limit=40');
+t('GET /api/ai/evidence lists the evidence the decision recorded', evidenceList.status === 200 && evidenceList.body.ok === true && Array.isArray(evidenceList.body.evidence) && evidenceList.body.evidence.length >= 1, evidenceList.body);
+const evidenceId = evidenceList.body.evidence?.[0]?.id;
+const evidenceGet = evidenceId ? await call(`/api/ai/evidence/${evidenceId}`) : { status: 0 };
+t('GET /api/ai/evidence/:id returns a single evidence row', evidenceGet.status === 200 && evidenceGet.body.evidence?.id === evidenceId, evidenceGet.body);
+const evidenceMiss = await call('/api/ai/evidence/not-a-real-id');
+t('an unknown evidence id is a named 404', evidenceMiss.status === 404 && evidenceMiss.body.code === 'EVIDENCE_NOT_FOUND', evidenceMiss.body);
+
+/* outcome learning: only VERIFIED completions ever land here. */
+const outcomes = await call('/api/ai/learning/outcomes?limit=20');
+t('GET /api/ai/learning/outcomes answers with the outcome history', outcomes.status === 200 && outcomes.body.ok === true && Array.isArray(outcomes.body.outcomes), outcomes.body);
+
+/* the guardian event feed. */
+const gCheckEvents = await post('/api/ai/guardian/check', {});
+const gEventsFeed = await call('/api/ai/guardian/events?limit=20');
+t('GET /api/ai/guardian/events returns the durable alert feed', gCheckEvents.status === 200 && gEventsFeed.status === 200 && gEventsFeed.body.ok === true && Array.isArray(gEventsFeed.body.events), { gCheck: gCheckEvents.body, gEvents: gEventsFeed.body });
+
 /* ══════════════════════ 5. the policy engine: fail-closed over HTTP ══════════════════════ */
 const policyNo = await post('/api/ai/policies', { policy: { name: 'probe', maxPerExecutionUsd: 500, maxDailyUsd: 1000, maxCumulativeUsd: 5000, slippageLimitPct: 0.5, gasLimitUsd: 10, riskLimit: 'ELEVATED', trigger: { kinds: ['SWAP'] }, expiration: Date.now() + 30 * 86400000 } });
 t('with the autonomy flag OFF, creating a policy refuses (FEATURE_DISABLED)',

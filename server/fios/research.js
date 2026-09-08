@@ -90,20 +90,42 @@ export function createResearchEngine({ collections, evidence, observability = nu
     const evidenceInput = [];
     const missing = [];
 
+    /* The world model nests its domains under `domains.*` with provenance
+       envelopes; the digest keeps counts. The research engine wants the flat
+       VALUE shapes — so unwrap whichever world shape arrived, and never treat
+       an envelope wrapper as a price. */
+    const unwrap = (node) => {
+      if (node && typeof node === 'object' && node.schema === 'fbt.fi.provenance.v1' && 'value' in node) return node.value;
+      return node;
+    };
+    const rawMarket = (world?.market && typeof world.market === 'object') ? world.market : (world?.domains?.market || {});
+    const rawExternal = (world?.external && typeof world.external === 'object') ? world.external : (world?.domains?.external || {});
+    const market = {
+      prices: unwrap(rawMarket.prices),
+      volatilityPct: unwrap(rawMarket.volatilityPct),
+      apy: unwrap(rawMarket.apy),
+      smartMoney: unwrap(rawMarket.smartMoney),
+      gas: unwrap(rawMarket.gas)
+    };
+    const external = { news: unwrap(rawExternal.news) };
+
     /* ── market ────────────────────────────────────────────────────────── */
     if (wanted.includes('market') || wanted.includes('token')) {
-      const prices = world?.market?.prices || null;
-      const volatility = world?.market?.volatilityPct || null;
+      const prices = market.prices || null;
+      const volatility = market.volatilityPct || null;
       if (prices && typeof prices === 'object') {
         const price = prices[sym] ?? prices[String(subject || '').toLowerCase()] ?? null;
-        if (Number.isFinite(Number(price))) {
+        /* `Number(null)` is 0, so a bare Number.isFinite would silently turn
+           a MISSING price into $0 — a fabricated number. Only a real, finite
+           price may become evidence. */
+        if (price !== null && price !== undefined && Number.isFinite(Number(price))) {
           evidenceInput.push({ type: 'price', source: 'world-model:markets', value: Number(price), at, ttlMs: 30_000 });
           signals.push({ name: 'PRICE', direction: 'neutral', value: Number(price), source: 'world-model:markets', confidence: 0.9 });
         } else missing.push(`price:${sym}`);
       } else missing.push('market:prices');
       if (volatility && typeof volatility === 'object') {
         const vol = volatility[sym] ?? volatility.PORTFOLIO ?? null;
-        if (Number.isFinite(Number(vol))) {
+        if (vol !== null && vol !== undefined && Number.isFinite(Number(vol))) {
           evidenceInput.push({ type: 'volatility', source: 'world-model:markets', value: Number(vol), at, ttlMs: 30_000 });
           signals.push({ name: 'VOLATILITY', direction: Number(vol) > 60 ? 'risk-up' : 'neutral', value: Number(vol), source: 'world-model:markets', confidence: 0.85 });
           if (Number(vol) > 80) risks.push({ name: 'EXTREME_VOLATILITY', severity: 'HIGH', source: 'world-model:markets', detail: `annualised-style volatility reading ${vol}` });
@@ -114,7 +136,7 @@ export function createResearchEngine({ collections, evidence, observability = nu
 
     /* ── news ──────────────────────────────────────────────────────────── */
     if (wanted.includes('news') || wanted.includes('macro')) {
-      const news = world?.external?.news;
+      const news = external.news;
       if (Array.isArray(news) && news.length) {
         const relevant = sym ? news.filter((n) => String(n?.title || '').toUpperCase().includes(sym)).slice(0, 6) : news.slice(0, 6);
         evidenceInput.push({ type: 'news', source: 'news-feed', value: relevant.map((n) => ({ title: String(n.title || '').slice(0, 160), url: n.url || null, at: n.publishedAt || n.at || null })), at, ttlMs: 15 * 60_000, untrusted: true });
@@ -145,7 +167,7 @@ export function createResearchEngine({ collections, evidence, observability = nu
 
     /* ── yield ─────────────────────────────────────────────────────────── */
     if (wanted.includes('yield') || wanted.includes('defi')) {
-      const apy = world?.market?.apy;
+      const apy = market.apy;
       if (Array.isArray(apy) && apy.length) {
         const relevant = sym ? apy.filter((p) => String(p.pool || '').toUpperCase().includes(sym)).slice(0, 5) : apy.slice(0, 5);
         if (relevant.length) {
@@ -162,7 +184,7 @@ export function createResearchEngine({ collections, evidence, observability = nu
 
     /* ── smart money ───────────────────────────────────────────────────── */
     if (wanted.includes('smart_money')) {
-      const sm = world?.market?.smartMoney;
+      const sm = market.smartMoney;
       if (sm && typeof sm === 'object') {
         evidenceInput.push({ type: 'smart_money', source: 'smart-money', value: sm, at, ttlMs: 5 * 60_000 });
         signals.push({ name: 'SMART_MONEY_FLOW', direction: sm.netFlowUsd > 0 ? 'accumulation' : sm.netFlowUsd < 0 ? 'distribution' : 'neutral', value: sm.netFlowUsd ?? null, source: 'smart-money', confidence: 0.5 });

@@ -93,6 +93,13 @@ t('§5 an unread value is unavailable with a reason, never a number',
   gap.value === null && gap.status === 'unavailable' && gap.reason === 'PROVIDER_DOWN' && gap.confidence === 0);
 t('§5 a stale value loses confidence with age, down to zero',
   confidenceFor(FRESHNESS.STALE, { ageMs: 60_000 * 11, ttlMs: 60_000 }) === 0 && confidenceFor(FRESHNESS.STALE, { ageMs: 70_000, ttlMs: 60_000 }) < 0.55);
+t('§5 the four-level freshness ladder is LIVE → FRESH → STALE → UNAVAILABLE',
+  value(65000, { source: 'coingecko', at: now, ttlMs: 60_000 }).freshness === FRESHNESS.LIVE
+  && value(65000, { source: 'coingecko', at: now - 2 * 60_000, ttlMs: 60_000 }).freshness === FRESHNESS.FRESH
+  && value(65000, { source: 'coingecko', at: now - 4 * 60_000, ttlMs: 60_000 }).freshness === FRESHNESS.STALE
+  && confidenceFor(FRESHNESS.FRESH) === 0.8
+  && unavailable('X').freshness === FRESHNESS.UNAVAILABLE);
+t('§5 a FRESH section sits between LIVE and STALE on the ladder', fromSection({ key: 'prices', source: 'coingecko', status: 'OK', updatedAt: now - 2 * 60_000, ttlMs: 60_000, data: { BTC: 1 } }).freshness === FRESHNESS.FRESH);
 const derivedOk = derived(100, [priceEnv, value(2, { source: 'gas', at: now, ttlMs: 60_000 })]);
 t('§5 a derived value inherits the WORST provenance of its inputs', derivedOk.confidence <= priceEnv.confidence && derivedOk.inputs.length === 2);
 t('§5 a derived value from an unavailable input is itself unavailable', derived(100, [priceEnv, gap]).status === 'unavailable');
@@ -379,7 +386,7 @@ t('§16 a what-if simulates and executes nothing', whatIf.ok && whatIf.executedN
 /* ═════════════════════════════════════════════════════════════════════════ */
 const confidenceEngine = createConfidenceEngine();
 const conf = confidenceEngine.assess({ intent: { confidence: 0.8, intentType: 'GROW_CAPITAL' }, financial, world, research: researchOut.research, strategy: strategyOut.strategies.find((s) => s.id === 'hold'), competition: compOut.competition, risk: { level: 'ELEVATED', securitySignals: [] } });
-t('§18 confidence is decomposed into the six dimensions', CRITICAL_FOR_EXECUTION.every((d) => d in conf.dimensions) && Object.keys(conf.dimensions).length === 6);
+t('§18 confidence is decomposed into the seven dimensions', CRITICAL_FOR_EXECUTION.every((d) => d in conf.dimensions) && Object.keys(conf.dimensions).length === 7 && 'simulation' in conf.dimensions);
 t('§18 a dimension with nothing behind it is 0, not a baseline', confidenceEngine.assess({}).dimensions.data === 0 && confidenceEngine.assess({}).dimensions.research === 0);
 const execConf = confidenceEngine.assess({ intent: { confidence: 0.9 }, financial, world, strategy: strategyOut.strategies.find((s) => s.id === 'hold'), risk: { level: 'MODERATE' }, executionRequested: true });
 t('§18 an execution request is blocked while a critical input is 0', execConf.actionable === false && execConf.blockers.includes('execution'));

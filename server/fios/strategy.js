@@ -227,6 +227,7 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
 
     const strategies = out.strategies.map((s, i) => ({
       ...s,
+      ...canonicalStrategyFields(withCompat[i], { goal, fs }),
       kind: withCompat[i].kind,
       goalCompatibilityPct: withCompat[i].goalCompatibilityPct,
       userCompatibilityPct: withCompat[i].userCompatibilityPct,
@@ -277,4 +278,104 @@ export function scoreGoalFit(candidate = {}, { goal = null, fs = {} } = {}) {
   /* Contribution-driven goals are served by DCA even with no return. */
   if (candidate.kind === 'DCA_IN' && Number(goal.monthlyContributionUsd) > 0) return Math.min(95, 55 + Math.round(expected));
   return Math.max(5, Math.min(95, Math.round(50 + expected * 1.5 - Math.abs(gapPct) * 0.2)));
+}
+
+/**
+ * The canonical strategy contract (§6/§7/§26): entry rules, exit rules,
+ * rebalance rules, allocation, assets, time horizon, the modelled return band
+ * and the conditions that invalidate the strategy. Every value is DERIVED from
+ * the candidate and the state we actually read — never a forecast, never a
+ * promise, never a fabricated number. `expectedRange` is the band from the
+ * modelled downside to the modelled expected return; when neither is modelled
+ * it is null, not a guess.
+ */
+export function canonicalStrategyFields(candidate = {}, { goal = null, fs = {} } = {}) {
+  const expected = candidate.expectedReturnPct ?? null;
+  const downside = candidate.potentialLossPct ?? null;
+  const expectedRange = (Number.isFinite(expected) || Number.isFinite(downside))
+    ? {
+        lowPct: Number.isFinite(downside) ? downside : null,
+        highPct: Number.isFinite(expected) ? expected : null,
+        note: 'modelled band: worst modelled downside to modelled expected return'
+      }
+    : null;
+
+  const exposure = fs.assetExposureUsd && typeof fs.assetExposureUsd === 'object' ? fs.assetExposureUsd : {};
+  const exposureEntries = Object.entries(exposure).filter(([, v]) => Number.isFinite(Number(v)) && Number(v) > 0);
+  const totalExposure = exposureEntries.reduce((sum, [, v]) => sum + Number(v), 0);
+  const allocation = exposureEntries.length && totalExposure > 0
+    ? Object.fromEntries(exposureEntries.map(([asset, v]) => [asset, Math.round((Number(v) / totalExposure) * 1000) / 10]))
+    : null;
+  const assets = exposureEntries.length ? exposureEntries.map(([asset]) => asset) : null;
+
+  const months = goal?.months ? Math.max(1, Math.round(Number(goal.months))) : 12;
+
+  const RULES = {
+    HOLD: {
+      entry: 'No new entry; hold the allocation exactly as read.',
+      exit: 'Exit only if a drawdown or goal-deviation threshold is crossed.',
+      rebalance: 'None; rebalancing is a separate strategy.',
+      invalidate: ['portfolio drawdown exceeds the stated tolerance', 'goal probability collapses with no compensating return']
+    },
+    DCA_IN: {
+      entry: 'Fixed-interval buys at execution-time quotes (never a forecast).',
+      exit: 'Stop when the schedule ends or the committed capital is exhausted.',
+      rebalance: 'None.',
+      invalidate: ['the target asset loses its quoted venue', 'per-fill cost exceeds the scheduled amount']
+    },
+    REBALANCE: {
+      entry: 'Trim the over-weight position when it sits above the target band.',
+      exit: 'Stop when concentration returns inside the band.',
+      rebalance: 'Sell the over-weight asset back toward its target weight at quoted prices.',
+      invalidate: ['concentration falls inside the band', 'the over-weight asset has no liquid exit']
+    },
+    YIELD_ON_IDLE: {
+      entry: 'Supply idle stables only into the observed pool.',
+      exit: 'Withdraw when the observed APY falls below the fee-adjusted floor.',
+      rebalance: 'None.',
+      invalidate: ['the pool APY read goes stale', 'protocol risk flags escalate']
+    },
+    DELEVERAGE: {
+      entry: 'Repay debt from available capital.',
+      exit: 'Stop once the health factor is comfortably above liquidation.',
+      rebalance: 'None.',
+      invalidate: ['debt is already zero', 'repayment would exhaust required liquidity']
+    },
+    RISK_REDUCTION: {
+      entry: 'Shift into lower-volatility assets at quoted prices.',
+      exit: 'Stop when portfolio volatility returns to target.',
+      rebalance: 'Increase the stable/major share until volatility is inside the band.',
+      invalidate: ['the volatility reading is stale', 'the stable leg loses its peg']
+    },
+    CROSS_CHAIN_CONSOLIDATE: {
+      entry: 'Bridge value off the extra chains toward the primary chain.',
+      exit: 'Stop when exposure is consolidated.',
+      rebalance: 'None.',
+      invalidate: ['no bridge quote is available', 'the destination chain is congested or halted']
+    }
+  };
+  const rules = RULES[candidate.kind] || {
+    entry: 'Executed only at execution-time quotes.',
+    exit: 'Reviewed at the goal deadline.',
+    rebalance: 'None.',
+    invalidate: ['market regime change', 'the goal is no longer valid']
+  };
+
+  return {
+    allocation,
+    assets,
+    entryRules: rules.entry,
+    exitRules: rules.exit,
+    rebalanceRules: rules.rebalance,
+    constraints: [
+      'execution only at quoted prices',
+      'fees are estimates and are re-quoted at execution time',
+      ...(candidate.liquidity ? [`liquidity: ${candidate.liquidity}`] : [])
+    ],
+    timeHorizonMonths: months,
+    expectedRange,
+    downside: Number.isFinite(downside) ? { pct: downside, note: 'modelled downside' } : null,
+    invalidationConditions: rules.invalidate,
+    strategyInvalidated: false
+  };
 }

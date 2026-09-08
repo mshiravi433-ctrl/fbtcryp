@@ -212,11 +212,53 @@ const AUTONOMY_SPEC_PHASES = Object.freeze(AUTONOMY_PHASE_TITLES.map((title, ind
   requiredEvidence: []
 })));
 
+/* Phase 210 — the Financial Intelligence Brain. One row that names the whole
+   server/fios composition root plus its probes; the per-subsystem fidelity
+   (implemented/configured/provider_available/runtime_ready/live) is published
+   by test/intent-ai/phase210-financial-brain-probe.mjs and the /api/ai/health
+   route, not fabricated here. The row follows the same launch-wide evidence
+   gate as every phase ≥ 51: without the reviewed evidence it stays
+   unavailable, never painted live. */
+const FINANCIAL_INTELLIGENCE_PHASES = Object.freeze([
+  {
+    phase: 210,
+    id: 'financial-intelligence-brain',
+    title: 'Financial World Model و Strategy و Simulation و Decision و Learning',
+    implementation: 'implemented',
+    source: [
+      'server/fios/index.js',
+      'server/fios/worldModel.js',
+      'server/fios/financialState.js',
+      'server/fios/provenance.js',
+      'server/fios/research.js',
+      'server/fios/strategy.js',
+      'server/fios/competition.js',
+      'server/fios/simulation.js',
+      'server/fios/decision.js',
+      'server/fios/confidence.js',
+      'server/fios/evidence.js',
+      'server/fios/learning.js',
+      'server/fios/genome.js',
+      'server/fios/guardian.js',
+      'server/fios/council.js',
+      'server/fios/router.js'
+    ],
+    tests: [
+      'test/fios/fios-core-probe.mjs',
+      'test/fios/fios-intelligence-probe.mjs',
+      'test/fios/fios-autonomy-probe.mjs',
+      'test/fios/fios-api-probe.mjs',
+      'test/intent-ai/phase210-financial-brain-probe.mjs'
+    ],
+    requiredEvidence: []
+  }
+]);
+
 /* Phase 51+ rows: source and probe presence are published; the launch-wide
    evidence gate decides operational/live. Working-group fidelity (per-check
    digests and third-party provider gaps) is published by the later-phase
    probe, not fabricated per row here. */
-export const SPEC_PHASES = Object.freeze([...BASE_SPEC_PHASES, ...LATER_SPEC_PHASES, ...AUTONOMY_SPEC_PHASES]);
+export const SPEC_PHASES = Object.freeze([...BASE_SPEC_PHASES, ...LATER_SPEC_PHASES, ...AUTONOMY_SPEC_PHASES, ...FINANCIAL_INTELLIGENCE_PHASES]);
 
 function laterInactiveStatus() {
   return {
@@ -330,7 +372,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     operational: live,
     live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
-    specificationImplementedThrough: 200,
+    specificationImplementedThrough: 210,
     /* The release gate is aggregate; the live rows are published per phase. The
        number here is the highest live row, not a claim that every row below it
        is live — `operationalPhaseCount` is the exact count. */

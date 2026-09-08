@@ -8,6 +8,8 @@
  *   data        provenance coverage + freshness of the financial state
  *   research    evidence quality behind the research bundle
  *   strategy    evidence quality of the selected strategy
+ *   simulation  whether scenarios actually ran on readable state, and how many
+ *               of them completed instead of being rejected for lack of input
  *   risk        whether a risk assessment actually ran on live state
  *   execution   quote freshness + wallet + capability + policy readiness
  *
@@ -22,7 +24,7 @@ import { FRESHNESS } from './provenance.js';
 export const CONFIDENCE_SCHEMA = 'fbt.fi.confidence.v1';
 
 export const CONFIDENCE_DIMENSIONS = Object.freeze([
-  'intent', 'data', 'research', 'strategy', 'risk', 'execution'
+  'intent', 'data', 'research', 'strategy', 'simulation', 'risk', 'execution'
 ]);
 
 /** What must be non-zero before an execution may be considered. */
@@ -43,9 +45,13 @@ export function dataConfidence({ financial = null, world = null } = {}) {
   const base = Number(financial?.confidence);
   if (!Number.isFinite(coverage) && !Number.isFinite(base)) return { value: 0, basis: 'NO_STATE_READ' };
   const stale = (world?.provenance?.stale?.length || 0) + (financial?.provenance?.stale?.length || 0);
+  const fresh = (world?.provenance?.fresh?.length || 0) + (financial?.provenance?.fresh?.length || 0);
   const unavailable = (world?.provenance?.unavailable?.length || 0);
-  const value = round(Math.max(0, Math.min(1, (num(base) * 0.6 + num(coverage) * 0.4) - stale * 0.04 - unavailable * 0.01)), 2);
-  return { value, basis: `state confidence ${num(base)}, provenance coverage ${num(coverage)}, ${stale} stale, ${unavailable} unavailable` };
+  /* FRESH is past the primary budget but inside the usable window: a small
+     discount, not the STALE penalty. STALE discounts hard — decisive actions
+     must not ride on it. */
+  const value = round(Math.max(0, Math.min(1, (num(base) * 0.6 + num(coverage) * 0.4) - fresh * 0.01 - stale * 0.04 - unavailable * 0.01)), 2);
+  return { value, basis: `state confidence ${num(base)}, provenance coverage ${num(coverage)}, ${fresh} fresh, ${stale} stale, ${unavailable} unavailable` };
 }
 
 export function researchConfidence(research = null) {
@@ -65,6 +71,20 @@ export function strategyConfidence(strategy = null, competition = null) {
   const declared = num(strategy.confidencePct !== null && strategy.confidencePct !== undefined ? strategy.confidencePct / 100 : null);
   const vetoed = competition?.judge?.rejected?.some((r) => r.strategyId === strategy.id) ? 0.3 : 0;
   return { value: round(Math.max(0, Math.min(0.95, (declared || 0.5) * (0.5 + sampleFactor * 0.5)) - vetoed), 2), basis: `evidence observed, ${sample} samples` };
+}
+
+export function simulationConfidence(simulation = null) {
+  if (!simulation) return { value: 0, basis: 'NO_SIMULATION' };
+  if (simulation.status === 'UNAVAILABLE' || (simulation.ok === false)) return { value: 0, basis: simulation.reason || 'SIMULATION_UNAVAILABLE' };
+  const rows = Array.isArray(simulation.scenarios) ? simulation.scenarios : [];
+  const completed = rows.filter((s) => s.status === 'OK').length;
+  if (!rows.length) return { value: 0, basis: 'NO_SCENARIOS_RAN' };
+  const rejected = Number(simulation.rejected?.length || 0);
+  /* Completeness matters: a run where half the scenarios were rejected for
+     lack of input is less trustworthy than a full set. Never a probability
+     of profit. */
+  const value = round(Math.max(0, Math.min(0.95, 0.55 * Math.min(1, completed / Math.max(1, rows.length)) + 0.4 - rejected * 0.05)), 2);
+  return { value, basis: `${completed}/${rows.length} scenarios completed, ${rejected} rejected, method ${simulation.method || 'unknown'}` };
 }
 
 export function riskConfidence(risk = null, { stateFresh = false } = {}) {
@@ -105,7 +125,7 @@ export function overallConfidence(parts = {}, { executionRequested = false } = {
   const values = {};
   for (const dim of CONFIDENCE_DIMENSIONS) values[dim] = num(parts[dim]?.value);
   const measured = CONFIDENCE_DIMENSIONS.filter((d) => values[d] > 0);
-  const weights = { intent: 0.15, data: 0.25, research: 0.15, strategy: 0.2, risk: 0.15, execution: 0.1 };
+  const weights = { intent: 0.1, data: 0.25, research: 0.15, strategy: 0.15, simulation: 0.1, risk: 0.15, execution: 0.1 };
   const weighted = measured.reduce((a, d) => a + values[d] * weights[d], 0) / Math.max(0.0001, measured.reduce((a, d) => a + weights[d], 0));
   const critical = CRITICAL_FOR_EXECUTION.map((d) => values[d]);
   const cap = Math.min(...critical);
@@ -129,12 +149,13 @@ export function overallConfidence(parts = {}, { executionRequested = false } = {
 }
 
 export function createConfidenceEngine({ log = () => {} } = {}) {
-  function assess({ intent = null, financial = null, world = null, research = null, strategy = null, competition = null, risk = null, quote = null, wallet = null, capabilities = null, policy = null, executionRequested = false, now = Date.now() } = {}) {
+  function assess({ intent = null, financial = null, world = null, research = null, strategy = null, competition = null, simulation = null, risk = null, quote = null, wallet = null, capabilities = null, policy = null, executionRequested = false, now = Date.now() } = {}) {
     const parts = {
       intent: intentConfidence(intent),
       data: dataConfidence({ financial, world }),
       research: researchConfidence(research),
       strategy: strategyConfidence(strategy, competition),
+      simulation: simulationConfidence(simulation),
       risk: riskConfidence(risk, { stateFresh: world?.provenance?.stale?.length === 0 }),
       execution: executionConfidence({ quote, wallet, capabilities, policy, now })
     };

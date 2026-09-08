@@ -12,24 +12,34 @@
  *
  * Confidence is DERIVED from freshness and status — never chosen by a caller:
  *   LIVE    0.95   the source answered inside its budget
+ *   FRESH   0.80   past the primary budget but inside 3× — still usable,
+ *                  slightly discounted (the §5 four-level freshness ladder)
  *   PARTIAL 0.70   the source answered but admits gaps
- *   STALE   0.55 → 0.10, decaying linearly to zero at 10× the budget
+ *   STALE   0.55 → 0.10, decaying linearly to zero at 10× the budget;
+ *                  stale data must never drive a decisive action
  *   UNAVAILABLE 0  nothing was read; the field must render as a gap
+ *
+ * The four-level freshness ladder the specification names is LIVE → FRESH →
+ * STALE → UNAVAILABLE. `PARTIAL` is ORTHOGONAL to that ladder: it describes
+ * completeness (the source answered but admits gaps), not age. A value can be
+ * LIVE-but-PARTIAL; it can never be FRESH-but-LIVE.
  */
 import { round } from '../../src/lib/central/schema.js';
 
 export const PROVENANCE_SCHEMA = 'fbt.fi.provenance.v1';
 
 export const FRESHNESS = Object.freeze({
-  LIVE: 'LIVE', PARTIAL: 'PARTIAL', STALE: 'STALE', UNAVAILABLE: 'UNAVAILABLE'
+  LIVE: 'LIVE', FRESH: 'FRESH', PARTIAL: 'PARTIAL', STALE: 'STALE', UNAVAILABLE: 'UNAVAILABLE'
 });
 
 const MAX_CONFIDENCE = 0.95;
+const FRESH_WINDOW_MULTIPLE = 3;   /* (ttl, 3×ttl] is FRESH, beyond is STALE */
 const STALE_DECAY_MULTIPLE = 10;
 
 export function confidenceFor(freshness, { ageMs = 0, ttlMs = 0 } = {}) {
   switch (freshness) {
     case FRESHNESS.LIVE: return MAX_CONFIDENCE;
+    case FRESHNESS.FRESH: return 0.8;
     case FRESHNESS.PARTIAL: return 0.7;
     case FRESHNESS.STALE: {
       const budget = Number(ttlMs) > 0 ? Number(ttlMs) : 60_000;
@@ -48,8 +58,10 @@ export function value(v, { source, at = Date.now(), ttlMs = 60_000, status = 'OK
     : status === 'STALE' ? FRESHNESS.STALE
       : FRESHNESS.LIVE;
   const ageMs = Math.max(0, Date.now() - Number(at || 0));
-  const stale = freshness === FRESHNESS.LIVE && Number(ttlMs) > 0 && ageMs > Number(ttlMs);
-  const f = stale ? FRESHNESS.STALE : freshness;
+  const overBudget = freshness === FRESHNESS.LIVE && Number(ttlMs) > 0 && ageMs > Number(ttlMs);
+  const f = overBudget
+    ? (ageMs <= Number(ttlMs) * FRESH_WINDOW_MULTIPLE ? FRESHNESS.FRESH : FRESHNESS.STALE)
+    : freshness;
   return {
     schema: PROVENANCE_SCHEMA,
     status: f === FRESHNESS.UNAVAILABLE ? 'unavailable' : 'ok',
@@ -96,8 +108,11 @@ export function fromSection(section, { now = Date.now(), pick = null } = {}) {
   if (data === null || data === undefined) return unavailable('FIELD_NOT_PRESENT', { source: section.source, at: section.updatedAt });
   const ageMs = Math.max(0, now - Number(section.updatedAt || 0));
   const budget = Number(section.ttlMs) || 60_000;
+  /* Inside (budget, 3×budget] the data is FRESH, not STALE: leave `status`
+     OK so `value()` computes the FRESH band itself. Only beyond 3× the budget
+     (or an explicit STALE status) does the value become STALE. */
   const status = section.status === 'PARTIAL' ? 'PARTIAL'
-    : section.status === 'STALE' || ageMs > budget ? 'STALE' : 'OK';
+    : section.status === 'STALE' || ageMs > budget * FRESH_WINDOW_MULTIPLE ? 'STALE' : 'OK';
   return value(data, { source: section.source || section.key || 'state', at: section.updatedAt || now, ttlMs: budget, status });
 }
 
@@ -122,6 +137,7 @@ export function provenanceSummary(obj = {}, { now = Date.now() } = {}) {
   const rows = Object.values(obj).filter(isEnvelope);
   if (!rows.length) return { count: 0, usable: 0, coverage: 0, minConfidence: 0, meanConfidence: 0, stale: [], unavailable: [], oldestAt: null, now };
   const usable = rows.filter(isUsable);
+  const fresh = rows.filter((e) => e.freshness === FRESHNESS.FRESH).map((e) => e.source);
   const stale = rows.filter((e) => e.freshness === FRESHNESS.STALE).map((e) => e.source);
   const unavailableRows = rows.filter((e) => e.freshness === FRESHNESS.UNAVAILABLE).map((e) => e.source);
   return {
@@ -130,6 +146,7 @@ export function provenanceSummary(obj = {}, { now = Date.now() } = {}) {
     coverage: round(usable.length / rows.length, 3),
     minConfidence: round(Math.min(...rows.map((e) => e.confidence)), 3),
     meanConfidence: round(rows.reduce((a, e) => a + e.confidence, 0) / rows.length, 3),
+    fresh,
     stale,
     unavailable: unavailableRows,
     oldestAt: Math.min(...rows.map((e) => e.at || now)),
