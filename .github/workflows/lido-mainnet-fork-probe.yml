@@ -1,5 +1,33 @@
 # ============================================================================
 # LIDO ETHEREUM · MAINNET FORK PROBE (MANUAL RUN)
+#
+# ONE-TIME SETUP (this file cannot be committed to .github/workflows by an
+# agent — GitHub rejects app tokens there, so it is placed by hand, like
+# ci/build-apk.yml):
+#
+#   1. Open the repo: github.com/mshiravi433-ctrl/fbtcryp
+#   2. Add file  .github/workflows/lido-mainnet-fork-probe.yml
+#      (typing / creates folders; commit straight to the branch you want)
+#   3. Actions tab → "Lido mainnet fork probe" → Run workflow.
+#      Optional inputs:
+#        - rpc_url (default https://eth.llamarpc.com) — any public Ethereum RPC
+#          works; an archive node is more reliable for the getLogs window.
+#        - log_window (default 100000) — blocks to scan for a real finalized,
+#          unclaimed WithdrawalRequested entry used for the claim/ownership proof.
+#          Lower it on a rate-limited public RPC.
+#
+# WHAT IT DOES: installs Foundry (anvil) on the runner, forks Ethereum mainnet
+# locally, and runs the REAL acceptance probe
+# (test/lido-mainnet-fork-probe.mjs --strict): verifyDeployment, exact-ETH
+# stake -> stETH position, exact approve + wrap to wstETH -> unwrap, request
+# withdrawal (requestId decoded from the real WithdrawalRequested event),
+# ownership / pending finalization, and a claim against a real finalized,
+# unclaimed request in the forked queue. The full output is saved as the
+# "lido-mainnet-fork-probe.log" artifact and printed in the run log.
+#
+# SAFETY: nothing leaves the runner. anvil forks chain state locally; the
+# transactions move test ETH between forked accounts only. No secrets, no
+# deploy keys, no real funds. Public-repo Actions minutes are free.
 # ============================================================================
 name: Lido mainnet fork probe
 on:
@@ -26,6 +54,10 @@ jobs:
 
       - name: Install Foundry (anvil)
         run: |
+          # anvil straight from the official GitHub release tarball — the same
+          # artifact foundryup installs, without depending on the third-party
+          # installer domain foundry.paradigm.xyz (which intermittently fails
+          # to serve the script, seen as exit 127 on `foundryup`).
           set -euo pipefail
           VER=v1.8.1
           mkdir -p "$HOME/.foundry/bin"
@@ -35,6 +67,10 @@ jobs:
           "$HOME/.foundry/bin/anvil" --version
 
       - name: Lockfile platform guard (before npm ci)
+        # Same step ci/build-apk.sh runs first: ganache's shrinkwrapped lockfile
+        # pins macOS-only fsevents as a REQUIRED dependency, which makes `npm ci`
+        # die with EBADPLATFORM on every Linux runner. The guard flips that one
+        # entry to optional, in place, idempotently.
         run: node ci/lock-platform-guard.mjs
 
       - name: Install dependencies (ethers + vite, used by the probe)
