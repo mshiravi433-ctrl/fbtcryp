@@ -6533,4 +6533,25 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
   }, 200);
 }
 
+import { businessFinanceRouter } from './businessFinance.js';
+import { structuredProductsRouter } from './structuredProducts.js';
+import { optionsRouter } from './options.js';
+import { paymentsOsRouter } from './paymentsOs.js';
+import { creditRouter } from './credit.js';
+import { rwaRouter } from './rwa.js';
+
+app.use('/api/business', businessFinanceRouter());
+app.use('/api/structured-products', structuredProductsRouter());
+app.use('/api/options', optionsRouter());
+app.use('/api/payments', paymentsOsRouter());
+app.use('/api/credit', creditRouter());
+app.use('/api/rwa', rwaRouter());
+
+import { appendLedgerEvent, getLedger } from './universalLedger.js';
+app.get('/api/v1/ledger', async (req, res) => {
+  const owner = req.query.owner || 'anonymous';
+  const ledger = await getLedger(owner);
+  res.json({ ok: true, data: ledger, schema: 'fbt.universal-ledger.v1' });
+});
+
 export default app;
