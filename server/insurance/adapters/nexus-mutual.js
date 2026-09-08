@@ -37,7 +37,7 @@
  *     quota-share / validator lists) need a dedicated input UI, so the
  *     marketplace does not surface them — no guessed metadata.
  */
-import { Interface } from 'ethers';
+import { Interface, getAddress } from 'ethers';
 import { InsuranceProviderAdapter } from '../adapter.js';
 import { httpGet, httpPost } from '../http.js';
 import * as store from '../store.js';
@@ -45,8 +45,43 @@ import {
   NEXUS_API_BASE_URL, NEXUS_ENABLED, NEXUS_CHAIN_ALLOWLIST,
   NEXUS_PRODUCT_IDS, NEXUS_TERMS_REQUIRED, NEXUS_POS_ENABLED, PROVIDER_HTTP_TIMEOUT_MS
 } from '../env.js';
-import { toMicro, fromMicro, CHAIN_IDS } from '../constants.js';
+import { parseMicro, fromMicro, CHAIN_IDS } from '../constants.js';
 import configData from './config/nexus-mainnet.json' with { type: 'json' };
+
+/** EIP-55 checksum. Nexus cover-metadata / buyCover owner reject lowercase-only on some paths. */
+export function checksumAddress(addr) {
+  try { return getAddress(String(addr || '')); } catch { return null; }
+}
+
+function stringifyJson(value) {
+  try {
+    return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return String(value);
+  }
+}
+
+function mapPoolAllocations(list) {
+  return (Array.isArray(list) ? list : []).map((r) => {
+    if (Array.isArray(r)) {
+      return { poolId: String(r[0] ?? ''), coverAmountInAsset: String(r[1] ?? '0'), skip: r[2] === true };
+    }
+    return {
+      poolId: String(r?.poolId ?? ''),
+      coverAmountInAsset: String(r?.coverAmountInAsset ?? r?.coverAmount ?? '0'),
+      skip: r?.skip === true
+    };
+  });
+}
+
+function quoteFailureCode(err) {
+  const code = String(err?.code || '');
+  if (['CAPACITY_UNAVAILABLE', 'DURATION_OUT_OF_RANGE', 'ASSET_UNSUPPORTED', 'QUOTE_MALFORMED', 'PRODUCT_REQUIRED', 'VALID_WALLET_REQUIRED', 'TERMS_ACCEPTANCE_REQUIRED'].includes(code)) {
+    return code;
+  }
+  if (code === 'PROVIDER_HTTP_ERROR') return 'QUOTE_REJECTED_BY_PROVIDER';
+  return 'PROVIDER_UNAVAILABLE';
+}
 
 /** CoverAsset enum — verified from @nexusmutual/sdk v3 (index.d.ts). */
 export const COVER_ASSETS = Object.freeze({
@@ -168,18 +203,30 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
 
   /* ------------------------------ transport ------------------------------ */
 
+  _httpError(res, action) {
+    const body = String(res.error?.body || '').slice(0, 400);
+    const detail = res.error?.kind === 'status'
+      ? `Nexus API HTTP ${res.status}${action ? ` (${action})` : ''}`
+      : `Nexus API unreachable (${res.error?.kind || 'network error'})`;
+    const err = new Error(detail);
+    err.httpStatus = res.status;
+    const b = body.toLowerCase();
+    if (res.error?.kind === 'status') {
+      if (/capacit|insufficient|not enough/.test(b)) err.code = 'CAPACITY_UNAVAILABLE';
+      else if (/period|duration/.test(b) && /invalid|must|range|minimum|maximum/.test(b)) err.code = 'DURATION_OUT_OF_RANGE';
+      else if (/asset/.test(b) && /invalid|unsupported|not supported/.test(b)) err.code = 'ASSET_UNSUPPORTED';
+      else err.code = 'PROVIDER_HTTP_ERROR';
+      err.providerStatus = 'DEGRADED';
+    } else {
+      err.code = 'PROVIDER_UNAVAILABLE';
+      err.providerStatus = 'UNAVAILABLE';
+    }
+    return err;
+  }
+
   async _get(path, params) {
     const res = await httpGet(`${this.apiBase}${path}`, { timeoutMs: this.timeoutMs, query: params });
-    if (!res.ok) {
-      const detail = res.error?.kind === 'status'
-        ? `Nexus API HTTP ${res.status}`
-        : `Nexus API unreachable (${res.error?.kind || 'network error'})`;
-      const err = new Error(detail);
-      err.code = res.error?.kind === 'status' ? 'PROVIDER_HTTP_ERROR' : 'PROVIDER_UNAVAILABLE';
-      err.providerStatus = res.error?.kind === 'status' ? 'DEGRADED' : 'UNAVAILABLE';
-      err.httpStatus = res.status;
-      throw err;
-    }
+    if (!res.ok) throw this._httpError(res, path);
     return res.data;
   }
 
@@ -244,7 +291,7 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       const ptName = pt?.name || 'UNKNOWN';
       const metadata = (typeof p?.metadata === 'object' && p.metadata) ? p.metadata : {};
       const exclusions = Array.isArray(metadata?.exclusions)
-        ? metadata.exclusions.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)))
+        ? metadata.exclusions.map((x) => (typeof x === 'string' ? x : stringifyJson(x)))
         : [];
       rows.push({
         providerProductId: String(id),
@@ -293,7 +340,7 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
 
   /** micro-units (1e6 USD-stable convention) -> cover asset base units (string). */
   amountToBaseUnits(microAmount, asset) {
-    const micro = typeof microAmount === 'bigint' ? microAmount : toMicro(microAmount);
+    const micro = parseMicro(microAmount);
     if (micro === null) return null;
     if (asset.decimals === 6) return micro.toString();
     const scale = 10n ** BigInt(asset.decimals - 6);
@@ -328,7 +375,8 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     }
     const amountBase = this.amountToBaseUnits(params.coverageAmountMicro, asset);
     if (!amountBase || amountBase === '0') return { ok: false, error: 'COVERAGE_AMOUNT_REQUIRED' };
-    if (!params.walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(params.walletAddress)) {
+    const owner = checksumAddress(params.walletAddress);
+    if (!owner) {
       return { ok: false, error: 'VALID_WALLET_REQUIRED' };
     }
     if (this.termsRequired && params.termsAccepted !== true) {
@@ -344,24 +392,16 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       const product = products.find((x) => x.providerProductId === String(productId));
       if (product && (product.proofOfLossInputTypes || []).length > 0) {
         const meta = {
-          creatorAddress: params.walletAddress,
-          proofOfLoss: [{ type: 'address', content: [{ address: params.walletAddress }] }]
+          creatorAddress: owner,
+          proofOfLoss: [{ type: 'address', content: [{ address: owner }] }]
         };
         const metaRes = await httpPost(`${this.apiBase}/cover-metadata`, meta, { timeoutMs: this.timeoutMs });
-        if (!metaRes.ok) {
-          const detail = metaRes.error?.kind === 'status'
-            ? `Nexus API HTTP ${metaRes.status} (cover metadata rejected)`
-            : `Nexus API unreachable (${metaRes.error?.kind || 'network error'})`;
-          const err = new Error(detail);
-          err.code = metaRes.error?.kind === 'status' ? 'PROVIDER_HTTP_ERROR' : 'PROVIDER_UNAVAILABLE';
-          err.providerStatus = metaRes.error?.kind === 'status' ? 'DEGRADED' : 'UNAVAILABLE';
-          throw err;
-        }
+        if (!metaRes.ok) throw this._httpError(metaRes, 'cover-metadata');
         cid = metaRes.data?.cid || '';
         if (!cid) return { ok: false, error: 'QUOTE_MALFORMED', detail: 'cover-metadata response carried no cid' };
       }
     } catch (err) {
-      return { ok: false, error: err.code === 'PROVIDER_HTTP_ERROR' ? 'QUOTE_REJECTED_BY_PROVIDER' : 'PROVIDER_UNAVAILABLE', detail: err.message, providerStatus: err.providerStatus };
+      return { ok: false, error: quoteFailureCode(err), detail: err.message, providerStatus: err.providerStatus };
     }
 
     let q;
@@ -371,10 +411,11 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
         amount: amountBase,
         period: days,
         coverAsset: asset.id,
-        paymentAsset: asset.id
+        paymentAsset: asset.id,
+        ...(cid ? { ipfsCid: cid } : {})
       });
     } catch (err) {
-      return { ok: false, error: err.code === 'PROVIDER_HTTP_ERROR' ? 'QUOTE_REJECTED_BY_PROVIDER' : 'PROVIDER_UNAVAILABLE', detail: err.message, providerStatus: err.providerStatus };
+      return { ok: false, error: quoteFailureCode(err), detail: err.message, providerStatus: err.providerStatus };
     }
 
     // Official response shape: { quote: { premiumInAsset, annualPrice, poolAllocationRequests } }.
@@ -382,10 +423,11 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     const premiumBase = quote?.premiumInAsset ?? null;
     if (premiumBase == null) return { ok: false, error: 'QUOTE_MALFORMED', detail: 'quote response carried no premiumInAsset' };
 
-    const premiumMicro = this.baseUnitsToMicro(premiumBase, asset);
-    const poolAllocationRequests = Array.isArray(quote?.poolAllocationRequests) ? quote.poolAllocationRequests : [];
+    const premiumInAsset = String(premiumBase);
+    const premiumMicro = this.baseUnitsToMicro(premiumInAsset, asset);
+    const poolAllocationRequests = mapPoolAllocations(quote?.poolAllocationRequests);
     // Slippage guard: the unsigned buy caps the premium at (1 + slippage) × price.
-    const maxPremium = BigInt(premiumBase) + (BigInt(premiumBase) * BigInt(this.slippageBps)) / 10000n;
+    const maxPremium = BigInt(premiumInAsset) + (BigInt(premiumInAsset) * BigInt(this.slippageBps)) / 10000n;
 
     let maxCapacityBase = null;
     try {
@@ -398,7 +440,7 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     // buyCoverParams mirrors @nexusmutual/sdk (period in SECONDS on-chain).
     const buyCoverParams = {
       coverId: 0,
-      owner: params.walletAddress,
+      owner,
       productId: Number(productId),
       coverAsset: asset.id,
       amount: amountBase,
@@ -422,9 +464,9 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       maxCapacityBase,
       estimatedGas: null, // filled at prepare time; never fabricated here
       at: Date.now(),
-      purchaseReady: poolAllocationRequests.length > 0 && BigInt(premiumBase) > 0n,
-      // Keep the provider's own quote artefacts verbatim for the unsigned tx.
-      raw: { buyCoverParams, poolAllocationRequests, premiumInAsset: premiumBase, coverAmount: amountBase }
+      purchaseReady: poolAllocationRequests.length > 0 && BigInt(premiumInAsset) > 0n,
+      // Keep the provider's own quote artefacts as JSON-safe strings for the unsigned tx.
+      raw: { buyCoverParams, poolAllocationRequests, premiumInAsset, coverAmount: amountBase }
     };
   }
 
@@ -462,8 +504,8 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     if (!buyCoverParams || !poolAllocationRequests) {
       return { ok: false, error: 'PURCHASE_INPUTS_UNAVAILABLE', detail: 'live quote did not include buyCoverInput; obtain a fresh quote' };
     }
-    const owner = String(params.walletAddress || buyCoverParams.owner || '').toLowerCase();
-    if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) return { ok: false, error: 'VALID_WALLET_REQUIRED' };
+    const owner = checksumAddress(params.walletAddress || buyCoverParams.owner);
+    if (!owner) return { ok: false, error: 'VALID_WALLET_REQUIRED' };
 
     const coverAssetId = Number(buyCoverParams.coverAsset);
     const assetEntry = Object.values(COVER_ASSETS).find((a) => a.id === coverAssetId) || null;
@@ -485,7 +527,8 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
     };
 
     const iface = new Interface([configData.abi.CoverBroker.buyCover]);
-    const data = iface.encodeFunctionData('buyCover', [finalParams, poolAllocationRequests.map((r) => [r.poolId, r.coverAmountInAsset])]);
+    const allocations = mapPoolAllocations(poolAllocationRequests);
+    const data = iface.encodeFunctionData('buyCover', [finalParams, allocations.map((r) => [r.poolId, r.coverAmountInAsset])]);
 
     const isNativePayment = coverAssetId === COVER_ASSETS.ETH.id;
     const tx = {

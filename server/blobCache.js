@@ -18,6 +18,11 @@
  * back to memory-only. A slow cache must never break the endpoint.
  */
 
+/** Durable backends are JSON; BigInt money must stringify as decimal integers. */
+function durableJson(value) {
+  return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+}
+
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
 const UPSTASH_URL = String(process.env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
 const UPSTASH_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
@@ -39,7 +44,7 @@ export const blobConfigured = () => Boolean(TOKEN) || upstashConfigured();
 export async function upstashSetIfAbsent(key, value, ttlMs) {
   if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
   const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
-  const answer = await upstashCommand(['SET', safeKey(key), JSON.stringify(value), 'NX', 'EX', seconds]);
+  const answer = await upstashCommand(['SET', safeKey(key), durableJson(value), 'NX', 'EX', seconds]);
   return answer.ok && answer.result === 'OK';
 }
 
@@ -63,7 +68,7 @@ export async function upstashGetAtomic(key) {
 export async function upstashSetAtomic(key, value, ttlMs) {
   if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
   const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
-  const answer = await upstashCommand(['SET', safeKey(key), JSON.stringify(value), 'EX', seconds]);
+  const answer = await upstashCommand(['SET', safeKey(key), durableJson(value), 'EX', seconds]);
   return answer.ok && answer.result === 'OK';
 }
 
@@ -75,7 +80,7 @@ export async function upstashSetAtomic(key, value, ttlMs) {
 export async function upstashReleaseAtomicLease(key, leaseValue) {
   if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
   const script = "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end";
-  const answer = await upstashCommand(['EVAL', script, '1', safeKey(key), JSON.stringify(leaseValue)]);
+  const answer = await upstashCommand(['EVAL', script, '1', safeKey(key), durableJson(leaseValue)]);
   return answer.ok && Number(answer.result) === 1;
 }
 
@@ -166,7 +171,7 @@ async function upstashGetEntry(path) {
 
 async function upstashSetEntry(path, entry, ttlMs) {
   const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
-  const answer = await upstashCommand(['SET', path, JSON.stringify(entry), 'EX', seconds]);
+  const answer = await upstashCommand(['SET', path, durableJson(entry), 'EX', seconds]);
   return answer.ok && answer.result === 'OK';
 }
 
@@ -189,7 +194,7 @@ async function vercelSetEntry(path, entry, ttlMs) {
   const mod = await api();
   if (!mod) return false;
   try {
-    await mod.put(path, JSON.stringify(entry), {
+    await mod.put(path, durableJson(entry), {
       token: TOKEN,
       access: 'public',
       contentType: 'application/json',

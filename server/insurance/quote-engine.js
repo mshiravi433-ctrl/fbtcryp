@@ -8,7 +8,7 @@
  * quoteId / termsHash use cryptographic hashes for integrity (§46).
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { fromMicro } from './constants.js';
+import { fromMicro, jsonSafe, jsonStringify } from './constants.js';
 import { computeFees } from './fee-engine.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000; // 15 min default
@@ -18,7 +18,7 @@ export function newId(prefix) {
 }
 
 export function sha256(obj) {
-  return createHash('sha256').update(JSON.stringify(obj)).digest('hex');
+  return createHash('sha256').update(jsonStringify(obj)).digest('hex');
 }
 
 /**
@@ -69,7 +69,9 @@ export function buildQuote({ provider, product, params, premiumMicro, network, c
 
   const fees = computeFees({ premiumMicro, provider, network });
 
-  return {
+  // jsonSafe: money is BigInt in-engine; durable store + HTTP are JSON and
+  // throw "Do not know how to serialize a BigInt" unless we stringify here.
+  return jsonSafe({
     quoteId: newId('q'),
     createdAt: now,
     expiresAt,
@@ -102,7 +104,7 @@ export function buildQuote({ provider, product, params, premiumMicro, network, c
     quoteUpdatedAt: now,
     termsHash: sha256(termsObj),
     terms: termsObj
-  };
+  });
 }
 
 export function isQuoteValid(quote, now = Date.now()) {
