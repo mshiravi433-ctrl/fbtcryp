@@ -1,1 +1,66 @@
+# ============================================================================
+# LIDO ETHEREUM · MAINNET FORK PROBE (MANUAL RUN)
+# ============================================================================
+name: Lido mainnet fork probe
+on:
+  workflow_dispatch:
+    inputs:
+      rpc_url:
+        description: 'Ethereum mainnet RPC URL to fork'
+        required: false
+        default: 'https://eth.llamarpc.com'
+      log_window:
+        description: 'Blocks to scan for a finalized/unclaimed request (getLogs window)'
+        required: false
+        default: '100000'
 
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Foundry (anvil)
+        run: |
+          set -euo pipefail
+          VER=v1.8.1
+          mkdir -p "$HOME/.foundry/bin"
+          curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/${VER}/foundry_${VER}_linux_amd64.tar.gz" -o /tmp/foundry.tar.gz
+          tar -xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
+          "$HOME/.foundry/bin/anvil" --version
+
+      - name: Lockfile platform guard (before npm ci)
+        run: node ci/lock-platform-guard.mjs
+
+      - name: Install dependencies (ethers + vite, used by the probe)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run the Lido mainnet fork probe (strict)
+        id: probe
+        env:
+          ETHEREUM_RPC_URL: ${{ inputs.rpc_url }}
+          LIDO_LOG_WINDOW: ${{ inputs.log_window }}
+        run: |
+          export PATH="$HOME/.foundry/bin:$PATH"
+          set -o pipefail
+          npm run test:lido-mainnet-fork -- --strict 2>&1 | tee /tmp/lido-mainnet-fork-probe.log
+          echo "probe_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "### Lido mainnet fork probe exit: ${{ steps.probe.outputs.probe_exit }}" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 /tmp/lido-mainnet-fork-probe.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lido-mainnet-fork-probe.log
+          path: /tmp/lido-mainnet-fork-probe.log
+          if-no-files-found: error
