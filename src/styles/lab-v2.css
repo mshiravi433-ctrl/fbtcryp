@@ -218,15 +218,20 @@
 }
 
 .lab2-card-icon {
-  font-size: 24px;
+  font-size: 25px;
   line-height: 1;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(0,229,255,.14), rgba(124,77,255,.16));
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 8px 18px -12px var(--rgb-1), inset 0 1px rgba(255,255,255,.12);
+  filter: saturate(1.15);
 }
 
 .lab2-card-title {

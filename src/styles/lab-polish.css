@@ -1,0 +1,23 @@
+/* Lab visual polish: readable in both themes, with expressive but restrained accents. */
+.lab2-card:hover, .lab2-card:focus-visible { border-color: color-mix(in srgb, var(--rgb-1) 48%, transparent); box-shadow: 0 12px 28px -20px var(--rgb-1); }
+.lab2-btn { min-height: 44px; border-radius: 14px; border: 1px solid transparent; box-shadow: 0 8px 18px -14px currentColor; transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
+.lab2-btn:hover:not(:disabled) { filter: brightness(1.08) saturate(1.08); transform: translateY(-1px); }
+.lab2-btn.buy { border-color: color-mix(in srgb, var(--up) 55%, transparent); box-shadow: 0 10px 24px -15px var(--up); }
+.lab2-btn.sell { border-color: color-mix(in srgb, var(--down) 55%, transparent); box-shadow: 0 10px 24px -15px var(--down); }
+.lab2-btn.ghost { background: var(--surface-2, rgba(255,255,255,.06)); border-color: var(--line-strong); }
+.lab-dir-btn { letter-spacing: .01em; }
+.lab-dir-btn .lab-dir-glyph { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 900; text-shadow: 0 3px 14px currentColor; }
+:root[data-theme='light'] .lab2-header,
+:root[data-theme='light'] .lab2-card,
+:root[data-theme='light'] .lab2-panel,
+:root[data-theme='light'] .lab2-choice,
+:root[data-theme='light'] .lab2-quiz-option,
+:root[data-theme='light'] .lab2-btn.ghost {
+  border-color: rgba(35,62,91,.14);
+  background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(241,246,252,.78));
+  box-shadow: 0 12px 28px -22px rgba(35,62,91,.7);
+}
+:root[data-theme='light'] .lab2-card-icon { background: linear-gradient(135deg, rgba(0,145,170,.12), rgba(106,58,224,.12)); border-color: rgba(35,62,91,.12); }
+:root[data-theme='light'] .lab-dir-btn.up { background: linear-gradient(145deg, #e6fbf3, #f7fffc); color: #087653; border-color: rgba(0,130,84,.24); }
+:root[data-theme='light'] .lab-dir-btn.down { background: linear-gradient(145deg, #fff0f4, #fffafd); color: #bf3158; border-color: rgba(191,49,88,.24); }
+@media (prefers-reduced-motion: reduce) { .lab2-card, .lab2-btn { transition: none; } }
