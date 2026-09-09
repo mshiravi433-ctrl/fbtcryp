@@ -42,6 +42,7 @@ farm-fork-evidence/*.json
 !farm-fork-evidence/aave-base.json
 !farm-fork-evidence/aave-arbitrum.json
 !farm-fork-evidence/compound-base.json
+!farm-fork-evidence/lido.json
 *-probe-detail.json
 .sandbox/
 

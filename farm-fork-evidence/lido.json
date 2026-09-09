@@ -1,0 +1,12 @@
+{
+  "protocol": "lido",
+  "result": "PASS",
+  "assertionsPassed": 31,
+  "totalAssertions": 31,
+  "fingerprint": {
+    "algo": "sha256",
+    "digest": "3365c0a8c6877cd19709a09fcfc1408634a7a2c46d8739780d0c82354d4122b9"
+  },
+  "recordedAt": "2026-09-09T02:16:48.237Z",
+  "note": "Strict mainnet-fork probe output. A protocol whose probe passed is committed as an auditable anchor so the fail-closed staged gate is reproducible in CI; re-earned per run otherwise."
+}
