@@ -22,61 +22,76 @@ import { ThinkingOrb } from './ThinkingOrb.jsx';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
-  .ai-global { padding: 16px; min-height: 100%; }
-  .aig-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .aig-title { font-size: 20px; font-weight: 700; color: #f0f0ff; flex: 1; }
-  .aig-chip { font-size: 11px; color: #a5b4fc; background: rgba(99,102,241,0.15); padding: 3px 9px; border-radius: 10px; white-space: nowrap; }
-  .aig-chip.warn { color: #eab308; background: rgba(234,179,8,0.12); }
-  .aig-chip.bad { color: #f87171; background: rgba(239,68,68,0.12); }
-  .aig-tabs { display: flex; gap: 4px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
-  .aig-tab { padding: 6px 12px; border-radius: 10px; font-size: 12px; font-weight: 500; color: #888; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); cursor: pointer; white-space: nowrap; }
-  .aig-tab.active { color: #c4b5fd; background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); }
-  .aig-section { margin-bottom: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px; }
-  .aig-section-title { font-size: 13px; font-weight: 600; color: #c4b5fd; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-  .aig-refresh { margin-inline-start: auto; font-size: 11px; color: #a5b4fc; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
-  .aig-item { padding: 10px; border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
-  .aig-item-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .aig-prio { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; letter-spacing: 0.4px; }
-  .aig-prio.critical { color: #fca5a5; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); }
-  .aig-prio.high { color: #fdba74; background: rgba(249,115,22,0.13); border: 1px solid rgba(249,115,22,0.28); }
-  .aig-prio.normal { color: #fde047; background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.25); }
-  .aig-prio.info { color: #86efac; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.22); }
-  .aig-item-kind { font-size: 10px; color: #777; }
-  .aig-item-title { font-size: 13px; font-weight: 600; color: #e8e8f5; }
-  .aig-item-detail { font-size: 11.5px; color: #9a9aad; margin-top: 3px; line-height: 1.5; }
-  .aig-item-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 10px; color: #666; }
-  .aig-item-action { color: #a5b4fc; cursor: pointer; font-weight: 600; }
-  .aig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-  .aig-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; }
-  .aig-card-name { font-size: 11px; color: #9a9aad; display: flex; align-items: center; gap: 6px; }
-  .aig-card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .aig-card-value { font-size: 15px; font-weight: 700; color: #f0f0ff; margin-top: 4px; }
-  .aig-card-sub { font-size: 10px; color: #6b7280; margin-top: 2px; line-height: 1.45; }
-  .aig-light { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; background: rgba(255,255,255,0.03); margin-bottom: 5px; }
-  .aig-light-name { font-size: 12px; color: #c0c0d0; flex: 1; }
-  .aig-light-lamps { display: flex; gap: 5px; }
-  .aig-lamp { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.12); }
-  .aig-lamp.on { background: #22c55e; }
-  .aig-lamp.off { background: rgba(255,255,255,0.12); }
-  .aig-empty { text-align: center; padding: 22px; color: #666; font-size: 12px; line-height: 1.7; }
-  .aig-reason { font-size: 10px; color: #f87171; margin-top: 3px; direction: ltr; text-align: start; word-break: break-all; }
-  .aig-regime { padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 10px; }
-  .aig-regime.risk_on { background: rgba(34,197,94,0.09); border: 1px solid rgba(34,197,94,0.25); }
-  .aig-regime.risk_off { background: rgba(239,68,68,0.09); border: 1px solid rgba(239,68,68,0.25); }
-  .aig-regime.mixed { background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.22); }
-  .aig-regime.partial { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); }
-  .aig-regime-label { font-size: 16px; font-weight: 700; color: #f0f0ff; }
-  .aig-regime-sub { font-size: 11px; color: #9a9aad; margin-top: 4px; }
-  .aig-note { font-size: 10.5px; color: #6b7280; line-height: 1.6; margin-top: 8px; }
-  @media (max-width: 380px) { .aig-grid { grid-template-columns: 1fr 1fr; } }
+  .ai-global { width:100%; padding:12px 14px 24px; min-height:100%; color:var(--text-1); overflow:hidden; }
+  .aig-header { position:relative; display:flex; align-items:center; gap:12px; margin-bottom:16px; min-height:72px; padding:13px 14px; border:1px solid var(--line); border-radius:20px; background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 9%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 13%,var(--bg-panel-solid)) 55%,color-mix(in srgb,var(--rgb-3) 7%,var(--bg-panel-solid))); box-shadow:var(--glass-shadow); overflow:hidden; }
+  .aig-header::after { content:""; position:absolute; width:100px; height:100px; inset-inline-end:-35px; top:-45px; border-radius:50%; background:var(--rgb-2); opacity:.12; filter:blur(22px); pointer-events:none; }
+  .aig-title { flex:1; min-width:0; font-size:var(--fs-lg); line-height:var(--lh-tight); font-weight:800; color:var(--text-1); }
+  .aig-chip { flex:0 0 auto; font-size:var(--fs-xs); font-weight:700; color:var(--rgb-2); background:color-mix(in srgb,var(--rgb-2) 13%,transparent); border:1px solid color-mix(in srgb,var(--rgb-2) 28%,transparent); padding:5px 9px; border-radius:999px; white-space:nowrap; }
+  .aig-chip.warn { color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 12%,transparent); }
+  .aig-chip.bad { color:var(--down); background:color-mix(in srgb,var(--down) 12%,transparent); }
+  .aig-tabs { display:flex; gap:8px; margin:0 -14px 12px; padding:2px 14px 8px; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scroll-padding-inline:14px; overscroll-behavior-inline:contain; scrollbar-width:none; -webkit-overflow-scrolling:touch; direction:inherit; mask-image:linear-gradient(to right,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%); }
+  .aig-tabs::-webkit-scrollbar { display:none; }
+  .aig-tab { flex:0 0 clamp(104px,29vw,126px); scroll-snap-align:start; min-width:104px; min-height:54px; padding:8px 10px; border-radius:14px; font:inherit; font-size:11px; font-weight:700; line-height:1.25; color:var(--text-2); background:var(--bg-panel); border:1px solid var(--line); cursor:pointer; white-space:normal; display:flex; align-items:center; justify-content:center; gap:7px; transition:.2s ease; }
+  .aig-tab-icon { width:22px; height:22px; display:grid; place-items:center; flex:0 0 22px; }
+  .aig-tab-icon svg { width:100%; height:100%; }
+  .aig-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .aig-tab.active { color:var(--text-1); background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 13%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 15%,var(--bg-panel-solid))); border-color:color-mix(in srgb,var(--rgb-2) 45%,var(--line)); box-shadow:inset 0 -2px var(--rgb-1),0 6px 18px color-mix(in srgb,var(--rgb-2) 13%,transparent); transform:translateY(-1px); }
+  .aig-refresh { width:100%; min-height:46px; margin-bottom:var(--sp-4); color:var(--text-1); background:var(--bg-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); font:inherit; font-size:var(--fs-sm); font-weight:700; cursor:pointer; }
+  .aig-refresh:disabled { opacity:.6; cursor:wait; }
+  .aig-connection { display:flex; align-items:center; gap:8px; margin-bottom:var(--sp-3); padding:9px 12px; border:1px solid color-mix(in srgb,var(--down) 35%,var(--line)); border-radius:var(--radius-sm); color:var(--down); background:color-mix(in srgb,var(--down) 8%,var(--bg-panel-solid)); font-size:var(--fs-xs); }
+  .aig-section { margin-bottom:var(--sp-4); background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--sp-4); box-shadow:var(--glass-shadow); }
+  .aig-section-title { font-size:var(--fs-sm); font-weight:800; color:var(--text-1); margin-bottom:var(--sp-3); display:flex; align-items:center; gap:var(--sp-2); }
+  .aig-item { padding:var(--sp-3); border-radius:var(--radius-sm); margin-bottom:var(--sp-2); background:var(--bg-raised); border:1px solid var(--line); }
+  .aig-item-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .aig-prio { font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; letter-spacing:.3px; }
+  .aig-prio.critical { color:var(--down); background:color-mix(in srgb,var(--down) 12%,transparent); }
+  .aig-prio.high { color:#f97316; background:rgba(249,115,22,.12); }
+  .aig-prio.normal { color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 10%,transparent); }
+  .aig-prio.info { color:var(--up); background:color-mix(in srgb,var(--up) 10%,transparent); }
+  .aig-item-kind,.aig-item-meta { font-size:var(--fs-xs); color:var(--text-3); }
+  .aig-item-title { font-size:var(--fs-sm); font-weight:700; color:var(--text-1); }
+  .aig-item-detail { font-size:var(--fs-xs); color:var(--text-2); margin-top:4px; line-height:var(--lh-normal); }
+  .aig-item-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
+  .aig-item-action { color:var(--rgb-1); cursor:pointer; font-weight:700; }
+  .aig-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-2); }
+  .aig-card { min-width:0; background:var(--bg-raised); border:1px solid var(--line); border-radius:var(--radius-sm); padding:var(--sp-3); }
+  .aig-card-name { font-size:var(--fs-xs); color:var(--text-2); display:flex; align-items:center; gap:6px; }
+  .aig-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; box-shadow:0 0 8px currentColor; }
+  .aig-card-value { font-size:var(--fs-lg); font-weight:800; color:var(--text-1); margin-top:6px; }
+  .aig-card-sub { font-size:11px; color:var(--text-2); margin-top:3px; line-height:1.45; overflow-wrap:anywhere; }
+  .aig-light { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--bg-raised); border:1px solid var(--line); margin-bottom:6px; }
+  .aig-light-name { min-width:0; font-size:var(--fs-xs); color:var(--text-1); flex:1; overflow-wrap:anywhere; }
+  .aig-light-lamps { display:flex; flex:0 0 auto; gap:5px; direction:ltr; }
+  .aig-lamp { width:9px; height:9px; border-radius:50%; background:var(--line-strong); }
+  .aig-lamp.on { background:var(--up); box-shadow:0 0 7px color-mix(in srgb,var(--up) 60%,transparent); }
+  .aig-empty { text-align:center; padding:24px 8px; color:var(--text-2); font-size:var(--fs-sm); line-height:var(--lh-loose); }
+  .aig-reason { font-size:10px; color:var(--down); margin-top:4px; direction:ltr; text-align:start; overflow-wrap:anywhere; }
+  .aig-regime { padding:var(--sp-4); border-radius:var(--radius-sm); text-align:center; margin-bottom:var(--sp-3); border:1px solid var(--line); background:var(--bg-raised); }
+  .aig-regime.risk_on { background:color-mix(in srgb,var(--up) 8%,var(--bg-raised)); border-color:color-mix(in srgb,var(--up) 28%,var(--line)); }
+  .aig-regime.risk_off { background:color-mix(in srgb,var(--down) 8%,var(--bg-raised)); border-color:color-mix(in srgb,var(--down) 28%,var(--line)); }
+  .aig-regime.mixed { background:color-mix(in srgb,var(--rgb-5) 8%,var(--bg-raised)); }
+  .aig-regime-label { font-size:var(--fs-lg); font-weight:800; color:var(--text-1); }
+  .aig-regime-sub,.aig-note { font-size:var(--fs-xs); color:var(--text-2); line-height:var(--lh-normal); margin-top:6px; }
+  @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tab { flex-basis:100px; min-width:100px; } .aig-section { padding:13px; } }
+  @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tabs { margin-inline:-16px; padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); flex-basis:124px; } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 `;
 
 const TABS = [
-  { id: 'briefing', icon: '📰' },
-  { id: 'domains', icon: '🌍' },
-  { id: 'cross', icon: '🔀' },
-  { id: 'providers', icon: '🔌' }
+  { id: 'briefing', icon: 'briefing', marker: '📰' },
+  { id: 'domains', icon: 'domains', marker: '🌍' },
+  { id: 'cross', icon: 'cross', marker: '🔀' },
+  { id: 'providers', icon: 'providers', marker: '🔌' }
 ];
+
+function TabIcon({ name }) {
+  const paths = {
+    briefing: <><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M8.5 8.5h6M8.5 12h6M8.5 15.5h4"/><path d="M18 8h1a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-1"/></>,
+    domains: <><circle cx="12" cy="12" r="8.5"/><path d="M3.8 12h16.4M12 3.5c2.2 2.3 3.3 5.1 3.3 8.5S14.2 18.2 12 20.5C9.8 18.2 8.7 15.4 8.7 12S9.8 5.8 12 3.5z"/></>,
+    cross: <><path d="M4 7h11.5a3.5 3.5 0 0 1 3.5 3.5V20"/><path d="m16 17 3 3 3-3"/><path d="M4 17h5.5a3.5 3.5 0 0 0 3.5-3.5V4"/><path d="m10 7 3-3 3 3"/></>,
+    providers: <><path d="M9 4v5M15 4v5M7 9h10v2a5 5 0 0 1-5 5v4"/><path d="M9 20h6"/></>
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
 
 const DOMAIN_META = {
   smart_money: { icon: '🧠', fa: 'پول هوشمند', en: 'Smart money' },
@@ -112,24 +127,38 @@ function AiGlobalIntelligenceInner() {
   const [data, setData] = useState({ intelligence: null, briefing: null, cross: null, providers: null });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const isRTL = !i18n.language?.startsWith('en');
-  const L = (fa, en) => (isRTL ? fa : en);
+  const [connectionError, setConnectionError] = useState(null);
+  const language = String(i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
+  const isPersian = language === 'fa';
+  const isRTL = ['fa', 'ar', 'ur'].includes(language);
+  const L = (fa, en) => (isPersian ? fa : en);
 
   const load = useCallback(async (refresh = false) => {
+    const readJson = async (url) => {
+      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (!payload?.ok) throw new Error(payload?.error || 'INVALID_RESPONSE');
+      return payload;
+    };
     try {
       if (refresh) setRefreshing(true);
+      setConnectionError(null);
       const qs = refresh ? '?refresh=1' : '';
-      const [intelRes, briefRes, crossRes] = await Promise.allSettled([
-        fetch(`/api/ai/global/intelligence${qs}`).then((r) => r.json()),
-        fetch(`/api/ai/global/briefing${qs}`).then((r) => r.json()),
-        fetch('/api/ai/global/cross-asset').then((r) => r.json())
+      const [intel, brief, crossAsset, providerState] = await Promise.all([
+        readJson(`/api/ai/global/intelligence${qs}`),
+        readJson(`/api/ai/global/briefing${qs}`),
+        readJson('/api/ai/global/cross-asset'),
+        readJson('/api/ai/global/providers')
       ]);
-      const intelligence = intelRes.status === 'fulfilled' && intelRes.value?.ok ? intelRes.value.globalIntelligence : null;
-      const briefing = briefRes.status === 'fulfilled' && briefRes.value?.ok ? briefRes.value.briefing : null;
-      const cross = crossRes.status === 'fulfilled' && crossRes.value?.ok ? crossRes.value : null;
-      setData((prev) => ({ intelligence: intelligence || prev.intelligence, briefing: briefing || prev.briefing, cross: cross || prev.cross, providers: intelligence?.providers || null }));
-    } catch {
-      /* the panels keep their honest empty state */
+      setData({
+        intelligence: intel.globalIntelligence || null,
+        briefing: brief.briefing || null,
+        cross: crossAsset || null,
+        providers: providerState.providers || intel.globalIntelligence?.providers || null
+      });
+    } catch (error) {
+      setConnectionError(error?.message || 'NETWORK_ERROR');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -204,16 +233,22 @@ function AiGlobalIntelligenceInner() {
       <div className="aig-tabs">
         {TABS.map((t) => (
           <button key={t.id} type="button" className={`aig-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-            {t.icon} {t.id === 'briefing' ? L('بریفینگ', 'Briefing')
+            <span className="aig-sr">{t.marker}</span><span className="aig-tab-icon"><TabIcon name={t.icon} /></span><span>{t.id === 'briefing' ? L('بریفینگ', 'Briefing')
               : t.id === 'domains' ? L('دامنه‌ها', 'Domains')
               : t.id === 'cross' ? L('کراس-است', 'Cross-asset')
-              : L('ارائه‌دهنده‌ها', 'Providers')}
+              : L('ارائه‌دهنده‌ها', 'Providers')}</span>
           </button>
         ))}
-        <button type="button" className="aig-refresh" onClick={() => load(true)} disabled={refreshing}>
-          {refreshing ? L('…در حال خواندن', 'reading…') : L('به‌روزرسانی', 'refresh')}
-        </button>
       </div>
+      <button type="button" className="aig-refresh" onClick={() => load(true)} disabled={refreshing}>
+        {refreshing ? L('در حال دریافت داده…', 'Reading live data…') : L('به‌روزرسانی داده‌های زنده', 'Refresh live data')}
+      </button>
+      {connectionError ? (
+        <div className="aig-connection" role="status">
+          <span aria-hidden="true">●</span>
+          <span>{L('ارتباط با سرور برقرار نشد. برای تلاش دوباره، به‌روزرسانی را بزنید.', 'Server connection failed. Tap refresh to try again.')}</span>
+        </div>
+      ) : null}
 
       {/* ── BRIEFING — the proactive layer ─────────────────────────────── */}
       {tab === 'briefing' && (
