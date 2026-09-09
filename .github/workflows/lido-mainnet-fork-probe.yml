@@ -11,10 +11,20 @@
 #   3. Actions tab → "Lido mainnet fork probe" → Run workflow.
 #      Optional inputs:
 #        - rpc_url (default https://eth.llamarpc.com) — any public Ethereum RPC
-#          works; an archive node is more reliable for the getLogs window.
+#          that serves ARCHIVE state without a personal token. The probe needs
+#          eth_getLogs over the forked queue's history, so a non-archive endpoint
+#          (e.g. https://ethereum-rpc.publicnode.com) is rejected with a HTTP 403
+#          "Archive requests require a personal token" and the probe FAILs (it
+#          never counts a transport error as a pass). If rpc_url is unreachable,
+#          the probe auto-fails over to eth-mainnet.public.blastapi.io,
+#          eth.drpc.org and 1rpc.io/eth before giving up. Recommend leaving the
+#          default and letting the probe pick a reachable archive endpoint.
 #        - log_window (default 100000) — blocks to scan for a real finalized,
 #          unclaimed WithdrawalRequested entry used for the claim/ownership proof.
 #          Lower it on a rate-limited public RPC.
+#        - log_chunk (default 10000) — eth_getLogs chunk size; the probe adaptively
+#          shrinks it to whatever per-call range the chosen RPC allows (e.g. some
+#          endpoints cap at 10 blocks), so this rarely needs to be set manually.
 #
 # WHAT IT DOES: installs Foundry (anvil) on the runner, forks Ethereum mainnet
 # locally, and runs the REAL acceptance probe
@@ -41,6 +51,10 @@ on:
         description: 'Blocks to scan for a finalized/unclaimed request (getLogs window)'
         required: false
         default: '100000'
+      anvil_start_timeout:
+        description: 'Milliseconds to wait for anvil to boot its fork (raise for a slow/flaky archive RPC)'
+        required: false
+        default: '180000'
 
 jobs:
   probe:
@@ -81,6 +95,7 @@ jobs:
         env:
           ETHEREUM_RPC_URL: ${{ inputs.rpc_url }}
           LIDO_LOG_WINDOW: ${{ inputs.log_window }}
+          ANVIL_START_TIMEOUT_MS: ${{ inputs.anvil_start_timeout }}
         run: |
           export PATH="$HOME/.foundry/bin:$PATH"
           set -o pipefail
