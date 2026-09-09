@@ -1,3 +1,70 @@
+# Unreleased — SplitRouter: کارمزد واریز فارم، بدون نگهداری پول («پول دست ما نباشد»)
+
+**«میخواهیم کارمزد بگیریم اما پول دست ما نباشد» — the five Farm execution paths
+deposit straight from the user's wallet to the protocol, which is why they earn the
+platform nothing.** The plan agreed across this conversation: fee-on-deposit without
+custody (a split router), plus the recurring-fee Morpho vault when it is deployed
+(that surface already ships dormant in `src/lib/vault.js` + `docs/MORPHO-VAULT-FA.md`,
+and its in-app deposit form stays unwired **by its own documented decision** until the
+vault has a track record). This change delivers the router half, with the same
+fail-closed discipline the Farm rollout itself uses.
+
+### What changes
+
+- **`contracts/FBTSplitRouter.sol` (new) — fee-on-deposit, custody-free.** One
+  deployment per chain, every destination (Aave Pool, Comet, Morpho + the pinned
+  market, Lido) and the fee immutable at deploy; `onBehalfOf` is forced to
+  `msg.sender`; every path ends with an on-chain zero-balance assertion; withdrawals
+  never touch it. **Zero admin by design**: no owner, no `setFeeBps`, no rescue, no
+  `receive()`, no generic forward — the ABI probe asserts this on the artifact. Fee
+  hard-capped at 1.00% (`MAX_FEE_BPS = 100`, the same ceiling as `src/lib/feeBps.js`).
+  A Lido-only Ethereum deployment pins no token. NOT AUDITED — the runbook in
+  `docs/defi/SPLIT-ROUTER-FA.md` puts audit + strict fork rehearsal before any env
+  is set.
+- **`scripts/compile-split-router.mjs` → `src/lib/splitRouterArtifact.json` (new,
+  committed):** solc 0.8.24 compile, 7166 bytes, `audited: false` until a real audit
+  report exists — same artifact pattern as FeeRouter/FlashLiquidityRouter.
+- **`test/split-router/split-router-contract-probe.mjs` — 10 assertions:** required
+  surface, the zero-admin guarantee, payable discipline (only `stakeLido`), the
+  compiled fee cap, the `Routed` event's money story, EIP-170 size, and a selector
+  cross-check of the four protocol calls against the canonical ones the adapters
+  encode (aave `0x617ba037`, morpho `0xa99aad89`, lido `0xa1903eab`).
+- **`test/split-router/split-router-evm-rehearsal.mjs` — 28/28 PASS on local
+  ganache:** deploys the REAL production artifact against the mock world from
+  `contracts/rehearsal/SplitRouterMocks.sol` (same surfaces the real protocols
+  expose) and proves the fee split (0.30% of 1000 USDC → 0.30 payout / 997.00
+  deposited **to the depositor**), the zero-balance invariant after every path
+  (asset, Comet base, stETH, ETH), the Compound hand-over, the Morpho market pin,
+  the Lido ETH fee, and every guard with its real revert string
+  (`FEE_TOO_HIGH`, `ZERO_ASSET`, `MORPHO_MARKET_ID_MISMATCH`, `ZERO_AMOUNT`,
+  `ZERO_TARGET`, missing-allowance, ETH-transfer bounce). Boundary test: exactly
+  100 bps deploys. Report committed at `test/split-router/split-router-rehearsal-report.json`.
+- **`test/split-router/split-router-fork-rehearsal.mjs` (new):** the mainnet-state
+  half — same artifact, forked Base + Ethereum, REAL Aave/Comet/Morpho/Lido, real
+  USDC moved between forked accounts. Self-skips without anvil (this sandbox has
+  no chain egress), `--strict` for the pre-deploy evidence gate, exactly like the
+  five adapter probes. Must PASS before any address enters env.
+- **`src/lib/defi/splitRouter.js` (new) — the dormant client seam.** Per-chain env
+  (`VITE_FBT_SPLIT_ROUTER_BASE/_ARBITRUM/_ETHEREUM`), on-chain `feeBps` read
+  (never from env, refused above the compiled cap), BigInt-exact `quoteSplit`, and
+  `routeSupplyPlan()` which rewrites any of the four adapters' supply plans through
+  the router and records the fee in `checks.splitRouter` for show-before-sign.
+  **Fail-open to today:** with nothing configured it returns the original plan
+  object, same reference — tested. Panels stay unwired until a deployed, audited
+  address exists (the diff then is lines, not files).
+- **`test/split-router-defi.test.js` — 15 vitest assertions:** dormancy (same-
+  reference identity), malformed-env rejection, the contract-fee read, exact fee
+  math, per-protocol rewrites, Lido value passthrough, and fail-open on every
+  unrecognised plan shape.
+- **`npm run test:split-router`** chains compile → ABI probe → EVM rehearsal →
+  unit tests. `.env.example` documents the three env vars with the audit/fork
+  preconditions; `docs/defi/SPLIT-ROUTER-FA.md` is the full Persian runbook
+  (invariants, per-chain pinned config, execution order, kill switch).
+- **Nothing existing was touched.** No adapter, panel, gate, workflow or money
+  path changed: a capital-off build today is byte-for-byte what it was, and a
+  public-open build behaves identically until someone deliberately sets a
+  router address after the audit.
+
 # Unreleased — Farm execution finally reaches every visitor («در فارم هنوز نمیاد برای همه»)
 
 **«در فارم هنوز نمیاد برای همه» — the pool card still said «تحلیل پروتکلی این
