@@ -1,0 +1,12 @@
+{
+  "protocol": "aave-base",
+  "result": "PASS",
+  "assertionsPassed": 36,
+  "totalAssertions": 36,
+  "fingerprint": {
+    "algo": "sha256",
+    "digest": "97abf4ad49c016a4ff719eb797b6f9f4dc52b192a5d44a9d3e50f524f4b32fc3"
+  },
+  "recordedAt": "2026-09-08T23:15:00.878Z",
+  "note": "Strict mainnet-fork probe output. This is a re-earned per-run record, not a git artifact."
+}

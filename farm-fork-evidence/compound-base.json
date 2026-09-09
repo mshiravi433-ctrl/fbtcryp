@@ -1,0 +1,12 @@
+{
+  "protocol": "compound-base",
+  "result": "PASS",
+  "assertionsPassed": 46,
+  "totalAssertions": 46,
+  "fingerprint": {
+    "algo": "sha256",
+    "digest": "e43e1301469cbeeccaa8c1787713259b27f7777daa2a9e0a374151a6c89f8eae"
+  },
+  "recordedAt": "2026-09-08T23:59:27.574Z",
+  "note": "Strict mainnet-fork probe output. A protocol whose probe passed is committed as an auditable anchor so the fail-closed staged gate is reproducible in CI; re-earned per run otherwise."
+}

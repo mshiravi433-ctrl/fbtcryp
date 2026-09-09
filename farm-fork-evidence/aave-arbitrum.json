@@ -1,0 +1,12 @@
+{
+  "protocol": "aave-arbitrum",
+  "result": "PASS",
+  "assertionsPassed": 37,
+  "totalAssertions": 37,
+  "fingerprint": {
+    "algo": "sha256",
+    "digest": "29d686b8fc0b707a12d06e1de6d702f0eac43369f7dd6ae4939434d591a4bd08"
+  },
+  "recordedAt": "2026-09-08T23:30:31.304Z",
+  "note": "Strict mainnet-fork probe output. A protocol whose probe passed is committed as an auditable anchor so the fail-closed staged gate is reproducible in CI; re-earned per run otherwise."
+}

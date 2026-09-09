@@ -32,6 +32,16 @@ scripts/locales/ar-todo.txt
 
 # collected operational evidence (real digests + measurements, re-earned per run)
 evidence.json
+
+# farm fork-probe evidence records. A protocol whose --strict fork probe passed is
+# committed as a canonical, auditable anchor (farm-fork-evidence/<id>.json, with the
+# probe log sha256) so the fail-closed staged gate is reproducible in a fresh CI/Vercel
+# checkout. Transient per-run records for OTHER protocols are re-earned and not tracked;
+# only the committed one is material. scripts/record-farm-fork-evidence.mjs rewrites them.
+farm-fork-evidence/*.json
+!farm-fork-evidence/aave-base.json
+!farm-fork-evidence/aave-arbitrum.json
+!farm-fork-evidence/compound-base.json
 *-probe-detail.json
 .sandbox/
 
