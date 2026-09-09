@@ -1,0 +1,246 @@
+/* Payment gateway — merchant builder (P2P tab) and customer landing.
+   Page-scoped on purpose: do not dump these rules into index.css. */
+
+.p2p-tab-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pay-gw {
+  display: grid;
+  gap: 4px;
+}
+
+.pay-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pay-field > span {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-2);
+}
+
+.pay-field input,
+.pay-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-2, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.pay-themes {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pay-theme {
+  height: 40px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pay-theme.is-on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--swatch, #00e5a8) 55%, transparent);
+}
+
+.pay-bound {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pay-bound .mono {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.pay-link-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  margin-top: 10px;
+}
+
+.pay-link-url {
+  font-size: 11.5px;
+  word-break: break-all;
+  color: var(--text-2);
+}
+
+.pay-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pay-qr {
+  width: 132px;
+  height: 132px;
+  padding: 8px;
+  margin: 4px auto 0;
+  background: #fff;
+  border-radius: 12px;
+}
+
+.pay-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- customer landing (headerless, themed, not Welcome) ---------------- */
+
+.pay-landing {
+  min-height: 100vh;
+  padding: 28px 20px 56px;
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--pay-accent) 22%, transparent), transparent 60%),
+    var(--pay-bg, #071510);
+  color: var(--pay-fg, #e8fff6);
+}
+
+.pay-landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.pay-landing-brand strong {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.pay-landing-card {
+  border-radius: 22px;
+  padding: 22px 18px 20px;
+  background: color-mix(in srgb, var(--pay-fg) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pay-accent) 35%, transparent);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.pay-landing-name {
+  font-size: 13px;
+  opacity: 0.72;
+  margin-bottom: 4px;
+}
+
+.pay-landing-title {
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+}
+
+.pay-landing-meta {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.pay-landing-meta span {
+  opacity: 0.65;
+  font-size: 11px;
+}
+
+.pay-landing-amount {
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-landing input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--pay-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--pay-fg) 6%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.pay-landing-fee {
+  font-size: 12px;
+  line-height: 1.55;
+  opacity: 0.78;
+  margin: 12px 0 18px;
+}
+
+.pay-landing-btn {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--pay-accent);
+  color: #04110c;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.pay-landing-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pay-landing-hint {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.pay-landing-err {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #ff8aa0;
+}
+
+.pay-landing-done {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+
+.pay-landing-done h2 {
+  margin: 10px 0 6px;
+  font-size: 22px;
+}
+
+.pay-landing-hash {
+  font-size: 11.5px;
+  word-break: break-all;
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pay-landing {
+    background: var(--pay-bg, #071510);
+  }
+}

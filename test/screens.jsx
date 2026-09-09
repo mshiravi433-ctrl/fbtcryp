@@ -20,7 +20,8 @@ import Swap from '../src/pages/Swap.jsx';
 import Leaderboard from '../src/pages/Leaderboard.jsx';
 import Help from '../src/pages/Help.jsx';
 import P2P from '../src/pages/P2P.jsx';
-import BoardPanel from '../src/components/BoardPanel.jsx';
+import PayGatewayPanel from '../src/components/PayGatewayPanel.jsx';
+import PayLanding from '../src/pages/PayLanding.jsx';
 import CommunityPanel from '../src/components/CommunityPanel.jsx';
 import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
@@ -177,10 +178,10 @@ export async function run(container) {
   await mount('BoardPanel', <BoardPanel />);
 
   /*
-   * The community feed, mounted directly for the same reason as the board: it
-   * lives behind a tab click, so the P2P mount above never reaches it. This
-   * renders with fetch failing, which is the case that matters — a dead feed
-   * must show the offline state, not throw and take the page with it.
+   * The community feed, mounted directly: it lives behind a News tab click,
+   * so no other mount reaches it. This renders with fetch failing, which is
+   * the case that matters — a dead feed must show the offline state, not
+   * throw and take the page with it.
    */
   await mount('CommunityPanel', <CommunityPanel />);
   await mount('Explore', <Explore />);

@@ -53,8 +53,9 @@ import { IconChevronRight } from './Icons';
  * @param {'info'|'warn'|'danger'} [props.tone='info']
  * @param {boolean} [props.defaultOpen=false]
  * @param {string}  [props.id]       for a stable animation key
+ * @param {import('react').ReactNode} [props.icon] optional glyph next to the title
  */
-export default function InfoBox({ title, tone = 'info', defaultOpen = false, id, children }) {
+export default function InfoBox({ title, tone = 'info', defaultOpen = false, id, icon, children }) {
   const [open, setOpen] = useState(defaultOpen);
   const { haptic } = useTelegram();
 
@@ -74,7 +75,9 @@ export default function InfoBox({ title, tone = 'info', defaultOpen = false, id,
           this size — a 14px warning triangle next to 13px text is noise, and
           the four screens this replaces were already too busy.
         */}
-        <span className="infobox-dot" aria-hidden="true" />
+        {icon
+          ? <span className="infobox-icon" aria-hidden="true">{icon}</span>
+          : <span className="infobox-dot" aria-hidden="true" />}
         <span className="infobox-title">{title}</span>
         <motion.span
           className="infobox-chev"

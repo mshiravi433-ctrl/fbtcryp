@@ -3820,7 +3820,7 @@
     "tab": {
       "market": "Market",
       "otc": "On-chain OTC",
-      "board": "Board"
+      "pay": "Pay"
     },
     "otcTitle": "Direct wallet-to-wallet",
     "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
@@ -11592,5 +11592,66 @@
   "aiGlobal": {
     "title": "Global Intelligence",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "pay": {
+    "title": "Payment gateway",
+    "subtitle": "Create a page your customers open, connect Trust Wallet, and pay you. A {{fee}}% fee is taken on every payment from that link.",
+    "section": {
+      "wallet": "Your wallet",
+      "look": "Look",
+      "payment": "Payment",
+      "link": "Shareable link"
+    },
+    "connect": "Connect the wallet that will receive payments.",
+    "bound": "Payments go to this address. It is bound to your connected wallet.",
+    "color": "Page colour",
+    "language": "Page language",
+    "network": "Network",
+    "token": "Token",
+    "amount": "Amount",
+    "amountHint": "Leave empty so the customer types the amount.",
+    "amountOpen": "Customer chooses",
+    "name": "Display name",
+    "nameHint": "Shown on the landing page. Optional.",
+    "namePlaceholder": "Store name",
+    "create": "Create link",
+    "needWallet": "Connect a wallet first.",
+    "needToken": "Pick a token.",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "share": "Share",
+    "preview": "Open page",
+    "remove": "Remove",
+    "emptyLinks": "No links yet.",
+    "feeNote": "Every payment from this link takes a {{fee}}% platform fee on-chain. The rest goes to your wallet.",
+    "qr": "QR code",
+    "landing": {
+      "title": "Pay",
+      "invalid": "This payment link is not valid.",
+      "pay": "Pay",
+      "connect": "Connect Trust Wallet",
+      "connecting": "Connecting…",
+      "paying": "Confirm in your wallet…",
+      "amount": "Amount",
+      "to": "To",
+      "network": "Network",
+      "fee": "A {{fee}}% platform fee is taken on this payment. The rest goes to the merchant.",
+      "done": "Paid",
+      "hash": "Transaction",
+      "wrongChain": "Switch to {{network}} in your wallet to continue.",
+      "insufficient": "Not enough {{token}} in this wallet.",
+      "rejected": "The payment was rejected.",
+      "failed": "The payment did not go through.",
+      "openAmount": "Enter the amount to pay.",
+      "trustHint": "Opens Trust Wallet. If Trust is already in this browser, it connects directly."
+    },
+    "theme": {
+      "mint": "Mint",
+      "cyan": "Cyan",
+      "violet": "Violet",
+      "rose": "Rose",
+      "gold": "Gold",
+      "night": "Night"
+    }
   }
 }
