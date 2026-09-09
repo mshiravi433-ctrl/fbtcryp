@@ -17,8 +17,21 @@ import { Contract, Interface, JsonRpcProvider, Wallet, formatEther, parseEther }
 
 const PORT = Number(process.env.ANVIL_PORT || 8555);
 const EXPLICIT_RPC = String(process.env.ETHEREUM_RPC_URL ?? '').trim();
-const RPC = EXPLICIT_RPC || process.env.MAINNET_RPC_URL || 'https://eth.llamarpc.com';
 const STRICT = process.argv.includes('--strict');
+
+// ETH mainnet fork RPC candidates. The operator's explicit choice is tried first,
+// then a set of token-free, archive-capable public endpoints. Only a reachable
+// endpoint is used; if NONE respond the probe fails (this is never a green skip).
+// publicnode is deliberately NOT listed because it rejects archive eth_getLogs
+// with a 403 "personal token" — reachable but not usable for this probe.
+const RPC_CANDIDATES = [
+  ...(EXPLICIT_RPC ? [EXPLICIT_RPC] : []),
+  ...(process.env.MAINNET_RPC_URL ? [process.env.MAINNET_RPC_URL] : []),
+  'https://eth.llamarpc.com',
+  'https://eth-mainnet.public.blastapi.io',
+  'https://eth.drpc.org',
+  'https://1rpc.io/eth'
+];
 const KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const rows = [];
@@ -40,12 +53,51 @@ async function rpc(url, method, params) {
   if (body.error) throw new Error(`${method}: ${body.error.message}`);
   return body.result;
 }
+
+// Pick the first reachable ETH mainnet RPC from the candidate list. Each probe is
+// capped so a hung endpoint cannot stall discovery, and every failure is captured
+// so the final error tells the operator which endpoints were tried and why.
+const RPC_PROBE_TIMEOUT_MS = 10_000;
+async function pickReachableRpc() {
+  const failures = [];
+  for (const url of RPC_CANDIDATES) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_PROBE_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+        signal: controller.signal
+      });
+      const body = await response.json();
+      if (body.result) return url;
+      failures.push(`${url}: ${body?.error?.message ?? 'no eth_blockNumber'}`);
+    } catch (e) {
+      failures.push(`${url}: ${e?.name === 'AbortError' ? 'timeout' : (e?.message ?? String(e))}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error(`No reachable ETH mainnet RPC. Tried: ${failures.join(' | ')}`);
+}
+// Anvil fetches the fork state at boot, so a slow/flaky public archive RPC can
+// delay the JSON-RPC endpoint well past a fixed 30s window. Let the operator
+// budget more time (ANVIL_START_TIMEOUT_MS, default 180s) and, on timeout,
+// surface the last fork error so the cause (RPC unreachable vs. anvil boot) is
+// explicit instead of a bare "did not start".
+const ANVIL_START_TIMEOUT_MS = Number(process.env.ANVIL_START_TIMEOUT_MS || 180_000);
 const waitForRpc = async (url) => {
-  for (let i = 0; i < 60; i += 1) {
-    try { if (await rpc(url, 'eth_blockNumber', [])) return true; } catch { /* booting */ }
+  const deadline = Date.now() + ANVIL_START_TIMEOUT_MS;
+  let lastErr = null;
+  while (Date.now() < deadline) {
+    try { if (await rpc(url, 'eth_blockNumber', [])) return true; } catch (e) { lastErr = e; /* booting */ }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return false;
+  throw new Error(
+    `Anvil did not become ready within ${Math.round(ANVIL_START_TIMEOUT_MS / 1000)}s` +
+    (lastErr ? `; last fork error: ${lastErr?.message ?? String(lastErr)}` : '')
+  );
 };
 const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, beforePosition, requestId = null, nonce }) => {
   const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: step.value ?? 0n, nonce });
@@ -64,6 +116,26 @@ const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, bef
   return { receipt, proof };
 };
 
+// Many public archive RPCs cap the block range a single eth_getLogs may cover
+// (and anvil inherits that limit when serving forked historical state). Query in
+// fixed-size chunks and merge, so the SDK's chosen fork RPC is not rejected for
+// requesting an oversized range. The topic is one event on one address, so the
+// merged result stays small and only needs to be reversed (newest-first) later.
+const LOG_CHUNK = 10_000;
+const fetchLogsChunked = async (provider, filter) => {
+  const { fromBlock, toBlock } = filter;
+  let from = fromBlock;
+  let out = [];
+  while (from <= toBlock) {
+    const to = Math.min(from + LOG_CHUNK - 1, toBlock);
+    const part = await provider.getLogs({ ...filter, fromBlock: from, toBlock: to });
+    out = out.concat(part);
+    if (to >= toBlock) break;
+    from = to + 1;
+  }
+  return out;
+};
+
 let anvil = null;
 try {
   rule('Lido · Ethereum mainnet (1) · stake / wrap / unwrap / withdrawal queue');
@@ -72,6 +144,8 @@ try {
   } else if (!haveAnvil()) {
     t('Anvil is available (--strict)', false, 'anvil not found on PATH');
   } else {
+    const RPC = await pickReachableRpc();
+    t('Ethereum mainnet fork RPC is reachable', true, RPC);
     anvil = spawn('anvil', [
       '--fork-url', RPC,
       '--chain-id', '1',
@@ -80,7 +154,7 @@ try {
       '--silent'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
     const url = `http://127.0.0.1:${PORT}`;
-    if (!await waitForRpc(url)) throw new Error('Anvil did not start within 30 seconds');
+    await waitForRpc(url); // throws a descriptive error if anvil never becomes ready
     t('Ethereum mainnet fork is serving', true, url);
 
     execSync('npx vite build -c test/vite.lidofork.mjs --logLevel error', { stdio: 'ignore' });
@@ -167,7 +241,8 @@ try {
     const topic = queueIface.getEvent('WithdrawalRequested').topicHash;
     const latest = await provider.getBlockNumber();
     const fromBlock = Math.max(0, latest - Number(process.env.LIDO_LOG_WINDOW || 100_000));
-    const logs = await provider.getLogs({ address: adapter.LIDO.withdrawalQueue, topics: [topic], fromBlock, toBlock: latest });
+    // Chunked so the fork RPC is not rejected for an oversized eth_getLogs range.
+    const logs = await fetchLogsChunked(provider, { address: adapter.LIDO.withdrawalQueue, topics: [topic], fromBlock, toBlock: latest });
     let claimCandidate = null;
     for (const log of logs.slice().reverse()) {
       const parsed = queueIface.parseLog({ topics: log.topics, data: log.data });

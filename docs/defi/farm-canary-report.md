@@ -142,9 +142,42 @@ strict `EXPLICIT_RPC` gate is untouched.
 **Status:** the unwrap fix is **now on `main`** (PR #258, merged as `cf04767`), and
 the Aave/Compound evidence anchors are also on `main` (PR #259, merged as `f2b0390`).
 
-**Next step:** re-run the manual **Lido mainnet fork probe** action now that the fix
-is in `main`; if it returns a clean `N/N passed`, record `farm-fork-evidence/lido.json`
-from that log, and only then consider Lido a canary candidate.
+**Probe result as of the latest manual run:** **27/28 passed.** Every real-logic
+assertion passes (stake → wrap → unwrap → withdrawal request → real `requestId` →
+ownership → fresh request not finalized → claim blocked until finalization). The
+**single** remaining FAIL is the last assertion (`probe completed without an
+unexpected error`): it is a **transport/archive error, not a logic bug** — the fork
+RPC used (`https://ethereum-rpc.publicnode.com`) rejects `eth_getLogs` over the queue
+history with `HTTP 403 "Archive requests require a personal token"`. Per the strict
+rule, a transport error is never counted as a pass, so this run is **not** evidence
+yet.
+
+**Required fix — use a responsive token-free ARCHIVE fork RPC.** Pass an RPC that
+serves archival state without a personal token and responds promptly (the workflow
+default `https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
+`https://eth.drpc.org`, `https://1rpc.io/eth`). Do **not** use
+`https://ethereum-rpc.publicnode.com` or any non-archive endpoint — it will `403`
+on archive `getLogs`. The probe now also **chunks** `eth_getLogs` into 10k-block
+windows so a per-request range cap cannot reject it.
+
+**Slow-fork startup / unreachable default RPC (newest run):** the probe failed with
+`Anvil did not become ready within 180s; last fork error: fetch failed` — the default
+`https://eth.llamarpc.com` was **unreachable from the runner**. That run is **not** a
+pass. The probe now:
+- **auto-fails over** across a set of token-free, archive-capable ETH RPCs (the
+  operator's explicit `rpc_url` first, then `eth.llamarpc.com`,
+  `eth-mainnet.public.blastapi.io`, `eth.drpc.org`, `1rpc.io/eth`), picking the first
+  reachable one. If **none** respond it fails (never a green skip).
+- budgets up to **`ANVIL_START_TIMEOUT_MS`** (default **180s**) to boot anvil, and
+  reports the **last fork error** so the cause is explicit.
+`publicnode` is deliberately excluded — it is reachable but rejects archive
+`eth_getLogs` with a 403 "personal token".
+
+**How to re-run (operator):** re-run the manual **Lido mainnet fork probe** with any
+token-free archive RPC (or leave `rpc_url` at the default and let the probe fail over).
+The probe will find a reachable archive endpoint on its own. Expected result:
+**28/28 passed**. Then record `farm-fork-evidence/lido.json` and Lido can be considered
+a canary candidate.
 
 ---
 
