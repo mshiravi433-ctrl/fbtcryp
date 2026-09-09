@@ -13400,8 +13400,17 @@ export default function run() {
         .includes('AAVE_BASE_SUPPLY_ENABLED'));
     t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
       panel.includes('withdrawAllowed && (') && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    /*
+     * The guard gained exactly one term: the build's public-rollout constant,
+     * which is `ENABLED && PUBLIC` (src/lib/farmRolloutMode.js). Both halves are
+     * pinned here so the term cannot become a bare `true` — a capital-off or
+     * canary build must still render NOTHING for a wallet with no position and
+     * no ledger history, exactly as before.
+     */
     t('the panel renders nothing once the flag is off with no position and no ledger history',
-      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+      panel.includes(`if (!supplyAllowed && !hasPosition && !knownHere && !AAVE_BASE_SUPPLY_OPEN_TO_PUBLIC) return null;`)
+      && read('src/lib/farmRolloutMode.js').includes(`export const AAVE_BASE_SUPPLY_OPEN_TO_PUBLIC =
+  AAVE_BASE_SUPPLY_ENABLED && AAVE_BASE_SUPPLY_PUBLIC;`));
 
     /* ── the deployment is verified before any write ──────────────────────── */
     t('verifyDeployment compares PoolAddressesProvider.getPool() to the pinned Pool',
@@ -13649,8 +13658,17 @@ export default function run() {
     t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
       panel.includes('withdrawAllowed && (')
       && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    /*
+     * The guard gained exactly one term: the build's public-rollout constant,
+     * which is `ENABLED && PUBLIC` (src/lib/farmRolloutMode.js). Both halves are
+     * pinned here so the term cannot become a bare `true` — a capital-off or
+     * canary build must still render NOTHING for a wallet with no position and
+     * no ledger history, exactly as before.
+     */
     t('the panel renders nothing once the flag is off with no position and no ledger history',
-      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+      panel.includes(`if (!supplyAllowed && !hasPosition && !knownHere && !COMPOUND_BASE_SUPPLY_OPEN_TO_PUBLIC) return null;`)
+      && read('src/lib/farmRolloutMode.js').includes(`export const COMPOUND_BASE_SUPPLY_OPEN_TO_PUBLIC =
+  COMPOUND_BASE_SUPPLY_ENABLED && COMPOUND_BASE_SUPPLY_PUBLIC;`));
 
     /* ── Comet's own semantics, not Aave's, copied by accident ────────────── */
     /*
@@ -13777,10 +13795,19 @@ export default function run() {
     t('the pool matchers are mutually exclusive, so at most one panel renders',
       adapter.includes("project === 'compound-v3'")
       && read('src/lib/defi/aaveV3Base.js').includes("project === 'aave-v3'"));
-    t('all four panels are mounted on the Farm screen (second check)',
-      farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<LidoPanel pool={pool} />'));
+    /*
+     * The panels are mounted through the adapter registry the position hub
+     * renders from (components/Farm/FarmPositionHub.jsx) rather than as literal
+     * JSX in the page — which is what this check used to grep for, so it had
+     * been red since the hub landed. Both halves of the wiring are asserted
+     * now: the registry carries every panel, and the Farm page mounts the hub.
+     * A panel that exists but is mounted nowhere is the failure this row is for.
+     */
+    const hubSrcCompound = read('src/components/Farm/FarmPositionHub.jsx');
+    t('all five execution panels are mounted on the Farm screen (second check)',
+      ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcCompound.includes(`Panel: ${name}`))
+      && hubSrcCompound.includes('<Panel key={id} pool={descriptor} />')
+      && farmPage.includes('<FarmPositionHub />'));
     t('the Compound adapter does not import the Aave one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
 
@@ -13953,8 +13980,17 @@ export default function run() {
     t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
       panel.includes('withdrawAllowed && (')
       && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
+    /*
+     * The guard gained exactly one term: the build's public-rollout constant,
+     * which is `ENABLED && PUBLIC` (src/lib/farmRolloutMode.js). Both halves are
+     * pinned here so the term cannot become a bare `true` — a capital-off or
+     * canary build must still render NOTHING for a wallet with no position and
+     * no ledger history, exactly as before.
+     */
     t('the panel renders nothing once the flag is off with no position and no ledger history',
-      /if \(!supplyAllowed && !hasPosition && !knownHere\) return null;/.test(panel));
+      panel.includes(`if (!supplyAllowed && !hasPosition && !knownHere && !AAVE_ARB_SUPPLY_OPEN_TO_PUBLIC) return null;`)
+      && read('src/lib/farmRolloutMode.js').includes(`export const AAVE_ARB_SUPPLY_OPEN_TO_PUBLIC =
+  AAVE_ARB_SUPPLY_ENABLED && AAVE_ARB_SUPPLY_PUBLIC;`));
 
     /* ── the deployment is verified before any write ──────────────────────── */
     t('verifyDeployment throws on a Pool mismatch',
@@ -14042,11 +14078,19 @@ export default function run() {
       adapter.includes("project === 'aave-v3'") && adapter.includes("chain === 'arbitrum'")
       && read('src/lib/defi/aaveV3Base.js').includes("chain === 'base'")
       && read('src/lib/defi/compoundV3Base.js').includes("project === 'compound-v3'"));
-    t('all four panels are mounted on the Farm screen',
-      farmPage.includes('<AaveBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<CompoundBaseUsdcPanel pool={pool} />')
-      && farmPage.includes('<AaveArbUsdcPanel pool={pool} />')
-      && farmPage.includes('<LidoPanel pool={pool} />'));
+    /*
+     * The panels are mounted through the adapter registry the position hub
+     * renders from (components/Farm/FarmPositionHub.jsx) rather than as literal
+     * JSX in the page — which is what this check used to grep for, so it had
+     * been red since the hub landed. Both halves of the wiring are asserted
+     * now: the registry carries every panel, and the Farm page mounts the hub.
+     * A panel that exists but is mounted nowhere is the failure this row is for.
+     */
+    const hubSrcArb = read('src/components/Farm/FarmPositionHub.jsx');
+    t('all five execution panels are mounted on the Farm screen',
+      ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcArb.includes(`Panel: ${name}`))
+      && hubSrcArb.includes('<Panel key={id} pool={descriptor} />')
+      && farmPage.includes('<FarmPositionHub />'));
     t('the Arbitrum adapter does not import the Base one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
 
@@ -14127,8 +14171,19 @@ export default function run() {
       !adapter.includes('sendTransaction') && !adapter.includes('getSigner'));
     t('Lido history has its own key',
       history.includes("LIDO_HISTORY_KEY = 'fbt-lido-history-v1'"));
-    t('all four panels are mounted (Lido included)',
-      farmPage.includes('<LidoPanel pool={pool} />'));
+    /*
+     * The panels are mounted through the adapter registry the position hub
+     * renders from (components/Farm/FarmPositionHub.jsx) rather than as literal
+     * JSX in the page — which is what this check used to grep for, so it had
+     * been red since the hub landed. Both halves of the wiring are asserted
+     * now: the registry carries every panel, and the Farm page mounts the hub.
+     * A panel that exists but is mounted nowhere is the failure this row is for.
+     */
+    const hubSrcLido = read('src/components/Farm/FarmPositionHub.jsx');
+    t('all five panels are mounted (Lido included)',
+      ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcLido.includes(`Panel: ${name}`))
+      && hubSrcLido.includes('<Panel key={id} pool={descriptor} />')
+      && farmPage.includes('<FarmPositionHub />'));
     for (const lang of ['en', 'fa']) {
       const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
       const ld = j.farm?.lido ?? {};

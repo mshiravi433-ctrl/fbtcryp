@@ -9,6 +9,7 @@ import {
   AAVE_BASE_SUPPLY_MAX_USDC_PER_TX, AAVE_BASE_SUPPLY_MAX_USDC_TOTAL,
   AAVE_BASE_SUPPLY_ALLOWLIST, aaveBaseSupplyAllowedFor, aaveBaseWithdrawAllowedFor
 } from '../../lib/features';
+import { AAVE_BASE_SUPPLY_OPEN_TO_PUBLIC } from '../../lib/farmRolloutMode';
 import {
   AAVE_V3_BASE, buildRevokePlan, buildSupplyPlan, buildWithdrawPlan,
   explainRevert, fromUsdcWei, getPosition, getReserveStatus, isAaveBaseUsdcPool,
@@ -354,7 +355,14 @@ export default function AaveBaseUsdcPanel({ pool }) {
   const knownHere = wrongChain && (hasPosition || history.some(
     (r) => r.action === 'supply' && (r.status === 'confirmed' || r.status === 'pending')
   ));
-  if (!supplyAllowed && !hasPosition && !knownHere) return null;
+    /*
+   * Visibility, not permission. In a public-open build the entry point is
+   * shown to EVERY visitor — including one with no wallet connected yet, who
+   * is exactly the person the rollout is meant to reach. Nothing here widens
+   * what a wallet may sign: the buttons below still read supplyAllowed, which
+   * needs a connected owner.
+   */
+  if (!supplyAllowed && !hasPosition && !knownHere && !AAVE_BASE_SUPPLY_OPEN_TO_PUBLIC) return null;
 
   const openSheet = (nextMode) => {
     setMode(nextMode);

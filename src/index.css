@@ -11921,6 +11921,17 @@ button.settings-quick-action {
 .farm-lido-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
 .farm-lido-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
 
+/*
+ * Morpho Blue · Base — the fifth execution panel. These two rules were simply
+ * never written when the panel landed: the class names were in the JSX with no
+ * CSS behind them, so the panel picked up the generic `.card` look and its
+ * plain-language step list rendered as an unstyled bullet run instead of the
+ * numbered "1. allow exactly X, 2. supply X" list every other panel shows.
+ */
+.farm-morpho-panel { margin-top: 12px; }
+.farm-morpho-steps { list-style: decimal; padding-inline-start: 1.25rem; margin: 8px 0 0; }
+.farm-morpho-steps li { color: var(--text-2); font-size: 12px; line-height: 1.7; }
+
 .farm-economics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12069,6 +12080,24 @@ button.settings-quick-action {
 .farm-action-grid .farm-btn { width: 100%; }
 .farm-action-grid .farm-btn:disabled { opacity: .52; cursor: not-allowed; }
 .farm-positions { margin-top: 14px; }
+/*
+ * The five execution panels, stacked. `gap` only: each panel is its own card
+ * and paints its own border, so the hub's job is spacing and nothing else.
+ */
+.farm-position-hub { gap: 10px; margin-top: 10px; }
+/*
+ * A supported pool renders its adapter INSIDE the analytics card, below the
+ * action row. The wrapper only separates it from the buttons above; the panel
+ * keeps its own card styling, so this must not add a second border or pad.
+ */
+.farm-pool-execution { margin-top: 12px; }
+.farm-pool-execution > * { margin-top: 0; }
+/*
+ * «اجرای درون‌برنامه‌ای» — the badge that says this pool can be transacted
+ * here. First in the badge row on purpose: it is the only badge on the card
+ * that changes what the user can DO, so it should not sit behind the chain.
+ */
+.farm-exec-badge { font-weight: 700; }
 
 /* Horizon earnings chart — day / week / month / year from projectEarnings. */
 .farm-horizon-chart {

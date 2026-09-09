@@ -6,6 +6,37 @@ It covers **Aave v3 Base (native USDC)**, **Aave v3 Arbitrum (native USDC)**,
 **Morpho Blue Base (USDC/cbBTC)** in a single build. Every protocol has a strict-fork
 PASS recorded under `farm-fork-evidence/`._
 
+## ✅ You no longer have to paste these into Vercel
+
+Since the public-open rollout, **`ci/farm-rollout.env.sh` carries every value below
+and `npm run build:full` sources it** — and `build:full` is exactly what
+`vercel.json` runs (`buildCommand`). So a normal deploy is public-open for all five
+protocols with no dashboard step, and the APK builds read the same file
+(`ci/build-both.sh`), which is the point: one copy, no drift.
+
+That manual step was the gap. This page existed, the values were correct, and the
+website was still `capital-off` for every visitor because nothing pasted them into
+the dashboard — «در فارم هنوز نمیاد برای همه». Keeping them in the repo means the
+next deploy cannot forget them.
+
+The tables below are still accurate, and still what to read when you need to know
+which value does what. Use them to **override** a single value in the dashboard
+(they win: the file uses `${VAR:-default}`, so an env var Vercel injects is kept),
+or to close everything again without a code change:
+
+| To do this | Set in Vercel |
+|---|---|
+| Close the money path completely | `FARM_CAPITAL=off` |
+| Drop back to the canary wallet only | `VITE_AAVE_BASE_SUPPLY_PUBLIC=false` (and the other four `*_PUBLIC`) |
+| Narrow the rollout to one protocol | `FARM_ROLLOUT_PROTOCOLS=aave-base` **and** the other four `VITE_ENABLE_*` = `false` — the gate rejects a mismatch rather than guessing |
+
+Anything half-set fails the build closed (`scripts/farm-rollout-policy.mjs`,
+re-asserted by `vite.config.js`), so an override typo produces a red deploy, not a
+half-open Farm.
+
+---
+
+
 ## ⚠️ Two rules that govern every value
 
 1. **No private key / secret for Farm.** Farm supply/stake is read from public
