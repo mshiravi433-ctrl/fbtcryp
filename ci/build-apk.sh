@@ -92,6 +92,34 @@ else
   echo "  (lockfile platform guard not found next to this script — continuing without it)"
 fi
 
+# ---------------------------------------------------------------------------
+# FARM ROLLOUT GATE — say which mode this build carries, before npm ci.
+#
+# scripts/farm-rollout-policy.mjs is fail-closed and vite.config.js re-asserts
+# it at build time, so nothing can bypass it — this pass exists purely to make
+# the MODE visible early. Without it, a run that dies twenty minutes into
+# Gradle leaves no trace of whether the bundle it was carrying was
+# capital-off or public-open: the one fact the release page does not show.
+# Running it before npm ci also fails a broken rollout env in ~1 second
+# instead of after a two-minute install.
+# ---------------------------------------------------------------------------
+echo "▸ farm rollout gate"
+if ! FARM_GATE="$(node "$ROOT/scripts/verify-farm-rollout.mjs" 2>&1)"; then
+  fail <<MSG
+The Farm rollout gate rejected this build environment:
+${FARM_GATE}
+
+See scripts/farm-rollout-policy.mjs for the rules. A capital-off build needs
+none of the FARM_*/VITE_*_SUPPLY_* variables; a public-open build needs
+FARM_ROLLOUT_PROTOCOLS listing every enabled protocol, FARM_STRICT_FORK_EVIDENCE=true,
+FARM_CANARY_CONFIRMED=true, and a complete matching per-protocol set
+(enable + allowlist + public + caps). A half-open combination is a red build
+on purpose.
+MSG
+fi
+echo "  ${FARM_GATE}"
+note "farm rollout" "$(printf '%s\n' "$FARM_GATE" | head -1)"
+
 echo "▸ installing dependencies"
 # Annotated rather than bare: one platform-locked nested package (see
 # ci/lock-platform-guard.mjs) used to end every run here with three unreadable lines
@@ -619,6 +647,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
       echo ""
       echo "Set the four \`ANDROID_*\` secrets and run the workflow again."
     fi
+    echo ""
+    echo "Farm rollout: ${FARM_GATE:-not checked}"
     echo ""
     echo "Download: [Releases → latest](https://github.com/mshiravi433-ctrl/fbtcryp/releases/tag/latest)"
   } >> "$GITHUB_STEP_SUMMARY"
