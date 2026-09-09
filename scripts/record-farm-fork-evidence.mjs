@@ -28,7 +28,8 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const KNOWN = new Set(['aave-base', 'compound-base', 'aave-arbitrum', 'lido', 'morpho']);
+const KNOWN = new Set(['aave-base', 'compound-base', 'aave-arbitrum', 'lido', 'morpho', 'morpho-base']);
+const ALIASES = Object.freeze({ morpho: 'morpho-base' });
 
 function parseOutcome(log) {
   let total = null;
@@ -44,11 +45,13 @@ function sha256(text) {
   return createHash('sha256').update(text).digest('hex');
 }
 
-const id = process.argv[2];
+let id = process.argv[2];
 if (!id || !KNOWN.has(id)) {
   console.error(`Usage: node scripts/record-farm-fork-evidence.mjs <protocol-id>\nValid ids: ${[...KNOWN].join(', ')}`);
   process.exit(1);
 }
+const canonicalId = ALIASES[id] ?? id;
+id = canonicalId;
 
 let log = '';
 try { log = readFileSync(0, 'utf8'); } catch { /* stdin empty */ }

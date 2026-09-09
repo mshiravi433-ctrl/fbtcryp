@@ -34,7 +34,8 @@ node scripts/record-farm-fork-evidence.mjs aave-arbitrum < /tmp/aave-arb.probe.l
 
 # Morpho Blue · Base · USDC/cbBTC
 node test/morpho-base-fork-probe.mjs --strict | tee /tmp/morpho-base.probe.log
-node scripts/record-farm-fork-evidence.mjs morpho < /tmp/morpho-base.probe.log
+node scripts/record-farm-fork-evidence.mjs morpho-base < /tmp/morpho-base.probe.log
+# legacy alias also accepted: morpho -> morpho-base
 
 # Lido · Ethereum · stETH
 node test/lido-mainnet-fork-probe.mjs --strict | tee /tmp/lido.probe.log
@@ -69,8 +70,9 @@ Currently committed as PASS anchors:
 - `aave-arbitrum` (37/37, Arbitrum One 42161 native USDC / USDCn)
 - `compound-base` (46/46, Base 8453 USDC, Compound V3 Comet cUSDCv3)
 
-`lido` becomes a committed anchor when its mainnet fork probe passes and
-`scripts/record-farm-fork-evidence.mjs lido` writes `farm-fork-evidence/lido.json`.
+Pending anchors (code ready, awaiting strict fork PASS in CI):
+- `morpho-base` (Morpho Blue Base USDC/cbBTC, marketId `0x9103...1836`, 86% LLTV) — workflow `.github/workflows/morpho-base-fork-probe.yml` ready, run via Actions then `record-farm-fork-evidence.mjs morpho-base`
+- `lido` becomes a committed anchor when its mainnet fork probe passes and `scripts/record-farm-fork-evidence.mjs lido` writes `farm-fork-evidence/lido.json`.
 
 ## Staged canary example — Aave Base + Aave Arbitrum
 
@@ -135,6 +137,27 @@ VITE_ENABLE_AAVE_BASE_SUPPLY=false
 VITE_ENABLE_COMPOUND_BASE_SUPPLY=false
 VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=false
 VITE_ENABLE_MORPHO_BASE_SUPPLY=false
+```
+
+## Staged canary example — Morpho Blue Base
+
+Morpho uses the same fee-recipient wallet as the only allowlisted address.
+Caps are in whole USDC (default 100 per-tx / 500 total). Market is pinned to
+one USDC/cbBTC market, 86% LLTV, no reward claim path.
+
+```env
+FARM_STRICT_FORK_EVIDENCE=true
+FARM_ROLLOUT_PROTOCOLS=morpho-base
+
+VITE_ENABLE_MORPHO_BASE_SUPPLY=true
+VITE_MORPHO_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
+VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX=100
+VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL=500
+
+VITE_ENABLE_AAVE_BASE_SUPPLY=false
+VITE_ENABLE_COMPOUND_BASE_SUPPLY=false
+VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=false
+VITE_ENABLE_LIDO_STAKE=false
 ```
 
 This is a limited canary, **not** public capital enablement. No private key / seed /
