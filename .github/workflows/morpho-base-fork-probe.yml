@@ -12,11 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install Foundry (anvil)
         run: |
           set -euo pipefail
@@ -26,13 +24,10 @@ jobs:
           tar -xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
           chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
           "$HOME/.foundry/bin/anvil" --version
-
       - name: Lockfile platform guard (before npm ci)
         run: node ci/lock-platform-guard.mjs
-
       - name: Install dependencies (ethers + vite, used by the probe)
         run: npm ci --no-audit --no-fund
-
       - name: Run the Base mainnet fork probe (strict)
         id: probe
         env:
@@ -42,13 +37,11 @@ jobs:
           set -o pipefail
           npm run test:morpho-base-fork -- --strict 2>&1 | tee /tmp/morpho-base-fork-probe.log
           echo "probe_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
-
       - name: Summarise
         if: always()
         run: |
           echo "### Morpho Base fork probe exit: ${{ steps.probe.outputs.probe_exit }}" >> "$GITHUB_STEP_SUMMARY"
           tail -n 60 /tmp/morpho-base-fork-probe.log >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload probe log
         if: always()
         uses: actions/upload-artifact@v4
