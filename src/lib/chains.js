@@ -257,11 +257,23 @@ export const EVM_CHAINS = {
     // KyberSwap supplies the route; no unverified direct router fallback.
     dexName: 'KyberSwap',
     color: '#f1c27d'
+  },
+  324: {
+    id: 324,
+    hexId: '0x144',
+    name: 'zkSync Era',
+    short: 'ZK',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://mainnet.era.zksync.io', 'https://zksync.drpc.org'],
+    explorer: 'https://era.zksync.network',
+    wrapped: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',
+    dexName: 'KyberSwap',
+    color: '#8c8dfc'
   }
 };
 
 export const DEFAULT_CHAIN = 56;
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324];
 
 /**
  * Platform fee — always charged, on every chain.
