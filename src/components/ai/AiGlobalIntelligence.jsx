@@ -86,6 +86,12 @@ const STYLES = `
   .aig-signal-name { font-size:var(--fs-xs); font-weight:800; color:var(--text-1); }
   .aig-signal-ev { font-size:var(--fs-xs); color:var(--text-2); line-height:var(--lh-normal); overflow-wrap:anywhere; }
   .aig-ind-chg { font-size:11px; font-weight:700; }
+  .aig-narrative { margin:var(--sp-3) 0; padding:var(--sp-3) var(--sp-4); border-radius:var(--radius-sm); border:1px solid color-mix(in srgb,var(--rgb-1) 22%,var(--line)); background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 6%,var(--bg-raised)),color-mix(in srgb,var(--rgb-2) 7%,var(--bg-raised))); }
+  .aig-narrative-title { display:flex; align-items:center; gap:6px; font-size:var(--fs-xs); font-weight:800; color:var(--text-1); margin-bottom:6px; }
+  .aig-narrative-text { font-size:var(--fs-xs); line-height:var(--lh-loose); color:var(--text-1); overflow-wrap:anywhere; }
+  .aig-narrative-note { font-size:10px; color:var(--text-3); margin-top:6px; }
+  .aig-commentary-provider { flex:0 0 auto; font-size:10px; font-weight:700; color:var(--rgb-2); background:color-mix(in srgb,var(--rgb-2) 12%,transparent); padding:2px 7px; border-radius:999px; }
+  .aig-fallback-tag { display:inline-block; margin-inline-start:5px; font-size:9px; font-weight:700; color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 10%,transparent); padding:1px 6px; border-radius:6px; vertical-align:middle; }
   @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tabs { gap:6px; } .aig-tab { font-size:10px; min-height:56px; padding-inline:4px; } .aig-section { padding:13px; } }
   @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 `;
@@ -221,6 +227,27 @@ const AIG_REASON = {
   BRAIN_READ_REFUSED: { fa: 'خوانش مغز رد شد', en: 'brain read refused' },
   PROVIDER_IMPORT_FAILED: { fa: 'ماژول ارائه‌دهنده بار نشد', en: 'provider failed to load' },
   PROVIDER_FUNCTION_MISSING: { fa: 'تابع ارائه‌دهنده یافت نشد', en: 'provider function missing' },
+  /* Phase 211.2 — the upstream failure codes the brain/classifier actually
+     emit, so «خوانده نشد» always says WHY. */
+  UNCLASSIFIED_ERROR: { fa: 'منبع بالادستی خطای نامشخص داد', en: 'upstream returned an unclassified error' },
+  PROVIDER_DOWN: { fa: 'منبع بالادستی از دسترس خارج است', en: 'upstream source is down' },
+  SOURCE_NOT_WIRED: { fa: 'منبع در این استقرار وصل نیست', en: 'source not wired in this deployment' },
+  SOURCE_REJECTED: { fa: 'منبع درخواست را رد کرد', en: 'source rejected the request' },
+  SOURCE_UNAVAILABLE: { fa: 'منبع در دسترس نیست', en: 'source unavailable' },
+  RPC_TIMEOUT: { fa: 'زمان خواندن منبع تمام شد', en: 'source read timed out' },
+  PROVIDER_TIMEOUT: { fa: 'زمان خواندن منبع تمام شد', en: 'source read timed out' },
+  NETWORK_UNAVAILABLE: { fa: 'شبکه در دسترس نیست', en: 'network unavailable' },
+  UPSTREAM_HTTP_5XX: { fa: 'خطای سرور منبع بالادستی', en: 'upstream server error' },
+  UPSTREAM_HTTP_4XX: { fa: 'درخواست منبع بالادستی رد شد', en: 'upstream rejected the request' },
+  NO_FEEDS_REACHABLE: { fa: 'هیچ فید خبری در دسترس نبود', en: 'no news feed reachable' },
+  NO_MACRO_DATA_SOURCE: { fa: 'هیچ منبع داده کلانی پاسخ نداد', en: 'no macro data source answered' },
+  MODULE_NOT_REGISTERED: { fa: 'ماژول مغز ثبت نشده است', en: 'brain module not registered' },
+  OPERATION_NOT_AVAILABLE: { fa: 'این عملیات در ماژول نیست', en: 'operation not available' },
+  STATE_STORE_EMPTY: { fa: 'حافظهٔ وضعیت هنوز خالی بود', en: 'state store was empty' },
+  NO_AI_PROVIDER: { fa: 'هیچ ارائه‌دهندهٔ هوش مصنوعی پیکربندی نشده — تحلیل محلی نمایش داده می‌شود', en: 'no AI provider configured — showing the local analysis' },
+  COMMENTARY_TIMEOUT: { fa: 'زمان تولید تحلیل هوش مصنوعی تمام شد', en: 'AI commentary timed out' },
+  COMMENTARY_PROVIDER_FAILED: { fa: 'ارائه‌دهندهٔ هوش مصنوعی پاسخ نداد', en: 'AI provider failed' },
+  COMMENTARY_UNUSABLE: { fa: 'پاسخ هوش مصنوعی قابل استفاده نبود', en: 'AI answer was unusable' },
   MACRO_IS_DERIVED: { fa: 'کلان از خبر ساخته می‌شود', en: 'macro is derived from news' },
   MACRO_NEEDS_NEWS_AND_QUOTES: { fa: 'کلان به خبر یا داده کلان نیاز دارد', en: 'macro needs news or macro data' },
   NO_MACRO_HEADLINES_IN_WINDOW_AND_NO_QUOTES: { fa: 'نه خبر کلان و نه داده کلان در این بازه', en: 'no macro headlines or quotes in this window' },
@@ -296,7 +323,7 @@ function AiGlobalIntelligenceInner() {
       const [intel, brief, crossAsset, providerState] = await Promise.all([
         readJson(`/api/ai/global/intelligence${qs}`),
         readJson(`/api/ai/global/briefing${qs}`),
-        readJson('/api/ai/global/cross-asset'),
+        readJson(`/api/ai/global/cross-asset${qs}`),
         readJson('/api/ai/global/providers')
       ]);
       setData({
@@ -551,7 +578,10 @@ function AiGlobalIntelligenceInner() {
               <div className="aig-grid">
                 {Object.entries(cross.classes || {}).filter(([, c]) => c).map(([cls, c]) => (
                   <div key={cls} className="aig-card">
-                    <div className="aig-card-name">{mapLabel(AIG_CLASS, cls, isPersian) || cls}</div>
+                    <div className="aig-card-name">
+                      {mapLabel(AIG_CLASS, cls, isPersian) || cls}
+                      {c.fallbackSource ? <span className="aig-fallback-tag" title={c.fallbackSource}>{L('دادهٔ کلان', 'macro desk')}</span> : null}
+                    </div>
                     <div className="aig-card-value" style={{ color: c.avgChangePct > 0 ? '#4ade80' : c.avgChangePct < 0 ? '#f87171' : '#f0f0ff' }}>
                       {c.avgChangePct > 0 ? '+' : ''}{c.avgChangePct?.toFixed(2)}%
                     </div>
@@ -559,6 +589,33 @@ function AiGlobalIntelligenceInner() {
                   </div>
                 ))}
               </div>
+
+              {/* ── THE COMPREHENSIVE ANALYSIS (Phase 211.2) — the local
+                     deterministic narrative, then the AI commentary when an
+                     external provider answered. Both name their source; both
+                     are data, never an instruction. ─────────────────────── */}
+              {cross.narrative?.[isPersian ? 'fa' : 'en'] ? (
+                <div className="aig-narrative">
+                  <div className="aig-narrative-title">🧠 {L('تحلیل جامع', 'Comprehensive analysis')}</div>
+                  <div className="aig-narrative-text">{cross.narrative[isPersian ? 'fa' : 'en']}</div>
+                </div>
+              ) : null}
+              {cross.commentary?.status === 'OK' && cross.commentary.text ? (
+                <div className="aig-narrative">
+                  <div className="aig-narrative-title">
+                    ✨ {L('تحلیل جامع با هوش مصنوعی', 'AI comprehensive analysis')}
+                    <span className="aig-commentary-provider">{cross.commentary.providerName || cross.commentary.provider || 'AI'}</span>
+                  </div>
+                  <div className="aig-narrative-text">{cross.commentary.text}</div>
+                  <div className="aig-narrative-note">
+                    {L('ساخت هوش مصنوعی بر فراز اعداد واقعی همین دور — داده است، نه دستور.', 'AI synthesis over this pass\u2019s real reads — data, not authority.')}
+                  </div>
+                </div>
+              ) : cross.commentary && cross.commentary.status !== 'OK' && cross.commentary.reason && cross.commentary.reason !== 'NO_AI_PROVIDER' && cross.commentary.reason !== 'NO_CROSS_ASSET_DATA' ? (
+                <div className="aig-note">
+                  {L('تحلیل هوش مصنوعی: ', 'AI commentary: ')}{reasonLabel(cross.commentary.reason, isPersian)}
+                </div>
+              ) : null}
 
               {/* ── the macro indicator layer — real quotes (dollar/gold/
                      crude/equity/rates/curve) with 1d + 7d changes ─────── */}
@@ -617,8 +674,14 @@ function AiGlobalIntelligenceInner() {
           ) : (
             <div className="aig-empty">
               {cross?.missing?.length
-                ? `${L('کلاس‌های خوانده‌نشده:', 'unread classes:')} ${cross.missing.map((c) => mapLabel(AIG_CLASS, c, isPersian) || mapLabel(AIG_MISSING, c, isPersian) || c).join(isPersian ? '، ' : ', ')}`
+                ? `${L('کلاس‌های خوانده‌نشده:', 'unread classes:')} ${cross.missing.map((c) => `${mapLabel(AIG_CLASS, c, isPersian) || mapLabel(AIG_MISSING, c, isPersian) || c}${cross.missingReasons?.[c] ? ` (${reasonLabel(cross.missingReasons[c], isPersian)})` : ''}`).join(isPersian ? '، ' : ', ')}`
                 : L('تحلیل کراس-است هنوز محاسبه نشده.', 'Cross-asset analysis has not been computed yet.')}
+              {cross?.narrative?.[isPersian ? 'fa' : 'en'] ? (
+                <div className="aig-narrative" style={{ marginTop: 12, textAlign: 'start' }}>
+                  <div className="aig-narrative-title">🧠 {L('تحلیل جامع', 'Comprehensive analysis')}</div>
+                  <div className="aig-narrative-text">{cross.narrative[isPersian ? 'fa' : 'en']}</div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

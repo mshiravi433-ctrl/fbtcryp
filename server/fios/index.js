@@ -46,6 +46,7 @@ import { createLearningEngine } from './learning.js';
 /* Phase 211 — Global AI Intelligence. */
 import { createGlobalIntelEngine, GLOBAL_DOMAINS } from './globalIntel.js';
 import { analyzeCrossAsset, crossAssetDigest } from './crossAsset.js';
+import { crossCommentary } from './crossNarrative.js';
 import { createBriefingEngine } from './briefing.js';
 import { createMigrations, CURRENT_MIGRATION_VERSION } from './migrations.js';
 import { createFiRouter } from './router.js';
@@ -194,12 +195,11 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     if (global) {
       globalSnapshot = await globalIntelFor(owner).catch(() => null);
       if (globalSnapshot && globalSnapshot.status !== 'UNAVAILABLE') {
-        /* crypto breadth comes from the sections the model itself reads */
-        crossAssetOut = analyzeCrossAsset({
-          world: { domains: { market: envOf(sections, ['markets', 'crypto', 'signals']) } },
-          globalIntel: globalSnapshot,
-          now: now()
-        });
+        /* Phase 211.2 — the same ACTIVE inputs the cross-asset route uses:
+           the brain's crypto read when the section is empty, and the named
+           macro-desk fallbacks when a class's own feed did not answer. */
+        const inputs = await crossInputsFor(owner, { globalSnapshot, sections }).catch(() => null);
+        crossAssetOut = inputs ? analyzeCrossAsset(inputs) : null;
       }
     }
     const model = buildWorldModel({
@@ -225,20 +225,125 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     return { schema: 'fbt.fi.provenance.v1', status: 'unavailable', value: null, reason: 'UNREAD', source: keys.join('|'), at: now(), freshnessMs: 0, freshness: 'UNAVAILABLE', ttlMs: 0, confidence: 0, note: null };
   }
 
+  /* ── Phase 211.2 — THE ACTIVE CROSS-ASSET READ ─────────────────────────
+   * Before this block the cross-asset engine only DIGESTED whatever the
+   * state store and the global snapshot already held — so a fresh owner (no
+   * markets section yet) and a deployment whose Avantis/Ostium feeds are
+   * blocked saw ALL five classes «unread» and the cross tab permanently
+   * empty. Three fixes, all still inside the no-second-gateway rule:
+   *
+   *   1. crypto: when the state store has no market section, the brain's
+   *      `crypto.read` answers (module `crypto` — the same guarded market
+   *      source chat uses) and the section is written back for every later
+   *      reader. The market domain shape stays exactly what crossAsset
+   *      already parsed (symbols array OR prices/changes24hPct maps).
+   *   2. stocks/forex/commodities: when a class's brain feed answered
+   *      nothing, the macro desk's REAL daily series (stooq → yahoo — SPX,
+   *      DXY, GOLD, WTI) stand in as named fallbacks. Narrower, real, and
+   *      labelled on the class (`fallbackSource`) — never passed off as the
+   *      primary feed. rwa has no honest fallback and stays missing.
+   *   3. the AI commentary (crossNarrative.js) synthesizes the bounded
+   *      digest over the ONE gateway — with no external provider configured
+   *      it says NO_AI_PROVIDER and the screen keeps the local narrative.
+   */
+
+  /** The market domain for cross-asset: the state store's section, else the
+   *  brain's crypto read (which also warms the section for the OWNER).
+   *  A short per-owner cache (30s) bounds the upstream cost: a dead market
+   *  feed must not re-dial on every world-model build and cross-asset poll. */
+  const marketReadCache = new Map(); // owner → { at, world }
+  async function marketDomainFor(owner, sections) {
+    const sectionEnv = envOf(sections, ['markets', 'crypto', 'signals']);
+    if (sectionEnv?.value != null) {
+      marketReadCache.delete(owner); /* the section answers — drop any failure memo */
+      return { world: { domains: { market: sectionEnv } } };
+    }
+    const hit = marketReadCache.get(owner);
+    if (hit && now() - hit.at < 30_000) return { world: hit.world };
+    let world = { domains: { market: sectionEnv } };
+    if (brain && typeof brain.directToolCall === 'function') {
+      try {
+        const out = await brain.directToolCall({ owner, module: 'crypto', operation: 'read', input: {} });
+        if (out?.ok && out?.data != null) {
+          world = {
+            domains: {
+              market: {
+                schema: 'fbt.fi.provenance.v1', status: 'ok', value: out.data,
+                source: 'brain:crypto', at: now(), freshness: 'LIVE', ttlMs: 60_000, confidence: 0.85
+              }
+            }
+          };
+        }
+      } catch { /* the class stays honestly missing — no invented market */ }
+    }
+    marketReadCache.set(owner, { at: now(), world });
+    return { world };
+  }
+
+  /** Per-class REAL fallback instruments from the macro desk, for the global
+   *  classes whose own feed did not answer this pass. The macro-desk cache is
+   *  GLOBAL (quotes are owner-independent) and also memoises FAILURE for 60s:
+   *  a fully offline deployment pays the dead-upstream cost once a minute,
+   *  not on every poll. */
+  let macroFallbackMemo = null; // { at, value }
+  async function macroFallbacksFor(globalSnapshot) {
+    const domains = globalSnapshot?.domains || {};
+    const needFallback = ['stocks', 'forex', 'commodities', 'rwa'].some((cls) => !domains[cls] || domains[cls].status !== 'OK');
+    if (!needFallback) return null;
+    if (macroFallbackMemo && now() - macroFallbackMemo.at < 60_000) return macroFallbackMemo.value;
+    let quotes = null;
+    const macroData = domains.macro;
+    if (macroData?.status === 'OK' && Array.isArray(macroData?.data?.instruments) && macroData.data.instruments.length) {
+      quotes = macroData.data.instruments; /* the SAME pass's macro read — no second upstream call */
+    } else {
+      try {
+        const mod = await import('../macroData.js');
+        const out = await mod.fetchMacroQuotes();
+        quotes = Array.isArray(out?.items) ? out.items : [];
+      } catch { quotes = null; }
+    }
+    let value = null;
+    if (Array.isArray(quotes) && quotes.length) {
+      const rowsFor = (kinds) => quotes
+        .filter((q) => kinds.includes(String(q?.kind || '')) && (q?.change1dPct ?? q?.change24hPct) != null)
+        .map((q) => ({ symbol: q.symbol, priceUsd: q.priceUsd, change24hPct: q.change1dPct ?? q.change24hPct, qsource: q.source }));
+      const fallback = (rows) => (rows.length ? { instruments: rows, source: `macroData:${String(rows[0].qsource || 'stooq').split(':')[0]}` } : null);
+      const stocks = fallback(rowsFor(['equity']));
+      const forex = fallback(rowsFor(['currency']));
+      const commodities = fallback(rowsFor(['safe_haven', 'energy']));
+      value = Object.fromEntries([['stocks', stocks], ['forex', forex], ['commodities', commodities]].filter(([, v]) => v));
+      if (!Object.keys(value).length) value = null;
+    }
+    macroFallbackMemo = { at: now(), value };
+    return value;
+  }
+
+  /** The shared cross-asset inputs: world (market domain, active read) +
+   *  global snapshot + named macro-desk fallbacks. */
+  async function crossInputsFor(owner, { globalSnapshot = null, refresh = false, sections = null } = {}) {
+    const secs = sections || sectionsFor(owner);
+    const snapshot = globalSnapshot || await globalIntelFor(owner, { refresh }).catch(() => null);
+    const { world } = await marketDomainFor(owner, secs);
+    const fallbacks = snapshot ? await macroFallbacksFor(snapshot) : null;
+    return { world, globalIntel: snapshot, fallbacks, now: now() };
+  }
+
   /** Phase 211 — the global intelligence snapshot for one owner (cached). */
   async function globalIntelFor(owner, { refresh = false } = {}) {
     return globalIntel.snapshotFor(owner, { sections: sectionsFor(owner), refresh });
   }
 
-  /** Phase 211 — cross-asset analysis over the world + global snapshot. */
-  async function crossAssetFor(owner, { refresh = false } = {}) {
-    const globalSnapshot = await globalIntelFor(owner, { refresh });
-    const sections = sectionsFor(owner);
-    return analyzeCrossAsset({
-      world: { domains: { market: envOf(sections, ['markets', 'crypto', 'signals']) } },
-      globalIntel: globalSnapshot,
-      now: now()
-    });
+  /** Phase 211 — cross-asset analysis over the world + global snapshot.
+   *  Phase 211.2 — ACTIVE: reads the market through the brain when the state
+   *  store is empty, stands the macro desk in for dead class feeds, and
+   *  attaches the AI commentary (language-aware, cached, `untrusted`). */
+  async function crossAssetFor(owner, { refresh = false, language = 'fa' } = {}) {
+    const inputs = await crossInputsFor(owner, { refresh });
+    const analysis = analyzeCrossAsset(inputs);
+    /* The commentary never breaks the analysis: any failure inside it is
+       already an honest status object, and this catch is belt-and-braces. */
+    const commentary = await crossCommentary({ analysis, language }).catch(() => null);
+    return { ...analysis, commentary: commentary || null };
   }
 
   /** Phase 211 — the proactive briefing: everything the OS actually read,

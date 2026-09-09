@@ -88,6 +88,39 @@ function breadthOf(instruments) {
   };
 }
 
+/* ── Phase 211.2 — the crypto rows, in EVERY shape the brain produces ──────
+ * The real `marketSnapshot` source (server/ci/sources.js) answers MAPS —
+ * `prices: { BTC: 70000 }`, `changes24hPct: { BTC: -1.2 }` — not a `symbols`
+ * array (only the test fixtures do). Reading only the array shapes left the
+ * crypto class permanently «unread» on production data even while the market
+ * feed was healthy. All four shapes are real reads now: coins/symbols arrays
+ * first (fixture + world model), then the changes map, then prices-only rows
+ * (instruments without a 24h change are counted, they just do not vote). */
+function cryptoRowsFrom(marketData) {
+  const rows = []
+    .concat(Array.isArray(marketData?.coins) ? marketData.coins : [])
+    .concat(Array.isArray(marketData?.symbols) ? marketData.symbols : [])
+    .concat(Array.isArray(marketData?.rows?.coins) ? marketData.rows.coins : [])
+    .concat(Array.isArray(marketData?.rows?.symbols) ? marketData.rows.symbols : [])
+    .map((c) => ({ symbol: c?.symbol, changePct: num(c?.change24hPct ?? c?.change24h ?? c?.changePct) }));
+  const seen = new Set(rows.map((r) => String(r.symbol || '').toUpperCase()));
+  const changes = marketData?.changes24hPct && typeof marketData.changes24hPct === 'object' ? marketData.changes24hPct : {};
+  for (const [symbol, change] of Object.entries(changes).slice(0, 40)) {
+    const key = String(symbol || '').toUpperCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ symbol: key, changePct: num(change) });
+  }
+  const prices = marketData?.prices && typeof marketData.prices === 'object' ? marketData.prices : {};
+  for (const [symbol, price] of Object.entries(prices).slice(0, 40)) {
+    const key = String(symbol || '').toUpperCase();
+    if (!key || seen.has(key) || !Number.isFinite(Number(price))) continue;
+    seen.add(key);
+    rows.push({ symbol: key, changePct: null });
+  }
+  return rows;
+}
+
 /** Instruments from a global-intel domain envelope (unwrapped if the caller
  *  passed the provenance-wrapped value). */
 const instrumentsOf = (domain) => {
@@ -288,33 +321,61 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
  * @param {object} p
  * @param {object} [p.world]          world model (market domain: prices/coins)
  * @param {object} [p.globalIntel]    global intelligence snapshot (domains)
+ * @param {Array}  [p.cryptoInstruments] Phase 211.2 — real crypto instrument
+ *                                    rows read THROUGH the brain when the
+ *                                    state store had no market section yet
+ *                                    ({ symbol, change24hPct } shaped)
+ * @param {object} [p.fallbacks]      Phase 211.2 — per-class REAL fallback
+ *                                    instruments for the four global classes,
+ *                                    used only when that class's brain domain
+ *                                    was UNAVAILABLE:
+ *                                    { stocks: { source, instruments }, … }
  * @param {object} [p.history]        optional REAL paired series —
  *                                    { cryptoVsStocks: { a: [], b: [] }, … }
  *                                    from a provider with history access
  * @param {number} [p.now]
  */
-export function analyzeCrossAsset({ world = null, globalIntel = null, history = null, now = Date.now() } = {}) {
+export function analyzeCrossAsset({ world = null, globalIntel = null, cryptoInstruments = null, fallbacks = null, history = null, now = Date.now() } = {}) {
   const classes = {};
   const missing = [];
+  const missingReasons = {};
+  const fallbackClasses = {};
 
   /* crypto: the world model's market rows — prices object, coins or the
      brain's crypto.symbols array, each carrying a 24h change when it has one. */
   const marketValue = world?.domains?.market || world?.market || {};
   const marketData = marketValue?.schema === 'fbt.fi.provenance.v1' ? marketValue.value : marketValue;
-  const marketRows = marketValue?.rows?.schema === 'fbt.fi.provenance.v1' ? marketValue.rows.value : marketData?.rows;
-  const cryptoRows = []
-    .concat(Array.isArray(marketData?.coins) ? marketData.coins : [])
-    .concat(Array.isArray(marketData?.symbols) ? marketData.symbols : [])
-    .concat(Array.isArray(marketRows?.coins) ? marketRows.coins : [])
-    .concat(Array.isArray(marketRows?.symbols) ? marketRows.symbols : [])
-    .map((c) => ({ symbol: c?.symbol, changePct: num(c?.change24hPct ?? c?.change24h ?? c?.changePct) }));
-  classes.crypto = breadthOf(cryptoRows);
+  classes.crypto = breadthOf(cryptoRowsFrom(marketData));
+  /* Phase 211.2 — the brain's crypto.read (module `crypto`) as the active
+     fallback: a caller that just read the market hands the rows in here and
+     the class stops being «unread» the moment a real source answers. */
+  if (!classes.crypto && Array.isArray(cryptoInstruments) && cryptoInstruments.length) {
+    classes.crypto = breadthOf(cryptoInstruments);
+    if (classes.crypto) fallbackClasses.crypto = { source: 'brain:crypto', reason: 'STATE_STORE_EMPTY' };
+  }
   if (!classes.crypto) missing.push('crypto');
 
-  /* the global classes: from the snapshot's domains. */
+  /* the global classes: from the snapshot's domains, with the per-domain
+     failure reason kept (the UI and the narrative name WHY a class is
+     unread instead of a bare missing[] row). */
   const domains = globalIntel?.domains || {};
   for (const cls of ['stocks', 'forex', 'commodities', 'rwa']) {
     classes[cls] = breadthOf(instrumentsOf(domains[cls]));
+    if (!classes[cls]) {
+      if (domains[cls] && domains[cls].status !== 'OK' && domains[cls].reason) missingReasons[cls] = String(domains[cls].reason).slice(0, 120);
+      /* Phase 211.2 — a REAL fallback read (macro desk: stooq/yahoo daily
+         series) stands in ONLY when the primary brain feed answered nothing.
+         The substitution is named on the class itself: `fallbackSource`. */
+      const fb = fallbacks?.[cls];
+      if (fb && Array.isArray(fb.instruments) && fb.instruments.length) {
+        classes[cls] = breadthOf(fb.instruments);
+        if (classes[cls]) {
+          classes[cls].fallbackSource = String(fb.source || 'fallback').slice(0, 40);
+          classes[cls].degraded = true;
+          fallbackClasses[cls] = { source: classes[cls].fallbackSource, reason: missingReasons[cls] || 'PRIMARY_FEED_UNAVAILABLE' };
+        }
+      }
+    }
     if (!classes[cls]) missing.push(cls);
   }
 
@@ -326,6 +387,8 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, history = 
     classes: Object.fromEntries(ASSET_CLASSES.map((c) => [c, classes[c] || null])),
     observedClasses: observed,
     missing,
+    missingReasons,
+    fallbackClasses,
     readOnlyClasses: READ_ONLY_CLASSES.filter((c) => observed.includes(c))
   };
 
@@ -411,8 +474,168 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, history = 
     macroDomain: domains.macro
   });
 
+  /* ── Phase 211.2: the comprehensive local analysis ──────────────────────
+     A deterministic, language-paired narrative built ONLY from the numbers
+     this pass actually read — the screen's «تحلیل جامع» paragraph. It works
+     with zero AI providers configured; the LLM commentary (crossNarrative.js)
+     rides ON TOP of it and is a separate, labelled field. */
+  result.narrative = crossNarrative(result);
+
   result.id = `ca_${createHash('sha256').update(JSON.stringify({ at: now, observed, regime: result.regime?.regime || null, outlook: result.outlook?.label || null })).digest('hex').slice(0, 18)}`;
   return result;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════ */
+/* The comprehensive local narrative (Phase 211.2) — pure, honest, bilingual */
+/* ═════════════════════════════════════════════════════════════════════════ */
+
+const NARRATIVE_CLASS_FA = { crypto: 'رمزارز', stocks: 'سهام', forex: 'فارکس', commodities: 'کالاها', rwa: 'دارایی واقعی' };
+const NARRATIVE_REGIME_FA = {
+  RISK_ON: 'ریسک‌پذیر', RISK_ON_LEANING: 'متمایل به ریسک‌پذیری', MIXED: 'ترکیبی',
+  RISK_OFF_LEANING: 'متمایل به احتیاط', RISK_OFF: 'ریسک‌گریز'
+};
+const NARRATIVE_OUTLOOK_FA = {
+  GROWTH_WATCH: 'چشم‌انداز رشد', RECESSION_WATCH: 'هشدار رکود',
+  MIXED_SIGNALS: 'سیگنال‌های مختلط', UNAVAILABLE: 'دادهٔ کافی نیست'
+};
+const NARRATIVE_REASON_FA = {
+  NO_INSTRUMENTS_IN_CATEGORY: 'ابزاری در این دسته خوانده نشد',
+  NO_EQUITIES_READ: 'فید سهام پاسخ نداد', NO_EQUITY_INSTRUMENTS: 'ابزار سهامی خوانده نشد',
+  NO_FOREX_READ: 'فید فارکس پاسخ نداد', NO_FOREX_INSTRUMENTS: 'ابزار فارکس خوانده نشد',
+  NO_COMMODITIES_READ: 'فید کالا پاسخ نداد', NO_COMMODITIES_INSTRUMENTS: 'ابزار کالا خوانده نشد',
+  NO_RWA_READ: 'فید دارایی واقعی پاسخ نداد', NO_RWA_INSTRUMENTS: 'ابزار دارایی واقعی خوانده نشد',
+  RWA_FEED_UNAVAILABLE: 'فید اوستیوم در دسترس نیست', RWA_SHAPE_UNUSABLE: 'قالب فید تغییر کرده است',
+  BRAIN_NOT_WIRED: 'مغز مرکزی وصل نیست', BRAIN_READ_REFUSED: 'خوانش مغز رد شد',
+  PROVIDER_DOWN: 'منبع بالادستی از دسترس خارج است', UNCLASSIFIED_ERROR: 'منبع بالادستی خطای نامشخص داد',
+  PROVIDER_TIMEOUT: 'زمان خواندن منبع تمام شد', RPC_TIMEOUT: 'زمان خواندن منبع تمام شد',
+  NETWORK_UNAVAILABLE: 'شبکه در دسترس نیست', SOURCE_NOT_WIRED: 'منبع در این استقرار وصل نیست',
+  SOURCE_REJECTED: 'منبع درخواست را رد کرد', NO_MACRO_DATA_SOURCE: 'هیچ منبع داده کلانی پاسخ نداد',
+  NO_FEEDS_REACHABLE: 'هیچ فید خبری در دسترس نبود'
+};
+const faReason = (reason) => {
+  if (!reason) return null;
+  const raw = String(reason);
+  if (NARRATIVE_REASON_FA[raw]) return NARRATIVE_REASON_FA[raw];
+  const head = raw.split(':')[0];
+  if (NARRATIVE_REASON_FA[head]) return NARRATIVE_REASON_FA[head];
+  if (/TIMEOUT/.test(raw)) return 'زمان خواندن منبع تمام شد';
+  return 'منبع پاسخ نداد';
+};
+const pctFa = (v) => (v === null || !Number.isFinite(v) ? null : faD(`${v > 0 ? '+' : ''}${Number(v).toFixed(2)}٪`));
+const pctEn = (v) => (v === null || !Number.isFinite(v) ? null : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
+/* Persian digits for the numbers the narrative formats itself (counts, gaps,
+   scores) — NOT a blanket conversion, which would mangle English words inside
+   quoted evidence like «US 10Y yield». */
+const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+const faD = (v) => String(v).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]);
+
+/**
+ * The comprehensive analysis paragraph, deterministic from the analysis
+ * itself. Sentences exist only for what was read; a missing class is named
+ * WITH its reason, never glossed over. Exported for the probe + the LLM
+ * commentary (which must stay consistent with the same numbers).
+ *
+ * @param {object} analysis the analyzeCrossAsset() result
+ * @returns {{ fa: string, en: string }} the two language renderings
+ */
+export function crossNarrative(analysis) {
+  if (!analysis) return { fa: '', en: '' };
+  const observed = Array.isArray(analysis.observedClasses) ? analysis.observedClasses : [];
+  const classes = analysis.classes || {};
+  const fa = [];
+  const en = [];
+
+  if (!observed.length) {
+    const miss = Array.isArray(analysis.missing) ? analysis.missing : [];
+    const faMiss = miss.map((c) => `${NARRATIVE_CLASS_FA[c] || c}${analysis.missingReasons?.[c] ? ` (${faReason(analysis.missingReasons[c])})` : ''}`).join('، ');
+    return {
+      fa: `هیچ کلاسی از بازار جهانی در این دور خوانده نشد${faMiss ? `: ${faMiss}` : ''}. تا وقتی یک منبع واقعی پاسخ ندهد، تحلیل کراس-است عمداً خالی می‌ماند — هیچ عددی حدس زده نمی‌شود.`,
+      en: `No global asset class was read in this pass${miss.length ? `: ${miss.join(', ')}` : ''}. Until a real source answers, the cross-asset analysis stays deliberately empty — no number is guessed.`
+    };
+  }
+
+  /* 1 · the classes that voted, with their real averages. */
+  const faParts = [];
+  const enParts = [];
+  for (const cls of observed) {
+    const c = classes[cls];
+    if (!c) continue;
+    const faLabel = NARRATIVE_CLASS_FA[cls] || cls;
+    const fb = c.fallbackSource ? ' (از میز داده کلان)' : '';
+    const fbEn = c.fallbackSource ? ' (from the macro desk)' : '';
+    faParts.push(`${faLabel} با میانگین ${pctFa(c.avgChangePct)}${c.withChange ? ` (${faD(c.advancing)} از ${faD(c.withChange)} ابزار سبز)` : ''}${fb}`);
+    enParts.push(`${cls} averaging ${pctEn(c.avgChangePct)}${c.withChange ? ` (${c.advancing}/${c.withChange} instruments green)` : ''}${fbEn}`);
+  }
+  fa.push(`در ۲۴ ساعت گذشته ${faD(observed.length)} کلاس دارایی واقعاً خوانده شد — ${faParts.join('؛ ')}.`);
+  en.push(`${observed.length} asset class${observed.length > 1 ? 'es were' : ' was'} actually read over the last 24h — ${enParts.join('; ')}.`);
+
+  /* 2 · the regime, with its real co-movement. */
+  if (analysis.regime?.regime) {
+    const regimeFa = NARRATIVE_REGIME_FA[analysis.regime.regime] || String(analysis.regime.regime).replace(/_/g, ' ').toLowerCase();
+    const co = Math.round((Number(analysis.regime.coMovement) || 0) * 100);
+    fa.push(`رژیم کلی بازار ${regimeFa} است (هم‌حرکتی ${faD(co)}٪ بر پایهٔ میانگین واقعی همین کلاس‌ها).`);
+    en.push(`The overall regime reads ${String(analysis.regime.regime).replace(/_/g, ' ').toLowerCase()} (${co}% co-movement on these classes' real averages).`);
+  }
+
+  /* 3 · leaders and laggards across the read classes. */
+  const movers = observed
+    .flatMap((cls) => [
+      ...(classes[cls]?.top || []).slice(0, 1).map((r) => ({ ...r, cls })),
+      ...(classes[cls]?.bottom || []).slice(0, 1).map((r) => ({ ...r, cls }))
+    ])
+    .sort((a, b) => b.changePct - a.changePct);
+  const leader = movers[0];
+  const laggard = movers[movers.length - 1];
+  if (leader && laggard && leader.symbol !== laggard.symbol) {
+    fa.push(`قوی‌ترین ${leader.symbol} (${NARRATIVE_CLASS_FA[leader.cls] || leader.cls}) با ${pctFa(leader.changePct)} و ضعیف‌ترین ${laggard.symbol} (${NARRATIVE_CLASS_FA[laggard.cls] || laggard.cls}) با ${pctFa(laggard.changePct)} است.`);
+    en.push(`Strongest is ${leader.symbol} (${leader.cls}) at ${pctEn(leader.changePct)}; weakest is ${laggard.symbol} (${laggard.cls}) at ${pctEn(laggard.changePct)}.`);
+  }
+
+  /* 4 · divergences — the cross-class disagreement a single-asset view misses. */
+  const divs = Array.isArray(analysis.divergences) ? analysis.divergences.slice(0, 2) : [];
+  for (const d of divs) {
+    const [a, b] = d.classes;
+    fa.push(`واگرایی: ${NARRATIVE_CLASS_FA[a] || a} ${pctFa(d.avgChangePct[a])} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(d.avgChangePct[b])} (شکاف ${faD(d.gapPct)} واحد درصد).`);
+    en.push(`Divergence: ${a} ${pctEn(d.avgChangePct[a])} against ${b} ${pctEn(d.avgChangePct[b])} (${d.gapPct}pp gap).`);
+  }
+
+  /* 5 · the macro layer — the biggest real quote move + the curve. */
+  const quotes = Array.isArray(analysis.macro?.indicators) ? analysis.macro.indicators.filter((q) => q.change1dPct !== null) : [];
+  const mover = quotes.slice().sort((x, y) => Math.abs(y.change1dPct) - Math.abs(x.change1dPct))[0];
+  if (mover) {
+    fa.push(`در میز کلان، بیشترین حرکت ۲۴س را ${mover.symbol} با ${pctFa(mover.change1dPct)} دارد.`);
+    en.push(`On the macro desk the biggest 1d move is ${mover.symbol} at ${pctEn(mover.change1dPct)}.`);
+  }
+  const curve = analysis.macro?.curve;
+  if (curve && Number.isFinite(Number(curve.spreadPct))) {
+    fa.push(curve.spreadPct < 0
+      ? `منحنی بهره ۲/۱۰ با ${curve.spreadPct} واحد درصد وارونه است — نشانهٔ کلاسیک فشار رکودی.`
+      : `منحنی بهره ۲/۱۰ با ${curve.spreadPct} واحد درصد طبیعی است.`);
+    en.push(curve.spreadPct < 0
+      ? `The 2s10s curve is inverted at ${curve.spreadPct}pp — the classic recession-pressure signal.`
+      : `The 2s10s curve is positive at ${curve.spreadPct}pp.`);
+  }
+
+  /* 6 · the economic outlook — the direction, with its strongest signal. */
+  const outlook = analysis.outlook;
+  if (outlook && outlook.label && outlook.label !== 'UNAVAILABLE') {
+    const labelFa = NARRATIVE_OUTLOOK_FA[outlook.label] || String(outlook.label).replace(/_/g, ' ').toLowerCase();
+    const top = (outlook.signals || []).slice().sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))[0];
+    fa.push(`چشم‌انداز اقتصادی: ${labelFa} با امتیاز ${faD(`${outlook.score > 0 ? '+' : ''}${outlook.score}`)}${top ? `؛ قوی‌ترین سیگنال: ${top.name} (${top.evidence})` : ''}.`);
+    en.push(`Economic outlook: ${String(outlook.label).replace(/_/g, ' ').toLowerCase()} at ${outlook.score > 0 ? '+' : ''}${outlook.score}${top ? `; strongest signal: ${top.name} (${top.evidence})` : ''}.`);
+  }
+
+  /* 7 · what was NOT read — named with its reason, never hidden. */
+  const miss = Array.isArray(analysis.missing) ? analysis.missing : [];
+  if (miss.length) {
+    const faMiss = miss.map((c) => `${NARRATIVE_CLASS_FA[c] || c}${analysis.missingReasons?.[c] ? ` (${faReason(analysis.missingReasons[c])})` : ''}`).join('، ');
+    fa.push(`${faMiss} در این دور خوانده نشد و در تحلیل وارد نشده است.`);
+    en.push(`${miss.join(', ')} ${miss.length > 1 ? 'were' : 'was'} not read this pass and ${miss.length > 1 ? 'are' : 'is'} excluded from the analysis.`);
+  }
+  fa.push('این تحلیل فقط از اعداد همین دور خوانده‌شده ساخته شده — داده است، نه توصیهٔ معامله.');
+  en.push('This analysis is built only from this pass\u2019s read numbers — data, not trading advice.');
+
+  return { fa: fa.join(' '), en: en.join(' ') };
 }
 
 /** The bounded, model-safe digest for chat/decision contexts. */
