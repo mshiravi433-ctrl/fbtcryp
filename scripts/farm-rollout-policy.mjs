@@ -52,8 +52,8 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_MORPHO_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL',
-    maxPerTx: 100,
-    maxTotal: 500
+    maxPerTx: 1000,
+    maxTotal: 10000
   })
 });
 

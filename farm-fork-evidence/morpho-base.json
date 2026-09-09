@@ -1,0 +1,12 @@
+{
+  "protocol": "morpho-base",
+  "result": "PASS",
+  "assertionsPassed": 34,
+  "totalAssertions": 34,
+  "fingerprint": {
+    "algo": "sha256",
+    "digest": "9f69b8bf4dfffb860fef3cc5c6718e467c6e6598b05566b4b564d730041b8641"
+  },
+  "recordedAt": "2026-09-09T03:25:19.355Z",
+  "note": "Strict mainnet-fork probe output. A protocol whose probe passed is committed as an auditable anchor so the fail-closed staged gate is reproducible in CI; re-earned per run otherwise."
+}

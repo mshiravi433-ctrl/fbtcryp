@@ -30,8 +30,8 @@ The staged rollout gate is `scripts/farm-rollout-policy.mjs`, invoked by
 A `FARM_STRICT_FORK_EVIDENCE=true` on its own is an operator attestation. The
 `farm-fork-evidence/<id>.json` anchors in this repo (Aave Base / Aave Arbitrum /
 Compound Base / **Lido**) pin the raw probe-log `sha256` so the evidence is
-reproducible and auditable in a fresh CI/Vercel checkout. **No record exists for
-Morpho yet.**
+reproducible and auditable in a fresh CI/Vercel checkout. **All five protocols have
+records; no record exists for any path now.**
 
 ---
 
@@ -43,7 +43,7 @@ Morpho yet.**
 | Arbitrum One | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | 1000 / 10000 | **37/37 PASS** (`aave-arbitrum.json`) | ✅ canary-ready |
 | Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **46/46 PASS** (`compound-base.json`) | ✅ canary-ready |
 | Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | 1 ETH / 10 ETH | **31/31 PASS** (`lido.json`) | ✅ canary-ready |
-| Base | native USDC / cbBTC (ERC-4626/earner) | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | — | **NO PASS yet** | ⛔ must stay OFF until PASS |
+| Base | native USDC / cbBTC | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **34/34 PASS** (`morpho-base.json`) | ✅ canary-ready |
 
 Capital-off (the default, no money-in flag) is always allowed.
 
@@ -110,6 +110,7 @@ count, and the raw probe-log `sha256` (the fingerprint). They are produced by
 | `aave-arbitrum` | PASS | 37/37 | `29d686b8fc0b707a12d06e1de6d702f0eac43369f7dd6ae4939434d591a4bd08` |
 | `compound-base` | PASS | 46/46 | `e43e1301469cbeeccaa8c1787713259b27f7777daa2a9e0a374151a6c89f8eae` |
 | `lido` | PASS | 31/31 | `3365c0a8c6877cd19709a09fcfc1408634a7a2c46d8739780d0c82354d4122b9` |
+| `morpho-base` | PASS | 34/34 | `9f69b8bf4dfffb860fef3cc5c6718e467c6e6598b05566b4b564d730041b8641` |
 
 `farm-fork-evidence/*.json` are git-ignored by default; only these four committed
 anchors are un-ignored (see `.gitignore`) so transient re-earned records don't
@@ -146,15 +147,15 @@ finalized/unclaimed request (`#134974`), and proved claim ownership/finalization
 
 ## 7. Remaining limits
 
-- **Morpho** stays OFF until it records an `N/N passed` strict-fork PASS under
-  `farm-fork-evidence/`. No amount of attestation (`FARM_STRICT_FORK_EVIDENCE=true`)
-  replaces a real PASS log. Lido now has its evidence and is canary-ready.
+- **All five protocols now have strict-fork PASS evidence** (Aave Base 36/36, Aave
+  Arbitrum 37/37, Compound Base 46/46, Lido 31/31, Morpho 34/34) and are canary-ready.
+  No amount of attestation (`FARM_STRICT_FORK_EVIDENCE=true`) replaces a real PASS log —
+  every enabled path has one.
 - No canary is enabled with an empty allowlist or incomplete flags; the gate never
   fails open.
 - The GitHub App cannot write `.github/workflows/`; workflow YAML for the agent is a
   committed `ci/` reference that the operator places by hand (this applies to Lido's
   workflow too — the probe already works; the workflow file just needs to be kept in
   sync with `ci/lido-mainnet-fork-probe.yml`).
-- The recommended rollout is **Aave Base + Aave Arbitrum + Compound Base + Lido** in one
-  canary (fee-recipient allowlist, Lido caps 1 ETH/tx / 10 ETH total), then Morpho once
-  its evidence lands.
+- The recommended canary is **all five** in one build (fee-recipient allowlist; caps
+  1000/10000 USDC for Aave/Compound/Morpho, 1 ETH/tx / 10 ETH total for Lido).
