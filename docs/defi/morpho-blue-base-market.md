@@ -23,6 +23,25 @@ supply cbBTC collateral, borrow USDC, repay debt, or claim rewards. It passes th
 full `MarketParams` tuple to Morpho Blue and verifies every field before a plan
 is returned.
 
+## ABI of record
+
+The two write selectors are pinned in `MORPHO_ACTION_SELECTORS`
+(`src/lib/defi/morphoBlueBase.js`) and re-checked against this file's ABI on
+every encode. A 4-byte selector the contract does not implement does not fail
+loudly: a Solidity contract without a fallback reverts with **no return data**,
+which ethers renders as `execution reverted (no data present; likely
+require(false) occurred)` — indistinguishable in the UI from a protocol
+refusal. Both the unit suite (`test/morpho-defi.test.js`) and the fork probe
+(`test/morpho-base-fork-probe.mjs`, rule 3b) therefore re-derive these
+selectors from Morpho Blue's published signatures and decode the plan's
+calldata, so an ABI edit that drifts away from the deployment is a named
+failure instead of a mystery revert.
+
+| Action | Canonical signature | Selector |
+|---|---|---|
+| supply | `supply((address,address,address,address,uint256),uint256,uint256,address,bytes)` | `0xa99aad89` |
+| withdraw | `withdraw((address,address,address,address,uint256),uint256,uint256,address,address)` | `0x5c2bea49` |
+
 ## Data mapping versus transaction authority
 
 The DefiLlama feed contains a Base `morpho-blue` row with `symbol=CBBTC`,
@@ -51,8 +70,13 @@ feed. Contract verification remains the source of transaction truth.
 
 1. chain/account and on-chain market verification;
 2. live USDC balance, allowance, market position, and supply-share reads;
-3. exact-amount approval followed by `supply(marketParams, assets, 0, owner)`;
-4. explicit-amount or share-based max `withdraw(..., owner, owner)`;
+3. exact-amount approval followed by
+   `supply(marketParams, assets, 0, owner, 0x)` — Morpho Blue's 1.x `supply` puts
+   the amounts **before** `onBehalf` and ends with the callback `bytes data`,
+   which stays empty because FBT signs from an EOA (selector `0xa99aad89`);
+4. explicit-amount or share-based max
+   `withdraw(marketParams, assets, shares, owner, owner)` — no callback on this
+   action (selector `0x5c2bea49`);
 5. post-mining receipt status, `Supply`/`Withdraw`/`Approval` event, market ID,
    owner/receiver, exact amount, and position-transition verification.
 

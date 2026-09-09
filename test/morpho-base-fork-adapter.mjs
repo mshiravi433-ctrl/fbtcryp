@@ -1,8 +1,11 @@
 export {
+  MORPHO_ACTION_SELECTORS,
   MORPHO_BLUE_BASE,
   buildRevokePlan,
   buildSupplyPlan,
   buildWithdrawPlan,
+  encodeSupplyCalldata,
+  encodeWithdrawCalldata,
   getMarketState,
   getPosition,
   verifyDeployment,

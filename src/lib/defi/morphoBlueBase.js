@@ -53,16 +53,44 @@ export const MORPHO_BLUE_BASE = Object.freeze({
 });
 
 const MARKET_PARAMS_ABI = 'tuple(address loanToken,address collateralToken,address oracle,address irm,uint256 lltv)';
+const MARKET_PARAMS_FLAT = 'address loanToken, address collateralToken, address oracle, address irm, uint256 lltv';
+
+/**
+ * Morpho Blue's deployed ABI, exactly as verified at
+ * 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb on Base.
+ *
+ * `MarketParams` is a static tuple, so it is encoded inline as five words and
+ * `idToMarketParams` returns those same five words flat. The two money actions
+ * are NOT symmetric — the orders below are what the deployment answers with:
+ *
+ *   supply((address,address,address,address,uint256),uint256,uint256,address,bytes)
+ *     -> 0xa99aad89  (amounts FIRST, then onBehalf, then the callback data)
+ *   withdraw((address,address,address,address,uint256),uint256,uint256,address,address)
+ *     -> 0x5c2bea49  (assets, shares, onBehalf, receiver; no callback)
+ *
+ * A 4-byte selector that the contract does not implement reverts with NO
+ * return data, which ethers reports as `execution reverted (no data present;
+ * likely require(false) occurred)` — indistinguishable, in the UI, from a real
+ * protocol refusal. So the pinned selectors below are re-checked against this
+ * ABI on every encode (see `morphoActionsInterface`) and re-derived from the
+ * canonical signatures in the unit suite: an ABI edit that drifts away from the
+ * deployment fails closed with a code, before anything is signed.
+ */
 const MORPHO_ABI = [
-  `function idToMarketParams(bytes32 id) view returns (${MARKET_PARAMS_ABI})`,
+  `function idToMarketParams(bytes32 id) view returns (${MARKET_PARAMS_FLAT})`,
   'function market(bytes32 id) view returns (uint128 totalSupplyAssets, uint128 totalSupplyShares, uint128 totalBorrowAssets, uint128 totalBorrowShares, uint128 lastUpdate, uint128 fee)',
   'function position(bytes32 id, address user) view returns (uint256 supplyShares, uint128 borrowShares, uint128 collateral)',
-  `function supply(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalfOf) returns (uint256 assetsSupplied, uint256 sharesSupplied)`,
-  `function withdraw(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalfOf, address receiver) returns (uint256 assetsWithdrawn, uint256 sharesWithdrawn)`
+  `function supply(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, bytes data) returns (uint256 assetsSupplied, uint256 sharesSupplied)`,
+  `function withdraw(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, address receiver) returns (uint256 assetsWithdrawn, uint256 sharesWithdrawn)`
 ];
+/** Selectors derived from the deployed signatures; the encode path refuses to run without them. */
+export const MORPHO_ACTION_SELECTORS = Object.freeze({
+  supply: '0xa99aad89',
+  withdraw: '0x5c2bea49'
+});
 const MORPHO_EVENT_ABI = [
-  'event Supply(bytes32 indexed id, address indexed caller, address indexed onBehalfOf, uint256 assets, uint256 shares)',
-  'event Withdraw(bytes32 indexed id, address indexed caller, address indexed onBehalfOf, address receiver, uint256 assets, uint256 shares)',
+  'event Supply(bytes32 indexed id, address indexed caller, address indexed onBehalf, uint256 assets, uint256 shares)',
+  'event Withdraw(bytes32 indexed id, address indexed caller, address indexed onBehalf, address receiver, uint256 assets, uint256 shares)',
   'event Approval(address indexed owner, address indexed spender, uint256 value)'
 ];
 
@@ -106,6 +134,57 @@ function paramsArray() {
 
 function asBigInt(value) {
   return typeof value === 'bigint' ? value : BigInt(String(value ?? 0));
+}
+
+/**
+ * The write-side interface. It refuses to be used as soon as this file's ABI
+ * stops hashing to the selectors Morpho Blue answers with on Base, so a drifted
+ * signature is an adapter error instead of an unexplained on-chain revert.
+ */
+async function morphoActionsInterface() {
+  const { Interface } = await loadEthers();
+  const iface = new Interface(MORPHO_ABI);
+  for (const [action, expected] of Object.entries(MORPHO_ACTION_SELECTORS)) {
+    const found = iface.getFunction(action).selector.toLowerCase();
+    if (found !== expected.toLowerCase()) {
+      throw new MorphoAdapterError('MORPHO_ABI_SELECTOR_MISMATCH', { action, expected, found });
+    }
+  }
+  return iface;
+}
+
+/**
+ * Pure `supply` calldata for the pinned market: `supply(marketParams, assets,
+ * 0, onBehalf, 0x)`. Only one of `assets`/`shares` may be non-zero — Morpho
+ * Blue reverts otherwise — and the callback `data` stays empty because FBT
+ * signs from an EOA and has no `onMorphoSupply` to be called back.
+ */
+export async function encodeSupplyCalldata({ owner, amountWei = 0n, sharesWei = 0n, callbackData = '0x' } = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  const assets = asBigInt(amountWei);
+  const shares = asBigInt(sharesWei);
+  if (assets <= 0n && shares <= 0n) throw new MorphoAdapterError('MORPHO_INVALID_AMOUNT', { assets, shares });
+  if (assets > 0n && shares > 0n) throw new MorphoAdapterError('MORPHO_INPUT_ASSETS_OR_SHARES', { assets, shares });
+  const iface = await morphoActionsInterface();
+  return iface.encodeFunctionData('supply', [paramsArray(), assets, shares, owner, callbackData]);
+}
+
+/**
+ * Pure `withdraw` calldata for the pinned market:
+ * `withdraw(marketParams, assets, 0, onBehalf, receiver)` for an amount, or
+ * `withdraw(marketParams, 0, shares, onBehalf, receiver)` for a max exit.
+ */
+export async function encodeWithdrawCalldata({
+  owner, receiver = owner, amountWei = 0n, sharesWei = 0n
+} = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  if (!isAddr(receiver)) throw new MorphoAdapterError('MORPHO_BAD_RECEIVER', { receiver });
+  const assets = asBigInt(amountWei);
+  const shares = asBigInt(sharesWei);
+  if (assets <= 0n && shares <= 0n) throw new MorphoAdapterError('MORPHO_INVALID_AMOUNT', { assets, shares });
+  if (assets > 0n && shares > 0n) throw new MorphoAdapterError('MORPHO_INPUT_ASSETS_OR_SHARES', { assets, shares });
+  const iface = await morphoActionsInterface();
+  return iface.encodeFunctionData('withdraw', [paramsArray(), assets, shares, owner, receiver]);
 }
 
 const verifiedByProvider = new WeakMap();
@@ -292,7 +371,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, nativeBalan
   checks.needsApproval = allowance < amount;
   const { Interface } = await loadEthers();
   const erc20 = new Interface(ERC20_ABI);
-  const morpho = new Interface(MORPHO_ABI);
   const steps = [];
   if (checks.needsApproval) steps.push({
     kind: 'approve', to: MORPHO_BLUE_BASE.loanToken,
@@ -301,7 +379,7 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, nativeBalan
   });
   steps.push({
     kind: 'supply', to: MORPHO_BLUE_BASE.morpho,
-    data: morpho.encodeFunctionData('supply', [paramsArray(), amount, 0n, owner]), value: 0n,
+    data: await encodeSupplyCalldata({ owner, amountWei: amount }), value: 0n,
     description: { key: 'farm.morpho.step.supply', amount: fromUsdcWei(amount) }
   });
   return { checks, steps };
@@ -333,11 +411,9 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc } = {}) {
     }
   }
   if (checks.blocked.length) return { checks, steps: [] };
-  const { Interface } = await loadEthers();
-  const morpho = new Interface(MORPHO_ABI);
   const step = {
     kind: 'withdraw', to: MORPHO_BLUE_BASE.morpho,
-    data: morpho.encodeFunctionData('withdraw', [paramsArray(), assets, shares, owner, owner]), value: 0n,
+    data: await encodeWithdrawCalldata({ owner, receiver: owner, amountWei: assets, sharesWei: shares }), value: 0n,
     description: { key: checks.isMax ? 'farm.morpho.step.withdrawMax' : 'farm.morpho.step.withdraw', amount: checks.isMax ? null : fromUsdcWei(assets) }
   };
   return { checks, steps: [step] };
@@ -380,8 +456,8 @@ export async function verifyMorphoReceipt({
   const eventAmount = asBigInt(args.assets);
   const eventId = String(args.id).toLowerCase();
   if (eventId !== MORPHO_BLUE_BASE.marketId.toLowerCase()) throw new MorphoAdapterError('MORPHO_MARKET_EVENT_MISMATCH');
-  const beneficiary = action === 'supply' ? args.onBehalfOf : args.receiver;
-  const onBehalf = action === 'supply' ? args.onBehalfOf : args.onBehalfOf;
+  const onBehalf = args.onBehalf ?? args.onBehalfOf;
+  const beneficiary = action === 'supply' ? onBehalf : args.receiver;
   if (!sameAddress(String(beneficiary), owner) || !sameAddress(String(onBehalf), owner) || (amount != null && amount !== MAX_UINT256 && eventAmount !== amount)) {
     throw new MorphoAdapterError('MORPHO_PROTOCOL_EVENT_MISMATCH', { action, eventAmount, expected: amount });
   }
