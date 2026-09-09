@@ -397,8 +397,8 @@ export async function run(container) {
     const second = await mountBoundary('Failed to fetch dynamically imported module');
     out.push(['...and a second failure does NOT reload again', reloads === 1]);
     out.push([
-      '...it explains that a new version shipped',
-      second.includes('crash.updateTitle')
+      '...it says the refresh already happened, instead of promising it again',
+      second.includes('crash.stillBrokenTitle')
     ]);
 
     /*

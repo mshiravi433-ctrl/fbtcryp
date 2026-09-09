@@ -437,7 +437,13 @@ export async function run(container) {
 
       const cards = container.querySelectorAll('.sic-card');
       const text = (container.textContent || '').replace(/\s+/g, ' ');
-      const boundaryFired = /crash\.(title|updateTitle|body)/.test(text);
+      /*
+       * `stillBroken*` is what the boundary renders for a chunk it has already
+       * refreshed once — the old set listed `updateTitle`, which no longer
+       * exists, so the one state that means "the deploy raced us" would have
+       * read as "no crash happened".
+       */
+      const boundaryFired = /crash\.(title|body|stillBrokenTitle|stillBrokenBody)/.test(text);
 
       check(`${c.name}: page renders without throwing`, !threw);
       check(`${c.name}: no React error was logged`, errors.length === before);
