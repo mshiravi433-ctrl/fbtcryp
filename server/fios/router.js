@@ -598,5 +598,66 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return out.ok ? { ok: true, written: out.written, preferences: out.preferences, durable: fi.collections.durable() } : reject(422, out.code, out.detail || null);
   }));
 
+  /* ══════════════════════ Phase 211: GLOBAL AI INTELLIGENCE ══════════════════════
+   * All additive routes. The FI router deliberately does not own /agents or
+   * /status (those belong to the command center); these live under
+   * /global/* — /api/ai/global/intelligence, /global/briefing,
+   * /global/cross-asset, /global/providers — and every response says what was
+   * actually read (per-domain status + missing[]) instead of promising. */
+
+  router.get('/global/intelligence', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    const snapshot = await fi.globalIntelFor(owner, { refresh });
+    return {
+      ok: true,
+      schema: snapshot.schema,
+      globalIntelligence: snapshot,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/global/briefing', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    const briefing = await fi.briefingFor(owner, { refresh });
+    return {
+      ok: true,
+      schema: briefing.schema,
+      briefing,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/global/cross-asset', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const analysis = await fi.crossAssetFor(owner, {});
+    return {
+      ok: true,
+      schema: analysis.schema,
+      crossAsset: analysis,
+      digest: fi.crossAsset.digest(analysis),
+      durable: fi.collections.durable()
+    };
+  }));
+
+  /* The readiness lights per domain — implemented · configured ·
+   * provider_available · runtime_ready · live — from the LAST real snapshot
+   * (a live:true is a result this process actually produced). */
+  router.get('/global/providers', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const snapshot = await fi.globalIntelFor(owner, {});
+    return {
+      ok: true,
+      schema: snapshot.schema,
+      providers: snapshot.providers,
+      domains: Object.fromEntries(Object.entries(snapshot.domains || {}).map(([k, v]) => [k, { status: v.status, source: v.source, reason: v.reason, at: v.at }])),
+      coverage: snapshot.coverage,
+      available: snapshot.available,
+      missing: snapshot.missing,
+      durable: fi.collections.durable()
+    };
+  }));
+
   return router;
 }

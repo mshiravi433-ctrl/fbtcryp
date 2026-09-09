@@ -42,8 +42,10 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
    * @param {object} [p.research]    research bundle
    * @param {object} [p.goal]        { targetUsd, months, monthlyContributionUsd }
    * @param {object} [p.preferences] resolved preference model
+   * @param {object} [p.globalIntel] Phase 211 — global intelligence snapshot
+   * @param {object} [p.crossAsset]  Phase 211 — cross-asset analysis
    */
-  async function generate({ owner, intent = {}, financial = null, world = null, research = null, goal = null, preferences = null, correlationId = null } = {}) {
+  async function generate({ owner, intent = {}, financial = null, world = null, research = null, goal = null, preferences = null, globalIntel = null, crossAsset = null, correlationId = null } = {}) {
     const at = now();
     const fs = financial?.computed || financial || {};
     if (!fs || fs.status === 'UNAVAILABLE') {
@@ -73,6 +75,25 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
     const availableUsd = num(fs.availableCapitalUsd);
     const apyRows = Array.isArray(world?.domains?.market?.apy?.value) ? world.domains.market.apy.value : [];
     const bestApy = apyRows.length ? apyRows.reduce((a, b) => ((num(b.apyPct) || 0) > (num(a.apyPct) || 0) ? b : a), apyRows[0]) : null;
+
+    /* ── Phase 211: the GLOBAL context every proposal now travels with ────
+       This is context, not a new strategy: the cross-asset regime and the
+       global domains the engine actually read attach to each proposal so the
+       council, the simulation and the user see the world the number was made
+       in. An unread global world produces a null context — never a guess. */
+    const globalContext = buildGlobalContext({ globalIntel, crossAsset, at });
+    const globalNotes = [];
+    if (globalContext) {
+      if (['RISK_OFF', 'RISK_OFF_LEANING'].includes(globalContext.regime)) {
+        globalNotes.push(`cross-asset regime is ${globalContext.regime.replace(/_/g, ' ').toLowerCase()} (${globalContext.observedClasses.join(', ')} observed) — entries carry wider macro risk`);
+      }
+      if (globalContext.macroAttention > 0) {
+        globalNotes.push(`macro attention: ${globalContext.topTopics} in real headlines`);
+      }
+      if (globalContext.smartMoneyNetUsd !== null) {
+        globalNotes.push(`smart-money net flow $${Math.round(globalContext.smartMoneyNetUsd / 1000)}k over the last window`);
+      }
+    }
 
     /* ── 1. HOLD — always offered; doing nothing is a strategy ──────────── */
     candidates.push({
@@ -235,7 +256,11 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
       feesUsd: withCompat[i].feesUsd ?? null,
       liquidity: withCompat[i].liquidity ?? null,
       engine: STRATEGY_ENGINE_SCHEMA,
-      researchId: research?.id || null
+      researchId: research?.id || null,
+      /* Phase 211 — the global world this proposal was made in (additive;
+         null when the global engine had nothing, never a guess). */
+      globalContext,
+      globalNotes: globalNotes.length ? globalNotes : null
     }));
 
     for (const s of strategies) {
@@ -266,6 +291,36 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
  * How well a strategy serves the goal. Bounded 0-100, and null when there is no
  * goal to serve — "goal compatible" is not a default value.
  */
+/** Phase 211 — the bounded global context a strategy proposal travels with.
+ *  Built ONLY from a real global-intel snapshot and/or a real cross-asset
+ *  analysis; both missing ⇒ null (the caller renders "global context: not
+ *  read", never a fabricated regime). */
+export function buildGlobalContext({ globalIntel = null, crossAsset = null, at = Date.now() } = {}) {
+  const hasSnapshot = globalIntel && typeof globalIntel === 'object' && globalIntel.status && globalIntel.status !== 'UNAVAILABLE';
+  const hasCross = crossAsset && typeof crossAsset === 'object' && crossAsset.status && crossAsset.status !== 'UNAVAILABLE';
+  if (!hasSnapshot && !hasCross) return null;
+  const domains = globalIntel?.domains || {};
+  const sm = domains.smart_money?.status === 'OK' ? domains.smart_money.data : null;
+  const macro = domains.macro?.status === 'OK' ? domains.macro.data : null;
+  const topTopics = macro
+    ? Object.entries(macro.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t}×${n}`).join(', ')
+    : null;
+  return {
+    at,
+    regime: crossAsset?.regime?.regime || null,
+    observedClasses: crossAsset?.observedClasses || [],
+    coMovement: crossAsset?.regime?.coMovement ?? null,
+    divergences: (crossAsset?.divergences || []).slice(0, 3).map((d) => `${d.classes.join(' vs ')} (${d.gapPct}pp apart)`),
+    macroAttention: macro ? macro.attention : null,
+    topTopics,
+    smartMoneyNetUsd: sm ? (num(sm.accumulationUsd) !== null && num(sm.distributionUsd) !== null ? num(sm.accumulationUsd) - num(sm.distributionUsd) : null) : null,
+    whaleEventCount: domains.whales?.status === 'OK' ? (domains.whales.data?.count ?? null) : null,
+    globalAvailable: globalIntel?.available ?? null,
+    readOnlyClasses: crossAsset?.readOnlyClasses || [],
+    note: 'global context is observation, not advice; read-only classes cannot be traded through this app'
+  };
+}
+
 export function scoreGoalFit(candidate = {}, { goal = null, fs = {} } = {}) {
   if (!goal || !Number.isFinite(Number(goal.targetUsd))) return null;
   const target = Number(goal.targetUsd);

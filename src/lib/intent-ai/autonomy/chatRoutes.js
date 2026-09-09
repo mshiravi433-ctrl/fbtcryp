@@ -107,6 +107,8 @@ export const ROUTED_PATHS = Object.freeze([
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',
   '/portfolio', '/intent', '/intent-ai', '/ai-control', '/flash-liquidity',
   '/vault', '/loan',
+  // Phase 211 — AI Global Intelligence surface (additive).
+  '/ai-global',
   // FBT Insurance OS (protection marketplace) — nested under the shell route.
   '/insurance', '/insurance/marketplace', '/insurance/quote/:quoteId',
   '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',

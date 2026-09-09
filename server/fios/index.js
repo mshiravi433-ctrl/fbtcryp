@@ -43,6 +43,10 @@ import { createAutonomyLoop } from './autonomy.js';
 import { createCouncil } from './council.js';
 import { createAgentRegistry } from './agents.js';
 import { createLearningEngine } from './learning.js';
+/* Phase 211 — Global AI Intelligence. */
+import { createGlobalIntelEngine, GLOBAL_DOMAINS } from './globalIntel.js';
+import { analyzeCrossAsset, crossAssetDigest } from './crossAsset.js';
+import { createBriefingEngine } from './briefing.js';
 import { createMigrations, CURRENT_MIGRATION_VERSION } from './migrations.js';
 import { createFiRouter } from './router.js';
 
@@ -50,7 +54,7 @@ export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
 const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
-export function createFinancialIntelligence({ stateStore = null, events = null, brain = null, ownerFor = null, log = () => {} } = {}) {
+export function createFinancialIntelligence({ stateStore = null, events = null, brain = null, ownerFor = null, providers = {}, log = () => {} } = {}) {
   /* ── shared substrate ────────────────────────────────────────────────── */
   const collections = createCollections({ log });
   const observability = createObservability({ log });
@@ -127,6 +131,17 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   const agents = createAgentRegistry({ collections, observability, log });
   const learning = createLearningEngine({ collections, memory, preferences, behavior, genome, observability, log });
 
+  /* ── Phase 211: GLOBAL AI INTELLIGENCE ────────────────────────────────
+   * One global intelligence engine, wired to the SAME brain the execution
+   * path uses (brain.directToolCall for stocks/forex/commodities/rwa) and to
+   * the provider seam the research engine established (smart money, whales,
+   * chain intel, news). It reads; it never signs and never executes.
+   * The cross-asset analysis is pure arithmetic over what the engine read.
+   * The briefing is the proactive layer: what the OS believes the owner
+   * should know before they ask. */
+  const globalIntel = createGlobalIntelEngine({ collections, evidence, observability, brain, providers, log });
+  const briefingEngine = createBriefingEngine({ collections, observability, log });
+
   /* ── migrations (batch 7) ────────────────────────────────────────────── */
   const migrations = createMigrations({ collections, log });
 
@@ -164,19 +179,90 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     return out;
   };
 
-  /** The world model over the same sections, with the user's own inputs. */
-  async function worldModelFor(owner) {
+  /** The world model over the same sections, with the user's own inputs.
+   *  Phase 211: the model now also carries the GLOBAL domain — filled from
+   *  the Global Intelligence Engine's cached snapshot (TTL-bounded, so a
+   *  world-model read does not re-dial providers) and the cross-asset
+   *  analysis computed from it. `global: false` keeps the Phase 210 shape
+   *  exactly (a pure sections read) for callers that want no global pass. */
+  async function worldModelFor(owner, { global = true } = {}) {
     const sections = sectionsFor(owner);
     const prefs = await preferences.resolve(owner).catch(() => null);
     const gGot = await genome.get(owner).catch(() => ({ ok: false }));
+    let globalSnapshot = null;
+    let crossAssetOut = null;
+    if (global) {
+      globalSnapshot = await globalIntelFor(owner).catch(() => null);
+      if (globalSnapshot && globalSnapshot.status !== 'UNAVAILABLE') {
+        /* crypto breadth comes from the sections the model itself reads */
+        crossAssetOut = analyzeCrossAsset({
+          world: { domains: { market: envOf(sections, ['markets', 'crypto', 'signals']) } },
+          globalIntel: globalSnapshot,
+          now: now()
+        });
+      }
+    }
     const model = buildWorldModel({
       owner,
       sections,
       preferences: prefs || null,
       genome: gGot.ok && gGot.genome ? gGot.genome : null,
+      globalIntel: globalSnapshot,
+      crossAsset: crossAssetOut,
       now: now()
     });
     return model;
+  }
+
+  /** Phase 211 — the raw global sections shape crossAsset expects (pure). */
+  function envOf(sections, keys) {
+    for (const key of keys) {
+      const s = sections?.[key];
+      if (s && typeof s === 'object' && s.data != null) {
+        return { schema: 'fbt.fi.provenance.v1', status: 'ok', value: s.data, source: s.source || key, at: s.updatedAt || now(), freshness: 'LIVE', ttlMs: s.ttlMs || 60_000, confidence: 0.9 };
+      }
+    }
+    return { schema: 'fbt.fi.provenance.v1', status: 'unavailable', value: null, reason: 'UNREAD', source: keys.join('|'), at: now(), freshnessMs: 0, freshness: 'UNAVAILABLE', ttlMs: 0, confidence: 0, note: null };
+  }
+
+  /** Phase 211 — the global intelligence snapshot for one owner (cached). */
+  async function globalIntelFor(owner, { refresh = false } = {}) {
+    return globalIntel.snapshotFor(owner, { sections: sectionsFor(owner), refresh });
+  }
+
+  /** Phase 211 — cross-asset analysis over the world + global snapshot. */
+  async function crossAssetFor(owner, { refresh = false } = {}) {
+    const globalSnapshot = await globalIntelFor(owner, { refresh });
+    const sections = sectionsFor(owner);
+    return analyzeCrossAsset({
+      world: { domains: { market: envOf(sections, ['markets', 'crypto', 'signals']) } },
+      globalIntel: globalSnapshot,
+      now: now()
+    });
+  }
+
+  /** Phase 211 — the proactive briefing: everything the OS actually read,
+   *  prioritized. Cached with a TTL; `refresh` forces a rebuild. Every input
+   *  is a REAL read of this pass (the global snapshot comes from the same
+   *  cached engine pass the world model used — no second provider round). */
+  async function briefingFor(owner, { refresh = false } = {}) {
+    const [financial, world, guardianStatus, calibration, prefs, globalSnapshot] = await Promise.all([
+      financialStateFor(owner).catch(() => null),
+      worldModelFor(owner, { global: true }).catch(() => null),
+      guardian.status(owner).catch(() => null),
+      learning.calibration(owner).catch(() => null),
+      preferences.resolve(owner).catch(() => null),
+      globalIntelFor(owner).catch(() => null)
+    ]);
+    return briefingEngine.briefingFor(owner, {
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null,
+      world,
+      globalIntel: globalSnapshot,
+      crossAsset: world?.domains?.global?.crossAsset?.value || null,
+      guardian: guardianStatus,
+      learning: calibration,
+      preferences: prefs
+    }, { refresh });
   }
 
   /** The risk view the decision + confidence engines consume. */
@@ -198,6 +284,10 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     const cal = await learning.calibration(owner).catch(() => null);
     const sections = sectionsFor(owner);
     const sectionKeys = Object.keys(sections || {});
+    /* Phase 211 — the global subsystem reports the LAST persisted snapshot
+       (the last REAL provider results), never a promise about the next one. */
+    const lastGlobal = await globalIntel.lastSnapshot(owner).catch(() => null);
+    const lastBriefing = await briefingEngine.lastBriefing(owner).catch(() => null);
     return {
       ok: true,
       schema: FI_ROOT_SCHEMA,
@@ -218,11 +308,21 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
         policy: policyStatus ? { enabled: policyStatus.flag?.ok, count: policyStatus.count, anyEmergency: policyStatus.anyEmergency } : null,
         guardian: guardianStatus ? { lastCheckAt: guardianStatus.lastCheckAt, recentAlerts: guardianStatus.recentAlerts?.length || 0, anyEmergency: guardianStatus.policies?.anyEmergency ?? null } : null,
         learning: cal ? { samples: cal.samples, directionHitRate: cal.directionHitRate } : null,
-        autonomy: autonomy.capabilities()
+        autonomy: autonomy.capabilities(),
+        global: lastGlobal ? {
+          snapshotId: lastGlobal.snapshotId || lastGlobal.id,
+          at: lastGlobal.at,
+          available: lastGlobal.available,
+          coverage: lastGlobal.coverage,
+          domains: Object.fromEntries(Object.entries(lastGlobal.providers || {}).map(([k, v]) => [k, { live: v.live, status: v.status }])),
+          briefing: lastBriefing ? { id: lastBriefing.id, at: lastBriefing.at, items: lastBriefing.items?.length || 0, critical: lastBriefing.counts?.critical || 0 } : null
+        } : { snapshotId: null, at: null, available: 0, coverage: 0, domains: {}, briefing: lastBriefing ? { id: lastBriefing.id, at: lastBriefing.at, items: lastBriefing.items?.length || 0, critical: lastBriefing.counts?.critical || 0 } : null }
       },
       lastResults: {
         decision: null,
-        council: null
+        council: null,
+        globalIntelligence: lastGlobal ? { id: lastGlobal.snapshotId || lastGlobal.id, at: lastGlobal.at, available: lastGlobal.available, missing: lastGlobal.missing || [] } : null,
+        briefing: lastBriefing ? { id: lastBriefing.briefingId || lastBriefing.id, at: lastBriefing.at, items: lastBriefing.items?.length || 0 } : null
       }
     };
   }
@@ -252,6 +352,13 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     agents,
     learning,
     migrations,
+    /* Phase 211 — Global AI Intelligence. */
+    globalIntel,
+    briefingEngine,
+    crossAsset: { analyze: analyzeCrossAsset, digest: crossAssetDigest },
+    globalIntelFor,
+    crossAssetFor,
+    briefingFor,
     financialStateFor,
     worldModelFor,
     worldModelDigest,

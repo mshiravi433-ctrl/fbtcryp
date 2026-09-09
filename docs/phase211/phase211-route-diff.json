@@ -1,0 +1,83 @@
+{
+  "probe": "phase211-routes-inventory",
+  "passed": 12,
+  "failed": 0,
+  "total": 12,
+  "removedRoutes": [],
+  "addedRoutes": [
+    "/ai-global → AiGlobalIntelligence"
+  ],
+  "removedBackendRoutes": [],
+  "counts": {
+    "frontend": {
+      "before": 64,
+      "after": 65
+    },
+    "chatNav": {
+      "before": 64,
+      "after": 65
+    },
+    "mounts": {
+      "before": 30,
+      "after": 30
+    },
+    "fiRoutes": {
+      "before": 44,
+      "after": 48
+    }
+  },
+  "results": [
+    {
+      "name": "FRONTEND: no route was removed (removedRoutes.length === 0)",
+      "ok": true
+    },
+    {
+      "name": "FRONTEND: every pre-existing route is still mounted with the same component",
+      "ok": true
+    },
+    {
+      "name": "FRONTEND: Phase 211 only ADDED routes",
+      "ok": true,
+      "extra": [
+        "/ai-global → AiGlobalIntelligence"
+      ]
+    },
+    {
+      "name": "PAGES: every lazy import in App.jsx resolves to a real file (0 missing)",
+      "ok": true
+    },
+    {
+      "name": "PAGES: the new AI Global Intelligence route resolves through a lazy import that exists",
+      "ok": true
+    },
+    {
+      "name": "PAGES: the route count only grew",
+      "ok": true,
+      "extra": "64 → 65"
+    },
+    {
+      "name": "CHAT NAV: no navigable path was removed",
+      "ok": true
+    },
+    {
+      "name": "CHAT NAV: /ai-global is navigable by the AI",
+      "ok": true
+    },
+    {
+      "name": "BACKEND: no app.use mount was removed",
+      "ok": true
+    },
+    {
+      "name": "BACKEND: no router route was removed anywhere in server/ (removedRoutes === 0)",
+      "ok": true
+    },
+    {
+      "name": "FI ROUTER: no existing /api/ai route was removed",
+      "ok": true
+    },
+    {
+      "name": "FI ROUTER: the four Phase 211 global routes are mounted",
+      "ok": true
+    }
+  ]
+}

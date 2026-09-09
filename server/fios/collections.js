@@ -21,12 +21,17 @@ import { storeGet, storeSet, storeDurable } from '../store.js';
 
 export const COLLECTIONS_SCHEMA = 'fbt.fi.collections.v1';
 
-/** §46 — the requested tables, as key namespaces. */
+/** §46 — the requested tables, as key namespaces. Phase 211 ADDS the two
+ *  global-intelligence collections at the end; existing names and their rows
+ *  are untouched, and `read()` of a collection an old build wrote is exactly
+ *  what it was before (keys are namespaced per collection). */
 export const COLLECTIONS = Object.freeze([
   'financial_state', 'world_state_snapshot', 'preferences', 'behavior_signals',
   'intent_genome', 'evidence', 'research', 'strategies', 'strategy_comparisons',
   'simulations', 'decisions', 'policies', 'decision_traces', 'learning_outcomes',
-  'agent_trust', 'guardian_events'
+  'agent_trust', 'guardian_events',
+  /* Phase 211 — Global AI Intelligence (additive). */
+  'global_intelligence', 'briefings'
 ]);
 
 /** Per-collection row caps. Small on purpose: these are decision records,
@@ -35,7 +40,9 @@ const CAPS = Object.freeze({
   financial_state: 60, world_state_snapshot: 40, preferences: 1, behavior_signals: 1,
   intent_genome: 1, evidence: 300, research: 60, strategies: 120,
   strategy_comparisons: 60, simulations: 80, decisions: 80, policies: 40,
-  decision_traces: 80, learning_outcomes: 120, agent_trust: 60, guardian_events: 200
+  decision_traces: 80, learning_outcomes: 120, agent_trust: 60, guardian_events: 200,
+  /* Phase 211 — one 'latest' snapshot + short history per owner. */
+  global_intelligence: 12, briefings: 24
 });
 
 const isCollection = (name) => COLLECTIONS.includes(String(name));

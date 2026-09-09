@@ -21,7 +21,10 @@ export const RESEARCH_SCHEMA = 'fbt.fi.research.v1';
 
 export const RESEARCH_KINDS = Object.freeze([
   'token', 'protocol', 'defi', 'rwa', 'stock', 'market', 'macro',
-  'news', 'smart_money', 'security', 'liquidity', 'yield'
+  'news', 'smart_money', 'security', 'liquidity', 'yield',
+  /* Phase 211 — global intelligence kinds (additive; the default kind list is
+     unchanged, these are opt-in through `kinds`). */
+  'whale', 'onchain', 'forex', 'commodity', 'global'
 ]);
 
 const TIMEOUT_MS = 6000;
@@ -179,6 +182,95 @@ export function createResearchEngine({ collections, evidence, observability = nu
       } else {
         missing.push('yield');
         sources.push({ name: 'yield-feed', at, status: 'unavailable' });
+      }
+    }
+
+    /* ── Phase 211: GLOBAL INTELLIGENCE (whale · onchain · forex · commodity
+       · global). These read the world model's `global` domain — filled by the
+       Global Intelligence Engine — so research and the panel quote the SAME
+       numbers, and an unread class lands in `missing[]` honestly. */
+    const wantsGlobal = wanted.some((k) => ['whale', 'onchain', 'forex', 'commodity', 'global', 'stock', 'rwa', 'macro'].includes(k));
+    if (wantsGlobal) {
+      const unwrapEnv = (node) => (node && typeof node === 'object' && node.schema === 'fbt.fi.provenance.v1' && 'value' in node ? node.value : node);
+      const rawGlobal = (world?.global && typeof world.global === 'object') ? world.global : (world?.domains?.global || {});
+      /* The global leaves hold either a picked array (the section seam) or the
+         engine's full domain object ({instruments}/{events}/{items}/…). Both
+         are real shapes this model can carry; normalise, never guess. */
+      const rowsOf = (v, key) => (Array.isArray(v) ? v : (Array.isArray(v?.[key]) ? v[key] : null));
+      const g = {
+        smartMoney: unwrapEnv(rawGlobal.smartMoney),
+        whales: rowsOf(unwrapEnv(rawGlobal.whales), 'events'),
+        onchain: unwrapEnv(rawGlobal.onchain),
+        macro: rowsOf(unwrapEnv(rawGlobal.macro), 'items'),
+        stocks: rowsOf(unwrapEnv(rawGlobal.stocks), 'instruments'),
+        forex: rowsOf(unwrapEnv(rawGlobal.forex), 'instruments'),
+        commodities: rowsOf(unwrapEnv(rawGlobal.commodities), 'instruments'),
+        rwa: rowsOf(unwrapEnv(rawGlobal.rwa), 'instruments')
+      };
+      const classFor = (k) => (k === 'commodity' ? g.commodities : g[k]);
+
+      if (wanted.includes('whale') || wanted.includes('global')) {
+        const events = g.whales;
+        if (events && events.length) {
+          evidenceInput.push({ type: 'whale', source: 'global-intel:whales', value: events.slice(0, 6), at, ttlMs: 5 * 60_000, untrusted: false });
+          const biggest = events.slice().sort((a, b) => (Number(b?.valueUsd) || 0) - (Number(a?.valueUsd) || 0))[0];
+          signals.push({ name: 'WHALE_FLOW', direction: biggest?.flow === 'dex_sell' || biggest?.flow === 'cex_in' ? 'distribution' : 'neutral', value: Number(biggest?.valueUsd) || null, source: 'global-intel:whales', confidence: 0.7, symbol: biggest?.symbol || null });
+          sources.push({ name: 'global-intel:whales', at, status: 'ok', count: events.length });
+        } else {
+          missing.push('whale:global-domain');
+          sources.push({ name: 'global-intel:whales', at, status: 'unavailable' });
+        }
+      }
+
+      if (wanted.includes('onchain') || wanted.includes('global')) {
+        const sourcesHealth = (g.onchain && (Array.isArray(g.onchain) || Array.isArray(g.onchain.sources) || typeof g.onchain === 'object'))
+          ? (Array.isArray(g.onchain) ? g.onchain : (g.onchain.sources || g.onchain))
+          : null;
+        if (sourcesHealth) {
+          evidenceInput.push({ type: 'onchain', source: 'global-intel:onchain', value: sourcesHealth, at, ttlMs: 5 * 60_000 });
+          const down = (Array.isArray(sourcesHealth) ? sourcesHealth : (sourcesHealth.sources || [])).filter((s) => s?.status === 'DOWN').length;
+          signals.push({ name: 'ONCHAIN_SOURCE_HEALTH', direction: down > 0 ? 'degraded' : 'healthy', value: down, source: 'global-intel:onchain', confidence: 0.8 });
+          sources.push({ name: 'global-intel:onchain', at, status: 'ok' });
+        } else {
+          missing.push('onchain:global-domain');
+          sources.push({ name: 'global-intel:onchain', at, status: 'unavailable' });
+        }
+      }
+
+      for (const [kind, label] of [['forex', 'forex'], ['commodity', 'commodities'], ['stock', 'stocks'], ['rwa', 'rwa']]) {
+        if (!wanted.includes(kind) && !wanted.includes('global')) continue;
+        const instruments = classFor(label);
+        if (Array.isArray(instruments) && instruments.length) {
+          const match = sym ? instruments.filter((i) => String(i?.symbol || '').toUpperCase().includes(sym)) : [];
+          const rows = (match.length ? match : instruments).slice(0, 6);
+          evidenceInput.push({ type: kind === 'commodity' ? 'commodity' : kind, source: `global-intel:${label}`, value: rows, at, ttlMs: 5 * 60_000 });
+          const withChange = rows.map((i) => ({ symbol: i.symbol, changePct: Number(i.change24hPct ?? i.changePct) })).filter((i) => Number.isFinite(i.changePct));
+          if (withChange.length) {
+            const avg = withChange.reduce((s, i) => s + i.changePct, 0) / withChange.length;
+            signals.push({ name: `${kind.toUpperCase()}_BREADTH`, direction: avg > 0 ? 'up' : avg < 0 ? 'down' : 'neutral', value: Number(avg.toFixed(2)), source: `global-intel:${label}`, confidence: 0.65, instruments: withChange.length });
+          }
+          sources.push({ name: `global-intel:${label}`, at, status: 'ok', count: instruments.length });
+        } else {
+          missing.push(`${kind}:global-domain`);
+          sources.push({ name: `global-intel:${label}`, at, status: 'unavailable' });
+        }
+      }
+
+      if (wanted.includes('macro') || wanted.includes('global')) {
+        const macroItems = g.macro;
+        if (macroItems && macroItems.length) {
+          evidenceInput.push({ type: 'macro', source: 'global-intel:macro', value: macroItems.slice(0, 6), at, ttlMs: 15 * 60_000, untrusted: true });
+          signals.push({ name: 'MACRO_ATTENTION', direction: 'neutral', value: macroItems.length, source: 'global-intel:macro', confidence: 0.55, topics: [...new Set(macroItems.map((m) => m.topic))] });
+          sources.push({ name: 'global-intel:macro', at, status: 'ok', count: macroItems.length });
+        } else if (!Array.isArray(external.news) || !external.news.length) {
+          missing.push('macro:global-domain');
+        }
+      }
+
+      if (wanted.includes('global') && g.smartMoney && typeof g.smartMoney === 'object') {
+        evidenceInput.push({ type: 'smart_money', source: 'global-intel:smart-money', value: g.smartMoney, at, ttlMs: 5 * 60_000 });
+        signals.push({ name: 'SMART_MONEY_GLOBAL', direction: (Number(g.smartMoney.netFlowUsd) || 0) > 0 ? 'accumulation' : 'distribution', value: g.smartMoney.netFlowUsd ?? null, source: 'global-intel:smart-money', confidence: 0.6 });
+        sources.push({ name: 'global-intel:smart-money', at, status: 'ok' });
       }
     }
 
