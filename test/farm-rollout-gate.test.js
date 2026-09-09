@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   assertFarmRollout,
+  formatFarmRollout,
   inspectFarmRollout
 } from '../scripts/farm-rollout-policy.mjs';
 
@@ -130,5 +131,59 @@ describe('staged Farm production rollout gate', () => {
     ], { env, encoding: 'utf8' });
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain(`${rpcName} provided (--strict)`);
+  });
+
+  it('never opens public capital on a public flag alone: canary must be confirmed', () => {
+    const result = inspectFarmRollout({
+      ...AAVE_BASE_CANARY,
+      VITE_AAVE_BASE_SUPPLY_PUBLIC: 'true'
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toMatch(/FARM_CANARY_CONFIRMED=true/);
+  });
+
+  it('opens supply to any wallet only with strict evidence AND a confirmed canary', () => {
+    const result = assertFarmRollout({
+      ...AAVE_BASE_CANARY,
+      VITE_AAVE_BASE_SUPPLY_PUBLIC: 'true',
+      FARM_CANARY_CONFIRMED: 'true'
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      mode: 'public-open',
+      enabled: ['aave-base'],
+      public: ['aave-base'],
+      canaryConfirmed: true
+    });
+    expect(result.protocols['aave-base'].public).toBe(true);
+    // The gate message names the wider scope so an operator can see it opened.
+    expect(formatFarmRollout(result)).toMatch(/public-open rollout/);
+  });
+
+  it('still refuses to open when the reviewed caps are exceeded, even with a confirmed canary', () => {
+    expect(() => assertFarmRollout({
+      ...AAVE_BASE_CANARY,
+      VITE_AAVE_BASE_SUPPLY_PUBLIC: 'true',
+      FARM_CANARY_CONFIRMED: 'true',
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '2000'
+    })).toThrow(/may not exceed the reviewed canary cap/);
+  });
+
+  it('rejects a public flag on a protocol whose money-in flag is not true', () => {
+    const result = inspectFarmRollout({
+      FARM_ROLLOUT_PROTOCOLS: 'aave-base',
+      FARM_STRICT_FORK_EVIDENCE: 'true',
+      VITE_AAVE_BASE_SUPPLY_PUBLIC: 'true'
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toMatch(/PUBLIC=true requires VITE_ENABLE_AAVE_BASE_SUPPLY=true/);
+  });
+
+  it('keeps the limited-canary mode when no public flag is present', () => {
+    expect(assertFarmRollout(AAVE_BASE_CANARY)).toMatchObject({
+      ok: true,
+      mode: 'limited-canary',
+      public: []
+    });
   });
 });

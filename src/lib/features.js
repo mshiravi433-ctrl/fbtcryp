@@ -178,6 +178,19 @@ export const AAVE_BASE_SUPPLY_ENABLED =
     : envFlag('VITE_ENABLE_AAVE_BASE_SUPPLY') === 'true';
 
 /**
+ * Public-canary override. When the build also sets
+ * `VITE_AAVE_BASE_SUPPLY_PUBLIC=true`, ANY connected wallet (not just the
+ * canary allowlist) may open a new supply, still subject to the caps. The
+ * rollout gate in scripts/farm-rollout-policy.mjs only allows this once
+ * `FARM_STRICT_FORK_EVIDENCE=true` AND `FARM_CANARY_CONFIRMED=true` are both
+ * present, so public capital cannot open on accident. OFF by default.
+ */
+export const AAVE_BASE_SUPPLY_PUBLIC =
+  typeof __AAVE_BASE_SUPPLY_PUBLIC__ !== 'undefined'
+    ? __AAVE_BASE_SUPPLY_PUBLIC__
+    : envFlag('VITE_AAVE_BASE_SUPPLY_PUBLIC') === 'true';
+
+/**
  * A finite, parseable number from the environment, or the default.
  *
  * A cap is a safety limit, so an unusable value must NOT silently become 0
@@ -224,9 +237,13 @@ export const AAVE_BASE_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function aaveBaseSupplyAllowedFor(owner) {
   if (!AAVE_BASE_SUPPLY_ENABLED) return false;
+  const who = String(owner ?? '').trim().toLowerCase();
+  if (!who) return false;
+  // Public-canary override: a build that ships a verified, canary-confirmed
+  // rollout opens supply to any connected wallet, not just the canary list.
+  if (AAVE_BASE_SUPPLY_PUBLIC) return true;
   // An enabled money path without an explicit wallet list is still closed.
   if (AAVE_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
-  const who = String(owner ?? '').trim().toLowerCase();
   return AAVE_BASE_SUPPLY_ALLOWLIST.includes(who);
 }
 
@@ -279,6 +296,17 @@ export const AAVE_ARB_SUPPLY_ENABLED =
     ? __AAVE_ARB_SUPPLY_ENABLED__
     : envFlag('VITE_ENABLE_AAVE_ARBITRUM_SUPPLY') === 'true';
 
+/**
+ * Public-canary override, same contract as the Base flag: any connected wallet
+ * may open a new supply, still subject to caps, only once the rollout gate
+ * sees both `FARM_STRICT_FORK_EVIDENCE=true` and `FARM_CANARY_CONFIRMED=true`.
+ * OFF by default.
+ */
+export const AAVE_ARB_SUPPLY_PUBLIC =
+  typeof __AAVE_ARB_SUPPLY_PUBLIC__ !== 'undefined'
+    ? __AAVE_ARB_SUPPLY_PUBLIC__
+    : envFlag('VITE_AAVE_ARB_SUPPLY_PUBLIC') === 'true';
+
 /** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
 export const AAVE_ARB_SUPPLY_MAX_USDC_PER_TX = envCap(
   'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
@@ -310,9 +338,11 @@ export const AAVE_ARB_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function aaveArbSupplyAllowedFor(owner) {
   if (!AAVE_ARB_SUPPLY_ENABLED) return false;
+  const who = String(owner ?? '').trim().toLowerCase();
+  if (!who) return false;
+  if (AAVE_ARB_SUPPLY_PUBLIC) return true;
   // An enabled money path without an explicit wallet list is still closed.
   if (AAVE_ARB_SUPPLY_ALLOWLIST.length === 0) return false;
-  const who = String(owner ?? '').trim().toLowerCase();
   return AAVE_ARB_SUPPLY_ALLOWLIST.includes(who);
 }
 
@@ -366,6 +396,17 @@ export const COMPOUND_BASE_SUPPLY_ENABLED =
     ? __COMPOUND_BASE_SUPPLY_ENABLED__
     : envFlag('VITE_ENABLE_COMPOUND_BASE_SUPPLY') === 'true';
 
+/**
+ * Public-canary override, same contract as the Aave flags: any connected wallet
+ * may open a new supply, still subject to caps, only once the rollout gate sees
+ * both `FARM_STRICT_FORK_EVIDENCE=true` AND `FARM_CANARY_CONFIRMED=true`.
+ * OFF by default.
+ */
+export const COMPOUND_BASE_SUPPLY_PUBLIC =
+  typeof __COMPOUND_BASE_SUPPLY_PUBLIC__ !== 'undefined'
+    ? __COMPOUND_BASE_SUPPLY_PUBLIC__
+    : envFlag('VITE_COMPOUND_BASE_SUPPLY_PUBLIC') === 'true';
+
 /** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
 export const COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
   'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
@@ -397,9 +438,11 @@ export const COMPOUND_BASE_SUPPLY_ALLOWLIST = Object.freeze(
  */
 export function compoundBaseSupplyAllowedFor(owner) {
   if (!COMPOUND_BASE_SUPPLY_ENABLED) return false;
+  const who = String(owner ?? '').trim().toLowerCase();
+  if (!who) return false;
+  if (COMPOUND_BASE_SUPPLY_PUBLIC) return true;
   // An enabled money path without an explicit wallet list is still closed.
   if (COMPOUND_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
-  const who = String(owner ?? '').trim().toLowerCase();
   return COMPOUND_BASE_SUPPLY_ALLOWLIST.includes(who);
 }
 
@@ -429,6 +472,17 @@ export const MORPHO_BASE_SUPPLY_ENABLED =
     ? __MORPHO_BASE_SUPPLY_ENABLED__
     : envFlag('VITE_ENABLE_MORPHO_BASE_SUPPLY') === 'true';
 
+/**
+ * Public-canary override, same contract as the other supply flags: any
+ * connected wallet may open a new supply, still subject to caps, only once the
+ * rollout gate sees both `FARM_STRICT_FORK_EVIDENCE=true` AND
+ * `FARM_CANARY_CONFIRMED=true`. OFF by default.
+ */
+export const MORPHO_BASE_SUPPLY_PUBLIC =
+  typeof __MORPHO_BASE_SUPPLY_PUBLIC__ !== 'undefined'
+    ? __MORPHO_BASE_SUPPLY_PUBLIC__
+    : envFlag('VITE_MORPHO_BASE_SUPPLY_PUBLIC') === 'true';
+
 export const MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
   'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
 );
@@ -441,9 +495,12 @@ export const MORPHO_BASE_SUPPLY_ALLOWLIST = Object.freeze(
 );
 export function morphoBaseSupplyAllowedFor(owner) {
   if (!MORPHO_BASE_SUPPLY_ENABLED) return false;
+  const who = String(owner ?? '').trim().toLowerCase();
+  if (!who) return false;
+  if (MORPHO_BASE_SUPPLY_PUBLIC) return true;
   // Public capital must never open accidentally when the list is empty.
   if (MORPHO_BASE_SUPPLY_ALLOWLIST.length === 0) return false;
-  return MORPHO_BASE_SUPPLY_ALLOWLIST.includes(String(owner ?? '').trim().toLowerCase());
+  return MORPHO_BASE_SUPPLY_ALLOWLIST.includes(who);
 }
 export function morphoBaseWithdrawAllowedFor({ owner, hasPosition } = {}) {
   return Boolean(owner && hasPosition);
@@ -492,6 +549,17 @@ export const LIDO_STAKE_ENABLED =
     ? __LIDO_STAKE_ENABLED__
     : envFlag('VITE_ENABLE_LIDO_STAKE') === 'true';
 
+/**
+ * Public-canary override for staking. Any connected wallet may stake (still
+ * subject to the ETH caps), only once the rollout gate sees both
+ * `FARM_STRICT_FORK_EVIDENCE=true` AND `FARM_CANARY_CONFIRMED=true`. OFF by
+ * default. Unwrap/requestWithdraw/claim remain gated by `hasPosition` only.
+ */
+export const LIDO_STAKE_PUBLIC =
+  typeof __LIDO_STAKE_PUBLIC__ !== 'undefined'
+    ? __LIDO_STAKE_PUBLIC__
+    : envFlag('VITE_LIDO_STAKE_PUBLIC') === 'true';
+
 /** Per-transaction stake ceiling, in whole ETH. */
 export const LIDO_STAKE_MAX_ETH_PER_TX = envCap(
   'VITE_LIDO_STAKE_MAX_ETH_PER_TX', 1, 100
@@ -517,9 +585,11 @@ export const LIDO_STAKE_ALLOWLIST = Object.freeze(
 
 export function lidoStakeAllowedFor(owner) {
   if (!LIDO_STAKE_ENABLED) return false;
+  const who = String(owner ?? '').trim().toLowerCase();
+  if (!who) return false;
+  if (LIDO_STAKE_PUBLIC) return true;
   // An enabled money path without an explicit wallet list is still closed.
   if (LIDO_STAKE_ALLOWLIST.length === 0) return false;
-  const who = String(owner ?? '').trim().toLowerCase();
   return LIDO_STAKE_ALLOWLIST.includes(who);
 }
 

@@ -95,6 +95,38 @@ VITE_LIDO_STAKE_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
 caps proposed 1 ETH/tx, 10 ETH total. **Do not enable until**
 `farm-fork-evidence/lido.json` with `result: "PASS"` exists.
 
+**Public-open (post-canary) mode — OFF by default:**
+
+Public capital is still OFF. The four USDC protocols and Lido are **canary-ready**,
+not open. After a protocol's canary has been confirmed on-chain, the operator may
+widen it to ANY connected wallet by adding a per-protocol public flag:
+
+| Protocol | public flag |
+|---|---|
+| Aave v3 Base | `VITE_AAVE_BASE_SUPPLY_PUBLIC=true` |
+| Aave v3 Arbitrum | `VITE_AAVE_ARB_SUPPLY_PUBLIC=true` |
+| Compound v3 Base | `VITE_COMPOUND_BASE_SUPPLY_PUBLIC=true` |
+| Lido | `VITE_LIDO_STAKE_PUBLIC=true` |
+| Morpho Blue Base | `VITE_MORPHO_BASE_SUPPLY_PUBLIC=true` |
+
+The rollout gate permits this **only** when the build ALSO sets
+`FARM_CANARY_CONFIRMED=true`; setting a public flag without it fails the build
+closed. The operator canary allowlist stays non-empty even in public mode (the
+fee-recipient wallet above), so the gate never fails open. Public mode opens
+SUPPLY/STAKE to everyone — still subject to the same per-tx/total caps
+(1000/10000 USDC, 1 ETH/tx and 10 ETH total for Lido) — while
+WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM remain gated by `hasPosition` only.
+
+```
+FARM_ROLLOUT_PROTOCOLS=aave-base,aave-arbitrum,compound-base,lido,morpho-base \
+FARM_STRICT_FORK_EVIDENCE=true \
+FARM_CANARY_CONFIRMED=true \
+VITE_ENABLE_AAVE_BASE_SUPPLY=true VITE_AAVE_BASE_SUPPLY_PUBLIC=true \
+VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6 \
+# ... same pattern for Aave Arb, Compound, Lido, Morpho with their *_PUBLIC=true
+```
+→ `mode: public-open`, `ok: true`. Verified with a real `vite build` (exit 0).
+
 ---
 
 ## 5. Records / proof
@@ -153,6 +185,11 @@ finalized/unclaimed request (`#134974`), and proved claim ownership/finalization
   every enabled path has one.
 - No canary is enabled with an empty allowlist or incomplete flags; the gate never
   fails open.
+- **Public-open mode is prepared in code but stays OFF.** It requires a per-protocol
+  `VITE_*_SUPPLY_PUBLIC=true` AND `FARM_CANARY_CONFIRMED=true`; the public flag alone
+  fails the build closed. The public build also got a verified `vite build` (exit 0)
+  and a dedicated runtime test (`npm run test:farm:public`), but **no public capital
+  is enabled until a real canary has succeeded**.
 - The GitHub App cannot write `.github/workflows/`; workflow YAML for the agent is a
   committed `ci/` reference that the operator places by hand (this applies to Lido's
   workflow too — the probe already works; the workflow file just needs to be kept in

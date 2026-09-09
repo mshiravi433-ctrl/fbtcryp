@@ -11,7 +11,7 @@
 - فهرست protocolهای انتخاب‌شده و flagهای فعال باید دقیقاً یکسان باشند.
 - `FARM_STRICT_FORK_EVIDENCE=true` و allowlist عمومی، معتبر و غیرخالی برای هر protocol فعال اجباری است.
 - آدرس صفر، عضو نامعتبر، عضو خالی و عضو تکراری پذیرفته نمی‌شود.
-- سقف canary نمی‌تواند از سقف reviewشدهٔ فعلی بیشتر شود: Aave/Compound/Morpho برابر ۱۰۰ USDC در هر تراکنش و ۵۰۰ USDC کل، و Lido برابر ۱ ETH و ۱۰ ETH کل.
+- سقف canary نمی‌تواند از سقف reviewشدهٔ فعلی بیشتر شود: Aave/Compound/Morpho برابر ۱۰۰۰ USDC در هر تراکنش و ۱۰۰۰۰ USDC کل، و Lido برابر ۱ ETH و ۱۰ ETH کل.
 - خاموش‌کردن flag فقط ورود جدید را می‌بندد. withdraw/claim/revoke به flag یا DefiLlama وابسته نیست.
 
 ## idهای معتبر
@@ -60,8 +60,8 @@ FARM_ROLLOUT_PROTOCOLS=aave-base
 
 VITE_ENABLE_AAVE_BASE_SUPPLY=true
 VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xPUBLIC_CANARY_WALLET
-VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX=100
-VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL=500
+VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX=1000
+VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL=10000
 
 VITE_ENABLE_COMPOUND_BASE_SUPPLY=false
 VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=false
@@ -109,3 +109,34 @@ BASE_RPC_URL="$BASE_RPC_URL" npm run test:morpho-base-fork -- --strict
 8. ثبت tx hash، block، event و before/after بدون هیچ credential.
 
 تا پیش از تکمیل این چرخه، وضعیت فقط «canary-ready در کد» است، نه production-ready برای public capital.
+
+## گذار به public-open (بعد از canary موفق) — پیش‌فرض خاموش
+
+پس از اینکه canaryِ روی زنجیره تأیید شد، ممکن است ورودی جدید را به **هر wallet متصل** باز کنی، نه فقط allowlist. این کار با افزودن پرچم public آن protocol **به‌همراه** `FARM_CANARY_CONFIRMED=true` انجام می‌شود:
+
+| protocol | public flag |
+|---|---|
+| Aave v3 Base | `VITE_AAVE_BASE_SUPPLY_PUBLIC=true` |
+| Aave v3 Arbitrum | `VITE_AAVE_ARB_SUPPLY_PUBLIC=true` |
+| Compound v3 Base | `VITE_COMPOUND_BASE_SUPPLY_PUBLIC=true` |
+| Lido | `VITE_LIDO_STAKE_PUBLIC=true` |
+| Morpho Blue Base | `VITE_MORPHO_BASE_SUPPLY_PUBLIC=true` |
+
+قواعد ثابت:
+
+- **پرچم public بدون `FARM_CANARY_CONFIRMED=true` باعث fail-closed شدن build می‌شود** (gate خطا می‌دهد).
+- allowlist حتی در حالت public هم باید غیرخالی بماند (همان wallet fee-recipient)، بنابراین gate هیچ‌وقت fail-open نمی‌شود.
+- حالت public فقط **SUPPLY/STAKE** را برای همه باز می‌کند و همان سقف‌ها (۱۰۰۰/۱۰۰۰۰ USDC و Lido ۱/۱۰ ETH) اعمال می‌شود.
+- **WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM** همچنان فقط با `hasPosition` گیت می‌شود؛ هرگز با flag/allowlist/caps/public باز نمی‌شود.
+
+```env
+FARM_STRICT_FORK_EVIDENCE=true
+FARM_CANARY_CONFIRMED=true
+FARM_ROLLOUT_PROTOCOLS=aave-base,aave-arbitrum,compound-base,lido,morpho-base
+
+VITE_ENABLE_AAVE_BASE_SUPPLY=true
+VITE_AAVE_BASE_SUPPLY_PUBLIC=true
+# ... همین الگو برای Aave Arb / Compound / Lido / Morpho با *_PUBLIC=true
+```
+
+تا وقتی canary تأیید نشده این متغیرها را **ست نکن**؛ deployment باید `limited-canary` بماند.
