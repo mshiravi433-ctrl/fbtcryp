@@ -15,6 +15,7 @@ import {
   explainRevert, fromUsdcWei, getPosition, getMarketStatus, isCompoundBaseUsdcPool,
   verifyCompoundReceipt
 } from '../../lib/defi/compoundV3Base';
+import { localChainLabel } from '../../lib/farmDeFi';
 import {
   cancelCompoundAction, confirmCompoundAction, derivePartialApprovalState, failCompoundAction,
   replaceCompoundAction, timeoutCompoundAction, loadCompoundHistoryFor, recordCompoundAction
@@ -26,6 +27,7 @@ import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
 import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
+import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
 
 /*
  * COMPOUND V3 · BASE · USDC — the in-app supply / withdraw surface.
@@ -181,7 +183,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
-      if (alive.current) setError(explainRevert(err).reason ?? err?.code ?? String(err));
+      if (alive.current) setError(farmErrorText(err, t, explainRevert(err)));
     }
   }, [owner, wallet]);
 
@@ -298,7 +300,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
               ? t('farm.compound.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
               : isTransactionReplacement(err)
                 ? t('farm.compound.replaced', { defaultValue: 'Transaction was replaced or cancelled.' })
-                : (explained.key ? t(explained.key) : (explained.reason ?? err?.code ?? t('farm.compound.failed')));
+                : (explained.key ? t(explained.key) : farmErrorLabel(err, t));
           setError(label);
           setBusy('');
           await refresh();
@@ -306,7 +308,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
         }
       }
     } catch (err) {
-      setError(err?.code ?? t('farm.compound.failed'));
+      setError(farmErrorLabel(err, t));
     }
     setBusy('');
     setOpen(false);
@@ -341,7 +343,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
         ? t('farm.compound.userRejected', { defaultValue: 'Signature rejected' })
         : isTransactionTimeout(err)
           ? t('farm.compound.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
-          : (explained.reason ?? err?.code ?? t('farm.compound.failed')));
+          : (explained.key ? t(explained.key) : farmErrorLabel(err, t)));
     } finally {
       setBusy('');
       await refresh();
@@ -400,7 +402,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
             {t('farm.compound.panelTitle')}
           </div>
           <div className="muted" style={{ fontSize: 11.6, margin: '3px 0 0' }}>
-            {t('farm.compound.panelSub', { chain: EVM_CHAINS[COMPOUND_V3_BASE.chainId].name, symbol: COMPOUND_V3_BASE.usdcSymbol })}
+            {t('farm.compound.panelSub', { chain: localChainLabel(EVM_CHAINS[COMPOUND_V3_BASE.chainId].name, t), symbol: COMPOUND_V3_BASE.usdcSymbol })}
           </div>
         </div>
         {status?.supplyApyPct != null && (
@@ -429,7 +431,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
 
       {knownHere && (
         <p className="muted" style={{ fontSize: 11.6, margin: '10px 0 0' }}>
-          {t('farm.compound.wrongChainNote', { chain: EVM_CHAINS[COMPOUND_V3_BASE.chainId].name })}
+          {t('farm.compound.wrongChainNote', { chain: localChainLabel(EVM_CHAINS[COMPOUND_V3_BASE.chainId].name, t) })}
         </p>
       )}
 
@@ -455,7 +457,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
         {!wallet.isConnected && <span className="faint">{t('farm.compound.connectFirst')}</span>}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(COMPOUND_V3_BASE.chainId)}>
-            {t('farm.compound.switchChain', { chain: EVM_CHAINS[COMPOUND_V3_BASE.chainId].name })}
+            {t('farm.compound.switchChain', { chain: localChainLabel(EVM_CHAINS[COMPOUND_V3_BASE.chainId].name, t) })}
           </button>
         )}
         {wallet.isConnected && !wrongChain && supplyAllowed && (

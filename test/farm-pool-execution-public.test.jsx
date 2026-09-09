@@ -86,6 +86,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const openDetails = async (container, symbol) => {
   await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
   const card = [...container.querySelectorAll('.farm-pool')].find((c) => c.textContent.includes(symbol));
+  // Cards collapse to a header; the analytics CTA lives in the open body.
+  fireEvent.click(card.querySelector('.farm-pool-toggle'));
   const details = [...card.querySelectorAll('button')].find((b) => b.textContent.includes(t('farm.viewAnalytics')));
   fireEvent.click(details);
   await screen.findByText(t('farm.historyTitle'));
@@ -113,7 +115,7 @@ describe('Farm execution surface — public-open build', () => {
     // the page renders the same five panels, so an unscoped query finds two.
     const inline = screen.getByTestId('farm-pool-execution-aave-base');
     expect(inline.querySelector('[data-testid="panel-aave-base"]').textContent).toContain('USDC');
-    // …and the placeholders are gone rather than sitting next to it.
+    // …and the dead placeholders never render anywhere on the screen.
     expect([...container.querySelectorAll('.farm-action-grid button')].filter((b) => b.disabled)).toHaveLength(0);
     expect(screen.queryByText(t('farm.statusUnavailable'))).toBeNull();
     // Disconnected, the analytics ask for a wallet instead of announcing
@@ -127,7 +129,7 @@ describe('Farm execution surface — public-open build', () => {
     expect(screen.getByText(t('farm.protocolModeExec'))).toBeTruthy();
   });
 
-  it('still says unavailable for a pool no adapter pins, in the same build', async () => {
+  it('stays honest for a pool no adapter pins, in the same build', async () => {
     const { container } = mount();
     const card = await openDetails(container, 'USDC-WETH');
     expect(card.querySelector('[data-testid^="farm-exec-badge-"]')).toBeNull();
@@ -135,6 +137,9 @@ describe('Farm execution surface — public-open build', () => {
     // No inline adapter for this row (the hub at the bottom is a separate
     // section and always lists the five supported positions).
     expect(container.querySelector('[data-testid^="farm-pool-execution-"]')).toBeNull();
-    expect([...container.querySelectorAll('.farm-action-grid button')].filter((b) => b.disabled)).toHaveLength(6);
+    // No six dead buttons either: what this row cannot do is simply not
+    // offered, instead of being offered as six disabled controls.
+    expect([...container.querySelectorAll('.farm-action-grid button')].filter((b) => b.disabled)).toHaveLength(0);
+    expect(screen.queryByText(t('farm.statusUnavailable'))).toBeNull();
   });
 });

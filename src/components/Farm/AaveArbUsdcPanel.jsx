@@ -15,6 +15,7 @@ import {
   explainRevert, fromUsdcWei, getPosition, getReserveStatus, isAaveArbUsdcPool,
   verifyAaveReceipt
 } from '../../lib/defi/aaveV3Arbitrum';
+import { localChainLabel } from '../../lib/farmDeFi';
 import {
   cancelAaveArbAction, confirmAaveArbAction, derivePartialApprovalState, failAaveArbAction,
   replaceAaveArbAction, timeoutAaveArbAction, loadAaveArbHistoryFor, recordAaveArbAction
@@ -26,6 +27,7 @@ import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
 import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
+import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
 
 /*
  * AAVE V3 · ARBITRUM · USDC — the in-app supply / withdraw surface.
@@ -174,7 +176,7 @@ export default function AaveArbUsdcPanel({ pool }) {
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
-      if (alive.current) setError(explainRevert(err).reason ?? err?.code ?? String(err));
+      if (alive.current) setError(farmErrorText(err, t, explainRevert(err)));
     }
   }, [owner, wallet]);
 
@@ -291,7 +293,7 @@ export default function AaveArbUsdcPanel({ pool }) {
               ? t('farm.aaveArb.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
               : isTransactionReplacement(err)
                 ? t('farm.aaveArb.replaced', { defaultValue: 'Transaction was replaced or cancelled.' })
-                : (explained.key ? t(explained.key) : (explained.reason ?? err?.code ?? t('farm.aaveArb.failed')));
+                : (explained.key ? t(explained.key) : farmErrorLabel(err, t));
           setError(label);
           setBusy('');
           await refresh();
@@ -299,7 +301,7 @@ export default function AaveArbUsdcPanel({ pool }) {
         }
       }
     } catch (err) {
-      setError(err?.code ?? t('farm.aaveArb.failed'));
+      setError(farmErrorLabel(err, t));
     }
     setBusy('');
     setOpen(false);
@@ -334,7 +336,7 @@ export default function AaveArbUsdcPanel({ pool }) {
         ? t('farm.aaveArb.userRejected', { defaultValue: 'Signature rejected' })
         : isTransactionTimeout(err)
           ? t('farm.aaveArb.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
-          : (explained.reason ?? err?.code ?? t('farm.aaveArb.failed')));
+          : (explained.key ? t(explained.key) : farmErrorLabel(err, t)));
     } finally {
       setBusy('');
       await refresh();
@@ -381,7 +383,7 @@ export default function AaveArbUsdcPanel({ pool }) {
             {t('farm.aaveArb.panelTitle')}
           </div>
           <div className="muted" style={{ fontSize: 11.6, margin: '3px 0 0' }}>
-            {t('farm.aaveArb.panelSub', { chain: EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name, symbol: AAVE_V3_ARBITRUM.usdcSymbol })}
+            {t('farm.aaveArb.panelSub', { chain: localChainLabel(EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name, t), symbol: AAVE_V3_ARBITRUM.usdcSymbol })}
           </div>
         </div>
         {status?.supplyApyPct != null && (
@@ -404,7 +406,7 @@ export default function AaveArbUsdcPanel({ pool }) {
 
       {knownHere && (
         <p className="muted" style={{ fontSize: 11.6, margin: '10px 0 0' }}>
-          {t('farm.aaveArb.wrongChainNote', { chain: EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name })}
+          {t('farm.aaveArb.wrongChainNote', { chain: localChainLabel(EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name, t) })}
         </p>
       )}
 
@@ -430,7 +432,7 @@ export default function AaveArbUsdcPanel({ pool }) {
         {!wallet.isConnected && <span className="faint">{t('farm.aaveArb.connectFirst')}</span>}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(AAVE_V3_ARBITRUM.chainId)}>
-            {t('farm.aaveArb.switchChain', { chain: EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name })}
+            {t('farm.aaveArb.switchChain', { chain: localChainLabel(EVM_CHAINS[AAVE_V3_ARBITRUM.chainId].name, t) })}
           </button>
         )}
         {wallet.isConnected && !wrongChain && supplyAllowed && (

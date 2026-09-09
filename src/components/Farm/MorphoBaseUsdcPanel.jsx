@@ -15,6 +15,7 @@ import {
   fromUsdcWei, getPosition, getMarketState, isMorphoBlueBaseMarket,
   verifyMorphoReceipt
 } from '../../lib/defi/morphoBlueBase';
+import { localChainLabel } from '../../lib/farmDeFi';
 import {
   cancelMorphoAction, confirmMorphoAction, derivePartialApprovalState, failMorphoAction,
   replaceMorphoAction, timeoutMorphoAction, loadMorphoHistoryFor, recordMorphoAction
@@ -26,6 +27,7 @@ import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
 import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
+import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
 
 const fmtUsdc = (wei) => (wei == null ? '—' : Number(fromUsdcWei(wei)).toFixed(2));
 const fmtUsd = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -146,7 +148,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
-      if (alive.current) setError(err?.code ?? String(err));
+      if (alive.current) setError(farmErrorLabel(err, t));
     }
   }, [owner, wallet]);
 
@@ -241,7 +243,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
           const label = isUserRejection(err) ? t('farm.morpho.userRejected', { defaultValue: 'Signature rejected' })
             : isTransactionTimeout(err) ? t('farm.morpho.timeout', { defaultValue: 'Pending; check wallet.' })
             : isTransactionReplacement(err) ? t('farm.morpho.replaced', { defaultValue: 'Replaced/cancelled' })
-            : (err?.code ?? t('farm.morpho.failed'));
+            : farmErrorLabel(err, t);
           setError(label);
           setBusy('');
           await refresh();
@@ -249,7 +251,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
         }
       }
     } catch (err) {
-      setError(err?.code ?? t('farm.morpho.failed'));
+      setError(farmErrorLabel(err, t));
     }
     setBusy('');
     setOpen(false);
@@ -277,7 +279,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
       });
       setPartial({ needed: false, allowanceUsdcWei: 0n, source: null, lastApprove: null });
     } catch (err) {
-      setError(isUserRejection(err) ? t('farm.morpho.userRejected', { defaultValue: 'Signature rejected' }) : (err?.code ?? t('farm.morpho.failed')));
+      setError(isUserRejection(err) ? t('farm.morpho.userRejected', { defaultValue: 'Signature rejected' }) : farmErrorLabel(err, t));
     } finally {
       setBusy('');
       await refresh();
@@ -315,7 +317,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
             {t('farm.morpho.panelTitle', { defaultValue: 'Morpho Blue · Base USDC/cbBTC' })}
           </div>
           <div className="muted" style={{ fontSize: 11.6, margin: '3px 0 0' }}>
-            {t('farm.morpho.panelSub', { defaultValue: 'One pinned market · USDC loan / cbBTC collateral · Base 8453', chain: EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name })}
+            {t('farm.morpho.panelSub', { defaultValue: 'One pinned market · USDC loan / cbBTC collateral · Base 8453', chain: localChainLabel(EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name, t) })}
           </div>
         </div>
         {status?.totalSupplyAssets != null && (
@@ -342,7 +344,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
 
       {knownHere && (
         <p className="muted" style={{ fontSize: 11.6, margin: '10px 0 0' }}>
-          {t('farm.morpho.wrongChainNote', { defaultValue: 'Position found on Base, but wallet is on another chain. Switch to sign.', chain: EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name })}
+          {t('farm.morpho.wrongChainNote', { defaultValue: 'Position found on Base, but wallet is on another chain. Switch to sign.', chain: localChainLabel(EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name, t) })}
         </p>
       )}
 
@@ -366,7 +368,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
         {!wallet.isConnected && <span className="faint">{t('farm.morpho.connectFirst', { defaultValue: 'Connect wallet' })}</span>}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(MORPHO_BLUE_BASE.chainId)}>
-            {t('farm.morpho.switchChain', { defaultValue: 'Switch to {{chain}}', chain: EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name })}
+            {t('farm.morpho.switchChain', { defaultValue: 'Switch to {{chain}}', chain: localChainLabel(EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name, t) })}
           </button>
         )}
         {wallet.isConnected && !wrongChain && supplyAllowed && (

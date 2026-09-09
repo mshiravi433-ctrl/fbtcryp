@@ -79,9 +79,15 @@ describe('Farm discovery UI', () => {
     expect(container.querySelectorAll('.farm-pool-with-details').length).toBe(24);
     fireEvent.click(screen.getByRole('button', { name: t('farm.showMore') }));
     expect(container.querySelectorAll('.farm-pool-with-details').length).toBe(30);
-    fireEvent.change(screen.getByRole('combobox', { name: t('farm.network') }), { target: { value: 'Base' } });
+    // The pickers are the shared ModernSelect: trigger opens a sheet of
+    // options, one tap picks. No native <select> anymore.
+    const pick = async (testId, name) => {
+      fireEvent.click(container.querySelector(`[data-testid="${testId}"] .modern-select-trigger`));
+      fireEvent.click(await screen.findByRole('option', { name }));
+    };
+    await pick('farm-network-select', 'Base');
     expect(container.querySelectorAll('.farm-pool-with-details').length).toBe(15);
-    fireEvent.change(screen.getByRole('combobox', { name: t('farm.sortBy') }), { target: { value: 'apy' } });
+    await pick('farm-sort-select', t('farm.sort.apy'));
     expect(container.querySelector('.farm-pool-with-details').textContent).toContain('ASSET28');
     fireEvent.change(screen.getByRole('textbox', { name: t('farm.search') }), { target: { value: 'not-present' } });
     expect(screen.getByText(t('farm.noneForFilter'))).toBeTruthy();
@@ -90,7 +96,9 @@ describe('Farm discovery UI', () => {
     const { container } = mount(tab);
     await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
     const card = container.querySelector('.farm-pool');
-    // Click the real analytics CTA, not a stubbed selection callback.
+    // The card is collapsed: open its body first, then click the real
+    // analytics CTA (not a stubbed selection callback).
+    fireEvent.click(card.querySelector('.farm-pool-toggle'));
     const details = [...card.querySelectorAll('button')].find((b) => b.textContent.includes(t('farm.viewAnalytics')));
     expect(details).toBeTruthy();
     fireEvent.click(details);

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import AssetIcon from '../AssetIcon';
 import AaveBaseUsdcPanel from './AaveBaseUsdcPanel';
 import CompoundBaseUsdcPanel from './CompoundBaseUsdcPanel';
 import AaveArbUsdcPanel from './AaveArbUsdcPanel';
@@ -122,11 +125,54 @@ export function farmExecutionAdapterFor(pool) {
   return null;
 }
 
+/* Title + icon per adapter row, so the hub reads like the rest of the Farm
+   rather than a stack of protocol cards. */
+const HUB_ROWS = {
+  'aave-base': { titleKey: 'farm.aave.panelTitle', chain: '8453', symbol: 'USDC' },
+  'compound-base': { titleKey: 'farm.compound.panelTitle', chain: '8453', symbol: 'USDC' },
+  'aave-arbitrum': { titleKey: 'farm.aaveArb.panelTitle', chain: '42161', symbol: 'USDC' },
+  lido: { titleKey: 'farm.lido.panelTitle', chain: '1', symbol: 'STETH' },
+  'morpho-base': { titleKey: 'farm.morpho.panelTitle', chain: '8453', symbol: 'USDC' }
+};
+
+function HubRow({ id, descriptor, Panel }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const row = HUB_ROWS[id] ?? {};
+  return (
+    <section className="farm-hub-row" data-testid={`farm-hub-row-${id}`}>
+      <button
+        type="button"
+        className="farm-hub-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="farm-hub-icon" aria-hidden="true">
+          <AssetIcon chain={row.chain} symbol={row.symbol} size={32} />
+        </span>
+        <span className="farm-hub-title">{t(row.titleKey, { defaultValue: id })}</span>
+        <span className="farm-pool-chevron" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
+      </button>
+      {/*
+        The panel mounts ONLY when the row opens. Five always-mounted panels
+        meant five sets of contract reads the moment the page rendered — and
+        the «LIDO_NETWORK_UNREADABLE»-style errors that came with them.
+        A collapsed row makes no network calls at all.
+      */}
+      {open && (
+        <div className="farm-hub-body">
+          <Panel pool={descriptor} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function FarmPositionHub() {
   return (
     <div className="stack farm-position-hub" data-testid="farm-position-hub">
       {FARM_EXECUTION_ADAPTERS.map(({ id, descriptor, Panel }) => (
-        <Panel key={id} pool={descriptor} />
+        <HubRow key={id} id={id} descriptor={descriptor} Panel={Panel} />
       ))}
     </div>
   );
