@@ -1,9 +1,10 @@
-# Farm canary — Vercel Environment Variables (all four protocols)
+# Farm canary — Vercel Environment Variables (all five protocols)
 
 _This is the operator checklist for enabling the staged Farm canary in Vercel.
 It covers **Aave v3 Base (native USDC)**, **Aave v3 Arbitrum (native USDC)**,
-**Compound v3 Base (native USDC)** and **Lido Ethereum (stETH/wstETH)** in a single
-build. **Morpho stays OFF** until it records a strict-fork PASS._
+**Compound v3 Base (native USDC)**, **Lido Ethereum (stETH/wstETH)** and
+**Morpho Blue Base (USDC/cbBTC)** in a single build. Every protocol has a strict-fork
+PASS recorded under `farm-fork-evidence/`._
 
 ## ⚠️ Two rules that govern every value
 
@@ -20,7 +21,7 @@ build. **Morpho stays OFF** until it records a strict-fork PASS._
 
 | Name | Value |
 |---|---|
-| `FARM_ROLLOUT_PROTOCOLS` | `aave-base,aave-arbitrum,compound-base,lido` |
+| `FARM_ROLLOUT_PROTOCOLS` | `aave-base,aave-arbitrum,compound-base,lido,morpho-base` |
 | `FARM_STRICT_FORK_EVIDENCE` | `true` |
 
 `vite.config.js` runs `assertFarmRollout(process.env)`. Without these the build
@@ -64,6 +65,15 @@ build. **Morpho stays OFF** until it records a strict-fork PASS._
 | `VITE_LIDO_STAKE_MAX_ETH_PER_TX` | `1` |
 | `VITE_LIDO_STAKE_MAX_ETH_TOTAL` | `10` |
 
+## Morpho Blue Base — USDC/cbBTC
+
+| Name | Value |
+|---|---|
+| `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `true` |
+| `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
+| `VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
+| `VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
+
 ---
 
 ## Where to put them in Vercel
@@ -79,11 +89,12 @@ Running `assertFarmRollout` with the above env returns:
 
 ```
 ok: true          mode: limited-canary
-enabled: [aave-base, compound-base, aave-arbitrum, lido]
+enabled: [aave-base, compound-base, aave-arbitrum, lido, morpho-base]
   aave-base      -> allowlist 1 | caps 1000/10000
   compound-base  -> allowlist 1 | caps 1000/10000
   aave-arbitrum  -> allowlist 1 | caps 1000/10000
   lido           -> allowlist 1 | caps 1/10
+  morpho-base    -> allowlist 1 | caps 1000/10000
 errors: []
 ```
 
@@ -95,7 +106,8 @@ the supply/stake path stays closed (withdraw/exit/revoke is gated only by
 `hasPosition`, never by allowlist/caps/flag). To add more operator wallets, join with
 commas: `0xabc...,0xdef...`.
 
-## Morpho — stays OFF
+## Evidence-backed
 
-`VITE_ENABLE_MORPHO_BASE_SUPPLY` must **not** be `true` until a strict-fork PASS is
-recorded under `farm-fork-evidence/`. Do **not** add it to `FARM_ROLLOUT_PROTOCOLS`.
+Every protocol listed above has a strict-fork PASS under `farm-fork-evidence/`:
+Aave Base 36/36, Aave Arbitrum 37/37, Compound Base 46/46, Lido 31/31, Morpho 34/34.
+No path is enabled without its anchor, and the gate never fails open.
