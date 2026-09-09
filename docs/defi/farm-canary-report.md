@@ -160,18 +160,24 @@ default `https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
 on archive `getLogs`. The probe now also **chunks** `eth_getLogs` into 10k-block
 windows so a per-request range cap cannot reject it.
 
-**Slow-fork startup (newest run):** with the default RPC the probe failed at
-`Anvil did not start within 30 seconds` — anvil fetches the fork state at boot, so a
-slow public archive RPC can delay the endpoint past a fixed 30s window. That run is
-**not** a pass. The probe now budgets up to **`ANVIL_START_TIMEOUT_MS`** (default
-**180s**, configurable as a workflow input) and, on timeout, reports the **last fork
-error** so the cause (RPC unreachable vs. anvil boot) is explicit. Re-run with a
-responsive archive RPC (and a larger `ANVIL_START_TIMEOUT_MS` if needed).
+**Slow-fork startup / unreachable default RPC (newest run):** the probe failed with
+`Anvil did not become ready within 180s; last fork error: fetch failed` — the default
+`https://eth.llamarpc.com` was **unreachable from the runner**. That run is **not** a
+pass. The probe now:
+- **auto-fails over** across a set of token-free, archive-capable ETH RPCs (the
+  operator's explicit `rpc_url` first, then `eth.llamarpc.com`,
+  `eth-mainnet.public.blastapi.io`, `eth.drpc.org`, `1rpc.io/eth`), picking the first
+  reachable one. If **none** respond it fails (never a green skip).
+- budgets up to **`ANVIL_START_TIMEOUT_MS`** (default **180s**) to boot anvil, and
+  reports the **last fork error** so the cause is explicit.
+`publicnode` is deliberately excluded — it is reachable but rejects archive
+`eth_getLogs` with a 403 "personal token".
 
-**Next step:** re-run the manual **Lido mainnet fork probe** action with a responsive
-token-free archive RPC; if it returns a clean `N/N passed` (expected 28/28), record
-`farm-fork-evidence/lido.json` from that log, and only then consider Lido a canary
-candidate.
+**How to re-run (operator):** re-run the manual **Lido mainnet fork probe** with any
+token-free archive RPC (or leave `rpc_url` at the default and let the probe fail over).
+The probe will find a reachable archive endpoint on its own. Expected result:
+**28/28 passed**. Then record `farm-fork-evidence/lido.json` and Lido can be considered
+a canary candidate.
 
 ---
 

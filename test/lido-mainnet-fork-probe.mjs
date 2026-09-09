@@ -17,8 +17,21 @@ import { Contract, Interface, JsonRpcProvider, Wallet, formatEther, parseEther }
 
 const PORT = Number(process.env.ANVIL_PORT || 8555);
 const EXPLICIT_RPC = String(process.env.ETHEREUM_RPC_URL ?? '').trim();
-const RPC = EXPLICIT_RPC || process.env.MAINNET_RPC_URL || 'https://eth.llamarpc.com';
 const STRICT = process.argv.includes('--strict');
+
+// ETH mainnet fork RPC candidates. The operator's explicit choice is tried first,
+// then a set of token-free, archive-capable public endpoints. Only a reachable
+// endpoint is used; if NONE respond the probe fails (this is never a green skip).
+// publicnode is deliberately NOT listed because it rejects archive eth_getLogs
+// with a 403 "personal token" — reachable but not usable for this probe.
+const RPC_CANDIDATES = [
+  ...(EXPLICIT_RPC ? [EXPLICIT_RPC] : []),
+  ...(process.env.MAINNET_RPC_URL ? [process.env.MAINNET_RPC_URL] : []),
+  'https://eth.llamarpc.com',
+  'https://eth-mainnet.public.blastapi.io',
+  'https://eth.drpc.org',
+  'https://1rpc.io/eth'
+];
 const KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const rows = [];
@@ -39,6 +52,34 @@ async function rpc(url, method, params) {
   const body = await response.json();
   if (body.error) throw new Error(`${method}: ${body.error.message}`);
   return body.result;
+}
+
+// Pick the first reachable ETH mainnet RPC from the candidate list. Each probe is
+// capped so a hung endpoint cannot stall discovery, and every failure is captured
+// so the final error tells the operator which endpoints were tried and why.
+const RPC_PROBE_TIMEOUT_MS = 10_000;
+async function pickReachableRpc() {
+  const failures = [];
+  for (const url of RPC_CANDIDATES) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_PROBE_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+        signal: controller.signal
+      });
+      const body = await response.json();
+      if (body.result) return url;
+      failures.push(`${url}: ${body?.error?.message ?? 'no eth_blockNumber'}`);
+    } catch (e) {
+      failures.push(`${url}: ${e?.name === 'AbortError' ? 'timeout' : (e?.message ?? String(e))}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error(`No reachable ETH mainnet RPC. Tried: ${failures.join(' | ')}`);
 }
 // Anvil fetches the fork state at boot, so a slow/flaky public archive RPC can
 // delay the JSON-RPC endpoint well past a fixed 30s window. Let the operator
@@ -103,6 +144,8 @@ try {
   } else if (!haveAnvil()) {
     t('Anvil is available (--strict)', false, 'anvil not found on PATH');
   } else {
+    const RPC = await pickReachableRpc();
+    t('Ethereum mainnet fork RPC is reachable', true, RPC);
     anvil = spawn('anvil', [
       '--fork-url', RPC,
       '--chain-id', '1',
