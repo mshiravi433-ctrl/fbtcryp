@@ -181,6 +181,28 @@
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+/* Theme-safe surfaces: the original white-on-transparent border vanished in light mode. */
+:root[data-theme='light'] .sm-section {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+}
+:root[data-theme='light'] .sm-seg { background: #eef2f7; border: 1px solid rgba(15,23,42,.10); }
+:root[data-theme='light'] .sm-seg button.active { background: #dbe5ff; color: #1e3a8a; }
+:root[data-theme='light'] .sm-row { border-bottom-color: rgba(15, 23, 42, 0.14); }
+:root[data-theme='light'] .sm-metric,
+:root[data-theme='light'] .sm-early-card,
+:root[data-theme='light'] .sm-score {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.16);
+}
+:root[data-theme='light'] .sm-meter { background: #dbe2ea; border: 1px solid rgba(15,23,42,.10); }
+:root[data-theme='light'] .sm-alert { border-bottom-color: rgba(15, 23, 42, 0.14); }
+:root[data-theme='light'] .sm-chip { background: #f1f5f9; border-color: rgba(15,23,42,.14); }
+:root[data-theme='light'] .sm-btn.ghost { border-color: rgba(15,23,42,.18); }
+:root[data-theme='light'] .sm-tab { border-color: rgba(15,23,42,.14); }
+:root[data-theme='light'] .sm-tab.active { border-color: rgba(79,70,229,.55); }
+
 .sm-section h3 {
   margin: 0 0 12px;
   font-size: 14px;

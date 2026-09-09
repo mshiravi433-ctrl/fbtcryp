@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import AssetIcon from './AssetIcon';
 import { riseIn } from './PageTransition';
 import SegIndicator from './SegIndicator';
 import WalletWatchReport from './WalletWatchReport';
@@ -674,7 +675,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                       <div className="bsw-assets" role="group" aria-label={t('buySell.asset')}>
                         {assetSymbols.map((symbol) => (
                           <button key={symbol} type="button" className={symbol === asset ? 'active' : ''} onClick={() => chooseAsset(symbol)}>
-                            <b>{symbol}</b>
+                            <AssetIcon symbol={symbol} size={30} /><b dir="ltr">{symbol}</b>
                           </button>
                         ))}
                       </div>
@@ -682,7 +683,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                       <div className="bsw-chips" role="group" aria-label={t('buySell.network')}>
                         {(assetNetworks.length ? assetNetworks : [network]).map((code) => (
                           <button key={code} type="button" className={code === network ? 'active' : ''} onClick={() => { setNetwork(code); resetQuote(); }}>
-                            {String(code).toUpperCase()}
+                            <AssetIcon chain={code} size={22} /><span dir="ltr">{String(code).toUpperCase()}</span>
                           </button>
                         ))}
                       </div>

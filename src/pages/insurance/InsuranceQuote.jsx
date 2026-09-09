@@ -120,8 +120,15 @@ export default function InsuranceQuote() {
       setStage('done');
       notify(t('insurance.quote.activatedToast'), 'success');
     } catch (e) {
-      setActErr(e?.message || String(e));
-      notify(e?.message || t('insurance.quote.activationFailed'), 'error');
+      // Wallet providers return long technical RPC messages. Keep the user-facing
+      // error short and actionable, especially when the purchase balance is low.
+      const raw = String(e?.message || e || '');
+      const lowBalance = /insufficient|not enough|exceeds balance|funds/i.test(raw) || /INSUFFICIENT/i.test(e?.code || '');
+      const message = lowBalance
+        ? t('insurance.quote.insufficientBalance', { defaultValue: 'موجودی کافی نیست. لطفاً موجودی کیف پول و کارمزد شبکه را بررسی کنید.' })
+        : t('insurance.quote.activationFailed');
+      setActErr(message);
+      notify(message, 'error');
       setStage('prepared');
     }
   }
