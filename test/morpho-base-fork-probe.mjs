@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 /**
  * Morpho Blue Base one-market fork probe.
- *
- * This is intentionally strict by default when --strict is supplied: missing
- * Anvil/RPC is a failed acceptance run, never a successful skip. No real
- * transaction is sent; all writes happen only on a local Anvil fork.
  */
 import { spawn, execFileSync, execSync } from 'node:child_process';
 import { Wallet, JsonRpcProvider, Contract, Interface, formatUnits } from 'ethers';
@@ -40,7 +36,6 @@ try {
     t('BASE_RPC_URL provided (--strict)', false, 'missing; strict evidence requires an explicit read-only fork RPC');
   } else if (!haveAnvil()) {
     t('Anvil is available (--strict)', false, 'anvil not found on PATH');
-    if (!STRICT) console.error('Non-strict mode still reports unavailable tooling as a failure; use --strict for release evidence.');
   } else {
     anvil = spawn('anvil', ['--fork-url', RPC, '--chain-id', '8453', '--port', String(PORT), '--accounts', '1', '--silent'], { stdio: ['ignore', 'pipe', 'pipe'] });
     const url = `http://127.0.0.1:${PORT}`;
@@ -70,28 +65,90 @@ try {
     rule('1 · fund the local fork account with USDC');
     const usdc = new Contract(MORPHO_BLUE_BASE.loanToken, [
       'function masterMinter() view returns (address)',
+      'function minter() view returns (address)',
       'function configureMinter(address,uint256) returns (bool)',
       'function mint(address,uint256) returns (bool)',
-      'function balanceOf(address) view returns (uint256)'
+      'function balanceOf(address) view returns (uint256)',
+      'function transfer(address,uint256) returns (bool)'
     ], provider);
-    let funding;
+    let funding = null;
+    let fundedVia = null;
+    const fundingErrors = [];
+
     try {
-      const master = await usdc.masterMinter();
-      await rpc(url, 'anvil_setBalance', [master, '0xDE0B6B3A7640000']);
-      await rpc(url, 'anvil_impersonateAccount', [master]);
-      try {
-        const data1 = usdc.interface.encodeFunctionData('configureMinter', [ACCOUNT, 1_000_000_000n]);
-        await rpc(url, 'eth_sendTransaction', [{ from: master, to: MORPHO_BLUE_BASE.loanToken, data: data1 }]);
-        const data2 = usdc.interface.encodeFunctionData('mint', [ACCOUNT, 1_000_000_000n]);
-        funding = await rpc(url, 'eth_sendTransaction', [{ from: master, to: MORPHO_BLUE_BASE.loanToken, data: data2 }]);
-      } finally {
-        await rpc(url, 'anvil_stopImpersonatingAccount', [master]);
+      const minter = await usdc.minter().catch(() => null);
+      if (minter) {
+        await rpc(url, 'anvil_setBalance', [minter, '0xDE0B6B3A7640000']);
+        await rpc(url, 'anvil_impersonateAccount', [minter]);
+        try {
+          funding = await rpc(url, 'eth_sendTransaction', [{
+            from: minter,
+            to: MORPHO_BLUE_BASE.loanToken,
+            data: usdc.interface.encodeFunctionData('mint', [ACCOUNT, 1_000_000_000n])
+          }]);
+          fundedVia = `minter ${minter.slice(0,10)} mint`;
+        } finally {
+          await rpc(url, 'anvil_stopImpersonatingAccount', [minter]);
+        }
       }
     } catch (err) {
-      throw new Error(`USDC funding failed; Base USDC masterMinter/mint unavailable: ${err.message}`);
+      fundingErrors.push(`minter mint: ${err.message}`);
     }
+
+    if (!fundedVia) {
+      try {
+        const master = await usdc.masterMinter();
+        await rpc(url, 'anvil_setBalance', [master, '0xDE0B6B3A7640000']);
+        await rpc(url, 'anvil_impersonateAccount', [master]);
+        try {
+          await rpc(url, 'eth_sendTransaction', [{
+            from: master,
+            to: MORPHO_BLUE_BASE.loanToken,
+            data: usdc.interface.encodeFunctionData('configureMinter', [ACCOUNT, 1_000_000_000n])
+          }]);
+        } finally {
+          await rpc(url, 'anvil_stopImpersonatingAccount', [master]);
+        }
+        const tx = await signer.sendTransaction({
+          to: MORPHO_BLUE_BASE.loanToken,
+          data: usdc.interface.encodeFunctionData('mint', [ACCOUNT, 1_000_000_000n]),
+          value: 0n,
+          nonce: nonce++
+        });
+        const receipt = await tx.wait();
+        funding = receipt.hash;
+        fundedVia = `masterMinter configure + ACCOUNT mint`;
+      } catch (err) {
+        fundingErrors.push(`masterMinter path: ${err.message}`);
+      }
+    }
+
+    if (!fundedVia) {
+      try {
+        const morpho = MORPHO_BLUE_BASE.morpho;
+        await rpc(url, 'anvil_setBalance', [morpho, '0xDE0B6B3A7640000']);
+        await rpc(url, 'anvil_impersonateAccount', [morpho]);
+        try {
+          funding = await rpc(url, 'eth_sendTransaction', [{
+            from: morpho,
+            to: MORPHO_BLUE_BASE.loanToken,
+            data: usdc.interface.encodeFunctionData('transfer', [ACCOUNT, 1_000_000_000n])
+          }]);
+          fundedVia = `Morpho core transfer`;
+        } finally {
+          await rpc(url, 'anvil_stopImpersonatingAccount', [morpho]);
+        }
+      } catch (err) {
+        fundingErrors.push(`Morpho transfer: ${err.message}`);
+      }
+    }
+
+    if (!fundedVia) {
+      throw new Error(`USDC funding failed; all methods failed: ${fundingErrors.join(' | ')}`);
+    }
+
     const funded = await usdc.balanceOf(ACCOUNT);
-    t('fork account received at least 5 USDC', funded >= 5_000_000n, `${formatUnits(funded, 6)} USDC; funding tx ${funding?.slice(0, 18)}`);
+    t('fork account received at least 5 USDC', funded >= 5_000_000n, `${formatUnits(funded, 6)} USDC via ${fundedVia}; tx ${funding?.slice(0, 18)}`);
 
     rule('2 · on-chain market verification');
     const evidence = await adapter.verifyDeployment(provider);
@@ -106,7 +163,6 @@ try {
     const supplyPlan = await adapter.buildSupplyPlan({ provider, owner: ACCOUNT, amountUsdc: '5', nativeBalance: await provider.getBalance(ACCOUNT) });
     t('supply checks pass', supplyPlan.checks.blocked.length === 0, supplyPlan.checks.blocked.join(',') || 'none');
     t('plan is approval then supply', supplyPlan.steps.map((s) => s.kind).join(',') === 'approve,supply');
-    const erc20Iface = new Interface(['function approve(address,uint256)']);
     t('approval calldata targets Morpho and exactly 5 USDC', supplyPlan.steps[0].to.toLowerCase() === MORPHO_BLUE_BASE.loanToken.toLowerCase() && supplyPlan.checks.amountWei === 5_000_000n);
     for (const step of supplyPlan.steps) {
       const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: 0n, nonce: nonce++ });
