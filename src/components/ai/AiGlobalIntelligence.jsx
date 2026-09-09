@@ -71,6 +71,21 @@ const STYLES = `
   .aig-regime.mixed { background:color-mix(in srgb,var(--rgb-5) 8%,var(--bg-raised)); }
   .aig-regime-label { font-size:var(--fs-lg); font-weight:800; color:var(--text-1); overflow-wrap:anywhere; }
   .aig-regime-sub,.aig-note { font-size:var(--fs-xs); color:var(--text-2); line-height:var(--lh-normal); margin-top:6px; }
+  .aig-outlook { padding:var(--sp-4); border-radius:var(--radius-sm); margin-bottom:var(--sp-3); border:1px solid var(--line); background:var(--bg-raised); }
+  .aig-outlook.growth { border-color:color-mix(in srgb,var(--up) 30%,var(--line)); background:color-mix(in srgb,var(--up) 6%,var(--bg-raised)); }
+  .aig-outlook.recession { border-color:color-mix(in srgb,var(--down) 30%,var(--line)); background:color-mix(in srgb,var(--down) 6%,var(--bg-raised)); }
+  .aig-outlook-head { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2); }
+  .aig-outlook-score { font-size:var(--fs-sm); font-weight:800; padding:3px 9px; border-radius:999px; background:color-mix(in srgb,var(--rgb-2) 12%,transparent); color:var(--text-1); }
+  .aig-signal { display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line); }
+  .aig-signal:first-of-type { border-top:none; }
+  .aig-signal-dir { flex:0 0 auto; font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px; white-space:nowrap; margin-top:1px; }
+  .aig-signal-dir.supportive { color:var(--up); background:color-mix(in srgb,var(--up) 11%,transparent); }
+  .aig-signal-dir.cautionary { color:var(--down); background:color-mix(in srgb,var(--down) 11%,transparent); }
+  .aig-signal-dir.neutral { color:var(--text-2); background:color-mix(in srgb,var(--rgb-5) 9%,transparent); }
+  .aig-signal-body { min-width:0; flex:1; }
+  .aig-signal-name { font-size:var(--fs-xs); font-weight:800; color:var(--text-1); }
+  .aig-signal-ev { font-size:var(--fs-xs); color:var(--text-2); line-height:var(--lh-normal); overflow-wrap:anywhere; }
+  .aig-ind-chg { font-size:11px; font-weight:700; }
   @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tabs { gap:6px; } .aig-tab { font-size:10px; min-height:56px; padding-inline:4px; } .aig-section { padding:13px; } }
   @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 `;
@@ -137,7 +152,10 @@ const AIG_SOURCE = {
   'brain:commodities': { fa: 'کالاها', en: 'commodities' }, 'brain:rwa': { fa: 'دارایی واقعی', en: 'rwa' },
   'equities-feed:avantis': { fa: 'سهام', en: 'stocks' }, 'rwa-feed:ostium': { fa: 'اوستیوم', en: 'ostium' },
   'cross-asset-engine': { fa: 'کراس‌است', en: 'cross-asset' },
-  'learning:calibration': { fa: 'یادگیری', en: 'learning' }
+  'learning:calibration': { fa: 'یادگیری', en: 'learning' },
+  'macroData': { fa: 'داده کلان', en: 'macro data' }, 'macroData:stooq': { fa: 'داده کلان (stooq)', en: 'macro data (stooq)' },
+  'macroData:yahoo': { fa: 'داده کلان (yahoo)', en: 'macro data (yahoo)' }, 'macroData:fred': { fa: 'داده کلان (FRED)', en: 'macro data (FRED)' },
+  'stooq': { fa: 'داده کلان', en: 'macro data' }, 'yahoo': { fa: 'داده کلان', en: 'macro data' }, 'fred': { fa: 'داده کلان', en: 'macro data' }
 };
 const AIG_REGIME = {
   RISK_ON: { fa: 'ریسک‌پذیر', en: 'risk on' }, RISK_ON_LEANING: { fa: 'متمایل به ریسک‌پذیری', en: 'risk on leaning' },
@@ -153,7 +171,18 @@ const AIG_TOPIC = {
   FED: { fa: 'فدرال‌رزرو', en: 'FED' }, RATES: { fa: 'نرخ بهره', en: 'RATES' },
   INFLATION: { fa: 'تورم', en: 'INFLATION' }, GROWTH: { fa: 'رشد', en: 'GROWTH' },
   ECB: { fa: 'اروپا', en: 'ECB' }, GEOPOLITICS: { fa: 'ژئوپلیتیک', en: 'GEOPOLITICS' },
-  CRYPTO_POLICY: { fa: 'قانون رمزارز', en: 'CRYPTO POLICY' }
+  CRYPTO_POLICY: { fa: 'قانون رمزارز', en: 'CRYPTO POLICY' },
+  POLITICS: { fa: 'سیاست', en: 'POLITICS' }, CURRENCIES: { fa: 'ارز و پولی', en: 'CURRENCIES' }
+};
+const AIG_OUTLOOK = {
+  GROWTH_WATCH: { fa: 'چشم‌انداز رشد', en: 'growth watch' },
+  RECESSION_WATCH: { fa: 'هشدار رکود', en: 'recession watch' },
+  MIXED_SIGNALS: { fa: 'سیگنال‌های مختلط', en: 'mixed signals' },
+  UNAVAILABLE: { fa: 'دادهٔ کافی نیست', en: 'no data yet' }
+};
+const AIG_DIRECTION = {
+  supportive: { fa: 'پشتیبان', en: 'supportive' }, cautionary: { fa: 'هشداردهنده', en: 'cautionary' },
+  neutral: { fa: 'خنثی', en: 'neutral' }
 };
 const AIG_MISSING = {
   guardian: { fa: 'نگهبان', en: 'guardian' }, financial: { fa: 'وضعیت مالی', en: 'financial' },
@@ -192,7 +221,10 @@ const AIG_REASON = {
   BRAIN_READ_REFUSED: { fa: 'خوانش مغز رد شد', en: 'brain read refused' },
   PROVIDER_IMPORT_FAILED: { fa: 'ماژول ارائه‌دهنده بار نشد', en: 'provider failed to load' },
   PROVIDER_FUNCTION_MISSING: { fa: 'تابع ارائه‌دهنده یافت نشد', en: 'provider function missing' },
-  MACRO_IS_DERIVED: { fa: 'کلان از خبر ساخته می‌شود', en: 'macro is derived from news' }
+  MACRO_IS_DERIVED: { fa: 'کلان از خبر ساخته می‌شود', en: 'macro is derived from news' },
+  MACRO_NEEDS_NEWS_AND_QUOTES: { fa: 'کلان به خبر یا داده کلان نیاز دارد', en: 'macro needs news or macro data' },
+  NO_MACRO_HEADLINES_IN_WINDOW_AND_NO_QUOTES: { fa: 'نه خبر کلان و نه داده کلان در این بازه', en: 'no macro headlines or quotes in this window' },
+  NO_MACRO_DATA_SOURCE: { fa: 'هیچ منبع داده کلان پاسخ نداد', en: 'no macro data source answered' }
 };
 
 const prettyCode = (code) => String(code || '').split(':')[0].replace(/_/g, ' ').trim().toLowerCase() || 'unread';
@@ -312,8 +344,21 @@ function AiGlobalIntelligenceInner() {
         return { value: `${v.healthySources ?? 0}/${(v.sources || []).length}`, sub: v.downSources ? `${v.downSources} ${L('منبع خاموش', 'sources down')}` : L('همه سالم', 'all healthy') };
       case 'news':
         return { value: `${v.count ?? 0}`, sub: v.items?.[0] ? String(v.items[0].title).slice(0, 46) : null };
-      case 'macro':
-        return { value: `${v.attention ?? 0}`, sub: Object.entries(v.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${mapLabel(AIG_TOPIC, t, isPersian) || t}×${n}`).join(' · ') || null };
+      case 'macro': {
+        /* Phase 211.1 — the macro card shows BOTH sides of the domain: the
+           classified headline topics (politics included) and, when a source
+           answered, the real quote moves (dollar/gold/crude…). */
+        const topics = Object.entries(v.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${mapLabel(AIG_TOPIC, t, isPersian) || t}×${n}`).join(' · ');
+        const quotes = Array.isArray(v.instruments) ? v.instruments : (Array.isArray(v.quotes) ? v.quotes : []);
+        const qmover = quotes
+          .filter((q) => q.change1dPct != null)
+          .sort((a, b) => Math.abs(b.change1dPct) - Math.abs(a.change1dPct))[0];
+        const qSub = qmover ? `${qmover.symbol} ${qmover.change1dPct > 0 ? '+' : ''}${qmover.change1dPct}%` : null;
+        return {
+          value: `${v.attention ?? 0}${quotes.length ? `+${quotes.length}` : ''}`,
+          sub: [topics, qSub].filter(Boolean).join(' · ') || null
+        };
+      }
       case 'stocks':
       case 'forex':
       case 'commodities':
@@ -471,6 +516,38 @@ function AiGlobalIntelligenceInner() {
                     : L('کلاس کافی برای رژیم نیست', 'not enough classes for a regime')}
                 </div>
               </div>
+
+              {/* ── THE ECONOMIC OUTLOOK (Phase 211.1) — the now AND the
+                     direction: growth watch / recession watch, each named
+                     signal citing the real read behind it ─────────────── */}
+              {cross.outlook && (cross.outlook.label || cross.outlook.signals?.length) ? (
+                <div className={`aig-outlook ${cross.outlook.label === 'GROWTH_WATCH' ? 'growth' : cross.outlook.label === 'RECESSION_WATCH' ? 'recession' : ''}`}>
+                  <div className="aig-outlook-head">
+                    <div className="aig-section-title" style={{ marginBottom: 0 }}>🌐 {L('چشم‌انداز اقتصادی', 'Economic outlook')}</div>
+                    <span className="aig-outlook-score" style={{ color: cross.outlook.score > 0 ? 'var(--up)' : cross.outlook.score < 0 ? 'var(--down)' : 'var(--text-1)' }}>
+                      {cross.outlook.label !== 'UNAVAILABLE'
+                        ? `${mapLabel(AIG_OUTLOOK, cross.outlook.label, isPersian) || String(cross.outlook.label).replace(/_/g, ' ')}${cross.outlook.score != null ? ` · ${cross.outlook.score > 0 ? '+' : ''}${cross.outlook.score}` : ''}`
+                        : L('دادهٔ کافی نیست', 'no data yet')}
+                    </span>
+                  </div>
+                  <div className="aig-regime-sub">
+                    {L('حال: ', 'now: ')}{cross.outlook.currentState?.regime ? mapLabel(AIG_REGIME, cross.outlook.currentState.regime, isPersian) || cross.outlook.currentState.regime : '—'}
+                    {L(' · جهت کوتاه‌مدت از سیگنال‌های زیر', ' · short-term direction from the signals below')}
+                  </div>
+                  {(cross.outlook.signals || []).map((s) => (
+                    <div key={s.id} className="aig-signal">
+                      <span className={`aig-signal-dir ${s.direction}`}>{mapLabel(AIG_DIRECTION, s.direction, isPersian) || s.direction}</span>
+                      <div className="aig-signal-body">
+                        <div className="aig-signal-name">{s.name}{s.source ? ` · ${sourceLabel(s.source, isPersian)}` : ''}</div>
+                        <div className="aig-signal-ev">{s.evidence}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="aig-note">
+                    {L('ترکیب وزن‌دار خوانش‌های واقعی همین دور — داده، نه پیش‌بینی قطعی.', 'A weighted reading of this pass\u2019s real reads — data, not a guaranteed forecast.')}
+                  </div>
+                </div>
+              ) : null}
               <div className="aig-grid">
                 {Object.entries(cross.classes || {}).filter(([, c]) => c).map(([cls, c]) => (
                   <div key={cls} className="aig-card">
@@ -482,6 +559,42 @@ function AiGlobalIntelligenceInner() {
                   </div>
                 ))}
               </div>
+
+              {/* ── the macro indicator layer — real quotes (dollar/gold/
+                     crude/equity/rates/curve) with 1d + 7d changes ─────── */}
+              {cross.macro?.indicators?.length ? (
+                <>
+                  <div className="aig-section-title" style={{ marginTop: 10, marginBottom: 6 }}>🏛️ {L('نشانگرهای کلان (۲۴س و ۷روز)', 'Macro indicators (1d / 7d)')}</div>
+                  <div className="aig-grid">
+                    {cross.macro.indicators.map((q) => (
+                      <div key={q.symbol} className="aig-card">
+                        <div className="aig-card-name">{q.symbol}{q.name ? <span style={{ color: 'var(--text-3)' }}> {q.name}</span> : null}</div>
+                        <div className="aig-card-value" style={{ fontSize: 'var(--fs-md)' }}>
+                          {q.priceUsd != null ? (q.priceUsd >= 100 ? q.priceUsd.toFixed(1) : q.priceUsd.toFixed(2)) : '—'}
+                        </div>
+                        <div className="aig-card-sub">
+                          <span className="aig-ind-chg" style={{ color: q.change1dPct > 0 ? '#4ade80' : q.change1dPct < 0 ? '#f87171' : 'var(--text-2)' }}>
+                            {q.change1dPct != null ? `${q.change1dPct > 0 ? '+' : ''}${q.change1dPct}% 1d` : L('۱روز: —', '1d: —')}
+                          </span>
+                          {' · '}
+                          <span className="aig-ind-chg" style={{ color: q.change7dPct > 0 ? '#4ade80' : q.change7dPct < 0 ? '#f87171' : 'var(--text-2)' }}>
+                            {q.change7dPct != null ? `${q.change7dPct > 0 ? '+' : ''}${q.change7dPct}% 7d` : L('۷روز: —', '7d: —')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {cross.macro.curve ? (
+                    <div className="aig-note" style={{ color: cross.macro.curve.spreadPct < 0 ? 'var(--down)' : 'var(--text-2)' }}>
+                      {L('منحنی بهره ۲/۱۰: ', '2s10s curve: ')}
+                      {cross.macro.curve.spreadPct}pp
+                      {cross.macro.curve.spreadPct < 0
+                        ? ` — ${L('منحنی وارون؛ نشانهٔ کلاسیک ریسک رکود', 'inverted — the classic recession-risk gauge')}`
+                        : ` — ${L('منحنی طبیعی', 'positive')}`}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               {cross.divergences?.length ? (
                 <div style={{ marginTop: 10 }}>
                   <div className="aig-section-title" style={{ marginBottom: 6 }}>↔️ {L('واگرایی‌ها', 'Divergences')}</div>

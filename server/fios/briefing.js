@@ -59,13 +59,19 @@ const FA_FLOW = Object.freeze({
 const faFlow = (f) => FA_FLOW[String(f || '').toLowerCase()] || String(f || 'انتقال');
 const FA_MACRO_TOPIC = Object.freeze({
   FED: 'فدرال‌رزرو', RATES: 'نرخ بهره', INFLATION: 'تورم', GROWTH: 'رشد اقتصادی',
-  ECB: 'بانک مرکزی اروپا', GEOPOLITICS: 'ژئوپلیتیک', CRYPTO_POLICY: 'قانون‌گذاری رمزارز'
+  ECB: 'بانک مرکزی اروپا', GEOPOLITICS: 'ژئوپلیتیک', CRYPTO_POLICY: 'قانون‌گذاری رمزارز',
+  POLITICS: 'سیاست', CURRENCIES: 'ارز و سیاست پولی'
 });
 const faTopic = (t) => FA_MACRO_TOPIC[String(t || '').toUpperCase()] || String(t || '');
 const FA_REGIME = Object.freeze({
   RISK_ON: 'ریسک‌پذیر', RISK_ON_LEANING: 'متمایل به ریسک‌پذیری', MIXED: 'ترکیبی',
   RISK_OFF_LEANING: 'متمایل به احتیاط', RISK_OFF: 'ریسک‌گریز'
 });
+const FA_OUTLOOK = Object.freeze({
+  GROWTH_WATCH: 'چشم‌انداز رشد', RECESSION_WATCH: 'هشدار رکود',
+  MIXED_SIGNALS: 'سیگنال‌های مختلط', UNAVAILABLE: 'دادهٔ کافی نیست'
+});
+const faOutlook = (l) => FA_OUTLOOK[String(l || '').toUpperCase()] || 'ترکیبی';
 const faRegime = (r) => FA_REGIME[String(r || '').toUpperCase()] || 'ترکیبی';
 const FA_CLASS = Object.freeze({
   crypto: 'رمزارز', stocks: 'سهام', forex: 'فارکس', commodities: 'کالاها', rwa: 'دارایی واقعی'
@@ -250,11 +256,31 @@ export function buildBriefingItems({
           id: itemId('macro'), kind: 'macro', priority: 'normal',
           title: `Macro attention: ${topTopic[0]} (${topTopic[1]} headlines)`,
           titleFa: `توجه کلان: ${faTopic(topTopic[0])} (${topTopic[1]} خبر)`,
-          detail: `most-mentioned macro topic in the last 48h of real headlines; items are classified, not generated`,
-          detailFa: 'پراشاره‌ترین موضوع کلان در ۴۸ ساعت گذشته از خبرهای واقعی؛ موارد دسته‌بندی شده‌اند، تولید نشده‌اند',
+          detail: `most-mentioned macro topic in the last 48h of real headlines (politics included); items are classified, not generated`,
+          detailFa: 'پراشاره‌ترین موضوع کلان در ۴۸ ساعت گذشته از خبرهای واقعی (سیاست هم در آن حساب می‌شود)؛ موارد دسته‌بندی شده‌اند، تولید نشده‌اند',
           evidence: (macro.items || []).slice(0, 3).map((m) => ({ source: `macro:${m.topic}`, at: m.at, url: m.url })),
           action: { type: 'navigate', to: '/news' },
           source: 'macro:classifier', at: domains.macro.at, confidence: 0.55, untrusted: true
+        });
+      }
+      /* Phase 211.1 — the REAL macro quotes (dollar, gold, crude, rates,
+         curve): the numbers side of the macro domain. Present only when a
+         source actually returned them. */
+      if (Array.isArray(macro.quotes) && macro.quotes.length) {
+        const fmtQuote = (q) => `${q.symbol} ${q.change1dPct != null ? `${q.change1dPct > 0 ? '+' : ''}${q.change1dPct}% 1d` : '—'}${q.change7dPct != null ? ` · ${q.change7dPct > 0 ? '+' : ''}${q.change7dPct}% 7d` : ''}`;
+        const shown = macro.quotes.slice(0, 4).map(fmtQuote).join(' · ');
+        const curve = macro.curve && macro.curve.spreadPct != null
+          ? (macro.curve.spreadPct < 0 ? ` · 2s10s INVERTED ${macro.curve.spreadPct}pp` : ` · 2s10s ${macro.curve.spreadPct}pp`)
+          : '';
+        push({
+          id: itemId('macro'), kind: 'macro', priority: macro.curve?.spreadPct < 0 ? 'high' : 'info',
+          title: `Macro indicators: ${macro.quotes[0].symbol} ${macro.quotes[0].change1dPct != null ? `${macro.quotes[0].change1dPct > 0 ? '+' : ''}${macro.quotes[0].change1dPct}%` : ''} 1d`,
+          titleFa: `نشانگرهای کلان: ${macro.quotes[0].symbol} ${macro.quotes[0].change1dPct != null ? `${macro.quotes[0].change1dPct > 0 ? '+' : ''}${macro.quotes[0].change1dPct}٪` : ''} ۲۴س`,
+          detail: `real quotes, not headlines: ${shown}${curve} (read-only)`,
+          detailFa: `ارقام واقعی، نه خبر: ${shown}${curve} (فقط‌خواندنی)`,
+          evidence: macro.quotes.slice(0, 3).map((q) => ({ source: q.source || 'macroData', at: domains.macro.at })),
+          action: { type: 'navigate', to: '/ai-global' },
+          source: domains.macro.source || 'macro:classifier', at: domains.macro.at, confidence: 0.6, untrusted: true
         });
       }
     }
@@ -314,18 +340,21 @@ export function buildBriefingItems({
     missing.push('global_intelligence');
   }
 
-  /* ── cross-asset ──────────────────────────────────────────────────────── */
+  /* ── cross-asset + the economic outlook (Phase 211.1) ─────────────────── */
   const digest = crossAsset ? crossAssetDigest(crossAsset) : null;
   if (digest?.available) {
+    const outlook = digest.outlook || null;
+    const outlookLabel = outlook && outlook.label && outlook.label !== 'UNAVAILABLE' ? outlook.label : null;
+    const priority = (digest.regime === 'RISK_OFF' || digest.regime === 'RISK_OFF_LEANING' || outlookLabel === 'RECESSION_WATCH') ? 'high' : 'info';
     push({
-      id: itemId('cross_asset'), kind: 'cross_asset', priority: digest.regime === 'RISK_OFF' || digest.regime === 'RISK_OFF_LEANING' ? 'high' : 'info',
-      title: `Cross-asset regime: ${String(digest.regime || 'MIXED').replace(/_/g, ' ').toLowerCase()}`,
-      titleFa: `رژیم کراس‌است: ${faRegime(digest.regime)}`,
-      detail: `${digest.observedClasses.join(', ')} observed${digest.divergences.length ? `; divergence: ${digest.divergences[0]}` : `; co-movement ${(digest.coMovement * 100).toFixed(0)}%`}`,
-      detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${(digest.coMovement * 100).toFixed(0)}٪`}`,
+      id: itemId('cross_asset'), kind: 'cross_asset', priority,
+      title: `Cross-asset regime: ${String(digest.regime || 'MIXED').replace(/_/g, ' ').toLowerCase()}${outlookLabel ? ` · outlook: ${outlookLabel.replace(/_/g, ' ').toLowerCase()}` : ''}`,
+      titleFa: `رژیم کراس‌است: ${faRegime(digest.regime)}${outlookLabel ? ` · چشم‌انداز: ${faOutlook(outlookLabel)}` : ''}`,
+      detail: `${digest.observedClasses.join(', ')} observed${digest.divergences.length ? `; divergence: ${digest.divergences[0]}` : `; co-movement ${(digest.coMovement * 100).toFixed(0)}%`}${outlookLabel ? `; outlook score ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
+      detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${(digest.coMovement * 100).toFixed(0)}٪`}${outlookLabel ? `؛ امتیاز چشم‌انداز ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
       evidence: [{ source: 'cross-asset-engine', at: crossAsset.at }],
       action: { type: 'navigate', to: '/ai-global' },
-      source: 'cross-asset-engine', at: crossAsset.at, confidence: 0.7
+      source: 'cross-asset-engine', at: crossAsset.at, confidence: 0.7, untrusted: outlookLabel !== null
     });
   } else if (crossAsset) {
     missing.push('cross_asset');

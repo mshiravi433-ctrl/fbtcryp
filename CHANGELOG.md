@@ -73,6 +73,71 @@ probe still passes untouched (fios-core 158/158, autonomy 64/64, intelligence
   probe (10/10, including the dead-API empty state). Design + verification in
   `docs/PHASE211-GLOBAL-AI-INTELLIGENCE-FA.md`.
 
+## Phase 211.1 — the macro connection, politics, and the economic outlook
+
+«در هوش جهانی ارتباط با کلان برقرار نیست — داده‌ها رو بیشتر کن · سیاست و
+کلان‌اقتصاد هم باید باشه تا تأثیر سیاست بر اقتصاد حساب شود · تحلیل کراس-است
+وضعیت فعلی و آینده (رشد یا رکود) را نمی‌گوید».
+
+- **Real macro quotes — the connection was words, now it is numbers**
+  (`server/macroData.js`, new): DXY, gold, WTI, S&P 500 futures, the US 10Y
+  yield and the 2s10s curve — keyless, a stooq → Yahoo → FRED ladder (FRED only
+  with `FRED_API_KEY`), a source accepted only with ≥3 usable instruments,
+  10-minute cache, 6-second per-source timeout; every source failing is an
+  honest `NO_MACRO_DATA_SOURCE`, never an invented number. Pure parsers
+  (`parseStooqCsv` · `parseYahooChart` · `parseFredJson`) plus
+  `changesFromSeries` — 1d = last vs previous observation, 7d = closest
+  observation ≥7 days back, null when the series is too short: never
+  interpolated.
+- **The macro domain is now a news × quote join**
+  (`server/fios/globalIntel.js`): `normalizeMacro` merges the classified
+  headlines with the real quotes — `instruments` (price · 1d · 7d) and
+  `curve` (spread · 7d change) travel beside the topics, `untrusted: true`
+  still attached; both sides missing → `UNAVAILABLE` with a named reason.
+  `MACRO_TOPICS` grew **POLITICS** and **CURRENCIES** (and the patterns widened:
+  central bank · monetary policy · easing · hawkish/dovish, PMI · IMF ·
+  slowdown · labor market, energy prices, sanction · tariff · election ·
+  ceasefire) — the impact of politics on the economy is now a first-class
+  topic, classified with provenance like every other.
+- **World news can no longer be crowded out** (`server/news.js`): eight
+  `macro`-class world desks (BBC Business/World, CNBC, MarketWatch, Yahoo
+  Finance, WSJ, Al Jazeera, DW) ride alongside the crypto feeds, and
+  `trimKeepingLanguages` reserves up to 12 macro items after the language
+  reserve — the probe proves 4 macro headlines survive a 200-crypto flood at
+  the 90 cap.
+- **Cross-asset gained the now AND the direction**
+  (`server/fios/crossAsset.js`): a `macro` indicator layer (the real quotes
+  with 1d/7d, the curve, `untrusted: true`) plus `economicOutlook` — seven
+  weighted signals from this pass's real reads (cross-class mood, dollar
+  pressure, safe-haven bid, energy inflation, long rates, the yield-curve
+  inversion, macro headlines) → `GROWTH_WATCH` / `RECESSION_WATCH` /
+  `MIXED_SIGNALS` / `UNAVAILABLE`, each signal carrying value · weight ·
+  direction · evidence · source — a weighted reading, never a forecast.
+- **The briefing and the world model speak the outlook**
+  (`server/fios/briefing.js`, `server/fios/worldModel.js`): a macro-indicators
+  briefing item (real quotes in the detail; the item goes high-priority when
+  the 2s10s curve is inverted), the cross-asset item carries the outlook in
+  title + detail (high priority on RECESSION_WATCH, `untrusted` while it does),
+  and the model-safe digest gets `global.outlook`. The phase211 digest bound
+  was recalibrated to <1450 for the richer snapshot; the fios-core <1400 bound
+  is untouched and still passes.
+- **The panel renders the connection**
+  (`src/components/ai/AiGlobalIntelligence.jsx`): the cross-asset tab gains the
+  «چشم‌انداز اقتصادی» block (label · score, per-signal rows with direction
+  chips, evidence, the data-not-a-forecast note), the macro indicator grid
+  (1d/7d, colored) and the curve note (inversion rendered as a warning); the
+  macro domain card now shows the topics beside the top real quote move.
+- **Proof:** `npm run test:phase211` — global-intelligence probe 73/73
+  (politics → POLITICS classification with provenance, the quote-joined macro
+  domain, the dead-provider honesty pass, the outlook enum/score/signal
+  invariants, parser units, the macro news reserve), route inventory 12/12,
+  rendered panel 13/13 (new: the outlook block, the macro grid, the macro
+  domain card — plus three stale checks updated to assert the localized labels
+  the UI actually renders). fios-core 158/158, autonomy 64/64, intelligence
+  54/54, units 1768/1768. Sandbox note: the quote ladders have no egress here,
+  so they degrade to honest UNAVAILABLEs locally — the live numbers verify in
+  production.
+
 ---
 
 # Unreleased — Settings is a hub of tiles: one box per section, every control behind it, in both themes

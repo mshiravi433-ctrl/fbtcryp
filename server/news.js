@@ -30,23 +30,45 @@ const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
  * not in the reader's language — without it, tapping a story expecting Persian
  * and landing on German is a trap.
  */
+/*
+ * `class` marks the desk's role in the global intelligence chain.
+ *   crypto — the coin desks the reader follows for price/flow news
+ *   macro  — the world/business desks. Phase 211.1 widened the FEED with them
+ *            because the macro domain (and the cross-asset economic outlook)
+ *            must read POLITICS and the macro economy, not only whatever a
+ *            crypto headline happens to mention. These are the keyless
+ *            wire-class desks (BBC/CNBC/MarketWatch/Yahoo Finance/WSJ/Al
+ *            Jazeera/DW) that stand in for the paid wires (Reuters/Bloomberg
+ *            have no keyless RSS) — the same role the header comment above
+ *            describes for the option of a paid wire later.
+ */
 const FEEDS = [
-  // English desks
-  { id: 'cointelegraph', url: 'https://cointelegraph.com/rss', lang: 'en' },
-  { id: 'coindesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', lang: 'en' },
-  { id: 'decrypt', url: 'https://decrypt.co/feed', lang: 'en' },
-  { id: 'bitcoinmagazine', url: 'https://bitcoinmagazine.com/feed', lang: 'en' },
-  { id: 'theblock', url: 'https://www.theblock.co/rss.xml', lang: 'en' },
-  { id: 'cryptoslate', url: 'https://cryptoslate.com/feed/', lang: 'en' },
+  // English crypto desks
+  { id: 'cointelegraph', url: 'https://cointelegraph.com/rss', lang: 'en', class: 'crypto' },
+  { id: 'coindesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', lang: 'en', class: 'crypto' },
+  { id: 'decrypt', url: 'https://decrypt.co/feed', lang: 'en', class: 'crypto' },
+  { id: 'bitcoinmagazine', url: 'https://bitcoinmagazine.com/feed', lang: 'en', class: 'crypto' },
+  { id: 'theblock', url: 'https://www.theblock.co/rss.xml', lang: 'en', class: 'crypto' },
+  { id: 'cryptoslate', url: 'https://cryptoslate.com/feed/', lang: 'en', class: 'crypto' },
+
+  // World/business desks — the macro outlook layer (Phase 211.1).
+  { id: 'bbc-business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml', lang: 'en', class: 'macro' },
+  { id: 'bbc-world', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', lang: 'en', class: 'macro' },
+  { id: 'cnbc-top', url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', lang: 'en', class: 'macro' },
+  { id: 'marketwatch-top', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', lang: 'en', class: 'macro' },
+  { id: 'yahoo-finance', url: 'https://finance.yahoo.com/news/rssindex', lang: 'en', class: 'macro' },
+  { id: 'wsj-markets', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', lang: 'en', class: 'macro' },
+  { id: 'aljazeera-world', url: 'https://www.aljazeera.com/xml/rss/all.xml', lang: 'en', class: 'macro' },
+  { id: 'dw-world', url: 'https://rss.dw.com/rdf/rss-en-all', lang: 'en', class: 'macro' },
 
   // Local-language desks. Persian first: it is the primary audience.
-  { id: 'arzdigital', url: 'https://arzdigital.com/feed/', lang: 'fa' },
-  { id: 'ramzarz', url: 'https://ramzarz.news/feed/', lang: 'fa' },
-  { id: 'cointelegraph-ar', url: 'https://ar.cointelegraph.com/rss', lang: 'ar' },
-  { id: 'cointelegraph-tr', url: 'https://tr.cointelegraph.com/rss', lang: 'tr' },
-  { id: 'cointelegraph-es', url: 'https://es.cointelegraph.com/rss', lang: 'es' },
-  { id: 'cointelegraph-hi', url: 'https://hi.cointelegraph.com/rss', lang: 'hi' },
-  { id: 'btc-echo', url: 'https://www.btc-echo.de/feed/', lang: 'de' }
+  { id: 'arzdigital', url: 'https://arzdigital.com/feed/', lang: 'fa', class: 'crypto' },
+  { id: 'ramzarz', url: 'https://ramzarz.news/feed/', lang: 'fa', class: 'crypto' },
+  { id: 'cointelegraph-ar', url: 'https://ar.cointelegraph.com/rss', lang: 'ar', class: 'crypto' },
+  { id: 'cointelegraph-tr', url: 'https://tr.cointelegraph.com/rss', lang: 'tr', class: 'crypto' },
+  { id: 'cointelegraph-es', url: 'https://es.cointelegraph.com/rss', lang: 'es', class: 'crypto' },
+  { id: 'cointelegraph-hi', url: 'https://hi.cointelegraph.com/rss', lang: 'hi', class: 'crypto' },
+  { id: 'btc-echo', url: 'https://www.btc-echo.de/feed/', lang: 'de', class: 'crypto' }
 ];
 
 async function getText(url) {
@@ -90,7 +112,7 @@ const pick = (block, tag) => {
  * format we lose that feed, not the endpoint — every source is wrapped in its
  * own try/catch upstream.
  */
-function parseFeed(xml, sourceId, lang = 'en') {
+function parseFeed(xml, sourceId, lang = 'en', feedClass = 'crypto') {
   const items = [];
   const blocks = xml.split(/<item[\s>]|<entry[\s>]/i).slice(1);
 
@@ -121,6 +143,9 @@ function parseFeed(xml, sourceId, lang = 'en') {
       // Carried through so the client can badge a foreign-language headline
       // instead of silently mixing it into the reader's own language.
       lang,
+      // Carried through so the trim can guarantee the macro desks survive
+      // (Phase 211.1) and the client can tell coin news from world news.
+      class: feedClass,
       at: Number.isFinite(at) ? at : Date.now()
     });
   }
@@ -130,7 +155,7 @@ function parseFeed(xml, sourceId, lang = 'en') {
 /** Fetch and merge every feed. One dead desk must not empty the response. */
 export async function fetchNews() {
   const results = await Promise.allSettled(
-    FEEDS.map(async (f) => parseFeed(await getText(f.url), f.id, f.lang ?? 'en'))
+    FEEDS.map(async (f) => parseFeed(await getText(f.url), f.id, f.lang ?? 'en', f.class ?? 'crypto'))
   );
 
   const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
@@ -164,8 +189,9 @@ export async function fetchNews() {
  * @param {object} [opts]
  * @param {number} [opts.limit]        total items to return
  * @param {number} [opts.keepPerLang]  minimum reserved per non-English language
+ * @param {number} [opts.keepMacro]    reserved for the macro/world desks
  */
-export function trimKeepingLanguages(deduped, { limit = 90, keepPerLang = 6 } = {}) {
+export function trimKeepingLanguages(deduped, { limit = 90, keepPerLang = 6, keepMacro = 12 } = {}) {
   /*
    * RESERVE A SLOT FOR EVERY LANGUAGE BEFORE TRIMMING.
    *
@@ -189,6 +215,28 @@ export function trimKeepingLanguages(deduped, { limit = 90, keepPerLang = 6 } = 
     if (n >= KEEP_PER_LANG) continue;
     perLang.set(lang, n + 1);
     reserved.push(item);
+  }
+
+  /*
+   * RESERVE A SLOT FOR THE MACRO DESKS TOO (Phase 211.1).
+   *
+   * The same trap in the other direction: on a day the crypto desks publish
+   * fast and the world desks slow, a newest-first cut can contain ZERO
+   * business/politics headlines — and the macro domain (and the cross-asset
+   * economic outlook that reads politics into the economy) goes quiet while
+   * the feed looks perfectly healthy. The world/business desks are tagged
+   * `class: 'macro'` in FEEDS; up to keepMacro of them are reserved exactly
+   * like the minority languages, so the macro classifier always has fresh
+   * politics/economy headlines to classify when a desk answered at all.
+   */
+  const KEEP_MACRO = keepMacro;
+  let macroKept = 0;
+  for (const item of deduped) {
+    if (macroKept >= KEEP_MACRO) break;
+    if ((item.class ?? 'crypto') !== 'macro') continue;
+    if (reserved.some((r) => r.id === item.id)) continue;
+    reserved.push(item);
+    macroKept += 1;
   }
 
   /*
