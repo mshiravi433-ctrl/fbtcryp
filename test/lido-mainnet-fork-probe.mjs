@@ -64,6 +64,26 @@ const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, bef
   return { receipt, proof };
 };
 
+// Many public archive RPCs cap the block range a single eth_getLogs may cover
+// (and anvil inherits that limit when serving forked historical state). Query in
+// fixed-size chunks and merge, so the SDK's chosen fork RPC is not rejected for
+// requesting an oversized range. The topic is one event on one address, so the
+// merged result stays small and only needs to be reversed (newest-first) later.
+const LOG_CHUNK = 10_000;
+const fetchLogsChunked = async (provider, filter) => {
+  const { fromBlock, toBlock } = filter;
+  let from = fromBlock;
+  let out = [];
+  while (from <= toBlock) {
+    const to = Math.min(from + LOG_CHUNK - 1, toBlock);
+    const part = await provider.getLogs({ ...filter, fromBlock: from, toBlock: to });
+    out = out.concat(part);
+    if (to >= toBlock) break;
+    from = to + 1;
+  }
+  return out;
+};
+
 let anvil = null;
 try {
   rule('Lido · Ethereum mainnet (1) · stake / wrap / unwrap / withdrawal queue');
@@ -167,7 +187,8 @@ try {
     const topic = queueIface.getEvent('WithdrawalRequested').topicHash;
     const latest = await provider.getBlockNumber();
     const fromBlock = Math.max(0, latest - Number(process.env.LIDO_LOG_WINDOW || 100_000));
-    const logs = await provider.getLogs({ address: adapter.LIDO.withdrawalQueue, topics: [topic], fromBlock, toBlock: latest });
+    // Chunked so the fork RPC is not rejected for an oversized eth_getLogs range.
+    const logs = await fetchLogsChunked(provider, { address: adapter.LIDO.withdrawalQueue, topics: [topic], fromBlock, toBlock: latest });
     let claimCandidate = null;
     for (const log of logs.slice().reverse()) {
       const parsed = queueIface.parseLog({ topics: log.topics, data: log.data });

@@ -142,9 +142,28 @@ strict `EXPLICIT_RPC` gate is untouched.
 **Status:** the unwrap fix is **now on `main`** (PR #258, merged as `cf04767`), and
 the Aave/Compound evidence anchors are also on `main` (PR #259, merged as `f2b0390`).
 
-**Next step:** re-run the manual **Lido mainnet fork probe** action now that the fix
-is in `main`; if it returns a clean `N/N passed`, record `farm-fork-evidence/lido.json`
-from that log, and only then consider Lido a canary candidate.
+**Probe result as of the latest manual run:** **27/28 passed.** Every real-logic
+assertion passes (stake → wrap → unwrap → withdrawal request → real `requestId` →
+ownership → fresh request not finalized → claim blocked until finalization). The
+**single** remaining FAIL is the last assertion (`probe completed without an
+unexpected error`): it is a **transport/archive error, not a logic bug** — the fork
+RPC used (`https://ethereum-rpc.publicnode.com`) rejects `eth_getLogs` over the queue
+history with `HTTP 403 "Archive requests require a personal token"`. Per the strict
+rule, a transport error is never counted as a pass, so this run is **not** evidence
+yet.
+
+**Required fix — use a token-free ARCHIVE fork RPC.** Pass an RPC that serves
+archival state without a personal token (the workflow default
+`https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
+`https://eth.drpc.org`, `https://1rpc.io/eth`). Do **not** use
+`https://ethereum-rpc.publicnode.com` or any non-archive endpoint — it will `403`
+on archive `getLogs`. The probe now also **chunks** `eth_getLogs` into 10k-block
+windows so a per-request range cap cannot reject it.
+
+**Next step:** re-run the manual **Lido mainnet fork probe** action with a token-free
+archive RPC; if it returns a clean `N/N passed` (expected 28/28), record
+`farm-fork-evidence/lido.json` from that log, and only then consider Lido a canary
+candidate.
 
 ---
 

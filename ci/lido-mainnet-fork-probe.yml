@@ -11,7 +11,13 @@
 #   3. Actions tab → "Lido mainnet fork probe" → Run workflow.
 #      Optional inputs:
 #        - rpc_url (default https://eth.llamarpc.com) — any public Ethereum RPC
-#          works; an archive node is more reliable for the getLogs window.
+#          that serves ARCHIVE state without a personal token. The probe needs
+#          eth_getLogs over the forked queue's history, so a non-archive endpoint
+#          (e.g. https://ethereum-rpc.publicnode.com) is rejected with a HTTP 403
+#          "Archive requests require a personal token" and the probe FAILs (it
+#          never counts a transport error as a pass). Key-free archive endpoints
+#          that work: https://eth.llamarpc.com, https://eth-mainnet.public.blastapi.io,
+#          https://eth.drpc.org, https://1rpc.io/eth.
 #        - log_window (default 100000) — blocks to scan for a real finalized,
 #          unclaimed WithdrawalRequested entry used for the claim/ownership proof.
 #          Lower it on a rate-limited public RPC.
