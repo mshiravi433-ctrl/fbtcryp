@@ -22,16 +22,15 @@ import { ThinkingOrb } from './ThinkingOrb.jsx';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
-  .ai-global { width:100%; padding:12px 14px 24px; min-height:100%; color:var(--text-1); overflow:hidden; }
+  .ai-global { width:100%; max-width:100%; box-sizing:border-box; padding:12px 14px 24px; min-height:100%; color:var(--text-1); overflow:hidden; }
   .aig-header { position:relative; display:flex; align-items:center; gap:12px; margin-bottom:16px; min-height:72px; padding:13px 14px; border:1px solid var(--line); border-radius:20px; background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 9%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 13%,var(--bg-panel-solid)) 55%,color-mix(in srgb,var(--rgb-3) 7%,var(--bg-panel-solid))); box-shadow:var(--glass-shadow); overflow:hidden; }
   .aig-header::after { content:""; position:absolute; width:100px; height:100px; inset-inline-end:-35px; top:-45px; border-radius:50%; background:var(--rgb-2); opacity:.12; filter:blur(22px); pointer-events:none; }
   .aig-title { flex:1; min-width:0; font-size:var(--fs-lg); line-height:var(--lh-tight); font-weight:800; color:var(--text-1); }
   .aig-chip { flex:0 0 auto; font-size:var(--fs-xs); font-weight:700; color:var(--rgb-2); background:color-mix(in srgb,var(--rgb-2) 13%,transparent); border:1px solid color-mix(in srgb,var(--rgb-2) 28%,transparent); padding:5px 9px; border-radius:999px; white-space:nowrap; }
   .aig-chip.warn { color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 12%,transparent); }
   .aig-chip.bad { color:var(--down); background:color-mix(in srgb,var(--down) 12%,transparent); }
-  .aig-tabs { display:flex; gap:8px; margin:0 -14px 12px; padding:2px 14px 8px; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scroll-padding-inline:14px; overscroll-behavior-inline:contain; scrollbar-width:none; -webkit-overflow-scrolling:touch; direction:inherit; mask-image:linear-gradient(to right,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%); }
-  .aig-tabs::-webkit-scrollbar { display:none; }
-  .aig-tab { flex:0 0 clamp(104px,29vw,126px); scroll-snap-align:start; min-width:104px; min-height:54px; padding:8px 10px; border-radius:14px; font:inherit; font-size:11px; font-weight:700; line-height:1.25; color:var(--text-2); background:var(--bg-panel); border:1px solid var(--line); cursor:pointer; white-space:normal; display:flex; align-items:center; justify-content:center; gap:7px; transition:.2s ease; }
+  .aig-tabs { display:flex; gap:8px; margin:0 0 12px; padding:0; max-width:100%; box-sizing:border-box; }
+  .aig-tab { flex:1 1 0; min-width:0; min-height:58px; padding:8px 6px; border-radius:14px; font:inherit; font-size:11px; font-weight:700; line-height:1.3; color:var(--text-2); background:var(--bg-panel); border:1px solid var(--line); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; text-align:center; overflow-wrap:anywhere; transition:.2s ease; }
   .aig-tab-icon { width:22px; height:22px; display:grid; place-items:center; flex:0 0 22px; }
   .aig-tab-icon svg { width:100%; height:100%; }
   .aig-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
@@ -49,7 +48,7 @@ const STYLES = `
   .aig-prio.normal { color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 10%,transparent); }
   .aig-prio.info { color:var(--up); background:color-mix(in srgb,var(--up) 10%,transparent); }
   .aig-item-kind,.aig-item-meta { font-size:var(--fs-xs); color:var(--text-3); }
-  .aig-item-title { font-size:var(--fs-sm); font-weight:700; color:var(--text-1); }
+  .aig-item-title { font-size:var(--fs-sm); font-weight:700; color:var(--text-1); overflow-wrap:anywhere; }
   .aig-item-detail { font-size:var(--fs-xs); color:var(--text-2); margin-top:4px; line-height:var(--lh-normal); }
   .aig-item-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
   .aig-item-action { color:var(--rgb-1); cursor:pointer; font-weight:700; }
@@ -65,15 +64,15 @@ const STYLES = `
   .aig-lamp { width:9px; height:9px; border-radius:50%; background:var(--line-strong); }
   .aig-lamp.on { background:var(--up); box-shadow:0 0 7px color-mix(in srgb,var(--up) 60%,transparent); }
   .aig-empty { text-align:center; padding:24px 8px; color:var(--text-2); font-size:var(--fs-sm); line-height:var(--lh-loose); }
-  .aig-reason { font-size:10px; color:var(--down); margin-top:4px; direction:ltr; text-align:start; overflow-wrap:anywhere; }
+  .aig-reason { font-size:10px; color:var(--down); margin-top:4px; text-align:start; overflow-wrap:anywhere; }
   .aig-regime { padding:var(--sp-4); border-radius:var(--radius-sm); text-align:center; margin-bottom:var(--sp-3); border:1px solid var(--line); background:var(--bg-raised); }
   .aig-regime.risk_on { background:color-mix(in srgb,var(--up) 8%,var(--bg-raised)); border-color:color-mix(in srgb,var(--up) 28%,var(--line)); }
   .aig-regime.risk_off { background:color-mix(in srgb,var(--down) 8%,var(--bg-raised)); border-color:color-mix(in srgb,var(--down) 28%,var(--line)); }
   .aig-regime.mixed { background:color-mix(in srgb,var(--rgb-5) 8%,var(--bg-raised)); }
-  .aig-regime-label { font-size:var(--fs-lg); font-weight:800; color:var(--text-1); }
+  .aig-regime-label { font-size:var(--fs-lg); font-weight:800; color:var(--text-1); overflow-wrap:anywhere; }
   .aig-regime-sub,.aig-note { font-size:var(--fs-xs); color:var(--text-2); line-height:var(--lh-normal); margin-top:6px; }
-  @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tab { flex-basis:100px; min-width:100px; } .aig-section { padding:13px; } }
-  @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tabs { margin-inline:-16px; padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); flex-basis:124px; } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tabs { gap:6px; } .aig-tab { font-size:10px; min-height:56px; padding-inline:4px; } .aig-section { padding:13px; } }
+  @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 `;
 
 const TABS = [
@@ -103,6 +102,123 @@ const DOMAIN_META = {
   forex: { icon: '💱', fa: 'فارکس', en: 'Forex' },
   commodities: { icon: '🛢️', fa: 'کالاها', en: 'Commodities' },
   rwa: { icon: '🏛️', fa: 'دارایی واقعی', en: 'RWA' }
+};
+
+/* ── Localised labels for the server's enum-like strings ──────────────────
+ * The briefing/cross-asset/providers payloads carry English codes (priority,
+ * kind, source, regime, class, topic, reason). The canonical English text
+ * stays untouched — these maps only decide what a Persian UI shows. Unknown
+ * values fall back to a prettified code, never to a blank. */
+const AIG_PRIORITY = {
+  critical: { fa: 'بحرانی', en: 'CRITICAL' }, high: { fa: 'مهم', en: 'HIGH' },
+  normal: { fa: 'عادی', en: 'NORMAL' }, info: { fa: 'اطلاع', en: 'INFO' }
+};
+const AIG_KIND = {
+  guardian: { fa: 'نگهبان', en: 'guardian' }, portfolio: { fa: 'پرتفوی', en: 'portfolio' },
+  risk: { fa: 'ریسک', en: 'risk' }, goal: { fa: 'هدف', en: 'goal' },
+  smart_money: { fa: 'پول هوشمند', en: 'smart money' }, whale: { fa: 'نهنگ', en: 'whale' },
+  macro: { fa: 'کلان', en: 'macro' }, news: { fa: 'اخبار', en: 'news' },
+  onchain: { fa: 'روی‌زنجیره', en: 'on-chain' }, stocks: { fa: 'سهام', en: 'stocks' },
+  forex: { fa: 'فارکس', en: 'forex' }, commodities: { fa: 'کالاها', en: 'commodities' },
+  rwa: { fa: 'دارایی واقعی', en: 'rwa' }, cross_asset: { fa: 'کراس‌است', en: 'cross-asset' },
+  learning: { fa: 'یادگیری', en: 'learning' }
+};
+const AIG_SOURCE = {
+  guardian: { fa: 'نگهبان', en: 'guardian' }, 'guardian:policies': { fa: 'نگهبان', en: 'guardian' },
+  'guardian:alerts': { fa: 'نگهبان', en: 'guardian' }, 'financial-state': { fa: 'وضعیت مالی', en: 'financial state' },
+  'financial-state:performance': { fa: 'وضعیت مالی', en: 'financial state' },
+  'financial-state:risk': { fa: 'وضعیت مالی', en: 'financial state' },
+  'goal-engine': { fa: 'موتور هدف', en: 'goal engine' },
+  'smartMoney:overview': { fa: 'پول هوشمند', en: 'smart money' },
+  'whales:scanner': { fa: 'اسکنر نهنگ', en: 'whale scanner' },
+  'macro:classifier': { fa: 'دسته‌بند کلان', en: 'macro classifier' },
+  'news-engine': { fa: 'موتور خبر', en: 'news engine' }, chainIntel: { fa: 'چین‌اینتل', en: 'chain intel' },
+  'brain:stocks': { fa: 'سهام', en: 'stocks' }, 'brain:forex': { fa: 'فارکس', en: 'forex' },
+  'brain:commodities': { fa: 'کالاها', en: 'commodities' }, 'brain:rwa': { fa: 'دارایی واقعی', en: 'rwa' },
+  'equities-feed:avantis': { fa: 'سهام', en: 'stocks' }, 'rwa-feed:ostium': { fa: 'اوستیوم', en: 'ostium' },
+  'cross-asset-engine': { fa: 'کراس‌است', en: 'cross-asset' },
+  'learning:calibration': { fa: 'یادگیری', en: 'learning' }
+};
+const AIG_REGIME = {
+  RISK_ON: { fa: 'ریسک‌پذیر', en: 'risk on' }, RISK_ON_LEANING: { fa: 'متمایل به ریسک‌پذیری', en: 'risk on leaning' },
+  MIXED: { fa: 'ترکیبی', en: 'mixed' }, RISK_OFF_LEANING: { fa: 'متمایل به احتیاط', en: 'risk off leaning' },
+  RISK_OFF: { fa: 'ریسک‌گریز', en: 'risk off' }
+};
+const AIG_CLASS = {
+  crypto: { fa: 'رمزارز', en: 'crypto' }, stocks: { fa: 'سهام', en: 'stocks' },
+  forex: { fa: 'فارکس', en: 'forex' }, commodities: { fa: 'کالاها', en: 'commodities' },
+  rwa: { fa: 'دارایی واقعی', en: 'rwa' }
+};
+const AIG_TOPIC = {
+  FED: { fa: 'فدرال‌رزرو', en: 'FED' }, RATES: { fa: 'نرخ بهره', en: 'RATES' },
+  INFLATION: { fa: 'تورم', en: 'INFLATION' }, GROWTH: { fa: 'رشد', en: 'GROWTH' },
+  ECB: { fa: 'اروپا', en: 'ECB' }, GEOPOLITICS: { fa: 'ژئوپلیتیک', en: 'GEOPOLITICS' },
+  CRYPTO_POLICY: { fa: 'قانون رمزارز', en: 'CRYPTO POLICY' }
+};
+const AIG_MISSING = {
+  guardian: { fa: 'نگهبان', en: 'guardian' }, financial: { fa: 'وضعیت مالی', en: 'financial' },
+  goals: { fa: 'اهداف', en: 'goals' }, global_intelligence: { fa: 'هوش جهانی', en: 'global intelligence' },
+  cross_asset: { fa: 'کراس‌است', en: 'cross-asset' }, learning: { fa: 'یادگیری', en: 'learning' },
+  crypto: { fa: 'رمزارز', en: 'crypto' }, stocks: { fa: 'سهام', en: 'stocks' },
+  forex: { fa: 'فارکس', en: 'forex' }, commodities: { fa: 'کالاها', en: 'commodities' },
+  rwa: { fa: 'دارایی واقعی', en: 'rwa' }
+};
+const AIG_REASON = {
+  NO_INSTRUMENTS_IN_CATEGORY: { fa: 'ابزاری در این دسته خوانده نشد', en: 'no instruments read in this category' },
+  NO_WHALE_EVENTS: { fa: 'در این بازه انتقال بزرگی ثبت نشد', en: 'no large transfers in this window' },
+  NO_WHALE_DATA: { fa: 'داده نهنگ خوانده نشد', en: 'whale data unread' },
+  WHALE_PRICE_OUTAGE: { fa: 'سرویس قیمت قطع است', en: 'price service outage' },
+  WHALES_UNAVAILABLE: { fa: 'اسکنر نهنگ در دسترس نیست', en: 'whale scanner unavailable' },
+  NO_SMART_MONEY_DATA: { fa: 'داده پول هوشمند نیست', en: 'no smart-money data' },
+  SMART_MONEY_STREAM_DOWN: { fa: 'جریان پول هوشمند قطع است', en: 'smart-money stream down' },
+  SMART_MONEY_UNAVAILABLE: { fa: 'پول هوشمند در دسترس نیست', en: 'smart money unavailable' },
+  NO_CHAIN_INTEL_SAMPLES: { fa: 'نمونه‌ای از چین‌اینتل نیست', en: 'no chain-intel samples' },
+  CHAIN_INTEL_UNAVAILABLE: { fa: 'چین‌اینتل در دسترس نیست', en: 'chain intel unavailable' },
+  NO_NEWS_ITEMS: { fa: 'خبری خوانده نشد', en: 'no news read' },
+  NEWS_UNAVAILABLE: { fa: 'سرویس خبر در دسترس نیست', en: 'news unavailable' },
+  MACRO_NEEDS_NEWS: { fa: 'تحلیل کلان به خبر نیاز دارد', en: 'macro needs the news domain' },
+  NO_MACRO_HEADLINES_IN_WINDOW: { fa: 'در این بازه خبر کلان نیست', en: 'no macro headlines in this window' },
+  NO_EQUITIES_READ: { fa: 'ابزار سهامی خوانده نشد', en: 'equities unread' },
+  NO_EQUITY_INSTRUMENTS: { fa: 'ابزار سهامی خوانده نشد', en: 'no equity instruments' },
+  NO_FOREX_READ: { fa: 'ابزار فارکس خوانده نشد', en: 'forex unread' },
+  NO_FOREX_INSTRUMENTS: { fa: 'ابزار فارکس خوانده نشد', en: 'no forex instruments' },
+  NO_COMMODITIES_READ: { fa: 'ابزار کالا خوانده نشد', en: 'commodities unread' },
+  NO_COMMODITIES_INSTRUMENTS: { fa: 'ابزار کالا خوانده نشد', en: 'no commodity instruments' },
+  NO_RWA_READ: { fa: 'ابزار دارایی واقعی خوانده نشد', en: 'rwa unread' },
+  NO_RWA_INSTRUMENTS: { fa: 'ابزار دارایی واقعی خوانده نشد', en: 'no rwa instruments' },
+  RWA_FEED_UNAVAILABLE: { fa: 'فید اوستیوم در دسترس نیست', en: 'ostium feed unavailable' },
+  RWA_SHAPE_UNUSABLE: { fa: 'قالب فید اوستیوم تغییر کرده', en: 'ostium feed shape changed' },
+  BRAIN_NOT_WIRED: { fa: 'مغز مرکزی وصل نیست', en: 'brain not wired' },
+  BRAIN_READ_REFUSED: { fa: 'خوانش مغز رد شد', en: 'brain read refused' },
+  PROVIDER_IMPORT_FAILED: { fa: 'ماژول ارائه‌دهنده بار نشد', en: 'provider failed to load' },
+  PROVIDER_FUNCTION_MISSING: { fa: 'تابع ارائه‌دهنده یافت نشد', en: 'provider function missing' },
+  MACRO_IS_DERIVED: { fa: 'کلان از خبر ساخته می‌شود', en: 'macro is derived from news' }
+};
+
+const prettyCode = (code) => String(code || '').split(':')[0].replace(/_/g, ' ').trim().toLowerCase() || 'unread';
+const mapLabel = (map, key, isPersian) => {
+  const hit = map?.[String(key || '')];
+  if (hit) return isPersian ? hit.fa : hit.en;
+  return null;
+};
+const reasonLabel = (reason, isPersian) => {
+  if (!reason) return '';
+  const raw = String(reason);
+  const hit = AIG_REASON[raw] || AIG_REASON[raw.split(':')[0]];
+  if (hit) return isPersian ? hit.fa : hit.en;
+  if (/TIMEOUT/.test(raw)) return isPersian ? 'زمان خواندن تمام شد' : 'read timed out';
+  return isPersian ? 'خوانده نشد' : prettyCode(raw);
+};
+const sourceLabel = (source, isPersian) => {
+  if (!source) return '';
+  const raw = String(source);
+  const direct = mapLabel(AIG_SOURCE, raw, isPersian);
+  if (direct) return direct;
+  /* `macro:FED`-style evidence sources and future `x:y` sources: label the tail. */
+  const tail = raw.includes(':') ? raw.split(':').pop() : raw;
+  return mapLabel(AIG_SOURCE, tail, isPersian)
+    || mapLabel(AIG_KIND, String(tail).toLowerCase(), isPersian)
+    || (isPersian ? tail : prettyCode(tail));
 };
 
 const fmtK = (v) => {
@@ -197,7 +313,7 @@ function AiGlobalIntelligenceInner() {
       case 'news':
         return { value: `${v.count ?? 0}`, sub: v.items?.[0] ? String(v.items[0].title).slice(0, 46) : null };
       case 'macro':
-        return { value: `${v.attention ?? 0}`, sub: Object.entries(v.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${t}×${n}`).join(' · ') || null };
+        return { value: `${v.attention ?? 0}`, sub: Object.entries(v.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${mapLabel(AIG_TOPIC, t, isPersian) || t}×${n}`).join(' · ') || null };
       case 'stocks':
       case 'forex':
       case 'commodities':
@@ -260,13 +376,13 @@ function AiGlobalIntelligenceInner() {
           {briefingItems.length ? briefingItems.map((item) => (
             <div key={item.id} className="aig-item">
               <div className="aig-item-top">
-                <span className={`aig-prio ${item.priority}`}>{item.priority.toUpperCase()}</span>
-                <span className="aig-item-kind">{item.kind}</span>
+                <span className={`aig-prio ${item.priority}`}>{mapLabel(AIG_PRIORITY, item.priority, isPersian) || String(item.priority || '').toUpperCase()}</span>
+                <span className="aig-item-kind">{mapLabel(AIG_KIND, item.kind, isPersian) || item.kind}</span>
               </div>
-              <div className="aig-item-title">{item.title}</div>
-              {item.detail ? <div className="aig-item-detail">{item.detail}</div> : null}
+              <div className="aig-item-title">{isPersian && item.titleFa ? item.titleFa : item.title}</div>
+              {(isPersian && item.detailFa ? item.detailFa : item.detail) ? <div className="aig-item-detail">{isPersian && item.detailFa ? item.detailFa : item.detail}</div> : null}
               <div className="aig-item-meta">
-                <span>{item.source}</span>
+                <span>{sourceLabel(item.source, isPersian)}</span>
                 {item.confidence != null ? <span>· {Math.round(item.confidence * 100)}%</span> : null}
                 {item.untrusted ? <span>· {L('داده، نه دستور', 'data, not authority')}</span> : null}
                 {item.action?.to ? (
@@ -289,7 +405,7 @@ function AiGlobalIntelligenceInner() {
                 'Nothing to report yet — the financial brain only speaks from what it actually read.'
               )}
               {data.briefing?.missing?.length ? (
-                <div className="aig-note">{L('ورودی‌های خوانده‌نشده:', 'unread inputs:')} {data.briefing.missing.join(', ')}</div>
+                <div className="aig-note">{L('ورودی‌های خوانده‌نشده:', 'unread inputs:')} {data.briefing.missing.map((m) => mapLabel(AIG_MISSING, m, isPersian) || m).join(isPersian ? '، ' : ', ')}</div>
               ) : null}
             </div>
           )}
@@ -316,12 +432,13 @@ function AiGlobalIntelligenceInner() {
                   <div key={key} className="aig-card">
                     <div className="aig-card-name">
                       <span className="aig-card-dot" style={{ background: statusColor(d?.status) }} />
-                      {meta.icon} {isRTL ? meta.fa : meta.en}
+                      {meta.icon} {isPersian ? meta.fa : meta.en}
                     </div>
                     <div className="aig-card-value">{summary.value}</div>
-                    {summary.sub ? <div className="aig-card-sub">{summary.sub}</div> : null}
-                    {summary.bad && summary.sub ? <div className="aig-reason">{summary.sub}</div> : null}
+                    {summary.sub && !summary.bad ? <div className="aig-card-sub">{summary.sub}</div> : null}
+                    {summary.bad && summary.sub ? <div className="aig-reason" title={summary.sub}>{reasonLabel(summary.sub, isPersian)}</div> : null}
                     {summary.note ? <div className="aig-card-sub">{summary.note}</div> : null}
+                    {d?.data?.stale === true ? <div className="aig-card-sub">{L('آخرین دادهٔ موفق', 'last good data')}</div> : null}
                   </div>
                 );
               })}
@@ -346,18 +463,18 @@ function AiGlobalIntelligenceInner() {
             <>
               <div className={`aig-regime ${regimeClass}`}>
                 <div className="aig-regime-label">
-                  {cross.regime?.regime ? String(cross.regime.regime).replace(/_/g, ' ') : L('ترکیبی', 'MIXED')}
+                  {cross.regime?.regime ? (mapLabel(AIG_REGIME, cross.regime.regime, isPersian) || String(cross.regime.regime).replace(/_/g, ' ')) : L('ترکیبی', 'MIXED')}
                 </div>
                 <div className="aig-regime-sub">
                   {cross.observedClasses?.length
-                    ? `${cross.observedClasses.join(' · ')} — ${L('میانگین تغییر ۲۴ ساعته واقعی هر کلاس', 'real per-class average 24h change')}`
+                    ? `${cross.observedClasses.map((c) => mapLabel(AIG_CLASS, c, isPersian) || c).join(' · ')} — ${L('میانگین تغییر ۲۴ ساعته واقعی هر کلاس', 'real per-class average 24h change')}`
                     : L('کلاس کافی برای رژیم نیست', 'not enough classes for a regime')}
                 </div>
               </div>
               <div className="aig-grid">
                 {Object.entries(cross.classes || {}).filter(([, c]) => c).map(([cls, c]) => (
                   <div key={cls} className="aig-card">
-                    <div className="aig-card-name">{cls}</div>
+                    <div className="aig-card-name">{mapLabel(AIG_CLASS, cls, isPersian) || cls}</div>
                     <div className="aig-card-value" style={{ color: c.avgChangePct > 0 ? '#4ade80' : c.avgChangePct < 0 ? '#f87171' : '#f0f0ff' }}>
                       {c.avgChangePct > 0 ? '+' : ''}{c.avgChangePct?.toFixed(2)}%
                     </div>
@@ -370,7 +487,7 @@ function AiGlobalIntelligenceInner() {
                   <div className="aig-section-title" style={{ marginBottom: 6 }}>↔️ {L('واگرایی‌ها', 'Divergences')}</div>
                   {cross.divergences.map((d, i) => (
                     <div key={i} className="aig-item-detail" style={{ marginBottom: 4 }}>
-                      {d.classes[0]} {d.avgChangePct[d.classes[0]]}% × {d.classes[1]} {d.avgChangePct[d.classes[1]]}% ({d.gapPct}pp)
+                      {mapLabel(AIG_CLASS, d.classes[0], isPersian) || d.classes[0]} {d.avgChangePct[d.classes[0]]}% × {mapLabel(AIG_CLASS, d.classes[1], isPersian) || d.classes[1]} {d.avgChangePct[d.classes[1]]}% ({d.gapPct}pp)
                     </div>
                   ))}
                 </div>
@@ -380,14 +497,14 @@ function AiGlobalIntelligenceInner() {
                   ? L('همبستگی فقط با سری زمانی جفتی واقعی محاسبه می‌شود؛ یک اسنپ‌شات همبستگی تولید نمی‌کند.', 'Correlations need real paired history; one snapshot cannot produce one.')
                   : null}
                 {cross.readOnlyClasses?.length
-                  ? ` · ${L('کلاس‌های فقط-خواندنی: ', 'read-only classes: ')}${cross.readOnlyClasses.join(', ')}`
+                  ? ` · ${L('کلاس‌های فقط-خواندنی: ', 'read-only classes: ')}${cross.readOnlyClasses.map((c) => mapLabel(AIG_CLASS, c, isPersian) || c).join(isPersian ? '، ' : ', ')}`
                   : null}
               </div>
             </>
           ) : (
             <div className="aig-empty">
               {cross?.missing?.length
-                ? `${L('کلاس‌های خوانده‌نشده:', 'unread classes:')} ${cross.missing.join(', ')}`
+                ? `${L('کلاس‌های خوانده‌نشده:', 'unread classes:')} ${cross.missing.map((c) => mapLabel(AIG_CLASS, c, isPersian) || mapLabel(AIG_MISSING, c, isPersian) || c).join(isPersian ? '، ' : ', ')}`
                 : L('تحلیل کراس-است هنوز محاسبه نشده.', 'Cross-asset analysis has not been computed yet.')}
             </div>
           )}
@@ -403,10 +520,10 @@ function AiGlobalIntelligenceInner() {
               {Object.entries(data.providers).map(([name, p]) => (
                 <div key={name} className="aig-light">
                   <span className="aig-light-name">
-                    {DOMAIN_META[name]?.icon || '•'} {name}
-                    {p.reason ? <div className="aig-reason">{p.reason}</div> : null}
+                    {DOMAIN_META[name]?.icon || '•'} {DOMAIN_META[name] ? (isPersian ? DOMAIN_META[name].fa : DOMAIN_META[name].en) : name}
+                    {p.reason ? <div className="aig-reason" title={p.reason}>{reasonLabel(p.reason, isPersian)}</div> : null}
                   </span>
-                  <span className="aig-light-lamps" title="implemented · configured · provider_available · runtime_ready · live">
+                  <span className="aig-light-lamps" title={L('پیاده‌سازی · پیکربندی · دسترس‌پذیری ارائه‌دهنده · آمادهٔ اجرا · زنده', 'implemented · configured · provider_available · runtime_ready · live')}>
                     {['implemented', 'configured', 'provider_available', 'runtime_ready', 'live'].map((k) => (
                       <span key={k} className={`aig-lamp ${p[k] ? 'on' : 'off'}`} />
                     ))}

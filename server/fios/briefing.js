@@ -44,6 +44,34 @@ const unwrap = (node) => (node && typeof node === 'object' && node.schema === 'f
 let seq = 0;
 const itemId = (kind) => `br_${String(Date.now().toString(36))}${(seq += 1).toString(36)}_${kind}`;
 
+/* ── Persian rendering ────────────────────────────────────────────────────
+ * Every briefing item carries `titleFa`/`detailFa` next to its canonical
+ * English `title`/`detail`, and the panel shows the Persian pair when the UI
+ * language is Persian. Numbers are shared — only the sentence is translated.
+ * Dynamic upstream reasons (guardian codes, raw headlines) keep their
+ * original language inside the Persian sentence rather than being dropped. */
+const FA_FLOW = Object.freeze({
+  dex_buy: 'خرید در صرافی غیرمتمرکز', dex_sell: 'فروش در صرافی غیرمتمرکز',
+  cex_in: 'ورود به صرافی متمرکز', cex_out: 'خروج از صرافی متمرکز',
+  transfer: 'انتقال', mint: 'ضرب', burn: 'سوزاندن',
+  accumulation: 'انباشت', distribution: 'توزیع', flow: 'جریان'
+});
+const faFlow = (f) => FA_FLOW[String(f || '').toLowerCase()] || String(f || 'انتقال');
+const FA_MACRO_TOPIC = Object.freeze({
+  FED: 'فدرال‌رزرو', RATES: 'نرخ بهره', INFLATION: 'تورم', GROWTH: 'رشد اقتصادی',
+  ECB: 'بانک مرکزی اروپا', GEOPOLITICS: 'ژئوپلیتیک', CRYPTO_POLICY: 'قانون‌گذاری رمزارز'
+});
+const faTopic = (t) => FA_MACRO_TOPIC[String(t || '').toUpperCase()] || String(t || '');
+const FA_REGIME = Object.freeze({
+  RISK_ON: 'ریسک‌پذیر', RISK_ON_LEANING: 'متمایل به ریسک‌پذیری', MIXED: 'ترکیبی',
+  RISK_OFF_LEANING: 'متمایل به احتیاط', RISK_OFF: 'ریسک‌گریز'
+});
+const faRegime = (r) => FA_REGIME[String(r || '').toUpperCase()] || 'ترکیبی';
+const FA_CLASS = Object.freeze({
+  crypto: 'رمزارز', stocks: 'سهام', forex: 'فارکس', commodities: 'کالاها', rwa: 'دارایی واقعی'
+});
+const faClass = (c) => FA_CLASS[String(c || '').toLowerCase()] || String(c || '');
+
 /**
  * Build the briefing items from real inputs. Pure — the engine wraps it with
  * persistence + freshness. Every input is optional; a missing input yields no
@@ -64,7 +92,9 @@ export function buildBriefingItems({
       push({
         id: itemId('guardian'), kind: 'guardian', priority: 'critical',
         title: 'A policy is in emergency stop',
+        titleFa: 'یک سیاست در توقف اضطراری است',
         detail: String(e.reason || 'the guardian stopped a policy').slice(0, 200),
+        detailFa: e.reason ? `نگهبان یک سیاست را متوقف کرد — ${String(e.reason).slice(0, 160)}` : 'نگهبان یک سیاست را متوقف کرد',
         evidence: [{ source: 'guardian:policies', at: num(e.at) || now }],
         action: { type: 'navigate', to: '/intent' },
         source: 'guardian', at: num(e.at) || now, confidence: 0.95
@@ -72,10 +102,14 @@ export function buildBriefingItems({
     }
     const alerts = Array.isArray(guardian.recentAlerts) ? guardian.recentAlerts : [];
     for (const a of alerts.slice(0, 3)) {
+      const alertTitle = String(a.title || a.code || 'guardian alert').slice(0, 120);
+      const alertDetail = String(a.detail || a.reason || '').slice(0, 200) || null;
       push({
         id: itemId('guardian'), kind: 'guardian', priority: a.severity === 'HIGH' ? 'high' : 'normal',
-        title: String(a.title || a.code || 'guardian alert').slice(0, 120),
-        detail: String(a.detail || a.reason || '').slice(0, 200) || null,
+        title: alertTitle,
+        titleFa: `هشدار نگهبان: ${alertTitle}`,
+        detail: alertDetail,
+        detailFa: alertDetail,
         evidence: [{ source: 'guardian:alerts', at: num(a.at) || now }],
         action: { type: 'navigate', to: '/portfolio' },
         source: 'guardian', at: num(a.at) || now, confidence: 0.8
@@ -93,7 +127,9 @@ export function buildBriefingItems({
       push({
         id: itemId('portfolio'), kind: 'portfolio', priority: 'high',
         title: `Portfolio is ${Math.abs(drawdown).toFixed(1)}% below its peak`,
+        titleFa: `پرتفوی ${Math.abs(drawdown).toFixed(1)}٪ پایین‌تر از سقف خود است`,
         detail: 'drawdown measured from the portfolio engine\'s peak value — the guardian baseline carries the same number',
+        detailFa: 'افت از سقف ارزش پرتفوی اندازه‌گیری شده — مبنای نگهبان هم همین عدد را دارد',
         evidence: [{ source: 'financial-state:performance', at: financial.at }],
         action: { type: 'navigate', to: '/portfolio' },
         source: 'financial-state', at: financial.at, confidence: 0.9
@@ -106,7 +142,9 @@ export function buildBriefingItems({
       push({
         id: itemId('portfolio'), kind: 'portfolio', priority: 'high',
         title: `Single-position concentration is ${topShare.toFixed(0)}%`,
+        titleFa: `تمرکز تک‌پوزیشن ${topShare.toFixed(0)}٪ است`,
         detail: 'one position dominates the portfolio; a single-asset shock moves the whole book',
+        detailFa: 'یک پوزیشن بر پرتفوی غالب است؛ شوک به یک دارایی کل پرتفوی را تکان می‌دهد',
         evidence: [{ source: 'financial-state:risk', at: financial.at }],
         action: { type: 'navigate', to: '/portfolio' },
         source: 'financial-state', at: financial.at, confidence: 0.85
@@ -117,7 +155,9 @@ export function buildBriefingItems({
       push({
         id: itemId('risk'), kind: 'risk', priority: 'critical',
         title: 'Liquidation risk is HIGH',
+        titleFa: 'ریسک لیکویید شدن بالاست',
         detail: String(liq.reason || 'borrowing positions are close to their liquidation threshold').slice(0, 200),
+        detailFa: liq.reason ? `پوزیشن‌های وام نزدیک آستانه لیکویید شدن‌اند — ${String(liq.reason).slice(0, 160)}` : 'پوزیشن‌های وام نزدیک آستانه لیکویید شدن‌اند',
         evidence: [{ source: 'financial-state:risk', at: financial.at }],
         action: { type: 'navigate', to: '/loan' },
         source: 'financial-state', at: financial.at, confidence: 0.9
@@ -136,7 +176,9 @@ export function buildBriefingItems({
       push({
         id: itemId('goal'), kind: 'goal', priority: 'high',
         title: `Goal «${String(g.name || g.id).slice(0, 60)}» is behind plan`,
+        titleFa: `هدف «${String(g.name || g.id).slice(0, 60)}» از برنامه عقب است`,
         detail: g.needPerMonthUsd != null ? `needs about $${Math.round(g.needPerMonthUsd)}/month to reach the target date` : 'progress is under the pace the target date needs',
+        detailFa: g.needPerMonthUsd != null ? `برای رسیدن به تاریخ هدف حدود ماهانه $${Math.round(g.needPerMonthUsd)} لازم است` : 'پیشرفت از سرعت لازم برای تاریخ هدف کمتر است',
         evidence: [{ source: 'goal-engine', at: num(goalProgress.at) || now }],
         action: { type: 'navigate', to: '/intent' },
         source: 'goal-engine', at: now, confidence: 0.75
@@ -159,7 +201,9 @@ export function buildBriefingItems({
         push({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'normal',
           title: accumulating ? 'Smart money is accumulating' : 'Smart money is distributing',
+          titleFa: accumulating ? 'پول هوشمند در حال انباشت است' : 'پول هوشمند در حال توزیع است',
           detail: `labelled flow over the last ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))}k ${accumulating ? 'net accumulation' : 'net distribution'} (whale activity ${num(sm.whaleActivity?.count) ?? '—'} events)`,
+          detailFa: `جریان برچسب‌خورده در ${sm.window || '24h'} گذشته: $${Math.abs(Math.round(net / 1000))} هزار ${accumulating ? 'انباشت خالص' : 'توزیع خالص'} (فعالیت نهنگ‌ها: ${num(sm.whaleActivity?.count) ?? '—'} رویداد)`,
           evidence: [{ source: 'smartMoney:overview', at: domains.smart_money.at }],
           action: { type: 'navigate', to: '/smart-money' },
           source: 'smartMoney:overview', at: domains.smart_money.at,
@@ -171,7 +215,9 @@ export function buildBriefingItems({
         push({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'info',
           title: `Strongest labelled flow: ${topToken.symbol}`,
+          titleFa: `قوی‌ترین جریان برچسب‌خورده: ${topToken.symbol}`,
           detail: `${topToken.flow || 'flow'} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)}k` : ''} on ${topToken.chain || 'chain'}`,
+          detailFa: `${faFlow(topToken.flow)} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)} هزار` : ''} در ${topToken.chain || 'زنجیره'}`.trim(),
           evidence: [{ source: 'smartMoney:overview', at: domains.smart_money.at }],
           action: { type: 'navigate', to: '/smart-money' },
           source: 'smartMoney:overview', at: domains.smart_money.at, confidence: 0.55
@@ -186,7 +232,9 @@ export function buildBriefingItems({
         push({
           id: itemId('whale'), kind: 'whale', priority: 'normal',
           title: `Whale move: $${Math.round(biggest.valueUsd / 1000)}k ${biggest.symbol}`,
+          titleFa: `حرکت نهنگ: $${Math.round(biggest.valueUsd / 1000)} هزار ${biggest.symbol}`,
           detail: `${biggest.flow || 'transfer'} on ${biggest.chain || 'chain'}${wh.count > 1 ? ` — ${wh.count} large transfers observed this window` : ''}`,
+          detailFa: `${faFlow(biggest.flow)} در ${biggest.chain || 'زنجیره'}${wh.count > 1 ? ` — ${wh.count} انتقال بزرگ در این بازه دیده شد` : ''}`,
           evidence: [{ source: 'whales:scanner', at: domains.whales.at }],
           action: { type: 'navigate', to: '/smart-money' },
           source: 'whales:scanner', at: domains.whales.at, confidence: 0.7
@@ -201,7 +249,9 @@ export function buildBriefingItems({
         push({
           id: itemId('macro'), kind: 'macro', priority: 'normal',
           title: `Macro attention: ${topTopic[0]} (${topTopic[1]} headlines)`,
+          titleFa: `توجه کلان: ${faTopic(topTopic[0])} (${topTopic[1]} خبر)`,
           detail: `most-mentioned macro topic in the last 48h of real headlines; items are classified, not generated`,
+          detailFa: 'پراشاره‌ترین موضوع کلان در ۴۸ ساعت گذشته از خبرهای واقعی؛ موارد دسته‌بندی شده‌اند، تولید نشده‌اند',
           evidence: (macro.items || []).slice(0, 3).map((m) => ({ source: `macro:${m.topic}`, at: m.at, url: m.url })),
           action: { type: 'navigate', to: '/news' },
           source: 'macro:classifier', at: domains.macro.at, confidence: 0.55, untrusted: true
@@ -214,7 +264,9 @@ export function buildBriefingItems({
       push({
         id: itemId('news'), kind: 'news', priority: 'info',
         title: `${news.items.length} fresh headlines`,
+        titleFa: `${news.items.length} خبر تازه`,
         detail: String(news.items[0]?.title || '').slice(0, 160),
+        detailFa: String(news.items[0]?.title || '').slice(0, 160),
         evidence: [{ source: 'news-engine', at: domains.news.at, url: news.items[0]?.url }],
         action: { type: 'navigate', to: '/news' },
         source: 'news-engine', at: domains.news.at, confidence: 0.6, untrusted: true
@@ -226,7 +278,9 @@ export function buildBriefingItems({
       push({
         id: itemId('onchain'), kind: 'onchain', priority: 'normal',
         title: `${onchain.downSources} on-chain source${onchain.downSources === 1 ? '' : 's'} down`,
+        titleFa: `${onchain.downSources} منبع روی‌زنجیره قطع است`,
         detail: 'chain-intel health ledger reports consecutive failures — on-chain reads may be degraded',
+        detailFa: 'دفتر سلامت چین‌اینتل خرابی‌های پیاپی گزارش می‌کند — خوانش‌های روی‌زنجیره ممکن است ناقص باشند',
         evidence: [{ source: 'chainIntel', at: domains.onchain.at }],
         action: { type: 'navigate', to: '/security' },
         source: 'chainIntel', at: domains.onchain.at, confidence: 0.85
@@ -241,10 +295,14 @@ export function buildBriefingItems({
           .filter((i) => i.changePct !== null)
           .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))[0];
         if (mover) {
+          const clsEn = cls === 'stocks' ? 'Equities' : cls === 'forex' ? 'FX' : cls === 'commodities' ? 'Commodities' : 'RWA';
+          const clsFa = cls === 'stocks' ? 'سهام' : cls === 'forex' ? 'فارکس' : cls === 'commodities' ? 'کالاها' : 'دارایی واقعی';
           push({
             id: itemId(cls), kind: cls, priority: 'info',
-            title: `${cls === 'stocks' ? 'Equities' : cls === 'forex' ? 'FX' : cls === 'commodities' ? 'Commodities' : 'RWA'}: ${mover.symbol} ${mover.changePct > 0 ? '+' : ''}${mover.changePct.toFixed(1)}%`,
+            title: `${clsEn}: ${mover.symbol} ${mover.changePct > 0 ? '+' : ''}${mover.changePct.toFixed(1)}%`,
+            titleFa: `${clsFa}: ${mover.symbol} ${mover.changePct > 0 ? '+' : ''}${mover.changePct.toFixed(1)}٪`,
             detail: `biggest 24h mover among ${d.data.instruments.length} ${d.data.venue || ''} instruments (read-only synthetic exposure; the app cannot buy these for you)`,
+            detailFa: `بزرگ‌ترین حرکت ۲۴ ساعته بین ${d.data.instruments.length} ابزار ${d.data.venue || ''} (مواجهه مصنوعی فقط‌خواندنی؛ برنامه نمی‌تواند این‌ها را برای شما بخرد)`,
             evidence: [{ source: d.source, at: d.at }],
             action: { type: 'navigate', to: cls === 'stocks' ? '/stocks' : '/ostium' },
             source: d.source, at: d.at, confidence: 0.6
@@ -262,7 +320,9 @@ export function buildBriefingItems({
     push({
       id: itemId('cross_asset'), kind: 'cross_asset', priority: digest.regime === 'RISK_OFF' || digest.regime === 'RISK_OFF_LEANING' ? 'high' : 'info',
       title: `Cross-asset regime: ${String(digest.regime || 'MIXED').replace(/_/g, ' ').toLowerCase()}`,
+      titleFa: `رژیم کراس‌است: ${faRegime(digest.regime)}`,
       detail: `${digest.observedClasses.join(', ')} observed${digest.divergences.length ? `; divergence: ${digest.divergences[0]}` : `; co-movement ${(digest.coMovement * 100).toFixed(0)}%`}`,
+      detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${(digest.coMovement * 100).toFixed(0)}٪`}`,
       evidence: [{ source: 'cross-asset-engine', at: crossAsset.at }],
       action: { type: 'navigate', to: '/ai-global' },
       source: 'cross-asset-engine', at: crossAsset.at, confidence: 0.7
@@ -278,7 +338,9 @@ export function buildBriefingItems({
     push({
       id: itemId('learning'), kind: 'learning', priority: 'info',
       title: `Learning calibration: ${(learning.directionHitRate ?? 0) * 100 > 0 ? `${Math.round((learning.directionHitRate || 0) * 100)}% direction hit rate` : 'no scored predictions yet'}`,
+      titleFa: `کالیبراسیون یادگیری: ${(learning.directionHitRate ?? 0) * 100 > 0 ? `نرخ اصابت جهت ${Math.round((learning.directionHitRate || 0) * 100)}٪` : 'هنوز پیش‌بینی امتیازداده‌شده‌ای نیست'}`,
       detail: `${learning.samples} verified outcome${learning.samples === 1 ? '' : 's'} recorded; the number is the machine's, not a promise`,
+      detailFa: `${learning.samples} نتیجه تأییدشده ثبت شد؛ این عدد مال ماشین است، نه یک وعده`,
       evidence: [{ source: 'learning:calibration', at: now }],
       action: { type: 'navigate', to: '/ai-control' },
       source: 'learning:calibration', at: now, confidence: 0.8

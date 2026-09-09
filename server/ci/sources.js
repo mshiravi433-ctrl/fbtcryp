@@ -772,20 +772,81 @@ async function equitiesMarkets() {
   };
 }
 
+/**
+ * Classify one Ostium price row into the brain's three buckets.
+ *
+ * ─── WHY SYMBOL BUCKETING, NOT THE SUBGRAPH ──────────────────────────────
+ * Pair GROUP names (Forex, Metals, …) live in Ostium's GraphQL subgraph, but
+ * the brain's market read must stay a single cheap upstream call: the price
+ * feed alone has to be enough to tell forex from commodities. FX pairs are
+ * two 3-letter FIAT codes (EURUSD, USDJPY) — six letters alone is not enough,
+ * because index perps (SPXUSD) and crypto perps (BTCUSD) are six letters too;
+ * commodities and metals carry their own roots (XAU, OIL, NATGAS, …);
+ * everything else — indices, single stocks, crypto perps — is `other`, which
+ * the `rwa` module still serves (it reads the whole venue) while
+ * `forex`/`commodities` stay exact. A row that already carries an explicit
+ * group/category hint from the upstream wins over the symbol guess.
+ */
+const OSTIUM_FIAT = new Set(String(
+  'USD EUR JPY GBP CHF CAD AUD NZD SEK NOK DKK PLN CZK HUF RON ILS MXN SGD HKD CNH CNY TWD THB KRW INR IDR MYR PHP VND ZAR TRY BRL ARS CLP COP PEN SAR AED QAR KWD EGP NGN KES'
+).split(' '));
+function classifyOstiumRow(row) {
+  const hint = String(row?.group?.name || row?.group || row?.assetType || row?.type || row?.category || '').toLowerCase();
+  if (/(forex|\bfx\b|currenc)/.test(hint)) return 'forex';
+  if (/(metal|commod|energy|bullion|mining|\boil\b|\bgas\b)/.test(hint)) return 'commodities';
+  /* A recognised non-market group (stocks, indices, crypto, …) is `other` —
+     but an UNRECOGNISED hint must not veto the symbol guess below, so only
+     return early for hints we actually understand. */
+  if (/(stock|equit|index|indice|crypto|bond|treasury)/.test(hint)) return 'other';
+  const flat = String(row?.__flat || '').toUpperCase();
+  if (/^(XAU|XAG|XPT|XPD|XA[UP]|COPPER|HG|OIL|WTI|BRENT|NATGAS|PLATINUM|PALLADIUM|SILVER|GOLD|COFFEE|WHEAT|CORN|SUGAR|COTTON|SOYBEAN|COCOA|ALUMINUM|ZINC|NICKEL)/.test(flat)) return 'commodities';
+  /* Six letters is necessary but not sufficient for FX: both halves must be
+     known fiat codes, otherwise index perps (SPXUSD), crypto perps (BTCUSD)
+     and anything else the venue lists would pollute the forex domain. */
+  if (/^[A-Z]{6}$/.test(flat) && OSTIUM_FIAT.has(flat.slice(0, 3)) && OSTIUM_FIAT.has(flat.slice(3))) return 'forex';
+  return 'other';
+}
+
 async function rwaMarkets() {
   const res = await guarded('rwa-feed', () => fetchOstiumPrices(), { staleKey: 'ci:ostium' });
   if (!res.ok) return { ok: false, code: res.code };
   const rows = Array.isArray(res.value?.prices) ? res.value.prices : (Array.isArray(res.value) ? res.value : []);
-  const bucket = (symbol) => {
-    const s = String(symbol || '').toUpperCase();
-    if (/^(XAU|XAG|COPPER|OIL|WTI|BRENT|NATGAS|PLATINUM)/.test(s)) return 'commodities';
-    if (/[A-Z]{3}[A-Z]{3}$/.test(s) && !s.startsWith('STOCK')) return 'forex';
-    return 'other';
-  };
+  /* Real Ostium price rows are shaped
+       { pair: 'EUR-USD', bid, mid, ask, isMarketOpen, timestampSeconds }
+     (see server/futures/adapters/ostium.js and src/lib/ostium.js) — NOT
+     { symbol, price }. The mapping below reads the real shape first and the
+     legacy/test shape ({ symbol|asset, price|markPrice }) second, so fakes
+     and fixtures keep working while production rows stop mapping to null. */
+  const mapped = rows.slice(0, 60).map((r) => {
+    const pairKey = String(r?.pair || (r?.from && r?.to ? `${r.from}-${r.to}` : '') || r?.symbol || r?.asset || '').toUpperCase().slice(0, 32);
+    const flat = pairKey.replace(/[^A-Z0-9]/g, '');
+    const pairMatch = pairKey.match(/^([A-Z0-9]{1,12})[-/]([A-Z0-9]{1,12})$/);
+    const symbol = pairMatch ? `${pairMatch[1]}/${pairMatch[2]}` : (flat || null);
+    const bid = numOr(r?.bid);
+    const ask = numOr(r?.ask);
+    const priceUsd = numOr(r?.mid)
+      ?? (bid !== null && ask !== null ? (bid + ask) / 2 : null)
+      ?? numOr(r?.price ?? r?.markPrice);
+    const row = { __flat: flat, group: r?.group, assetType: r?.assetType, type: r?.type, category: r?.category };
+    return {
+      symbol,
+      priceUsd,
+      change24hPct: numOr(r?.change24hPct ?? r?.change24h ?? r?.priceChangePct ?? r?.changePct),
+      category: classifyOstiumRow(row),
+      marketOpen: r?.isMarketOpen ?? null,
+      asOf: Number(r?.timestampSeconds) > 0 ? Number(r.timestampSeconds) * 1000 : null
+    };
+  }).filter((r) => r.symbol && r.priceUsd !== null);
+  if (rows.length > 0 && !mapped.length) {
+    /* The feed answered but nothing survived the mapping — the upstream shape
+       changed. That is a different failure from an empty venue, and the brain
+       must hear it as one instead of NO_INSTRUMENTS_IN_CATEGORY. */
+    return { ok: false, code: 'RWA_SHAPE_UNUSABLE', venue: 'ostium', rawRows: rows.length, stale: res.stale === true, source: 'rwa-feed:ostium', at: Date.now() };
+  }
   return {
-    ok: rows.length > 0,
+    ok: mapped.length > 0,
     venue: 'ostium',
-    rows: rows.slice(0, 30).map((r) => ({ symbol: String(r?.symbol || r?.asset || '').toUpperCase() || null, priceUsd: numOr(r?.price ?? r?.markPrice), category: bucket(r?.symbol || r?.asset) })).filter((r) => r.symbol),
+    rows: mapped.slice(0, 30),
     stale: res.stale === true,
     readOnly: true,
     source: 'rwa-feed:ostium', at: Date.now()

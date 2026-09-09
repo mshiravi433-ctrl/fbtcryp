@@ -510,7 +510,7 @@ export function createModules(ctx = {}) {
   });
   const commodities = rwaSource('commodities', 'Commodities (Ostium)', 'commodities');
   const forex = rwaSource('forex', 'Forex (Ostium)', 'forex');
-  const etf = defineModule({ ...commodities.definition, id: 'etf', name: 'ETF', capability: CAPABILITY.UNAVAILABLE, tools: ['etf.read'], state: ['markets'], permissions: { max: PERMISSION.READ }, errors: ['NO_DATA_SOURCE'], fallback: [], events: [], quote: NA('no ETF data source exists in this build, so there is nothing to quote'), prepare: NA('no route to prepare; declaring one would let the brain promise an ETF order'), simulate: NA('no ETF instrument to simulate against'), execute: NA('no trading route for ETFs exists server-side'), verify: NA('nothing is executed, so there is nothing to verify'), recover: NA('an absent source has no recovery path; the module reports UNAVAILABLE instead'), healthCheck: async () => ({ status: 'DOWN', detail: 'no ETF data source is wired in this deployment' }), capabilities: async () => ({ operations: [], executes: false, reason: 'no ETF feed exists in this build; the brain must say so rather than approximate from crypto data' }) });
+  const etf = defineModule({ ...commodities.definition, id: 'etf', name: 'ETF', capability: CAPABILITY.UNAVAILABLE, tools: ['etf.read'], state: ['markets'], permissions: { max: PERMISSION.READ }, errors: ['NO_DATA_SOURCE'], fallback: [], events: [], getState: async () => ok('UNAVAILABLE', null, { reason: 'NO_DATA_SOURCE' }), read: async () => unavailable('NO_DATA_SOURCE', { detail: 'no ETF data source is wired in this deployment; the spread must not inherit the commodities read' }), quote: NA('no ETF data source exists in this build, so there is nothing to quote'), prepare: NA('no route to prepare; declaring one would let the brain promise an ETF order'), simulate: NA('no ETF instrument to simulate against'), execute: NA('no trading route for ETFs exists server-side'), verify: NA('nothing is executed, so there is nothing to verify'), recover: NA('an absent source has no recovery path; the module reports UNAVAILABLE instead'), healthCheck: async () => ({ status: 'DOWN', detail: 'no ETF data source is wired in this deployment' }), capabilities: async () => ({ operations: [], executes: false, reason: 'no ETF feed exists in this build; the brain must say so rather than approximate from crypto data' }) });
   const funds = defineModule({
     ...etf.definition,
     id: 'funds', name: 'Funds', capability: CAPABILITY.UNAVAILABLE,
@@ -519,7 +519,11 @@ export function createModules(ctx = {}) {
     healthCheck: async () => ({ status: 'DOWN', detail: 'no fund data source is wired in this deployment' }),
     capabilities: async () => ({ operations: [], executes: false, reason: 'no fund feed exists in this build' })
   });
-  const rwa = defineModule({ ...commodities.definition, id: 'rwa', name: 'Tokenised real-world assets', capability: CAPABILITY.READ_ONLY });
+  /* `rwa` reads the WHOLE venue (label 'all'): spreading commodities.definition
+     here used to silently inherit its category filter, so the brain's `rwa`
+     read — and the global-intel RWA domain through it — only ever returned
+     commodities. */
+  const rwa = rwaSource('rwa', 'Tokenised real-world assets', 'all');
 
   /* ── crypto market intelligence ─────────────────────────────────────── */
   const crypto = defineModule({

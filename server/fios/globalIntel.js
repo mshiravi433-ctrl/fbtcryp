@@ -147,9 +147,19 @@ export function normalizeSmartMoney(overview, at = Date.now()) {
 export function normalizeWhales(out, at = Date.now()) {
   if (!out || typeof out !== 'object') return unavailableDomain('NO_WHALE_DATA', 'whales:scanner');
   const events = Array.isArray(out.events) ? out.events : [];
-  if (!events.length) return unavailableDomain(out.reason || (out.pricesOutage ? 'WHALE_PRICE_OUTAGE' : 'NO_WHALE_EVENTS'), 'whales:scanner');
+  if (!events.length) {
+    /* Keep the failure anatomy on the envelope: an empty window with failed
+       chains (or a dead price service) is an outage to investigate, while an
+       empty window with none is genuinely quiet water. */
+    return unavailableDomain(out.reason || (out.pricesOutage ? 'WHALE_PRICE_OUTAGE' : 'NO_WHALE_EVENTS'), 'whales:scanner', {
+      failedChains: Array.isArray(out.failedChains) ? out.failedChains.slice(0, 8) : [],
+      pricesOutage: out.pricesOutage === true
+    });
+  }
+  const stale = out.stale === true;
   return okDomain({
     count: events.length,
+    stale,
     failedChains: Array.isArray(out.failedChains) ? out.failedChains.slice(0, 8) : [],
     events: events.slice(0, 12).map((e) => ({
       symbol: str(e.token?.symbol || e.symbol, 24),
@@ -160,7 +170,7 @@ export function normalizeWhales(out, at = Date.now()) {
       at: num(e.timestamp) || num(e.at)
     })).filter((e) => e.symbol && e.valueUsd !== null),
     note: 'large on-chain transfers observed while the scanner ran — not full chain history'
-  }, 'whales:scanner', out.pricesOutage ? 0.5 : 0.75, { at, partial: Array.isArray(out.failedChains) && out.failedChains.length > 0 });
+  }, 'whales:scanner', stale ? 0.6 : out.pricesOutage ? 0.5 : 0.75, { at, partial: stale || (Array.isArray(out.failedChains) && out.failedChains.length > 0) });
 }
 
 /** onchain: chain-intel health ledger + the real activity ring. */
@@ -233,6 +243,7 @@ export function normalizeStocks(out, at = Date.now()) {
   return okDomain({
     venue: str(out.venue, 24) || 'avantis',
     readOnly: out.readOnly !== false,
+    stale: out.stale === true,
     marketOpen: instruments.some((r) => r.marketOpen === true),
     instruments: instruments.slice(0, 15).map((r) => ({
       symbol: str(r.symbol, 12), name: str(r.name, 80),
@@ -261,6 +272,7 @@ export function normalizeRwaClass(out, category, at = Date.now()) {
   return okDomain({
     venue: str(out.venue, 24) || 'ostium',
     readOnly: out.readOnly !== false,
+    stale: out.stale === true,
     instruments: filtered.slice(0, 15)
   }, str(out.source, 40) || `brain:${category}`, out.stale ? 0.5 : 0.7, { at, partial: out.stale === true });
 }
@@ -341,8 +353,16 @@ export function createGlobalIntelEngine({
       case 'whales': {
         try {
           /* cachedWhales reads opts.vs — an explicit (empty-but-present) opts
-             object, not a bare call. */
-          return normalizeWhales(await callProvider('whales', 'cachedWhales', 'whales:scanner', [{ minUsd: 250_000, limit: 40 }]), at);
+             object, not a bare call. The $100k floor matches the /api/news/whales
+             default: the scanner only sees a few minutes of chain time, and at
+             $250k the window is empty far too often to be a useful domain. */
+          const raw = await callProvider('whales', 'cachedWhales', 'whales:scanner', [{ minUsd: 100_000, limit: 40 }]);
+          /* cachedWhales returns the CACHE envelope { value, cached, stale } —
+             the events live in `value` (see server/app.js, which unwraps it).
+             Passing the envelope straight to the normalizer reads zero events
+             and every snapshot reports NO_WHALE_EVENTS on a healthy scanner. */
+          const out = Array.isArray(raw?.value?.events) ? { ...raw.value, stale: raw.value.stale === true || raw.stale === true } : raw;
+          return normalizeWhales(out, at);
         } catch (err) {
           const reason = String(err?.message || err).slice(0, 120);
           return unavailableDomain(reason.includes('TIMEOUT') || reason.startsWith('PROVIDER') ? reason : `WHALES_UNAVAILABLE:${reason}`, 'whales:scanner');
