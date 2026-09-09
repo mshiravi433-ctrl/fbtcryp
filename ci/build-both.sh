@@ -82,52 +82,26 @@ say "$(tr '\n' ' ' < /tmp/env-summary.txt)"
 # ---------------------------------------------------------------------------
 # FARM ROLLOUT — public-open, all five protocols (canary-confirmed).
 #
-# These are the same literals the "Build APK" workflow carries in its env:
-# block. They live here rather than in .github/workflows/build-apk.yml
-# because that path cannot be written from a coding-agent session (agent
-# tokens are blocked from workflow files, and mobile copy-paste has corrupted
-# it before — see the ci/build-apk.sh header). The effect is identical: the
-# values reach `npm run build`, where Vite inlines them, and the fail-closed
-# gate in scripts/farm-rollout-policy.mjs (re-asserted by vite.config.js at
-# build time) rejects any half-open combination with a red build instead of
-# shipping a half-open Farm.
+# The values are NOT listed here any more: they live in ci/farm-rollout.env.sh,
+# which this script sources and `npm run build:full` (the website build Vercel
+# runs) sources too. Keeping one copy is the whole point — the previous copy
+# lived in this file alone, so the APK builds were public-open while the
+# website compiled every money-in flag to false and Farm stayed read-only for
+# every visitor there. Two copies of a money-path configuration always drift.
 #
-# Deliberately applied to BOTH stages: a workflow env block applies to the
-# whole run, so both the direct-download build (FBT-Swap-full.apk) and the
-# store build (app-release.apk / .aab) are public-open. To close the store
-# build again, drop "${FARM_ROLLOUT_ENV[@]}" from the second run_stage line
-# only — the gate keeps every partial combination from shipping.
+# The fail-closed gate in scripts/farm-rollout-policy.mjs (re-asserted by
+# vite.config.js at build time) still rejects any half-open combination with a
+# red build, so a partial edit in the env file cannot ship a half-open Farm.
+# `FARM_CAPITAL=off` closes it again without editing anything.
+#
+# Applied to BOTH stages below, exactly as a workflow env block would: the
+# direct-download build (FBT-Swap-full.apk) and the store build
+# (app-release.apk / .aab) are both public-open. To close the store build
+# again, run its stage with FARM_CAPITAL=off instead.
 # ---------------------------------------------------------------------------
-FARM_ROLLOUT_ENV=(
-  FARM_ROLLOUT_PROTOCOLS=aave-base,aave-arbitrum,compound-base,lido,morpho-base
-  FARM_STRICT_FORK_EVIDENCE=true
-  FARM_CANARY_CONFIRMED=true
-  VITE_ENABLE_AAVE_BASE_SUPPLY=true
-  VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-  VITE_AAVE_BASE_SUPPLY_PUBLIC=true
-  VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX=1000
-  VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL=10000
-  VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=true
-  VITE_AAVE_ARB_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-  VITE_AAVE_ARB_SUPPLY_PUBLIC=true
-  VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX=1000
-  VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL=10000
-  VITE_ENABLE_COMPOUND_BASE_SUPPLY=true
-  VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-  VITE_COMPOUND_BASE_SUPPLY_PUBLIC=true
-  VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX=1000
-  VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL=10000
-  VITE_ENABLE_LIDO_STAKE=true
-  VITE_LIDO_STAKE_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-  VITE_LIDO_STAKE_PUBLIC=true
-  VITE_LIDO_STAKE_MAX_ETH_PER_TX=1
-  VITE_LIDO_STAKE_MAX_ETH_TOTAL=10
-  VITE_ENABLE_MORPHO_BASE_SUPPLY=true
-  VITE_MORPHO_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-  VITE_MORPHO_BASE_SUPPLY_PUBLIC=true
-  VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX=1000
-  VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL=10000
-)
+# shellcheck source=./farm-rollout.env.sh
+. "$HERE/farm-rollout.env.sh"
+
 
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║  1/2  FULL build — incl. speculation, for GitHub Releases      ║"
@@ -137,7 +111,7 @@ echo "╚═══════════════════════�
 # subshell with `export`), so it cannot leak into the store build below. That leak
 # would silently produce two identical full builds, one of them labelled as the
 # store artifact — the worst possible outcome and an invisible one.
-run_stage "full build" env VITE_ENABLE_SPECULATION=true "${FARM_ROLLOUT_ENV[@]}" bash "$HERE/build-apk.sh"
+run_stage "full build" env VITE_ENABLE_SPECULATION=true bash "$HERE/build-apk.sh"
 
 mkdir -p out
 if [ -f out/app-release.apk ]; then
@@ -160,8 +134,10 @@ echo "╚═══════════════════════�
 
 # Speculation stays off (the flag that keeps the banned screens out of the
 # store build). The Farm rollout env deliberately applies here too — both
-# published outputs are public-open; see the FARM_ROLLOUT_ENV block above.
-run_stage "store build" env "${FARM_ROLLOUT_ENV[@]}" bash "$HERE/build-apk.sh"
+# published outputs are public-open; see the sourced farm-rollout.env.sh.
+# The rollout env is already exported above, so it is inherited rather than
+# re-listed; only speculation has to be pinned, and only for the full build.
+run_stage "store build" bash "$HERE/build-apk.sh"
 
 echo
 echo "──────────────────────────────────────────────────────────────────"

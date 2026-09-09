@@ -28,8 +28,11 @@ import {
 /*
  * Supported execution positions live in a feed-independent hub. DefiLlama is
  * discovery/data only: a feed failure must never remove withdraw/claim/revoke.
+ *
+ * `farmExecutionAdapterFor` is the SAME table the hub renders from, so a pool
+ * row and the hub can never disagree about which pools this app can transact.
  */
-import FarmPositionHub from '../components/Farm/FarmPositionHub';
+import FarmPositionHub, { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -41,6 +44,18 @@ import TrendChart from '../components/TrendChart';
  * be the one you have to flick to find.
  */
 const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
+
+/*
+ * Is ANY adapter open to every visitor in this build?
+ *
+ * The status card at the top of this page used to carry a permanent
+ * «🔒 حالت فقط‌خواندنی · تحلیل فقط‌خواندنی» badge, compiled in regardless of
+ * the rollout — so a public-open build, whose five adapters sign real
+ * transactions, still introduced itself to every visitor as read-only. That
+ * badge is now derived from the same adapter table the rest of the screen
+ * reads, and a capital-off build still says exactly what it said before.
+ */
+const EXECUTION_LIVE = FARM_EXECUTION_ADAPTERS.some((adapter) => adapter.openToPublic);
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
 const AMOUNTS = [100, 1000, 10000];
 const HORIZONS = ['day', 'week', 'month', 'year'];
@@ -327,10 +342,14 @@ function ProtocolStatusCard({ protocol, t }) {
       </div>
 
       <div className="farm-protocol-readout">
-        <span className="pill pill-neutral"><IconLock width={12} height={12} /> {t('farm.readOnly')}</span>
+        <span className="pill pill-neutral">
+          {EXECUTION_LIVE
+            ? <><IconShield width={12} height={12} /> {t('farm.executionLive')}</>
+            : <><IconLock width={12} height={12} /> {t('farm.readOnly')}</>}
+        </span>
         <span className="farm-protocol-live" aria-hidden="true">
           <i />
-          <span className="faint">{t('farm.protocolMode')}</span>
+          <span className="faint">{EXECUTION_LIVE ? t('farm.protocolModeExec') : t('farm.protocolMode')}</span>
         </span>
       </div>
 
@@ -367,6 +386,13 @@ function ProtocolStatusCard({ protocol, t }) {
 
 function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, onShowDetails, t }) {
   const route = investRoute(pool);
+  /*
+   * «این استخر در برنامه اجرا می‌شود» — but only in a build that may actually
+   * offer it to whoever is looking. In a canary build the panel renders for the
+   * allowlisted wallet alone, so the badge stays off rather than promising the
+   * same thing to everybody.
+   */
+  const executable = Boolean(farmExecutionAdapterFor(pool)?.openToPublic);
   const economics = fbtFeeEngine.estimateNetYield({
     grossApy: pool.apy,
     protocolCostApy: 0, // the feed's depositor APY is already net of protocol-retained yield
@@ -389,6 +415,7 @@ function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, o
       </div>
 
       <div className="farm-card-badges">
+        {executable && <span className="pill pill-neutral farm-exec-badge" data-testid={`farm-exec-badge-${pool.id}`}>{t('farm.execBadge')}</span>}
         <RiskPill risk={pool.risk} t={t} />
         <span className="pill pill-neutral">{pool.chain}</span>
         <span className="pill pill-neutral">{pool.type === 'staking' ? t('farm.category.staking') : t('farm.category.lp')}</span>
@@ -446,6 +473,28 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
   const mean30 = research.apyMean30d ?? research.unusual?.mean ?? null;
   const updateTime = pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
   const isPair = pairTokens(pool).length > 1 || pool.ilRisk;
+  /*
+   * CAN THIS APP ACTUALLY TRANSACT THIS POOL?
+   * ---------------------------------------------------------------------------
+   * This card used to answer "no" for every row in the feed — six permanently
+   * disabled buttons and «تا وصل‌شدن آداپتور اجرایی تأییدشده، اجرا
+   * فقط‌خواندنی می‌ماند» — including the exact Aave v3 / Compound v3 / Morpho
+   * Blue / Lido rows whose adapters are wired, fork-probed and shipped. The
+   * notice was honest about 4 000 pools and false about the five we support,
+   * and the only place a supported pool could be executed was a different
+   * section at the bottom of the page.
+   *
+   * Both surfaces now read one table (components/Farm/FarmPositionHub.jsx), so
+   * a supported row gets its real panel here — supply, withdraw, revoke, the
+   * pre-sign simulation and the wallet confirmation, all in the adapter.
+   *
+   * `openToPublic` is required before anything is advertised: in a canary build
+   * the panel renders only for the allowlisted wallet, and a card that promises
+   * execution to everyone else would be the same lie in the other direction.
+   * Unsupported rows keep the analysis + protocol-site guidance they had.
+   */
+  const execution = farmExecutionAdapterFor(pool);
+  const ExecutionPanel = execution?.openToPublic ? execution.Panel : null;
 
   return (
     <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
@@ -492,7 +541,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
       <HorizonEarningsChart pool={pool} amount={amount} t={t} />
       <FeeEngineCard pool={pool} amount={amount} t={t} />
 
-      <p className="notice">{t('farm.analysisActivated')}</p>
+      <p className="notice">{ExecutionPanel ? t('farm.executionActivated') : t('farm.analysisActivated')}</p>
       <p className="faint">{t('farm.netIsAnalysis')}</p>
 
       {isPair ? (
@@ -525,13 +574,25 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
         {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
-        {['addLiquidity', 'removeLiquidity', 'stakeLp', 'unstakeLp', 'claim', 'compound'].map((action) => (
+        {/*
+          * A supported pool shows ITS adapter's buttons below, not this grid:
+          * six dead «ناموجود» buttons next to a working supply button is a
+          * screen arguing with itself. Every other pool keeps them, because
+          * "unavailable" is the true answer there and must stay visible rather
+          * than becoming an enabled button that does nothing.
+          */}
+        {!ExecutionPanel && ['addLiquidity', 'removeLiquidity', 'stakeLp', 'unstakeLp', 'claim', 'compound'].map((action) => (
           <button key={action} className="btn btn-ghost farm-btn" disabled title={t('farm.statusUnavailable')}>
             {t(`farm.action.${action}`)} · {t('farm.statusUnavailable')}
           </button>
         ))}
       </div>
-      {!wallet.isConnected && <p className="faint">{t('farm.readOnly')}</p>}
+      {ExecutionPanel && (
+        <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
+          <ExecutionPanel pool={pool} />
+        </div>
+      )}
+      {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
     </motion.section>
   );
 }
@@ -543,18 +604,27 @@ function PositionPanel({ wallet, t, navigate }) {
         <div><p className="section-label" style={{ margin: 0 }}>{t('farm.myFarms')}</p><p className="faint" style={{ margin: '4px 0 0' }}>{t('farm.positionsIntro')}</p></div>
         {!wallet.isConnected && <span className="pill pill-neutral">{t('farm.readOnly')}</span>}
       </div>
+      {/*
+       * The hub renders for EVERY visitor, not only after a wallet connects.
+       * It used to sit inside the connected branch, so even a public-open build
+       * — one where any wallet may supply — showed an empty section to the
+       * person who had not connected yet: exactly the person the rollout exists
+       * to reach («در فارم هنوز نمیاد برای همه»). This cannot resurrect a
+       * closed money path: each panel decides its own visibility from the build
+       * flags, the connected owner and its on-chain position, so in a
+       * capital-off build all five still render nothing and the section is
+       * empty the way it was.
+       */}
       {wallet.isConnected ? (
-        <>
-          <p className="faint" style={{ margin: '10px 0', fontSize: 11.8 }}>{t('farm.positionsDirect')}</p>
-          <FarmPositionHub />
-          <p className="notice">{t('farm.positionsUnavailable')}</p>
-        </>
+        <p className="faint" style={{ margin: '10px 0', fontSize: 11.8 }}>{t('farm.positionsDirect')}</p>
       ) : (
         <>
           <p className="notice">{t('farm.connectForPositions')}</p>
           <button className="btn btn-ghost" onClick={() => navigate('/wallet')}>{t('wallet.connect')}</button>
         </>
       )}
+      <FarmPositionHub />
+      <p className="notice">{t('farm.positionsUnavailable')}</p>
     </section>
   );
 }

@@ -1,3 +1,80 @@
+# Unreleased — Farm execution finally reaches every visitor («در فارم هنوز نمیاد برای همه»)
+
+**«در فارم هنوز نمیاد برای همه» — the pool card still said «تحلیل پروتکلی این
+استخر فعال است. تا وصل‌شدن آداپتور اجرایی تأییدشده، اجرا فقط‌خواندنی می‌ماند» with
+six «ناموجود» buttons under it.** The rollout had been declared public-open for all
+five protocols, the adapters were wired and fork-probed, and the screen still told
+every visitor it was read-only. Three separate things had to be true for that button
+to exist, and all three were false:
+
+- **The website build never received the rollout env.** `ci/build-both.sh` carried
+  the values as a literal array, so the APK builds were public-open while
+  `npm run build:full` — the command `vercel.json` actually runs — compiled every
+  `VITE_ENABLE_*` define to `false`. Verified by building both ways: with the env
+  the bundle contains `VITE_AAVE_BASE_SUPPLY_ALLOWLIST:"0xaf5CE154…24d6"`, with
+  `FARM_CAPITAL=off` the same key is `""`.
+- **The panels hid themselves from anyone without a wallet.** Each one answered
+  "should I render?" with `!supplyAllowed && !hasPosition && !knownHere`, and
+  `supplyAllowed` is `*AllowedFor(owner)`, false for an empty owner. In a build
+  open to EVERY wallet, the panel was invisible to the person who had not connected
+  yet — and `FarmPositionHub` is a stack of exactly those panels, which the page
+  rendered only inside its connected branch. Empty section, for everyone.
+- **The pool card never asked the adapter table.** `PoolDetails` hardcoded six
+  disabled buttons for all ~4 000 feed rows, including the five we can sign for.
+
+### What changed
+
+- **`ci/farm-rollout.env.sh` (new) — one copy of the money-path configuration.**
+  Sourced by `ci/build-both.sh` (APK/AAB) *and* by `build:full` (the website), which
+  now also runs `scripts/verify-farm-rollout.mjs` so the deploy log states the mode
+  the bundle carries. Every value is `${VAR:-default}`, so a dashboard override wins,
+  and `FARM_CAPITAL=off` closes the whole path without editing a file.
+- **`src/lib/farmRolloutMode.js` (new) — visibility, separated from permission.**
+  Five `*_OPEN_TO_PUBLIC` constants, each `ENABLED && PUBLIC`. They decide whether a
+  panel is ON THE PAGE; the sign buttons still read `*AllowedFor(owner)`, unchanged,
+  which still needs a connected owner. Both flags are required, so a canary build
+  shows nothing to a wallet outside its allowlist. It is its own module rather than a
+  block appended to `features.js` because three wiring audits read that file as
+  "everything after `xWithdrawAllowedFor`" to prove the exit path never reads a
+  supply flag — derived constants at the end land inside every one of those slices.
+- **All five panels render for every visitor in a public-open build**
+  (`AaveBase/AaveArb/Compound/Lido/MorphoBase…Panel.jsx`): the guard gained exactly
+  one term, `&& !*_OPEN_TO_PUBLIC`, and `Farm`'s position hub now mounts
+  unconditionally instead of only in the connected branch. A disconnected visitor
+  sees the card and «Connect a wallet on Base to supply or withdraw»; a capital-off
+  build renders nothing at all, exactly as before.
+- **`FarmPositionHub.jsx` is now the one table of "which pool can this app
+  transact?"** — `FARM_EXECUTION_ADAPTERS` (id, descriptor, the adapter's own strict
+  matcher, its panel, its `openToPublic`) with `farmExecutionAdapterFor(pool)`. The
+  hub renders from it and so does the pool card, so the two surfaces cannot disagree.
+  Morpho matches the exact market id, never "any Morpho market on Base".
+- **`Farm.jsx` offers the real adapter on a supported pool.** The analytics render
+  that pool's panel, drop the six placeholder buttons (a working supply button next
+  to six «ناموجود» ones is a screen arguing with itself), swap the read-only notice
+  for `farm.executionActivated`, and ask for a wallet (`farm.connectToExecute`)
+  instead of announcing read-only. Unsupported rows keep every placeholder — there,
+  "unavailable" is the truth. Cards carry an «اجرای درون‌برنامه‌ای» badge, and the
+  status header's permanent «🔒 حالت فقط‌خواندنی · تحلیل فقط‌خواندنی» badge is now
+  derived from the same table, so a public-open build stops introducing itself as
+  read-only while a capital-off build says exactly what it said before.
+- **Nothing was widened.** No cap, allowlist, simulation, receipt check or exit rule
+  moved; `*AllowedFor` and `*WithdrawAllowedFor` are byte-identical. The gate still
+  rejects every half-open combination.
+
+**Tests** — `test/farm-pool-execution.test.jsx` (default/capital-off: no badge, no
+panel, six dead buttons, header still read-only, hub still mounts for a disconnected
+visitor) and, under `test/vitest.public.config.mjs`,
+`test/farm-pool-execution-public.test.jsx` (badge + real panel + notice swapped +
+placeholders gone in en **and** fa; an unsupported pool in the same build still says
+unavailable) and `test/farm-panel-visibility-public.test.jsx` (each of the five real
+panels renders with no wallet connected and still hides its money button).
+`npm run test:farm` 249/249, `npm run test:farm:public` 12/12, wiring audit 2654 rows
+with 7 failures — all 7 pre-existing at `d6b4160` (Aave-Arb copy keys, three
+switch-prompt checks, Lido address/refusal-code checks); this change fixed four that
+were already red (the missing panel/hub CSS and three "all four panels are mounted"
+rows that still grepped for literal JSX the hub had replaced). First-paint bundle
+1276 KB in store mode, under the 1300 KB ratchet.
+
 # Unreleased — the wallet page stopped refreshing itself forever («نسخه جدید منتشر شد» loop)
 
 **«صفحه کیف پول قاطی زده؛ میزنه نسخه جدید منتشر شد، رفرش میشه، دوباره همین

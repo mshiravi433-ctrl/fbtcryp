@@ -28,6 +28,12 @@ export default defineConfig({
     __LIDO_STAKE_PUBLIC__: true
   },
   test: {
-    include: ['test/farm-public-mode-public.test.js']
+    include: [
+      'test/farm-public-mode-public.test.js',
+      // The UI half of the same rollout: what a public-open build shows on
+      // the Farm screen and in each panel. See the header of each file.
+      'test/farm-pool-execution-public.test.jsx',
+      'test/farm-panel-visibility-public.test.jsx'
+    ]
   }
 });
