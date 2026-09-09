@@ -77,6 +77,7 @@ try {
     let funding;
     try {
       const master = await usdc.masterMinter();
+      await rpc(url, 'anvil_setBalance', [master, '0xDE0B6B3A7640000']);
       await rpc(url, 'anvil_impersonateAccount', [master]);
       try {
         const data1 = usdc.interface.encodeFunctionData('configureMinter', [ACCOUNT, 1_000_000_000n]);

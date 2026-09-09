@@ -4,6 +4,7 @@ import { isAaveBaseUsdcPool } from '../src/lib/defi/aaveV3Base';
 import { isCompoundBaseUsdcPool } from '../src/lib/defi/compoundV3Base';
 import { isAaveArbUsdcPool } from '../src/lib/defi/aaveV3Arbitrum';
 import { isLidoPool } from '../src/lib/defi/lido';
+import { isMorphoBlueBaseMarket } from '../src/lib/defi/morphoBlueBase';
 
 describe('feed-independent Farm position hub', () => {
   it('pins only matcher descriptors and no feed-derived rates or positions', () => {
@@ -16,15 +17,17 @@ describe('feed-independent Farm position hub', () => {
   });
 
   it('routes every descriptor to exactly its supported direct adapter', () => {
-    const { aaveBase, compoundBase, aaveArbitrum, lido } = SUPPORTED_FARM_POSITION_POOLS;
+    const { aaveBase, compoundBase, aaveArbitrum, lido, morphoBase } = SUPPORTED_FARM_POSITION_POOLS;
     expect(isAaveBaseUsdcPool(aaveBase)).toBe(true);
     expect(isCompoundBaseUsdcPool(compoundBase)).toBe(true);
     expect(isAaveArbUsdcPool(aaveArbitrum)).toBe(true);
     expect(isLidoPool(lido)).toBe(true);
+    expect(isMorphoBlueBaseMarket(morphoBase)).toBe(true);
 
     expect(isCompoundBaseUsdcPool(aaveBase)).toBe(false);
     expect(isAaveBaseUsdcPool(compoundBase)).toBe(false);
     expect(isAaveBaseUsdcPool(aaveArbitrum)).toBe(false);
     expect(isLidoPool(aaveBase)).toBe(false);
+    expect(isMorphoBlueBaseMarket(aaveBase)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import AaveBaseUsdcPanel from './AaveBaseUsdcPanel';
 import CompoundBaseUsdcPanel from './CompoundBaseUsdcPanel';
 import AaveArbUsdcPanel from './AaveArbUsdcPanel';
 import LidoPanel from './LidoPanel';
+import MorphoBaseUsdcPanel from './MorphoBaseUsdcPanel';
 
 /**
  * Feed-independent descriptors for the adapters that already have an exit UI.
@@ -23,6 +24,11 @@ export const SUPPORTED_FARM_POSITION_POOLS = Object.freeze({
   }),
   lido: Object.freeze({
     project: 'lido', chain: 'Ethereum', symbol: 'STETH', exposure: 'single', ilRisk: false
+  }),
+  morphoBase: Object.freeze({
+    project: 'morpho-blue', chain: 'Base', symbol: 'USDC', exposure: 'single', ilRisk: false,
+    // Off-chain data identifier only — never a transaction target. The adapter pins marketId.
+    pool: '7d33d57d-36dc-414b-9538-22a223250468'
   })
 });
 
@@ -33,6 +39,7 @@ export default function FarmPositionHub() {
       <CompoundBaseUsdcPanel pool={SUPPORTED_FARM_POSITION_POOLS.compoundBase} />
       <AaveArbUsdcPanel pool={SUPPORTED_FARM_POSITION_POOLS.aaveArbitrum} />
       <LidoPanel pool={SUPPORTED_FARM_POSITION_POOLS.lido} />
+      <MorphoBaseUsdcPanel pool={SUPPORTED_FARM_POSITION_POOLS.morphoBase} />
     </div>
   );
 }

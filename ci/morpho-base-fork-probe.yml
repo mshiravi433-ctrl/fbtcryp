@@ -1,0 +1,95 @@
+# ============================================================================
+# MORPHO BLUE BASE · MAINNET FORK PROBE (MANUAL RUN)
+#
+# ONE-TIME SETUP (this file cannot be committed to .github/workflows by an
+# agent — GitHub rejects app tokens there, so it is placed by hand, like
+# ci/aave-base-fork-probe.yml):
+#
+#   1. Open the repo: github.com/mshiravi433-ctrl/fbtcryp
+#   2. Add file  .github/workflows/morpho-base-fork-probe.yml
+#      (typing / creates folders; commit straight to the branch you want)
+#   3. Actions tab → "Morpho Base fork probe" → Run workflow.
+#      Optional input rpc_url defaults to https://mainnet.base.org — any
+#      public Base RPC works if the default is rate-limited.
+#
+# WHAT IT DOES: installs Foundry on the runner, forks Base mainnet state
+# locally with anvil, and runs the REAL acceptance probe
+# (test/morpho-base-fork-probe.mjs --strict): pinned marketId
+# 0x9103c3b4e834476c9a62ea009ba2c884ee42e94e6e314a26f04d312434191836,
+# immutable MarketParams tuple (loan USDC 0x8335..., collateral cbBTC
+# 0xcbB7..., oracle 0x663B..., IRM 0x4641..., LLTV 86%), funding the fork
+# account via USDC masterMinter mint, exact approval + supply 5 USDC,
+# Supply event + position proof, max withdraw via shares, Withdraw event +
+# empty position proof, wrong-chain fail-closed and missing-event proof.
+# The full output is saved as the "morpho-base-fork-probe.log" artifact.
+#
+# SAFETY: nothing leaves the runner. anvil forks chain state locally; the
+# "transactions" move test USDC between forked accounts only. No secrets, no
+# deploy keys, no real funds. Public-repo Actions minutes are free.
+# ============================================================================
+name: Morpho Base fork probe
+on:
+  workflow_dispatch:
+    inputs:
+      rpc_url:
+        description: 'Base mainnet RPC URL to fork'
+        required: false
+        default: 'https://mainnet.base.org'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Foundry (anvil)
+        run: |
+          # anvil straight from the official GitHub release tarball — the same
+          # artifact foundryup installs, without depending on the third-party
+          # installer domain foundry.paradigm.xyz (which intermittently fails
+          # to serve the script, seen as exit 127 on `foundryup`).
+          set -euo pipefail
+          VER=v1.8.1
+          mkdir -p "$HOME/.foundry/bin"
+          curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/${VER}/foundry_${VER}_linux_amd64.tar.gz" -o /tmp/foundry.tar.gz
+          tar -xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          chmod +x "$HOME/.foundry/bin/anvil" "$HOME/.foundry/bin/cast" "$HOME/.foundry/bin/forge" "$HOME/.foundry/bin/chisel" 2>/dev/null || chmod +x "$HOME/.foundry/bin/anvil"
+          "$HOME/.foundry/bin/anvil" --version
+
+      - name: Lockfile platform guard (before npm ci)
+        # Same step ci/build-apk.sh runs first: ganache's shrinkwrapped lockfile
+        # pins macOS-only fsevents as a REQUIRED dependency, which makes `npm ci`
+        # die with EBADPLATFORM on every Linux runner. The guard flips that one
+        # entry to optional, in place, idempotently.
+        run: node ci/lock-platform-guard.mjs
+
+      - name: Install dependencies (ethers + vite, used by the probe)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run the Base mainnet fork probe (strict)
+        id: probe
+        env:
+          BASE_RPC_URL: ${{ inputs.rpc_url }}
+        run: |
+          export PATH="$HOME/.foundry/bin:$PATH"
+          set -o pipefail
+          npm run test:morpho-base-fork -- --strict 2>&1 | tee /tmp/morpho-base-fork-probe.log
+          echo "probe_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "### Morpho Base fork probe exit: ${{ steps.probe.outputs.probe_exit }}" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 60 /tmp/morpho-base-fork-probe.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: morpho-base-fork-probe.log
+          path: /tmp/morpho-base-fork-probe.log
+          if-no-files-found: error
