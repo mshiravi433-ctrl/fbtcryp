@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { ethers } from 'ethers';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel, typeLabel, reasonLabel, claimLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import {
-  InsIconFee, InsIconHourglass, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconCheck, InsIconInfo, InsIconExternal, InsIconLock, InsIconShield,
+  InsIconFee, InsIconHourglass, InsIconWallet, InsIconChevronEnd, InsIconCheck, InsIconInfo, InsIconExternal, InsIconLock, InsIconShield,
   INS_TYPE_ICONS, INS_TYPE_TONES
 } from './InsuranceIcons.jsx';
 
@@ -25,7 +27,9 @@ export default function InsuranceQuote() {
   useEffect(() => {
     insuranceApi.quoteById(quoteId)
       .then((res) => { if (!res.ok) { setErr(res.errors?.[0]?.code || 'QUOTE_UNAVAILABLE'); return; } setQuote(res.data.quote); setStage('ready'); })
-      .catch((e) => setErr(e.message || String(e)));
+      /* The heading below runs this through reasonLabel, so a code stays a
+         code and a sentence stays a sentence — one line either way. */
+      .catch((e) => setErr(insuranceError(e, t).text));
   }, [quoteId]);
 
   async function createIntent() {
@@ -40,7 +44,13 @@ export default function InsuranceQuote() {
       const res = await insuranceApi.purchaseIntent({ quoteId, walletAddress: wallet, idempotencyKey: `buy-${quoteId}-${Date.now()}` });
       setIntent(res.data || res); setStage('prepared');
       notify(t('insurance.quote.preparedToast'), 'info');
-    } catch (e) { setActErr(e.message || String(e)); notify(e.message || t('insurance.quote.prepareFailed'), 'error'); }
+    } catch (e) {
+      /* One line, named by cause — see ./insErrors.js. The raw envelope is
+         behind the alert's details toggle, never in the toast. */
+      const mapped = insuranceError(e, t);
+      setActErr(mapped);
+      notify(mapped.text, 'error');
+    }
   }
 
   const isLive = intent?.prepared?.sandbox === false || quote?.sandbox === false;
@@ -116,19 +126,31 @@ export default function InsuranceQuote() {
       }
 
       const res = await insuranceApi.activate({ coverageId: intent.coverageId, owner: wallet, txHash: finalHash, chainId: quote.chainId });
-      if (!res.ok) throw new Error(res.errors?.[0]?.detail || res.errors?.[0]?.code || 'ACTIVATION_FAILED');
+      if (!res.ok) {
+        const e0 = res.errors?.[0] || {};
+        /* keep the machine code on the Error so the mapper can translate it by
+           code instead of re-guessing from prose. */
+        const err = new Error(e0.detail || e0.code || 'ACTIVATION_FAILED');
+        err.code = e0.code || 'ACTIVATION_FAILED';
+        err.detail = res.errors;
+        throw err;
+      }
       setStage('done');
       notify(t('insurance.quote.activatedToast'), 'success');
     } catch (e) {
-      // Wallet providers return long technical RPC messages. Keep the user-facing
-      // error short and actionable, especially when the purchase balance is low.
-      const raw = String(e?.message || e || '');
-      const lowBalance = /insufficient|not enough|exceeds balance|funds/i.test(raw) || /INSUFFICIENT/i.test(e?.code || '');
-      const message = lowBalance
-        ? t('insurance.quote.insufficientBalance', { defaultValue: 'موجودی کافی نیست. لطفاً موجودی کیف پول و کارمزد شبکه را بررسی کنید.' })
-        : t('insurance.quote.activationFailed');
-      setActErr(message);
-      notify(message, 'error');
+      /* THE FIX, in one line: the balance case used to be guessed with a regex
+         over `e.message`, which MetaMask fills with «Internal JSON-RPC error.»
+         while the real reason sits in `e.data.data[<hash>].message` — so an
+         empty wallet got «Activation failed», and any provider that *does* put
+         the dump in `message` got three lines of JSON. Both paths now go through
+         insuranceError(), which digs for the reason and returns one sentence.
+         The «موجودی کافی نیست…» Persian literal that used to sit in
+         `defaultValue:` (a key that exists in no locale file) is gone with it:
+         hardcoded target text is not translation. */
+      const mapped = insuranceError(e, t);
+      setActErr(mapped);
+      /* A rejection is not a fault — say it quietly and briefly. */
+      notify(mapped.text, 'error');
       setStage('prepared');
     }
   }
@@ -255,7 +277,7 @@ export default function InsuranceQuote() {
           )}
         </div>
       )}
-      {actErr && <div className="ins-alert"><InsIconAlert /><span>{actErr}</span></div>}
+      {actErr ? <InsAlert error={actErr} /> : null}
     </div>
   );
 }

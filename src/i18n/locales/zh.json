@@ -1226,7 +1226,14 @@
     "footNote": "市场数据仅供参考，不构成财务建议。加密货币波动剧烈——只投入您能承受损失的资金。"
   },
   "contact": {
-    "title": "联系我们"
+    "title": "联系我们",
+    "social": {
+      "x": "X",
+      "linkedin": "领英",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "电子邮件"
+    }
   },
   "lab2": {
     "screens": {

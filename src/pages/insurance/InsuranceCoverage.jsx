@@ -3,8 +3,10 @@ import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom
 import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel, typeLabel, settlementLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import {
-  InsIconCoverage, InsIconShield, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconInfo, InsIconRetry, InsIconClaim, InsIconLock,
+  InsIconCoverage, InsIconShield, InsIconWallet, InsIconChevronEnd, InsIconInfo, InsIconRetry, InsIconClaim, InsIconLock,
   INS_TYPE_ICONS, INS_TYPE_TONES
 } from './InsuranceIcons.jsx';
 
@@ -16,7 +18,7 @@ export default function InsuranceCoverageList() {
   const nav = useNavigate();
   useEffect(() => {
     if (!wallet) return;
-    insuranceApi.coverage(wallet).then(setData).catch((e) => setErr(e.message || String(e)));
+    insuranceApi.coverage(wallet).then(setData).catch((e) => setErr(insuranceError(e, t)));
   }, [wallet]);
 
   if (!wallet) return (
@@ -27,7 +29,7 @@ export default function InsuranceCoverageList() {
       <div className="ins-state-actions"><Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')} <InsIconChevronEnd /></Link></div>
     </div>
   );
-  if (err) return <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>;
+  if (err) return <InsAlert error={err} />;
 
   const active = (data?.coverages || []).filter((c) => c.status === 'ACTIVE');
   const total = data?.summary?.totalProtectedUsd || '0';
@@ -82,14 +84,14 @@ export function InsuranceCoverageDetail() {
 
   const load = () => {
     if (!id) return;
-    insuranceApi.coverageById(id, wallet).then((r) => setCov(r.coverage)).catch((e) => setErr(e.message || String(e)));
+    insuranceApi.coverageById(id, wallet).then((r) => setCov(r.coverage)).catch((e) => setErr(insuranceError(e, t)));
   };
   useEffect(load, [id, wallet]);
 
   async function renew() {
     setBusy('renew');
     try { await insuranceApi.renew({ coverageId: id, walletAddress: wallet, durationDays: 30 }); load(); notify(t('insurance.coverage.renewed'), 'success'); }
-    catch (e) { notify(e.message || t('insurance.coverage.renewFailed'), 'error'); }
+    catch (e) { const m = insuranceError(e, t); setErr(m); notify(m.text || t('insurance.coverage.renewFailed'), 'error'); }
     setBusy('');
   }
   async function cancel() {
@@ -97,11 +99,11 @@ export function InsuranceCoverageDetail() {
     if (!ok2) return;
     setBusy('cancel');
     try { await insuranceApi.cancel({ coverageId: id, walletAddress: wallet }); load(); notify(t('insurance.coverage.cancelled'), 'success'); }
-    catch (e) { notify(e.message || t('insurance.coverage.cancelFailed'), 'error'); }
+    catch (e) { const m = insuranceError(e, t); setErr(m); notify(m.text || t('insurance.coverage.cancelFailed'), 'error'); }
     setBusy('');
   }
 
-  if (err) return <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>;
+  if (err) return <InsAlert error={err} />;
   if (!cov) return <div className="ins-skel" aria-busy="true">{t('insurance.quote.loading')}</div>;
 
   const Glyph = INS_TYPE_ICONS[cov.protectionType] || InsIconShield;

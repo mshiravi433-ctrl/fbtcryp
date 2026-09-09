@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import AssetIcon from './AssetIcon';
+import CurrencySelect from './CurrencySelect';
 import { riseIn } from './PageTransition';
 import SegIndicator from './SegIndicator';
 import WalletWatchReport from './WalletWatchReport';
@@ -433,6 +434,13 @@ export default function BuySellPanel({ initialOrderId = null }) {
      the Next button exactly like «100» does. */
   const amountChanged = (setter) => (event) => { setter(normalizeAmountInput(event.target.value)); resetQuote(); };
   const walletChanged = (event) => { setWalletAddress(normalizeWalletInput(event.target.value)); resetQuote(); };
+  /* The currency is part of the quoted amount, so a change must invalidate the
+     quote exactly like changing the asset does — a stale $ quote under a €
+     label is how a ramp shows someone a number they will never pay. */
+  const chooseCurrency = (nextCurrency) => {
+    setFiatCurrency(nextCurrency);
+    resetQuote();
+  };
   const chooseAsset = (nextAsset) => {
     const rows = catalog.filter((row) => row.asset === nextAsset);
     setAsset(nextAsset);
@@ -629,7 +637,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
                         />
                         {sell
                           ? <span className="bsw-amount-unit">{asset}</span>
-                          : <select value={fiatCurrency} onChange={inputChanged(setFiatCurrency)} aria-label={t('buySell.wizard.currencyLabel')}>{FIAT_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}</select>}
+                          : <CurrencySelect value={fiatCurrency} onChange={chooseCurrency} codes={FIAT_CURRENCIES} testId="buy-sell-currency" />}
                       </div>
                       {!sell && (
                         <div className="bsw-chips" role="group" aria-label={t('buySell.wizard.quickAmounts')}>
@@ -640,7 +648,12 @@ export default function BuySellPanel({ initialOrderId = null }) {
                           ))}
                         </div>
                       )}
-                      {sell && <label className="ord-field bsw-payout"><span>{t('buySell.payoutCurrency')}</span><select value={fiatCurrency} onChange={inputChanged(setFiatCurrency)}>{FIAT_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}</select></label>}
+                      {sell && (
+                        <div className="ord-field bsw-payout">
+                          <span>{t('buySell.payoutCurrency')}</span>
+                          <CurrencySelect value={fiatCurrency} onChange={chooseCurrency} codes={FIAT_CURRENCIES} titleKey="buySell.wizard.currencySheet" testId="buy-sell-payout-currency" />
+                        </div>
+                      )}
                       <p className="bsw-hint">{sell ? t('buySell.wizard.amountHintSell') : t('buySell.wizard.amountHintBuy')}</p>
                     </motion.div>
                   )}
