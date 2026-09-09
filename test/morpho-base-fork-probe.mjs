@@ -11,6 +11,14 @@ const RPC = EXPLICIT_RPC || 'https://mainnet.base.org';
 const STRICT = process.argv.includes('--strict');
 const KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+/*
+ * The probe prints what it is running, because a fork probe that fails on a
+ * stale checkout looks exactly like a protocol refusal: same pin, same revert.
+ */
+const PROBE_REVISION = 'morpho-supply-selector-2026-09-09';
+const gitSha = (() => {
+  try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; }
+})();
 const rows = [];
 const t = (name, ok, detail = '') => {
   rows.push({ name, ok: Boolean(ok), detail });
@@ -46,6 +54,7 @@ async function rpc(url, method, params) {
 let anvil = null;
 try {
   rule('Morpho Blue · Base · USDC loan / cbBTC collateral');
+  console.log(`probe revision ${PROBE_REVISION} @ ${gitSha} · rpc ${RPC}`);
   if (STRICT && !EXPLICIT_RPC) {
     t('BASE_RPC_URL provided (--strict)', false, 'missing; strict evidence requires an explicit read-only fork RPC');
   } else if (!haveAnvil()) {
@@ -62,6 +71,13 @@ try {
     execSync('npx vite build -c test/vite.morphofork.mjs --logLevel error', { stdio: 'ignore' });
     const adapter = await import('./.out/morphofork/morpho-base-fork-adapter.js');
     const { MORPHO_BLUE_BASE } = adapter;
+    t('the build under test carries the Morpho Blue action ABI',
+      typeof adapter.encodeSupplyCalldata === 'function'
+      && adapter.MORPHO_ACTION_SELECTORS?.supply === '0xa99aad89'
+      && adapter.MORPHO_ACTION_SELECTORS?.withdraw === '0x5c2bea49',
+      adapter.MORPHO_ACTION_SELECTORS
+        ? `supply ${adapter.MORPHO_ACTION_SELECTORS.supply}, withdraw ${adapter.MORPHO_ACTION_SELECTORS.withdraw}`
+        : 'MORPHO_ACTION_SELECTORS missing: this checkout predates the supply-selector fix');
     const provider = new JsonRpcProvider(url, 8453, { staticNetwork: true });
     const signer = new Wallet(KEY, provider);
     await rpc(url, 'anvil_setBalance', [ACCOUNT, '0xDE0B6B3A7640000']);
@@ -295,8 +311,14 @@ try {
     }
   }
 } catch (err) {
-  const expected = `${err?.code ?? err?.name}: ${err?.message}`;
-  t('probe completed without an unexpected error', false, /CALL_EXCEPTION/.test(expected) ? `${expected} — ${revertHint(err)}` : expected);
+  const message = String(err?.message ?? err ?? '');
+  const expected = `${err?.code ?? err?.name}: ${message}`;
+  const hints = [];
+  if (/CALL_EXCEPTION/.test(expected)) hints.push(revertHint(err));
+  if (/429|rate limit|too many requests|timeout|ETIMEDOUT|ECONNRESET|fetch failed|bad response/i.test(message)) {
+    hints.push(`the fork could not read state — public RPC throttling; rerun with BASE_RPC_URL pointed at your own Base node (revision ${PROBE_REVISION} @ ${gitSha})`);
+  }
+  t('probe completed without an unexpected error', false, `${expected}${hints.length ? ` — ${hints.join(' — ')}` : ''}`);
 } finally {
   if (anvil) { anvil.kill('SIGKILL'); await new Promise((r) => setTimeout(r, 200)); }
 }
