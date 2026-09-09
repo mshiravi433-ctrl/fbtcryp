@@ -29,14 +29,19 @@ const STYLES = `
   .aig-chip { flex:0 0 auto; font-size:var(--fs-xs); font-weight:700; color:var(--rgb-2); background:color-mix(in srgb,var(--rgb-2) 13%,transparent); border:1px solid color-mix(in srgb,var(--rgb-2) 28%,transparent); padding:5px 9px; border-radius:999px; white-space:nowrap; }
   .aig-chip.warn { color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 12%,transparent); }
   .aig-chip.bad { color:var(--down); background:color-mix(in srgb,var(--down) 12%,transparent); }
-  .aig-tabs { display:flex; gap:8px; margin:0 0 12px; padding:0; max-width:100%; box-sizing:border-box; }
-  .aig-tab { flex:1 1 0; min-width:0; min-height:58px; padding:8px 6px; border-radius:14px; font:inherit; font-size:11px; font-weight:700; line-height:1.3; color:var(--text-2); background:var(--bg-panel); border:1px solid var(--line); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; text-align:center; overflow-wrap:anywhere; transition:.2s ease; }
-  .aig-tab-icon { width:22px; height:22px; display:grid; place-items:center; flex:0 0 22px; }
+  .aig-tabs { display:flex; gap:8px; margin:0 0 16px; padding:6px; max-width:100%; box-sizing:border-box; background:color-mix(in srgb, var(--bg-panel) 80%, transparent); border-radius:18px; border:1px solid color-mix(in srgb, var(--line) 50%, transparent); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .aig-tab { flex:1 1 0; min-width:0; min-height:64px; padding:8px; border-radius:12px; font:inherit; font-size:11px; font-weight:700; line-height:1.4; color:var(--text-3); background:transparent; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; overflow-wrap:anywhere; transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  .aig-tab:hover { color:var(--text-2); background:color-mix(in srgb, var(--bg-raised) 50%, transparent); }
+  .aig-tab-icon { width:24px; height:24px; display:grid; place-items:center; flex:0 0 24px; transition:transform 0.3s ease; }
   .aig-tab-icon svg { width:100%; height:100%; }
   .aig-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  .aig-tab.active { color:var(--text-1); background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 13%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 15%,var(--bg-panel-solid))); border-color:color-mix(in srgb,var(--rgb-2) 45%,var(--line)); box-shadow:inset 0 -2px var(--rgb-1),0 6px 18px color-mix(in srgb,var(--rgb-2) 13%,transparent); transform:translateY(-1px); }
-  .aig-refresh { width:100%; min-height:46px; margin-bottom:var(--sp-4); color:var(--text-1); background:var(--bg-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); font:inherit; font-size:var(--fs-sm); font-weight:700; cursor:pointer; }
+  .aig-tab.active { color:var(--text-1); background:linear-gradient(135deg,color-mix(in srgb,var(--rgb-1) 15%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 18%,var(--bg-panel-solid))); border:1px solid color-mix(in srgb,var(--rgb-2) 40%,transparent); box-shadow:0 6px 16px color-mix(in srgb,var(--rgb-2) 15%,transparent), inset 0 1px 1px rgba(255,255,255,0.05); transform:translateY(-2px); }
+  .aig-tab.active .aig-tab-icon { transform:scale(1.1); color:var(--rgb-2); }
+  .aig-refresh { width:100%; min-height:48px; margin-bottom:var(--sp-4); color:var(--text-1); background:linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-panel) 100%); border:1px solid var(--line); border-radius:14px; font:inherit; font-size:var(--fs-sm); font-weight:700; cursor:pointer; transition:all 0.2s ease; box-shadow:0 2px 8px rgba(0,0,0,0.04); display:flex; align-items:center; justify-content:center; gap:8px; }
+  .aig-refresh:hover:not(:disabled) { background:linear-gradient(180deg, color-mix(in srgb, var(--bg-raised) 90%, var(--rgb-2)) 0%, var(--bg-panel) 100%); border-color:var(--rgb-2); transform:translateY(-1px); box-shadow:0 4px 12px color-mix(in srgb,var(--rgb-2) 15%,transparent); }
+  .aig-refresh:active:not(:disabled) { transform:translateY(0); box-shadow:none; }
   .aig-refresh:disabled { opacity:.6; cursor:wait; }
+  @keyframes spin { 100% { transform:rotate(360deg); } }
   .aig-connection { display:flex; align-items:center; gap:8px; margin-bottom:var(--sp-3); padding:9px 12px; border:1px solid color-mix(in srgb,var(--down) 35%,var(--line)); border-radius:var(--radius-sm); color:var(--down); background:color-mix(in srgb,var(--down) 8%,var(--bg-panel-solid)); font-size:var(--fs-xs); }
   .aig-section { margin-bottom:var(--sp-4); background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--sp-4); box-shadow:var(--glass-shadow); }
   .aig-section-title { font-size:var(--fs-sm); font-weight:800; color:var(--text-1); margin-bottom:var(--sp-3); display:flex; align-items:center; gap:var(--sp-2); }
@@ -105,12 +110,12 @@ const TABS = [
 
 function TabIcon({ name }) {
   const paths = {
-    briefing: <><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M8.5 8.5h6M8.5 12h6M8.5 15.5h4"/><path d="M18 8h1a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-1"/></>,
-    domains: <><circle cx="12" cy="12" r="8.5"/><path d="M3.8 12h16.4M12 3.5c2.2 2.3 3.3 5.1 3.3 8.5S14.2 18.2 12 20.5C9.8 18.2 8.7 15.4 8.7 12S9.8 5.8 12 3.5z"/></>,
-    cross: <><path d="M4 7h11.5a3.5 3.5 0 0 1 3.5 3.5V20"/><path d="m16 17 3 3 3-3"/><path d="M4 17h5.5a3.5 3.5 0 0 0 3.5-3.5V4"/><path d="m10 7 3-3 3 3"/></>,
-    providers: <><path d="M9 4v5M15 4v5M7 9h10v2a5 5 0 0 1-5 5v4"/><path d="M9 20h6"/></>
+    briefing: <><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M2 19h6"/><path d="M12 11h6"/><path d="M12 15h4"/></>,
+    domains: <><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></>,
+    cross: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
+    providers: <><path d="M19 11v-2a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/><path d="M2 15h20"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 7v4"/><path d="M8 7v4"/><path d="M16 7v4"/></>
   };
-  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 const DOMAIN_META = {
@@ -319,7 +324,7 @@ function AiGlobalIntelligenceInner() {
     try {
       if (refresh) setRefreshing(true);
       setConnectionError(null);
-      const qs = refresh ? '?refresh=1' : '';
+      const qs = refresh ? `?refresh=1&lang=${language}` : `?lang=${language}`;
       const [intel, brief, crossAsset, providerState] = await Promise.all([
         readJson(`/api/ai/global/intelligence${qs}`),
         readJson(`/api/ai/global/briefing${qs}`),
@@ -421,14 +426,17 @@ function AiGlobalIntelligenceInner() {
       <div className="aig-tabs">
         {TABS.map((t) => (
           <button key={t.id} type="button" className={`aig-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-            <span className="aig-sr">{t.marker}</span><span className="aig-tab-icon"><TabIcon name={t.icon} /></span><span>{t.id === 'briefing' ? L('بریفینگ', 'Briefing')
-              : t.id === 'domains' ? L('دامنه‌ها', 'Domains')
-              : t.id === 'cross' ? L('کراس-است', 'Cross-asset')
-              : L('ارائه‌دهنده‌ها', 'Providers')}</span>
+            <span className="aig-sr">{t.marker}</span><span className="aig-tab-icon"><TabIcon name={t.icon} /></span><span>{t.id === 'briefing' ? L('گزارش وضعیت', 'Briefing')
+              : t.id === 'domains' ? L('حوزه‌های داده', 'Domains')
+              : t.id === 'cross' ? L('اقتصاد و دارایی', 'Cross-asset')
+              : L('ارائه‌دهندگان', 'Providers')}</span>
           </button>
         ))}
       </div>
       <button type="button" className="aig-refresh" onClick={() => load(true)} disabled={refreshing}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
+          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
         {refreshing ? L('در حال دریافت داده…', 'Reading live data…') : L('به‌روزرسانی داده‌های زنده', 'Refresh live data')}
       </button>
       {connectionError ? (
@@ -442,7 +450,8 @@ function AiGlobalIntelligenceInner() {
       {tab === 'briefing' && (
         <div className="aig-section">
           <div className="aig-section-title">
-            📰 {L('بریفینگ فعال هوش مصنوعی', 'Proactive AI briefing')}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--rgb-2)'}}><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M2 19h6"/><path d="M12 11h6"/><path d="M12 15h4"/></svg>
+            {L('بریفینگ فعال هوش مصنوعی', 'Proactive AI briefing')}
             {data.briefing?.at ? <span className="aig-item-kind">{timeAgo(data.briefing.at, isRTL)}</span> : null}
           </div>
           {briefingItems.length ? briefingItems.map((item) => (
@@ -493,7 +502,10 @@ function AiGlobalIntelligenceInner() {
       {/* ── DOMAINS — the nine intelligence domains ────────────────────── */}
       {tab === 'domains' && (
         <div className="aig-section">
-          <div className="aig-section-title">🌍 {L('دامنه‌های هوش جهانی', 'Global intelligence domains')}</div>
+          <div className="aig-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--rgb-1)'}}><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            {L('حوزه‌های داده هوش جهانی', 'Global intelligence domains')}
+          </div>
           {domains ? (
             <div className="aig-grid">
               {Object.keys(DOMAIN_META).map((key) => {
@@ -530,7 +542,10 @@ function AiGlobalIntelligenceInner() {
       {/* ── CROSS-ASSET — regime, breadth, divergences ─────────────────── */}
       {tab === 'cross' && (
         <div className="aig-section">
-          <div className="aig-section-title">🔀 {L('تحلیل کراس-است', 'Cross-asset intelligence')}</div>
+          <div className="aig-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--up)'}}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+            {L('تحلیل اقتصاد و دارایی‌ها', 'Cross-asset intelligence')}
+          </div>
           {cross && cross.status !== 'UNAVAILABLE' ? (
             <>
               <div className={`aig-regime ${regimeClass}`}>
@@ -596,14 +611,14 @@ function AiGlobalIntelligenceInner() {
                      are data, never an instruction. ─────────────────────── */}
               {cross.narrative?.[isPersian ? 'fa' : 'en'] ? (
                 <div className="aig-narrative">
-                  <div className="aig-narrative-title">🧠 {L('تحلیل جامع', 'Comprehensive analysis')}</div>
+                  <div className="aig-narrative-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-3)"}}><path d="M2 10a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10Z"/><path d="M12 2v4"/><path d="M8 2v4"/><path d="M16 2v4"/></svg> {L('تحلیل سیستمی', 'System analysis')}</div>
                   <div className="aig-narrative-text">{cross.narrative[isPersian ? 'fa' : 'en']}</div>
                 </div>
               ) : null}
               {cross.commentary?.status === 'OK' && cross.commentary.text ? (
                 <div className="aig-narrative">
                   <div className="aig-narrative-title">
-                    ✨ {L('تحلیل جامع با هوش مصنوعی', 'AI comprehensive analysis')}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-2)"}}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> {L('تحلیل پیشرفته با هوش مصنوعی', 'Advanced AI synthesis')}
                     <span className="aig-commentary-provider">{cross.commentary.providerName || cross.commentary.provider || 'AI'}</span>
                   </div>
                   <div className="aig-narrative-text">{cross.commentary.text}</div>
@@ -621,7 +636,7 @@ function AiGlobalIntelligenceInner() {
                      crude/equity/rates/curve) with 1d + 7d changes ─────── */}
               {cross.macro?.indicators?.length ? (
                 <>
-                  <div className="aig-section-title" style={{ marginTop: 10, marginBottom: 6 }}>🏛️ {L('نشانگرهای کلان (۲۴س و ۷روز)', 'Macro indicators (1d / 7d)')}</div>
+                  <div className="aig-section-title" style={{ marginTop: 10, marginBottom: 6 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-5)"}}><path d="M2 22h20"/><path d="M4 22V10"/><path d="M8 22V10"/><path d="M12 22V10"/><path d="M16 22V10"/><path d="M20 22V10"/><path d="M2 10l10-8 10 8"/></svg> {L('شاخص‌های اقتصاد کلان (۲۴س و ۷روز)', 'Macro indicators (1d / 7d)')}</div>
                   <div className="aig-grid">
                     {cross.macro.indicators.map((q) => (
                       <div key={q.symbol} className="aig-card">
@@ -654,7 +669,7 @@ function AiGlobalIntelligenceInner() {
               ) : null}
               {cross.divergences?.length ? (
                 <div style={{ marginTop: 10 }}>
-                  <div className="aig-section-title" style={{ marginBottom: 6 }}>↔️ {L('واگرایی‌ها', 'Divergences')}</div>
+                  <div className="aig-section-title" style={{ marginBottom: 6 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-1)"}}><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> {L('واگرایی‌های بازار', 'Market divergences')}</div>
                   {cross.divergences.map((d, i) => (
                     <div key={i} className="aig-item-detail" style={{ marginBottom: 4 }}>
                       {mapLabel(AIG_CLASS, d.classes[0], isPersian) || d.classes[0]} {d.avgChangePct[d.classes[0]]}% × {mapLabel(AIG_CLASS, d.classes[1], isPersian) || d.classes[1]} {d.avgChangePct[d.classes[1]]}% ({d.gapPct}pp)
@@ -678,7 +693,7 @@ function AiGlobalIntelligenceInner() {
                 : L('تحلیل کراس-است هنوز محاسبه نشده.', 'Cross-asset analysis has not been computed yet.')}
               {cross?.narrative?.[isPersian ? 'fa' : 'en'] ? (
                 <div className="aig-narrative" style={{ marginTop: 12, textAlign: 'start' }}>
-                  <div className="aig-narrative-title">🧠 {L('تحلیل جامع', 'Comprehensive analysis')}</div>
+                  <div className="aig-narrative-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-3)"}}><path d="M2 10a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10Z"/><path d="M12 2v4"/><path d="M8 2v4"/><path d="M16 2v4"/></svg> {L('تحلیل سیستمی', 'System analysis')}</div>
                   <div className="aig-narrative-text">{cross.narrative[isPersian ? 'fa' : 'en']}</div>
                 </div>
               ) : null}
@@ -690,7 +705,7 @@ function AiGlobalIntelligenceInner() {
       {/* ── PROVIDERS — the five readiness lights per domain ───────────── */}
       {tab === 'providers' && (
         <div className="aig-section">
-          <div className="aig-section-title">🔌 {L('چراغ‌های آمادگی ارائه‌دهنده', 'Provider readiness lights')}</div>
+          <div className="aig-section-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-4)"}}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> {L('وضعیت پایداری منابع داده', 'Data provider status')}</div>
           {data.providers ? (
             <>
               {Object.entries(data.providers).map(([name, p]) => (
