@@ -47,6 +47,10 @@ on:
         description: 'Blocks to scan for a finalized/unclaimed request (getLogs window)'
         required: false
         default: '100000'
+      anvil_start_timeout:
+        description: 'Milliseconds to wait for anvil to boot its fork (raise for a slow/flaky archive RPC)'
+        required: false
+        default: '180000'
 
 jobs:
   probe:
@@ -87,6 +91,7 @@ jobs:
         env:
           ETHEREUM_RPC_URL: ${{ inputs.rpc_url }}
           LIDO_LOG_WINDOW: ${{ inputs.log_window }}
+          ANVIL_START_TIMEOUT_MS: ${{ inputs.anvil_start_timeout }}
         run: |
           export PATH="$HOME/.foundry/bin:$PATH"
           set -o pipefail

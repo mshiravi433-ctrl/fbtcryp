@@ -40,12 +40,23 @@ async function rpc(url, method, params) {
   if (body.error) throw new Error(`${method}: ${body.error.message}`);
   return body.result;
 }
+// Anvil fetches the fork state at boot, so a slow/flaky public archive RPC can
+// delay the JSON-RPC endpoint well past a fixed 30s window. Let the operator
+// budget more time (ANVIL_START_TIMEOUT_MS, default 180s) and, on timeout,
+// surface the last fork error so the cause (RPC unreachable vs. anvil boot) is
+// explicit instead of a bare "did not start".
+const ANVIL_START_TIMEOUT_MS = Number(process.env.ANVIL_START_TIMEOUT_MS || 180_000);
 const waitForRpc = async (url) => {
-  for (let i = 0; i < 60; i += 1) {
-    try { if (await rpc(url, 'eth_blockNumber', [])) return true; } catch { /* booting */ }
+  const deadline = Date.now() + ANVIL_START_TIMEOUT_MS;
+  let lastErr = null;
+  while (Date.now() < deadline) {
+    try { if (await rpc(url, 'eth_blockNumber', [])) return true; } catch (e) { lastErr = e; /* booting */ }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return false;
+  throw new Error(
+    `Anvil did not become ready within ${Math.round(ANVIL_START_TIMEOUT_MS / 1000)}s` +
+    (lastErr ? `; last fork error: ${lastErr?.message ?? String(lastErr)}` : '')
+  );
 };
 const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, beforePosition, requestId = null, nonce }) => {
   const tx = await signer.sendTransaction({ to: step.to, data: step.data, value: step.value ?? 0n, nonce });
@@ -100,7 +111,7 @@ try {
       '--silent'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
     const url = `http://127.0.0.1:${PORT}`;
-    if (!await waitForRpc(url)) throw new Error('Anvil did not start within 30 seconds');
+    await waitForRpc(url); // throws a descriptive error if anvil never becomes ready
     t('Ethereum mainnet fork is serving', true, url);
 
     execSync('npx vite build -c test/vite.lidofork.mjs --logLevel error', { stdio: 'ignore' });
