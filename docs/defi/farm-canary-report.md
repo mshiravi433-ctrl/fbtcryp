@@ -29,8 +29,9 @@ The staged rollout gate is `scripts/farm-rollout-policy.mjs`, invoked by
 
 A `FARM_STRICT_FORK_EVIDENCE=true` on its own is an operator attestation. The
 `farm-fork-evidence/<id>.json` anchors in this repo (Aave Base / Aave Arbitrum /
-Compound Base) pin the raw probe-log `sha256` so the evidence is reproducible and
-auditable in a fresh CI/Vercel checkout. **No record exists for Lido or Morpho yet.**
+Compound Base / **Lido**) pin the raw probe-log `sha256` so the evidence is
+reproducible and auditable in a fresh CI/Vercel checkout. **No record exists for
+Morpho yet.**
 
 ---
 
@@ -41,7 +42,7 @@ auditable in a fresh CI/Vercel checkout. **No record exists for Lido or Morpho y
 | Base | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | 100 / 500 | **36/36 PASS** (`aave-base.json`) | ✅ canary-ready |
 | Arbitrum One | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | 100 / 500 | **37/37 PASS** (`aave-arbitrum.json`) | ✅ canary-ready |
 | Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | 100 / 500 | **46/46 PASS** (`compound-base.json`) | ✅ canary-ready |
-| Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | 1 ETH / 10 ETH (proposed) | **NO PASS yet** | ⛔ must stay OFF until PASS |
+| Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | 1 ETH / 10 ETH | **31/31 PASS** (`lido.json`) | ✅ canary-ready |
 | Base | native USDC / cbBTC (ERC-4626/earner) | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | — | **NO PASS yet** | ⛔ must stay OFF until PASS |
 
 Capital-off (the default, no money-in flag) is always allowed.
@@ -58,7 +59,7 @@ wallets. Primary operator fee-recipient:
 ```
 
 Additional per-chain fee recipients from the repo are acceptable **only if** they
-are real operator-owned `0x` addresses. The allowlist is non-empty in all three
+are real operator-owned `0x` addresses. The allowlist is non-empty in all four
 canary-ready protocols (only the fee wallet above).
 
 ---
@@ -108,97 +109,52 @@ count, and the raw probe-log `sha256` (the fingerprint). They are produced by
 | `aave-base` | PASS | 36/36 | `97abf4ad49c016a4ff719eb797b6f9f4dc52b192a5d44a9d3e50f524f4b32fc3` |
 | `aave-arbitrum` | PASS | 37/37 | `29d686b8fc0b707a12d06e1de6d702f0eac43369f7dd6ae4939434d591a4bd08` |
 | `compound-base` | PASS | 46/46 | `e43e1301469cbeeccaa8c1787713259b27f7777daa2a9e0a374151a6c89f8eae` |
+| `lido` | PASS | 31/31 | `3365c0a8c6877cd19709a09fcfc1408634a7a2c46d8739780d0c82354d4122b9` |
 
-`farm-fork-evidence/*.json` are git-ignored by default; only these three committed
+`farm-fork-evidence/*.json` are git-ignored by default; only these four committed
 anchors are un-ignored (see `.gitignore`) so transient re-earned records don't
 clutter the repo.
 
 ---
 
-## 6. Lido — the running blocker
+## 6. Lido — now evidence-backed
 
-Lido's `--strict` mainnet fork probe (`test/lido-mainnet-fork-probe.mjs`) currently
-**fails on the unwrap step**, so there is **no `farm-fork-evidence/lido.json`**.
+Lido's `--strict` mainnet fork probe (`test/lido-mainnet-fork-probe.mjs`) **now passes
+31/31**, so `farm-fork-evidence/lido.json` is recorded (sha256
+`3365c0a8c6877cd19709a09fcfc1408634a7a2c46d8739780d0c82354d4122b9`).
 
-**Root cause (confirmed):** the probe wraps `0.005` stETH, then calls
-`buildUnwrapPlan({ amountWstETH: wrapAmount })` where `wrapAmount` is `"0.005"` —
-i.e. it passes the **stETH** amount as if it were **wstETH**. stETH→wstETH is not
-1:1 (`0.005` stETH produced ≈ `0.0040207` wstETH), so `buildUnwrapPlan` correctly
-returns `steps: []` with `LIDO_INSUFFICIENT_WSTETH`, and the probe crashes
-dereferencing `steps[0].to`.
+Getting here required several fixes, all merged to `main`:
+- **Unwrap real wstETH** (PR #258, `cf04767`): the probe originally passed the stETH
+  input as `amountWstETH`, but stETH→wstETH isn't 1:1 (`0.005` stETH ≈ `0.0040207`
+  wstETH), so `buildUnwrapPlan` returned `steps: []` and the probe crashed. It now uses
+  `formatEther(afterWrap.wstETHWei)` / `afterWrap.wstETHWei`.
+- **Adaptive `eth_getLogs` chunking** (PR #264, `00aaefb`): the chosen fork RPC caps
+  the `eth_getLogs` range (e.g. `blastapi` caps at 10 blocks). The probe now reads the
+  RPC's suggested window from a range error and shrinks the chunk, retrying the same
+  start block so no logs are skipped. Honors `LIDO_LOG_CHUNK`.
+- **RPC auto-failover** (PR #263, `0dfe356`): tries the operator's explicit `rpc_url`
+  first, then a set of token-free archive endpoints, and picks the first reachable one.
+- **Anvil boot budget** (PR #262, `61f4926`): waits up to `ANVIL_START_TIMEOUT_MS`
+  (default 180s) and surfaces the last fork error.
+- **Token-free archive RPC** requirement documented in `ci/lido-mainnet-fork-probe.yml`
+  (`publicnode` is excluded because it 403s on archive `getLogs`).
 
-**Fix (PR #258, merged to `main` as `cf04767`):** unwrap the **real** wstETH balance held after the wrap:
-```js
-const unwrapAmount = formatEther(afterWrap.wstETHWei);
-const unwrapWei   = afterWrap.wstETHWei;
-const unwrapPlan  = await adapter.buildUnwrapPlan({
-  provider, owner: ACCOUNT, amountWstETH: unwrapAmount
-});
-```
-Because `afterWrap.wstETHWei` is the actual wstETH the account holds, the plan is
-non-empty and the probe can complete wrap → unwrap → request → claim. The remote
-strict `EXPLICIT_RPC` gate is untouched.
-
-**Status:** the unwrap fix is **now on `main`** (PR #258, merged as `cf04767`), and
-the Aave/Compound evidence anchors are also on `main` (PR #259, merged as `f2b0390`).
-
-**Probe result as of the latest manual run:** **27/28 passed.** Every real-logic
-assertion passes (stake → wrap → unwrap → withdrawal request → real `requestId` →
-ownership → fresh request not finalized → claim blocked until finalization). The
-**single** remaining FAIL is the last assertion (`probe completed without an
-unexpected error`): it is a **transport/archive error, not a logic bug** — the fork
-RPC used (`https://ethereum-rpc.publicnode.com`) rejects `eth_getLogs` over the queue
-history with `HTTP 403 "Archive requests require a personal token"`. Per the strict
-rule, a transport error is never counted as a pass, so this run is **not** evidence
-yet.
-
-**Required fix — use a responsive token-free ARCHIVE fork RPC.** Pass an RPC that
-serves archival state without a personal token and responds promptly (the workflow
-default `https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
-`https://eth.drpc.org`, `https://1rpc.io/eth`). Do **not** use
-`https://ethereum-rpc.publicnode.com` or any non-archive endpoint — it will `403`
-on archive `getLogs`. The probe now also **chunks** `eth_getLogs` into 10k-block
-windows so a per-request range cap cannot reject it.
-
-**Slow-fork startup / unreachable default RPC (newest run):** the probe failed with
-`Anvil did not become ready within 180s; last fork error: fetch failed` — the default
-`https://eth.llamarpc.com` was **unreachable from the runner**. That run is **not** a
-pass. The probe now:
-- **auto-fails over** across a set of token-free, archive-capable ETH RPCs (the
-  operator's explicit `rpc_url` first, then `eth.llamarpc.com`,
-  `eth-mainnet.public.blastapi.io`, `eth.drpc.org`, `1rpc.io/eth`), picking the first
-  reachable one. If **none** respond it fails (never a green skip).
-- budgets up to **`ANVIL_START_TIMEOUT_MS`** (default **180s**) to boot anvil, and
-  reports the **last fork error** so the cause is explicit.
-`publicnode` is deliberately excluded — it is reachable but rejects archive
-`eth_getLogs` with a 403 "personal token".
-
-**How to re-run (operator):** re-run the manual **Lido mainnet fork probe** with any
-token-free archive RPC (or leave `rpc_url` at the default and let the probe fail over).
-The probe will find a reachable archive endpoint on its own. Expected result:
-**28/28 passed**. Then record `farm-fork-evidence/lido.json` and Lido can be considered
-a canary candidate.
-
-**Per-RPC `eth_getLogs` range caps (newest run):** 28/29 passed — the only failure was
-still a transport/range error. The chosen RPC (`eth-mainnet.public.blastapi.io`) caps
-`eth_getLogs` to a **10-block window** with the error *"You can make eth_getLogs
-requests with up to a 10 block range"*. The probe now **adapts**: if the RPC rejects a
-chunk for exceeding its range, it reads the RPC's suggested window from the error and
-**shrinks the chunk and retries the same start block**, so no logs are silently skipped.
-It also honors **`LIDO_LOG_CHUNK`** (default 10000) if the operator wants to set a
-conservative size. This was verified against a mock 10-block-cap RPC (full 1904-block
-coverage, 192 calls, no gaps).
+The successful run used `https://eth-mainnet.public.blastapi.io`, found a real
+finalized/unclaimed request (`#134974`), and proved claim ownership/finalization.
 
 ---
 
 ## 7. Remaining limits
 
-- **Lido** and **Morpho** stay OFF until each has a recorded `N/N passed` strict-fork
-  PASS under `farm-fork-evidence/`. No amount of attestation (`FARM_STRICT_FORK_EVIDENCE=true`)
-  replaces a real PASS log.
+- **Morpho** stays OFF until it records an `N/N passed` strict-fork PASS under
+  `farm-fork-evidence/`. No amount of attestation (`FARM_STRICT_FORK_EVIDENCE=true`)
+  replaces a real PASS log. Lido now has its evidence and is canary-ready.
 - No canary is enabled with an empty allowlist or incomplete flags; the gate never
   fails open.
 - The GitHub App cannot write `.github/workflows/`; workflow YAML for the agent is a
-  committed `ci/` reference that the operator places by hand (this applies to Lido too).
-- The recommended rollout is **Aave Base + Aave Arbitrum + Compound Base** in one
-  canary (fee-recipient allowlist), then Lido once its evidence lands, then Morpho.
+  committed `ci/` reference that the operator places by hand (this applies to Lido's
+  workflow too — the probe already works; the workflow file just needs to be kept in
+  sync with `ci/lido-mainnet-fork-probe.yml`).
+- The recommended rollout is **Aave Base + Aave Arbitrum + Compound Base + Lido** in one
+  canary (fee-recipient allowlist, Lido caps 1 ETH/tx / 10 ETH total), then Morpho once
+  its evidence lands.
