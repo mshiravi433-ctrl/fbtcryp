@@ -152,16 +152,24 @@ history with `HTTP 403 "Archive requests require a personal token"`. Per the str
 rule, a transport error is never counted as a pass, so this run is **not** evidence
 yet.
 
-**Required fix — use a token-free ARCHIVE fork RPC.** Pass an RPC that serves
-archival state without a personal token (the workflow default
-`https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
+**Required fix — use a responsive token-free ARCHIVE fork RPC.** Pass an RPC that
+serves archival state without a personal token and responds promptly (the workflow
+default `https://eth.llamarpc.com`, or `https://eth-mainnet.public.blastapi.io`,
 `https://eth.drpc.org`, `https://1rpc.io/eth`). Do **not** use
 `https://ethereum-rpc.publicnode.com` or any non-archive endpoint — it will `403`
 on archive `getLogs`. The probe now also **chunks** `eth_getLogs` into 10k-block
 windows so a per-request range cap cannot reject it.
 
-**Next step:** re-run the manual **Lido mainnet fork probe** action with a token-free
-archive RPC; if it returns a clean `N/N passed` (expected 28/28), record
+**Slow-fork startup (newest run):** with the default RPC the probe failed at
+`Anvil did not start within 30 seconds` — anvil fetches the fork state at boot, so a
+slow public archive RPC can delay the endpoint past a fixed 30s window. That run is
+**not** a pass. The probe now budgets up to **`ANVIL_START_TIMEOUT_MS`** (default
+**180s**, configurable as a workflow input) and, on timeout, reports the **last fork
+error** so the cause (RPC unreachable vs. anvil boot) is explicit. Re-run with a
+responsive archive RPC (and a larger `ANVIL_START_TIMEOUT_MS` if needed).
+
+**Next step:** re-run the manual **Lido mainnet fork probe** action with a responsive
+token-free archive RPC; if it returns a clean `N/N passed` (expected 28/28), record
 `farm-fork-evidence/lido.json` from that log, and only then consider Lido a canary
 candidate.
 
