@@ -119,19 +119,50 @@ const sendStep = async ({ signer, provider, adapter, step, owner, amountWei, bef
 // Many public archive RPCs cap the block range a single eth_getLogs may cover
 // (and anvil inherits that limit when serving forked historical state). Query in
 // fixed-size chunks and merge, so the SDK's chosen fork RPC is not rejected for
-// requesting an oversized range. The topic is one event on one address, so the
-// merged result stays small and only needs to be reversed (newest-first) later.
-const LOG_CHUNK = 10_000;
+// requesting an oversized range. Some endpoints cap far tighter (e.g. 10 blocks),
+// so on a range-limit error we parse the RPC's suggested window and shrink the
+// chunk adaptively, retrying the same start until it fits. The topic is one event
+// on one address, so the merged result stays small and only needs to be reversed
+// (newest-first) later.
+const LOG_CHUNK = Number(process.env.LIDO_LOG_CHUNK || 10_000);
+const LOG_CHUNK_MIN = 1;
+// Some RPCs tell you the accepted window in the error, e.g.
+// "You can make eth_getLogs requests with up to a 10 block range ... [0x.., 0x..]".
+function rpcBlockRangeHint(message) {
+  const m = String(message).match(/\[0x([0-9a-fA-F]+),\s*0x([0-9a-fA-F]+)\]/);
+  if (m) {
+    const from = Number.parseInt(m[1], 16);
+    const to = Number.parseInt(m[2], 16);
+    if (Number.isFinite(from) && Number.isFinite(to) && to >= from) {
+      return to - from + 1;
+    }
+  }
+  return null;
+}
 const fetchLogsChunked = async (provider, filter) => {
   const { fromBlock, toBlock } = filter;
   let from = fromBlock;
   let out = [];
+  let chunk = Math.max(LOG_CHUNK_MIN, LOG_CHUNK);
   while (from <= toBlock) {
-    const to = Math.min(from + LOG_CHUNK - 1, toBlock);
-    const part = await provider.getLogs({ ...filter, fromBlock: from, toBlock: to });
-    out = out.concat(part);
-    if (to >= toBlock) break;
-    from = to + 1;
+    const to = Math.min(from + chunk - 1, toBlock);
+    try {
+      const part = await provider.getLogs({ ...filter, fromBlock: from, toBlock: to });
+      out = out.concat(part);
+      if (to >= toBlock) break;
+      from = to + 1;
+    } catch (err) {
+      const message = err?.message ?? String(err);
+      const hint = rpcBlockRangeHint(message);
+      const tooLarge = /block range|range|too large|exceed|size|limit/i.test(message);
+      if (tooLarge && chunk > LOG_CHUNK_MIN) {
+        // Shrink to the RPC's suggested window if given, otherwise halve; retry
+        // the *same* start block so we don't silently skip any logs.
+        chunk = Math.max(LOG_CHUNK_MIN, hint ? Math.min(chunk, hint) : Math.floor(chunk / 2));
+        continue;
+      }
+      throw err;
+    }
   }
   return out;
 };

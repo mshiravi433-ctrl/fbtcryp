@@ -179,6 +179,16 @@ The probe will find a reachable archive endpoint on its own. Expected result:
 **28/28 passed**. Then record `farm-fork-evidence/lido.json` and Lido can be considered
 a canary candidate.
 
+**Per-RPC `eth_getLogs` range caps (newest run):** 28/29 passed — the only failure was
+still a transport/range error. The chosen RPC (`eth-mainnet.public.blastapi.io`) caps
+`eth_getLogs` to a **10-block window** with the error *"You can make eth_getLogs
+requests with up to a 10 block range"*. The probe now **adapts**: if the RPC rejects a
+chunk for exceeding its range, it reads the RPC's suggested window from the error and
+**shrinks the chunk and retries the same start block**, so no logs are silently skipped.
+It also honors **`LIDO_LOG_CHUNK`** (default 10000) if the operator wants to set a
+conservative size. This was verified against a mock 10-block-cap RPC (full 1904-block
+coverage, 192 calls, no gaps).
+
 ---
 
 ## 7. Remaining limits
