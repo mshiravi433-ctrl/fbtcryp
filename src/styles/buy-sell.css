@@ -115,7 +115,10 @@
 .bsw-amount:focus-within { border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 4px rgba(0,229,255,.08); }
 .bsw-amount input { flex: 1; min-width: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 14px 16px; font-family: var(--font-mono); font-size: clamp(26px, 8vw, 34px); font-weight: 800; letter-spacing: -.5px; box-shadow: none !important; }
 .bsw-amount input:focus { outline: none; }
-.bsw-amount select { max-width: 92px; border: 0 !important; border-inline-start: 1px solid rgba(255,255,255,.1) !important; border-radius: 0 !important; background: rgba(255,255,255,.03); font-weight: 800; font-size: 13px; }
+/* `background-color`, never `background` — see the long note at the bottom of
+   this file: the shorthand used to reset the themed chevron's repeat and
+   position, which tiled the arrow across the control in light mode. */
+.bsw-amount select { max-width: 92px; border: 0 !important; border-inline-start: 1px solid rgba(255,255,255,.1) !important; border-radius: 0 !important; background-color: rgba(255,255,255,.03); font-weight: 800; font-size: 13px; }
 .bsw-amount-unit { display: flex; align-items: center; padding: 0 16px; border-inline-start: 1px solid rgba(255,255,255,.1); color: var(--text-2); font-family: var(--font-mono); font-size: 13px; font-weight: 800; background: rgba(255,255,255,.03); }
 .bsw-payout { margin-top: 12px; }
 
@@ -258,3 +261,133 @@
 
 /* A required field the flow is waiting on, outlined rather than merely hinted. */
 .ord-field-needed input { border-color: rgba(255,196,0,.45) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FIAT CURRENCY FIELD — «باکس نوع ارز باید مدرن باشد، مثلا USD با پرچم آمریکا»
+   ───────────────────────────────────────────────────────────────────────────
+   THE HATCH, EXPLAINED. The currency used to be a native <select> that this
+   file restyled with the `background` SHORTHAND:
+
+       .bsw-amount select { background: rgba(255,255,255,.03); }   (0-1-1)
+
+   A shorthand also writes every longhand it does not mention, so that single
+   line reset `background-image: none`, `background-repeat: repeat` and
+   `background-position: 0% 0%`. The themed chevron is a `background-image`
+   declared on the bare `select` rule (0-0-1) — so the shorthand out-specified
+   it and the arrow simply disappeared… except in the LIGHT theme, where
+   `:root[data-theme='light'] select` re-declares the image at 0-2-1 and wins.
+   Light mode therefore got the 12×8 arrow back with `repeat` and the origin in
+   the corner: the chevron tiled across the entire control. That is the
+   «هاشور» — and it could only ever appear in one theme, which is exactly how
+   it was reported.
+
+   The rule this file now follows: on a themed control, set `background-color`,
+   never `background`. The control itself is ModernSelect (a sheet picker with
+   real flag artwork from lib/assetIconData — vendored inline SVG, so a flag is
+   never missing because a CDN was blocked), restyled here to sit flush inside
+   the amount ticket.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* inside the amount row: no second card, no shadow — one flush segment with a
+   hairline between the number and the currency, like a real amount field */
+.bsw-amount .buy-sell-currency { display: flex; align-items: stretch; min-width: 0; }
+.bsw-amount .buy-sell-currency .modern-select { width: auto; min-width: 0; }
+.bsw-amount .buy-sell-currency .modern-select-trigger,
+.buy-sell-amount-input .buy-sell-currency .modern-select-trigger {
+  min-height: 0;
+  height: 100%;
+  width: auto;
+  max-width: 168px;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.bsw-amount .buy-sell-currency .modern-select-trigger:hover,
+.buy-sell-amount-input .buy-sell-currency .modern-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.12);
+  border-inline-start-color: rgba(255, 255, 255, 0.2);
+}
+.bsw-amount .buy-sell-currency .modern-select-trigger[aria-expanded='true'] {
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: none;
+}
+.bsw-amount .buy-sell-currency .modern-select-icon,
+.buy-sell-amount-input .buy-sell-currency .modern-select-icon {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  border-radius: 8px;
+  overflow: hidden;
+  /* the ring is what makes a flat flag read as a deliberate badge rather than
+     as a picture that lost its edges */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.bsw-amount .buy-sell-currency .modern-select-label,
+.buy-sell-amount-input .buy-sell-currency .modern-select-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+/* one decision per screen: the amount row shows code + flag, the sheet shows
+   the currency name — the sublabel would eat the width the number needs */
+.bsw-amount .buy-sell-currency .modern-select-sublabel,
+.buy-sell-amount-input .buy-sell-currency .modern-select-sublabel { display: none; }
+.bsw-amount .buy-sell-currency .modern-select-chevron,
+.buy-sell-amount-input .buy-sell-currency .modern-select-chevron { display: grid; }
+
+/* the sell payout field is a standalone box, so it keeps the full trigger skin */
+.bsw-payout .buy-sell-currency .modern-select-trigger { max-width: 220px; }
+.bsw-payout .buy-sell-currency .modern-select-icon { width: 30px; height: 30px; flex-basis: 30px; }
+.bsw-payout .buy-sell-currency .modern-select-label { font-size: 13.5px; }
+
+/* ─── LIGHT THEME: the ticket had white-on-white seams ───────────────────────
+   Every border in the amount row was rgba(255,255,255,…), which is exactly the
+   colour of a white card — so in light mode the amount box, its currency
+   segment and the quick-amount chips all had "a border" that painted nothing.
+   Same trap as the Smart Money card; same fix: follow the theme tokens. */
+:root[data-theme='light'] .bsw-amount {
+  background: #ffffff;
+  border-color: var(--line-strong, rgba(15, 23, 42, 0.3));
+  box-shadow: 0 4px 18px -10px rgba(15, 23, 42, 0.35);
+}
+:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-trigger {
+  background: #f3f6fb;
+  border-inline-start-color: rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-trigger:hover { background: #e9eef7; }
+:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-icon { box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14); }
+:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-label { color: #0f172a; }
+:root[data-theme='light'] .bsw-amount-unit {
+  background: #f3f6fb;
+  color: #334155;
+  border-inline-start-color: rgba(15, 23, 42, 0.16);
+}
+:root[data-theme='light'] .bsw-chips button {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #334155;
+}
+:root[data-theme='light'] .bsw-chips button.active {
+  background: linear-gradient(145deg, #dff6ff, #eaeaff);
+  border-color: #0e7490;
+  color: #0b3b52;
+}
+:root[data-theme='light'] .buy-sell-readonly {
+  background: #f6f8fc;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+:root[data-theme='light'] .buy-sell-amount-input select,
+:root[data-theme='light'] .buy-sell-amount-input input { background-color: #ffffff; }
+[dir='rtl'] .bsw-amount .buy-sell-currency .modern-select-trigger { border-radius: 0; }

@@ -1233,7 +1233,14 @@
     "footNote": "Data pasar bersifat informatif, bukan nasihat keuangan. Kripto sangat fluktuatif; bertransaksilah hanya dengan dana yang siap kamu relakan."
   },
   "contact": {
-    "title": "Hubungi kami"
+    "title": "Hubungi kami",
+    "social": {
+      "x": "X",
+      "linkedin": "LinkedIn",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "Email"
+    }
   },
   "lab2": {
     "screens": {

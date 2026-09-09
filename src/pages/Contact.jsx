@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
+import { SOCIAL_CHANNELS, isMailChannel } from '../lib/socials';
+import { openUrl, isSafeUrl } from '../lib/browser';
 import {
   IconBuilding,
   IconInstagram,
@@ -18,47 +19,13 @@ import {
   IconUser
 } from '../components/Icons';
 
-const SOCIALS = [
-  /*
-   * Telegram removed at the owner's request - email is the contact route.
-   * X and LinkedIn are the public company profiles.
-   *
-   * The LinkedIn URL is stored WITHOUT its utm_source/utm_content/utm_medium
-   * parameters. Those were on the shared link and would have told LinkedIn
-   * every visit came from an Android share sheet, which is both wrong and a
-   * needless detail about our users to hand over.
-   */
-  {
-    id: 'x',
-    url: 'https://x.com/CompanyFbt',
-    grad: 'linear-gradient(135deg,#1a1a1a,#4a4a4a)',
-    handle: '@CompanyFbt'
-  },
-  {
-    id: 'linkedin',
-    url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b',
-    grad: 'linear-gradient(135deg,#0a66c2,#004182)',
-    handle: 'Mohammad Shiravi'
-  },
-  {
-    id: 'instagram',
-    url: 'https://www.instagram.com/fbt_company_',
-    grad: 'linear-gradient(135deg,#f9ce34,#ee2a7b 45%,#6228d7)',
-    handle: '@fbt_company_'
-  },
-  {
-    id: 'crunchbase',
-    url: 'https://www.crunchbase.com/organization/fbt-company',
-    grad: 'linear-gradient(135deg,#146aff,#0b47b3)',
-    handle: 'FBT Company'
-  },
-  {
-    id: 'email',
-    url: SUPPORT_MAILTO,
-    grad: 'linear-gradient(135deg,var(--rgb-5),var(--rgb-6))',
-    handle: SUPPORT_EMAIL
-  }
-];
+/*
+ * One list for every screen that says «where to find us» — see
+ * ../lib/socials.js for why the tiles are anchors and not buttons, and for the
+ * label keys each id needs in all twelve locales.
+ */
+const SOCIALS = SOCIAL_CHANNELS;
+
 /*
  * REAL BUG: the office address rendered in PERSIAN on every language, because
  * it was a hardcoded `ADDRESS_FA` constant instead of a translation lookup.
@@ -90,7 +57,7 @@ function SocialIcon({ id }) {
 export default function Contact() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
+  const { haptic } = useTelegram();
 
   const copy = (text, key) => {
     navigator.clipboard?.writeText(text);
@@ -98,10 +65,29 @@ export default function Contact() {
     useAppStore.getState().notify(key, 'success');
   };
 
-  const openLink = (url) => {
+  /*
+   * THE OPENER, DONE IN THE RIGHT ORDER.
+   *
+   * The old version called `tg.openLink` when it existed and `window.open`
+   * otherwise, from a <button> with no href. Both halves were wrong: inside
+   * Telegram `openLink` can refuse a link and there was nothing behind it, and
+   * inside the packaged app `window.open` is frequently a no-op — so X and
+   * LinkedIn appeared broken while Instagram (which the OS happened to allow)
+   * did not. `openUrl` is the app's one opener policy: Custom Tab in the
+   * native shell, Telegram's own opener in the Mini App, a real tab on the web,
+   * and a same-tab navigation if a pop-up blocker interferes. It returns whether
+   * it took the click, and we only preventDefault when the href is ours to
+   * override — so a modifier-click (⌘/ctrl) and a refused opener both still fall
+   * through to the anchor, which is what a link is for.
+   */
+  const followChannel = async (event, channel) => {
     haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
+    const url = channel.url;
+    if (isMailChannel(channel)) return;          // <a href="mailto:"> already does this properly
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!isSafeUrl(url)) return;                 // never follow a non-https href ourselves
+    event.preventDefault();
+    await openUrl(url);
   };
 
   return (
@@ -124,17 +110,25 @@ export default function Contact() {
           gap: 16 
         }}>
           {SOCIALS.map((soc, index) => (
-            <motion.button
+            <motion.a
               key={soc.id}
               variants={riseIn}
               initial="hidden"
               animate="show"
               custom={index}
+              href={soc.url}
+              {...(isMailChannel(soc) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
               whileHover={{ y: -4, scale: 1.01 }}
               whileTap={{ scale: 0.985 }}
-              onClick={() => openLink(soc.url)}
+              onClick={(event) => followChannel(event, soc)}
               style={{
+                /* an <a> inherits the UA's link colour and underline, which on a
+                   card is exactly the «broken styling» a reviewer reports; the
+                   tap highlight is a WebKit-only default buttons do not have. */
                 textAlign: 'left',
+                color: 'inherit',
+                textDecoration: 'none',
+                WebkitTapHighlightColor: 'transparent',
                 padding: '22px 24px',
                 borderRadius: 24,
                 background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))',
@@ -172,7 +166,7 @@ export default function Contact() {
                 </div>
               </div>
               <IconExternal width={20} height={20} style={{ color: '#64748b' }} />
-            </motion.button>
+            </motion.a>
           ))}
         </div>
       </div>

@@ -1,3 +1,64 @@
+# Unreleased — six reports in Persian: tabs that did nothing, hatches, and errors nobody could read
+
+Six defects, all reported in one message, all of them the kind a render test
+cannot see: every component mounted, every build was green, and the app was
+nevertheless lying to the person holding the phone.
+
+- **«تب روز/هفته/ماه هیچ کاری نمی‌کند»** — the Smart Money window rail was
+  `useState` inside `FlowsTab`, so a tap re-rendered the same 24 hours, and the
+  token card's rail was raw `1h/4h/24h/7d` strings with no translation. The
+  page also held `const [window, setWindow]`, which shadowed the global — its
+  own `openExternal()` was calling `window.open` on an array, so every external
+  link on the screen was dead.
+- **«باکس اسمارت‌مانی توکن در تم روشن خط دور ندارد»** — `.sm-section` and its
+  inner separators were white-alpha rules, and `var(--text, #fff)` referenced a
+  token that does not exist in this app (it is `--text-1`), so light mode got
+  white text on white paper.
+- **«تب نوع ارز هاشور می‌اندازد»** — `buy-sell.css` restyled the currency
+  `<select>` with the `background` SHORTHAND, which also writes
+  `background-repeat`/`-position`; the light theme re-declares the chevron as a
+  `background-image` at higher specificity, so light mode got a 12×8 arrow
+  TILED across the control. The box is now `CurrencySelect` — the app's own
+  sheet picker with the currency's real flag (vendored inline SVG, so a blocked
+  CDN cannot remove it), and choosing a currency re-quotes instead of leaving a
+  stale number under a new symbol.
+- **«ارور بیمه چندخطی است به‌جای موجودی کم»** — every insurance action ended in
+  `setErr(e.message)`. MetaMask nests the real reason in
+  `data.data[<hash>].message`, so an empty wallet was reported as «Activation
+  failed», while the inline regex that tried to fix it read only `message`,
+  cited an i18n key that exists in no locale, and carried hardcoded Persian in
+  a `defaultValue`. `pages/insurance/insErrors.js` is now the single door: one
+  sentence, named by cause, never more than 148 characters and never a newline,
+  with the machine code behind a details toggle. The 15 server codes that had
+  no translation at all (COVERAGE_NOT_CANCELLABLE, IDEMPOTENCY_CONFLICT,
+  QUOTE_WALLET_MISMATCH, …) now have sentences in en and fa, so no insurance
+  error prints as a code again.
+- **«قبل از اسم هر استخر لوگوی پروتکل لازم است»** — a pool row's only picture
+  was the CHAIN coin, so Aave, Lido and Pendle all showed the same ETH disc.
+  `Farm/PoolGlyph.jsx` draws the protocol instead, from
+  `lib/protocolMarks.js`: brand hue pair, initial, and an accent that encodes
+  the kind of venue — generated rather than fetched, because a tile that is
+  missing its logo looks broken in a way a missing price does not.
+- **«جای لینکدین و ایکس متن اینستاگرام افتاده و لینک‌ها باز نمی‌شوند»** —
+  `contact.social` defined four ids while the screen rendered five, and `x` /
+  `linkedin` existed in Persian only, so eleven locales printed the raw key. And
+  the tiles were `<motion.button onClick={() => window.open(...)}>`: no `href`,
+  so a refused opener left a dead card. Both screens now share
+  `lib/socials.js`, render real anchors, and treat `openUrl` as the improvement
+  rather than the only path — `preventDefault` runs only when the opener takes
+  the click.
+
+### Guarded so it cannot come back
+
+`test/wiring.mjs` gained 40 pins for the above (a tablist that is localised and
+persisted, `background` never on a `select`, no undefined token in smart-money,
+every fiat code backed by flag artwork, no raw `e.message` in an insurance page,
+every protocol slug with a mark, every channel id labelled in all 12 locales).
+`test/insurance/ins-errors.test.js` (new, 35 tests, wired into
+`npm run test:insurance-ui` and `test:insurance-errors`) drives real provider
+envelopes through the mapper and pins the guarantees the report asked for —
+one line, in Persian, with the code kept for support and never invented.
+
 # Unreleased — Farm execution finally reaches every visitor («در فارم هنوز نمیاد برای همه»)
 
 **«در فارم هنوز نمیاد برای همه» — the pool card still said «تحلیل پروتکلی این

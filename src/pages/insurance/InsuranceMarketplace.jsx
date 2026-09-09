@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams, useOutletContext } from 'react-rout
 import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel, typeLabel, reasonLabel, settlementLabel, claimLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import ModernSelect from '../../components/ModernSelect.jsx';
 import AssetIcon from '../../components/AssetIcon.jsx';
 import {
@@ -64,6 +66,9 @@ export default function InsuranceMarketplace() {
   const [result, setResult] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [err, setErr] = useState('');
+  /* the machine code alone — the unavailable-state heading switches on it, and
+     reading it off `err.text` would mean parsing prose back into a code */
+  const [errCode, setErrCode] = useState('');
   const [failures, setFailures] = useState([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [providers, setProviders] = useState([]);
@@ -117,7 +122,7 @@ export default function InsuranceMarketplace() {
   const needsProduct = productsState === 'ready' && typeProducts.length > 0 && !selectedProduct;
 
   async function getQuotes() {
-    setErr(''); setResult(null); setFailures([]); setBusy(true);
+    setErr(''); setErrCode(''); setResult(null); setFailures([]); setBusy(true);
     try {
       const res = await insuranceApi.quote({
         walletAddress: wallet,
@@ -130,15 +135,25 @@ export default function InsuranceMarketplace() {
         termsAccepted
       });
       if (!res.ok) {
-        const code = res.errors?.[0]?.code;
-        setErr(code || res.errors?.[0]?.detail || t('insurance.market.noEligible'));
+        const e0 = res.errors?.[0] || {};
+        /* `err` used to be the raw code («VALID_WALLET_REQUIRED» printed in a red
+           box, in English, on a Persian page). Map it to one sentence and keep
+           the code for the unavailable-state header comparison below. */
+        const mapped = insuranceError({ code: e0.code || 'NO_ELIGIBLE_PROTECTION', message: e0.detail || '' }, t);
+        setErr(mapped);
+        setErrCode(mapped.code);
         setWarnings(res.warnings || []);
         setFailures(Array.isArray(res.data?.detail) ? res.data.detail : []);
       } else {
         setResult(res.data.quotes);
         setWarnings(res.warnings || []);
       }
-    } catch (e) { setErr(e?.message || String(e)); setWarnings(e?.warnings || []); setFailures(Array.isArray(e?.data?.detail) ? e.data.detail : []); }
+    } catch (e) {
+      setErr(insuranceError(e, t));
+      setErrCode(String(e?.code || ''));
+      setWarnings(e?.warnings || []);
+      setFailures(Array.isArray(e?.data?.detail) ? e.data.detail : []);
+    }
     setBusy(false);
   }
 
@@ -376,7 +391,7 @@ export default function InsuranceMarketplace() {
       {(err || noLiveQuote) && (
         <div className="ins-state-card">
           <div className="ins-ico lg"><InsIconShield /></div>
-          <h2>{err === 'NO_ELIGIBLE_PROTECTION' || noLiveQuote ? t('insurance.unavailable.title') : t('insurance.unavailable.titleGeneric')}</h2>
+          <h2>{errCode === 'NO_ELIGIBLE_PROTECTION' || noLiveQuote ? t('insurance.unavailable.title') : t('insurance.unavailable.titleGeneric')}</h2>
           <p>{t('insurance.unavailable.body')}</p>
 
           {liveProviders.length === 0 && providers.length > 0 && (
@@ -404,7 +419,7 @@ export default function InsuranceMarketplace() {
           {sandboxOnly && <p className="ins-muted">{t('insurance.market.sandboxOnlyNote')}</p>}
         </div>
       )}
-      {err && !noLiveQuote && !(failures.length || liveProviders.length === 0) && <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>}
+      {err && !noLiveQuote && !(failures.length || liveProviders.length === 0) ? <InsAlert error={err} /> : null}
 
       {result && result.length > 0 && (
         <div className="ins-sec-title">

@@ -85,6 +85,11 @@ export default function ModernSelect({
   disabled = false,
   testId,
   triggerSublabel,
+  /* The trigger's accessible name. Every caller so far sits under a visible
+     field label («ارز دریافت», «شبکه»); a control embedded inside another box —
+     the fiat currency inside the amount field — has nothing to read out, so it
+     names itself. */
+  ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -115,6 +120,7 @@ export default function ModernSelect({
       <button
         type="button"
         className="modern-select-trigger"
+        aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => !disabled && setOpen(true)}

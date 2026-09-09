@@ -3,6 +3,8 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import ModernSelect from '../../components/ModernSelect.jsx';
 import { InsIconRisk, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconInfo, InsIconCheck, InsIconShield, InsIconSearch, INS_TYPE_ICONS } from './InsuranceIcons.jsx';
 
@@ -33,11 +35,11 @@ export default function InsuranceRisk() {
   async function run() {
     setErr(''); setResult(null); setBusy(true);
     const exposures = rows.filter((r) => Number(r.amount) > 0).map((r) => ({ kind: r.kind, amountUsd: r.amount, chainId: 56 }));
-    if (!exposures.length) { setErr(t('insurance.risk.needExposure')); setBusy(false); return; }
+    if (!exposures.length) { setErr({ text: t('insurance.risk.needExposure'), code: 'NEED_EXPOSURE', technical: '' }); setBusy(false); return; }
     try {
       const res = await insuranceApi.protectPortfolio({ walletAddress: wallet, chainId: 1, durationDays: 30, exposures });
       setResult(res.data || res);
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(insuranceError(e, t)); }
     setBusy(false);
   }
 
@@ -92,7 +94,7 @@ export default function InsuranceRisk() {
         </div>
       </div>
 
-      {err && <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>}
+      {err ? <InsAlert error={err} /> : null}
 
       {result && (
         <>

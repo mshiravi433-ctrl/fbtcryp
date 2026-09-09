@@ -1,23 +1,28 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { openUrl } from '../lib/browser';
-import { IconInstagram, IconLinkedin, IconMail, IconXLogo } from '../components/Icons';
-import { SUPPORT_MAILTO } from '../lib/contact';
+import { openUrl, isSafeUrl } from '../lib/browser';
+import { IconInstagram, IconLinkedin, IconBriefcase, IconMail, IconXLogo } from '../components/Icons';
+import { SOCIAL_CHANNELS, isMailChannel } from '../lib/socials';
 import GalaxyBackdrop from '../components/GalaxyBackdrop';
 import FluidBackdrop, { fluidSupported } from '../components/FluidBackdrop';
 
 /*
- * The same accounts Contact links to — deliberately not a second, invented
- * list. Two sources of truth for "where to find us" is how one of them ends
- * up pointing at a dead handle.
+ * The same accounts Contact links to — imported, not copied. The copy had
+ * already drifted (no Crunchbase, and English `label` strings on a screen that
+ * renders in twelve languages), which is exactly how a duplicated list rots.
  */
-const SOCIALS = [
-  { id: 'x', url: 'https://x.com/CompanyFbt', Icon: IconXLogo, label: 'X' },
-  { id: 'linkedin', url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b', Icon: IconLinkedin, label: 'LinkedIn' },
-  { id: 'instagram', url: 'https://www.instagram.com/fbt_company_', Icon: IconInstagram, label: 'Instagram' },
-  { id: 'email', url: SUPPORT_MAILTO, Icon: IconMail, label: 'Email' }
-];
+const SOCIALS = SOCIAL_CHANNELS;
+
+/* The glyph lives with the screen, the channel list does not: lib/socials.js is
+ * plain data so a server-side render or a test can import it without React. */
+const SOCIAL_MARKS = {
+  x: IconXLogo,
+  linkedin: IconLinkedin,
+  instagram: IconInstagram,
+  crunchbase: IconBriefcase,
+  email: IconMail
+};
 
 /**
  * SPLASH — the first thing anyone sees.
@@ -165,26 +170,39 @@ export default function Splash({ onStart, hideGalaxy }) {
           OS handler, which openUrl already accounts for.
         */}
         <div className="splash-socials">
-          {SOCIALS.map(({ id, url, Icon, label }) => (
-            <button
-              key={id}
-              type="button"
-              className="splash-social"
-              onClick={() => {
-                /*
-                 * openUrl only accepts https - by design, so no caller can
-                 * introduce a javascript: or data: link. mailto: is therefore
-                 * REJECTED by it and the button would have looked live and
-                 * done nothing. Hand mail to the OS handler directly.
-                 */
-                if (url.startsWith('mailto:')) window.location.href = url;
-                else openUrl(url);
-              }}
-              aria-label={label}
-            >
-              <Icon width={18} height={18} />
-            </button>
-          ))}
+          {SOCIALS.map(({ id, url, mark }) => {
+            const Icon = SOCIAL_MARKS[id] ?? IconMail;
+            return (
+              /*
+               * An <a href>, not a button with an onClick: on the launch screen
+               * there is no page to come back to, so a refused opener used to
+               * leave the user on a screen with a dead icon. The href is the
+               * floor; openUrl is the improvement that puts the link in a Custom
+               * Tab (visible address bar) when the shell can provide one.
+               *
+               * openUrl only accepts https - by design, so no caller can
+               * introduce a javascript: or data: link. mailto: is REJECTED by
+               * it, so mail is left to the anchor itself.
+               */
+              <a
+                key={id}
+                href={url}
+                className="splash-social"
+                {...(isMailChannel({ url }) || !isSafeUrl(url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                aria-label={t(`contact.social.${id}`)}
+                title={t(`contact.social.${id}`)}
+                onClick={(event) => {
+                  if (isMailChannel({ url })) return;
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  if (!isSafeUrl(url)) return;
+                  event.preventDefault();
+                  openUrl(url);
+                }}
+              >
+                <Icon width={18} height={18} />
+              </a>
+            );
+          })}
         </div>
       </motion.div>
     </div>
