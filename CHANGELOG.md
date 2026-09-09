@@ -1,3 +1,53 @@
+# Unreleased — Phase 211.2: the cross-asset tab actually READS (active market reads, macro-desk fallbacks, comprehensive AI analysis) — additive only
+
+**Phase 211.2 — «تحلیل کراس کار نمی‌دهد» fix.** The Global Intelligence cross
+tab answered «کلاس‌های خوانده‌نشده: رمزارز، سهام، فارکس، کالاها، دارایی واقعی» —
+every class unread — because the engine only DIGESTED pre-read state: a fresh
+owner had no markets section (and nothing ever read the market), the four
+global classes had no fallback when the Avantis/Ostium feeds did not answer,
+the brain reads dropped the OWNER (write-backs landed in an anon store nobody
+reads), and the screen had no comprehensive analysis at all. Nothing was
+removed; every Phase 210/211 probe still passes (fios-core 158/158, autonomy
+64/64, intelligence 54/54, api 53/53, phase210 39/39, new cross-asset 28/28).
+
+- **Active crypto read** (`server/fios/index.js` → `marketDomainFor`): when
+  the state store has no market section, the brain's own `crypto.read`
+  answers (the same guarded market source chat uses) and the section is
+  written back for the OWNER — the class stops being «unread» the moment a
+  real source answers. Both real brain shapes parse now: the fixture
+  `symbols` array AND the production `prices`/`changes24hPct` maps
+  (`server/fios/crossAsset.js` → `cryptoRowsFrom`).
+- **Macro-desk fallbacks** (`macroFallbacksFor` + `analyzeCrossAsset`
+  `fallbacks`): when a class's brain feed answers nothing, the REAL daily
+  series from stooq/yahoo (SPX → stocks, DXY → forex, GOLD/WTI →
+  commodities) stand in — named on the class (`fallbackSource`, `degraded`,
+  `fallbackClasses[]` with the original failure reason) and tagged on the
+  card («دادهٔ کلان»). rwa has no honest fallback and stays missing.
+  Owner-independent 60s memo bounds the dead-upstream cost.
+- **The owner travels with brain reads** (`server/fios/globalIntel.js`):
+  `brainRead(domain, sections, owner)` — before this fix the global engine's
+  read ran under the anon registry, so even a successful Avantis/Ostium read
+  wrote into a store no owner ever saw.
+- **Comprehensive analysis, two layers** (both `untrusted: true`, data-not-
+  authority): `crossNarrative()` (`server/fios/crossAsset.js`) is a
+  deterministic bilingual paragraph built only from this pass's real numbers
+  — regime, per-class averages with advancing counts, leader/laggard,
+  divergences, macro moves, the 2s10s curve, the economic outlook, and the
+  unread classes WITH their reasons; `server/fios/crossNarrative.js` adds the
+  LLM commentary over the ONE AI gateway (`routedChat`), prompt bounded to
+  the computed digest, cached 2 min per content key, `NO_AI_PROVIDER`
+  honestly reported (LOCAL_ONLY) when no external model is configured — the
+  canned internal engine is never passed off as analysis.
+- **The screen says WHY** (`AiGlobalIntelligence.jsx`): unread classes now
+  carry their per-domain reason (missingReasons + a widened AIG_REASON map:
+  UNCLASSIFIED_ERROR, PROVIDER_DOWN, SOURCE_*, timeouts, …), fallback
+  classes are badged, and the cross tab renders the narrative + AI
+  commentary blocks. Refresh now also refreshes the cross-asset pass.
+- **New probe** `test/fios/cross-asset-probe.mjs` (registered in
+  `test/run.mjs`): 28 assertions over the pure engine, the owner wiring and
+  the real HTTP surface — including the fresh-owner end-to-end that used to
+  answer all-unread and now reads all five classes through seeded sources.
+
 # Unreleased — Phase 211: the AI brain goes global (nine intelligence domains, cross-asset regime, proactive briefing) — additive only
 
 **Phase 211 — FBT Intent OS · Global AI Intelligence.** The rule the phase was

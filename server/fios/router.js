@@ -631,7 +631,12 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
 
   router.get('/global/cross-asset', route(async (req, res, owner) => {
     await ensureMigrated(owner);
-    const analysis = await fi.crossAssetFor(owner, {});
+    /* The AI commentary follows the caller's language (Accept-Language, fa
+       default — this surface is Persian-first). */
+    const al = String(req.get?.('accept-language') || req.query.lang || 'fa').toLowerCase();
+    const language = al.split(',').map((s) => s.trim().split('-')[0]).find((c) => ['fa', 'en'].includes(c)) || 'fa';
+    const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    const analysis = await fi.crossAssetFor(owner, { refresh, language });
     return {
       ok: true,
       schema: analysis.schema,

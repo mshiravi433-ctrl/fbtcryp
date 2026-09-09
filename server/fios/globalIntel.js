@@ -369,8 +369,12 @@ export function createGlobalIntelEngine({
 
   /** The brain read for a global-market domain. `sections` may pre-seed it
    *  (a provider-shaped fixture or a future brain write-back); the brain is
-   *  asked otherwise. No direct provider dialing happens here. */
-  async function brainRead(domain, sections) {
+   *  asked otherwise. No direct provider dialing happens here.
+   *  Phase 211.2 fix: the OWNER travels with the call. Before this, the read
+   *  ran under the anon registry and its `markets` write-back landed in an
+   *  anon state store nobody reads — the owner's own crypto domain stayed
+   *  «unread» forever even though the brain had just read the market. */
+  async function brainRead(domain, sections, owner = null) {
     const seeded = sections?.[domain]?.data ?? sections?.[domain] ?? null;
     if (seeded && typeof seeded === 'object' && (seeded.instruments || seeded.rows)) {
       return { ok: true, value: seeded, source: `state:${domain}` };
@@ -379,7 +383,7 @@ export function createGlobalIntelEngine({
       return { ok: false, reason: 'BRAIN_NOT_WIRED' };
     }
     try {
-      const out = await withTimeout(brain.directToolCall({ module: BRAIN_READ_DOMAINS[domain], operation: 'read', input: {} }), TIMEOUT_MS, 'brain-read');
+      const out = await withTimeout(brain.directToolCall({ owner, module: BRAIN_READ_DOMAINS[domain], operation: 'read', input: {} }), TIMEOUT_MS, 'brain-read');
       if (!out?.ok || out?.status === 'UNAVAILABLE' || out?.data == null) {
         return { ok: false, reason: out?.reason || out?.status || 'BRAIN_READ_REFUSED' };
       }
@@ -402,7 +406,7 @@ export function createGlobalIntelEngine({
     }
   }
 
-  async function readDomain(domain, sections, at) {
+  async function readDomain(domain, sections, at, owner = null) {
     switch (domain) {
       case 'smart_money': {
         try {
@@ -460,13 +464,13 @@ export function createGlobalIntelEngine({
            pass — it is passed in by snapshotFor, never read alone. */
         return unavailableDomain('MACRO_IS_DERIVED', 'macro:classifier');
       case 'stocks': {
-        const out = await brainRead('stocks', sections);
+        const out = await brainRead('stocks', sections, owner);
         return out.ok ? normalizeStocks(out.value, at) : unavailableDomain(out.reason, 'brain:stocks');
       }
       case 'forex':
       case 'commodities':
       case 'rwa': {
-        const out = await brainRead(domain, sections);
+        const out = await brainRead(domain, sections, owner);
         return out.ok ? normalizeRwaClass(out.value, domain, at) : unavailableDomain(out.reason, `brain:${domain}`);
       }
       default:
@@ -492,7 +496,7 @@ export function createGlobalIntelEngine({
       const readDomains = GLOBAL_DOMAINS.filter((d) => d !== 'macro');
       const [results, macroQuotes] = await Promise.all([
         Promise.all(readDomains
-          .map((d) => readDomain(d, sections, at).catch((err) => unavailableDomain(`DOMAIN_ERROR:${String(err?.message || err).slice(0, 100)}`, 'global-intel')))),
+          .map((d) => readDomain(d, sections, at, owner).catch((err) => unavailableDomain(`DOMAIN_ERROR:${String(err?.message || err).slice(0, 100)}`, 'global-intel')))),
         readMacroQuotes()
       ]);
       const domains = {};
