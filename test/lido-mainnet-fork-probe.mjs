@@ -130,10 +130,16 @@ try {
     const afterWrap = await adapter.getPosition(provider, ACCOUNT);
     t('wrap created wstETH position', afterWrap.wstETHWei > beforeWrap.wstETHWei && afterWrap.stETHWei < beforeWrap.stETHWei, `${formatEther(afterWrap.wstETHWei)} wstETH`);
 
-    const unwrapPlan = await adapter.buildUnwrapPlan({ provider, owner: ACCOUNT, amountWstETH: wrapAmount });
+    // stETH -> wstETH is NOT 1:1 at the share price, so the wstETH held differs
+    // from the stETH that produced it. Unwrap must use the REAL wstETH balance
+    // (read from the position), not the stETH input amount — otherwise the plan
+    // comes back blocked (LIDO_INSUFFICIENT_WSTETH) and steps[] is empty.
+    const unwrapAmount = formatEther(afterWrap.wstETHWei);
+    const unwrapWei = afterWrap.wstETHWei;
+    const unwrapPlan = await adapter.buildUnwrapPlan({ provider, owner: ACCOUNT, amountWstETH: unwrapAmount });
     const beforeUnwrap = await adapter.getPosition(provider, ACCOUNT);
     t('unwrap plan is one exact step', unwrapPlan.steps.length === 1 && unwrapPlan.steps[0].kind === 'unwrap');
-    await sendStep({ signer, provider, adapter, step: unwrapPlan.steps[0], owner: ACCOUNT, amountWei: wrapWei, beforePosition: beforeUnwrap, nonce: nonce++ });
+    await sendStep({ signer, provider, adapter, step: unwrapPlan.steps[0], owner: ACCOUNT, amountWei: unwrapWei, beforePosition: beforeUnwrap, nonce: nonce++ });
     const afterUnwrap = await adapter.getPosition(provider, ACCOUNT);
     t('unwrap returned stETH and reduced wstETH', afterUnwrap.stETHWei > beforeUnwrap.stETHWei && afterUnwrap.wstETHWei < beforeUnwrap.wstETHWei, `${formatEther(afterUnwrap.stETHWei)} stETH`);
 
