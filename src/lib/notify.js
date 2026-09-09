@@ -763,6 +763,37 @@ export async function registerNativePush() {
 }
 
 /**
+ * Auto-register FCM once the user is genuinely inside the packaged app.
+ *
+ * ─── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * Registration used to happen only when the user opened Settings (or the News
+ * permission row) and tapped "allow". On the web that is acceptable — a
+ * browser's permission is memorable enough to find again. On a phone it is how
+ * the feature quietly dies: someone installs the APK expecting price alerts,
+ * never visits Settings, and the app never hands FCM a token — so `devices`
+ * stays 0 on the server and nothing can ever reach the tray, no matter how
+ * correctly the server and the OS are configured. That is exactly the state
+ * this closes.
+ *
+ * It runs once per app session and never while a first-run screen (welcome /
+ * onboarding / guide / lock) is up, so the OS permission prompt does not
+ * interrupt first setup.
+ *
+ * Safety:
+ *   - Already granted  → register() with no dialog.
+ *   - Not asked yet    → one real Android runtime prompt, then register.
+ *   - Denied           → returns immediately; Android will not re-show the
+ *                        prompt after a denial, so we never nag.
+ *   - Not native       → no-op.
+ */
+let nativeAutoRegistrationTried = false;
+export async function autoRegisterNativePush() {
+  if (!isNativeApp() || nativeAutoRegistrationTried) return { ok: false, reason: 'SKIP' };
+  nativeAutoRegistrationTried = true;
+  return registerNativePush();
+}
+
+/**
  * Register for push on whichever transport this device actually supports.
  *
  * Callers should use this rather than picking a transport themselves — that

@@ -657,6 +657,20 @@ export default function run() {
     const deps = { ...pkg.dependencies };
     t('native biometric plugin is a dependency', 'capacitor-native-biometric' in deps);
     t('native push plugin is a dependency', '@capacitor/push-notifications' in deps);
+
+    // REAL GAP: installing the APK never prompted for FCM — the token was only
+    // handed to the server when the user opened Settings and tapped "allow",
+    // so devices stayed 0 and nothing could ever reach the tray. Auto-register
+    // once the user is genuinely inside the app (past first-run, unlocked).
+    const appSrc = read('src/App.jsx');
+    t('App.jsx imports the native auto-register helper', /autoRegisterNativePush/.test(appSrc));
+    t('App.jsx auto-registers only past the first-run gates',
+      /autoRegisterNativePush\(\)/.test(appSrc)
+      && /locked \|\| showSplash \|\| showWelcome \|\| showOnb \|\| showGuide/.test(appSrc));
+    t('notify.js exposes a once-only native auto-register (skips repeats)',
+      /export async function autoRegisterNativePush/.test(notif)
+      && /nativeAutoRegistrationTried/.test(notif)
+      && /return registerNativePush\(\);/.test(notif));
   }
 
   /* ------------- 11. every API the client calls must be routed ------------ */

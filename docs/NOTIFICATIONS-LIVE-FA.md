@@ -10,6 +10,10 @@
 - سایت/مرورگر/PWA از VAPID و `POST /api/push/subscribe` استفاده می‌کند (`server/push.js`).
 - اپ اندروید (Capacitor) از `@capacitor/push-notifications` و FCM استفاده می‌کند و توکن را
   به `POST /api/push/fcm` می‌فرستد (`server/fcm.js`، `src/lib/notify.js`).
+- **از این نسخه**، APK همین‌که کاربر از جریانِ اولین ورود (راهنما) رد شود و داخلِ اپ بیاید،
+  خودش یک‌بار اجازهٔ نوتیفیکیشن را می‌پرسد و توکن FCM را ثبت می‌کند (گیتِ «داخلِ اپ و
+  قفل باز» در `src/App.jsx` → `autoRegisterNativePush`). دیگر لازم نیست کاربر به‌دنبال
+  دکمهٔ «اجازه» در تنظیمات بگردد.
 - هر دو کانال با یک تحویل‌دهندهٔ مشترک (`sendWatchAlert`/`deliverStagePush`) به دستگاهِ
   مخاطب می‌رسند: سفارش‌ها (`/api/cron/daily` → `runWatchCycle`)، مانیتورهای بازار،
   هشدارهای smart-money و پروموی روزانه. خطای قدیمی «بدون کال‌بک اجرا شد و اعلان بی‌صدا
