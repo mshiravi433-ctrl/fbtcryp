@@ -1,3 +1,62 @@
+# Unreleased — the wallet page stopped refreshing itself forever («نسخه جدید منتشر شد» loop)
+
+**«صفحه کیف پول قاطی زده؛ میزنه نسخه جدید منتشر شد، رفرش میشه، دوباره همین
+پیام — همش پشت سرهم.»** The refresh loop was the crash recovery itself. Every route is a
+`lazy()` chunk, so a `Wallet-<hash>.js` that 404s (a deploy that renamed the chunks under a
+live tab, or a service worker handing back a cached shell) throws into `RouteBoundary`, which
+reloads — correctly, ONCE. That "once" was a boolean sessionStorage flag, and the boundary
+cleared it in `componentDidMount` to mean "the route rendered successfully". For a lazy route
+that is false at the moment it fires: the boundary commits the Suspense FALLBACK while the
+chunk is still in flight, so the guard disarmed itself milliseconds BEFORE the failure it
+existed to catch. Every document load therefore spent a fresh reload, forever, and since the
+HashRouter keeps `#/wallet` across the reload, every one of them landed back on the screen
+that had just failed. The message was the loop's only visible symptom and its own promise —
+«یک‌بار تازه‌سازی نسخه جدید را می‌آورد» is true exactly once per route.
+
+- **The guard is now a per-route record, not a bit** (`RouteBoundary.jsx`):
+  `{ "/wallet": <ts> }` in sessionStorage, valid for a two-minute incident window. One broken
+  page keeps its own reload budget and cannot spend another page's; a later incident on the
+  same route gets its reload again on its own, without a success signal existing anywhere.
+  Fails CLOSED when storage cannot be read (private mode refuses reads AND writes, so nothing
+  would survive the reload) — an unspendable budget is an infinite one.
+- **The success signal moved to where it can only mean what it says** (`App.jsx` →
+  `RoutePaintProbe`): an effect that cannot mount until the lazy subtree resolves, because it
+  sits INSIDE the `<Suspense>` boundary. `noteRoutePainted(route)` clears that route's record.
+  Placement is the mechanism, so `test/stale-chunk-loop-probe.jsx` §7 asserts it as text —
+  moving those four lines one level up re-introduces the loop with every behavioural
+  assertion still green.
+- **The screen and the reload answer from ONE decision** (`planFor(error)`). It used to be a
+  `this.reloading` field written in `componentDidCatch`, which runs AFTER React paints — so
+  the first paint drew the alarming full-screen message for the ~120 ms before the reload it
+  was apologising for. Memoised per error object, because the record it reads expires on
+  purpose: re-deriving it would let two idle minutes plus a theme toggle turn the readable
+  screen into a spinner waiting on a reload nobody scheduled.
+- **Honest copy where the promise used to be**: `crash.updateTitle`/`crash.updateBody` («نسخه
+  جدید منتشر شد») are deleted; the refusal screen now says what already happened —
+  `crash.stillBrokenTitle`/`crash.stillBrokenBody` in en, fa and ar.
+- **«Try again» retries** for a chunk failure. `React.lazy` caches the REJECTION for the life
+  of the document, so the old `setState({ error: null })` re-rendered the same poisoned
+  component, threw again, and put the screen back — one more tick of «همش پشت سرهم». It now
+  frees the route's budget, evicts the cached shell and reloads; the non-chunk branch keeps
+  its in-place clear, which is the cheap and correct recovery there.
+- **`Unable to preload CSS` counts as a chunk failure** — the same deploy renames
+  `Wallet-<hash>.css`, and that rejection used to land on the generic crash screen with no
+  reload at all. Deliberately NOT added to `lib/lazyRetry.js`, whose only handle is the URL in
+  the message, and importing a `.css` as a module can never succeed.
+- **Nothing else touches storage**: no `unregister()` to "fix" the worker (a PushSubscription
+  is owned by the registration — that would cost push to a user who enabled it), and no
+  `localStorage` write of any kind.
+
+**New probe** `test/stale-chunk-loop-probe.jsx` (registered in `test/run.mjs`, 44 assertions):
+it simulates whole DOCUMENT loads against one shared sessionStorage, which is the only way to
+see a reload loop at all — a loop is not a second render, it is a second page load. The
+existing boundary case could not catch this because it throws inside the boundary's first
+render, so the boundary never commits and `componentDidMount` never runs. Sabotage-verified in
+both directions: restoring the mount-clear produces 8 failures, moving the paint probe outside
+`<Suspense>` or un-memoising the plan produces 2. `test/signals-page-probe.jsx` now recognises
+the renamed fallback keys, and `test/coindetail-probe.jsx` asserts the honest copy. Entry
+bundle 1329587 → 1330645 chars (1299 KB, still under the 1300 KB first-paint ratchet).
+
 # Unreleased — Phase 211.2: the cross-asset tab actually READS (active market reads, macro-desk fallbacks, comprehensive AI analysis) — additive only
 
 **Phase 211.2 — «تحلیل کراس کار نمی‌دهد» fix.** The Global Intelligence cross

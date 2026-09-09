@@ -940,6 +940,21 @@ installDom();
 const { run: runCoinDetail } = await import('./.out/coindetail/coindetail-probe.js');
 report('coin detail (real data shapes · chunk recovery)', await runCoinDetail(document.getElementById('r')));
 
+/* -------------------- 4b₁. the stale-chunk RELOAD LOOP --------------------- */
+/*
+ * The case above cannot express: it throws inside the boundary's first render,
+ * so the boundary never commits. The wallet-page report — «میزنه نسخه جدید
+ * منتشر شد، رفرش میشه، دوباره همین پیام، همش پشت سرهم» — is a loop across
+ * whole DOCUMENT loads, and only a probe that simulates document loads can see
+ * it. It belongs in `npm test` because the regression that caused it is four
+ * lines of lifecycle code in a file everybody edits.
+ */
+console.log('\n▸ building stale-chunk loop suite…');
+npx(['vite', 'build', '-c', 'test/vite.stalechunk.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runStaleChunk } = await import('./.out/stalechunk/stale-chunk-loop-probe.js');
+report('stale chunk reload loop (per-route, paint-cleared guard)', await runStaleChunk(document.getElementById('r')));
+
 /* -------------------- 4b₂. signals page under real data ------------------- */
 /*
  * The same gap, one screen over — and this one was not intermittent.

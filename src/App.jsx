@@ -12,7 +12,7 @@ import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
-import RouteBoundary from './components/RouteBoundary';
+import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 /*
  * ─── EVERY ROUTE LOADS THROUGH lazyRetry, NOT React.lazy ────────────────────
  * Reported: tapping a coin from the market list crashes, and RELOADING fixes
@@ -171,6 +171,33 @@ function Loader() {
 }
 
 /**
+ * THE PROOF THAT A ROUTE ACTUALLY PAINTED.
+ *
+ * RouteBoundary needs to know when a route's chunk has really loaded, so it can
+ * hand that route back its automatic-reload budget. It cannot learn this from
+ * its own mount: with a lazy child the boundary commits the FALLBACK while the
+ * import is still in flight, which is why the guard that used to be cleared in
+ * `componentDidMount` disarmed itself milliseconds BEFORE the failure it was
+ * meant to follow — and why the wallet page reloaded on every single load while
+ * announcing «نسخه جدید منتشر شد» each time. See RouteBoundary.jsx.
+ *
+ * Placement is the whole mechanism: INSIDE `<Suspense>`, this cannot mount
+ * until the suspended subtree resolves. Anywhere else — including the boundary
+ * itself — it mounts regardless and means nothing. One effect, one callback, no
+ * state to keep in sync.
+ *
+ * `test/stale-chunk-loop-probe.jsx` §7 asserts that placement as text, because
+ * moving these four lines one level up re-introduces the refresh loop while
+ * every behavioural assertion in the file stays green.
+ */
+function RoutePaintProbe({ route, children }) {
+  useEffect(() => {
+    noteRoutePainted(route);
+  }, [route]);
+  return children;
+}
+
+/**
  * Warm the route chunks the user is most likely to open next.
  *
  * THE JOLT.
@@ -308,8 +335,9 @@ function AnimatedRoutes() {
      * error rather than leaving the user stuck on it — without the key, React
      * keeps a boundary in its error state for the rest of the session.
      */
-    <RouteBoundary key={location.pathname} t={t}>
+    <RouteBoundary key={location.pathname} route={location.pathname} t={t}>
       <Suspense fallback={<Loader />}>
+        <RoutePaintProbe route={location.pathname}>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Market />} />
@@ -392,6 +420,7 @@ function AnimatedRoutes() {
             <Route path="*" element={<Market />} />
           </Routes>
         </AnimatePresence>
+        </RoutePaintProbe>
       </Suspense>
     </RouteBoundary>
   );
