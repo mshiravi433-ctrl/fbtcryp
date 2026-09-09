@@ -169,6 +169,7 @@ export default defineConfig({
      * See src/lib/features.js and docs/defi/aave-v3-base.md.
      */
     __AAVE_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_BASE_SUPPLY === 'true'),
+    __AAVE_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_AAVE_BASE_SUPPLY_PUBLIC === 'true'),
     __AAVE_BASE_BUILD_ENV__: JSON.stringify({
       VITE_AAVE_BASE_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_BASE_SUPPLY_ALLOWLIST ?? '',
       VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
@@ -182,6 +183,7 @@ export default defineConfig({
      * See src/lib/features.js and docs/defi/compound-v3-base.md.
      */
     __COMPOUND_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_COMPOUND_BASE_SUPPLY === 'true'),
+    __COMPOUND_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_COMPOUND_BASE_SUPPLY_PUBLIC === 'true'),
     __COMPOUND_BASE_BUILD_ENV__: JSON.stringify({
       VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST: process.env.VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST ?? '',
       VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
@@ -195,6 +197,7 @@ export default defineConfig({
      * See src/lib/features.js and docs/defi/aave-v3-arbitrum.md.
      */
     __AAVE_ARB_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_ARBITRUM_SUPPLY === 'true'),
+    __AAVE_ARB_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_AAVE_ARB_SUPPLY_PUBLIC === 'true'),
     __AAVE_ARB_BUILD_ENV__: JSON.stringify({
       VITE_AAVE_ARB_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_ARB_SUPPLY_ALLOWLIST ?? '',
       VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX ?? '',
@@ -206,6 +209,7 @@ export default defineConfig({
      * See src/lib/features.js and docs/defi/lido.md.
      */
     __LIDO_STAKE_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true'),
+    __LIDO_STAKE_PUBLIC__: JSON.stringify(process.env.VITE_LIDO_STAKE_PUBLIC === 'true'),
     __LIDO_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true'),
     __LIDO_BUILD_ENV__: JSON.stringify({
       VITE_LIDO_STAKE_ALLOWLIST: process.env.VITE_LIDO_STAKE_ALLOWLIST ?? '',
@@ -214,6 +218,7 @@ export default defineConfig({
     }),
     /* Morpho is a separately scoped Base market, not an ERC-4626 vault. */
     __MORPHO_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_MORPHO_BASE_SUPPLY === 'true'),
+    __MORPHO_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_MORPHO_BASE_SUPPLY_PUBLIC === 'true'),
     __MORPHO_BASE_BUILD_ENV__: JSON.stringify({
       VITE_MORPHO_BASE_SUPPLY_ALLOWLIST: process.env.VITE_MORPHO_BASE_SUPPLY_ALLOWLIST ?? '',
       VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',

@@ -83,6 +83,32 @@ PASS recorded under `farm-fork-evidence/`._
   add them there too (otherwise the preview build stays `capital-off`).
 - **Save**, then **Deployments → ⋯ → Redeploy** so the build picks them up.
 
+## Public-open (post-canary) — OPTIONAL, OFF by default
+
+The values above open the money-in UI **only to the allowlist wallet**. After a
+protocol's canary has succeeded on-chain, you may widen it to ANY connected wallet
+by adding that protocol's public flag **plus** `FARM_CANARY_CONFIRMED=true`.
+
+| Name | Value (only for the public-open transition) |
+|---|---|
+| `FARM_CANARY_CONFIRMED` | `true` |
+| `VITE_AAVE_BASE_SUPPLY_PUBLIC` | `true` |
+| `VITE_AAVE_ARB_SUPPLY_PUBLIC` | `true` |
+| `VITE_COMPOUND_BASE_SUPPLY_PUBLIC` | `true` |
+| `VITE_LIDO_STAKE_PUBLIC` | `true` |
+| `VITE_MORPHO_BASE_SUPPLY_PUBLIC` | `true` |
+
+**Rules that never change:**
+
+- A public flag **without** `FARM_CANARY_CONFIRMED=true` fails the build **closed**.
+- The allowlist stays non-empty (the fee-recipient wallet above) even in public mode,
+  so the gate never fails open.
+- Public mode opens **SUPPLY/STAKE** to everyone, still capped (1000/10000 USDC and
+  1 ETH/tx / 10 ETH total for Lido). **WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM** stay
+  gated by `hasPosition` only, never by the flag/allowlist/caps/public override.
+- **Do not set these until the canary has been confirmed.** Until then, leave them
+  unset so the deployment stays `limited-canary`.
+
 ## Verified gate behaviour
 
 Running `assertFarmRollout` with the above env returns:
@@ -105,6 +131,10 @@ wallet that sees the money-in UI. Any other connected wallet sees the position b
 the supply/stake path stays closed (withdraw/exit/revoke is gated only by
 `hasPosition`, never by allowlist/caps/flag). To add more operator wallets, join with
 commas: `0xabc...,0xdef...`.
+
+When you later widen to every wallet (public-open above), the allowlist still has to
+be present and non-empty; it is no longer the only wallet allowed in, but it stays on
+record as the canary wallet so the gate never fails open.
 
 ## Evidence-backed
 

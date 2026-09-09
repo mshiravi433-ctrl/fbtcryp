@@ -16,6 +16,7 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_AAVE_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL',
+    publicFlag: 'VITE_AAVE_BASE_SUPPLY_PUBLIC',
     maxPerTx: 1000,
     maxTotal: 10000
   }),
@@ -25,6 +26,7 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL',
+    publicFlag: 'VITE_COMPOUND_BASE_SUPPLY_PUBLIC',
     maxPerTx: 1000,
     maxTotal: 10000
   }),
@@ -34,6 +36,7 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_AAVE_ARB_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL',
+    publicFlag: 'VITE_AAVE_ARB_SUPPLY_PUBLIC',
     maxPerTx: 1000,
     maxTotal: 10000
   }),
@@ -43,6 +46,7 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_LIDO_STAKE_ALLOWLIST',
     perTxCap: 'VITE_LIDO_STAKE_MAX_ETH_PER_TX',
     totalCap: 'VITE_LIDO_STAKE_MAX_ETH_TOTAL',
+    publicFlag: 'VITE_LIDO_STAKE_PUBLIC',
     maxPerTx: 1,
     maxTotal: 10
   }),
@@ -52,6 +56,7 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_MORPHO_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL',
+    publicFlag: 'VITE_MORPHO_BASE_SUPPLY_PUBLIC',
     maxPerTx: 1000,
     maxTotal: 10000
   })
@@ -124,12 +129,32 @@ export function inspectFarmRollout(env = process.env) {
   const knownSelected = selected.filter((id) => FARM_ROLLOUT_PROTOCOLS[id]);
   const enabled = [];
 
+  const publicEnabled = [];
   for (const [id, protocol] of Object.entries(FARM_ROLLOUT_PROTOCOLS)) {
     const rawFlag = value(env, protocol.flag);
     if (rawFlag && rawFlag !== 'true' && rawFlag !== 'false') {
       errors.push(`${protocol.flag} must be exactly "true", "false", or unset.`);
     }
     if (rawFlag === 'true') enabled.push(id);
+
+    const rawPublic = value(env, protocol.publicFlag);
+    if (rawPublic && rawPublic !== 'true' && rawPublic !== 'false') {
+      errors.push(`${protocol.publicFlag} must be exactly "true", "false", or unset.`);
+    }
+    if (rawPublic === 'true') {
+      if (rawFlag !== 'true') {
+        errors.push(`${protocol.publicFlag}=true requires ${protocol.flag}=true.`);
+      } else {
+        publicEnabled.push(id);
+      }
+    }
+  }
+
+  // Public capital is a deliberate post-canary override. It must never open on
+  // the strength of the flag alone: once any protocol is public the build has
+  // to assert that a successful canary already happened.
+  if (publicEnabled.length > 0 && value(env, 'FARM_CANARY_CONFIRMED') !== 'true') {
+    errors.push('Public rollout requires FARM_CANARY_CONFIRMED=true after a successful canary.');
   }
 
   for (const id of enabled) {
@@ -170,16 +195,20 @@ export function inspectFarmRollout(env = process.env) {
         allowlistName: protocol.allowlist,
         allowlist: Object.freeze(allowlist),
         perTxCap: perTx,
-        totalCap: total
+        totalCap: total,
+        public: publicEnabled.includes(id)
       });
     }
   }
 
+  const anyPublic = enabled.some((id) => publicEnabled.includes(id));
   return Object.freeze({
     ok: errors.length === 0,
-    mode: enabled.length === 0 ? 'capital-off' : 'limited-canary',
+    mode: enabled.length === 0 ? 'capital-off' : (anyPublic ? 'public-open' : 'limited-canary'),
     selected: Object.freeze(knownSelected),
     enabled: Object.freeze(enabled),
+    public: Object.freeze(publicEnabled),
+    canaryConfirmed: value(env, 'FARM_CANARY_CONFIRMED') === 'true',
     protocols: Object.freeze(protocols),
     errors: Object.freeze(errors)
   });
@@ -191,9 +220,11 @@ export function formatFarmRollout(result) {
   }
   const summary = result.enabled.map((id) => {
     const row = result.protocols[id];
-    return `${id} (${row.allowlist.length} canary wallet${row.allowlist.length === 1 ? '' : 's'}, caps ${row.perTxCap}/${row.totalCap})`;
+    const scope = row.public ? 'public' : `${row.allowlist.length} canary wallet${row.allowlist.length === 1 ? '' : 's'}`;
+    return `${id} (${scope}, caps ${row.perTxCap}/${row.totalCap})`;
   }).join(', ');
-  return `Farm rollout gate passed: limited canary for ${summary}.`;
+  const mode = result.mode === 'public-open' ? 'public-open rollout' : 'limited canary';
+  return `Farm rollout gate passed: ${mode} for ${summary}.`;
 }
 
 /** Throw during config evaluation so every Vite entry point fails closed. */

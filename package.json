@@ -30,7 +30,7 @@
     "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
-    "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx test/farm-lido-panel.test.jsx test/defi-execution-guards.test.js test/morpho-defi.test.js test/lido-defi.test.js test/farm-rollout-gate.test.js test/farm-position-hub.test.jsx",
+    "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx test/farm-lido-panel.test.jsx test/defi-execution-guards.test.js test/morpho-defi.test.js test/lido-defi.test.js test/farm-rollout-gate.test.js test/farm-position-hub.test.jsx test/farm-public-mode.test.js",
     "test:farm:live": "node scripts/farm-defillama-smoke.mjs",
     "test:aave-base-fork": "node test/aave-base-fork-probe.mjs",
     "test:aave-arbitrum-fork": "node test/aave-arbitrum-fork-probe.mjs",
@@ -253,7 +253,8 @@
     "test:insurance-security": "node test/insurance/insurance-security-probe.mjs",
     "test:insurance-production": "node test/insurance/insurance-production-probe.mjs",
     "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs",
-    "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs"
+    "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs",
+    "test:farm:public": "vitest run --config test/vitest.public.config.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
