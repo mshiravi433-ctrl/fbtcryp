@@ -115,4 +115,128 @@ describe('Morpho Blue Base selected market', () => {
     expect(fromUsdcWei(1n)).toBe('0.000001');
     expect(fromUsdcWei(5_000_000n)).toBe('5.000000');
   });
+  const MORPHO_READ_ABI = new Interface([
+    'function idToMarketParams(bytes32 id) view returns (address loanToken,address collateralToken,address oracle,address irm,uint256 lltv)',
+    'function market(bytes32 id) view returns (uint128 totalSupplyAssets,uint128 totalSupplyShares,uint128 totalBorrowAssets,uint128 totalBorrowShares,uint128 lastUpdate,uint128 fee)',
+    'function position(bytes32 id,address user) view returns (uint256 supplyShares,uint128 borrowShares,uint128 collateral)',
+    'event Supply(bytes32 indexed id,address indexed caller,address indexed onBehalf,uint256 assets,uint256 shares)',
+    'event Withdraw(bytes32 indexed id,address indexed caller,address indexed onBehalf,address receiver,uint256 assets,uint256 shares)'
+  ]);
+
+  function fakeMorphoProvider({ supplyShares = 0n, totalSupplyAssets = 9_999_999n, totalSupplyShares = 4n } = {}) {
+    return {
+      getNetwork: async () => ({ chainId: 8453 }),
+      call: async ({ data }) => {
+        const selector = String(data).slice(0, 10);
+        if (selector === MORPHO_READ_ABI.getFunction('idToMarketParams').selector) {
+          return MORPHO_READ_ABI.encodeFunctionResult('idToMarketParams', [
+            MORPHO_BLUE_BASE.loanToken,
+            MORPHO_BLUE_BASE.collateralToken,
+            MORPHO_BLUE_BASE.oracle,
+            MORPHO_BLUE_BASE.irm,
+            MORPHO_BLUE_BASE.lltv
+          ]);
+        }
+        if (selector === MORPHO_READ_ABI.getFunction('market').selector) {
+          return MORPHO_READ_ABI.encodeFunctionResult('market', [
+            totalSupplyAssets,
+            totalSupplyShares,
+            0n,
+            0n,
+            1n,
+            0n
+          ]);
+        }
+        if (selector === MORPHO_READ_ABI.getFunction('position').selector) {
+          return MORPHO_READ_ABI.encodeFunctionResult('position', [supplyShares, 0n, 0n]);
+        }
+        throw new Error(`unexpected call ${selector}`);
+      }
+    };
+  }
+
+  function morphoReceipt(eventName, { assets, shares, owner = OWNER } = {}) {
+    const encoded = eventName === 'Supply'
+      ? MORPHO_READ_ABI.encodeEventLog(MORPHO_READ_ABI.getEvent('Supply'), [MORPHO_BLUE_BASE.marketId, owner, owner, assets, shares])
+      : MORPHO_READ_ABI.encodeEventLog(MORPHO_READ_ABI.getEvent('Withdraw'), [MORPHO_BLUE_BASE.marketId, owner, owner, owner, assets, shares]);
+    return {
+      status: 1,
+      logs: [{ address: MORPHO_BLUE_BASE.morpho, topics: encoded.topics, data: encoded.data }]
+    };
+  }
+
+  it('proves supply by event shares when derived assets round one wei below the supplied amount', async () => {
+    const proof = await verifyMorphoReceipt({
+      provider: fakeMorphoProvider({ supplyShares: 2n, totalSupplyAssets: 9_999_999n, totalSupplyShares: 4n }),
+      receipt: morphoReceipt('Supply', { assets: 5_000_000n, shares: 2n }),
+      owner: OWNER,
+      action: 'supply',
+      amountWei: 5_000_000n,
+      beforePositionWei: 0n,
+      beforeSupplyShares: 0n
+    });
+    expect(proof.proof).toMatchObject({ eventAmount: 5_000_000n, eventShares: 2n, sharesDelta: 2n });
+    expect(proof.position.supplyShares).toBe(2n);
+    expect(proof.position.suppliedUsdc).toBe(4_999_999n);
+  });
+
+  it('rejects a supply receipt if the owner supply shares did not move', async () => {
+    await expect(verifyMorphoReceipt({
+      provider: fakeMorphoProvider({ supplyShares: 0n }),
+      receipt: morphoReceipt('Supply', { assets: 5_000_000n, shares: 2n }),
+      owner: OWNER,
+      action: 'supply',
+      amountWei: 5_000_000n,
+      beforePositionWei: 0n,
+      beforeSupplyShares: 0n
+    })).rejects.toMatchObject({
+      code: 'MORPHO_POSITION_UNCHANGED',
+      detail: { expectedShares: 2n, sharesDelta: 0n }
+    });
+  });
+
+  it('rejects a supply receipt if the owner supply shares moved by the wrong amount', async () => {
+    await expect(verifyMorphoReceipt({
+      provider: fakeMorphoProvider({ supplyShares: 1n }),
+      receipt: morphoReceipt('Supply', { assets: 5_000_000n, shares: 2n }),
+      owner: OWNER,
+      action: 'supply',
+      amountWei: 5_000_000n,
+      beforePositionWei: 0n,
+      beforeSupplyShares: 0n
+    })).rejects.toMatchObject({
+      code: 'MORPHO_POSITION_UNCHANGED',
+      detail: { expectedShares: 2n, sharesDelta: 1n }
+    });
+  });
+
+  it('proves withdraw by event shares instead of a derived-asset equality', async () => {
+    const proof = await verifyMorphoReceipt({
+      provider: fakeMorphoProvider({ supplyShares: 0n }),
+      receipt: morphoReceipt('Withdraw', { assets: 4_999_999n, shares: 2n }),
+      owner: OWNER,
+      action: 'withdraw',
+      amountWei: null,
+      beforePositionWei: 4_999_999n,
+      beforeSupplyShares: 2n
+    });
+    expect(proof.proof).toMatchObject({ eventAmount: 4_999_999n, eventShares: 2n, sharesDelta: 2n });
+    expect(proof.position.supplyShares).toBe(0n);
+  });
+
+  it('rejects a withdraw receipt if the owner shares did not burn', async () => {
+    await expect(verifyMorphoReceipt({
+      provider: fakeMorphoProvider({ supplyShares: 2n }),
+      receipt: morphoReceipt('Withdraw', { assets: 4_999_999n, shares: 2n }),
+      owner: OWNER,
+      action: 'withdraw',
+      amountWei: null,
+      beforePositionWei: 4_999_999n,
+      beforeSupplyShares: 2n
+    })).rejects.toMatchObject({
+      code: 'MORPHO_POSITION_UNCHANGED',
+      detail: { expectedShares: 2n, sharesDelta: 0n }
+    });
+  });
+
 });

@@ -15,7 +15,7 @@ const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
  * The probe prints what it is running, because a fork probe that fails on a
  * stale checkout looks exactly like a protocol refusal: same pin, same revert.
  */
-const PROBE_REVISION = 'morpho-supply-selector-2026-09-09';
+const PROBE_REVISION = 'morpho-shares-position-proof-2026-09-09';
 const gitSha = (() => {
   try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; }
 })();
@@ -25,6 +25,7 @@ const t = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
 };
 const rule = (name) => console.log(`\n${'='.repeat(76)}\n${name}\n${'='.repeat(76)}`);
+const detailJson = (value) => JSON.stringify(value, (_key, item) => (typeof item === 'bigint' ? item.toString() : item));
 const haveAnvil = () => {
   try { execFileSync('anvil', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; }
 };
@@ -248,6 +249,7 @@ try {
      * out or reverting into a generic failure. The approval is checked first, so
      * the supply call below is simulated against a state that already has it.
      */
+    let provedSupplyShares = null;
     for (const step of supplyPlan.steps) {
       let simulated = true;
       let reason = 'clean';
@@ -262,11 +264,22 @@ try {
         throw new Error(`${step.kind} step was refused before broadcast [${step.data.slice(0, 10)} → ${step.to}]: ${revertHint(err)}`);
       }
       const receipt = await tx.wait();
-      const proof = await adapter.verifyMorphoReceipt({ provider, receipt, owner: ACCOUNT, action: step.kind === 'approve' ? 'approve' : 'supply', amountWei: supplyPlan.checks.amountWei, beforePositionWei: step.kind === 'supply' ? before.suppliedUsdc : null });
-      t(`${step.kind} receipt is mined, event-matched, and proved`, proof.ok === true, receipt.hash.slice(0, 18));
+      const proof = await adapter.verifyMorphoReceipt({
+        provider, receipt, owner: ACCOUNT, action: step.kind === 'approve' ? 'approve' : 'supply',
+        amountWei: supplyPlan.checks.amountWei,
+        beforePositionWei: step.kind === 'supply' ? before.suppliedUsdc : null,
+        beforeSupplyShares: step.kind === 'supply' ? before.supplyShares : null
+      });
+      if (step.kind === 'supply') provedSupplyShares = proof.proof?.eventShares ?? null;
+      const proofDetail = proof.proof?.sharesDelta == null
+        ? receipt.hash.slice(0, 18)
+        : `${receipt.hash.slice(0, 18)} · shares +${proof.proof.sharesDelta} · assets ${formatUnits(proof.proof.eventAmount, 6)} USDC`;
+      t(`${step.kind} receipt is mined, event-matched, and proved`, proof.ok === true, proofDetail);
     }
     const supplied = await adapter.getPosition(provider, ACCOUNT);
-    t('supply position increased', supplied.suppliedUsdc >= before.suppliedUsdc + 5_000_000n, `${formatUnits(supplied.suppliedUsdc, 6)} USDC`);
+    const supplySharesDelta = supplied.supplyShares - before.supplyShares;
+    t('supply position increased by exactly the event shares', supplySharesDelta === provedSupplyShares,
+      `shares ${before.supplyShares} → ${supplied.supplyShares} (+${supplySharesDelta}, event ${provedSupplyShares}), assets ${formatUnits(supplied.suppliedUsdc, 6)} USDC`);
 
     rule('4 · max withdrawal uses shares and proves the exit');
     const withdrawPlan = await adapter.buildWithdrawPlan({ provider, owner: ACCOUNT, amountUsdc: 'max' });
@@ -291,8 +304,13 @@ try {
     if (!withdrawSimulated) throw new Error(`withdraw step does not answer on the fork: ${withdrawReason}`);
     const tx = await signer.sendTransaction({ to: withdrawStep.to, data: withdrawStep.data, value: 0n, nonce: nonce++ });
     const receipt = await tx.wait();
-    const proof = await adapter.verifyMorphoReceipt({ provider, receipt, owner: ACCOUNT, action: 'withdraw', amountWei: null, beforePositionWei: supplied.suppliedUsdc });
-    t('withdraw receipt has the selected market and owner receiver', proof.ok === true, receipt.hash.slice(0, 18));
+    const proof = await adapter.verifyMorphoReceipt({
+      provider, receipt, owner: ACCOUNT, action: 'withdraw', amountWei: null,
+      beforePositionWei: supplied.suppliedUsdc,
+      beforeSupplyShares: supplied.supplyShares
+    });
+    t('withdraw receipt has the selected market and owner receiver', proof.ok === true,
+      `${receipt.hash.slice(0, 18)} · shares -${proof.proof?.sharesDelta ?? '—'} · assets ${proof.proof?.eventAmount == null ? '—' : formatUnits(proof.proof.eventAmount, 6)} USDC`);
     const final = await adapter.getPosition(provider, ACCOUNT);
     t('max withdrawal leaves no supplied USDC shares', final.supplyShares === 0n && final.suppliedUsdc === 0n, `shares ${final.supplyShares}`);
 
@@ -312,7 +330,7 @@ try {
   }
 } catch (err) {
   const message = String(err?.message ?? err ?? '');
-  const expected = `${err?.code ?? err?.name}: ${message}`;
+  const expected = `${err?.code ?? err?.name}: ${message}${err?.detail ? ` detail=${detailJson(err.detail)}` : ''}`;
   const hints = [];
   if (/CALL_EXCEPTION/.test(expected)) hints.push(revertHint(err));
   if (/429|rate limit|too many requests|timeout|ETIMEDOUT|ECONNRESET|fetch failed|bad response/i.test(message)) {
