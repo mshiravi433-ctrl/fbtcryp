@@ -34,8 +34,8 @@ build. **Morpho stays OFF** until it records a strict-fork PASS._
 |---|---|
 | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `true` |
 | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX` | `100` |
-| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL` | `500` |
+| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
+| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
 
 ## Aave v3 Arbitrum — native USDC
 
@@ -43,8 +43,8 @@ build. **Morpho stays OFF** until it records a strict-fork PASS._
 |---|---|
 | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `true` |
 | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX` | `100` |
-| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL` | `500` |
+| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX` | `1000` |
+| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL` | `10000` |
 
 ## Compound v3 Base — native USDC
 
@@ -52,8 +52,8 @@ build. **Morpho stays OFF** until it records a strict-fork PASS._
 |---|---|
 | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `true` |
 | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX` | `100` |
-| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL` | `500` |
+| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
+| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
 
 ## Lido Ethereum — stETH/wstETH
 
@@ -80,9 +80,9 @@ Running `assertFarmRollout` with the above env returns:
 ```
 ok: true          mode: limited-canary
 enabled: [aave-base, compound-base, aave-arbitrum, lido]
-  aave-base      -> allowlist 1 | caps 100/500
-  compound-base  -> allowlist 1 | caps 100/500
-  aave-arbitrum  -> allowlist 1 | caps 100/500
+  aave-base      -> allowlist 1 | caps 1000/10000
+  compound-base  -> allowlist 1 | caps 1000/10000
+  aave-arbitrum  -> allowlist 1 | caps 1000/10000
   lido           -> allowlist 1 | caps 1/10
 errors: []
 ```
