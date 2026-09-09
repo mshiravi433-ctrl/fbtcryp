@@ -27,8 +27,6 @@
 از کامپیوتر خودت (اینجا اینترنت عمومی در دسترس نیست) این سندِ تمام‌چک را اجرا کن:
 
 ```bash
-BASE_URL=https://fbtcryp-kkxi.vercel.app node scripts/notify-verify.mjs
-# یا روی دامنهٔ اصلی:
 BASE_URL=https://fbtswap.ir node scripts/notify-verify.mjs
 ```
 
@@ -56,7 +54,7 @@ BASE_URL=https://fbtswap.ir node scripts/notify-verify.mjs
 ابزار تولید کلید در صفحهٔ push امن) → عمومی را در `VITE_VAPID_PUBLIC_KEY` و خصوصی را در
 `VAPID_PRIVATE_KEY` بگذار → Redeploy.
 
-**راستی‌آزمایی:** `GET https://fbtcryp-kkxi.vercel.app/api/push/status` باید
+**راستی‌آزمایی:** `GET https://fbtswap.ir/api/push/status` باید
 `"web": true` بدهد. (این endpoint هیچ رازی برنمی‌گرداند.)
 
 ---
@@ -86,7 +84,7 @@ BASE_URL=https://fbtswap.ir node scripts/notify-verify.mjs
 
 **راستی‌آزمایی (از خود گوگل می‌پرسد):**
 ```bash
-curl -s https://fbtcryp-kkxi.vercel.app/api/push/selftest
+curl -s https://fbtswap.ir/api/push/selftest
 ```
 این endpoint یک OAuth واقعی می‌سازد و با توکنِ عمداً نامعتبر به FCM می‌زند؛ هیچ‌چیز به
 دستگاهی نمی‌رسد. `"ok": true, "stage":"SEND"` یعنی احراز هویت و پروژه درست‌اند و فقط
@@ -104,7 +102,7 @@ curl -s https://fbtcryp-kkxi.vercel.app/api/push/selftest
 اجرای دستیِ همان چیزی که ورسل هر روز ۰۹:۰۰ UTC می‌زند:
 ```bash
 curl -s -H "Authorization: Bearer $CRON_SECRET" \
-     https://fbtcryp-kkxi.vercel.app/api/cron/daily
+     https://fbtswap.ir/api/cron/daily
 ```
 خروجی باید شامل `web: {sent,failed…}`، `fcm: {sent,failed…}` و `watch: {checked,triggered,sent}` باشد.
 
@@ -118,7 +116,7 @@ curl -s -H "Authorization: Bearer $CRON_SECRET" \
 ## ۴ · راستی‌آزمایی نهایی روی دستگاه — سایت و اپ
 
 ### سایت (مرورگر / PWA)
-1. باز کن `https://fbtcryp-kkxi.vercel.app` → تنظیمات → اعلان‌ها → اجازه بده.
+1. باز کن `https://fbtswap.ir` → تنظیمات → اعلان‌ها → اجازه بده.
 2. چک کن `GET /api/push/status` حالا `subscribers` را **۱** بالا نشان دهد.
 3. یک سفارش حد/قیمت تنظیم کن و قیمت هدف را بزن. اعلانِ وب‌پوش باید در shade سیستم بیاید.
 4. بعد از رسیدن، `subscribers` کم نشده و endpoint هرگز در `❌` نیفتاده باشد.

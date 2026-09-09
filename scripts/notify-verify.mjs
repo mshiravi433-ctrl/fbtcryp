@@ -7,8 +7,8 @@
  * triggers a broadcast. Run it from your own machine (this sandbox has no
  * route to the public internet, so you must run it where the site is reachable).
  *
+ *   npm run notify:verify                 # uses the default https://fbtswap.ir
  *   BASE_URL=https://fbtswap.ir node scripts/notify-verify.mjs
- *   BASE_URL=https://fbtcryp-kkxi.vercel.app node scripts/notify-verify.mjs
  *   # include a CRON_SECRET to also test the manual re-run guard:
  *   CRON_SECRET=… node scripts/notify-verify.mjs
  *
