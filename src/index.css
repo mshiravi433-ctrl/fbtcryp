@@ -8216,6 +8216,17 @@ body { overflow-x: clip; }
 .infobox-warn   .infobox-dot { background: var(--rgb-5); }
 .infobox-danger .infobox-dot { background: var(--down); }
 
+.infobox-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--rgb-1);
+}
+.infobox-warn   .infobox-icon { color: var(--rgb-5); }
+.infobox-danger .infobox-icon { color: var(--down); }
+
 .infobox-title {
   flex: 1;
   min-width: 0;

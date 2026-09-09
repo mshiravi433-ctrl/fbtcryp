@@ -10,9 +10,10 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
 import TapToPay from '../components/TapToPay';
 import P2PMarket from '../components/P2PMarket';
-import { IconChevronLeft, IconShield, IconSwap } from '../components/Icons';
+import { IconCard, IconChevronLeft, IconShield, IconSwap, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
-import BoardPanel from '../components/BoardPanel';
+import PayGatewayPanel from '../components/PayGatewayPanel';
+import '../styles/pay-gateway.css';
 
 /**
  * Peer-to-peer trading.
@@ -50,6 +51,7 @@ import BoardPanel from '../components/BoardPanel';
  */
 
 const SCAMS = ['reversal', 'thirdParty', 'offPlatform', 'overpay'];
+const TAB_ICONS = { market: IconTrend, otc: IconSwap, pay: IconCard };
 
 export default function P2P() {
   const { t } = useTranslation();
@@ -58,8 +60,8 @@ export default function P2P() {
   const wallet = useWallet();
 
   /* market first: it is the tab that earns, and the tab that answers the
-     question most openers of this page arrive with. OTC and the board are
-     untouched beyond position. */
+     question most openers of this page arrive with. OTC and the payment
+     gateway sit beside it. */
   const [tab, setTab] = useState('market');
   const [sendOpen, setSendOpen] = useState(false);
 
@@ -75,12 +77,18 @@ export default function P2P() {
       <p className="prose-sm">{t('p2p.subtitle')}</p>
 
       <div className="segmented">
-        {['market', 'otc', 'board'].map((k) => (
-          <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
-            {tab === k && <SegIndicator id="p2ptab" />}
-            {t(`p2p.tab.${k}`)}
-          </button>
-        ))}
+        {['market', 'otc', 'pay'].map((k) => {
+          const Icon = TAB_ICONS[k];
+          return (
+            <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
+              {tab === k && <SegIndicator id="p2ptab" />}
+              <span className="p2p-tab-label">
+                <Icon width={14} height={14} />
+                {t(`p2p.tab.${k}`)}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {tab === 'market' ? (
@@ -137,14 +145,8 @@ export default function P2P() {
             <p>{t('p2p.notice')}</p>
           </InfoBox>
         </>
-      ) : tab === 'board' ? (
-        /*
-          The classifieds board. A component rather than inline JSX because
-          this file is already long, and because the board owns real state
-          (fetching, a form, a payment flow) that has no business being
-          interleaved with the market tab.
-        */
-        <BoardPanel />
+      ) : tab === 'pay' ? (
+        <PayGatewayPanel />
       ) : (
         <>
           <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">

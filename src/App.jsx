@@ -82,6 +82,7 @@ const Developers = lazyRetry(() => import('./pages/Developers'));
 const Ecosystem = lazyRetry(() => import('./pages/Ecosystem'));
 const Business = lazyRetry(() => import('./pages/Business'));
 const P2P = lazyRetry(() => import('./pages/P2P'));
+const PayLanding = lazyRetry(() => import('./pages/PayLanding'));
 const Leaderboard = lazyRetry(() => import('./pages/Leaderboard'));
 const News = lazyRetry(() => import('./pages/News'));
 const Explore = lazyRetry(() => import('./pages/Explore'));
@@ -284,6 +285,7 @@ function prefetchLikelyRoutes() {
  * `/intent` (the AI chat) is an app within the app: the global Header (logo
  * + settings) is NOT rendered there, so the conversation starts at the very
  * top of the viewport instead of sitting under a bar it does not need.
+ * `/pay/:code` is the same shape — a customer landing, not the chrome.
  *
  * The BottomNav is now hidden there TOO — on the newer instruction to make
  * the AI surface look like Trenchers' ai-agent («تب‌های پایین مینیمال با
@@ -299,7 +301,7 @@ function prefetchLikelyRoutes() {
  */
 function AppChrome() {
   const { pathname } = useLocation();
-  const headerless = pathname === '/intent';
+  const headerless = pathname === '/intent' || pathname.startsWith('/pay');
   return (
     <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}`}>
       {!headerless && <Header />}
@@ -370,6 +372,7 @@ function AnimatedRoutes() {
             <Route path="/ecosystem" element={<Ecosystem />} />
             <Route path="/business" element={<Business />} />
             <Route path="/p2p" element={<P2P />} />
+            <Route path="/pay/:code" element={<PayLanding />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/news" element={<News />} />
             <Route path="/explore" element={<Explore />} />
@@ -534,13 +537,31 @@ export default function App() {
   // slippage loses real money, and that refunds to nobody.
   const showGuide = !showOnb && !guideReadAt;
 
+  /* A shared payment link is a customer landing, not a first-run. Skip
+     lock → splash → welcome → onboarding → guide so `#/pay/:code` opens
+     the page itself. Returning visits still use AppChrome, which is
+     headerless for `/pay`. */
+  const payLanding = typeof window !== 'undefined'
+    && /^#\/pay(\/|$)/.test(window.location.hash || '');
+
   let screen;
   /*
    * The lock comes FIRST — before onboarding, the guide and the router.
    * Anything mounted above it is content an unauthenticated holder of the
    * phone can read, which would defeat the point of the lock.
+   *
+   * Matched on the assignment, not on `screen = <AppLock` as a single
+   * literal: adding a prop pushed the JSX onto its own line and this check
+   * silently stopped finding it.
    */
-  if (locked) {
+  if (payLanding) {
+    screen = (
+      <HashRouter future={{ v7_relativeSplatPath: true }}>
+        <AppChrome />
+        <RadioDock />
+      </HashRouter>
+    );
+  } else if (locked) {
     screen = (
       <AppLock
         onUnlock={() => {
@@ -639,7 +660,7 @@ export default function App() {
           changes, and it must not appear over the splash, onboarding or the
           lock screen — all of which replace `screen` entirely.
         */}
-        <InstallPrompt />
+        {!payLanding && <InstallPrompt />}
         </CentralBrainProvider>
       </WalletProvider>
     </TelegramProvider>

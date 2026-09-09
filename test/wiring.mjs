@@ -10360,7 +10360,7 @@ export default function run() {
       /عبارت بازیابی|پشتیبان/.test(doc));
   }
 
-  /* ---- 95. the classifieds board: a forum, never a money transmitter ----- */
+  /* ---- 95. payment gateway: a shareable landing, not a classifieds board ----- */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -10369,176 +10369,80 @@ export default function run() {
 
     /*
      * ─── THE LINE THIS FEATURE IS BUILT ON ──────────────────────────────────
-     * FinCEN: a platform that "only provides a forum where buyers and sellers
-     * post their bids and offers" while "the parties themselves settle through
-     * an outside venue" is NOT a money transmitter. Escrow, dispute handling,
-     * or a fee ON THE TRANSFER crosses it — a felony under 18 USC 1960 when
-     * unlicensed.
+     * The P2P «برد» tab was a classifieds board. It is gone. In its place a
+     * merchant builds a payment page: wallet bound, colour, language, network,
+     * amount (or open), then a URL-safe base64 payload so a customer can open
+     * `#/pay/:code` without Welcome, Onboarding, or the app chrome.
      *
-     * Asserted as ABSENCES, because the danger is a well-meaning future commit
-     * adding "just a small escrow" and nothing failing.
+     * The fee is the same 70 bps as everywhere else, split in wei, paid as two
+     * sequential transfers (merchant first, platform second). Trust Wallet is
+     * the customer connect path.
      */
-    const server = code(read('server/board.js'));
-    const client = code(read('src/lib/board.js'));
-    const panel = code(read('src/components/BoardPanel.jsx'));
+    const lib = code(read('src/lib/payLink.js'));
+    const panel = code(read('src/components/PayGatewayPanel.jsx'));
+    const landing = code(read('src/pages/PayLanding.jsx'));
+    const p2p = code(read('src/pages/P2P.jsx'));
+    const appSrc = read('src/App.jsx');
 
-    for (const [name, src] of [['server', server], ['client', client], ['UI', panel]]) {
-      t(`the board ${name} holds no escrow`, !/escrow/i.test(src));
-      t(`...and arbitrates no disputes (${name})`, !/dispute|arbitrat/i.test(src));
-    }
-    /* No endpoint may exist that settles or releases a trade. */
-    t('there is no settle/release/refund route',
-      !/\/board\/(settle|release|refund|trade|escrow)/.test(code(read('server/app.js'))));
+    t('the payment-link encoder exists', existsSync('src/lib/payLink.js'));
+    t('the merchant builder exists', existsSync('src/components/PayGatewayPanel.jsx'));
+    t('the customer landing exists', existsSync('src/pages/PayLanding.jsx'));
 
-    /*
-     * ─── THE OPS BUDGET, WHICH IS WHAT KEEPS THIS FREE ──────────────────────
-     * Vercel Blob's free tier is 10,000 SIMPLE OPS PER MONTH. One blob per
-     * listing would spend that in days: a single feed load costs one op per
-     * row, so 200 users refreshing a 50-row board is 10,000 ops in an
-     * afternoon. The whole board is therefore ONE document, served from the
-     * in-process cache in store.js on a warm instance for zero ops.
-     */
-    t('the whole board lives under one storage key', /const KEY = 'board:v1'/.test(server));
-    t('...with a hard row cap so a cold read stays small', /MAX_ROWS/.test(server));
-    t('...and listings expire on their own, with no cron to depend on',
-      /TTL_MS/.test(server) && /isLive/.test(server));
+    t('the gateway is reachable as a P2P tab', /'market', 'otc', 'pay'/.test(p2p));
+    t('...and P2P mounts the merchant builder', /<PayGatewayPanel/.test(p2p));
+    t('the classifieds board is no longer a P2P tab',
+      !/'board'/.test(p2p) && !/BoardPanel/.test(p2p));
 
-    /*
-     * ─── PAY TO PUBLISH: AN UNPAID ADVERT MUST BE INVISIBLE ─────────────────
-     * A free board fills with adverts from people with nothing to sell.
-     * Charging for the slot costs a spammer real money per advert.
-     *
-     * The property that matters is that invisibility is enforced by the DATA,
-     * not by a caller remembering to filter: `liveUntil` is set ONLY by
-     * activateListing, which runs only after a verified payment. So a bug in
-     * the UI cannot publish an unpaid row.
-     */
-    t('the public board shows only paid listings', /filter\(\(r\) => isLive\(r, now\)\)/.test(server));
-    t('...and only a verified payment can set the live window',
-      /liveUntil: until/.test(server) && !/liveUntil = Date\.now/.test(server));
-    /* Three tiers, one source of truth, cheapest first. */
-    t('the price list is declared once', /export const TIERS = \[/.test(server));
-    for (const [usd, days] of [[1, 1], [5, 7], [25, 30]]) {
-      t(`...including $${usd} for ${days} day(s)`,
-        new RegExp(`usd: ${usd}[^}]*\\}`).test(server.replace(/\s+/g, ' '))
-        || new RegExp(`days: ${days}, usd: ${usd}`).test(server));
-    }
-    /*
-     * The tier is derived from the amount RECEIVED, never from what the client
-     * asks for — otherwise a $1 payment could request 30 days and get it.
-     */
-    t('the tier is decided by the amount actually paid', /tierForAmount/.test(server));
-    t('...and rounds down rather than up', /paid \+ 1e-9 >= t\.usd/.test(server));
+    t('the payload is URL-safe base64 JSON, not a server lookup',
+      /encodePayPayload/.test(lib) && /decodePayPayload/.test(lib)
+      && /replace\(\/\\\+\/g, '-'\)/.test(lib));
+    t('the share URL is the canonical host, not the current one',
+      /publicAppUrl/.test(lib) && /\/#\/pay\//.test(lib));
+    t('the landing route is real',
+      appSrc.includes('path="/pay/:code"') && appSrc.includes("pages/PayLanding'"));
 
-    /*
-     * ─── PAYMENT IS VERIFIED, NOT BELIEVED ──────────────────────────────────
-     * The browser says "I paid, here is the hash". If the server trusted that,
-     * any 66-character string would buy a listing.
-     */
-    const promote = code(read('server/promote.js'));
-    t('the promotion payment is checked against the chain',
-      /eth_getTransactionReceipt/.test(promote));
-    t('...the transfer must be to OUR address',
-      /PROMO_RECIPIENT/.test(promote) && /topics\[2\]/.test(promote));
-    t('...for at least the cheapest tier', /MIN_UNITS/.test(promote) && /value < MIN_UNITS/.test(promote));
-    t('...on a transaction that actually succeeded', /receipt\.status/.test(promote));
-    /*
-     * The payer check stops somebody watching the chain for a large transfer
-     * to us and claiming a stranger's payment as their own.
-     */
-    t('...sent by the wallet claiming it', /same\(receipt\.from, payer\)/.test(promote));
-    /*
-     * REPLAY. A valid hash stays valid forever, so without this one $25
-     * payment could promote a listing every month, or be handed to a friend.
-     */
-    /*
-     * ─── REAL BUG FOUND IN TESTING ──────────────────────────────────────────
-     * A single `paidTx` field was overwritten on each renewal, so after a
-     * second payment the FIRST hash was forgotten and could be replayed for
-     * free days — by the buyer, or by anyone who read it off the public chain.
-     * Every spent hash is now remembered.
-     */
-    t('a payment hash can only ever be spent once',
-      /txAlreadyUsed/.test(server) && /txAlreadyUsed/.test(code(read('server/app.js'))));
-    t('...and EVERY past payment stays blocked, not just the latest',
-      /paidTxs/.test(server) && /paidTxs\.includes\(needle\)/.test(server));
-    /* Rows written before the fix must keep blocking their hash after deploy. */
-    t('...including rows written before that fix', /r\?\.paidTx === needle/.test(server));
+    t('the fee is the same 70 bps, split in wei',
+      /FEE_BPS/.test(lib) && /10000n/.test(lib) && /splitPayWei/.test(lib));
+    t('the customer pays the merchant first, then the platform',
+      /Merchant first, then the platform/.test(read('src/lib/payLink.js'))
+      && /sendPayTransfers/.test(lib));
+    t('a zero-rounded fee is not sent as a second transfer',
+      /Skip the fee transfer if it rounds to 0/.test(read('src/lib/payLink.js')));
+    t('the builder does not reuse sendToken for the split',
+      !/sendToken/.test(lib) && !/sendToken/.test(landing));
 
-    /* No API key: this must keep working if a key is rotated or revoked. */
-    t('verification needs no API key', !/ALCHEMY|API_KEY|apiKey/i.test(promote));
+    t('Trust Wallet is preferred when injected, otherwise WalletConnect',
+      /isTrustWallet/.test(landing) && /connectInjected/.test(landing)
+      && /connectWalletConnect/.test(landing));
+    t('the landing switches to the merchant network after connect',
+      /switchChain/.test(landing));
 
-    /*
-     * ─── THE PAID PLAN IS CONFINED TO ONE SCREEN ────────────────────────────
-     * Asked for explicitly: «نمیخام در صفحات دیگر این تبلیغات نشان داده شود».
-     * The Pro upsell renders inside BoardPanel and nowhere else. Checked by
-     * scanning every OTHER page and component for the panel or its class.
-     */
-    const files = [];
-    for (const dir of ['src/pages', 'src/components']) {
-      for (const f of readdirSync(dir)) {
-        if (!f.endsWith('.jsx')) continue;
-        if (f === 'BoardPanel.jsx') continue;
-        files.push(join(dir, f));
-      }
-    }
-    const leaked = files.filter((f) => /brd-pro|brd-tier|board\.publishTitle|payForPromotion/.test(read(f)));
-    t(`the Pro upsell appears on no other screen${leaked.length ? ` — ${leaked.join(', ')}` : ''}`,
-      leaked.length === 0);
-    /* And it is only offered to someone who has something to promote. */
-    t('...and is only shown when the user has a listing', /address && mine && tiers\.length > 0/.test(panel));
-    /*
-     * THE PRICE LIST IN A COLLAPSIBLE WARNING BOX — asked for explicitly. It
-     * is built from the server's own tiers so the screen cannot advertise a
-     * price the server will not honour.
-     */
-    t('the costs are shown in a collapsible warning box',
-      /board\.costsTitle/.test(panel) && /tone="warn"/.test(panel));
-    t('...built from the server price list, not hard-coded',
-      /tiers\.map/.test(panel) && !/\$25|\$5\b/.test(panel.replace(/\$\{[^}]*\}/g, '')));
-    t('...and warns that payment is final', /board\.costsRefund/.test(panel));
+    t('a pay deep-link skips the splash/welcome/onboarding/guide gates',
+      /payLanding/.test(appSrc)
+      && appSrc.indexOf('if (payLanding)') < appSrc.indexOf('else if (locked)'));
+    t('the pay landing is headerless like /intent',
+      /pathname === '\/intent' \|\| pathname.startsWith\('\/pay'\)/.test(appSrc));
+    t('the landing uses the platform logo, not a marketing asset',
+      /payBrandGrad/.test(landing) && !/public\/landing/.test(landing));
+    t('the merchant address is bound to the connected wallet',
+      /wallet\.address/.test(panel) && /encodePayPayload/.test(panel));
+    t('the merchant language picker does not persist the app language',
+      /persist=\{false\}/.test(panel));
+    t('the landing applies the language encoded in the link',
+      /setLanguage\(payload\.lang\)/.test(landing));
+    t('expandable sections carry icons',
+      /icon=\{<IconWallet/.test(panel) && /icon=\{<IconLink/.test(panel));
 
-    /*
-     * ─── USER TEXT IS RENDERED IN OTHER PEOPLE'S CLIENTS ────────────────────
-     * Same rule UsernameField already applies: angle brackets and quotes are
-     * removed outright rather than escaped, and bidi overrides are stripped
-     * because they let a string visually reverse the text around it.
-     */
-    t('listing text is sanitised before storage', /BIDI/.test(server) && /\[<>"'`\\\\\]/.test(server));
-    t('...and contact handles cannot carry a URL', /cleanContact/.test(server));
-
-    /*
-     * ─── FAILURE MODES THAT COST THE USER MONEY ─────────────────────────────
-     * The money leaves the wallet before the claim call. If that call fails
-     * the user must be told the payment SUCCEEDED, not that it failed —
-     * otherwise they pay twice.
-     */
-    t('a failed claim after a successful payment does not report failure',
-      /payClaimLater/.test(panel));
-    /* Sending Base calldata on the wrong chain can hit a different contract. */
-    t('the chain is re-checked after switching, before spending',
-      /WRONG_CHAIN/.test(client) && /wallet\.chainId !== terms\.chainId/.test(client));
-    /* Handing over a mempool hash would read as "payment rejected". */
-    t('the payment waits for a confirmation before claiming', /tx\.wait/.test(client));
-
-    /* Locale coverage, hand-written in both primary languages. */
     for (const lang of ['en', 'fa']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
-      t(`${lang} has the board copy`, Boolean(L.board?.title));
-      t(`${lang} says plainly that nobody holds the money`,
-        String(L.board?.safetyBody ?? '').length > 150);
-      /* Toasts resolve `toast.<key>`; a missing one renders the raw key. */
-      for (const k of ['boardPosted', 'boardFailed', 'payRejected', 'payWrongChain', 'payClaimLater']) {
-        t(`${lang} has the ${k} toast`, Boolean(L.toast?.[k]));
-      }
+      t(`${lang} labels the pay tab`, Boolean(L.p2p?.tab?.pay));
+      t(`${lang} has the payment-gateway copy`, Boolean(L.pay?.title) && Boolean(L.pay?.landing?.connect));
+      t(`${lang} interpolates the fee on the landing`,
+        String(L.pay?.landing?.fee || '').includes('{{fee}}'));
+      t(`${lang} interpolates the fee on the builder`,
+        String(L.pay?.feeNote || '').includes('{{fee}}')
+        && String(L.pay?.subtitle || '').includes('{{fee}}'));
     }
-
-    /* The tab must exist, and the other two must be untouched. */
-    const p2p = code(read('src/pages/P2P.jsx'));
-    /* The strip is market-first since the directory became a market — see
-       section 74 for why the default tab is the one that earns. */
-    t('the board is reachable as a P2P tab', /'market', 'otc', 'board'/.test(p2p));
-    t('...and the default tab is the market', /useState\('market'\)/.test(p2p));
   }
 
   /* ---- 96. the community feed: rendered, never hosted -------------------- */
@@ -10620,7 +10524,7 @@ export default function run() {
         String(L.community?.notice ?? '').length > 120);
       /* The tab label must exist or the button renders the raw key. */
       t(`${lang} labels the community tab`, Boolean(L.news?.tab?.community));
-      t(`${lang} labels the board tab`, Boolean(L.p2p?.tab?.board));
+      t(`${lang} labels the pay tab`, Boolean(L.p2p?.tab?.pay));
     }
 
     /*
@@ -10640,79 +10544,38 @@ export default function run() {
       !/CommunityPanel/.test(read('src/pages/P2P.jsx')));
     /* Market-first strip since the market replaced the directory (sec. 74). */
     t('...and the P2P tab strip is back to three tabs',
-      /\['market', 'otc', 'board'\]/.test(p2p));
+      /\['market', 'otc', 'pay'\]/.test(p2p));
     t('...and the market is the default P2P tab', /useState\('market'\)/.test(p2p));
     t('...and Headlines is still the default News tab',
       /NEWS_TABS\.includes\(fromUrl\) \? fromUrl : 'read'/.test(news));
   }
 
-  /* ---- 97. cancelling, the deleted sentence, and a cheap neon border ----- */
+  /* ---- 97. the pay landing is themed, headerless, and self-contained ----- */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
       .replace(/^\s*\/\/.*$/gm, '');
 
-    const panel = code(read('src/components/BoardPanel.jsx'));
-    const css = read('src/index.css');
+    const css = read('src/styles/pay-gateway.css');
+    const landing = code(read('src/pages/PayLanding.jsx'));
+    const lib = code(read('src/lib/payLink.js'));
+    const panel = code(read('src/components/PayGatewayPanel.jsx'));
 
-    /*
-     * ─── AN UNPAID DRAFT MUST BE DELETABLE ──────────────────────────────────
-     * There is a Remove button on the user's own row in the public list, but a
-     * draft NEVER appears in that list — it is hidden from everyone including
-     * its author. Without a second control the draft state had no way out.
-     */
-    t('a draft can be deleted from the panel itself', /board\.cancelDraft/.test(panel));
-    t('...and a live advert can be cancelled too', /board\.cancelLive/.test(panel));
-    t('...both wired to the delete call', /deleteListing/.test(code(read('src/lib/board.js'))));
-
-    /* The owner asked for this sentence to go. */
-    t('the "one advert per wallet" sentence is gone', !/oneEach/.test(panel));
-    for (const lang of ['en', 'fa', 'ar']) {
-      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
-      t(`${lang} no longer carries that string`, L.board?.oneEach === undefined);
-      t(`${lang} has the cancel labels`, Boolean(L.board?.cancelDraft) && Boolean(L.board?.cancelLive));
-    }
-
-    /*
-     * ─── THE NEON BORDER IS CSS, AND THAT IS THE WHOLE POINT ────────────────
-     * The component that was proposed mounts ~18 nested divs per advert, six
-     * of them blurred, and rebuilds two 27-stop conic gradients from
-     * JavaScript on EVERY frame — 2,400 gradient rebuilds per second with 20
-     * adverts on screen. The brief was explicitly "don't put the app under
-     * strain", so it is one pseudo-element driven by an animated custom
-     * property instead, reusing the `steps()` trick this file already uses for
-     * .card-rgb.
-     */
-    t('the neon border exists', /\.brd-row-neon::before/.test(css));
-    t('...and is not a per-frame JavaScript animation',
-      !/requestAnimationFrame/.test(panel) && !/ResizeObserver/.test(panel));
-    /* steps() is what turns 60 repaints per second into 10. */
-    t('...repainting is quantised with steps()',
-      /\.brd-row-neon::before[\s\S]{0,1200}?animation: rotate-angle [\d.]+s steps\(\d+\)/.test(css));
-    /* An animated blur filter on a list row is the most expensive thing there
-       is; the glow is a static shadow that never repaints. */
-    t('...and the glow does not animate a blur filter',
-      !/\.brd-row-neon[\s\S]{0,400}?filter:\s*blur/.test(css));
-
-    /* Colour per tier, as asked: 1 day white, 7 grey, 30 gold. */
-    for (const tier of ['d1', 'd7', 'd30']) {
-      t(`the ${tier} border has its own colour`, new RegExp(`\\.brd-neon-${tier}\\b`).test(css));
-    }
-    t('...and the class is chosen from the tier that was paid for',
-      /brd-neon-\$\{row\.tier\}/.test(panel));
-    /* A row with no tier must not emit brd-neon-undefined. */
-    t('...with no class at all when a row has no tier', /row\.tier \?/.test(panel));
-
-    /*
-     * A rotating border is exactly the motion that triggers vestibular
-     * symptoms, and an unsupported @property would leave a bright arc frozen
-     * in one corner looking like a rendering fault.
-     */
-    t('reduced motion stops the rotation but keeps the colour',
-      /prefers-reduced-motion[\s\S]{0,200}?\.brd-row-neon::before \{ animation: none/.test(css));
-    t('...and there is a fallback where @property is unsupported',
-      /@supports not \(background: conic-gradient\(from var\(--angle\)[\s\S]{0,400}?brd-row-neon/.test(css));
+    t('the landing paints from encoded theme tokens, not applyAccent',
+      /--pay-accent/.test(css) && /PAY_THEMES/.test(landing)
+      && !/applyAccent/.test(landing));
+    t('six page colours are offered',
+      /PAY_THEME_ORDER/.test(lib) && (lib.match(/id: 'mint'|id: 'cyan'|id: 'violet'|id: 'rose'|id: 'gold'|id: 'night'/g) || []).length === 6);
+    t('the merchant builder offers those colours as swatches',
+      /pay-themes/.test(panel) && /PAY_THEME_ORDER\.map/.test(panel));
+    t('the landing stylesheet is page-scoped, not dumped into index.css',
+      /import '\.\.\/styles\/pay-gateway\.css'/.test(read('src/pages/PayLanding.jsx'))
+      && !/\.pay-landing/.test(read('src/index.css')));
+    t('a QR of the share URL is built with the same encoder as Receive',
+      /qrcode-generator/.test(panel) && /qrcode\(0, 'M'\)/.test(panel));
+    t('reduced motion drops the landing glow',
+      /prefers-reduced-motion/.test(css));
   }
 
   /* ---- 98. real tickers on Stocks, and the perks released ---------------- */

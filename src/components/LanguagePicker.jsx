@@ -24,13 +24,14 @@ import { IconCheck } from './Icons';
  * `variant="compact"` is the inline chip row used in the guide header, where a
  * full list would push the content off screen.
  */
-export default function LanguagePicker({ variant = 'list', onPick, showCoverage = true }) {
+export default function LanguagePicker({ variant = 'list', onPick, showCoverage = true, persist = true, value }) {
   const { t, i18n } = useTranslation();
   const { haptic } = useTelegram();
+  const current = value ?? i18n.language;
 
   const pick = (code) => {
     haptic?.('select');
-    setLanguage(code);
+    if (persist !== false) setLanguage(code);
     onPick?.(code);
   };
 
@@ -40,7 +41,7 @@ export default function LanguagePicker({ variant = 'list', onPick, showCoverage 
         {LANGUAGES.map((l) => (
           <motion.button
             key={l.code}
-            className={`tag ${i18n.language === l.code ? 'active' : ''}`}
+            className={`tag ${current === l.code ? 'active' : ''}`}
             whileTap={{ scale: 0.93 }}
             onClick={() => pick(l.code)}
             lang={l.code}
@@ -57,7 +58,7 @@ export default function LanguagePicker({ variant = 'list', onPick, showCoverage 
   return (
     <div className="lang-list" role="radiogroup" aria-label={t('common.language')}>
       {LANGUAGES.map((l, i) => {
-        const active = i18n.language === l.code;
+        const active = current === l.code;
         return (
           <motion.button
             key={l.code}

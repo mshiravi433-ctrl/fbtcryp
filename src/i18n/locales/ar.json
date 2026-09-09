@@ -2693,7 +2693,7 @@
     "tab": {
       "market": "السوق",
       "otc": "OTC على السلسلة",
-      "board": "اللوحة"
+      "pay": "بوابة الدفع"
     },
     "otcTitle": "Direct wallet-to-wallet",
     "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
