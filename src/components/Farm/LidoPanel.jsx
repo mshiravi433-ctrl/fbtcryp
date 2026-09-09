@@ -31,6 +31,7 @@ import {
   verifyDeployment,
   verifyLidoReceipt
 } from '../../lib/defi/lido';
+import { localChainLabel } from '../../lib/farmDeFi';
 import {
   cancelLidoAction,
   confirmLidoAction,
@@ -48,6 +49,7 @@ import { evaluateExecutionGate, isBlocked } from '../../lib/executionGate';
 import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
+import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
 
 const fmt = (n, d = 4) => {
   if (n == null || !Number.isFinite(Number(n))) return '—';
@@ -156,7 +158,7 @@ export default function LidoPanel({ pool }) {
         if (!alive.current) return;
         setPlan(built);
       } catch (err) {
-        if (alive.current) setError(explainRevert(err).reason ?? String(err));
+        if (alive.current) setError(farmErrorText(err, t, explainRevert(err)));
       }
       return;
     }
@@ -182,9 +184,9 @@ export default function LidoPanel({ pool }) {
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
-      if (alive.current) setError(explainRevert(err).reason ?? err?.code ?? String(err));
+      if (alive.current) setError(farmErrorText(err, t, explainRevert(err)));
     }
-  }, [owner, wallet]);
+  }, [owner, wallet, t]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -306,7 +308,7 @@ export default function LidoPanel({ pool }) {
               ? t('farm.lido.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
               : isTransactionReplacement(err)
                 ? t('farm.lido.replaced', { defaultValue: 'Transaction was replaced or cancelled.' })
-                : (explained.key ? t(explained.key) : (explained.reason ?? err?.code ?? t('farm.lido.failed')));
+                : (explained.key ? t(explained.key) : farmErrorLabel(err, t));
           setError(label);
           setBusy('');
           await refresh();
@@ -314,7 +316,7 @@ export default function LidoPanel({ pool }) {
         }
       }
     } catch (err) {
-      setError(err?.code ?? t('farm.lido.failed'));
+      setError(farmErrorLabel(err, t));
     }
     setBusy('');
     setOpen(false);
@@ -350,7 +352,7 @@ export default function LidoPanel({ pool }) {
         ? t('farm.lido.userRejected', { defaultValue: 'Signature rejected' })
         : isTransactionTimeout(err)
           ? t('farm.lido.timeout', { defaultValue: 'Transaction is still pending; check the wallet or explorer.' })
-          : (explained.reason ?? err?.code ?? t('farm.lido.failed')));
+          : (explained.key ? t(explained.key) : farmErrorLabel(err, t)));
     } finally {
       setBusy('');
       await refresh();
@@ -394,7 +396,7 @@ export default function LidoPanel({ pool }) {
             {t('farm.lido.panelTitle')}
           </div>
           <div className="muted" style={{ fontSize: 11.6, margin: '3px 0 0' }}>
-            {t('farm.lido.panelSub', { chain: EVM_CHAINS[LIDO.chainId].name })}
+            {t('farm.lido.panelSub', { chain: localChainLabel(EVM_CHAINS[LIDO.chainId].name, t) })}
           </div>
         </div>
         {status?.feeBps != null && (
@@ -426,7 +428,7 @@ export default function LidoPanel({ pool }) {
 
       {knownHere && (
         <p className="muted" style={{ fontSize: 11.6, margin: '10px 0 0' }}>
-          {t('farm.lido.wrongChainNote', { chain: EVM_CHAINS[LIDO.chainId].name })}
+          {t('farm.lido.wrongChainNote', { chain: localChainLabel(EVM_CHAINS[LIDO.chainId].name, t) })}
         </p>
       )}
 
@@ -459,7 +461,7 @@ export default function LidoPanel({ pool }) {
         {!wallet.isConnected && <span className="faint">{t('farm.lido.connectFirst')}</span>}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(LIDO.chainId)}>
-            {t('farm.lido.switchChain', { chain: EVM_CHAINS[LIDO.chainId].name })}
+            {t('farm.lido.switchChain', { chain: localChainLabel(EVM_CHAINS[LIDO.chainId].name, t) })}
           </button>
         )}
         {wallet.isConnected && !wrongChain && stakeAllowed && (

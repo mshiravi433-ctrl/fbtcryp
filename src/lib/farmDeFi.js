@@ -34,6 +34,95 @@ export const FARM_EXECUTION_ERRORS = Object.freeze([
   'CONTRACT_REVERT', 'RPC_ERROR', 'TIMEOUT', 'TRANSACTION_DROPPED', 'INDEXER_DELAY'
 ]);
 
+/**
+ * Feed chain name → the network-mark key vendored in lib/assetIconData.js.
+ * The feed spells chains as names ("Ethereum", "BNB Chain", "zkSync Era"…);
+ * AssetIcon wants chain ids / lowercase slugs. Unknown chains return null and
+ * the UI falls back to the symbol monogram — an icon must never be missing.
+ */
+export const CHAIN_ICON_KEYS = Object.freeze({
+  Ethereum: '1',
+  Optimism: '10',
+  'BNB Chain': '56',
+  BSC: '56',
+  Binance: '56',
+  Unichain: '130',
+  Polygon: '137',
+  Monad: '143',
+  Sonic: '146',
+  Mantle: '5000',
+  Base: '8453',
+  Arbitrum: '42161',
+  Avalanche: '43114',
+  Linea: '59144',
+  Berachain: '80094',
+  Tron: 'tron',
+  Solana: 'solana',
+  Bitcoin: 'bitcoin',
+  Cosmos: 'cosmos',
+  TON: 'ton'
+});
+
+/** The network-mark key for a feed chain name, or null when unknown. */
+export function chainIconKey(name) {
+  return CHAIN_ICON_KEYS[String(name ?? '')] ?? null;
+}
+
+/**
+ * Feed slugs are not labels. This is the canonical display form for the
+ * well-known projects; anything else gets a title-case fallback so a row
+ * never renders the raw slug ("aave-v3") to a human.
+ */
+export const PROJECT_DISPLAY_NAMES = Object.freeze({
+  'aave-v3': 'Aave v3',
+  'compound-v3': 'Compound III',
+  'morpho-blue': 'Morpho Blue',
+  lido: 'Lido',
+  'rocket-pool': 'Rocket Pool',
+  'uniswap-v3': 'Uniswap v3',
+  'curve-dex': 'Curve',
+  'pancakeswap-amm': 'PancakeSwap',
+  'yearn-finance': 'Yearn',
+  'convex-finance': 'Convex',
+  beefy: 'Beefy',
+  'jito-liquid-staking': 'Jito',
+  'marinade-liquid-staking': 'Marinade',
+  'jupiter-staked-sol': 'Jupiter',
+  'binance-staked-eth': 'Binance stETH',
+  'ether.fi-stake': 'Ether.fi',
+  gmx: 'GMX',
+  pendle: 'Pendle',
+  'balancer-v2': 'Balancer',
+  sushi: 'SushiSwap',
+  velodrome: 'Velodrome',
+  aerodrome: 'Aerodrome',
+  camelot: 'Camelot',
+  'trader-joe': 'Trader Joe',
+  spookyswap: 'SpookySwap',
+  'benqi-lending': 'Benqi',
+  stargate: 'Stargate',
+  'woofi': 'WOO Fi'
+});
+
+export function projectDisplayName(slug) {
+  const s = String(slug ?? '');
+  if (PROJECT_DISPLAY_NAMES[s]) return PROJECT_DISPLAY_NAMES[s];
+  return s
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => (w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+}
+
+/**
+ * Localised label for a feed chain name, so «سوییچ به {{chain}}» reads
+ * «سوییچ به اتریوم» on a Persian device instead of «سوییچ به Ethereum».
+ * Unknown names fall back to the raw name (English), never a raw key.
+ */
+export function localChainLabel(name, t) {
+  return t(`farm.chainLabels.${name}`, { defaultValue: name });
+}
+
 export const FARM_EVENTS = Object.freeze([
   'FARM_DISCOVERED', 'POOL_UPDATED', 'POSITION_UPDATED', 'REWARD_UPDATED',
   'FARM_DEPOSIT_STARTED', 'FARM_DEPOSIT_CONFIRMED', 'FARM_WITHDRAW_CONFIRMED',

@@ -12,8 +12,8 @@
  * This file runs under the DEFAULT config, where every money-in flag is false,
  * so it asserts the two properties that keep a closed build honest:
  *
- *   · nothing is advertised: no execution badge, no execution panel, and the
- *     six «ناموجود» buttons plus the read-only notice stay exactly as they were;
+ *   · nothing is advertised: no execution badge, no execution panel, no dead
+ *     «ناموجود» action buttons, and the read-only notice stays as it was;
  *   · the position hub still MOUNTS for a visitor with no wallet connected —
  *     the panels inside it decide their own visibility, so in this build they
  *     render nothing, but the section itself must not be gated on a connection.
@@ -78,6 +78,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const openDetails = async (container, symbol) => {
   await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
   const card = [...container.querySelectorAll('.farm-pool')].find((c) => c.textContent.includes(symbol));
+  // Cards collapse to a header; the analytics CTA lives in the open body.
+  fireEvent.click(card.querySelector('.farm-pool-toggle'));
   const details = [...card.querySelectorAll('button')].find((b) => b.textContent.includes(t('farm.viewAnalytics')));
   fireEvent.click(details);
   await screen.findByText(t('farm.historyTitle'));
@@ -104,7 +106,7 @@ describe('Farm execution surface — build with the money path closed', () => {
     expect(farmExecutionAdapterFor(null)).toBeNull();
   });
 
-  it('advertises no execution and keeps the honest unavailable buttons', async () => {
+  it('advertises no execution and shows no dead action buttons', async () => {
     const { container } = mount();
     const card = await openDetails(container, 'USDC');
     // No badge: the build cannot offer execution to whoever is looking.
@@ -112,9 +114,12 @@ describe('Farm execution surface — build with the money path closed', () => {
     expect(screen.queryByText(t('farm.executionActivated'))).toBeNull();
     expect(screen.queryByTestId('farm-pool-execution-aave-base')).toBeNull();
     expect(screen.getByText(t('farm.analysisActivated'))).toBeTruthy();
-    const dead = [...container.querySelectorAll('.farm-action-grid button')].filter((b) => b.disabled);
-    expect(dead).toHaveLength(6);
-    expect(dead[0].textContent).toContain(t('farm.statusUnavailable'));
+    // The six permanently-disabled «ناموجود» buttons are GONE — a dead
+    // button is clutter, not honesty. The action grid now holds only what
+    // exists (swap/stake + pool link), all enabled.
+    const gridButtons = [...container.querySelectorAll('.farm-action-grid button')];
+    expect(gridButtons.filter((b) => b.disabled)).toHaveLength(0);
+    expect(screen.queryByText(t('farm.statusUnavailable'))).toBeNull();
     // The page header keeps calling itself read-only, because in this build it
     // is: the badge is derived from the adapter table, not hardcoded.
     expect(screen.getAllByText(t('farm.readOnly')).length).toBeGreaterThan(0);

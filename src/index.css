@@ -11872,7 +11872,6 @@ button.settings-quick-action {
 .farm-market-grid,
 .farm-strategy-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .farm-pool-selected { border-color: color-mix(in srgb, var(--rgb-1) 62%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--rgb-1) 18%, transparent); }
-.farm-pool-head { gap: 10px; align-items: flex-start; }
 .farm-apy-wrap { text-align: end; flex: 0 0 auto; min-width: 76px; }
 .farm-apy-label { font-size: 10.5px; line-height: 1.35; }
 .farm-card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
@@ -13531,6 +13530,157 @@ button.settings-quick-action {
 }
 .farm-pool-with-details { min-width: 0; }
 .farm-pool-with-details > .farm-details { margin-top: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FARM — collapsible pool cards, picker row, position-hub accordion.
+   Collapsed cards turn the page from a metrics wall into a list; the picker
+   row keeps network + sort on one line at equal size; the hub mounts panels
+   lazily. All colours come from the theme vars, so dark and light both hold.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── network + sort pickers: ONE row, two equal boxes ────────────────────── */
+.farm-select-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+.farm-select-row .modern-select { min-width: 0; }
+
+/* The static «sorted by score» box on tabs without a sort picker — it mirrors
+   the compact trigger geometry so the network box never changes width. */
+.farm-select-static {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 14px;
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--bg-raised) 45%, transparent);
+  color: var(--text-2);
+}
+.farm-select-static-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  color: var(--rgb-1);
+}
+.farm-select-static-icon svg { width: 17px; height: 17px; }
+
+/* ── pool card: tappable header, body only when open ─────────────────────── */
+.farm-pool-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.farm-pool-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.farm-pool-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.farm-pool-meta {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-pool-chevron {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
+  border: 1px solid var(--line);
+  transition: transform 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.farm-pool.is-open .farm-pool-chevron {
+  color: var(--rgb-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 35%, transparent);
+}
+.farm-pool-body {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── position hub: five compact rows instead of five stacked panels ──────── */
+.farm-position-hub .farm-hub-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  overflow: hidden;
+  min-width: 0;
+}
+.farm-hub-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.farm-hub-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.farm-hub-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.6px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-hub-body {
+  padding: 0 12px 12px;
+}
+.farm-hub-body .farm-aave-panel,
+.farm-hub-body .farm-compound-panel,
+.farm-hub-body .farm-aavearb-panel,
+.farm-hub-body .farm-lido-panel,
+.farm-hub-body .farm-morpho-panel {
+  margin-top: 0;
+  box-shadow: none;
+}
 
 /* The «داغ همین حالا» rail keeps its flex geometry from the hot-strip block
    above — nothing here may turn it back into a grid. Only the surfaces are

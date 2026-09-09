@@ -6,6 +6,8 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
 import SegIndicator from '../components/SegIndicator';
+import ModernSelect from '../components/ModernSelect';
+import AssetIcon from '../components/AssetIcon';
 import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -22,8 +24,8 @@ import {
 import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
 import { LST_ASSETS } from '../lib/solanaAssets';
 import {
-  AUTOCOMPOUND_PROJECTS, buildYieldStrategies, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
-  farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, VAULT_PROJECTS
+  AUTOCOMPOUND_PROJECTS, buildYieldStrategies, chainIconKey, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
+  farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, projectDisplayName, VAULT_PROJECTS
 } from '../lib/farmDeFi';
 /*
  * Supported execution positions live in a feed-independent hub. DefiLlama is
@@ -33,6 +35,7 @@ import {
  * row and the hub can never disagree about which pools this app can transact.
  */
 import FarmPositionHub, { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
+import { feedErrorLabel } from '../lib/defi/farmErrors';
 import TrendChart from '../components/TrendChart';
 
 /*
@@ -77,6 +80,44 @@ const ETH_STAKE_JOIN = {
 const ethStakeTokens = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
 
 const GOLD_TOKENS = ['PAXG', 'XAUt'];
+
+/*
+ * Localised labels for feed rows. The feed sends slugs and English names
+ * (`aave-v3`, `Ethereum`); humans read the locale. `farm.chainLabels.*` and
+ * `farm.projectLabels.*` live in the locale files, and anything absent falls
+ * back to a readable English form — never a raw slug or a machine code.
+ */
+const chainLabel = (name, t) => t(`farm.chainLabels.${name}`, { defaultValue: name });
+const projectLabel = (slug, t) => t(`farm.projectLabels.${slug}`, { defaultValue: projectDisplayName(slug) });
+
+/* The picker glyphs: small, offline, theme-neutral inline SVGs. */
+const GLOBE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3c2.6 2.6 3.9 5.6 3.9 9S14.6 18.4 12 21c-2.6-2.6-3.9-5.6-3.9-9S9.4 5.6 12 3z" />
+  </svg>
+);
+const SCORE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.8-5.3-2.9-5.3 2.9 1.1-5.8L3.5 9.7l5.9-.8z" />
+  </svg>
+);
+const APY_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 17l5-5 4 4 7-7" />
+    <path d="M15 9h5v5" />
+  </svg>
+);
+const TVL_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z" />
+    <path d="M4 7.2l8 4.4 8-4.4" />
+    <path d="M12 11.6v9.6" />
+  </svg>
+);
+
+const SORT_ICONS = { score: SCORE_ICON, apy: APY_ICON, tvlUsd: TVL_ICON };
 
 function RiskPill({ risk, t }) {
   const normalized = ['low', 'medium', 'high'].includes(risk) ? risk : 'high';
@@ -379,12 +420,12 @@ function ProtocolStatusCard({ protocol, t }) {
           <span className="mono" dir="ltr" title={capabilities}>{capabilities}</span>
         </div>
       </div>
-      {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{protocol.error}</p>}
+      {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{feedErrorLabel(protocol.error, t)}</p>}
     </motion.section>
   );
 }
 
-function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, onShowDetails, t }) {
+function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, onGetTokens, onOpenPool, t }) {
   const route = investRoute(pool);
   /*
    * «این استخر در برنامه اجرا می‌شود» — but only in a build that may actually
@@ -400,60 +441,84 @@ function PoolCard({ pool, amount, selected, onSelect, onGetTokens, onOpenPool, o
     amountUsd: amount
   });
   const beforeGas = Math.max(-100, Number(pool.apy || 0) - economics.fbtFeeApy);
+  const iconKey = chainIconKey(pool.chain);
 
+  /*
+   * COLLAPSED BY DEFAULT.
+   * The page used to stack every metric, every bar and every badge of every
+   * pool in one tall column. Now the card is one tappable header — icon,
+   * symbol, project · chain, APY, chevron — and the body only renders when the
+   * user opens it, so the screen reads as a list instead of a wall.
+   */
   return (
-    <motion.article className={`farm-pool ${selected ? 'farm-pool-selected' : ''}`} variants={riseIn} id={`farm-pool-${pool.id}`}>
-      <div className="row-between farm-pool-head">
-        <div style={{ minWidth: 0 }}>
-          <div className="farm-pool-sym" dir="ltr">{pool.symbol}</div>
-          <div className="set-row-sub">{pool.project} · {pool.chain}</div>
-        </div>
-        <div className="farm-apy-wrap">
-          <div className="farm-apy mono" dir="ltr">{pool.apy}%</div>
-          <div className="faint farm-apy-label">{t('farm.estimatedApy')}</div>
-        </div>
-      </div>
+    <motion.article className={`farm-pool ${selected ? 'farm-pool-selected' : ''} ${expanded ? 'is-open' : ''}`} variants={riseIn} id={`farm-pool-${pool.id}`}>
+      <button
+        type="button"
+        className="farm-pool-toggle"
+        aria-expanded={expanded}
+        onClick={() => onToggle(pool)}
+        title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}
+      >
+        <span className="farm-pool-icon" aria-hidden="true">
+          {iconKey
+            ? <AssetIcon chain={iconKey} size={34} />
+            : <AssetIcon symbol={pool.symbol} size={34} />}
+        </span>
+        <span className="farm-pool-id">
+          <span className="farm-pool-sym" dir="ltr">{pool.symbol}</span>
+          <span className="farm-pool-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
+        </span>
+        <span className="farm-apy-wrap">
+          <span className="farm-apy mono" dir="ltr">{pool.apy}%</span>
+          <span className="faint farm-apy-label">{t('farm.estimatedApy')}</span>
+        </span>
+        <span className="farm-pool-chevron" aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+      </button>
 
-      <div className="farm-card-badges">
-        {executable && <span className="pill pill-neutral farm-exec-badge" data-testid={`farm-exec-badge-${pool.id}`}>{t('farm.execBadge')}</span>}
-        <RiskPill risk={pool.risk} t={t} />
-        <span className="pill pill-neutral">{pool.chain}</span>
-        <span className="pill pill-neutral">{pool.type === 'staking' ? t('farm.category.staking') : t('farm.category.lp')}</span>
-        {pool.stablecoin && <span className="pill pill-neutral">{t('farm.stableShort')}</span>}
-        {pool.ilRisk && <span className="pill pill-down">{t('farm.ilShort')}</span>}
-        {pool.score != null && <span className="pill pill-neutral">{t('farm.score', { score: pool.score })}</span>}
-        <FreshnessPill freshness={pool.freshness} t={t} />
-      </div>
+      {expanded && (
+        <div className="farm-pool-body">
+          <div className="farm-card-badges">
+            {executable && <span className="pill pill-neutral farm-exec-badge" data-testid={`farm-exec-badge-${pool.id}`}>{t('farm.execBadge')}</span>}
+            <RiskPill risk={pool.risk} t={t} />
+            <span className="pill pill-neutral">{chainLabel(pool.chain, t)}</span>
+            <span className="pill pill-neutral">{pool.type === 'staking' ? t('farm.category.staking') : t('farm.category.lp')}</span>
+            {pool.stablecoin && <span className="pill pill-neutral">{t('farm.stableShort')}</span>}
+            {pool.ilRisk && <span className="pill pill-down">{t('farm.ilShort')}</span>}
+            {pool.score != null && <span className="pill pill-neutral">{t('farm.score', { score: pool.score })}</span>}
+            <FreshnessPill freshness={pool.freshness} t={t} />
+          </div>
 
-      {pool.poolMeta && <p className="faint" style={{ margin: '7px 0 0', fontSize: 11.5 }}>{pool.poolMeta}</p>}
+          {pool.poolMeta && <p className="faint" style={{ margin: '7px 0 0', fontSize: 11.5 }}>{pool.poolMeta}</p>}
 
-      <SplitBar pool={pool} t={t} />
-      <UnusualNote pool={pool} t={t} />
-      <EarningsLine pool={pool} amount={amount} t={t} />
+          <SplitBar pool={pool} t={t} />
+          <UnusualNote pool={pool} t={t} />
+          <EarningsLine pool={pool} amount={amount} t={t} />
 
-      <div className="farm-metrics-grid">
-        <Metric label={t('farm.tvl')} value={fmtCompact(pool.tvlUsd)} />
-        <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
-        <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
-        <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} />
-        <Metric label={t('farm.fbtFee')} value={`${economics.fbtFeeApy.toFixed(2)}%`} />
-        <Metric label={t('farm.netBeforeGas')} value={`${beforeGas.toFixed(2)}%`} strong />
-      </div>
-      <p className="faint farm-source-line">
-        {t('farm.sourceLine', { source: pool.source, time: pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' })}
-      </p>
+          <div className="farm-metrics-grid">
+            <Metric label={t('farm.tvl')} value={fmtCompact(pool.tvlUsd)} />
+            <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
+            <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
+            <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} />
+            <Metric label={t('farm.fbtFee')} value={`${economics.fbtFeeApy.toFixed(2)}%`} />
+            <Metric label={t('farm.netBeforeGas')} value={`${beforeGas.toFixed(2)}%`} strong />
+          </div>
+          <p className="faint farm-source-line">
+            {t('farm.sourceLine', { source: pool.source, time: pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' })}
+          </p>
 
-      <ILToy pool={pool} t={t} />
+          <ILToy pool={pool} t={t} />
 
-      <div className="farm-actions">
-        <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
-        <button className="btn btn-ghost farm-btn" onClick={() => onShowDetails(pool)} aria-expanded={selected}>{selected ? t('farm.hideAnalytics') : t('farm.viewAnalytics')}</button>
-      </div>
-      {pool.url && (
-        <div className="farm-actions">
-          <button className="btn btn-ghost farm-btn farm-btn-minor" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>
-            {t('farm.openPool')}
-          </button>
+          <div className="farm-actions">
+            <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
+            <button className="btn btn-ghost farm-btn" onClick={() => onShowDetails(pool)} aria-expanded={selected}>{selected ? t('farm.hideAnalytics') : t('farm.viewAnalytics')}</button>
+          </div>
+          {pool.url && (
+            <div className="farm-actions">
+              <button className="btn btn-ghost farm-btn farm-btn-minor" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>
+                {t('farm.openPool')}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </motion.article>
@@ -518,8 +583,8 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
 
       <div className="farm-economics">
         <Metric label={t('farm.amount')} value={fmtUsd(amount)} />
-        <Metric label={t('farm.protocol')} value={pool.project} />
-        <Metric label={t('farm.network')} value={pool.chain} />
+        <Metric label={t('farm.protocol')} value={projectLabel(pool.project, t)} />
+        <Metric label={t('farm.network')} value={chainLabel(pool.chain, t)} />
         <Metric label={t('farm.tvl')} value={fmtCompact(pool.tvlUsd)} />
         <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
         <Metric label={t('farm.volume7d')} value={research.volumeUsd7d == null ? null : fmtCompact(research.volumeUsd7d)} unavailable={research.volumeUsd7d == null} />
@@ -560,32 +625,28 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         ))}
       </div>
 
-      <div className="card card-soft" style={{ marginTop: 12 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{t('farm.howToInvestTitle')}</div>
+      <InfoBox title={t('farm.howToInvestTitle')} defaultOpen={false} id="farm-how-to-invest">
         <p className="faint" style={{ margin: '0 0 6px', fontSize: 12, lineHeight: 1.8 }}>{t('farm.howToInvest1')}</p>
         <p className="faint" style={{ margin: 0, fontSize: 12, lineHeight: 1.8 }}>{t('farm.howToInvest2')}</p>
-      </div>
+      </InfoBox>
 
       <div className="farm-source-line faint">
         {t('farm.sourceLine', { source: research.source, time: updateTime })}
         {research.freshness && <> · {research.freshness}</>}
       </div>
 
+      {/*
+        ACTIONS — only what this app can really do.
+        The six «ناموجود» placeholder buttons (add/remove liquidity, stake/
+        unstake LP, claim, compound) used to sit here for every unsupported
+        pool: six permanently-disabled controls that argued with the screen.
+        They are gone. What remains is what exists: the swap/stake handoff and
+        the pool link. A pool an adapter CAN transact shows its own live
+        panel below instead of dead buttons.
+      */}
       <div className="farm-action-grid">
         {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
         {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
-        {/*
-          * A supported pool shows ITS adapter's buttons below, not this grid:
-          * six dead «ناموجود» buttons next to a working supply button is a
-          * screen arguing with itself. Every other pool keeps them, because
-          * "unavailable" is the true answer there and must stay visible rather
-          * than becoming an enabled button that does nothing.
-          */}
-        {!ExecutionPanel && ['addLiquidity', 'removeLiquidity', 'stakeLp', 'unstakeLp', 'claim', 'compound'].map((action) => (
-          <button key={action} className="btn btn-ghost farm-btn" disabled title={t('farm.statusUnavailable')}>
-            {t(`farm.action.${action}`)} · {t('farm.statusUnavailable')}
-          </button>
-        ))}
       </div>
       {ExecutionPanel && (
         <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
@@ -649,12 +710,12 @@ function HotStrip({ rows, onSelect, t }) {
       </div>
       <div className="farm-hot-grid">
         {hot.map((pool, i) => (
-          <button key={pool.id} type="button" className="farm-hot-card" onClick={() => onSelect(pool)} title={`${pool.symbol} · ${pool.project} · ${pool.chain}`}>
+          <button key={pool.id} type="button" className="farm-hot-card" onClick={() => onSelect(pool)} title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}>
             <span className="farm-hot-top">
               <span className="farm-hot-rank" aria-hidden="true">{i + 1}</span>
               <span className="farm-hot-sym" dir="ltr">{pool.symbol}</span>
             </span>
-            <span className="farm-hot-meta">{pool.project} · {pool.chain}</span>
+            <span className="farm-hot-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
             <span className="farm-hot-apy mono" dir="ltr">{pool.apy}%</span>
             {pool.score != null && <span className="farm-hot-score">{t('farm.score', { score: pool.score })}</span>}
           </button>
@@ -684,6 +745,7 @@ export default function Farm() {
   const [amount, setAmount] = useState(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const [yieldCenterOpen, setYieldCenterOpen] = useState(false);
   const tabsRef = useRef(null);
 
@@ -753,6 +815,22 @@ export default function Farm() {
   const chains = useMemo(() => [...new Set(opportunities.map((p) => p.chain))].sort(), [opportunities]);
   const selectedPool = opportunities.find((p) => p.id === selected?.id) || null;
 
+  /* Picker option lists: chain rows carry the network icon, sort rows carry
+     a small glyph, and every label is localised. */
+  const networkOptions = useMemo(() => [
+    { value: 'all', label: t('farm.allNetworks'), iconNode: GLOBE_ICON },
+    ...chains.map((name) => ({
+      value: name,
+      label: chainLabel(name, t),
+      chain: chainIconKey(name) ?? undefined
+    }))
+  ], [chains, t]);
+  const sortOptions = useMemo(() => [
+    { value: 'score', label: t('farm.sort.score'), iconNode: SCORE_ICON },
+    { value: 'apy', label: t('farm.sort.apy'), iconNode: APY_ICON },
+    { value: 'tvlUsd', label: t('farm.sort.tvlUsd'), iconNode: TVL_ICON }
+  ], [t]);
+
   const recommended = useMemo(() => filtered.slice(0, 8), [filtered]);
   const marketRows = useMemo(() => {
     const first = (sorter) => [...filtered].sort(sorter)[0];
@@ -774,11 +852,18 @@ export default function Farm() {
     freshness: data?.freshness
   }), [data, error]);
 
-  const selectTab = (id) => { haptic?.('select'); setSelected(null); setParams({ tab: id }, { replace: true }); };
+  const selectTab = (id) => { haptic?.('select'); setSelected(null); setExpandedId(null); setParams({ tab: id }, { replace: true }); };
+  const togglePool = (pool) => {
+    haptic?.('light');
+    setExpandedId((v) => (v === pool.id ? null : pool.id));
+  };
   const selectPool = (pool) => {
     haptic?.('light');
     const next = selected?.id === pool.id ? null : pool;
     setSelected(next);
+    /* Opening analytics also opens the card body, so the buttons it
+       references are visible; closing analytics collapses the card too. */
+    setExpandedId(next ? pool.id : null);
     const context = { page: 'farm', tab, selectedPool: next?.id || null, network: next?.chain || null, walletState: wallet.isConnected ? 'connected' : 'read-only', previousIntent: null, pendingAction: null };
     try { sessionStorage.setItem('fbt:farm-context', JSON.stringify(context)); } catch { /* storage optional */ }
     emitFarmEvent('POOL_UPDATED', context);
@@ -815,7 +900,7 @@ export default function Farm() {
     <motion.div className="farm-pool-grid" variants={stagger} initial="hidden" animate="show">
       {rows.map((pool) => (
         <div key={pool.id} className="farm-pool-with-details">
-          <PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
+          <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
           {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
         </div>
       ))}
@@ -875,13 +960,47 @@ export default function Farm() {
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
         {FILTERS.map((id) => <button key={id} className={`tag ${filter === id ? 'active' : ''}`} onClick={() => setFilter(id)}>{t(`farm.category.${id}`)}</button>)}
       </div>
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginBlock: 10 }}>
-        <label className="faint">{t('farm.network')} <select className="farm-search" value={chain} onChange={(e) => setChain(e.target.value)} aria-label={t('farm.network')}>
-          <option value="all">{t('farm.allNetworks')}</option>{chains.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select></label>
-        {['recommended', 'pools'].includes(tab) && <label className="faint">{t('farm.sortBy')} <select className="farm-search" value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t('farm.sortBy')}>
-          {['score', 'apy', 'tvlUsd'].map((key) => <option key={key} value={key}>{t(`farm.sort.${key}`)}</option>)}
-        </select></label>}
+      {/*
+        NETWORK + SORT — two modern pickers in ONE horizontal row.
+        Native selects cannot show a chain icon and their popups ignore the
+        theme. Both boxes here are the shared ModernSelect: icon + label +
+        chevron trigger, and the option list opens as a properly-sized sheet
+        (dark and light), so the page never carries two stretched dropdowns.
+        The row splits 50/50 and stays on one line — aligned, same height,
+        same width.
+      */}
+      <div className="farm-select-row">
+        <ModernSelect
+          value={chain}
+          onChange={(v) => setChain(v)}
+          options={networkOptions}
+          title={t('farm.network')}
+          triggerSublabel={t('farm.network')}
+          compact
+          testId="farm-network-select"
+        />
+        {['recommended', 'pools'].includes(tab) ? (
+          <ModernSelect
+            value={sort}
+            onChange={(v) => setSort(v)}
+            options={sortOptions}
+            title={t('farm.sortBy')}
+            triggerSublabel={t('farm.sortBy')}
+            compact
+            searchable={false}
+            testId="farm-sort-select"
+          />
+        ) : (
+          /* On tabs without a sort control the slot stays filled with the
+             fixed rule, so the network box never jumps widths. */
+          <div className="farm-select-static" role="note">
+            <span className="modern-select-icon farm-select-static-icon" aria-hidden="true">{SORT_ICONS.score}</span>
+            <span className="modern-select-text">
+              <span className="modern-select-label">{t('farm.sort.score')}</span>
+              <span className="modern-select-sublabel">{t('farm.sortBy')}</span>
+            </span>
+          </div>
+        )}
       </div>
       <div className="farm-controls">
         <input className="farm-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('farm.search')} aria-label={t('farm.search')} />
@@ -907,8 +1026,8 @@ export default function Farm() {
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
       {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
-      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
-      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} selected={selected?.id === pool.id} onSelect={selectPool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
 
       {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
