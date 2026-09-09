@@ -43,6 +43,7 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     owner, intent = null, financial = null, world = null, research = null,
     strategies = [], competition = null, simulation = null, risk = null,
     policyVerdict = null, preferences = null, goal = null,
+    globalIntel = null, crossAsset = null,
     executionRequested = false, correlationId = null, trace = null
   } = {}) {
     const at = now();
@@ -138,6 +139,16 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     }
     if (financial.missing?.length) conditions.push(`unread inputs: ${financial.missing.join(', ')}`);
     if (simulation?.worstCase) conditions.push(`worst modelled case is ${simulation.worstCase.id} at ${simulation.worstCase.deltaUsd} USD`);
+    /* Phase 211 — the global conditions the decision was made under. These
+       are observations attached to the record; they never gate execution by
+       themselves (that is the policy engine's call, not the world's). */
+    const globalContext = (strategies.find((s) => s?.globalContext)?.globalContext) || null;
+    if (crossAsset?.regime?.regime && ['RISK_OFF', 'RISK_OFF_LEANING'].includes(crossAsset.regime.regime)) {
+      conditions.push(`cross-asset regime is ${crossAsset.regime.regime.replace(/_/g, ' ').toLowerCase()} (${crossAsset.observedClasses.join(', ')} observed)`);
+    }
+    if (globalContext?.smartMoneyNetUsd !== null && globalContext?.smartMoneyNetUsd !== undefined && Math.abs(globalContext.smartMoneyNetUsd) >= 1_000_000 && globalContext.smartMoneyNetUsd < 0) {
+      conditions.push('smart money is net distributing over the last window (observation, not a veto)');
+    }
 
     /* ── reason ────────────────────────────────────────────────────────── */
     const reason = [];
@@ -228,6 +239,16 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
       competitionId: competition?.id || null,
       simulationId: simulation?.id || null,
       researchId: research?.id || null,
+      /* Phase 211 — the global context of the decision (additive; null when
+         the global engine had nothing this pass). Observation, not authority. */
+      globalContext: globalContext || (crossAsset ? {
+        at,
+        regime: crossAsset.regime?.regime || null,
+        observedClasses: crossAsset.observedClasses || [],
+        globalAvailable: globalIntel?.available ?? null,
+        note: 'from the cross-asset analysis only'
+      } : null),
+      globalSnapshotId: globalIntel?.id || null,
       policyId: policyVerdict?.policyId || null,
       traceId: traceRef.id,
       executionPermission: false,

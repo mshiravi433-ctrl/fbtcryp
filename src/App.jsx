@@ -106,6 +106,11 @@ const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
 const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'));
+/* Phase 211 — Global AI Intelligence: the /ai-global surface. ADDITIVE route:
+   the nine global intelligence domains, the cross-asset regime and the
+   proactive briefing, on the FI's own /api/ai/global/* endpoints. Nothing
+   existing is replaced — /ai-control and /intent keep their roles. */
+const AiGlobalIntelligence = lazyRetry(() => import('./components/ai/AiGlobalIntelligence'));
 /*
  * The vault's own route, so the Earn row for it has somewhere to go. The page
  * renders the live <VaultCard /> when a vault is deployed and an honest "none
@@ -365,6 +370,7 @@ function AnimatedRoutes() {
             <Route path="/intent" element={<IntentAIUnified />} />
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
+            <Route path="/ai-global" element={<AiGlobalIntelligence />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />

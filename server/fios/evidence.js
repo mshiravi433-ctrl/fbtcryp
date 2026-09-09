@@ -23,7 +23,9 @@ export const EVIDENCE_TYPES = Object.freeze([
   'balance', 'price', 'quote', 'apy', 'tvl', 'funding', 'gas', 'spread',
   'liquidity', 'volatility', 'orderbook', 'news', 'macro', 'security',
   'onchain', 'execution', 'verification', 'simulation', 'risk', 'research',
-  'protocol', 'smart_money', 'user_statement', 'behavior', 'goal', 'policy'
+  'protocol', 'smart_money', 'user_statement', 'behavior', 'goal', 'policy',
+  /* Phase 211 — global intelligence evidence types (additive). */
+  'whale', 'stock', 'forex', 'commodity', 'rwa'
 ]);
 
 export const EVIDENCE_TARGETS = Object.freeze(['decision', 'strategy', 'risk', 'research', 'simulation', 'execution', 'goal', 'world_state']);

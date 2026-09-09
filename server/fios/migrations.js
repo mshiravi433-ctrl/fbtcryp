@@ -22,7 +22,7 @@ import { computeAgentTrustScore } from './agents.js';
 
 export const MIGRATIONS_SCHEMA = 'fbt.fi.migrations.v1';
 
-export const CURRENT_MIGRATION_VERSION = 2;
+export const CURRENT_MIGRATION_VERSION = 3;
 
 const dayKeyOf = (at) => new Date(at).toISOString().slice(0, 10);
 
@@ -97,9 +97,51 @@ async function runV2(owner, { collections, now }) {
   return { version: 2, changes };
 }
 
+/**
+ * v3 (Phase 211 — Global AI Intelligence): the two new collections exist and
+ * their rows carry the authority invariant. Only ADDS missing fields; a v3
+ * that destroyed anything would violate the migration contract above.
+ *   global_intelligence — `executionAuthorized: false` (a snapshot is data)
+ *   briefings           — `executionAuthorized: false` + `proactive: true`
+ *                         (a briefing recommends reading, never execution)
+ */
+async function runV3(owner, { collections, now }) {
+  let changes = 0;
+
+  const gi = await collections.read('global_intelligence', owner);
+  if (gi.ok && gi.rows.length) {
+    let touched = 0;
+    const next = gi.rows.map((r) => {
+      if (!r || typeof r !== 'object') return r;
+      if (r.executionAuthorized === false) return r;
+      touched += 1;
+      return { ...r, executionAuthorized: false };
+    });
+    if (touched) { await collections.write('global_intelligence', owner, next); changes += touched; }
+  }
+
+  const bf = await collections.read('briefings', owner);
+  if (bf.ok && bf.rows.length) {
+    let touched = 0;
+    const next = bf.rows.map((r) => {
+      if (!r || typeof r !== 'object') return r;
+      const fixed = { ...r };
+      let rowTouched = false;
+      if (fixed.executionAuthorized !== false) { fixed.executionAuthorized = false; rowTouched = true; }
+      if (fixed.proactive !== true) { fixed.proactive = true; rowTouched = true; }
+      if (rowTouched) touched += 1;
+      return fixed;
+    });
+    if (touched) { await collections.write('briefings', owner, next); changes += touched; }
+  }
+
+  return { version: 3, changes };
+}
+
 /** The ordered step list. A step's `version` is the version it PRODUCES. */
 const STEPS = [
-  { version: 2, name: 'v2-row-shape-normalisation', run: runV2 }
+  { version: 2, name: 'v2-row-shape-normalisation', run: runV2 },
+  { version: 3, name: 'v3-global-intelligence-collections', run: runV3 }
 ];
 
 export function createMigrations({ collections, log = () => {}, now = () => Date.now() } = {}) {

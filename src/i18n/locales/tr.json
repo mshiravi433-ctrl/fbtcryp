@@ -1851,5 +1851,9 @@
       "fee": "Fee",
       "explorerTitle": "Lido contracts"
     }
+  },
+  "aiGlobal": {
+    "title": "Küresel zekâ",
+    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
   }
 }

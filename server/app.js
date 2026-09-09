@@ -8,6 +8,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+const { Router: ExpressRouter } = express;
 import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
 import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } from './blobCache.js';
@@ -5539,6 +5540,16 @@ app.use('/api/brain', centralIntelligence.router);
  * /learning{,/calibration}, /preferences{,/statement}.
  * /agents and /status belong to the command center — FI deliberately does
  * not touch them. */
+/* PHASE 211 FIX (additive): the FI mount point is registered SYNCHRONOUSLY
+ * here — before server/index.js adds the SPA fallback that 404s unmatched
+ * /api/* paths — and the real router is attached onto it when the dynamic
+ * import resolves. Before this, the async `app.use` raced the fallback's
+ * registration and every FI route (Phase 210's /health, /world-state… and
+ * Phase 211's /global/*) 404ed on the local/self-hosted server even though
+ * the same routes worked through the fios-api probe and on Vercel (whose
+ * entry has no SPA fallback). No route changed; they just become reachable. */
+const fiMount = ExpressRouter();
+app.use('/api/ai', fiMount);
 import('./fios/index.js').then(({ createFinancialIntelligence }) => {
   const fi = createFinancialIntelligence({
     stateStore: centralIntelligence.stateStore,
@@ -5548,7 +5559,7 @@ import('./fios/index.js').then(({ createFinancialIntelligence }) => {
     log: (line) => app.locals.ciLog?.push?.(line)
   });
   app.set('financialIntelligence', fi);
-  app.use('/api/ai', fi.router);
+  fiMount.use(fi.router);
 }).catch((err) => {
   console.error('Failed to mount financial intelligence routes:', err?.message || err);
 });
@@ -5558,6 +5569,12 @@ import('./fios/index.js').then(({ createFinancialIntelligence }) => {
  * Knowledge Graph, Ecosystem Router, and Cross-Module Workflows.
  * Mounted on /api/brain alongside the existing central intelligence.
  * ─────────────────────────────────────────────────────────────────────────── */
+/* Same sync-mount-point pattern as the FI mount above: the placeholder router
+ * is registered before the SPA fallback in server/index.js, so the async
+ * brain-router attach cannot lose the race and 404 the whole AI surface on a
+ * long-running server. */
+const brainMount = ExpressRouter();
+app.use('/api/brain', brainMount);
 import('./brain/index.js').then(({ createBrainRouter }) => {
   const brainRouter = createBrainRouter({
     kernel: centralIntelligence.kernel,
@@ -5565,7 +5582,7 @@ import('./brain/index.js').then(({ createBrainRouter }) => {
     events: centralIntelligence.events,
     log: (line) => app.locals.ciLog?.push?.(line)
   });
-  app.use('/api/brain', brainRouter);
+  brainMount.use(brainRouter);
 }).catch((err) => {
   console.error('Failed to mount brain routes:', err?.message || err);
 });

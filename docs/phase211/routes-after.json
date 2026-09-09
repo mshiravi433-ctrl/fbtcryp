@@ -1,0 +1,1303 @@
+{
+  "schema": "fbt.phase211.route-inventory.v1",
+  "label": "after",
+  "generatedAt": "2026-09-09T01:27:21.801Z",
+  "frontend": {
+    "routeCount": 65,
+    "routes": [
+      {
+        "path": "*",
+        "component": "Market"
+      },
+      {
+        "path": "/",
+        "component": "Market"
+      },
+      {
+        "path": "/about",
+        "component": "About"
+      },
+      {
+        "path": "/ai-control",
+        "component": "AiControlCenter"
+      },
+      {
+        "path": "/ai-global",
+        "component": "AiGlobalIntelligence"
+      },
+      {
+        "path": "/audit",
+        "component": "Security"
+      },
+      {
+        "path": "/bridge",
+        "component": "Bridge"
+      },
+      {
+        "path": "/business",
+        "component": "Business"
+      },
+      {
+        "path": "/buy",
+        "component": "Buy"
+      },
+      {
+        "path": "/coin/:id",
+        "component": "CoinDetail"
+      },
+      {
+        "path": "/compare",
+        "component": "Compare"
+      },
+      {
+        "path": "/contact",
+        "component": "Contact"
+      },
+      {
+        "path": "/derivatives",
+        "component": "DerivativesDashboard"
+      },
+      {
+        "path": "/developers",
+        "component": "Developers"
+      },
+      {
+        "path": "/discover",
+        "component": "Discover"
+      },
+      {
+        "path": "/docs",
+        "component": "Docs"
+      },
+      {
+        "path": "/dydx",
+        "component": "Dydx"
+      },
+      {
+        "path": "/earn",
+        "component": "Earn"
+      },
+      {
+        "path": "/ecosystem",
+        "component": "Ecosystem"
+      },
+      {
+        "path": "/explore",
+        "component": "Explore"
+      },
+      {
+        "path": "/explore-hub",
+        "component": "ExploreHub"
+      },
+      {
+        "path": "/farm",
+        "component": "Farm"
+      },
+      {
+        "path": "/flash-liquidity",
+        "component": "FlashLiquidity"
+      },
+      {
+        "path": "/help",
+        "component": "Help"
+      },
+      {
+        "path": "/insurance",
+        "component": "InsuranceShell"
+      },
+      {
+        "path": "/intent",
+        "component": "IntentAIUnified"
+      },
+      {
+        "path": "/intent-ai",
+        "component": "Navigate"
+      },
+      {
+        "path": "/invest",
+        "component": "Invest"
+      },
+      {
+        "path": "/lab",
+        "component": "Lab"
+      },
+      {
+        "path": "/leaderboard",
+        "component": "Leaderboard"
+      },
+      {
+        "path": "/learn",
+        "component": "Learn"
+      },
+      {
+        "path": "/legal/:doc",
+        "component": "Legal"
+      },
+      {
+        "path": "/loan",
+        "component": "Loan"
+      },
+      {
+        "path": "/news",
+        "component": "News"
+      },
+      {
+        "path": "/nft",
+        "component": "Nft"
+      },
+      {
+        "path": "/order/result/:orderId",
+        "component": "Buy"
+      },
+      {
+        "path": "/orders",
+        "component": "Orders"
+      },
+      {
+        "path": "/ostium",
+        "component": "Ostium"
+      },
+      {
+        "path": "/p2p",
+        "component": "P2P"
+      },
+      {
+        "path": "/perp",
+        "component": "Perp"
+      },
+      {
+        "path": "/portfolio",
+        "component": "Portfolio"
+      },
+      {
+        "path": "/predict",
+        "component": "Predict"
+      },
+      {
+        "path": "/rewards",
+        "component": "Rewards"
+      },
+      {
+        "path": "/security",
+        "component": "Security"
+      },
+      {
+        "path": "/settings",
+        "component": "Settings"
+      },
+      {
+        "path": "/shop",
+        "component": "Shop"
+      },
+      {
+        "path": "/signals",
+        "component": "Signals"
+      },
+      {
+        "path": "/smart-money",
+        "component": "SmartMoney"
+      },
+      {
+        "path": "/smart-money/token/:chain/:address",
+        "component": "SmartMoneyToken"
+      },
+      {
+        "path": "/smart-money/wallet/:chain/:address",
+        "component": "SmartMoneyWallet"
+      },
+      {
+        "path": "/smart-wallet",
+        "component": "SmartWallet"
+      },
+      {
+        "path": "/solana",
+        "component": "SolanaSwap"
+      },
+      {
+        "path": "/stocks",
+        "component": "Stocks"
+      },
+      {
+        "path": "/swap",
+        "component": "Swap"
+      },
+      {
+        "path": "/trade",
+        "component": "Trade"
+      },
+      {
+        "path": "/vault",
+        "component": "Vault"
+      },
+      {
+        "path": "/wallet",
+        "component": "Wallet"
+      },
+      {
+        "path": "claims",
+        "component": "InsuranceClaims"
+      },
+      {
+        "path": "coverage",
+        "component": "InsuranceCoverage"
+      },
+      {
+        "path": "coverage/:id",
+        "component": "InsuranceCoverageDetail"
+      },
+      {
+        "path": "marketplace",
+        "component": "InsuranceMarketplace"
+      },
+      {
+        "path": "providers",
+        "component": "InsuranceProviders"
+      },
+      {
+        "path": "quote/:quoteId",
+        "component": "InsuranceQuote"
+      },
+      {
+        "path": "risk",
+        "component": "InsuranceRisk"
+      },
+      {
+        "path": "settings",
+        "component": "InsuranceSettings"
+      }
+    ],
+    "lazyImportCount": 63,
+    "lazyImportsMissing": [],
+    "lazyImports": [
+      {
+        "spec": "./components/ai/AiControlCenter",
+        "exists": true
+      },
+      {
+        "spec": "./components/ai/AiGlobalIntelligence",
+        "exists": true
+      },
+      {
+        "spec": "./components/IntentAIUnified",
+        "exists": true
+      },
+      {
+        "spec": "./pages/About",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Bridge",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Business",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Buy",
+        "exists": true
+      },
+      {
+        "spec": "./pages/CoinDetail",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Compare",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Contact",
+        "exists": true
+      },
+      {
+        "spec": "./pages/DerivativesDashboard",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Developers",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Discover",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Docs",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Dydx",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Earn",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Ecosystem",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Explore",
+        "exists": true
+      },
+      {
+        "spec": "./pages/ExploreHub",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Farm",
+        "exists": true
+      },
+      {
+        "spec": "./pages/FlashLiquidity",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Help",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceClaims",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceCoverage",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceCoverageDetail",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceDashboard",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceMarketplace",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceProviders",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceQuote",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceRisk",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceSettings",
+        "exists": true
+      },
+      {
+        "spec": "./pages/insurance/InsuranceShell",
+        "exists": true
+      },
+      {
+        "spec": "./pages/IntentOS",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Invest",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Lab",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Leaderboard",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Learn",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Legal",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Loan",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Market",
+        "exists": true
+      },
+      {
+        "spec": "./pages/News",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Nft",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Orders",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Ostium",
+        "exists": true
+      },
+      {
+        "spec": "./pages/P2P",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Perp",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Portfolio",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Predict",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Rewards",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Security",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Settings",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Shop",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Signals",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SmartMoney",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SmartMoneyToken",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SmartMoneyWallet",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SmartWallet",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SolanaSwap",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Stocks",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Swap",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Trade",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Vault",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Wallet",
+        "exists": true
+      }
+    ]
+  },
+  "chatNavigation": [
+    "/",
+    "/about",
+    "/ai-control",
+    "/ai-global",
+    "/audit",
+    "/bridge",
+    "/business",
+    "/buy",
+    "/coin/:id",
+    "/compare",
+    "/contact",
+    "/derivatives",
+    "/developers",
+    "/discover",
+    "/docs",
+    "/dydx",
+    "/earn",
+    "/ecosystem",
+    "/explore",
+    "/explore-hub",
+    "/farm",
+    "/flash-liquidity",
+    "/help",
+    "/insurance",
+    "/insurance/claims",
+    "/insurance/coverage",
+    "/insurance/coverage/:id",
+    "/insurance/marketplace",
+    "/insurance/providers",
+    "/insurance/quote/:quoteId",
+    "/insurance/risk",
+    "/insurance/settings",
+    "/intent",
+    "/intent-ai",
+    "/intent?tab=ops",
+    "/invest",
+    "/lab",
+    "/leaderboard",
+    "/learn",
+    "/legal/:doc",
+    "/loan",
+    "/news",
+    "/nft",
+    "/order/result/:orderId",
+    "/orders",
+    "/ostium",
+    "/p2p",
+    "/perp",
+    "/portfolio",
+    "/predict",
+    "/rewards",
+    "/security",
+    "/settings",
+    "/shop",
+    "/signals",
+    "/smart-money",
+    "/smart-money/token/:chain/:address",
+    "/smart-money/wallet/:chain/:address",
+    "/smart-wallet",
+    "/solana",
+    "/stocks",
+    "/swap",
+    "/trade",
+    "/vault",
+    "/wallet"
+  ],
+  "backend": {
+    "mounts": [
+      "/api",
+      "/api",
+      "/api/ai",
+      "/api/ai",
+      "/api/ai",
+      "/api/brain",
+      "/api/brain",
+      "/api/brain",
+      "/api/business",
+      "/api/credit",
+      "/api/ecosystem",
+      "/api/insurance",
+      "/api/intents/v1",
+      "/api/intents/v1/auctions",
+      "/api/intents/v1/auctions",
+      "/api/intents/v1/auctions",
+      "/api/intents/v1/cross-chain",
+      "/api/intents/v1/cross-chain",
+      "/api/intents/v1/log",
+      "/api/lending",
+      "/api/options",
+      "/api/payments",
+      "/api/rwa",
+      "/api/structured-products",
+      "/api/v1/ai",
+      "/api/v1/ai",
+      "/api/v1/ai/os",
+      "/api/v1/financial-goals",
+      "/api/v1/futures",
+      "/api/v1/rewards"
+    ],
+    "routers": {
+      "server/aiCommand.js": [
+        "DELETE /automations/:id",
+        "GET /agents",
+        "GET /automations",
+        "GET /dashboard",
+        "GET /plan/:id",
+        "POST /automations",
+        "POST /chat",
+        "POST /dashboard",
+        "POST /emergency-stop",
+        "POST /emergency-stop/release",
+        "POST /plan",
+        "POST /plan/:id/approve",
+        "POST /plan/:id/execute"
+      ],
+      "server/aiIntentOS.js": [
+        "DELETE /automations/:id",
+        "DELETE /monitors/:id",
+        "GET /automations",
+        "GET /gateway/providers",
+        "GET /gateway/selftest",
+        "GET /knowledge",
+        "GET /learning/stats",
+        "GET /memory",
+        "GET /monitors",
+        "GET /monitors/status",
+        "GET /quality",
+        "GET /questions/analytics",
+        "GET /questions/faq-candidates",
+        "GET /questions/gaps",
+        "GET /system-prompt",
+        "GET /tools",
+        "POST /automations",
+        "POST /automations/:id/pause",
+        "POST /automations/:id/result",
+        "POST /automations/:id/run",
+        "POST /chat",
+        "POST /collaborate",
+        "POST /confirm",
+        "POST /context",
+        "POST /execute",
+        "POST /execution-result",
+        "POST /feedback",
+        "POST /gateway/chat",
+        "POST /gateway/confidence",
+        "POST /gateway/consensus",
+        "POST /goal",
+        "POST /goal/:id/plan",
+        "POST /knowledge/search",
+        "POST /learning/record",
+        "POST /memory",
+        "POST /monitors",
+        "POST /monitors/:id/cancel",
+        "POST /monitors/:id/evaluate",
+        "POST /monitors/:id/pause",
+        "POST /monitors/:id/resume",
+        "POST /news-impact",
+        "POST /research",
+        "POST /resume",
+        "POST /suggestions"
+      ],
+      "server/app.js": [
+        "DELETE /api/v1/smart-money/watchlist/:id",
+        "GET /api/ai/diagnose",
+        "GET /api/ai/status",
+        "GET /api/audio",
+        "GET /api/avantis/equities",
+        "GET /api/board",
+        "GET /api/bridge/quote",
+        "GET /api/bridge/status",
+        "GET /api/btc/address/:addr",
+        "GET /api/btc/fees",
+        "GET /api/btc/status",
+        "GET /api/calm",
+        "GET /api/category/:slug",
+        "GET /api/chart/:id",
+        "GET /api/coin-id/:chainId",
+        "GET /api/coin-venue/:id",
+        "GET /api/coin/:id",
+        "GET /api/community",
+        "GET /api/cron/daily",
+        "GET /api/cron/monitors",
+        "GET /api/cron/smart-money",
+        "GET /api/cron/status",
+        "GET /api/cron/train",
+        "GET /api/cron/watch",
+        "GET /api/cross-chain/chains",
+        "GET /api/cross-chain/history",
+        "GET /api/cross-chain/quote",
+        "GET /api/cross-chain/resolve-token",
+        "GET /api/cross-chain/routes",
+        "GET /api/cross-chain/tokens",
+        "GET /api/cross-chain/transactions/:id/status",
+        "GET /api/developer/projects",
+        "GET /api/dex/:network",
+        "GET /api/dln/quote",
+        "GET /api/dln/status",
+        "GET /api/dln/tx",
+        "GET /api/dydx/account/:address/:number",
+        "GET /api/dydx/candles",
+        "GET /api/dydx/markets",
+        "GET /api/dydx/orderbook/:ticker",
+        "GET /api/ecosystem/agents",
+        "GET /api/ecosystem/certifications",
+        "GET /api/ecosystem/certifier",
+        "GET /api/ecosystem/liquidity",
+        "GET /api/ecosystem/mine/agents",
+        "GET /api/ecosystem/mine/strategies",
+        "GET /api/ecosystem/review/queue",
+        "GET /api/ecosystem/status",
+        "GET /api/ecosystem/strategies",
+        "GET /api/environments",
+        "GET /api/flash-liquidity/v1/capabilities",
+        "GET /api/gasless/price",
+        "GET /api/gasless/quote",
+        "GET /api/gasless/status",
+        "GET /api/global",
+        "GET /api/health",
+        "GET /api/health/cross-chain",
+        "GET /api/indexnow-key/${INDEXNOW_KEY}.txt",
+        "GET /api/intents/v1/activation",
+        "GET /api/intents/v1/activation-config",
+        "GET /api/intents/v1/admissions/:intentHash/:entryHash",
+        "GET /api/intents/v1/anchor-networks",
+        "GET /api/intents/v1/atomic-swap/status",
+        "GET /api/intents/v1/auctions/:intentHash",
+        "GET /api/intents/v1/auctions/:intentHash/adjudication",
+        "GET /api/intents/v1/auctions/:intentHash/anchor-calldata/:chainId",
+        "GET /api/intents/v1/auctions/:intentHash/disputes",
+        "GET /api/intents/v1/auctions/:intentHash/execution-claim",
+        "GET /api/intents/v1/auctions/:intentHash/settlement-reports",
+        "GET /api/intents/v1/auctions/:intentHash/watcher-reports",
+        "GET /api/intents/v1/audit-status",
+        "GET /api/intents/v1/bonds",
+        "GET /api/intents/v1/bridge-quote",
+        "GET /api/intents/v1/bridge-status",
+        "GET /api/intents/v1/capabilities",
+        "GET /api/intents/v1/confidential/commitments/:intentHash",
+        "GET /api/intents/v1/confidential/operators",
+        "GET /api/intents/v1/coordinator",
+        "GET /api/intents/v1/cross-chain/states/:stateId",
+        "GET /api/intents/v1/cross-chain/states/:stateId/account-bindings",
+        "GET /api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports",
+        "GET /api/intents/v1/cross-chain/states/:stateId/verification-reports",
+        "GET /api/intents/v1/drill-status",
+        "GET /api/intents/v1/evidence-status",
+        "GET /api/intents/v1/execution-observation-model",
+        "GET /api/intents/v1/external-agents",
+        "GET /api/intents/v1/external-providers",
+        "GET /api/intents/v1/freeze-status",
+        "GET /api/intents/v1/later-phase-probe",
+        "GET /api/intents/v1/log/:intentHash",
+        "GET /api/intents/v1/log/:intentHash/root-anchor-calldata/:chainId",
+        "GET /api/intents/v1/merkle-anchor-networks",
+        "GET /api/intents/v1/monitor-status",
+        "GET /api/intents/v1/multi-venue/status",
+        "GET /api/intents/v1/operators",
+        "GET /api/intents/v1/ops-probe",
+        "GET /api/intents/v1/outcome/admissions/:intentHash/:entryHash",
+        "GET /api/intents/v1/outcome/auctions/:intentHash",
+        "GET /api/intents/v1/outcome/auctions/:intentHash/disputes",
+        "GET /api/intents/v1/outcome/auctions/:intentHash/execution-claim",
+        "GET /api/intents/v1/outcome/auctions/:intentHash/watcher-reports",
+        "GET /api/intents/v1/outcome/log/:intentHash",
+        "GET /api/intents/v1/output-locales",
+        "GET /api/intents/v1/phase-status",
+        "GET /api/intents/v1/public-status",
+        "GET /api/intents/v1/scheduler-status",
+        "GET /api/intents/v1/self-probe",
+        "GET /api/intents/v1/simulator-status",
+        "GET /api/intents/v1/slo-status",
+        "GET /api/intents/v1/solvers",
+        "GET /api/intents/v1/stage3-digest",
+        "GET /api/intents/v1/stage3-probe",
+        "GET /api/intents/v1/stage3-review-package",
+        "GET /api/intents/v1/venue-health",
+        "GET /api/iran/buy/config",
+        "GET /api/iran/buy/orders/:id",
+        "GET /api/iran/buy/orders/:id/audit",
+        "GET /api/iran/buy/rate",
+        "GET /api/learning/params",
+        "GET /api/markets",
+        "GET /api/me",
+        "GET /api/monitors/status",
+        "GET /api/network/overview",
+        "GET /api/news",
+        "GET /api/news/whales",
+        "GET /api/nft/:chainId/:owner",
+        "GET /api/nft/chains",
+        "GET /api/nft/diagnose",
+        "GET /api/ohlc/:id",
+        "GET /api/openapi.json",
+        "GET /api/orders/watch/status",
+        "GET /api/ostium/prices",
+        "GET /api/p2p/countries",
+        "GET /api/p2p/currencies",
+        "GET /api/p2p/offers",
+        "GET /api/p2p/payment-methods",
+        "GET /api/p2p/status",
+        "GET /api/perp/markets",
+        "GET /api/portfolio/agent",
+        "GET /api/prices",
+        "GET /api/providers/status",
+        "GET /api/push/selftest",
+        "GET /api/push/status",
+        "GET /api/reputation/:id",
+        "GET /api/revenue/readiness",
+        "GET /api/search",
+        "GET /api/shop/catalogue",
+        "GET /api/shop/countries",
+        "GET /api/shop/products",
+        "GET /api/signals/pulse",
+        "GET /api/signals/solana/radar",
+        "GET /api/solana/assets",
+        "GET /api/solana/intel/:mint",
+        "GET /api/solana/oo/quote",
+        "GET /api/solana/oo/status",
+        "GET /api/solana/oo/swap",
+        "GET /api/solana/order",
+        "GET /api/solana/signal-mints",
+        "GET /api/solana/status",
+        "GET /api/solana/whales",
+        "GET /api/swap/kyber/routes",
+        "GET /api/swap/oo/quote",
+        "GET /api/swap/oo/swap",
+        "GET /api/swap/velora/prices",
+        "GET /api/telegram/diagnose",
+        "GET /api/telegram/whoami-bot",
+        "GET /api/thor/pools",
+        "GET /api/thor/quote",
+        "GET /api/thor/status",
+        "GET /api/token-risk",
+        "GET /api/trending",
+        "GET /api/v1/buy-sell/assets",
+        "GET /api/v1/buy-sell/networks",
+        "GET /api/v1/buy-sell/order/:id",
+        "GET /api/v1/buy-sell/order/:id/audit",
+        "GET /api/v1/buy-sell/order/:id/status",
+        "GET /api/v1/buy-sell/providers",
+        "GET /api/v1/financial-goals",
+        "GET /api/v1/financial-goals/:id",
+        "GET /api/v1/financial-goals/:id/progress",
+        "GET /api/v1/ledger",
+        "GET /api/v1/smart-money/alerts",
+        "GET /api/v1/smart-money/early-tokens",
+        "GET /api/v1/smart-money/exchanges",
+        "GET /api/v1/smart-money/flows",
+        "GET /api/v1/smart-money/fresh-wallets",
+        "GET /api/v1/smart-money/liquidity",
+        "GET /api/v1/smart-money/overview",
+        "GET /api/v1/smart-money/token/:chain/:address",
+        "GET /api/v1/smart-money/wallet/:address",
+        "GET /api/v1/smart-money/wallet/:chain/:address",
+        "GET /api/v1/smart-money/wallets",
+        "GET /api/v1/smart-money/watchlist",
+        "GET /api/v1/smart-money/whales",
+        "GET /api/xchain/probe",
+        "GET /api/xchain/quotes",
+        "GET /api/xchain/status",
+        "GET /api/yields",
+        "GET /api/yields/:id/history",
+        "POST /api/ai/ask",
+        "POST /api/ai/brief",
+        "POST /api/ai/outlook",
+        "POST /api/board",
+        "POST /api/board/publish",
+        "POST /api/board/remove",
+        "POST /api/btc/tx",
+        "POST /api/cross-chain/intents",
+        "POST /api/cross-chain/transactions",
+        "POST /api/cross-chain/transactions/:id/cancel",
+        "POST /api/developer/projects",
+        "POST /api/developer/projects/:id/keys",
+        "POST /api/developer/projects/:id/keys/:keyId/revoke",
+        "POST /api/ecosystem/agents",
+        "POST /api/ecosystem/agents/:id",
+        "POST /api/ecosystem/agents/:id/delete",
+        "POST /api/ecosystem/agents/:id/draft",
+        "POST /api/ecosystem/agents/:id/publish",
+        "POST /api/ecosystem/agents/:id/revoke",
+        "POST /api/ecosystem/agents/:id/submit",
+        "POST /api/ecosystem/certifications",
+        "POST /api/ecosystem/certifications/:id/revoke",
+        "POST /api/ecosystem/liquidity",
+        "POST /api/ecosystem/strategies",
+        "POST /api/ecosystem/strategies/:id",
+        "POST /api/ecosystem/strategies/:id/delete",
+        "POST /api/ecosystem/strategies/:id/draft",
+        "POST /api/ecosystem/strategies/:id/publish",
+        "POST /api/ecosystem/strategies/:id/revoke",
+        "POST /api/ecosystem/strategies/:id/submit",
+        "POST /api/flash-liquidity/v1/plan",
+        "POST /api/flash-liquidity/v1/scan",
+        "POST /api/flash-liquidity/v1/simulate",
+        "POST /api/gasless/submit",
+        "POST /api/intents/v1/atomic-swap/plan",
+        "POST /api/intents/v1/atomic-swap/verify",
+        "POST /api/intents/v1/auctions/:intentHash/adjudicate",
+        "POST /api/intents/v1/auctions/:intentHash/anchor",
+        "POST /api/intents/v1/auctions/:intentHash/close",
+        "POST /api/intents/v1/auctions/:intentHash/disputes",
+        "POST /api/intents/v1/auctions/:intentHash/execution-claims",
+        "POST /api/intents/v1/auctions/:intentHash/settlement-reports",
+        "POST /api/intents/v1/auctions/:intentHash/watcher-reports",
+        "POST /api/intents/v1/commitments",
+        "POST /api/intents/v1/confidential/commit",
+        "POST /api/intents/v1/confidential/reveal",
+        "POST /api/intents/v1/cross-chain/states",
+        "POST /api/intents/v1/cross-chain/states/:stateId/account-binding-challenge",
+        "POST /api/intents/v1/cross-chain/states/:stateId/account-bindings",
+        "POST /api/intents/v1/cross-chain/states/:stateId/receipts",
+        "POST /api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports",
+        "POST /api/intents/v1/cross-chain/states/:stateId/verification-reports",
+        "POST /api/intents/v1/freeze",
+        "POST /api/intents/v1/log/:intentHash/root-anchor",
+        "POST /api/intents/v1/observations",
+        "POST /api/intents/v1/operator-evidence",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/adjudicate",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/close",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/disputes",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/execution-claims",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/settlement-reports",
+        "POST /api/intents/v1/outcome/auctions/:intentHash/watcher-reports",
+        "POST /api/intents/v1/outcome/bids",
+        "POST /api/intents/v1/profit-plan",
+        "POST /api/intents/v1/stage3-review",
+        "POST /api/intents/v1/unfreeze",
+        "POST /api/intents/v1/validate",
+        "POST /api/iran/buy/orders/:id/cancel",
+        "POST /api/iran/buy/orders/:id/payment/verify",
+        "POST /api/iran/buy/orders/:id/settlement-authorize",
+        "POST /api/iran/buy/orders/:id/settlement-challenge",
+        "POST /api/iran/buy/usdt",
+        "POST /api/iran/buy/usdt/preview",
+        "POST /api/iran/buy/wallet-challenge",
+        "POST /api/iran/buy/wallet-verify",
+        "POST /api/learning/event",
+        "POST /api/orders/unwatch",
+        "POST /api/orders/watch",
+        "POST /api/ostium/subgraph",
+        "POST /api/portfolio/agent",
+        "POST /api/providers/probe",
+        "POST /api/push/event",
+        "POST /api/push/fcm",
+        "POST /api/push/fcm/remove",
+        "POST /api/push/subscribe",
+        "POST /api/push/unsubscribe",
+        "POST /api/signals/why",
+        "POST /api/solana/execute",
+        "POST /api/swap/kyber/build",
+        "POST /api/telegram/diagnose",
+        "POST /api/telemetry/resolve",
+        "POST /api/telemetry/signal",
+        "POST /api/v1/buy-sell/checkout",
+        "POST /api/v1/buy-sell/eligibility",
+        "POST /api/v1/buy-sell/order",
+        "POST /api/v1/buy-sell/order/:id/cancel",
+        "POST /api/v1/buy-sell/order/:id/checkout",
+        "POST /api/v1/buy-sell/order/:id/verify",
+        "POST /api/v1/buy-sell/quote",
+        "POST /api/v1/buy-sell/webhooks/:provider",
+        "POST /api/v1/financial-goals",
+        "POST /api/v1/financial-goals/:id/analyze",
+        "POST /api/v1/financial-goals/:id/approve",
+        "POST /api/v1/financial-goals/:id/build-plan",
+        "POST /api/v1/financial-goals/:id/pause",
+        "POST /api/v1/financial-goals/:id/simulate",
+        "POST /api/v1/financial-goals/:id/what-if",
+        "POST /api/v1/smart-money/alerts/read",
+        "POST /api/v1/smart-money/watchlist",
+        "USE /api",
+        "USE /api/ai",
+        "USE /api/brain",
+        "USE /api/business",
+        "USE /api/credit",
+        "USE /api/ecosystem",
+        "USE /api/insurance",
+        "USE /api/intents/v1",
+        "USE /api/intents/v1/auctions",
+        "USE /api/intents/v1/cross-chain",
+        "USE /api/intents/v1/log",
+        "USE /api/lending",
+        "USE /api/options",
+        "USE /api/payments",
+        "USE /api/rwa",
+        "USE /api/structured-products",
+        "USE /api/v1/ai",
+        "USE /api/v1/ai/os",
+        "USE /api/v1/financial-goals",
+        "USE /api/v1/futures",
+        "USE /api/v1/rewards"
+      ],
+      "server/brain/index.js": [
+        "GET /daily-brief",
+        "GET /guardian",
+        "GET /knowledge",
+        "GET /opportunities",
+        "GET /predictive/risk",
+        "GET /workflow/:id",
+        "POST /guardian/event",
+        "POST /predictive/twin",
+        "POST /route",
+        "POST /workflow"
+      ],
+      "server/businessFinance.js": [
+        "GET /payroll",
+        "GET /treasury",
+        "POST /invoices/create"
+      ],
+      "server/ci/api.js": [
+        "GET /intent/:id",
+        "GET /system/capabilities",
+        "GET /system/events",
+        "GET /system/health",
+        "GET /system/state",
+        "GET /system/stream",
+        "GET /transactions/:id",
+        "POST /intent",
+        "POST /intent/:id/cancel",
+        "POST /intent/:id/confirm",
+        "POST /intent/:id/receipt",
+        "POST /system/context",
+        "POST /system/test-source",
+        "POST /tools/${operation}"
+      ],
+      "server/ci/kernelRoutes.js": [
+        "DELETE /financial/goals/:goalId",
+        "DELETE /financial/profile",
+        "DELETE /memory",
+        "DELETE /permissions",
+        "GET /evaluation",
+        "GET /financial/calibration",
+        "GET /financial/goals",
+        "GET /financial/monitor",
+        "GET /financial/optimize",
+        "GET /financial/profile",
+        "GET /financial/state",
+        "GET /kill-switch",
+        "GET /memory",
+        "GET /permissions",
+        "PATCH /financial/goals/:goalId",
+        "PATCH /financial/profile",
+        "POST /financial/advise",
+        "POST /financial/goals",
+        "POST /financial/outcome",
+        "POST /financial/project",
+        "POST /financial/scenarios",
+        "POST /financial/strategies",
+        "POST /financial/strategies/:id/transition",
+        "POST /financial/twin",
+        "POST /kill-switch",
+        "POST /memory/promote",
+        "POST /memory/retrieve",
+        "POST /permissions",
+        "POST /permissions/check",
+        "POST /permissions/mode"
+      ],
+      "server/credit.js": [
+        "GET /score/:address"
+      ],
+      "server/exploreSecurityRoutes.js": [
+        "GET /api/v1/explore/classify",
+        "GET /api/v1/explore/contracts/:address",
+        "GET /api/v1/explore/networks",
+        "GET /api/v1/explore/protocols",
+        "GET /api/v1/explore/protocols/:id",
+        "GET /api/v1/explore/search",
+        "GET /api/v1/explore/tokens",
+        "GET /api/v1/explore/tokens/:address",
+        "GET /api/v1/explore/transactions/:hash",
+        "GET /api/v1/explore/trending",
+        "GET /api/v1/explore/wallet/:address",
+        "GET /api/v1/security/activity",
+        "GET /api/v1/security/alerts",
+        "GET /api/v1/security/approvals/:wallet",
+        "GET /api/v1/security/contract/:address",
+        "GET /api/v1/security/incidents",
+        "GET /api/v1/security/overview",
+        "GET /api/v1/security/protocol/:id",
+        "GET /api/v1/security/score",
+        "GET /api/v1/security/token/:address"
+      ],
+      "server/fios/router.js": [
+        "GET /autonomy",
+        "GET /council",
+        "GET /council/:id",
+        "GET /decision/:id",
+        "GET /decision/:id/evidence",
+        "GET /evidence",
+        "GET /evidence/:id",
+        "GET /external-agents",
+        "GET /external-agents/:id",
+        "GET /financial-state",
+        "GET /global/briefing",
+        "GET /global/cross-asset",
+        "GET /global/intelligence",
+        "GET /global/providers",
+        "GET /guardian/events",
+        "GET /guardian/status",
+        "GET /health",
+        "GET /learning",
+        "GET /learning/calibration",
+        "GET /learning/outcomes",
+        "GET /policies",
+        "GET /policies/:id",
+        "GET /preferences",
+        "GET /research",
+        "GET /research/:id",
+        "GET /strategies",
+        "GET /trace/:id",
+        "GET /world-state",
+        "POST /autonomy/run",
+        "POST /decision",
+        "POST /external-agents",
+        "POST /external-agents/:id/authorize",
+        "POST /external-agents/:id/interaction",
+        "POST /external-agents/:id/revoke",
+        "POST /guardian/check",
+        "POST /learning",
+        "POST /policies",
+        "POST /policies/:id/resume",
+        "POST /policies/:id/revoke",
+        "POST /policies/:id/stop",
+        "POST /policies/stop",
+        "POST /preferences/statement",
+        "POST /replan",
+        "POST /research",
+        "POST /simulate",
+        "POST /strategies",
+        "POST /strategies/compare",
+        "POST /what-if"
+      ],
+      "server/futures/router.js": [
+        "GET /account/:wallet",
+        "GET /candles",
+        "GET /executions/:wallet",
+        "GET /fees",
+        "GET /fees/ledger",
+        "GET /funding",
+        "GET /health",
+        "GET /markets",
+        "GET /markets/:provider/:market",
+        "GET /open-interest",
+        "GET /positions/:wallet",
+        "GET /providers",
+        "POST /execute",
+        "POST /positions/:id/${action}",
+        "POST /prepare",
+        "POST /quote",
+        "POST /risk",
+        "POST /simulate",
+        "POST /verify"
+      ],
+      "server/insurance/index.js": [
+        "USE /api/insurance"
+      ],
+      "server/intentOsUpgrade8.js": [
+        "GET /conversations/:id",
+        "GET /goals/:id",
+        "GET /intents/:id",
+        "GET /questions/:id",
+        "GET /state",
+        "GET /tasks/:id",
+        "PATCH /intents/:id",
+        "POST /agent-runs",
+        "POST /conversations",
+        "POST /executions",
+        "POST /goals",
+        "POST /intents",
+        "POST /intents/:id/resume",
+        "POST /monitoring-events",
+        "POST /questions",
+        "POST /questions/:id/answers",
+        "POST /state",
+        "POST /tasks",
+        "POST /tool-runs"
+      ],
+      "server/lending.js": [
+        "DELETE /alerts/:id",
+        "GET /alerts/:wallet",
+        "GET /markets",
+        "GET /markets/:market",
+        "GET /networks",
+        "GET /positions/:wallet",
+        "GET /status",
+        "GET /transactions/:wallet",
+        "POST /alerts",
+        "POST /quote/borrow",
+        "POST /quote/repay",
+        "POST /quote/supply",
+        "POST /quote/withdraw",
+        "POST /transaction/borrow",
+        "POST /transaction/repay",
+        "POST /transaction/supply",
+        "POST /transaction/withdraw"
+      ],
+      "server/options.js": [
+        "GET /chain",
+        "POST /execute"
+      ],
+      "server/paymentsOs.js": [
+        "GET /merchant/quote",
+        "POST /card/issue",
+        "POST /send"
+      ],
+      "server/rewards/index.js": [
+        "GET /eligibility",
+        "GET /level",
+        "GET /missions",
+        "GET /referral",
+        "GET /summary",
+        "POST /claim/prepare",
+        "POST /claim/simulate",
+        "POST /events",
+        "POST /referral/bind"
+      ],
+      "server/rwa.js": [
+        "GET /marketplace",
+        "POST /tokenize"
+      ],
+      "server/structuredProducts.js": [
+        "GET /products",
+        "POST /invest"
+      ]
+    },
+    "fiRoutes": [
+      "GET /autonomy",
+      "GET /council",
+      "GET /council/:id",
+      "GET /decision/:id",
+      "GET /decision/:id/evidence",
+      "GET /evidence",
+      "GET /evidence/:id",
+      "GET /external-agents",
+      "GET /external-agents/:id",
+      "GET /financial-state",
+      "GET /global/briefing",
+      "GET /global/cross-asset",
+      "GET /global/intelligence",
+      "GET /global/providers",
+      "GET /guardian/events",
+      "GET /guardian/status",
+      "GET /health",
+      "GET /learning",
+      "GET /learning/calibration",
+      "GET /learning/outcomes",
+      "GET /policies",
+      "GET /policies/:id",
+      "GET /preferences",
+      "GET /research",
+      "GET /research/:id",
+      "GET /strategies",
+      "GET /trace/:id",
+      "GET /world-state",
+      "POST /autonomy/run",
+      "POST /decision",
+      "POST /external-agents",
+      "POST /external-agents/:id/authorize",
+      "POST /external-agents/:id/interaction",
+      "POST /external-agents/:id/revoke",
+      "POST /guardian/check",
+      "POST /learning",
+      "POST /policies",
+      "POST /policies/:id/resume",
+      "POST /policies/:id/revoke",
+      "POST /policies/:id/stop",
+      "POST /policies/stop",
+      "POST /preferences/statement",
+      "POST /replan",
+      "POST /research",
+      "POST /simulate",
+      "POST /strategies",
+      "POST /strategies/compare",
+      "POST /what-if"
+    ]
+  }
+}

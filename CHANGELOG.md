@@ -1,3 +1,80 @@
+# Unreleased — Phase 211: the AI brain goes global (nine intelligence domains, cross-asset regime, proactive briefing) — additive only
+
+**Phase 211 — FBT Intent OS · Global AI Intelligence.** The rule the phase was
+graded on: «UPGRADE THE AI — DO NOT DESTROY THE APP». Nothing was removed — the
+route inventory proves it (`docs/phase211/routes-before.json` →
+`routes-after.json`, `removedRoutes: []` on every surface), and every Phase 210
+probe still passes untouched (fios-core 158/158, autonomy 64/64, intelligence
+54/54, api 53/53, phase210 39/39).
+
+- **Global Intelligence Engine** (`server/fios/globalIntel.js`): nine domains —
+  smart money, whales, on-chain health, news, macro, stocks, forex, commodities,
+  RWA. The four global-market domains are read THROUGH the central brain
+  (`brain.directToolCall` → the guarded Avantis/Ostium sources — no second
+  gateway); smart money/whales/chain-intel/news use the same lazy provider seam
+  the research engine established. A dead provider is an honest `UNAVAILABLE`
+  with its reason, named in `missing[]` — never a plausible number.
+- **Macro intelligence is a classifier, not a generator** (`macro` domain):
+  real headlines tagged Fed/ECB/rates/inflation/growth/geopolitics, each macro
+  item keeping its original title, URL, timestamp and the matched keyword —
+  `untrusted: true` travels with it (§49: data, not authority).
+- **The world model grew its seventh domain** (`server/fios/worldModel.js`):
+  `global` — smartMoney · whales · onchain · macro · stocks · forex ·
+  commodities · rwa · crossAsset, every leaf a provenance envelope (source +
+  at + freshness + confidence). The model-safe digest stays bounded (<1400) —
+  the digest's missing list is now capped with an honest `missingCount`.
+- **Cross-Asset Intelligence** (`server/fios/crossAsset.js`): per-class breadth
+  from real per-instrument 24h changes, risk-on/risk-off regime with named
+  votes and basis, divergence pairs, and Pearson correlations that are computed
+  ONLY from ≥8 real paired observations — one snapshot honestly reports
+  `NO_PAIRED_HISTORY_SUPPLIED` instead of inventing an r.
+- **Proactive AI briefing** (`server/fios/briefing.js`): what the OS believes
+  the owner should know before they ask — guardian emergencies first
+  (critical), then portfolio risk, goals, the nine global domains, the
+  cross-asset regime, and learning calibration. Every item cites its source
+  and carries a navigation action; `executionAuthorized: false` always.
+- **The existing engines got the global context (extend, not duplicate):**
+  research gained kinds `whale · onchain · forex · commodity · global` (+5
+  evidence types); every strategy proposal travels with `globalContext` and
+  `globalNotes`; the decision record carries `globalContext` +
+  `globalSnapshotId`, and a risk-off cross-asset regime lands in its
+  `conditions` as an observation — vetoes remain the policy engine's alone.
+- **Migration v3 + two additive collections** (`global_intelligence`,
+  `briefings`): per-owner, lazy, idempotent, only-adds — existing rows are
+  untouched, `/api/ai/health` reports the version and the last REAL global
+  snapshot + briefing (never a promise).
+- **Four additive API routes** on the FI router (44 → 48): `GET
+  /api/ai/global/intelligence|briefing|cross-asset|providers` — the last one
+  the five readiness lights (implemented · configured · provider_available ·
+  runtime_ready · live), where `live` means a real result in this process.
+- **A new AI surface — `/ai-global`** (`src/components/ai/AiGlobalIntelligence.jsx`):
+  briefing feed, nine domain cards (an unread domain says «خوانده نشد» with its
+  reason), the cross-asset regime banner + divergences, and the provider lamp
+  rows — bilingual, same visual language as the AI Control Center. One tile in
+  the More sheet, one entry in the chat's navigable paths, i18n keys in all 12
+  locales. All additive: no page, tab, menu or route was touched.
+- **Fixed the async-mount race that 404ed the whole AI surface on a
+  self-hosted server** (`server/app.js`): the FI (`/api/ai`) and brain
+  (`/api/brain`) routers were attached inside dynamic-import callbacks that
+  resolved AFTER `server/index.js` registered its SPA fallback — so every FI
+  route (Phase 210's included) 404ed locally while working through the probes
+  and on Vercel. The mount POINT is now registered synchronously as a
+  placeholder router and the real router is attached onto it when the import
+  resolves. No route changed; they became reachable. Verified against a real
+  booted server: `/api/ai/health` answers (migrations v3 applied) and the four
+  `/api/ai/global/*` routes are live, with sandbox-offline domains reporting
+  honest UNAVAILABLEs (smart money and on-chain — the services that run
+  locally — are live).
+- **Proof it stayed additive:** `npm run test:phase211` — the global
+  intelligence probe (49/49, including the dead-provider honesty pass and the
+  no-key/no-signature/no-execution invariants), the route-inventory probe
+  (12/12, `removedRoutes: []` across frontend routes, chat navigation, backend
+  mounts, every server router file, and the FI router), and the rendered panel
+  probe (10/10, including the dead-API empty state). Design + verification in
+  `docs/PHASE211-GLOBAL-AI-INTELLIGENCE-FA.md`.
+
+---
+
 # Unreleased — Settings is a hub of tiles: one box per section, every control behind it, in both themes
 
 **«تنظیمات رو ساختار دهی مجدد کن، هر بخش خودش یک صفحه یا پاپ‌آپ داشته باشد — فقط

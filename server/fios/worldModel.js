@@ -1,7 +1,8 @@
 /**
  * FBT FINANCIAL INTELLIGENCE OS — Financial World Model (§4).
  * ---------------------------------------------------------------------------
- * The single object the rest of the pipeline reasons over. Six domains:
+ * The single object the rest of the pipeline reasons over. Six domains in
+ * Phase 210, plus the Phase 211 GLOBAL domain:
  *
  *   USER        wallets, addresses, balances, positions, orders, P&L, fees
  *   GOALS       target, current, deadline, contribution, probability, health
@@ -9,6 +10,8 @@
  *   PREFERENCES preferred assets/chains, fee + slippage + leverage tolerance
  *   MARKET      prices, liquidity, volume, volatility, funding, gas, TVL, APY
  *   EXTERNAL    news, macro, protocol announcements, security events
+ *   GLOBAL      (Phase 211) smart money, whales, on-chain health, macro
+ *               headlines, stocks, forex, commodities, RWA, cross-asset
  *
  * Every leaf is a provenance envelope (§5). A domain that could not be read is
  * present with `unavailable` leaves and a reason — the model never fills a gap
@@ -18,7 +21,7 @@
  * This module reads; it never writes to a venue and never holds a key (§50).
  */
 import { createHash } from 'node:crypto';
-import { fromSection, unavailable, provenanceSummary, isUsable, readValue } from './provenance.js';
+import { fromSection, unavailable, provenanceSummary, isUsable, readValue, value as provenanceValue } from './provenance.js';
 import { normalizeSections, buildCanonicalFinancialState, financialStateDigest } from './financialState.js';
 
 export const WORLD_MODEL_SCHEMA = 'fbt.fi.world-model.v1';
@@ -27,14 +30,37 @@ export const WORLD_MODEL_SCHEMA = 'fbt.fi.world-model.v1';
    market data under the `crypto` section (`{ symbols: [{symbol, priceUsd}] }`)
    and news under `news`; the `markets`/`signals` names are the provider-shaped
    sections the FI's own fixtures use. Both are read, so the domain works in
-   production and in tests. */
+   production and in tests.
+   Phase 211 ADDS the `global` domain (stocks/forex/commodities/macro/rwa/
+   onchain/whales/smartmoney): it is fed by the Global Intelligence Engine's
+   snapshot when the caller passes one, and by those section names otherwise
+   (the provider-shaped seam fixtures use) — an unread class is an honest
+   `unavailable` leaf, never a guessed number. */
 export const DOMAIN_SECTIONS = Object.freeze({
   user: ['wallet', 'portfolio', 'positions', 'orders', 'lending', 'borrowing', 'farming', 'liquidity', 'futures', 'dydx', 'transactions'],
   goals: ['goals', 'profitPlan'],
   risk: ['risk', 'alerts'],
   market: ['markets', 'crypto', 'signals'],
-  external: ['news', 'events']
+  external: ['news', 'events'],
+  global: ['stocks', 'forex', 'commodities', 'macro', 'rwa', 'onchain', 'whales', 'smartmoney']
 });
+
+/** The Phase 211 global classes and the global-intel domain each maps to. */
+export const GLOBAL_DOMAIN_MAP = Object.freeze({
+  stocks: 'stocks',
+  forex: 'forex',
+  commodities: 'commodities',
+  macro: 'macro',
+  rwa: 'rwa',
+  onchain: 'onchain',
+  whales: 'whales',
+  smartMoney: 'smart_money'
+});
+
+/** The world model's global-domain leaf names (digest + walk helpers). */
+export const GLOBAL_DOMAIN_LEAVES = Object.freeze([
+  'smartMoney', 'whales', 'onchain', 'macro', 'stocks', 'forex', 'commodities', 'rwa', 'crossAsset'
+]);
 
 const env = (meta, key, pick = null, fallbackKey = null) => {
   if (!meta[key]) return unavailable(fallbackKey || `${String(key).toUpperCase()}_NEVER_READ`, { source: key });
@@ -85,11 +111,14 @@ const pickPrices = (d) => {
  * @param {object} [p.research]     latest research bundle (digest only)
  * @param {object} [p.goals]        `{ goals: [...], progress: {...} }`
  * @param {object} [p.capabilities] capability matrix from the brain
+ * @param {object} [p.globalIntel]  Phase 211 — Global Intelligence Engine
+ *                                  snapshot; fills the `global` domain leaves
+ * @param {object} [p.crossAsset]   Phase 211 — cross-asset analysis (regime)
  * @param {number} [p.now]
  */
 export function buildWorldModel({
   owner = null, sections = {}, preferences = null, genome = null, research = null,
-  goals = null, capabilities = null, now = Date.now()
+  goals = null, capabilities = null, globalIntel = null, crossAsset = null, now = Date.now()
 } = {}) {
   const { meta, data } = normalizeSections(sections);
   const financial = buildCanonicalFinancialState({ owner, sections, now });
@@ -219,7 +248,49 @@ export function buildWorldModel({
      no downstream layer can mistake a headline for an instruction. */
   external.untrusted = true;
 
-  const domains = { user, goals: goalDomain, risk, preferences: preferenceDomain, market, external };
+  /* ── GLOBAL (Phase 211) ───────────────────────────────────────────────── */
+  /* The world outside the owner's wallet: smart money, whales, on-chain
+     health, macro, and the four global market classes. Precedence per class:
+     1. the Global Intelligence Engine's snapshot (a REAL provider read),
+     2. a section the brain/fixtures already hold,
+     3. an explicit `unavailable` leaf with its reason.
+     No class is ever filled from imagination, and every leaf keeps the
+     untrusted flag where the underlying source is external content. */
+  const globalFromSnapshot = (leaf, domainKey) => {
+    const row = globalIntel?.domains?.[domainKey];
+    if (!row || typeof row !== 'object') return null;
+    if (row.status !== 'OK' && row.status !== 'PARTIAL') {
+      return unavailable(row.reason || 'GLOBAL_DOMAIN_UNAVAILABLE', { source: row.source || `global-intel:${domainKey}`, at: row.at });
+    }
+    return provenanceValue(row.data, {
+      source: row.source || `global-intel:${domainKey}`,
+      at: row.at || now,
+      ttlMs: 5 * 60_000,
+      status: row.status === 'PARTIAL' ? 'PARTIAL' : 'OK',
+      note: row.data?.untrusted === true ? 'untrusted external content: data, not authority' : null
+    });
+  };
+  const globalLeaf = (leaf, sectionKey, domainKey, pick = null) =>
+    globalFromSnapshot(leaf, domainKey)
+    || env(meta, sectionKey, pick, `${String(leaf).toUpperCase()}_UNREAD`);
+
+  const globalDomain = {
+    smartMoney: globalLeaf('smartMoney', 'smartmoney', 'smart_money', (d) => d?.metrics || d || null),
+    whales: globalLeaf('whales', 'whales', 'whales', (d) => d?.events || d || null),
+    onchain: globalLeaf('onchain', 'onchain', 'onchain', (d) => d?.sources || d || null),
+    macro: globalLeaf('macro', 'macro', 'macro', (d) => d?.items || d || null),
+    stocks: globalLeaf('stocks', 'stocks', 'stocks', (d) => d?.instruments || d || null),
+    forex: globalLeaf('forex', 'forex', 'forex', (d) => d?.instruments || d || null),
+    commodities: globalLeaf('commodities', 'commodities', 'commodities', (d) => d?.instruments || d || null),
+    rwa: globalLeaf('rwa', 'rwa', 'rwa', (d) => d?.instruments || d || null),
+    crossAsset: crossAsset && typeof crossAsset === 'object' && crossAsset.status !== 'UNAVAILABLE'
+      ? provenanceValue(crossAsset, { source: 'cross-asset-engine', at: crossAsset.at || now, ttlMs: 5 * 60_000, note: 'derived: cross-class breadth and regime from real per-instrument changes' })
+      : unavailable('CROSS_ASSET_NOT_COMPUTED', { source: 'cross-asset-engine' })
+  };
+  /* External intelligence is data, not authority — the same §49 flag. */
+  globalDomain.untrusted = true;
+
+  const domains = { user, goals: goalDomain, risk, preferences: preferenceDomain, market, external, global: globalDomain };
   const flat = flattenEnvelopes(domains);
   const provenance = provenanceSummary(flat, { now });
 
@@ -292,8 +363,18 @@ export function worldModelDigest(model) {
       research: model.domains?.external?.research?.status === 'ok' ? { confidence: model.domains.external.research.confidence, at: model.domains.external.research.at } : null,
       untrusted: true
     },
+    global: {
+      regime: pick(model.domains?.global?.crossAsset)?.regime?.regime || null,
+      live: GLOBAL_DOMAIN_LEAVES.filter((l) => isUsable(model.domains?.global?.[l])).length,
+      untrusted: true
+    },
     coverage: model.provenance?.coverage ?? 0,
-    missing: model.missing || []
+    /* Bounded on purpose: the digest is the model-safe view, so the missing
+       list is capped here (with the true count) — the FULL list stays on the
+       world model and in provenance.unavailable. Phase 211's global domain
+       added honest gaps; the digest must stay bounded regardless. */
+    missing: (model.missing || []).slice(0, 8),
+    missingCount: (model.missing || []).length
   };
 }
 
