@@ -16,8 +16,8 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_AAVE_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL',
-    maxPerTx: 100,
-    maxTotal: 500
+    maxPerTx: 1000,
+    maxTotal: 10000
   }),
   'compound-base': Object.freeze({
     label: 'Compound v3 Base native USDC',
@@ -25,8 +25,8 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL',
-    maxPerTx: 100,
-    maxTotal: 500
+    maxPerTx: 1000,
+    maxTotal: 10000
   }),
   'aave-arbitrum': Object.freeze({
     label: 'Aave v3 Arbitrum native USDC',
@@ -34,8 +34,8 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     allowlist: 'VITE_AAVE_ARB_SUPPLY_ALLOWLIST',
     perTxCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX',
     totalCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL',
-    maxPerTx: 100,
-    maxTotal: 500
+    maxPerTx: 1000,
+    maxTotal: 10000
   }),
   lido: Object.freeze({
     label: 'Lido Ethereum ETH',

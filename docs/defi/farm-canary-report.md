@@ -39,9 +39,9 @@ Morpho yet.**
 
 | Network | Asset | Protocol | Op | Flag | Allowlist | Caps (per tx / total) | Fork evidence | Status |
 |---|---|---|---|---|---|---|---|---|
-| Base | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | 100 / 500 | **36/36 PASS** (`aave-base.json`) | ✅ canary-ready |
-| Arbitrum One | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | 100 / 500 | **37/37 PASS** (`aave-arbitrum.json`) | ✅ canary-ready |
-| Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | 100 / 500 | **46/46 PASS** (`compound-base.json`) | ✅ canary-ready |
+| Base | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **36/36 PASS** (`aave-base.json`) | ✅ canary-ready |
+| Arbitrum One | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | 1000 / 10000 | **37/37 PASS** (`aave-arbitrum.json`) | ✅ canary-ready |
+| Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **46/46 PASS** (`compound-base.json`) | ✅ canary-ready |
 | Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | 1 ETH / 10 ETH | **31/31 PASS** (`lido.json`) | ✅ canary-ready |
 | Base | native USDC / cbBTC (ERC-4626/earner) | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | — | **NO PASS yet** | ⛔ must stay OFF until PASS |
 
@@ -73,7 +73,7 @@ FARM_ROLLOUT_PROTOCOLS=compound-base \
 VITE_ENABLE_COMPOUND_BASE_SUPPLY=true \
 VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
 ```
-caps default 100/500 USDC → `limited-canary`, `ok: true`. Capital-off build passes too.
+caps default 1000/10000 USDC → `limited-canary`, `ok: true`. Capital-off build passes too.
 
 **Aave v3 Base + Arbitrum (canary):**
 ```

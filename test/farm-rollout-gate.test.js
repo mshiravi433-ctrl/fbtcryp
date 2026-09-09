@@ -38,8 +38,8 @@ describe('staged Farm production rollout gate', () => {
     });
     expect(result.protocols['aave-base']).toMatchObject({
       allowlist: [ADDRESS],
-      perTxCap: 100,
-      totalCap: 500
+      perTxCap: 1000,
+      totalCap: 10000
     });
   });
 
@@ -77,12 +77,20 @@ describe('staged Farm production rollout gate', () => {
     })).toThrow(message);
   });
 
-  it('does not allow canary cap overrides above the reviewed 100/500 limits', () => {
+  it('does not allow canary cap overrides above the reviewed 1000/10000 limits', () => {
     expect(() => assertFarmRollout({
       ...AAVE_BASE_CANARY,
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '101',
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: '501'
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '1001',
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: '10001'
     })).toThrow(/may not exceed the reviewed canary cap/);
+  });
+
+  it('rejects a per-tx cap that exceeds the total cap', () => {
+    expect(() => assertFarmRollout({
+      ...AAVE_BASE_CANARY,
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '2000',
+      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: '10000'
+    })).toThrow(/may not exceed/);
   });
 
   it('requires every independently enabled protocol to be selected and allowlisted', () => {
