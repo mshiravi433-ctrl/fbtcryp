@@ -245,11 +245,23 @@ export const EVM_CHAINS = {
     explorer: 'https://monadvision.com',
     dexName: 'KyberSwap',
     color: '#7c3aed'
+  },
+  534352: {
+    id: 534352,
+    hexId: '0x82750',
+    name: 'Scroll',
+    short: 'SCR',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com'],
+    explorer: 'https://scrollscan.com',
+    // KyberSwap supplies the route; no unverified direct router fallback.
+    dexName: 'KyberSwap',
+    color: '#f1c27d'
   }
 };
 
 export const DEFAULT_CHAIN = 56;
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352];
 
 /**
  * Platform fee — always charged, on every chain.
