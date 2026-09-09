@@ -220,7 +220,8 @@ export default function MorphoBaseUsdcPanel({ pool }) {
             verifyReceipt: ({ receipt }) => verifyMorphoReceipt({
               provider, receipt, owner, action: step.kind,
               amountWei: plan.checks.amountWei,
-              beforePositionWei: before?.suppliedUsdc ?? null
+              beforePositionWei: before?.suppliedUsdc ?? null,
+              beforeSupplyShares: before?.supplyShares ?? null
             })
           });
           confirmMorphoAction(record.id, {

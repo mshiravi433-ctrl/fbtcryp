@@ -80,6 +80,16 @@ feed. Contract verification remains the source of transaction truth.
 5. post-mining receipt status, `Supply`/`Withdraw`/`Approval` event, market ID,
    owner/receiver, exact amount, and position-transition verification.
 
+Receipt proof is intentionally share-first. `getPosition().suppliedUsdc` is a
+reconstructed display value (`floor(supplyShares * totalSupplyAssets /
+totalSupplyShares)`), while Morpho Blue supplies with share rounding up and
+emits the exact `shares` moved in both `Supply` and `Withdraw`. Therefore the
+post-transaction proof compares the owner's supply-share delta exactly against
+the event `shares`. The asset leg is still checked against the event `assets`,
+but with a one-wei tolerance to cover the display-side floor division; this
+keeps a successful 5.000000 USDC supply from being reported as failed when the
+rebuilt position reads 4.999999 USDC.
+
 Wallet signing remains in the UI execution boundary. Account and chain are
 rechecked immediately before each signature. A user rejection is not recorded
 as a protocol revert. Timeout, replacement/cancellation, failed receipt, and

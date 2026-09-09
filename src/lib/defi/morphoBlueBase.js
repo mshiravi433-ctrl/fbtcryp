@@ -27,6 +27,7 @@ const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const isAddr = (value) => typeof value === 'string' && ADDRESS.test(value);
 const ZERO = '0x0000000000000000000000000000000000000000';
 const MAX_UINT256 = (1n << 256n) - 1n;
+const ASSET_ROUNDING_TOLERANCE_WEI = 1n;
 
 const usdc = getToken(8453, 'USDC');
 const cbBtc = getToken(8453, 'cbBTC');
@@ -432,7 +433,7 @@ export async function buildRevokePlan({ provider, owner } = {}) {
 }
 
 export async function verifyMorphoReceipt({
-  provider, receipt, owner, action, amountWei, beforePositionWei = null
+  provider, receipt, owner, action, amountWei, beforePositionWei = null, beforeSupplyShares = null
 } = {}) {
   assertSuccessfulReceipt(receipt);
   if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER');
@@ -454,20 +455,59 @@ export async function verifyMorphoReceipt({
     return Object.freeze({ ok: true, action, event: 'Approval' });
   }
   const eventAmount = asBigInt(args.assets);
+  const eventShares = asBigInt(args.shares);
   const eventId = String(args.id).toLowerCase();
   if (eventId !== MORPHO_BLUE_BASE.marketId.toLowerCase()) throw new MorphoAdapterError('MORPHO_MARKET_EVENT_MISMATCH');
   const onBehalf = args.onBehalf ?? args.onBehalfOf;
   const beneficiary = action === 'supply' ? onBehalf : args.receiver;
   if (!sameAddress(String(beneficiary), owner) || !sameAddress(String(onBehalf), owner) || (amount != null && amount !== MAX_UINT256 && eventAmount !== amount)) {
-    throw new MorphoAdapterError('MORPHO_PROTOCOL_EVENT_MISMATCH', { action, eventAmount, expected: amount });
+    throw new MorphoAdapterError('MORPHO_PROTOCOL_EVENT_MISMATCH', { action, eventAmount, eventShares, expected: amount });
   }
   const after = await getPosition(provider, owner);
+  let sharesDelta = null;
+  if (beforeSupplyShares != null) {
+    const beforeShares = asBigInt(beforeSupplyShares);
+    sharesDelta = action === 'supply' ? after.supplyShares - beforeShares : beforeShares - after.supplyShares;
+    if (sharesDelta !== eventShares) {
+      throw new MorphoAdapterError('MORPHO_POSITION_UNCHANGED', {
+        action,
+        expectedShares: eventShares,
+        sharesDelta,
+        beforeSupplyShares: beforeShares,
+        afterSupplyShares: after.supplyShares,
+        beforePositionWei: beforePositionWei == null ? null : asBigInt(beforePositionWei),
+        afterPositionWei: after.suppliedUsdc,
+        eventAmount
+      });
+    }
+  }
   if (beforePositionWei != null) {
     const before = asBigInt(beforePositionWei);
-    const changed = action === 'supply' ? after.suppliedUsdc >= before + eventAmount : after.suppliedUsdc < before;
-    if (!changed) throw new MorphoAdapterError('MORPHO_POSITION_UNCHANGED', { action, before, after: after.suppliedUsdc });
+    const changed = action === 'supply'
+      ? after.suppliedUsdc + ASSET_ROUNDING_TOLERANCE_WEI >= before + eventAmount
+      : after.suppliedUsdc < before + ASSET_ROUNDING_TOLERANCE_WEI;
+    if (!changed) {
+      throw new MorphoAdapterError('MORPHO_POSITION_UNCHANGED', {
+        action,
+        before,
+        after: after.suppliedUsdc,
+        eventAmount,
+        eventShares,
+        sharesDelta,
+        assetRoundingToleranceWei: ASSET_ROUNDING_TOLERANCE_WEI
+      });
+    }
   }
-  return Object.freeze({ ok: true, action, event: action === 'supply' ? 'Supply' : 'Withdraw', position: after });
+  return Object.freeze({
+    ok: true,
+    action,
+    event: action === 'supply' ? 'Supply' : 'Withdraw',
+    position: after,
+    eventAmount,
+    eventShares,
+    sharesDelta,
+    proof: Object.freeze({ eventAmount, eventShares, sharesDelta })
+  });
 }
 
 export function isMorphoBlueBaseMarket(pool) {
