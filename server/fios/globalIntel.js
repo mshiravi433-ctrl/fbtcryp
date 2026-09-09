@@ -9,7 +9,11 @@
  *   whales       large on-chain transfer events (whales scanner)
  *   onchain      chain-intel source health + real activity ring
  *   news         the merged news feed (state store first, feed fallback)
- *   macro        real headlines CLASSIFIED by macro topic — never invented
+ *   macro        real headlines CLASSIFIED by macro topic (incl. POLITICS and
+ *                CURRENCIES — the impact of politics on the economy) PLUS the
+ *                real macro quotes (dollar, gold, crude, S&P, 10y yield,
+ *                2s10s curve) — never invented, either input alone keeps it
+ *                alive
  *   stocks       synthetic equity exposure (Avantis, read THROUGH the brain)
  *   forex        FX instruments (Ostium, read THROUGH the brain)
  *   commodities  metals/energy (Ostium, read THROUGH the brain)
@@ -57,15 +61,25 @@ export const BRAIN_READ_DOMAINS = Object.freeze({
 });
 
 /** Macro topics: keyword → topic. A topic is a LABEL on a real headline,
- *  never a generated event. Keep the list small and unambiguous. */
+ *  never a generated event. The first topic that matches wins (order matters,
+ *  counts must stay honest), so the broad politics/currency topics sit LAST —
+ *  a headline that is Fed news stays Fed news.
+ *  Phase 211.1 widened the lens: POLITICS and CURRENCIES are first-class
+ *  topics, because the impact of politics ON the economy is exactly what the
+ *  owner asked this domain to show (sanctions, tariffs, elections, fiscal
+ *  packages, the dollar) — and the GROWTH/FED/INFLATION/GEOPOLITICS patterns
+ *  gained the words real desks actually use (pmi, slowdown, easing, hawkish,
+ *  energy prices, ceasefire…). */
 export const MACRO_TOPICS = Object.freeze({
-  FED: /\b(fed|fomc|powell|federal reserve|interest rate|rate hike|rate cut|rate decision)\b/i,
-  RATES: /\b(yields?|treasury|bond market|basis points|bps)\b/i,
-  INFLATION: /\b(cpi|inflation|deflation|ppi|core inflation)\b/i,
-  GROWTH: /\b(gdp|recession|growth|soft landing|hard landing|unemployment|payrolls|nfp|jobless)\b/i,
+  FED: /\b(fed|fomc|powell|federal reserve|interest rate|rate hike|rate cut|rate decision|central bank|monetary policy|federal funds|easing|tightening|hawkish|dovish)\b/i,
+  RATES: /\b(yields?|treasury|treasuries|bond market|basis points|bps)\b/i,
+  INFLATION: /\b(cpi|inflation|deflation|ppi|core inflation|energy prices|oil prices|gas prices|deflator)\b/i,
+  GROWTH: /\b(gdp|recession|growth|soft landing|hard landing|unemployment|payrolls|nfp|jobless|pmi|imf|oecd|world bank|slowdown|stagflation|labor market|expansion)\b/i,
   ECB: /\b(ecb|lagarde|euro area|bank of england|boe|bank of japan|boj)\b/i,
-  GEOPOLITICS: /\b(geopolit|sanction|tariff|war|conflict|election|trade tension|opec)\b/i,
-  CRYPTO_POLICY: /\b(crypto regulation|etf|sec|cftc|stablecoin law|mica)\b/i
+  GEOPOLITICS: /\b(geopolit|sanction|tariff|war|conflict|election|trade tension|opec|ceasefire|blockade|export ban|nato|missile|escalat\w*)\b/i,
+  CRYPTO_POLICY: /\b(crypto regulation|etf|sec|cftc|stablecoin law|mica)\b/i,
+  POLITICS: /\b(election|elections|parliament|congress|senate|president|minister|ministry|chancellor|sanctions?|tariffs?|trade deal|trade war|diplomat\w*|legislation|government|governments|fiscal|stimulus|bailout|debt ceiling|impeach\w*|coup|protests?|unrest|shutdown|coalition)\b/i,
+  CURRENCIES: /\b(dollar|dollars|euro|yen|pound|sterling|dxy|forex|foreign exchange|currencies|currency|devaluation)\b/i
 });
 
 const TIMEOUT_MS = 8000;
@@ -95,6 +109,7 @@ async function load(name) {
       case 'whales': return await import('../whales.js');
       case 'chainIntel': return await import('../chainIntel.js');
       case 'news': return await import('../news.js');
+      case 'macroData': return await import('../macroData.js');
       default: return null;
     }
   } catch (err) {
@@ -205,14 +220,19 @@ export function normalizeNews(news, at = Date.now()) {
   }, 'news-engine', 0.7, { at });
 }
 
-/** macro: REAL headlines classified by topic. The classification names its
- *  evidence (the matched keyword) and the item keeps its original url/time —
- *  so this is a label on data, not generated text (§49). */
-export function normalizeMacro(newsDomain, at = Date.now()) {
-  if (!newsDomain || newsDomain.status !== 'OK' || !Array.isArray(newsDomain.data?.items)) {
-    return unavailableDomain('MACRO_NEEDS_NEWS', 'macro:classifier');
-  }
-  const fresh = newsDomain.data.items.filter((n) => !n.at || at - n.at < NEWS_FRESH_MS);
+/** macro: REAL headlines classified by topic PLUS the real macro quotes
+ *  (dollar index, gold, crude, equity index, 10y yield, 2s10s spread —
+ *  Phase 211.1). The classification names its evidence (the matched keyword)
+ *  and the item keeps its original url/time; the quotes keep their own source
+ *  and observation time — so this is a label on data plus a read of data,
+ *  never generated text (§49).
+ *
+ *  Either input alone keeps the domain alive: a quiet news day is covered by
+ *  the quotes, a quote outage by the headlines — the global→macro connection
+ *  no longer depends on a single upstream. */
+export function normalizeMacro(newsDomain, macroQuotes = null, at = Date.now()) {
+  const newsRead = Boolean(newsDomain && newsDomain.status === 'OK' && Array.isArray(newsDomain.data?.items));
+  const fresh = newsRead ? newsDomain.data.items.filter((n) => !n.at || at - n.at < NEWS_FRESH_MS) : [];
   const classified = [];
   for (const item of fresh) {
     const text = `${item.title || ''}`;
@@ -224,15 +244,44 @@ export function normalizeMacro(newsDomain, at = Date.now()) {
       }
     }
   }
-  if (!classified.length) return unavailableDomain('NO_MACRO_HEADLINES_IN_WINDOW', 'macro:classifier');
+  /* The quotes become the domain's instruments — the same shape the brain
+     classes expose, so the cross-asset engine can read them without a
+     special case. `change24hPct` is the real 1-day change of the quote. */
+  const rawQuotes = Array.isArray(macroQuotes?.items) ? macroQuotes.items : [];
+  const quotes = rawQuotes
+    .map((q) => ({
+      symbol: str(q.symbol, 12),
+      name: str(q.name, 60),
+      kind: str(q.kind, 16),
+      priceUsd: num(q.priceUsd),
+      change24hPct: num(q.change1dPct),
+      change1dPct: num(q.change1dPct),
+      change7dPct: num(q.change7dPct),
+      source: str(q.source, 40)
+    }))
+    .filter((q) => q.symbol && q.priceUsd !== null);
+  if (!classified.length && !quotes.length) {
+    return unavailableDomain(
+      newsRead ? 'NO_MACRO_HEADLINES_IN_WINDOW_AND_NO_QUOTES' : 'MACRO_NEEDS_NEWS_AND_QUOTES',
+      'macro:classifier'
+    );
+  }
   const byTopic = {};
   for (const c of classified) byTopic[c.topic] = (byTopic[c.topic] || 0) + 1;
+  const curve = quotes.find((q) => q.kind === 'curve') || null;
   return okDomain({
     items: classified.slice(0, 14),
     byTopic,
     attention: classified.length,
+    quotes,
+    instruments: quotes,
+    /* The 2s10s spread — the classic cycle gauge: its LEVEL (priceUsd) is
+       the spread in percentage points, null when the curve instrument was
+       not among what a source returned. */
+    curve: curve ? { symbol: curve.symbol, spreadPct: curve.priceUsd, change7dPct: curve.change7dPct, source: curve.source } : null,
+    sources: { news: newsRead ? 'news-engine' : null, quotes: str(macroQuotes?.source, 40) || null },
     untrusted: true
-  }, 'macro:classifier', 0.6, { at });
+  }, 'macro:classifier', classified.length && quotes.length ? 0.7 : 0.6, { at, partial: !classified.length || !quotes.length });
 }
 
 /** stocks: the brain's Avantis read (or a provider-shaped fixture). */
@@ -340,6 +389,19 @@ export function createGlobalIntelEngine({
     }
   }
 
+  /** The macro quotes for this pass. A quote outage is NOT an error for the
+   *  snapshot — it is one missing input to the macro domain (the headlines
+   *  still classify), so the failure is swallowed here and named by the
+   *  domain itself. */
+  async function readMacroQuotes() {
+    try {
+      return await callProvider('macroData', 'fetchMacroQuotes', 'macroData');
+    } catch (err) {
+      log(`global-intel:macro-quotes:${String(err?.message || err).slice(0, 80)}`);
+      return null;
+    }
+  }
+
   async function readDomain(domain, sections, at) {
     switch (domain) {
       case 'smart_money': {
@@ -428,17 +490,22 @@ export function createGlobalIntelEngine({
     const run = (async () => {
       const started = now();
       const readDomains = GLOBAL_DOMAINS.filter((d) => d !== 'macro');
-      const results = await Promise.all(readDomains
-        .map((d) => readDomain(d, sections, at).catch((err) => unavailableDomain(`DOMAIN_ERROR:${String(err?.message || err).slice(0, 100)}`, 'global-intel'))));
+      const [results, macroQuotes] = await Promise.all([
+        Promise.all(readDomains
+          .map((d) => readDomain(d, sections, at).catch((err) => unavailableDomain(`DOMAIN_ERROR:${String(err?.message || err).slice(0, 100)}`, 'global-intel')))),
+        readMacroQuotes()
+      ]);
       const domains = {};
       const missing = [];
       readDomains.forEach((domain, i) => {
         domains[domain] = results[i] || unavailableDomain('DOMAIN_NOT_RUN', 'global-intel');
         if (domains[domain].status !== 'OK') missing.push(domain);
       });
-      /* macro is classified from THIS pass's news result — a news outage is a
-         macro outage, never a stale classification. */
-      domains.macro = normalizeMacro(domains.news, at);
+      /* macro is classified from THIS pass's news result AND the real macro
+         quotes of the same pass — a news outage no longer takes the macro
+         domain down (the quotes still read), and a quote outage leaves the
+         headlines. Never a stale classification. */
+      domains.macro = normalizeMacro(domains.news, macroQuotes, at);
       if (domains.macro.status !== 'OK') missing.push('macro');
 
       const available = GLOBAL_DOMAINS.filter((d) => domains[d]?.status === 'OK').length;
@@ -486,8 +553,11 @@ export function createGlobalIntelEngine({
       return { ok: false, code: 'UNKNOWN_DOMAIN', allowed: GLOBAL_DOMAINS };
     }
     if (domain === 'macro') {
-      const news = await readDomain('news', sections, now());
-      return { ok: true, domain: 'macro', result: normalizeMacro(news, now()) };
+      const [news, quotes] = await Promise.all([
+        readDomain('news', sections, now()),
+        readMacroQuotes()
+      ]);
+      return { ok: true, domain: 'macro', result: normalizeMacro(news, quotes, now()) };
     }
     const snapshot = await snapshotFor(owner, { sections, refresh });
     return { ok: true, domain, result: snapshot.domains[domain] };

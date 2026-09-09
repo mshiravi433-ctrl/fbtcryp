@@ -365,6 +365,9 @@ export function worldModelDigest(model) {
     },
     global: {
       regime: pick(model.domains?.global?.crossAsset)?.regime?.regime || null,
+      /* Phase 211.1 — the economic outlook's LABEL only (bounded digest):
+         growth watch / recession watch / mixed — never the signal text. */
+      outlook: pick(model.domains?.global?.crossAsset)?.outlook?.label || null,
       live: GLOBAL_DOMAIN_LEAVES.filter((l) => isUsable(model.domains?.global?.[l])).length,
       untrusted: true
     },

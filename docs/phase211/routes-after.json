@@ -1,7 +1,7 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-09-09T01:27:21.801Z",
+  "generatedAt": "2026-09-09T04:11:27.683Z",
   "frontend": {
     "routeCount": 65,
     "routes": [

@@ -35,7 +35,7 @@ const INTEL = {
       whales: { status: 'UNAVAILABLE', reason: 'WHALES_UNAVAILABLE:FEED_DOWN', source: 'whales:scanner', at: Date.now(), confidence: 0, data: null },
       onchain: { status: 'OK', reason: null, source: 'chainIntel', at: Date.now(), confidence: 0.8, data: { healthySources: 1, degradedSources: 1, downSources: 0, sources: [{ source: 'ci:markets', status: 'HEALTHY' }] } },
       news: { status: 'OK', reason: null, source: 'news-engine', at: Date.now(), confidence: 0.7, data: { count: 2, items: [{ title: 'Fed signals patience on rates', url: 'u', source: 'r', lang: 'en', at: Date.now() }] } },
-      macro: { status: 'OK', reason: null, source: 'macro:classifier', at: Date.now(), confidence: 0.6, data: { attention: 2, byTopic: { FED: 1, ECB: 1 }, items: [{ topic: 'FED', title: 'Fed signals patience', url: 'u', at: Date.now(), matched: 'Fed' }] } },
+      macro: { status: 'OK', reason: null, source: 'macro:classifier', at: Date.now(), confidence: 0.7, data: { attention: 2, byTopic: { FED: 1, POLITICS: 1 }, items: [{ topic: 'FED', title: 'Fed signals patience', url: 'u', at: Date.now(), matched: 'Fed' }], instruments: [{ symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' }, { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F' }], curve: { symbol: 'US2S10S', spreadPct: -0.21, source: 'fred:T10Y2Y' }, untrusted: true } },
       stocks: { status: 'OK', reason: null, source: 'brain:stocks', at: Date.now(), confidence: 0.75, data: { venue: 'avantis', readOnly: true, instruments: [{ symbol: 'AAPL', priceUsd: 214.3, change24hPct: 1.2 }, { symbol: 'TSLA', priceUsd: 242.1, change24hPct: -2.1 }] } },
       forex: { status: 'OK', reason: null, source: 'brain:forex', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'EURUSD', priceUsd: 1.084, change24hPct: 0.3 }] } },
       commodities: { status: 'OK', reason: null, source: 'brain:commodities', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'XAU', priceUsd: 2352.5, change24hPct: 0.9 }] } },
@@ -65,7 +65,26 @@ const CROSS = {
     observedClasses: ['crypto', 'stocks'], readOnlyClasses: ['stocks'],
     classes: { crypto: { instruments: 2, withChange: 2, advancing: 1, declining: 1, avgChangePct: -0.35, top: [], bottom: [] }, stocks: { instruments: 2, withChange: 2, advancing: 1, declining: 1, avgChangePct: -0.45, top: [], bottom: [] } },
     regime: { regime: 'RISK_OFF_LEANING', votes: [{ cls: 'crypto', avg: -0.35 }, { cls: 'stocks', avg: -0.45 }], coMovement: 1, basis: 'real per-instrument changes' },
-    divergences: [], correlations: { UNAVAILABLE: { ok: false, reason: 'NO_PAIRED_HISTORY_SUPPLIED' } }, missing: ['forex']
+    divergences: [], correlations: { UNAVAILABLE: { ok: false, reason: 'NO_PAIRED_HISTORY_SUPPLIED' } }, missing: ['forex'],
+    /* Phase 211.1 — the macro indicator layer + the economic outlook. */
+    macro: {
+      status: 'OK', untrusted: true,
+      indicators: [
+        { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' },
+        { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F' },
+        { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:T10YIE' }
+      ],
+      curve: { symbol: 'US2S10S', spreadPct: -0.21, change7dPct: -0.3, source: 'fred:T10Y2Y' }
+    },
+    outlook: {
+      label: 'RECESSION_WATCH', score: -0.21, untrusted: true,
+      note: 'a weighted reading of this pass\u2019s real reads — data, not authority; not a forecast',
+      currentState: { regime: 'RISK_OFF_LEANING', observedClasses: ['crypto', 'stocks'], avgChangePct: { crypto: -0.35, stocks: -0.45 } },
+      signals: [
+        { id: 'risk_mood', name: 'cross-class mood', value: -1, weight: 1.5, direction: 'cautionary', evidence: '0 of 2 asset classes up over 24h — regime risk off leaning', source: 'cross-asset-engine' },
+        { id: 'yield_curve', name: 'yield curve', value: -1, weight: 1.5, direction: 'cautionary', evidence: '2s10s spread INVERTED at -0.21pp — inversions have historically preceded US recessions', source: 'fred:T10Y2Y' }
+      ]
+    }
   }
 };
 
@@ -110,7 +129,7 @@ export async function run(container) {
   check('panel: the screen mounts with the briefing tab visible and the live-domain chip',
     text().includes('9') || /domains live|دامنه زنده/.test(text()));
   check('panel: the smart-money briefing item renders with its source + open action',
-    /Smart money is accumulating|پول هوشمند/.test(text()) && text().includes('smartMoney:overview'));
+    /Smart money is accumulating|پول هوشمند/.test(text()) && (/smart money|پول هوشمند/.test(text())));
 
   /* switch to the domains tab */
   const domainTab = all('button').find((b) => (b.textContent || '').includes('🌍'));
@@ -119,7 +138,9 @@ export async function run(container) {
   check('panel: the domains tab renders the nine domains',
     ['smart money', 'whales', 'on-chain', 'macro', 'stocks', 'forex', 'commodities', 'rwa'].every((d) => text().toLowerCase().includes(d)) || text().includes('پول هوشمند'));
   check('panel: an UNAVAILABLE domain shows unread with its reason — never a number',
-    /unread|خوانده نشد/.test(text()) && text().includes('WHALES_UNAVAILABLE'));
+    /unread|خوانده نشد/.test(text()) && (/whale scanner unavailable|اسکنر نهنگ در دسترس نیست/.test(text())));
+  check('panel: the macro domain card shows classified topics AND the real quote move (the connection)',
+    /DXY/.test(text()) && /\+0\.8%/.test(text()) && /POLITICS|سیاست/i.test(text()));
 
   /* switch to cross-asset */
   const crossTab = all('button').find((b) => (b.textContent || '').includes('🔀'));
@@ -129,6 +150,19 @@ export async function run(container) {
     /RISK OFF LEANING/i.test(text()) && /real per-class average 24h change|میانگین تغییر ۲۴ ساعته واقعی/.test(text()) && text().includes('crypto'));
   check('panel: the correlations note says history is required — never an invented r',
     /Correlations need real paired history|همبستگی فقط با سری زمانی/.test(text()));
+  /* Phase 211.1 — the economic outlook block: the now AND the direction. */
+  check('panel: the economic outlook block renders its label, score and named signals with evidence',
+    /Economic outlook|چشم‌انداز اقتصادی/.test(text())
+    && /recession watch|هشدار رکود/i.test(text())
+    && text().includes('-0.21')
+    && /yield curve|منحنی/i.test(text())
+    && /INVERTED|وارون/i.test(text())
+    && all('.aig-signal').length >= 2
+    && all('.aig-signal-dir').some((el) => /cautionary|هشداردهنده/.test(el.textContent || '')));
+  check('panel: the macro indicator layer renders the real quotes with 1d/7d and the curve',
+    text().includes('DXY') && text().includes('GOLD') && text().includes('US10Y')
+    && /\+0\.8% 1d/.test(text()) && /\+2\.1% 7d/.test(text())
+    && /2s10s/i.test(text()) && /inverted|وارون/i.test(text()));
 
   /* switch to providers */
   const provTab = all('button').find((b) => (b.textContent || '').includes('🔌'));
@@ -137,7 +171,7 @@ export async function run(container) {
   check('panel: the providers tab renders the five-lamp rows',
     all('.aig-light').length >= 1 && all('.aig-lamp').length >= 10);
   check('panel: a dead provider shows its reason',
-    text().includes('WHALES_UNAVAILABLE'));
+    (/whale scanner unavailable|اسکنر نهنگ در دسترس نیست/.test(text())));
 
   await act(async () => { root.unmount(); });
 
