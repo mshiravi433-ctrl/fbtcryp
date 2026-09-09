@@ -22,6 +22,9 @@
 #        - log_window (default 100000) — blocks to scan for a real finalized,
 #          unclaimed WithdrawalRequested entry used for the claim/ownership proof.
 #          Lower it on a rate-limited public RPC.
+#        - log_chunk (default 10000) — eth_getLogs chunk size; the probe adaptively
+#          shrinks it to whatever per-call range the chosen RPC allows (e.g. some
+#          endpoints cap at 10 blocks), so this rarely needs to be set manually.
 #
 # WHAT IT DOES: installs Foundry (anvil) on the runner, forks Ethereum mainnet
 # locally, and runs the REAL acceptance probe
