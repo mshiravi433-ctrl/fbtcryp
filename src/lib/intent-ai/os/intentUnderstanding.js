@@ -42,6 +42,12 @@ export const INTENT_TYPES = Object.freeze([
      trade: it needs a target, a horizon, the live rates and a verdict. It gets
      its own type so the compiler — not a link — answers it. */
   'GOAL_PLAN',
+  /* A whole-ecosystem objective («۱۰ هزار دلار، ۱۵٪ در ۴ ماه، ریسک متوسط»):
+     capital + target + horizon + risk. Not one module — the strategy brain
+     reads every module, compares the plans it can build and returns a staged
+     Portfolio Strategy. It outranks GOAL_PLAN because it needs strictly more
+     of the sentence: a target AND a horizon AND a risk appetite. */
+  'STRATEGY_PLAN',
   /* Arming / stopping the autonomy loop itself. */
   'AUTONOMY',
   'DCA',
@@ -261,6 +267,31 @@ const INTENT_PATTERNS = [
       /موجودی.*چقدر|چقدر.*موجودی/i,
       /balance|how much.*have|how many.*have|my balance/i,
       /کیف پول.*موجودی|موجودی.*کیف/i
+    ]
+  },
+  {
+    /*
+     * «من ۱۰ هزار دلار دارم، در ۴ ماه حداقل ۱۵٪ سود می‌خواهم و ریسک متوسط
+     *  قبول دارم» used to classify as PORTFOLIO_ANALYSIS — a snapshot of what
+     *  the user already owns, in answer to a question about what to DO with it.
+     *
+     *  This rule fires on either of two things: an explicit ask for a strategy,
+     *  or the three numbers that make a request an objective — a capital
+     *  amount, a percent target and a horizon. INTENT_PATTERNS run against the
+     *  RAW text, so every digit class below includes the Persian/Arabic forms;
+     *  `\d` alone would never see «۱۵٪».
+     */
+    type: 'STRATEGY_PLAN',
+    weight: 10,
+    patterns: [
+      /استراتژی[\s‌]*(?:پرتفوی|پرتفوليو|سرمایه|portfolio)?[\s‌]*(?:بساز|بچین|طراحی|بده|درست کن|بنویس)/i,
+      /(?:بساز|بچین|طراحی کن|درست کن|بنویس)[\s‌]*(?:یه|یک|برام|برایم)?[\s‌]*استراتژی/i,
+      /برنامه[\s‌]*(?:سرمایه[\s‌]*گذاری|پرتفوی)[\s‌]*(?:بساز|بچین|بده|می[\s‌]*خوام|میخواهم)/i,
+      /(?:portfolio|investment)[\s‌]*strategy|build[\s‌]*(?:me[\s‌]*)?(?:a[\s‌]*)?strategy|strategy[\s‌]*for[\s‌]*my[\s‌]*(?:money|portfolio|capital|10k)/i,
+      /[\d۰-۹]+(?:\.\d+)?[\s‌]*(?:٪|%|درصد)[\s‌]*(?:سود|بازدهی|بازده|رشد)/i,
+      /(?:سود|بازدهی|بازده|رشد)[\s‌]*(?:حداقل[\s‌]*)?[\d۰-۹]+(?:\.\d+)?[\s‌]*(?:٪|%|درصد)/i,
+      /[\d۰-۹]+(?:\.\d+)?[\s‌]*(?:٪|%|percent)[\s‌]*(?:profit|return|gain|apr|apy)/i,
+      /(?:at least|minimum)[\s‌]*[\d۰-۹]+[\s‌]*(?:٪|%|percent)/i
     ]
   },
   {
@@ -928,6 +959,7 @@ export function understandIntent(message, context = {}) {
       'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
       'FARM', 'LEND', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
       'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS',
+      'STRATEGY_PLAN',
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
       'SWAP', 'BUY', 'SELL', 'BRIDGE', 'SEND',
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',

@@ -39,6 +39,13 @@ import './intent-ai/ci-brain-turns-probe.mjs';
 import './intent-ai/ops-center-probe.mjs';
 import './intent-ai/ops-i18n-probe.mjs';
 /*
+ * Strategy brain — the layer that turns «۱۰ هزار دلار، ۱۵٪ در ۴ ماه، ریسک
+ * متوسط» into a cross-module Portfolio Strategy instead of a link to one
+ * venue: the goal spec, the 21-domain read under a host budget, the decision
+ * between every module, the staged handoffs, and the monitoring/revision loop.
+ */
+import './intent-ai/strategy-brain-probe.mjs';
+/*
  * Autonomy core — the layer that turns "the assistant links you to a page" into
  * "the assistant executes". Three suites, all against the real source:
  *

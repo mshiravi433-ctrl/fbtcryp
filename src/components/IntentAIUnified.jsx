@@ -84,6 +84,11 @@ import { resolveChatRoute } from '../lib/intent-ai/autonomy/chatRoutes.js';
 import { buildAutonomyDrivers, warmAutonomyDrivers } from '../lib/intent-ai/autonomy/browserDrivers.js';
 import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
+import { StrategyPlanCard } from './StrategyPlanCard.jsx';
+import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
+import {
+  saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs, linkRevision
+} from '../lib/strategyBrain/strategyStore.js';
 import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
 import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
 import { getOhlc } from '../lib/api';
@@ -350,6 +355,10 @@ const ConversationRow = memo(function ConversationRow({
   onFeedback,
   onOpenRoute,
   onGoalExecute,
+  onStrategyExecute,
+  onStrategyMonitor,
+  onStrategyRevise,
+  strategyLive,
   autonomyEngine,
   autonomyStrategies,
   onAutonomyArm,
@@ -442,6 +451,23 @@ const ConversationRow = memo(function ConversationRow({
             error={m.goalError || null}
             onExecute={onGoalExecute ? (option) => onGoalExecute(m, option) : null}
             onOpenRoute={onOpenRoute}
+          />
+        ) : null}
+        {/* The cross-module Portfolio Strategy: what the ecosystem read, the
+            options compared, the allocation, the staged handoffs and the
+            monitors. Everything on it comes from the plan object. */}
+        {m.strategyRequest ? (
+          <StrategyPlanCard
+            plan={m.strategyPlan}
+            spec={m.strategySpec || null}
+            busy={Boolean(m.strategyBusy)}
+            error={m.strategyError || null}
+            locale={locale}
+            onOpenRoute={onOpenRoute}
+            onExecuteStage={onStrategyExecute ? (strategy) => onStrategyExecute(m, strategy) : null}
+            onMonitor={onStrategyMonitor ? (strategy) => onStrategyMonitor(m, strategy) : null}
+            onRevise={onStrategyRevise ? (strategy) => onStrategyRevise(m, strategy) : null}
+            live={m.strategyPlan?.strategyId ? (strategyLive?.[m.strategyPlan.strategyId] || null) : null}
           />
         ) : null}
         {m.autonomyRequest ? (
@@ -2040,6 +2066,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
              only honest verdict available is NO_LIVE_RATES, so every goal
              card would refuse even on a network that had the data. */
           goalResults: osResult.human?.goalRequest ? (osResult.data || null) : null,
+          /* A whole-ecosystem objective («۱۰ هزار دلار، ۱۵٪ در ۴ ماه، ریسک
+             متوسط») travels the same way: the request rides with the message
+             and the strategy brain compiles the real plan from live reads
+             after render, because this layer cannot await twenty-one domains
+             synchronously. */
+          strategyRequest: osResult.human?.strategyRequest || null,
+          strategyEntities: osResult.human?.strategyRequest ? (osResult.intent?.entities || null) : null,
           autonomyRequest: osResult.human?.autonomyRequest || null,
           intentType: osResult.intent?.type || null,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
@@ -2204,6 +2237,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         card: reply.card || null,
         actions: Array.isArray(reply.actions) ? reply.actions : [],
         rebalance: reply.rebalance || null,
+        strategyRequest: reply.strategyRequest || null,
+        strategyEntities: reply.strategyRequest ? (reply.intent?.entities || null) : null,
         choices: Array.isArray(reply.choices) ? reply.choices : [],
         choiceKind: reply.choiceKind || null,
         intentId: reply.intentId || null,
@@ -2618,6 +2653,262 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     })();
   }, [messages, aiContext, locale]);
+
+  /*
+   * ─── STRATEGY BRAIN: compile the cross-module plan ──────────────────────
+   * Same shape as the goal effect above, for the same reason: the human layer
+   * is synchronous and cannot await twenty-one domain reads, so the request
+   * rides with the message and the plan is built here — against the LIVE app
+   * (real wallet snapshot, real market/yield/derivatives/intelligence feeds),
+   * never against remembered numbers.
+   *
+   * `lastStrategyMessageId` is the same guard the goal effect needed: without
+   * it this effect re-runs on every `messages` change, re-reads the ecosystem
+   * for a message it already answered, and — because it sets state — re-runs
+   * itself. That is both a stuck spinner and a needless load on a small host.
+   */
+  const lastStrategyMessageId = useRef(null);
+  useEffect(() => {
+    const pending = messages.find((m) => m.strategyRequest && !m.strategyPlan && !m.strategyError && !m.strategyBusy && m.id !== lastStrategyMessageId.current);
+    if (!pending) return;
+    lastStrategyMessageId.current = pending.id;
+    void (async () => {
+      setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, strategyBusy: true } : m)));
+      try {
+        const result = await buildStrategyFromChat({
+          text: pending.strategyRequest.text || '',
+          entities: pending.strategyEntities || {},
+          context: aiContext,
+          results: {},
+          wallet: wallet || null,
+          portfolio: aiContext.portfolio || null
+        });
+        if (!goalMountedRef.current) return;
+        const built = result.strategy || result;
+        /*
+         * Persist the plan before it is shown. A strategy is built for a
+         * horizon measured in months, so losing it on reload would throw away
+         * the stage progress that staged execution and revision both act on.
+         * One localStorage write, no server round-trip: free on a small host.
+         * A refusal (ok:false) is never stored — there is no plan to resume.
+         */
+        if (built?.ok) {
+          try {
+            saveStrategyPlan({ strategy: built, goal: result.spec || built.goal || null });
+          } catch { /* storage full or blocked: the plan still works this session */ }
+        }
+        setMessages((prev) => prev.map((m) => (m.id === pending.id
+          ? { ...m, strategyPlan: built, strategySpec: result.spec || null, strategyBusy: false }
+          : m)));
+      } catch (err) {
+        if (!goalMountedRef.current) return;
+        setMessages((prev) => prev.map((m) => (m.id === pending.id
+          ? { ...m, strategyBusy: false, strategyError: locale.startsWith('fa')
+            ? `استراتژی ساخته نشد: ${String(err?.message || err).slice(0, 140)}`
+            : `The strategy could not be built: ${String(err?.message || err).slice(0, 140)}` }
+          : m)));
+      }
+    })();
+  }, [messages, aiContext, wallet, locale]);
+
+  /*
+   * Run the next stage of a live strategy. The runtime decides which stage is
+   * next and refuses to skip ahead after a failure; the actions it hands back
+   * are handoffs to the venues that own the signature, so this opens the venue
+   * prefilled rather than signing anything itself.
+   */
+  const strategyRuntimesRef = useRef(new Map());
+
+  /* Write the runtime's stage truth back to the store. Called after anything
+     that changes progress, so a reload picks up where this left off. Storage
+     failure is swallowed on purpose: losing persistence must never block a
+     stage the user just signed. */
+  const persistStrategyRuntime = useCallback((strategy, spec, runtime) => {
+    if (!strategy?.ok || !runtime) return;
+    try {
+      saveStrategyPlan({ strategy, goal: spec || strategy.goal || null, runtime: runtime.state() });
+    } catch { /* ignore */ }
+  }, []);
+
+  const runStrategyStage = useCallback((message, strategy) => {
+    if (!strategy?.ok) return;
+    let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
+    if (!runtime) {
+      /* Resume from the store when there is a saved plan: a strategy built
+         for a 4-month horizon that restarts at stage one on every reload
+         would re-run stages the user already signed. */
+      let hydrate = null;
+      try {
+        const saved = loadStrategyPlan(strategy.strategyId);
+        hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
+      } catch { hydrate = null; }
+      runtime = createChatStrategyRuntime({
+        strategy,
+        spec: message.strategySpec || null,
+        context: aiContext,
+        wallet: wallet || null,
+        portfolio: aiContext.portfolio || null,
+        hydrate
+      });
+      strategyRuntimesRef.current.set(strategy.strategyId, runtime);
+    }
+    const next = runtime.nextStage();
+    const fa = locale.startsWith('fa');
+    if (!next.ok) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `مرحله بعد اجرا نمی‌شود: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. چیزی به عنوان موفق گزارش نمی‌شود.`
+          : `The next stage will not run: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. Nothing is reported as a success.`
+      }]);
+      return;
+    }
+    if (next.done) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: fa ? 'همه‌ی مراحل اجرا شده‌اند. از این‌جا پایش ادامه دارد.' : 'Every stage has run. From here it is monitoring.'
+      }]);
+      return;
+    }
+    if (next.movesFunds && !walletConnected) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
+    const first = next.actions?.find((a) => a.route) || null;
+    /*
+     * Only now is the stage really leaving this surface, so only now is it
+     * marked RUNNING and written back. Marking it earlier would record a
+     * hand-off that never happened when the wallet gate turns the user away.
+     *
+     * RUNNING is the honest ceiling here: the signature happens on the venue
+     * page, and this surface has no receipt to bring back, so nothing is ever
+     * marked CONFIRMED from chat. A returning user sees "this stage is with
+     * the venue", not a false "done".
+     */
+    runtime.advance();
+    persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: fa
+        ? `مرحله «${next.stage.title}»: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم.`
+        : `Stage "${next.stage.title}": ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat.`,
+      actions: first ? [{ id: `stage-${next.stage.id}`, route: first.route, label: fa ? 'باز کن' : 'Open' }] : []
+    }]);
+    if (first?.route) navigate(first.route);
+  }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate, persistStrategyRuntime]);
+
+  /*
+   * ─── STRATEGY BRAIN: monitoring and revision ────────────────────────────
+   * The last two legs of the pipeline. A plan that is built and executed but
+   * never measured against reality is a brochure, so this reads the REAL
+   * portfolio and hands it to the runtime, which compares it against the
+   * plan's own curve and the user's drawdown budget.
+   *
+   * No timer, no polling: the check runs when the user asks for it. A resident
+   * loop would be exactly the kind of always-on load a small host cannot
+   * spare, and a number nobody is looking at is not worth fetching.
+   */
+  const strategyLiveRef = useRef(new Map());
+  /* The live verdicts live in a ref (a Map keyed by strategyId) because they
+     are written from inside callbacks. The version counter is what actually
+     re-renders: a ref mutation on its own would leave the card showing the
+     previous verdict forever. Deriving a plain object keeps the prop stable
+     enough for the row's memo to behave. */
+  const [strategyLiveVersion, setStrategyLiveVersion] = useState(0);
+  const strategyLive = useMemo(() => {
+    void strategyLiveVersion;
+    return Object.fromEntries(strategyLiveRef.current);
+  }, [strategyLiveVersion]);
+
+  /** Resolve the runtime for a plan, hydrating stage truth from the store. */
+  const strategyRuntimeFor = useCallback((message, strategy) => {
+    if (!strategy?.ok) return null;
+    let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
+    if (!runtime) {
+      let hydrate = null;
+      try {
+        const saved = loadStrategyPlan(strategy.strategyId);
+        hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
+      } catch { hydrate = null; }
+      runtime = createChatStrategyRuntime({
+        strategy,
+        spec: message.strategySpec || null,
+        context: aiContext,
+        wallet: wallet || null,
+        portfolio: aiContext.portfolio || null,
+        hydrate
+      });
+      strategyRuntimesRef.current.set(strategy.strategyId, runtime);
+    }
+    return runtime;
+  }, [aiContext, wallet]);
+
+  const monitorStrategy = useCallback((message, strategy) => {
+    const runtime = strategyRuntimeFor(message, strategy);
+    const fa = locale.startsWith('fa');
+    if (!runtime) return;
+    const portfolio = aiContext.portfolio || null;
+    const valueUsd = Number(portfolio?.totalValueUsd);
+    if (!Number.isFinite(valueUsd) || valueUsd <= 0) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? 'برای سنجیدن برنامه باید ارزش واقعی پرتفوی را ببینم — کیف پول را وصل کن تا بتوانم مقایسه کنم. حدس نمی‌زنم.'
+          : 'To check the plan I need the portfolio\'s real value — connect the wallet so I can compare it. I will not guess.'
+      }]);
+      return;
+    }
+    const result = runtime.observe({ portfolioValueUsd: valueUsd });
+    strategyLiveRef.current.set(strategy.strategyId, {
+      decision: result.decision,
+      triggers: result.triggers || [],
+      last: result.observation || null,
+      curve: result.curve || null,
+      revisionCount: result.revisionsUsed || 0
+    });
+    persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
+    setStrategyLiveVersion((v) => v + 1);
+    const label = {
+      CONTINUE: fa ? 'برنامه روی مسیر است.' : 'The plan is on track.',
+      REVISE: fa ? 'برنامه از مسیر خارج شده — بازسازی پیشنهاد می‌شود.' : 'The plan has drifted — a rebuild is advised.',
+      HALT: fa ? 'توقف: بودجه ریسک شکسته شده است.' : 'Halted: the risk budget is breached.',
+      COMPLETE: fa ? 'افق زمانی برنامه تمام شده است.' : 'The plan has reached the end of its horizon.'
+    }[result.decision] || result.decision;
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: fa
+        ? `${label} ارزش واقعی ${Number(valueUsd).toLocaleString()} دلار در برابر سرمایه‌ی ${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} دلار.`
+        : `${label} Real value $${Number(valueUsd).toLocaleString()} against $${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} of capital.`
+    }]);
+  }, [aiContext, locale, persistStrategyRuntime, strategyRuntimeFor]);
+
+  const reviseStrategy = useCallback(async (message, strategy) => {
+    const runtime = strategyRuntimeFor(message, strategy);
+    const fa = locale.startsWith('fa');
+    if (!runtime) return;
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, strategyBusy: true } : m)));
+    const result = await runtime.revise({ reason: 'USER_REQUESTED' });
+    if (!result.ok) {
+      setMessages((prev) => [...prev.map((m) => (m.id === message.id ? { ...m, strategyBusy: false } : m)), {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `بازسازی انجام نشد: ${result.code}. استراتژی قبلی دست‌نخورده باقی می‌ماند.`
+          : `The rebuild did not happen: ${result.code}. The previous strategy stays as it was.`
+      }]);
+      return;
+    }
+    /* The revision replaces the plan on this message, and the chain is
+       persisted so a reload resumes the NEW strategy, not the old one. */
+    try {
+      linkRevision({ fromStrategyId: strategy.strategyId, toStrategyId: result.strategy.strategyId });
+      saveStrategyPlan({ strategy: result.strategy, goal: message.strategySpec || null, runtime: runtime.state() });
+    } catch { /* persistence must never block the revision */ }
+    strategyLiveRef.current.set(result.strategy.strategyId, {
+      decision: 'CONTINUE', triggers: [], last: null, curve: null,
+      revisionCount: result.revision?.at ? 1 : 0
+    });
+    setMessages((prev) => prev.map((m) => (m.id === message.id
+      ? { ...m, strategyPlan: result.strategy, strategyBusy: false }
+      : m)));
+    setStrategyLiveVersion((v) => v + 1);
+  }, [locale, persistStrategyRuntime, strategyRuntimeFor]);
 
   /**
    * Execute one goal option for real. The steps are the venue actions the
@@ -4129,6 +4420,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
                 onGoalExecute={executeGoalOption}
+                onStrategyExecute={runStrategyStage}
+                onStrategyMonitor={monitorStrategy}
+                onStrategyRevise={reviseStrategy}
+                strategyLive={strategyLive}
                 autonomyEngine={autonomyEngine}
                 autonomyStrategies={autonomyStrategies}
                 onAutonomyArm={armAutomation}

@@ -325,7 +325,7 @@ export function createIntentOS({
           // "what can you do" is a chat answer by definition
           'CAPABILITIES',
           // the ops surfaces answer with their own live panels
-          'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS'
+          'OPS_CENTER', 'AGENTS', 'STRATEGY', 'STRATEGY_PLAN', 'SYSTEM_STATUS'
         ];
         let workingIntent = intent;
         const stayInChat = ANSWER_IN_CHAT.includes(workingIntent.type);

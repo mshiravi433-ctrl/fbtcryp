@@ -321,6 +321,11 @@ const CARD_LABELS = Object.freeze({
   },
 
   /* -------------------------------- Goals -------------------------------- */
+  strategy_build: {
+    fa: { title: 'استراتژی پرتفوی', desc: 'همه‌ی ماژول‌ها را یک‌جا می‌خواند و برای سرمایه، هدف و ریسک تو یک برنامه‌ی مرحله‌به‌مرحله می‌سازد' },
+    ar: { title: 'استراتيجية المحفظة', desc: 'يقرأ كل الوحدات دفعة واحدة ويبني خطة مرحلية لرأسمالك وهدفك ومخاطرك' },
+    en: { title: 'Portfolio Strategy', desc: 'Reads every module at once and builds a staged cross-module plan for your capital, target and risk' }
+  },
   goals_create: {
     fa: { title: 'هدف مالی', desc: 'ساخت یک هدف مالی واقعی و ماندگار' },
     ar: { title: 'هدف مالي', desc: 'إنشاء هدف مالي حقيقي ودائم' }
