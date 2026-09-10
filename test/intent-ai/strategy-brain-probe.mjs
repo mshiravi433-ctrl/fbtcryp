@@ -41,6 +41,9 @@ import {
   deleteStrategyPlan, linkRevision, hydrateRuntimeArgs, planLabel,
   STRATEGY_MAX_PLANS, STRATEGY_STORE_KEY
 } from '../../src/lib/strategyBrain/strategyStore.js';
+import {
+  createConversationState, appendMessage, saveConversationState, loadConversationState
+} from '../../src/lib/intent-ai/os/upgrade6/conversationState.js';
 import { num } from '../../src/lib/strategyBrain/numeric.js';
 import { understandIntent } from '../../src/lib/intent-ai/os/intentUnderstanding.js';
 import { buildHumanResponse } from '../../src/lib/intent-ai/os/humanResponse.js';
@@ -583,6 +586,63 @@ try {
   saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, store: delStore, now: T0 });
   saveStrategyPlan({ strategy: secretPlan, goal: goalForPersist, store: delStore, now: T0 + 1 });
   check('the whole archive can be cleared', deleteStrategyPlan(null, { store: delStore }).remaining === 0);
+
+  /* ── the join that makes persistence worth anything ──────────────────────
+     Storing the plan is useless unless the card that shows it comes back too,
+     and unless the two meet on the same strategyId. conversationState keeps
+     its own localStorage key and reaches for the global directly, so this
+     needs a real global stub — the same one the browser provides. ──────── */
+  {
+    const backing = new Map();
+    const savedGlobal = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: (k) => (backing.has(k) ? backing.get(k) : null),
+      setItem: (k, v) => { backing.set(k, String(v)); },
+      removeItem: (k) => { backing.delete(k); },
+      clear: () => { backing.clear(); }
+    };
+    try {
+      let conv = createConversationState({ sessionId: 'sess-strategy' });
+      conv = appendMessage(conv, {
+        id: 'msg-strategy', role: 'ai', kind: 'assistant',
+        ui: { type: 'STRATEGY_PLAN_CARD' }, content: FA_GOAL,
+        strategyRequest: { text: FA_GOAL }, strategySpec: goalForPersist, strategyPlan: persistPlan
+      });
+      saveConversationState(conv);
+
+      /* Reload: read the thread back exactly the way the component does. */
+      const restored = loadConversationState();
+      const msg = (restored.messages || []).find((m) => m.id === 'msg-strategy');
+
+      check('the strategy card survives a reload', Boolean(msg?.strategyPlan));
+      check('the restored card keeps the same plan',
+        msg?.strategyPlan?.strategyId === persistPlan.strategyId);
+      check('the restored plan is still a usable strategy', msg?.strategyPlan?.ok === true);
+      check('the restored card keeps the goal it was built from',
+        Number(msg?.strategySpec?.capitalUsd) === 10000, `${msg?.strategySpec?.capitalUsd}`);
+      check('the restored plan keeps its stage list',
+        (msg?.strategyPlan?.stages || []).length === persistPlan.stages.length);
+
+      /* The join: the restored card's id must find the stored plan, or the
+         two halves of persistence never meet and nothing can resume. */
+      const joinStore = memoryStore();
+      saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, store: joinStore, now: T0 });
+      const joined = loadStrategyPlan(msg?.strategyPlan?.strategyId, { store: joinStore });
+      check('the restored card reaches the stored plan by id', Boolean(joined));
+      check('the joined record yields a resumable runtime',
+        createStrategyRuntime({ ...hydrateRuntimeArgs(joined), now: () => T0 }).state().strategyId
+          === persistPlan.strategyId);
+
+      /* A thread full of other turns must not push the plan out. */
+      for (let i = 0; i < 30; i += 1) conv = appendMessage(conv, { id: `chatter-${i}`, role: 'user', content: `سوال ${i}` });
+      saveConversationState(conv);
+      const afterChatter = (loadConversationState().messages || []).find((m) => m.id === 'msg-strategy');
+      check('later chatter does not evict the strategy card', Boolean(afterChatter?.strategyPlan));
+    } finally {
+      if (savedGlobal === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = savedGlobal;
+    }
+  }
 
   const passed = results.filter((r) => r.ok).length;
   console.log(`\nstrategy-brain probe: ${passed}/${results.length} passed`);
