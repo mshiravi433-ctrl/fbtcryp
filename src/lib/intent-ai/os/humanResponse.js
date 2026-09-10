@@ -6,6 +6,7 @@
 
 import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 import { pageName } from './moduleRouter.js';
+import { parseGoalSpec } from '../../strategyBrain/goalSpec.js';
 
 const LEAK_PATTERNS = [
   /Prepared\s+\d+\s+real\s+action\(s\)\.?/gi,
@@ -287,7 +288,17 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
    * Specific Token Portfolio Query (e.g. "من بیت کوین دارم؟" / "بیت کوین دارم؟")
    */
   const rawText = String(intent?.raw || '').toLowerCase();
-  const isHoldingQuery = /(دارم\s*\?|دارم\s*$|من.*دارم|do i have)/i.test(rawText) && Boolean(intent?.entities?.token);
+  /*
+   * «من ۱۰ هزار دلار دارم، ۱۵٪ سود در ۴ ماه» contains «من … دارم», so this
+   * heuristic used to swallow the whole objective and answer it as "do you
+   * hold USD?" — with a connect-wallet wall in front of a question that never
+   * needed a wallet, because the capital is IN the sentence. An intent the
+   * parser classified as an objective is not a holdings question.
+   */
+  const OBJECTIVE_TYPES = ['STRATEGY_PLAN', 'GOAL_PLAN'];
+  const isHoldingQuery = /(دارم\s*\?|دارم\s*$|من.*دارم|do i have)/i.test(rawText)
+    && Boolean(intent?.entities?.token)
+    && !OBJECTIVE_TYPES.includes(String(intent?.type || '').toUpperCase());
   if (isHoldingQuery && intent?.entities?.token) {
     const sym = intent.entities.token.toUpperCase();
     if (!connected) {
@@ -431,6 +442,56 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
    * asked — and that the answer must be a card that can be executed, not a
    * navigation.
    */
+  /*
+   * ─── «۱۰ هزار دلار دارم، ۱۵٪ در ۴ ماه، ریسک متوسط» ──────────────────────
+   * This is not a portfolio snapshot and not a single trade. It is an
+   * OBJECTIVE, and the answer is a cross-module Portfolio Strategy: the
+   * strategy brain reads the whole ecosystem this turn (wallet, portfolio,
+   * crypto, RWA, stocks, forex, commodities, lending, farms, pools, futures,
+   * dYdX, bridge, smart money, whales, news, macro, risk, fees, gas,
+   * correlation), compares every plan it can actually build inside the user's
+   * own risk band, and returns the winner as staged handoffs to real venues.
+   *
+   * The plan itself is compiled by the chat (lib/strategyBrain) after this
+   * function returns, for the same reason the goal compiler runs there: this
+   * layer is synchronous by contract, and the reads are async. What this layer
+   * decides is that the answer must be a STRATEGY CARD — and that a missing
+   * number is asked for inside that card, not by a dead-end sentence.
+   */
+  if (type === 'STRATEGY_PLAN') {
+    const raw = String(intent?.raw || context?.lastMessage || '');
+    /*
+     * The parser does not read «۱۰ هزار دلار» — Persian digits plus the word
+     * «هزار» are outside its amount regex — so asking it for `amountUsd` here
+     * would tell a user who just typed their capital that it is missing. The
+     * goal spec reader is the one that understands the sentence; it is pure
+     * arithmetic, so it is safe to call from this synchronous layer.
+     */
+    const goalSpec = parseGoalSpec({
+      text: raw,
+      entities: intent?.entities || {},
+      portfolio: context?.portfolio || null,
+      balances: context?.balances || null,
+      wallet: context?.wallet || null
+    });
+    const knowsCapital = goalSpec.capitalUsd > 0;
+    return {
+      message: lang === 'fa'
+        ? (knowsCapital
+          ? 'هدف را گرفتم. حالا کل اکوسیستم را یک‌جا می‌خوانم — کیف پول، پرتفوی، کریپتو، RWA، سهام، فارکس، کالا، وام، فارم، نقدینگی، فیوچرز، dYdX، بریج، اسمارت‌مانی، نهنگ‌ها، اخبار، ماکرو، ریسک، کارمزد و گاز — و بین همه‌ی ماژول‌ها مقایسه می‌کنم تا یک استراتژی پرتفوی مرحله‌به‌مرحله بسازم. نه یک پاسخ متنی.'
+          : 'برای ساختن استراتژی باید سرمایه‌ات را بدانم — مبلغ را بنویس یا کیف پول را وصل کن. بقیه‌ی اعداد (هدف، بازه، ریسک) را از جمله‌ات می‌خوانم.')
+        : (knowsCapital
+          ? 'Goal taken. Reading the whole ecosystem at once — wallet, portfolio, crypto, RWA, stocks, forex, commodities, lending, farms, pools, futures, dYdX, bridge, smart money, whales, news, macro, risk, fees and gas — then comparing every module to build one staged portfolio strategy. Not a text answer.'
+          : 'To build a strategy I need your capital — type the amount or connect the wallet. I read the rest (target, horizon, risk) from your sentence.'),
+      ui: { type: 'STRATEGY_PLAN_CARD' },
+      strategyRequest: {
+        text: raw,
+        entities: intent?.entities || {},
+        knownCapital: knowsCapital
+      }
+    };
+  }
+
   if (type === 'GOAL_PLAN') {
     const multiple = Number(intent?.entities?.goalMultiple) > 1 ? Number(intent.entities.goalMultiple) : 2;
     const horizonDays = Number(intent?.entities?.horizonDays) > 0 ? Number(intent.entities.horizonDays) : 365;

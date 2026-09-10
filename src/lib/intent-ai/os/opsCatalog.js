@@ -120,6 +120,10 @@ export const OPERATIONS = Object.freeze([
   { id: 'intel_contract', category: 'intelligence', icon: '📜', title: 'Contract Analysis', desc: 'Token contract risk screen (address shield)', action: 'read', capabilityId: 'intel.contract', route: '/smart-wallet' },
 
   /* -------------------------------- Goals -------------------------------- */
+  /* The strategy brain: one card that reads the WHOLE ecosystem and returns a
+     staged Portfolio Strategy instead of a link to one venue. `read` because
+     what it does is send a request the assistant answers with a plan card. */
+  { id: 'strategy_build', category: 'goals', icon: '🧭', title: 'Portfolio Strategy', desc: 'Reads every module at once and builds a staged cross-module plan for your capital, target and risk', action: 'read', capabilityId: 'strategy.build', route: '/intent' },
   { id: 'goals_create', category: 'goals', icon: '🎯', title: 'Financial Goal', desc: 'Create a real, durable financial goal (Financial OS) — real markets: /stocks /perp', action: 'navigate', capabilityId: 'goals.create', route: '/stocks' },
   { id: 'goals_profit', category: 'goals', icon: '📈', title: 'Profit Plan', desc: 'Risk-aware plan toward your profit target — opens real trading: Horizon (افق جهانی), Perp (فیوچرز), Stocks (سهام)', action: 'navigate', capabilityId: 'profit_plan.build', route: '/stocks' },
   { id: 'goals_forecast', category: 'goals', icon: '🔮', title: 'Forecast', desc: 'Historical scenario range for a goal (no guarantees) — real data from /stocks', action: 'navigate', capabilityId: 'goals.forecast', route: '/stocks' },

@@ -35,6 +35,14 @@ const PROMPTS = Object.freeze({
   portfolio_risk: { fa: 'ریسک پرتفوی من را بررسی کن', en: 'check my portfolio risk' },
   portfolio_allocation: { fa: 'توزیع دارایی‌های من را نشان بده', en: 'show my asset allocation' },
 
+  /* Goals — the strategy brain. The prompt has to carry the three numbers the
+     brain needs (capital, target, horizon) or the card only produces a
+     question; the amounts are placeholders the user edits in the chat. */
+  strategy_build: {
+    fa: 'برای ۱۰ هزار دلار یک استراتژی پرتفوی بساز با ۱۵ درصد سود در ۶ ماه و ریسک متوسط',
+    en: 'build a portfolio strategy for 10000 dollars with 15 percent profit in 6 months and medium risk'
+  },
+
   /* Wallet */
   wallet_analysis: { fa: 'کیف پول من را تحلیل کن', en: 'analyze my wallet' },
   wallet_balances: { fa: 'موجودی کیف پول من را نشان بده', en: 'show my wallet balances' },

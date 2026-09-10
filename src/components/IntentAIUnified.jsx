@@ -84,6 +84,8 @@ import { resolveChatRoute } from '../lib/intent-ai/autonomy/chatRoutes.js';
 import { buildAutonomyDrivers, warmAutonomyDrivers } from '../lib/intent-ai/autonomy/browserDrivers.js';
 import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
+import { StrategyPlanCard } from './StrategyPlanCard.jsx';
+import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
 import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
 import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
 import { getOhlc } from '../lib/api';
@@ -350,6 +352,7 @@ const ConversationRow = memo(function ConversationRow({
   onFeedback,
   onOpenRoute,
   onGoalExecute,
+  onStrategyExecute,
   autonomyEngine,
   autonomyStrategies,
   onAutonomyArm,
@@ -442,6 +445,20 @@ const ConversationRow = memo(function ConversationRow({
             error={m.goalError || null}
             onExecute={onGoalExecute ? (option) => onGoalExecute(m, option) : null}
             onOpenRoute={onOpenRoute}
+          />
+        ) : null}
+        {/* The cross-module Portfolio Strategy: what the ecosystem read, the
+            options compared, the allocation, the staged handoffs and the
+            monitors. Everything on it comes from the plan object. */}
+        {m.strategyRequest ? (
+          <StrategyPlanCard
+            plan={m.strategyPlan}
+            spec={m.strategySpec || null}
+            busy={Boolean(m.strategyBusy)}
+            error={m.strategyError || null}
+            locale={locale}
+            onOpenRoute={onOpenRoute}
+            onExecuteStage={onStrategyExecute ? (strategy) => onStrategyExecute(m, strategy) : null}
           />
         ) : null}
         {m.autonomyRequest ? (
@@ -2040,6 +2057,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
              only honest verdict available is NO_LIVE_RATES, so every goal
              card would refuse even on a network that had the data. */
           goalResults: osResult.human?.goalRequest ? (osResult.data || null) : null,
+          /* A whole-ecosystem objective («۱۰ هزار دلار، ۱۵٪ در ۴ ماه، ریسک
+             متوسط») travels the same way: the request rides with the message
+             and the strategy brain compiles the real plan from live reads
+             after render, because this layer cannot await twenty-one domains
+             synchronously. */
+          strategyRequest: osResult.human?.strategyRequest || null,
+          strategyEntities: osResult.human?.strategyRequest ? (osResult.intent?.entities || null) : null,
           autonomyRequest: osResult.human?.autonomyRequest || null,
           intentType: osResult.intent?.type || null,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || null,
@@ -2204,6 +2228,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         card: reply.card || null,
         actions: Array.isArray(reply.actions) ? reply.actions : [],
         rebalance: reply.rebalance || null,
+        strategyRequest: reply.strategyRequest || null,
+        strategyEntities: reply.strategyRequest ? (reply.intent?.entities || null) : null,
         choices: Array.isArray(reply.choices) ? reply.choices : [],
         choiceKind: reply.choiceKind || null,
         intentId: reply.intentId || null,
@@ -2618,6 +2644,100 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     })();
   }, [messages, aiContext, locale]);
+
+  /*
+   * ─── STRATEGY BRAIN: compile the cross-module plan ──────────────────────
+   * Same shape as the goal effect above, for the same reason: the human layer
+   * is synchronous and cannot await twenty-one domain reads, so the request
+   * rides with the message and the plan is built here — against the LIVE app
+   * (real wallet snapshot, real market/yield/derivatives/intelligence feeds),
+   * never against remembered numbers.
+   *
+   * `lastStrategyMessageId` is the same guard the goal effect needed: without
+   * it this effect re-runs on every `messages` change, re-reads the ecosystem
+   * for a message it already answered, and — because it sets state — re-runs
+   * itself. That is both a stuck spinner and a needless load on a small host.
+   */
+  const lastStrategyMessageId = useRef(null);
+  useEffect(() => {
+    const pending = messages.find((m) => m.strategyRequest && !m.strategyPlan && !m.strategyError && !m.strategyBusy && m.id !== lastStrategyMessageId.current);
+    if (!pending) return;
+    lastStrategyMessageId.current = pending.id;
+    void (async () => {
+      setMessages((prev) => prev.map((m) => (m.id === pending.id ? { ...m, strategyBusy: true } : m)));
+      try {
+        const result = await buildStrategyFromChat({
+          text: pending.strategyRequest.text || '',
+          entities: pending.strategyEntities || {},
+          context: aiContext,
+          results: {},
+          wallet: wallet || null,
+          portfolio: aiContext.portfolio || null
+        });
+        if (!goalMountedRef.current) return;
+        setMessages((prev) => prev.map((m) => (m.id === pending.id
+          ? { ...m, strategyPlan: result.strategy || result, strategySpec: result.spec || null, strategyBusy: false }
+          : m)));
+      } catch (err) {
+        if (!goalMountedRef.current) return;
+        setMessages((prev) => prev.map((m) => (m.id === pending.id
+          ? { ...m, strategyBusy: false, strategyError: locale.startsWith('fa')
+            ? `استراتژی ساخته نشد: ${String(err?.message || err).slice(0, 140)}`
+            : `The strategy could not be built: ${String(err?.message || err).slice(0, 140)}` }
+          : m)));
+      }
+    })();
+  }, [messages, aiContext, wallet, locale]);
+
+  /*
+   * Run the next stage of a live strategy. The runtime decides which stage is
+   * next and refuses to skip ahead after a failure; the actions it hands back
+   * are handoffs to the venues that own the signature, so this opens the venue
+   * prefilled rather than signing anything itself.
+   */
+  const strategyRuntimesRef = useRef(new Map());
+  const runStrategyStage = useCallback((message, strategy) => {
+    if (!strategy?.ok) return;
+    let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
+    if (!runtime) {
+      runtime = createChatStrategyRuntime({
+        strategy,
+        spec: message.strategySpec || null,
+        context: aiContext,
+        wallet: wallet || null,
+        portfolio: aiContext.portfolio || null
+      });
+      strategyRuntimesRef.current.set(strategy.strategyId, runtime);
+    }
+    const next = runtime.nextStage();
+    const fa = locale.startsWith('fa');
+    if (!next.ok) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `مرحله بعد اجرا نمی‌شود: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. چیزی به عنوان موفق گزارش نمی‌شود.`
+          : `The next stage will not run: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. Nothing is reported as a success.`
+      }]);
+      return;
+    }
+    if (next.done) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: fa ? 'همه‌ی مراحل اجرا شده‌اند. از این‌جا پایش ادامه دارد.' : 'Every stage has run. From here it is monitoring.'
+      }]);
+      return;
+    }
+    if (next.movesFunds && !walletConnected) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
+    const first = next.actions?.find((a) => a.route) || null;
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: fa
+        ? `مرحله «${next.stage.title}»: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم.`
+        : `Stage "${next.stage.title}": ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat.`,
+      actions: first ? [{ id: `stage-${next.stage.id}`, route: first.route, label: fa ? 'باز کن' : 'Open' }] : []
+    }]);
+    if (first?.route) navigate(first.route);
+  }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate]);
 
   /**
    * Execute one goal option for real. The steps are the venue actions the
@@ -4129,6 +4249,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
                 onGoalExecute={executeGoalOption}
+                onStrategyExecute={runStrategyStage}
                 autonomyEngine={autonomyEngine}
                 autonomyStrategies={autonomyStrategies}
                 onAutonomyArm={armAutomation}
