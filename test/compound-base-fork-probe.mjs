@@ -138,10 +138,9 @@ try {
 
     rule('0 · pinned constants and shipped defaults');
     t('flag ships OFF in this bundle', adapter.COMPOUND_BASE_SUPPLY_ENABLED === false);
-    t('per-tx cap is the shipped 100 USDC', adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX === 100,
-      `got ${adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX}`);
-    t('total cap is the shipped 500 USDC', adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL === 500,
-      `got ${adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL}`);
+    t('ships with NO amount caps (removed by owner decision after fork evidence)',
+      adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX === undefined
+      && adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL === undefined);
 
     /* ── fund the test account ────────────────────────────────────────────── */
     rule('1 · funding the test account from forked state');
@@ -261,9 +260,8 @@ try {
      */
     t('the base asset has no supply cap (a protocol fact, stated not guessed)',
       status.hasSupplyCap === false && status.supplyCapUsdc === null);
-    t('the rewards floor is above our total cap, so no COMP can accrue here',
-      status.rewardsMinUsdc != null
-      && status.rewardsMinUsdc > BigInt(adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL) * 1_000_000n,
+    t('the rewards floor is reported so the UI can state it honestly',
+      status.rewardsMinUsdc != null,
       status.rewardsMinUsdc == null ? 'unreadable' : `${formatUnits(status.rewardsMinUsdc, 6)} USDC floor`);
 
     /* ── 4. supply 5 USDC ──────────────────────────────────────────────────── */
@@ -426,14 +424,16 @@ try {
       `${formatUnits(finalUsdc, 6)} USDC (Δ ${formatUnits(finalUsdc - walletUsdc, 6)})`);
 
     /* ── 8. refusals, against the real market ──────────────────────────────── */
-    rule('8 · the caps and the revert table, on real state');
+    rule('8 · no caps, and the revert table, on real state');
+    /* No platform cap anymore: a plan above the old 100 USDC ceiling must
+     * build against the real market, gated only by the balance read. */
     const tooMuch = await adapter.buildSupplyPlan({
       provider, owner: ANVIL_ACCOUNT,
-      amountUsdc: String(adapter.COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX + 1),
+      amountUsdc: '4',
       nativeBalance: await provider.getBalance(ANVIL_ACCOUNT)
     });
-    t('the per-tx cap refused an over-cap supply on the fork',
-      tooMuch.steps.length === 0 && tooMuch.checks.blocked.includes('COMPOUND_PER_TX_CAP'),
+    t('a supply plan above the removed 100-USDC ceiling still builds, uncapped',
+      tooMuch.steps.length > 0 && !tooMuch.checks.blocked.includes('COMPOUND_PER_TX_CAP'),
       tooMuch.checks.blocked.join(', '));
 
     /* A zero-amount supply: Comet rejects it, and so does the adapter. */

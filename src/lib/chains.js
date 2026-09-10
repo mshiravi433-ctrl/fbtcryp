@@ -64,7 +64,13 @@ export const EVM_CHAINS = {
     name: 'Ethereum',
     short: 'ETH',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'],
+    /* Farm execution reads (Lido) hit this list hard; publicnode and drpc
+       are added ahead of llamarpc because they rate-limit far more generously
+       — «شبکه Lido در دسترس نیست» was a rate-limit, not an outage. */
+    rpc: [
+      'https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org',
+      'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'
+    ],
     explorer: 'https://etherscan.io',
     router: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2
     wrapped: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
@@ -90,7 +96,7 @@ export const EVM_CHAINS = {
     name: 'Arbitrum One',
     short: 'ARB',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://arb1.arbitrum.io/rpc', 'https://rpc.ankr.com/arbitrum'],
+    rpc: ['https://arbitrum-rpc.publicnode.com', 'https://arbitrum.drpc.org', 'https://arb1.arbitrum.io/rpc', 'https://rpc.ankr.com/arbitrum'],
     explorer: 'https://arbiscan.io',
     router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506', // SushiSwap
     wrapped: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', // WETH
@@ -103,7 +109,7 @@ export const EVM_CHAINS = {
     name: 'Base',
     short: 'BASE',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://mainnet.base.org', 'https://base.llamarpc.com'],
+    rpc: ['https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://mainnet.base.org', 'https://base.llamarpc.com'],
     explorer: 'https://basescan.org',
     router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24', // Uniswap V2 on Base
     wrapped: '0x4200000000000000000000000000000000000006', // WETH
@@ -254,6 +260,8 @@ export const EVM_CHAINS = {
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
     rpc: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com'],
     explorer: 'https://scrollscan.com',
+    // Genesis WETH contract on Scroll (scrollscan-verified).
+    wrapped: '0x5300000000000000000000000000000000000004',
     // KyberSwap supplies the route; no unverified direct router fallback.
     dexName: 'KyberSwap',
     color: '#f1c27d'
@@ -464,6 +472,19 @@ export const TOKENS = {
   ],
   143: [
     { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' }
+  ],
+  /* Scroll + zkSync Era — added with the chains in the same batch; curated
+     defaults follow the house pattern above: native coin + wrapped native
+     ONLY, both addresses verified on the chains' own explorers (Scroll WETH
+     is a genesis contract; zkSync WETH matches the `wrapped` pin above).
+     USDC/USDT and the long tail come from the CoinGecko runtime lists. */
+  534352: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5300000000000000000000000000000000000004', decimals: 18, coingeckoId: 'ethereum' }
+  ],
+  324: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', decimals: 18, coingeckoId: 'ethereum' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

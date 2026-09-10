@@ -3925,8 +3925,19 @@ export default function run() {
 
     /* ---- execution is honest: only a route we can actually price ---- */
     t('Farm only offers a pair route when one exists', /pairSwapRoute\(pool\)/.test(farm));
-    t('the action buttons say unavailable rather than pretending to stake',
-      /farm\.action\.\$\{action\}/.test(farm) && /disabled/.test(farm) && /statusUnavailable/.test(farm));
+    /*
+     * Superseded decision: the six permanently-disabled «ناموجود» buttons
+     * were REMOVED («a dead button is clutter, not honesty» — pinned by
+     * farm-pool-execution.test.jsx, which asserts zero disabled buttons in
+     * the action grid). The grid now holds only what this app can really
+     * do: the swap/stake handoff and the pool link.
+     */
+    t('the action grid holds only real actions — no dead «ناموجود» buttons',
+      !/farm\.action\.\$\{action\}/.test(farm)
+      && !/statusUnavailable/.test(farm)
+      && /farm-action-grid/.test(farm)
+      && /route && <button/.test(farm)
+      && /pool\.url && <button/.test(farm));
 
     /* ---- the handoff ---- */
     /*
@@ -9607,15 +9618,22 @@ export default function run() {
      */
     const chainsSrc = read('src/lib/chains.js');
     const aggSrc = read('src/lib/aggregator.js');
-    for (const [name, id, slug] of [['Linea', '59144', 'linea'], ['Sonic', '146', 'sonic']]) {
+    /*
+     * Scroll was tried against the aggregator when Linea/Sonic were quoted
+     * and 404'd, so it was deliberately absent. PR #286 later added it (plus
+     * zkSync Era) as configured chains routed through the same aggregator —
+     * a newer deliberate decision, so the audit now pins THAT state instead:
+     * configured, routable, and with a token list, exactly like Linea and
+     * Sonic. The live fee-echo quote these chains still owe (see the comment
+     * in src/lib/aggregator.js) remains a manual step before real volume.
+     */
+    for (const [name, id, slug] of [['Linea', '59144', 'linea'], ['Sonic', '146', 'sonic'], ['Scroll', '534352', 'scroll'], ['zkSync Era', '324', 'zksync']]) {
       t(`${name} is a configured chain`, new RegExp(`^  ${id}: \\{`, 'm').test(chainsSrc));
       /* A chain in chains.js but not in the aggregator map quotes nothing. */
       t(`...and is routable through the aggregator`, aggSrc.includes(`'${slug}'`));
       /* And it needs tokens, or the picker opens empty. */
       t(`...and has a token list`, new RegExp(`^  ${id}: \\[`, 'm').test(chainsSrc));
     }
-    t('Scroll stays out, since its aggregator route 404s',
-      !/'scroll'/.test(aggSrc));
 
     /*
      * ─── NEW SECTORS, AND THE CHECK THAT ACTUALLY MATTERS ───────────────────
@@ -13440,19 +13458,20 @@ export default function run() {
     t('...and the documented default is off',
       features.includes('AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD'));
 
-    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
-    t('per-transaction cap defaults to 100 USDC',
-      /VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
-    t('total position cap defaults to 500 USDC',
-      /VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
-    t('an unusable cap env value falls back to the default instead of becoming 0 or Infinity',
-      features.includes('if (!Number.isFinite(n) || n <= 0) return fallback;'));
-    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
-      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
-      && adapter.includes("block('AAVE_PER_TX_CAP')"));
-    t('...and the total cap counts the existing position, not just this transfer',
-      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
-      && adapter.includes("block('AAVE_TOTAL_CAP')"));
+    /* ── amount caps were REMOVED by owner decision after the fork evidence ──
+     * «با هر مقدار انجام بپذیر» — the only ceilings left are Aave's own
+     * on-chain reserve supply cap (still checked: AAVE_SUPPLY_CAP_EXCEEDED)
+     * and the user's balance. The audit now pins the ABSENCE of the cap
+     * machinery so it cannot quietly come back. */
+    t('no platform amount cap constant exists anymore',
+      !features.includes('AAVE_BASE_SUPPLY_MAX_USDC_PER_TX')
+      && !features.includes('AAVE_BASE_SUPPLY_MAX_USDC_TOTAL'));
+    t('...and the adapter enforces no per-tx or total platform cap',
+      !adapter.includes('AAVE_PER_TX_CAP')
+      && !adapter.includes('AAVE_TOTAL_CAP')
+      && !adapter.includes('perTxCapOk'));
+    t('...while Aave\'s own reserve supply cap is still respected',
+      adapter.includes("block('AAVE_SUPPLY_CAP_EXCEEDED')"));
 
     /* ── USDC comes from the token table, never retyped ───────────────────── */
     const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
@@ -13477,9 +13496,14 @@ export default function run() {
     t('...nor in the revoke path', afterWithdraw.length > 0 && !afterWithdraw.includes('MaxUint256'));
     t('...and every approve encodes the exact amount or zero',
       adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_BASE.pool, amountWei])")
-      && adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_BASE.pool, 0n])"));
-    t('the approval is granted to the Aave Pool only',
-      !/approve'\s*,\s*\[(?!AAVE_V3_BASE\.pool)/.test(adapter));
+      && adapter.includes("erc20.encodeFunctionData('approve', [spender ?? AAVE_V3_BASE.pool, 0n])"));
+    /*
+     * The revoke can now also target the SPLIT ROUTER — but only through the
+     * explicit `spender` parameter the panels pass when a router is live;
+     * every other approve still names the pinned pool.
+     */
+    t('the approval is granted to the Aave Pool only (or the router the panel explicitly names)',
+      !/approve'\s*,\s*\[(?!AAVE_V3_BASE\.pool|spender \?\? AAVE_V3_BASE\.pool)/.test(adapter));
     t('the approve step is skipped when the allowance already covers the amount',
       adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
 
@@ -13603,7 +13627,7 @@ export default function run() {
 
     /* ── copy exists in the complete locales ──────────────────────────────── */
     const errCodes = ['invalidAmount', 'reserveInactive', 'reserveFrozen', 'reservePaused', 'supplyCapExceeded'];
-    const blockCodes = ['AAVE_PER_TX_CAP', 'AAVE_TOTAL_CAP', 'AAVE_RESERVE_PAUSED', 'AAVE_SUPPLY_CAP_EXCEEDED'];
+    const blockCodes = ['AAVE_RESERVE_PAUSED', 'AAVE_SUPPLY_CAP_EXCEEDED'];
     for (const lang of ['en', 'fa', 'ar']) {
       const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
       const a = j.farm?.aave ?? {};
@@ -13629,10 +13653,17 @@ export default function run() {
     t('panel shows the switch prompt from the local ledger, not from a chain read',
       panel.includes('knownHere')
       && panel.includes("t('farm.aave.wrongChainNote'")
+      /*
+       * The wrong-chain early return is gone: refresh() reads through the
+       * PINNED chain's RPC for every active wallet network, and it loads the
+       * local ledger BEFORE anything else — so discovery (and the switch
+       * prompt that hangs off it) never depended on the wallet's chain.
+       */
       && panel.indexOf('setHistory(loadAaveHistoryFor(owner));')
-         < panel.indexOf('if (wallet.chainId !== AAVE_V3_BASE.chainId) return;'));
+         < panel.indexOf('const wrongChain = wallet.isConnected')
+      && !panel.includes('wallet.chainId !== AAVE_V3_BASE.chainId) return;'));
     t('the switch prompt is gated on the ledger so it cannot spam strangers',
-      /knownHere\s*=\s*wrongChain && !hasPosition && history\.some\(/.test(panel));
+      /knownHere = wrongChain && \(hasPosition \|\| history\.some\(/.test(panel));
     for (const lang of ['en', 'fa', 'ar']) {
       const a = JSON.parse(read(`src/i18n/locales/${lang}.json`)).farm.aave;
       t(`${lang} explains the wrong-chain case`,
@@ -13690,17 +13721,12 @@ export default function run() {
       !compoundFlagBlock.includes('AAVE_BASE_SUPPLY_ENABLED')
       && !compoundFlagBlock.includes('VITE_ENABLE_AAVE_BASE_SUPPLY'));
 
-    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
-    t('Compound per-transaction cap defaults to 100 USDC',
-      /VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
-    t('Compound total position cap defaults to 500 USDC',
-      /VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
-    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
-      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
-      && adapter.includes("block('COMPOUND_PER_TX_CAP')"));
-    t('...and the total cap counts the existing position, not just this transfer',
-      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
-      && adapter.includes("block('COMPOUND_TOTAL_CAP')"));
+    /* ── amount caps were REMOVED by owner decision after the fork evidence ── */
+    t('no Compound platform amount cap exists anymore',
+      !features.includes('COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX')
+      && !features.includes('COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL')
+      && !adapter.includes('COMPOUND_PER_TX_CAP')
+      && !adapter.includes('COMPOUND_TOTAL_CAP'));
 
     /* ── USDC comes from the token table, never retyped ───────────────────── */
     const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
@@ -13726,9 +13752,9 @@ export default function run() {
     t('...nor in the revoke path', afterWithdraw.length > 0 && !afterWithdraw.includes('MaxUint256'));
     t('...and every approve encodes the exact amount or zero',
       adapter.includes("erc20.encodeFunctionData('approve', [COMPOUND_V3_BASE.comet, amountWei])")
-      && adapter.includes("erc20.encodeFunctionData('approve', [COMPOUND_V3_BASE.comet, 0n])"));
-    t('the approval is granted to the Comet market only',
-      !/approve'\s*,\s*\[(?!COMPOUND_V3_BASE\.comet)/.test(adapter));
+      && adapter.includes("erc20.encodeFunctionData('approve', [spender ?? COMPOUND_V3_BASE.comet, 0n])"));
+    t('the approval is granted to the Comet market only (or the router the panel explicitly names)',
+      !/approve'\s*,\s*\[(?!COMPOUND_V3_BASE\.comet|spender \?\? COMPOUND_V3_BASE\.comet)/.test(adapter));
     t('the approve step is skipped when the allowance already covers the amount',
       adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
 
@@ -13759,8 +13785,8 @@ export default function run() {
       !features
         .slice(features.indexOf('export function compoundBaseWithdrawAllowedFor'))
         .includes('COMPOUND_BASE_SUPPLY_ENABLED'));
-    t('the withdraw builder is ungated by the caps, and says so in its checks',
-      /perTxCapOk: true,\s*\n\s*totalCapOk: true,/.test(adapter));
+    t('the withdraw builder carries no cap fields at all — caps are gone',
+      !adapter.includes('perTxCapOk') && !adapter.includes('totalCapOk'));
     t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
       panel.includes('withdrawAllowed && (')
       && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
@@ -13912,7 +13938,7 @@ export default function run() {
     const hubSrcCompound = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five execution panels are mounted on the Farm screen (second check)',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcCompound.includes(`Panel: ${name}`))
-      && hubSrcCompound.includes('<Panel key={id} pool={descriptor} />')
+      && hubSrcCompound.includes('<Panel pool={descriptor} />')
       && farmPage.includes('<FarmPositionHub />'));
     t('the Compound adapter does not import the Aave one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
@@ -13920,7 +13946,7 @@ export default function run() {
     /* ── copy exists in all three locales ─────────────────────────────────── */
     const cErrCodes = ['paused', 'notCollateralized', 'transferInFailed', 'transferOutFailed', 'supplyCapExceeded'];
     const cBlockCodes = [
-      'COMPOUND_PER_TX_CAP', 'COMPOUND_TOTAL_CAP', 'COMPOUND_EXISTING_BORROW',
+      'COMPOUND_EXISTING_BORROW',
       'COMPOUND_WITHDRAW_EXCEEDS_POSITION', 'COMPOUND_SUPPLY_PAUSED'
     ];
     for (const lang of ['en', 'fa', 'ar']) {
@@ -13949,8 +13975,11 @@ export default function run() {
     t('the Compound panel shows the switch prompt from the local ledger, not a chain read',
       panel.includes('knownHere')
       && panel.includes("t('farm.compound.wrongChainNote'")
+      /* Same as Aave Base: the ledger loads inside refresh(), which reads the
+         pinned Base RPC regardless of the wallet's current network. */
       && panel.indexOf('setHistory(loadCompoundHistoryFor(owner));')
-         < panel.indexOf('if (wallet.chainId !== COMPOUND_V3_BASE.chainId) return;'));
+         < panel.indexOf('const wrongChain = wallet.isConnected')
+      && !panel.includes('wallet.chainId !== COMPOUND_V3_BASE.chainId) return;'));
 
     /* The adapter's error table must not name a key no locale defines. */
     const cKeyRefs = [...adapter.matchAll(/'(farm\.compound\.err\.[a-zA-Z]+)'/g)].map((m) => m[1]);
@@ -14018,17 +14047,12 @@ export default function run() {
       viteCfg.includes('__AAVE_ARB_BUILD_ENV__')
       && features.includes("typeof __AAVE_ARB_BUILD_ENV__ !== 'undefined'"));
 
-    /* ── caps default to 100 / 500 and are enforced in the adapter ────────── */
-    t('Arbitrum per-transaction cap defaults to 100 USDC',
-      /VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX',\s*100,/.test(features));
-    t('Arbitrum total position cap defaults to 500 USDC',
-      /VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL',\s*500,/.test(features));
-    t('the per-tx cap is enforced in buildSupplyPlan, not only in the UI',
-      adapter.includes('checks.perTxCapOk = amountWei <= perTxCapWei')
-      && adapter.includes("block('AAVE_PER_TX_CAP')"));
-    t('...and the total cap counts the existing position, not just this transfer',
-      adapter.includes('checks.totalCapOk = suppliedNow + amountWei <= totalCapWei')
-      && adapter.includes("block('AAVE_TOTAL_CAP')"));
+    /* ── amount caps were REMOVED by owner decision after the fork evidence ── */
+    t('no Arbitrum platform amount cap exists anymore',
+      !features.includes('AAVE_ARB_SUPPLY_MAX_USDC_PER_TX')
+      && !features.includes('AAVE_ARB_SUPPLY_MAX_USDC_TOTAL')
+      && !adapter.includes('AAVE_PER_TX_CAP')
+      && !adapter.includes('AAVE_TOTAL_CAP'));
 
     /* ── USDC comes from the token table, never retyped ───────────────────── */
     const USDC_ARB = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
@@ -14060,9 +14084,9 @@ export default function run() {
     t('...nor in the revoke path', arbAfterWithdraw.length > 0 && !arbAfterWithdraw.includes('MaxUint256'));
     t('...and every approve encodes the exact amount or zero',
       adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_ARBITRUM.pool, amountWei])")
-      && adapter.includes("erc20.encodeFunctionData('approve', [AAVE_V3_ARBITRUM.pool, 0n])"));
-    t('the approval is granted to the Aave Pool only',
-      !/approve'\s*,\s*\[(?!AAVE_V3_ARBITRUM\.pool)/.test(adapter));
+      && adapter.includes("erc20.encodeFunctionData('approve', [spender ?? AAVE_V3_ARBITRUM.pool, 0n])"));
+    t('the approval is granted to the Aave Pool only (or the router the panel explicitly names)',
+      !/approve'\s*,\s*\[(?!AAVE_V3_ARBITRUM\.pool|spender \?\? AAVE_V3_ARBITRUM\.pool)/.test(adapter));
     t('the approve step is skipped when the allowance already covers the amount',
       adapter.includes('checks.needsApproval = checks.allowanceWei < amountWei'));
 
@@ -14081,8 +14105,8 @@ export default function run() {
       !features
         .slice(features.indexOf('export function aaveArbWithdrawAllowedFor'))
         .includes('AAVE_ARB_SUPPLY_ENABLED'));
-    t('the withdraw builder is ungated by the caps, and says so in its checks',
-      /perTxCapOk: true,\s*\n\s*totalCapOk: true,/.test(adapter));
+    t('the withdraw builder carries no cap fields at all — caps are gone',
+      !adapter.includes('perTxCapOk') && !adapter.includes('totalCapOk'));
     t('the withdraw button keys off withdrawAllowed, never supplyAllowed',
       panel.includes('withdrawAllowed && (')
       && !/supplyAllowed && \(\s*\n\s*<button[^>]*onClick=\{\(\) => openSheet\('withdraw'\)\}/.test(panel));
@@ -14195,7 +14219,7 @@ export default function run() {
     const hubSrcArb = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five execution panels are mounted on the Farm screen',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcArb.includes(`Panel: ${name}`))
-      && hubSrcArb.includes('<Panel key={id} pool={descriptor} />')
+      && hubSrcArb.includes('<Panel pool={descriptor} />')
       && farmPage.includes('<FarmPositionHub />'));
     t('the Arbitrum adapter does not import the Base one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
@@ -14222,8 +14246,11 @@ export default function run() {
     t('the Arbitrum panel shows the switch prompt from the local ledger, not a chain read',
       panel.includes('knownHere')
       && panel.includes("t('farm.aaveArb.wrongChainNote'")
+      /* Same as Aave Base: the ledger loads inside refresh(), which reads the
+         pinned Arbitrum RPC regardless of the wallet's current network. */
       && panel.indexOf('setHistory(loadAaveArbHistoryFor(owner));')
-         < panel.indexOf('if (wallet.chainId !== AAVE_V3_ARBITRUM.chainId) return;'));
+         < panel.indexOf('const wrongChain = wallet.isConnected')
+      && !panel.includes('wallet.chainId !== AAVE_V3_ARBITRUM.chainId) return;'));
 
     /* The adapter's error table must not name a key no locale defines. */
     const aKeyRefs = [...adapter.matchAll(/'(farm\.aaveArb\.err\.[a-zA-Z]+)'/g)].map((m) => m[1]);
@@ -14256,16 +14283,17 @@ export default function run() {
       features.includes("envFlag('VITE_ENABLE_LIDO_STAKE') === 'true'"));
     t('...and the build define fails CLOSED',
       viteCfg.includes("__LIDO_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true')"));
-    t('per-tx cap defaults to 1 ETH',
-      /VITE_LIDO_STAKE_MAX_ETH_PER_TX',\s*1,/.test(features));
-    t('total position cap defaults to 10 ETH',
-      /VITE_LIDO_STAKE_MAX_ETH_TOTAL',\s*10,/.test(features));
+    t('no Lido platform amount cap exists anymore (owner decision after fork evidence)',
+      !features.includes('LIDO_STAKE_MAX_ETH_PER_TX')
+      && !features.includes('LIDO_STAKE_MAX_ETH_TOTAL')
+      && !adapter.includes('LIDO_PER_TX_CAP')
+      && !adapter.includes('LIDO_TOTAL_CAP'));
     t('the adapter reads Lido addresses from the constant, not per-call',
       adapter.includes('LIDO.stETH') && adapter.includes('LIDO.wstETH') && adapter.includes('LIDO.withdrawalQueue'));
     t('Lido addresses are pinned to mainnet',
       adapter.toLowerCase().includes('0xae7ab96520de3a18e5e111b5eaab095312d7fe84')
       && adapter.toLowerCase().includes('0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca')
-      && adapter.toLowerCase().includes('0x889edc2edab5f40e902b864ad4d7ade8e412f9b2c'));
+      && adapter.toLowerCase().includes('0x889edc2edab5f40e902b864ad4d7ade8e412f9b1'));
     t('no MaxUint256 approve in Lido (exact amount or zero)',
       !code.slice(0, code.indexOf('export async function buildWrapPlan')).includes('MaxUint256')
       && !code.slice(code.indexOf('export async function buildRevokePlan')).includes('MaxUint256'));
@@ -14288,7 +14316,7 @@ export default function run() {
     const hubSrcLido = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five panels are mounted (Lido included)',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcLido.includes(`Panel: ${name}`))
-      && hubSrcLido.includes('<Panel key={id} pool={descriptor} />')
+      && hubSrcLido.includes('<Panel pool={descriptor} />')
       && farmPage.includes('<FarmPositionHub />'));
     for (const lang of ['en', 'fa']) {
       const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
@@ -14412,6 +14440,63 @@ export default function run() {
       /params\.get\('section'\)/.test(settings)
       && /setParams\(/.test(settings)
       && /next\.delete\('section'\)/.test(settings));
+  }
+
+
+  /* ---- 4X. the split-router seam is wired, disclosed, and one-way ------- */
+  /*
+   * «میخواهیم کارمزد بگیریم اما پول دست ما نباشد» — the router earns a
+   * deposit fee without custody. Three properties a refactor must not be
+   * able to break silently, so they are audited like everything else here:
+   *   · every one of the five panels ROUTES its supply plans (and only
+   *     supply plans) through routeSupplyPlan when a router is configured;
+   *   · the fee is DISCLOSED in the sheet before the sign button, from the
+   *     same checks.splitRouter the receipt is later proven against;
+   *   · the receipt proof is two-layered: the router's Routed event AND the
+   *     protocol's own event, so a lying router is still caught.
+   */
+  {
+    const panels = [
+      ['aave base', 'src/components/Farm/AaveBaseUsdcPanel.jsx', 'aave-base', 8453],
+      ['aave arbitrum', 'src/components/Farm/AaveArbUsdcPanel.jsx', 'aave-arbitrum', 42161],
+      ['compound base', 'src/components/Farm/CompoundBaseUsdcPanel.jsx', 'compound-base', 8453],
+      ['morpho base', 'src/components/Farm/MorphoBaseUsdcPanel.jsx', 'morpho-base', 8453],
+      ['lido', 'src/components/Farm/LidoPanel.jsx', 'lido', 1]
+    ];
+    for (const [name, path, protocolId, chainId] of panels) {
+      const src = read(path);
+      t(`${name}: imports the router seam`, /loadSplitRouterInfo/.test(src) && /routeSupplyPlan/.test(src));
+      t(`${name}: routes with its own protocol id`,
+        src.includes(`protocolId: '${protocolId}'`));
+      t(`${name}: only supply/stake plans are routed, withdrawals never`,
+        /nextMode !== 'withdraw'/.test(src) || /nextMode === 'stake'/.test(src));
+      t(`${name}: the fee is disclosed from checks.splitRouter BEFORE signing`,
+        /checks\?\.splitRouter/.test(src) && /farm\.splitRouter\.feeNotice/.test(src));
+      t(`${name}: the receipt proof receives the routing context`,
+        /splitRouter: plan\.checks\.splitRouter \?\? null/.test(src));
+    }
+    const seam = read('src/lib/defi/splitRouter.js');
+    t('the seam fails open: unroutered plans keep their identity', /return plan;/.test(seam));
+    t('the Routed-event proof exists and is exported', /export async function verifyRoutedDeposit/.test(seam));
+    t('no adapter ever routes a withdraw', (() => {
+      const adapters = ['aaveV3Base.js', 'aaveV3Arbitrum.js', 'compoundV3Base.js', 'morphoBlueBase.js', 'lido.js'];
+      return adapters.every((f) => !/routeSupplyPlan/.test(read(`src/lib/defi/${f}`)));
+    })());
+    /* the disclosure copy must exist in every language the app ships */
+    const hasFeeNotice = (file) => {
+      const json = JSON.parse(read(file));
+      return Boolean(json?.farm?.splitRouter?.feeNotice && json?.farm?.splitRouter?.trustNote);
+    };
+    t('the fee disclosure copy exists in fa, en and ar',
+      hasFeeNotice('src/i18n/locales/fa.json')
+      && hasFeeNotice('src/i18n/locales/en.json')
+      && hasFeeNotice('src/i18n/locales/ar.json'));
+    /* the five execution panels live INSIDE the in-app tab and nowhere else */
+    const farm = read('src/pages/Farm.jsx');
+    const inappAt = farm.indexOf("tab === 'inapp' && (");
+    const hubAt = farm.indexOf('<PositionPanel');
+    t('the five execution panels render inside the in-app tab',
+      inappAt > -1 && hubAt > inappAt && farm.split('<PositionPanel').length - 1 === 1);
   }
 
   return rows;

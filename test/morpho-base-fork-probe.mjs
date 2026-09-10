@@ -96,7 +96,9 @@ try {
     t('loan is Base USDC', MORPHO_BLUE_BASE.loanToken.toLowerCase() === '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913');
     t('collateral is Base cbBTC', MORPHO_BLUE_BASE.collateralToken.toLowerCase() === '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf');
     t('public supply flag ships off', adapter.MORPHO_BASE_SUPPLY_ENABLED === false);
-    t('caps are the shipped defaults', adapter.MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX === 100 && adapter.MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL === 500);
+    t('ships with NO amount caps (removed by owner decision after fork evidence)',
+      adapter.MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX === undefined
+      && adapter.MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL === undefined);
 
     rule('1 · fund the local fork account with USDC');
     const usdc = new Contract(MORPHO_BLUE_BASE.loanToken, [

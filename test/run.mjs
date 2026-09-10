@@ -167,6 +167,11 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
   const w = dom.window;
   global.window = w;
   global.document = w.document;
+  /* JSDOM does not implement scrollIntoView, and at least one mounted screen
+     (Farm's tab rail) calls it on mount — without the stub the mount test
+     reports a React error that says nothing about the screen itself. Same
+     approach the vitest farm suites already use. */
+  if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};
   for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver']) {
     if (w[k]) global[k] = w[k];
   }

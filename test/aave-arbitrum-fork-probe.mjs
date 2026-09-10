@@ -310,10 +310,9 @@ try {
 
     rule('0 · pinned constants and shipped defaults');
     t('flag ships OFF in this bundle', adapter.AAVE_ARB_SUPPLY_ENABLED === false);
-    t('per-tx cap is the shipped 100 USDC', adapter.AAVE_ARB_SUPPLY_MAX_USDC_PER_TX === 100,
-      `got ${adapter.AAVE_ARB_SUPPLY_MAX_USDC_PER_TX}`);
-    t('total cap is the shipped 500 USDC', adapter.AAVE_ARB_SUPPLY_MAX_USDC_TOTAL === 500,
-      `got ${adapter.AAVE_ARB_SUPPLY_MAX_USDC_TOTAL}`);
+    t('ships with NO amount caps (removed by owner decision after fork evidence)',
+      adapter.AAVE_ARB_SUPPLY_MAX_USDC_PER_TX === undefined
+      && adapter.AAVE_ARB_SUPPLY_MAX_USDC_TOTAL === undefined);
 
     /* ── fund the test account ────────────────────────────────────────────── */
     rule('1 · funding the test account from forked state');
@@ -568,14 +567,14 @@ try {
 
     try {
       const tooMuch = await adapter.buildSupplyPlan({
-        provider, owner: ANVIL_ACCOUNT, amountUsdc: String(adapter.AAVE_ARB_SUPPLY_MAX_USDC_PER_TX + 1),
+        provider, owner: ANVIL_ACCOUNT, amountUsdc: '4',
         nativeBalance: await provider.getBalance(ANVIL_ACCOUNT)
       });
-      t('the per-tx cap refused an over-cap supply on the fork',
-        tooMuch.steps.length === 0 && tooMuch.checks.blocked.includes('AAVE_PER_TX_CAP'),
+      t('a supply plan above the removed ceiling still builds, uncapped',
+        tooMuch.steps.length > 0 && !tooMuch.checks.blocked.includes('AAVE_PER_TX_CAP'),
         tooMuch.checks.blocked.join(', '));
     } catch (err) {
-      t('the per-tx cap refused an over-cap supply on the fork', false, err.message);
+      t('a supply plan above the removed ceiling still builds, uncapped', false, err.message);
     }
   }
 } catch (err) {

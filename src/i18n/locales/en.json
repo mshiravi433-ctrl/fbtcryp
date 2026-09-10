@@ -102,7 +102,8 @@
     "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network",
     "trendTitle": "Total market cap · {{days}} days",
     "trendNote": "Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.",
-    "compare": "Compare"
+    "compare": "Compare",
+    "livePrices": "Live market prices"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -1886,6 +1887,13 @@
     "apyBase": "Base APY",
     "apyReward": "Reward APY",
     "inappIntro": "Buy it here and you own the position — no extra deposit, no lock-up, no external site.",
+    "splitRouter": {
+      "step": {
+        "approve": "Allow the deposit contract to use exactly {{amount}} {{symbol}}"
+      },
+      "feeNotice": "Deposit fee: {{fee}} of {{total}} {{symbol}} ({pct}%) — {{net}} {{symbol}} reaches the protocol. Withdrawals are always fee-free.",
+      "trustNote": "Your funds move from your own wallet into the protocol in the same transaction; only the fee is split off, and the router contract holds no balance."
+    },
     "aave": {
       "panelTitle": "Supply in-app · Aave v3 on Base",
       "panelSub": "USDC supplied into the Aave v3 pool on {{chain}} from inside this app. Your wallet signs; the app never holds the funds.",
@@ -1974,7 +1982,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "We could not read your ETH balance on Base.",
         "AAVE_NATIVE_GAS_FLOOR": "You need more ETH on Base to cover gas."
       },
-      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Aave position and withdraw."
+      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Aave position and withdraw.",
+      "userRejected": "Signature rejected",
+      "timeout": "Transaction is still pending; check the wallet or explorer.",
+      "replaced": "Transaction was replaced or cancelled."
     },
     "aaveArb": {
       "panelTitle": "Supply in-app · Aave v3 on Arbitrum",
@@ -2064,7 +2075,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "We could not read your ETH balance on Arbitrum.",
         "AAVE_NATIVE_GAS_FLOOR": "You need more ETH on Arbitrum to cover gas."
       },
-      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Aave position and withdraw."
+      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Aave position and withdraw.",
+      "userRejected": "Signature rejected",
+      "timeout": "Transaction is still pending; check the wallet or explorer.",
+      "replaced": "Transaction was replaced or cancelled."
     },
     "compound": {
       "panelTitle": "Supply in-app · Compound III on Base",
@@ -2158,7 +2172,10 @@
         "COMPOUND_NATIVE_BALANCE_UNKNOWN": "We could not read your ETH balance on Base.",
         "COMPOUND_NATIVE_GAS_FLOOR": "You need more ETH on Base to cover gas."
       },
-      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Compound position and withdraw."
+      "wrongChainNote": "Your wallet is on another network. Switch to {{chain}} to see your Compound position and withdraw.",
+      "userRejected": "Signature rejected",
+      "timeout": "Transaction is still pending; check the wallet or explorer.",
+      "replaced": "Transaction was replaced or cancelled."
     },
     "horizonChartTitle": "Earnings by horizon",
     "horizonChartSub": "Projected return on {{amount}} at today’s rate",
@@ -2276,7 +2293,23 @@
         "LIDO_QUEUE_WSTETH_MISMATCH": "Queue wstETH mismatch.",
         "LIDO_QUEUE_STETH_MISMATCH": "Queue stETH mismatch.",
         "LIDO_PROTOCOL_STATUS_UNREADABLE": "Protocol status unreadable.",
-        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable."
+        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable.",
+        "LIDO_WRONG_CHAIN": "Your wallet is on another network. Lido runs on Ethereum Mainnet.",
+        "LIDO_NETWORK_UNREADABLE": "The Ethereum network could not be reached right now. Try again in a moment.",
+        "LIDO_STETH_IDENTITY_MISMATCH": "The stETH contract did not identify itself as expected. Nothing was signed.",
+        "LIDO_STETH_IDENTITY_UNREADABLE": "The stETH contract could not be read right now.",
+        "LIDO_BAD_OWNER": "The connected account could not be verified.",
+        "LIDO_EXPECTED_EVENT_MISSING": "The receipt did not contain the event this action must produce. Check the transaction on the explorer.",
+        "LIDO_APPROVAL_EVENT_MISMATCH": "The approval receipt does not match what was signed.",
+        "LIDO_REVOKE_AMOUNT_MISMATCH": "The revoke did not reset the allowance to zero.",
+        "LIDO_APPROVAL_AMOUNT_MISMATCH": "The approved amount does not match the plan.",
+        "LIDO_STAKE_EVENT_MISMATCH": "The stake receipt does not prove your stETH arrived.",
+        "LIDO_POSITION_UNCHANGED": "Your stETH position did not change as expected.",
+        "LIDO_REQUEST_EVENT_MISMATCH": "The withdrawal request receipt does not match.",
+        "LIDO_REQUEST_STATE_MISMATCH": "The withdrawal request is not in the state this action needs.",
+        "LIDO_CLAIM_EVENT_MISMATCH": "The claim receipt does not match.",
+        "LIDO_CLAIM_STATE_MISMATCH": "This withdrawal is not in a claimable state.",
+        "LIDO_UNSUPPORTED_ACTION": "This action is not supported."
       },
       "err": {
         "unknown": "The transaction failed for an unknown reason.",
@@ -2299,7 +2332,10 @@
       "risk4": "Lido takes a 10% fee on staking rewards (as of 2024) — the APY shown is net of protocol fees but variable.",
       "risk5": "No fee on this page — Lido stake/wrap/unwrap/request/claim costs only Ethereum gas here. Swaps elsewhere still carry the platform fee ({{fee}}%).",
       "fee": "Fee",
-      "explorerTitle": "Lido contracts"
+      "explorerTitle": "Lido contracts",
+      "userRejected": "Signature rejected",
+      "timeout": "Transaction is still pending; check the wallet or explorer.",
+      "replaced": "Transaction was replaced or cancelled."
     },
     "refresh": "Refresh",
     "retry": "Try again",

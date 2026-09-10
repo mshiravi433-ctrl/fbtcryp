@@ -191,32 +191,6 @@ export const AAVE_BASE_SUPPLY_PUBLIC =
     : envFlag('VITE_AAVE_BASE_SUPPLY_PUBLIC') === 'true';
 
 /**
- * A finite, parseable number from the environment, or the default.
- *
- * A cap is a safety limit, so an unusable value must NOT silently become 0
- * (which would block everything and look like a bug) nor Infinity (which would
- * remove the limit). Non-finite input falls back to the default, and the value
- * is clamped to a sane ceiling so a typo cannot type 1e18 into a cap.
- */
-function envCap(name, fallback, ceiling) {
-  const raw = buildOrEnv(name);
-  if (raw == null || String(raw).trim() === '') return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(n, ceiling);
-}
-
-/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
-export const AAVE_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
-  'VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
-);
-
-/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
-export const AAVE_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
-  'VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
-);
-
-/**
  * Required small-group gate: lowercase 0x addresses. Empty means the money
  * path stays closed. Compared case-insensitively against the connected owner.
  *
@@ -306,16 +280,6 @@ export const AAVE_ARB_SUPPLY_PUBLIC =
   typeof __AAVE_ARB_SUPPLY_PUBLIC__ !== 'undefined'
     ? __AAVE_ARB_SUPPLY_PUBLIC__
     : envFlag('VITE_AAVE_ARB_SUPPLY_PUBLIC') === 'true';
-
-/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
-export const AAVE_ARB_SUPPLY_MAX_USDC_PER_TX = envCap(
-  'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
-);
-
-/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
-export const AAVE_ARB_SUPPLY_MAX_USDC_TOTAL = envCap(
-  'VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
-);
 
 /**
  * Required small-group gate: lowercase 0x addresses. Empty means the money
@@ -407,16 +371,6 @@ export const COMPOUND_BASE_SUPPLY_PUBLIC =
     ? __COMPOUND_BASE_SUPPLY_PUBLIC__
     : envFlag('VITE_COMPOUND_BASE_SUPPLY_PUBLIC') === 'true';
 
-/** Per-transaction supply ceiling, in whole USDC. Enforced in the adapter. */
-export const COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
-  'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
-);
-
-/** Lifetime position ceiling, in whole USDC (existing position + new supply). */
-export const COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
-  'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
-);
-
 /**
  * Required small-group gate: lowercase 0x addresses. Empty means the money
  * path stays closed. Compared case-insensitively against the connected owner.
@@ -483,12 +437,6 @@ export const MORPHO_BASE_SUPPLY_PUBLIC =
     ? __MORPHO_BASE_SUPPLY_PUBLIC__
     : envFlag('VITE_MORPHO_BASE_SUPPLY_PUBLIC') === 'true';
 
-export const MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX = envCap(
-  'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX', 100, 10_000
-);
-export const MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL = envCap(
-  'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL', 500, 100_000
-);
 export const MORPHO_BASE_SUPPLY_ALLOWLIST = Object.freeze(
   String(buildOrEnv('VITE_MORPHO_BASE_SUPPLY_ALLOWLIST') ?? '')
     .split(',').map((s) => s.trim().toLowerCase()).filter((s) => /^0x[a-f0-9]{40}$/.test(s))
@@ -559,16 +507,6 @@ export const LIDO_STAKE_PUBLIC =
   typeof __LIDO_STAKE_PUBLIC__ !== 'undefined'
     ? __LIDO_STAKE_PUBLIC__
     : envFlag('VITE_LIDO_STAKE_PUBLIC') === 'true';
-
-/** Per-transaction stake ceiling, in whole ETH. */
-export const LIDO_STAKE_MAX_ETH_PER_TX = envCap(
-  'VITE_LIDO_STAKE_MAX_ETH_PER_TX', 1, 100
-);
-
-/** Lifetime position ceiling, in whole ETH (existing stETH + new stake). */
-export const LIDO_STAKE_MAX_ETH_TOTAL = envCap(
-  'VITE_LIDO_STAKE_MAX_ETH_TOTAL', 10, 1000
-);
 
 /**
  * Required allowlist: lowercase 0x addresses. Empty means the money path stays

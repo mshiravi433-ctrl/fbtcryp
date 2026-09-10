@@ -78,11 +78,7 @@ import { decodeRevertReason } from '../preSignSimulation';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
 } from './executionGuards';
-import {
-  AAVE_ARB_SUPPLY_MAX_USDC_PER_TX,
-  AAVE_ARB_SUPPLY_MAX_USDC_TOTAL
-} from '../features';
-
+import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 
 const isAddr = (v) => typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v);
@@ -690,9 +686,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
   const c = await contracts(provider);
   const { Interface } = await loadEthers();
 
-  const perTxCapUsdc = AAVE_ARB_SUPPLY_MAX_USDC_PER_TX;
-  const totalCapUsdc = AAVE_ARB_SUPPLY_MAX_USDC_TOTAL;
-
   const checks = {
     schema: 'fbt.aave-arbitrum.supply-checks.v1',
     deploymentVerified: Boolean(deployment?.ok),
@@ -700,8 +693,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
     reserveNotPaused: null,
     reserveNotFrozen: null,
     supplyCapHeadroomOk: null,
-    perTxCapOk: null,
-    totalCapOk: null,
     balanceSufficient: null,
     nativeGasFloorOk: null,
     blocked: [],
@@ -710,7 +701,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
     balanceUsdc: null,
     allowanceWei: null,
     needsApproval: null,
-    remainingTotalCapUsdc: null,
     supplyCapUsdc: null
   };
   const block = (code) => { if (!checks.blocked.includes(code)) checks.blocked.push(code); };
@@ -728,30 +718,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
     return { steps: [], checks };
   }
   checks.amountUsdc = Number(amountWei) / 10 ** AAVE_V3_ARBITRUM.usdcDecimals;
-
-  /* ── per-tx cap (enforced HERE, not only in the UI) ─────────────────────── */
-  const perTxCapWei = BigInt(Math.floor(Number(perTxCapUsdc) * 10 ** AAVE_V3_ARBITRUM.usdcDecimals));
-  checks.perTxCapOk = amountWei <= perTxCapWei;
-  if (!checks.perTxCapOk) block('AAVE_PER_TX_CAP');
-
-  /* ── total cap: existing position + this supply ─────────────────────────── */
-  let suppliedNow = 0n;
-  try {
-    suppliedNow = BigInt(String(await c.aUsdc.balanceOf(owner) ?? 0n));
-  } catch {
-    suppliedNow = null;
-  }
-  if (suppliedNow == null) {
-    // A missing balance read is not a pass. Refuse rather than guess.
-    checks.totalCapOk = null;
-    block('AAVE_POSITION_UNREADABLE');
-  } else {
-    const totalCapWei = BigInt(Math.floor(Number(totalCapUsdc) * 10 ** AAVE_V3_ARBITRUM.usdcDecimals));
-    checks.remainingTotalCapUsdc =
-      Number(totalCapWei > suppliedNow ? totalCapWei - suppliedNow : 0n) / 10 ** AAVE_V3_ARBITRUM.usdcDecimals;
-    checks.totalCapOk = suppliedNow + amountWei <= totalCapWei;
-    if (!checks.totalCapOk) block('AAVE_TOTAL_CAP');
-  }
 
   /* ── reserve state: active / paused / frozen / supply cap headroom ──────── */
   try {
@@ -892,10 +858,6 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc }) {
       isMax,
       amountWei,
       amountUsdc: isMax ? null : Number(amountWei) / 10 ** AAVE_V3_ARBITRUM.usdcDecimals,
-      // No caps on the way out — recorded explicitly so a reviewer can see
-      // this was a decision and not an omission.
-      perTxCapOk: true,
-      totalCapOk: true,
       blocked: []
     }
   };
@@ -906,7 +868,7 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc }) {
  * confirmed but the supply did not, so the standing allowance is never left
  * sitting on the Pool.
  */
-export async function buildRevokePlan({ provider, owner }) {
+export async function buildRevokePlan({ provider, owner, spender = null } = {}) {
   if (!isAddr(owner)) throw new AaveAdapterError('AAVE_BAD_OWNER', { owner });
   await verifyDeployment(provider);
   const { Interface } = await loadEthers();
@@ -915,7 +877,7 @@ export async function buildRevokePlan({ provider, owner }) {
     steps: [{
       kind: 'approve',
       to: AAVE_V3_ARBITRUM.usdc,
-      data: erc20.encodeFunctionData('approve', [AAVE_V3_ARBITRUM.pool, 0n]),
+      data: erc20.encodeFunctionData('approve', [spender ?? AAVE_V3_ARBITRUM.pool, 0n]),
       value: 0n,
       description: { key: 'farm.aaveArb.step.revoke' }
     }],
@@ -925,7 +887,8 @@ export async function buildRevokePlan({ provider, owner }) {
 
 /** Verify the mined receipt and the expected on-chain position transition. */
 export async function verifyAaveReceipt({
-  provider, receipt, owner, action, amountWei, beforePositionWei = null
+  provider, receipt, owner, action, amountWei, beforePositionWei = null, splitRouter = null,
+  expectedSpender = null
 } = {}) {
   assertSuccessfulReceipt(receipt);
   if (!isAddr(owner)) throw new AaveAdapterError('AAVE_BAD_OWNER', { owner });
@@ -940,7 +903,11 @@ export async function verifyAaveReceipt({
   }
   const args = events[0].parsed.args;
   if (action === 'approve' || action === 'revoke') {
-    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.spender), AAVE_V3_ARBITRUM.pool)) {
+    if (!sameAddress(String(args.owner), owner)
+      || !sameAddress(
+        String(args.spender),
+        expectedSpender ?? (splitRouter ? splitRouter.address : AAVE_V3_ARBITRUM.pool)
+      )) {
       throw new AaveAdapterError('AAVE_APPROVAL_EVENT_MISMATCH', { action });
     }
     if (action === 'approve' && amount != null && BigInt(String(args.value)) !== amount) {
@@ -951,6 +918,43 @@ export async function verifyAaveReceipt({
     }
     return Object.freeze({ ok: true, action, event: 'Approval', position: null });
   }
+  if (splitRouter && action === 'supply') {
+    /*
+     * Routed through the split router. TWO proofs, not one:
+     *   · the router's Routed event pins the split — user, the one pool this
+     *     deployment routes to, gross amount, quoted fee, net amount;
+     *   · the pool's own Supply event must still credit the OWNER with the
+     *     NET amount — the router is never the beneficiary.
+     * A receipt that satisfies neither shape is not accepted.
+     */
+    const { routed } = await verifyRoutedDeposit({
+      receipt,
+      routerAddress: splitRouter.address,
+      owner,
+      target: AAVE_V3_ARBITRUM.pool,
+      asset: AAVE_V3_ARBITRUM.usdc,
+      amountIn: amount,
+      feeTaken: splitRouter.feeAmount,
+      netAmount: splitRouter.netAmount
+    });
+    const supplies = parseReceiptLogs(receipt, iface, AAVE_V3_ARBITRUM.pool, 'Supply');
+    const credited = supplies.some(({ parsed }) =>
+      sameAddress(String(parsed.args.onBehalfOf), owner)
+      && BigInt(String(parsed.args.amount)) === routed.netAmount);
+    if (!credited) {
+      throw new AaveAdapterError('AAVE_PROTOCOL_EVENT_MISMATCH', {
+        action, eventAmount: routed.netAmount, expected: routed.netAmount,
+        reason: 'ROUTED_SUPPLY_NOT_CREDITED_TO_OWNER'
+      });
+    }
+    const after = await getPosition(provider, owner);
+    const before = beforePositionWei == null ? null : BigInt(String(beforePositionWei));
+    if (before != null && !(after.aTokenBalance > before)) {
+      throw new AaveAdapterError('AAVE_POSITION_UNCHANGED', { action, before, after: after.aTokenBalance });
+    }
+    return Object.freeze({ ok: true, action, event: 'Supply', position: after, routed });
+  }
+
   const eventAmount = BigInt(String(args.amount));
   const eventOwner = action === 'supply' ? args.onBehalfOf : args.to;
   if (!sameAddress(String(eventOwner), owner) ||

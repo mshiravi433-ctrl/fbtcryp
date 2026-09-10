@@ -1,3 +1,4 @@
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 /**
  * Intent OS → real FBT pages.
  * Chat never reimplements Swap / Farm / Lending / Bridge. It classifies,
@@ -69,7 +70,13 @@ export const PAGE_CATALOG = Object.freeze([
   { route: '/smart-money', names: { fa: 'اسمارت مانی', en: 'Smart Money' }, keywords: ['smart money', 'اسمارت', 'نهنگ', 'کیف پول بزرگ'] },
   { route: '/stocks', names: { fa: 'سهام', en: 'Stocks' }, keywords: ['سهام', 'stocks', 'شرکتی', 'افق جهانی', 'فارکس', 'forex', 'جفت ارز', 'طلا', 'نفت', 'کالا', 'فلزات', 'gold', 'metals', 'commodities'] },
   { route: '/invest', names: { fa: 'سرمایه‌گذاری', en: 'Invest' }, keywords: ['سرمایه‌گذاری مجازی', 'پول مجازی', 'virtual invest', 'nx invest'] },
-  { route: '/perp', names: { fa: 'فیوچرز', en: 'Perpetuals' }, keywords: ['فیوچرز', 'پرپچوال', 'perp', 'futures'] },
+  /* The margin venues exist only in the website build. In a store build the
+     routes are not in the binary, so the router must not offer them — and the
+     entry's English label is exactly the vocabulary a store review scans
+     for. SPECULATIVE_VOCABULARY_PRESENT is false only in those builds. */
+  ...(SPECULATIVE_VOCABULARY_PRESENT
+    ? [{ route: '/perp', names: { fa: 'فیوچرز', en: 'Perpetuals' }, keywords: ['فیوچرز', 'پرپچوال', 'perp', 'futures'] }]
+    : []),
   { route: '/dydx', names: { fa: 'dYdX', en: 'dYdX' }, keywords: ['dydx', 'دی وای دی ایکس'] },
   { route: '/ostium', names: { fa: 'Ostium', en: 'Ostium' }, keywords: ['ostium', 'اوسشیوم'] },
   { route: '/p2p', names: { fa: 'P2P', en: 'P2P' }, keywords: ['p2p', 'پی تو پی', 'همتا'] },
@@ -180,12 +187,16 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
       const hasVirtual = /پول مجازی|سرمایه‌گذاری مجازی|virtual (money|invest)|nx invest/i.test(raw);
       const hasStocks = tokens.some((t) => ['stock', 'stocks', 'xstock', 'rwa'].includes(t))
         || /سهام|بورس|xstock|stocks|equities|tokenized|rwa|دارایی واقعی|توکن شده|افق جهانی|فارکس|forex|طلا|نفت|کالا|فلزات|gold|metals/i.test(raw);
+      /* The leverage vocabulary is website-build-only (see the
+         speculativeLexicon stub): a store build cannot offer the venue, so
+         it also cannot recognise a request for it. */
       const hasHighRisk = risk === 'high' || risk === 'aggressive'
-        || /اهرم|لوریج|leverage|فیوچرز|پرپچوال|perp|futures|زلا|سود میبره|سود می‌بره/i.test(raw)
+        || (SPECULATIVE_VOCABULARY_PRESENT
+          && /اهرم|لوریج|leverage|فیوچرز|پرپچوال|perp|futures|زلا|سود میبره|سود می‌بره/i.test(raw))
         || /high.*risk|پرریسک|ریسک.*زیاد|تهاجمی/i.test(raw);
       if (hasVirtual) return '/invest';
       if (hasStocks) return '/stocks';
-      if (hasHighRisk) return '/perp';
+      if (hasHighRisk) return SPECULATIVE_VOCABULARY_PRESENT ? '/perp' : '/stocks';
       return '/stocks';
     }
     case 'SIGNALS':

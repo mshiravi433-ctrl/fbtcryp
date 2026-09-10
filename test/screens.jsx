@@ -23,6 +23,9 @@ import P2P from '../src/pages/P2P.jsx';
 import PayGatewayPanel from '../src/components/PayGatewayPanel.jsx';
 import PayLanding from '../src/pages/PayLanding.jsx';
 import CommunityPanel from '../src/components/CommunityPanel.jsx';
+/* Missing since BoardPanel was mounted at line ~178 — hidden because the
+   harness stopped at an earlier failing probe and never reached this suite. */
+import BoardPanel from '../src/components/BoardPanel.jsx';
 import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
 import Nft from '../src/pages/Nft.jsx';

@@ -112,7 +112,9 @@ export const ROUTED_PATHS = Object.freeze([
   // FBT Insurance OS (protection marketplace) — nested under the shell route.
   '/insurance', '/insurance/marketplace', '/insurance/quote/:quoteId',
   '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',
-  '/insurance/risk', '/insurance/providers', '/insurance/settings'
+  '/insurance/risk', '/insurance/providers', '/insurance/settings',
+  /* Headerless customer landing — mounted in App.jsx's HEADERLESS ROUTES. */
+  '/pay/:code'
 ]);
 
 /** Does a pathname exist in the router? Params (`:id`) match by segment count. */

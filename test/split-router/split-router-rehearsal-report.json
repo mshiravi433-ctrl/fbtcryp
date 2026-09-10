@@ -1,0 +1,152 @@
+{
+  "schema": "fbt.split-router.rehearsal.v1",
+  "when": "2026-09-10T02:38:23.700Z",
+  "chain": "local ganache (in-process EVM)",
+  "counterparties": "mocks from contracts/rehearsal/SplitRouterMocks.sol — NOT the real protocols",
+  "contractUnderTest": "the REAL compiled artifact src/lib/splitRouterArtifact.json (production bytecode)",
+  "feeBps": 30,
+  "passed": 28,
+  "total": 28,
+  "rows": [
+    {
+      "name": "deploys with the pinned config",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "fee cap is compiled in: MAX_FEE_BPS = 100",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "quoteFee(1000 USDC) = 0.30 / 999.70",
+      "ok": true,
+      "detail": "3000000 / 997000000"
+    },
+    {
+      "name": "aave: depositor credited the net amount",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "aave: payout received the fee",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "aave: router holds zero USDC",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "aave: onBehalfOf forced to depositor, referral 0",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "aave: Routed event carries the full money story",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "compound: base balance landed on the depositor",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "compound: router holds zero comet balance",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "compound: router holds zero USDC",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "compound: fees accumulate for dashboards",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "morpho: position credited to the depositor",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "morpho: supplied the exact pinned market",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "morpho: onBehalf is the depositor, no hooks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "morpho: router holds zero USDC",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "lido: stETH minted to the depositor, minus the fee",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "lido: ETH fee reached the payout address",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "lido: router ends with zero ETH",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "lido: router holds zero stETH",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "guard: exactly 100 bps (the cap) deploys",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "guard: a chain without that protocol reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "guard: zero amount reverts",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_AMOUNT\""
+    },
+    {
+      "name": "guard: missing approval reverts (pull-only, exact amount)",
+      "ok": true,
+      "detail": "execution reverted: \"TRANSFER_FROM_FAILED\""
+    },
+    {
+      "name": "guard: a token path without an asset cannot deploy",
+      "ok": true,
+      "detail": "ZERO_ASSET"
+    },
+    {
+      "name": "guard: fee above 1% cannot deploy",
+      "ok": true,
+      "detail": "FEE_TOO_HIGH"
+    },
+    {
+      "name": "guard: a wrong Morpho market id cannot deploy",
+      "ok": true,
+      "detail": "MORPHO_MARKET_ID_MISMATCH"
+    },
+    {
+      "name": "guard: plain ETH transfers bounce (no receive)",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

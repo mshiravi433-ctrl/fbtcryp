@@ -38,10 +38,11 @@ describe('staged Farm production rollout gate', () => {
       selected: ['aave-base']
     });
     expect(result.protocols['aave-base']).toMatchObject({
-      allowlist: [ADDRESS],
-      perTxCap: 1000,
-      totalCap: 10000
+      allowlist: [ADDRESS]
     });
+    // Amount caps are gone by owner decision; the gate must not resurrect them.
+    expect(result.protocols['aave-base'].perTxCap).toBeUndefined();
+    expect(result.protocols['aave-base'].totalCap).toBeUndefined();
   });
 
   it('rejects a lone VITE flag so direct production builds cannot bypass the gate', () => {
@@ -78,20 +79,15 @@ describe('staged Farm production rollout gate', () => {
     })).toThrow(message);
   });
 
-  it('does not allow canary cap overrides above the reviewed 1000/10000 limits', () => {
-    expect(() => assertFarmRollout({
+  it('ignores amount-cap env vars entirely — caps were removed by owner decision', () => {
+    // A stale VITE_*_MAX_* value (left in a dashboard by mistake) must neither
+    // fail the build nor re-introduce a cap: it is simply not a gate input.
+    const result = assertFarmRollout({
       ...AAVE_BASE_CANARY,
       VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '1001',
       VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: '10001'
-    })).toThrow(/may not exceed the reviewed canary cap/);
-  });
-
-  it('rejects a per-tx cap that exceeds the total cap', () => {
-    expect(() => assertFarmRollout({
-      ...AAVE_BASE_CANARY,
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '2000',
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: '10000'
-    })).toThrow(/may not exceed/);
+    });
+    expect(formatFarmRollout(result)).toMatch(/uncapped/);
   });
 
   it('requires every independently enabled protocol to be selected and allowlisted', () => {
@@ -160,13 +156,15 @@ describe('staged Farm production rollout gate', () => {
     expect(formatFarmRollout(result)).toMatch(/public-open rollout/);
   });
 
-  it('still refuses to open when the reviewed caps are exceeded, even with a confirmed canary', () => {
-    expect(() => assertFarmRollout({
+  it('opens public capital with a confirmed canary even when stale cap env vars linger', () => {
+    const result = assertFarmRollout({
       ...AAVE_BASE_CANARY,
       VITE_AAVE_BASE_SUPPLY_PUBLIC: 'true',
       FARM_CANARY_CONFIRMED: 'true',
       VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: '2000'
-    })).toThrow(/may not exceed the reviewed canary cap/);
+    });
+    expect(result.mode).toBe('public-open');
+    expect(formatFarmRollout(result)).toMatch(/uncapped/);
   });
 
   it('rejects a public flag on a protocol whose money-in flag is not true', () => {

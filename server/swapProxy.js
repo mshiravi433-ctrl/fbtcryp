@@ -64,7 +64,11 @@ const KYBER_SLUG = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* Scroll + zkSync Era — the client map (lib/aggregator.js) already carries
+     these; a proxy without them is a silent outage for proxied users. */
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 /** OpenOcean chain id -> network slug. Must mirror lib/openocean.js. */
@@ -82,7 +86,10 @@ const OO_SLUG = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* Scroll + zkSync Era — same lockstep rule as above. */
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 /** Chains Velora supports. Must mirror the SUPPORTED set in lib/velora.js. */

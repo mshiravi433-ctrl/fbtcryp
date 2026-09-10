@@ -166,7 +166,10 @@ export const NATIVE_GAS_FLOOR = {
   5000: 0.01,     // MNT
   80094: 0.1,     // BERA
   130: 0.0003,    // ETH on Unichain
-  143: 0.01       // MON
+  143: 0.01,      // MON
+  // Scroll + zkSync Era — ETH L2 gas, same err-high family as Linea/Unichain.
+  534352: 0.0003, // ETH on Scroll
+  324: 0.0003     // ETH on zkSync Era
 };
 
 /**

@@ -26,6 +26,4 @@ export {
 
 export {
   COMPOUND_BASE_SUPPLY_ENABLED,
-  COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX,
-  COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL
 } from '../src/lib/features.js';

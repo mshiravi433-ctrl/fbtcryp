@@ -107,8 +107,7 @@ import {
   isAaveBaseUsdcPool, rayToApyPct, verifyAaveReceipt, verifyDeployment
 } from '../src/lib/defi/aaveV3Base';
 import {
-  AAVE_BASE_SUPPLY_ENABLED, AAVE_BASE_SUPPLY_MAX_USDC_PER_TX,
-  AAVE_BASE_SUPPLY_MAX_USDC_TOTAL, aaveBaseSupplyAllowedFor, aaveBaseWithdrawAllowedFor
+  AAVE_BASE_SUPPLY_ENABLED, aaveBaseSupplyAllowedFor, aaveBaseWithdrawAllowedFor
 } from '../src/lib/features';
 import { derivePartialApprovalState } from '../src/lib/defi/aaveV3History';
 import {
@@ -344,21 +343,18 @@ describe('aave v3 base adapter', () => {
     })).rejects.toMatchObject({ code: 'AAVE_PROTOCOL_EVENT_MISMATCH' });
   });
 
-  it('refuses a supply above the per-transaction cap', async () => {
-    const over = AAVE_BASE_SUPPLY_MAX_USDC_PER_TX + 0.000001;
-    const { steps, checks } = await plan(healthy(), String(over));
-    expect(checks.perTxCapOk).toBe(false);
-    expect(checks.blocked).toContain('AAVE_PER_TX_CAP');
-    expect(steps).toEqual([]);
+  it('has NO per-transaction cap — any amount the wallet holds may be supplied', async () => {
+    // «با هر مقدار انجام بپذیر» — caps removed by owner decision after the
+    // fork evidence; Aave's own reserve cap and the balance still gate.
+    const { steps, checks } = await plan(healthy({ usdcBalanceWei: BigInt(900000) * USDC_1 }), '900000');
+    expect(checks.blocked).toEqual([]);
+    expect(steps.map((s) => s.kind)).toEqual(['approve', 'supply']);
   });
 
-  it('refuses a supply that would breach the total position cap', async () => {
-    const existing = BigInt(AAVE_BASE_SUPPLY_MAX_USDC_TOTAL - 2) * USDC_1;
-    const { steps, checks } = await plan(healthy({ aTokenBalanceWei: existing }), '5');
-    expect(checks.totalCapOk).toBe(false);
-    expect(checks.blocked).toContain('AAVE_TOTAL_CAP');
-    expect(checks.remainingTotalCapUsdc).toBeCloseTo(2, 6);
-    expect(steps).toEqual([]);
+  it('has NO total cap — a large existing position does not block a new supply', async () => {
+    const { steps, checks } = await plan(healthy({ aTokenBalanceWei: BigInt(900000) * USDC_1 }), '5');
+    expect(checks.blocked).toEqual([]);
+    expect(steps.map((s) => s.kind)).toEqual(['approve', 'supply']);
   });
 
   it('refuses a paused or frozen or inactive reserve', async () => {
@@ -421,9 +417,9 @@ describe('aave v3 base adapter', () => {
     expect(amount).not.toBe(MaxUint256);
     expect(to.toLowerCase()).toBe(OWNER.toLowerCase());
     expect(checks.isMax).toBe(false);
-    // Withdrawal is never gated: no caps are applied on the way out.
-    expect(checks.perTxCapOk).toBe(true);
-    expect(checks.totalCapOk).toBe(true);
+    // Withdrawal is never gated: no cap fields exist at all anymore.
+    expect('perTxCapOk' in checks).toBe(false);
+    expect('totalCapOk' in checks).toBe(false);
     expect(checks.blocked).toEqual([]);
   });
 
@@ -549,11 +545,12 @@ describe('aave v3 base adapter', () => {
 });
 
 describe('aave v3 base feature flag', () => {
-  it('is off by default, with finite caps', () => {
+  it('is off by default, and ships with no amount caps', async () => {
     expect(AAVE_BASE_SUPPLY_ENABLED).toBe(false);
-    expect(AAVE_BASE_SUPPLY_MAX_USDC_PER_TX).toBe(100);
-    expect(AAVE_BASE_SUPPLY_MAX_USDC_TOTAL).toBe(500);
     expect(aaveBaseSupplyAllowedFor(OWNER)).toBe(false);
+    const features = await import('../src/lib/features.js');
+    expect(Object.keys(features)).not.toContain('AAVE_BASE_SUPPLY_MAX_USDC_PER_TX');
+    expect(Object.keys(features)).not.toContain('AAVE_BASE_SUPPLY_MAX_USDC_TOTAL');
   });
 
   it('never gates the way out on a position', () => {
@@ -581,5 +578,81 @@ describe('aave v3 base partial-state recovery', () => {
     expect(landed.needed).toBe(false);
     // Nothing standing anywhere: clean.
     expect(derivePartialApprovalState({ owner: OWNER }).needed).toBe(false);
+  });
+});
+
+
+describe('aave v3 base adapter — ROUTED supply receipts (split router)', () => {
+  const ROUTER = '0x1234567890123456789012345678901234567890';
+  const OTHER = '0x2222222222222222222222222222222222222222';
+  const GROSS = 5n * USDC_1;
+  const FEE = (GROSS * 30n) / 10_000n;      // 30 bps
+  const NET = GROSS - FEE;
+  const splitRouter = { address: ROUTER, feeBps: 30n, feeAmount: FEE, netAmount: NET };
+
+  const supplyIface = new Interface([
+    'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)'
+  ]);
+  const routedIface = new Interface([
+    'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+  ]);
+  const supplyLog = (onBehalfOf, amount) => {
+    const e = supplyIface.encodeEventLog(supplyIface.getEvent('Supply'), [AAVE_V3_BASE.usdc, ROUTER, onBehalfOf, amount, 0]);
+    return { address: AAVE_V3_BASE.pool, topics: e.topics, data: e.data };
+  };
+  const routedLog = (user) => {
+    const e = routedIface.encodeEventLog(routedIface.getEvent('Routed'), [AAVE_V3_BASE.pool, user, AAVE_V3_BASE.usdc, GROSS, FEE, NET]);
+    return { address: ROUTER, topics: e.topics, data: e.data };
+  };
+
+  it('proves a routed deposit from Routed + the pool Supply crediting the OWNER with the NET amount', async () => {
+    const proof = await verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: NET }),
+      receipt: { status: 1, hash: '0x' + 'ab'.repeat(32), logs: [routedLog(OWNER), supplyLog(OWNER, NET)] },
+      owner: OWNER,
+      action: 'supply',
+      amountWei: GROSS,
+      beforePositionWei: 0n,
+      splitRouter
+    });
+    expect(proof).toMatchObject({ ok: true, action: 'supply', event: 'Supply' });
+    expect(proof.routed.netAmount).toBe(NET);
+    expect(proof.position.aTokenBalance).toBe(NET);
+  });
+
+  it('rejects a routed receipt whose Supply event credits the GROSS amount (fee was never taken) — or another account', async () => {
+    await expect(verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: GROSS }),
+      receipt: { status: 1, logs: [routedLog(OWNER), supplyLog(OWNER, GROSS)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'AAVE_PROTOCOL_EVENT_MISMATCH' });
+    await expect(verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: NET }),
+      receipt: { status: 1, logs: [routedLog(OWNER), supplyLog(OTHER, NET)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'AAVE_PROTOCOL_EVENT_MISMATCH' });
+  });
+
+  it('rejects a routed receipt with no Routed event, or one for someone else', async () => {
+    await expect(verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: NET }),
+      receipt: { status: 1, logs: [supplyLog(OWNER, NET)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    await expect(verifyAaveReceipt({
+      provider: healthy({ aTokenBalanceWei: NET }),
+      receipt: { status: 1, logs: [routedLog(OTHER), supplyLog(OWNER, NET)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+  });
+
+  it('the routed approve receipt names the ROUTER as spender', async () => {
+    const approvalIface = new Interface(['event Approval(address indexed owner, address indexed spender, uint256 value)']);
+    const e = approvalIface.encodeEventLog(approvalIface.getEvent('Approval'), [OWNER, ROUTER, GROSS]);
+    await expect(verifyAaveReceipt({
+      provider: healthy({}),
+      receipt: { status: 1, logs: [{ address: AAVE_V3_BASE.usdc, topics: e.topics, data: e.data }] },
+      owner: OWNER, action: 'approve', amountWei: GROSS, splitRouter
+    })).resolves.toMatchObject({ ok: true });
   });
 });

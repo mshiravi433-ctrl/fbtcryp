@@ -62,11 +62,7 @@ import { decodeRevertReason } from '../preSignSimulation';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
 } from './executionGuards';
-import {
-  LIDO_STAKE_MAX_ETH_PER_TX,
-  LIDO_STAKE_MAX_ETH_TOTAL
-} from '../features';
-
+import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 
 const isAddr = (v) => typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v);
@@ -481,11 +477,6 @@ export async function buildStakePlan({ provider, owner, amountEth, history = [],
   }
   checks.amountWei = amountWei;
 
-  // Per-tx cap
-  if (amount > LIDO_STAKE_MAX_ETH_PER_TX) {
-    checks.blocked.push('LIDO_PER_TX_CAP');
-  }
-
   // Verify deployment
   try {
     await verifyDeployment(provider);
@@ -524,17 +515,6 @@ export async function buildStakePlan({ provider, owner, amountEth, history = [],
     } catch {
       checks.blocked.push('LIDO_NATIVE_BALANCE_UNKNOWN');
     }
-  }
-
-  // Total cap: existing position + new amount
-  try {
-    const pos = await getPosition(provider, owner, { history });
-    const existingEth = Number(pos.totalEthEquivalent ?? 0);
-    if (existingEth + amount > LIDO_STAKE_MAX_ETH_TOTAL) {
-      checks.blocked.push('LIDO_TOTAL_CAP');
-    }
-  } catch {
-    checks.blocked.push('LIDO_POSITION_UNREADABLE');
   }
 
   if (checks.blocked.length > 0) return { checks, steps: [] };
@@ -827,7 +807,7 @@ export async function buildRevokePlan({ provider, owner, spender } = {}) {
  */
 export async function verifyLidoReceipt({
   provider, receipt, owner, action, amountWei = null, expectedSpender = null,
-  beforePosition = null, requestId = null
+  beforePosition = null, requestId = null, splitRouter = null
 } = {}) {
   assertSuccessfulReceipt(receipt);
   if (!isAddr(owner)) throw Object.assign(new Error('LIDO_BAD_OWNER'), { code: 'LIDO_BAD_OWNER' });
@@ -870,6 +850,49 @@ export async function verifyLidoReceipt({
   }
 
   if (action === 'stake') {
+    if (splitRouter) {
+      /*
+       * Routed stake: the ROUTER submits to Lido (so the Submitted event's
+       * sender is the router, not the owner) and hands every minted stETH
+       * over before the transaction can end. Two proofs:
+       *   · the router's Routed event pins the split — user, stETH, the
+       *     gross ETH signed, quoted fee, net (the minted stETH can
+       *     marginally exceed net ETH by Lido's own rounding, hence
+       *     netAtLeast); on the native path Routed.asset is address(0);
+       *   · stETH's own Transfer event must move the minted balance
+       *     router → OWNER.
+       */
+      const { routed } = await verifyRoutedDeposit({
+        receipt,
+        routerAddress: splitRouter.address,
+        owner,
+        target: LIDO.stETH,
+        asset: null,
+        amountIn: amount,
+        feeTaken: splitRouter.feeAmount,
+        netAmount: splitRouter.netAmount,
+        netAtLeast: true
+      });
+      const transfers = parseReceiptLogs(receipt, iface, LIDO.stETH, 'Transfer');
+      const credited = transfers.some(({ parsed }) =>
+        sameAddress(String(parsed.args.from), splitRouter.address)
+        && sameAddress(String(parsed.args.to), owner)
+        && BigInt(String(parsed.args.value)) === routed.netAmount);
+      if (!credited) {
+        throw Object.assign(new Error('LIDO_STAKE_EVENT_MISMATCH'), {
+          code: 'LIDO_STAKE_EVENT_MISMATCH',
+          detail: { reason: 'ROUTED_STETH_NOT_TRANSFERRED_TO_OWNER' }
+        });
+      }
+      if (beforePosition) {
+        const after = await getPosition(provider, owner);
+        if (after.stETHWei <= BigInt(String(beforePosition.stETHWei ?? 0))) {
+          throw Object.assign(new Error('LIDO_POSITION_UNCHANGED'), { code: 'LIDO_POSITION_UNCHANGED' });
+        }
+        return Object.freeze({ ok: true, action, event: 'Routed', position: after, routed });
+      }
+      return Object.freeze({ ok: true, action, event: 'Routed', position: null, routed });
+    }
     const eventAmount = BigInt(String(args.amount));
     if (!sameAddress(String(args.sender), owner) || (amount != null && eventAmount !== amount)) {
       throw Object.assign(new Error('LIDO_STAKE_EVENT_MISMATCH'), { code: 'LIDO_STAKE_EVENT_MISMATCH' });

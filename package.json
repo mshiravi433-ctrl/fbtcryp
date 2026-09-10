@@ -251,6 +251,7 @@
     "test:insurance": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-core-probe.mjs && node test/insurance/insurance-security-probe.mjs && node test/insurance/insurance-production-probe.mjs && node test/insurance/insurance-quote-serialize-probe.mjs && node test/insurance/insurance-contract-probe.mjs && node test/insurance/insurance-marketplace-probe.mjs && npm run test:insurance-ui",
     "test:insurance-ui": "vitest run test/insurance/insurance-marketplace-ui.test.jsx test/insurance/ins-errors.test.js",
     "test:insurance-errors": "vitest run test/insurance/ins-errors.test.js",
+    "test:split-router": "node scripts/compile-split-router.mjs && node test/split-router/split-router-contract-probe.mjs && node test/split-router/split-router-evm-rehearsal.mjs && vitest run test/split-router-defi.test.js",
     "test:insurance-core": "node test/insurance/insurance-core-probe.mjs",
     "test:insurance-security": "node test/insurance/insurance-security-probe.mjs",
     "test:insurance-production": "node test/insurance/insurance-production-probe.mjs",

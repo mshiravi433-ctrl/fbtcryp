@@ -13,8 +13,6 @@ import {
 } from '../src/lib/defi/morphoBlueBase';
 import {
   MORPHO_BASE_SUPPLY_ENABLED,
-  MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX,
-  MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL,
   morphoBaseWithdrawAllowedFor
 } from '../src/lib/features';
 
@@ -39,10 +37,11 @@ describe('Morpho Blue Base selected market', () => {
     expect(isMorphoBlueBaseMarket({ ...row, symbol: 'USDC' })).toBe(true); // UUID + chain are the identity; symbol is display data only.
   });
 
-  it('ships capital execution off and exits are independent of the supply flag', () => {
+  it('ships capital execution off, uncapped, with exits independent of the supply flag', async () => {
     expect(MORPHO_BASE_SUPPLY_ENABLED).toBe(false);
-    expect(MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX).toBe(100);
-    expect(MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL).toBe(500);
+    const features = await import('../src/lib/features.js');
+    expect(Object.keys(features)).not.toContain('MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX');
+    expect(Object.keys(features)).not.toContain('MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL');
     expect(morphoBaseWithdrawAllowedFor({ owner: OWNER, hasPosition: true })).toBe(true);
     expect(morphoBaseWithdrawAllowedFor({ owner: OWNER, hasPosition: false })).toBe(false);
   });
@@ -239,4 +238,61 @@ describe('Morpho Blue Base selected market', () => {
     });
   });
 
+  describe('ROUTED supply receipts (split router)', () => {
+    const ROUTER = '0x1234567890123456789012345678901234567890';
+    const OTHER = '0x2222222222222222222222222222222222222222';
+    const GROSS = 5_000_000n;
+    const FEE = (GROSS * 30n) / 10_000n;      // 30 bps
+    const NET = GROSS - FEE;
+    const splitRouter = { address: ROUTER, feeBps: 30n, feeAmount: FEE, netAmount: NET };
+    const ROUTED_ABI = new Interface([
+      'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+    ]);
+    const routedLog = (user) => {
+      const e = ROUTED_ABI.encodeEventLog(ROUTED_ABI.getEvent('Routed'), [MORPHO_BLUE_BASE.morpho, user, MORPHO_BLUE_BASE.loanToken, GROSS, FEE, NET]);
+      return { address: ROUTER, topics: e.topics, data: e.data };
+    };
+    /* caller = ROUTER, onBehalf = OWNER — exactly what a routed supply emits. */
+    const routedSupplyLog = (assets, shares, onBehalf = OWNER) => {
+      const e = MORPHO_READ_ABI.encodeEventLog(MORPHO_READ_ABI.getEvent('Supply'), [MORPHO_BLUE_BASE.marketId, ROUTER, onBehalf, assets, shares]);
+      return { address: MORPHO_BLUE_BASE.morpho, topics: e.topics, data: e.data };
+    };
+
+    it('proves a routed deposit from Routed + MarketSupply crediting the OWNER with the NET assets', async () => {
+      const proof = await verifyMorphoReceipt({
+        provider: fakeMorphoProvider({ supplyShares: 2n }),
+        receipt: { status: 1, logs: [routedLog(OWNER), routedSupplyLog(NET, 2n)] },
+        owner: OWNER, action: 'supply', amountWei: GROSS,
+        beforePositionWei: 0n, beforeSupplyShares: 0n, splitRouter
+      });
+      expect(proof).toMatchObject({ ok: true, event: 'Supply' });
+      expect(proof.routed.netAmount).toBe(NET);
+      expect(proof.eventAmount).toBe(NET);
+      expect(proof.eventShares).toBe(2n);
+    });
+
+    it('rejects a routed receipt that credits the GROSS amount or another account', async () => {
+      await expect(verifyMorphoReceipt({
+        provider: fakeMorphoProvider({ supplyShares: 2n }),
+        receipt: { status: 1, logs: [routedLog(OWNER), routedSupplyLog(GROSS, 2n)] },
+        owner: OWNER, action: 'supply', amountWei: GROSS,
+        beforePositionWei: 0n, beforeSupplyShares: 0n, splitRouter
+      })).rejects.toMatchObject({ code: 'MORPHO_PROTOCOL_EVENT_MISMATCH' });
+      await expect(verifyMorphoReceipt({
+        provider: fakeMorphoProvider({ supplyShares: 2n }),
+        receipt: { status: 1, logs: [routedLog(OWNER), routedSupplyLog(NET, 2n, OTHER)] },
+        owner: OWNER, action: 'supply', amountWei: GROSS,
+        beforePositionWei: 0n, beforeSupplyShares: 0n, splitRouter
+      })).rejects.toMatchObject({ code: 'MORPHO_PROTOCOL_EVENT_MISMATCH' });
+    });
+
+    it('rejects a routed receipt without the Routed event', async () => {
+      await expect(verifyMorphoReceipt({
+        provider: fakeMorphoProvider({ supplyShares: 2n }),
+        receipt: { status: 1, logs: [routedSupplyLog(NET, 2n)] },
+        owner: OWNER, action: 'supply', amountWei: GROSS,
+        beforePositionWei: 0n, beforeSupplyShares: 0n, splitRouter
+      })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    });
+  });
 });

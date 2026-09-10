@@ -258,7 +258,23 @@ const STRATEGY = {
     await submitRegistryEntry('agent', 3001, 'queued-agent', { store: queueStore });
     const queue = await listReviewQueue({}, queueStore);
     t('the review queue holds only submitted listings', queue.ok && queue.data.length === 1 && queue.data[0].id === 'queued-agent');
-    t('the review queue never exposes who submitted a listing', !JSON.stringify(queue.data).includes('ownerId') && !JSON.stringify(queue.data).includes('3001'));
+    t('the review queue never exposes who submitted a listing',
+      /*
+       * Structural, not a substring scan over JSON.stringify: the queue row
+       * legitimately carries four Date.now() fields, and any epoch
+       * milliseconds value can contain the digits "3001" by pure chance —
+       * which flipped this row once in a full-harness run with zero code
+       * change. The leak this guards against is an owner FIELD or the
+       * submitter's account id as a VALUE; `ownerRef` ("telegram-user", no
+       * identity) is the honest marker and stays allowed.
+       */
+      queue.data.length === 1 && !JSON.stringify(queue.data).includes('ownerId')
+      && !(function leaksOwner(v) {
+        if (v && typeof v === 'object') {
+          return Object.entries(v).some(([k, val]) => k === 'owner' || val === 3001 || leaksOwner(val));
+        }
+        return v === 3001;
+      })(queue.data[0]));
     const counts = await registryCounts(queueStore);
     t('registry counts report each lifecycle state', counts.counts.agent.draft === 1 && counts.counts.agent.submitted === 1);
     t('registry counts report unavailable without a durable store',

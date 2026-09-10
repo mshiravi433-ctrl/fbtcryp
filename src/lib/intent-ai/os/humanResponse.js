@@ -4,6 +4,7 @@
  * Missing price ≠ $0. Connected-but-empty ≠ disconnected.
  */
 
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 import { pageName } from './moduleRouter.js';
 
 const LEAK_PATTERNS = [
@@ -732,7 +733,13 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         opportunities: best,
         actions: [
           { id: 'open-horizon', label: lang === 'fa' ? 'افق جهانی' : 'Horizon', route: '/stocks' },
-          { id: 'open-perp', label: lang === 'fa' ? 'فیوچرز' : 'Perpetuals', route: '/perp' },
+          /* The margin venue is a website-build surface: in a store build the
+             route does not exist and the label is exactly the vocabulary a
+             review filter scans for, so the chip is gated on the same flag
+             the lexicon stub carries (SPECULATIVE_VOCABULARY_PRESENT). */
+          ...(SPECULATIVE_VOCABULARY_PRESENT
+            ? [{ id: 'open-perp', label: lang === 'fa' ? 'فیوچرز' : 'Perpetuals', route: '/perp' }]
+            : []),
           { id: 'open-stocks', label: lang === 'fa' ? 'سهام' : 'Stocks', route: '/stocks' }
         ]
       };

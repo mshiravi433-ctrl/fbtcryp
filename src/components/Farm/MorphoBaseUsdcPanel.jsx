@@ -6,7 +6,6 @@ import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
 import { EVM_CHAINS, explorerAddr, explorerTx } from '../../lib/chains';
 import {
-  MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX, MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL,
   MORPHO_BASE_SUPPLY_ALLOWLIST, morphoBaseSupplyAllowedFor, morphoBaseWithdrawAllowedFor
 } from '../../lib/features';
 import { MORPHO_BASE_SUPPLY_OPEN_TO_PUBLIC } from '../../lib/farmRolloutMode';
@@ -28,6 +27,8 @@ import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
 import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
+import { withRpcRetry } from '../../lib/defi/rpcRetry.js';
+import { loadSplitRouterInfo, routeSupplyPlan } from '../../lib/defi/splitRouter.js';
 
 const fmtUsdc = (wei) => (wei == null ? '—' : Number(fromUsdcWei(wei)).toFixed(2));
 const fmtUsd = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -73,6 +74,9 @@ export default function MorphoBaseUsdcPanel({ pool }) {
   const [simulating, setSimulating] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [history, setHistory] = useState([]);
+  /* null = no router configured for this chain (or its fee could not be
+   * read) → every plan stays direct and fee-less. Fail-open, never fail-dead. */
+  const [routerInfo, setRouterInfo] = useState(null);
   const alive = useRef(true);
 
   const isTarget = pool ? isMorphoBlueBaseMarket(pool) : true;
@@ -93,17 +97,28 @@ export default function MorphoBaseUsdcPanel({ pool }) {
     try {
       const provider = await wallet.getReadProvider(MORPHO_BLUE_BASE.chainId);
       const [pos, mkt] = await Promise.all([
-        getPosition(provider, owner).catch(() => null),
-        getMarketState(provider).catch(() => null)
+        withRpcRetry(() => getPosition(provider, owner), { label: 'morpho position' }).catch(() => null),
+        withRpcRetry(() => getMarketState(provider), { label: 'morpho market' }).catch(() => null)
       ]);
       if (!alive.current) return;
       setPosition(pos);
       setStatus(mkt);
       setHistory(loadMorphoHistoryFor(owner));
-      const bal = await walletBalanceOf(provider, owner);
+      const bal = await withRpcRetry(() => walletBalanceOf(provider, owner), { label: 'morpho wallet' });
       if (!alive.current) return;
       setWalletUsdc(bal);
-      const allowance = await walletAllowanceOf(provider, owner);
+      const rinfo = await withRpcRetry(
+        () => loadSplitRouterInfo(provider, MORPHO_BLUE_BASE.chainId),
+        { label: 'morpho router' }
+      ).catch(() => null);
+      if (!alive.current) return;
+      setRouterInfo(rinfo);
+      /* When a router is live the allowance that matters is the ROUTER's —
+       * the protocol allowance is no longer the spender that will pull. */
+      const allowance = await withRpcRetry(
+        () => walletAllowanceOf(provider, owner, rinfo?.address),
+        { label: 'morpho allowance' }
+      );
       setPartial(derivePartialApprovalState({
         owner,
         allowanceUsdcWei: allowance ?? 0n,
@@ -120,10 +135,8 @@ export default function MorphoBaseUsdcPanel({ pool }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const maxSupplyUsdc = useMemo(() => {
-    const limits = [
-      MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX,
-      MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL - (position ? Number(fromUsdcWei(position.suppliedUsdc)) : 0)
-    ];
+    /* No platform caps: the wallet balance is the only ceiling. */
+    const limits = [];
     if (walletUsdc != null) limits.push(Number(fromUsdcWei(walletUsdc)));
     return Math.max(0, Math.min(...limits));
   }, [position, walletUsdc]);
@@ -139,12 +152,33 @@ export default function MorphoBaseUsdcPanel({ pool }) {
     if (nextMode !== 'withdraw' && !(Number(amt) > 0)) return;
     try {
       const provider = await wallet.getReadProvider(MORPHO_BLUE_BASE.chainId);
-      const built = nextMode === 'withdraw'
+      let built = nextMode === 'withdraw'
         ? await buildWithdrawPlan({ provider, owner, amountUsdc: amt })
         : await buildSupplyPlan({
             provider, owner, amountUsdc: amt,
             nativeBalance: wallet.nativeBalance == null ? null : await toWei(wallet.nativeBalance)
           });
+      /*
+       * SPLIT ROUTER — the fee-on-deposit seam. ONLY supply plans, NEVER
+       * withdrawals: an exit stays exactly as direct as it is today.
+       * routeSupplyPlan returns the SAME plan (same reference, fee-less,
+       * direct) unless a router is configured for this chain, its feeBps
+       * was read on-chain and the plan's steps match exactly what it can
+       * rewrite — every other case fails open to the direct deposit.
+       */
+      if (nextMode !== 'withdraw' && Array.isArray(built?.steps) && built.steps.length > 0) {
+        const rinfo = await loadSplitRouterInfo(provider, MORPHO_BLUE_BASE.chainId);
+        if (rinfo) {
+          const routerAllowanceWei = await walletAllowanceOf(provider, owner, rinfo.address);
+          built = routeSupplyPlan(built, {
+            chainId: MORPHO_BLUE_BASE.chainId,
+            protocolId: 'morpho-base',
+            feeBps: rinfo.feeBps,
+            routerAllowanceWei,
+            asset: MORPHO_BLUE_BASE.loanToken
+          });
+        }
+      }
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
@@ -171,7 +205,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
           provider,
           tx,
           allowance: step.kind === 'supply'
-            ? { token: MORPHO_BLUE_BASE.loanToken, owner, spender: MORPHO_BLUE_BASE.morpho, amountWei: plan.checks.amountWei ?? 0n }
+            ? { token: MORPHO_BLUE_BASE.loanToken, owner, spender: plan.checks.splitRouter?.address ?? MORPHO_BLUE_BASE.morpho, amountWei: plan.checks.amountWei ?? 0n }
             : undefined
         });
         if (!cancelled) setSimulation(outcome);
@@ -214,7 +248,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
           await simulateGuardedStep({
             provider, owner, step,
             allowance: step.kind === 'supply'
-              ? { token: MORPHO_BLUE_BASE.loanToken, owner, spender: MORPHO_BLUE_BASE.morpho, amountWei: plan.checks.amountWei ?? 0n }
+              ? { token: MORPHO_BLUE_BASE.loanToken, owner, spender: plan.checks.splitRouter?.address ?? MORPHO_BLUE_BASE.morpho, amountWei: plan.checks.amountWei ?? 0n }
               : undefined
           });
           const before = step.kind === 'supply' || step.kind === 'withdraw' ? await getPosition(provider, owner) : null;
@@ -224,7 +258,10 @@ export default function MorphoBaseUsdcPanel({ pool }) {
               provider, receipt, owner, action: step.kind,
               amountWei: plan.checks.amountWei,
               beforePositionWei: before?.suppliedUsdc ?? null,
-              beforeSupplyShares: before?.supplyShares ?? null
+              beforeSupplyShares: before?.supplyShares ?? null,
+              /* Present only on routed supply plans — makes the receipt
+               * proof demand the Routed event + net-amount protocol credit. */
+              splitRouter: plan.checks.splitRouter ?? null
             })
           });
           confirmMorphoAction(record.id, {
@@ -266,11 +303,14 @@ export default function MorphoBaseUsdcPanel({ pool }) {
     setError(null);
     try {
       const provider = await wallet.getReadProvider(MORPHO_BLUE_BASE.chainId);
-      const { steps } = await buildRevokePlan({ provider, owner });
+      /* When a router is live, the standing allowance the user may want to
+         kill is the ROUTER's — that is what the sheet shows and what a revoke
+         must actually revoke. */
+      const { steps } = await buildRevokePlan({ provider, owner, spender: routerInfo?.address ?? null });
       await simulateGuardedStep({ provider, owner, step: steps[0] });
       const result = await executeGuardedStep({
         signer, provider, owner, chainId: MORPHO_BLUE_BASE.chainId, step: steps[0],
-        verifyReceipt: ({ receipt }) => verifyMorphoReceipt({ provider, receipt, owner, action: 'revoke', amountWei: 0n })
+        verifyReceipt: ({ receipt }) => verifyMorphoReceipt({ provider, receipt, owner, action: 'revoke', amountWei: 0n, expectedSpender: routerInfo?.address ?? undefined })
       });
       recordMorphoAction({
         action: 'revoke', owner, chainId: MORPHO_BLUE_BASE.chainId, amountUsdcWei: '0',
@@ -388,7 +428,6 @@ export default function MorphoBaseUsdcPanel({ pool }) {
 
       {supplyAllowed && (
         <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.4 }}>
-          {t('farm.morpho.capsLine', { defaultValue: 'Caps {{perTx}}/{{total}} USDC', perTx: MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX, total: MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL })}
           {MORPHO_BASE_SUPPLY_ALLOWLIST.length > 0 && <> · {t('farm.morpho.allowlisted', { defaultValue: 'allowlisted' })}</>}
         </p>
       )}
@@ -406,7 +445,7 @@ export default function MorphoBaseUsdcPanel({ pool }) {
               style={{ flex: 1 }}
             />
             <span className="mono">{MORPHO_BLUE_BASE.loanSymbol}</span>
-            <button className="tag" type="button" onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : maxSupplyUsdc) * 1e6) / 1e6))}>
+            <button className="tag" type="button" disabled={mode !== 'withdraw' && maxSupplyUsdc == null} onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : (maxSupplyUsdc ?? 0)) * 1e6) / 1e6))}>
               {t('farm.morpho.max', { defaultValue: 'Max' })}
             </button>
           </div>
@@ -418,6 +457,23 @@ export default function MorphoBaseUsdcPanel({ pool }) {
           </p>
 
           <StepList steps={plan?.steps} t={t} />
+
+          {/* THE FEE, disclosed before the signature — not in a receipt.
+              Rendered only when this plan is actually routed; a direct
+              deposit shows nothing, because it charges nothing. */}
+          {plan?.checks?.splitRouter && (
+            <p className="notice" style={{ margin: '8px 0 0' }}>
+              {t('farm.splitRouter.feeNotice', {
+                pct: (Number(plan.checks.splitRouter.feeBps ?? 0n) / 100).toString(),
+                fee: fmtUsdc(plan.checks.splitRouter.feeAmount ?? 0n),
+                net: fmtUsdc(plan.checks.splitRouter.netAmount ?? 0n),
+                total: plan.checks.amountUsdc ?? '—',
+                symbol: MORPHO_BLUE_BASE.loanSymbol
+              })}
+              <br />
+              <span className="faint">{t('farm.splitRouter.trustNote')}</span>
+            </p>
+          )}
 
           {blockedByPlan && (
             <p className="notice notice-danger" style={{ margin: 0 }}>
@@ -472,10 +528,10 @@ async function walletBalanceOf(provider, owner) {
   try { return await c.balanceOf(owner); } catch { return null; }
 }
 
-async function walletAllowanceOf(provider, owner) {
+async function walletAllowanceOf(provider, owner, spender = null) {
   const { Contract } = await import('ethers');
   const c = new Contract(MORPHO_BLUE_BASE.loanToken, ['function allowance(address,address) view returns (uint256)'], provider);
-  try { return await c.allowance(owner, MORPHO_BLUE_BASE.morpho); } catch { return 0n; }
+  try { return await c.allowance(owner, spender ?? MORPHO_BLUE_BASE.morpho); } catch { return 0n; }
 }
 
 async function toWei(eth) {

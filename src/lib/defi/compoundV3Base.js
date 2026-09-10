@@ -93,11 +93,7 @@ import { decodeRevertReason } from '../preSignSimulation';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
 } from './executionGuards';
-import {
-  COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX,
-  COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL
-} from '../features';
-
+import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 
 const isAddr = (v) => typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v);
@@ -196,7 +192,8 @@ const REWARDS_ABI = [
 const COMET_EVENT_ABI = [
   'event Supply(address indexed from, address indexed dst, address indexed asset, uint256 amount)',
   'event Withdraw(address indexed src, address indexed to, address indexed asset, uint256 amount)',
-  'event Approval(address indexed owner, address indexed spender, uint256 value)'
+  'event Approval(address indexed owner, address indexed spender, uint256 value)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)'
 ];
 
 /**
@@ -614,16 +611,11 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
   const c = await contracts(provider);
   const { Interface } = await loadEthers();
 
-  const perTxCapUsdc = COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX;
-  const totalCapUsdc = COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL;
-
   const checks = {
     schema: 'fbt.compound-base.supply-checks.v1',
     deploymentVerified: Boolean(deployment?.ok),
     supplyNotPaused: null,
     noExistingBorrow: null,
-    perTxCapOk: null,
-    totalCapOk: null,
     balanceSufficient: null,
     nativeGasFloorOk: null,
     blocked: [],
@@ -632,7 +624,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
     balanceUsdc: null,
     allowanceWei: null,
     needsApproval: null,
-    remainingTotalCapUsdc: null,
     /* Stated explicitly so a reviewer sees this is a protocol fact, not a gap. */
     hasSupplyCap: false,
     supplyCapUsdc: null
@@ -652,30 +643,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, history = n
     return { steps: [], checks };
   }
   checks.amountUsdc = Number(amountWei) / 10 ** COMPOUND_V3_BASE.usdcDecimals;
-
-  /* ── per-tx cap (enforced HERE, not only in the UI) ─────────────────────── */
-  const perTxCapWei = BigInt(Math.floor(Number(perTxCapUsdc) * 10 ** COMPOUND_V3_BASE.usdcDecimals));
-  checks.perTxCapOk = amountWei <= perTxCapWei;
-  if (!checks.perTxCapOk) block('COMPOUND_PER_TX_CAP');
-
-  /* ── total cap: existing position + this supply ─────────────────────────── */
-  let suppliedNow = null;
-  try {
-    suppliedNow = BigInt(String(await c.comet.balanceOf(owner) ?? 0n));
-  } catch {
-    suppliedNow = null;
-  }
-  if (suppliedNow == null) {
-    // A missing balance read is not a pass. Refuse rather than guess.
-    checks.totalCapOk = null;
-    block('COMPOUND_POSITION_UNREADABLE');
-  } else {
-    const totalCapWei = BigInt(Math.floor(Number(totalCapUsdc) * 10 ** COMPOUND_V3_BASE.usdcDecimals));
-    checks.remainingTotalCapUsdc =
-      Number(totalCapWei > suppliedNow ? totalCapWei - suppliedNow : 0n) / 10 ** COMPOUND_V3_BASE.usdcDecimals;
-    checks.totalCapOk = suppliedNow + amountWei <= totalCapWei;
-    if (!checks.totalCapOk) block('COMPOUND_TOTAL_CAP');
-  }
 
   /*
    * ── an open borrow turns "supply" into "repay" ──────────────────────────
@@ -802,10 +769,6 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc }) {
     positionUsdcWei: null,
     withinPosition: null,
     withdrawNotPaused: null,
-    // No caps on the way out — recorded explicitly so a reviewer can see this
-    // was a decision and not an omission.
-    perTxCapOk: true,
-    totalCapOk: true,
     blocked: []
   };
   const block = (code) => { if (!checks.blocked.includes(code)) checks.blocked.push(code); };
@@ -879,7 +842,7 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc }) {
  * confirmed but the supply did not, so the standing allowance is never left
  * sitting on the market.
  */
-export async function buildRevokePlan({ provider, owner }) {
+export async function buildRevokePlan({ provider, owner, spender = null } = {}) {
   if (!isAddr(owner)) throw new CompoundAdapterError('COMPOUND_BAD_OWNER', { owner });
   await verifyDeployment(provider);
   const { Interface } = await loadEthers();
@@ -888,7 +851,7 @@ export async function buildRevokePlan({ provider, owner }) {
     steps: [{
       kind: 'approve',
       to: COMPOUND_V3_BASE.usdc,
-      data: erc20.encodeFunctionData('approve', [COMPOUND_V3_BASE.comet, 0n]),
+      data: erc20.encodeFunctionData('approve', [spender ?? COMPOUND_V3_BASE.comet, 0n]),
       value: 0n,
       description: { key: 'farm.compound.step.revoke' }
     }],
@@ -898,7 +861,8 @@ export async function buildRevokePlan({ provider, owner }) {
 
 /** Verify the mined Comet receipt and the expected balance transition. */
 export async function verifyCompoundReceipt({
-  provider, receipt, owner, action, amountWei, beforePositionWei = null
+  provider, receipt, owner, action, amountWei, beforePositionWei = null, splitRouter = null,
+  expectedSpender = null
 } = {}) {
   assertSuccessfulReceipt(receipt);
   if (!isAddr(owner)) throw new CompoundAdapterError('COMPOUND_BAD_OWNER', { owner });
@@ -913,7 +877,11 @@ export async function verifyCompoundReceipt({
   }
   const args = events[0].parsed.args;
   if (action === 'approve' || action === 'revoke') {
-    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.spender), COMPOUND_V3_BASE.comet)) {
+    if (!sameAddress(String(args.owner), owner)
+      || !sameAddress(
+        String(args.spender),
+        expectedSpender ?? (splitRouter ? splitRouter.address : COMPOUND_V3_BASE.comet)
+      )) {
       throw new CompoundAdapterError('COMPOUND_APPROVAL_EVENT_MISMATCH', { action });
     }
     if (action === 'approve' && amount != null && BigInt(String(args.value)) !== amount) {
@@ -924,6 +892,49 @@ export async function verifyCompoundReceipt({
     }
     return Object.freeze({ ok: true, action, event: 'Approval', position: null });
   }
+  if (splitRouter && action === 'supply') {
+    /*
+     * Routed through the split router. Comet credits the ROUTER with the
+     * supply (its Supply event carries from = dst = router, so it can never
+     * identify the owner) and the router hands the minted base balance over
+     * in the same transaction. Two proofs:
+     *   · the router's Routed event pins the split — user, comet, gross,
+     *     quoted fee, net (the minted balance can marginally EXCEED net by
+     *     Comet's own accounting, hence netAtLeast);
+     *   · Comet's own Transfer event must move that balance router → OWNER.
+     */
+    const { routed } = await verifyRoutedDeposit({
+      receipt,
+      routerAddress: splitRouter.address,
+      owner,
+      target: COMPOUND_V3_BASE.comet,
+      asset: COMPOUND_V3_BASE.usdc,
+      amountIn: amount,
+      feeTaken: splitRouter.feeAmount,
+      netAmount: splitRouter.netAmount,
+      netAtLeast: true
+    });
+    const transfers = parseReceiptLogs(receipt, iface, COMPOUND_V3_BASE.comet, 'Transfer');
+    const credited = transfers.some(({ parsed }) =>
+      sameAddress(String(parsed.args.from), splitRouter.address)
+      && sameAddress(String(parsed.args.to), owner)
+      && BigInt(String(parsed.args.value)) === routed.netAmount);
+    if (!credited) {
+      throw new CompoundAdapterError('COMPOUND_PROTOCOL_EVENT_MISMATCH', {
+        action, eventAmount: routed.netAmount, expected: routed.netAmount,
+        reason: 'ROUTED_BASE_NOT_TRANSFERRED_TO_OWNER'
+      });
+    }
+    const after = await getPosition(provider, owner);
+    const before = beforePositionWei == null ? null : BigInt(String(beforePositionWei));
+    if (before != null && !(after.suppliedUsdc >= before + routed.netAmount)) {
+      throw new CompoundAdapterError('COMPOUND_POSITION_UNCHANGED', {
+        action, before, after: after.suppliedUsdc, eventAmount: routed.netAmount
+      });
+    }
+    return Object.freeze({ ok: true, action, event: 'Supply', position: after, routed });
+  }
+
   const eventAmount = BigInt(String(args.amount));
   const first = action === 'supply' ? args.from : args.src;
   const second = action === 'supply' ? args.dst : args.to;

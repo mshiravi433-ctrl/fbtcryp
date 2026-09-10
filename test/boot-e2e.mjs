@@ -65,7 +65,18 @@ const page = shipped.replace(
 const blocked = [];
 const vc = new VirtualConsole();
 const jsErrors = [];
-vc.on('jsdomError', (e) => jsErrors.push(e.message));
+/*
+ * "Not implemented:" jsdomErrors are JSDOM's own capability gaps, not our
+ * code failing — e.g. the splash's WebGL2 capability probe calls
+ * canvas.getContext('webgl2'), which JSDOM cannot serve; the app handles the
+ * null return and falls back to the starfield, which is exactly what the
+ * other rows assert. Real script errors (uncaught exceptions) do not carry
+ * that prefix, so only that prefix is filtered — the same rule the rest of
+ * the harness already applies to console.error.
+ */
+vc.on('jsdomError', (e) => {
+  if (!String(e?.message || '').startsWith('Not implemented:')) jsErrors.push(e.message);
+});
 
 const dom = new JSDOM(page, {
   url: 'https://localhost/',

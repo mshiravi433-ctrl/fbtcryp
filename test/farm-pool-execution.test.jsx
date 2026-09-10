@@ -66,7 +66,7 @@ const history = () => ({ pool: id, points: [
   { timestamp: Date.now() - 86_400_000, apy: 5, tvlUsd: 20_000_000 },
   { timestamp: Date.now(), apy: 5, tvlUsd: 21_000_000 }
 ], at: Date.now(), freshness: 'FRESH' });
-const mount = (pools) => render(<MemoryRouter initialEntries={['/farm?tab=recommended']}><Farm /></MemoryRouter>);
+const mount = (pools, tab = 'recommended') => render(<MemoryRouter initialEntries={[`/farm?tab=${tab}`]}><Farm /></MemoryRouter>);
 
 beforeEach(() => {
   language = 'en';
@@ -129,12 +129,19 @@ describe('Farm execution surface — build with the money path closed', () => {
 
   it.each(['en', 'fa'])('mounts the position hub for a visitor with no wallet connected (%s)', async (lang) => {
     language = lang;
-    const { container } = mount();
-    await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
-    // The section used to render the hub only inside the connected branch, so
-    // a public-open build still showed an empty box to the person the rollout
-    // exists to reach. The mount is now unconditional.
+    /* «هر ۵ شبکه که زیر صفحه فارم هست را بیار داخل تب داخل اپ» — the five
+     * execution panels moved from below EVERY tab into the in-app tab. They
+     * still mount for every visitor on that tab, connected or not: the section
+     * used to render the hub only inside the connected branch, so a
+     * public-open build showed an empty box to exactly the person the rollout
+     * exists to reach. */
+    const { container } = mount(null, 'inapp');
+    await waitFor(() => expect(container.querySelector('[data-testid="farm-position-hub"]')).toBeTruthy());
     expect(container.querySelector('[data-testid="farm-position-hub"]')).toBeTruthy();
     expect(screen.getByText(t('farm.connectForPositions'))).toBeTruthy();
+    // And it is GONE from below the other tabs — one place, not two.
+    const { container: recommended } = mount();
+    await waitFor(() => expect(recommended.querySelector('.farm-pool')).toBeTruthy());
+    expect(recommended.querySelector('[data-testid="farm-position-hub"]')).toBeNull();
   });
 });

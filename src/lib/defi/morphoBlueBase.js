@@ -17,11 +17,7 @@ import { decodeRevertReason } from '../preSignSimulation';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
 } from './executionGuards';
-import {
-  MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX,
-  MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL
-} from '../features';
-
+import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const isAddr = (value) => typeof value === 'string' && ADDRESS.test(value);
@@ -324,8 +320,6 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, nativeBalan
     amountUsdc: null,
     balanceSufficient: null,
     nativeGasFloorOk: null,
-    perTxCapOk: null,
-    totalCapOk: null,
     allowanceWei: null,
     needsApproval: null,
     positionUsdcWei: null,
@@ -339,14 +333,8 @@ export async function buildSupplyPlan({ provider, owner, amountUsdc, nativeBalan
   }
   if (amount == null || amount <= 0n) return { checks, steps: [] };
 
-  const perTx = BigInt(Math.floor(MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX * 10 ** MORPHO_BLUE_BASE.loanDecimals));
-  const total = BigInt(Math.floor(MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL * 10 ** MORPHO_BLUE_BASE.loanDecimals));
-  checks.perTxCapOk = amount <= perTx;
-  if (!checks.perTxCapOk) checks.blocked.push('MORPHO_PER_TX_CAP');
   const pos = await getPosition(provider, owner);
   checks.positionUsdcWei = pos.suppliedUsdc;
-  checks.totalCapOk = pos.suppliedUsdc + amount <= total;
-  if (!checks.totalCapOk) checks.blocked.push('MORPHO_TOTAL_CAP');
 
   try {
     const balance = asBigInt(await c.usdc.balanceOf(owner));
@@ -394,7 +382,7 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc } = {}) {
     schema: 'fbt.morpho-blue-base.withdraw-checks.v1', deploymentVerified: true,
     isMax: String(amountUsdc).toLowerCase() === 'max', amountWei: null,
     positionUsdcWei: position.suppliedUsdc, withinPosition: null,
-    perTxCapOk: true, totalCapOk: true, blocked: []
+    blocked: []
   };
   let assets = 0n;
   let shares = 0n;
@@ -420,20 +408,21 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc } = {}) {
   return { checks, steps: [step] };
 }
 
-export async function buildRevokePlan({ provider, owner } = {}) {
+export async function buildRevokePlan({ provider, owner, spender = null } = {}) {
   if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
   await verifyDeployment(provider);
   const { Interface } = await loadEthers();
   const erc20 = new Interface(ERC20_ABI);
   return { checks: { schema: 'fbt.morpho-blue-base.revoke-checks.v1', blocked: [] }, steps: [{
     kind: 'revoke', to: MORPHO_BLUE_BASE.loanToken,
-    data: erc20.encodeFunctionData('approve', [MORPHO_BLUE_BASE.morpho, 0n]), value: 0n,
+    data: erc20.encodeFunctionData('approve', [spender ?? MORPHO_BLUE_BASE.morpho, 0n]), value: 0n,
     description: { key: 'farm.morpho.step.revoke' }
   }] };
 }
 
 export async function verifyMorphoReceipt({
-  provider, receipt, owner, action, amountWei, beforePositionWei = null, beforeSupplyShares = null
+  provider, receipt, owner, action, amountWei, beforePositionWei = null, beforeSupplyShares = null,
+  splitRouter = null, expectedSpender = null
 } = {}) {
   assertSuccessfulReceipt(receipt);
   if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER');
@@ -446,7 +435,11 @@ export async function verifyMorphoReceipt({
   if (!events.length) throw new MorphoAdapterError('MORPHO_EXPECTED_EVENT_MISSING', { action });
   const args = events[0].parsed.args;
   if (action === 'approve' || action === 'revoke') {
-    if (!sameAddress(String(args.owner), owner) || !sameAddress(String(args.spender), MORPHO_BLUE_BASE.morpho)) {
+    if (!sameAddress(String(args.owner), owner)
+      || !sameAddress(
+        String(args.spender),
+        expectedSpender ?? (splitRouter ? splitRouter.address : MORPHO_BLUE_BASE.morpho)
+      )) {
       throw new MorphoAdapterError('MORPHO_APPROVAL_EVENT_MISMATCH');
     }
     const value = asBigInt(args.value);
@@ -454,6 +447,78 @@ export async function verifyMorphoReceipt({
     if (action === 'approve' && amount != null && value !== amount) throw new MorphoAdapterError('MORPHO_APPROVAL_AMOUNT_MISMATCH');
     return Object.freeze({ ok: true, action, event: 'Approval' });
   }
+  if (splitRouter && action === 'supply') {
+    /*
+     * Routed through the split router. Two proofs:
+     *   · the router's Routed event pins the split — user, Morpho, the
+     *     pinned loan token, gross, quoted fee, net;
+     *   · Morpho's own Supply event must credit the OWNER (onBehalf) in the
+     *     ONE pinned market with the NET amount. The router is only the
+     *     caller; the shares are the owner's.
+     */
+    const { routed } = await verifyRoutedDeposit({
+      receipt,
+      routerAddress: splitRouter.address,
+      owner,
+      target: MORPHO_BLUE_BASE.morpho,
+      asset: MORPHO_BLUE_BASE.loanToken,
+      amountIn: amount,
+      feeTaken: splitRouter.feeAmount,
+      netAmount: splitRouter.netAmount
+    });
+    const supplies = parseReceiptLogs(receipt, iface, MORPHO_BLUE_BASE.morpho, 'Supply');
+    const credited = supplies.find(({ parsed }) =>
+      String(parsed.args.id).toLowerCase() === MORPHO_BLUE_BASE.marketId.toLowerCase()
+      && sameAddress(String(parsed.args.onBehalf ?? parsed.args.onBehalfOf), owner)
+      && asBigInt(parsed.args.assets) === routed.netAmount);
+    if (!credited) {
+      throw new MorphoAdapterError('MORPHO_PROTOCOL_EVENT_MISMATCH', {
+        action, eventAmount: routed.netAmount, expected: routed.netAmount,
+        reason: 'ROUTED_SUPPLY_NOT_CREDITED_TO_OWNER'
+      });
+    }
+    const eventShares = asBigInt(credited.parsed.args.shares);
+    const after = await getPosition(provider, owner);
+    let sharesDelta = null;
+    if (beforeSupplyShares != null) {
+      const beforeShares = asBigInt(beforeSupplyShares);
+      sharesDelta = after.supplyShares - beforeShares;
+      if (sharesDelta !== eventShares) {
+        throw new MorphoAdapterError('MORPHO_POSITION_UNCHANGED', {
+          action,
+          expectedShares: eventShares,
+          sharesDelta,
+          beforeSupplyShares: beforeShares,
+          afterSupplyShares: after.supplyShares
+        });
+      }
+    }
+    if (beforePositionWei != null) {
+      const before = asBigInt(beforePositionWei);
+      if (!(after.suppliedUsdc + ASSET_ROUNDING_TOLERANCE_WEI >= before + routed.netAmount)) {
+        throw new MorphoAdapterError('MORPHO_POSITION_UNCHANGED', {
+          action,
+          before,
+          after: after.suppliedUsdc,
+          eventAmount: routed.netAmount,
+          eventShares,
+          assetRoundingToleranceWei: ASSET_ROUNDING_TOLERANCE_WEI
+        });
+      }
+    }
+    return Object.freeze({
+      ok: true,
+      action,
+      event: 'Supply',
+      position: after,
+      eventAmount: routed.netAmount,
+      eventShares,
+      sharesDelta,
+      proof: Object.freeze({ eventAmount: routed.netAmount, eventShares, sharesDelta }),
+      routed
+    });
+  }
+
   const eventAmount = asBigInt(args.assets);
   const eventShares = asBigInt(args.shares);
   const eventId = String(args.id).toLowerCase();

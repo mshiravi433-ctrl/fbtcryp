@@ -1032,8 +1032,22 @@ export default function Farm() {
         tokens and gold are bought, not joined — only their live APY labels
         need the feed, and those degrade to nothing (never to a stale number).
       */}
-      {!loading && tab === 'inapp' && (
-        <InAppTab pools={opportunities} deposit={deposit} liveByMint={liveByMint} onStakeLst={stakeLst} onBuyEth={buyEthStake} onBuyGold={buyGold} t={t} />
+      {tab === 'inapp' && (
+        <>
+          {!loading && (
+            <InAppTab pools={opportunities} deposit={deposit} liveByMint={liveByMint} onStakeLst={stakeLst} onBuyEth={buyEthStake} onBuyGold={buyGold} t={t} />
+          )}
+          {/*
+            «هر ۵ شبکه که زیر صفحه فارم هست را بیار داخل تب داخل اپ» — the
+            five execution panels used to sit BELOW every tab, one stack after
+            the lists. They now live here, inside the in-app tab, and nowhere
+            else. Rendering semantics are unchanged otherwise: the hub still
+            shows on this tab for every visitor, connected or not, and each
+            panel still decides its own visibility from the build flags —
+            nothing about any money path was touched by the move.
+          */}
+          <PositionPanel wallet={wallet} t={t} navigate={navigate} />
+        </>
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
       {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
@@ -1042,8 +1056,6 @@ export default function Farm() {
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
 
       {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
-
-      <PositionPanel wallet={wallet} t={t} navigate={navigate} />
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
       <InfoBox title={t('farm.riskDisclosureTitle')} tone="warning"><p>{t('farm.riskDisclosure')}</p></InfoBox>

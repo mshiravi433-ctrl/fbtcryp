@@ -202,7 +202,8 @@ try {
     t('official wstETH address is pinned', adapter.LIDO.wstETH.toLowerCase() === '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0');
     t('official WithdrawalQueue address is pinned', adapter.LIDO.withdrawalQueue.toLowerCase() === '0x889edc2edab5f40e902b864ad4d7ade8e412f9b1');
     t('staking flag ships off', adapter.LIDO_STAKE_ENABLED === false);
-    t('stake caps are 1 / 10 ETH', adapter.LIDO_STAKE_MAX_ETH_PER_TX === 1 && adapter.LIDO_STAKE_MAX_ETH_TOTAL === 10);
+    t('ships with NO stake caps (removed by owner decision after fork evidence)',
+      adapter.LIDO_STAKE_MAX_ETH_PER_TX === undefined && adapter.LIDO_STAKE_MAX_ETH_TOTAL === undefined);
     const deployment = await adapter.verifyDeployment(provider);
     t('stETH, wstETH and queue immutable links verify', deployment.stETH === adapter.LIDO.stETH && deployment.wstETH === adapter.LIDO.wstETH && deployment.withdrawalQueue === adapter.LIDO.withdrawalQueue);
     const status = await adapter.getProtocolStatus(provider);

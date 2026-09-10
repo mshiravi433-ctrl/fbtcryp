@@ -6,7 +6,7 @@
  *
  * Two separate defects were hiding in that one report.
  *
- * 1 · THE LABELS. Contact rendered `t('contact.social.' + id)` for five ids,
+ * 1 · THE LABELS. Contact rendered t(\"contact.social.\" + id) for five ids,
  *     while `en.json` — the fallback for eleven of the twelve locales — only
  *     defined `telegram`, `instagram`, `crunchbase` and `email`. So in English,
  *     Arabic, Hindi… the X and LinkedIn tiles printed their raw key

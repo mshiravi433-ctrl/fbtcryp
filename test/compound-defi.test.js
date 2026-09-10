@@ -25,10 +25,9 @@ import {
   COMET_ERROR_KEYS, COMPOUND_V3_BASE, CompoundAdapterError,
   buildRevokePlan, buildSupplyPlan, buildWithdrawPlan, explainRevert, fromUsdcWei,
   getMarketStatus, getPosition, getRewardsOwed, isCompoundBaseUsdcPool,
-  perSecondRateToAprPct, perSecondRateToApyPct, verifyDeployment
+  perSecondRateToAprPct, perSecondRateToApyPct, verifyCompoundReceipt, verifyDeployment
 } from '../src/lib/defi/compoundV3Base.js';
 import {
-  COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX, COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL,
   COMPOUND_BASE_SUPPLY_ENABLED, compoundBaseSupplyAllowedFor, compoundBaseWithdrawAllowedFor
 } from '../src/lib/features.js';
 import {
@@ -195,12 +194,11 @@ describe('compound v3 base: market status', () => {
     expect(status.withdrawPaused).toBe(true);
   });
 
-  it('reports the rewards floor so the UI can say rewards are out of reach', async () => {
+  it('reports the rewards floor so the UI can state it honestly', async () => {
     const status = await getMarketStatus(provider());
     expect(status.rewardsMinUsdc).toBe(usdc(1000));
     expect(status.rewardsActive).toBe(true);
-    // The shipped total cap is below the floor: no COMP can accrue here.
-    expect(usdc(COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL)).toBeLessThan(status.rewardsMinUsdc);
+    // No platform cap exists anymore: reaching the floor is the user's choice.
   });
 
   it('computes utilisation as a percentage', async () => {
@@ -317,22 +315,23 @@ describe('compound v3 base: supply plan', () => {
     expect(steps.map((s) => s.kind)).toEqual(['supply']);
   });
 
-  it('enforces the per-transaction cap in the ADAPTER, not just the UI', async () => {
-    const over = String(COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX + 1);
+  it('has NO per-transaction cap — any amount the wallet holds may be supplied', async () => {
+    // «با هر مقدار انجام بپذیر» — caps were removed by owner decision after
+    // the fork evidence; only the protocol's own limits and the balance gate.
     const { steps, checks } = await buildSupplyPlan({
-      provider: provider({ usdcBalanceWei: usdc(100000) }), owner: OWNER, amountUsdc: over, nativeBalance: GAS_OK
+      provider: provider({ usdcBalanceWei: usdc(500000) }), owner: OWNER, amountUsdc: '500000', nativeBalance: GAS_OK
     });
-    expect(checks.blocked).toContain('COMPOUND_PER_TX_CAP');
-    expect(steps).toEqual([]);
+    expect(checks.blocked).toEqual([]);
+    expect(steps.map((s) => s.kind)).toEqual(['approve', 'supply']);
   });
 
-  it('enforces the total cap against the EXISTING position', async () => {
+  it('has NO total cap — a large existing position does not block a new supply', async () => {
     const { steps, checks } = await buildSupplyPlan({
-      provider: provider({ ...base, positionWei: usdc(COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL) }),
+      provider: provider({ ...base, positionWei: usdc(900000) }),
       owner: OWNER, amountUsdc: '1', nativeBalance: GAS_OK
     });
-    expect(checks.blocked).toContain('COMPOUND_TOTAL_CAP');
-    expect(steps).toEqual([]);
+    expect(checks.blocked).toEqual([]);
+    expect(steps.map((s) => s.kind)).toEqual(['approve', 'supply']);
   });
 
   it('REFUSES to supply while a borrow is open, because that would repay not earn', async () => {
@@ -450,14 +449,14 @@ describe('compound v3 base: withdraw plan', () => {
     expect(checks.blocked).toContain('COMPOUND_WITHDRAW_PAUSED');
   });
 
-  it('is NOT gated by the supply caps — a position above the cap can still exit fully', async () => {
-    const huge = usdc(COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL * 10);
+  it('is not gated by any cap — a huge position can still exit fully', async () => {
+    const huge = usdc(5000000);
     const { steps, checks } = await buildWithdrawPlan({
-      provider: provider({ positionWei: huge }), owner: OWNER, amountUsdc: String(COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX * 5)
+      provider: provider({ positionWei: huge }), owner: OWNER, amountUsdc: '2500000'
     });
     expect(checks.blocked).toEqual([]);
     expect(steps).toHaveLength(1);
-    expect(checks.perTxCapOk).toBe(true);
+    expect('perTxCapOk' in checks).toBe(false);
   });
 
   it('revoke builds approve(comet, 0) and nothing else', async () => {
@@ -555,9 +554,10 @@ describe('compound v3 base: feature flag and caps', () => {
     expect(compoundBaseWithdrawAllowedFor({ owner: null, hasPosition: true })).toBe(false);
   });
 
-  it('uses the reviewed default caps', () => {
-    expect(COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX).toBe(100);
-    expect(COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL).toBe(500);
+  it('ships with no amount caps at all (removed by owner decision)', async () => {
+    const features = await import('../src/lib/features.js');
+    expect(Object.keys(features)).not.toContain('COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX');
+    expect(Object.keys(features)).not.toContain('COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL');
   });
 
   it('keeps its caps independent of the Aave ones', async () => {
@@ -631,5 +631,73 @@ describe('compound v3 base: local ledger', () => {
     const state = derivePartialApprovalState({ owner: OWNER, allowanceUsdcWei: 0n, positionUsdcWei: 0n });
     expect(state.source).toBe('record');
     expect(state.needed).toBe(true); // a recorded approval with no supply is still worth showing
+  });
+});
+
+
+describe('compound v3 base adapter — ROUTED supply receipts (split router)', () => {
+  const ROUTER = '0x1234567890123456789012345678901234567890';
+  const GROSS = usdc(5);
+  const FEE = (GROSS * 30n) / 10_000n;      // 30 bps
+  const NET = GROSS - FEE;
+  const splitRouter = { address: ROUTER, feeBps: 30n, feeAmount: FEE, netAmount: NET };
+
+  const routedIface = new Interface([
+    'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+  ]);
+  const transferIface = new Interface(['event Transfer(address indexed from, address indexed to, uint256 value)']);
+  const supplyIface = new Interface([
+    'event Supply(address indexed from, address indexed dst, address indexed asset, uint256 amount)'
+  ]);
+  /* The router really does call comet.supply(), so the receipt carries a
+   * Supply event — with from = dst = ROUTER, which is exactly why the
+   * direct-supply proof (from = dst = owner) cannot be used here. */
+  const supplyLog = (amount) => {
+    const e = supplyIface.encodeEventLog(supplyIface.getEvent('Supply'), [ROUTER, ROUTER, COMPOUND_V3_BASE.usdc, amount]);
+    return { address: COMPOUND_V3_BASE.comet, topics: e.topics, data: e.data };
+  };
+  const routedLog = (user, net) => {
+    const e = routedIface.encodeEventLog(routedIface.getEvent('Routed'), [COMPOUND_V3_BASE.comet, user, COMPOUND_V3_BASE.usdc, GROSS, FEE, net]);
+    return { address: ROUTER, topics: e.topics, data: e.data };
+  };
+  const transferLog = (to, value) => {
+    const e = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [ROUTER, to, value]);
+    return { address: COMPOUND_V3_BASE.comet, topics: e.topics, data: e.data };
+  };
+
+  it('proves a routed deposit from Routed + the Comet base Transfer router → OWNER', async () => {
+    const proof = await verifyCompoundReceipt({
+      provider: provider({ positionWei: NET }),
+      receipt: { status: 1, hash: '0x' + 'cd'.repeat(32), logs: [routedLog(OWNER, NET), supplyLog(NET), transferLog(OWNER, NET)] },
+      owner: OWNER,
+      action: 'supply',
+      amountWei: GROSS,
+      beforePositionWei: 0n,
+      splitRouter
+    });
+    expect(proof).toMatchObject({ ok: true, action: 'supply', event: 'Supply' });
+    expect(proof.routed.netAmount).toBe(NET);
+    expect(proof.position.suppliedUsdc).toBe(NET);
+  });
+
+  it('accepts the minted balance marginally EXCEEDING net (Comet rounding), rejects it landing elsewhere', async () => {
+    await expect(verifyCompoundReceipt({
+      provider: provider({ positionWei: NET + 1n }),
+      receipt: { status: 1, logs: [routedLog(OWNER, NET + 1n), supplyLog(NET + 1n), transferLog(OWNER, NET + 1n)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).resolves.toMatchObject({ ok: true });
+    await expect(verifyCompoundReceipt({
+      provider: provider({ positionWei: NET }),
+      receipt: { status: 1, logs: [routedLog(OWNER, NET), supplyLog(NET), transferLog(OTHER, NET)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'COMPOUND_PROTOCOL_EVENT_MISMATCH' });
+  });
+
+  it('rejects a routed receipt without the Routed event', async () => {
+    await expect(verifyCompoundReceipt({
+      provider: provider({ positionWei: NET }),
+      receipt: { status: 1, logs: [supplyLog(NET), transferLog(OWNER, NET)] },
+      owner: OWNER, action: 'supply', amountWei: GROSS, beforePositionWei: 0n, splitRouter
+    })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
   });
 });
