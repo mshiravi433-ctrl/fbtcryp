@@ -291,6 +291,27 @@ const CASES = [
     chart: series(60, (i) => 62_000 + i * 40),
     pulse: livePulse,
     expectCards: 'any'
+  },
+  {
+    /*
+     * The chart endpoint resolving to a JSON STRING (a proxy helpfully
+     * serialising its error page). usePoll stores whatever resolves, so
+     * `chart` used to be a string and the page's `.map` died on it. The
+     * series coercion must treat it as "no chart" and use the sparkline.
+     */
+    name: 'a JSON string where the chart array should be',
+    markets: [btc, eth],
+    chart: { status: 200, body: 'upstream temporarily unavailable' },
+    pulse: livePulse,
+    expectCards: 'any'
+  },
+  {
+    /* `[ts, price]` tuples (raw CoinGecko market_chart) instead of {t,p}. */
+    name: 'chart rows as [ts, price] tuples',
+    markets: [btc, eth],
+    chart: { status: 200, body: Array.from({ length: 60 }, (_, i) => [Date.now() - (60 - i) * 3600_000, 62_000 + i * 40]) },
+    pulse: livePulse,
+    expectCards: 'any'
   }
 ];
 
@@ -346,8 +367,9 @@ function stubFetch(c) {
     if (u.includes('/v1/smart-money/')) return out(c.smartMoney, smartMoney);
     if (u.includes('/perp/markets')) return res({ assets: [] });
     if (u.includes('/solana/intel/')) return out(c.intel, { configured: false });
-    if (u.includes('/ai/status')) return res({ enabled: false, providers: [] });
-    if (u.includes('/ai/brief') || u.includes('/ai/outlook')) return res({});
+    if (u.includes('/ai/status')) return out(c.aiStatus, { enabled: false, providers: [] });
+    if (u.includes('/ai/brief')) return out(c.brief, {});
+    if (u.includes('/ai/outlook')) return out(c.outlook, {});
     if (method === 'POST') return res({ ok: true });
 
     if (u.includes('/chart/')) return out(c.chart, series(60, (i) => 100 + i));
@@ -406,6 +428,87 @@ export async function run(container) {
   let reloads = 0;
 
   try {
+    /* ── a server-side AI outlook in a DRIFTED shape ─────────────────────
+       getOutlook SPREADS the server JSON (`if (res?.summary) return { ...res }`).
+       The server normalises its own answer, but a proxy, or a model that
+       changed shape between versions, can still deliver `drivers:"text"`,
+       an object headline, or a string confidence. The AI panel used to feed
+       those straight into React (an object child is an instant crash) and
+       call `.map` on a string — production-only crashes, invisible here
+       until now because every case stubbed AI as disabled.
+
+       This pass runs FIRST ON PURPOSE: `aiStatus()` is memoised for the
+       session, and only this case may observe `{enabled:true}` (server
+       mode). Everything mounted afterwards falls through `{}` to the local
+       narrator exactly as before. */
+    {
+      const c = {
+        name: 'server AI with drifted shapes (object headline, string drivers)',
+        markets: [btc, eth],
+        chart: series(60, (i) => 62_000 + Math.sin(i / 5) * 900 + i * 55),
+        pulse: livePulse,
+        aiStatus: { enabled: true, providers: ['gemini'] },
+        outlook: {
+          bias: 'definitely-not-a-bias',
+          confidence: 'very',
+          headline: { fa: 'تیتر' },
+          summary: ['array', 'instead', 'of', 'string'],
+          range: { low: 'a lot', high: 'the moon', horizonDays: 'soon' },
+          drivers: 'momentum, whales and a dovish Fed',
+          risks: 42,
+          invalidation: { level: 62000 },
+          model: 'gemini-2.5'
+        }
+      };
+      globalThis.fetch = stubFetch(c);
+      clearApiCache();
+      const before = errors.length;
+      const root = createRoot(container);
+      let threw = null;
+      try {
+        await act(async () => {
+          root.render(
+            <Wrap>
+              <RouteBoundary t={(k) => k} reload={() => { reloads += 1; }}>
+                <Routes>
+                  <Route path="*" element={<Signals />} />
+                </Routes>
+              </RouteBoundary>
+            </Wrap>
+          );
+        });
+        await settle(920);
+        const aiTab = [...container.querySelectorAll('.sic-detail-tabs button')][1];
+        check('the AI analysis tab exists for the drifted-outlook pass', Boolean(aiTab));
+        if (aiTab) {
+          await act(async () => { aiTab.click(); });
+          /* AnimatePresence mode="wait" mounts the new tab only after the old
+             one exits, and exit animations run far past 300ms in jsdom; a
+             shorter wait reads the OLD panel and proves nothing. */
+          await settle(1500);
+        }
+      } catch (e) {
+        threw = e;
+      }
+      const text = (container.textContent || '').replace(/\s+/g, ' ');
+      check(`${c.name}: renders without throwing`, !threw);
+      check(`${c.name}: no React error was logged`, errors.length === before);
+      check(`${c.name}: the route boundary did not catch a crash`, !/crash\.(title|body|stillBrokenTitle|stillBrokenBody)/.test(text) && reloads === 0);
+      check(`${c.name}: the focus card survived the drifted AI payload`, container.querySelectorAll('.sic-card').length === 1);
+      /* The AI panel itself must still be PAINTED — a guard that quietly
+         swallowed the whole tab would pass every line above. */
+      check(`${c.name}: the AI panel still rendered (not a silent blank)`, Boolean(container.querySelector('.sic-ai-panel')));
+      const rawToxic = rawKeyIn(text);
+      check(`${c.name}: no raw i18n key leaked from the drifted fields${rawToxic ? ` (found "${rawToxic}")` : ''}`, !rawToxic);
+      if (threw) errors.push(`${c.name}: ${threw.message}`);
+      try {
+        await act(async () => root.unmount());
+      } catch {
+        /* an unmount failure is not the thing under test */
+      }
+      container.innerHTML = '';
+    }
+
     /* ── the data cases, one mount each ─────────────────────────────────── */
     for (const c of CASES) {
       globalThis.fetch = stubFetch(c);
@@ -469,6 +572,63 @@ export async function run(container) {
         /* an unmount failure is not the thing under test */
       }
       container.innerHTML = '';
+    }
+
+    /* ── alert rows written by an older build, still in localStorage ──────
+       AlertSheet read `a.symbol.toUpperCase()` on every stored row; a row
+       from an older build (or one truncated by a full storage quota) can
+       have no symbol at all, and a kind this build no longer knows. Opening
+       the sheet then took the WHOLE page to the crash card — the exact
+       «خیلی اوقات… مشکلی پیش اومده» shape: only some users, only sometimes. */
+    {
+      window.localStorage.setItem('fbt-signal-alerts-v1', JSON.stringify([
+        { id: 'legacy-1', active: true }, /* ← no symbol at all */
+        { id: 'legacy-2', symbol: 'BTC', kind: 'mysteryKind', condition: 'above', value: 70000, active: true, firedCount: 2 },
+        { id: 'legacy-3', symbol: 'BTC', kind: 'price', condition: 'below', value: 60000, active: true }
+      ]));
+      const c = CASES[0];
+      globalThis.fetch = stubFetch(c);
+      clearApiCache();
+      const before = errors.length;
+      const root = createRoot(container);
+      let threw = null;
+      try {
+        await act(async () => {
+          root.render(
+            <Wrap>
+              <RouteBoundary t={(k) => k} reload={() => { reloads += 1; }}>
+                <Routes>
+                  <Route path="*" element={<Signals />} />
+                </Routes>
+              </RouteBoundary>
+            </Wrap>
+          );
+        });
+        await settle(920);
+        const card = container.querySelector('.sic-card');
+        const alertBtn = card
+          ? [...card.querySelectorAll('button')].find((b) => /alert|هشدار|تنبيه/i.test(`${b.textContent} ${b.getAttribute('aria-label') || ''}`))
+          : null;
+        check('legacy alert rows: the alert bell is still wired', Boolean(alertBtn));
+        if (alertBtn) {
+          await act(async () => { alertBtn.click(); });
+          await settle(40);
+        }
+      } catch (e) {
+        threw = e;
+      }
+      check('legacy alert rows: renders without throwing', !threw);
+      check('legacy alert rows: no React error was logged', errors.length === before);
+      check('legacy alert rows: the route boundary did not catch a crash', !/crash\.(title|body|stillBrokenTitle|stillBrokenBody)/.test((document.body.textContent || '').replace(/\s+/g, ' ')) && reloads === 0);
+      check('legacy alert rows: the sheet opened and skipped the shapeless row', Boolean(document.querySelector('.sic-modal')));
+      if (threw) errors.push(`legacy alerts: ${threw.message}`);
+      try {
+        await act(async () => root.unmount());
+      } catch {
+        /* an unmount failure is not the thing under test */
+      }
+      container.innerHTML = '';
+      window.localStorage.removeItem('fbt-signal-alerts-v1');
     }
 
     /* ── the Solana tab, reached by clicking the way a user does ────────── */
