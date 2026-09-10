@@ -9,6 +9,7 @@ import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
 import WhaleTrackingPanel from '../components/WhaleTrackingPanel';
+import AiGlobalIntelligence from '../components/ai/AiGlobalIntelligence.jsx';
 import SegIndicator from '../components/SegIndicator';
 import '../styles/whales.css';
 import { useTelegram } from '../context/TelegramContext';
@@ -58,7 +59,7 @@ const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
  * the ?tab= deep link so a URL like #/news?tab=calm cannot open a tab that
  * does not exist, and the row and the URL cannot drift apart.
  */
-const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'calm'];
+const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'global', 'calm'];
 
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
@@ -223,13 +224,9 @@ export default function News() {
       </motion.div>
 
       <div className="segmented news-mode-tabs">
-        {/*
-          Intelligence sits immediately after Radio as requested. Calm remains
-          last because it is about the reader rather than the market. All five
-          labels stay in one fixed strip on phones; CSS reduces only this
-          strip's type slightly rather than making the requested tab scroll out
-          of sight.
-        */}
+        {/* Global Intelligence lives inside News so the market brief and its
+            source headlines share one discoverable destination. Calm remains
+            last because it is about the reader rather than the market. */}
         {/*
           ─── THE COMMUNITY FEED MOVED HERE FROM P2P ───────────────────────
           Asked for directly: «گفتگو نباید در p2p باشد باید در صفحه اخبار باشد».
@@ -245,11 +242,11 @@ export default function News() {
             key={k}
             className={tab === k ? 'active' : ''}
             onClick={() => setTab(k)}
-            title={t(`news.tab.${k}`)}
+            title={k === 'global' ? t('aiGlobal.title') : t(`news.tab.${k}`)}
             style={{ isolation: 'isolate' }}
           >
             {tab === k && <SegIndicator id="newstab" />}
-            {t(`news.tab.${k}`)}
+            {k === 'global' ? t('aiGlobal.title') : t(`news.tab.${k}`)}
           </button>
         ))}
       </div>
@@ -284,6 +281,8 @@ export default function News() {
           marketsUpdatedAt={marketsUpdatedAt}
           newsUpdatedAt={feed.at}
         />
+      ) : tab === 'global' ? (
+        <AiGlobalIntelligence />
       ) : (
         <>
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">

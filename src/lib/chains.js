@@ -185,12 +185,11 @@ export const EVM_CHAINS = {
     color: '#fe9a4d'
   },
   /*
-   * ─── MANTLE · BERACHAIN · UNICHAIN · MONAD ────────────────────────────────
+   * ─── MULTI-CHAIN EVM COVERAGE ─────────────────────────────────────────────
    * Added 2026-09 to close the biggest "important network we don't support"
-   * gaps by global TVL. Each is on KyberSwap's OFFICIAL supported-EVM-chain
-   * list (aggregator slug below in lib/aggregator.js), which is the same gate
-   * Linea and Sonic already passed — so the aggregator can route swaps AND
-   * collect our fee on-chain for these chains.
+   * gaps by global TVL. Mantle, Berachain, Unichain, Monad, Scroll and zkSync
+   * are on KyberSwap's supported-EVM-chain list (aggregator slugs below), so
+   * the same fee-enforced route is used for every one of these chains.
    *
    * ⚠️ BEFORE REAL VOLUME, rerun the live fee-echo quote test that Linea and
    * Sonic went through (see docs/NETWORKS-ADD-FA.md): for a liquid pair on each
@@ -473,18 +472,24 @@ export const TOKENS = {
   143: [
     { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' }
   ],
-  /* Scroll + zkSync Era — added with the chains in the same batch; curated
-     defaults follow the house pattern above: native coin + wrapped native
-     ONLY, both addresses verified on the chains' own explorers (Scroll WETH
-     is a genesis contract; zkSync WETH matches the `wrapped` pin above).
-     USDC/USDT and the long tail come from the CoinGecko runtime lists. */
+  /* Scroll + zkSync Era — native/wrapped ETH plus the canonical stablecoins
+     needed for an immediately usable swap pair. These addresses are pinned
+     rather than left to a remote list: an offline Android launch must still
+     have a real USDC/USDT route, and a list outage must never make a network
+     look empty. The runtime CoinGecko lists add the long tail. */
   534352: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
-    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5300000000000000000000000000000000000004', decimals: 18, coingeckoId: 'ethereum' }
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5300000000000000000000000000000000000004', decimals: 18, coingeckoId: 'ethereum' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'USDT', name: 'Tether USD', address: '0xf55bec9cafdbe8730f096aa55dad6d22d44099df', decimals: 6, coingeckoId: 'tether' },
+    { symbol: 'DAI', name: 'Dai', address: '0xcfa5712e9ef4b61e611f7b3a2d3c5f8a91213385', decimals: 18, coingeckoId: 'dai' }
   ],
   324: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
-    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', decimals: 18, coingeckoId: 'ethereum' }
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', decimals: 18, coingeckoId: 'ethereum' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x1d17cbcf0d6d143135ae902365d2e5e2a16538d4', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'USDT', name: 'Tether USD', address: '0x493257fd37edb34451f62edf8d2a0c418852ba4', decimals: 6, coingeckoId: 'tether' },
+    { symbol: 'DAI', name: 'Dai', address: '0x3e7676937a7e96cfb7616f255b9ad9ff47363d4b', decimals: 18, coingeckoId: 'dai' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

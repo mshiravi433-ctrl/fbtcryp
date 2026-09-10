@@ -72,7 +72,13 @@ export function correlate(a = [], b = []) {
 
 /** Class breadth from real per-instrument 24h changes. */
 function breadthOf(instruments) {
-  const rows = (instruments || []).map((i) => ({ symbol: String(i?.symbol || '').toUpperCase().slice(0, 20), changePct: num(i?.change24hPct ?? i?.changePct) })).filter((r) => r.symbol);
+  const rows = (instruments || []).map((i) => ({
+    symbol: String(i?.symbol || '').toUpperCase().slice(0, 20),
+    name: i?.name ? String(i.name).slice(0, 80) : null,
+    country: i?.country ? String(i.country).slice(0, 8) : null,
+    logoURI: /^https:\/\//i.test(String(i?.logoURI || '')) ? String(i.logoURI).slice(0, 300) : null,
+    changePct: num(i?.change24hPct ?? i?.changePct)
+  })).filter((r) => r.symbol);
   const withChange = rows.filter((r) => r.changePct !== null);
   if (!withChange.length) return null;
   const advancing = withChange.filter((r) => r.changePct > 0).length;
@@ -83,8 +89,8 @@ function breadthOf(instruments) {
     advancing,
     declining: withChange.filter((r) => r.changePct < 0).length,
     avgChangePct: round(avg, 2),
-    top: withChange.slice().sort((x, y) => y.changePct - x.changePct).slice(0, 3).map((r) => ({ symbol: r.symbol, changePct: r.changePct })),
-    bottom: withChange.slice().sort((x, y) => x.changePct - y.changePct).slice(0, 3).map((r) => ({ symbol: r.symbol, changePct: r.changePct }))
+    top: withChange.slice().sort((x, y) => y.changePct - x.changePct).slice(0, 3).map((r) => ({ symbol: r.symbol, name: r.name, country: r.country, logoURI: r.logoURI, changePct: r.changePct })),
+    bottom: withChange.slice().sort((x, y) => x.changePct - y.changePct).slice(0, 3).map((r) => ({ symbol: r.symbol, name: r.name, country: r.country, logoURI: r.logoURI, changePct: r.changePct }))
   };
 }
 

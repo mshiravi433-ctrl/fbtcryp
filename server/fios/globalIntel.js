@@ -150,7 +150,12 @@ export function normalizeSmartMoney(overview, at = Date.now()) {
     netFlowUsd: num(metrics.netFlow),
     topTokens: tokenRows.slice(0, 6).map((t) => ({
       symbol: str(t.symbol, 24), chain: str(t.chainShort, 16),
-      flow: str(t.flow || t.direction, 16), valueUsd: num(t.valueUsd ?? t.value)
+      flow: str(t.flow || t.direction || t.signal, 16),
+      valueUsd: num(t.valueUsd ?? t.value ?? t.netUsd ?? t.totalUsd),
+      netUsd: num(t.netUsd),
+      exchangeOutflowUsd: num(t.exchangeOutflowUsd ?? t.cexOut ?? t.exchangeOutflow),
+      exchangeInflowUsd: num(t.exchangeInflowUsd ?? t.cexIn ?? t.exchangeInflow),
+      signal: str(t.signal, 20)
     })).filter((t) => t.symbol),
     coverage: overview.coverage && typeof overview.coverage === 'object' ? {
       events: num(overview.coverage.events), windowCoverage: num(overview.coverage.windowCoverage), comparable: overview.coverage.comparable === true
@@ -295,7 +300,8 @@ export function normalizeStocks(out, at = Date.now()) {
     stale: out.stale === true,
     marketOpen: instruments.some((r) => r.marketOpen === true),
     instruments: instruments.slice(0, 15).map((r) => ({
-      symbol: str(r.symbol, 12), name: str(r.name, 80),
+      symbol: str(r.symbol, 12), name: str(r.name, 80), country: str(r.country, 8),
+      logoURI: /^https:\/\//i.test(String(r.logoURI || r.logo || '')) ? str(r.logoURI || r.logo, 300) : null,
       priceUsd: num(r.priceUsd ?? r.price), change24hPct: num(r.change24hPct ?? r.change24h),
       marketOpen: r.marketOpen === true ? true : (r.marketOpen === false ? false : null)
     })).filter((r) => r.symbol)

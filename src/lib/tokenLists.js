@@ -86,6 +86,16 @@ const LIST_SOURCES = {
   ],
   143: [
     { id: 'coingecko-monad', url: 'https://tokens.coingecko.com/monad/all.json' }
+  ],
+  // These two L2s used to have only the native + wrapped coin in the
+  // offline picker. Keep the public lists as a long-tail source, but pair
+  // them with curated stablecoins in chains.js so first launch is swappable
+  // even when a mobile network blocks a CDN.
+  534352: [
+    { id: 'coingecko-scroll', url: 'https://tokens.coingecko.com/scroll/all.json' }
+  ],
+  324: [
+    { id: 'coingecko-zksync-era', url: 'https://tokens.coingecko.com/zksync-era/all.json' }
   ]
 };
 

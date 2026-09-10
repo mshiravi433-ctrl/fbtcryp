@@ -11,14 +11,16 @@
  *   · a provider light marked live means a real result, not a promise
  *   · every briefing item names its source; nothing carries execution
  *
- * This screen is ADDITIVE (Phase 211 rule): it adds the /ai-global route and
- * one tile in the More sheet; it replaces and removes nothing. It talks to
- * the FI's own additive endpoints under /api/ai/global/*.
+ * This surface is available at /ai-global for existing deep links and is also
+ * embedded as the Global tab in News. The standalone More-sheet doorway is
+ * intentionally gone; both renderings talk to the FI's own additive
+ * endpoints under /api/ai/global/*.
  */
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ThinkingOrb } from './ThinkingOrb.jsx';
+import { apiBase } from '../../lib/apiBase';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
@@ -97,6 +99,23 @@ const STYLES = `
   .aig-narrative-note { font-size:10px; color:var(--text-3); margin-top:6px; }
   .aig-commentary-provider { flex:0 0 auto; font-size:10px; font-weight:700; color:var(--rgb-2); background:color-mix(in srgb,var(--rgb-2) 12%,transparent); padding:2px 7px; border-radius:999px; }
   .aig-fallback-tag { display:inline-block; margin-inline-start:5px; font-size:9px; font-weight:700; color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 10%,transparent); padding:1px 6px; border-radius:6px; vertical-align:middle; }
+  .aig-market-chart { margin:var(--sp-3) 0 var(--sp-4); padding:var(--sp-3); border:1px solid color-mix(in srgb,var(--rgb-1) 22%,var(--line)); border-radius:var(--radius-sm); background:linear-gradient(145deg,color-mix(in srgb,var(--rgb-1) 7%,var(--bg-raised)),var(--bg-raised)); }
+  .aig-chart-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .aig-chart-title { font-size:var(--fs-xs); font-weight:800; color:var(--text-1); }
+  .aig-chart-source { font-size:10px; color:var(--text-3); }
+  .aig-chart-svg { width:100%; height:auto; display:block; overflow:visible; }
+  .aig-insight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .aig-insight-card { min-width:0; position:relative; overflow:hidden; padding:11px; border-radius:14px; border:1px solid var(--line); background:linear-gradient(145deg,var(--bg-raised),color-mix(in srgb,var(--rgb-1) 5%,var(--bg-raised))); }
+  .aig-insight-card::after { content:""; position:absolute; width:64px; height:64px; inset-inline-end:-25px; top:-25px; border-radius:50%; background:var(--insight-tone,var(--rgb-2)); opacity:.13; filter:blur(13px); }
+  .aig-insight-kicker { display:flex; align-items:center; gap:6px; position:relative; z-index:1; font-size:10px; color:var(--text-2); line-height:1.35; }
+  .aig-insight-icon { font-size:18px; line-height:1; }
+  .aig-insight-logo { width:24px; height:24px; flex:0 0 24px; display:grid; place-items:center; overflow:hidden; border-radius:8px; color:var(--text-1); background:linear-gradient(135deg,var(--rgb-1),var(--rgb-2)); font-size:11px; font-weight:900; }
+  .aig-insight-logo img { width:100%; height:100%; object-fit:cover; }
+  .aig-insight-symbol { position:relative; z-index:1; display:flex; align-items:center; gap:6px; margin-top:9px; font-size:var(--fs-md); font-weight:900; color:var(--text-1); }
+  .aig-insight-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; font-weight:600; color:var(--text-3); }
+  .aig-insight-value { position:relative; z-index:1; margin-top:4px; font-size:var(--fs-sm); font-weight:900; }
+  .aig-insight-meta { position:relative; z-index:1; margin-top:3px; font-size:10px; color:var(--text-2); line-height:1.35; overflow-wrap:anywhere; }
+  .aig-insight-empty { position:relative; z-index:1; margin-top:9px; color:var(--text-3); font-size:11px; line-height:1.45; }
   @media (max-width:360px) { .ai-global { padding-inline:12px; } .aig-title { font-size:18px; } .aig-chip { font-size:10px; padding-inline:7px; } .aig-tabs { gap:6px; } .aig-tab { font-size:10px; min-height:56px; padding-inline:4px; } .aig-section { padding:13px; } }
   @media (min-width:480px) { .ai-global { padding-inline:16px; } .aig-tab { font-size:var(--fs-xs); } .aig-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 `;
@@ -255,8 +274,7 @@ const AIG_REASON = {
   COMMENTARY_UNUSABLE: { fa: 'پاسخ هوش مصنوعی قابل استفاده نبود', en: 'AI answer was unusable' },
   MACRO_IS_DERIVED: { fa: 'کلان از خبر ساخته می‌شود', en: 'macro is derived from news' },
   MACRO_NEEDS_NEWS_AND_QUOTES: { fa: 'کلان به خبر یا داده کلان نیاز دارد', en: 'macro needs news or macro data' },
-  NO_MACRO_HEADLINES_IN_WINDOW_AND_NO_QUOTES: { fa: 'نه خبر کلان و نه داده کلان در این بازه', en: 'no macro headlines or quotes in this window' },
-  NO_MACRO_DATA_SOURCE: { fa: 'هیچ منبع داده کلان پاسخ نداد', en: 'no macro data source answered' }
+  NO_MACRO_HEADLINES_IN_WINDOW_AND_NO_QUOTES: { fa: 'نه خبر کلان و نه داده کلان در این بازه', en: 'no macro headlines or quotes in this window' }
 };
 
 const prettyCode = (code) => String(code || '').split(':')[0].replace(/_/g, ' ').trim().toLowerCase() || 'unread';
@@ -300,6 +318,98 @@ const timeAgo = (at, isRTL) => {
   return isRTL ? `${Math.round(s / 3600)} ساعت پیش` : `${Math.round(s / 3600)}h ago`;
 };
 
+function InsightCard({ icon, title, row, L, tone = 'var(--rgb-2)', flow = false }) {
+  const hasRow = row && row.symbol && Number.isFinite(Number(flow ? row.amount : row.changePct));
+  return (
+    <div className="aig-insight-card" style={{ '--insight-tone': tone }}>
+      <div className="aig-insight-kicker"><span className="aig-insight-icon" aria-hidden="true">{icon}</span><span>{title}</span></div>
+      {hasRow ? (
+        <>
+          <div className="aig-insight-symbol">
+            <span className="aig-insight-logo" aria-hidden="true">
+              {row.logoURI ? <img src={row.logoURI} alt="" loading="lazy" /> : String(row.symbol).slice(0, 1)}
+            </span>
+            <span>{row.symbol}</span>
+            {row.name ? <span className="aig-insight-name">{row.name}</span> : null}
+          </div>
+          <div className={`aig-insight-value ${flow ? (row.amount > 0 ? 'down' : '') : row.changePct >= 0 ? 'up' : 'down'}`}>
+            {flow ? `$${fmtK(row.amount)}` : `${row.changePct > 0 ? '+' : ''}${Number(row.changePct).toFixed(2)}%`}
+          </div>
+          <div className="aig-insight-meta">
+            {flow
+              ? [row.chain, row.signal].filter(Boolean).join(' · ') || L('جریان برچسب‌خورده', 'labelled flow')
+              : row.country ? `${L('کشور', 'country')}: ${row.country}` : L('کشور در فید گزارش نشده', 'country not supplied by feed')}
+          </div>
+        </>
+      ) : (
+        <div className="aig-insight-empty">{flow ? L('خروجی معتبر در این بازه خوانده نشد.', 'No measured outflow was read in this window.') : L('دادهٔ معتبر این کارت هنوز خوانده نشده است.', 'No measured data for this card yet.')}</div>
+      )}
+    </div>
+  );
+}
+
+function CrossAssetVisuals({ cross, domains, L }) {
+  const classes = cross?.classes || {};
+  const chartRows = Object.entries(classes)
+    .map(([key, value]) => ({ key, value: Number(value?.avgChangePct) }))
+    .filter((row) => Number.isFinite(row.value));
+  const max = Math.max(0.1, ...chartRows.map((row) => Math.abs(row.value)));
+  const stocks = classes.stocks;
+  const stockTop = stocks?.top || [];
+  const stockBottom = stocks?.bottom || [];
+  const smartTokens = domains?.smart_money?.data?.topTokens || [];
+  const outflowRows = smartTokens
+    .map((row) => ({ ...row, amount: Number(row.exchangeOutflowUsd) }))
+    .filter((row) => row.symbol && Number.isFinite(row.amount) && row.amount > 0);
+  const highestOutflow = outflowRows.slice().sort((a, b) => b.amount - a.amount)[0] || null;
+  const lowestOutflow = outflowRows.slice().sort((a, b) => a.amount - b.amount)[0] || null;
+  const label = (key) => ({ crypto: 'CRYPTO', stocks: 'STOCKS', forex: 'FX', commodities: 'CMDTY', rwa: 'RWA' }[key] || key.toUpperCase());
+  const xStep = chartRows.length ? 340 / chartRows.length : 340;
+  return (
+    <>
+      <div className="aig-market-chart" role="img" aria-label={L('نمودار تغییر ۲۴ ساعته کلاس‌های دارایی', '24-hour asset-class change chart')}>
+        <div className="aig-chart-head">
+          <span className="aig-chart-title">📊 {L('نقشهٔ حرکت اقتصاد و دارایی‌ها', 'Economy & asset movement')}</span>
+          <span className="aig-chart-source">{L('خوانش واقعی همین دور', 'reads from this pass')}</span>
+        </div>
+        {chartRows.length ? (
+          <svg className="aig-chart-svg" viewBox="0 0 360 136" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="8" y1="72" x2="352" y2="72" stroke="var(--line-strong)" strokeWidth="1" />
+            {chartRows.map((row, index) => {
+              const x = 12 + index * xStep + xStep / 2;
+              const height = Math.max(3, Math.abs(row.value) / max * 48);
+              const y = row.value >= 0 ? 72 - height : 72;
+              const color = row.value >= 0 ? '#4ade80' : '#f87171';
+              return (
+                <g key={row.key}>
+                  <rect x={x - Math.min(18, xStep * 0.25)} y={y} width={Math.min(36, xStep * 0.5)} height={height} rx="5" fill={color} opacity=".88" />
+                  <text x={x} y="91" textAnchor="middle" fill="var(--text-2)" fontSize="8">{label(row.key)}</text>
+                  <text x={x} y={row.value >= 0 ? y - 5 : y + height + 11} textAnchor="middle" fill="var(--text-1)" fontSize="8" fontWeight="700">{row.value > 0 ? '+' : ''}{row.value.toFixed(1)}%</text>
+                </g>
+              );
+            })}
+          </svg>
+        ) : <div className="aig-insight-empty">{L('برای نمودار دادهٔ تغییر معتبر نیست.', 'No measured change data is available for the chart.')}</div>}
+      </div>
+
+      <div className="aig-section-title" style={{ marginTop: 4 }}>
+        ✨ {L('کارت‌های برتر اقتصاد جهانی', 'Global economy leaders & outliers')}
+      </div>
+      <div className="aig-insight-grid">
+        <InsightCard icon="🏆" title={L('بیشترین رشد سهم/شرکت', 'Largest profitable mover')} row={stockTop[0]} L={L} tone="var(--up)" />
+        <InsightCard icon="📉" title={L('بیشترین زیان سهم/شرکت', 'Biggest loss')} row={stockBottom[0]} L={L} tone="var(--down)" />
+        <InsightCard icon="🌐" title={L('برترین سهام جهان', 'Top global stock')} row={stockTop[1] || stockTop[0]} L={L} tone="var(--rgb-1)" />
+        <InsightCard icon="⚠️" title={L('ضعیف‌ترین سهام جهان', 'Worst-performing stock')} row={stockBottom[1] || stockBottom[0]} L={L} tone="var(--rgb-5)" />
+        <InsightCard icon="💸" title={L('بیشترین خروج پول', 'Highest observed outflow')} row={highestOutflow} L={L} tone="var(--down)" flow />
+        <InsightCard icon="🪙" title={L('کمترین خروج پول', 'Lowest observed outflow')} row={lowestOutflow} L={L} tone="var(--rgb-2)" flow />
+      </div>
+      <div className="aig-note">
+        {L('این کارت‌ها فقط از ابزارهایی ساخته شده‌اند که منبع در همین دور خوانده است؛ نبود داده به‌صورت «خوانده نشد» نمایش داده می‌شود، نه با مقدار ساختگی.', 'These cards use only instruments read by the connected sources in this pass; missing data stays explicitly unread rather than becoming a fabricated value.')}
+      </div>
+    </>
+  );
+}
+
 function AiGlobalIntelligenceInner() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -308,14 +418,19 @@ function AiGlobalIntelligenceInner() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
+  const requestId = useRef(0);
   const language = String(i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
   const isPersian = language === 'fa';
   const isRTL = ['fa', 'ar', 'ur'].includes(language);
   const L = (fa, en) => (isPersian ? fa : en);
 
   const load = useCallback(async (refresh = false) => {
-    const readJson = async (url) => {
-      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    const id = ++requestId.current;
+    const readJson = async (path) => {
+      // Relative /api URLs resolve against Capacitor's https://localhost in
+      // Android. Resolve through the shared native-aware base so the embedded
+      // News tab and the standalone route read the same backend.
+      const response = await fetch(`${apiBase()}${path}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       if (!payload?.ok) throw new Error(payload?.error || 'INVALID_RESPONSE');
@@ -326,11 +441,12 @@ function AiGlobalIntelligenceInner() {
       setConnectionError(null);
       const qs = refresh ? `?refresh=1&lang=${language}` : `?lang=${language}`;
       const [intel, brief, crossAsset, providerState] = await Promise.all([
-        readJson(`/api/ai/global/intelligence${qs}`),
-        readJson(`/api/ai/global/briefing${qs}`),
-        readJson(`/api/ai/global/cross-asset${qs}`),
-        readJson('/api/ai/global/providers')
+        readJson(`/ai/global/intelligence${qs}`),
+        readJson(`/ai/global/briefing${qs}`),
+        readJson(`/ai/global/cross-asset${qs}`),
+        readJson('/ai/global/providers')
       ]);
+      if (id !== requestId.current) return;
       setData({
         intelligence: intel.globalIntelligence || null,
         briefing: brief.briefing || null,
@@ -338,12 +454,14 @@ function AiGlobalIntelligenceInner() {
         providers: providerState.providers || intel.globalIntelligence?.providers || null
       });
     } catch (error) {
-      setConnectionError(error?.message || 'NETWORK_ERROR');
+      if (id === requestId.current) setConnectionError(error?.message || 'NETWORK_ERROR');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (id === requestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     load(false);
@@ -604,6 +722,8 @@ function AiGlobalIntelligenceInner() {
                   </div>
                 ))}
               </div>
+
+              <CrossAssetVisuals cross={cross} domains={domains} L={L} />
 
               {/* ── THE COMPREHENSIVE ANALYSIS (Phase 211.2) — the local
                      deterministic narrative, then the AI commentary when an

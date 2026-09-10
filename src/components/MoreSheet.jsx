@@ -21,7 +21,6 @@ import {
   IconSettings,
   IconShield,
   IconSmartMoney,
-  IconSparkle,
   IconSwap,
   IconTrend,
   IconTrophy,
@@ -166,11 +165,6 @@ const GROUPS = [
        * same flat treatment.
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
-      /* Phase 211 — AI Global Intelligence. ADDITIVE tile: the global brain
-         (smart money · whales · macro · stocks · forex · commodities · RWA ·
-         cross-asset · proactive briefing) on /ai-global. Nothing was removed
-         to make room — the More grid reflows. */
-      { to: '/ai-global', key: 'aiGlobal.title', Icon: IconSparkle, hue: 'var(--rgb-5)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
