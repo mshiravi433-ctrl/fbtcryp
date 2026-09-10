@@ -112,13 +112,16 @@ t('§5 provenance summary counts coverage and names stale/unavailable sources',
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* §51 flags                                                                 */
 /* ═════════════════════════════════════════════════════════════════════════ */
-t('§51 every requested flag exists', ['FINANCIAL_WORLD_MODEL_ENABLED', 'RESEARCH_ENGINE_ENABLED', 'STRATEGY_COMPETITION_ENABLED', 'SIMULATION_ENGINE_ENABLED', 'DECISION_ENGINE_ENABLED', 'CROSS_CHAIN_REASONER_ENABLED', 'AUTONOMOUS_POLICY_ENABLED', 'LEARNING_ENGINE_ENABLED', 'PROACTIVE_GUARDIAN_ENABLED'].every((f) => FI_FLAG_NAMES.includes(f)));
-t('§51 autonomy is opt-in, the rest default on', fiFlag('AUTONOMOUS_POLICY_ENABLED') === false && fiFlag('DECISION_ENGINE_ENABLED') === true);
-process.env.AUTONOMOUS_POLICY_ENABLED = 'true';
-t('§51 a flag flips at runtime without a redeploy', fiFlag('AUTONOMOUS_POLICY_ENABLED') === true);
+t('§51 every requested flag exists', ['FINANCIAL_WORLD_MODEL_ENABLED', 'RESEARCH_ENGINE_ENABLED', 'STRATEGY_COMPETITION_ENABLED', 'SIMULATION_ENGINE_ENABLED', 'DECISION_ENGINE_ENABLED', 'CROSS_CHAIN_REASONER_ENABLED', 'AUTONOMOUS_POLICY_ENABLED', 'LEARNING_ENGINE_ENABLED', 'PROACTIVE_GUARDIAN_ENABLED', 'MACRO_GRAPH_ENABLED', 'WHY_ENGINE_ENABLED', 'AGENT_COUNCIL_ENABLED', 'PERSONAL_PROFILE_ENABLED', 'EVALUATION_LOOP_ENABLED', 'WALLET_CONTEXT_ENABLED', 'EVENT_REPLANNING_ENABLED', 'CONVERSATION_STATE_ENABLED', 'GOAL_SCENARIOS_ENABLED', 'OPPORTUNITY_FIT_ENABLED', 'GOAL_REASONING_ENABLED', 'AGENT_RUNTIME_OPS_ENABLED'].every((f) => FI_FLAG_NAMES.includes(f)));
+/* Phase 212 owner policy: every engine ships ON — including permissioned
+   autonomy (the numeric policy limits + guardian + wallet signature remain
+   the real boundary, the flag no longer is). */
+t('§51 every engine is on by default (Phase 212 policy)', FI_FLAG_NAMES.every((f) => fiFlag(f) === true));
 process.env.AUTONOMOUS_POLICY_ENABLED = 'false';
 t('§51 a disabled feature refuses with FEATURE_DISABLED instead of faking success', requireFlag('AUTONOMOUS_POLICY_ENABLED').code === 'FEATURE_DISABLED');
-t('§51 flags snapshot covers all nine', Object.keys(fiFlags()).length === 9);
+t('§51 a flag flips at runtime without a redeploy', (() => { process.env.AUTONOMOUS_POLICY_ENABLED = 'true'; const on = fiFlag('AUTONOMOUS_POLICY_ENABLED') === true; process.env.AUTONOMOUS_POLICY_ENABLED = ''; return on; })());
+t('§51 the master switch can still turn the deep layer off', (() => { process.env.INTENT_AI_FLAGS_OFF = '1'; const off = fiFlag('MACRO_GRAPH_ENABLED') === false; process.env.INTENT_AI_FLAGS_OFF = ''; return off; })());
+t('§51 flags snapshot covers every engine', Object.keys(fiFlags()).length === FI_FLAG_NAMES.length && Object.keys(fiFlags()).length === 21);
 
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* §34 observability                                                         */

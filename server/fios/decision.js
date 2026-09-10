@@ -278,6 +278,9 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
           }
         : null,
       status: chosen ? 'RECOMMENDED' : 'NO_RECOMMENDATION',
+      /* Phase 212 — the why engine's falsifier math reads this: the worst
+         modelled case as a SHARE of net worth vs the user's drawdown ceiling. */
+      netWorthUsd: num(financial.computed?.netWorthUsd),
       reason,
       confidence,
       alternatives: ranked.slice(1, 5).map((r) => ({ strategyId: r.id, name: r.name, type: r.type, score: r.score?.score ?? null, expectedReturnPct: r.expectedReturnPct })),

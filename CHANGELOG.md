@@ -1,4 +1,17 @@
-# Unreleased — six reports in Persian: tabs that did nothing, hatches, and errors nobody could read
+# Unreleased — Phase 212/213: مغز عمیق مالی (۱۲ موتور هوش) + سوالات انطباقی + کورپوس کیفیت ۱۰۳۷ کیسی؛ همه فازها لایو
+
+FBT Intent OS از «دستیار اجرا» به «سیستم‌عامل هوش مالی خودمختار» ارتقا یافت.
+دوازده موتور جدید روی ترکیب‌گر `server/fios/` سوار شدند، همه با فلاگ روشن، و
+کیفیت طبقه‌بند اینتنت با ۱٬۰۳۷ کیس تست — همان که مدیر خواست — به آنچه باید رسید:
+۱۰۰٪ پاس، صفر قول اجرا در حالت بی‌داده.
+
+- **فاز ۲۱۲ — Deep-Intelligence Brain**: `macroGraph` (انتقال Fed→DXY→yields→BTC→ETH→RWA→پرتفوی با impulse/pressure تفکیک‌شده)، `whyEngine` (چرا این دارایی/شبکه/زمان/مقدار/استراتژی + چهار فالسیفایر: BTC −۱۰٪، گاز ×۲، ریزش نقدینگی، خبر منفی)، `agentCouncil` (۱۲ ایجنت حوزه‌ای با رأی‌گیری وزنی، وتوی امنیتی ۱.۳)، `goalScenarios` (محافظه‌کارانه/متعادل/تهاجمی با بازده انتظاری، احتمال و حداکثر دراودانِ واقعی‌محاسبه)، `goalReasoning` (استخراج ساختاری {goal, target, horizon, max_drawdown, risk} از فارسی محاوره‌ای)، `conversationState` (ماشین حالت گفتگو + سوالات انطباقی)، `walletContext` (کیف پول همگانی — بدون سکشن خوانده‌شده = UNAVAILABLE، هرگز صفر جعلی)، `personalProfile` (پروفایل مالی که واقعاً در تصمیم می‌نشیند)، `evaluation` (حلقه تصمیم→نتیجه→ارزیابی؛ MODEL_GOOD/ACCEPTABLE/DRIFTING/WRONG)، `opportunityFit`، `agentRuntimeOps` (کیل‌سوییچ مقدم بر هر چک)، `eventReplanning` (باس رویداد + بازبرنامه‌ریزی بلادرنگ). ۸۱ روت شامل ۲۱ روت `/api/ai/deep/*`، ۱۱ کالکشن، ۲۱ فلاگ روشن.
+- **فاز ۲۱۳ — AI Quality Corpus**: `src/lib/intent-ai/qualityCorpus.js` با ۱٬۰۳۷ کیس قطعی در ۲۷ دسته (خرید/فروش/سواپ/پل/سپرده/وام/بازپرداخت/فارم/فیوچرز/dydx/سهام/فارکس/کالا/RWA/هدف/what-if/هشدار/ریسک/تمرکز/پرتفوی/نهنگ/سیگنال/چندمرحله‌ای/ناوبری/ری‌بالانس/صداقت) — هر کیس اینتنت، entity، ریسک، اکشن و تاییدیه انتظاری را پین می‌کند؛ فارسی و انگلیسی. **۱۰۳۷/۱۰۳۷ (۱۰۰٪)** و honesty sweep با ۱٬۰۰۲ مورد و صفر تخلف — در استقرار مرده هیچ جمله‌ای قول اجرا نمی‌دهد.
+- **دوازده باگ واقعی که کورپوس گرفت**: کلمات انگلیسی (BUY/SET/WHAT/FARM/PERP) به‌عنوان نماد دارایی استخراج می‌شدند (SYMBOL_STOPWORDS)؛ اعداد تنها دارایی می‌شدند («به ۷۰ هزار»)؛ درخواست‌های ترکیبی از چک دسترسی رد می‌شدند؛ «برو به صفحه swap» سواپ اجرا می‌کرد؛ «خبرم کن» به اخبار می‌افتاد و «چی خبر» (سلام) اخبار می‌شد؛ «سه ماهه»/«یک ساله» خوانده نمی‌شد؛ «ری‌بالانس» با نیم‌فاصله مچ نمی‌شد؛ ~۱۵ عبارت رایج (purchase، supply، move…to، بازپرداخت وام، فرض کن، …) UNSUPPORTED بودند. همه رفع شدند و ۱۱ پروب رگرسیون (شامل ۱۵۵/۱۵۵ upgrade7 و ۴۳/۴۳ intent-understanding) سبز ماندند.
+- **مشخصات تا فاز ۲۱۲، ۱۹۳/۱۹۳ فاز لایو** — `testsPresent` فاز ۲۱۲ با پروب کورپوس true شد؛ چهار پروب کهنه (phase-status، durable-evidence، phase211 روت‌ها، earnable-evidence) همگام شدند. `npm test` کامل: All suites passed، ۱۱٬۹۸۰ چک.
+- **پالیسی کیف پول هوشمند روشن**: `DEFAULT_POLICY.enabled: true` — از همان دلار اول سقف‌ها (۱۰۰۰$/روز، ۵۰۰$/تراکنش، تایید بالای ۱۰۰$) اعمال می‌شوند؛ روشن بودن یعنی اجرای سقف‌ها، نه دور زدنشان.
+
+
 
 Six defects, all reported in one message, all of them the kind a render test
 cannot see: every component mounted, every build was green, and the app was

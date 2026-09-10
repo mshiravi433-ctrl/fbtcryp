@@ -61,7 +61,11 @@ t('FRONTEND: no route was removed (removedRoutes.length === 0)', removedRoutes.l
 t('FRONTEND: every pre-existing route is still mounted with the same component',
   beforeRoutes.every((r) => afterRoutes.includes(r)));
 const addedRoutes = added(beforeRoutes, afterRoutes);
-t('FRONTEND: Phase 211 only ADDED routes', addedRoutes.length >= 1 && addedRoutes.every((r) => r.startsWith('/ai-global')), addedRoutes);
+/* The Phase 211 rule is «هیچ route حذف نشود» — additions are allowed, including
+   by later phases (/pay/:code is a later phase's customer landing). What must
+   hold: ≥1 route was added, /ai-global among them, and nothing removed. */
+t('FRONTEND: Phase 211 only ADDED routes (later phases may add, never remove)',
+  addedRoutes.length >= 1 && addedRoutes.some((r) => r.startsWith('/ai-global')), addedRoutes);
 
 /* 2. page regression — every lazy import resolves. */
 t('PAGES: every lazy import in App.jsx resolves to a real file (0 missing)',

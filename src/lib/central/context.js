@@ -337,6 +337,19 @@ const ASSET_ALIASES = Object.freeze({
   sol: 'SOL', solana: 'SOL', bnb: 'BNB', avax: 'AVAX', matic: 'POL', pol: 'POL',
   arb: 'ARB', op: 'OP', link: 'LINK', steth: 'stETH', cbtc: 'cbBTC', gold: 'XAU', xau: 'XAU'
 });
+/* English words that the generic 3–5-letter fallback must never read as asset
+   symbols. The quality corpus caught «buy BTC» extracting asset=BUY: a fake
+   asset flows straight into the planner, so the floor is a wordlist. Real
+   symbols (BTC, ETH, SOL, …) are unaffected — none of these are symbols. */
+const SYMBOL_STOPWORDS = new Set(['ALL', 'AND', 'ANY', 'ARE', 'BAD', 'BEST', 'BIG', 'BONUS', 'BUY', 'CAN',
+  'DAILY', 'DO', 'DOES', 'FOR', 'FROM', 'FARM', 'GET', 'GOOD', 'HAS', 'HAVE', 'HIGH', 'HOW', 'IF', 'IN',
+  'IS', 'IT', 'LOW', 'ME', 'MUCH', 'MY', 'NEW', 'NEWS', 'NOT', 'NOW', 'OF', 'ON', 'OPEN', 'PAGE', 'PLAN',
+  'PRICE', 'RISK', 'SELL', 'SET', 'SHOW', 'SIGN', 'SOME', 'STOP', 'TAKE', 'THAN', 'THAT', 'THE', 'THEN',
+  'THIS', 'TO', 'TOO', 'TOP', 'WANT', 'WAS', 'WHAT', 'WHEN', 'WHY', 'WITH', 'YOU', 'YOUR', 'WHICH', 'WHOSE',
+  'ALERT', 'BRIDGE', 'SWAP', 'LEND', 'GOAL', 'LOAN', 'DEBT', 'FUND', 'GOLD', 'SILVER', 'OIL', 'YIELD', 'APY',
+  'PROFIT', 'LOSS', 'MOVE', 'MOON', 'PUMP', 'SEND', 'GIVE', 'HELP', 'JUST', 'LIKE', 'MADE', 'MAKE', 'MORE'
+]);
+
 const NETWORK_ALIASES = Object.freeze({
   ethereum: 'ethereum', eth: 'ethereum', mainnet: 'ethereum',
   bsc: 'bsc', 'bnb chain': 'bsc', binance: 'bsc',
@@ -350,7 +363,11 @@ const CHAIN_HINT = /(شبکه|به |روی |to |from |chain|network|arbitrum|bas
 export function usableSymbol(value) {
   const s = String(value ?? '').trim();
   if (!s || s.length > 16) return null;
-  return /^[A-Za-z0-9$@._-]+$/.test(s) ? s.toUpperCase() : (ASSET_ALIASES[normalizeText(s)] || null);
+  if (ASSET_ALIASES[normalizeText(s)]) return ASSET_ALIASES[normalizeText(s)];
+  /* A bare number (or number-like token) is never a symbol — «به 70 هزار» is a
+     price, not the asset «70». The generic branch needs at least one letter. */
+  if (!/[A-Za-z]/.test(s)) return null;
+  return /^[A-Za-z0-9$@._-]+$/.test(s) ? s.toUpperCase() : null;
 }
 
 export function findAssetsIn(normalizedText) {
@@ -360,7 +377,12 @@ export function findAssetsIn(normalizedText) {
     /* «بیت‌کوینمو» = بیت‌کوین + «-م» (mine) + the colloquial «و»; both clitics come off
        so an asset named with a possessive resolves like the English «my BTC». */
     const key = tok.replace(/م$/, '').replace(/م$/, '');
-    const sym = ASSET_ALIASES[key] || ASSET_ALIASES[tok] || (/^[A-Z]{2,6}$/.test(tok.toUpperCase()) && (Object.values(ASSET_ALIASES).includes(tok.toUpperCase()) || /^[A-Z]{3,5}$/.test(tok.toUpperCase())) ? tok.toUpperCase() : null);
+    /* The generic 3–5-letter fallback is gated by the stopword list: «buy BTC
+       now» must resolve BTC, not BUY. Aliases are exempt (gold→XAU survives). */
+    const upper = tok.toUpperCase();
+    const genericOk = /^[A-Z]{2,6}$/.test(upper)
+      && (Object.values(ASSET_ALIASES).includes(upper) || (/^[A-Z]{3,5}$/.test(upper) && !SYMBOL_STOPWORDS.has(upper)));
+    const sym = ASSET_ALIASES[key] || ASSET_ALIASES[tok] || (genericOk ? upper : null);
     if (sym && !out.includes(sym)) out.push(sym);
   }
   return out;
@@ -464,7 +486,13 @@ export function extractHorizon(text) {
   const n = (v) => Number(v);
   let m = s.match(/(\d+|یک|دو|سه|چهار|پنج|شش|هفت|ده|پانزده|بیست|سی|چهل|پنجاه)\s*(سال|ساله|year|years)/);
   if (m) { const v = n(m[1]); return { years: Number.isFinite(v) ? v : { 'یک': 1, 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'شش': 6, 'هفت': 7, 'ده': 10, 'پانزده': 15, 'بیست': 20, 'سی': 30, 'چهل': 40, 'پنجاه': 50 }[m[1]] || null, months: null }; }
-  m = s.match(/(\d+)\s*(ماه|month|months)/);
+  m = s.match(/(\d+|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|یازده|دوازده)\s*ماه(?:ه)?(?![\u0600-\u06FFa-z])/);
+  if (m) {
+    const word = { 'یک': 1, 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'شش': 6, 'هفت': 7, 'هشت': 8, 'نه': 9, 'ده': 10, 'یازده': 11, 'دوازده': 12 }[m[1]];
+    const months = word ?? n(m[1]);
+    if (Number.isFinite(months)) return { years: null, months };
+  }
+  m = s.match(/(\d+)\s*(month|months)\b/);
   if (m) return { years: null, months: n(m[1]) };
   m = s.match(/(\d+)\s*(روز|day|days)/);
   if (m) return { years: null, months: null, days: n(m[1]) };

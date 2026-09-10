@@ -973,5 +973,309 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     };
   }));
 
+  /* ══════════════════════ Phase 212: DEEP INTELLIGENCE ══════════════════════
+   * مغز تصمیم‌گیری. All additive, all read-only (the only writes are the
+   * engines' own persistence rows), every response carrying what was actually
+   * read. Routes:
+   *   GET  /deep/status                  every engine + flag + bus attach state
+   *   GET  /deep/macro-graph             the transmission graph + why-riskier
+   *   GET  /deep/why/:decisionId         the why block of a decision
+   *   GET  /deep/profile                 the personal financial profile
+   *   GET  /deep/wallet-context          the universal wallet context
+   *   GET  /deep/evaluation/due          decisions due for self-review
+   *   POST /deep/evaluation/review       evaluate one decision (actuals in)
+   *   GET  /deep/evaluation/regimes      per-regime prediction error stats
+   *   POST /deep/agent-council           convene the domain agents (BUY/HOLD/SELL)
+   *   POST /deep/goal-scenarios          Conservative/Balanced/Aggressive plan
+   *   POST /deep/goal-scenarios/what-if  the four named what-ifs (real math)
+   *   POST /deep/opportunities/fit       score one/ranked list vs the profile
+   *   POST /deep/conversation/ingest     one message into the state machine
+   *   POST /deep/conversation/advance    a legal transition
+   *   GET  /deep/conversation            the active conversation + next question
+   *   POST /deep/goal-reasoning          text → structured goal constraints
+   *   GET  /deep/agents/runtime          session/kill-switch status
+   *   POST /deep/agents/sessions         open an agent session (scoped, expiring)
+   *   POST /deep/agents/call             check a tool call (scope+rate+kill)
+   *   POST /deep/agents/kill             trip the kill switch
+   *   POST /deep/events/replan           run/see event-driven replanning
+   */
+
+  router.get('/deep/status', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return {
+      ok: true,
+      deepIntelligence: {
+        macroGraph: true,
+        whyEngine: true,
+        personalProfile: true,
+        evaluation: true,
+        agentCouncil: true,
+        goalScenarios: true,
+        opportunityFit: true,
+        conversationState: true,
+        walletContext: true,
+        agentRuntime: true,
+        eventReplanning: true,
+        goalReasoning: true
+      },
+      flags: fiFlags(),
+      durable: fi.collections.durable(),
+      executionAuthorized: false
+    };
+  }));
+
+  router.get('/deep/macro-graph', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.macroGraphFor(owner);
+    if (!out.ok) return reject(409, out.code || 'MACRO_GRAPH_UNAVAILABLE', out.detail || null);
+    const asset = String(req.query.asset || req.query.why || '').toUpperCase();
+    return {
+      ok: true,
+      schema: out.graph.schema,
+      graph: fi.macroGraphDigest ? fi.macroGraphDigest(out.graph) : out.record,
+      coverage: out.graph.coverage,
+      portfolioRiskImpulse: out.graph.portfolioRiskImpulse,
+      whyRiskier: asset ? out.graph.whyRiskier(asset.toLowerCase()) : out.graph.whyPortfolioRiskier(),
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/deep/why/:decisionId', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const stored = await fi.whyEngine.forDecision(owner, req.params.decisionId);
+    if (stored) return { ok: true, why: stored, source: 'stored', durable: fi.collections.durable() };
+    const decision = await fi.decisionEngine.get(owner, req.params.decisionId).catch(() => null);
+    if (!decision?.row && !decision?.id) return reject(404, 'DECISION_NOT_FOUND', `no decision ${req.params.decisionId} for this owner`);
+    const row = decision.row || decision;
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const prefs = await fi.preferences.resolve(owner).catch(() => null);
+    const out = await fi.whyEngine.explain(owner, {
+      decision: row,
+      strategies: [],
+      simulation: null,
+      preferences: prefs
+    }, { persist: true });
+    return out.ok ? { ok: true, why: out.why, source: 'rebuilt', durable: fi.collections.durable() } : reject(409, out.code, out.detail);
+  }));
+
+  router.get('/deep/profile', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.personalProfile.profileFor(owner, { goal: req.query.goal ? { months: Number(req.query.goal) || null } : null });
+    if (!out.ok) return reject(409, out.code || 'PROFILE_UNAVAILABLE', out.flag || null);
+    return { ok: true, profile: out.profile, durable: fi.collections.durable() };
+  }));
+
+  router.get('/deep/wallet-context', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const context = await fi.walletContext.contextFor(owner);
+    return {
+      ok: context.status !== 'UNAVAILABLE',
+      ...(context.status === 'UNAVAILABLE' ? { code: 'NO_WALLET_SECTION_READ', detail: context.reason } : {}),
+      walletContext: context,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/deep/evaluation/due', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.evaluation.reviewDue(owner, { limit: Math.min(50, Math.max(1, Number(req.query.limit) || 20)) });
+    return { ok: true, due: out.due || [], count: out.count || 0, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/evaluation/review', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (!body.decisionId) return reject(400, 'DECISION_ID_REQUIRED', 'the decision to review is required');
+    const got = await fi.decisionEngine.get(owner, body.decisionId).catch(() => null);
+    const decision = got?.row || got;
+    if (!decision?.id) return reject(404, 'DECISION_NOT_FOUND', `no decision ${body.decisionId} for this owner`);
+    const out = await fi.evaluation.evaluate(owner, {
+      decision,
+      actual: {
+        returnPct: num(body.returnPct),
+        drawdownPct: num(body.drawdownPct),
+        slippagePct: num(body.slippagePct),
+        pnlUsd: num(body.pnlUsd),
+        amountUsd: num(body.amountUsd),
+        executionId: body.executionId || null,
+        verified: body.verified === true
+      }
+    });
+    return out.ok ? { ok: true, evaluation: out.row, durable: fi.collections.durable() } : reject(409, out.code, out.detail || 'OUTCOME_UNREADABLE');
+  }));
+
+  router.get('/deep/evaluation/regimes', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const regimes = await fi.evaluation.regimes(owner);
+    return { ok: true, regimes, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/agent-council', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const globalIntel = await fi.globalIntelFor(owner).catch(() => null);
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const world = await fi.worldModelFor(owner).catch(() => null);
+    const crossAsset = await fi.crossAssetFor(owner, {}).catch(() => null);
+    const profile = await fi.personalProfile.profileFor(owner, {}).catch(() => null);
+    const macro = await fi.macroGraphFor(owner).catch(() => null);
+    const domains = globalIntel?.domains || {};
+    const marketValue = world?.domains?.market?.value ?? null;
+    const out = await fi.agentCouncil.convene(owner, {
+      asset: String(body.asset || 'BTC').toUpperCase(),
+      market: marketValue?.value ?? marketValue,
+      risk: fi.riskFor(owner, world),
+      financial,
+      profile: profile?.ok ? profile.profile : null,
+      goal: body.goal || null,
+      smartMoney: domains.smart_money?.status === 'OK' ? domains.smart_money : null,
+      crossAsset,
+      news: domains.news?.status === 'OK' ? domains.news.data : null,
+      onchain: domains.onchain?.status === 'OK' ? domains.onchain.data : null,
+      macroGraph: macro?.ok ? macro.graph : null,
+      whales: domains.whales?.status === 'OK' ? domains.whales : null,
+      costs: body.costs || null,
+      securitySignals: fi.riskFor(owner, world)?.securitySignals || null,
+      defi: body.defi || null
+    });
+    return out.ok ? { ok: true, council: out.council, durable: fi.collections.durable() } : reject(409, out.code, out.flag || null);
+  }));
+
+  router.post('/deep/goal-scenarios', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const out = await fi.goalScenarios.scenariosFor(owner, {
+      goal: body.goal || { targetUsd: num(body.targetUsd), months: num(body.months), maxDrawdownPct: num(body.maxDrawdownPct), monthlyContributionUsd: num(body.monthlyContributionUsd) },
+      financial,
+      liveYieldPct: num(body.liveYieldPct)
+    });
+    return out.ok ? { ok: true, scenarios: out, durable: fi.collections.durable() } : reject(409, out.code, out.detail);
+  }));
+
+  router.post('/deep/goal-scenarios/what-if', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const out = await fi.goalScenarios.whatIfsFor(owner, { sections: fi.flatSectionsFor(owner), financial });
+    return out.ok ? { ok: true, whatIfs: out.whatIfs, estimate: true, durable: fi.collections.durable() } : reject(409, out.code, out.reason);
+  }));
+
+  router.post('/deep/opportunities/fit', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const profile = await fi.personalProfile.profileFor(owner, { goal: body.goal || null });
+    if (!profile.ok) return reject(409, profile.code || 'PROFILE_UNAVAILABLE', profile.flag || null);
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    if (Array.isArray(body.opportunities)) {
+      const out = await fi.opportunityFit.rankFor(owner, { opportunities: body.opportunities, profile: profile.profile, financial, goal: body.goal || null });
+      return { ok: true, ranked: out.ranked, count: out.count, durable: fi.collections.durable() };
+    }
+    if (!body.opportunity || typeof body.opportunity !== 'object') {
+      return reject(400, 'OPPORTUNITY_REQUIRED', 'one opportunity (or opportunities[]) is required');
+    }
+    const out = await fi.opportunityFit.score(owner, { opportunity: body.opportunity, profile: profile.profile, financial, goal: body.goal || null });
+    return out.ok ? { ok: true, fit: out.fit, durable: fi.collections.durable() } : reject(409, out.code, out.detail);
+  }));
+
+  router.post('/deep/conversation/ingest', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const message = String(body.message || '').slice(0, MAX_TEXT);
+    if (!message.trim()) return reject(400, 'MESSAGE_REQUIRED');
+    const goalReasoning = fi.goalReasoning.reason(message);
+    const out = await fi.conversationState.ingest(owner, {
+      message,
+      locale: body.locale || 'fa',
+      goalReasoning,
+      patch: body.patch || {}
+    });
+    return out.ok
+      ? { ok: true, conversation: out.conversation, suggestion: out.suggestion, question: out.question, goalReasoning, durable: fi.collections.durable() }
+      : reject(409, out.code, out.flag || null);
+  }));
+
+  router.post('/deep/conversation/advance', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (!body.to) return reject(400, 'TARGET_STATE_REQUIRED', 'to is required');
+    const out = await fi.conversationState.advance(owner, { to: body.to, note: body.note || null, patch: body.patch || {} });
+    return out.ok ? { ok: true, conversation: out.conversation, durable: fi.collections.durable() } : reject(422, out.code, out.detail || null, { allowed: out.allowed || null, from: out.from || null });
+  }));
+
+  router.get('/deep/conversation', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const out = await fi.conversationState.active(owner, { locale: 'fa' });
+    if (!out.ok) return reject(409, out.code, null);
+    const { suggestNextState, nextAdaptiveQuestion } = await import('./conversationState.js');
+    return {
+      ok: true,
+      conversation: out.conversation,
+      suggestion: suggestNextState(out.conversation, out.conversation.context || {}),
+      question: nextAdaptiveQuestion(out.conversation.state, out.conversation.context || {}),
+      states: (await import('./conversationState.js')).CONVERSATION_STATES,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.post('/deep/goal-reasoning', route(async (req, res, owner) => {
+    const body = req.body || {};
+    const text = String(body.text || body.message || '').slice(0, MAX_TEXT);
+    if (!text.trim()) return reject(400, 'TEXT_REQUIRED');
+    const prefs = await fi.preferences.resolve(owner).catch(() => null);
+    const reasoning = fi.goalReasoning.reason(text, { preferences: prefs });
+    return {
+      ok: true,
+      reasoning,
+      requiredAnnualizedPct: fi.goalReasoning.requiredAnnualizedPct({ targetReturnPct: reasoning.targetReturnPct, horizonMonths: reasoning.horizonMonths }),
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/deep/agents/runtime', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    return { ok: true, runtime: fi.agentRuntime.status(owner), agents: (await fi.agents.list(owner).catch(() => ({ agents: [] }))).agents || [], durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/agents/sessions', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (!body.agentId) return reject(400, 'AGENT_ID_REQUIRED');
+    const out = await fi.agentRuntime.openSession(owner, {
+      agentId: body.agentId,
+      scopes: Array.isArray(body.scopes) ? body.scopes : null,
+      ttlMs: num(body.ttlMs),
+      by: 'user'
+    });
+    return out.ok ? { ok: true, session: out.session, key: out.key, denied: out.denied || null, expiresAt: out.expiresAt } : reject(409, out.code, out.detail || null);
+  }));
+
+  router.post('/deep/agents/call', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (!body.key || !body.scope) return reject(400, 'KEY_AND_SCOPE_REQUIRED');
+    const out = await fi.agentRuntime.checkToolCall(owner, { key: body.key, scope: body.scope, agentId: body.agentId || null });
+    return out.ok ? { ok: true, call: out.session } : reject(403, out.code, out.detail || null, { granted: out.granted || null, allowed: out.allowed || null });
+  }));
+
+  router.post('/deep/agents/kill', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const out = body.clear === true
+      ? await fi.agentRuntime.clearKillSwitch(owner, { agentId: body.agentId || null })
+      : await fi.agentRuntime.tripKillSwitch(owner, { agentId: body.agentId || null, reason: body.reason || 'user' });
+    return { ok: true, killSwitch: out, runtime: fi.agentRuntime.status(owner) };
+  }));
+
+  router.post('/deep/events/replan', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (body.trigger) {
+      const out = await fi.eventReplanning.replan(owner, { trigger: String(body.trigger).toUpperCase(), payload: body.payload || {} });
+      return out.ok ? { ok: true, replan: out.replan || null, skipped: out.skipped === true || null, durable: fi.collections.durable() } : reject(409, out.code, out.flag || null);
+    }
+    const recent = fi.eventReplanning.recent(owner, { limit: Math.min(50, Math.max(1, Number(body.limit) || 20)) });
+    return { ok: true, attempts: recent.attempts, triggers: fi.eventReplanning.TRIGGERS, durable: fi.collections.durable() };
+  }));
+
   return router;
 }

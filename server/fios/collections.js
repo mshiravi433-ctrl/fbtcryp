@@ -31,7 +31,11 @@ export const COLLECTIONS = Object.freeze([
   'simulations', 'decisions', 'policies', 'decision_traces', 'learning_outcomes',
   'agent_trust', 'guardian_events',
   /* Phase 211 — Global AI Intelligence (additive). */
-  'global_intelligence', 'briefings'
+  'global_intelligence', 'briefings',
+  /* Phase 212 — Deep Intelligence (additive). */
+  'macro_graphs', 'why_records', 'personal_profiles', 'evaluations',
+  'agent_councils', 'goal_scenarios', 'opportunity_fits', 'conversations',
+  'wallet_context', 'agent_runtime_audit', 'replan_attempts'
 ]);
 
 /** Per-collection row caps. Small on purpose: these are decision records,
@@ -42,7 +46,11 @@ const CAPS = Object.freeze({
   strategy_comparisons: 60, simulations: 80, decisions: 80, policies: 40,
   decision_traces: 80, learning_outcomes: 120, agent_trust: 60, guardian_events: 200,
   /* Phase 211 — one 'latest' snapshot + short history per owner. */
-  global_intelligence: 12, briefings: 24
+  global_intelligence: 12, briefings: 24,
+  /* Phase 212 — 'latest' pins + short histories. */
+  macro_graphs: 24, why_records: 80, personal_profiles: 1, evaluations: 120,
+  agent_councils: 60, goal_scenarios: 24, opportunity_fits: 120, conversations: 40,
+  wallet_context: 12, agent_runtime_audit: 300, replan_attempts: 120
 });
 
 const isCollection = (name) => COLLECTIONS.includes(String(name));

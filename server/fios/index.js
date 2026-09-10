@@ -53,6 +53,24 @@ import { analyzeCrossAsset, crossAssetDigest } from './crossAsset.js';
 import { crossCommentary } from './crossNarrative.js';
 import { createBriefingEngine } from './briefing.js';
 import { createMigrations, CURRENT_MIGRATION_VERSION } from './migrations.js';
+/* Phase 212 — DEEP INTELLIGENCE (مغز تصمیم‌گیری): the macro graph, the why
+ * engine, the personal profile, the evaluation loop, the domain agent
+ * council, the goal scenarios, the opportunity fit, the conversation state
+ * machine, the universal wallet context, the agent runtime and the
+ * event-driven replanning layer. Every engine ships ON (flags.js defaults). */
+import { createMacroGraphEngine, macroGraphDigest } from './macroGraph.js';
+import { createWhyEngine } from './whyEngine.js';
+import { createPersonalProfileEngine } from './personalProfile.js';
+import { createEvaluationEngine } from './evaluation.js';
+import { createAgentCouncilEngine } from './agentCouncil.js';
+import { createGoalScenariosEngine } from './goalScenarios.js';
+import { createOpportunityFitEngine } from './opportunityFit.js';
+import { createConversationStateEngine } from './conversationState.js';
+import { createWalletContextEngine } from './walletContext.js';
+import { createAgentRuntime } from './agentRuntimeOps.js';
+import { createEventReplanningEngine } from './eventReplanning.js';
+import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
+import { fiFlags } from './flags.js';
 import { createFiRouter } from './router.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
@@ -222,6 +240,26 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   /* ── migrations (batch 7) ────────────────────────────────────────────── */
   const migrations = createMigrations({ collections, log });
 
+  /* ── Phase 212 — DEEP INTELLIGENCE ─────────────────────────────────────
+   * Every engine below reads the SAME substrate (collections, the same
+   * financial state the chat quotes, the same global snapshot the panel
+   * shows) and holds no wallet, no signer and no second feed. All are ON by
+   * default (flags.js); each can still be flipped off per deployment. */
+  const macroGraph = createMacroGraphEngine({ collections, observability, log });
+  const whyEngine = createWhyEngine({ collections, observability, log });
+  const evaluation = createEvaluationEngine({ collections, learning, observability, log });
+  const agentCouncil = createAgentCouncilEngine({ collections, observability, log });
+  const goalScenarios = createGoalScenariosEngine({ collections, observability, log });
+  const opportunityFit = createOpportunityFitEngine({ collections, observability, log });
+  const conversationState = createConversationStateEngine({ collections, observability, log });
+  const agentRuntime = createAgentRuntime({ collections, registry: agents, observability, log });
+
+  /* The personal profile needs the readers defined further down
+     (financialStateFor), so it is constructed after them — see below. */
+  let personalProfile = null;
+  let walletContext = null;
+  let eventReplanning = null;
+
   /* ── shared readers: the sections provider is the brain's state ──────── */
   /** The raw sections the brain already read for this owner. */
   const sectionsFor = (owner) => (stateStore?.peek?.(owner)?.sections ?? stateStore?.peek?.(owner) ?? {});
@@ -243,6 +281,41 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     }
     return financial;
   }
+
+  /* ── Phase 212 — the deep-intelligence readers, on the SAME sections ─── */
+
+  /** The macro graph for one owner: global snapshot + world model + state. */
+  async function macroGraphFor(owner, { refresh = false } = {}) {
+    const [globalSnapshot, world, financial] = await Promise.all([
+      globalIntelFor(owner, { refresh }).catch(() => null),
+      worldModelFor(owner, { global: true }).catch(() => null),
+      financialStateFor(owner).catch(() => null)
+    ]);
+    return macroGraph.graphFor(owner, {
+      globalIntel: globalSnapshot,
+      world,
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null
+    });
+  }
+
+  /* Engines that need the readers above: profile, wallet context, replanning. */
+  personalProfile = createPersonalProfileEngine({
+    collections, preferences, behavior, genome, memory, decisionEngine,
+    learning, evaluation, financialStateFor, observability, log
+  });
+  walletContext = createWalletContextEngine({ collections, sectionsFor, observability, log });
+  eventReplanning = createEventReplanningEngine({
+    bus: events, collections, observability,
+    macroGraphFor: (owner) => macroGraphFor(owner).catch(() => null),
+    financialStateFor,
+    riskFor: (owner) => riskFor(owner),
+    agentCouncilConvene: (owner, context) => agentCouncil.convene(owner, context).catch(() => ({ ok: false })),
+    guardianCheck: (owner) => guardian.check(owner).catch(() => null),
+    log
+  });
+  /* Attach the AI to the central event bus the moment the FI is built —
+   * the bus becomes the spine, exactly as the owner drew it. */
+  eventReplanning.subscribe();
 
   /** Flat section DATA (not the envelopes) — the shape the scenario engine
    *  and the risk engine read (portfolio.holdings, lending.positions, …). */
@@ -490,12 +563,22 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
         guardian: guardianStatus ? { lastCheckAt: guardianStatus.lastCheckAt, recentAlerts: guardianStatus.recentAlerts?.length || 0, anyEmergency: guardianStatus.policies?.anyEmergency ?? null } : null,
         learning: cal ? { samples: cal.samples, directionHitRate: cal.directionHitRate } : null,
         autonomy: autonomy.capabilities(),
-        /* Phase 11 live path: route simulator + smart-money intel are wired. */
-        strategy: {
-          routeSimulator: true,
-          smartMoneyIntel: true,
-          priceSeries: true,
-          livePath: 'generate → simulate → risk-adjusted compete → decide',
+        /* Phase 212 — the deep-intelligence engines, each reporting its flag
+           and its own last-real-result surface (never a promise). */
+        deepIntelligence: {
+          macroGraph: Boolean(macroGraph),
+          whyEngine: Boolean(whyEngine),
+          personalProfile: Boolean(personalProfile),
+          evaluation: Boolean(evaluation),
+          agentCouncil: Boolean(agentCouncil),
+          goalScenarios: Boolean(goalScenarios),
+          opportunityFit: Boolean(opportunityFit),
+          conversationState: Boolean(conversationState),
+          walletContext: Boolean(walletContext),
+          agentRuntime: Boolean(agentRuntime),
+          eventReplanning: Boolean(eventReplanning),
+          eventBusAttached: Boolean(eventReplanning && eventReplanning.subscribe),
+          flags: fiFlags(),
           executionPermission: false
         },
         global: lastGlobal ? {
@@ -558,7 +641,22 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     riskFor,
     health,
     sectionsFor,
-    flatSectionsFor
+    flatSectionsFor,
+    /* Phase 212 — Deep Intelligence. */
+    macroGraph,
+    macroGraphFor,
+    macroGraphDigest,
+    whyEngine,
+    personalProfile,
+    evaluation,
+    agentCouncil,
+    goalScenarios,
+    opportunityFit,
+    conversationState,
+    walletContext,
+    agentRuntime,
+    eventReplanning,
+    goalReasoning: { reason: reasonAboutGoal, requiredAnnualizedPct }
   };
 
   const router = createFiRouter({ fi, ownerFor, stateStore, brain, events, log });

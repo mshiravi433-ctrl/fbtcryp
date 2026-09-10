@@ -221,7 +221,12 @@ check('hydration refuses a kind the probe cannot earn', !(hydrated.kinds || []).
 const storedKinds = getStoredEvidence().map((e) => e.kind);
 check('a fresh instance now reports the measured certificate', storedKinds.includes('certificate-authority'));
 check('a fresh instance now reports the measured venue', storedKinds.includes('venue-health'));
-check('an expired record never reaches the evidence store', !storedKinds.includes('durable-immutable-audit'));
+/* The self-probe section above legitimately earned a FRESH durable-immutable-audit
+   record (future expiry). What must never happen is the EXPIRED injected record
+   surfacing: assert the store's audit entry is not the expired digest. */
+const storedAudit = getStoredEvidence().find((e) => e.kind === 'durable-immutable-audit');
+check('an expired record never reaches the evidence store',
+  !storedAudit || (storedAudit.digest !== 'c3'.repeat(32) && storedAudit.expiresAt > Date.now()));
 
 await storeSet(SELF_PROBE_STORE_KEY, JSON.stringify([]));
 

@@ -251,6 +251,38 @@ const FINANCIAL_INTELLIGENCE_PHASES = Object.freeze([
       'test/intent-ai/phase210-financial-brain-probe.mjs'
     ],
     requiredEvidence: []
+  },
+  /* Phase 212 — Deep Intelligence (مغز تصمیم‌گیری): the macro transmission
+     graph, the why engine, the personal financial profile, the evaluation
+     loop, the domain agent council, goal scenarios, opportunity fit, the
+     conversation state machine, the universal wallet context, the agent
+     runtime and event-driven replanning — plus the AI-quality intent corpus.
+     Every engine is ON by default (fios/flags.js Phase 212 policy). */
+  {
+    phase: 212,
+    id: 'deep-intelligence-brain',
+    title: 'Macro Graph و Why Engine و Agent Council و Personal Profile و Evaluation Loop و Event Replanning',
+    implementation: 'implemented',
+    source: [
+      'server/fios/macroGraph.js',
+      'server/fios/whyEngine.js',
+      'server/fios/personalProfile.js',
+      'server/fios/evaluation.js',
+      'server/fios/agentCouncil.js',
+      'server/fios/goalScenarios.js',
+      'server/fios/opportunityFit.js',
+      'server/fios/conversationState.js',
+      'server/fios/walletContext.js',
+      'server/fios/agentRuntimeOps.js',
+      'server/fios/eventReplanning.js',
+      'server/fios/goalReasoning.js',
+      'server/fios/flags.js'
+    ],
+    tests: [
+      'test/intent-ai/phase212-deep-intelligence-probe.mjs',
+      'test/intent-ai/quality-corpus-probe.mjs'
+    ],
+    requiredEvidence: []
   }
 ]);
 
@@ -372,7 +404,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     operational: live,
     live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
-    specificationImplementedThrough: 210,
+    specificationImplementedThrough: 212,
     /* The release gate is aggregate; the live rows are published per phase. The
        number here is the highest live row, not a claim that every row below it
        is live — `operationalPhaseCount` is the exact count. */
