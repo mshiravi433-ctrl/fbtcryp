@@ -44,10 +44,11 @@ import {
 } from '../lib/signalEngine';
 import {
   readWatchlist, toggleWatch, createAlert, readAlerts, deleteAlert, saveAlerts,
-  evaluateSignalAlerts, recordSignal, settleHistory, readHistory
+  evaluateSignalAlerts, recordSignal, settleHistory, readHistory, ALERT_KINDS
 } from '../lib/signalStore';
 import { showLocalNotification } from '../lib/notify';
 import ModernSelect from '../components/ModernSelect';
+import SectionGuard from '../components/SectionGuard';
 import '../styles/docs-modern.css';
 import '../styles/wallet-modern.css';
 import '../styles/signals-intel.css';
@@ -57,6 +58,15 @@ const HORIZONS = [
   { days: 7, key: '7D' },
   { days: 30, key: '30D' }
 ];
+
+/* Chart rows are `{ t, p }` from every source today, but poll hooks store
+   whatever resolves — a string body or `[ts, price]` tuples would both
+   poison every consumer downstream. Coerce per row and keep only finite
+   positive prices, so anything below only ever sees clean numbers. */
+const toSeries = (rows) =>
+  (Array.isArray(rows) ? rows : [])
+    .map((p) => (typeof p === 'number' ? p : Array.isArray(p) ? Number(p[1]) : Number(p?.p)))
+    .filter((n) => Number.isFinite(n) && n > 0);
 
 /* ────────────────────────────────────────────────────────────────────────────
  * COLLAPSIBLE SIGNAL SECTION (kept from the existing page — presentation only)
@@ -227,12 +237,21 @@ function PulseCard({ pulse, brief }) {
   const [open, setOpen] = useState(false);
   if (!pulse) return null;
   const s = pulse.sentiment ?? {};
+  /* Server payloads travel through proxies; coerce before calling string
+     methods or building i18n keys — one numeric `risk.label` used to be a
+     whole-page TypeError. */
   const tone = s.label === 'bullish' ? 'bullish' : s.label === 'bearish' ? 'bearish' : 'neutral';
   const live = pulse.source === 'live' || pulse.source === 'market-only' || pulse.source === 'local';
   const liveTone = live ? 'bullet up' : '';
   const breadth = pulse.breadth;
   const avg = breadth?.avgChange;
   const turn = pulse.liquidity?.turnoverPct;
+  const riskKey = String(pulse.risk?.label || 'medium').toLowerCase();
+  const momKey = ['flat', 'moderate', 'strong'].includes(pulse.momentum?.label) ? pulse.momentum.label : 'flat';
+  const volKey = ['low', 'moderate', 'high'].includes(pulse.volatility?.label) ? pulse.volatility.label : 'moderate';
+  const liqKey = ['strong', 'adequate', 'thin'].includes(pulse.liquidity?.label) ? pulse.liquidity.label : 'adequate';
+  const momDir = pulse.momentum?.direction === 'up' ? 'up' : pulse.momentum?.direction === 'down' ? 'down' : null;
+  const briefBias = typeof brief?.bias === 'string' ? brief.bias : 'neutral';
   return (
     <motion.section className={`sic-pulse ${open ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
       <button
@@ -268,11 +287,11 @@ function PulseCard({ pulse, brief }) {
             <div className="sic-pulse-content">
               <div className="sic-pulse-grid">
                 <MetricTile k={t('signals.intel.sentiment')} v={`${s.score ?? '—'}/100`} />
-                <MetricTile k={t('signals.intel.riskLevel')} v={t(`signals.intel.riskLabel.${(pulse.risk?.label || 'medium').toLowerCase()}`)} tone={pulse.risk?.label === 'HIGH' ? 'down' : pulse.risk?.label === 'LOW' ? 'up' : 'warn'} />
+                <MetricTile k={t('signals.intel.riskLevel')} v={t(`signals.intel.riskLabel.${riskKey}`)} tone={riskKey === 'high' ? 'down' : riskKey === 'low' ? 'up' : 'warn'} />
                 <MetricTile k={t('signals.intel.aiConfidence')} v={`${pulse.aiConfidence ?? '—'}%`} tone={pulse.aiConfidence >= 70 ? 'up' : ''} />
-                <MetricTile k={t('signals.intel.pulseMomentum')} v={`${t(`signals.intel.momentumLabel.${(pulse.momentum?.label || 'flat')}`)}${pulse.momentum?.direction === 'up' ? ' ↑' : pulse.momentum?.direction === 'down' ? ' ↓' : ''}`} tone={pulse.momentum?.direction === 'up' ? 'up' : pulse.momentum?.direction === 'down' ? 'down' : ''} />
-                <MetricTile k={t('signals.intel.volatility')} v={t(`signals.intel.volLabel.${(pulse.volatility?.label || 'moderate')}`)} tone={pulse.volatility?.label === 'high' ? 'down' : pulse.volatility?.label === 'low' ? 'up' : 'warn'} />
-                <MetricTile k={t('signals.intel.liquidity')} v={t(`signals.intel.liquidityLabel.${(pulse.liquidity?.label || 'adequate')}`)} tone={pulse.liquidity?.label === 'strong' ? 'up' : pulse.liquidity?.label === 'thin' ? 'down' : ''} />
+                <MetricTile k={t('signals.intel.pulseMomentum')} v={`${t(`signals.intel.momentumLabel.${momKey}`)}${momDir === 'up' ? ' ↑' : momDir === 'down' ? ' ↓' : ''}`} tone={momDir === 'up' ? 'up' : momDir === 'down' ? 'down' : ''} />
+                <MetricTile k={t('signals.intel.volatility')} v={t(`signals.intel.volLabel.${volKey}`)} tone={volKey === 'high' ? 'down' : volKey === 'low' ? 'up' : 'warn'} />
+                <MetricTile k={t('signals.intel.liquidity')} v={t(`signals.intel.liquidityLabel.${liqKey}`)} tone={liqKey === 'strong' ? 'up' : liqKey === 'thin' ? 'down' : ''} />
                 <MetricTile
                   k={t('signals.intel.breadth')}
                   v={breadth?.total ? `${breadth.up ?? 0}/${breadth.total}` : '—'}
@@ -293,17 +312,19 @@ function PulseCard({ pulse, brief }) {
                 <div className="sic-daily-brief">
                   <div className="sic-daily-brief-head">
                     <span>{t('signals.dailyBrief')}</span>
-                    <span className={`sic-bias ${brief.bias || 'neutral'}`}>{t(`signals.bias.${brief.bias || 'neutral'}`)}</span>
+                    <span className={`sic-bias ${briefBias}`}>{t(`signals.bias.${briefBias}`)}</span>
                   </div>
-                  <strong>{brief.headline}</strong>
-                  <p>{brief.summary}</p>
+                  {/* A model response with a non-string headline would render
+                      as a raw object child — a React crash; coerce to text. */}
+                  <strong>{typeof brief.headline === 'string' ? brief.headline : ''}</strong>
+                  <p>{typeof brief.summary === 'string' ? brief.summary : ''}</p>
                 </div>
               )}
 
               <div className="sic-pulse-meta">
                 <span>
-                  {t(`signals.intel.source.${pulse.source || 'unavailable'}`)}
-                  {pulse.smartMoney?.dataStatus ? ` · ${t(`signals.intel.smartMoney.${pulse.smartMoney.dataStatus}`)}` : ''}
+                  {t(`signals.intel.source.${['live', 'market-only', 'local', 'offline'].includes(pulse.source) ? pulse.source : 'unavailable'}`)}
+                  {pulse.smartMoney?.dataStatus ? ` · ${t(`signals.intel.smartMoney.${pulse.smartMoney.dataStatus === 'live' ? 'live' : 'unavailable'}`)}` : ''}
                 </span>
                 <span className={liveTone}>{t('signals.intel.lastUpdate')}: {timeAgo(pulse.lastUpdate || pulse.at)}</span>
               </div>
@@ -323,7 +344,9 @@ function HorizonStrip({ horizons }) {
       <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.7, marginBottom: 8 }}>{t('signals.intel.horizonTitle')}</div>
       <div className="sic-horizons">
         {horizons.map((h) => {
-          const rl = (h.riskLabel || 'medium').toLowerCase();
+          const rl = ['low', 'medium', 'high'].includes(String(h.riskLabel || '').toLowerCase())
+            ? String(h.riskLabel).toLowerCase()
+            : 'medium';
           return (
             <div key={h.key} className="sic-horizon">
               <div className="h">
@@ -442,7 +465,12 @@ function AlertSheet({ symbol, onClose }) {
   const [value, setValue] = useState('');
   const [alerts, setAlerts] = useState([]);
   useEffect(() => {
-    if (symbol) setAlerts(readAlerts().filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && a.active));
+    if (!symbol) return;
+    /* Rows come from localStorage, so their shape is whatever an older build
+       (or a quota-truncated write) left behind — `a.symbol` can be missing
+       entirely, and `.toUpperCase()` on it used to take the page down. */
+    const wanted = String(symbol).toUpperCase();
+    setAlerts(readAlerts().filter((a) => String(a?.symbol || '').toUpperCase() === wanted && a?.active));
   }, [symbol]);
   if (!symbol) return null;
   const kinds = [
@@ -492,21 +520,26 @@ function AlertSheet({ symbol, onClose }) {
             <div style={{ marginTop: 4 }}>
               <div className="field-label">{t('signals.intel.alert.active')}</div>
               <div className="stack" style={{ gap: 6, marginTop: 6 }}>
-                {alerts.map((a) => (
-                  <div key={a.id} className="row-between" style={{ padding: '7px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 700 }}>
-                      {t(`signals.intel.alert.cond.${a.kind}`, { v: a.value, op: t(a.condition === 'above' ? 'signals.intel.alert.above' : 'signals.intel.alert.below') })}
-                      {' '}· {a.firedCount > 0 ? `${t('signals.intel.alert.fired')} ${a.firedCount}×` : ''}
-                    </span>
-                    <button
-                      type="button"
-                      className="sic-btn"
-                      style={{ minWidth: 34, padding: '2px 8px', fontSize: 11 }}
-                      onClick={() => setAlerts(deleteAlert(a.id).filter((x) => x.symbol.toUpperCase() === symbol.toUpperCase() && x.active))}
-                      aria-label={`remove ${a.kind} alert`}
-                    >✕</button>
-                  </div>
-                ))}
+                {alerts.map((a) => {
+                  /* A kind an older build no longer knows must not become a
+                     raw i18n key on screen; fall back to the price row. */
+                  const kind = ALERT_KINDS.includes(a.kind) ? a.kind : 'price';
+                  return (
+                    <div key={a.id} className="row-between" style={{ padding: '7px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+                        {t(`signals.intel.alert.cond.${kind}`, { v: a.value, op: t(a.condition === 'above' ? 'signals.intel.alert.above' : 'signals.intel.alert.below') })}
+                        {' '}· {a.firedCount > 0 ? `${t('signals.intel.alert.fired')} ${a.firedCount}×` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="sic-btn"
+                        style={{ minWidth: 34, padding: '2px 8px', fontSize: 11 }}
+                        onClick={() => setAlerts(deleteAlert(a.id).filter((x) => String(x?.symbol || '').toUpperCase() === String(symbol).toUpperCase() && x?.active))}
+                        aria-label={`remove ${kind} alert`}
+                      >✕</button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -539,7 +572,7 @@ function EarlySection({ early, embedded = false }) {
               <CoinLogo coin={e.coin} />
               <div className="main">
                 <div className="s">{e.symbol}</div>
-                <div className="d">{e.flags.map((f) => t(`signals.intel.early.${f}`)).join(' · ')}</div>
+                <div className="d">{(e.flags ?? []).map((f) => t(`signals.intel.early.${f}`)).join(' · ')}</div>
               </div>
               <div className="num">
                 <div style={{ color: e.direction === 'earlyBullish' ? 'var(--up)' : e.direction === 'earlyBearish' ? 'var(--down)' : '#ffb300', fontWeight: 900 }}>
@@ -644,7 +677,12 @@ function MomentumSection({ cards, embedded = false }) {
 
 function HistorySection({ history, embedded = false }) {
   const { t } = useTranslation();
-  const rows = [...history].reverse().slice(0, 8);
+  /* The ledger lives in localStorage — only render rows that still look like
+     rows; anything an older build wrote differently is skipped, not fatal. */
+  const rows = [...(Array.isArray(history) ? history : [])]
+    .filter((h) => h && typeof h === 'object' && h.symbol && Number.isFinite(Number(h.ts)))
+    .reverse()
+    .slice(0, 8);
   return (
     <section className={embedded ? 'sic-embedded-section' : ''}>
       {!embedded && (
@@ -775,7 +813,7 @@ function TokenPicker({ coin, options, value, onChange, coins }) {
 function SelectedSignalCard({ coin, signal, analysis, scanning, watched, whyLoading, onWhy, onWatch, onAlert }) {
   const { t } = useTranslation();
   const ready = signal?.status === 'READY';
-  const risk = (signal?.risk || 'MEDIUM').toLowerCase();
+  const risk = String(signal?.risk || 'medium').toLowerCase();
 
   if (!coin) return <div className="sic-insufficient sic-token-empty">{t('signals.intel.card.insufficientBody')}</div>;
 
@@ -975,11 +1013,27 @@ function SignalBreakdown({
 
 function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
   const { t } = useTranslation();
+  /*
+   * The outlook arrives from a MODEL through a proxy — `getOutlook` spreads
+   * the server JSON straight into state. Headline/summary rendered as React
+   * children must be strings (an object child is an instant crash), and
+   * drivers/risks must be arrays before `.map` exists. None of this is
+   * paranoia about one provider: models change shape between versions, and
+   * the failure lands on the whole page.
+   */
+  const headline = typeof outlook?.headline === 'string' ? outlook.headline : '';
+  const summary = typeof outlook?.summary === 'string' ? outlook.summary : '';
+  const drivers = Array.isArray(outlook?.drivers) ? outlook.drivers.filter((d) => typeof d === 'string' && d.trim()) : [];
+  const risks = Array.isArray(outlook?.risks) ? outlook.risks.filter((r) => typeof r === 'string' && r.trim()) : [];
+  const bias = ['bullish', 'bearish', 'neutral'].includes(outlook?.bias) ? outlook.bias : 'neutral';
+  const range = outlook?.range && Number.isFinite(Number(outlook.range.low)) && Number.isFinite(Number(outlook.range.high))
+    ? outlook.range
+    : null;
   return (
     <div className="sic-ai-panel">
       <div className="sic-ai-panel-head">
         <span>{outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}</span>
-        {outlook && <span className={`sic-bias ${outlook.bias || 'neutral'}`}>{t(`signals.bias.${outlook.bias || 'neutral'}`)} · {outlook.confidence}%</span>}
+        {outlook && <span className={`sic-bias ${bias}`}>{t(`signals.bias.${bias}`)} · {Number(outlook.confidence) || 0}%</span>}
       </div>
       <div className="segmented sic-horizon-tabs">
         {HORIZONS.filter((item) => item.days !== 1).map((item) => (
@@ -1001,29 +1055,29 @@ function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
 
       {outlook && !aiLoading && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <h3 className="sic-ai-headline">{outlook.headline}</h3>
-          <p className="sic-ai-summary">{outlook.summary}</p>
-          {outlook.range?.low != null && (
+          <h3 className="sic-ai-headline">{headline}</h3>
+          <p className="sic-ai-summary">{summary}</p>
+          {range && (
             <InfoBox title={t('signals.projectionTitle')} tone="info" id="sig-proj-box">
               <div className="sic-projection-row">
-                <span>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
-                <b className="mono">${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}</b>
+                <span>{t('signals.aiRange', { d: range.horizonDays })}</span>
+                <b className="mono">${fmtPrice(range.low)} – ${fmtPrice(range.high)}</b>
               </div>
             </InfoBox>
           )}
-          {outlook.drivers?.length > 0 && (
+          {drivers.length > 0 && (
             <div className="sic-ai-list">
               <div className="field-label">{t('signals.drivers')}</div>
-              {outlook.drivers.map((driver, index) => <p key={index} className="support"><i aria-hidden="true">↑</i><span>{driver}</span></p>)}
+              {drivers.map((driver, index) => <p key={index} className="support"><i aria-hidden="true">↑</i><span>{driver}</span></p>)}
             </div>
           )}
-          {outlook.risks?.length > 0 && (
+          {risks.length > 0 && (
             <div className="sic-ai-list">
               <div className="field-label">{t('signals.risks')}</div>
-              {outlook.risks.map((riskItem, index) => <p key={index} className="risk"><i aria-hidden="true">↓</i><span>{riskItem}</span></p>)}
+              {risks.map((riskItem, index) => <p key={index} className="risk"><i aria-hidden="true">↓</i><span>{riskItem}</span></p>)}
             </div>
           )}
-          {outlook.invalidation && <p className="notice sic-ai-invalidation"><strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}</p>}
+          {typeof outlook.invalidation === 'string' && outlook.invalidation && <p className="notice sic-ai-invalidation"><strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}</p>}
           <div className="faint sic-ai-meta">{outlook.source === 'local' ? t('signals.aiMetaLocal') : t('signals.aiMeta', { model: outlook.model })}</div>
         </motion.div>
       )}
@@ -1183,8 +1237,11 @@ export default function Signals() {
     return (coins ?? []).find((c) => c.id === coinId) ?? null;
   }, [tab, solanaCoin, coins, coinId, activeId]);
 
-  const priceSeries = useMemo(() => (chart?.length ? chart.map((p) => p.p) : (coin?.sparkline ?? [])), [chart, coin]);
-  const btcSeries = useMemo(() => (btcChart ?? []).map((p) => p.p), [btcChart]);
+  const priceSeries = useMemo(
+    () => (Array.isArray(chart) && chart.length ? toSeries(chart) : toSeries(coin?.sparkline)),
+    [chart, coin]
+  );
+  const btcSeries = useMemo(() => toSeries(btcChart), [btcChart]);
   const analysis = useMemo(() => (priceSeries.length ? analyze(priceSeries, coin ?? {}) : null), [priceSeries, coin]);
   const projection = useMemo(() => (analysis ? projectRange(analysis, horizon.days) : null), [analysis, horizon]);
 
@@ -1391,7 +1448,7 @@ export default function Signals() {
     haptic?.('select');
     setWhy({ signal, loading: true, data: null });
     const ev = {};
-    signal.evidence.forEach((e) => {
+    (signal.evidence ?? []).forEach((e) => {
       if (e.key === 'rsi') ev.rsi = e.pct != null ? 50 + (e.direction > 0 ? -15 : e.direction < 0 ? 15 : 0) : null;
       if (e.key === 'macd') ev.macd = e.direction;
       if (e.key === 'maCross' || e.key === 'ma20') { ev.ma20 = e.direction; ev.ma50 = 0; }
@@ -1501,7 +1558,12 @@ export default function Signals() {
         </div>
       </motion.section>
 
-      <PulseCard pulse={pulse} brief={brief} />
+      {/* Each panel below is fed by its own poll; SectionGuard confines a
+          bad payload to that panel and re-tries it on the next tick, instead
+          of dropping the whole page into the crash screen. */}
+      <SectionGuard resetKey={pulse?.at ?? pulse?.lastUpdate}>
+        <PulseCard pulse={pulse} brief={brief} />
+      </SectionGuard>
 
       <motion.section className="sic-workspace" variants={riseIn} initial="hidden" animate="show">
         <div className="sic-market-tabs" role="tablist" aria-label={t('signals.intel.assetPicker.marketLabel')}>
@@ -1529,17 +1591,19 @@ export default function Signals() {
 
         <TokenPicker coin={coin} options={tokenOptions} value={activeId} onChange={selectToken} coins={coins} />
 
-        <SelectedSignalCard
-          coin={coin}
-          signal={selectedSignal}
-          analysis={analysis}
-          scanning={scanning}
-          watched={watchedIds.has(activeId)}
-          whyLoading={why?.signal?.coin?.id === activeId && why?.loading}
-          onWhy={openWhy}
-          onWatch={(signal) => onCardAction('watch', signal)}
-          onAlert={(signal) => onCardAction('alert', signal)}
-        />
+        <SectionGuard resetKey={`${activeId}:${selectedSignal?.at ?? 'pending'}`}>
+          <SelectedSignalCard
+            coin={coin}
+            signal={selectedSignal}
+            analysis={analysis}
+            scanning={scanning}
+            watched={watchedIds.has(activeId)}
+            whyLoading={why?.signal?.coin?.id === activeId && why?.loading}
+            onWhy={openWhy}
+            onWatch={(signal) => onCardAction('watch', signal)}
+            onAlert={(signal) => onCardAction('alert', signal)}
+          />
+        </SectionGuard>
 
         <div className="sic-detail-box">
           <div className="sic-detail-tabs" role="tablist" aria-label={t('signals.intel.detailTabs.label')}>
@@ -1578,20 +1642,24 @@ export default function Signals() {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={detailTab} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.16 }}>
                 {detailTab === 'breakdown' ? (
-                  <SignalBreakdown
-                    analysis={analysis}
-                    activeHorizons={activeHorizons}
-                    layerRows={layerRows}
-                    perpForCoin={perpForCoin}
-                    scenarios={scenarios}
-                    horizon={horizon}
-                    invalidation={invalidation}
-                    backtestInfo={backtestInfo}
-                    hasOnchain={hasOnchain}
-                    intel={intel}
-                  />
+                  <SectionGuard resetKey={`${activeId}:${analysis?.score ?? 'na'}`}>
+                    <SignalBreakdown
+                      analysis={analysis}
+                      activeHorizons={activeHorizons}
+                      layerRows={layerRows}
+                      perpForCoin={perpForCoin}
+                      scenarios={scenarios}
+                      horizon={horizon}
+                      invalidation={invalidation}
+                      backtestInfo={backtestInfo}
+                      hasOnchain={hasOnchain}
+                      intel={intel}
+                    />
+                  </SectionGuard>
                 ) : (
-                  <AiAnalysisPanel outlook={outlook} aiLoading={aiLoading} aiError={aiError} horizon={horizon} setHorizon={setHorizon} />
+                  <SectionGuard resetKey={`${activeId}:${outlook?.generatedAt ?? outlook?.model ?? 'na'}`}>
+                    <AiAnalysisPanel outlook={outlook} aiLoading={aiLoading} aiError={aiError} horizon={horizon} setHorizon={setHorizon} />
+                  </SectionGuard>
                 )}
               </motion.div>
             </AnimatePresence>
@@ -1606,20 +1674,29 @@ export default function Signals() {
 
       <AdBanner slot="swap" />
 
-      <IntelligenceHub
-        early={early}
-        sm={sm}
-        momentumCards={momentumCards}
-        portfolioImpactData={portfolioImpactData}
-        history={history}
-      />
+      {/* Markets tick every 30s, so a price/row change is the earliest
+          self-heal for whatever panel input went bad. */}
+      <SectionGuard resetKey={`${coins?.length ?? 0}:${Math.round(coins?.[0]?.price ?? 0)}:${history.length}`}>
+        <IntelligenceHub
+          early={early}
+          sm={sm}
+          momentumCards={momentumCards}
+          portfolioImpactData={portfolioImpactData}
+          history={history}
+        />
+      </SectionGuard>
 
       <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer" style={{ marginTop: 2 }}>
         <p style={{ fontSize: 12.5, lineHeight: 1.9 }}>{t('signals.intel.disclaimer')} — {t('signals.disclaimer')}</p>
       </InfoBox>
 
-      <WhyModal why={why} onClose={() => setWhy(null)} />
-      <AlertSheet symbol={alertFor} onClose={() => setAlertFor(null)} />
+      {/* A dead modal closes instead of taking the page with it. */}
+      <SectionGuard onError={() => setWhy(null)}>
+        <WhyModal why={why} onClose={() => setWhy(null)} />
+      </SectionGuard>
+      <SectionGuard onError={() => setAlertFor(null)}>
+        <AlertSheet symbol={alertFor} onClose={() => setAlertFor(null)} />
+      </SectionGuard>
     </PageTransition>
   );
 }
