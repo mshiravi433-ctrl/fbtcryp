@@ -21,6 +21,20 @@ describe('non-custodial execution guards', () => {
       .rejects.toMatchObject({ code: 'EXECUTION_NETWORK_UNREADABLE' });
   });
 
+  it('recovers from a transient RPC blip instead of surfacing NETWORK_UNREADABLE', async () => {
+    // Two public endpoints hiccup, the third answers — the panel must resolve,
+    // not show the user «شبکه در دسترس نیست».
+    let calls = 0;
+    const flaky = { getNetwork: async () => { calls += 1; if (calls < 3) throw new Error('429'); return { chainId: 1 }; } };
+    await expect(assertProviderChain(flaky, 1)).resolves.toBe(1);
+    expect(calls).toBe(3);
+    // A WRONG chain is a deterministic answer — it must never be retried.
+    let wrongCalls = 0;
+    const wrong = { getNetwork: async () => { wrongCalls += 1; return { chainId: 137 }; } };
+    await expect(assertProviderChain(wrong, 1)).rejects.toMatchObject({ code: 'EXECUTION_WRONG_CHAIN' });
+    expect(wrongCalls).toBe(1);
+  });
+
   it('re-checks account and chain immediately before a signature', async () => {
     const provider = { getNetwork: async () => ({ chainId: 8453 }) };
     const signer = { provider, getAddress: async () => '0x1111111111111111111111111111111111111111' };

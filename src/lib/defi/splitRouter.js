@@ -34,6 +34,7 @@
  */
 
 import { Interface } from 'ethers';
+import { parseReceiptLogs } from './executionGuards.js';
 
 const env = (k) => (typeof import.meta !== 'undefined' ? import.meta.env?.[k] : undefined) || '';
 
@@ -137,6 +138,87 @@ export function quoteSplit(amount, feeBps) {
 
 const ERC20_IFACE = new Interface(['function approve(address spender, uint256 amount)']);
 
+/* ─── routed-deposit receipts ────────────────────────────────────────────────
+ *
+ * A routed deposit proves itself from the router's own Routed event — but the
+ * protocol-side event is STILL required by each adapter's verify* function
+ * with router-adjusted expectations (beneficiary = owner, amount = NET). The
+ * two proofs are complementary:
+ *
+ *   Routed   → the split was honest: who, which target, gross, fee, net;
+ *   protocol → the protocol really credited the OWNER, not the router.
+ *
+ * Nothing here accepts "the transaction succeeded" as evidence of anything.
+ */
+export const SPLIT_ROUTER_EVENT_ABI = [
+  'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+];
+const ROUTER_EVENT_IFACE = new Interface(SPLIT_ROUTER_EVENT_ABI);
+
+export class SplitRouterProofError extends Error {
+  constructor(detail) {
+    super('SPLIT_ROUTER_PROOF_MISMATCH');
+    this.name = 'SplitRouterProofError';
+    this.code = 'SPLIT_ROUTER_PROOF_MISMATCH';
+    this.detail = detail ?? {};
+  }
+}
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const sameAddr = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/**
+ * Parse and structurally check the router's Routed event from a receipt.
+ * Throws SplitRouterProofError when the receipt carries none — a routed
+ * deposit ALWAYS emits it, so its absence means the receipt is not what the
+ * caller thinks it is.
+ */
+export function parseRoutedEvent(receipt, routerAddress) {
+  const events = parseReceiptLogs(receipt, ROUTER_EVENT_IFACE, routerAddress, 'Routed');
+  if (!events.length) {
+    throw new SplitRouterProofError({ reason: 'ROUTED_EVENT_MISSING', router: routerAddress });
+  }
+  const a = events[0].parsed.args;
+  return {
+    target: String(a.target),
+    user: String(a.user),
+    asset: String(a.asset),
+    amountIn: BigInt(a.amountIn),
+    feeTaken: BigInt(a.feeTaken),
+    netAmount: BigInt(a.netAmount)
+  };
+}
+
+/**
+ * Prove a routed deposit against the pinned expectations.
+ *
+ * Every field the panels pinned before signing must come back in the Routed
+ * event: the user, the ONE target this deployment routes to, the asset
+ * (address(0) on the native-ETH Lido path), the gross amount the user signed,
+ * the fee that was quoted in the sheet, and the net that reached the
+ * protocol. `netAtLeast` covers Compound and Lido, whose minted position can
+ * marginally EXCEED net by their own accounting — everywhere else the net is
+ * exact.
+ */
+export async function verifyRoutedDeposit({
+  receipt, routerAddress, owner, target, asset = null,
+  amountIn, feeTaken, netAmount, netAtLeast = false
+} = {}) {
+  const routed = parseRoutedEvent(receipt, routerAddress);
+  const failures = [];
+  if (!sameAddr(routed.user, owner)) failures.push('USER');
+  if (!sameAddr(routed.target, target)) failures.push('TARGET');
+  if (!sameAddr(routed.asset, asset == null ? ZERO_ADDRESS : asset)) failures.push('ASSET');
+  if (amountIn != null && routed.amountIn !== BigInt(amountIn)) failures.push('AMOUNT_IN');
+  if (feeTaken != null && routed.feeTaken !== BigInt(feeTaken)) failures.push('FEE_TAKEN');
+  const expectedNet = netAmount == null ? routed.amountIn - (feeTaken ?? 0n) : BigInt(netAmount);
+  if (netAtLeast ? routed.netAmount < expectedNet : routed.netAmount !== expectedNet) failures.push('NET_AMOUNT');
+  if (failures.length) {
+    throw new SplitRouterProofError({ fields: failures, routed });
+  }
+  return Object.freeze({ ok: true, routed: { ...routed } });
+}
+
 /**
  * Build the router step for one protocol. Exported for the panels' future use
  * and for tests; routeSupplyPlan is the only caller today.
@@ -166,8 +248,28 @@ export function splitRouterStep(protocolId, amountOrValue) {
  *       step shape the rewriter does not recognise exactly. Fail-open to
  *       today's behaviour — a direct deposit the app already proves — never
  *       to a half-rewritten money path. Every fallback is loud.
+ *
+ * ALLOWANCE — the adapter decided whether an approve step was needed by
+ * reading the allowance for the PROTOCOL. Routing changes the spender: what
+ * matters now is the allowance for THE ROUTER. `routerAllowanceWei` lets the
+ * caller state it, and the three cases behave differently:
+ *   · plan already has an approve step → it is simply re-pointed at the
+ *     router for the same (gross) amount; nothing else is needed;
+ *   · no approve step + routerAllowanceWei ≥ amount → route WITHOUT an
+ *     approve: the user has approved this router before and it can pull;
+ *   · no approve step + routerAllowanceWei < amount → INJECT an approve
+ *     step (same shape the adapter builds — to: asset, exact amount) before
+ *     the supply step, so a sufficient protocol allowance can never silently
+ *     produce a fee-less direct deposit while every other deposit pays the
+ *     fee. The injected description uses the shared router step key so the
+ *     sheet names the real spender — the router, not the protocol.
+ *   · no approve step + routerAllowanceWei unknown (null/undefined) → keep
+ *     the plan direct (fail-open, loud): guessing here would either brick
+ *     the deposit or skip the fee.
  */
-export function routeSupplyPlan(plan, { chainId, protocolId, feeBps } = {}) {
+export function routeSupplyPlan(plan, {
+  chainId, protocolId, feeBps, routerAllowanceWei = null, asset = null
+} = {}) {
   if (!plan || !Array.isArray(plan.steps)) return plan;
   const address = splitRouterAddressFor(chainId);
   if (!address) return plan;
@@ -196,18 +298,54 @@ export function routeSupplyPlan(plan, { chainId, protocolId, feeBps } = {}) {
     }
     amount = supplyStep.value;
   } else {
-    if (!approveStep || !supplyStep) {
+    if (approveStep && supplyStep) {
+      try {
+        const [spender, value] = ERC20_IFACE.decodeFunctionData('approve', approveStep.data);
+        amount = BigInt(value);
+        if (!spender || typeof spender !== 'string') throw new Error('bad spender');
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[split-router] could not decode the approve amount (${err?.message ?? err}); leaving the plan direct`);
+        return plan;
+      }
+    } else if (supplyStep) {
+      /* Supply-only plan: the PROTOCOL allowance was sufficient, but the
+       * router's allowance is a different question. The amount comes from
+       * the plan's own checks — every adapter records it there, and it is
+       * the same number the verify* functions will hold the receipt to. */
+      const declared = plan.checks?.amountWei;
+      if (declared == null) {
+        // eslint-disable-next-line no-console
+        console.warn('[split-router] supply-only plan without checks.amountWei; leaving the plan direct');
+        return plan;
+      }
+      amount = BigInt(String(declared));
+      if (routerAllowanceWei == null) {
+        // eslint-disable-next-line no-console
+        console.warn('[split-router] no approve step and the router allowance is unknown; leaving the plan direct');
+        return plan;
+      }
+      const routerAllowance = BigInt(String(routerAllowanceWei));
+      if (routerAllowance < amount) {
+        /* Inject the approve the adapter skipped because ITS spender had
+         * enough. Same shape the adapter builds: exact amount, to: asset. */
+        if (!asset) {
+          // eslint-disable-next-line no-console
+          console.warn('[split-router] cannot inject an approve step without the asset address; leaving the plan direct');
+          return plan;
+        }
+        approveStep = {
+          kind: 'approve',
+          to: asset,
+          data: ERC20_IFACE.encodeFunctionData('approve', [address, amount]),
+          value: 0n,
+          description: { key: 'farm.splitRouter.step.approve', amount: plan.checks?.amountUsdc ?? null }
+        };
+      }
+      /* routerAllowance ≥ amount → route with no approve step at all. */
+    } else {
       // eslint-disable-next-line no-console
-      console.warn(`[split-router] ${protocolId} plan missing its approve/supply steps; leaving the plan direct`);
-      return plan;
-    }
-    try {
-      const [spender, value] = ERC20_IFACE.decodeFunctionData('approve', approveStep.data);
-      amount = BigInt(value);
-      if (!spender || typeof spender !== 'string') throw new Error('bad spender');
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn(`[split-router] could not decode the approve amount (${err?.message ?? err}); leaving the plan direct`);
+      console.warn(`[split-router] ${protocolId} plan without a supply step; leaving the plan direct`);
       return plan;
     }
   }
@@ -224,15 +362,31 @@ export function routeSupplyPlan(plan, { chainId, protocolId, feeBps } = {}) {
     : { ...supplyStep, to: address, data: ROUTER_IFACE.encodeFunctionData(method, [amount]) };
   const steps = plan.steps.map((step) => {
     if (step === approveStep) {
-      return { ...step, data: ERC20_IFACE.encodeFunctionData('approve', [address, amount]) };
+      /* The adapter's approve re-points from the protocol to the router for
+       * the SAME amount the user saw — and says so: the step list must name
+       * the contract that will actually pull the tokens. (An injected
+       * approve — see below — is never in plan.steps, so this branch only
+       * ever sees adapter steps.) */
+      return {
+        ...step,
+        data: ERC20_IFACE.encodeFunctionData('approve', [address, amount]),
+        description: {
+          key: 'farm.splitRouter.step.approve',
+          amount: step.description?.amount ?? plan.checks?.amountUsdc ?? null
+        }
+      };
     }
     if (step === supplyStep) return routedStep;
     return step;
   });
+  const injectApprove = approveStep && !plan.steps.includes(approveStep);
+  const finalSteps = injectApprove
+    ? insertBefore(steps, (s) => s === routedStep, approveStep)
+    : steps;
 
   return {
     ...plan,
-    steps,
+    steps: finalSteps,
     checks: {
       ...plan.checks,
       splitRouter: {
@@ -244,4 +398,17 @@ export function routeSupplyPlan(plan, { chainId, protocolId, feeBps } = {}) {
       }
     }
   };
+}
+
+function insertBefore(steps, predicate, step) {
+  const out = [];
+  let inserted = false;
+  for (const s of steps) {
+    if (!inserted && predicate(s)) {
+      out.push(step);
+      inserted = true;
+    }
+    out.push(s);
+  }
+  return inserted ? out : [...steps, step];
 }

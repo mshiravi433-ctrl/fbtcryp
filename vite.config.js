@@ -171,9 +171,7 @@ export default defineConfig({
     __AAVE_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_BASE_SUPPLY === 'true'),
     __AAVE_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_AAVE_BASE_SUPPLY_PUBLIC === 'true'),
     __AAVE_BASE_BUILD_ENV__: JSON.stringify({
-      VITE_AAVE_BASE_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_BASE_SUPPLY_ALLOWLIST ?? '',
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
-      VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+      VITE_AAVE_BASE_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_BASE_SUPPLY_ALLOWLIST ?? ''
     }),
     /*
      * In-app Compound V3 (Base/USDC) supply — the second execution adapter,
@@ -185,9 +183,7 @@ export default defineConfig({
     __COMPOUND_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_COMPOUND_BASE_SUPPLY === 'true'),
     __COMPOUND_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_COMPOUND_BASE_SUPPLY_PUBLIC === 'true'),
     __COMPOUND_BASE_BUILD_ENV__: JSON.stringify({
-      VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST: process.env.VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST ?? '',
-      VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
-      VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+      VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST: process.env.VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST ?? ''
     }),
     /*
      * In-app Aave v3 (Arbitrum/USDC) supply — the third execution adapter.
@@ -199,9 +195,7 @@ export default defineConfig({
     __AAVE_ARB_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_AAVE_ARBITRUM_SUPPLY === 'true'),
     __AAVE_ARB_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_AAVE_ARB_SUPPLY_PUBLIC === 'true'),
     __AAVE_ARB_BUILD_ENV__: JSON.stringify({
-      VITE_AAVE_ARB_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_ARB_SUPPLY_ALLOWLIST ?? '',
-      VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX ?? '',
-      VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL ?? ''
+      VITE_AAVE_ARB_SUPPLY_ALLOWLIST: process.env.VITE_AAVE_ARB_SUPPLY_ALLOWLIST ?? ''
     }),
     /*
      * In-app Lido (Ethereum/stETH) — the fourth execution adapter.
@@ -212,17 +206,13 @@ export default defineConfig({
     __LIDO_STAKE_PUBLIC__: JSON.stringify(process.env.VITE_LIDO_STAKE_PUBLIC === 'true'),
     __LIDO_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_LIDO_STAKE === 'true'),
     __LIDO_BUILD_ENV__: JSON.stringify({
-      VITE_LIDO_STAKE_ALLOWLIST: process.env.VITE_LIDO_STAKE_ALLOWLIST ?? '',
-      VITE_LIDO_STAKE_MAX_ETH_PER_TX: process.env.VITE_LIDO_STAKE_MAX_ETH_PER_TX ?? '',
-      VITE_LIDO_STAKE_MAX_ETH_TOTAL: process.env.VITE_LIDO_STAKE_MAX_ETH_TOTAL ?? ''
+      VITE_LIDO_STAKE_ALLOWLIST: process.env.VITE_LIDO_STAKE_ALLOWLIST ?? ''
     }),
     /* Morpho is a separately scoped Base market, not an ERC-4626 vault. */
     __MORPHO_BASE_SUPPLY_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_MORPHO_BASE_SUPPLY === 'true'),
     __MORPHO_BASE_SUPPLY_PUBLIC__: JSON.stringify(process.env.VITE_MORPHO_BASE_SUPPLY_PUBLIC === 'true'),
     __MORPHO_BASE_BUILD_ENV__: JSON.stringify({
-      VITE_MORPHO_BASE_SUPPLY_ALLOWLIST: process.env.VITE_MORPHO_BASE_SUPPLY_ALLOWLIST ?? '',
-      VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX: process.env.VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX ?? '',
-      VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL: process.env.VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL ?? ''
+      VITE_MORPHO_BASE_SUPPLY_ALLOWLIST: process.env.VITE_MORPHO_BASE_SUPPLY_ALLOWLIST ?? ''
     }),
     /*
      * Version string, read from package.json at build time.

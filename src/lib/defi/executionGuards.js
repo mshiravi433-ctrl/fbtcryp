@@ -7,6 +7,8 @@
  * receipt is never treated as success until it is mined with status 1.
  */
 
+import { withRpcRetry } from './rpcRetry.js';
+
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
 export class ExecutionGuardError extends Error {
@@ -32,7 +34,14 @@ export async function assertProviderChain(provider, expectedChainId) {
   }
   let network;
   try {
-    network = await provider.getNetwork();
+    // getNetwork() on a fallback stack can fail transiently when every public
+    // endpoint hiccups in the same instant — retry once or twice before
+    // declaring EXECUTION_NETWORK_UNREADABLE (the code behind the user-facing
+    // «شبکه در دسترس نیست» errors). A wrong chainId is NOT retried: that is
+    // a deterministic answer, not a blip.
+    network = await withRpcRetry(() => provider.getNetwork(), {
+      attempts: 3, delayMs: 300, label: `assertProviderChain(${expectedChainId})`
+    });
   } catch (cause) {
     throw new ExecutionGuardError('EXECUTION_NETWORK_UNREADABLE', { expectedChainId, cause });
   }

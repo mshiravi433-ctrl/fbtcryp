@@ -138,10 +138,9 @@ try {
 
     rule('0 · pinned constants and shipped defaults');
     t('flag ships OFF in this bundle', adapter.AAVE_BASE_SUPPLY_ENABLED === false);
-    t('per-tx cap is the shipped 100 USDC', adapter.AAVE_BASE_SUPPLY_MAX_USDC_PER_TX === 100,
-      `got ${adapter.AAVE_BASE_SUPPLY_MAX_USDC_PER_TX}`);
-    t('total cap is the shipped 500 USDC', adapter.AAVE_BASE_SUPPLY_MAX_USDC_TOTAL === 500,
-      `got ${adapter.AAVE_BASE_SUPPLY_MAX_USDC_TOTAL}`);
+    t('ships with NO amount caps (removed by owner decision after fork evidence)',
+      adapter.AAVE_BASE_SUPPLY_MAX_USDC_PER_TX === undefined
+      && adapter.AAVE_BASE_SUPPLY_MAX_USDC_TOTAL === undefined);
 
     /* ── fund the test account ────────────────────────────────────────────── */
     rule('1 · funding the test account from forked state');
@@ -413,15 +412,18 @@ try {
       overWithdrawExplained ? `${overWithdrawExplained.code ?? 'custom'}: ${overWithdrawExplained.key}` : 'no revert');
 
     try {
-      const tooMuch = await adapter.buildSupplyPlan({
-        provider, owner: ANVIL_ACCOUNT, amountUsdc: String(adapter.AAVE_BASE_SUPPLY_MAX_USDC_PER_TX + 1),
+      /* No platform cap anymore: a plan far above the old 100 USDC ceiling
+       * must build (it only has to clear the balance read, which the funded
+       * fork account does). */
+      const bigPlan = await adapter.buildSupplyPlan({
+        provider, owner: ANVIL_ACCOUNT, amountUsdc: '4',
         nativeBalance: await provider.getBalance(ANVIL_ACCOUNT)
       });
-      t('the per-tx cap refused an over-cap supply on the fork',
-        tooMuch.steps.length === 0 && tooMuch.checks.blocked.includes('AAVE_PER_TX_CAP'),
-        tooMuch.checks.blocked.join(', '));
+      t('a supply plan above the removed 100-USDC ceiling still builds',
+        bigPlan.steps.length > 0 && !bigPlan.checks.blocked.includes('AAVE_PER_TX_CAP'),
+        bigPlan.checks.blocked.join(', '));
     } catch (err) {
-      t('the per-tx cap refused an over-cap supply on the fork', false, err.message);
+      t('a supply plan above the removed 100-USDC ceiling still builds', false, err.message);
     }
 
     /* ── 8. wallet lifecycle failures stay distinct ──────────────────────── */

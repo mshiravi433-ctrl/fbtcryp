@@ -22,7 +22,5 @@ export {
 } from '../src/lib/defi/aaveV3Arbitrum.js';
 
 export {
-  AAVE_ARB_SUPPLY_ENABLED,
-  AAVE_ARB_SUPPLY_MAX_USDC_PER_TX,
-  AAVE_ARB_SUPPLY_MAX_USDC_TOTAL
+  AAVE_ARB_SUPPLY_ENABLED
 } from '../src/lib/features.js';

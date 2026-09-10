@@ -6,7 +6,6 @@ import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
 import { EVM_CHAINS, explorerAddr, explorerTx } from '../../lib/chains';
 import {
-  COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX, COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL,
   COMPOUND_BASE_SUPPLY_ALLOWLIST, compoundBaseSupplyAllowedFor, compoundBaseWithdrawAllowedFor
 } from '../../lib/features';
 import { COMPOUND_BASE_SUPPLY_OPEN_TO_PUBLIC } from '../../lib/farmRolloutMode';
@@ -28,6 +27,8 @@ import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
 import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
+import { withRpcRetry } from '../../lib/defi/rpcRetry.js';
+import { loadSplitRouterInfo, routeSupplyPlan } from '../../lib/defi/splitRouter.js';
 
 /*
  * COMPOUND V3 · BASE · USDC — the in-app supply / withdraw surface.
@@ -96,6 +97,9 @@ export default function CompoundBaseUsdcPanel({ pool }) {
   const [simulating, setSimulating] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [history, setHistory] = useState([]);
+  /* null = no router configured for this chain (or its fee could not be
+   * read) → every plan stays direct and fee-less. Fail-open, never fail-dead. */
+  const [routerInfo, setRouterInfo] = useState(null);
   const alive = useRef(true);
 
   const isTarget = isCompoundBaseUsdcPool(pool);
@@ -119,18 +123,29 @@ export default function CompoundBaseUsdcPanel({ pool }) {
     try {
       const provider = await wallet.getReadProvider(COMPOUND_V3_BASE.chainId);
       const [pos, mkt, rows] = await Promise.all([
-        getPosition(provider, owner, { history: loadCompoundHistoryFor(owner) }).catch(() => null),
-        getMarketStatus(provider).catch(() => null),
+        withRpcRetry(() => getPosition(provider, owner, { history: loadCompoundHistoryFor(owner) }), { label: 'compound position' }).catch(() => null),
+        withRpcRetry(() => getMarketStatus(provider), { label: 'compound market' }).catch(() => null),
         Promise.resolve(loadCompoundHistoryFor(owner))
       ]);
       if (!alive.current) return;
       setPosition(pos);
       setStatus(mkt);
       setHistory(rows);
-      const bal = await walletBalanceOf(provider, owner);
+      const bal = await withRpcRetry(() => walletBalanceOf(provider, owner), { label: 'compound wallet' });
       if (!alive.current) return;
       setWalletUsdc(bal);
-      const allowance = await walletAllowanceOf(provider, owner);
+      const rinfo = await withRpcRetry(
+        () => loadSplitRouterInfo(provider, COMPOUND_V3_BASE.chainId),
+        { label: 'compound router' }
+      ).catch(() => null);
+      if (!alive.current) return;
+      setRouterInfo(rinfo);
+      /* When a router is live the allowance that matters is the ROUTER's —
+       * the protocol allowance is no longer the spender that will pull. */
+      const allowance = await withRpcRetry(
+        () => walletAllowanceOf(provider, owner, rinfo?.address),
+        { label: 'compound allowance' }
+      );
       setPartial(derivePartialApprovalState({
         owner,
         allowanceUsdcWei: allowance ?? 0n,
@@ -154,10 +169,8 @@ export default function CompoundBaseUsdcPanel({ pool }) {
    * two cards symmetrical would be inventing a number.
    */
   const maxSupplyUsdc = useMemo(() => {
-    const limits = [
-      COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX,
-      COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL - (position ? Number(fromUsdcWei(position.suppliedUsdc)) : 0)
-    ];
+    /* No platform caps: the wallet balance is the only ceiling. */
+    const limits = [];
     if (walletUsdc != null) limits.push(Number(fromUsdcWei(walletUsdc)));
     return Math.max(0, Math.min(...limits));
   }, [position, walletUsdc]);
@@ -171,7 +184,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
     if (!owner || !(Number(nextAmount) > 0)) return;
     try {
       const provider = await wallet.getReadProvider(COMPOUND_V3_BASE.chainId);
-      const built = nextMode === 'withdraw'
+      let built = nextMode === 'withdraw'
         ? await buildWithdrawPlan({ provider, owner, amountUsdc: nextAmount })
         : await buildSupplyPlan({
             provider, owner, amountUsdc: nextAmount,
@@ -180,6 +193,27 @@ export default function CompoundBaseUsdcPanel({ pool }) {
               ? null
               : await toWei(wallet.nativeBalance)
           });
+      /*
+       * SPLIT ROUTER — the fee-on-deposit seam. ONLY supply plans, NEVER
+       * withdrawals: an exit stays exactly as direct as it is today.
+       * routeSupplyPlan returns the SAME plan (same reference, fee-less,
+       * direct) unless a router is configured for this chain, its feeBps
+       * was read on-chain and the plan's steps match exactly what it can
+       * rewrite — every other case fails open to the direct deposit.
+       */
+      if (nextMode !== 'withdraw' && Array.isArray(built?.steps) && built.steps.length > 0) {
+        const rinfo = await loadSplitRouterInfo(provider, COMPOUND_V3_BASE.chainId);
+        if (rinfo) {
+          const routerAllowanceWei = await walletAllowanceOf(provider, owner, rinfo.address);
+          built = routeSupplyPlan(built, {
+            chainId: COMPOUND_V3_BASE.chainId,
+            protocolId: 'compound-base',
+            feeBps: rinfo.feeBps,
+            routerAllowanceWei,
+            asset: COMPOUND_V3_BASE.usdc
+          });
+        }
+      }
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
@@ -207,7 +241,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
           provider,
           tx,
           allowance: step.kind === 'supply'
-            ? { token: COMPOUND_V3_BASE.usdc, owner, spender: COMPOUND_V3_BASE.comet, amountWei: plan.checks.amountWei ?? 0n }
+            ? { token: COMPOUND_V3_BASE.usdc, owner, spender: plan.checks.splitRouter?.address ?? COMPOUND_V3_BASE.comet, amountWei: plan.checks.amountWei ?? 0n }
             : undefined
         });
         if (!cancelled) {
@@ -263,7 +297,7 @@ export default function CompoundBaseUsdcPanel({ pool }) {
             owner,
             step,
             allowance: step.kind === 'supply'
-              ? { token: COMPOUND_V3_BASE.usdc, owner, spender: COMPOUND_V3_BASE.comet, amountWei: plan.checks.amountWei ?? 0n }
+              ? { token: COMPOUND_V3_BASE.usdc, owner, spender: plan.checks.splitRouter?.address ?? COMPOUND_V3_BASE.comet, amountWei: plan.checks.amountWei ?? 0n }
               : undefined
           });
           const before = step.kind === 'supply' || step.kind === 'withdraw'
@@ -275,6 +309,10 @@ export default function CompoundBaseUsdcPanel({ pool }) {
               provider, receipt, owner, action: step.kind,
               amountWei: plan.checks.amountWei,
               beforePositionWei: before?.suppliedUsdc ?? null
+            ,
+              /* Present only on routed supply plans — makes the receipt
+               * proof demand the Routed event + net-amount protocol credit. */
+              splitRouter: plan.checks.splitRouter ?? null
             })
           });
           confirmCompoundAction(record.id, {
@@ -323,12 +361,15 @@ export default function CompoundBaseUsdcPanel({ pool }) {
     setError(null);
     try {
       const provider = await wallet.getReadProvider(COMPOUND_V3_BASE.chainId);
-      const { steps } = await buildRevokePlan({ provider, owner });
+      /* When a router is live, the standing allowance the user may want to
+         kill is the ROUTER's — that is what the sheet shows and what a revoke
+         must actually revoke. */
+      const { steps } = await buildRevokePlan({ provider, owner, spender: routerInfo?.address ?? null });
       await simulateGuardedStep({ provider, owner, step: steps[0] });
       const result = await executeGuardedStep({
         signer, provider, owner, chainId: COMPOUND_V3_BASE.chainId, step: steps[0],
         verifyReceipt: ({ receipt }) => verifyCompoundReceipt({
-          provider, receipt, owner, action: 'revoke', amountWei: 0n
+          provider, receipt, owner, action: 'revoke', amountWei: 0n, expectedSpender: routerInfo?.address ?? undefined
         })
       });
       recordCompoundAction({
@@ -380,18 +421,6 @@ export default function CompoundBaseUsdcPanel({ pool }) {
     setSimulation(null);
     setOpen(true);
   };
-
-  /*
-   * Rewards are stated honestly or not at all. This market only accrues COMP
-   * to positions at or above `baseMinForRewards` (1 000 USDC), which is above
-   * both of our caps, so the card says so rather than showing a reward line
-   * that will always read zero.
-   */
-  const rewardsOutOfReach =
-    status?.rewardsActive === true
-    && status?.rewardsMinUsdc != null
-    && BigInt(Math.floor(COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL)) * 10n ** BigInt(COMPOUND_V3_BASE.usdcDecimals)
-       < status.rewardsMinUsdc;
 
   return (
     <section className="card card-soft farm-compound-panel" aria-label={t('farm.compound.panelTitle')}>
@@ -480,16 +509,10 @@ export default function CompoundBaseUsdcPanel({ pool }) {
         </a>
       </div>
 
-      {/* The supply caps are shown, not hidden: a user must be able to see why
-          the input stops where it does. */}
-      {supplyAllowed && (
-        <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.4 }}>
-          {t('farm.compound.capsLine', { perTx: COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX, total: COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL })}
-          {COMPOUND_BASE_SUPPLY_ALLOWLIST.length > 0 && <> · {t('farm.compound.allowlisted')}</>}
-        </p>
-      )}
-
-      {rewardsOutOfReach && (
+      {/* Rewards, stated honestly: Compound only accrues COMP from
+          baseMinForRewards up, and with no platform cap that floor is the
+          user's own decision to reach or not. */}
+      {status?.rewardsActive === true && status?.rewardsMinUsdc != null && (
         <p className="faint" style={{ margin: '4px 0 0', fontSize: 11.4 }}>
           {t('farm.compound.rewardsFloor', { min: fmtUsdc(status.rewardsMinUsdc), symbol: COMPOUND_V3_BASE.usdcSymbol })}
         </p>
@@ -511,7 +534,8 @@ export default function CompoundBaseUsdcPanel({ pool }) {
             <button
               className="tag"
               type="button"
-              onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : maxSupplyUsdc) * 1e6) / 1e6))}
+              disabled={mode !== 'withdraw' && maxSupplyUsdc == null}
+              onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : (maxSupplyUsdc ?? 0)) * 1e6) / 1e6))}
             >
               {t('farm.compound.max')}
             </button>
@@ -529,6 +553,23 @@ export default function CompoundBaseUsdcPanel({ pool }) {
 
           {/* Plain-language step list BEFORE any signature. */}
           <StepList steps={plan?.steps} t={t} />
+
+          {/* THE FEE, disclosed before the signature — not in a receipt.
+              Rendered only when this plan is actually routed; a direct
+              deposit shows nothing, because it charges nothing. */}
+          {plan?.checks?.splitRouter && (
+            <p className="notice" style={{ margin: '8px 0 0' }}>
+              {t('farm.splitRouter.feeNotice', {
+                pct: (Number(plan.checks.splitRouter.feeBps ?? 0n) / 100).toString(),
+                fee: fromUsdcWei(plan.checks.splitRouter.feeAmount ?? 0n),
+                net: fromUsdcWei(plan.checks.splitRouter.netAmount ?? 0n),
+                total: plan.checks.amountUsdc ?? '—',
+                symbol: COMPOUND_V3_BASE.usdcSymbol
+              })}
+              <br />
+              <span className="faint">{t('farm.splitRouter.trustNote')}</span>
+            </p>
+          )}
 
           {/* Checks the plan refused, in words. */}
           {blockedByPlan && (
@@ -608,11 +649,11 @@ async function walletBalanceOf(provider, owner) {
   }
 }
 
-async function walletAllowanceOf(provider, owner) {
+async function walletAllowanceOf(provider, owner, spender = null) {
   const { Contract } = await import('ethers');
   const c = new Contract(COMPOUND_V3_BASE.usdc, ['function allowance(address,address) view returns (uint256)'], provider);
   try {
-    return await c.allowance(owner, COMPOUND_V3_BASE.comet);
+    return await c.allowance(owner, spender ?? COMPOUND_V3_BASE.comet);
   } catch {
     return 0n;
   }

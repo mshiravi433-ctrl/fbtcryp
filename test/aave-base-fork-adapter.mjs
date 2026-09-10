@@ -24,8 +24,6 @@ export {
 
 export {
   AAVE_BASE_SUPPLY_ENABLED,
-  AAVE_BASE_SUPPLY_MAX_USDC_PER_TX,
-  AAVE_BASE_SUPPLY_MAX_USDC_TOTAL
 } from '../src/lib/features.js';
 
 export { simulateGuardedStep } from '../src/lib/defi/guardedExecution.js';

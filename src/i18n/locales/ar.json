@@ -86,7 +86,8 @@
     "swap": "Swap",
     "swapOnCorrectNetwork": "{{symbol}} ← المبادلة على الشبكة الصحيحة",
     "trendTitle": "إجمالي القيمة السوقية · {{days}} يوم",
-    "trendNote": "مُعاد بناؤها من أكبر {{n}} عملة في هذه الصفحة — تاريخ السعر الساعي لكل عملة × معروضها المتداول. هذا أعلى السوق، لا السوق كاملاً، والمعروض ثابت على مدى الفترة."
+    "trendNote": "مُعاد بناؤها من أكبر {{n}} عملة في هذه الصفحة — تاريخ السعر الساعي لكل عملة × معروضها المتداول. هذا أعلى السوق، لا السوق كاملاً، والمعروض ثابت على مدى الفترة.",
+    "livePrices": "أسعار السوق المباشرة"
   },
   "coin": {
     "notFound": "العملة غير موجودة",
@@ -1039,6 +1040,13 @@
       "staking": "استراتيجية الستيكينغ",
       "vault": "استراتيجية الخزانة"
     },
+    "splitRouter": {
+      "step": {
+        "approve": "اسمح لعقد الإيداع باستخدام {{amount}} {{symbol}} بالضبط"
+      },
+      "feeNotice": "رسوم الإيداع: {{fee}} من {{total}} {{symbol}} ({{pct}}٪) — يصل {{net}} {{symbol}} إلى البروتوكول. السحب دائمًا بدون رسوم.",
+      "trustNote": "تدخل أموالك من محفظتك إلى البروتوكول في نفس المعاملة؛ تُقتطع الرسوم فقط ولا يحتفظ عقد التوجيه بأي رصيد."
+    },
     "aave": {
       "panelTitle": "الإيداع داخل التطبيق · Aave v3 على Base",
       "panelSub": "يُودَع USDC في مجمّع Aave v3 على {{chain}} من داخل هذا التطبيق. محفظتك هي التي توقّع؛ التطبيق لا يحفظ الأموال أبدًا.",
@@ -1127,7 +1135,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "تعذّرت قراءة رصيد ETH الخاص بك على Base.",
         "AAVE_NATIVE_GAS_FLOOR": "تحتاج إلى ETH إضافي على Base لتغطية الرسوم."
       },
-      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {{chain}} لعرض مركزك في Aave والسحب."
+      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {{chain}} لعرض مركزك في Aave والسحب.",
+      "userRejected": "تم رفض التوقيع",
+      "timeout": "المعاملة لا تزال قيد الانتظار؛ تحقق من المحفظة أو المستكشف.",
+      "replaced": "تم استبدال المعاملة أو إلغاؤها."
     },
     "aaveArb": {
       "panelTitle": "الإيداع داخل التطبيق · Aave v3 على Arbitrum",
@@ -1217,7 +1228,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "تعذّرت قراءة رصيد ETH الخاص بك على Arbitrum.",
         "AAVE_NATIVE_GAS_FLOOR": "تحتاج إلى ETH إضافي على Arbitrum لتغطية الرسوم."
       },
-      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {{chain}} لعرض مركزك في Aave والسحب."
+      "wrongChainNote": "محفظتك على شبكة أخرى. بدّل إلى {{chain}} لعرض مركزك في Aave والسحب.",
+      "userRejected": "تم رفض التوقيع",
+      "timeout": "المعاملة لا تزال قيد الانتظار؛ تحقق من المحفظة أو المستكشف.",
+      "replaced": "تم استبدال المعاملة أو إلغاؤها."
     },
     "compound": {
       "panelTitle": "الإيداع داخل التطبيق · Compound III على Base",
@@ -1311,7 +1325,10 @@
         "COMPOUND_NATIVE_BALANCE_UNKNOWN": "تعذّرت قراءة رصيد ETH لديك على Base.",
         "COMPOUND_NATIVE_GAS_FLOOR": "تحتاج إلى مزيد من ETH على Base لتغطية الغاز."
       },
-      "wrongChainNote": "محفظتك على شبكة أخرى. انتقل إلى {{chain}} لرؤية مركزك في Compound وللسحب."
+      "wrongChainNote": "محفظتك على شبكة أخرى. انتقل إلى {{chain}} لرؤية مركزك في Compound وللسحب.",
+      "userRejected": "تم رفض التوقيع",
+      "timeout": "المعاملة لا تزال قيد الانتظار؛ تحقق من المحفظة أو المستكشف.",
+      "replaced": "تم استبدال المعاملة أو إلغاؤها."
     },
     "lido": {
       "panelTitle": "Stake in-app · Lido on Ethereum",
@@ -1423,7 +1440,23 @@
         "LIDO_QUEUE_WSTETH_MISMATCH": "Queue wstETH mismatch.",
         "LIDO_QUEUE_STETH_MISMATCH": "Queue stETH mismatch.",
         "LIDO_PROTOCOL_STATUS_UNREADABLE": "Protocol status unreadable.",
-        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable."
+        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable.",
+        "LIDO_WRONG_CHAIN": "محفظتك على شبكة أخرى. يعمل Lido على شبكة Ethereum الرئيسية.",
+        "LIDO_NETWORK_UNREADABLE": "تعذّر الوصول إلى شبكة Ethereum الآن. حاول مجددًا بعد قليل.",
+        "LIDO_STETH_IDENTITY_MISMATCH": "لم يعرّف عقد stETH عن نفسه كما هو متوقع. لم يتم توقيع أي شيء.",
+        "LIDO_STETH_IDENTITY_UNREADABLE": "لا يمكن قراءة عقد stETH الآن.",
+        "LIDO_BAD_OWNER": "تعذّر التحقق من الحساب المتصل.",
+        "LIDO_EXPECTED_EVENT_MISSING": "لم يحتِ الإيصال على الحدث المتوقع لهذا الإجراء. تحقق من المعاملة في المستكشف.",
+        "LIDO_APPROVAL_EVENT_MISMATCH": "إيصال الموافقة لا يطابق ما تم توقيعه.",
+        "LIDO_REVOKE_AMOUNT_MISMATCH": "لم يُصفّر الإلغاء البدلَ المسموح.",
+        "LIDO_APPROVAL_AMOUNT_MISMATCH": "المبلغ الموافَق عليه لا يطابق الخطة.",
+        "LIDO_STAKE_EVENT_MISMATCH": "إيصال الاستيكار لا يثبت وصول stETH الخاص بك.",
+        "LIDO_POSITION_UNCHANGED": "لم يتغير مركز stETH كما هو متوقع.",
+        "LIDO_REQUEST_EVENT_MISMATCH": "إيصال طلب السحب لا يطابق.",
+        "LIDO_REQUEST_STATE_MISMATCH": "حالة طلب السحب ليست ما يحتاجه هذا الإجراء.",
+        "LIDO_CLAIM_EVENT_MISMATCH": "إيصال المطالبة لا يطابق.",
+        "LIDO_CLAIM_STATE_MISMATCH": "هذا السحب ليس في حالة قابلة للمطالبة.",
+        "LIDO_UNSUPPORTED_ACTION": "هذا الإجراء غير مدعوم."
       },
       "err": {
         "unknown": "The transaction failed for an unknown reason.",
@@ -1446,7 +1479,15 @@
       "risk4": "Lido takes a 10% fee on staking rewards (as of 2024) — the APY shown is net of protocol fees but variable.",
       "risk5": "No fee on this page — Lido stake/wrap/unwrap/request/claim costs only Ethereum gas here. Swaps elsewhere still carry the platform fee ({{fee}}%).",
       "fee": "Fee",
-      "explorerTitle": "Lido contracts"
+      "explorerTitle": "Lido contracts",
+      "userRejected": "تم رفض التوقيع",
+      "timeout": "المعاملة لا تزال قيد الانتظار؛ تحقق من المحفظة أو المستكشف.",
+      "replaced": "تم استبدال المعاملة أو إلغاؤها."
+    },
+    "morpho": {
+      "userRejected": "تم رفض التوقيع",
+      "timeout": "قيد الانتظار؛ تحقق من المحفظة.",
+      "replaced": "تم الاستبدال/الإلغاء"
     }
   },
   "signals": {

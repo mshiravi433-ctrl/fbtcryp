@@ -12,7 +12,5 @@ export {
   verifyMorphoReceipt
 } from '../src/lib/defi/morphoBlueBase.js';
 export {
-  MORPHO_BASE_SUPPLY_ENABLED,
-  MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX,
-  MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL
+  MORPHO_BASE_SUPPLY_ENABLED
 } from '../src/lib/features.js';

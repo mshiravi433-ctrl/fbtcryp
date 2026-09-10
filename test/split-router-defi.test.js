@@ -23,10 +23,12 @@ import {
   SPLIT_ROUTER_MAX_FEE_BPS,
   SPLIT_ROUTER_METHODS,
   loadSplitRouterInfo,
+  parseRoutedEvent,
   quoteSplit,
   routeSupplyPlan,
   splitRouterAddressFor,
-  splitRouterIsLive
+  splitRouterIsLive,
+  verifyRoutedDeposit
 } from '../src/lib/defi/splitRouter';
 
 const ROUTER = '0x1234567890123456789012345678901234567890';
@@ -224,5 +226,134 @@ describe('the five adapter ids are all routable', () => {
     expect(Object.keys(SPLIT_ROUTER_METHODS).sort()).toEqual(
       ['aave-arbitrum', 'aave-base', 'compound-base', 'lido', 'morpho-base'].sort()
     );
+  });
+});
+
+
+describe('routeSupplyPlan — supply-only plans (sufficient PROTOCOL allowance)', () => {
+  const supplyOnly = () => ({
+    checks: { amountWei: AMOUNT, amountUsdc: 1000, needsApproval: false },
+    steps: [supplyStep('0xA238Dd80C259a72e81d7e4664a9801593F98d1c5')]
+  });
+
+  it('stays DIRECT when the router allowance is unknown — never guess', () => {
+    vi.stubEnv('VITE_FBT_SPLIT_ROUTER_BASE', ROUTER);
+    const plan = supplyOnly();
+    expect(routeSupplyPlan(plan, { chainId: 8453, protocolId: 'aave-base', feeBps: 30n })).toBe(plan);
+  });
+
+  it('routes WITHOUT an approve when the user already approved this router', () => {
+    vi.stubEnv('VITE_FBT_SPLIT_ROUTER_BASE', ROUTER);
+    const out = routeSupplyPlan(supplyOnly(), {
+      chainId: 8453, protocolId: 'aave-base', feeBps: 30n, routerAllowanceWei: AMOUNT
+    });
+    expect(out.steps).toHaveLength(1);
+    expect(out.steps[0].to).toBe(ROUTER);
+    expect(out.checks.splitRouter.netAmount).toBe(997_000_000n);
+  });
+
+  it('INJECTS the missing approve when the router allowance is insufficient', () => {
+    vi.stubEnv('VITE_FBT_SPLIT_ROUTER_BASE', ROUTER);
+    const out = routeSupplyPlan(supplyOnly(), {
+      chainId: 8453, protocolId: 'aave-base', feeBps: 30n, routerAllowanceWei: 1n,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    });
+    /* A sufficient pool allowance must not produce a fee-less direct
+     * deposit: the approve the adapter skipped is injected for the ROUTER,
+     * as the FIRST step, exact gross amount. */
+    expect(out.steps).toHaveLength(2);
+    const [approve, supply] = out.steps;
+    expect(approve.kind).toBe('approve');
+    expect(approve.to).toBe('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+    expect(ERC20.decodeFunctionData('approve', approve.data)).toEqual([ROUTER, AMOUNT]);
+    expect(supply.to).toBe(ROUTER);
+  });
+
+  it('cannot inject without the asset address — stays direct, loudly', () => {
+    vi.stubEnv('VITE_FBT_SPLIT_ROUTER_BASE', ROUTER);
+    const plan = supplyOnly();
+    expect(routeSupplyPlan(plan, {
+      chainId: 8453, protocolId: 'aave-base', feeBps: 30n, routerAllowanceWei: 1n
+    })).toBe(plan);
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it('the rewritten approve NAMES the router, not the protocol', () => {
+    vi.stubEnv('VITE_FBT_SPLIT_ROUTER_BASE', ROUTER);
+    const out = routeSupplyPlan(aavePlan(), { chainId: 8453, protocolId: 'aave-base', feeBps: 30n });
+    expect(out.steps[0].description.key).toBe('farm.splitRouter.step.approve');
+    expect(out.steps[0].description.amount).toBe(1000);
+    /* the injected one says the same */
+    const injected = routeSupplyPlan(supplyOnly(), {
+      chainId: 8453, protocolId: 'aave-base', feeBps: 30n, routerAllowanceWei: 1n,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    });
+    expect(injected.steps[0].description.key).toBe('farm.splitRouter.step.approve');
+  });
+});
+
+describe('routed-deposit receipts (the Routed event proof)', () => {
+  const ROUTER_ABI = new Interface([
+    'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+  ]);
+  const routedLog = (target, user, asset, amountIn, feeTaken, netAmount) => {
+    const encoded = ROUTER_ABI.encodeEventLog(ROUTER_ABI.getEvent('Routed'), [target, user, asset, amountIn, feeTaken, netAmount]);
+    return { address: ROUTER, topics: encoded.topics, data: encoded.data };
+  };
+  const POOL = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5';
+  const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+  const OWNER = '0x1111111111111111111111111111111111111111';
+  const OTHER = '0x2222222222222222222222222222222222222222';
+
+  const receipt = (log) => ({ status: 1, hash: '0x' + 'ab'.repeat(32), logs: [log] });
+
+  it('parses the Routed event from a receipt', () => {
+    const parsed = parseRoutedEvent(receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_000n)), ROUTER);
+    expect(parsed).toMatchObject({ user: OWNER, amountIn: AMOUNT, feeTaken: 3_000_000n, netAmount: 997_000_000n });
+  });
+
+  it('throws when the receipt carries no Routed event from THIS router', () => {
+    expect(() => parseRoutedEvent({ status: 1, logs: [] }, ROUTER)).toThrow();
+  });
+
+  it('verifyRoutedDeposit accepts the honest split', async () => {
+    await expect(verifyRoutedDeposit({
+      receipt: receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_000n)),
+      routerAddress: ROUTER, owner: OWNER, target: POOL, asset: USDC,
+      amountIn: AMOUNT, feeTaken: 3_000_000n, netAmount: 997_000_000n
+    })).resolves.toMatchObject({ ok: true });
+  });
+
+  it('verifyRoutedDeposit rejects every field that disagrees with what was signed', async () => {
+    const good = () => receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_000n));
+    const args = { routerAddress: ROUTER, owner: OWNER, target: POOL, asset: USDC, amountIn: AMOUNT, feeTaken: 3_000_000n, netAmount: 997_000_000n };
+    /* someone else's deposit */
+    await expect(verifyRoutedDeposit({ ...args, receipt: receipt(routedLog(POOL, OTHER, USDC, AMOUNT, 3_000_000n, 997_000_000n)) }))
+      .rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    /* a fee larger than the sheet quoted */
+    await expect(verifyRoutedDeposit({ ...args, receipt: receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 4_000_000n, 996_000_000n)) }))
+      .rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    /* a different destination */
+    await expect(verifyRoutedDeposit({ ...args, receipt: receipt(routedLog(OTHER, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_000n)) }))
+      .rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+  });
+
+  it('netAtLeast allows the minted balance to exceed net (Compound/Lido rounding), never to fall below', async () => {
+    const args = { routerAddress: ROUTER, owner: OWNER, target: POOL, asset: USDC, amountIn: AMOUNT, feeTaken: 3_000_000n, netAmount: 997_000_000n };
+    await expect(verifyRoutedDeposit({ ...args, netAtLeast: true, receipt: receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_001n)) }))
+      .resolves.toMatchObject({ ok: true });
+    await expect(verifyRoutedDeposit({ ...args, netAtLeast: false, receipt: receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_001n)) }))
+      .rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    await expect(verifyRoutedDeposit({ ...args, netAtLeast: true, receipt: receipt(routedLog(POOL, OWNER, USDC, AMOUNT, 3_000_000n, 997_000_000n - 1n)) }))
+      .rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+  });
+
+  it('the native-ETH path (Lido) pins asset = address(0)', async () => {
+    const LIDO_STETH = '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84';
+    await expect(verifyRoutedDeposit({
+      receipt: receipt(routedLog(LIDO_STETH, OWNER, '0x0000000000000000000000000000000000000000', 10n ** 18n, 3n * 10n ** 14n, 997n * 10n ** 16n)),
+      routerAddress: ROUTER, owner: OWNER, target: LIDO_STETH, asset: null,
+      amountIn: 10n ** 18n, feeTaken: 3n * 10n ** 14n, netAmount: 997n * 10n ** 16n, netAtLeast: true
+    })).resolves.toMatchObject({ ok: true });
   });
 });

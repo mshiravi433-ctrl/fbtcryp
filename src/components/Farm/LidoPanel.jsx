@@ -6,8 +6,6 @@ import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
 import { EVM_CHAINS, explorerAddr, explorerTx } from '../../lib/chains';
 import {
-  LIDO_STAKE_MAX_ETH_PER_TX,
-  LIDO_STAKE_MAX_ETH_TOTAL,
   LIDO_STAKE_ALLOWLIST,
   lidoStakeAllowedFor,
   lidoWithdrawAllowedFor
@@ -50,6 +48,8 @@ import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
 import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
+import { withRpcRetry } from '../../lib/defi/rpcRetry.js';
+import { loadSplitRouterInfo, routeSupplyPlan } from '../../lib/defi/splitRouter.js';
 
 const fmt = (n, d = 4) => {
   if (n == null || !Number.isFinite(Number(n))) return '—';
@@ -99,6 +99,9 @@ export default function LidoPanel({ pool }) {
   const [simulating, setSimulating] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [history, setHistory] = useState([]);
+  /* null = no router configured for Ethereum (or its fee could not be
+   * read) → every plan stays direct and fee-less. Fail-open, never fail-dead. */
+  const [, setRouterInfo] = useState(null);
   const alive = useRef(true);
 
   const isTarget = isLidoPool(pool);
@@ -115,13 +118,15 @@ export default function LidoPanel({ pool }) {
     setBusy('loading');
     try {
       const provider = await wallet.getReadProvider(LIDO.chainId);
-      const [pos, proto] = await Promise.all([
-        getPosition(provider, owner, { history: loadLidoHistoryFor(owner) }).catch(() => null),
-        getProtocolStatus(provider).catch(() => null)
+      const [pos, proto, rinfo] = await Promise.all([
+        withRpcRetry(() => getPosition(provider, owner, { history: loadLidoHistoryFor(owner) }), { label: 'lido position' }).catch(() => null),
+        withRpcRetry(() => getProtocolStatus(provider), { label: 'lido protocol' }).catch(() => null),
+        withRpcRetry(() => loadSplitRouterInfo(provider, LIDO.chainId), { label: 'lido router' }).catch(() => null)
       ]);
       if (!alive.current) return;
       setPosition(pos);
       setStatus(proto);
+      setRouterInfo(rinfo);
       setHistory(loadLidoHistoryFor(owner));
     } catch {
       /* keep previous state */
@@ -134,12 +139,11 @@ export default function LidoPanel({ pool }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const maxStakeEth = useMemo(() => {
-    if (!position) return LIDO_STAKE_MAX_ETH_PER_TX;
-    const existing = Number(position.totalEthEquivalent ?? 0);
-    const remainingTotal = Math.max(0, LIDO_STAKE_MAX_ETH_TOTAL - existing);
-    const walletEth = wallet.nativeBalance != null ? Number(wallet.nativeBalance) : Infinity;
-    return Math.max(0, Math.min(LIDO_STAKE_MAX_ETH_PER_TX, remainingTotal, walletEth * 0.95));
-  }, [position, wallet.nativeBalance]);
+    /* No platform caps: the honest ceiling is the wallet's own ETH, minus a
+       5% floor so staking everything would not strand the gas. */
+    const walletEth = wallet.nativeBalance != null ? Number(wallet.nativeBalance) : null;
+    return walletEth == null ? null : Math.max(0, walletEth * 0.95);
+  }, [wallet.nativeBalance]);
 
   const maxWrap = position?.stETH ?? 0;
   const maxUnwrap = position?.wstETH ?? 0;
@@ -174,6 +178,25 @@ export default function LidoPanel({ pool }) {
           history: loadLidoHistoryFor(owner),
           nativeBalance: wallet.nativeBalance == null ? null : await toWei(wallet.nativeBalance)
         });
+        /*
+         * SPLIT ROUTER — the fee-on-deposit seam, native-ETH shape. ONLY the
+         * stake plan: wrap / unwrap / requestWithdraw / claim are user-side
+         * exits and conversions and stay exactly as direct as they are today.
+         * routeSupplyPlan returns the SAME plan (same reference, fee-less,
+         * direct) unless a router is configured for Ethereum, its feeBps was
+         * read on-chain and the plan carries a valued stake step — every
+         * other case fails open to the direct stake.
+         */
+        if (Array.isArray(built?.steps) && built.steps.length > 0) {
+          const rinfo = await loadSplitRouterInfo(provider, LIDO.chainId);
+          if (rinfo) {
+            built = routeSupplyPlan(built, {
+              chainId: LIDO.chainId,
+              protocolId: 'lido',
+              feeBps: rinfo.feeBps
+            });
+          }
+        }
       } else if (nextMode === 'wrap') {
         built = await buildWrapPlan({ provider, owner, amountStETH: nextAmount });
       } else if (nextMode === 'unwrap') {
@@ -280,7 +303,10 @@ export default function LidoPanel({ pool }) {
               amountWei: plan.checks.amountWei,
               expectedSpender: step.spender,
               beforePosition: before,
-              requestId: plan.checks.requestId
+              requestId: plan.checks.requestId,
+              /* Present only on routed stake plans — makes the receipt proof
+               * demand the Routed event + the router→owner stETH transfer. */
+              splitRouter: plan.checks.splitRouter ?? null
             })
           });
           const requestId = result.proof?.requestId ?? plan.checks.requestId ?? null;
@@ -490,12 +516,6 @@ export default function LidoPanel({ pool }) {
         </a>
       </div>
 
-      {stakeAllowed && (
-        <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.4 }}>
-          {t('farm.lido.capsLine', { perTx: LIDO_STAKE_MAX_ETH_PER_TX, total: LIDO_STAKE_MAX_ETH_TOTAL })}
-          {LIDO_STAKE_ALLOWLIST.length > 0 && <> · {t('farm.lido.allowlisted')}</>}
-        </p>
-      )}
 
       {/* Claimable quick list */}
       {claimable.length > 0 && (
@@ -536,7 +556,7 @@ export default function LidoPanel({ pool }) {
                   type="button"
                   onClick={() => {
                     const max = mode === 'stake' ? maxStakeEth : mode === 'wrap' ? maxWrap : mode === 'unwrap' ? maxUnwrap : maxRequest;
-                    setAmount(String(Math.floor(Number(max) * 1e6) / 1e6));
+                    if (max != null) setAmount(String(Math.floor(Number(max) * 1e6) / 1e6));
                   }}
                 >
                   {t('farm.lido.max')}
@@ -593,6 +613,23 @@ export default function LidoPanel({ pool }) {
           )}
 
           <StepList steps={plan?.steps} t={t} />
+
+          {/* THE FEE, disclosed before the signature — not in a receipt.
+              Rendered only when this plan is actually routed; a direct
+              stake shows nothing, because it charges nothing. */}
+          {plan?.checks?.splitRouter && (
+            <p className="notice" style={{ margin: '8px 0 0' }}>
+              {t('farm.splitRouter.feeNotice', {
+                pct: (Number(plan.checks.splitRouter.feeBps ?? 0n) / 100).toString(),
+                fee: fmt(Number(plan.checks.splitRouter.feeAmount ?? 0n) / 1e18),
+                net: fmt(Number(plan.checks.splitRouter.netAmount ?? 0n) / 1e18),
+                total: plan.checks.amountEth ?? '—',
+                symbol: 'ETH'
+              })}
+              <br />
+              <span className="faint">{t('farm.splitRouter.trustNote')}</span>
+            </p>
+          )}
 
           {blockedByPlan && (
             <p className="notice notice-danger" style={{ margin: 0 }}>

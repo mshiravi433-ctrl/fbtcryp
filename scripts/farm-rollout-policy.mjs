@@ -14,51 +14,31 @@ export const FARM_ROLLOUT_PROTOCOLS = Object.freeze({
     label: 'Aave v3 Base native USDC',
     flag: 'VITE_ENABLE_AAVE_BASE_SUPPLY',
     allowlist: 'VITE_AAVE_BASE_SUPPLY_ALLOWLIST',
-    perTxCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX',
-    totalCap: 'VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL',
-    publicFlag: 'VITE_AAVE_BASE_SUPPLY_PUBLIC',
-    maxPerTx: 1000,
-    maxTotal: 10000
+    publicFlag: 'VITE_AAVE_BASE_SUPPLY_PUBLIC'
   }),
   'compound-base': Object.freeze({
     label: 'Compound v3 Base native USDC',
     flag: 'VITE_ENABLE_COMPOUND_BASE_SUPPLY',
     allowlist: 'VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST',
-    perTxCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX',
-    totalCap: 'VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL',
-    publicFlag: 'VITE_COMPOUND_BASE_SUPPLY_PUBLIC',
-    maxPerTx: 1000,
-    maxTotal: 10000
+    publicFlag: 'VITE_COMPOUND_BASE_SUPPLY_PUBLIC'
   }),
   'aave-arbitrum': Object.freeze({
     label: 'Aave v3 Arbitrum native USDC',
     flag: 'VITE_ENABLE_AAVE_ARBITRUM_SUPPLY',
     allowlist: 'VITE_AAVE_ARB_SUPPLY_ALLOWLIST',
-    perTxCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX',
-    totalCap: 'VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL',
-    publicFlag: 'VITE_AAVE_ARB_SUPPLY_PUBLIC',
-    maxPerTx: 1000,
-    maxTotal: 10000
+    publicFlag: 'VITE_AAVE_ARB_SUPPLY_PUBLIC'
   }),
   lido: Object.freeze({
     label: 'Lido Ethereum ETH',
     flag: 'VITE_ENABLE_LIDO_STAKE',
     allowlist: 'VITE_LIDO_STAKE_ALLOWLIST',
-    perTxCap: 'VITE_LIDO_STAKE_MAX_ETH_PER_TX',
-    totalCap: 'VITE_LIDO_STAKE_MAX_ETH_TOTAL',
-    publicFlag: 'VITE_LIDO_STAKE_PUBLIC',
-    maxPerTx: 1,
-    maxTotal: 10
+    publicFlag: 'VITE_LIDO_STAKE_PUBLIC'
   }),
   'morpho-base': Object.freeze({
     label: 'Morpho Blue Base selected USDC/cbBTC market',
     flag: 'VITE_ENABLE_MORPHO_BASE_SUPPLY',
     allowlist: 'VITE_MORPHO_BASE_SUPPLY_ALLOWLIST',
-    perTxCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX',
-    totalCap: 'VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL',
-    publicFlag: 'VITE_MORPHO_BASE_SUPPLY_PUBLIC',
-    maxPerTx: 1000,
-    maxTotal: 10000
+    publicFlag: 'VITE_MORPHO_BASE_SUPPLY_PUBLIC'
   })
 });
 
@@ -104,24 +84,15 @@ function parseAllowlist(raw, name, errors) {
   return [...new Set(normalized)];
 }
 
-function capValue(env, name, fallback, errors) {
-  const raw = value(env, name);
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    errors.push(`${name} must be a finite number greater than zero.`);
-    return fallback;
-  }
-  return parsed;
-}
-
 /**
  * Inspect a build environment without mutating it.
  *
  * Capital-off builds require no evidence marker. The moment any money-in flag
  * is true, the selected rollout ids must match the enabled flags exactly, the
- * strict-fork marker is mandatory, that protocol's allowlist must be non-empty,
- * and canary caps may not exceed the reviewed defaults.
+ * strict-fork marker is mandatory, and that protocol's allowlist must be
+ * non-empty. There are no amount caps anymore: the owner removed them after
+ * the fork evidence passed («با هر مقدار انجام بپذیر»), so the only ceilings
+ * left are the protocols' own on-chain limits and the user's balance.
  */
 export function inspectFarmRollout(env = process.env) {
   const errors = [];
@@ -177,25 +148,12 @@ export function inspectFarmRollout(env = process.env) {
     for (const id of enabled) {
       const protocol = FARM_ROLLOUT_PROTOCOLS[id];
       const allowlist = parseAllowlist(value(env, protocol.allowlist), protocol.allowlist, errors);
-      const perTx = capValue(env, protocol.perTxCap, protocol.maxPerTx, errors);
-      const total = capValue(env, protocol.totalCap, protocol.maxTotal, errors);
-      if (perTx > protocol.maxPerTx) {
-        errors.push(`${protocol.perTxCap} may not exceed the reviewed canary cap ${protocol.maxPerTx}.`);
-      }
-      if (total > protocol.maxTotal) {
-        errors.push(`${protocol.totalCap} may not exceed the reviewed canary cap ${protocol.maxTotal}.`);
-      }
-      if (perTx > total) {
-        errors.push(`${protocol.perTxCap} may not exceed ${protocol.totalCap}.`);
-      }
       protocols[id] = Object.freeze({
         id,
         label: protocol.label,
         flag: protocol.flag,
         allowlistName: protocol.allowlist,
         allowlist: Object.freeze(allowlist),
-        perTxCap: perTx,
-        totalCap: total,
         public: publicEnabled.includes(id)
       });
     }
@@ -221,7 +179,7 @@ export function formatFarmRollout(result) {
   const summary = result.enabled.map((id) => {
     const row = result.protocols[id];
     const scope = row.public ? 'public' : `${row.allowlist.length} canary wallet${row.allowlist.length === 1 ? '' : 's'}`;
-    return `${id} (${scope}, caps ${row.perTxCap}/${row.totalCap})`;
+    return `${id} (${scope}, uncapped)`;
   }).join(', ');
   const mode = result.mode === 'public-open' ? 'public-open rollout' : 'limited canary';
   return `Farm rollout gate passed: ${mode} for ${summary}.`;

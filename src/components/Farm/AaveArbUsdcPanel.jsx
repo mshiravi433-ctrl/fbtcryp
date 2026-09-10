@@ -6,7 +6,6 @@ import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
 import { EVM_CHAINS, explorerAddr, explorerTx } from '../../lib/chains';
 import {
-  AAVE_ARB_SUPPLY_MAX_USDC_PER_TX, AAVE_ARB_SUPPLY_MAX_USDC_TOTAL,
   AAVE_ARB_SUPPLY_ALLOWLIST, aaveArbSupplyAllowedFor, aaveArbWithdrawAllowedFor
 } from '../../lib/features';
 import { AAVE_ARB_SUPPLY_OPEN_TO_PUBLIC } from '../../lib/farmRolloutMode';
@@ -28,6 +27,8 @@ import {
   executeGuardedStep, simulateGuardedStep, isTransactionReplacement, isTransactionTimeout, isUserRejection
 } from '../../lib/defi/guardedExecution';
 import { farmErrorLabel, farmErrorText } from '../../lib/defi/farmErrors';
+import { withRpcRetry } from '../../lib/defi/rpcRetry.js';
+import { loadSplitRouterInfo, routeSupplyPlan } from '../../lib/defi/splitRouter.js';
 
 /*
  * AAVE V3 · ARBITRUM · USDC — the in-app supply / withdraw surface.
@@ -92,6 +93,9 @@ export default function AaveArbUsdcPanel({ pool }) {
   const [simulating, setSimulating] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [history, setHistory] = useState([]);
+  /* null = no router configured for this chain (or its fee could not be
+   * read) → every plan stays direct and fee-less. Fail-open, never fail-dead. */
+  const [routerInfo, setRouterInfo] = useState(null);
   const alive = useRef(true);
 
   const isTarget = isAaveArbUsdcPool(pool);
@@ -115,18 +119,29 @@ export default function AaveArbUsdcPanel({ pool }) {
     try {
       const provider = await wallet.getReadProvider(AAVE_V3_ARBITRUM.chainId);
       const [pos, res, rows] = await Promise.all([
-        getPosition(provider, owner, { history: loadAaveArbHistoryFor(owner) }).catch(() => null),
-        getReserveStatus(provider).catch(() => null),
+        withRpcRetry(() => getPosition(provider, owner, { history: loadAaveArbHistoryFor(owner) }), { label: 'aave-arb position' }).catch(() => null),
+        withRpcRetry(() => getReserveStatus(provider), { label: 'aave-arb reserve' }).catch(() => null),
         Promise.resolve(loadAaveArbHistoryFor(owner))
       ]);
       if (!alive.current) return;
       setPosition(pos);
       setStatus(res);
       setHistory(rows);
-      const bal = await walletBalanceOf(provider, owner);
+      const bal = await withRpcRetry(() => walletBalanceOf(provider, owner), { label: 'aave-arb wallet' });
       if (!alive.current) return;
       setWalletUsdc(bal);
-      const allowance = await walletAllowanceOf(provider, owner);
+      const rinfo = await withRpcRetry(
+        () => loadSplitRouterInfo(provider, AAVE_V3_ARBITRUM.chainId),
+        { label: 'aave-arb router' }
+      ).catch(() => null);
+      if (!alive.current) return;
+      setRouterInfo(rinfo);
+      /* When a router is live the allowance that matters is the ROUTER's —
+       * the protocol allowance is no longer the spender that will pull. */
+      const allowance = await withRpcRetry(
+        () => walletAllowanceOf(provider, owner, rinfo?.address),
+        { label: 'aave-arb allowance' }
+      );
       setPartial(derivePartialApprovalState({
         owner,
         allowanceUsdcWei: allowance ?? 0n,
@@ -144,10 +159,8 @@ export default function AaveArbUsdcPanel({ pool }) {
 
   /* ── the amount the user may actually supply ────────────────────────────── */
   const maxSupplyUsdc = useMemo(() => {
-    const limits = [
-      AAVE_ARB_SUPPLY_MAX_USDC_PER_TX,
-      AAVE_ARB_SUPPLY_MAX_USDC_TOTAL - (position ? Number(fromUsdcWei(position.suppliedUsdc)) : 0)
-    ];
+    /* No platform caps: wallet balance and Aave's own reserve cap only. */
+    const limits = [];
     if (walletUsdc != null) limits.push(Number(fromUsdcWei(walletUsdc)));
     if (status?.supplyCapUsdc != null && status.currentSuppliedUsdc != null) {
       limits.push(Number(fromUsdcWei(status.supplyCapUsdc - status.currentSuppliedUsdc)));
@@ -164,7 +177,7 @@ export default function AaveArbUsdcPanel({ pool }) {
     if (!owner || !(Number(nextAmount) > 0)) return;
     try {
       const provider = await wallet.getReadProvider(AAVE_V3_ARBITRUM.chainId);
-      const built = nextMode === 'withdraw'
+      let built = nextMode === 'withdraw'
         ? await buildWithdrawPlan({ provider, owner, amountUsdc: nextAmount })
         : await buildSupplyPlan({
             provider, owner, amountUsdc: nextAmount,
@@ -173,6 +186,27 @@ export default function AaveArbUsdcPanel({ pool }) {
               ? null
               : await toWei(wallet.nativeBalance)
           });
+      /*
+       * SPLIT ROUTER — the fee-on-deposit seam. ONLY supply plans, NEVER
+       * withdrawals: an exit stays exactly as direct as it is today.
+       * routeSupplyPlan returns the SAME plan (same reference, fee-less,
+       * direct) unless a router is configured for this chain, its feeBps
+       * was read on-chain and the plan's steps match exactly what it can
+       * rewrite — every other case fails open to the direct deposit.
+       */
+      if (nextMode !== 'withdraw' && Array.isArray(built?.steps) && built.steps.length > 0) {
+        const rinfo = await loadSplitRouterInfo(provider, AAVE_V3_ARBITRUM.chainId);
+        if (rinfo) {
+          const routerAllowanceWei = await walletAllowanceOf(provider, owner, rinfo.address);
+          built = routeSupplyPlan(built, {
+            chainId: AAVE_V3_ARBITRUM.chainId,
+            protocolId: 'aave-arbitrum',
+            feeBps: rinfo.feeBps,
+            routerAllowanceWei,
+            asset: AAVE_V3_ARBITRUM.usdc
+          });
+        }
+      }
       if (!alive.current) return;
       setPlan(built);
     } catch (err) {
@@ -200,7 +234,7 @@ export default function AaveArbUsdcPanel({ pool }) {
           provider,
           tx,
           allowance: step.kind === 'supply'
-            ? { token: AAVE_V3_ARBITRUM.usdc, owner, spender: AAVE_V3_ARBITRUM.pool, amountWei: plan.checks.amountWei ?? 0n }
+            ? { token: AAVE_V3_ARBITRUM.usdc, owner, spender: plan.checks.splitRouter?.address ?? AAVE_V3_ARBITRUM.pool, amountWei: plan.checks.amountWei ?? 0n }
             : undefined
         });
         if (!cancelled) {
@@ -256,7 +290,7 @@ export default function AaveArbUsdcPanel({ pool }) {
             owner,
             step,
             allowance: step.kind === 'supply'
-              ? { token: AAVE_V3_ARBITRUM.usdc, owner, spender: AAVE_V3_ARBITRUM.pool, amountWei: plan.checks.amountWei ?? 0n }
+              ? { token: AAVE_V3_ARBITRUM.usdc, owner, spender: plan.checks.splitRouter?.address ?? AAVE_V3_ARBITRUM.pool, amountWei: plan.checks.amountWei ?? 0n }
               : undefined
           });
           const before = step.kind === 'supply' || step.kind === 'withdraw'
@@ -268,6 +302,10 @@ export default function AaveArbUsdcPanel({ pool }) {
               provider, receipt, owner, action: step.kind,
               amountWei: plan.checks.amountWei,
               beforePositionWei: before?.aTokenBalance ?? null
+            ,
+              /* Present only on routed supply plans — makes the receipt
+               * proof demand the Routed event + net-amount protocol credit. */
+              splitRouter: plan.checks.splitRouter ?? null
             })
           });
           confirmAaveArbAction(record.id, {
@@ -316,12 +354,15 @@ export default function AaveArbUsdcPanel({ pool }) {
     setError(null);
     try {
       const provider = await wallet.getReadProvider(AAVE_V3_ARBITRUM.chainId);
-      const { steps } = await buildRevokePlan({ provider, owner });
+      /* When a router is live, the standing allowance the user may want to
+         kill is the ROUTER's — that is what the sheet shows and what a revoke
+         must actually revoke. */
+      const { steps } = await buildRevokePlan({ provider, owner, spender: routerInfo?.address ?? null });
       await simulateGuardedStep({ provider, owner, step: steps[0] });
       const result = await executeGuardedStep({
         signer, provider, owner, chainId: AAVE_V3_ARBITRUM.chainId, step: steps[0],
         verifyReceipt: ({ receipt }) => verifyAaveReceipt({
-          provider, receipt, owner, action: 'revoke', amountWei: 0n
+          provider, receipt, owner, action: 'revoke', amountWei: 0n, expectedSpender: routerInfo?.address ?? undefined
         })
       });
       recordAaveArbAction({
@@ -459,8 +500,7 @@ export default function AaveArbUsdcPanel({ pool }) {
           the input stops where it does. */}
       {supplyAllowed && (
         <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.4 }}>
-          {t('farm.aaveArb.capsLine', { perTx: AAVE_ARB_SUPPLY_MAX_USDC_PER_TX, total: AAVE_ARB_SUPPLY_MAX_USDC_TOTAL })}
-          {AAVE_ARB_SUPPLY_ALLOWLIST.length > 0 && <> · {t('farm.aaveArb.allowlisted')}</>}
+              {AAVE_ARB_SUPPLY_ALLOWLIST.length > 0 && <> · {t('farm.aaveArb.allowlisted')}</>}
         </p>
       )}
 
@@ -480,7 +520,8 @@ export default function AaveArbUsdcPanel({ pool }) {
             <button
               className="tag"
               type="button"
-              onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : maxSupplyUsdc) * 1e6) / 1e6))}
+              disabled={mode !== 'withdraw' && maxSupplyUsdc == null}
+              onClick={() => setAmount(String(Math.floor((mode === 'withdraw' ? maxWithdrawUsdc : (maxSupplyUsdc ?? 0)) * 1e6) / 1e6))}
             >
               {t('farm.aaveArb.max')}
             </button>
@@ -498,6 +539,23 @@ export default function AaveArbUsdcPanel({ pool }) {
 
           {/* Plain-language step list BEFORE any signature. */}
           <StepList steps={plan?.steps} t={t} />
+
+          {/* THE FEE, disclosed before the signature — not in a receipt.
+              Rendered only when this plan is actually routed; a direct
+              deposit shows nothing, because it charges nothing. */}
+          {plan?.checks?.splitRouter && (
+            <p className="notice" style={{ margin: '8px 0 0' }}>
+              {t('farm.splitRouter.feeNotice', {
+                pct: (Number(plan.checks.splitRouter.feeBps ?? 0n) / 100).toString(),
+                fee: fromUsdcWei(plan.checks.splitRouter.feeAmount ?? 0n),
+                net: fromUsdcWei(plan.checks.splitRouter.netAmount ?? 0n),
+                total: plan.checks.amountUsdc ?? '—',
+                symbol: AAVE_V3_ARBITRUM.usdcSymbol
+              })}
+              <br />
+              <span className="faint">{t('farm.splitRouter.trustNote')}</span>
+            </p>
+          )}
 
           {/* Checks the plan refused, in words. */}
           {blockedByPlan && (
@@ -577,11 +635,11 @@ async function walletBalanceOf(provider, owner) {
   }
 }
 
-async function walletAllowanceOf(provider, owner) {
+async function walletAllowanceOf(provider, owner, spender = null) {
   const { Contract } = await import('ethers');
   const c = new Contract(AAVE_V3_ARBITRUM.usdc, ['function allowance(address,address) view returns (uint256)'], provider);
   try {
-    return await c.allowance(owner, AAVE_V3_ARBITRUM.pool);
+    return await c.allowance(owner, spender ?? AAVE_V3_ARBITRUM.pool);
   } catch {
     return 0n;
   }

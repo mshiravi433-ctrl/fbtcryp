@@ -101,3 +101,42 @@ describe('Lido execution proof boundary', () => {
     })).rejects.toMatchObject({ code: 'LIDO_EXPECTED_EVENT_MISSING' });
   });
 });
+
+
+describe('Lido — ROUTED stake receipts (split router)', () => {
+  const ROUTER = '0x1234567890123456789012345678901234567890';
+  const ETH = 5n * 10n ** 18n;
+  const FEE = (ETH * 30n) / 10_000n;
+  const NET = ETH - FEE;
+  const splitRouter = { address: ROUTER, feeBps: 30n, feeAmount: FEE, netAmount: NET };
+  const ROUTED = new Interface([
+    'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
+  ]);
+  const routedLog = (user, net) => {
+    const e = ROUTED.encodeEventLog(ROUTED.getEvent('Routed'), [LIDO.stETH, user, '0x0000000000000000000000000000000000000000', ETH, FEE, net]);
+    return { address: ROUTER, topics: e.topics, data: e.data };
+  };
+
+  it('proves a routed stake from Routed + the stETH Transfer router → OWNER', async () => {
+    /* The router itself calls submit(), so the receipt really does carry a
+     * Submitted event — with the ROUTER as sender. That is exactly why the
+     * direct-stake proof (sender === owner) cannot be used here. */
+    const submitted = log(LIDO.stETH, 'Submitted', [ROUTER, NET, '0x0000000000000000000000000000000000000000']);
+    const receipt = { status: 1, logs: [routedLog(OWNER, NET), submitted, log(LIDO.stETH, 'Transfer', [ROUTER, OWNER, NET])] };
+    await expect(verifyLidoReceipt({
+      provider: {}, receipt, owner: OWNER, action: 'stake', amountWei: ETH, splitRouter
+    })).resolves.toMatchObject({ ok: true, event: 'Routed' });
+  });
+
+  it('rejects a routed stake that hands the stETH to someone else, or a missing Routed event', async () => {
+    const submitted = log(LIDO.stETH, 'Submitted', [ROUTER, NET, '0x0000000000000000000000000000000000000000']);
+    const toOther = { status: 1, logs: [routedLog(OWNER, NET), submitted, log(LIDO.stETH, 'Transfer', [ROUTER, OTHER, NET])] };
+    await expect(verifyLidoReceipt({
+      provider: {}, receipt: toOther, owner: OWNER, action: 'stake', amountWei: ETH, splitRouter
+    })).rejects.toMatchObject({ code: 'LIDO_STAKE_EVENT_MISMATCH' });
+    const noRouted = { status: 1, logs: [submitted, log(LIDO.stETH, 'Transfer', [ROUTER, OWNER, NET])] };
+    await expect(verifyLidoReceipt({
+      provider: {}, receipt: noRouted, owner: OWNER, action: 'stake', amountWei: ETH, splitRouter
+    })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+  });
+});

@@ -102,7 +102,8 @@
     "swapOnCorrectNetwork": "{{symbol}} ← سواپ در شبکهٔ درست",
     "trendTitle": "کل ارزش بازار · {{days}} روز",
     "trendNote": "بازسازی‌شده از {{n}} کوین بزرگ همین صفحه — تاریخچه قیمت ساعلی هر کوین ضربدر عرضه در گردش آن. این بالای بازار است، نه کل بازار، و عرضه در کل بازه ثابت در نظر گرفته شده است.",
-    "compare": "مقایسه"
+    "compare": "مقایسه",
+    "livePrices": "قیمت‌های زنده بازار"
   },
   "coin": {
     "notFound": "ارز پیدا نشد",
@@ -1885,6 +1886,13 @@
     "apyBase": "بازده پایه",
     "apyReward": "بازده پاداش",
     "inappIntro": "همین‌جا بخر و مالکش باش — بدون واریز اضافه، بدون قفل، بدون سایت خارجی.",
+    "splitRouter": {
+      "step": {
+        "approve": "اجازه دهید قرارداد واریز دقیقاً {{amount}} {{symbol}} برداشت کند"
+      },
+      "feeNotice": "کارمزد واریز: {{fee}} از {{total}} {{symbol}} ({{pct}}٪) — {{net}} {{symbol}} وارد پروتکل می‌شود. برداشت همیشه بدون کارمزد است.",
+      "trustNote": "پول شما از کیف پول خودتان در همان تراکنش وارد پروتکل می‌شود؛ فقط کارمزد جدا می‌شود و قرارداد روتر هیچ موجودی نگه نمی‌دارد."
+    },
     "aave": {
       "panelTitle": "سپرده درون‌برنامه‌ای · Aave v3 روی Base",
       "panelSub": "USDC از درون همین برنامه به استخر Aave v3 روی {{chain}} سپرده می‌شود. کیف پول شما امضا می‌کند؛ برنامه هرگز نگهدارندهٔ دارایی نیست.",
@@ -1973,7 +1981,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "موجودی ETH شما روی Base خوانده نشد.",
         "AAVE_NATIVE_GAS_FLOOR": "برای پرداخت گاز به ETH بیشتری روی Base نیاز دارید."
       },
-      "wrongChainNote": "کیف پول شما روی شبکه دیگری است. برای دیدن پوزیشن Aave و برداشت، به {{chain}} بروید."
+      "wrongChainNote": "کیف پول شما روی شبکه دیگری است. برای دیدن پوزیشن Aave و برداشت، به {{chain}} بروید.",
+      "userRejected": "امضا رد شد",
+      "timeout": "تراکنش هنوز در انتظار است؛ کیف پول یا اکسپلورر را بررسی کنید.",
+      "replaced": "تراکنش جایگزین یا لغو شد."
     },
     "aaveArb": {
       "panelTitle": "سپرده درون‌برنامه‌ای · Aave v3 روی Arbitrum",
@@ -2063,7 +2074,10 @@
         "AAVE_NATIVE_BALANCE_UNKNOWN": "موجودی ETH شما روی Arbitrum خوانده نشد.",
         "AAVE_NATIVE_GAS_FLOOR": "برای پرداخت گاز به ETH بیشتری روی Arbitrum نیاز دارید."
       },
-      "wrongChainNote": "کیف پول شما روی شبکه دیگری است. برای دیدن پوزیشن Aave و برداشت، به {{chain}} بروید."
+      "wrongChainNote": "کیف پول شما روی شبکه دیگری است. برای دیدن پوزیشن Aave و برداشت، به {{chain}} بروید.",
+      "userRejected": "امضا رد شد",
+      "timeout": "تراکنش هنوز در انتظار است؛ کیف پول یا اکسپلورر را بررسی کنید.",
+      "replaced": "تراکنش جایگزین یا لغو شد."
     },
     "compound": {
       "panelTitle": "تأمین درون‌اپ · Compound III روی Base",
@@ -2157,7 +2171,10 @@
         "COMPOUND_NATIVE_BALANCE_UNKNOWN": "موجودی ETH شما روی Base خوانده نشد.",
         "COMPOUND_NATIVE_GAS_FLOOR": "برای گز، به ETH بیشتری روی Base نیاز دارید."
       },
-      "wrongChainNote": "کیف پول شما روی شبکهٔ دیگری است. برای دیدن موقعیت Compound و برداشت، به {{chain}} تغییر دهید."
+      "wrongChainNote": "کیف پول شما روی شبکهٔ دیگری است. برای دیدن موقعیت Compound و برداشت، به {{chain}} تغییر دهید.",
+      "userRejected": "امضا رد شد",
+      "timeout": "تراکنش هنوز در انتظار است؛ کیف پول یا اکسپلورر را بررسی کنید.",
+      "replaced": "تراکنش جایگزین یا لغو شد."
     },
     "horizonChartTitle": "سود بر اساس افق زمانی",
     "horizonChartSub": "بازده تقریبی {{amount}} با نرخ امروز",
@@ -2275,7 +2292,23 @@
         "LIDO_QUEUE_WSTETH_MISMATCH": "Queue wstETH mismatch.",
         "LIDO_QUEUE_STETH_MISMATCH": "Queue stETH mismatch.",
         "LIDO_PROTOCOL_STATUS_UNREADABLE": "Protocol status unreadable.",
-        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable."
+        "LIDO_WITHDRAWAL_REQUESTS_UNREADABLE": "Withdrawal requests unreadable.",
+        "LIDO_WRONG_CHAIN": "کیف پول شما روی شبکهٔ دیگری است. لیدو روی اتریوم اصلی اجرا می‌شود.",
+        "LIDO_NETWORK_UNREADABLE": "الان به شبکهٔ اتریوم دسترسی نداریم. کمی بعد دوباره تلاش کنید.",
+        "LIDO_STETH_IDENTITY_MISMATCH": "قرارداد stETH خودش را آن‌گونه که انتظار می‌رفت معرفی نکرد. هیچ چیزی امضا نشد.",
+        "LIDO_STETH_IDENTITY_UNREADABLE": "قرارداد stETH الان قابل خواندن نیست.",
+        "LIDO_BAD_OWNER": "حساب متصل قابل تأیید نبود.",
+        "LIDO_EXPECTED_EVENT_MISSING": "رسید تراکنش رویداد مورد انتظار این عمل را نداشت. تراکنش را در اکسپلورر بررسی کنید.",
+        "LIDO_APPROVAL_EVENT_MISMATCH": "رسید تأیید با چیزی که امضا شد نمی‌خواند.",
+        "LIDO_REVOKE_AMOUNT_MISMATCH": "لغو اجازه، سقف مجاز را صفر نکرد.",
+        "LIDO_APPROVAL_AMOUNT_MISMATCH": "مبلغ تأییدشده با پلن نمی‌خواند.",
+        "LIDO_STAKE_EVENT_MISMATCH": "رسید استیک ثابت نمی‌کند stETH شما رسیده باشد.",
+        "LIDO_POSITION_UNCHANGED": "موقعیت stETH شما طبق انتظار تغییر نکرد.",
+        "LIDO_REQUEST_EVENT_MISMATCH": "رسید درخواست برداشت نمی‌خواند.",
+        "LIDO_REQUEST_STATE_MISMATCH": "وضعیت درخواست برداشت چیزی نیست که این عمل نیاز دارد.",
+        "LIDO_CLAIM_EVENT_MISMATCH": "رسید مطالبه نمی‌خواند.",
+        "LIDO_CLAIM_STATE_MISMATCH": "این برداشت در وضعیت قابل مطالبه نیست.",
+        "LIDO_UNSUPPORTED_ACTION": "این عمل پشتیبانی نمی‌شود."
       },
       "err": {
         "unknown": "تراکنش به دلیل نامشخصی شکست خورد.",
@@ -2298,7 +2331,10 @@
       "risk4": "Lido حدود ۱۰٪ از پاداش استیک را به‌عنوان کارمزد برمی‌دارد (تا ۲۰۲۴) — APY نمایش‌داده‌شده خالص است اما متغیر است.",
       "risk5": "در این صفحه کارمزدی برای استیک/تبدیل/درخواست/دریافت Lido دریافت نمی‌شود — فقط گس اتریوم اینجا. سواپ‌های دیگر همچنان کارمزد پلتفرم ({{fee}}٪) دارند.",
       "fee": "کارمزد",
-      "explorerTitle": "قراردادهای Lido"
+      "explorerTitle": "قراردادهای Lido",
+      "userRejected": "امضا رد شد",
+      "timeout": "تراکنش هنوز در انتظار است؛ کیف پول یا اکسپلورر را بررسی کنید.",
+      "replaced": "تراکنش جایگزین یا لغو شد."
     },
     "refresh": "به‌روزرسانی",
     "retry": "تلاش دوباره",
