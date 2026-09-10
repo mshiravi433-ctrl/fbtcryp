@@ -33,6 +33,7 @@ import { createEcosystemReader, DOMAIN_IDS } from './ecosystemState.js';
 import { buildPortfolioStrategy, RISK_PROFILES } from './strategyEngine.js';
 import { createStrategyRuntime } from './strategyRuntime.js';
 import { FEE_BPS } from '../feeBps.js';
+import { SPECULATION_ENABLED } from '../features.js';
 
 
 /** One memoised promise per upstream call, shared by every domain that needs it. */
@@ -168,12 +169,22 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
     },
 
     /* ── one shared Ostium call answers three domains ────────────────────── */
-    ...ostiumReaders(),
+    ...(SPECULATION_ENABLED ? ostiumReaders() : {}),
 
     /* ── one shared yield call answers three domains ─────────────────────── */
     ...yieldReaders(),
 
     /* ── derivatives ─────────────────────────────────────────────────────── */
+    /*
+     * Gated on the same flag App.jsx gates the Perp/Dydx/Ostium routes with,
+     * and for the same reason: in a store build those venues do not exist in
+     * the app at all, so the brain must not read them and must not even carry
+     * their code. An ungated dynamic import emits a `perp-*.js` chunk into the
+     * store bundle, which is precisely what test/run.mjs greps the built
+     * output for. With the flag off the readers are absent, the ecosystem
+     * read reports those domains as skipped, and the plan says so.
+     */
+    ...(SPECULATION_ENABLED ? {
     futures: async () => {
       const { getPerpMarkets } = await import('../perp.js');
       const data = await getPerpMarkets();
@@ -194,7 +205,8 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
         price: num(m.oraclePrice), volumeUsd: num(m.volume24h ?? m.volume24hUsd),
         leverage: 1, risk: 'high'
       }));
-    },
+    }
+    } : {}),
 
     /* ── intelligence ────────────────────────────────────────────────────── */
     smartMoney: async () => {

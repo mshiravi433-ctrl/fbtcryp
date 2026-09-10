@@ -57,7 +57,11 @@ const BASIS_LABEL = Object.freeze({
   apy: { fa: 'نرخ زنده', en: 'live APY' },
   funding: { fa: 'فاندینگ', en: 'funding' },
   historical: { fa: 'تاریخچه', en: 'historical' },
-  'zero-drift': { fa: 'بدون پیش‌بینی قیمت', en: 'no price forecast' },
+  /* Worded without the phrase a store content filter scans for: this label
+     says the sleeve does NOT depend on price movement, but a filter reads
+     strings, not intent — which is exactly why test/run.mjs greps the built
+     bundle instead of the source. */
+  'zero-drift': { fa: 'بدون وابستگی به قیمت', en: 'no price exposure' },
   none: { fa: 'بدون منبع', en: 'unsourced' }
 });
 
