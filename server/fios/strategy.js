@@ -44,8 +44,9 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
    * @param {object} [p.preferences] resolved preference model
    * @param {object} [p.globalIntel] Phase 211 — global intelligence snapshot
    * @param {object} [p.crossAsset]  Phase 211 — cross-asset analysis
+   * @param {object} [p.smartMoney]  Smart-money intel digest (feeds evidence + notes)
    */
-  async function generate({ owner, intent = {}, financial = null, world = null, research = null, goal = null, preferences = null, globalIntel = null, crossAsset = null, correlationId = null } = {}) {
+  async function generate({ owner, intent = {}, financial = null, world = null, research = null, goal = null, preferences = null, globalIntel = null, crossAsset = null, smartMoney = null, correlationId = null } = {}) {
     const at = now();
     const fs = financial?.computed || financial || {};
     if (!fs || fs.status === 'UNAVAILABLE') {
@@ -81,7 +82,7 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
        global domains the engine actually read attach to each proposal so the
        council, the simulation and the user see the world the number was made
        in. An unread global world produces a null context — never a guess. */
-    const globalContext = buildGlobalContext({ globalIntel, crossAsset, at });
+    const globalContext = buildGlobalContext({ globalIntel, crossAsset, smartMoney, at });
     const globalNotes = [];
     if (globalContext) {
       if (['RISK_OFF', 'RISK_OFF_LEANING'].includes(globalContext.regime)) {
@@ -93,6 +94,23 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
       if (globalContext.smartMoneyNetUsd !== null) {
         globalNotes.push(`smart-money net flow $${Math.round(globalContext.smartMoneyNetUsd / 1000)}k over the last window`);
       }
+      if (globalContext.cexDexDirection) {
+        globalNotes.push(`flow direction ${String(globalContext.cexDexDirection).replace(/_/g, '→')}`);
+      }
+    }
+    /* Smart-money evidence rows — same contract as strategyCompetition expects.
+       Attached to every candidate so competition/decision see the window. */
+    const smEvidence = [];
+    if (smartMoney && Array.isArray(smartMoney.strategyEvidence) && smartMoney.strategyEvidence.length) {
+      smEvidence.push(...smartMoney.strategyEvidence);
+    } else if (globalContext?.smartMoneyNetUsd != null || globalContext?.whaleEventCount != null) {
+      const smSamples = globalContext.whaleEventCount || 1;
+      smEvidence.push(ev('smart-money:global', {
+        observedAt: at,
+        sampleSize: smSamples,
+        quality: smSamples >= 5 ? 0.65 : 0.4,
+        assumptions: ['labelled on-chain flow', 'observation not advice']
+      }));
     }
 
     /* ── 1. HOLD — always offered; doing nothing is a strategy ──────────── */
@@ -109,7 +127,8 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
       liquidity: 'unchanged',
       evidence: [
         ev('financial-state', { observedAt: at, sampleSize: fs.holdingsCounted || null, quality: financial?.confidence ?? null, assumptions: ['portfolio read'] }),
-        ...(seriesSamples ? [ev('price-series', { observedAt: at, sampleSize: seriesSamples, quality: 0.8, assumptions: ['volatility from historical candles'] })] : [])
+        ...(seriesSamples ? [ev('price-series', { observedAt: at, sampleSize: seriesSamples, quality: 0.8, assumptions: ['volatility from historical candles'] })] : []),
+        ...smEvidence
       ]
     });
 
@@ -246,22 +265,53 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
     const out = generateStrategies({ intent: { id: intent?.id || null }, candidates: withCompat, evidence: [], now: at });
     if (!out.ok) return { ok: false, code: out.code };
 
-    const strategies = out.strategies.map((s, i) => ({
-      ...s,
-      ...canonicalStrategyFields(withCompat[i], { goal, fs }),
-      kind: withCompat[i].kind,
-      goalCompatibilityPct: withCompat[i].goalCompatibilityPct,
-      userCompatibilityPct: withCompat[i].userCompatibilityPct,
-      genomeVerdict: withCompat[i].genomeVerdict,
-      feesUsd: withCompat[i].feesUsd ?? null,
-      liquidity: withCompat[i].liquidity ?? null,
-      engine: STRATEGY_ENGINE_SCHEMA,
-      researchId: research?.id || null,
-      /* Phase 211 — the global world this proposal was made in (additive;
-         null when the global engine had nothing, never a guess). */
-      globalContext,
-      globalNotes: globalNotes.length ? globalNotes : null
-    }));
+    const strategies = out.strategies.map((s, i) => {
+      const base = withCompat[i];
+      const kind = base.kind;
+      const smNotes = [];
+      if (smartMoney?.signals?.netFlowUsd != null) {
+        const net = smartMoney.signals.netFlowUsd;
+        smNotes.push(`smart-money net $${Math.round(net / 1000)}k`);
+        if (net < -1_000_000 && ['DCA_IN', 'YIELD_ON_IDLE'].includes(kind)) {
+          smNotes.push('distribution window — entries carry extra flow-risk (observation)');
+        }
+        if (net < -1_000_000 && kind === 'RISK_REDUCTION') {
+          smNotes.push('distribution window aligns with risk-reduction posture');
+        }
+        if (net > 1_000_000 && kind === 'DCA_IN') {
+          smNotes.push('accumulation window — measured entry is flow-aligned (observation, not a buy signal)');
+        }
+      }
+      return {
+        ...s,
+        ...canonicalStrategyFields(base, { goal, fs }),
+        kind,
+        goalCompatibilityPct: base.goalCompatibilityPct,
+        userCompatibilityPct: base.userCompatibilityPct,
+        genomeVerdict: base.genomeVerdict,
+        feesUsd: base.feesUsd ?? null,
+        liquidity: base.liquidity ?? null,
+        engine: STRATEGY_ENGINE_SCHEMA,
+        researchId: research?.id || null,
+        /* Phase 211 — the global world this proposal was made in (additive;
+           null when the global engine had nothing, never a guess). */
+        globalContext,
+        globalNotes: globalNotes.length ? globalNotes : null,
+        /* Smart Money — first-class on every proposal so decision/competition
+           consume the same window the Intelligence page shows. */
+        smartMoney: smartMoney && smartMoney.status !== 'unavailable'
+          ? {
+              status: smartMoney.status,
+              netFlowUsd: smartMoney.signals?.netFlowUsd ?? null,
+              cexDexDirection: smartMoney.signals?.cexDexDirection ?? null,
+              whaleActivity: smartMoney.signals?.whaleActivity ?? null,
+              alignment: smartMoney.alignment ?? null,
+              topTokens: (smartMoney.signals?.topTokens || []).slice(0, 5)
+            }
+          : null,
+        smartMoneyNotes: smNotes.length ? smNotes : null
+      };
+    });
 
     for (const s of strategies) {
       await collections.put('strategies', owner, s);
@@ -295,15 +345,24 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
  *  Built ONLY from a real global-intel snapshot and/or a real cross-asset
  *  analysis; both missing ⇒ null (the caller renders "global context: not
  *  read", never a fabricated regime). */
-export function buildGlobalContext({ globalIntel = null, crossAsset = null, at = Date.now() } = {}) {
+export function buildGlobalContext({ globalIntel = null, crossAsset = null, smartMoney = null, at = Date.now() } = {}) {
   const hasSnapshot = globalIntel && typeof globalIntel === 'object' && globalIntel.status && globalIntel.status !== 'UNAVAILABLE';
   const hasCross = crossAsset && typeof crossAsset === 'object' && crossAsset.status && crossAsset.status !== 'UNAVAILABLE';
-  if (!hasSnapshot && !hasCross) return null;
+  const hasSm = smartMoney && typeof smartMoney === 'object' && smartMoney.status && smartMoney.status !== 'unavailable';
+  if (!hasSnapshot && !hasCross && !hasSm) return null;
   const domains = globalIntel?.domains || {};
   const sm = domains.smart_money?.status === 'OK' ? domains.smart_money.data : null;
   const macro = domains.macro?.status === 'OK' ? domains.macro.data : null;
   const topTopics = macro
     ? Object.entries(macro.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t}×${n}`).join(', ')
+    : null;
+  /* Prefer the dedicated smart-money intel digest (richer) over the global
+     snapshot leaf when both exist; never invent a net from nothing. */
+  const smNetFromIntel = hasSm ? (num(smartMoney.signals?.netFlowUsd) ?? null) : null;
+  const smNetFromGlobal = sm
+    ? (num(sm.accumulationUsd) !== null && num(sm.distributionUsd) !== null
+      ? num(sm.accumulationUsd) - num(sm.distributionUsd)
+      : num(sm.netFlowUsd))
     : null;
   return {
     at,
@@ -313,8 +372,11 @@ export function buildGlobalContext({ globalIntel = null, crossAsset = null, at =
     divergences: (crossAsset?.divergences || []).slice(0, 3).map((d) => `${d.classes.join(' vs ')} (${d.gapPct}pp apart)`),
     macroAttention: macro ? macro.attention : null,
     topTopics,
-    smartMoneyNetUsd: sm ? (num(sm.accumulationUsd) !== null && num(sm.distributionUsd) !== null ? num(sm.accumulationUsd) - num(sm.distributionUsd) : null) : null,
-    whaleEventCount: domains.whales?.status === 'OK' ? (domains.whales.data?.count ?? null) : null,
+    smartMoneyNetUsd: smNetFromIntel ?? smNetFromGlobal,
+    cexDexDirection: hasSm ? (smartMoney.signals?.cexDexDirection || null) : null,
+    whaleEventCount: hasSm
+      ? (smartMoney.signals?.whaleActivity ?? null)
+      : (domains.whales?.status === 'OK' ? (domains.whales.data?.count ?? null) : null),
     globalAvailable: globalIntel?.available ?? null,
     readOnlyClasses: crossAsset?.readOnlyClasses || [],
     note: 'global context is observation, not advice; read-only classes cannot be traded through this app'

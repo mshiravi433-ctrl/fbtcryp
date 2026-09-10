@@ -138,15 +138,38 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason);
     const world = await fi.worldModelFor(owner);
     const prefs = await fi.preferences.resolve(owner);
+    /* Smart money is a first-class input to strategy generation — same feed
+       the Intelligence page reads, folded into evidence + notes. */
+    const smartMoney = fi.smartMoneyIntel
+      ? await fi.smartMoneyIntel.fetch({ window: body.window || '24h' }).catch(() => null)
+      : null;
+    const globalIntel = fi.globalIntelFor
+      ? await fi.globalIntelFor(owner).catch(() => null)
+      : null;
+    const crossAsset = fi.crossAssetFor
+      ? await fi.crossAssetFor(owner, {}).catch(() => null)
+      : null;
     const out = await fi.strategyEngine.generate({
       owner,
       intent: { message: String(body.message || body.intent || '').slice(0, MAX_TEXT) },
       financial, world,
       goal: body.goal || null,
       preferences: prefs,
+      globalIntel,
+      crossAsset,
+      smartMoney,
       correlationId: body.correlationId || null
     });
-    return out.ok ? { ok: true, strategies: out.strategies, durable: out.durable ?? fi.collections.durable() } : reject(409, out.code, out.detail);
+    return out.ok
+      ? {
+          ok: true,
+          strategies: out.strategies,
+          smartMoney: smartMoney && smartMoney.status !== 'unavailable'
+            ? { status: smartMoney.status, netFlowUsd: smartMoney.signals?.netFlowUsd ?? null, alignment: smartMoney.alignment }
+            : null,
+          durable: out.durable ?? fi.collections.durable()
+        }
+      : reject(409, out.code, out.detail);
   }));
 
   router.get('/strategies', route(async (req, res, owner) => {
@@ -171,17 +194,118 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     if (!rows || rows.length < 2) {
       return reject(409, 'NEEDS_AT_LEAST_TWO_STRATEGIES', 'generate strategies first, or pass at least two in the body', { count: rows ? rows.length : 0 });
     }
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const world = await fi.worldModelFor(owner).catch(() => null);
+    const smartMoney = fi.smartMoneyIntel
+      ? await fi.smartMoneyIntel.fetch({ window: body.window || '24h' }).catch(() => null)
+      : null;
+    const crossAsset = fi.crossAssetFor
+      ? await fi.crossAssetFor(owner, {}).catch(() => null)
+      : null;
+
+    /* Live route simulation for every candidate — Phase 11 runtime provider. */
+    let routeSims = body.simulations || null;
+    let simBundle = null;
+    if (!routeSims && fi.routeSimulator?.simulateAll) {
+      simBundle = await fi.routeSimulator.simulateAll(rows, {
+        financial, world, smartMoney, crossAsset
+      }).catch(() => null);
+      if (simBundle?.ok) routeSims = simBundle.simulations;
+    }
+
     const out = await fi.competition.compete({
       owner,
       strategies: rows,
       preferences: prefs,
       goal: body.goal || null,
-      simulations: body.simulations || null,
+      simulations: routeSims,
+      smartMoney,
+      financial,
+      crossAsset,
       correlationId: body.correlationId || null
     });
     return out.ok
-      ? { ok: true, comparison: out.competition, durable: fi.collections.durable() }
+      ? {
+          ok: true,
+          comparison: out.competition,
+          routeSimulations: simBundle?.ok ? simBundle.simulations : null,
+          liveSimulation: out.competition?.liveSimulation === true,
+          smartMoney: smartMoney && smartMoney.status !== 'unavailable'
+            ? { status: smartMoney.status, netFlowUsd: smartMoney.signals?.netFlowUsd ?? null }
+            : null,
+          durable: fi.collections.durable()
+        }
       : reject(409, out.code, out.detail || null, { count: out.count || rows.length });
+  }));
+
+  /* Explicit live route-simulate endpoint — Strategy A/B/C → simulate → rank. */
+  router.post('/strategies/simulate', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    let rows = Array.isArray(body.strategies) ? body.strategies.slice(0, 12) : null;
+    if (!rows || !rows.length) {
+      rows = await fi.strategyEngine.recent(owner, { limit: 12 });
+    }
+    if (!rows || !rows.length) {
+      return reject(409, 'NO_STRATEGIES', 'generate strategies first, or pass them in the body');
+    }
+    const financial = await fi.financialStateFor(owner);
+    if (financial.status === 'UNAVAILABLE') return reject(409, 'NO_FINANCIAL_STATE', financial.reason);
+    const world = await fi.worldModelFor(owner);
+    const smartMoney = fi.smartMoneyIntel
+      ? await fi.smartMoneyIntel.fetch({ window: body.window || '24h' }).catch(() => null)
+      : null;
+    const crossAsset = fi.crossAssetFor
+      ? await fi.crossAssetFor(owner, {}).catch(() => null)
+      : null;
+    if (!fi.routeSimulator?.simulateAll) {
+      return reject(503, 'ROUTE_SIMULATOR_UNAVAILABLE', 'live route simulator is not wired in this deployment');
+    }
+    const simBundle = await fi.routeSimulator.simulateAll(rows, {
+      financial, world, smartMoney, crossAsset
+    });
+    if (!simBundle.ok) return reject(502, simBundle.code || 'SIMULATION_FAILED', 'route simulation failed');
+
+    /* Rank by risk-adjusted score when competition is available. */
+    let comparison = null;
+    if (rows.length >= 2) {
+      const prefs = await fi.preferences.resolve(owner);
+      const comp = await fi.competition.compete({
+        owner,
+        strategies: rows,
+        preferences: prefs,
+        goal: body.goal || null,
+        simulations: simBundle.simulations,
+        smartMoney,
+        financial,
+        crossAsset,
+        correlationId: body.correlationId || null
+      });
+      if (comp.ok) comparison = comp.competition;
+    }
+
+    return {
+      ok: true,
+      schema: 'fbt.fi.route-simulator.v1',
+      simulations: simBundle.simulations,
+      passed: simBundle.passed,
+      live: true,
+      estimate: true,
+      bestStrategyId: comparison?.judge?.winnerId || null,
+      winnerStatus: comparison?.judge?.winnerStatus || null,
+      comparison,
+      smartMoney: smartMoney && smartMoney.status !== 'unavailable'
+        ? {
+            status: smartMoney.status,
+            netFlowUsd: smartMoney.signals?.netFlowUsd ?? null,
+            cexDexDirection: smartMoney.signals?.cexDexDirection ?? null,
+            whaleActivity: smartMoney.signals?.whaleActivity ?? null
+          }
+        : null,
+      executionPermission: false,
+      guaranteed: false,
+      durable: fi.collections.durable()
+    };
   }));
 
   router.post('/simulate', route(async (req, res, owner) => {
@@ -234,22 +358,80 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     const prefs = await fi.preferences.resolve(owner);
     const goal = body.goal || null;
 
+    /* Smart money + global context — feed the SAME observations into
+       strategy generation, competition ranking and the decision record. */
+    const smartMoney = fi.smartMoneyIntel
+      ? await fi.smartMoneyIntel.fetch({ window: body.window || '24h' }).catch(() => null)
+      : null;
+    const globalIntel = fi.globalIntelFor
+      ? await fi.globalIntelFor(owner).catch(() => null)
+      : null;
+    const crossAsset = fi.crossAssetFor
+      ? await fi.crossAssetFor(owner, {}).catch(() => null)
+      : null;
+
     let rows = Array.isArray(body.strategies) ? body.strategies.slice(0, 12) : null;
     if (!rows || rows.length < 2) {
       const gen = await fi.strategyEngine.generate({
         owner,
         intent: { message: String(body.message || body.intent || '').slice(0, MAX_TEXT) },
-        financial, world, goal, preferences: prefs, correlationId
+        financial, world, goal, preferences: prefs,
+        globalIntel, crossAsset, smartMoney,
+        correlationId
       });
       if (!gen.ok) return reject(409, gen.code, gen.detail);
       rows = gen.strategies;
     }
 
-    const comp = await fi.competition.compete({ owner, strategies: rows, preferences: prefs, goal, correlationId });
+    /* Live route simulation BEFORE competition so the judge ranks simulated
+       risk-adjusted outcomes, not bare proposals. */
+    let routeSims = null;
+    if (fi.routeSimulator?.simulateAll) {
+      const simBundle = await fi.routeSimulator.simulateAll(rows, {
+        financial, world, globalIntel, crossAsset, smartMoney
+      }).catch(() => null);
+      if (simBundle?.ok) routeSims = simBundle.simulations;
+    }
+
+    const comp = await fi.competition.compete({
+      owner,
+      strategies: rows,
+      preferences: prefs,
+      goal,
+      simulations: routeSims,
+      smartMoney,
+      financial,
+      crossAsset,
+      correlationId
+    });
     if (!comp.ok) return reject(409, comp.code, comp.detail);
 
     const sim = await fi.simulationEngine.simulate({ owner, sections: fi.flatSectionsFor(owner), financial, goal, correlationId }).catch(() => ({ ok: false, code: 'SIMULATION_UNAVAILABLE' }));
     const risk = fi.riskFor(owner, world);
+
+    /* Authority inputs — all default false. Flip only when the caller
+       supplies every gate (execute + userConfirmed + auth screen +
+       guardian + policy). Returns stay unguaranteed forever. */
+    const executionRequested = body.execute === true || body.executionRequested === true;
+    const userConfirmed = body.userConfirmed === true || body.confirmed === true;
+    const authorizationScreenShown = body.authorizationScreenShown === true || body.authScreen === true;
+    const guardianApproved = body.guardianApproved === true;
+    let policyVerdict = body.policyVerdict && typeof body.policyVerdict === 'object' ? body.policyVerdict : null;
+    if (executionRequested && !policyVerdict && body.policyId && fi.policyEngine?.evaluate) {
+      policyVerdict = await fi.policyEngine.evaluate({
+        owner,
+        policyId: body.policyId,
+        request: {
+          kind: rows.find((r) => r.id === (comp.competition?.judge?.winnerId))?.kind || body.kind || 'HOLD',
+          amountUsd: num(body.amountUsd) ?? 0,
+          asset: body.asset || null,
+          chain: body.chainId || body.chain || null,
+          gasUsd: num(body.gasUsd),
+          slippagePct: num(body.slippagePct),
+          riskLevel: risk?.level || null
+        }
+      }).catch((err) => ({ ok: false, code: 'POLICY_EVAL_FAILED', detail: String(err?.message || err).slice(0, 120) }));
+    }
 
     const decided = await fi.decisionEngine.decide({
       owner,
@@ -261,7 +443,18 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       risk,
       preferences: prefs,
       goal,
-      executionRequested: body.execute === true,
+      globalIntel,
+      crossAsset,
+      smartMoney,
+      routeSimulations: routeSims,
+      policyVerdict,
+      executionRequested,
+      userConfirmed,
+      authorizationScreenShown,
+      guardianApproved,
+      controls: body.controls || null,
+      limits: body.limits || null,
+      runtimeEvidence: body.runtimeEvidence || null,
       correlationId
     });
     if (!decided.ok) return reject(409, decided.code, decided.detail, { state: decided.state || null });
@@ -290,11 +483,127 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       council: cnc.ok ? cnc.council : null,
       competition: comp.competition,
       simulation: sim.ok ? sim.simulation : null,
+      routeSimulations: routeSims,
+      liveSimulation: comp.competition?.liveSimulation === true,
+      bestStrategyId: comp.competition?.judge?.winnerId || decisionRow?.decision?.strategyId || null,
+      smartMoney: decisionRow.smartMoney || null,
       alternatives: decisionRow.alternatives,
       reason: decisionRow.reason,
       confidence: decisionRow.confidence,
       conditions: decisionRow.conditions,
-      executionPermission: false,
+      /* Authority — true only when every gate passed on this request. */
+      executionPermission: decisionRow.executionPermission === true,
+      guaranteed: decisionRow.guaranteed === true,
+      returnGuaranteed: false,
+      processGuaranteed: decisionRow.processGuaranteed === true,
+      guaranteedNote: decisionRow.guaranteedNote || null,
+      authority: decided.authority || decisionRow.authority || null,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  /**
+   * Confirm a previously-recommended decision and activate authority flags.
+   * POST /api/ai/decision/:id/confirm
+   *
+   * Body gates (all required for executionPermission:true):
+   *   userConfirmed, authorizationScreenShown, guardianApproved
+   *   policyId | policyVerdict
+   * Optional: controls, limits, runtimeEvidence, amountUsd, …
+   *
+   * Returns the patched decision with executionPermission / guaranteed
+   * resolved. Still never signs; wallet hand-off is a separate step.
+   */
+  router.post('/decision/:id/confirm', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const got = await fi.decisionEngine.get(owner, req.params.id);
+    if (!got.ok || !got.row) return reject(404, 'DECISION_NOT_FOUND', `no decision ${req.params.id} for this owner`, { id: req.params.id });
+
+    const prior = got.row;
+    const financial = await fi.financialStateFor(owner);
+    const risk = fi.riskFor(owner);
+    const prefs = await fi.preferences.resolve(owner);
+
+    let policyVerdict = body.policyVerdict && typeof body.policyVerdict === 'object' ? body.policyVerdict : null;
+    if (!policyVerdict && body.policyId && fi.policyEngine?.evaluate) {
+      policyVerdict = await fi.policyEngine.evaluate({
+        owner,
+        policyId: body.policyId,
+        request: {
+          kind: prior.decision?.type || body.kind || 'HOLD',
+          amountUsd: num(body.amountUsd) ?? num(prior.decision?.amountUsd) ?? 0,
+          asset: body.asset || null,
+          chain: body.chainId || body.chain || null,
+          gasUsd: num(body.gasUsd),
+          slippagePct: num(body.slippagePct),
+          riskLevel: risk?.level || prior.decision?.riskLevel || null
+        }
+      }).catch((err) => ({ ok: false, code: 'POLICY_EVAL_FAILED', detail: String(err?.message || err).slice(0, 120) }));
+    }
+    if (!policyVerdict && body.policyOk === true) {
+      /* Explicit one-shot ALLOW when the client already evaluated a policy
+         out-of-band and only needs the authority flip recorded. */
+      policyVerdict = { ok: true, decision: 'ALLOW', policyId: body.policyId || prior.policyId || 'oneshot' };
+    }
+
+    const { resolveExecutionAuthority, limitsFromContext } = await import('./executionAuthority.js');
+    const authority = resolveExecutionAuthority({
+      executionRequested: true,
+      userConfirmed: body.userConfirmed === true || body.confirmed === true,
+      authorizationScreenShown: body.authorizationScreenShown === true || body.authScreen === true,
+      guardianApproved: body.guardianApproved === true,
+      policyVerdict,
+      confidence: prior.confidence || body.confidence || null,
+      risk: risk || { level: prior.decision?.riskLevel },
+      chosen: prior.decision,
+      controls: body.controls || null,
+      limits: body.limits || limitsFromContext({
+        chosen: prior.decision,
+        financial: financial?.status === 'UNAVAILABLE' ? null : financial,
+        preferences: prefs,
+        policyVerdict
+      }),
+      runtimeEvidence: body.runtimeEvidence || null,
+      liveSimulation: prior.liveSimulation === true,
+      now: Date.now()
+    });
+
+    const patched = {
+      ...prior,
+      updatedAt: Date.now(),
+      status: authority.executionPermission ? 'AUTHORIZED' : prior.status,
+      executionPermission: authority.executionPermission === true,
+      executionAuthorized: authority.executionAuthorized === true,
+      financialExecutionAuthorized: authority.financialExecutionAuthorized === true,
+      automaticExecution: false,
+      guaranteed: authority.guaranteed === true,
+      returnGuaranteed: false,
+      processGuaranteed: authority.processGuaranteed === true,
+      guaranteedWhat: authority.guaranteedWhat || null,
+      guaranteedNote: authority.guaranteedNote || null,
+      authority: {
+        status: authority.status,
+        reason: authority.reason,
+        blockers: authority.blockers,
+        gates: authority.gates,
+        checkedAt: authority.checkedAt
+      },
+      policyId: policyVerdict?.policyId || prior.policyId || null,
+      confirmedAt: authority.executionPermission ? Date.now() : null,
+      signs: false,
+      submits: false
+    };
+    await fi.collections.put('decisions', owner, patched);
+    return {
+      ok: true,
+      decision: patched,
+      authority,
+      executionPermission: patched.executionPermission,
+      guaranteed: patched.guaranteed,
+      returnGuaranteed: false,
+      processGuaranteed: patched.processGuaranteed,
+      guaranteedNote: patched.guaranteedNote,
       durable: fi.collections.durable()
     };
   }));

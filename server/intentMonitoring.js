@@ -30,9 +30,17 @@ export const MONITOR_STATUSES = Object.freeze([
   'ACTIVE', 'PAUSED', 'TRIGGERED', 'COMPLETED', 'CANCELLED', 'ERROR'
 ]);
 
-export const MONITOR_METRICS = Object.freeze(['PRICE', 'PERCENT_CHANGE', 'VOLATILITY', 'OPPORTUNITY']);
+export const MONITOR_METRICS = Object.freeze([
+  'PRICE', 'PERCENT_CHANGE', 'VOLATILITY', 'OPPORTUNITY',
+  /* Smart-money / flow metrics — evaluated against the live smart-money
+     overview (same feed the Intelligence page reads). Never fabricated. */
+  'VOLUME', 'WHALE', 'SMART_MONEY_NET', 'EXCHANGE_FLOW'
+]);
 export const MONITOR_OPERATORS = Object.freeze(['ABOVE', 'BELOW']);
 export const MONITOR_INTERVALS = Object.freeze([5, 15, 30, 60, 180, 360, 720, 1440]);
+
+/** Metrics that do not need a single priced asset (they read feeds). */
+export const FEED_METRICS = Object.freeze(['OPPORTUNITY', 'VOLUME', 'WHALE', 'SMART_MONEY_NET', 'EXCHANGE_FLOW']);
 
 /**
  * Symbol → CoinGecko id for the assets this app can actually price and trade.
@@ -124,10 +132,19 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
   const metric = String(input?.metric || 'PRICE').toUpperCase();
   if (!MONITOR_METRICS.includes(metric)) return { error: 'BAD_METRIC' };
 
-  /* OPPORTUNITY monitors watch the best available real yield (APY %); they do
-     not need a single asset, so resolution is skipped for them. */
-  const asset = metric === 'OPPORTUNITY'
-    ? { symbol: String(input?.asset?.symbol || 'YIELD').toUpperCase().slice(0, 12), coinId: null }
+  /* Feed metrics (yield / volume / whale / smart-money) do not need a single
+     priced asset — they read live feeds. Asset is optional context only. */
+  const asset = FEED_METRICS.includes(metric)
+    ? {
+        symbol: String(input?.asset?.symbol || (
+          metric === 'OPPORTUNITY' ? 'YIELD'
+            : metric === 'VOLUME' ? 'VOLUME'
+              : metric === 'WHALE' ? 'WHALE'
+                : metric === 'SMART_MONEY_NET' ? 'SM_NET'
+                  : 'FLOW'
+        )).toUpperCase().slice(0, 12),
+        coinId: null
+      }
     : resolveAsset({ symbol: input?.asset?.symbol, coinId: input?.asset?.coinId });
   if (!asset) return { error: 'UNKNOWN_ASSET' };
 
@@ -155,7 +172,19 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
     baseline: num(input?.baseline),
     intervalMinutes: interval,
     status: 'ACTIVE',
-    label: label || `${asset.symbol} ${metric === 'PRICE' ? `${operator === 'ABOVE' ? '≥' : '≤'} ${threshold}` : `${operator} ${threshold}%`}`,
+    label: label || (
+      metric === 'PRICE'
+        ? `${asset.symbol} ${operator === 'ABOVE' ? '≥' : '≤'} ${threshold}`
+        : metric === 'VOLUME'
+          ? `volume ${operator === 'ABOVE' ? '≥' : '≤'} $${threshold}`
+          : metric === 'WHALE'
+            ? `whale events ${operator === 'ABOVE' ? '≥' : '≤'} ${threshold}`
+            : metric === 'SMART_MONEY_NET'
+              ? `smart-money net ${operator === 'ABOVE' ? '≥' : '≤'} $${threshold}`
+              : metric === 'EXCHANGE_FLOW'
+                ? `exchange flow ${operator === 'ABOVE' ? '≥' : '≤'} $${threshold}`
+                : `${asset.symbol} ${operator} ${threshold}${metric === 'OPPORTUNITY' || metric === 'PERCENT_CHANGE' || metric === 'VOLATILITY' ? '%' : ''}`
+    ),
     goalText,
     targetReturnPct,
     conditions: Array.isArray(input?.conditions) ? input.conditions.slice(0, 12) : [],
@@ -187,7 +216,12 @@ export function evaluateCondition({
   baseline = null
 } = {}) {
   const v = num(value);
-  if (v == null || v <= 0) return { ok: false, reason: 'NO_VALUE' };
+  /* Count/flow metrics (WHALE, SMART_MONEY_NET, EXCHANGE_FLOW, VOLUME) may
+     legitimately read 0 — that is an observation, not a missing feed. Price
+     and percent still require a positive sample. */
+  const allowZero = ['WHALE', 'SMART_MONEY_NET', 'EXCHANGE_FLOW', 'VOLUME'].includes(String(metric || '').toUpperCase());
+  if (v == null || (!allowZero && v <= 0)) return { ok: false, reason: 'NO_VALUE' };
+  if (allowZero && v < 0) return { ok: false, reason: 'NO_VALUE' };
   const t = num(threshold);
   if (t == null || t <= 0) return { ok: false, reason: 'NO_THRESHOLD' };
 
@@ -199,7 +233,8 @@ export function evaluateCondition({
     sample = ((v - b) / b) * 100;
     display = sample;
   }
-  /* OPPORTUNITY value is the best real APY in percent — compared like a price. */
+  /* OPPORTUNITY value is the best real APY in percent — compared like a price.
+     VOLUME / WHALE / SMART_MONEY_NET / EXCHANGE_FLOW compare absolute units. */
   const hit = operator === 'ABOVE' ? sample >= t : sample <= t;
   return { ok: true, hit, sample, display, value: v, threshold: t };
 }
@@ -207,36 +242,64 @@ export function evaluateCondition({
 /** Human-readable (localizable by key, not hard-coded strings) event summary. */
 export function eventCopy(monitor, evaluation, lang = 'fa') {
   const symbol = monitor.asset.symbol;
-  const isPrice = monitor.metric === 'PRICE';
-  const isOpp = monitor.metric === 'OPPORTUNITY';
+  const metric = monitor.metric;
+  const isPrice = metric === 'PRICE';
+  const isOpp = metric === 'OPPORTUNITY';
+  const isWhale = metric === 'WHALE';
+  const isVolume = metric === 'VOLUME';
+  const isSm = metric === 'SMART_MONEY_NET' || metric === 'EXCHANGE_FLOW';
   const op = monitor.operator === 'ABOVE' ? 'above' : 'below';
   if (lang === 'en') {
     return {
-      title: isOpp ? 'Opportunity alert' : isPrice ? `${symbol} price alert` : `${symbol} ${monitor.metric.toLowerCase()} alert`,
+      title: isOpp ? 'Opportunity alert'
+        : isWhale ? 'Whale activity alert'
+          : isVolume ? 'Volume alert'
+            : isSm ? 'Smart-money flow alert'
+              : isPrice ? `${symbol} price alert`
+                : `${symbol} ${metric.toLowerCase()} alert`,
       body: isOpp
         ? `Best real yield reached ${evaluation.display}% (target ${monitor.threshold}%).`
-        : isPrice
-          ? `${symbol} is now ${op} ${monitor.threshold} USD (${evaluation.display}).`
-          : `${symbol} ${monitor.metric.toLowerCase()} is ${op} ${monitor.threshold}% (${evaluation.display}%).`
+        : isWhale
+          ? `Whale events reached ${evaluation.display} (target ${monitor.threshold}).`
+          : isVolume
+            ? `Market volume is ${op} $${monitor.threshold} (observed $${evaluation.display}).`
+            : isSm
+              ? `Smart-money/exchange flow is ${op} $${monitor.threshold} (observed $${evaluation.display}).`
+              : isPrice
+                ? `${symbol} is now ${op} ${monitor.threshold} USD (${evaluation.display}).`
+                : `${symbol} ${metric.toLowerCase()} is ${op} ${monitor.threshold}% (${evaluation.display}%).`
     };
   }
   if (lang === 'ar') {
     return {
-      title: isOpp ? 'تنبيه فرصة' : isPrice ? `تنبيه سعر ${symbol}` : `تنبيه ${symbol}`,
+      title: isOpp ? 'تنبيه فرصة' : isWhale ? 'تنبيه الحيتان' : isPrice ? `تنبيه سعر ${symbol}` : `تنبيه ${symbol}`,
       body: isOpp
         ? `أفضل عائد حقيقي بلغ ${evaluation.display}٪ (الهدف ${monitor.threshold}٪).`
-        : isPrice
-          ? `${symbol} الآن ${op === 'above' ? 'فوق' : 'تحت'} ${monitor.threshold} دولار (${evaluation.display}).`
-          : `${symbol} ${op === 'above' ? 'فوق' : 'تحت'} ${monitor.threshold}٪ (${evaluation.display}٪).`
+        : isWhale
+          ? `أحداث الحيتان بلغت ${evaluation.display} (الهدف ${monitor.threshold}).`
+          : isPrice
+            ? `${symbol} الآن ${op === 'above' ? 'فوق' : 'تحت'} ${monitor.threshold} دولار (${evaluation.display}).`
+            : `${symbol} ${op === 'above' ? 'فوق' : 'تحت'} ${monitor.threshold}٪ (${evaluation.display}٪).`
     };
   }
   return {
-    title: isOpp ? 'هشدار فرصت' : isPrice ? `هشدار قیمت ${symbol}` : `هشدار ${symbol}`,
+    title: isOpp ? 'هشدار فرصت'
+      : isWhale ? 'هشدار فعالیت نهنگ'
+        : isVolume ? 'هشدار حجم'
+          : isSm ? 'هشدار جریان smart money'
+            : isPrice ? `هشدار قیمت ${symbol}`
+              : `هشدار ${symbol}`,
     body: isOpp
       ? `بهترین بازده واقعی به ${evaluation.display}٪ رسید (هدف ${monitor.threshold}٪).`
-      : isPrice
-        ? `${symbol} ${op === 'above' ? 'به' : 'به'} ${monitor.threshold} دلار رسید (${evaluation.display}).`
-        : `${symbol} ${op === 'above' ? 'بالاتر' : 'پایین‌تر'} از ${monitor.threshold}٪ شد (${evaluation.display}٪).`
+      : isWhale
+        ? `تعداد رویداد نهنگ به ${evaluation.display} رسید (هدف ${monitor.threshold}).`
+        : isVolume
+          ? `حجم بازار ${op === 'above' ? 'بالای' : 'زیر'} $${monitor.threshold} است (مشاهده $${evaluation.display}).`
+          : isSm
+            ? `جریان smart money ${op === 'above' ? 'بالای' : 'زیر'} $${monitor.threshold} است (مشاهده $${evaluation.display}).`
+            : isPrice
+              ? `${symbol} ${op === 'above' ? 'به' : 'به'} ${monitor.threshold} دلار رسید (${evaluation.display}).`
+              : `${symbol} ${op === 'above' ? 'بالاتر' : 'پایین‌تر'} از ${monitor.threshold}٪ شد (${evaluation.display}٪).`
   };
 }
 
@@ -329,6 +392,8 @@ export async function deleteMonitor(owner, id) {
 export async function evaluateMonitor(row, {
   prices = null,
   fetchPrices = null,
+  fetchSmartMoney = null,
+  fetchGlobalVolume = null,
   send = null,
   now = Date.now()
 } = {}) {
@@ -352,6 +417,69 @@ export async function evaluateMonitor(row, {
         updatedAt: now
       }, { now });
       return { monitor: patched, evaluation: null, triggered: false, error: 'YIELDS_UNAVAILABLE', detail: String(err?.message || '').slice(0, 120) };
+    }
+  } else if (row.metric === 'VOLUME') {
+    /* Global 24h market volume from the same providers the markets screen uses. */
+    try {
+      let vol = null;
+      if (typeof fetchGlobalVolume === 'function') {
+        vol = await fetchGlobalVolume();
+      } else {
+        const { fetchGlobal } = await import('./providers.js');
+        const g = await fetchGlobal();
+        vol = Number(g?.volume);
+      }
+      value = Number.isFinite(vol) && vol > 0 ? vol : null;
+    } catch (err) {
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now,
+        nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastError: 'VOLUME_UNAVAILABLE',
+        updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation: null, triggered: false, error: 'VOLUME_UNAVAILABLE', detail: String(err?.message || '').slice(0, 120) };
+    }
+  } else if (['WHALE', 'SMART_MONEY_NET', 'EXCHANGE_FLOW'].includes(row.metric)) {
+    /* Smart-money / whale metrics — same overview the Intelligence page reads. */
+    try {
+      let overview = null;
+      if (typeof fetchSmartMoney === 'function') {
+        overview = await fetchSmartMoney({ window: '24h' });
+      } else {
+        const sm = await import('./smartMoney/index.js');
+        overview = await sm.getOverview({ window: '24h' });
+      }
+      const m = overview?.metrics || {};
+      if (row.metric === 'WHALE') {
+        value = Number(m.whaleActivity?.value);
+      } else if (row.metric === 'SMART_MONEY_NET') {
+        const net = m.netFlow?.value ?? overview?.flows?.windows?.['24h']?.netUsd;
+        value = net != null ? Math.abs(Number(net)) : null;
+      } else {
+        /* EXCHANGE_FLOW — max of inflow/outflow magnitude. */
+        const inn = Number(m.exchangeInflow?.value ?? overview?.flows?.windows?.['24h']?.inflowUsd);
+        const out = Number(m.exchangeOutflow?.value ?? overview?.flows?.windows?.['24h']?.outflowUsd);
+        const candidates = [inn, out].filter(Number.isFinite);
+        value = candidates.length ? Math.max(...candidates.map(Math.abs)) : null;
+      }
+      if (!Number.isFinite(value) || value < 0) value = null;
+      if (overview?.dataStatus === 'unavailable' && value == null) {
+        const patched = await patchMonitor(row.owner, row.id, {
+          lastCheckAt: now,
+          nextCheckAt: now + row.intervalMinutes * 60_000,
+          lastError: 'SMART_MONEY_UNAVAILABLE',
+          updatedAt: now
+        }, { now });
+        return { monitor: patched, evaluation: null, triggered: false, error: 'SMART_MONEY_UNAVAILABLE' };
+      }
+    } catch (err) {
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now,
+        nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastError: 'SMART_MONEY_UNAVAILABLE',
+        updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation: null, triggered: false, error: 'SMART_MONEY_UNAVAILABLE', detail: String(err?.message || '').slice(0, 120) };
     }
   } else {
     const id = row.asset.coinId;
@@ -405,7 +533,13 @@ export async function evaluateMonitor(row, {
   const copy = eventCopy(row, evaluation, row.alert?.lang || 'fa');
   const event = {
     at: now,
-    kind: 'PRICE',
+    kind: ['WHALE', 'SMART_MONEY_NET', 'EXCHANGE_FLOW'].includes(row.metric)
+      ? 'SMART_MONEY'
+      : row.metric === 'VOLUME'
+        ? 'VOLUME'
+        : row.metric === 'OPPORTUNITY'
+          ? 'OPPORTUNITY'
+          : 'PRICE',
     metric: row.metric,
     value: evaluation.display,
     threshold: row.threshold,

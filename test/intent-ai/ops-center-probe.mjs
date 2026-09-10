@@ -121,6 +121,17 @@ try {
     && evaluateCondition({ metric: 'PERCENT_CHANGE', operator: 'ABOVE', threshold: 5, value: 105, baseline: 100 }).hit === true
     && evaluateCondition({ metric: 'PRICE', operator: 'ABOVE', threshold: 100000, value: null }).ok === false);
 
+  /* Volume / Whale / Smart-money monitor metrics (advertised + evaluable). */
+  const whaleMon = normalizeMonitor({ metric: 'WHALE', operator: 'ABOVE', threshold: 10 }, { now: NOW });
+  check('WHALE metric is accepted without a priced asset', whaleMon.monitor?.metric === 'WHALE' && !whaleMon.error);
+  const volMon = normalizeMonitor({ metric: 'VOLUME', operator: 'ABOVE', threshold: 1e9 }, { now: NOW });
+  check('VOLUME metric is accepted', volMon.monitor?.metric === 'VOLUME');
+  const smNetMon = normalizeMonitor({ metric: 'SMART_MONEY_NET', operator: 'ABOVE', threshold: 1e6 }, { now: NOW });
+  check('SMART_MONEY_NET metric is accepted', smNetMon.monitor?.metric === 'SMART_MONEY_NET');
+  check('whale count zero is a valid observation',
+    evaluateCondition({ metric: 'WHALE', operator: 'ABOVE', threshold: 10, value: 0 }).ok === true
+    && evaluateCondition({ metric: 'WHALE', operator: 'ABOVE', threshold: 10, value: 22 }).hit === true);
+
   /* ---------------------------- B. client parsing ------------------------ */
   check('«بازار را بپای» resolves to a monitor request', parseMonitorRequest('بازار را بپای').monitor?.type === 'MARKET');
   const btcBelow = parseMonitorRequest('اگر ETH کمتر از 3000 شد خبر بده');

@@ -13,13 +13,17 @@
  * opening the decision trace, and refusing to produce a decision at all when
  * the state was never read.
  *
- * A decision is a RECOMMENDATION. `executionPermission` is always false here;
- * authority comes from the policy engine (§22) or an explicit user
- * confirmation, never from this file (§50).
+ * Authority: `executionPermission` and `guaranteed` are resolved by
+ * `executionAuthority.js`. Default is false. They flip to true ONLY when the
+ * caller supplies executionRequested + userConfirmed + auth screen + guardian
+ * + policy ALLOW + actionable confidence + non-CRITICAL risk. `guaranteed`
+ * means PROCESS guarantee (limits/guardian/unsigned hand-off) — returns/APY
+ * stay `returnGuaranteed: false` forever (§50).
  */
 import { randomUUID } from 'node:crypto';
 import { rankDecisions, weightsFor } from '../../src/lib/central/decision.js';
 import { confidenceFromEvidence } from './evidence.js';
+import { resolveExecutionAuthority, limitsFromContext } from './executionAuthority.js';
 
 export const DECISION_RECORD_SCHEMA = 'fbt.fi.decision.v1';
 
@@ -43,8 +47,16 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     owner, intent = null, financial = null, world = null, research = null,
     strategies = [], competition = null, simulation = null, risk = null,
     policyVerdict = null, preferences = null, goal = null,
-    globalIntel = null, crossAsset = null,
-    executionRequested = false, correlationId = null, trace = null
+    globalIntel = null, crossAsset = null, smartMoney = null,
+    routeSimulations = null,
+    executionRequested = false,
+    userConfirmed = false,
+    authorizationScreenShown = false,
+    guardianApproved = false,
+    controls = null,
+    limits = null,
+    runtimeEvidence = null,
+    correlationId = null, trace = null
   } = {}) {
     const at = now();
 
@@ -129,13 +141,38 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
       executionRequested, now: at
     });
 
+    /* ── authority: the ONLY place executionPermission / guaranteed may flip ─ */
+    const authority = resolveExecutionAuthority({
+      executionRequested,
+      userConfirmed,
+      authorizationScreenShown,
+      guardianApproved: guardianApproved === true || policyVerdict?.guardianApproved === true,
+      policyVerdict,
+      confidence,
+      risk,
+      chosen,
+      controls,
+      limits: limits || (executionRequested ? limitsFromContext({ chosen: chosenStrategy || chosen, financial, preferences, policyVerdict }) : null),
+      runtimeEvidence,
+      liveSimulation: competition?.liveSimulation === true,
+      now: at
+    });
+
     /* ── conditions: what must still be true ───────────────────────────── */
     const conditions = [];
     if (!chosen) conditions.push('no candidate is both eligible and evidenced — a human choice is required');
     if (executionRequested) {
+      if (!authority.executionPermission) {
+        for (const b of (authority.blockers || []).slice(0, 6)) conditions.push(`authority: ${b}`);
+      } else {
+        conditions.push('executionPermission ACTIVE — unsigned hand-off only; wallet must still sign');
+        conditions.push('process guaranteed (limits + guardian + policy); returns/APY are NOT guaranteed');
+      }
       if (!policyVerdict?.ok) conditions.push(`policy: ${policyVerdict?.code || 'no policy check performed'}`);
-      if (!confidence.actionable) conditions.push(`confidence: blockers ${confidence.blockers.join(', ')}`);
-      conditions.push('explicit user confirmation of the exact chain, asset, amount, fees, slippage, route and destination');
+      if (confidence && !confidence.actionable && (confidence.blockers || []).length) {
+        conditions.push(`confidence: blockers ${confidence.blockers.join(', ')}`);
+      }
+      if (!userConfirmed) conditions.push('explicit user confirmation of the exact chain, asset, amount, fees, slippage, route and destination');
     }
     if (financial.missing?.length) conditions.push(`unread inputs: ${financial.missing.join(', ')}`);
     if (simulation?.worstCase) conditions.push(`worst modelled case is ${simulation.worstCase.id} at ${simulation.worstCase.deltaUsd} USD`);
@@ -148,6 +185,20 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     }
     if (globalContext?.smartMoneyNetUsd !== null && globalContext?.smartMoneyNetUsd !== undefined && Math.abs(globalContext.smartMoneyNetUsd) >= 1_000_000 && globalContext.smartMoneyNetUsd < 0) {
       conditions.push('smart money is net distributing over the last window (observation, not a veto)');
+    }
+    /* First-class smart-money conditions from the dedicated intel digest —
+       these are the same observations the Intelligence page shows, now inside
+       the decision record the AI actually reasons over. */
+    if (smartMoney && Array.isArray(smartMoney.decisionConditions)) {
+      for (const c of smartMoney.decisionConditions.slice(0, 6)) {
+        if (c && !conditions.includes(c)) conditions.push(c);
+      }
+    }
+    if (competition?.liveSimulation) {
+      conditions.push('ranking used live route simulation (fees, slippage, risk-adjusted return) — still proposal-only');
+    }
+    if (competition?.regime) {
+      conditions.push(`market regime at decision time: ${String(competition.regime).replace(/_/g, ' ').toLowerCase()}`);
     }
 
     /* ── reason ────────────────────────────────────────────────────────── */
@@ -182,8 +233,10 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     await step('BUILDING_STATE', 'decision composed');
     await step('GENERATING_STRATEGIES', `${rows.length} candidates`);
     await step('RISK_REVIEW', risk?.level || 'no risk assessment');
-    if (risk && ['HIGH', 'CRITICAL'].includes(String(risk.level).toUpperCase()) && !policyVerdict?.overrideRisk) {
+    if (risk && ['HIGH', 'CRITICAL'].includes(String(risk.level).toUpperCase()) && !policyVerdict?.overrideRisk && !authority.executionPermission) {
       await step('BLOCKED', `risk level ${risk.level}`);
+    } else if (authority.executionPermission) {
+      await step('WAITING_FOR_CONFIRMATION', `authorized:${chosen ? chosen.id : 'none'}`);
     } else {
       await step('WAITING_FOR_CONFIRMATION', chosen ? chosen.id : 'no winner');
     }
@@ -249,21 +302,66 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
         note: 'from the cross-asset analysis only'
       } : null),
       globalSnapshotId: globalIntel?.id || null,
-      policyId: policyVerdict?.policyId || null,
+      /* Smart Money — first-class decision input (not page-only). */
+      smartMoney: smartMoney && smartMoney.status !== 'unavailable'
+        ? {
+            status: smartMoney.status,
+            netFlowUsd: smartMoney.signals?.netFlowUsd ?? null,
+            cexDexDirection: smartMoney.signals?.cexDexDirection ?? null,
+            whaleActivity: smartMoney.signals?.whaleActivity ?? null,
+            alignment: smartMoney.alignment ?? null,
+            topTokens: (smartMoney.signals?.topTokens || []).slice(0, 5),
+            note: smartMoney.note || 'observation only'
+          }
+        : null,
+      liveSimulation: competition?.liveSimulation === true,
+      routeSimulationCount: Array.isArray(routeSimulations) ? routeSimulations.length : (routeSimulations ? Object.keys(routeSimulations).length : 0),
+      riskAdjustedWinner: competition?.judge?.winnerId || null,
+      scoringFactors: competition?.judge?.scoringFactors || null,
+      policyId: policyVerdict?.policyId || authority.policyId || null,
       traceId: traceRef.id,
-      executionPermission: false,
+      /* Authority flags — false by default; true only when every gate passed. */
+      executionPermission: authority.executionPermission === true,
+      executionAuthorized: authority.executionAuthorized === true,
+      financialExecutionAuthorized: authority.financialExecutionAuthorized === true,
+      automaticExecution: false,
       executionId: null,
       verificationId: null,
-      guaranteed: false,
+      guaranteed: authority.guaranteed === true,
+      returnGuaranteed: false,
+      processGuaranteed: authority.processGuaranteed === true,
+      guaranteedWhat: authority.guaranteedWhat || null,
+      guaranteedNote: authority.guaranteedNote || null,
+      authority: {
+        status: authority.status,
+        reason: authority.reason,
+        blockers: authority.blockers,
+        gates: authority.gates,
+        checkedAt: authority.checkedAt
+      },
+      signs: false,
+      submits: false,
       durable: collections.durable()
     };
     traceStore.link(traceRef, 'strategyId', chosen?.id || 'none');
     await traceStore.save(owner, traceRef);
     await collections.put('decisions', owner, record);
     if (observability) {
-      observability.emit({ type: 'decision.completed', owner, correlationId, payload: { decisionId, strategyId: chosen?.id || null, state: traceRef.state, confidence: confidence.overall } });
+      observability.emit({
+        type: 'decision.completed',
+        owner,
+        correlationId,
+        payload: {
+          decisionId,
+          strategyId: chosen?.id || null,
+          state: traceRef.state,
+          confidence: confidence.overall,
+          executionPermission: record.executionPermission,
+          guaranteed: record.guaranteed
+        }
+      });
     }
-    return { ok: true, decision: record, trace: traceStore.summary(traceRef), ranking, weights: ranking.weights || null };
+    return { ok: true, decision: record, authority, trace: traceStore.summary(traceRef), ranking, weights: ranking.weights || null };
   }
 
   async function get(owner, id) { return collections.get('decisions', owner, id); }
