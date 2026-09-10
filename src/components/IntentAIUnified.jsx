@@ -87,7 +87,7 @@ import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
 import { StrategyPlanCard } from './StrategyPlanCard.jsx';
 import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
 import {
-  saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs
+  saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs, linkRevision
 } from '../lib/strategyBrain/strategyStore.js';
 import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
 import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
@@ -356,6 +356,9 @@ const ConversationRow = memo(function ConversationRow({
   onOpenRoute,
   onGoalExecute,
   onStrategyExecute,
+  onStrategyMonitor,
+  onStrategyRevise,
+  strategyLive,
   autonomyEngine,
   autonomyStrategies,
   onAutonomyArm,
@@ -462,6 +465,9 @@ const ConversationRow = memo(function ConversationRow({
             locale={locale}
             onOpenRoute={onOpenRoute}
             onExecuteStage={onStrategyExecute ? (strategy) => onStrategyExecute(m, strategy) : null}
+            onMonitor={onStrategyMonitor ? (strategy) => onStrategyMonitor(m, strategy) : null}
+            onRevise={onStrategyRevise ? (strategy) => onStrategyRevise(m, strategy) : null}
+            live={m.strategyPlan?.strategyId ? (strategyLive?.[m.strategyPlan.strategyId] || null) : null}
           />
         ) : null}
         {m.autonomyRequest ? (
@@ -2788,6 +2794,122 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (first?.route) navigate(first.route);
   }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate, persistStrategyRuntime]);
 
+  /*
+   * ─── STRATEGY BRAIN: monitoring and revision ────────────────────────────
+   * The last two legs of the pipeline. A plan that is built and executed but
+   * never measured against reality is a brochure, so this reads the REAL
+   * portfolio and hands it to the runtime, which compares it against the
+   * plan's own curve and the user's drawdown budget.
+   *
+   * No timer, no polling: the check runs when the user asks for it. A resident
+   * loop would be exactly the kind of always-on load a small host cannot
+   * spare, and a number nobody is looking at is not worth fetching.
+   */
+  const strategyLiveRef = useRef(new Map());
+  /* The live verdicts live in a ref (a Map keyed by strategyId) because they
+     are written from inside callbacks. The version counter is what actually
+     re-renders: a ref mutation on its own would leave the card showing the
+     previous verdict forever. Deriving a plain object keeps the prop stable
+     enough for the row's memo to behave. */
+  const [strategyLiveVersion, setStrategyLiveVersion] = useState(0);
+  const strategyLive = useMemo(() => {
+    void strategyLiveVersion;
+    return Object.fromEntries(strategyLiveRef.current);
+  }, [strategyLiveVersion]);
+
+  /** Resolve the runtime for a plan, hydrating stage truth from the store. */
+  const strategyRuntimeFor = useCallback((message, strategy) => {
+    if (!strategy?.ok) return null;
+    let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
+    if (!runtime) {
+      let hydrate = null;
+      try {
+        const saved = loadStrategyPlan(strategy.strategyId);
+        hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
+      } catch { hydrate = null; }
+      runtime = createChatStrategyRuntime({
+        strategy,
+        spec: message.strategySpec || null,
+        context: aiContext,
+        wallet: wallet || null,
+        portfolio: aiContext.portfolio || null,
+        hydrate
+      });
+      strategyRuntimesRef.current.set(strategy.strategyId, runtime);
+    }
+    return runtime;
+  }, [aiContext, wallet]);
+
+  const monitorStrategy = useCallback((message, strategy) => {
+    const runtime = strategyRuntimeFor(message, strategy);
+    const fa = locale.startsWith('fa');
+    if (!runtime) return;
+    const portfolio = aiContext.portfolio || null;
+    const valueUsd = Number(portfolio?.totalValueUsd);
+    if (!Number.isFinite(valueUsd) || valueUsd <= 0) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? 'برای سنجیدن برنامه باید ارزش واقعی پرتفوی را ببینم — کیف پول را وصل کن تا بتوانم مقایسه کنم. حدس نمی‌زنم.'
+          : 'To check the plan I need the portfolio\'s real value — connect the wallet so I can compare it. I will not guess.'
+      }]);
+      return;
+    }
+    const result = runtime.observe({ portfolioValueUsd: valueUsd });
+    strategyLiveRef.current.set(strategy.strategyId, {
+      decision: result.decision,
+      triggers: result.triggers || [],
+      last: result.observation || null,
+      curve: result.curve || null,
+      revisionCount: result.revisionsUsed || 0
+    });
+    persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
+    setStrategyLiveVersion((v) => v + 1);
+    const label = {
+      CONTINUE: fa ? 'برنامه روی مسیر است.' : 'The plan is on track.',
+      REVISE: fa ? 'برنامه از مسیر خارج شده — بازسازی پیشنهاد می‌شود.' : 'The plan has drifted — a rebuild is advised.',
+      HALT: fa ? 'توقف: بودجه ریسک شکسته شده است.' : 'Halted: the risk budget is breached.',
+      COMPLETE: fa ? 'افق زمانی برنامه تمام شده است.' : 'The plan has reached the end of its horizon.'
+    }[result.decision] || result.decision;
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: fa
+        ? `${label} ارزش واقعی ${Number(valueUsd).toLocaleString()} دلار در برابر سرمایه‌ی ${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} دلار.`
+        : `${label} Real value $${Number(valueUsd).toLocaleString()} against $${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} of capital.`
+    }]);
+  }, [aiContext, locale, persistStrategyRuntime, strategyRuntimeFor]);
+
+  const reviseStrategy = useCallback(async (message, strategy) => {
+    const runtime = strategyRuntimeFor(message, strategy);
+    const fa = locale.startsWith('fa');
+    if (!runtime) return;
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, strategyBusy: true } : m)));
+    const result = await runtime.revise({ reason: 'USER_REQUESTED' });
+    if (!result.ok) {
+      setMessages((prev) => [...prev.map((m) => (m.id === message.id ? { ...m, strategyBusy: false } : m)), {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `بازسازی انجام نشد: ${result.code}. استراتژی قبلی دست‌نخورده باقی می‌ماند.`
+          : `The rebuild did not happen: ${result.code}. The previous strategy stays as it was.`
+      }]);
+      return;
+    }
+    /* The revision replaces the plan on this message, and the chain is
+       persisted so a reload resumes the NEW strategy, not the old one. */
+    try {
+      linkRevision({ fromStrategyId: strategy.strategyId, toStrategyId: result.strategy.strategyId });
+      saveStrategyPlan({ strategy: result.strategy, goal: message.strategySpec || null, runtime: runtime.state() });
+    } catch { /* persistence must never block the revision */ }
+    strategyLiveRef.current.set(result.strategy.strategyId, {
+      decision: 'CONTINUE', triggers: [], last: null, curve: null,
+      revisionCount: result.revision?.at ? 1 : 0
+    });
+    setMessages((prev) => prev.map((m) => (m.id === message.id
+      ? { ...m, strategyPlan: result.strategy, strategyBusy: false }
+      : m)));
+    setStrategyLiveVersion((v) => v + 1);
+  }, [locale, persistStrategyRuntime, strategyRuntimeFor]);
+
   /**
    * Execute one goal option for real. The steps are the venue actions the
    * executors sign; the confirmation gate and the runtime's receipt rule still
@@ -4299,6 +4421,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onOpenRoute={openBubbleRoute}
                 onGoalExecute={executeGoalOption}
                 onStrategyExecute={runStrategyStage}
+                onStrategyMonitor={monitorStrategy}
+                onStrategyRevise={reviseStrategy}
+                strategyLive={strategyLive}
                 autonomyEngine={autonomyEngine}
                 autonomyStrategies={autonomyStrategies}
                 onAutonomyArm={armAutomation}

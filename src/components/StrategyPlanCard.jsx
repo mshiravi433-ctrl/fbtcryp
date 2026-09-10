@@ -30,6 +30,15 @@ import { useMemo, useState } from 'react';
 const pct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}%` : '—');
 const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}` : '—');
 
+/* The runtime's four verdicts, in the user's language. These are labels for a
+   decision the runtime already made — the UI never picks one of them. */
+export const DECISION_LABELS = Object.freeze({
+  CONTINUE: { fa: 'برنامه روی مسیر است', en: 'The plan is on track' },
+  REVISE: { fa: 'نیاز به بازسازی دارد', en: 'Needs a rebuild' },
+  HALT: { fa: 'توقف — بودجه ریسک شکسته شد', en: 'Halted — risk budget breached' },
+  COMPLETE: { fa: 'افق زمانی تمام شد', en: 'Horizon reached' }
+});
+
 const FAMILY_LABEL = Object.freeze({
   cash: { fa: 'نقد/استیبل', en: 'Stable' },
   lending: { fa: 'وام‌دهی', en: 'Lending' },
@@ -259,7 +268,8 @@ function MonitorList({ monitors, fa }) {
 
 export function StrategyPlanCard({
   plan, spec = null, busy = false, error = null, locale = 'fa',
-  onOpenRoute = null, onExecuteStage = null, onSwitchPlan = null
+  onOpenRoute = null, onExecuteStage = null, onSwitchPlan = null,
+  onMonitor = null, onRevise = null, live = null
 }) {
   const fa = String(locale).startsWith('fa');
   const [picked, setPicked] = useState(null);
@@ -393,6 +403,63 @@ export function StrategyPlanCard({
               >
                 {busy ? (fa ? 'در حال اجرا…' : 'Running…') : (fa ? 'مرحله بعد را با تأیید من اجرا کن' : 'Run the next stage with my confirmation')}
               </button>
+              {onMonitor ? (
+                <button
+                  type="button"
+                  className="isp-btn is-ghost"
+                  disabled={busy}
+                  onClick={() => onMonitor(effective)}
+                  data-testid="strategy-monitor"
+                >
+                  {fa ? 'برنامه را با وضعیت واقعی بسنج' : 'Check the plan against reality'}
+                </button>
+              ) : null}
+              {onRevise && live?.decision === 'REVISE' ? (
+                <button
+                  type="button"
+                  className="isp-btn is-ghost"
+                  disabled={busy}
+                  onClick={() => onRevise(effective)}
+                  data-testid="strategy-revise"
+                >
+                  {fa ? 'استراتژی را بازسازی کن' : 'Rebuild the strategy'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/*
+            The monitoring verdict, once the plan has been measured against
+            reality. Nothing here is a promise: the pace is the plan's own
+            curve, and the decision comes from the runtime, not from a
+            colour the UI picked.
+          */}
+          {live?.last ? (
+            <div
+              className="isp-live"
+              data-testid="strategy-live"
+              data-decision={live.decision || 'CONTINUE'}
+            >
+              <b>{DECISION_LABELS[live.decision]?.[fa ? 'fa' : 'en'] || live.decision}</b>
+              {live.last.realisedPct != null ? (
+                <span dir="ltr">
+                  {fa ? 'تحقق‌یافته' : 'realised'} {pct(live.last.realisedPct, 2)}
+                  {live.last.paceReturnPct != null ? ` / ${fa ? 'انتظار' : 'expected'} ${pct(live.last.paceReturnPct, 2)}` : ''}
+                </span>
+              ) : null}
+              {live.last.drawdownPct != null ? (
+                <span dir="ltr">{fa ? 'افت' : 'drawdown'} {pct(live.last.drawdownPct, 2)}</span>
+              ) : null}
+              {(live.triggers || []).length ? (
+                <ul className="isp-triggers">
+                  {live.triggers.map((t) => <li key={t.id} dir="ltr">{t.id}: {t.detail}</li>)}
+                </ul>
+              ) : null}
+              {live.revisionCount ? (
+                <small data-testid="strategy-revision-count">
+                  {fa ? `${live.revisionCount} بازسازی انجام شده` : `${live.revisionCount} revision(s) applied`}
+                </small>
+              ) : null}
             </div>
           ) : null}
         </>

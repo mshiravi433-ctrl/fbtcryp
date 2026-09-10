@@ -35,6 +35,13 @@ export const STRATEGY_RUNTIME_SCHEMA = 'fbt.strategy-runtime.v1';
 
 export const STAGE_STATES = Object.freeze(['PENDING', 'READY', 'RUNNING', 'CONFIRMED', 'FAILED', 'SKIPPED']);
 
+/**
+ * Every verdict `observe()` can return. Surfaced so a UI can label them all
+ * instead of pattern-matching strings it found in a comment — a fifth
+ * decision added here must not render as a raw code in the chat.
+ */
+export const STRATEGY_DECISIONS = Object.freeze(['CONTINUE', 'REVISE', 'HALT', 'COMPLETE']);
+
 
 /**
  * The plan's own expected-return curve. Deployment is not instant — capital

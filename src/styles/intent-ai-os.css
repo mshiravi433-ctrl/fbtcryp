@@ -4262,3 +4262,25 @@ body:has(.iaos-page-v6) {
 :root[data-theme='light'] .isp-table tr.is-picked { background: rgba(99, 102, 241, 0.08); }
 :root[data-theme='light'] .isp-refusal { color: #92400e; }
 :root[data-theme='light'] .isp-btn.is-ghost { color: #0f172a; border-color: rgba(15, 23, 42, .18); }
+
+/* ── strategy monitoring: the verdict after the plan met reality ─────────── */
+.isp-live {
+  margin-top: 10px; padding: 9px 10px; border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, .28);
+  background: rgba(15, 23, 42, .32);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.isp-live b { font-size: 11px; letter-spacing: .2px; }
+.isp-live span { font-size: 10px; color: #94a3b8; }
+.isp-live small { font-size: 10px; color: #7dd3fc; }
+.isp-live[data-decision='CONTINUE'] { border-color: rgba(52, 211, 153, .45); }
+.isp-live[data-decision='CONTINUE'] b { color: #34d399; }
+.isp-live[data-decision='REVISE'] { border-color: rgba(251, 191, 36, .5); }
+.isp-live[data-decision='REVISE'] b { color: #fbbf24; }
+.isp-live[data-decision='HALT'] { border-color: rgba(248, 113, 113, .55); }
+.isp-live[data-decision='HALT'] b { color: #f87171; }
+.isp-live[data-decision='COMPLETE'] { border-color: rgba(125, 211, 252, .5); }
+.isp-live[data-decision='COMPLETE'] b { color: #7dd3fc; }
+.isp-triggers { margin: 2px 0 0; padding-inline-start: 15px; display: flex; flex-direction: column; gap: 2px; }
+.isp-triggers li { font-size: 10px; color: #cbd5e1; line-height: 1.5; }
+:root[data-theme='light'] .isp-live { background: rgba(241, 245, 249, .8); border-color: rgba(15, 23, 42, .14); }

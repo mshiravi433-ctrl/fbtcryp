@@ -31,6 +31,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { TelegramProvider } from '../../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../../src/context/WalletContext.jsx';
 import IntentAIUnified from '../../src/components/IntentAIUnified.jsx';
+import { DECISION_LABELS } from '../../src/components/StrategyPlanCard.jsx';
+import { STRATEGY_DECISIONS } from '../../src/lib/strategyBrain/strategyRuntime.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,6 +63,16 @@ export async function run(container) {
     );
   });
   for (let i = 0; i < 4; i += 1) await act(async () => { await sleep(20); });
+
+  /* The runtime's verdicts are labelled by a lookup table in the card. A
+     decision the table does not know renders as a raw code like "CONTINUE"
+     in the middle of a Persian sentence, so the two lists are held against
+     each other here rather than left to drift. */
+  check('every runtime verdict has a Persian and an English label',
+    STRATEGY_DECISIONS.every((d) => DECISION_LABELS[d]?.fa && DECISION_LABELS[d]?.en),
+    STRATEGY_DECISIONS.filter((d) => !DECISION_LABELS[d]?.fa || !DECISION_LABELS[d]?.en).join(','));
+  check('the label table carries no verdict the runtime cannot return',
+    Object.keys(DECISION_LABELS).every((d) => STRATEGY_DECISIONS.includes(d)));
 
   check('the chat renders', !!q('.iaos-composer'));
 
@@ -155,6 +167,26 @@ export async function run(container) {
       `${before?.strategyId} -> ${after?.strategyId}`);
     check('the chat says the signature happens on the venue page, not in chat',
       (container.textContent || '').includes('امضا') || (container.textContent || '').includes('signature'));
+  }
+
+  /* ── Monitoring: the plan must be measurable against reality, and must
+        refuse rather than guess when there is no portfolio to measure. In
+        this environment no wallet is connected, so the honest outcome is a
+        named refusal — a verdict invented from nothing would be a lie in
+        the one place the whole feature exists to avoid. ───────────────── */
+  const monitorBtn = q('[data-testid="strategy-monitor"]');
+  check('the card offers to check the plan against reality', !!monitorBtn && monitorBtn.disabled === false);
+  if (monitorBtn) {
+    await act(async () => { monitorBtn.click(); });
+    for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
+    const bodyText = container.textContent || '';
+    check('monitoring without a portfolio refuses instead of guessing',
+      bodyText.includes('کیف پول') || bodyText.includes('wallet'),
+      bodyText.slice(-260));
+    check('it does not invent a verdict without data',
+      !q('[data-testid="strategy-live"]'));
+    check('it does not offer to rebuild on data it never saw',
+      !q('[data-testid="strategy-revise"]'));
   }
 
   /* ── The plain portfolio question must NOT be swallowed by the objective
