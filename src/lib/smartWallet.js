@@ -25,7 +25,10 @@ const STORAGE_KEY = 'fbt-smart-wallet-v1';
 const SPEND_KEY = 'fbt-smart-wallet-spend-v1';
 
 export const DEFAULT_POLICY = {
-  enabled: false,
+  /* ON by default (owner directive: no feature ships disabled). The spend
+     bounds below are what make permissioned autonomy safe — enabled:true is
+     what makes them ENFORCED (a disabled policy bypasses the caps entirely). */
+  enabled: true,
   dailyLimitUsd: 1000,
   perTxLimitUsd: 500,
   allowlist: [],

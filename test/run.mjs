@@ -676,6 +676,11 @@ console.log('▸ probing the free Upstash durable-store fallback…');
 
 await import('./intent-ai/phase-status-probe.mjs');
 
+/* Phase 213 — the AI quality bar: 1,000+ deterministic intent cases against the
+   real classifier, plus the dead-deployment honesty sweep. */
+console.log('▸ probing FBT Intent AI — quality corpus (1,037 cases + honesty sweep)…');
+await import('./intent-ai/quality-corpus-probe.mjs');
+
 console.log('▸ probing FBT Intent AI — operational drills (backup/restore · rollback · sandbox · policy)…');
 {
   const { default: opsRows } = await import('./intent-ai/ops-drill-probe.mjs');

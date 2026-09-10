@@ -69,38 +69,38 @@ export const INTENT_TYPES = Object.freeze({
  * is still LOAN_STATUS but with `executable:false` and a stated reason (§21).
  */
 const RULES = Object.freeze([
-  { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)/i], requires: ['portfolio'] },
+  { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)|ریسک (من|پرتفوی|سبد)|ارزیابی ریسک|my risk|risk (assessment|check|level)/i], requires: ['portfolio'] },
   { intent: 'CONCENTRATION_CHECK', patterns: [/زیاد (دارم|است|داری)|تمرکز|concentration|too much|比重|تک‌دارایی|تک دارایی/i], requires: ['portfolio'] },
   { intent: 'LOAN_STATUS', patterns: /وامم|وام من|وام(?:م)? (چطور|چقدر|چنده|امن|سلامت)|وضعیت وام|loan status|بدهی ?م|my loan/i, requires: ['lending'] },
   /* Buying an instrument the app may not sell is the most dangerous place to be
      vague: a cheerful «بله، در حال خرید ETF…» would be a lie, and a «متوجه نشدم»
      wastes the turn. It classifies as its own intent so the registry, not the
      language model, decides whether the answer is a route or a refusal (§8). */
-  { intent: 'INSTRUMENT_QUERY', patterns: /\betf\b|\beft\b|صندوق (سرمایه|درآمد| ETF)?|fund\b|stock|سهام|شرکت|farik?س|فارکس|forex|جفت ?ارز|commodit|کالایی|طلا|نقره|نفت|خاک ?سبز|rwa|real.?world|tokeniz/i, requires: ['markets'] },
+  { intent: 'INSTRUMENT_QUERY', patterns: [/\betf\b|\beft\b|صندوق (سرمایه|درآمد| ETF)?|fund\b|stock|سهام|شرکت|فارکس|forex|جفت ?ارز|commodit|کالایی|طلا|نقره|نفت|خاک ?سبز|rwa|real.?world|tokeniz|توکنایز|ملک|املاک/, /\b(aapl|tsla|msft|nvda|spy|qqq|googl?e?|amzn|meta|eurusd|usdjpy|dxy|gold|silver|oil|brent|wti|copper)\b/, /اپل|تسلا|مایکروسافت|انویدیا|گوگل|آمازون|متوان/i], requires: ['markets'] },
   { intent: 'BORROW_CAPACITY', patterns: /(?:چقدر|چه مقدار|حداکثر|سقف|چند).{0,28}(وام|borrow|اعتبار)|ظرفیت (وام|دریافت)|borrowing power|max borrow/i, requires: ['lending'] },
-  { intent: 'FUTURES_RISK', patterns: /(فیوچرز|آتی|اهرم|leverage|funding|مارجین|perp|position (باز|open))/i, requires: ['futures'] },
-  { intent: 'WHATIF_SIMULATION', patterns: [/اگر .{0,40}(بیفتد|بریزد|بریزه|بالا برود|بره بالا|افزایش|کاهش|برسه)|چه می ?شود|what.?if|در صورت (ریختن|افت)|سناریو/i], requires: ['portfolio'] },
-  { intent: 'GOAL_PLAN', patterns: [/هدف|goal|برای (رسیدن|برسم)|می ?خواهم (به|برسم)|target (of|:)/i], requires: [] },
+  { intent: 'FUTURES_RISK', patterns: /(فیوچرز|آتی|اهرم|leverage|funding|مارجین|perp|position (باز|open)|\bdydx\b|\bfutures\b)/i, requires: ['futures'] },
+  { intent: 'WHATIF_SIMULATION', patterns: [/اگر .{0,40}(بیفتد|بیفته|بریزد|بریزه|ریخت|سقوط|بالا برود|بالا بره|بره بالا|افزایش|کاهش|برسه|دو برابر|برابر بشه|نصف بشه)|چه می ?شود|what.?if|در صورت (ریختن|افت)|سناریو|فرض کن/i], requires: ['portfolio'] },
+  { intent: 'GOAL_PLAN', patterns: [/هدف|\bgoal\b|برای (رسیدن|برسم)|می[\s\u200c]?خوا?ه?م (به|برسم|.{0,40}(سود|درآمد))|تا .{0,24}(سود|درآمد|برسم)|target (of|:)/i], requires: [] },
   { intent: 'PROFIT_PLAN', patterns: /برنامه (سود|کسب سود|درآمد)|profit plan|بهینه ?سازی (سود|پرتفوی)|بهترین مسیر/i, requires: ['portfolio'] },
-  { intent: 'NEWS_SUMMARY', patterns: /خبر|اخبار|news|آپدیت (جدید|بازار)|رویداد/i, requires: ['news'] },
+  { intent: 'NEWS_SUMMARY', patterns: /(?<!چی )(?<!چه )خبر|اخبار|\bnews\b|آپدیت (جدید|بازار)|رویداد/i, requires: ['news'] },
   { intent: 'SIGNAL_READING', patterns: /سیگنال|signal|اندیکاتور|تایم?فریم/i, requires: ['signals'] },
-  { intent: 'MARKET_OVERVIEW', patterns: /بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار/i, requires: ['markets'] },
-  { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?دهد|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
-  { intent: 'EXECUTE_SWAP', patterns: /تبدیل (کن|کنید|بکن)|سواپ|swap (این|به|to)|convert .* to| exchange .* for| تبدیلش بده|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|فروش بزن|خرید بزن|\bsell\b|\bbuy\b)/i, requires: ['wallet'] },
-  { intent: 'EXECUTE_BRIDGE', patterns: /به (آربیتروم|آربیتروm ?one|آربیتروم one|arbitrum|پالیگان|بیس|اپتیمیزم|اربیترم)|منتقل کن به|برو به شبکه|bridge|پل بزن|ببر (به|روی)/i, requires: ['wallet'] },
-  { intent: 'EXECUTE_BORROW', patterns: /وام (بگیر|گرفتن|دریافت کن)|borrow (me|some)?|بخوام بگیرم/i, requires: ['lending'] },
-  { intent: 'EXECUTE_LEND', patterns: /سپرده (گذاری|بگذار)|لند (کن|کنید)|lend|supply (کن|کردن)/i, requires: ['lending'] },
-  { intent: 'EXECUTE_REPAY', patterns: /بدهی (را )?بده| بازپرداخت|قسط (بده|ردیف)|repay/i, requires: ['lending'] },
-  { intent: 'EXECUTE_REBALANCE', patterns: /ری‌بالانس|متعادل (کردن|کن)|توزیع مجدد|rebalance/i, requires: ['portfolio'] },
-  { intent: 'CREATE_GOAL', patterns: /هدف (جدید|بساز|ثبت|-set)|create goal|هدفم رو ثبت/i, requires: [] },
-  { intent: 'SET_ALERT', patterns: /هشدار|alert (set|کن)|به من خبر بده|وقتی رسید به|خبرم کن|یادم انداز/i, requires: [] },
-  { intent: 'BALANCE_QUERY', patterns: /مانده|بالانس|موجودی|balance|چقدر (دارم|تومان|دلار)/i, requires: ['wallet'] },
-  { intent: 'ASSET_ANALYSIS', patterns: /(بررسی|تحلیل|وضعیت) ?(کن|ش)?|analyze|check .* out|چطور است/i, requires: ['markets'] },
+  { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money/i], requires: ['markets'] },
+  { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?ده(?:د)?|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
+  { intent: 'EXECUTE_SWAP', patterns: [/تبدیلش? (کن|کنید|بکن|بده|بدهید)|سواپ|\bswap\b|convert .* to|\bexchange .* for|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|بخرم?|بخرید|فروش بزن|خرید بزن|\bsell\b|\bbuy\b|\bpurchase\b|قصد خرید|دنبال خرید)/i], requires: ['wallet'] },
+  { intent: 'EXECUTE_BRIDGE', patterns: /به (آربیتروم|آربیتروm ?one|آربیتروم one|arbitrum|پالیگان|بیس|اپتیمیزم|اربیترم)|منتقل کن به|برو به شبکه|\bbridge\b|پل بزن|ببر (به|روی)|\bmove\b .{0,24}\bto\b|\btransfer\b .{0,24}\bto\b/i, requires: ['wallet'] },
+  { intent: 'EXECUTE_BORROW', patterns: /وام.{0,16}(بگیر|گرفتن|دریافت کن)|borrow (me|some)?|بخوام بگیرم/i, requires: ['lending'] },
+  { intent: 'EXECUTE_LEND', patterns: /سپرده.{0,16}(گذاری|بگذار|کن|کنید|بذار|بذارید)|لند (کن|کنید)|\blend\b|\bsupply\b|\bdeposit\b/i, requires: ['lending'] },
+  { intent: 'EXECUTE_REPAY', patterns: /بدهی.{0,16}(را |رو )?بده|بازپرداخت (وام )?(کن|بکن)?|قسط (بده|ردیف)|repay (my |the )?(loan|debt|position)|\brepay\b/i, requires: ['lending'] },
+  { intent: 'EXECUTE_REBALANCE', patterns: /ری[\s\u200c]?بالانس|ریبالانس|متعادل (کردن|کن)|توزیع مجدد|rebalance/i, requires: ['portfolio'] },
+  { intent: 'CREATE_GOAL', patterns: /هدف (جدید|بساز|ثبت|-set)|create (a |new )?goal|هدفم رو ثبت/i, requires: [] },
+  { intent: 'SET_ALERT', patterns: /هشدار|\bset (an )?alert\b|alert (set|کن|for|on|me)|به من خبر بده|وقتی رسید به|خبرم کن|یادم انداز|notify me when/i, requires: [] },
+  { intent: 'BALANCE_QUERY', patterns: /مانده|بالانس|موجودی|\bbalance\b|چقدر (دارم|تومان|دلار)|how much (do i|have|i have|to i)/i, requires: ['wallet'] },
+  { intent: 'ASSET_ANALYSIS', patterns: /(بررسی|تحلیل|وضعیت) ?(کن|ش)?|analyze|check .* out|چطور (است|ه)|چطوره|چه حالی|\bfarm\b|فارم|\bapy\b|\byield\b/i, requires: ['markets'] },
   /* Price questions are the single most common message in a trading app, and a
      lexicon that misses them turns "36,000 USDT" into "please clarify". Ordered
      after QUOTE_SWAP / BALANCE_QUERY / LOAN_STATUS so those keep their ground. */
   { intent: 'ASSET_ANALYSIS', patterns: /قیمت|price|چنده|چقدره|چند است|چند شد|چند شده|رسید (به|چند)|رساند|rate (is|of)/i, requires: ['markets'] },
-  { intent: 'NAVIGATE', patterns: /برو به (صفحه )?|نمایش بده|باز کن|open (the )?page|navigate/i, requires: [] }
+  { intent: 'NAVIGATE', patterns: [/برو به (صفحه )?|نمایش بده|باز کن|open (the )?[\w\u0600-\u06FF]+ page|navigate|show me the/i], requires: [] }
 ]);
 
 /**
@@ -168,7 +168,33 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
   const compound = detectCompound(text);
   /* A compound request is the whole sentence, so it is ranked with the same rule
      as everything else — its own score is a floor, not an automatic win. */
-  hits.push(...compound.map((c) => ({ intent: c.intent, score: round(Math.max(0.72, c.score ?? 0.72), 3), compound: true, leg: c.leg })));
+  hits.push(...compound.map((c) => {
+    /* A compound request inherits its intent's availability check — «به arbitrum
+       ببر» with the wallet UNAVAILABLE must refuse both legs, not promise them.
+       Without this the compound floor (0.76) outranked every honest single
+       intent in a dead deployment. */
+    const rule = RULES.find((r) => r.intent === c.intent);
+    const unavailable = (rule?.requires || []).filter((k) => SERVE_UNAVAILABLE(context, k));
+    const base = round(Math.max(0.72, c.score ?? 0.72), 3);
+    return {
+      intent: c.intent,
+      score: unavailable.length ? round(base * (0.45 / 0.7), 3) : base,
+      compound: true, leg: c.leg,
+      missingRequires: unavailable.length ? unavailable : undefined
+    };
+  }));
+
+  /* A sentence that names a PAGE («برو به صفحه swap», «open the swap page») is a
+     navigation request even when the page's name is also an operation verb — the
+     user asked to SEE the page, not to run it. Lift NAVIGATE above every execute
+     verb (max 0.75) but below conversation follow-ups (0.85+). */
+  if (/صفحه|\bpage\b|\btab\b|منو|بخش|نمایش بده|navigate to\b|show me the/.test(text)) {
+    const nav = hits.find((h) => h.intent === 'NAVIGATE');
+    if (nav) {
+      nav.score = round(Math.max(nav.score, 0.78), 3);
+      hits.sort((a, b) => (b.score || 0) - (a.score || 0));
+    }
+  }
 
   hits.sort((a, b) => (b.score || 0) - (a.score || 0));
   const best = hits[0] || null;
@@ -197,11 +223,11 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
 
 /** Which intent wins when a sentence matches several; see `classify`. */
 const INTENT_PRIORITY = Object.freeze({
-  BORROW_CAPACITY: 0.07, LOAN_STATUS: 0.06, EXECUTE_REPAY: 0.06, WHATIF_SIMULATION: 0.05,
-  INSTRUMENT_QUERY: 0.05, SET_ALERT: 0.045, NEWS_SUMMARY: 0.045, SIGNAL_READING: 0.045,
+  BORROW_CAPACITY: 0.07, EXECUTE_REPAY: 0.075, LOAN_STATUS: 0.06, WHATIF_SIMULATION: 0.05,
+  INSTRUMENT_QUERY: 0.05, SET_ALERT: 0.05, NEWS_SUMMARY: 0.045, SIGNAL_READING: 0.045,
   PROFIT_PLAN: 0.045, QUOTE_BRIDGE: 0.04, EXECUTE_BRIDGE: 0.04, FUTURES_RISK: 0.04,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,
-  CREATE_GOAL: 0.03, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
+  CREATE_GOAL: 0.04, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
   PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02
 });
 
@@ -217,7 +243,7 @@ export function instrumentOf(text = '') {
   if (/stock|سهام|شرکت (آمریکا|امریکا)|\b(aapl|tsla|msft|nvda|spy|qqq)\b|اپل|تسلا|مایکروسافت|انویدیا/.test(t)) return 'stocks';
   if (/forex|فارکس|جفت ?ارز|\beurusd\b|\bdxy\b|\busdjpy\b/.test(t)) return 'forex';
   if (/commodit|کالایی|\bxau\b|\bxag\b|gold|طلا|silver|نقره|oil|نفت|brent|wti|gas ?oil/.test(t)) return 'commodities';
-  if (/\brwa\b|real.?world.?asset|tokeniz|صندوق مسدود|ملک/.test(t)) return 'rwa';
+  if (/\brwa\b|real.?world.?asset|tokeniz|توکنایز|صندوق مسدود|ملک|املاک/.test(t)) return 'rwa';
   return null;
 }
 
@@ -240,7 +266,7 @@ const COMPOUND_PATTERNS = [
   /* «… تبدیل کن و بریزد روی آربیتروم» and «… بعدش ببر روی base» are the same request
      in two shapes, so the connector is optional as long as a destination network or
      a bridge verb follows — the destination is what makes it a second leg. */
-  { leg: 2, intent: 'EXECUTE_BRIDGE', score: 0.72, test: /(بعد از (خرید|سواپ|تبدیل)|بعدش|سپس|و بعد|بعد|then|after ?that)?\s*(و\s*)?(به\s*|روی\s*|بریز?د?\s*(روی|به)?\s*|ببر\s*(به|روی)?\s*|منتقل\s*(به|روی)?\s*)?(arbitrum|arbi\b|base\b|polygon|matic|optimism|bnb|bsc|avalanche|پل\b|bridge|شبکه)/i },
+  { leg: 2, intent: 'EXECUTE_BRIDGE', score: 0.76, test: /((بعد از (خرید|سواپ|تبدیل)|بعدش|سپس|و بعد|بعد|then|after ?that)[^\n]{0,24})?\s*(و\s*)?(به\s+|روی\s+|بریز?د?\s*(روی|به)?\s+|ببر\s*(به|روی)?\s*|منتقل\s*(به|روی)?\s*|پل\s*بزن|bridge\s*(to)?\s*)(arbitrum|arbi\b|base\b|polygon|matic|optimism|bnb chain|bsc\b|avalanche|پل\b|bridge|شبکه)/i },
   { leg: 2, intent: 'EXECUTE_LEND', score: 0.68, test: /(بعد از (خرید|سواپ)|then|سپس).{0,40}(لند|وام بده|supply)/i }
 ];
 function detectCompound(text) {
@@ -296,7 +322,7 @@ export function extractEntities(message, { context = {}, state = {} } = {}) {
     assetPositions: assetsWithPositions,
     targetUsd: amounts.targetUsd,
     horizon: horizon.years || horizon.months || horizon.days ? horizon : null,
-    side: /فروش|sell/i.test(text) ? 'sell' : (/خرید|buy/i.test(text) ? 'buy' : null),
+    side: /فروش|sell/i.test(text) ? 'sell' : (/خرید|buy|purchase/i.test(text) ? 'buy' : null),
     /* Which non-crypto venue the sentence names, decided by the lexicon and never
        by a guess: `null` means the user did not name one. */
     instrument: instrumentOf(text),

@@ -139,7 +139,7 @@ await new Promise((r) => setTimeout(r, 800));
 /* ══════════════════════ 1. health + honest baseline ══════════════════════ */
 const health = await call('/api/ai/health');
 t('GET /api/ai/health answers with flags, migrations and durability', health.status === 200 && health.body.ok === true && health.body.migrations.applied === health.body.migrations.current, health.body);
-t('health reports autonomy off by default and canSign false', health.body.subsystems?.autonomy?.autonomous === false && health.body.subsystems?.autonomy?.canSign === false, health.body.subsystems?.autonomy);
+t('health reports autonomy ON by default (Phase 212 owner policy) and canSign false', health.body.subsystems?.autonomy?.autonomous === true && health.body.subsystems?.autonomy?.canSign === false, health.body.subsystems?.autonomy);
 t('health reports durability honestly (no blob token → in-process only)', health.body.durable === false);
 t('before a brain turn, the financial state is UNREAD, not zero', (await call('/api/ai/financial-state')).body.financial?.status === 'UNAVAILABLE', (await call('/api/ai/financial-state')).body.financial);
 
@@ -234,11 +234,14 @@ const gEventsFeed = await call('/api/ai/guardian/events?limit=20');
 t('GET /api/ai/guardian/events returns the durable alert feed', gCheckEvents.status === 200 && gEventsFeed.status === 200 && gEventsFeed.body.ok === true && Array.isArray(gEventsFeed.body.events), { gCheck: gCheckEvents.body, gEvents: gEventsFeed.body });
 
 /* ══════════════════════ 5. the policy engine: fail-closed over HTTP ══════════════════════ */
+/* Phase 212: autonomy ships ON by default, so the flag-off refusal is proven
+   FIRST (explicitly disabled), then the default-on path creates the policy. */
+process.env.AUTONOMOUS_POLICY_ENABLED = 'false'; /* flags read the env on every call */
 const policyNo = await post('/api/ai/policies', { policy: { name: 'probe', maxPerExecutionUsd: 500, maxDailyUsd: 1000, maxCumulativeUsd: 5000, slippageLimitPct: 0.5, gasLimitUsd: 10, riskLimit: 'ELEVATED', trigger: { kinds: ['SWAP'] }, expiration: Date.now() + 30 * 86400000 } });
-t('with the autonomy flag OFF, creating a policy refuses (FEATURE_DISABLED)',
+t('with the autonomy flag explicitly OFF, creating a policy refuses (FEATURE_DISABLED)',
   policyNo.status === 409 && policyNo.body.code === 'FEATURE_DISABLED', policyNo.body);
 
-process.env.AUTONOMOUS_POLICY_ENABLED = 'true'; /* flags read the env on every call */
+process.env.AUTONOMOUS_POLICY_ENABLED = 'true';
 const policyYes = await post('/api/ai/policies', { policy: { name: 'probe-swap', maxPerExecutionUsd: 500, maxDailyUsd: 1000, maxCumulativeUsd: 5000, slippageLimitPct: 0.5, gasLimitUsd: 10, riskLimit: 'ELEVATED', trigger: { kinds: ['SWAP'], assets: [], chains: [] }, expiration: Date.now() + 30 * 86400000 } });
 t('with the flag ON, a complete policy is created ACTIVE',
   policyYes.status === 200 && policyYes.body.policy?.status === 'ACTIVE', policyYes.body);

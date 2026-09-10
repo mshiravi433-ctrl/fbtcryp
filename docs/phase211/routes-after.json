@@ -1,9 +1,9 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-09-09T04:11:27.683Z",
+  "generatedAt": "2026-09-10T16:47:51.299Z",
   "frontend": {
-    "routeCount": 65,
+    "routeCount": 66,
     "routes": [
       {
         "path": "*",
@@ -162,6 +162,10 @@
         "component": "P2P"
       },
       {
+        "path": "/pay/:code",
+        "component": "PayLanding"
+      },
+      {
         "path": "/perp",
         "component": "Perp"
       },
@@ -266,7 +270,7 @@
         "component": "InsuranceSettings"
       }
     ],
-    "lazyImportCount": 63,
+    "lazyImportCount": 64,
     "lazyImportsMissing": [],
     "lazyImports": [
       {
@@ -450,6 +454,10 @@
         "exists": true
       },
       {
+        "spec": "./pages/PayLanding",
+        "exists": true
+      },
+      {
         "spec": "./pages/Perp",
         "exists": true
       },
@@ -571,6 +579,7 @@
     "/orders",
     "/ostium",
     "/p2p",
+    "/pay/:code",
     "/perp",
     "/portfolio",
     "/predict",
@@ -1112,6 +1121,15 @@
         "GET /council/:id",
         "GET /decision/:id",
         "GET /decision/:id/evidence",
+        "GET /deep/agents/runtime",
+        "GET /deep/conversation",
+        "GET /deep/evaluation/due",
+        "GET /deep/evaluation/regimes",
+        "GET /deep/macro-graph",
+        "GET /deep/profile",
+        "GET /deep/status",
+        "GET /deep/wallet-context",
+        "GET /deep/why/:decisionId",
         "GET /evidence",
         "GET /evidence/:id",
         "GET /external-agents",
@@ -1137,6 +1155,19 @@
         "GET /world-state",
         "POST /autonomy/run",
         "POST /decision",
+        "POST /decision/:id/confirm",
+        "POST /deep/agent-council",
+        "POST /deep/agents/call",
+        "POST /deep/agents/kill",
+        "POST /deep/agents/sessions",
+        "POST /deep/conversation/advance",
+        "POST /deep/conversation/ingest",
+        "POST /deep/evaluation/review",
+        "POST /deep/events/replan",
+        "POST /deep/goal-reasoning",
+        "POST /deep/goal-scenarios",
+        "POST /deep/goal-scenarios/what-if",
+        "POST /deep/opportunities/fit",
         "POST /external-agents",
         "POST /external-agents/:id/authorize",
         "POST /external-agents/:id/interaction",
@@ -1154,6 +1185,7 @@
         "POST /simulate",
         "POST /strategies",
         "POST /strategies/compare",
+        "POST /strategies/simulate",
         "POST /what-if"
       ],
       "server/futures/router.js": [
@@ -1255,6 +1287,15 @@
       "GET /council/:id",
       "GET /decision/:id",
       "GET /decision/:id/evidence",
+      "GET /deep/agents/runtime",
+      "GET /deep/conversation",
+      "GET /deep/evaluation/due",
+      "GET /deep/evaluation/regimes",
+      "GET /deep/macro-graph",
+      "GET /deep/profile",
+      "GET /deep/status",
+      "GET /deep/wallet-context",
+      "GET /deep/why/:decisionId",
       "GET /evidence",
       "GET /evidence/:id",
       "GET /external-agents",
@@ -1280,6 +1321,19 @@
       "GET /world-state",
       "POST /autonomy/run",
       "POST /decision",
+      "POST /decision/:id/confirm",
+      "POST /deep/agent-council",
+      "POST /deep/agents/call",
+      "POST /deep/agents/kill",
+      "POST /deep/agents/sessions",
+      "POST /deep/conversation/advance",
+      "POST /deep/conversation/ingest",
+      "POST /deep/evaluation/review",
+      "POST /deep/events/replan",
+      "POST /deep/goal-reasoning",
+      "POST /deep/goal-scenarios",
+      "POST /deep/goal-scenarios/what-if",
+      "POST /deep/opportunities/fit",
       "POST /external-agents",
       "POST /external-agents/:id/authorize",
       "POST /external-agents/:id/interaction",
@@ -1297,6 +1351,7 @@
       "POST /simulate",
       "POST /strategies",
       "POST /strategies/compare",
+      "POST /strategies/simulate",
       "POST /what-if"
     ]
   }

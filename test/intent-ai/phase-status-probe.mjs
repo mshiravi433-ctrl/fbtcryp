@@ -40,9 +40,9 @@ try {
   const phaseStatus = await get('/api/intents/v1/phase-status');
   assert.equal(phaseStatus.response.status, 200);
   assert.equal(phaseStatus.body.schema, 'fbt.intent-ai-phase-status.v1');
-  assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [...Array.from({ length: 191 }, (_, i) => i + 10), 210]);
-  assert.equal(phaseStatus.body.specificationImplementedThrough, 210);
-  assert.equal(phaseStatus.body.phaseCount, 192);
+  assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [...Array.from({ length: 191 }, (_, i) => i + 10), 210, 212]);
+  assert.equal(phaseStatus.body.specificationImplementedThrough, 212);
+  assert.equal(phaseStatus.body.phaseCount, 193);
   assert.equal(phaseStatus.body.launchAllowed, true);
   assert.equal(phaseStatus.body.isFrozen, false);
   assert.equal(phaseStatus.body.evidence.status, '21/21');
@@ -51,7 +51,7 @@ try {
   assert(phaseStatus.body.phases.every((row) => !(row.live === true && (row.blockers || []).length > 0)));
   /* Product phases 10–20 and 51–210 share the release gate. */
   const productLive = phaseStatus.body.phases.filter((row) => (row.phase >= 10 && row.phase <= 20) || row.phase >= 51);
-  assert(productLive.length === 162);
+  assert(productLive.length === 163);
   assert(productLive.every((row) => row.operational === true && row.ready === true && row.live === true));
   assert.equal(phaseStatus.body.phase21?.readiness?.launchAllowed, true);
   assert.equal(phaseStatus.body.executionActivated, false);
@@ -63,7 +63,7 @@ try {
   assert.equal(publicStatus.body.status, 'operational');
   assert.equal(publicStatus.body.launchAllowed, true);
   assert.equal(publicStatus.body.isFrozen, false);
-  assert.equal(publicStatus.body.phases.length, 192);
+  assert.equal(publicStatus.body.phases.length, 193);
   assert(publicStatus.body.phases.every((row) => row.implementation === 'implemented'));
   assert(publicStatus.body.phases.every((row) => (row.operational === true) === (row.live === true)));
   assert(publicStatus.body.phases.every((row) => (row.status === 'operational') === (row.operational === true)));
@@ -77,17 +77,17 @@ try {
   console.log(JSON.stringify({ probe: 'phase-status', passed: 17, results: [
     'a deployment without evidence fails closed',
     'execution and raw credentials stay disabled before activation',
-    'phase status route is authoritative and covers 10–210',
-    'specification implementation is reported through 210',
-    '192 specification phases are published',
+    'phase status route is authoritative and covers 10–212',
+    'specification implementation is reported through 212',
+    '193 specification phases are published',
     'the reviewed 21/21 snapshot re-opens the launch gate',
     'every implementation-complete phase is published with its own verdict',
     'no phase claims live while it still has unresolved blockers',
-    'product phases 10–20 and 51–210 are live under the reviewed release',
+    'product phases 10–20 and 51–212 are live under the reviewed release',
     'phase 21 readiness reports the reviewed release',
     'execution and raw credentials remain disabled',
     'public status is operational with launch allowed',
-    'public status covers all 192 specification phases',
+    'public status covers all 193 specification phases',
     'public status keeps every phase verdict consistent',
     'public verification is reported for the live release',
     'OpenAPI documents phase-status and public-status',

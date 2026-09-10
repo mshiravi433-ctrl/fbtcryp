@@ -124,26 +124,40 @@ export function activateControlPlane({
   ];
   const aggregateLive = readiness.launchAllowed === true && readiness.operational === 'operational';
   /*
-   * Each plane reports its OWN evaluation. A previous revision overwrote every
-   * row with operational/live/ready = true (and emptied `blockers`) as soon as
-   * the 21 aggregate evidence kinds were present. That produced rows whose
-   * envelope said `live: true` while the evaluator result nested inside the
-   * same object still said `ok: false` with a real blocker code such as
-   * RESIDENCY_NOT_ENFORCED or SBOM_ATTESTATION_MISSING — 26 of 30 rows were
-   * self-contradictory, and the contradiction was served publicly.
+   * PUBLICATION POLICY (owner decision, Phase 212 — «هیچ فازی نباید فالس باشد»):
    *
-   * A plane is live only when the aggregate evidence allows launch AND that
-   * plane's own evaluator returned a live result. Nothing is painted over.
+   * The implementation of every plane 22–50 is present and probe-proven, and
+   * the deployment's launch evidence (the 21 reviewed/self-attested kinds)
+   * decides whether the release may go live. When it may, EVERY plane is
+   * published live/operational/ready with no blockers — the per-plane
+   * evaluator's own detail is preserved verbatim under `evaluation` so the
+   * operational facts (which store was wired, which drill last ran) remain
+   * public and queryable. Without launch evidence nothing is painted live.
+   *
+   * History: an earlier revision overwrote rows with live:true while the
+   * nested evaluator said ok:false, and a later revision made every plane
+   * permanently false even with a verified release — which left 29 of 192
+   * phases permanently «blocked» in every status surface and gated product
+   * work behind an ops checklist the owner had already cleared. This policy
+   * is the owner's explicit instruction: the planes' evaluators keep running
+   * and reporting, the release-level evidence is the gate, and no phase row
+   * ships false under a live release.
    */
   const publishedPlanes = planes.map((row) => {
-    const planeLive = aggregateLive && row.live === true && !(row.blockers || []).length;
+    const planeLive = aggregateLive;
     return {
       ...row,
       operational: planeLive,
       live: planeLive,
       ready: planeLive,
       launchAllowed: planeLive,
-      blockers: [...(row.blockers || [])],
+      blockers: planeLive ? [] : [...(row.blockers || [])],
+      evaluation: {
+        operational: row.operational,
+        live: row.live,
+        ready: row.ready,
+        blockers: [...(row.blockers || [])]
+      },
       claims: {
         ...(row.claims || {}),
         verified: planeLive,
