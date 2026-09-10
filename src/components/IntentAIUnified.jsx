@@ -86,6 +86,9 @@ import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
 import { StrategyPlanCard } from './StrategyPlanCard.jsx';
 import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
+import {
+  saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs
+} from '../lib/strategyBrain/strategyStore.js';
 import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
 import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
 import { getOhlc } from '../lib/api';
@@ -2675,8 +2678,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           portfolio: aiContext.portfolio || null
         });
         if (!goalMountedRef.current) return;
+        const built = result.strategy || result;
+        /*
+         * Persist the plan before it is shown. A strategy is built for a
+         * horizon measured in months, so losing it on reload would throw away
+         * the stage progress that staged execution and revision both act on.
+         * One localStorage write, no server round-trip: free on a small host.
+         * A refusal (ok:false) is never stored — there is no plan to resume.
+         */
+        if (built?.ok) {
+          try {
+            saveStrategyPlan({ strategy: built, goal: result.spec || built.goal || null });
+          } catch { /* storage full or blocked: the plan still works this session */ }
+        }
         setMessages((prev) => prev.map((m) => (m.id === pending.id
-          ? { ...m, strategyPlan: result.strategy || result, strategySpec: result.spec || null, strategyBusy: false }
+          ? { ...m, strategyPlan: built, strategySpec: result.spec || null, strategyBusy: false }
           : m)));
       } catch (err) {
         if (!goalMountedRef.current) return;
@@ -2696,16 +2712,37 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * prefilled rather than signing anything itself.
    */
   const strategyRuntimesRef = useRef(new Map());
+
+  /* Write the runtime's stage truth back to the store. Called after anything
+     that changes progress, so a reload picks up where this left off. Storage
+     failure is swallowed on purpose: losing persistence must never block a
+     stage the user just signed. */
+  const persistStrategyRuntime = useCallback((strategy, spec, runtime) => {
+    if (!strategy?.ok || !runtime) return;
+    try {
+      saveStrategyPlan({ strategy, goal: spec || strategy.goal || null, runtime: runtime.state() });
+    } catch { /* ignore */ }
+  }, []);
+
   const runStrategyStage = useCallback((message, strategy) => {
     if (!strategy?.ok) return;
     let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
     if (!runtime) {
+      /* Resume from the store when there is a saved plan: a strategy built
+         for a 4-month horizon that restarts at stage one on every reload
+         would re-run stages the user already signed. */
+      let hydrate = null;
+      try {
+        const saved = loadStrategyPlan(strategy.strategyId);
+        hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
+      } catch { hydrate = null; }
       runtime = createChatStrategyRuntime({
         strategy,
         spec: message.strategySpec || null,
         context: aiContext,
         wallet: wallet || null,
-        portfolio: aiContext.portfolio || null
+        portfolio: aiContext.portfolio || null,
+        hydrate
       });
       strategyRuntimesRef.current.set(strategy.strategyId, runtime);
     }
@@ -2729,6 +2766,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
     if (next.movesFunds && !walletConnected) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
     const first = next.actions?.find((a) => a.route) || null;
+    /*
+     * Only now is the stage really leaving this surface, so only now is it
+     * marked RUNNING and written back. Marking it earlier would record a
+     * hand-off that never happened when the wallet gate turns the user away.
+     *
+     * RUNNING is the honest ceiling here: the signature happens on the venue
+     * page, and this surface has no receipt to bring back, so nothing is ever
+     * marked CONFIRMED from chat. A returning user sees "this stage is with
+     * the venue", not a false "done".
+     */
+    runtime.advance();
+    persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
     setMessages((prev) => [...prev, {
       id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
       content: fa
@@ -2737,7 +2786,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       actions: first ? [{ id: `stage-${next.stage.id}`, route: first.route, label: fa ? 'باز کن' : 'Open' }] : []
     }]);
     if (first?.route) navigate(first.route);
-  }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate]);
+  }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate, persistStrategyRuntime]);
 
   /**
    * Execute one goal option for real. The steps are the venue actions the

@@ -112,6 +112,51 @@ export async function run(container) {
     check('the refusal names a reason code', Boolean(refused.dataset.code));
   }
 
+  /* ── Persistence: a plan built for a months-long horizon must survive the
+        tab closing, otherwise the stage progress that staged execution and
+        revision both act on is gone. This is the check that fails if the
+        store is written but never CALLED from the component. ──────────── */
+  const STORE_KEY = 'fbt.strategy-brain.plans.v1';
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { stored = null; }
+  check('the built plan is written to the strategy store', Boolean(stored),
+    stored ? '' : 'nothing under ' + STORE_KEY);
+  check('the store holds a resumable strategy',
+    Array.isArray(stored?.plans) && stored.plans.length > 0 && stored.plans[0].strategy?.ok === true);
+  const storedPlan = stored?.plans?.[0];
+  check('the stored plan carries the goal it was built from',
+    Number(storedPlan?.goal?.capitalUsd) === 10000 && Number(storedPlan?.goal?.targetPct) === 15,
+    JSON.stringify({ capital: storedPlan?.goal?.capitalUsd, target: storedPlan?.goal?.targetPct }));
+  check('the stored plan keeps its stage list',
+    (storedPlan?.strategy?.stages || []).length > 0,
+    `${(storedPlan?.strategy?.stages || []).length} stages`);
+  check('no signature payload reached storage',
+    !/privatekey|mnemonic|seedphrase/i.test(localStorage.getItem(STORE_KEY) || ''));
+
+  /* ── Running a stage must move the plan's state, and write it back. A
+        hand-off that records nothing leaves a returning user at stage one
+        forever — and a hand-off that records CONFIRMED would be a lie,
+        because the signature happens on the venue page, not here. ─────── */
+  const runBtn = q('[data-testid="strategy-execute-stage"]');
+  check('the card offers to run the next stage', !!runBtn && runBtn.disabled === false);
+  if (runBtn) {
+    const before = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
+    await act(async () => { runBtn.click(); });
+    for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
+    const after = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
+    const states = Object.values(after?.runtime?.stageProgress || {});
+    check('running a stage records stage progress in the store',
+      states.length > 0, `${states.length} stage rows`);
+    check('the handed-off stage is marked RUNNING, never CONFIRMED',
+      states.some((s) => s.state === 'RUNNING') && !states.some((s) => s.state === 'CONFIRMED'),
+      JSON.stringify(states.map((s) => s.state)));
+    check('the stored plan is still the same strategy after the run',
+      after?.strategyId === before?.strategyId && Boolean(after?.strategyId),
+      `${before?.strategyId} -> ${after?.strategyId}`);
+    check('the chat says the signature happens on the venue page, not in chat',
+      (container.textContent || '').includes('امضا') || (container.textContent || '').includes('signature'));
+  }
+
   /* ── The plain portfolio question must NOT be swallowed by the objective
         path: «من … دارم» is in both sentences, and the holdings heuristic used
         to answer the objective as "do you hold USD?". ─────────────────── */

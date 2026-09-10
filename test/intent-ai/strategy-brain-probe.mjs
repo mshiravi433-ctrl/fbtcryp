@@ -36,6 +36,11 @@ import {
   deriveMarketView, portfolioRangePct, BLUEPRINTS, RISK_PROFILES
 } from '../../src/lib/strategyBrain/strategyEngine.js';
 import { createStrategyRuntime, planCurve } from '../../src/lib/strategyBrain/strategyRuntime.js';
+import {
+  saveStrategyPlan, readStrategyPlans, loadStrategyPlan, latestStrategyPlan,
+  deleteStrategyPlan, linkRevision, hydrateRuntimeArgs, planLabel,
+  STRATEGY_MAX_PLANS, STRATEGY_STORE_KEY
+} from '../../src/lib/strategyBrain/strategyStore.js';
 import { num } from '../../src/lib/strategyBrain/numeric.js';
 import { understandIntent } from '../../src/lib/intent-ai/os/intentUnderstanding.js';
 import { buildHumanResponse } from '../../src/lib/intent-ai/os/humanResponse.js';
@@ -421,6 +426,163 @@ try {
   const cacheReader = createEcosystemReader({ readers: readersFrom(ECOSYSTEM) });
   await cacheReader.read();
   check('the cache never grows past the domain list', cacheReader.cacheSize() <= DOMAIN_IDS.length);
+
+  /* ── H. PERSISTENCE — a 4-month plan must survive the tab closing ─────────
+     A plan built for a horizon measured in months is worthless if the stage
+     progress dies on reload: staged execution and revision both act on that
+     progress. These checks drive a real save → confirm → reload → resume
+     cycle against an in-memory store, which is exactly the surface the app
+     gets when it passes localStorage. ──────────────────────────────────── */
+
+  const memoryStore = () => {
+    const map = new Map();
+    return {
+      getItem: (k) => (map.has(k) ? map.get(k) : null),
+      setItem: (k, v) => { map.set(k, String(v)); },
+      removeItem: (k) => { map.delete(k); },
+      _map: map
+    };
+  };
+
+  const persistStore = memoryStore();
+  /* The same fixed clock the runtime checks above use, so a resumed plan is
+     compared against the curve it was built with rather than against now(). */
+  const T0 = 1_800_000_000_000;
+  const goalForPersist = parseGoalSpec({ text: FA_GOAL });
+  const persistState = await createEcosystemReader({ readers: readersFrom(ECOSYSTEM) }).read();
+  const persistPlan = buildPortfolioStrategy({ goal: goalForPersist, state: persistState, now: T0 });
+
+  check('nothing is stored before a plan is saved', readStrategyPlans({ store: persistStore }).length === 0);
+  check('saving a non-strategy is refused', saveStrategyPlan({ strategy: { ok: false }, store: persistStore }) === null);
+
+  const persistRt = createStrategyRuntime({ strategy: persistPlan, goal: goalForPersist, now: () => T0 });
+  const firstSaved = saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, runtime: persistRt.state(), store: persistStore, now: T0 });
+  check('a built plan is persisted', Boolean(firstSaved), JSON.stringify(firstSaved)?.slice(0, 60));
+  check('it is stored under one bounded key', persistStore._map.has(STRATEGY_STORE_KEY));
+  check('the stored record keeps the strategyId', firstSaved?.strategyId === persistPlan.strategyId);
+  check('the stored record keeps the goal', firstSaved?.goal?.capitalUsd === goalForPersist.capitalUsd);
+  check('a headline summary is kept for the resume list',
+    firstSaved?.headline?.targetPct === goalForPersist.targetPct
+    && firstSaved.headline.stageCount === persistPlan.stages.length);
+  check('the resume label is human-readable Persian', /هدف .*٪/.test(planLabel(firstSaved)), planLabel(firstSaved));
+  check('the resume label has an English form too', /target/.test(planLabel(firstSaved, { locale: 'en' })));
+
+  /* ── the stage truth is what cannot be rebuilt ────────────────────────── */
+  const advancing = persistRt.advance();
+  const stageA = advancing.stage.id;
+  persistRt.confirmStage(stageA, { txHash: '0xreceipt1' });
+  saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, runtime: persistRt.state(), store: persistStore, now: T0 + 60_000 });
+
+  const reloaded = loadStrategyPlan(persistPlan.strategyId, { store: persistStore });
+  check('the plan can be read back by id', Boolean(reloaded));
+  check('it is also the latest plan', latestStrategyPlan({ store: persistStore })?.strategyId === persistPlan.strategyId);
+  check('saving twice does not duplicate it', readStrategyPlans({ store: persistStore }).length === 1,
+    `${readStrategyPlans({ store: persistStore }).length}`);
+  check('the confirmed stage survived the round trip',
+    reloaded?.runtime?.stageProgress?.[stageA]?.state === 'CONFIRMED',
+    JSON.stringify(reloaded?.runtime?.stageProgress?.[stageA]));
+  check('its receipt survived too', reloaded?.runtime?.stageProgress?.[stageA]?.receipt?.txHash === '0xreceipt1');
+
+  /* ── resume: the runtime must continue, not restart ───────────────────── */
+  const resumedArgs = hydrateRuntimeArgs(reloaded);
+  check('a stored record yields runtime arguments', Boolean(resumedArgs?.strategy));
+  const resumed = createStrategyRuntime({ ...resumedArgs, now: () => T0 + 60_000 });
+  check('the resumed runtime keeps the confirmation',
+    resumed.state().stageProgress[stageA].state === 'CONFIRMED');
+  check('the resumed runtime keeps the receipt',
+    resumed.state().stageProgress[stageA].receipt?.txHash === '0xreceipt1');
+  const afterResume = resumed.nextStage();
+  check('the resumed runtime does not re-run the confirmed stage',
+    afterResume.ok && afterResume.stage?.id !== stageA,
+    JSON.stringify({ ok: afterResume.ok, stage: afterResume.stage?.id, code: afterResume.code }));
+
+  const freshRt = createStrategyRuntime({ strategy: persistPlan, goal: goalForPersist, now: () => T0 + 60_000 });
+  check('without hydration the same plan starts over',
+    freshRt.state().stageProgress[stageA].state === 'READY',
+    freshRt.state().stageProgress[stageA].state);
+
+  /* ── hygiene ──────────────────────────────────────────────────────────── */
+  const secretStore = memoryStore();
+  const secretPlan = buildPortfolioStrategy({
+    goal: goalForPersist,
+    state: await createEcosystemReader({ readers: readersFrom(ECOSYSTEM) }).read(),
+    now: T0 + 1
+  });
+  const withSecrets = createStrategyRuntime({ strategy: secretPlan, goal: goalForPersist, now: () => T0 });
+  withSecrets.confirmStage(secretPlan.stages[0].id, { receipt: { txHash: '0xabc', signature: '0xDEADBEEF' } });
+  saveStrategyPlan({
+    strategy: secretPlan, goal: goalForPersist, runtime: withSecrets.state(),
+    store: secretStore, now: T0
+  });
+  const rawBlob = secretStore.getItem(STRATEGY_STORE_KEY) || '';
+  check('a signature never reaches storage', !rawBlob.includes('DEADBEEF'));
+  check('but the transaction hash is kept', rawBlob.includes('0xabc'));
+
+  check('a corrupt blob degrades to an empty store',
+    (() => { const bad = memoryStore(); bad.setItem(STRATEGY_STORE_KEY, '{not json'); return readStrategyPlans({ store: bad }).length === 0; })());
+  check('a blob without a plans array is ignored',
+    (() => { const bad = memoryStore(); bad.setItem(STRATEGY_STORE_KEY, '{"schema":"x"}'); return readStrategyPlans({ store: bad }).length === 0; })());
+  check('hydrating from a broken record yields nothing', hydrateRuntimeArgs({ strategy: null }) === null);
+  check('a runtime built from a garbage hydrate still works',
+    createStrategyRuntime({ strategy: persistPlan, goal: goalForPersist, hydrate: { stageProgress: 'nope' }, now: () => T0 })
+      .state().stageProgress[stageA].state === 'READY');
+  check('an unknown stage in storage is not resurrected',
+    createStrategyRuntime({
+      strategy: persistPlan, goal: goalForPersist,
+      hydrate: { stageProgress: { 'stage-that-no-longer-exists': { state: 'CONFIRMED' } } }, now: () => T0
+    }).state().stages.every((s) => s.runtime.stageId !== 'stage-that-no-longer-exists'));
+  check('a stored state that is not a real stage state is ignored',
+    createStrategyRuntime({
+      strategy: persistPlan, goal: goalForPersist,
+      hydrate: { stageProgress: { [stageA]: { state: 'TELEPORTED' } } }, now: () => T0
+    }).state().stageProgress[stageA].state === 'READY');
+
+  /* ── bounds: the footprint must not grow with usage ───────────────────── */
+  const boundStore = memoryStore();
+  for (let i = 0; i < STRATEGY_MAX_PLANS + 4; i += 1) {
+    const g = parseGoalSpec({ text: `من ${1000 + i} دلار دارم و در ۳ ماه ۱۲٪ سود می‌خواهم` });
+    const plan = buildPortfolioStrategy({
+      goal: g, state: await createEcosystemReader({ readers: readersFrom(ECOSYSTEM) }).read(), now: T0 + i
+    });
+    saveStrategyPlan({ strategy: plan, goal: g, store: boundStore, now: T0 + i * 1000 });
+  }
+  check('the store is capped, so it cannot grow with usage',
+    readStrategyPlans({ store: boundStore }).length === STRATEGY_MAX_PLANS,
+    `${readStrategyPlans({ store: boundStore }).length}`);
+  check('the newest plans are the ones kept',
+    Number(latestStrategyPlan({ store: boundStore })?.savedAt) >= T0 + STRATEGY_MAX_PLANS * 1000);
+
+  /* ── revision chain ───────────────────────────────────────────────────── */
+  const reviseStore = memoryStore();
+  const rtWithRead = createStrategyRuntime({
+    strategy: persistPlan, goal: goalForPersist, now: () => T0,
+    readEcosystem: async () => createEcosystemReader({ readers: readersFrom(ECOSYSTEM) }).read()
+  });
+  rtWithRead.confirmStage(persistPlan.stages.find((s) => s.movesFunds).id, { txHash: '0xfirst' });
+  saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, runtime: rtWithRead.state(), store: reviseStore, now: T0 });
+  const persistRevised = await rtWithRead.revise({ reason: 'drawdown-budget' });
+  saveStrategyPlan({ strategy: persistRevised.strategy, goal: goalForPersist, runtime: rtWithRead.state(), store: reviseStore, now: T0 + 5_000 });
+  linkRevision({ fromStrategyId: persistPlan.strategyId, toStrategyId: persistRevised.strategy.strategyId, store: reviseStore });
+
+  const head = loadStrategyPlan(persistRevised.strategy.strategyId, { store: reviseStore });
+  check('both ends of a revision are stored', Boolean(head) && Boolean(loadStrategyPlan(persistPlan.strategyId, { store: reviseStore })));
+  check('the revision points back at the plan it replaced', head?.supersedes === persistPlan.strategyId, `${head?.supersedes}`);
+  check('the resumed revision keeps the stage that was already signed',
+    Object.values(head?.runtime?.stageProgress || {}).some((p) => p.state === 'CONFIRMED' && p.receipt?.txHash === '0xfirst'));
+  check('a resumed revision still remembers how many revisions it used',
+    createStrategyRuntime({ ...hydrateRuntimeArgs(head), now: () => T0 + 5_000 }).state().revisionCount === 1,
+    `${createStrategyRuntime({ ...hydrateRuntimeArgs(head), now: () => T0 + 5_000 }).state().revisionCount}`);
+  check('linking an unknown revision is a no-op', linkRevision({ fromStrategyId: 'nope', toStrategyId: 'also-nope', store: reviseStore }) === null);
+
+  /* ── deletion ─────────────────────────────────────────────────────────── */
+  const delStore = memoryStore();
+  saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, store: delStore, now: T0 });
+  const delResult = deleteStrategyPlan(persistPlan.strategyId, { store: delStore });
+  check('a plan can be deleted by id', delResult.removed === 1 && readStrategyPlans({ store: delStore }).length === 0);
+  check('deleting an unknown id removes nothing', deleteStrategyPlan('ghost', { store: delStore }).removed === 0);
+  saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, store: delStore, now: T0 });
+  saveStrategyPlan({ strategy: secretPlan, goal: goalForPersist, store: delStore, now: T0 + 1 });
+  check('the whole archive can be cleared', deleteStrategyPlan(null, { store: delStore }).remaining === 0);
 
   const passed = results.filter((r) => r.ok).length;
   console.log(`\nstrategy-brain probe: ${passed}/${results.length} passed`);

@@ -329,14 +329,17 @@ export async function buildStrategyFromChat({
 }
 
 /** Create the runtime that drives the plan's stages and revisions. */
-export function createChatStrategyRuntime({ strategy, spec, context = {}, results = {}, wallet = null, portfolio = null, onEvent = null } = {}) {
+export function createChatStrategyRuntime({ strategy, spec, context = {}, results = {}, wallet = null, portfolio = null, onEvent = null, hydrate = null } = {}) {
   const reader = createEcosystemReader({ readers: createChatEcosystemReaders({ context, results, wallet, portfolio }) });
   return createStrategyRuntime({
     strategy,
     goal: spec,
     /* A revision MUST be a fresh read — never this turn's cache. */
     readEcosystem: async () => { resetSharedReads(); return reader.read({ force: true }); },
-    onEvent
+    onEvent,
+    /* Stage truth restored from strategyStore: a plan resumed after a reload
+       continues on the stage it actually reached instead of restarting. */
+    hydrate
   });
 }
 

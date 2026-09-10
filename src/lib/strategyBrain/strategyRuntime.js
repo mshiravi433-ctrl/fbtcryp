@@ -21,9 +21,11 @@
  * has no key, no provider and no wallet.
  *
  * ─── HOST BUDGET ────────────────────────────────────────────────────────────
- * No timers, no polling, no persistence: the runtime is a plain object driven
- * by the caller's events, and its revision history is capped at
- * `revisionPolicy.maxRevisions` (5).
+ * No timers, no polling: the runtime is a plain object driven by the caller's
+ * events, and its revision history is capped at `revisionPolicy.maxRevisions`
+ * (5). It holds nothing itself across reloads — `strategyStore` persists the
+ * stage progress and hands it back through the `hydrate` option, so resuming a
+ * plan costs one localStorage read and no server round-trip.
  */
 
 import { buildPortfolioStrategy } from './strategyEngine.js';
@@ -92,8 +94,13 @@ function stageOfFamily(family) {
  * @param {Function} [opts.readEcosystem]  async () => state (layer 2)
  * @param {Function} [opts.now]
  * @param {Function} [opts.onEvent] ({ type, ... }) => void  (telemetry only)
+ * @param {object} [opts.hydrate]  { stageProgress, observations, revisions,
+ *                                  halted } restored from strategyStore. Only
+ *                                  stages the current strategy still has are
+ *                                  restored, so a plan rebuilt by a revision
+ *                                  resumes on its own stage list.
  */
-export function createStrategyRuntime({ strategy, goal = null, readEcosystem = null, now = () => Date.now(), onEvent = null } = {}) {
+export function createStrategyRuntime({ strategy, goal = null, readEcosystem = null, now = () => Date.now(), onEvent = null, hydrate = null } = {}) {
   if (!strategy?.ok) throw new Error('STRATEGY_REQUIRED');
 
   const emit = (payload) => { try { onEvent?.(payload); } catch { /* telemetry is never load-bearing */ } };
@@ -107,12 +114,35 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
   }
 
   let current = strategy;
-  const stageProgress = Object.fromEntries((strategy.stages || []).map((s) => [s.id, {
-    stageId: s.id, state: s.order === 0 ? 'READY' : 'PENDING', confirmedAt: null, receipt: null, error: null, attempts: 0
-  }]));
-  const observations = [];
-  const revisions = [];
-  let halted = null;
+  /* Hydration comes from strategyStore: a plan resumed after a reload must
+     continue on the stage it actually reached, keeping what was signed and
+     with which receipt. Only stages the current strategy still has are
+     restored — a stage a revision dropped is not resurrected, and a brand-new
+     stage starts fresh. A stored state whose shape is wrong is ignored rather
+     than trusted, so a corrupt entry degrades to a fresh runtime. */
+  const saved = hydrate && typeof hydrate === 'object' ? hydrate : null;
+  const savedProgress = saved?.stageProgress && typeof saved.stageProgress === 'object' ? saved.stageProgress : null;
+
+  const stageProgress = Object.fromEntries((strategy.stages || []).map((s) => {
+    const prior = savedProgress?.[s.id];
+    const validState = prior && STAGE_STATES.includes(prior.state);
+    if (validState) {
+      return [s.id, {
+        stageId: s.id,
+        state: prior.state,
+        confirmedAt: Number(prior.confirmedAt) || null,
+        receipt: prior.receipt || null,
+        error: prior.error || null,
+        attempts: Number(prior.attempts) || 0,
+        startedAt: Number(prior.startedAt) || null
+      }];
+    }
+    return [s.id, { stageId: s.id, state: s.order === 0 ? 'READY' : 'PENDING', confirmedAt: null, receipt: null, error: null, attempts: 0 }];
+  }));
+
+  const observations = Array.isArray(saved?.observations) ? saved.observations.slice(-50) : [];
+  const revisions = Array.isArray(saved?.revisions) ? saved.revisions.slice(-5) : [];
+  let halted = saved?.halted && typeof saved.halted === 'object' ? saved.halted : null;
 
   const stageOrder = (strategy.stages || []).slice().sort((a, b) => a.order - b.order);
 
