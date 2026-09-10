@@ -6215,8 +6215,14 @@ export default async function run() {
     }
     localStorage.removeItem('fbt-smart-wallet-v1');
     localStorage.removeItem('fbt-smart-wallet-spend-v1');
-    t('policies start off', loadPolicy().enabled === false);
-    t('an off policy never blocks', checkPolicy({ usd: 99999 }).ok === true);
+    /* Owner doctrine: the smart-wallet spend policy ships ON (nothing starts
+       disabled) — so a fresh install ENFORCES the default caps from the first
+       dollar. A user may still turn the policy off; an explicitly off policy
+       never blocks (that's a user choice, not a bypass we invented). */
+    t('policies start ON (owner doctrine: nothing ships disabled)', loadPolicy().enabled === true);
+    t('a fresh policy already enforces the default per-tx cap', checkPolicy({ usd: 99999 }).ok === false);
+    savePolicy({ enabled: false });
+    t('a policy the user turned off never blocks', checkPolicy({ usd: 99999 }).ok === true);
     savePolicy({ enabled: true, dailyLimitUsd: 100, perTxLimitUsd: 40 });
     t('a $50 spend is over the per-tx cap', checkPolicy({ usd: 50 }).code === 'OVER_TX_LIMIT');
     t('a $30 spend is allowed', checkPolicy({ usd: 30 }).ok === true);
