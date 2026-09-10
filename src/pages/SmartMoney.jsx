@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import ScrollRail from '../components/ScrollRail';
+import SegIndicator from '../components/SegIndicator';
 import { IconChevronLeft, IconSearch, IconBell } from '../components/Icons';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
@@ -12,6 +13,7 @@ import {
   chainIdForSlug
 } from '../lib/smartMoneyClient';
 import { trackWallet } from '../lib/smartMoneyWatch';
+import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyWallet from './SmartMoneyWallet';
 
@@ -19,6 +21,42 @@ import SmartMoneyWallet from './SmartMoneyWallet';
 import '../styles/smart-money.css';
 
 const TABS = ['overview', 'whales', 'wallets', 'tokens', 'flows', 'alerts'];
+
+/*
+ * THE TIME-WINDOW RAIL — «تب روز، هفته و ماه کار نمیده».
+ *
+ * Three separate faults made this control look decorative:
+ *
+ *  1. The buttons printed the raw API keys (`24h`, `7d`, `30d`) instead of the
+ *     translated label, so on a Persian screen they read as machine output, and
+ *     nothing about them said "these are the tabs I just tapped".
+ *  2. The choice was thrown away on every navigation and on every 45-second
+ *     re-render path — it lived in component state only — so the rail snapped
+ *     back to «24h» and the tap looked like it had never happened.
+ *  3. The overview tiles are built from what OUR scanner has actually observed
+ *     (see server/smartMoney/eventStore.js). Until the buffer reaches back a
+ *     full week, «7d» and «30d» aggregate the same events, so the numbers did
+ *     not move — with no explanation anywhere on screen.
+ *
+ * So the window is now: translated, mirrored into the URL (shareable, survives
+ * refresh, and a deep link can open /smart-money?window=7d), remembered in
+ * localStorage, announced through `aria-selected`, and — when the selected
+ * window is wider than what has been observed — labelled with its real
+ * coverage instead of pretending to be a month of data.
+ */
+const WINDOWS = ['24h', '7d', '30d'];
+const WINDOW_STORE_KEY = 'fbt.sm.window.v1';
+
+function readStoredWindow() {
+  try {
+    const v = localStorage.getItem(WINDOW_STORE_KEY);
+    return WINDOWS.includes(v) ? v : null;
+  } catch { return null; }
+}
+
+function writeStoredWindow(win) {
+  try { localStorage.setItem(WINDOW_STORE_KEY, win); } catch { /* best effort */ }
+}
 
 /*
  * LAST-GOOD OVERVIEW CACHE.
@@ -69,9 +107,21 @@ function Empty({ children }) {
 export default function SmartMoney() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { haptic } = useTelegram();
   const [tab, setTab] = useState('overview');
-  const [window, setWindow] = useState('24h');
+  /*
+   * Named `winKey`, NEVER `window`. It used to be `const [window, setWindow]`,
+   * which shadows the global inside this component: every `window.open(...)`
+   * in its body became `'24h'.open(...)` — a TypeError — and the rows that
+   * should open an explorer silently did nothing (documented at each call
+   * site). Every external link on this page now goes through `openUrl`, and a
+   * state variable no longer eats a browser global.
+   */
+  const [winKey, setWinKey] = useState(() => {
+    const fromUrl = WINDOWS.includes(String(params.get('window') || '')) ? String(params.get('window')) : null;
+    return fromUrl || readStoredWindow() || '24h';
+  });
   const [data, setData] = useState(() => readLastGood());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -102,7 +152,32 @@ export default function SmartMoney() {
     }
   }, []);
 
-  useEffect(() => { load(window); const i = setInterval(() => load(window), 45_000); return () => { clearInterval(i); abortRef.current?.abort?.(); }; }, [window, load]);
+  useEffect(() => { load(winKey); const i = setInterval(() => load(winKey), 45_000); return () => { clearInterval(i); abortRef.current?.abort?.(); }; }, [winKey, load]);
+
+  /*
+   * The rail is the single source of truth, and the URL mirrors it. `replace`
+   * so a tap on «۷ روز» never piles up history entries the back button has to
+   * walk through.
+   */
+  const selectWindow = useCallback((win) => {
+    if (!WINDOWS.includes(win)) return;
+    haptic?.('light');
+    setWinKey(win);
+    writeStoredWindow(win);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('window', win);
+      return next;
+    }, { replace: true });
+  }, [haptic, setParams]);
+
+  /* A back/forward or a pasted deep link changes `?window=` without this
+     component re-mounting — follow it, or the rail would lie about what is
+     selected. */
+  useEffect(() => {
+    const fromUrl = String(params.get('window') || '');
+    if (WINDOWS.includes(fromUrl) && fromUrl !== winKey) setWinKey(fromUrl);
+  }, [params, winKey]);
 
   const onSearch = () => {
     haptic?.('light');
@@ -112,13 +187,21 @@ export default function SmartMoney() {
       navigate(`/smart-money/wallet/${chain}/${c.address}`);
     } else if (c.kind === 'tx') {
       /*
-       * NOT `window.open` — the component's `window` state (the '24h' string)
-       * shadows the global here, so `window.open(...)` was a TypeError and tx
-       * search silently did nothing.
+       * openUrl — never a raw `window.open`, for two independent reasons that
+       * both produced the same «nothing happened» report:
+       *
+       *   · this component used to keep its selected window in a state called
+       *     `window`, which shadowed the global, so `window.open(...)` here was
+       *     `'24h'.open(...)` — a TypeError, thrown inside the click handler;
+       *   · inside the packaged APK a `window.open` to an external host is
+       *     swallowed by the WebView, so even correct code did nothing.
+       *
+       * lib/browser.js resolves both: Telegram's opener, then Android Custom
+       * Tabs, then a real tab, then the same-tab fallback.
        */
-      globalThis.open(c.chain === 'solana'
+      openUrl(c.chain === 'solana'
         ? `https://solscan.io/tx/${c.address}`
-        : `https://etherscan.io/tx/${c.address}`, '_blank');
+        : `https://etherscan.io/tx/${c.address}`);
     } else if (c.kind === 'symbol') {
       // Search token through early-token + token activity list
       setTab('tokens');
@@ -201,11 +284,31 @@ export default function SmartMoney() {
         {/* OVERVIEW */}
         {tab === 'overview' && (
           <>
-            <div className="sm-seg" style={{ marginBottom: 12 }}>
-              {['24h', '7d', '30d'].map((w) => (
-                <button key={w} className={window === w ? 'active' : ''} onClick={() => setWindow(w)}>{w}</button>
+            {/*
+              «تب روز، هفته و ماه» — translated, keyboard- and screen-reader-
+              reachable, and it carries the coverage of the window it selects.
+            */}
+            <div className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-window-tabs">
+              {WINDOWS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  role="tab"
+                  aria-selected={winKey === w}
+                  className={`sm-seg-window-item ${winKey === w ? 'active' : ''}`}
+                  data-testid={`sm-window-${w}`}
+                  onClick={() => selectWindow(w)}
+                >
+                  {winKey === w && <SegIndicator id="sm-window" />}
+                  {t(`sm.windows.${w}`)}
+                </button>
               ))}
             </div>
+            {data?.coverage?.windowCoverage != null && data.coverage.windowCoverage < 0.95 && (
+              <div className="sm-coverage" data-testid="sm-window-coverage">
+                {t('sm.windowPartial', { window: t(`sm.windows.${winKey}`), pct: Math.round((data.coverage.windowCoverage || 0) * 100) })}
+              </div>
+            )}
 
             {loading && !data && <Spinner />}
             {error && !data && <Empty>{t('sm.errorOverview')}<br /><span className="faint">{error}</span></Empty>}
@@ -214,7 +317,7 @@ export default function SmartMoney() {
             {data && streamDown && (
               <div className="sm-section sm-offline">
                 <span className="msg">⚠️ {t('sm.dataSourceOffline')}</span>
-                <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(window)}>{t('sm.retry')}</button>
+                <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(winKey)}>{t('sm.retry')}</button>
               </div>
             )}
             {data && streamStale && (
@@ -303,7 +406,7 @@ export default function SmartMoney() {
 
                 {/* Money flow quick view — hidden while offline: a 0/0 bar
                     reads as "no flow", which is exactly what we are NOT sure of. */}
-                {!streamDown && <FlowSummary flows={data.flows} window={window} onMore={() => setTab('flows')} t={t} />}
+                {!streamDown && <FlowSummary flows={data.flows} window={winKey} onMore={() => setTab('flows')} t={t} />}
 
                 {/* Early detection */}
                 <div className="sm-section">
@@ -342,12 +445,12 @@ export default function SmartMoney() {
                 {data.liquidityEvents?.events?.length > 0 && (
                   <div className="sm-section">
                     <h3>⚠️ {t('sm.liquidityMovement')}</h3>
-                    {/* NOT `window.open` — the component's `window` state (the
-                        '24h' string) shadows the global here, exactly like the
-                        tx-search bug above; tapping a liquidity row silently
-                        did nothing. */}
+                    {/* openUrl for the same two reasons as the tx search above:
+                        the old `window` state shadowed the global here, and a
+                        raw `window.open` is a no-op inside the APK — so tapping
+                        a liquidity row silently did nothing. */}
                     {data.liquidityEvents.events.slice(0, 6).map((e) => (
-                      <div key={e.id} className="sm-row" onClick={() => e.explorerTx && globalThis.open(e.explorerTx, '_blank')}>
+                      <div key={e.id} className="sm-row" onClick={() => e.explorerTx && openUrl(e.explorerTx)}>
                         <div className="sym">{e.kind === 'LP_ADDED' ? '+' : '−'}</div>
                         <div className="mid">
                           <div className="name">{e.symbols}</div>
@@ -378,7 +481,7 @@ export default function SmartMoney() {
         {tab === 'tokens' && <TokensTab navigate={navigate} t={t} query={query} setQuery={setQuery} />}
 
         {/* MONEY FLOW */}
-        {tab === 'flows' && <FlowsTab t={t} />}
+        {tab === 'flows' && <FlowsTab t={t} win={winKey} onWindow={selectWindow} />}
 
         {/* ALERTS */}
         {tab === 'alerts' && <AlertsTab navigate={navigate} t={t} />}
@@ -439,7 +542,7 @@ function EarlyGrid({ tokens, navigate, t }) {
         const chainId = chainIdForSlug(tk.chain);
         const open = () => {
           if (chainId) navigate(`/smart-money/token/${chainId}/${tk.address}`);
-          else globalThis.open(`https://dexscreener.com/${tk.chain}/${tk.address}`, '_blank');
+          else openUrl(`https://dexscreener.com/${tk.chain}/${tk.address}`);
         };
         return (
           <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
@@ -530,11 +633,16 @@ function TokensTab({ navigate, t, query, setQuery }) {
   );
 }
 
-function FlowsTab({ t }) {
+/*
+ * The flow tab shows the SAME window the overview rail is showing. It used to
+ * own a private `win` state that always started at '24h', so switching to «۷
+ * روز» on the overview and then opening «جریان نقدینگی» reset the choice with
+ * no visible cause — the second half of «تب هفته و ماه کار نمیده».
+ */
+function FlowsTab({ t, win = '24h', onWindow }) {
   const [flows, setFlows] = useState(null);
   const [liq, setLiq] = useState(null);
   const [exchanges, setExchanges] = useState(null);
-  const [win, setWin] = useState('24h');
   useEffect(() => {
     let on = true;
     fetchFlows().then((d) => on && setFlows(d)).catch(() => on && setFlows({ windows: {} }));
@@ -550,8 +658,21 @@ function FlowsTab({ t }) {
         <h3>
           🏦 {t('sm.exchangeFlow')}
           <span className="spacer" />
-          <span className="sm-seg">
-            {['24h', '7d', '30d'].map((w) => <button key={w} className={win === w ? 'active' : ''} onClick={() => setWin(w)}>{w}</button>)}
+          <span className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')}>
+            {WINDOWS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                role="tab"
+                aria-selected={win === w}
+                className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
+                data-testid={`sm-flows-window-${w}`}
+                onClick={() => (onWindow ? onWindow(w) : null)}
+              >
+                {win === w && <SegIndicator id="sm-window" />}
+                {t(`sm.windows.${w}`)}
+              </button>
+            ))}
           </span>
         </h3>
         {!flows ? <Spinner /> : (
@@ -598,7 +719,7 @@ function FlowsTab({ t }) {
       <div className="sm-section">
         <h3>⚠️ {t('sm.liquidityMovement')}</h3>
         {!liq ? <Spinner /> : !liq.length ? <Empty>{t('sm.noLiquidity')}</Empty> : liq.slice(0, 20).map((e) => (
-          <div key={e.id} className="sm-row" onClick={() => e.explorerTx && window.open(e.explorerTx, '_blank')}>
+          <div key={e.id} className="sm-row" onClick={() => e.explorerTx && openUrl(e.explorerTx)}>
             <div className="sym">{e.kind === 'LP_ADDED' ? '+' : '−'}</div>
             <div className="mid"><div className="name">{e.symbols}</div><div className="sub">{e.chainShort}{e.dex ? ` · ${e.dex}` : ''}</div></div>
             <div className="right">

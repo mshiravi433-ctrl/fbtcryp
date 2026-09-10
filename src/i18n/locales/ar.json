@@ -849,10 +849,11 @@
     "telegram": "تيليجرام",
     "openTelegram": "افتح تيليجرام",
     "social": {
-      "telegram": "Telegram",
-      "instagram": "Instagram",
+      "x": "إكس",
+      "linkedin": "لينكدإن",
+      "instagram": "إنستغرام",
       "crunchbase": "Crunchbase",
-      "email": "Email"
+      "email": "البريد الإلكتروني"
     }
   },
   "terms": {
@@ -6041,8 +6042,19 @@
     }
   },
   "sm": {
-    "checking": "Connecting…",
-    "offlineShort": "Offline"
+"checking": "Connecting…",
+"offlineShort": "Offline",
+"windowAria": "النافذة الزمنية",
+"windows": {
+  "1h": "ساعة",
+  "4h": "٤ ساعات",
+  "24h": "يوم",
+  "7d": "أسبوع",
+  "30d": "شهر"
+},
+"windowPartial": "تم رصد {{pct}}٪ فقط من هذه النافذة ({{window}}) — تكتمل الأرقام مع استمرار الماسح.",
+"tokenWindowNote": "الشراء والبيع وصافي التدفق تغطي آخر {{window}}.",
+"tokenWindowFallback": "المقاييس أدناه من إحصاءات الزوج لـ ٢٤ ساعة؛ فقط أرقام التدفق تتبع النافذة المحددة."
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."

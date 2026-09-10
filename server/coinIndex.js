@@ -87,7 +87,10 @@ export const PLATFORM_SLUGS = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* CoinGecko's own platform ids for the Scroll + zkSync Era additions. */
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 /** Six hours. New listings are not urgent; hammering a free API is rude. */

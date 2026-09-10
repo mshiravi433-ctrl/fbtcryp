@@ -1233,7 +1233,14 @@
     "footNote": "Piyasa verileri bilgilendirme amaçlıdır, finansal tavsiye değildir. Kripto oynaktır; yalnızca kaybetmeyi göze alabileceğin kadarıyla işlem yap."
   },
   "contact": {
-    "title": "Bize ulaşın"
+    "title": "Bize ulaşın",
+    "social": {
+      "x": "X",
+      "linkedin": "LinkedIn",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "E-posta"
+    }
   },
   "lab2": {
     "screens": {

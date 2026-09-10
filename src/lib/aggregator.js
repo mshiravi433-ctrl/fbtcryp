@@ -47,7 +47,9 @@ const NETWORK_SLUG = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 /** Identifies our app to KyberSwap. Not a secret, not an API key. */

@@ -35,7 +35,7 @@ import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { SPECULATION_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
-import { initServiceWorker, initNativePushListeners, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
+import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
 import { captureReferral, referredBy } from './lib/referral';
@@ -543,6 +543,29 @@ export default function App() {
      headerless for `/pay`. */
   const payLanding = typeof window !== 'undefined'
     && /^#\/pay(\/|$)/.test(window.location.hash || '');
+
+  /*
+   * AUTO-REGISTER FCM ONCE THE USER IS INSIDE THE APP.
+   *
+   * Installing the APK and opening Settings to "allow" was a silent on-ramp
+   * for push that most users never took — the server stayed at devices:0 and
+   * nothing could ever reach the tray, however correctly the OS, the build and
+   * the server were configured.
+   *
+   * Fired only once the first-run flow is behind us and the app is unlocked,
+   * so the OS permission prompt never interrupts onboarding. It is a no-op on
+   * the web build, and on Android it asks at most once (never again after a
+   * denial, because the OS forbids re-prompting).
+   */
+  useEffect(() => {
+    if (payLanding) return;
+    if (locked || showSplash || showWelcome || showOnb || showGuide) return;
+    const id = setTimeout(() => {
+      autoRegisterNativePush().catch(() => {});
+    }, 900);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, showSplash, showWelcome, showOnb, showGuide, payLanding]);
 
   let screen;
   /*

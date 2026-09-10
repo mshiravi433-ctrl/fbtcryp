@@ -65,6 +65,19 @@ export const WALLET_SUPPORTED_CHAIN_IDS = Object.freeze([
   42161,    /* Arbitrum */
   43114,    /* Avalanche */
   59144,    /* Linea */
+  /*
+   * The 2026-09 + Scroll/zkSync additions. The picker is still LI.FI's own
+   * list ∩ this set, so a chain LI.FI does not serve simply never appears —
+   * but a chain the app supports must not be filtered out before LI.FI ever
+   * gets a say. The cross-chain probe pins this list against
+   * EVM_CHAIN_ORDER.
+   */
+  5000,     /* Mantle */
+  80094,    /* Berachain */
+  130,      /* Unichain */
+  143,      /* Monad */
+  534352,   /* Scroll */
+  324,      /* zkSync Era */
   1151111081099710 /* Solana (SVM — signed through the Solana wallet adapter) */
 ]);
 

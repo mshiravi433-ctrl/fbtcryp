@@ -3,8 +3,10 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import {
-  InsIconDashboard, InsIconShield, InsIconProviders, InsIconChevronEnd, InsIconInfo, InsIconAlert, InsIconCoverage,
+  InsIconDashboard, InsIconShield, InsIconProviders, InsIconChevronEnd, InsIconInfo, InsIconCoverage,
   INS_TYPE_ICONS, INS_TYPE_TONES
 } from './InsuranceIcons.jsx';
 
@@ -24,7 +26,7 @@ export default function InsuranceDashboard() {
     if (!wallet) { setData(null); return; }
     insuranceApi.coverage(wallet)
       .then((d) => setData(d.summary))
-      .catch((e) => { setErr(e.message || String(e)); notify?.(e.message || t('insurance.dashboard.loadError'), 'error'); });
+      .catch((e) => { const m = insuranceError(e, t); setErr(m); notify?.(m.text || t('insurance.dashboard.loadError'), 'error'); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet]);
 
@@ -47,7 +49,7 @@ export default function InsuranceDashboard() {
         </div>
       </div>
 
-      {err && <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>}
+      {err ? <InsAlert error={err} /> : null}
 
       <div className="ins-grid">
         <div className="ins-stat"><div className="lbl">{t('insurance.dashboard.totalProtected')}</div><div className="val acc">${usd(data?.totalProtectedUsd || '0')}</div></div>

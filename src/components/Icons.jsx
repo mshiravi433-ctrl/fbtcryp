@@ -299,11 +299,15 @@ export const IconXLogo = (p) => (
   </svg>
 );
 
+/*
+ * Filled, like IconXLogo — see the note above it. The LinkedIn tile is 56px of
+ * brand gradient with an 18-21px mark on it, and a stroked "in" at that size is
+ * a smudge: the counter of the bowl closes up and the mark stops reading as
+ * LinkedIn. Solid glyphs keep their counters open.
+ */
 export const IconLinkedin = (p) => (
-  <svg {...base} {...p}>
-    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-    <rect x="2" y="9" width="4" height="12" />
-    <circle cx="4" cy="4" r="2" />
+  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...p}>
+    <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2.6 9.2h4.76V21H2.6zM9.4 9.2h4.56v1.62h.07c.63-1.2 2.2-2.47 4.52-2.47 4.84 0 5.73 3.19 5.73 7.33V21h-4.75v-5.02c0-1.2-.02-2.73-1.66-2.73-1.67 0-1.92 1.3-1.92 2.65V21H9.4z" />
   </svg>
 );
 

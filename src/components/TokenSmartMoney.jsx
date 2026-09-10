@@ -3,6 +3,26 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
 import { FlowBar } from '../pages/SmartMoney';
+import SegIndicator from './SegIndicator';
+
+/*
+ * «تب ۱ ساعت / ۴ ساعت / روز / هفته روی این باکس کار نمی‌کند»
+ *
+ * Two causes, both real:
+ *
+ *  · the buttons printed the raw API keys ('1h', '4h', …), so a tap changed
+ *    the label's styling only — nothing told the user which window they were
+ *    now looking at;
+ *  · the accumulation / distribution meters read `data.accumulation` and
+ *    `data.distribution`, which come from the token's FIXED 24-hour DEX pair
+ *    statistics, not from the window-scoped `smartMoneyFlow`. Buying, selling
+ *    and net flow moved with the window; the two meters never did, so half of
+ *    the card looked frozen no matter what was selected.
+ *
+ * The meters now take the window-scoped signal when the server answered with
+ * one, and the window the card is showing is printed on the flow block.
+ */
+const WINDOWS = ['1h', '4h', '24h', '7d'];
 
 /**
  * Token-level Smart Money card — embedded in the token detail page AND in the
@@ -35,9 +55,12 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
   if (!address) return null;
 
   const flow = data?.smartMoneyFlow;
-  const accum = data?.accumulation;
-  const distrib = data?.distribution;
+  /* Window-scoped signals first (they are what `window` actually selects);
+     the pair-level numbers are the fallback, and they are labelled as such. */
+  const accum = flow?.accumulation ?? data?.accumulation;
+  const distrib = flow?.distribution ?? data?.distribution;
   const holders = data?.holders;
+  const windowScoped = flow?.window === win;
 
   return (
     <motion.div
@@ -49,9 +72,20 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
       <h3>
         ✦ {t('sm.title')}
         <span className="spacer" />
-        <span className="sm-seg">
-          {['1h', '4h', '24h', '7d'].map((w) => (
-            <button key={w} className={win === w ? 'active' : ''} onClick={() => setWin(w)}>{w}</button>
+        <span className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-token-window-tabs">
+          {WINDOWS.map((w) => (
+            <button
+              key={w}
+              type="button"
+              role="tab"
+              aria-selected={win === w}
+              className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
+              data-testid={`sm-token-window-${w}`}
+              onClick={() => setWin(w)}
+            >
+              {win === w && <SegIndicator id={`sm-token-window-${chain}`} />}
+              {t(`sm.windows.${w}`)}
+            </button>
           ))}
         </span>
       </h3>
@@ -71,7 +105,10 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
             <div className="sm-empty" style={{ padding: '8px 0' }}>{t('sm.tokenNoDex')}</div>
           )}
 
-          {/* Buying / selling / net */}
+          {/* Buying / selling / net — these three follow the selected window. */}
+          <div className="sm-coverage" data-testid="sm-token-window-note">
+            {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
+          </div>
           <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
             <div className="sm-metric">
               <div className="lab">{t('sm.buying')}</div>
@@ -159,6 +196,10 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
                 </div>
               ))}
             </>
+          )}
+
+          {!windowScoped && (
+            <div className="sm-coverage">{t('sm.tokenWindowFallback')}</div>
           )}
 
           {data.risk && (

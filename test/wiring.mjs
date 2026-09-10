@@ -317,6 +317,230 @@ export default function run() {
       /:root\[data-theme='light'\] \.iaos-ops-cat\.is-on/.test(aiOs));
   }
 
+  /* --------- 5b'''. the six defects reported in Persian (this batch) ------
+   *
+   * Each pin below is a bug someone lived through and reported in one
+   * sentence. They are cheap to write and impossible to see in a render test:
+   * a tab that resets state renders, a border that paints white-on-white
+   * renders, an arrow tiled across a <select> renders, an error string with
+   * four newlines renders, a pool row with the chain coin instead of the
+   * protocol renders, and a social tile with no href renders. Only the source
+   * shows what the user saw.
+   */
+  {
+    const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const flat = (obj, prefix = '') =>
+      Object.entries(obj).flatMap(([k, v]) =>
+        v && typeof v === 'object' ? flat(v, `${prefix}${k}.`) : [`${prefix}${k}`]);
+
+    /* ── 1 · «تب روز/هفته/ماه در صفحه هوشمند مانی هیچ کاری نمی‌کند» ─────── */
+    const smPage = read('src/pages/SmartMoney.jsx');
+    const smCard = read('src/components/TokenSmartMoney.jsx');
+    const smCss = strip(read('src/styles/smart-money.css'));
+    t('Smart Money: the window rail exists on the page and the token card',
+      /data-testid="sm-window-tabs"/.test(smPage) && /data-testid="sm-token-window-tabs"/.test(smCard));
+    t('Smart Money: it is a real tablist (aria-selected + localised labels)',
+      /role="tablist"[\s\S]{0,120}aria-label=\{t\('sm\.windowAria'\)\}/.test(smPage)
+      && /aria-selected=\{winKey === w\}/.test(smPage)
+      && /t\(`sm\.windows\.\$\{w\}`\)/.test(smPage) && /t\(`sm\.windows\.\$\{w\}`\)/.test(smCard));
+    t('Smart Money: choosing a window refetches, persists and mirrors the URL',
+      /setInterval\(\(\) => load\(winKey\)/.test(smPage)
+      && /writeStoredWindow\(win\)/.test(smPage)
+      && /next\.set\('window', win\)/.test(smPage)
+      && /if \(WINDOWS\.includes\(fromUrl\) && fromUrl !== winKey\)/.test(smPage));
+    /* Comments quote the bug they fix, so the two negative checks below read
+       stripped source: a comment saying «window.open is what broke» must not
+       be mistaken for a call to window.open. */
+    const smCode = strip(smPage);
+    t('Smart Money: the state is not called `window` any more',
+      // a `const [window, setWindow]` shadowed the global, so the page's own
+      // openExternal() called window.open on an ARRAY and every link died.
+      !/const \[window, setWindow\]/.test(smCode) && /const \[winKey, setWinKey\]/.test(smCode));
+    t('Smart Money: external opens go through the app opener policy',
+      /openUrl/.test(smCode) && !/window\.open\(/.test(smCode));
+
+    t('Smart Money: a partly-covered window says so instead of lying',
+      /data-testid="sm-window-coverage"/.test(smPage)
+      && /windowCoverage < 0\.95/.test(smPage)
+      && /t\('sm\.windowCoverage', \{ pct: Math\.round\(f\.coverage \* 100\) \}\)/.test(smPage));
+    t('Smart Money: the token card admits which numbers follow the window',
+      /const windowScoped = flow\?\.window === win/.test(smCard)
+      && /!windowScoped && \(/.test(smCard)
+      && /data-testid="sm-token-window-note"/.test(smCard));
+    {
+      const ids = [...smPage.matchAll(/const WINDOWS = \[([^\]]*)\]/g)][0][1]
+        .match(/'[^']+'/g).map((x) => x.replace(/'/g, ''));
+      const locale = JSON.parse(read('src/i18n/locales/fa.json'));
+      t(`every window id on the rail has a Persian label (${ids.join('/')})`,
+        ids.every((id) => typeof locale?.sm?.windows?.[id] === 'string' && locale.sm.windows[id].length > 0)
+        && typeof locale?.sm?.windowAria === 'string'
+        && /windowAria|windows/.test(read('src/i18n/locales/en.json')));
+    }
+
+    /* ── 2 · «باکس اسمارت‌مانی توکن در تم روشن خط دور ندارد» ────────────── */
+    t('the token smart-money card has a border that exists in light mode',
+      /:root\[data-theme='light'\] \.sm-section\s*\{[^}]*border:\s*1px solid/.test(smCss));
+    t('its inner rules follow the theme tokens, not white alpha',
+      /:root\[data-theme='light'\] \.sm-row\s*\{[^}]*border/
+      && /:root\[data-theme='light'\] \.sm-seg-window/.test(smCss));
+    t('smart-money.css references no token that does not exist',
+      // var(--text, #fff) resolved to #fff in BOTH themes: white text on white
+      // paper. The token is --text-1, and it is defined; --text never was.
+      !/var\(--text,[^)]*\)/.test(smCss));
+    {
+      const root = read('src/index.css');
+      t('--text is not a real token (the pin above would be meaningless if it were)',
+        !/:root\s*\{[\s\S]{0,4000}?--text:/.test(root));
+    }
+
+    /* ── 3 · «تب نوع ارز در صفحه خرید و فروش هاشور می‌اندازد» ───────────── */
+    const bsCss = strip(read('src/styles/buy-sell.css'));
+    const panel = read('src/components/BuySellPanel.jsx');
+    const currencySelect = read('src/components/CurrencySelect.jsx');
+    const accCss = strip(read('src/styles/ai-command-center.css'));
+    t('no rule styles a <select> background with the shorthand',
+      // `background:` also writes background-repeat/position, which tiles the
+      // themed chevron across the whole control — that was the «هاشور». The
+      // ELEMENT selector only: `.modern-select-trigger` legitimately uses the
+      // shorthand (a button carries no themed background-image), and matching
+      // it would have this pin cry wolf.
+      !/(?<![-\w])select(?![-\w])[^{]*\{[^}]*[\s;{]background:\s*(?!none|transparent)/.test(bsCss)
+      && !/(?<![-\w])select(?![-\w])[^{]*\{[^}]*[\s;{]background:\s*(?!none|transparent)/.test(accCss));
+    t('the currency field is a real picker with flag artwork, not a native select',
+      (panel.match(/<CurrencySelect/g) || []).length === 2
+      && /from '\.\/CurrencySelect'/.test(panel)
+      && /FLAG_SVG/.test(currencySelect)
+      && /ModernSelect/.test(currencySelect));
+    t('every guided fiat code has flag artwork behind it',
+      // the picker's whole promise is a flag per currency, so an unflagged
+      // code is a three-letter monogram in a slot built for a flag.
+      (() => {
+        const list = read('src/lib/guidedCheckout.js').match(/GUIDED_FIAT = \[([^\]]*)\]/);
+        const codes = list ? list[1].match(/'[A-Z]{3}'/g).map((x) => x.replace(/'/g, '')) : [];
+        const flagBlock = read('src/lib/assetIconData.js').split('FLAG_SVG')[1] || '';
+        return codes.length > 3 && codes.every((c) => new RegExp(`['\"]?${c}['\"]?:`, 'm').test(flagBlock));
+      })());
+    t('choosing a currency re-quotes instead of keeping a stale amount',
+      /const chooseCurrency = \([\s\S]{0,220}resetQuote\(\)/.test(panel));
+    t('the amount ticket, its chips and its currency seam have light surfaces',
+      /:root\[data-theme='light'\] \.bsw-amount\s*\{[^}]*background:\s*#ffffff/.test(bsCss)
+      && /:root\[data-theme='light'\] \.bsw-amount \.buy-sell-currency \.modern-select-trigger/.test(bsCss)
+      && /:root\[data-theme='light'\] \.bsw-chips button\s*\{[^}]*border-color/.test(bsCss));
+    t('the currency trigger sits flush inside the amount box',
+      // a comma-separated selector list: the block the amount row actually gets
+      /^\.bsw-amount \.buy-sell-currency \.modern-select-trigger,[\s\S]{0,400}?\{[^}]*min-height: 0;[\s\S]{0,300}?border: 0;/m.test(bsCss));
+
+    /* ── 4 · «ارورهای صفحه بیمه غلط و چندخطی است» ────────────────────────── */
+    const insDir = 'src/pages/insurance';
+    const insPages = ['InsuranceQuote.jsx', 'InsuranceCoverage.jsx', 'InsuranceClaims.jsx',
+      'InsuranceDashboard.jsx', 'InsuranceRisk.jsx', 'InsuranceMarketplace.jsx'];
+    const insErr = read(`${insDir}/insErrors.js`);
+    const insCss = strip(read(`${insDir}/insurance.css`));
+    const localeFa = JSON.parse(read('src/i18n/locales/fa.json'));
+    t('every insurance page routes its errors through the mapper',
+      insPages.every((f) => new RegExp(`from '\\./insErrors\\.js'`).test(read(`${insDir}/${f}`))));
+    const insCode = insPages.map((f) => strip(read(`${insDir}/${f}`))).join('\n');
+    t('no insurance page pastes a raw e.message or a bare {err} into the UI',
+      !/set(?:Act)?Err\(\s*e\??\.message/.test(insCode) && !/\{err\}\s*<\/div>/.test(insCode)
+      && /<InsAlert error=/.test(insCode));
+    t('an empty wallet is named as an empty wallet, in one line',
+      /noGas|insufficient funds for gas/i.test(insErr)
+      && /\['insufficientBalance', \/insufficient/.test(insErr)
+      && /out\.push\(v\)[\s\S]{0,80}dig\(v, depth \+ 1/.test(insErr));
+    t('the mapper reads the reason out of the nested provider envelope',
+      /function dig\(/.test(insErr) && /TEXT_KEYS/.test(insErr)
+      && /MAX_LEN = 148/.test(insErr) && /replace\(\/\[\\r\\n\\t\]\+\/g, ' '\)/.test(insErr));
+    t('one sentence for every code the mapper can name, in en and fa',
+      (() => {
+        const keys = [...insErr.matchAll(/:\s*'([a-zA-Z]+)',/g)].map((m) => m[1])
+          .filter((k) => /^[a-z]/.test(k));
+        const needed = new Set(keys.filter((k) => k !== 'userRejected' ? true : true));
+        return needed.size > 10
+          && [...needed].every((k) => typeof en?.insurance?.errors?.[k] === 'string'
+            && typeof localeFa?.insurance?.errors?.[k] === 'string')
+          && typeof en?.insurance?.errors?.generic === 'string';
+      })());
+    t('the errors table does not fork the server reason codes',
+      // insurance.reason.* already covers the envelope codes in every shipped
+      // locale; a second list here is how two lists start disagreeing.
+      !/ACTIVATION_FAILED: '|QUOTE_EXPIRED: '|TERMS_ACCEPTANCE_REQUIRED: '/.test(insErr));
+    t('the alert shows the sentence and keeps the code behind a toggle',
+      /ins-alert-text/.test(read(`${insDir}/InsAlert.jsx`))
+      && /<details className="ins-alert-detail">/.test(read(`${insDir}/InsAlert.jsx`))
+      && /\.ins-alert-detail code\s*\{[^}]*white-space: pre-wrap/.test(insCss));
+    t('no insurance screen hardcodes target-language copy',
+      // `t(key, { defaultValue: 'موجودی کافی نیست…' })` looked like a
+      // translation and was actually a string no translator could change.
+      // Measured on stripped source for the same reason the Smart Money pins are.
+      !insPages.some((f) => /[؀-ۿ]/.test(strip(read(`${insDir}/${f}`))))
+      && !insPages.some((f) => /defaultValue: '[؀-ۿ]/.test(read(`${insDir}/${f}`))));
+
+    /* ── 5 · «قبل از اسم هر استخر لوگوی پروتکل لازم است» ─────────────────── */
+    const marks = read('src/lib/protocolMarks.js');
+    const glyph = read('src/components/Farm/PoolGlyph.jsx');
+    const farm = read('src/pages/Farm.jsx');
+    t('a pool row carries the protocol mark, not the chain coin',
+      /<PoolGlyph pool=\{pool\} size=\{38\} chainKey=\{iconKey\}/.test(farm)
+      && !/<AssetIcon chain=\{iconKey\} size=\{34\}/.test(farm));
+    t('the rail and the details drawer use the same mark',
+      /farm-hot-glyph"><PoolGlyph/.test(farm) && /<PoolGlyph pool=\{pool\} size=\{32\}/.test(farm));
+    t('every named project has a mark of its own',
+      (() => {
+        const block = read('src/lib/farmDeFi.js').split('PROJECT_DISPLAY_NAMES = Object.freeze({')[1].split('});')[0];
+        const slugs = [...block.matchAll(/^\s{2}'?([a-z0-9._-]+)'?:\s*'[A-Z][^']*',?$/gm)].map((m) => m[1]);
+        const table = marks.split('PROTOCOL_MARKS = {')[1];
+        return slugs.length > 20
+          && slugs.every((slug) => table.includes(`'${slug}':`) || table.includes(`  ${slug}:`));
+      })());
+    t('an unknown protocol still gets a stable, distinct tile',
+      /function hashHue/.test(marks) && /hashHue\(key\)/.test(marks) && /function guessAccent/.test(marks));
+    t('the glyph is generated offline and never an empty box',
+      !/https?:\/\/[^'"]*\.(?:png|svg|ico)/.test(glyph)
+      && /mark\.letter/.test(glyph)
+      && /aria-hidden="true"/.test(glyph));
+    t('the glyph tile and its badge are legible in the light theme too',
+      /:root\[data-theme='light'\] \.farm-glyph\s*\{[\s\S]*?box-shadow/.test(read('src/index.css')));
+
+    /* ── 6 · «جای لینکدین و ایکس متن اینستاگرام افتاده و لینک‌ها باز نمی‌شوند» */
+    const socials = read('src/lib/socials.js');
+    const contact = read('src/pages/Contact.jsx');
+    const splash = read('src/pages/Splash.jsx');
+    const icons = read('src/components/Icons.jsx');
+    const channelIds = [...socials.matchAll(/id:\s*'([a-z]+)'/g)].map((m) => m[1]);
+    t('one social list, imported by both screens that show it',
+      channelIds.length === 5 && /SOCIAL_CHANNELS/.test(contact) && /SOCIAL_CHANNELS/.test(splash)
+      && !/instagram\.com\/fbt_company_/.test(splash));
+    t('every channel has a label in all 12 locales',
+      // `contact.social` carried four ids while the list had five, and `x` /
+      // `linkedin` existed in Persian only — so eleven locales printed the raw
+      // key where a brand name belongs.
+      channelIds.length === 5 && readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))
+        .every((file) => channelIds.every((id) => {
+          const loc = JSON.parse(read(`src/i18n/locales/${file}`));
+          const v = loc?.contact?.social?.[id];
+          return typeof v === 'string' && v.length > 0 && !v.includes('contact.social');
+        })));
+    t('a channel is a link, so a refused opener cannot kill it',
+      /<motion\.a/.test(contact) && /href=\{soc\.url\}/.test(contact)
+      && /rel: 'noopener noreferrer'/.test(contact)
+      && /<a\b[\s\S]{0,400}href=\{url\}/.test(splash));
+    t('the in-app opener is tried first and only takes over when it works',
+      /await openUrl\(url\)/.test(contact) && /event\.preventDefault\(\)/.test(contact)
+      && /isSafeUrl\(url\)/.test(contact) && !/window\.open\(/.test(contact));
+    t('mailto is never fed to the https-only opener',
+      /isMailChannel\(channel\)\) return;/.test(contact) && /isMailChannel\(\{ url \}\)\) return;/.test(splash));
+    t('the brand marks are filled, and the tile is decorative for AT',
+      /export const IconLinkedin[\s\S]{0,160}fill="currentColor"/.test(icons)
+      && /export const IconXLogo[\s\S]{0,160}fill="currentColor"/.test(icons));
+    t('no social URL is a javascript:, data: or http: target',
+      (() => {
+        const urls = [...socials.matchAll(/url:\s*(?:'([^']+)'|([A-Z_]+))/g)]
+          .map((m) => m[1] || m[2]);
+        return urls.length >= 5
+          && urls.every((u) => /^https:\/\/|^[A-Z_]+$/.test(u));
+      })());
+  }
+
   /* ------------------ 5c. execution core v2 is really wired -------------- */
   /*
    * The pure modules are tested by their own probes. What only a wiring check
@@ -657,6 +881,20 @@ export default function run() {
     const deps = { ...pkg.dependencies };
     t('native biometric plugin is a dependency', 'capacitor-native-biometric' in deps);
     t('native push plugin is a dependency', '@capacitor/push-notifications' in deps);
+
+    // REAL GAP: installing the APK never prompted for FCM — the token was only
+    // handed to the server when the user opened Settings and tapped "allow",
+    // so devices stayed 0 and nothing could ever reach the tray. Auto-register
+    // once the user is genuinely inside the app (past first-run, unlocked).
+    const appSrc = read('src/App.jsx');
+    t('App.jsx imports the native auto-register helper', /autoRegisterNativePush/.test(appSrc));
+    t('App.jsx auto-registers only past the first-run gates',
+      /autoRegisterNativePush\(\)/.test(appSrc)
+      && /locked \|\| showSplash \|\| showWelcome \|\| showOnb \|\| showGuide/.test(appSrc));
+    t('notify.js exposes a once-only native auto-register (skips repeats)',
+      /export async function autoRegisterNativePush/.test(notif)
+      && /nativeAutoRegistrationTried/.test(notif)
+      && /return registerNativePush\(\);/.test(notif));
   }
 
   /* ------------- 11. every API the client calls must be routed ------------ */
@@ -1509,13 +1747,16 @@ export default function run() {
     t('the splash draws an F stem and arms', /M9\.6 7\.2v9\.6/.test(code));
 
     // Social buttons must go somewhere real.
-    t('the splash offers social links', /SOCIALS/.test(code));
+    t('the splash offers social links', /SOCIALS|SOCIAL_CHANNELS/.test(code));
     t('social links open through the safe helper', /openUrl/.test(code));
     /*
      * openUrl only accepts https, by design. mailto: would be silently
      * rejected and the button would look live while doing nothing.
      */
-    t('mailto is handled rather than silently dropped', /mailto:/.test(code));
+    /* Handled in lib/socials.js now (one list, one rule), so the splash screen
+       asks `isMailChannel` instead of re-typing the protocol check. */
+    t('mailto is handled rather than silently dropped',
+      /isMailChannel|mailto:/.test(code + read('src/lib/socials.js')));
   }
 
   /* ---- 21. no fake money in the chrome; real wallet first --------------- */
@@ -1589,7 +1830,9 @@ export default function run() {
   {
     const strip = (src) =>
       src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-    const contact = strip(read('src/pages/Contact.jsx'));
+    /* The channel list itself moved to lib/socials.js (Splash renders the same
+       one), so the links are asserted against the page plus its source list. */
+    const contact = strip(read('src/pages/Contact.jsx')) + strip(read('src/lib/socials.js'));
     const settingsRaw = read('src/pages/Settings.jsx');
     const settings = strip(settingsRaw);
 
@@ -9375,15 +9618,22 @@ export default function run() {
      */
     const chainsSrc = read('src/lib/chains.js');
     const aggSrc = read('src/lib/aggregator.js');
-    for (const [name, id, slug] of [['Linea', '59144', 'linea'], ['Sonic', '146', 'sonic']]) {
+    /*
+     * Scroll was tried against the aggregator when Linea/Sonic were quoted
+     * and 404'd, so it was deliberately absent. PR #286 later added it (plus
+     * zkSync Era) as configured chains routed through the same aggregator —
+     * a newer deliberate decision, so the audit now pins THAT state instead:
+     * configured, routable, and with a token list, exactly like Linea and
+     * Sonic. The live fee-echo quote these chains still owe (see the comment
+     * in src/lib/aggregator.js) remains a manual step before real volume.
+     */
+    for (const [name, id, slug] of [['Linea', '59144', 'linea'], ['Sonic', '146', 'sonic'], ['Scroll', '534352', 'scroll'], ['zkSync Era', '324', 'zksync']]) {
       t(`${name} is a configured chain`, new RegExp(`^  ${id}: \\{`, 'm').test(chainsSrc));
       /* A chain in chains.js but not in the aggregator map quotes nothing. */
       t(`...and is routable through the aggregator`, aggSrc.includes(`'${slug}'`));
       /* And it needs tokens, or the picker opens empty. */
       t(`...and has a token list`, new RegExp(`^  ${id}: \\[`, 'm').test(chainsSrc));
     }
-    t('Scroll stays out, since its aggregator route 404s',
-      !/'scroll'/.test(aggSrc));
 
     /*
      * ─── NEW SECTORS, AND THE CHECK THAT ACTUALLY MATTERS ───────────────────

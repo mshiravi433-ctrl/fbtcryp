@@ -179,7 +179,7 @@ function useAboutSEO(lang) {
       }
       injected.forEach((el) => el.remove());
       // restore title to default — index.html default
-      document.title = 'FBT Swap — Non-Custodial DEX & Crypto Swap on 14 Chains';
+      document.title = 'FBT Swap — Non-Custodial DEX & Crypto Swap on 16 Chains';
     };
   }, [lang]);
 }

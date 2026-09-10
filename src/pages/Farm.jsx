@@ -16,6 +16,7 @@ import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
 import PoolHistory from '../components/Farm/PoolHistory';
+import PoolGlyph from '../components/Farm/PoolGlyph';
 import { TOKENS } from '../lib/chains';
 import {
   farmScore, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
@@ -459,10 +460,13 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
         onClick={() => onToggle(pool)}
         title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}
       >
+        {/* THE PROTOCOL, NOT THE CHAIN. Both branches used to be an AssetIcon of
+            the network, so Aave, Lido and Pendle all showed the same ETH disc
+            and the row's only picture carried no information. The chain now
+            rides on the corner of the tile as a badge; the tile itself belongs
+            to the protocol. */}
         <span className="farm-pool-icon" aria-hidden="true">
-          {iconKey
-            ? <AssetIcon chain={iconKey} size={34} />
-            : <AssetIcon symbol={pool.symbol} size={34} />}
+          <PoolGlyph pool={pool} size={38} chainKey={iconKey} />
         </span>
         <span className="farm-pool-id">
           <span className="farm-pool-sym" dir="ltr">{pool.symbol}</span>
@@ -564,9 +568,14 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
   return (
     <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
       <div className="row-between" style={{ gap: 10 }}>
-        <div>
-          <p className="section-label" style={{ margin: 0 }}>{t('farm.poolAnalytics')}</p>
-          <div className="farm-pool-sym" dir="ltr">{pool.symbol}</div>
+        {/* the drawer repeats the card's mark so the user never wonders whether
+            they opened the pool they meant to open */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <PoolGlyph pool={pool} size={32} chainKey={chainIconKey(pool.chain)} />
+          <div style={{ minWidth: 0 }}>
+            <p className="section-label" style={{ margin: 0 }}>{t('farm.poolAnalytics')}</p>
+            <div className="farm-pool-sym" dir="ltr">{pool.symbol}</div>
+          </div>
         </div>
         <div className="farm-details-head" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <span className="pill pill-neutral">{FARM_PROTOCOL.name}</span>
@@ -712,6 +721,8 @@ function HotStrip({ rows, onSelect, t }) {
         {hot.map((pool, i) => (
           <button key={pool.id} type="button" className="farm-hot-card" onClick={() => onSelect(pool)} title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}>
             <span className="farm-hot-top">
+              {/* the same mark as the card, so the rail and the list agree */}
+              <span className="farm-hot-glyph"><PoolGlyph pool={pool} size={22} chainKey={chainIconKey(pool.chain)} showBadge={false} /></span>
               <span className="farm-hot-rank" aria-hidden="true">{i + 1}</span>
               <span className="farm-hot-sym" dir="ltr">{pool.symbol}</span>
             </span>

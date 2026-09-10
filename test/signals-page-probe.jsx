@@ -638,8 +638,11 @@ export async function run(container) {
 
         const card = container.querySelector('.sic-card');
         check('exactly one selected-token card is present', Boolean(card) && container.querySelectorAll('.sic-card').length === 1);
-        const picker = container.querySelector('.sic-token-select-shell select');
-        check('global signals default to Bitcoin', picker?.value === 'bitcoin');
+        /* The picker became a ModernSelect (testId "signals-token-picker"); its
+           trigger label shows the selected option's symbol. Same intent as the
+           old native-select check: the global view must land on Bitcoin. */
+        const pickerLabel = container.querySelector('[data-testid="signals-token-picker"] .modern-select-label');
+        check('global signals default to Bitcoin', pickerLabel?.textContent?.trim() === 'BTC');
 
         const pulseToggle = container.querySelector('.sic-pulse-toggle');
         check('AI market pulse starts collapsed', pulseToggle?.getAttribute('aria-expanded') === 'false' && !container.querySelector('#sic-pulse-content'));

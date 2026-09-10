@@ -211,9 +211,19 @@ export function rewardsRouter() {
     const who = identity(req, res);
     if (!who) return undefined;
     const { code, wallet, signature, message } = req.body || {};
+    /*
+     * A wallet presented without a signature must be REFUSED, not silently
+     * re-interpreted as a device bind: the caller asked to tie this code to
+     * an address they must prove control of. Downgrading would bind the code
+     * to whoever could type the address — the exact spoof the engine's
+     * SIGNATURE_REQUIRED contract (and the probe) exists to prevent.
+     */
     const via = who.owner.startsWith('tg:')
       ? 'telegram'
-      : (wallet && signature) ? 'wallet' : 'device';
+      : wallet ? 'wallet' : 'device';
+    if (via === 'wallet' && (!signature || !message)) {
+      return error(res, 'SIGNATURE_REQUIRED', 400);
+    }
     const result = await engine.bindCode({
       code: String(code || '').toUpperCase(),
       wallet: wallet || null,

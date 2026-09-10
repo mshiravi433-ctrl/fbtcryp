@@ -1233,7 +1233,14 @@
     "footNote": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptomonnaies sont volatiles : ne tradez que ce que vous pouvez vous permettre de perdre."
   },
   "contact": {
-    "title": "Nous contacter"
+    "title": "Nous contacter",
+    "social": {
+      "x": "X",
+      "linkedin": "LinkedIn",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "E-mail"
+    }
   },
   "lab2": {
     "screens": {

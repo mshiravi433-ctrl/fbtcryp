@@ -104,7 +104,12 @@ const OO_SLUG = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* Scroll + zkSync Era — OpenOcean serves both (their registry lists them
+     among its 30+ networks). A slug that ever stops being served simply
+     fails its own quote; KyberSwap continues alone. */
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 export const openOceanSupports = (chainId) => Boolean(OO_SLUG[chainId]);

@@ -1,3 +1,4 @@
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../../speculativeLexicon.js';
 /**
  * FBT INTENT OS — UPGRADE 7 · Intent Understanding 2.0 + Hidden Intent
  * ---------------------------------------------------------------------------
@@ -201,7 +202,9 @@ export function extractConstraints(text) {
   if (/(بدون\s*(کارمزد|فی)\s*(بالا|زیاد)|کارمزد\s*کم|low\s*fee|cheap\s*gas|گس\s*کم)/.test(t)) out.push({ kind: 'fee', value: 'low' });
   if (/(فقط\s*(روی|در)\s*(سولانا|solana))/.test(t)) out.push({ kind: 'chain', value: 'solana' });
   if (/(فقط\s*استیبل|only\s*stable|استیبل\s*کوین\s*فقط)/.test(t)) out.push({ kind: 'asset_class', value: 'stable' });
-  if (/(بدون\s*اهرم|no\s*leverage|اهرم\s*نه)/.test(t)) out.push({ kind: 'leverage', value: 'none' });
+  /* Leverage vocabulary is website-build-only (speculativeLexicon stub):
+     a store build has no margin venue, so it must not carry the word either. */
+  if (SPECULATIVE_VOCABULARY_PRESENT && /(بدون\s*اهرم|no\s*leverage|اهرم\s*نه)/.test(t)) out.push({ kind: 'leverage', value: 'none' });
   if (/(نفروش|نمی\s*خوام\s*بفروشم|don.?t\s*sell|بدون\s*فروش)/.test(t)) out.push({ kind: 'no_sell', value: true });
   if (/(حلال|شرعی|halal|sharia)/.test(t)) out.push({ kind: 'compliance', value: 'halal' });
   return out;

@@ -703,13 +703,22 @@
   padding: 9px 10px;
   border-radius: 12px;
   border: 1px solid var(--acc-line-soft);
-  background: rgba(0, 0, 0, 0.28);
+  /* `background-color`, never `background`: the shorthand also writes
+     background-image/-repeat/-position, and the themed chevron IS a
+     background-image — this rule was erasing it in the dark theme, which is the
+     same one-character class of bug that tiled it across the currency picker in
+     the light theme. See the note at the end of buy-sell.css. */
+  background-color: rgba(0, 0, 0, 0.28);
   color: var(--acc-strong);
   font-size: 16px; /* keeps iOS from zooming the page when the field focuses */
 }
+/* `background-color`, not `background`: the shorthand here would also reset
+   `background-image`/`-repeat`/`-position`, and the themed chevron the light
+   `select` rule paints IS a background-image — which is how the currency picker
+   on /buy-sell grew its hatch. Same rule, same file, same trap. */
 :root[data-theme='light'] .acc-control input[type='number'],
 :root[data-theme='light'] .acc-auto-form input,
-:root[data-theme='light'] .acc-auto-form select { background: rgba(255, 255, 255, 0.8); }
+:root[data-theme='light'] .acc-auto-form select { background-color: rgba(255, 255, 255, 0.8); }
 .acc-control input[type='range'] { width: 100%; accent-color: var(--acc-violet); }
 
 .acc-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }

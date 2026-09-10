@@ -1,3 +1,4 @@
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 /**
  * FBT INTENT OS — Intent Understanding
  * ---------------------------------------------------------------------------
@@ -168,7 +169,11 @@ const KEYWORD_LEXICON = Object.freeze([
   /* Tokenized real-world assets — the Stocks/RWA surface owns these. */
   { type: 'RWA', words: ['توکن شده', 'توکنیزه', 'دارایی واقعی', 'rwa', 'tokenized', 'tokenized assets', 'real world asset'] },
   { type: 'P2P', words: ['p2p', 'پی تو پی', 'همتا به همتا'] },
-  { type: 'FUTURES', words: ['فیوچرز', 'پرپچوال', 'اهرم', 'futures', 'perp', 'perps', 'perpetual', 'leverage'] },
+  /* Futures vocabulary is website-build-only: a store build has no margin
+     venue, so its parser must not recognise (let alone advertise) one. */
+  ...(SPECULATIVE_VOCABULARY_PRESENT
+    ? [{ type: 'FUTURES', words: ['فیوچرز', 'پرپچوال', 'اهرم', 'futures', 'perp', 'perps', 'perpetual', 'leverage'] }]
+    : []),
   { type: 'DYDX', words: ['dydx', 'دیوایدیایکس'] },
   { type: 'HORIZON', words: ['افق جهانی', 'فارکس', 'forex', 'طلا', 'نفت', 'کالا', 'commodity', 'commodities'] },
   { type: 'BUY', words: ['خرید', 'بخرم', 'buy', 'purchase'] },

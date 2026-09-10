@@ -1467,3 +1467,71 @@
 :root[data-reduce-motion='true'] .ins-tabs { scroll-behavior: auto; }
 :root[data-reduce-motion='true'] .ins-skel,
 :root[data-reduce-motion='true'] .ins-explain-body { animation: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ERROR ALERTS — one readable line + a code you can copy, never both at once
+   (see src/pages/insurance/insErrors.js for why the mapping exists).
+   `InsAlert` renders the sentence in .ins-alert-text and hides the machine code
+   behind a <details> toggle, so the alert stays one line tall in normal use and
+   still answers «چی شد؟ کدش چیه؟» when someone needs it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ins-alert { flex-wrap: wrap; }
+.ins-alert-text { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+/* the tone the mapper chose — `error` is the default, the others exist so a
+   success/info message reuses this skin without pretending to be a failure */
+.ins-alert--success { border-color: color-mix(in srgb, var(--up) 38%, transparent); background: color-mix(in srgb, var(--up) 9%, transparent); }
+.ins-alert--success svg { color: var(--up); }
+.ins-alert--info { border-color: color-mix(in srgb, var(--accent-2, #00e5ff) 34%, transparent); background: color-mix(in srgb, var(--accent-2, #00e5ff) 8%, transparent); }
+.ins-alert-detail { flex: 0 0 100%; margin: 3px 0 0; padding-inline-start: 26px; }
+.ins-alert-detail summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  list-style: none;
+}
+.ins-alert-detail summary::-webkit-details-marker { display: none; }
+.ins-alert-detail summary::after { content: '⌄'; font-size: 12px; line-height: 1; transition: transform 0.18s ease; }
+.ins-alert-detail[open] summary::after { transform: rotate(180deg); }
+.ins-alert-detail summary:hover,
+.ins-alert-detail summary:focus-visible { color: var(--text-1); }
+.ins-alert-detail code {
+  display: block;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(6, 9, 20, 0.5);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 154px;
+  overflow: auto;
+  user-select: all;
+}
+:root[data-theme='light'] .ins-alert-detail code {
+  background: #ffffff;
+  border-color: rgba(16, 20, 40, 0.14);
+  color: #3f4763;
+}
+:root[data-theme='light'] .ins-alert-detail summary { color: #6b7391; }
+:root[data-theme='light'] .ins-alert-detail summary:hover { color: #131a33; }
+/* A toast must never become a paragraph. The mapper already guarantees one line
+   per error; this guarantees it visually even for a provider sentence nobody
+   translated — clamp at two lines and let the alert carry the rest. */
+.ins-toast {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}

@@ -1,3 +1,4 @@
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 /**
  * FBT INTENT OS — OPERATIONS CATALOG LOCALIZATION.
  * ---------------------------------------------------------------------------
@@ -226,7 +227,10 @@ const CARD_LABELS = Object.freeze({
     ar: { title: 'تقليص المركز', desc: 'تقليل حجم المركز' }
   },
   futures_risk: {
-    fa: { title: 'تحلیل ریسک', desc: 'ریسک اهرم و لیکویید شدن در بازارهای پرپچوال' },
+    /* The Persian word for leverage is review-banned vocabulary in a store
+       build (where the margin venue does not exist at all). Website builds
+       keep the precise wording; the store branch loses only the word. */
+    fa: { title: 'تحلیل ریسک', desc: SPECULATIVE_VOCABULARY_PRESENT ? 'ریسک اهرم و لیکویید شدن در بازارهای پرپچوال' : 'ریسک لیکویید شدن در بازارهای پرپچوال' },
     ar: { title: 'تحليل المخاطر', desc: 'مخاطر الرافعة والتصفية في الأسواق الدائمة' }
   },
 

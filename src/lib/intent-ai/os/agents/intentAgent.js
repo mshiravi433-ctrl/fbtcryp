@@ -1,3 +1,4 @@
+import { SPECULATIVE_VOCABULARY_PRESENT } from '../../speculativeLexicon.js';
 /**
  * FBT INTENT OS — Intent Agent (Top-level Understanding & Smart Clarification)
  * ---------------------------------------------------------------------------
@@ -118,7 +119,7 @@ export function createIntentAgent() {
         objective = 'CAPITAL_PRESERVATION';
       } else if (/yield|passive|درآمد|سود ماهانه|income|farm|stake/i.test(text)) {
         objective = 'PASSIVE_YIELD';
-      } else if (/speculat|نوسان‌گیری|اهرم|futures|trade/i.test(text)) {
+      } else if (SPECULATIVE_VOCABULARY_PRESENT && /speculat|نوسان‌گیری|اهرم|futures|trade/i.test(text)) {
         objective = 'SPECULATION';
       }
 

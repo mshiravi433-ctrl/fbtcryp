@@ -114,19 +114,27 @@ try {
        unable to report "not ready". */
     const phaseStatus = await get('/api/intents/v1/phase-status');
     const publicStatus = await get('/api/intents/v1/public-status');
-    const activation = await get('/api/intents/v1/activation');
     check('phase-status reports phase 21 implemented but not live without evidence', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === false && row.live === false));
     check('phase-status names the missing evidence instead of going quiet', phaseStatus.body.phases.some((row) => row.phase === 21 && Array.isArray(row.blockers) && row.blockers.length > 0));
     check('public-status refuses launch while operator evidence is absent', publicStatus.body.launchAllowed === false && publicStatus.body.claims.executionActivated === false);
     /* The evidence store is module-level and shared across probes in one run,
        so an earlier suite may legitimately have injected records. Assert that
        the reported count MATCHES the store rather than pinning a literal —
-       the point is that the number is real, not that it is zero. */
-    const liveCount = evidenceStoreStatus().storedCount;
+       the point is that the number is real, not that it is zero.
+       The count is read on BOTH sides of the fetch: a pending async write
+       from an earlier suite can land between the route's snapshot and a
+       single later read, which made this row flip between runs on identical
+       code. The route's number must sit inside that bracket and its launch
+       flag must agree with the number it reported. */
+    const beforeCount = evidenceStoreStatus().storedCount;
+    const activation = await get('/api/intents/v1/activation');
+    const afterCount = evidenceStoreStatus().storedCount;
+    const reportedCount = Number(String(activation.body.product.storedEvidence ?? '').split('/')[0]);
     check('activation reports the real stored-evidence count',
       activation.body.product.specificationImplementedThrough === 200
-      && activation.body.product.storedEvidence === `${liveCount}/21`
-      && activation.body.product.operationalActivationRequired === (liveCount < 21));
+      && Number.isFinite(reportedCount)
+      && beforeCount <= reportedCount && reportedCount <= afterCount
+      && activation.body.product.operationalActivationRequired === (reportedCount < 21));
     const dumped = JSON.stringify({ phaseStatus: phaseStatus.body, publicStatus: publicStatus.body, activation: activation.body, empty, ready });
     check('no raw credential words leak into status output', !/private.?key|seed.?phrase|master.?password|BEGIN [A-Z ]*PRIVATE KEY/i.test(dumped));
     const document = openApiDocument();

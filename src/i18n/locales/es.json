@@ -1233,7 +1233,14 @@
     "footNote": "Los datos de mercado son informativos, no asesoramiento financiero. Las criptomonedas son volátiles: opera solo con lo que puedas permitirte perder."
   },
   "contact": {
-    "title": "Contáctanos"
+    "title": "Contáctanos",
+    "social": {
+      "x": "X",
+      "linkedin": "LinkedIn",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "Correo"
+    }
   },
   "lab2": {
     "screens": {

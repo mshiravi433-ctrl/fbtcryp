@@ -246,7 +246,12 @@ globalThis.fetch = async (input, init) => {
         { id: 8453, key: 'bas', name: 'Base', chainType: 'EVM', coin: 'ETH', metamask: { blockExplorerUrls: ['https://basescan.org'], rpcUrls: ['https://rpc'] } },
         { id: 1151111081099710, key: 'sol', name: 'Solana', chainType: 'SVM', coin: 'SOL' },
         /* A chain LI.FI serves and our wallet cannot sign for — must NOT be
-           offered to the user. */
+           offered to the user. (zkSync/324 used to be this decoy; the app
+           now supports it as a first-class EVM chain, so the decoy moved to
+           a chain the app genuinely does not support.) */
+        { id: 250, key: 'ftm', name: 'Fantom', chainType: 'EVM', coin: 'FTM' },
+        /* zkSync now that the app supports it: served by the provider AND
+           signable by the wallet, so it must appear in the picker. */
         { id: 324, key: 'era', name: 'zkSync', chainType: 'EVM', coin: 'ETH' }
       ]
     });
@@ -301,7 +306,9 @@ const WALLET = '0x1111111111111111111111111111111111111111';
 const chains = await get('/api/cross-chain/chains');
 t('GET /api/cross-chain/chains answers from the provider registry', chains.status === 200 && Array.isArray(chains.body.chains));
 t('...filtered to chains this wallet can actually sign for',
-  chains.body.chains.some((c) => c.id === 8453) && !chains.body.chains.some((c) => c.id === 324));
+  chains.body.chains.some((c) => c.id === 8453) && !chains.body.chains.some((c) => c.id === 250));
+t('...and a chain the app supports (zkSync) is no longer filtered out',
+  chains.body.chains.some((c) => c.id === 324));
 t('...and Solana is offered as an SVM chain, not as an EVM one',
   chains.body.chains.find((c) => c.id === 1151111081099710)?.family === 'SVM');
 

@@ -106,6 +106,16 @@ export async function run(container) {
       composerInput && /swap/i.test(composerInput.value));
 
     /* ---------------- 4. guided flow via quick replies ---------------- */
+    /*
+     * The default mode is now AUTONOMOUS (L3) — the ladder stopped being a
+     * user choice — so the panel opens with the policy gate: no turn is
+     * answered until CONFIRM & START is pressed. Confirm it the way a user
+     * does, then the vague request must still open the guided flow.
+     */
+    const confirmStartBtn = qa('button').find((b) => /CONFIRM & START/i.test(b.textContent || ''));
+    t('the L3 default gates the first turn behind CONFIRM & START', Boolean(confirmStartBtn));
+    await act(async () => { confirmStartBtn?.click(); });
+    await act(async () => { await sleep(10); });
     await act(async () => { setInputValue(composerInput, 'hello'); });
     await act(async () => { q('.ia-composer .ia-send').click(); });
     await act(async () => { await sleep(10); });

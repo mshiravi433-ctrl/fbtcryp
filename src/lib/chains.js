@@ -251,11 +251,37 @@ export const EVM_CHAINS = {
     explorer: 'https://monadvision.com',
     dexName: 'KyberSwap',
     color: '#7c3aed'
+  },
+  534352: {
+    id: 534352,
+    hexId: '0x82750',
+    name: 'Scroll',
+    short: 'SCR',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com'],
+    explorer: 'https://scrollscan.com',
+    // Genesis WETH contract on Scroll (scrollscan-verified).
+    wrapped: '0x5300000000000000000000000000000000000004',
+    // KyberSwap supplies the route; no unverified direct router fallback.
+    dexName: 'KyberSwap',
+    color: '#f1c27d'
+  },
+  324: {
+    id: 324,
+    hexId: '0x144',
+    name: 'zkSync Era',
+    short: 'ZK',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://mainnet.era.zksync.io', 'https://zksync.drpc.org'],
+    explorer: 'https://era.zksync.network',
+    wrapped: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',
+    dexName: 'KyberSwap',
+    color: '#8c8dfc'
   }
 };
 
 export const DEFAULT_CHAIN = 56;
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324];
 
 /**
  * Platform fee — always charged, on every chain.
@@ -446,6 +472,19 @@ export const TOKENS = {
   ],
   143: [
     { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' }
+  ],
+  /* Scroll + zkSync Era — added with the chains in the same batch; curated
+     defaults follow the house pattern above: native coin + wrapped native
+     ONLY, both addresses verified on the chains' own explorers (Scroll WETH
+     is a genesis contract; zkSync WETH matches the `wrapped` pin above).
+     USDC/USDT and the long tail come from the CoinGecko runtime lists. */
+  534352: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5300000000000000000000000000000000000004', decimals: 18, coingeckoId: 'ethereum' }
+  ],
+  324: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', decimals: 18, coingeckoId: 'ethereum' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

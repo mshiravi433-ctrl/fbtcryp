@@ -1233,7 +1233,14 @@
     "footNote": "Os dados de mercado são informativos, não aconselhamento financeiro. As criptomoedas são voláteis: negocie apenas o que pode perder."
   },
   "contact": {
-    "title": "Fale connosco"
+    "title": "Fale connosco",
+    "social": {
+      "x": "X",
+      "linkedin": "LinkedIn",
+      "instagram": "Instagram",
+      "crunchbase": "Crunchbase",
+      "email": "E-mail"
+    }
   },
   "lab2": {
     "screens": {

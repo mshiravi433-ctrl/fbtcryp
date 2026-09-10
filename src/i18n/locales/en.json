@@ -1465,7 +1465,8 @@
     "telegram": "Telegram",
     "openTelegram": "Send email",
     "social": {
-      "telegram": "Telegram",
+      "x": "X",
+      "linkedin": "LinkedIn",
       "instagram": "Instagram",
       "crunchbase": "Crunchbase",
       "email": "Email"
@@ -9133,6 +9134,17 @@
   },
   "sm": {
     "title": "Smart Money",
+    "windowAria": "Time window",
+    "windows": {
+      "1h": "1 hour",
+      "4h": "4 hours",
+      "24h": "24 hours",
+      "7d": "Week",
+      "30d": "Month"
+    },
+    "windowPartial": "Only {{pct}}% of this {{window}} window has been observed so far — the ranges fill in while the scanner keeps running.",
+    "tokenWindowNote": "Buying, selling and net flow cover the last {{window}}.",
+    "tokenWindowFallback": "The meters below come from the token\u2019s 24-hour pair statistics; only the flow numbers follow the selected window.",
     "live": "Live",
     "tagline": "Track <b>whales</b>. Detect <b>accumulation</b>. Find unusual <b>wallet activity</b> — before it shows up in price.",
     "searchPlaceholder": "Wallet address, token contract, symbol or tx hash…",
@@ -10322,6 +10334,16 @@
     }
   },
   "buySell": {
+    "fiat": {
+      "USD": "US Dollar",
+      "EUR": "Euro",
+      "GBP": "British Pound",
+      "CHF": "Swiss Franc",
+      "PLN": "Polish Zloty",
+      "TRY": "Turkish Lira",
+      "AED": "UAE Dirham",
+      "BRL": "Brazilian Real"
+    },
     "title": "Buy & Sell",
     "pageIntro": "Buy crypto through an approved provider-hosted checkout. FBT never receives your payment or custody of your assets; delivery is complete only after blockchain verification.",
     "directionLabel": "Transaction direction",
@@ -10519,6 +10541,8 @@
       "amountHintBuy": "Enter the amount in your currency. The exact crypto amount and all provider fees are shown on the provider’s own page before you pay.",
       "amountHintSell": "Enter the amount of crypto to sell. You will pick the exact asset in a later step.",
       "currencyLabel": "Currency",
+      "chooseCurrency": "Choose a currency",
+      "currencySheet": "Payout currency",
       "quickAmounts": "Quick amounts",
       "walletTitleBuy": "Which wallet should receive the crypto?",
       "walletTitleSell": "Which wallet will you send the crypto from?",
@@ -11397,7 +11421,24 @@
       "unknown": "Unknown",
       "simulated": "Simulated (test)"
     },
-    "quote": {
+    "errors": {
+      "userRejected": "You cancelled the request in your wallet.",
+      "insufficientBalance": "Not enough balance in your wallet for this purchase.",
+      "noGas": "Not enough balance for the network fee — add a little ETH or BNB and try again.",
+      "allowance": "Approve USDC spending once, then try again.",
+      "wrongNetwork": "Switch your wallet to the insurance network and try again.",
+      "noWallet": "Connect a wallet to sign this purchase.",
+      "methodMissing": "This wallet cannot send that request — update it or use another wallet.",
+      "reverted": "The contract rejected the transaction. Nothing was charged.",
+      "dropped": "A previous transaction is still pending — wait for it and try again.",
+      "timeout": "The request timed out. Try again.",
+      "offline": "No connection to the insurance service. Check your network and retry.",
+      "rateLimited": "Too many requests — wait a minute and try again.",
+      "rpc": "The insurance provider did not answer. Try again shortly.",
+      "invalidInput": "Check {{field}}: {{message}}",
+      "generic": "This action could not be completed (code {{code}}).",
+      "detailToggle": "Details"
+    },    "quote": {
       "confirmTitle": "Confirm purchase?",
       "confirmBody": "You are preparing ${{coverage}} of protection for ${{total}} total (all fees included). Nothing is charged until you sign.",
       "confirmPrepare": "Confirm & Prepare",
@@ -11550,7 +11591,22 @@
       "NO_ELIGIBLE_PROTECTION": "No eligible protection available.",
       "INTENT_FAILED": "Purchase preparation failed.",
       "TIMEOUT": "No response from the provider (timeout).",
-      "QUOTE_NOT_FOUND": "Quote not found or already expired"
+      "QUOTE_NOT_FOUND": "Quote not found or already expired",
+      "BAD_WALLET": "Enter the wallet address you are insuring (0x…).",
+      "UNAUTHORIZED": "That record belongs to a different wallet address.",
+      "QUOTE_WALLET_MISMATCH": "This quote was issued for a different wallet address.",
+      "IDEMPOTENCY_KEY_REQUIRED": "This request needs a retry key. Try again in a moment.",
+      "IDEMPOTENCY_CONFLICT": "The same request was already sent with different details.",
+      "COVERAGE_NOT_FOUND": "That coverage record could not be found.",
+      "COVERAGE_NOT_ACTIVE": "This cover is not active, so it cannot be changed.",
+      "COVERAGE_NOT_CANCELLABLE": "Only an active or pending cover can be cancelled.",
+      "COVERAGE_EXHAUSTED": "The cover limit is already paid out in full.",
+      "CLAIM_NOT_FOUND": "That claim could not be found.",
+      "CLAIM_NOT_APPROVED": "Only an approved claim can be paid out.",
+      "INVALID_DECISION": "That decision is not one the ledger accepts.",
+      "RECEIPT_ALREADY_PROCESSED": "That transaction receipt has already been processed.",
+      "PAYOUT_NOT_VERIFIED": "The payout transaction is not verified on-chain yet.",
+      "PROVIDER_UNKNOWN": "That provider is not configured on this app."
     },
     "coverage": {
       "title": "My coverage",

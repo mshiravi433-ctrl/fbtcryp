@@ -3,6 +3,8 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { insuranceApi, usd } from '../../lib/insuranceClient.js';
 import { statusLabel } from './insStatus.js';
+import { insuranceError } from './insErrors.js';
+import InsAlert from './InsAlert.jsx';
 import ModernSelect from '../../components/ModernSelect.jsx';
 import {
   InsIconClaims, InsIconClaim, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconInfo, InsIconCheck, InsIconHourglass, InsIconShield,
@@ -44,12 +46,13 @@ export default function InsuranceClaims() {
       setMsg(t('insurance.claims.created', { number: r.data.claim.claimNumber, status: statusLabel(t, r.data.claim.status) }));
       notify(t('insurance.claims.createdToast', { number: r.data.claim.claimNumber }), 'success');
       const d = await insuranceApi.claims(wallet); setClaims(d.claims || []);
-    } catch (e) { setErr(e.message || String(e)); notify(e.message || t('insurance.claims.failed'), 'error'); }
+    } catch (e) { const m = insuranceError(e, t); setErr(m); notify(m.text || t('insurance.claims.failed'), 'error'); }
     setBusy(false);
   }
 
   async function submit(claimId) {
-    try { await insuranceApi.submitClaim(claimId, { walletAddress: wallet }); const d = await insuranceApi.claims(wallet); setClaims(d.claims || []); notify(t('insurance.claims.submitted'), 'success'); } catch (e) { notify(e.message || t('insurance.claims.submitFailed'), 'error'); }
+    try { await insuranceApi.submitClaim(claimId, { walletAddress: wallet }); const d = await insuranceApi.claims(wallet); setClaims(d.claims || []); notify(t('insurance.claims.submitted'), 'success'); }
+    catch (e) { const m = insuranceError(e, t); setErr(m); notify(m.text || t('insurance.claims.submitFailed'), 'error'); }
   }
 
   if (!wallet) {
@@ -112,7 +115,7 @@ export default function InsuranceClaims() {
           <button className="ins-btn ins-cta" disabled={busy || !coverageId} onClick={create}>{busy ? t('insurance.claims.creating') : (<><InsIconClaim /> {t('insurance.claims.createBtn')}</>)}</button>
         </div>
       </div>
-      {err && <div className="ins-alert"><InsIconAlert /><span>{err}</span></div>}
+      {err ? <InsAlert error={err} /> : null}
       {msg && <div className="ins-ok"><InsIconCheck /><span>{msg}</span></div>}
 
       {(claims || []).length === 0 && <div className="ins-ok neutral"><InsIconInfo /><span>{t('insurance.claims.empty')}</span></div>}
