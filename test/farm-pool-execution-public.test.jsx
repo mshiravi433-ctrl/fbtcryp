@@ -109,7 +109,10 @@ describe('Farm execution surface — public-open build', () => {
     const card = await openDetails(container, 'USDC');
     expect(card.querySelector(`[data-testid="farm-exec-badge-${id}"]`)).toBeTruthy();
     expect(screen.getByText(t('farm.executionActivated'))).toBeTruthy();
-    expect(screen.queryByText(t('farm.analysisActivated'))).toBeNull();
+    /* The deleted read-only notice (see farm-pool-execution.test.jsx) must
+       not leak back in anywhere on the screen. */
+    expect(screen.queryByText('تحلیل پروتکلی این استخر فعال است. تا وصل‌شدن آداپتور اجرایی تأییدشده، اجرا فقط‌خواندنی می‌ماند.')).toBeNull();
+    expect(screen.queryByText('Protocol analytics are active for this pool. Execution stays read-only until a verified adapter is wired in.')).toBeNull();
     // The adapter itself, rendered INSIDE the analytics with the live feed
     // row. Scoped to the wrapper on purpose: the position hub at the bottom of
     // the page renders the same five panels, so an unscoped query finds two.
@@ -133,7 +136,12 @@ describe('Farm execution surface — public-open build', () => {
     const { container } = mount();
     const card = await openDetails(container, 'USDC-WETH');
     expect(card.querySelector('[data-testid^="farm-exec-badge-"]')).toBeNull();
-    expect(screen.getByText(t('farm.analysisActivated'))).toBeTruthy();
+    /* No execution notice on an adapter-less pool — the old "read-only until
+       a verified adapter is wired" sentence was deleted (read as an
+       unfinished app); the analysis simply stands on its own. */
+    expect(screen.queryByText(t('farm.executionActivated'))).toBeNull();
+    expect(screen.queryByText('تحلیل پروتکلی این استخر فعال است. تا وصل‌شدن آداپتور اجرایی تأییدشده، اجرا فقط‌خواندنی می‌ماند.')).toBeNull();
+    expect(screen.queryByText('Protocol analytics are active for this pool. Execution stays read-only until a verified adapter is wired in.')).toBeNull();
     // No inline adapter for this row (the hub at the bottom is a separate
     // section and always lists the five supported positions).
     expect(container.querySelector('[data-testid^="farm-pool-execution-"]')).toBeNull();
