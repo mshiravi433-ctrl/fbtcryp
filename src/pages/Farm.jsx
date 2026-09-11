@@ -694,7 +694,15 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
       <HorizonEarningsChart pool={pool} amount={amount} t={t} />
       <FeeEngineCard pool={pool} amount={amount} t={t} />
 
-      <p className="notice">{ExecutionPanel ? t('farm.executionActivated') : t('farm.analysisActivated')}</p>
+      {/*
+        Reported: «این جمله را پاک کن، زشته، انگار اپ ناقصه» — the
+        "execution stays read-only until a verified adapter is wired" notice
+        printed on EVERY analysis, which read as an unfinished app instead of
+        a product. The analysis stands on its own; the only disclosure that
+        belongs here is the one for pools that genuinely HAVE live execution,
+        because that sentence describes where a real signature happens.
+      */}
+      {ExecutionPanel ? <p className="notice">{t('farm.executionActivated')}</p> : null}
       <p className="faint">{t('farm.netIsAnalysis')}</p>
 
       {isPair ? (

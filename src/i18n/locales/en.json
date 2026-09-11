@@ -1815,7 +1815,6 @@
     "protocolPools": "Live pools",
     "protocolLastSync": "Last sync",
     "protocolCapabilities": "Protocol capabilities",
-    "analysisActivated": "Protocol analytics are active for this pool. Execution stays read-only until a verified adapter is wired in.",
     "executionActivated": "In-app execution is live for this pool: supply and withdrawal are signed against the protocol's own pinned contracts, simulated before signing and confirmed in your wallet. We never custody the funds.",
     "connectToExecute": "Connect a wallet to execute this pool. Rates and analytics stay readable without one.",
     "execBadge": "In-app execution",

@@ -68,6 +68,35 @@ const toSeries = (rows) =>
     .map((p) => (typeof p === 'number' ? p : Array.isArray(p) ? Number(p[1]) : Number(p?.p)))
     .filter((n) => Number.isFinite(n) && n > 0);
 
+/*
+ * FAIL CLOSED INSIDE RENDER, NOT INTO THE ROUTE BOUNDARY.
+ * ---------------------------------------------------------------------------
+ * Reported: «سیگنال با انتخاب توکن هم اصلی و هم سولنا کرش میشه، اپ و سایت،
+ * میگه مشکلی پیش اومده» — choosing a token from the picker took the WHOLE
+ * screen to the crash card.
+ *
+ * Everything below the page's own useMemo chain runs OUTSIDE any
+ * SectionGuard: the guards only wrap the panels a computation feeds, while
+ * the computation itself happens here, in the page's render. One shape an
+ * engine did not expect — a field a new upstream spell delivers differently,
+ * a row an older poll cached — and the throw travels straight past every
+ * panel guard into RouteBoundary, blanking even the panels that had
+ * perfectly good data.
+ *
+ * So each engine read is computed through this helper: an unexpected shape
+ * degrades THAT read to its honest "nothing measured" value, and the rest of
+ * the screen keeps working — the same fail-closed law the data layer already
+ * follows, applied one layer up. A panel that hides is recoverable on the
+ * next poll; a route-level crash card is what the report describes.
+ */
+const safeCalc = (fn, fallback = null) => {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
+};
+
 /* ────────────────────────────────────────────────────────────────────────────
  * COLLAPSIBLE SIGNAL SECTION (kept from the existing page — presentation only)
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -893,35 +922,30 @@ function SignalTrendChart({ series, coin }) {
     <div className="sic-trend-chart" aria-label={t('signals.intel.trendTitle', { symbol: coin?.symbol || '—' })}>
       <div className="sic-trend-head">
         {/*
-          Reported: "this emoji should be modern". The header carried the
-          chart emoji next to a hard-coded English word. An emoji renders differently on every device
-          (Apple/Google/Samsung each draw their own), it cannot take the page's
-          accent colour, and it is not localised. This is the same line-chart
-          glyph the rest of the screen draws in SVG: it inherits currentColor,
-          so it turns green/red with the direction it is describing.
+          Reported: "در باکس نمودار دوتا آیکون هست، یکی قبل و یکی بعد روند
+          قیمت؛ ایموجی نمودار بالا‌رونده را پاک کن". The header used to carry
+          a line-chart glyph BEFORE the title and an arrow AFTER it — two
+          pictures around one number, and the glyph still read as the old 📈
+          emoji it replaced. The glyph is gone entirely; the direction is told
+          once, by the tiny arrow beside the percent. The plot svg below
+          carries its own class so the full-width chart styling can never leak
+          onto a header mark again — that leak is what once blew these glyphs
+          up to 82px tall.
         */}
         <span className="sic-trend-title">
-          <svg
-            className={`sic-trend-icon ${rising ? 'up' : 'down'}`}
-            width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-          >
-            <path d="M3 17.5 9 11l4 3.6L21 6.5" />
-            <path d="M15.5 6.5H21V12" />
-          </svg>
           {t('signals.intel.trendTitle', { symbol: coin?.symbol || '—' })}
         </span>
         <b className={rising ? 'up' : 'down'}>
           <svg
             className={`sic-trend-arrow ${rising ? 'up' : 'down'}`}
-            width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"
+            width="8" height="8" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"
           >
             {rising ? <path d="M5 0 10 9H0z" /> : <path d="M5 10 0 1h10z" />}
           </svg>
           {rising ? '+' : ''}{change.toFixed(2)}%
         </b>
       </div>
-      <svg viewBox="0 0 300 82" role="img" aria-hidden="true" preserveAspectRatio="none">
+      <svg className="sic-trend-plot" viewBox="0 0 300 82" role="img" aria-hidden="true" preserveAspectRatio="none">
         <defs>
           <linearGradient id="signalsTrendFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={rising ? '#00ff9d' : '#ff3b6b'} stopOpacity=".3" />
@@ -1355,7 +1379,7 @@ export default function Signals() {
   const pulse = useMemo(() => {
     const srv = pulsePoll.data?.sentiment ? pulsePoll.data : null;
     if (srv && (srv.source === 'live' || srv.source === 'market-only')) return srv;
-    const local = computePulseLocal({ global, markets: coins ?? [], smartMoney: sm, now: Date.now() });
+    const local = safeCalc(() => computePulseLocal({ global, markets: coins ?? [], smartMoney: sm, now: Date.now() }));
     return local || srv || null;
   }, [pulsePoll.data, global, coins, sm]);
 
@@ -1369,8 +1393,11 @@ export default function Signals() {
     [chart, coin]
   );
   const btcSeries = useMemo(() => toSeries(btcChart), [btcChart]);
-  const analysis = useMemo(() => (priceSeries.length ? analyze(priceSeries, coin ?? {}) : null), [priceSeries, coin]);
-  const projection = useMemo(() => (analysis ? projectRange(analysis, horizon.days) : null), [analysis, horizon]);
+  const analysis = useMemo(
+    () => (priceSeries.length ? safeCalc(() => analyze(priceSeries, coin ?? {})) : null),
+    [priceSeries, coin]
+  );
+  const projection = useMemo(() => (analysis ? safeCalc(() => projectRange(analysis, horizon.days)) : null), [analysis, horizon]);
 
   const [perpMarkets, setPerpMarkets] = useState(null);
   useEffect(() => {
@@ -1380,7 +1407,7 @@ export default function Signals() {
   }, []);
 
   const verdictData = useMemo(
-    () => (analysis ? verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets }) : null),
+    () => (analysis ? safeCalc(() => verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets })) : null),
     [analysis, priceSeries, btcSeries, coin, global, perpMarkets]
   );
   const perpForCoin = useMemo(() => {
@@ -1406,7 +1433,7 @@ export default function Signals() {
   const learn = useLearningParams();
   const verdictForTelemetry = useMemo(
     () => (optedIn && analysis && !scanning
-      ? verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets })
+      ? safeCalc(() => verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets }))
       : null),
     [optedIn, analysis, scanning, priceSeries, btcSeries, coin, global, perpMarkets]
   );
@@ -1445,22 +1472,25 @@ export default function Signals() {
   /* ── Global signal cards (deterministic engine over real market data) ── */
   const globalSignals = useMemo(() => {
     if (!coins?.length) return [];
-    const list = coins.slice(0, 24).map((c) => {
+    /* One poisoned market row must cost ONE card, never the whole list —
+       and the list itself must never throw the page. */
+    const list = coins.slice(0, 24).map((c) => safeCalc(() => {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n) && n > 0);
       const a = series.length >= 30 ? analyze(series, c) : null;
       if (!a) return null;
       return computeSignalCard({ coin: c, series, analysis: a, solanaIntel: null, smToken: smBySymbol.get(c.symbol), pulse, now: Date.now() });
-    }).filter(Boolean);
-    return rankSignals(list);
+    })).filter(Boolean);
+    return safeCalc(() => rankSignals(list), list);
   }, [coins, pulse, smBySymbol]);
 
   /* One picker, one active token. Bitcoin stays first and selected by default
      in the global view; Solana stays first in the Solana view. */
-  const globalOptions = useMemo(() => {
+  const globalOptions = useMemo(() => safeCalc(() => {
     return [...globalSignals]
+      .filter((signal) => signal?.coin?.id)
       .sort((a, b) => (a.coin?.id === 'bitcoin' ? -1 : b.coin?.id === 'bitcoin' ? 1 : 0))
       .map((signal) => ({ id: signal.coin.id, symbol: signal.coin.symbol, name: signal.coin.name }));
-  }, [globalSignals]);
+  }, []), [globalSignals]);
   const solanaOptions = useMemo(() => SOLANA_SIGNAL_ASSETS.map((asset) => {
     const marketCoin = (coins ?? []).find((item) => item.id === asset.id);
     return { id: asset.id, symbol: asset.symbol, name: marketCoin?.name || '' };
@@ -1545,7 +1575,7 @@ export default function Signals() {
    * Each row carries the direction it implies (`dir`) so the UI draws the same
    * up/down glyph and colour for it everywhere.
    */
-  const onchainRows = useMemo(() => {
+  const onchainRows = useMemo(() => safeCalc(() => {
     const rows = [];
     const push = (key, value, tone = '', dir = null) => {
       if (value == null || value === '' || value === '—') return;
@@ -1555,14 +1585,14 @@ export default function Signals() {
     const holders = tokenOnchain?.holders;
 
     if (holders?.dataStatus === 'live') {
-      if (Number.isFinite(Number(holders.total))) {
+      if (holders.total != null && Number.isFinite(Number(holders.total))) {
         push('holdersTotal', Number(holders.total).toLocaleString(), '', null);
       }
-      if (Number.isFinite(Number(holders.top10Share))) {
+      if (holders.top10Share != null && Number.isFinite(Number(holders.top10Share))) {
         const share = Number(holders.top10Share);
         push('topHolder', `${share}%`, share > 50 ? 'down' : share > 30 ? 'warn' : 'up', share > 50 ? 'down' : 'up');
       }
-      if (Number.isFinite(Number(holders.exchangeSupplyPct))) {
+      if (holders.exchangeSupplyPct != null && Number.isFinite(Number(holders.exchangeSupplyPct))) {
         const sup = Number(holders.exchangeSupplyPct);
         push('exchangeSupply', `${sup}%`, sup > 15 ? 'down' : '', sup > 15 ? 'down' : 'up');
       }
@@ -1570,7 +1600,7 @@ export default function Signals() {
     if (Number.isFinite(Number(tokenOnchain?.liquidityUsd)) && Number(tokenOnchain.liquidityUsd) > 0) {
       push('liquidityObserved', `$${fmtCompact(tokenOnchain.liquidityUsd)}`, '', null);
     }
-    if (Number.isFinite(Number(flow?.netUsd))) {
+    if (flow?.netUsd != null && Number.isFinite(Number(flow.netUsd))) {
       const net = Number(flow.netUsd);
       push(
         'smartMoneyNet',
@@ -1594,7 +1624,9 @@ export default function Signals() {
       const rising = intel.holderTrend.change === 'rising';
       push('holderTrend', t(`signals.onchain.trend.${intel.holderTrend.change}`), rising ? 'down' : 'up', rising ? 'down' : 'up');
     }
-    if (Number.isFinite(Number(intel?.topHolderPct))) {
+    /* Number(null) is 0 and finite — a null field must hide its row, exactly
+       like the fail-closed rule above, never print a fabricated 0%. */
+    if (intel?.topHolderPct != null && Number.isFinite(Number(intel.topHolderPct))) {
       const pct = Number(intel.topHolderPct);
       push('topHolder', `${pct}%`, pct > 50 ? 'down' : '', pct > 50 ? 'down' : 'up');
     }
@@ -1603,13 +1635,13 @@ export default function Signals() {
       push('dexActivity', t(`signals.onchain.pressure.${intel.dexActivity.pressure}`), buy ? 'up' : 'down', buy ? 'up' : 'down');
     }
     return rows;
-  }, [tokenOnchain, intel, t]);
+  }, []), [tokenOnchain, intel, t]);
 
   /* On-chain row for the detail lab: shown only when at least one metric was
      actually measured — failing closed exactly like the existing page did. */
   const hasOnchain = onchainRows.length > 0;
 
-  const selectedSignal = useMemo(() => {
+  const selectedSignal = useMemo(() => safeCalc(() => {
     if (tab === 'all') return globalSignals.find((signal) => signal.coin?.id === coinId) ?? null;
     if (!coin) return null;
     if (!analysis || priceSeries.length < 30 || !Number.isFinite(coin.price) || coin.price <= 0) {
@@ -1624,11 +1656,11 @@ export default function Signals() {
       pulse,
       now: Date.now()
     });
-  }, [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smBySymbol, pulse]);
+  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smBySymbol, pulse]);
 
   const portfolioImpactData = useMemo(
     () => (selectedSignal?.status === 'READY'
-      ? portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification })
+      ? safeCalc(() => portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification }))
       : null),
     [selectedSignal, positions, priceMap]
   );
@@ -1636,13 +1668,13 @@ export default function Signals() {
   /* ── Early signals: momentum acceleration + flow/on-chain agreement ─────
         Market-wide (both tabs): every number comes from real market data. */
   const earlyEntries = useMemo(() => {
-    return (coins ?? []).slice(0, 24).map((c) => {
+    return (coins ?? []).slice(0, 24).map((c) => safeCalc(() => {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n));
       const a = series.length >= 30 ? analyze(series, c) : null;
       return a ? { coin: c, series, analysis: a, smToken: smBySymbol.get(c.symbol) } : null;
-    }).filter(Boolean);
+    })).filter(Boolean);
   }, [coins, smBySymbol]);
-  const early = useMemo(() => computeEarlySignals({ entries: earlyEntries }), [earlyEntries]);
+  const early = useMemo(() => safeCalc(() => computeEarlySignals({ entries: earlyEntries }), []), [earlyEntries]);
 
   /* ── history learning loop: record + settle against real prices ───────── */
   useEffect(() => {
@@ -1762,16 +1794,16 @@ export default function Signals() {
   };
 
   /* ── detail lab data (kept from the existing page, fail-closed) ────────── */
-  const bandPct = useMemo(() => {
+  const bandPct = useMemo(() => safeCalc(() => {
     if (!projection || !projection.mid) return 2;
     const half = (projection.high - projection.low) / 2;
     return Math.max(0.5, Math.min(10, (half / projection.mid) * 100));
-  }, [projection]);
+  }, 2), [projection]);
   const scenarios = useMemo(
-    () => (priceSeries.length ? scenarioSplit(priceSeries, horizon.days, bandPct) : null),
+    () => (priceSeries.length ? safeCalc(() => scenarioSplit(priceSeries, horizon.days, bandPct)) : null),
     [priceSeries, horizon.days, bandPct]
   );
-  const invalidation = useMemo(() => {
+  const invalidation = useMemo(() => safeCalc(() => {
     if (!priceSeries.length) return null;
     const price = priceSeries[priceSeries.length - 1];
     const support = findLevels(priceSeries)
@@ -1779,15 +1811,15 @@ export default function Signals() {
       .sort((a, b) => b.price - a.price)[0];
     if (!support) return null;
     return { price: support.price, pctBelow: ((price - support.price) / price) * 100 };
-  }, [priceSeries]);
-  const backtestInfo = useMemo(() => {
+  }), [priceSeries]);
+  const backtestInfo = useMemo(() => safeCalc(() => {
     const bt = analysis?.backtest;
     if (!bt || !bt.samples || bt.samples < 8) return null;
     const side = String(analysis.label ?? '').includes('ell') ? bt.sell : bt.buy;
     if (!side || side.total < 8 || side.edge === null || side.edge === undefined) return null;
     return { rate: side.rate, edge: side.edge, samples: side.total, base: bt.baseRate };
-  }, [analysis]);
-  const activeHorizons = useMemo(() => computeHorizonRisks({ series: priceSeries, analysis }), [priceSeries, analysis]);
+  }), [analysis]);
+  const activeHorizons = useMemo(() => safeCalc(() => computeHorizonRisks({ series: priceSeries, analysis }), []), [priceSeries, analysis]);
   const layerRows = useMemo(() => {
     if (!read?.layers) return [];
     const order = ['technical', 'historical', 'structural', 'macro', 'derivatives'];

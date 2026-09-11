@@ -113,7 +113,12 @@ describe('Farm execution surface — build with the money path closed', () => {
     expect(card.querySelector('[data-testid^="farm-exec-badge-"]')).toBeNull();
     expect(screen.queryByText(t('farm.executionActivated'))).toBeNull();
     expect(screen.queryByTestId('farm-pool-execution-aave-base')).toBeNull();
-    expect(screen.getByText(t('farm.analysisActivated'))).toBeTruthy();
+    /* The "execution stays read-only until a verified adapter is wired"
+       notice was deleted on purpose — reported as «زشته، انگار اپ ناقصه»,
+       it printed on EVERY analysis and read as an unfinished app. An
+       analysis-only pool now simply shows the analysis. */
+    expect(screen.queryByText('تحلیل پروتکلی این استخر فعال است. تا وصل‌شدن آداپتور اجرایی تأییدشده، اجرا فقط‌خواندنی می‌ماند.')).toBeNull();
+    expect(screen.queryByText('Protocol analytics are active for this pool. Execution stays read-only until a verified adapter is wired in.')).toBeNull();
     // The six permanently-disabled «ناموجود» buttons are GONE — a dead
     // button is clutter, not honesty. The action grid now holds only what
     // exists (swap/stake + pool link), all enabled.
