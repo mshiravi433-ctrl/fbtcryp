@@ -7356,6 +7356,41 @@ body { overflow-x: clip; }
   gap: 10px;
   min-width: 0;
 }
+/*
+ * The head row is now the accordion toggle («پروتکل متصل است» collapsed by
+ * default — see ProtocolStatusCard in Farm.jsx). Button reset so it renders
+ * exactly like the old div, plus a full-width hit target and the same
+ * chevron chip PoolCard uses, so both accordions feel like one control.
+ */
+button.farm-protocol-toggle {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.farm-protocol-chevron {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
+  border: 1px solid var(--line);
+  transition: transform 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.farm-protocol-card.is-open .farm-protocol-chevron {
+  color: var(--rgb-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 35%, transparent);
+}
 .farm-protocol-icon {
   flex: 0 0 42px;
   width: 42px;

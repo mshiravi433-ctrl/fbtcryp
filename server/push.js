@@ -60,6 +60,7 @@ async function lib() {
  *        the notification renders in the OS shade, where the app has no
  *        opportunity to translate anything.
  */
+
 /**
  * Send to ONE subscriber.
  *
@@ -83,7 +84,9 @@ export async function sendToEndpoint(endpoint, payload) {
   try {
     await wp.sendNotification(
       { endpoint: sub.endpoint, keys: sub.keys },
-      JSON.stringify(payload),
+      // Presentation (icon/badge/lang/dir/colour) rides along so the shade
+      // renders on-brand even though no page is alive to style anything.
+      JSON.stringify(withPresentation(payload, sub.lang || 'fa')),
       // Shorter TTL than the promo: a price alert that arrives twelve hours
       // late is actively misleading, because the price has moved on.
       { TTL: 3600 }
@@ -119,7 +122,7 @@ export async function broadcast(build, { tag = 'fbt-daily' } = {}) {
         try {
           await wp.sendNotification(
             { endpoint: sub.endpoint, keys: sub.keys },
-            JSON.stringify({ ...payload, tag }),
+            JSON.stringify({ ...withPresentation(payload, sub.lang || 'fa'), tag }),
             { TTL: 12 * 3600 } // a stale promo is worse than none
           );
           sent += 1;
@@ -138,6 +141,32 @@ export async function broadcast(build, { tag = 'fbt-daily' } = {}) {
   }
 
   return { sent, failed, pruned: dead.length, total: subs.length };
+}
+
+/**
+ * The presentation half of a push payload, filled in ONE place.
+ *
+ * The shade is a brand surface: colour mark as `icon`, the MONOCHROME mark as
+ * `badge` (the OS silhouettes that slot — a colour picture there renders as a
+ * white blob), brand cyan as the accent, and lang/dir so Persian text is
+ * shaped and right-aligned by the OS instead of guessed per string. Callers
+ * build title/body/url; everything visual comes from here so a new alert
+ * type can never ship an off-brand notification. The service worker
+ * (public/sw.js) applies the same defaults again, so a payload that skips
+ * this helper still presents correctly.
+ */
+export function withPresentation(payload, lang = 'fa') {
+  const RTL = ['fa', 'ar', 'ur', 'he', 'ckb', 'sd', 'ps'];
+  const code = String(lang || 'fa').split('-')[0];
+  return {
+    lang: code,
+    dir: RTL.includes(code) ? 'rtl' : 'ltr',
+    icon: '/notification/icon-color-192.png',
+    badge: '/notification/badge-96.png',
+    color: '#00E5FF',
+    vibrate: [40, 60, 40],
+    ...payload
+  };
 }
 
 /**

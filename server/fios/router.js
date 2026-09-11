@@ -995,9 +995,18 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
 
   router.get('/global/cross-asset', route(async (req, res, owner) => {
     await ensureMigrated(owner);
-    /* The AI commentary follows the caller's language (Accept-Language, fa
-       default — this surface is Persian-first). */
-    const al = String(req.get?.('accept-language') || req.query.lang || 'fa').toLowerCase();
+    /* The AI commentary follows the caller's language, fa default — this
+       surface is Persian-first.
+
+       The EXPLICIT ?lang= parameter wins over the Accept-Language header.
+       It used to be the other way around, and that order was the bug behind
+       «جمع‌بندی هوش مصنوعی still shows in English»: the app always asks for
+       the UI's language (?lang=fa), but the browser/WebView attaches its OWN
+       Accept-Language (commonly en-US on Iranian users' phones — the OS
+       language, not the app's), so the header outvoted the app and the
+       cross-asset narrative came back in English. A parameter the client
+       sets deliberately must beat a header the client cannot control. */
+    const al = String(req.query.lang || req.get?.('accept-language') || 'fa').toLowerCase();
     const language = al.split(',').map((s) => s.trim().split('-')[0]).find((c) => ['fa', 'en'].includes(c)) || 'fa';
     const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
     const analysis = await fi.crossAssetFor(owner, { refresh, language });

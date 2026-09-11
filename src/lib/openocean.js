@@ -1,5 +1,7 @@
 /**
- * OPENOCEAN — a second aggregator, quoted in parallel with KyberSwap.
+ * OPENOCEAN — a second aggregator, quoted in parallel with KyberSwap; the
+ * SOLE and primary source on chains Kyber's gateway no longer serves
+ * (Mantle, Scroll, zkSync Era — see KYBER_LIVE in lib/aggregator.js).
  * ---------------------------------------------------------------------------
  * ─── WHY A SECOND ONE AT ALL ────────────────────────────────────────────────
  * We already route through KyberSwap, which searches every DEX on the chain —
@@ -28,8 +30,11 @@
  * sequence. So:
  *
  *   • Both aggregators are queried CONCURRENTLY (Promise.allSettled).
- *   • This one carries a SHORTER timeout than the primary. If OpenOcean is
- *     slow, we do not wait for it — we ship KyberSwap's answer.
+ *   • As a SECOND opinion this carries a SHORTER timeout than the primary.
+ *     If OpenOcean is slow, we do not wait for it — we ship KyberSwap's
+ *     answer. As the PRIMARY (chains Kyber dropped) the caller passes a
+ *     longer `timeoutMs`, because a 3s leash for the only routing source
+ *     converts "slow network" into «مسیری بین این دو توکن وجود ندارد».
  *   • A rejection here is never fatal. The comparison layer treats a failed
  *     second opinion as "no second opinion", not as a broken quote.
  *
@@ -105,9 +110,14 @@ const OO_SLUG = {
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
-  /* Scroll + zkSync Era — OpenOcean serves both (their registry lists them
-     among its 30+ networks). A slug that ever stops being served simply
-     fails its own quote; KyberSwap continues alone. */
+  /* Scroll + zkSync Era + Mantle — OpenOcean serves all three (v4 registry:
+     scroll-mainnet, zksync-mainnet, mantle-mainnet). Since 2026-09-11 these
+     are not second-opinion slugs: Kyber's aggregator gateway answers HTTP
+     *404* for `scroll`, `zksync` and `mantle`, so OpenOcean is the ONLY
+     routing source on these chains and swap.js gives it a primary-grade
+     timeout there. If a slug ever stops being served the quote fails and
+     the screen says «no route» honestly — there is no other source to fall
+     back to until Kyber's gateway comes back (re-probe: verify-fees.mjs). */
   534352: 'scroll',
   324: 'zksync'
 };
@@ -242,7 +252,8 @@ export async function getOpenOceanQuote({
   feeBps = 0,
   feeReceiver = null,
   parseUnits,
-  formatUnits
+  formatUnits,
+  timeoutMs = null
 }) {
   const slug = OO_SLUG[chainId];
   if (!slug) throw new Error('CHAIN_UNSUPPORTED');
@@ -271,7 +282,19 @@ export async function getOpenOceanQuote({
     params.set('referrerFee', String(bpsToPercent(feeBps)));
   }
 
-  const data = await ooFetch(`${OO_BASE}/${slug}/quote?${params.toString()}`, { endpoint: 'quote' });
+  /*
+   * `timeoutMs` promotes this call from second opinion to PRIMARY source.
+   * On chains Kyber's gateway no longer serves (Mantle, Scroll, zkSync Era —
+   * see KYBER_LIVE in lib/aggregator.js), OpenOcean is the only routing
+   * source, and the 3s bonus-leash is the wrong budget for the only quote
+   * standing between the user and «مسیری بین این دو توکن وجود ندارد». The
+   * caller passes a longer leash exactly there; everywhere else the default
+   * keeps the "never slower than KyberSwap alone" contract.
+   */
+  const data = await ooFetch(`${OO_BASE}/${slug}/quote?${params.toString()}`, {
+    endpoint: 'quote',
+    timeout: Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : OO_TIMEOUT_MS
+  });
 
   const outWeiRaw = data?.outAmount;
   if (outWeiRaw == null) throw new Error('NO_ROUTE');

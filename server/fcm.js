@@ -269,18 +269,25 @@ export async function fcmSendToToken(deviceToken, payload) {
             url: payload.url || '/',
             tag: payload.tag || 'fbt',
             stage: payload.stage || '',
-            color: payload.color || '#7c4dff'
+            color: payload.color || '#00E5FF'
           },
           android: {
             // High priority: a price alert is time-sensitive, and normal
             // priority lets Android hold it until the next maintenance window,
-            // by which point the price has moved.
+            // by which point the price has moved. This is also what lets the
+            // message wake a CLOSED app: FCM delivers high-priority messages
+            // to the system tray even when the process is not running, which
+            // is the whole point of «نوتیفیکیشن حتی وقتی اپ بسته است برسد».
             priority: 'high',
             ttl: '3600s',
             notification: {
               tag: payload.tag || 'fbt',
-              icon: 'ic_launcher',
-              color: payload.color || '#7c4dff',
+              /* The monochrome brand mark, not the launcher artwork: Android
+                 silhouettes small icons, and a 512px neon picture becomes a
+                 white blob at 24dp. Same drawable the manifest declares as
+                 the FCM default; brand cyan tints it. */
+              icon: 'ic_stat_notification',
+              color: payload.color || '#00E5FF',
               sound: payload.sound === 'ready' ? 'default' : 'default'
             }
           }
@@ -338,7 +345,7 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
                 data: { url: msg.url || '/', tag },
                 android: {
                   priority: 'normal',
-                  notification: { tag, icon: 'ic_launcher', color: '#7c4dff' }
+                  notification: { tag, icon: 'ic_stat_notification', color: '#00E5FF' }
                 }
               }
             })

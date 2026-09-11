@@ -545,6 +545,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  min-width: 0;
 }
 
 .iaos-suggestion {
@@ -557,6 +558,15 @@
   font-weight: 700;
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
+  /* Same disease as .iaos-choice: a suggested prompt longer than the row
+     must wrap inside its pill, never spill over the next one. */
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .iaos-suggestion:hover {
@@ -566,7 +576,10 @@
 
 .iaos-suggestion-label::before {
   content: "✦";
-  margin-right: 5px;
+  /* Logical property: in RTL the star belongs on the RIGHT of the label —
+     margin-right put it between two Persian words, one of the «به‌هم‌ریخته»
+     details. */
+  margin-inline-end: 5px;
   color: #22d3ee;
 }
 
@@ -960,12 +973,31 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+  min-width: 0;
 }
+/*
+ * ─── WHY THESE CHIPS WRAP ───────────────────────────────────────────────────
+ * «پیشنهادها روی هم می‌افتند و به‌هم‌ریخته» — the +ایجنت جدید flow offers the
+ * SUGGESTED_AGENTS titles as chips, and in Persian those are long
+ * («✦ تعادل ماهانه پرتفوی»). Two rules made them overlap: this chip inherits
+ * `.iaos-btn { flex: 1 }` (every chip in a row stretches to equal width —
+ * ragged pills with dead space), and `white-space: nowrap` meant a chip's
+ * minimum width was its full unwrapped text: wider than a phone bubble, so
+ * it spilled over its neighbours instead of breaking into two lines.
+ * Chips now size to their content, may wrap their label, and can never be
+ * wider than the bubble that holds them.
+ */
 .iaos-choice {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
   padding: 7px 14px;
   border-radius: 999px;
   font-size: 13px;
-  white-space: nowrap;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 /* An answered question keeps its answer visible instead of dead buttons. */
 .iaos-choice-answered {

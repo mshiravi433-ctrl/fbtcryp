@@ -232,9 +232,18 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   if (!amountIn || Number(amountIn) <= 0) return null;
   const { Contract, parseUnits, formatUnits } = await loadEthers();
 
-  // Preferred path: the aggregator finds a better route across every DEX AND
-  // collects our fee on-chain, with no contract of our own to deploy.
-  if (aggregatorFeeEnabled(chainId) && aggregatorSupports(chainId)) {
+  // Preferred path: the aggregators find a better route across every DEX AND
+  // collect our fee on-chain, with no contract of our own to deploy.
+  //
+  // KyberSwap is the primary where its gateway actually serves the chain;
+  // OpenOcean covers every EVM chain we list and is the SOLE source on the
+  // ones Kyber dropped (Mantle, Scroll, zkSync Era — HTTP 404 from their
+  // gateway, live-probed 2026-09-11, see KYBER_LIVE in lib/aggregator.js).
+  // On those chains OpenOcean gets a longer leash, because a 3s budget for a
+  // second opinion is a death sentence for a primary.
+  const kyberLive = aggregatorSupports(chainId);
+  const ooLive = openOceanSupports(chainId);
+  if (aggregatorFeeEnabled(chainId) && (kyberLive || ooLive)) {
     try {
       const feeReceiver = feeRecipientFor(chainId);
       const common = {
@@ -250,7 +259,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
       };
 
       /*
-       * ─── ASK EVERY AGGREGATOR AT ONCE ────────────────────────────────────
+       * ─── ASK EVERY LIVE AGGREGATOR AT ONCE ───────────────────────────────
        * Not one after the other. `quoteAllSources` starts them together, so
        * the wall-clock cost is the SLOWEST source rather than the sum — and
        * OpenOcean runs on a 3s leash against KyberSwap's 15s, so in the worst
@@ -260,10 +269,21 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        * comparison; it never turns a good quote into an error. And only an
        * EXECUTABLE quote is allowed to win, so a better price we cannot
        * actually sign can never become the transaction — see lib/bestQuote.js.
+       *
+       * A source that does not serve the chain is never asked at all: asking
+       * Kyber's dead `scroll`/`zksync`/`mantle` endpoints only produced a
+       * guaranteed-loser candidate and, when OpenOcean was also slow, turned
+       * «no answer yet» into «مسیری بین این دو توکن وجود ندارد».
        */
-      const sources = [{ id: 'kyberswap', quote: () => getAggregatorQuote(common) }];
-      if (openOceanSupports(chainId)) {
-        sources.push({ id: 'openocean', quote: () => getOpenOceanQuote(common) });
+      const sources = [];
+      if (kyberLive) {
+        sources.push({ id: 'kyberswap', quote: () => getAggregatorQuote(common) });
+      }
+      if (ooLive) {
+        sources.push({
+          id: 'openocean',
+          quote: () => getOpenOceanQuote(kyberLive ? common : { ...common, timeoutMs: 12000 })
+        });
       }
       /*
        * Velora (formerly ParaSwap) — a third opinion, added after testing
@@ -335,6 +355,15 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
     }
   }
   const cfg = EVM_CHAINS[chainId];
+  /*
+   * The 2026-09 networks trade through aggregators only — they deliberately
+   * carry no `router` in the registry because no direct-DEX fallback has
+   * been verified (or deployed) for them. Reaching this line on one of those
+   * chains means every fee-carrying aggregator source failed, and
+   * `new Contract(undefined, …)` would throw an opaque ethers error out of
+   * getQuote instead of the classified, retriable answer the screen renders.
+   */
+  if (!cfg?.router) return { error: 'QUOTE_FAILED', retriable: true };
   const router = new Contract(cfg.router, ROUTER_ABI, provider);
 
   const path = buildPath(chainId, fromToken, toToken);

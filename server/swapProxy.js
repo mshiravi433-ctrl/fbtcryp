@@ -55,18 +55,22 @@ const KYBER_SLUG = {
   43114: 'avalanche',
   59144: 'linea',
   146: 'sonic',
-  /* The 2026-09 additions. These MUST stay in lockstep with lib/aggregator.js:
-     a slug missing HERE (but present client-side) is a silent outage for the
-     exact users the proxy exists for — anyone whose network cannot reach the
-     aggregator directly. Their client would retry through this proxy, get
-     CHAIN_UNSUPPORTED, and the swap screen would answer "no route" for a
-     perfectly routable pair. */
+  /* The 2026-09 additions. These MUST stay in lockstep with the slug map in
+     lib/aggregator.js: a slug missing HERE (but present client-side) is a
+     silent outage for the exact users the proxy exists for — anyone whose
+     network cannot reach the aggregator directly. Their client would retry
+     through this proxy, get CHAIN_UNSUPPORTED, and the swap screen would
+     answer "no route" for a perfectly routable pair.
+     NOTE 2026-09-11: Kyber's GATEWAY answers HTTP 404 for the `mantle`,
+     `scroll` and `zksync` slugs, so the client no longer routes those chains
+     through Kyber at all (KYBER_LIVE in lib/aggregator.js gates them; they
+     swap via OpenOcean). The entries stay so this map remains a true mirror
+     of the client's NETWORK_SLUG — a forwarded request to a dead slug simply
+     relays the upstream 404 as a 502, which is the honest answer. */
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
-  /* Scroll + zkSync Era — the client map (lib/aggregator.js) already carries
-     these; a proxy without them is a silent outage for proxied users. */
   534352: 'scroll',
   324: 'zksync'
 };
@@ -87,7 +91,10 @@ const OO_SLUG = {
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
-  /* Scroll + zkSync Era — same lockstep rule as above. */
+  /* Scroll + zkSync Era — same lockstep rule as above. Since 2026-09-11 these
+     two (plus Mantle) are OpenOcean-only chains client-side, so this proxy
+     path is their reachability fallback of LAST resort — the one standing
+     between a geo-blocked user and «مسیری بین این دو توکن وجود ندارد». */
   534352: 'scroll',
   324: 'zksync'
 };

@@ -35,7 +35,7 @@ import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { SPECULATION_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
-import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
+import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
 import { captureReferral, referredBy } from './lib/referral';
@@ -562,6 +562,11 @@ export default function App() {
     if (locked || showSplash || showWelcome || showOnb || showGuide) return;
     const id = setTimeout(() => {
       autoRegisterNativePush().catch(() => {});
+      /* The web twin of the line above: native devices re-register their FCM
+         token here; browsers silently heal a lost push subscription for
+         users who already opted in. Neither can prompt — both are no-ops
+         unless the device opted in before. */
+      refreshWebPushIfOptedIn().catch(() => {});
     }, 900);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps

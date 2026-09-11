@@ -211,7 +211,14 @@ export const EVM_CHAINS = {
     native: { symbol: 'MNT', decimals: 18, coingeckoId: 'mantle' },
     rpc: ['https://rpc.mantle.xyz', 'https://mantle-rpc.publicnode.com'],
     explorer: 'https://explorer.mantle.xyz',
-    dexName: 'KyberSwap',
+    /* Canonical WMNT — verified against Mantle's own live top pools on
+       2026-09-11 (USDT0/WMNT is the network's deepest market). */
+    wrapped: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8',
+    /* Kyber's aggregator gateway answers HTTP 404 for the `mantle` slug
+       (live-probed 2026-09-11; their supported-networks page lists Mantle
+       WITHOUT the aggregator check), so OpenOcean — whose v4 API serves
+       mantle-mainnet — is the routing source and the honest dexName. */
+    dexName: 'OpenOcean',
     color: '#f0b90b' /* placeholder brand tone — cosmetic only */
   },
   80094: {
@@ -261,8 +268,13 @@ export const EVM_CHAINS = {
     explorer: 'https://scrollscan.com',
     // Genesis WETH contract on Scroll (scrollscan-verified).
     wrapped: '0x5300000000000000000000000000000000000004',
-    // KyberSwap supplies the route; no unverified direct router fallback.
-    dexName: 'KyberSwap',
+    /* ROUTING, corrected 2026-09-11 after «مسیری بین این دو توکن وجود
+       ندارد» on this chain: Kyber's aggregator gateway answers HTTP 404 for
+       the `scroll` slug (live-probed; their supported-networks page lists
+       Scroll WITHOUT the aggregator check). OpenOcean's v4 API serves
+       scroll-mainnet with protocol fees included, so it — not KyberSwap —
+       supplies the route, and swap.js promotes it to primary here. */
+    dexName: 'OpenOcean',
     color: '#f1c27d'
   },
   324: {
@@ -274,7 +286,9 @@ export const EVM_CHAINS = {
     rpc: ['https://mainnet.era.zksync.io', 'https://zksync.drpc.org'],
     explorer: 'https://era.zksync.network',
     wrapped: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',
-    dexName: 'KyberSwap',
+    /* Same correction as Scroll: Kyber's gateway 404s on the `zksync` slug,
+       OpenOcean serves zksync-mainnet — it is the routing source here. */
+    dexName: 'OpenOcean',
     color: '#8c8dfc'
   }
 };
@@ -475,26 +489,55 @@ export const TOKENS = {
     { symbol: 'wS', name: 'Wrapped Sonic', address: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', decimals: 18, coingeckoId: 'sonic-3' }
   ],
   /*
-   * Curated defaults for the four chains added in EVM_CHAINS above are kept
-   * deliberately small (native coin + wrapped native where a canonical
-   * address is confirmed). The full per-chain token universe — USDC, USDT,
-   * and the long tail — is supplied at runtime by the CoinGecko token lists
-   * declared in lib/tokenLists.js, so no unverified ERC-20 contract address
-   * is committed into this file. See docs/NETWORKS-ADD-FA.md.
+   * Curated defaults for the 2026-09 chains. «دو شبکه جدید یا توکن ندارد یا
+   * سواپ نمی‌شود» — Mantle and Monad shipped with the native coin ALONE, and
+   * Berachain/Unichain with native + wrapped: on a first visit (or whenever
+   * the CoinGecko CDN is blocked — common on Iranian mobile networks) the
+   * picker had ONE token, every default pair was degenerate, and the fee
+   * check answered «مسیری بین این دو توکن وجود ندارد». The full per-chain
+   * universe still arrives at runtime from lib/tokenLists.js; these pinned
+   * entries guarantee an immediately swappable pair offline.
+   *
+   * Every address below was cross-checked against a LIVE source on
+   * 2026-09-11 (GeckoTerminal's per-network pool registry and CoinGecko's
+   * own `platforms` map, which publish the contract each venue actually
+   * trades) — not copied from a stale list:
+   *   Mantle    WMNT/USDT/WETH — the deepest live pools on the network
+   *             (USDT0/WMNT, WMNT/USDT, USDT0/WETH); USDC.e is the official
+   *             Mantle-bridge deployment quoted by scripts/verify-fees.mjs.
+   *   Berachain WETH/USDC.e/HONEY/WBTC — Kodiak's live top pools
+   *             (USDC.e/WETH, USD₮0/WBTC, WBERA/HONEY, USDC.e/HONEY).
+   *   Unichain  USDC — Circle's native deployment, confirmed via CoinGecko's
+   *             usd-coin platform map.
+   *   Monad     WMON/USDC/WETH — Uniswap-v4 + PancakeSwap-v3 live pools
+   *             (MON/USDC, USDC/WMON, USDC/WETH); USDC confirmed twice
+   *             (CoinGecko platform map AND the live pool registry).
    */
   5000: [
-    { symbol: 'MNT', name: 'Mantle', address: null, decimals: 18, native: true, coingeckoId: 'mantle' }
+    { symbol: 'MNT', name: 'Mantle', address: null, decimals: 18, native: true, coingeckoId: 'mantle' },
+    { symbol: 'WMNT', name: 'Wrapped Mantle', address: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8', decimals: 18, coingeckoId: 'mantle' },
+    { symbol: 'USDT', name: 'Tether USD', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6, coingeckoId: 'tether' },
+    { symbol: 'USDC', name: 'USD Coin (bridged)', address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xDeaDdeaDDeAdDeAdDEAdDEADdeadDeAD1111', decimals: 18, coingeckoId: 'ethereum' }
   ],
   80094: [
     { symbol: 'BERA', name: 'Berachain', address: null, decimals: 18, native: true, coingeckoId: 'berachain' },
-    { symbol: 'WBERA', name: 'Wrapped BERA', address: '0x6969696969696969696969696969696969696969', decimals: 18, coingeckoId: 'berachain' }
+    { symbol: 'WBERA', name: 'Wrapped BERA', address: '0x6969696969696969696969696969696969696969', decimals: 18, coingeckoId: 'berachain' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x2F6F07CDcf3588944Bf4C42aC74ff24bF56e7590', decimals: 18, coingeckoId: 'ethereum' },
+    { symbol: 'USDC', name: 'USD Coin (bridged)', address: '0x549943e04f40284185054145c6E4e9568C1D3241', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'HONEY', name: 'Honey', address: '0xfcbd14dc51f0a4d49d5e53c2e0950e0bc26d0dce', decimals: 18, coingeckoId: 'honey' },
+    { symbol: 'WBTC', name: 'Wrapped Bitcoin', address: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c', decimals: 8, coingeckoId: 'bitcoin' }
   ],
   130: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
-    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x4200000000000000000000000000000000000006', decimals: 18, coingeckoId: 'ethereum' }
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x4200000000000000000000000000000000000006', decimals: 18, coingeckoId: 'ethereum' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x078D782b760474a361dDA0AF3839290b0EF57AD6', decimals: 6, coingeckoId: 'usd-coin' }
   ],
   143: [
-    { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' }
+    { symbol: 'MON', name: 'Monad', address: null, decimals: 18, native: true, coingeckoId: 'monad' },
+    { symbol: 'WMON', name: 'Wrapped MON', address: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A', decimals: 18, coingeckoId: 'monad' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x754704Bc059F8c67012feD69BC8a327a5aafb603', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xEe8C0E9f1bFfB4Eb878d8f15f368a02A35481242', decimals: 18, coingeckoId: 'ethereum' }
   ],
   /* Scroll + zkSync Era — native/wrapped ETH plus the canonical stablecoins
      needed for an immediately usable swap pair. These addresses are pinned

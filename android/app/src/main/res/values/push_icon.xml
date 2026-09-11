@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Drawable alias for the push small icon.
+
+  @capacitor/push-notifications builds its shade notification with the
+  drawable named in the plugin config `smallIcon`, and when that key is
+  absent it looks up its OWN built-in default resource name,
+  `ic_stat_icon_config_name`. Rather than ship a second copy of the artwork
+  under a machine's name, that name is aliased here to the real vector, so
+  every lookup path — manifest meta-data, FCM payload icon, plugin config,
+  plugin default — resolves to the same monochrome mark.
+-->
+<resources>
+    <item name="ic_stat_icon_config_name" type="drawable">@drawable/ic_stat_notification</item>
+</resources>
