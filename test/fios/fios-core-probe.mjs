@@ -121,7 +121,7 @@ process.env.AUTONOMOUS_POLICY_ENABLED = 'false';
 t('§51 a disabled feature refuses with FEATURE_DISABLED instead of faking success', requireFlag('AUTONOMOUS_POLICY_ENABLED').code === 'FEATURE_DISABLED');
 t('§51 a flag flips at runtime without a redeploy', (() => { process.env.AUTONOMOUS_POLICY_ENABLED = 'true'; const on = fiFlag('AUTONOMOUS_POLICY_ENABLED') === true; process.env.AUTONOMOUS_POLICY_ENABLED = ''; return on; })());
 t('§51 the master switch can still turn the deep layer off', (() => { process.env.INTENT_AI_FLAGS_OFF = '1'; const off = fiFlag('MACRO_GRAPH_ENABLED') === false; process.env.INTENT_AI_FLAGS_OFF = ''; return off; })());
-t('§51 flags snapshot covers every engine', Object.keys(fiFlags()).length === FI_FLAG_NAMES.length && Object.keys(fiFlags()).length === 21);
+t('§51 flags snapshot covers every engine', Object.keys(fiFlags()).length === FI_FLAG_NAMES.length && Object.keys(fiFlags()).length === 24);
 
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* §34 observability                                                         */

@@ -73,16 +73,22 @@ export function listAdapters() {
 export const PROTOCOL_ALLOWLIST = Object.freeze([
   { id: 'aave-v3', enabled: true, note: 'Aave V3 — wired end-to-end (src/lib/lending.js)' },
   /*
-   * Deliberately still false. Compound III DOES now have a supply/withdraw
-   * adapter — src/lib/defi/compoundV3Base.js, Base/USDC, behind its own flag —
-   * but that is the Farm money path, not this engine. THIS registry gates the
-   * lending engine's borrow/repay/health-factor surface, and no Comet adapter
-   * for that exists. Flipping this to true because "Compound is integrated
-   * now" would let the engine dial a protocol it has no code to drive.
+   * Phase 216: the pending state ended — every id the engine can name has
+   * code to drive it. Compound III: supply/withdraw were already real
+   * (src/lib/defi/compoundV3Base.js, Base/USDC); borrow/repay are now built
+   * in the SAME file with the same gates (deployment verification, the
+   * collateral gate, the native gas floor, unsigned steps only).
    */
-  { id: 'compound-v3', enabled: false, note: 'Borrow adapter pending — supply/withdraw lives in src/lib/defi/compoundV3Base.js' },
-  { id: 'morpho', enabled: false, note: 'Adapter pending' },
-  { id: 'solana-lending', enabled: false, note: 'Adapter pending' }
+  { id: 'compound-v3', enabled: true, note: 'Comet Base/USDC — supply/withdraw via src/lib/defi/compoundV3Base.js, borrow/repay/health via src/lib/defi/compoundV3Lending.js' },
+  { id: 'morpho', enabled: true, note: 'Morpho Blue Base USDC/cbBTC — supply/withdraw/borrow/repay via src/lib/defi/morphoBlueBase.js' },
+  /*
+   * Phase 216: real, enabled adapter with an HONEST boundary — the pool
+   * registry. No audited Solana lending program is registered in this
+   * deployment, so every quote/build refuses with NO_POOL_REGISTERED instead
+   * of dialing an unverified program. Registering a pool (program id + vault
+   * + mint, with a source) is a deployment decision, not an adapter one.
+   */
+  { id: 'solana-lending', enabled: true, note: 'Solana lending — pool-registry adapter; refuses with NO_POOL_REGISTERED until a pool is registered' }
 ]);
 
 /**
@@ -313,11 +319,618 @@ class AaveLendingAdapter extends LendingProtocolAdapter {
   }
 }
 
-/* Register the wired adapter; pending ones are listed but disabled. */
+/* ─────────────────────────── Compound III adapter ────────────────────────── */
+
+/**
+ * CompoundV3LendingAdapter — the Comet market on Base (8453), USDC base
+ * asset. Every read and write delegates to the defi modules — supply/withdraw
+ * and the market/position reads to src/lib/defi/compoundV3Base.js (the SAME
+ * module the Farm money path uses, with its deployment verification and its
+ * unsigned-step discipline), borrow/repay/health-factor to the sibling
+ * src/lib/defi/compoundV3Lending.js (which imports the base's verification
+ * and contract handles). Nothing is re-implemented here; a second Comet
+ * implementation is a second bug surface.
+ */
+export function createCompoundV3Adapter({ } = {}) {
+  return new CompoundV3LendingAdapter();
+}
+
+/* The plan builders that live in the lending sibling module (the Farm module
+   stays supply/withdraw-only by design — a wiring pin reads its ABIs). */
+const COMPOUND_LENDING_METHODS = new Set(['buildBorrowPlan', 'buildRepayPlan']);
+
+class CompoundV3LendingAdapter extends LendingProtocolAdapter {
+  constructor() {
+    super({ id: 'compound-v3', name: 'Compound III (Comet)', chainIds: [8453], enabled: true });
+  }
+
+  /* The base module is Vite-shaped (extensionless imports inside it), so in
+     a plain-node runtime the dynamic import can fail. The adapter must be
+     TOTAL — every path answers with a value or an error code, never a crash,
+     never a success: a runtime without the module says so with a code. */
+  async _base() {
+    try { return await import('../defi/compoundV3Base.js'); }
+    catch (err) {
+      return { __unavailable: true, ok: false, code: 'ADAPTER_MODULE_UNAVAILABLE', detail: `on-chain module not loadable in this runtime: ${String(err?.message || err).slice(0, 120)}` };
+    }
+  }
+
+  /* The borrow/repay/health-factor surface lives in the lending sibling —
+     the Farm module stays supply/withdraw-only by design (wiring pin). */
+  async _compoundLending() {
+    try { return await import('../defi/compoundV3Lending.js'); }
+    catch (err) {
+      return { __unavailable: true, ok: false, code: 'ADAPTER_MODULE_UNAVAILABLE', detail: `on-chain module not loadable in this runtime: ${String(err?.message || err).slice(0, 120)}` };
+    }
+  }
+
+  _noProvider() { return { ok: false, code: 'PROVIDER_REQUIRED', detail: 'an on-chain read needs a provider; nothing was estimated' }; }
+
+  async _guarded(fn) {
+    try { return { __ok: true, __value: await fn() }; }
+    catch (err) {
+      /* A failure is a CODE, never a success: the typed CompoundAdapterError
+         codes (COMPOUND_MARKET_UNREADABLE, COMPOUND_WRONG_CHAIN, …) surface
+         as-is; anything else is ADAPTER_ERROR with the message sanitized. */
+      const code = String(err?.code || 'ADAPTER_ERROR').slice(0, 64);
+      return { __ok: false, __error: { code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
+    }
+  }
+
+  async getMarkets({ provider, chainId = 8453, assets } = {}) {
+    if (!provider) return this._noProvider();
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getMarketStatus(provider));
+    if (!out.__ok) return out.__error;
+    const s = out.__value;
+    return {
+      ok: true, protocol: this.id, chainId,
+      reserves: [{
+        id: 'USDC', symbol: 'USDC', listed: true,
+        supplyApyPct: s.supplyApyPct, borrowApyPct: null,
+        supplyPaused: s.supplyPaused, withdrawPaused: s.withdrawPaused,
+        utilizationPct: s.utilizationPct,
+        totalSupplyUsdc: s.totalSupplyUsdc, totalBorrowUsdc: s.totalBorrowUsdc,
+        hasSupplyCap: s.hasSupplyCap, supplyCapUsdc: s.supplyCapUsdc,
+        readAt: s.readAt
+      }]
+    };
+  }
+
+  async getMarket({ provider, chainId = 8453, asset } = {}) {
+    if (!provider) return this._noProvider();
+    if (String(asset || 'USDC').toUpperCase() !== 'USDC') {
+      return { ok: false, code: 'ASSET_NOT_SUPPORTED', detail: `this market is USDC-only (Base); ${asset} has no Comet market in this deployment` };
+    }
+    const out = await this.getMarkets({ provider, chainId });
+    return out.ok ? { ok: true, protocol: this.id, chainId, asset: 'USDC', reserve: out.reserves[0] } : out;
+  }
+
+  async getUserPosition({ provider, chainId = 8453, wallet, asset, reserve = null } = {}) {
+    if (!provider) return this._noProvider();
+    if (!wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a position is per-wallet; name the wallet' };
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getPosition(provider, wallet));
+    if (!out.__ok) return out.__error;
+    const p = out.__value;
+    return {
+      ok: true, protocol: this.id, chainId, asset: 'USDC',
+      position: {
+        suppliedUsdc: base.fromUsdcWei(p.suppliedUsdc),
+        suppliedUsd: p.suppliedUsd,
+        borrowedUsdc: p.borrowedUsdc == null ? null : base.fromUsdcWei(p.borrowedUsdc),
+        hasBorrow: p.hasBorrow,
+        rewardsOwedUsdc: p.rewardsOwed == null ? null : base.fromUsdcWei(p.rewardsOwed),
+        readAt: p.readAt
+      }
+    };
+  }
+
+  async getUserPositions({ provider, chainId = 8453, wallet, assets } = {}) {
+    const one = await this.getUserPosition({ provider, chainId, wallet, asset: 'USDC' });
+    return one.ok
+      ? { ok: true, protocol: this.id, chainId, positions: { USDC: one.position } }
+      : { ok: false, code: one.code, detail: one.detail };
+  }
+
+  async _plan(method, args) {
+    if (!args.provider) return this._noProvider();
+    if (!args.wallet && args.owner === undefined) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a plan needs the acting wallet' };
+    /* borrow/repay/health-factor live in the lending sibling; supply/withdraw
+       in the Farm module. One plan, one owner, one ABI surface. */
+    const mod = COMPOUND_LENDING_METHODS.has(method) ? await this._compoundLending() : await this._base();
+    if (mod.__unavailable) return mod;
+    /* The base plans gate on a REAL native balance (Comet reverts a borrow
+       that cannot pay gas) — read it here rather than assuming. */
+    let nativeBalance = null;
+    if (typeof args.provider.getBalance === 'function') {
+      try { nativeBalance = await args.provider.getBalance(args.wallet ?? args.owner); } catch { nativeBalance = null; }
+    }
+    const out = await this._guarded(() => mod[method]({ ...args, owner: args.wallet ?? args.owner, nativeBalance }));
+    if (!out.__ok) return out.__error;
+    const plan = out.__value;
+    if (!plan.steps.length) {
+      return { ok: false, code: plan.checks.blocked[0] || 'PLAN_REFUSED', detail: `refused: ${plan.checks.blocked.join(', ')}`, checks: plan.checks };
+    }
+    return { ok: true, plan, checks: plan.checks };
+  }
+
+  async getSupplyQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildSupplyPlan', { provider, wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      reserve: { listed: true, supplyApyPct: null },
+      balanceWei: c.balanceUsdc != null ? String(c.balanceUsdc) : null,
+      sufficientBalance: c.balanceSufficient,
+      needsApproval: c.needsApproval,
+      blocked: c.blocked
+    };
+  }
+
+  async getBorrowQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildBorrowPlan', { provider, wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      hasCollateral: c.hasCollateral,
+      existingBorrowUsdcWei: c.existingBorrowUsdcWei != null ? String(c.existingBorrowUsdcWei) : null,
+      withinBorrowLimit: c.hasCollateral !== false && c.blocked.length === 0,
+      blocked: c.blocked
+    };
+  }
+
+  async getRepayQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildRepayPlan', { provider, wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      debtWei: c.debtUsdcWei != null ? String(c.debtUsdcWei) : null,
+      exceedsDebt: c.withinDebt === false,
+      blocked: c.blocked
+    };
+  }
+
+  async getWithdrawQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildWithdrawPlan', { provider, wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: c.isMax ? 'max' : String(c.amountWei),
+      suppliedWei: c.positionUsdcWei != null ? String(c.positionUsdcWei) : null,
+      exceedsSupplied: c.withinPosition === false,
+      blocked: c.blocked
+    };
+  }
+
+  _unsigned(plan) {
+    const step = plan.steps[plan.steps.length - 1];
+    return {
+      ok: true, protocol: this.id, chainId: 8453,
+      to: String(step.to), data: String(step.data), value: '0',
+      steps: plan.steps.map((s) => ({ kind: s.kind, to: String(s.to), data: String(s.data), value: '0' })),
+      signed: false,
+      capabilities: { sign: 'wallet-only', broadcast: 'wallet-only' }
+    };
+  }
+
+  /* 6-dp USDC → plain decimal string (exact, no float). */
+  _weiToUsdc(wei) {
+    const s = String(wei ?? '0');
+    const n = s.length;
+    if (n <= 6) return `0.${s.padStart(6, '0')}`;
+    return `${s.slice(0, n - 6)}.${s.slice(n - 6)}`;
+  }
+
+  async buildSupplyTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildSupplyPlan', { provider, wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildBorrowTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildBorrowPlan', { provider, wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildRepayTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildRepayPlan', { provider, wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildWithdrawTransaction({ chainId = 8453, asset, amountWei, to, provider, wallet }) {
+    const max = String(amountWei || '').toLowerCase() === 'max' || String(amountWei) === ((1n << 256n) - 1n).toString();
+    const out = await this._plan('buildWithdrawPlan', { provider, wallet, amountUsdc: max ? 'max' : this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async getHealthFactor({ provider, chainId = 8453, wallet } = {}) {
+    if (!provider) return this._noProvider();
+    if (!wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a health factor is per-wallet; name the wallet' };
+    const lending = await this._compoundLending();
+    if (lending.__unavailable) return lending;
+    const out = await this._guarded(() => lending.getHealthFactor(provider, wallet));
+    if (!out.__ok) return { ok: false, code: out.__error.code, healthFactor: null };
+    const hf = out.__value;
+    return { ok: hf != null, healthFactor: hf == null ? null : Number(hf) / 1e18 };
+  }
+
+  async getRewards({ provider, chainId = 8453, wallet } = {}) {
+    if (!provider) return this._noProvider();
+    if (!wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'rewards are per-wallet; name the wallet' };
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getRewardsOwed(provider, wallet));
+    if (!out.__ok) return { ok: false, code: 'NOT_INDEXED', rewards: [] };
+    const r = out.__value;
+    return r
+      ? { ok: true, rewards: [{ token: r.token, owedUsdc: base.fromUsdcWei(r.owed) }] }
+      : { ok: true, rewards: [], note: 'no COMP owed readable — reported as none, not a fabricated zero' };
+  }
+}
+
+/* ─────────────────────────── Morpho Blue adapter ─────────────────────────── */
+
+/**
+ * MorphoLendingAdapter — the pinned Morpho Blue market on Base (8453):
+ * USDC loan / cbBTC collateral. Same delegation rule as Compound: the calldata
+ * and checks live in src/lib/defi/morphoBlueBase.js, where the market
+ * parameters are pinned and verified on-chain before every plan.
+ */
+export function createMorphoAdapter({ } = {}) {
+  return new MorphoLendingAdapter();
+}
+
+class MorphoLendingAdapter extends LendingProtocolAdapter {
+  constructor() {
+    super({ id: 'morpho', name: 'Morpho Blue', chainIds: [8453], enabled: true });
+  }
+
+  /* Same totality rule as the Compound adapter — see there. */
+  async _base() {
+    try { return await import('../defi/morphoBlueBase.js'); }
+    catch (err) {
+      return { __unavailable: true, ok: false, code: 'ADAPTER_MODULE_UNAVAILABLE', detail: `on-chain module not loadable in this runtime: ${String(err?.message || err).slice(0, 120)}` };
+    }
+  }
+
+  _noProvider() { return { ok: false, code: 'PROVIDER_REQUIRED', detail: 'an on-chain read needs a provider; nothing was estimated' }; }
+
+  async _guarded(fn) {
+    try { return { __ok: true, __value: await fn() }; }
+    catch (err) {
+      const code = String(err?.code || 'ADAPTER_ERROR').slice(0, 64);
+      return { __ok: false, __error: { code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
+    }
+  }
+
+  async getMarkets({ provider, chainId = 8453 } = {}) {
+    if (!provider) {
+      /* The pinned market is a FACT of this deployment — report it as
+         registered, with the live state null. A fake state would be a lie.
+         (Also keeps this path working in runtimes that cannot load the
+         Vite-shaped on-chain module.) */
+      return {
+        ok: true, protocol: this.id, chainId,
+        reserves: [{ id: 'USDC', symbol: 'USDC', listed: true, supplyApyPct: null, live: false, note: 'no provider — registered market, live state unread' }],
+        live: false
+      };
+    }
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getMarketState(provider));
+    if (!out.__ok) return out.__error;
+    const s = out.__value;
+    return {
+      ok: true, protocol: this.id, chainId, live: true,
+      reserves: [{
+        id: 'USDC', symbol: 'USDC', listed: true,
+        supplyApyPct: null, /* Morpho has no per-second base rate — a supply APY needs the IRM's curve; unread here, never invented */
+        borrowApyPct: null,
+        totalSupplyUsdc: base.fromUsdcWei(s.totalSupplyAssets),
+        totalBorrowUsdc: base.fromUsdcWei(s.totalBorrowAssets),
+        marketId: base.MORPHO_BLUE_BASE.marketId,
+        lastUpdate: s.lastUpdate,
+        readAt: s.readAt
+      }]
+    };
+  }
+
+  async getMarket({ provider, chainId = 8453, asset } = {}) {
+    if (String(asset || 'USDC').toUpperCase() !== 'USDC') {
+      return { ok: false, code: 'ASSET_NOT_SUPPORTED', detail: `this market loans USDC only (Base); ${asset} is not its loan token` };
+    }
+    const out = await this.getMarkets({ provider, chainId });
+    return out.ok ? { ok: true, protocol: this.id, chainId, asset: 'USDC', reserve: out.reserves[0] } : out;
+  }
+
+  async getUserPosition({ provider, chainId = 8453, wallet } = {}) {
+    if (!provider) return this._noProvider();
+    if (!wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a position is per-wallet; name the wallet' };
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getPosition(provider, wallet));
+    if (!out.__ok) return out.__error;
+    const p = out.__value;
+    return {
+      ok: true, protocol: this.id, chainId, asset: 'USDC',
+      position: {
+        suppliedUsdc: base.fromUsdcWei(p.suppliedUsdc),
+        borrowShares: p.borrowShares,
+        collateralCbBtc: p.collateralCbBtc,
+        hasBorrow: p.hasBorrow,
+        readAt: p.readAt
+      }
+    };
+  }
+
+  async getUserPositions({ provider, chainId = 8453, wallet, assets } = {}) {
+    const one = await this.getUserPosition({ provider, chainId, wallet });
+    return one.ok
+      ? { ok: true, protocol: this.id, chainId, positions: { USDC: one.position } }
+      : { ok: false, code: one.code, detail: one.detail };
+  }
+
+  async _plan(method, args) {
+    if (!args.provider) return this._noProvider();
+    if (!args.wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a plan needs the acting wallet' };
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    /* Same native-balance discipline as the Compound adapter. */
+    let nativeBalance = null;
+    if (typeof args.provider.getBalance === 'function') {
+      try { nativeBalance = await args.provider.getBalance(args.wallet); } catch { nativeBalance = null; }
+    }
+    const out = await this._guarded(() => base[method]({ ...args, nativeBalance }));
+    if (!out.__ok) return out.__error;
+    const plan = out.__value;
+    if (!plan.steps.length) {
+      return { ok: false, code: plan.checks.blocked[0] || 'PLAN_REFUSED', detail: `refused: ${plan.checks.blocked.join(', ')}`, checks: plan.checks };
+    }
+    return { ok: true, plan, checks: plan.checks };
+  }
+
+  async getSupplyQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildSupplyPlan', { provider, owner: wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      reserve: { listed: true, supplyApyPct: null },
+      balanceWei: null,
+      sufficientBalance: c.balanceSufficient,
+      needsApproval: c.needsApproval,
+      blocked: c.blocked
+    };
+  }
+
+  async getBorrowQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildBorrowPlan', { provider, owner: wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      hasCollateral: c.hasCollateral,
+      withinBorrowLimit: c.hasCollateral !== false && c.blocked.length === 0,
+      blocked: c.blocked
+    };
+  }
+
+  async getRepayQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildRepayPlan', { provider, owner: wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: String(c.amountWei),
+      debtWei: c.debtUsdcWei != null ? String(c.debtUsdcWei) : null,
+      exceedsDebt: c.withinDebt === false,
+      blocked: c.blocked
+    };
+  }
+
+  async getWithdrawQuote({ provider, chainId = 8453, wallet, asset, amount } = {}) {
+    const out = await this._plan('buildWithdrawPlan', { provider, owner: wallet, amountUsdc: amount });
+    if (!out.ok) return out;
+    const c = out.checks;
+    return {
+      ok: true, amountWei: c.isMax ? 'max' : String(c.amountWei),
+      suppliedWei: c.positionUsdcWei != null ? String(c.positionUsdcWei) : null,
+      exceedsSupplied: c.withinPosition === false,
+      blocked: c.blocked
+    };
+  }
+
+  _unsigned(plan) {
+    const step = plan.steps[plan.steps.length - 1];
+    return {
+      ok: true, protocol: this.id, chainId: 8453,
+      to: String(step.to), data: String(step.data), value: '0',
+      steps: plan.steps.map((s) => ({ kind: s.kind, to: String(s.to), data: String(s.data), value: '0' })),
+      signed: false,
+      capabilities: { sign: 'wallet-only', broadcast: 'wallet-only' }
+    };
+  }
+
+  _weiToUsdc(wei) {
+    const s = String(wei ?? '0');
+    const n = s.length;
+    if (n <= 6) return `0.${s.padStart(6, '0')}`;
+    return `${s.slice(0, n - 6)}.${s.slice(n - 6)}`;
+  }
+
+  async buildSupplyTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildSupplyPlan', { provider, owner: wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildBorrowTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildBorrowPlan', { provider, owner: wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildRepayTransaction({ chainId = 8453, asset, amountWei, onBehalfOf, provider, wallet }) {
+    const out = await this._plan('buildRepayPlan', { provider, owner: wallet, amountUsdc: this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async buildWithdrawTransaction({ chainId = 8453, asset, amountWei, to, provider, wallet }) {
+    const max = String(amountWei || '').toLowerCase() === 'max';
+    const out = await this._plan('buildWithdrawPlan', { provider, owner: wallet, amountUsdc: max ? 'max' : this._weiToUsdc(amountWei) });
+    return out.ok ? this._unsigned(out.plan) : out;
+  }
+
+  async getHealthFactor({ provider, chainId = 8453, wallet } = {}) {
+    if (!provider) return this._noProvider();
+    if (!wallet) return { ok: false, code: 'WALLET_REQUIRED', detail: 'a health factor is per-wallet; name the wallet' };
+    const base = await this._base();
+    if (base.__unavailable) return base;
+    const out = await this._guarded(() => base.getHealthFactor(provider, wallet));
+    if (!out.__ok) return { ok: false, code: out.__error.code, healthFactor: null };
+    const res = out.__value || {};
+    const hf = res.healthFactor == null ? null : Number(res.healthFactor);
+    return {
+      ok: hf != null, healthFactor: hf,
+      reason: hf == null ? (res.reason || 'unreadable — no number is better than a guess') : undefined
+    };
+  }
+
+  async getRewards() {
+    return { ok: false, reason: 'NOT_INDEXED', rewards: [] };
+  }
+}
+
+/* ─────────────────────────── Solana lending adapter ──────────────────────── */
+
+/**
+ * SolanaLendingAdapter — the SOLANA leg of the lending engine.
+ *
+ * The honest boundary of this deployment: the repo integrates NO audited
+ * Solana lending program yet, and dialing a program address without a
+ * registered, source-pinned pool would be exactly the failure the §31
+ * allowlist exists to prevent. So the adapter is REAL in the parts that can
+ * be real now — the interface, the registry, the network config, the failure
+ * modes — and REFUSES in the parts that would need an unverified program:
+ *
+ *   getMarkets            the registered pools (zero until a deployment
+ *                         registers one) — a truthful registry read, ok:true
+ *   every quote / build   NO_POOL_REGISTERED when the registry is empty;
+ *                         CLIENT_REQUIRED when a pool IS registered but this
+ *                         deployment has not wired its read client yet.
+ *                         Always a code, never a success, never a
+ *                         fabricated quote.
+ *
+ * `registerSolanaLendingPool` is the seam: a deployment that has audited a
+ * program registers it (program id + vault + mint + source) and points its
+ * read client at that pool through the same interface.
+ */
+
+const SOLANA_LENDING_POOLS = new Map();
+
+export function registerSolanaLendingPool({ id, programId, mint, vault, name = id, source = null, chainId = 900001 } = {}) {
+  if (!id || !programId || !mint) throw new Error('registerSolanaLendingPool: id, programId and mint are required');
+  if (!source) throw new Error('registerSolanaLendingPool: a source is required — a pool without provenance is not allowed into the engine');
+  SOLANA_LENDING_POOLS.set(String(id), {
+    id: String(id), name: String(name), programId: String(programId),
+    mint: String(mint), vault: vault ? String(vault) : null,
+    source: String(source).slice(0, 200), chainId: Number(chainId) || 900001
+  });
+  return id;
+}
+
+export function unregisterSolanaLendingPool(id) {
+  return SOLANA_LENDING_POOLS.delete(String(id));
+}
+
+export function listSolanaLendingPools() {
+  return [...SOLANA_LENDING_POOLS.values()].map((p) => ({ ...p }));
+}
+
+export function createSolanaLendingAdapter({ } = {}) {
+  return new SolanaLendingAdapter();
+}
+
+class SolanaLendingAdapter extends LendingProtocolAdapter {
+  constructor() {
+    super({ id: 'solana-lending', name: 'Solana Lending', chainIds: [900001], enabled: true });
+  }
+
+  _noPool() {
+    if (SOLANA_LENDING_POOLS.size > 0) {
+      return {
+        ok: false,
+        code: 'CLIENT_REQUIRED',
+        detail: `${SOLANA_LENDING_POOLS.size} pool(s) registered, but no Solana read client is wired in this deployment — a quote needs a live feed, so it is refused, not estimated`
+      };
+    }
+    return {
+      ok: false,
+      code: 'NO_POOL_REGISTERED',
+      detail: 'no audited Solana lending pool is registered in this deployment; the adapter refuses rather than dial an unverified program'
+    };
+  }
+
+  async getMarkets({ chainId = 900001 } = {}) {
+    const pools = [...SOLANA_LENDING_POOLS.values()].filter((p) => p.chainId === Number(chainId));
+    return {
+      ok: true, protocol: this.id, chainId,
+      reserves: pools.map((p) => ({ id: p.id, symbol: p.mint, listed: true, source: p.source, programId: p.programId, vault: p.vault })),
+      note: pools.length ? 'registered pools, quoted on demand' : 'empty registry — a truthful read, not a failure'
+    };
+  }
+
+  async getMarket() { return this._noPool(); }
+  async getUserPosition() { return this._noPool(); }
+  async getUserPositions() { return this._noPool(); }
+  async getSupplyQuote() { return this._noPool(); }
+  async getBorrowQuote() { return this._noPool(); }
+  async getRepayQuote() { return this._noPool(); }
+  async getWithdrawQuote() { return this._noPool(); }
+  async buildSupplyTransaction() { return this._noPool(); }
+  async buildBorrowTransaction() { return this._noPool(); }
+  async buildRepayTransaction() { return this._noPool(); }
+  async buildWithdrawTransaction() { return this._noPool(); }
+  async getHealthFactor() { return this._noPool(); }
+  async getRewards() { return this._noPool(); }
+}
+
+/* ─────────────────────────── registrations ───────────────────────────────── */
+
 registerAdapter({
   id: 'aave-v3',
   name: 'Aave V3',
   chainIds: [1, 10, 56, 137, 42161, 43114, 8453],
   enabled: true,
   factory: ({ tokenLookup } = {}) => createAaveAdapter({ tokenLookup })
+});
+
+/* Phase 216 — the three pending adapters, now implemented and enabled.
+   Each factory takes the same shape as Aave's; the on-chain boundary is the
+   `provider` the caller injects (a fixture in tests, the wallet's read
+   provider in production). */
+registerAdapter({
+  id: 'compound-v3',
+  name: 'Compound III (Comet)',
+  chainIds: [8453],
+  enabled: true,
+  factory: () => createCompoundV3Adapter()
+});
+
+registerAdapter({
+  id: 'morpho',
+  name: 'Morpho Blue',
+  chainIds: [8453],
+  enabled: true,
+  factory: () => createMorphoAdapter()
+});
+
+registerAdapter({
+  id: 'solana-lending',
+  name: 'Solana Lending',
+  chainIds: [900001],
+  enabled: true,
+  factory: () => createSolanaLendingAdapter()
 });

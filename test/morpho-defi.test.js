@@ -4,9 +4,14 @@ import {
   MORPHO_ACTION_SELECTORS,
   MORPHO_BLUE_BASE,
   MorphoAdapterError,
+  buildBorrowPlan,
+  buildRepayPlan,
+  encodeBorrowCalldata,
+  encodeRepayCalldata,
   encodeSupplyCalldata,
   encodeWithdrawCalldata,
   fromUsdcWei,
+  getHealthFactor,
   isMorphoBlueBaseMarket,
   verifyDeployment,
   verifyMorphoReceipt
@@ -66,12 +71,18 @@ describe('Morpho Blue Base selected market', () => {
    */
   const MORPHO_BLUE_CANONICAL = new Interface([
     'function supply((address,address,address,address,uint256),uint256,uint256,address,bytes) returns (uint256,uint256)',
-    'function withdraw((address,address,address,address,uint256),uint256,uint256,address,address) returns (uint256,uint256)'
+    'function withdraw((address,address,address,address,uint256),uint256,uint256,address,address) returns (uint256,uint256)',
+    'function borrow((address,address,address,address,uint256),uint256,uint256,address,bytes) returns (uint256,uint256,uint256)',
+    'function repay((address,address,address,address,uint256),uint256,uint256,address,bytes) returns (uint256,uint256,uint256)'
   ]);
 
   it('asks for only the selectors Morpho Blue answers with on Base', () => {
     expect(MORPHO_ACTION_SELECTORS.supply).toBe(MORPHO_BLUE_CANONICAL.getFunction('supply').selector);
     expect(MORPHO_ACTION_SELECTORS.withdraw).toBe(MORPHO_BLUE_CANONICAL.getFunction('withdraw').selector);
+    /* Phase 216 — the borrow/repay selectors drift the same way: re-derived
+       from the published signatures. */
+    expect(MORPHO_ACTION_SELECTORS.borrow).toBe(MORPHO_BLUE_CANONICAL.getFunction('borrow').selector);
+    expect(MORPHO_ACTION_SELECTORS.repay).toBe(MORPHO_BLUE_CANONICAL.getFunction('repay').selector);
   });
 
   it('puts supply amounts before onBehalf and keeps the callback empty', async () => {
@@ -293,6 +304,190 @@ describe('Morpho Blue Base selected market', () => {
         owner: OWNER, action: 'supply', amountWei: GROSS,
         beforePositionWei: 0n, beforeSupplyShares: 0n, splitRouter
       })).rejects.toMatchObject({ code: 'SPLIT_ROUTER_PROOF_MISMATCH' });
+    });
+  });
+
+  /* ───────────────────────── Phase 216: borrow / repay / health factor ── */
+
+  const MORPHO_PHASE216_CANONICAL = new Interface([
+    'function borrow((address,address,address,address,uint256),uint256,uint256,address,bytes) returns (uint256,uint256)',
+    'function repay((address,address,address,address,uint256),uint256,uint256,address,bytes) returns (uint256,uint256)',
+    'function read(address token) view returns (uint256)'
+  ]);
+  const ERC20_PLAN_ABI = new Interface([
+    'function balanceOf(address owner) view returns (uint256)',
+    'function decimals() view returns (uint8)',
+    'function allowance(address owner, address spender) view returns (uint256)'
+  ]);
+
+  /** A full-market fake: deployment, market, position, loan token and oracle. */
+  function fakePlanProvider({
+    supplyShares = 0n,
+    borrowShares = 0n,
+    collateral = 0n,
+    totalSupplyAssets = 9_999_999n,
+    totalSupplyShares = 4n,
+    totalBorrowAssets = 0n,
+    totalBorrowShares = 0n,
+    usdcBalance = 0n,
+    usdcAllowance = 0n,
+    oraclePrice18 = null,
+    failOracle = false
+  } = {}) {
+    return {
+      getNetwork: async () => ({ chainId: 8453 }),
+      call: async ({ to, data }) => {
+        const selector = String(data).slice(0, 10);
+        const target = String(to).toLowerCase();
+        if (target === MORPHO_BLUE_BASE.morpho.toLowerCase()) {
+          if (selector === MORPHO_READ_ABI.getFunction('idToMarketParams').selector) {
+            return MORPHO_READ_ABI.encodeFunctionResult('idToMarketParams', [
+              MORPHO_BLUE_BASE.loanToken, MORPHO_BLUE_BASE.collateralToken,
+              MORPHO_BLUE_BASE.oracle, MORPHO_BLUE_BASE.irm, MORPHO_BLUE_BASE.lltv
+            ]);
+          }
+          if (selector === MORPHO_READ_ABI.getFunction('market').selector) {
+            return MORPHO_READ_ABI.encodeFunctionResult('market', [
+              totalSupplyAssets, totalSupplyShares, totalBorrowAssets, totalBorrowShares, 1n, 0n
+            ]);
+          }
+          if (selector === MORPHO_READ_ABI.getFunction('position').selector) {
+            return MORPHO_READ_ABI.encodeFunctionResult('position', [supplyShares, borrowShares, collateral]);
+          }
+        }
+        if (target === MORPHO_BLUE_BASE.loanToken.toLowerCase()) {
+          if (selector === ERC20_PLAN_ABI.getFunction('balanceOf').selector) return ERC20_PLAN_ABI.encodeFunctionResult('balanceOf', [usdcBalance]);
+          if (selector === ERC20_PLAN_ABI.getFunction('decimals').selector) return ERC20_PLAN_ABI.encodeFunctionResult('decimals', [6]);
+          if (selector === ERC20_PLAN_ABI.getFunction('allowance').selector) return ERC20_PLAN_ABI.encodeFunctionResult('allowance', [usdcAllowance]);
+        }
+        if (target === MORPHO_BLUE_BASE.oracle.toLowerCase() && selector === MORPHO_PHASE216_CANONICAL.getFunction('read').selector) {
+          if (failOracle || oraclePrice18 == null) throw new Error('execution reverted');
+          return MORPHO_PHASE216_CANONICAL.encodeFunctionResult('read', [oraclePrice18]);
+        }
+        throw new Error(`unexpected call ${target} ${selector}`);
+      }
+    };
+  }
+
+  describe('borrow plan (Phase 216)', () => {
+    it('encodes borrow(params, assets, 0, onBehalf, "0x") — no collateral transfer, empty callback', async () => {
+      const data = await encodeBorrowCalldata({ owner: OWNER, amountWei: 250_000_000n });
+      expect(data.slice(0, 10)).toBe(MORPHO_PHASE216_CANONICAL.getFunction('borrow').selector);
+      const args = MORPHO_PHASE216_CANONICAL.decodeFunctionData('borrow', data);
+      expect([...args[0]].map((v) => (typeof v === 'bigint' ? v : String(v).toLowerCase()))).toEqual([
+        MORPHO_BLUE_BASE.loanToken.toLowerCase(),
+        MORPHO_BLUE_BASE.collateralToken.toLowerCase(),
+        MORPHO_BLUE_BASE.oracle.toLowerCase(),
+        MORPHO_BLUE_BASE.irm.toLowerCase(),
+        MORPHO_BLUE_BASE.lltv
+      ]);
+      expect(args[1]).toBe(250_000_000n);
+      expect(args[2]).toBe(0n);
+      expect(String(args[3]).toLowerCase()).toBe(OWNER.toLowerCase());
+      expect(args[4]).toBe('0x');
+    });
+
+    it('REFUSES a borrow with zero collateral in the market — Morpho would revert it', async () => {
+      const { steps, checks } = await buildBorrowPlan({
+        provider: fakePlanProvider({}), owner: OWNER, amountUsdc: '250', nativeBalance: 10n ** 18n
+      });
+      expect(steps).toEqual([]);
+      expect(checks.hasCollateral).toBe(false);
+      expect(checks.blocked).toContain('MORPHO_NO_COLLATERAL');
+    });
+
+    it('builds a single borrow step when the market position holds collateral', async () => {
+      const { steps, checks } = await buildBorrowPlan({
+        provider: fakePlanProvider({ collateral: 100_000_000n }),
+        owner: OWNER, amountUsdc: '250', nativeBalance: 10n ** 18n
+      });
+      expect(checks.blocked).toEqual([]);
+      expect(checks.hasCollateral).toBe(true);
+      expect(steps.map((s) => s.kind)).toEqual(['borrow']);
+      expect(steps[0].to.toLowerCase()).toBe(MORPHO_BLUE_BASE.morpho.toLowerCase());
+      expect(steps[0].data.slice(0, 10)).toBe(MORPHO_ACTION_SELECTORS.borrow);
+      expect(steps[0].value).toBe(0n);
+    });
+  });
+
+  describe('repay plan (Phase 216)', () => {
+    /* A position with 100 USDC of debt: 10 of 100 borrow shares over
+       1,000 USDC total borrowed. */
+    const withDebt = (over = {}) => ({
+      borrowShares: 10n,
+      totalBorrowAssets: 1_000_000_000n,
+      totalBorrowShares: 100n,
+      usdcBalance: 500_000_000n,
+      usdcAllowance: 0n,
+      ...over
+    });
+
+    it('refuses a repay when the position has no debt — the debt is the share projection, not a guess', async () => {
+      const { steps, checks } = await buildRepayPlan({
+        provider: fakePlanProvider({}), owner: OWNER, amountUsdc: '10', nativeBalance: 10n ** 18n
+      });
+      expect(steps).toEqual([]);
+      expect(checks.debtUsdcWei).toBe(0n);
+      expect(checks.blocked).toContain('MORPHO_NO_DEBT_TO_REPAY');
+    });
+
+    it('refuses repaying more than the live (projected) debt', async () => {
+      const { steps, checks } = await buildRepayPlan({
+        provider: fakePlanProvider(withDebt()), owner: OWNER, amountUsdc: '150', nativeBalance: 10n ** 18n
+      });
+      expect(steps).toEqual([]);
+      expect(checks.debtUsdcWei).toBe(100_000_000n); /* 10/100 shares × 1,000 USDC */
+      expect(checks.withinDebt).toBe(false);
+      expect(checks.blocked).toContain('MORPHO_REPAY_EXCEEDS_DEBT');
+    });
+
+    it('prepends an EXACT approve when the allowance does not cover the repayment', async () => {
+      const { steps, checks } = await buildRepayPlan({
+        provider: fakePlanProvider(withDebt({ usdcAllowance: 0n })),
+        owner: OWNER, amountUsdc: '100', nativeBalance: 10n ** 18n
+      });
+      expect(checks.blocked).toEqual([]);
+      expect(checks.needsApproval).toBe(true);
+      expect(steps.map((s) => s.kind)).toEqual(['approve', 'repay']);
+      expect(steps[1].data.slice(0, 10)).toBe(MORPHO_ACTION_SELECTORS.repay);
+    });
+
+    it('skips the approve when the allowance already covers the repayment', async () => {
+      const { steps, checks } = await buildRepayPlan({
+        provider: fakePlanProvider(withDebt({ usdcAllowance: 100_000_000n })),
+        owner: OWNER, amountUsdc: '100', nativeBalance: 10n ** 18n
+      });
+      expect(checks.blocked).toEqual([]);
+      expect(checks.needsApproval).toBe(false);
+      expect(steps.map((s) => s.kind)).toEqual(['repay']);
+    });
+  });
+
+  describe('health factor (Phase 216)', () => {
+    /* 1 cbBTC collateral, $100,000 price, 100 USDC debt, LLTV 86% → HF 860. */
+    const healthy = {
+      borrowShares: 10n,
+      totalBorrowAssets: 1_000_000_000n,
+      totalBorrowShares: 100n,
+      collateral: 100_000_000n,
+      oraclePrice18: 100_000n * 10n ** 18n
+    };
+
+    it('computes HF = (collateralUSD × LLTV) / borrowUSD from live reads — 860 here', async () => {
+      const res = await getHealthFactor(fakePlanProvider(healthy), OWNER);
+      expect(res.healthFactor).toBeCloseTo(860, 6);
+    });
+
+    it('no debt → no factor: null with a reason, never a fabricated "infinite"', async () => {
+      const res = await getHealthFactor(fakePlanProvider({ ...healthy, borrowShares: 0n }), OWNER);
+      expect(res.healthFactor).toBeNull();
+      expect(String(res.reason)).not.toBe('');
+    });
+
+    it('an unreadable oracle leg → null, not a number', async () => {
+      const res = await getHealthFactor(fakePlanProvider({ ...healthy, failOracle: true }), OWNER);
+      expect(res.healthFactor).toBeNull();
+      expect(String(res.reason)).not.toBe('');
     });
   });
 });

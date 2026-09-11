@@ -35,7 +35,13 @@ export const COLLECTIONS = Object.freeze([
   /* Phase 212 — Deep Intelligence (additive). */
   'macro_graphs', 'why_records', 'personal_profiles', 'evaluations',
   'agent_councils', 'goal_scenarios', 'opportunity_fits', 'conversations',
-  'wallet_context', 'agent_runtime_audit', 'replan_attempts'
+  'wallet_context', 'agent_runtime_audit', 'replan_attempts',
+  /* Phase 214 — Cross-Chain Route Intelligence (additive). */
+  'route_plans',
+  /* Phase 215 — Traditional assets in the decision engine (additive). */
+  'traditional_opportunities',
+  /* Phase 216 — lending adapter quote attempts (additive). */
+  'lending_adapter_audit'
 ]);
 
 /** Per-collection row caps. Small on purpose: these are decision records,
@@ -50,7 +56,13 @@ const CAPS = Object.freeze({
   /* Phase 212 — 'latest' pins + short histories. */
   macro_graphs: 24, why_records: 80, personal_profiles: 1, evaluations: 120,
   agent_councils: 60, goal_scenarios: 24, opportunity_fits: 120, conversations: 40,
-  wallet_context: 12, agent_runtime_audit: 300, replan_attempts: 120
+  wallet_context: 12, agent_runtime_audit: 300, replan_attempts: 120,
+  /* Phase 214 — per-owner route-plan history. */
+  route_plans: 120,
+  /* Phase 215 — discovered traditional opportunities (latest pin + history). */
+  traditional_opportunities: 120,
+  /* Phase 216 — adapter quote attempts (audit rows, newest first). */
+  lending_adapter_audit: 300
 });
 
 const isCollection = (name) => COLLECTIONS.includes(String(name));

@@ -283,6 +283,74 @@ const FINANCIAL_INTELLIGENCE_PHASES = Object.freeze([
       'test/intent-ai/quality-corpus-probe.mjs'
     ],
     requiredEvidence: []
+  },
+  /* Phase 214 — Cross-Chain Route Intelligence: every bridge/swap plan
+     carries the ranked candidate routes with per-dimension scores (total
+     route cost, liquidity depth & price impact, est. time, historical
+     success, bridge risk); missing data is UNKNOWN, never zero; the best
+     route and why the others were rejected ride on the decision record and
+     the whyEngine («این شبکه چون گاز کمتر و نقدینگی عمیق‌تر»). */
+  {
+    phase: 214,
+    id: 'cross-chain-route-intelligence',
+    title: 'Route Intelligence بین‌زنجیره‌ای — رتبه‌بندی مسیرهای پل روی ابعاد واقعی',
+    implementation: 'implemented',
+    source: [
+      'server/fios/routeIntelligence.js',
+      'server/fios/decision.js',
+      'server/fios/whyEngine.js',
+      'server/fios/router.js'
+    ],
+    tests: [
+      'test/intent-ai/route-intelligence-probe.mjs'
+    ],
+    requiredEvidence: []
+  },
+  /* Phase 215 — RWA/stocks/forex/commodities in the decision engine: the
+     same discovery → decision → why → scenarios loop as crypto, on the same
+     opportunity contract. Execution only through a configured
+     broker/off-ramp provider; unconfigured = the honest Persian refusal,
+     never a simulated fill. */
+  {
+    phase: 215,
+    id: 'traditional-assets-decision',
+    title: 'RWA و سهام و فارکس و کالایی در چرخه‌ی کشف → تصمیم → چرا → سناریو',
+    implementation: 'implemented',
+    source: [
+      'server/fios/traditionalAssets.js',
+      'server/fios/agentCouncil.js',
+      'server/fios/opportunityFit.js',
+      'server/fios/goalScenarios.js',
+      'server/fios/router.js'
+    ],
+    tests: [
+      'test/intent-ai/traditional-assets-probe.mjs'
+    ],
+    requiredEvidence: []
+  },
+  /* Phase 216 — Lending adapters really implemented and enabled:
+     compound-v3 (supply/borrow/withdraw), morpho, solana-lending behind the
+     same BAD_ADDRESS/UNSUPPORTED_CHAIN/POOL_NOT_ALLOWED/TOKEN_NOT_ALLOWED
+     gates; honest error codes on network failure, never a fake success. */
+  {
+    phase: 216,
+    id: 'lending-adapters',
+    title: 'آداپتورهای وام‌دهی Compound v3 و Morpho و Solana Lending فعال و واقعی',
+    implementation: 'implemented',
+    source: [
+      'src/lib/lending-engine/adapter.js',
+      'src/lib/lending-engine/index.js',
+      'src/lib/lending-engine/networkConfig.js',
+      'src/lib/defi/compoundV3Base.js',
+      'src/lib/defi/compoundV3Lending.js',
+      'src/lib/defi/morphoBlueBase.js'
+    ],
+    tests: [
+      'test/intent-ai/lending-adapters-probe.mjs',
+      'test/compound-defi.test.js',
+      'test/morpho-defi.test.js'
+    ],
+    requiredEvidence: []
   }
 ]);
 
@@ -404,7 +472,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     operational: live,
     live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
-    specificationImplementedThrough: 212,
+    specificationImplementedThrough: 216,
     /* The release gate is aggregate; the live rows are published per phase. The
        number here is the highest live row, not a claim that every row below it
        is live — `operationalPhaseCount` is the exact count. */

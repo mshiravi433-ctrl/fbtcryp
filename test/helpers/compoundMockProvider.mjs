@@ -25,6 +25,8 @@ const IFACES = {
   comet: new Interface([
     'function supply(address asset, uint256 amount)',
     'function withdraw(address asset, uint256 amount)',
+    'function borrow(address asset, uint256 amount)',
+    'function repay(address asset, uint256 amount)',
     'function balanceOf(address owner) view returns (uint256)',
     'function borrowBalanceOf(address account) view returns (uint256)',
     'function baseToken() view returns (address)',
@@ -39,7 +41,16 @@ const IFACES = {
     'function isSupplyPaused() view returns (bool)',
     'function isWithdrawPaused() view returns (bool)',
     'function baseMinForRewards() view returns (uint256)',
-    'function baseTrackingSupplySpeed() view returns (uint256)'
+    'function baseTrackingSupplySpeed() view returns (uint256)',
+    'function usdPerSupply() view returns (uint256)',
+    'function usdPerBorrow() view returns (uint256)',
+    'function supplyState() view returns (uint256,uint256)',
+    'function getTotalSupply() view returns (uint256)',
+    'function getTotalBorrow() view returns (uint256)',
+    'function accountSupplyAssets() view returns (uint256)',
+    'function accountBorrowAssets() view returns (uint256)',
+    'function collateralBalanceOf(address account, address asset) view returns (uint256)',
+    'function getHealthFactor() view returns (uint256)'
   ]),
   configurator: new Interface([`function getConfiguration(address cometProxy) view returns (${CONFIGURATION_TUPLE})`]),
   rewards: new Interface([
@@ -48,7 +59,8 @@ const IFACES = {
   erc20: new Interface([
     'function balanceOf(address owner) view returns (uint256)',
     'function allowance(address owner, address spender) view returns (uint256)',
-    'function approve(address spender, uint256 value) returns (bool)'
+    'function approve(address spender, uint256 value) returns (bool)',
+    'function decimals() view returns (uint8)'
   ])
 };
 
@@ -75,6 +87,11 @@ const PRICE_FEED = '0x7e860098F58bBFC8648a4311b374B1D669a2bc6B';
  * @param {bigint} [cfg.rewardsOwedWei]  COMP owed, or null to make the read fail
  * @param {bigint} [cfg.baseMinForRewards]
  * @param {bigint} [cfg.priceUsd8]       1e8-based USD price, or 0 to fail the read
+ * @param {bigint} [cfg.usdPerSupplyWei] 1e18-scaled USDC→USD exchange rate
+ * @param {bigint} [cfg.usdPerBorrowWei] 1e18-scaled USDC→USD exchange rate
+ * @param {bigint} [cfg.collateralBalanceWei] the owner's balance of the configured collateral
+ * @param {bigint} [cfg.healthFactorWei] 1e18-scaled Comet.getHealthFactor(), or null to fail the read
+ * @param {Array}  [cfg.assetConfigs]    the Configurator's configured collateral assets
  */
 export function makeCometProvider({
   comet,
@@ -102,10 +119,18 @@ export function makeCometProvider({
   baseMinForRewards = 1000n * 10n ** 6n,
   baseTrackingSupplySpeed = 231_481_481_481n,
   priceUsd8 = 100_000_000n,
+  usdPerSupplyWei = 10n ** 18n,
+  usdPerBorrowWei = 10n ** 18n,
+  collateralBalanceWei = 0n,
+  healthFactorWei = null,
+  assetConfigs = [],
   nativeBalanceWei = 10n ** 18n,
   chainId = 8453,
   calls = []
 } = {}) {
+  const collateralByAddress = Object.fromEntries(
+    assetConfigs.map((a) => [String(a.asset).toLowerCase(), a])
+  );
   const sel = (iface, name) => IFACES[iface].getFunction(name).selector;
   const S = {
     baseToken: sel('comet', 'baseToken'),
@@ -123,9 +148,19 @@ export function makeCometProvider({
     isWithdrawPaused: sel('comet', 'isWithdrawPaused'),
     baseMinForRewards: sel('comet', 'baseMinForRewards'),
     baseTrackingSupplySpeed: sel('comet', 'baseTrackingSupplySpeed'),
+    usdPerSupply: sel('comet', 'usdPerSupply'),
+    usdPerBorrow: sel('comet', 'usdPerBorrow'),
+    supplyState: sel('comet', 'supplyState'),
+    getTotalSupply: sel('comet', 'getTotalSupply'),
+    getTotalBorrow: sel('comet', 'getTotalBorrow'),
+    accountSupplyAssets: sel('comet', 'accountSupplyAssets'),
+    accountBorrowAssets: sel('comet', 'accountBorrowAssets'),
+    collateralBalanceOf: sel('comet', 'collateralBalanceOf'),
+    getHealthFactor: sel('comet', 'getHealthFactor'),
     getConfiguration: sel('configurator', 'getConfiguration'),
     getRewardOwed: sel('rewards', 'getRewardOwed'),
-    allowance: sel('erc20', 'allowance')
+    allowance: sel('erc20', 'allowance'),
+    decimals20: sel('erc20', 'decimals')
   };
 
   const provider = {
@@ -136,7 +171,7 @@ export function makeCometProvider({
     async call(tx) {
       const to = String(tx.to).toLowerCase();
       const selector = String(tx.data).slice(0, 10);
-      calls.push({ to, selector, data: tx.data });
+      calls.push({ to, selector, data: tx.data, from: tx.from ?? null });
       const enc = (types, values) => coder.encode(types, values);
 
       if (to === String(comet).toLowerCase()) {
@@ -160,6 +195,18 @@ export function makeCometProvider({
         if (selector === S.isWithdrawPaused) return enc(['bool'], [withdrawPaused]);
         if (selector === S.baseMinForRewards) return enc(['uint256'], [baseMinForRewards]);
         if (selector === S.baseTrackingSupplySpeed) return enc(['uint256'], [baseTrackingSupplySpeed]);
+        if (selector === S.usdPerSupply) return enc(['uint256'], [usdPerSupplyWei]);
+        if (selector === S.usdPerBorrow) return enc(['uint256'], [usdPerBorrowWei]);
+        if (selector === S.supplyState) return enc(['uint256,uint256'], [totalSupplyWei, totalBorrowWei]);
+        if (selector === S.getTotalSupply) return enc(['uint256'], [totalSupplyWei]);
+        if (selector === S.getTotalBorrow) return enc(['uint256'], [totalBorrowWei]);
+        if (selector === S.accountSupplyAssets) return enc(['uint256'], [positionWei]);
+        if (selector === S.accountBorrowAssets) return enc(['uint256'], [borrowWei]);
+        if (selector === S.collateralBalanceOf) return enc(['uint256'], [collateralBalanceWei]);
+        if (selector === S.getHealthFactor) {
+          if (healthFactorWei == null) throw new Error('execution reverted');
+          return enc(['uint256'], [healthFactorWei]);
+        }
       }
 
       if (to === String(configurator).toLowerCase() && selector === S.getConfiguration) {
@@ -167,7 +214,12 @@ export function makeCometProvider({
         return enc([CONFIGURATION_TUPLE], [[
           ZERO_ADDRESS, ZERO_ADDRESS, configBaseToken ?? usdc, PRICE_FEED, ZERO_ADDRESS,
           0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n,
-          baseMinForRewards, 1n, 0n, []
+          baseMinForRewards, 1n, 0n,
+          assetConfigs.map((a) => [
+            a.asset, a.priceFeed ?? PRICE_FEED, a.decimals ?? 8,
+            a.borrowCollateralFactor ?? 0n, a.liquidateCollateralFactor ?? 0n,
+            a.liquidationFactor ?? 0n, a.supplyCap ?? 0n
+          ])
         ]]);
       }
 
@@ -179,6 +231,13 @@ export function makeCometProvider({
       if (to === String(usdc).toLowerCase()) {
         if (selector === S.allowance) return enc(['uint256'], [allowanceWei]);
         if (selector === S.balanceOf) return enc(['uint256'], [usdcBalanceWei]);
+      }
+
+      /* Configured collateral tokens answer like plain ERC20s. */
+      if (collateralByAddress[to]) {
+        const cfg = collateralByAddress[to];
+        if (selector === S.balanceOf) return enc(['uint256'], [collateralBalanceWei]);
+        if (selector === S.decimals20) return enc(['uint8'], [cfg.decimals ?? 8]);
       }
 
       throw new Error(`mock provider: unhandled call to ${to} selector ${selector}`);

@@ -23,10 +23,16 @@ import { AbiCoder, id, Interface, MaxUint256 } from 'ethers';
 
 import {
   COMET_ERROR_KEYS, COMPOUND_V3_BASE, CompoundAdapterError,
-  buildRevokePlan, buildSupplyPlan, buildWithdrawPlan, explainRevert, fromUsdcWei,
+  buildRevokePlan, buildSupplyPlan, buildWithdrawPlan,
+  explainRevert, fromUsdcWei,
   getMarketStatus, getPosition, getRewardsOwed, isCompoundBaseUsdcPool,
   perSecondRateToAprPct, perSecondRateToApyPct, verifyCompoundReceipt, verifyDeployment
 } from '../src/lib/defi/compoundV3Base.js';
+/* The lending surface (Phase 216) lives in the sibling module — the Farm
+   module's ABIs must stay supply/withdraw-only (wiring pin). */
+import {
+  buildBorrowPlan, buildRepayPlan, getHealthFactor
+} from '../src/lib/defi/compoundV3Lending.js';
 import {
   COMPOUND_BASE_SUPPLY_ENABLED, compoundBaseSupplyAllowedFor, compoundBaseWithdrawAllowedFor
 } from '../src/lib/features.js';
@@ -469,6 +475,154 @@ describe('compound v3 base: withdraw plan', () => {
 });
 
 /* ========================================================================== */
+/* ========================================================================== */
+describe('compound v3 base: borrow plan (Phase 216)', () => {
+  /* A configured collateral asset: cbBTC on Base with a $100,000 price feed. */
+  const CBBTC = '0x2d0e084cd9d94be23ad9a2e397540e9a8685077b';
+  const withCollateral = (over = {}) => ({
+    assetConfigs: [{ asset: CBBTC, decimals: 8 }],
+    collateralBalanceWei: 100n, /* 1e-6 cbBTC ≈ $0.10 — enough to exist, honest that it is small */
+    priceUsd8: 100_000n * 100_000_000n,
+    ...over
+  });
+
+  it('refuses a borrow when the market has NO configured collateral assets', async () => {
+    const { steps, checks } = await buildBorrowPlan({
+      provider: provider({}), owner: OWNER, amountUsdc: '100', nativeBalance: GAS_OK
+    });
+    expect(steps).toEqual([]);
+    expect(checks.hasCollateral).toBe(false);
+    /* A healthy Comet market always configures at least one collateral asset;
+       an empty set is an anomaly the plan refuses as unreadable, not "none". */
+    expect(checks.blocked).toContain('COMPOUND_COLLATERAL_SET_UNREADABLE');
+  });
+
+  it('refuses a borrow when the configured collateral balance is zero', async () => {
+    const { steps, checks } = await buildBorrowPlan({
+      provider: provider(withCollateral({ collateralBalanceWei: 0n })),
+      owner: OWNER, amountUsdc: '100', nativeBalance: GAS_OK
+    });
+    expect(steps).toEqual([]);
+    expect(checks.hasCollateral).toBe(false);
+    expect(checks.blocked).toContain('COMPOUND_NO_COLLATERAL');
+  });
+
+  it('refuses a borrow when the collateral SET itself is unreadable', async () => {
+    const { steps, checks } = await buildBorrowPlan({
+      provider: provider({ configuratorFails: true }), owner: OWNER, amountUsdc: '100', nativeBalance: GAS_OK
+    });
+    expect(steps).toEqual([]);
+    expect(checks.hasCollateral).toBeNull();
+    expect(checks.blocked).toContain('COMPOUND_COLLATERAL_UNREADABLE');
+  });
+
+  it('builds ONE borrow step with the canonical two-argument calldata when collateral exists', async () => {
+    const { steps, checks } = await buildBorrowPlan({
+      provider: provider(withCollateral()), owner: OWNER, amountUsdc: '250', nativeBalance: GAS_OK
+    });
+    expect(checks.blocked).toEqual([]);
+    expect(checks.hasCollateral).toBe(true);
+    expect(checks.collateralAssets.map((a) => a.toLowerCase())).toEqual([CBBTC.toLowerCase()]);
+    expect(steps.map((s) => s.kind)).toEqual(['borrow']);
+    const step = steps[0];
+    expect(step.to.toLowerCase()).toBe(COMPOUND_V3_BASE.comet.toLowerCase());
+    /* borrow(address,uint256) — the two-argument entry point, no recipient. */
+    expect(step.data.slice(0, 10)).toBe(id('borrow(address,uint256)').slice(0, 10));
+    const [asset, amount] = decodeCall('comet', 'borrow', step.data);
+    expect(asset.toLowerCase()).toBe(COMPOUND_V3_BASE.usdc.toLowerCase());
+    expect(amount).toBe(usdc(250));
+    expect(step.value).toBe(0n);
+  });
+
+  it('refuses a borrow the wallet cannot pay gas for', async () => {
+    const { steps, checks } = await buildBorrowPlan({
+      provider: provider(withCollateral()), owner: OWNER, amountUsdc: '250', nativeBalance: 0n
+    });
+    expect(steps).toEqual([]);
+    expect(checks.blocked).toContain('COMPOUND_NATIVE_GAS_FLOOR');
+  });
+
+  it('records the open position context — a borrow that eats the supply is visible in the checks', async () => {
+    const { checks } = await buildBorrowPlan({
+      provider: provider(withCollateral({ positionWei: usdc(500), borrowWei: usdc(50) })),
+      owner: OWNER, amountUsdc: '250', nativeBalance: GAS_OK
+    });
+    expect(checks.existingSupplyUsdcWei).toBe(usdc(500));
+    expect(checks.existingBorrowUsdcWei).toBe(usdc(50));
+  });
+});
+
+/* ========================================================================== */
+describe('compound v3 base: repay plan (Phase 216)', () => {
+  it('refuses a repay when the account has no debt', async () => {
+    const { steps, checks } = await buildRepayPlan({
+      provider: provider({}), owner: OWNER, amountUsdc: '10'
+    });
+    expect(steps).toEqual([]);
+    expect(checks.blocked).toContain('COMPOUND_NO_DEBT_TO_REPAY');
+  });
+
+  it('refuses repaying MORE than the live debt', async () => {
+    const { steps, checks } = await buildRepayPlan({
+      provider: provider({ borrowWei: usdc(50) }), owner: OWNER, amountUsdc: '60'
+    });
+    expect(steps).toEqual([]);
+    expect(checks.withinDebt).toBe(false);
+    expect(checks.blocked).toContain('COMPOUND_REPAY_EXCEEDS_DEBT');
+  });
+
+  it('builds ONE repay step within the debt when the allowance is sufficient', async () => {
+    const { steps, checks } = await buildRepayPlan({
+      provider: provider({ borrowWei: usdc(50), allowanceWei: usdc(50) }), owner: OWNER, amountUsdc: '50'
+    });
+    expect(checks.blocked).toEqual([]);
+    expect(checks.withinDebt).toBe(true);
+    expect(checks.needsApproval).toBe(false);
+    expect(steps.map((s) => s.kind)).toEqual(['repay']);
+    const step = steps[0];
+    expect(step.data.slice(0, 10)).toBe(id('repay(address,uint256)').slice(0, 10));
+    const [asset, amount] = decodeCall('comet', 'repay', step.data);
+    expect(asset.toLowerCase()).toBe(COMPOUND_V3_BASE.usdc.toLowerCase());
+    expect(amount).toBe(usdc(50));
+    expect(step.value).toBe(0n);
+  });
+
+  it('adds an EXACT-amount approve step when the standing allowance is not enough', async () => {
+    /* Comet's `repay` PULLS the USDC from the caller (transferIn → safe
+       transferFrom), so without an allowance the repay would revert with
+       TransferInFailed() after the user signed. The plan must say so. */
+    const { steps, checks } = await buildRepayPlan({
+      provider: provider({ borrowWei: usdc(50), allowanceWei: 0n }), owner: OWNER, amountUsdc: '50'
+    });
+    expect(checks.blocked).toEqual([]);
+    expect(checks.needsApproval).toBe(true);
+    expect(steps.map((s) => s.kind)).toEqual(['approve', 'repay']);
+    const approve = steps[0];
+    expect(approve.to.toLowerCase()).toBe(COMPOUND_V3_BASE.usdc.toLowerCase());
+    const [spender, value] = decodeCall('erc20', 'approve', approve.data);
+    expect(spender.toLowerCase()).toBe(COMPOUND_V3_BASE.comet.toLowerCase());
+    expect(value).toBe(usdc(50)); /* EXACTLY the repaid amount — never unbounded */
+    expect(steps[1].kind).toBe('repay');
+  });
+});
+
+/* ========================================================================== */
+describe('compound v3 base: health factor read (Phase 216)', () => {
+  it('reads getHealthFactor WITH from:owner — msg.sender is the account, not the RPC default', async () => {
+    const p = provider({ healthFactorWei: (15n * 10n ** 18n) / 10n });
+    const hf = await getHealthFactor(p, OWNER);
+    /* 18-dp scaled: 1.5 → 1_500_000_000_000_000_000n */
+    expect(hf).toBe(1_500_000_000_000_000_000n);
+    /* The read MUST go out with from:owner — a bare read would be msg.sender. */
+    expect(p.calls.some((c) => c.from?.toLowerCase() === OWNER.toLowerCase())).toBe(true);
+  });
+
+  it('returns null when the read fails — never a fabricated 1.0', async () => {
+    const p = provider({ healthFactorWei: null });
+    await expect(getHealthFactor(p, OWNER)).resolves.toBeNull();
+  });
+});
+
 describe('compound v3 base: revert explanation', () => {
   /*
    * Every Comet error is a zero-argument custom error, so the selector is
