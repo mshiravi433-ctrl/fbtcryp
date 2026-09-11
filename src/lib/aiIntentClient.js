@@ -96,6 +96,7 @@ export const aiAutomations = () => call('/v1/ai/automations');
 export const aiCreateAutomation = (automation) => call('/v1/ai/automations', { method: 'POST', body: automation });
 export const aiDeleteAutomation = (id) => call(`/v1/ai/automations/${encodeURIComponent(String(id || ''))}`, { method: 'DELETE' });
 export const aiPauseAutomation = (id) => call(`/v1/ai/automations/${encodeURIComponent(String(id || ''))}/pause`, { method: 'POST' });
+export const aiResumeAutomation = (id) => call(`/v1/ai/automations/${encodeURIComponent(String(id || ''))}/resume`, { method: 'POST' });
 export const aiRunAutomation = (id) => call(`/v1/ai/automations/${encodeURIComponent(String(id || ''))}/run`, { method: 'POST' });
 export const aiAutomationResult = (id, result) => call(`/v1/ai/automations/${encodeURIComponent(String(id || ''))}/result`, { method: 'POST', body: result });
 

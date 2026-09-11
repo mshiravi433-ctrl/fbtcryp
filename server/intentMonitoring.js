@@ -234,8 +234,13 @@ export function evaluateCondition({
     display = sample;
   }
   /* OPPORTUNITY value is the best real APY in percent — compared like a price.
-     VOLUME / WHALE / SMART_MONEY_NET / EXCHANGE_FLOW compare absolute units. */
-  const hit = operator === 'ABOVE' ? sample >= t : sample <= t;
+     VOLUME / WHALE / SMART_MONEY_NET / EXCHANGE_FLOW compare absolute units.
+     PERCENT_CHANGE + BELOW + a POSITIVE threshold means "a drop of t% or
+     more" (sample <= -t): a drawdown guard created as "alert me on a 10%
+     drop" must not fire on every flat reading. */
+  const hit = metric === 'PERCENT_CHANGE' && operator === 'BELOW' && t > 0
+    ? sample <= -t
+    : (operator === 'ABOVE' ? sample >= t : sample <= t);
   return { ok: true, hit, sample, display, value: v, threshold: t };
 }
 
@@ -307,6 +312,21 @@ export function eventCopy(monitor, evaluation, lang = 'fa') {
 /* storage-backed API                                                         */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Read-modify-write cycles must be atomic: two concurrent creates (two
+ * devices hitting the server at once, or two probes sharing one process)
+ * used to read the same blob and the second write silently dropped the
+ * first monitor. A lost alert is a lost promise — the write side goes
+ * through a module-level chain so every cycle sees the previous write.
+ */
+let monitorWriteChain = Promise.resolve();
+function withMonitorLock(fn) {
+  const run = monitorWriteChain.then(fn, fn);
+  // The chain itself never rejects, or every later write would stall.
+  monitorWriteChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 export async function readMonitors() {
   const rows = await storeGet(MONITOR_STORE_KEY, []);
   return Array.isArray(rows) ? rows : [];
@@ -329,14 +349,16 @@ export async function createMonitor(owner, input = {}, { now = Date.now() } = {}
   if (!owner) return { error: 'NO_OWNER' };
   const { monitor, error } = normalizeMonitor(input, { now });
   if (error) return { error };
-  const all = await readMonitors();
-  const mine = all.filter((m) => m.owner === owner);
-  if (mine.filter((m) => m.status === 'ACTIVE' || m.status === 'PAUSED').length >= MONITOR_MAX) {
-    return { error: 'TOO_MANY' };
-  }
-  const row = { ...monitor, owner, updatedAt: now };
-  await writeMonitors([row, ...all]);
-  return { monitor: row };
+  return withMonitorLock(async () => {
+    const all = await readMonitors();
+    const mine = all.filter((m) => m.owner === owner);
+    if (mine.filter((m) => m.status === 'ACTIVE' || m.status === 'PAUSED').length >= MONITOR_MAX) {
+      return { error: 'TOO_MANY' };
+    }
+    const row = { ...monitor, owner, updatedAt: now };
+    await writeMonitors([row, ...all]);
+    return { monitor: row };
+  });
 }
 
 export async function getMonitor(owner, id, { now = Date.now() } = {}) {
@@ -347,18 +369,20 @@ export async function getMonitor(owner, id, { now = Date.now() } = {}) {
 }
 
 export async function patchMonitor(owner, id, patch, { now = Date.now() } = {}) {
-  const all = await readMonitors();
-  let found = null;
-  const next = all.map((m) => {
-    if (m.owner === owner && m.id === id) {
-      found = { ...m, ...patch, updatedAt: now };
-      return found;
-    }
-    return m;
+  return withMonitorLock(async () => {
+    const all = await readMonitors();
+    let found = null;
+    const next = all.map((m) => {
+      if (m.owner === owner && m.id === id) {
+        found = { ...m, ...patch, updatedAt: now };
+        return found;
+      }
+      return m;
+    });
+    if (!found) return null;
+    await writeMonitors(next);
+    return found;
   });
-  if (!found) return null;
-  await writeMonitors(next);
-  return found;
 }
 
 export async function setMonitorStatus(owner, id, status, { now = Date.now() } = {}) {
@@ -371,11 +395,13 @@ export async function setMonitorStatus(owner, id, status, { now = Date.now() } =
 }
 
 export async function deleteMonitor(owner, id) {
-  const all = await readMonitors();
-  const next = all.filter((m) => !(m.owner === owner && m.id === id));
-  if (next.length === all.length) return { error: 'NOT_FOUND' };
-  await writeMonitors(next);
-  return { deleted: true, id };
+  return withMonitorLock(async () => {
+    const all = await readMonitors();
+    const next = all.filter((m) => !(m.owner === owner && m.id === id));
+    if (next.length === all.length) return { error: 'NOT_FOUND' };
+    await writeMonitors(next);
+    return { deleted: true, id };
+  });
 }
 
 /**
@@ -503,12 +529,35 @@ export async function evaluateMonitor(row, {
     }
     value = priceMap?.[id]?.usd;
   }
+  /* A PERCENT_CHANGE monitor without a baseline arms itself from the first
+     live read: "watch for a 10% drop from NOW" is creatable without knowing
+     the price at creation. The arming turn records the baseline and never
+     triggers — the first comparison happens on the next read. */
+  let baseline = row.baseline;
+  if (row.metric === 'PERCENT_CHANGE' && !(Number(baseline) > 0) && Number(value) > 0) {
+    baseline = Number(value);
+    const patched = await patchMonitor(row.owner, row.id, {
+      lastCheckAt: now,
+      nextCheckAt: now + row.intervalMinutes * 60_000,
+      lastValue: Number(value),
+      baseline,
+      lastError: null,
+      updatedAt: now
+    }, { now });
+    return {
+      monitor: patched,
+      evaluation: { ok: true, hit: false, armed: true, sample: 0, display: 0, value: Number(value), threshold: row.threshold },
+      triggered: false,
+      armed: true
+    };
+  }
+
   const evaluation = evaluateCondition({
     metric: row.metric,
     operator: row.operator,
     threshold: row.threshold,
     value,
-    baseline: row.baseline
+    baseline
   });
 
   const basePatch = {

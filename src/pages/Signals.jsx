@@ -71,9 +71,9 @@ const toSeries = (rows) =>
 /*
  * FAIL CLOSED INSIDE RENDER, NOT INTO THE ROUTE BOUNDARY.
  * ---------------------------------------------------------------------------
- * Reported: «سیگنال با انتخاب توکن هم اصلی و هم سولنا کرش میشه، اپ و سایت،
- * میگه مشکلی پیش اومده» — choosing a token from the picker took the WHOLE
- * screen to the crash card.
+ * Reported: "Signals crashes when picking a token, both main-list and
+ * Solana tokens, app and site alike — it says something went wrong."
+ * Choosing a token from the picker took the WHOLE screen to the crash card.
  *
  * Everything below the page's own useMemo chain runs OUTSIDE any
  * SectionGuard: the guards only wrap the panels a computation feeds, while
@@ -922,8 +922,9 @@ function SignalTrendChart({ series, coin }) {
     <div className="sic-trend-chart" aria-label={t('signals.intel.trendTitle', { symbol: coin?.symbol || '—' })}>
       <div className="sic-trend-head">
         {/*
-          Reported: "در باکس نمودار دوتا آیکون هست، یکی قبل و یکی بعد روند
-          قیمت؛ ایموجی نمودار بالا‌رونده را پاک کن". The header used to carry
+          Reported: "the chart box has two icons, one before and one
+          after the price trend; remove the rising-chart emoji". The header
+          used to carry
           a line-chart glyph BEFORE the title and an arrow AFTER it — two
           pictures around one number, and the glyph still read as the old 📈
           emoji it replaced. The glyph is gone entirely; the direction is told

@@ -639,7 +639,8 @@ export function IntelligencePanel({
   locale = 'fa',
   providersStatus = 'ready',
   providersError = null,
-  onRetryProviders = null
+  onRetryProviders = null,
+  onSpawnAgent = null
 }) {
   const [tab, setTab] = useState('models');
   const isEn = locale?.startsWith?.('en');
@@ -812,6 +813,16 @@ export function IntelligencePanel({
                   </div>
                   <p>{a.role}</p>
                   <small>{isEn ? 'Authority: Read & Plan only — Signing requires user wallet' : 'اختیارات: تحلیل و برنامه‌ریزی — امضا منحصراً با تأیید کاربر'}</small>
+                  {onSpawnAgent ? (
+                    <button
+                      type="button"
+                      className="iaos-btn iss-ghost iaos-intel-spawn"
+                      onClick={() => onSpawnAgent(a.id)}
+                      data-testid={`intel-spawn-${a.id}`}
+                    >
+                      {isEn ? '✦ Build this agent' : '✦ ساخت این ایجنت'}
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>

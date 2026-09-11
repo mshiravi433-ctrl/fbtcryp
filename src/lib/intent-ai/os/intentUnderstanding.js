@@ -314,6 +314,25 @@ const INTENT_PATTERNS = [
     ]
   },
   {
+    /*
+     * «برام یک ایجنت بساز که…» is a CREATION request, not a panel visit.
+     * It must outrank the AGENTS keyword (open the registry) and any
+     * execution intent the payload resembles (a DCA agent is still an
+     * agent first). The factory parses the sentence; this only routes it.
+     */
+    type: 'AGENT_CREATE',
+    weight: 10,
+    patterns: [
+      /ایجنت[\s‌]*(?:جدید|بساز|بسازی|می‌خوام|میخوام|می‌خواهم|میخواهم|لازم\s*دارم|برام|می‌سازی|میشه)/i,
+      /(?:برام|برایم|بهم|به\s*من)[\s‌]*(?:یه|یک|یه\s*دونه)?[\s‌]*(ایجنت|عامل\s*هوشمند)[\s‌]*(بساز|بسازی|بده|ایجاد\s*کن|درست\s*کن)/i,
+      /(?:بساز|بسازی|ایجاد\s*کن|درست\s*کن|بده|بزن)[\s‌]*(?:یه|یک|برام|برایم)?[\s‌]*(ایجنت|عامل\s*هوشمند)/i,
+      /(?:یه|یک)[\s‌]*(ایجنت|عامل\s*هوشمند)[\s‌]*(?:که|برای|تا|که\s*بتونه)/i,
+      /(?:create|build|make|spawn|set\s*up|give\s*me)[\s‌]*(?:me\s*)?(?:a\s*|an\s*|new\s*)*agent/i,
+      /agent[\s‌]*(?:that|which|to|for)[\s‌]*(?:watches|monitors|alerts|buys|tracks|notifies)/i,
+      /new[\s‌]*agent/i
+    ]
+  },
+  {
     type: 'AUTONOMY',
     weight: 8,
     patterns: [

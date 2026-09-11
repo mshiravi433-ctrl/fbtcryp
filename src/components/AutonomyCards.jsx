@@ -18,6 +18,31 @@ import { useMemo, useState } from 'react';
 const pct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}%` : '—');
 const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}` : '—');
 
+const RISK_FA = Object.freeze({ low: 'کم‌ریسک', medium: 'ریسک متوسط', high: 'پرریسک' });
+const MODE_FA = Object.freeze({ PAPER: 'کاغذی', ARMED: 'مسلح', LIVE: 'واقعی' });
+
+/*
+ * Venue action labels are built in the compiler in English
+ * ("Supply USDC @ 4.20% APY"). The shapes are closed, so the card re-words
+ * each one for a Persian reader instead of leaking raw English.
+ */
+function actionLabelFa(a) {
+  const label = String(a?.label || '');
+  const num = (label.match(/-?[\d.]+/) || [])[0];
+  const asset = a?.asset || '';
+  if (/^Supply\s/i.test(label)) return `سپرده ${asset}${num ? ` با نرخ ${num}٪ سالانه` : ''}`;
+  if (/^Buy\s/i.test(label)) return `خرید ${asset}${num ? ` با سود ${num}٪ سالانه` : ''}`;
+  if (/^Deposit into\s/i.test(label)) {
+    const m = label.match(/^Deposit into\s+(.+?)\s+@/i);
+    return `سپرده در ${m ? m[1] : (a?.venue || '')}${num ? ` با سود ${num}٪ سالانه` : ''}`;
+  }
+  if (/^Open\s/i.test(label)) {
+    const m = label.match(/^Open\s+(\w+)\s+(\w+)\s+([\d.]+)x/i);
+    if (m) return `باز کردن پوزیشن ${m[1] === 'short' ? 'شورت' : 'لانگ'} ${m[2]} ${m[3]}x — پرریسک`;
+  }
+  return label;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    GOAL PLAN
    ══════════════════════════════════════════════════════════════════════════ */
@@ -125,8 +150,8 @@ export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExe
               data-testid={`goal-option-${o.id}`}
             >
               <span className="iaos-goal-opt-title">{o.title}</span>
-              <span className="iaos-goal-opt-meta" dir="ltr">
-                {pct(o.apyPct)} · {o.risk} · {o.actions?.length || 0} {fa ? 'گام' : 'step(s)'}
+              <span className="iaos-goal-opt-meta">
+                <bdi dir="ltr">{pct(o.apyPct)}</bdi> · {fa ? (RISK_FA[o.risk] || o.risk) : o.risk} · {o.actions?.length || 0} {fa ? 'گام' : 'step(s)'}
               </span>
             </button>
           ))}
@@ -138,7 +163,7 @@ export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExe
           {option.actions.map((a, i) => (
             <li key={`${a.venue || 'step'}-${i}`}>
               <span className="iaos-goal-step-venue" dir="ltr">{a.venue || a.type}</span>
-              <span className="iaos-goal-step-label">{a.label || `${a.type} ${a.asset || ''}`}</span>
+              <span className="iaos-goal-step-label">{fa ? actionLabelFa(a) : (a.label || `${a.type} ${a.asset || ''}`)}</span>
             </li>
           ))}
         </ol>
@@ -205,7 +230,7 @@ export function AutonomyCard({
           data-mode={status?.mode || null}
         >
           {status?.running ? (fa ? 'در حال اجرا' : 'Running') : (fa ? 'متوقف' : 'Stopped')}
-          {status?.mode ? ` · ${status.mode}` : ''}
+          {status?.mode ? ` · ${fa ? (MODE_FA[status.mode] || status.mode) : status.mode}` : ''}
         </span>
       </div>
 

@@ -31,6 +31,7 @@ import { parseGoalSpec } from './goalSpec.js';
 import { num, r2 } from './numeric.js';
 import { createEcosystemReader, DOMAIN_IDS } from './ecosystemState.js';
 import { buildPortfolioStrategy, RISK_PROFILES } from './strategyEngine.js';
+import { localizeStrategy } from './strategyLocales.js';
 import { createStrategyRuntime } from './strategyRuntime.js';
 import { FEE_BPS } from '../feeBps.js';
 import { SPECULATION_ENABLED } from '../features.js';

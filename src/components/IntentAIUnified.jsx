@@ -57,6 +57,7 @@ import {
   aiCreateGoal,
   aiMemory,
   aiPauseAutomation,
+  aiResumeAutomation,
   aiDeleteAutomation,
   aiRunAutomation,
   aiExecutionResult,
@@ -184,10 +185,28 @@ import {
   appendConversation,
   appendOperation,
   appendSeason,
+  conversationsForSeason,
+  loadThreadSnapshot,
   readHistory,
+  saveThreadSnapshot,
   seasonsFromHistory
 } from '../lib/intent-ai/os/historyStore.js';
 import { cardAvailability } from '../lib/intent-ai/os/opsCatalog.js';
+import {
+  SUGGESTED_AGENTS,
+  agentSlotQuestion,
+  agentSummary,
+  applyAgentChoice,
+  buildAgentPayload,
+  fillAgentSlot,
+  fleetPrompt,
+  isAgentCreateRequest,
+  missingSlots,
+  parseAgentRequest,
+  primarySlot,
+  suggestedDraft
+} from '../lib/intent-ai/os/agentFactory.js';
+import { getYields } from '../lib/yields.js';
 import { loadOrders } from '../lib/orders.js';
 import { fetchAiProviders, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
 import {
@@ -245,7 +264,6 @@ import {
   saveLocalIntentOSState,
   hydrateLegacyStateFromIntentOS,
   deriveIntentOSStateFromLegacy,
-  shouldSyncToServer,
   bootstrapIntentOSSession,
   persistIntentOSSession,
   ingestUserTurn,
@@ -261,23 +279,159 @@ const MAX_SUGGESTIONS = 4;
 const DEFAULT_CHAIN = 42161;
 
 /*
- * ─── SEASONS: A CLEAN THREAD ON RETURN, AN ARCHIVE THAT KEEPS THE PAST ─────
- * A «season» is one continuous chat episode. Two storage keys make the
- * semantics explicit:
+ * ─── SEASONS: THE THREAD SURVIVES UNTIL THE USER STARTS A NEW ONE ──────────
+ * A «season» is one continuous chat episode. The rule is absolute: navigating
+ * away (to swap, to farm, to another tab) NEVER wipes the thread, and coming
+ * back NEVER starts a clean conversation. A new season begins only when the
+ * user presses «+ سشن جدید» or continues an archived season from History.
+ *
+ * Three device-local keys make the semantics explicit (nothing here is sent
+ * to any host — the thread lives in this browser's own storage):
  *
  *   SEASON_KEY       — which season the CURRENT thread belongs to.
- *   LAST_ACTIVE_KEY  — when the user last left /intent (mount & unmount both
- *                      stamp it). If they come back within VISIT_GAP_MS it is
- *                      the same visit and the thread resumes where it left
- *                      off (navigation ≠ new conversation); after that it is
- *                      a new season and the thread starts clean.
- *
- * The old conversation is never thrown away: it is archived in the History
- * panel under «سشن‌ها» and can be resumed with the Continue button.
+ *   LAST_ACTIVE_KEY  — when /intent was last mounted/unmounted (analytics).
+ *   HANDOFF_KEY      — an execution hand-off that is still waiting for its
+ *                      outcome: the venue the user was sent to, so the return
+ *                      turn can ask «انجام شد یا لغو شد؟» instead of guessing.
  */
 const SEASON_KEY = 'fbt.ai.os.active-season';
 const LAST_ACTIVE_KEY = 'fbt.ai.os.last-active';
-const VISIT_GAP_MS = 15 * 60 * 1000;
+const HANDOFF_KEY = 'fbt.ai.os.pending-handoff';
+const HANDOFF_TTL_MS = 6 * 60 * 60 * 1000;
+
+const ROUTE_FA_LABEL = Object.freeze({
+  '/': 'بازار',
+  '/swap': 'سواپ',
+  '/bridge': 'بریج',
+  '/farm': 'فارم',
+  '/loan': 'وام',
+  '/stocks': 'سهام',
+  '/perp': 'فیوچرز',
+  '/solana': 'سولانا',
+  '/wallet': 'کیف پول',
+  '/portfolio': 'پرتفوی',
+  '/signals': 'سیگنال‌ها'
+});
+
+function routeFaLabel(route) {
+  const path = String(route || '').split('?')[0];
+  if (ROUTE_FA_LABEL[path]) return ROUTE_FA_LABEL[path];
+  if (String(route || '').includes('tab=ops')) return 'مرکز عملیات';
+  if (String(route || '').includes('tab=agents')) return 'ایجنت‌ها';
+  return path || 'صفحه';
+}
+
+function readPendingHandoff() {
+  try {
+    const raw = localStorage.getItem(HANDOFF_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (Date.now() - Number(parsed.at || 0) > HANDOFF_TTL_MS) {
+      try { localStorage.removeItem(HANDOFF_KEY); } catch {}
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+
+function writePendingHandoff(handoff) {
+  try { localStorage.setItem(HANDOFF_KEY, JSON.stringify({ ...handoff, at: Date.now() })); } catch {}
+}
+
+function clearPendingHandoff() {
+  try { localStorage.removeItem(HANDOFF_KEY); } catch {}
+}
+
+const fmtUsd = (v) => (Number.isFinite(Number(v))
+  ? `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: Number(v) >= 100 ? 0 : 2 })}`
+  : '—');
+const fmtPct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}٪` : '—');
+
+/*
+ * «بررسی» must ANSWER, not nod. The evaluate endpoint returns the live
+ * reading, the threshold and whether the condition holds — this turns that
+ * into «قیمت الان X است، شرطت Y، این‌قدر فاصله داری» (or the yield version),
+ * in the user's language. Pure: the same input always renders the same words.
+ */
+function monitorEvaluateReport(mon, out, { locale = 'fa' } = {}) {
+  const fa = String(locale).startsWith('fa');
+  const label = mon?.label || mon?.asset?.symbol || (fa ? 'دیده‌بان' : 'monitor');
+  const ev = out?.evaluation || null;
+  const triggered = out?.triggered === true;
+  const metric = String(mon?.metric || 'PRICE').toUpperCase();
+  const threshold = Number(mon?.threshold);
+  const symbol = mon?.asset?.symbol || '';
+
+  if (!ev || ev.ok === false) {
+    const reason = ev?.reason || out?.error || 'NO_VALUE';
+    return fa
+      ? `«${label}» را بررسی کردم ولی خوانش زنده‌ای برنگشت (${reason}). شرطت سر جایش است و چیزی به‌اشتباه گزارش نشد — وقتی فید برگردد دوباره «بررسی» بزن.`
+      : `I checked "${label}" but no live reading came back (${reason}). Your condition is untouched and nothing was misreported — hit Check again when the feed is back.`;
+  }
+  if (ev.armed) {
+    return fa
+      ? `«${label}» مسلح شد: مبنا از قیمت الان ${symbol} (${fmtUsd(ev.value)}) ثبت شد و از خوانش بعدی افت را با آن می‌سنجم.`
+      : `"${label}" is armed: the baseline is the current ${symbol} price (${fmtUsd(ev.value)}); the drop is measured from the next read.`;
+  }
+
+  const verdict = triggered
+    ? (fa ? 'شرط برقرار شد ✓' : 'Condition met ✓')
+    : (fa ? 'فعلاً برقرار نیست.' : 'Not met right now.');
+  const op = String(mon?.operator || 'ABOVE').toUpperCase();
+
+  if (metric === 'OPPORTUNITY') {
+    const best = Number(ev.display ?? ev.value);
+    const gap = Number.isFinite(best) && Number.isFinite(threshold) ? threshold - best : null;
+    return fa
+      ? `«${label}»: بهترین سود واقعی الان ${fmtPct(best)} است و هدفت ${fmtPct(threshold)}. ${gap != null && gap > 0 ? `پس ${fmtPct(gap)} فاصله داری.` : ''} ${verdict}`
+      : `"${label}": best real yield is ${fmtPct(best)}, your target ${fmtPct(threshold)}. ${verdict}`;
+  }
+  if (metric === 'PERCENT_CHANGE') {
+    const sample = Number(ev.sample ?? ev.display);
+    const base = Number(mon?.baseline);
+    const need = op === 'BELOW' ? -threshold : threshold;
+    return fa
+      ? `«${label}»: تغییر ${symbol} از مبنا ${Number.isFinite(sample) ? `${sample.toFixed(2)}٪` : '—'} است${Number.isFinite(base) ? ` (مبنا ${fmtUsd(base)})` : ''}؛ شرط «${op === 'BELOW' ? `افت ${fmtPct(threshold)}` : `رشد ${fmtPct(threshold)}`}» ${Number.isFinite(sample) ? `(الان ${sample.toFixed(2)}٪ در برابر آستانه ${need.toFixed(0)}٪)` : ''}. ${verdict}`
+      : `"${label}": ${symbol} changed ${Number.isFinite(sample) ? `${sample.toFixed(2)}%` : '—'} from baseline; trigger at ${need.toFixed(0)}%. ${verdict}`;
+  }
+  if (metric === 'PRICE') {
+    const price = Number(ev.display ?? ev.value);
+    const dirFa = op === 'BELOW' ? 'زیر' : 'بالای';
+    let dist = '';
+    if (Number.isFinite(price) && Number.isFinite(threshold) && price > 0 && !triggered) {
+      const d = op === 'BELOW' ? ((price - threshold) / price) * 100 : ((threshold - price) / price) * 100;
+      dist = d > 0 ? (fa ? `یعنی ${fmtPct(d)} فاصله داری. ` : `That's ${fmtPct(d)} away. `) : '';
+    }
+    return fa
+      ? `«${label}»: قیمت فعلی ${symbol} ${fmtUsd(price)} است؛ شرطت «${dirFa} ${fmtUsd(threshold)}». ${dist}${verdict}`
+      : `"${label}": ${symbol} is ${fmtUsd(price)}; your condition is "${op === 'BELOW' ? 'below' : 'above'} ${fmtUsd(threshold)}". ${dist}${verdict}`;
+  }
+  const val = ev.display ?? ev.value;
+  return fa
+    ? `«${label}»: خوانش فعلی ${val} در برابر آستانه ${threshold}. ${verdict}`
+    : `"${label}": current reading ${val} vs threshold ${threshold}. ${verdict}`;
+}
+
+/*
+ * A restored thread (snapshot or archive) must behave like a live one: stale
+ * choice buttons on OLD messages would re-fire dead questions, so choices
+ * survive only on the last message that carries them — the pending question.
+ */
+function sanitizeRestoredThread(list) {
+  const msgs = Array.isArray(list) ? list : [];
+  let lastChoiceIdx = -1;
+  msgs.forEach((m, i) => {
+    if (Array.isArray(m?.choices) && m.choices.length && !m.responded) lastChoiceIdx = i;
+  });
+  return msgs.map((m, i) => {
+    if (!m || typeof m !== 'object') return m;
+    if (i === lastChoiceIdx) return m;
+    if (!Array.isArray(m.choices) || !m.choices.length) return m;
+    const { choices, choiceKind, ...rest } = m;
+    return rest;
+  });
+}
 
 function makeId() {
   try { return crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
@@ -368,7 +522,6 @@ const ConversationRow = memo(function ConversationRow({
   onAutonomyStop,
   onAutonomyTick
 }) {
-  const [fbSent, setFbSent] = useState(null);
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
   const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
@@ -378,7 +531,6 @@ const ConversationRow = memo(function ConversationRow({
   const actionRoutes = Array.isArray(m.actions)
     ? m.actions.filter((a) => a && typeof a.route === 'string' && a.route.trim())
     : [];
-  const showFeedback = m.role === 'ai' && (m.kind === 'assistant' || m.kind === 'result') && m.intentId && !fbSent;
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
       <div className="iaos-bubble">
@@ -393,7 +545,7 @@ const ConversationRow = memo(function ConversationRow({
             {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
           </button>
         ) : null}
-        {Array.isArray(m.choices) && m.choices.length ? (
+        {Array.isArray(m.choices) && m.choices.length && !m.responded ? (
           <div className="iaos-choices" data-testid="intent-ai-choices">
             {m.choices.map((c) => (
               <button
@@ -406,6 +558,9 @@ const ConversationRow = memo(function ConversationRow({
               </button>
             ))}
           </div>
+        ) : null}
+        {m.responded && m.selectedChoiceLabel ? (
+          <div className="iaos-choice-answered" data-testid="intent-ai-choice-answered">✓ {m.selectedChoiceLabel}</div>
         ) : null}
         {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
           <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
@@ -507,14 +662,9 @@ const ConversationRow = memo(function ConversationRow({
             ) : null}
           </div>
         ) : null}
-        {m.multiAi ? (
+        {m.multiAi && (m.multiAi.riskScore || m.multiAi.dataFreshness) ? (
           <div className="iaos-multi-ai-badge" data-testid="intent-ai-multi-model-badge">
             <span className="iaos-model-pill">✦ Multi-AI</span>
-            {m.multiAi.confidenceScore != null ? (
-              <span className="iaos-pill iaos-pill-ok">
-                {locale.startsWith('fa') ? 'اطمینان:' : 'Confidence:'} {m.multiAi.confidenceScore}%
-              </span>
-            ) : null}
             {m.multiAi.riskScore ? (
               <span className={`iaos-pill ${m.multiAi.riskScore === 'HIGH' || m.multiAi.riskScore === 'EXTREME' ? 'iaos-pill-bad' : m.multiAi.riskScore === 'MEDIUM' ? 'iaos-pill-warn' : 'iaos-pill-ok'}`}>
                 {locale.startsWith('fa') ? 'ریسک:' : 'Risk:'} {m.multiAi.riskScore}
@@ -528,48 +678,16 @@ const ConversationRow = memo(function ConversationRow({
           </div>
         ) : null}
         {m.upgrade7?.plan?.steps?.length ? (
-          <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} />
+          <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} final />
         ) : null}
-        {m.upgrade7?.confidence ? (
-          <div data-testid="u7-confidence" style={{ marginTop: 8 }}>
-            <span className="iaos-conf-meter">
-              {m.upgrade7.confidence.display || (fa ? 'اطمینان' : 'Confidence')} · {m.upgrade7.confidence.score}%
-            </span>
-            {Array.isArray(m.upgrade7.confidence.notices) && m.upgrade7.confidence.notices.length ? (
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.85)', marginTop: 4, lineHeight: 1.6 }}>
-                {m.upgrade7.confidence.notices.map((n, i) => (<div key={i}>{n}</div>))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {m.upgrade7?.synthesis ? (
-          m.upgrade7.synthesis.divergence === true ? (
-            <div className="iaos-consensus-box" data-testid="u7-divergence">
-              <div className="iaos-divergence-warn">⚠ {m.upgrade7.synthesis.warning || (fa ? 'تحلیل‌ها اختلاف دارند.' : 'Analyses disagree.')}</div>
-            </div>
-          ) : (
-            <div className="iaos-consensus-box" data-testid="u7-consensus">
-              <strong>{fa ? 'اجماع Agentها' : 'Agent consensus'}</strong>
-              <span>
-                {(m.upgrade7.synthesis.contributingAgents || []).length} agent{(m.upgrade7.synthesis.contributingAgents || []).length === 1 ? '' : 's'}
-                {m.upgrade7.synthesis.agreement != null ? ` · ${Math.round(m.upgrade7.synthesis.agreement * 100)}%` : ''}
-                {m.upgrade7.synthesis.stance && m.upgrade7.synthesis.stance !== 'unknown' ? ` · ${m.upgrade7.synthesis.stance}` : ''}
-              </span>
-              {Array.isArray(m.upgrade7.agentHealth) && m.upgrade7.agentHealth.some((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown') ? (
-                <div className="iaos-divergence-warn">
-                  ⚠ {m.upgrade7.agentHealth.filter((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown').length} {fa ? 'عامل نیازمند توجه' : 'agent(s) need attention'}
-                </div>
-              ) : null}
-            </div>
-          )
-        ) : null}
-        {intel?.uncertainty?.level === 'HIGH' ? (
-          <div className="iaos-uncertainty" data-testid="intent-ai-uncertainty">
-            ⚠ {fa
-              ? 'اطمینان این پاسخ پایین است؛ بر اساس داده‌های فعلی است و قطعی نیست.'
-              : 'Confidence in this answer is low; it reflects current data and is not certain.'}
-          </div>
-        ) : null}
+        {/*
+          * The confidence meter («اطمینان: پایین · 36%»), its unverified-data
+          * notices, the agent-consensus box («اجماع Agentها 4 agents · 100%»)
+          * and the low-confidence warning are deliberately NOT rendered: the
+          * answer carries its evidence inline (sources, numbers, receipts),
+          * and the meters only added noise to the bubble. The data stays on
+          * the message for probes — only the rendering is gone.
+          */}
         {sources.length ? (
           <div className="iaos-sources" data-testid="intent-ai-sources">
             <span className="iaos-sources-label">{fa ? 'منابع:' : 'Sources:'}</span>
@@ -587,27 +705,10 @@ const ConversationRow = memo(function ConversationRow({
             ))}
           </div>
         ) : null}
-        {showFeedback ? (
-          <div className="iaos-feedback-row" data-testid="intent-ai-feedback">
-            <button
-              type="button"
-              className="iaos-fb-btn"
-              data-testid="intent-ai-feedback-up"
-              aria-label={fa ? 'مفید بود' : 'Helpful'}
-              onClick={() => { setFbSent(1); onFeedback?.(m, 1); }}
-            >👍</button>
-            <button
-              type="button"
-              className="iaos-fb-btn"
-              data-testid="intent-ai-feedback-down"
-              aria-label={fa ? 'مفید نبود' : 'Not helpful'}
-              onClick={() => { setFbSent(-1); onFeedback?.(m, -1); }}
-            >👎</button>
-          </div>
-        ) : null}
-        {fbSent ? (
-          <div className="iaos-fb-thanks">{fa ? 'ممنون از بازخوردت!' : 'Thanks for the feedback!'}</div>
-        ) : null}
+        {/* The 👍/👎 row is deliberately not rendered (same rationale as the
+            meters above): a tap target on every answer added clutter without
+            changing the next answer. `onFeedback` stays a prop so the parent
+            API is unchanged. */}
       </div>
     </div>
   );
@@ -698,7 +799,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   // UPGRADE 8 — OS state refs must be initialized BEFORE convState boot
   const os8StateRef = useRef(loadLocalIntentOSState('intent-unified'));
   const os8SyncSigRef = useRef('');
-  const os8RemoteSyncAtRef = useRef(0);
   const os8HydratedRef = useRef(false);
 
   // UPGRADE 6 — Initialize all managers
@@ -725,15 +825,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * choose between the archived thread and a clean conversation.
    */
   const [visitInfo] = useState(() => {
-    const lastActive = readLastActive();
-    const isReturning = Boolean(lastActive) && (Date.now() - lastActive) <= VISIT_GAP_MS;
+    /*
+     * The thread ALWAYS resumes. A timeout-based "fresh visit" used to wipe
+     * the conversation whenever the user came back from swap/farm after 15
+     * minutes — that was the chat-wipe bug. Now a new season starts only via
+     * the «+» button (newSeason) or by continuing an archived season.
+     */
     let seasonId = readSeasonId();
-    if (!seasonId || !isReturning) {
+    if (!seasonId) {
       seasonId = makeSeasonId();
       writeSeasonId(seasonId);
     }
     writeLastActive();
-    return { seasonId, isReturning };
+    return { seasonId, isReturning: true };
   });
   const seasonIdRef = useRef(visitInfo.seasonId);
 
@@ -780,12 +884,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
   const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
 
-  // Messages now backed by persistent ConversationState (§1). A returning
-  // visit resumes the stored thread; a fresh one starts clean with the hello
-  // message only — the previous season lives in the History panel.
+  // Messages backed by persistent ConversationState (§1), with the device-local
+  // thread snapshot as the second layer: convState expires after 24h and caps
+  // at 200 turns, while the snapshot keeps the full thread (cards, choices,
+  // strategy plans) until the user starts a new season. Either way the thread
+  // resumes — a clean hello appears only when there is genuinely nothing.
   const [messages, setMessages] = useState(() => {
     const persisted = visitInfo.isReturning ? (convStateRef.current.messages || []) : [];
     if (persisted.length) return persisted;
+    try {
+      const snap = loadThreadSnapshot(visitInfo.seasonId);
+      if (Array.isArray(snap) && snap.length) {
+        const clean = sanitizeRestoredThread(snap);
+        // Seed the SAME object the convState state already captured — a
+        // replacement would be overwritten by the convState sync effect.
+        try { convStateRef.current.messages = clean; } catch {}
+        return clean;
+      }
+    } catch { /* corrupted snapshot: fall through to hello */ }
     return [{
       id: makeId(),
       role: 'ai',
@@ -794,6 +910,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       ui: { type: 'TEXT' }
     }];
   });
+  /* A live handle on the thread for handlers that must read it without
+     re-subscribing (the hand-off outcome needs the strategy plan). */
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; });
+  /*
+   * The agent-creation loop lives below (it needs the monitor/automation
+   * creators), but choice taps arrive at `chooseOption` above — so the loop
+   * publishes itself through this ref, the same pattern as contextHandlerRef.
+   * `pendingAgentDraftRef` is the slot the loop is currently waiting for.
+   */
+  const agentOpsRef = useRef(null);
+  const pendingAgentDraftRef = useRef(null);
 
   const [input, setInput] = useState('');
   /*
@@ -883,26 +1011,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const remoteBoot = await bootstrapIntentOSSession({ ownerKey: 'intent-unified', hydrateRemote: true });
+      /* Device-local by mandate: the conversation is never read from (or
+         written to) any host. `hydrateRemote: false` boots from this
+         browser's own store only. */
+      const remoteBoot = await bootstrapIntentOSSession({ ownerKey: 'intent-unified', hydrateRemote: false });
       if (cancelled || !remoteBoot) return;
       os8StateRef.current = remoteBoot;
       os8HydratedRef.current = true;
       const hydrated = hydrateLegacyStateFromIntentOS(remoteBoot);
       /*
-       * Remote turns only resume the thread when this is a returning visit.
-       * On a fresh visit the remote history is an archived season, not the
-       * live conversation, so it must never be injected into the clean thread.
+       * Local OS turns only fill an EMPTY thread (hello-only). They are this
+       * device's own mirror of the same conversation — never a host read —
+       * and must never overwrite or shrink a restored thread.
        */
-      if (visitInfo.isReturning && hydrated?.messages?.length && (!convStateRef.current?.messages?.length || remoteBoot.lastUpdated > Number(convStateRef.current?.updatedAt || 0))) {
+      if (hydrated?.messages?.length && !convStateRef.current?.messages?.length) {
         setMessages((prev) => prev.length > 1 ? prev : hydrated.messages);
-        setConvState((prev) => ({
-          ...prev,
-          ...(hydrated.convStatePatch || {}),
-          messages: hydrated.messages,
-          currentRoute: remoteBoot.currentRoute || prev.currentRoute,
-          previousRoute: remoteBoot.previousRoute || prev.previousRoute,
-          updatedAt: Date.now()
-        }));
+        setConvState((prev) => {
+          if ((prev?.messages || []).length) return prev;
+          return {
+            ...prev,
+            ...(hydrated.convStatePatch || {}),
+            messages: hydrated.messages,
+            currentRoute: remoteBoot.currentRoute || prev.currentRoute,
+            previousRoute: remoteBoot.previousRoute || prev.previousRoute,
+            updatedAt: Date.now()
+          };
+        });
       }
     })();
     return () => { cancelled = true; };
@@ -1420,10 +1554,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     os8SyncSigRef.current = signature;
     os8StateRef.current = derived;
     saveLocalIntentOSState(derived, 'intent-unified');
-    if (shouldSyncToServer(os8RemoteSyncAtRef.current) || !os8HydratedRef.current) {
-      os8RemoteSyncAtRef.current = Date.now();
+    /* Device-local by mandate: the OS state is persisted to this browser only
+       (`remote: false`). The conversation must never be uploaded to a host. */
+    if (!os8HydratedRef.current) {
       os8HydratedRef.current = true;
-      void persistIntentOSSession(derived, { ownerKey: 'intent-unified', remote: true }).then((saved) => {
+      void persistIntentOSSession(derived, { ownerKey: 'intent-unified', remote: false }).then((saved) => {
         if (saved) os8StateRef.current = saved;
       }).catch(() => {});
     }
@@ -2681,7 +2816,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           context: aiContext,
           results: {},
           wallet: wallet || null,
-          portfolio: aiContext.portfolio || null
+          portfolio: aiContext.portfolio || null,
+          locale
         });
         if (!goalMountedRef.current) return;
         const built = result.strategy || result;
@@ -2791,7 +2927,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         : `Stage "${next.stage.title}": ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat.`,
       actions: first ? [{ id: `stage-${next.stage.id}`, route: first.route, label: fa ? 'باز کن' : 'Open' }] : []
     }]);
-    if (first?.route) navigate(first.route);
+    if (first?.route) {
+      /* The stage hand-off carries its own identity so the return turn can
+         confirm or skip the exact stage the user acted on. */
+      try {
+        writePendingHandoff({
+          route: first.route,
+          label: fa ? `مرحله «${next.stage.title}» در ${routeFaLabel(first.route)}` : `Stage "${next.stage.title}" on ${first.route}`,
+          kind: 'strategy-stage',
+          strategyId: strategy.strategyId,
+          stageId: next.stage.id,
+          seasonId: seasonIdRef.current
+        });
+      } catch {}
+      navigate(first.route);
+    }
   }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate, persistStrategyRuntime]);
 
   /*
@@ -3036,7 +3186,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         lastUpdated: Date.now()
       };
       saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
-      void persistIntentOSSession(os8StateRef.current, { ownerKey: 'intent-unified', remote: true }).catch(() => {});
+      void persistIntentOSSession(os8StateRef.current, { ownerKey: 'intent-unified', remote: false }).catch(() => {});
     } catch {}
 
     setExecuting(true);
@@ -3281,7 +3431,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           });
           os8StateRef.current = monitored;
           saveLocalIntentOSState(monitored, 'intent-unified');
-          void persistIntentOSSession(monitored, { ownerKey: 'intent-unified', remote: true }).catch(() => {});
+          void persistIntentOSSession(monitored, { ownerKey: 'intent-unified', remote: false }).catch(() => {});
         } catch {}
         clearPendingIntent();
         try { await multi?.refresh?.(); } catch {}
@@ -3335,6 +3485,96 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const chooseOption = useCallback((msg, choice) => {
     if (!choice) return;
+    /*
+     * The RETURN-turn answers. «انجام شد» on a strategy stage confirms THAT
+     * stage on the runtime — with a receipt that says the source is the
+     * user's own word, never a fabricated tx hash — and offers the next
+     * stage. «لغو شد» skips the stage without recording any success. Plain
+     * routes just get an honest acknowledgement.
+     */
+    if (msg?.choiceKind === 'HANDOFF_OUTCOME') {
+      const pickedId = String(choice?.id || choice?.value || '');
+      const faLoc = locale.startsWith('fa');
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, responded: true, selectedChoiceLabel: choice?.label || '' } : m)));
+      const handoff = msg?.handoff || {};
+      const say = (content, extra = {}) => setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', content, kind: 'assistant', ui: { type: 'TEXT' }, ...extra
+      }]);
+      const nextStageChoice = (strategyId) => ({
+        choices: [{ id: 'strategy-next', value: strategyId, label: faLoc ? '▶️ مرحله بعد را اجرا کن' : '▶️ Run the next stage' }],
+        choiceKind: 'STRATEGY_NEXT'
+      });
+      if (pickedId === 'handoff-browse') {
+        say(faLoc ? 'باشه، مشکلی نیست. هر وقت آماده بودی بگو ادامه بده.' : 'No problem. Say continue whenever you are ready.');
+        return;
+      }
+      const planMsg = handoff.strategyId
+        ? (messagesRef.current || []).find((m) => m.strategyPlan?.strategyId === handoff.strategyId)
+        : null;
+      const plan = planMsg?.strategyPlan || null;
+      if (pickedId === 'handoff-cancelled') {
+        if (plan && handoff.stageId) {
+          try {
+            const runtime = strategyRuntimeFor(planMsg, plan);
+            runtime?.skipStage?.(handoff.stageId, 'CANCELLED_BY_USER');
+            if (runtime) persistStrategyRuntime(plan, planMsg.strategySpec || null, runtime);
+          } catch {}
+        }
+        say(faLoc
+          ? `لغو شد — «${handoff.label || ''}» انجام نشد و چیزی به عنوان موفق ثبت نشد. اگه بخوای با شرایط جدید ادامه می‌دیم.`
+          : `Cancelled — "${handoff.label || ''}" did not happen and nothing was recorded as a success. We can continue with new terms whenever you want.`,
+        plan ? nextStageChoice(plan.strategyId) : {});
+        return;
+      }
+      // handoff-done (or any unknown answer to the outcome question: the user
+      // tapped something affirmative — treat it as done, honestly sourced).
+      if (plan && handoff.stageId) {
+        let next = null;
+        try {
+          const runtime = strategyRuntimeFor(planMsg, plan);
+          const res = runtime?.confirmStage?.(handoff.stageId, { receipt: { source: 'user-confirmed', at: Date.now() } });
+          if (runtime) persistStrategyRuntime(plan, planMsg.strategySpec || null, runtime);
+          next = res?.next || runtime?.nextStage?.() || null;
+        } catch {}
+        if (next?.done) {
+          say(faLoc
+            ? `انجام شد و ثبت شد — همه مراحل «${plan.comparison?.find?.((c) => c.id === plan.chosen)?.title || ''}» تأیید شدند. از اینجا پایش ادامه دارد؛ هر وقت خواستی بگو «وضعیت» تا برنامه را با واقعیت بسنجم.`
+            : 'Done and recorded — every stage is confirmed. From here it is monitoring; say "status" any time to check the plan against reality.');
+        } else {
+          say(faLoc
+            ? `انجام شد و ثبت شد — مرحله «${handoff.stageId}» تأیید شد (به گفته خودت).${next?.stage?.title ? ` مرحله بعد «${next.stage.title}» آماده است.` : ''}`
+            : `Done and recorded — stage "${handoff.stageId}" is confirmed (by your word).${next?.stage?.title ? ` Next up is "${next.stage.title}".` : ''}`,
+          next && !next.done ? nextStageChoice(plan.strategyId) : {});
+        }
+        return;
+      }
+      say(faLoc
+        ? `عالیه — «${handoff.label || ''}» انجام شد. اگه کار دیگری مونده بگو تا ادامه بدیم.`
+        : `Great — "${handoff.label || ''}" is done. Tell me what is left and we continue.`);
+      return;
+    }
+    /*
+     * Agent creation answers (slot chips, the «بسازم؟» confirm, suggested
+     * agents). Handled by the agent loop below via ref — see agentOpsRef.
+     */
+    if (msg?.choiceKind === 'AGENT_SLOT' || msg?.choiceKind === 'AGENT_CONFIRM' || msg?.choiceKind === 'SUGGEST_AGENT') {
+      try { agentOpsRef.current?.handleChoice?.(msg, choice); } catch {}
+      return;
+    }
+    if (msg?.choiceKind === 'STRATEGY_NEXT') {
+      const faLoc = locale.startsWith('fa');
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, responded: true, selectedChoiceLabel: choice?.label || '' } : m)));
+      const planMsg = (messagesRef.current || []).find((m) => m.strategyPlan?.strategyId === String(choice?.value || ''));
+      if (planMsg?.strategyPlan) {
+        runStrategyStage(planMsg, planMsg.strategyPlan);
+      } else {
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: faLoc ? 'برنامه را در این رشته پیدا نکردم — سشن عوض شده؟' : 'I could not find the plan in this thread — did the season change?'
+        }]);
+      }
+      return;
+    }
     if (msg?.choiceKind === 'STRATEGY_OPTION') {
       const current = os8StateRef.current || loadLocalIntentOSState('intent-unified');
       const nextOptions = (current.agentState?.lastPresentedOptions || []).map((item) => ({
@@ -3374,7 +3614,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       ? `${original} ${choice.value}`.trim()
       : original || choice.label;
     void sendRef.current?.(followUp, { hints, skipUserBubble: false });
-  }, [locale]);
+  }, [locale, strategyRuntimeFor, persistStrategyRuntime, runStrategyStage]);
 
   const sendFeedback = useCallback((msg, rating) => {
     if (!msg?.intentId) return;
@@ -3510,25 +3750,67 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (list?.ok) setAutomations(list.automations || []);
   }, []);
 
+  /*
+   * pushTurn + appendOp live here — above every automation/agent callback —
+   * because those callbacks list them in their dependency arrays, and a
+   * dependency array reads its values during render (a later declaration
+   * would be a temporal-dead-zone crash on mount).
+   */
+  const pushTurn = useCallback((m) => {
+    setMessages((prev) => [...prev, m]);
+    return m;
+  }, []);
+
+  const appendOp = useCallback((op) => {
+    try {
+      const row = appendOperation({ conversationId, seasonId: seasonIdRef.current, ...op });
+      setHistData(readHistory());
+      return row;
+    } catch {
+      return null;
+    }
+  }, [conversationId]);
+
   const toggleAutomation = useCallback(async (row) => {
     if (!row) return;
+    const fa = locale.startsWith('fa');
+    const label = row.kind === 'rebalance'
+      ? (fa ? 'تعادل پرتفوی' : 'rebalance')
+      : (fa ? `خرید دوره‌ای ${row.asset || ''}`.trim() : `DCA ${row.asset || ''}`.trim());
+    let out = null;
     if (row.status === 'ACTIVE' || row.active) {
-      await aiPauseAutomation(row.id);
+      out = await aiPauseAutomation(row.id);
     } else {
-      const made = await aiCreateAutomation({
-        type: row.kind === 'rebalance' ? 'REBALANCE' : 'DCA',
-        asset: row.asset || 'BTC',
-        amount: String(row.amountUsd || ''),
-        frequency: String(row.cadence || row.frequency || 'WEEKLY').toUpperCase(),
-        chainId: row.chainId || null
-      });
-      if (made?.ok !== true) return;
+      /* Resume in place — the old code "resumed" by creating a brand-new
+         automation, duplicating the agent on every pause/resume cycle. */
+      out = await aiResumeAutomation(row.id);
     }
     await refreshAutomations();
-  }, [refreshAutomations]);
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: out?.ok === false ? 'error' : 'assistant',
+      ui: { type: 'TEXT' },
+      content: out?.ok === false
+        ? (fa ? `«${label}» تغییر نکرد: ${String(out?.error || 'UNAVAILABLE')}` : `"${label}" did not change: ${String(out?.error || 'UNAVAILABLE')}`)
+        : (row.status === 'ACTIVE' || row.active)
+          ? (fa ? `«${label}» متوقف شد. برنامه‌اش پاک نشده — هر وقت خواستی «ادامه» بزن.` : `"${label}" paused. Its schedule is kept — resume any time.`)
+          : (fa ? `«${label}» ادامه یافت و دوباره فعال است.` : `"${label}" resumed and active again.`)
+    });
+    appendOp({
+      kind: (row.status === 'ACTIVE' || row.active) ? 'AUTOMATION_PAUSE' : 'AUTOMATION_RESUME',
+      status: out?.ok === false ? 'FAILED' : 'ACTIVE',
+      title: label,
+      detail: String(row.id || ''),
+      ref: row.id || null,
+      refKind: 'automation'
+    });
+    setAiTab('chat');
+  }, [locale, pushTurn, appendOp, refreshAutomations]);
 
   const runAutomationNow = useCallback(async (row) => {
     if (!row) return;
+    const fa = locale.startsWith('fa');
     const run = await aiRunAutomation(row.id);
     if (run?.ok && run.action) {
       setPendingExecution({
@@ -3543,14 +3825,47 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           editLabel: t('intentAIOS.edit', { defaultValue: 'ویرایش' })
         }
       });
+      // The confirmation card lives in the chat — take the user to it.
+      setAiTab('chat');
+    } else {
+      pushTurn({
+        id: makeId(),
+        role: 'ai',
+        kind: 'error',
+        ui: { type: 'TEXT' },
+        content: (fa ? 'اجرا شروع نشد: ' : 'The run did not start: ') + String(run?.error || 'UNAVAILABLE')
+      });
+      setAiTab('chat');
     }
-  }, [t]);
+  }, [t, locale, pushTurn]);
 
   const deleteAutomationRow = useCallback(async (row) => {
     if (!row) return;
-    await aiDeleteAutomation(row.id);
+    const fa = locale.startsWith('fa');
+    const label = row.kind === 'rebalance'
+      ? (fa ? 'تعادل پرتفوی' : 'rebalance')
+      : (fa ? `خرید دوره‌ای ${row.asset || ''}`.trim() : `DCA ${row.asset || ''}`.trim());
+    const out = await aiDeleteAutomation(row.id);
     await refreshAutomations();
-  }, [refreshAutomations]);
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: out?.ok === false ? 'error' : 'assistant',
+      ui: { type: 'TEXT' },
+      content: out?.ok === false
+        ? (fa ? `«${label}» حذف نشد: ${String(out?.error || 'UNAVAILABLE')}` : `"${label}" was not deleted: ${String(out?.error || 'UNAVAILABLE')}`)
+        : (fa ? `«${label}» حذف شد.` : `"${label}" deleted.`)
+    });
+    appendOp({
+      kind: 'AUTOMATION_DELETE',
+      status: out?.ok === false ? 'FAILED' : 'CANCELLED',
+      title: label,
+      detail: String(row.id || ''),
+      ref: row.id || null,
+      refKind: 'automation'
+    });
+    setAiTab('chat');
+  }, [locale, pushTurn, appendOp, refreshAutomations]);
 
   const progressLine = progress
     ? formatExecutionProgress({
@@ -3565,10 +3880,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const card = pendingExecution?.card || null;
 
-  const pushTurn = useCallback((m) => {
-    setMessages((prev) => [...prev, m]);
-    return m;
-  }, []);
 
   const persistedCountRef = useRef(0);
   useEffect(() => {
@@ -3619,6 +3930,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         }
         persistedCountRef.current = messages.length;
       }
+      /*
+       * The FULL thread snapshot — cards, choices, plans included — so a
+       * reload, a navigation away, or an expired convState never loses the
+       * conversation. Device-local only; failures are silent by design.
+       */
+      try { saveThreadSnapshot(seasonIdRef.current, messages); } catch {}
     } catch {}
   }, [messages, conversationId]);
 
@@ -3770,8 +4087,75 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
     setPanel(null);
     setDrawerOpen(false);
+    /* Leaving the chat for a venue: remember where the user went, so the
+       return turn can ask for the outcome instead of pretending nothing
+       happened. The thread itself is already snapshotted by the persist
+       effect — it will be exactly as it was left.
+       A RICHER hand-off (the strategy stage, written seconds ago by the
+       stage runner) must not be flattened by the generic «باز کن» chip that
+       carries the same route: keep whichever is fresher and more specific. */
+    try {
+      const existing = readPendingHandoff();
+      const freshStageHandoff = existing
+        && existing.route === target.to
+        && existing.seasonId === seasonIdRef.current
+        && existing.kind === 'strategy-stage'
+        && (Date.now() - Number(existing.at || 0)) < 5 * 60 * 1000;
+      if (!freshStageHandoff) {
+        writePendingHandoff({ route: target.to, label: routeFaLabel(target.to), kind: 'route', seasonId: seasonIdRef.current });
+      }
+    } catch {}
     try { navigate(target.to); } catch { /* router ready */ }
   }, [navigate, location.pathname, openPanel, openEcosystem, locale]);
+
+  /*
+   * The RETURN turn. When the user comes back to /intent after an execution
+   * hand-off (swap, farm, a strategy stage…), the thread is intact — but the
+   * outcome of that hand-off is unknown. The honest move is to ask: «انجام
+   * شد یا لغو شد؟» — with a continue path — instead of guessing or staying
+   * silent. Fires at most once per hand-off (the key is cleared on show).
+   */
+  const maybeShowHandoffOutcome = useCallback((seasonId) => {
+    let pending = null;
+    try { pending = readPendingHandoff(); } catch { pending = null; }
+    if (!pending || !pending.route) return false;
+    // Only the season that issued the hand-off asks for its outcome; a
+    // hand-off from another season waits until THAT season is continued.
+    if (pending.seasonId && pending.seasonId !== seasonId) return false;
+    try { clearPendingHandoff(); } catch {}
+    const faLoc = locale.startsWith('fa');
+    const label = pending.label || routeFaLabel(pending.route);
+    setMessages((prev) => [...prev, {
+      id: makeId(),
+      role: 'ai',
+      content: faLoc
+        ? `برگشتی! «${label}» را باز کرده بودی — خروجی چی شد؟`
+        : `Welcome back! You had opened "${label}" — how did it go?`,
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      handoff: {
+        route: pending.route,
+        label,
+        kind: pending.kind || 'route',
+        strategyId: pending.strategyId || null,
+        stageId: pending.stageId || null
+      },
+      choices: [
+        { id: 'handoff-done', label: faLoc ? '✅ انجام شد — ادامه بده' : '✅ Done — continue' },
+        { id: 'handoff-cancelled', label: faLoc ? '❌ لغو شد' : '❌ Cancelled' },
+        { id: 'handoff-browse', label: faLoc ? '👀 فقط نگاه کردم' : '👀 Just looking' }
+      ],
+      choiceKind: 'HANDOFF_OUTCOME'
+    }]);
+    return true;
+  }, [locale]);
+
+  // Fire the return turn on mount — /intent unmounts on every navigation, so
+  // every arrival back is a fresh mount and the one place to ask.
+  useEffect(() => {
+    try { maybeShowHandoffOutcome(seasonIdRef.current); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /*
    * `?tab=` also has to work when the user arrives from somewhere else in the
@@ -3790,15 +4174,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (target.kind === 'tab') { setPanel(null); setDrawerOpen(false); setAiTab(target.tab); }
   }, [location.search, openPanel, openEcosystem]);
 
-  const appendOp = useCallback((op) => {
-    try {
-      const row = appendOperation({ conversationId, ...op });
-      setHistData(readHistory());
-      return row;
-    } catch {
-      return null;
-    }
-  }, [conversationId]);
 
   const runOpportunity = useCallback(async (card) => {
     setOpsBusy(true);
@@ -3973,8 +4348,196 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setOpsBusy(false);
   }, [locale, pushTurn, appendOp, refreshStatus]);
 
+  /*
+   * ─── AGENT FACTORY: the creation loop ────────────────────────────────────
+   * «برام یک ایجنت بساز که …» ends here. The factory (agentFactory.js) parses
+   * the sentence purely; this loop asks for the missing slots (chips or free
+   * text), confirms the exact agent, and creates it through the SAME
+   * monitor/automation registries the forms use — never a parallel fake.
+   * Suggested agents and the intelligence-fleet «بساز» buttons feed the same
+   * loop, so there is exactly one way an agent comes to exist.
+   */
+  const askAgentSlot = useCallback((draft, slot) => {
+    const q = agentSlotQuestion(slot, draft, locale);
+    pendingAgentDraftRef.current = { draft, slot };
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      content: q.text,
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      agentDraft: draft,
+      agentSlot: slot,
+      choices: Array.isArray(q.choices) ? q.choices : [],
+      choiceKind: q.choices?.length ? 'AGENT_SLOT' : null
+    });
+  }, [locale, pushTurn]);
+
+  const askAgentConfirm = useCallback((draft) => {
+    const fa = locale.startsWith('fa');
+    pendingAgentDraftRef.current = { draft, slot: 'confirm' };
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      content: `${agentSummary(draft, locale)}\n\n${fa ? 'بسازمش؟' : 'Build it?'}`,
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      agentDraft: draft,
+      choices: [
+        { id: 'agent-confirm-yes', label: fa ? '✓ بساز' : '✓ Build it' },
+        { id: 'agent-confirm-edit', label: fa ? '✎ تغییرش بده' : '✎ Change it' },
+        { id: 'agent-confirm-no', label: fa ? '✕ انصراف' : '✕ Cancel' }
+      ],
+      choiceKind: 'AGENT_CONFIRM'
+    });
+  }, [locale, pushTurn]);
+
+  const advanceAgentDraft = useCallback((draft) => {
+    if (!draft) return;
+    const missing = missingSlots(draft);
+    if (draft.kind && !missing.length) askAgentConfirm(draft);
+    else askAgentSlot(draft, missing[0] || 'kind');
+  }, [askAgentSlot, askAgentConfirm]);
+
+  const createAgentFromDraft = useCallback(async (draft, { via = 'chat' } = {}) => {
+    void via;
+    const fa = locale.startsWith('fa');
+    pendingAgentDraftRef.current = null;
+    const built = buildAgentPayload(draft, { locale });
+    if (built?.error) {
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa ? 'این ایجنت ناقص است و ساخته نشد — از اول بگو چه ایجنتی می‌خواهی.' : 'This agent draft is incomplete and was not created — tell me again what you want.'
+      });
+      return;
+    }
+    if (built.backend === 'monitor') {
+      await handleMonitorCreate({ ...built.draft, conversationId, source: 'agent-factory' });
+      return;
+    }
+    setOpsBusy(true);
+    const made = await aiCreateAutomation(built.input);
+    if (!made?.ok) {
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: (fa ? 'ایجنت ساخته نشد: ' : 'The agent was not created: ') + String(made?.error || 'UNAVAILABLE')
+      });
+      setOpsBusy(false);
+      return;
+    }
+    await refreshAutomations();
+    const a = made.automation || {};
+    const freqFa = { DAILY: 'روزانه', WEEKLY: 'هفتگی', MONTHLY: 'ماهانه' }[String(a.frequency || '').toUpperCase()] || a.frequency || '';
+    const label = a.kind === 'rebalance'
+      ? (fa ? `تعادل ${freqFa} پرتفوی` : `${a.frequency} rebalance`)
+      : (fa ? `خرید ${freqFa} ${a.amountUsd} دلار ${a.asset}` : `${a.frequency} buy $${a.amountUsd} ${a.asset}`);
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      content: fa
+        ? `ایجنت «${label}» ساخته شد و فعال است. در تب ایجنت‌ها می‌بینی‌اش؛ هر اجرا با تأیید تو انجام می‌شود.`
+        : `Agent "${label}" created and active. You can see it on the Agents tab; every run needs your confirmation.`
+    });
+    appendOp({
+      kind: 'AUTOMATION_CREATE',
+      status: 'ACTIVE',
+      title: label,
+      detail: `${a.kind || ''} ${a.asset || ''} ${a.amountUsd != null ? `$${a.amountUsd}` : ''} ${a.frequency || ''}`.trim(),
+      ref: a.id || null,
+      refKind: 'automation'
+    });
+    setOpsBusy(false);
+  }, [conversationId, locale, pushTurn, appendOp, handleMonitorCreate, refreshAutomations]);
+
+  const createSuggestedAgent = useCallback(async (templateId) => {
+    const fa = locale.startsWith('fa');
+    const draft = suggestedDraft(templateId);
+    if (!draft?.ok) {
+      setAiTab('chat');
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa ? 'این قالب ایجنت را نشناختم.' : 'I did not recognise that agent template.'
+      });
+      return;
+    }
+    // The tap IS the confirmation — create immediately and report in chat.
+    setAiTab('chat');
+    await createAgentFromDraft(draft, { via: 'suggested' });
+  }, [locale, pushTurn, createAgentFromDraft]);
+
+  const handleAgentChoice = useCallback((msg, choice) => {
+    const fa = locale.startsWith('fa');
+    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, responded: true, selectedChoiceLabel: choice?.label || '' } : m)));
+    if (msg?.choiceKind === 'SUGGEST_AGENT') {
+      if (String(choice?.id) === 'agent-custom' || String(choice?.value) === 'custom') {
+        pendingAgentDraftRef.current = null;
+        setInput(fa ? 'برام یک ایجنت بساز که ' : 'Build me an agent that ');
+        return;
+      }
+      void createSuggestedAgent(String(choice?.value || ''));
+      return;
+    }
+    if (msg?.choiceKind === 'AGENT_SLOT') {
+      const slot = msg.agentSlot || pendingAgentDraftRef.current?.slot;
+      const base = msg.agentDraft || pendingAgentDraftRef.current?.draft;
+      const next = applyAgentChoice(base, slot, choice?.value);
+      if (!next) {
+        pendingAgentDraftRef.current = null;
+        pushTurn({
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa ? 'این انتخاب را نفهمیدم — از اول بگو چه ایجنتی می‌خواهی.' : 'I did not understand that choice — tell me again what agent you want.'
+        });
+        return;
+      }
+      advanceAgentDraft(next);
+      return;
+    }
+    // AGENT_CONFIRM
+    const id = String(choice?.id || '');
+    const draft = msg?.agentDraft || pendingAgentDraftRef.current?.draft;
+    if (id === 'agent-confirm-yes') {
+      if (!draft || missingSlots(draft).length) {
+        if (draft) advanceAgentDraft(draft);
+        return;
+      }
+      void createAgentFromDraft(draft, { via: 'chat' });
+    } else if (id === 'agent-confirm-edit') {
+      if (!draft) return;
+      askAgentSlot(draft, primarySlot(draft.kind));
+    } else {
+      pendingAgentDraftRef.current = null;
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: fa ? 'باشه، ایجنت ساخته نشد. هر وقت خواستی بگو.' : 'OK, no agent was created. Just say the word.'
+      });
+    }
+  }, [locale, pushTurn, advanceAgentDraft, askAgentSlot, createAgentFromDraft, createSuggestedAgent]);
+
+  agentOpsRef.current = {
+    handleChoice: handleAgentChoice,
+    createSuggested: createSuggestedAgent,
+    advance: advanceAgentDraft,
+    create: createAgentFromDraft
+  };
+
+  /*
+   * The intelligence-fleet «بساز» link. Each fleet card sends its own
+   * verbatim AGENT_CREATE sentence through the real pipeline, so a fleet
+   * agent becomes a working user agent via parse → confirm → create.
+   */
+  const spawnFleetAgent = useCallback((agentId) => {
+    const prompt = fleetPrompt(agentId, locale);
+    if (!prompt) return;
+    setPanel(null);
+    setAiTab('chat');
+    try { void sendRef.current?.(prompt); } catch {}
+  }, [locale]);
+
   const handleMonitorAction = useCallback(async (m, action) => {
     if (!m?.id) return;
+    const fa = locale.startsWith('fa');
     setOpsBusy(true);
     let out = null;
     if (action === 'pause') out = await apiPauseMonitor(m.id);
@@ -3982,27 +4545,64 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     else if (action === 'cancel') out = await apiCancelMonitor(m.id);
     else if (action === 'evaluate') out = await apiEvaluateMonitor(m.id);
     if (out?.ok) await refreshMonitors();
-    const verb = action === 'pause' ? (locale.startsWith('fa') ? 'متوقف شد' : 'paused')
-      : action === 'resume' ? (locale.startsWith('fa') ? 'ادامه یافت' : 'resumed')
-      : action === 'cancel' ? (locale.startsWith('fa') ? 'لغو شد' : 'cancelled')
-      : (locale.startsWith('fa') ? 'بررسی شد' : 'checked');
+    const mon = out?.monitor || m;
+    const label = mon.label || m.label || mon.asset?.symbol || (fa ? 'دیده‌بان' : 'monitor');
+
+    let content = '';
+    if (action === 'pause') content = fa ? `«${label}» متوقف شد. شرطش پاک نشده — هر وقت خواستی «ادامه» بزن.` : `"${label}" paused. Its condition is kept — resume any time.`;
+    else if (action === 'resume') content = fa ? `«${label}» ادامه یافت و دوباره فعال است.` : `"${label}" resumed and active again.`;
+    else if (action === 'cancel') content = fa ? `«${label}» لغو شد.` : `"${label}" cancelled.`;
+    else if (action === 'evaluate') content = monitorEvaluateReport(mon, out, { locale });
+    if (out?.ok === false || out?.error) {
+      const err = String(out?.error || 'UNAVAILABLE');
+      content += (content ? '\n' : '') + (fa ? `خطا: ${err}` : `Error: ${err}`);
+    }
+
+    /*
+     * A yield («فرصت») check names the actual money: the best live venue, its
+     * APY and its risk — «سود چیه، ریسک چیه». Best-effort: if the feed is
+     * unreachable the evaluation numbers above still stand on their own.
+     */
+    if (action === 'evaluate' && out?.ok && String(mon.metric || '').toUpperCase() === 'OPPORTUNITY') {
+      try {
+        const data = await getYields();
+        const pools = Array.isArray(data?.pools) ? data.pools : [];
+        const ranked = pools
+          .map((p) => ({ apy: Number(p.apy ?? p.apyPct), name: p.project || p.pool || p.symbol || '—', risk: p.risk || null }))
+          .filter((r) => Number.isFinite(r.apy))
+          .sort((a, b) => b.apy - a.apy)
+          .slice(0, 3);
+        if (ranked.length) {
+          const riskFa = (r) => r === 'low' ? 'کم' : r === 'high' ? 'زیاد' : r === 'medium' ? 'متوسط' : '—';
+          const lines = ranked.map((r, i) => fa
+            ? `${i + 1}. ${r.name}: سود ${r.apy.toFixed(2)}٪ سالانه · ریسک ${riskFa(r.risk)}`
+            : `${i + 1}. ${r.name}: ${r.apy.toFixed(2)}% APY · risk ${r.risk || '—'}`).join('\n');
+          content += `\n\n${fa ? 'بهترین سودهای زنده الان:' : 'Best live yields right now:'}\n${lines}`;
+        }
+      } catch { /* the evaluation stands without the venue list */ }
+    }
+
     pushTurn({
       id: makeId(),
       role: 'ai',
-      kind: action === 'cancel' ? 'error' : 'assistant',
+      kind: action === 'cancel' || out?.ok === false ? 'error' : 'assistant',
       ui: { type: 'MONITOR_CARD' },
-      content: `${m.label || m.asset?.symbol} ${verb}${out?.error ? ' — ' + out.error : ''}`,
+      content,
       monitor: out?.monitor || { ...m, status: action === 'pause' ? 'PAUSED' : action === 'resume' ? 'ACTIVE' : action === 'cancel' ? 'CANCELLED' : m.status }
     });
     appendOp({
       kind: 'MONITOR_' + String(action).toUpperCase(),
       status: out?.ok === false ? 'FAILED' : (action === 'cancel' ? 'CANCELLED' : 'ACTIVE'),
-      title: m.label || `${m.asset?.symbol || ''} monitor`,
-      detail: action,
+      title: label,
+      detail: action === 'evaluate' && out?.evaluation
+        ? `value=${out.evaluation.display ?? out.evaluation.value ?? '—'} threshold=${mon.threshold} hit=${out.triggered === true}`
+        : action,
       ref: m.id,
       refKind: 'monitor'
     });
     setOpsBusy(false);
+    // Every agent action reports where the user reads: the chat.
+    setAiTab('chat');
   }, [locale, refreshMonitors, pushTurn, appendOp]);
 
   const monitorOpportunityRow = useCallback(async (o) => {
@@ -4045,6 +4645,42 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const handleContextTurn = useCallback(async (message) => {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
+
+    /*
+     * ── AGENT FACTORY ──
+     * A pending agent draft owns the next turn: a slot answer fills it, a
+     * cancellation kills it, a NEW agent sentence replaces it, and anything
+     * else releases it so the normal pipeline treats the text as the new
+     * topic it is (the old question's chips stay tappable on their message).
+     */
+    const pendingAgent = pendingAgentDraftRef.current;
+    if (pendingAgent?.draft) {
+      const fa = locale.startsWith('fa');
+      if (/^(لغو|کنسل|بیخیال|انصراف|cancel|never\s*mind)/i.test(text)
+        || (pendingAgent.slot === 'confirm' && /^(نه|نخیر|no)\s*[!.؟?]*$/i.test(text))) {
+        pendingAgentDraftRef.current = null;
+        pushTurn({
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: fa ? 'باشه، ایجنت ساخته نشد. هر وقت خواستی بگو.' : 'OK, no agent was created. Just say the word.'
+        });
+        return { handled: true };
+      }
+      if (isAgentCreateRequest(text)) {
+        advanceAgentDraft(parseAgentRequest(text, { locale }));
+        return { handled: true };
+      }
+      const filled = fillAgentSlot(pendingAgent.draft, pendingAgent.slot, text);
+      if (filled) {
+        advanceAgentDraft(filled);
+        return { handled: true };
+      }
+      pendingAgentDraftRef.current = null;
+      return { handled: false };
+    }
+    if (isAgentCreateRequest(text)) {
+      advanceAgentDraft(parseAgentRequest(text, { locale }));
+      return { handled: true };
+    }
 
     // Only a bare yes confirms a leftover draft. «اره پر سوده را» / «افق جهانی»
     // are new requests and must not fire the old monitor/order.
@@ -4204,16 +4840,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
 
     return { handled: false };
-  }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity]);
+  }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity, advanceAgentDraft]);
 
   contextHandlerRef.current = handleContextTurn;
 
   const newSeason = useCallback(() => {
     // The current thread is already archived (every turn is persisted as it
-    // happens); a new season is simply a clean conversation under a new id.
+    // happens, and the full snapshot sits next to the archive); a new season
+    // is simply a clean conversation under a new id.
     const next = makeSeasonId();
     writeSeasonId(next);
     seasonIdRef.current = next;
+    // The old thread's pending hand-off belongs to the old season: a fresh
+    // season must not open with «انجام شد یا لغو شد؟» for work the user left.
+    try { clearPendingHandoff(); } catch {}
     persistedCountRef.current = 0;
     setActiveContext(null);
     setPendingExecution(null);
@@ -4233,35 +4873,74 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [t, currentPage]);
 
   const handleContinue = useCallback((item) => {
+    /*
+     * Restores an archived season into the live thread and adopts its id so
+     * the next turns continue the same episode instead of forking a new one.
+     * Layer 1 is the FULL thread snapshot (cards, choices, strategy plans);
+     * layer 2 is the text-only archive rows for seasons that predate
+     * snapshots — with an honest note that the cards are gone.
+     */
+    const restoreSeasonThread = (seasonId) => {
+      let restored = null;
+      let full = false;
+      try {
+        const snap = loadThreadSnapshot(seasonId);
+        if (Array.isArray(snap) && snap.length) {
+          restored = sanitizeRestoredThread(snap);
+          full = true;
+        }
+      } catch { restored = null; }
+      if (!restored) {
+        const rows = conversationsForSeason(seasonId, { history: readHistory() });
+        if (rows.length) {
+          restored = rows.map((c) => ({
+            id: c.sourceId || c.id,
+            role: c.role,
+            content: c.content,
+            kind: c.role === 'user' ? 'user' : (c.kind && c.kind !== 'hello' ? c.kind : 'assistant'),
+            at: Number(c.at) || Date.now()
+          }));
+        }
+      }
+      if (!restored || !restored.length) return false;
+      writeSeasonId(seasonId);
+      seasonIdRef.current = seasonId;
+      // The restored rows are, by definition, already in the archive — mark
+      // them as persisted so the persist effect never re-records (and thus
+      // never duplicates) them. Only the NEW turns that follow are appended.
+      const faLoc = locale.startsWith('fa');
+      const thread = full ? restored : [...restored, {
+        id: makeId(),
+        role: 'ai',
+        content: faLoc
+          ? 'این سشن قدیمی است — فقط متنش مانده و کارت‌ها (استراتژی، انتخاب‌ها) همراهش نیست. از اینجا به بعد همه‌چیز کامل ذخیره می‌شود.'
+          : 'This is an older season — only its text survived, without the cards (strategy, choices). From here on everything is stored in full.',
+        kind: 'assistant',
+        ui: { type: 'TEXT' }
+      }];
+      persistedCountRef.current = restored.length;
+      setMessages(thread);
+      setConvState((prev) => ({ ...(prev || {}), messages: thread }));
+      return true;
+    };
+
     if (item?.kind === 'season' && item?.seasonId) {
-      /*
-       * Continue on a SEASON restores that archived conversation into the
-       * thread, newest-last, and adopts its season id so the next turns
-       * continue the same episode instead of forking a new one.
-       */
-      const seasonId = item.seasonId;
-      const rows = readHistory().conversations
-        .filter((c) => c.seasonId === seasonId || (!c.seasonId && c.conversationId === seasonId))
-        .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
-      if (rows.length) {
-        const restored = rows.map((c) => ({
-          id: c.sourceId || c.id,
-          role: c.role,
-          content: c.content,
-          kind: c.role === 'user' ? 'user' : (c.kind && c.kind !== 'hello' ? c.kind : 'assistant'),
-          at: Number(c.at) || Date.now()
-        }));
-        writeSeasonId(seasonId);
-        seasonIdRef.current = seasonId;
-        // The restored rows are, by definition, already in the archive — mark
-        // them as persisted so the persist effect never re-records (and thus
-        // never duplicates) them. Only the NEW turns that follow are appended.
-        persistedCountRef.current = restored.length;
-        setMessages(restored);
+      if (restoreSeasonThread(item.seasonId)) {
+        // The continued season may own a hand-off the user never answered.
+        try { maybeShowHandoffOutcome(item.seasonId); } catch {}
       }
       setActiveContext(null);
       setPanel(null);
       return;
+    }
+    /*
+     * Continue on an OPERATION now restores the operation's own season when
+     * it has one — the operation happened inside a conversation, and «ادامه»
+     * means going back to exactly that conversation. Only operations without
+     * a season (legacy rows) fall back to the old context-only resume.
+     */
+    if (item?.seasonId && restoreSeasonThread(item.seasonId)) {
+      try { maybeShowHandoffOutcome(item.seasonId); } catch {}
     }
     if (item?.refKind === 'monitor' || item?.kind === 'MONITOR_CREATE' || item?.id?.startsWith?.('mon_')) {
       const mon = monitors.find((x) => x.id === (item.ref || item.id));
@@ -4281,7 +4960,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         ? `ادامهٔ «${item?.title || item?.content || activeContext?.label || 'عملیات'}». حالا می‌توانی بگویی «متوقفش کن» یا «شرطش را تغییر بده».`
         : `Context resumed for "${item?.title || item?.content || 'item'}". Try "stop it" or "change its condition".`
     });
-  }, [monitors, locale, pushTurn]);
+  }, [monitors, locale, pushTurn, maybeShowHandoffOutcome]);
 
   /* ── Trench-style surface: helpers for the tab views ───────────────────
      All of it reads state the page already owns — automations and monitors
@@ -4297,9 +4976,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (diff >= 0 && diff < 86400000) return fa ? `${Math.floor(diff / 3600000)} ساعت پیش` : `${Math.floor(diff / 3600000)}h ago`;
     return d.toLocaleDateString(fa ? 'fa-IR' : undefined, { month: 'short', day: 'numeric' });
   };
+  /*
+   * «+ ایجنت جدید» opens the real creation flow in the chat: one tap per
+   * suggested agent (the tap creates it), or a free sentence for a custom
+   * one. It never prefills dead text anymore.
+   */
   const spawnAgent = () => {
     setAiTab('chat');
-    setInput(fa ? 'برام یک ایجنت بساز که ' : 'Spawn an agent that ');
+    pendingAgentDraftRef.current = null;
+    pushTurn({
+      id: makeId(),
+      role: 'ai',
+      content: fa
+        ? 'چه ایجنتی بسازم؟ یکی را بزن تا همان لحظه ساخته شود — یا بنویس دقیقاً چه کاری مدام انجام شود.'
+        : 'Which agent should I build? Tap one to create it right away — or type exactly what should keep happening.',
+      kind: 'assistant',
+      ui: { type: 'TEXT' },
+      choices: [
+        ...SUGGESTED_AGENTS.map((s) => ({
+          id: s.id,
+          value: s.id,
+          label: fa ? `✦ ${s.titleFa}` : `✦ ${s.titleEn}`
+        })),
+        { id: 'agent-custom', value: 'custom', label: fa ? '✍️ خودم می‌گم' : '✍️ I will describe it' }
+      ],
+      choiceKind: 'SUGGEST_AGENT'
+    });
   };
   const agentCards = [
     ...(Array.isArray(automations) ? automations : []).map((a) => ({
@@ -4653,12 +5355,36 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 <span className="tag-empty-title">{fa ? 'هنوز ایجنتی نداری' : 'No agents yet'}</span>
                 <span className="tag-empty-sub">
                   {fa
-                    ? 'از چت بگو چه کاری مدام انجام شود — خرید دوره‌ای، بازبینی پرتفوی یا دیده‌بانی قیمت — و برایت ایجنت می‌سازم.'
-                    : 'Describe a recurring job in chat — DCA buys, portfolio rebalances or price watches — and it becomes an agent.'}
+                    ? 'یکی از پیشنهادی‌ها را بزن تا همان لحظه ساخته شود — یا از چت بگو چه کاری مدام انجام شود.'
+                    : 'Tap a suggestion to create it right away — or describe a recurring job in chat.'}
                 </span>
                 <button type="button" className="tag-spawn" onClick={spawnAgent}>+ {fa ? 'ساخت اولین ایجنت' : 'Spawn your first agent'}</button>
               </div>
             )}
+
+            <div className="tag-section">{fa ? 'ایجنت‌های پیشنهادی' : 'Suggested agents'}</div>
+            <div data-testid="intent-ai-suggested-agents">
+              {SUGGESTED_AGENTS.map((s) => (
+                <div key={s.id} className="tag-card tag-suggest">
+                  <div className="tag-card-head">
+                    <span className="tag-card-name">{fa ? s.titleFa : s.titleEn}</span>
+                  </div>
+                  <div className="tag-card-meta">
+                    <span>{fa ? s.descFa : s.descEn}</span>
+                  </div>
+                  <div className="tag-card-actions">
+                    <button
+                      type="button"
+                      className="tag-icon-btn"
+                      onClick={() => agentOpsRef.current?.createSuggested?.(s.id)}
+                      data-testid={`suggest-agent-${s.id}`}
+                    >
+                      {fa ? 'بساز' : 'Build'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         ) : null}
 
@@ -4904,6 +5630,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         onRetryProviders={() => { void loadAiProviders(); }}
         learningStats={learningStats}
         locale={locale}
+        onSpawnAgent={spawnFleetAgent}
       />
       <MonitorDraftForm
         key={monitorDraftOpen ? `mon-${monitorInitial ? `${monitorInitial.asset?.symbol || ''}${monitorInitial.metric || ''}` : 'open'}` : 'mon-closed'}

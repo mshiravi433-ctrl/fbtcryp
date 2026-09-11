@@ -200,17 +200,28 @@ clearPlans(); resetIntentOS();
   t('the orders adapter still answers with a dataStatus', typeof orders.dataStatus === 'string');
 }
 
-/* ── 10. the surface uses existing components + classes only ─────────────── */
+/* ── 10. the surface uses existing components + classes only ───────────────
+ *
+ * NOTE (product decision, user-directed): the chat bubble no longer renders
+ * the confidence meter («اطمینان: پایین · 36%»), the consensus/divergence
+ * box («اجماع Agentها…») or the 👍/👎 row — they read as noise on every
+ * answer. The DATA still travels on the message (asserted below) so probes
+ * and panels can read it; only the bubble rendering is gone.
+ */
 {
   const panel = readFileSync(join(repoRoot, 'src/components/IntentAIUnified.jsx'), 'utf8');
   t('plan steps render through the existing timeline',
     panel.includes('mapPlanStepsForTimeline(m.upgrade7.plan.steps)') && panel.includes('<AIActivityTimeline'));
-  t('confidence renders through the existing meter',
-    panel.includes('iaos-conf-meter') && panel.includes('u7-confidence'));
-  t('divergence renders through the existing warning',
-    panel.includes('iaos-divergence-warn') && panel.includes('u7-divergence'));
-  t('consensus renders through the existing box',
-    panel.includes('iaos-consensus-box') && panel.includes('u7-consensus'));
+  t('confidence data still travels on the message',
+    panel.includes('confidence: u7.confidence'));
+  t('synthesis data still travels on the message',
+    panel.includes('synthesis: u7.synthesis'));
+  t('chat does not render the confidence meter',
+    !panel.includes('u7-confidence') && !panel.includes('iaos-conf-meter'));
+  t('chat does not render the consensus/divergence box',
+    !panel.includes('u7-consensus') && !panel.includes('u7-divergence') && !panel.includes('iaos-consensus-box'));
+  t('chat does not render the feedback row',
+    !panel.includes('intent-ai-feedback') && !panel.includes('iaos-feedback-row'));
   t('predicted chips merge with suggestions', panel.includes('allChips') && panel.includes('predictedNext'));
   t('answers bind to the slot that asked', panel.includes('bindAnswer'));
   t('derived chips memoize (no render-time heavy work)',

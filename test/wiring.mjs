@@ -137,6 +137,7 @@ export default function run() {
      * to it.
      */
     '/solana',                  // -> tab inside /swap
+    '/ai-global',               // -> 'global' tab inside /news (AiGlobalIntelligence renders there; the standalone URL is kept as a contract)
     '/ostium', '/dydx', '/derivatives', // -> derivatives / stocks tabs
     '/portfolio',               // -> Intelligence tile inside /wallet
     /*

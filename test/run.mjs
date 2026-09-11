@@ -38,6 +38,15 @@ import './intent-ai/ci-brain-turns-probe.mjs';
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
 import './intent-ai/ops-i18n-probe.mjs';
+/* Trust push — the four proofs the user-visible fixes are real: the agent
+   creation draft loop («برام یک ایجنت بساز که …») and its monitor/automation
+   payloads, the strategy card's fa presentation layer, the per-season thread
+   snapshots that make switching options/tabs lossless, and the percent-drop
+   guard semantics (auto-arm + drop-of-t% firing) on the real monitor engine. */
+import './intent-ai/agent-factory-probe.mjs';
+import './intent-ai/strategy-locales-probe.mjs';
+import './intent-ai/thread-snapshot-probe.mjs';
+import './intent-ai/monitor-percent-probe.mjs';
 /*
  * Strategy brain — the layer that turns «۱۰ هزار دلار، ۱۵٪ در ۴ ماه، ریسک
  * متوسط» into a cross-module Portfolio Strategy instead of a link to one

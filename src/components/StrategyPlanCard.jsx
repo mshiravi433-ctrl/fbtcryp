@@ -92,6 +92,44 @@ const REFUSALS = Object.freeze({
   }
 });
 
+/* Slot codes come from the parser in English; the user reads their own words. */
+const MISSING_FA = Object.freeze({
+  capitalUsd: 'سرمایه',
+  targetPct: 'هدف سود',
+  horizonDays: 'بازه زمانی'
+});
+
+const RISK_PROFILE_FA = Object.freeze({
+  conservative: 'محافظه‌کار',
+  balanced: 'متعادل',
+  aggressive: 'تهاجمی'
+});
+
+const REGIME_FA = Object.freeze({
+  risk_on: 'ریسک‌پذیر',
+  risk_off: 'احتیاطی',
+  neutral: 'خنثی'
+});
+/*
+ * Runtime trigger details arrive in English ("behind the plan curve by 12pp").
+ * The ids are a closed set, so the card re-words each one instead of letting
+ * raw English leak into a Persian verdict block.
+ */
+function triggerFa(t) {
+  const id = String(t?.id || '');
+  const d = String(t?.detail || '');
+  const nums = d.match(/-?[\d.]+/g) || [];
+  if (id === 'drawdown-budget' && nums.length >= 2) return `\u0628\u0648\u062f\u062c\u0647 \u0627\u0641\u062a: \u0627\u0641\u062a ${nums[0]}٪ \u0628\u06cc\u0634\u062a\u0631 \u0627\u0632 \u0628\u0648\u062f\u062c\u0647 ${nums[1]}٪`;
+  if (id === 'target-pace' && nums.length >= 1) return `\u0639\u0642\u0628 \u0627\u0632 \u0645\u0646\u062d\u0646\u06cc: ${nums[0]} \u0648\u0627\u062d\u062f \u0639\u0642\u0628\u200c\u062a\u0631 \u0627\u0632 \u0645\u0646\u062d\u0646\u06cc \u0628\u0631\u0646\u0627\u0645\u0647`;
+  if (id === 'floor-breach' && nums.length >= 2) return `\u0634\u06a9\u0633\u062a \u06a9\u0641: \u062a\u062d\u0642\u0642 ${nums[0]}٪ \u062f\u0631 \u0628\u0631\u0627\u0628\u0631 \u06a9\u0641 ${nums[1]}٪`;
+  if (id === 'rate-decay' && nums.length >= 1) return `\u0627\u0641\u062a \u0646\u0631\u062e: APY \u06cc\u06a9 \u0628\u062e\u0634 ${nums[0]}٪ \u0627\u0641\u062a\u0627\u062f`;
+  if (id === 'regime-flip') {
+    const m = d.match(/→\s*(\S+)/);
+    return `\u0686\u0631\u062e\u0634 \u0631\u0698\u06cc\u0645 \u0628\u0627\u0632\u0627\u0631${m ? ` \u0628\u0647 ${REGIME_FA[m[1]] || m[1]}` : ''}`;
+  }
+  return `${id}: ${d}`;
+}
+
 /* ── sub-blocks ──────────────────────────────────────────────────────────── */
 
 function CoverageRow({ strategy, fa }) {
@@ -124,49 +162,58 @@ function CoverageRow({ strategy, fa }) {
 function ComparisonTable({ strategy, fa, picked, onPick }) {
   const rows = Array.isArray(strategy.comparison) ? strategy.comparison : [];
   if (!rows.length) return null;
+  const head = {
+    plan: fa ? 'گزینه' : 'Plan',
+    ret: fa ? 'بازده' : 'Return',
+    risk: fa ? 'ریسک' : 'Risk',
+    cost: fa ? 'هزینه' : 'Cost',
+    data: fa ? 'اتکا' : 'Data'
+  };
   return (
     <div className="isp-block" data-testid="strategy-comparison">
       <div className="isp-block-head">
         <span>{fa ? 'مقایسه گزینه‌ها' : 'Options compared'}</span>
         <b>{rows.length}</b>
       </div>
-      <table className="isp-table">
-        <thead>
-          <tr>
-            <th>{fa ? 'گزینه' : 'Plan'}</th>
-            <th dir="ltr">{fa ? 'بازده' : 'Return'}</th>
-            <th dir="ltr">{fa ? 'ریسک' : 'Risk'}</th>
-            <th dir="ltr">{fa ? 'هزینه' : 'Cost'}</th>
-            <th dir="ltr">{fa ? 'اتکا' : 'Data'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const why = (strategy.ranking || []).find((x) => x.id === r.id);
-            return (
-              <tr
-                key={r.id}
-                className={`${picked === r.id ? 'is-picked' : ''} ${r.role === 'default' ? 'is-default' : ''}`}
-                onClick={() => onPick?.(r.id)}
-                data-testid={`strategy-option-${r.id}`}
-              >
-                <td>
-                  <button type="button" className="isp-option-name" onClick={() => onPick?.(r.id)}>
-                    {r.title}
-                    {r.role === 'default' ? <em>{fa ? 'پیشنهاد' : 'default'}</em> : null}
-                    {r.role === 'stretch' ? <em className="is-stretch">{fa ? 'شانس هدف' : 'stretch'}</em> : null}
-                  </button>
-                  {why?.reason ? <small>{fa && why.verdict === 'CHOSEN' ? 'انتخاب شد' : why.reason}</small> : null}
-                </td>
-                <td dir="ltr">{pct(r.expectedReturnPct)}</td>
-                <td dir="ltr">{pct(r.riskPct, 1)}</td>
-                <td dir="ltr">{pct(r.costPct)}</td>
-                <td dir="ltr">{Math.round((r.confidence || 0) * 100)}%</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="isp-table-wrap">
+        <table className="isp-table">
+          <thead>
+            <tr>
+              <th>{head.plan}</th>
+              <th dir="ltr">{head.ret}</th>
+              <th dir="ltr">{head.risk}</th>
+              <th dir="ltr">{head.cost}</th>
+              <th dir="ltr">{head.data}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const why = (strategy.ranking || []).find((x) => x.id === r.id);
+              return (
+                <tr
+                  key={r.id}
+                  className={`${picked === r.id ? 'is-picked' : ''} ${r.role === 'default' ? 'is-default' : ''}`}
+                  onClick={() => onPick?.(r.id)}
+                  data-testid={`strategy-option-${r.id}`}
+                >
+                  <td data-th={head.plan} className="isp-cell-name">
+                    <button type="button" className="isp-option-name" onClick={() => onPick?.(r.id)}>
+                      {r.title}
+                      {r.role === 'default' ? <em>{fa ? 'پیشنهاد' : 'default'}</em> : null}
+                      {r.role === 'stretch' ? <em className="is-stretch">{fa ? 'شانس هدف' : 'stretch'}</em> : null}
+                    </button>
+                    {why?.reason ? <small className="isp-why">{why.reason}</small> : null}
+                  </td>
+                  <td dir="ltr" data-th={head.ret} className="isp-num">{pct(r.expectedReturnPct)}</td>
+                  <td dir="ltr" data-th={head.risk} className="isp-num">{pct(r.riskPct, 1)}</td>
+                  <td dir="ltr" data-th={head.cost} className="isp-num">{pct(r.costPct)}</td>
+                  <td dir="ltr" data-th={head.data} className="isp-num">{Math.round((r.confidence || 0) * 100)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -304,7 +351,7 @@ export function StrategyPlanCard({
       <div className="isp-card isp-refused" data-testid="strategy-plan-refused" data-code={effective.code}>
         <p className="isp-refusal">{copy ? (fa ? copy.fa : copy.en) : effective.detail || effective.code}</p>
         {missing.length ? (
-          <p className="isp-note" dir="ltr">missing: {missing.join(', ')}</p>
+          <p className="isp-note">{fa ? `کم است: ${missing.map((m) => MISSING_FA[m] || m).join('، ')}` : `missing: ${missing.join(', ')}`}</p>
         ) : null}
         {effective.detail && copy ? <small dir="ltr">{effective.detail}</small> : null}
       </div>
@@ -329,7 +376,7 @@ export function StrategyPlanCard({
             {usd(goal.capitalUsd)} · {pct(goal.targetPct, 1)} · {goal.horizonDays}d
           </b>
           <small>
-            {fa ? `ریسک ${goal.riskProfile}` : `${goal.riskProfile} risk`}
+            {fa ? `ریسک ${goal.riskProfileFa || RISK_PROFILE_FA[goal.riskProfile] || goal.riskProfile}` : `${goal.riskProfile} risk`}
             {goal.capitalSource ? ` · ${fa ? 'سرمایه از' : 'capital from'} ${goal.capitalSource}` : ''}
           </small>
         </div>
@@ -353,9 +400,11 @@ export function StrategyPlanCard({
       <p className="isp-honesty">{effective.honesty}</p>
 
       {view.regime ? (
-        <p className="isp-regime" dir="ltr">
-          regime: {view.regime} · bias {view.bias} · conviction {Math.round((view.conviction || 0) * 100)}%
-          <small> ({(view.readDomains || []).join(', ') || 'no read'})</small>
+        <p className="isp-regime">
+          {fa
+            ? `رژیم بازار: ${view.regimeFa || REGIME_FA[view.regime] || view.regime} · سوگیری ${view.bias === 'up' ? 'صعودی' : view.bias === 'down' ? 'نزولی' : view.bias || '—'} · قطعیت ${Math.round((view.conviction || 0) * 100)}٪`
+            : `regime: ${view.regime} · bias ${view.bias} · conviction ${Math.round((view.conviction || 0) * 100)}%`}
+          <small> ({(view.readDomains || []).join(', ') || (fa ? 'خوانشی نیست' : 'no read')})</small>
         </p>
       ) : null}
 
@@ -456,7 +505,7 @@ export function StrategyPlanCard({
               ) : null}
               {(live.triggers || []).length ? (
                 <ul className="isp-triggers">
-                  {live.triggers.map((t) => <li key={t.id} dir="ltr">{t.id}: {t.detail}</li>)}
+                  {live.triggers.map((t) => <li key={t.id}>{fa ? triggerFa(t) : <span dir="ltr">{t.id}: {t.detail}</span>}</li>)}
                 </ul>
               ) : null}
               {live.revisionCount ? (
