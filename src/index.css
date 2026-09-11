@@ -7216,7 +7216,11 @@ body { overflow-x: clip; }
 .farm-split-real {
   height: 100%;
   border-radius: 999px;
-  background: var(--ink-cyan);
+  /* Real revenue, drawn as a mint→cyan ramp: the part of the headline rate
+     that is actually being paid to the depositor, told apart from the flat
+     grey emissions track at a glance rather than by reading the legend. */
+  background: linear-gradient(90deg, var(--ink-mint, var(--rgb-4)), var(--ink-cyan, var(--rgb-1)));
+  box-shadow: 0 0 10px -2px rgba(0, 255, 157, 0.5);
 }
 
 .farm-split-legend {
@@ -13648,9 +13652,16 @@ button.settings-quick-action {
   height: 100%;
   overflow: visible;
 }
+/* The berry watermark: filled where the shape is a fruit, stroked where it is
+   a stalk, a leaf or a crown. Both, from one path — that is what lets a single
+   `d` string draw a cherry instead of two overlapping discs, which is what the
+   old accent set reduced to at 34px. */
 .farm-glyph-accent {
-  fill: #ffffff;
-  opacity: 0.17;
+  fill: rgba(255, 255, 255, 0.2);
+  stroke: rgba(255, 255, 255, 0.42);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .farm-glyph-letter {
   fill: #ffffff;

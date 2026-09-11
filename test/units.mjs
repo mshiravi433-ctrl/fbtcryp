@@ -3775,8 +3775,25 @@ export default async function run() {
     })());
     t('...while BTCB is not WBTC and stays unresolved',
       pairSwapRoute({ symbol: 'WBTC-BNB', exposure: 'multi', chain: 'BSC' }) === null);
-    t('...and wstETH never aliases to stETH',
-      pairSwapRoute({ symbol: 'WSTETH-ETH', exposure: 'multi', chain: 'Ethereum' }) === null);
+    /*
+     * wstETH USED to be absent from the registry, so a WSTETH leg stayed
+     * unresolved and `=== null` was the whole assertion. The Farm's Ethereum
+     * staking set now carries wstETH/weETH/cbETH (they are the wrapped forms
+     * the same depositors hold), so wstETH is a first-class registry token and
+     * `WSTETH-ETH` is a REAL pair rather than a misspelling of `STETH-ETH`.
+     *
+     * What must never happen is the alias: the route has to name wstETH. A
+     * prefilled swap into stETH when the pool holds wstETH is a different
+     * token, a different price and a different risk — the exact mistake the
+     * old `=== null` was protecting against, restated for a registry that can
+     * now spell both.
+     */
+    t('...and a wstETH leg resolves as wstETH, never as stETH', (() => {
+      const r = pairSwapRoute({ symbol: 'WSTETH-ETH', exposure: 'multi', chain: 'Ethereum' });
+      return r?.chainId === 1 && r.from === 'wstETH' && r.to === 'ETH';
+    })());
+    t('...and an STETH leg never resolves as wstETH',
+      pairSwapRoute({ symbol: 'STETH-ETH', exposure: 'multi', chain: 'Ethereum' })?.from === 'stETH');
 
     /*
      * ─── SINGLE-ASSET POOLS GET AN INVEST PATH TOO ─────────────────────────
@@ -4582,9 +4599,20 @@ export default async function run() {
      * (7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj) and freeze authority as
      * the assets already listed, which is the check a convincing clone cannot
      * pass: it can copy a name and a ticker, it cannot be minted by Backed.
+     *
+     * 26 since the Farm's «داخل اپ» pools grew the three Solana liquid-staking
+     * tokens its own yield feed already tracks — bSOL (BlazeStake), INF
+     * (Sanctum Infinity) and hSOL (Helius). They are a different KIND, so they
+     * pass a different gate: `issuerMatches` accepts an LST on `isVerified`
+     * alone, because a liquid-staking token has no Backed-style issuer to
+     * match — its backing is the staked SOL inside it, and a fake would have
+     * to be minted by the same program to survive that check. Their mints come
+     * from the DefiLlama adapters that carry the pools (project + symbol +
+     * mint), which is the same feed the Farm joins against, so a mistyped mint
+     * would not merely be wrong here — it would render an empty row there.
      */
     t('every curated mint is a plausible Solana address',
-      all.length === 23 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 26 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.

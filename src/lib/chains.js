@@ -405,7 +405,31 @@ export const TOKENS = {
      * an outbound link, and so the disclosure can explain what the token is.
      */
     { symbol: 'stETH', name: 'Lido Staked ETH', address: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', decimals: 18, coingeckoId: 'staked-ether', stake: 'eth' },
-    { symbol: 'rETH', name: 'Rocket Pool ETH', address: '0xae78736Cd615f374D3085123A210448E74Fc6393', decimals: 18, coingeckoId: 'rocket-pool-eth', stake: 'eth' }
+    { symbol: 'rETH', name: 'Rocket Pool ETH', address: '0xae78736Cd615f374D3085123A210448E74Fc6393', decimals: 18, coingeckoId: 'rocket-pool-eth', stake: 'eth' },
+    /*
+     * ─── THE REST OF THE ETH STAKING MARKET, ADDED 2026-09-11 ──────────────
+     * «توکن‌های جدید هم اضافه کن» — stETH and rETH were the first two LSTs
+     * ever, not the two people actually hold. wstETH is the wrapped form that
+     * DeFi runs on (the same stake, wrapped, so it can be lent and used as
+     * collateral), weETH is ether.fi's restaking token and cbETH is Coinbase's
+     * — the three largest ETH staking tokens we were not offering at all.
+     *
+     * Every address below was checked against the ISSUER's own published
+     * contract, not copied from a list:
+     *   wstETH  docs.lido.fi — the Lido wrap contract
+     *   cbETH   coinbase.com/cbeth — «The official cbETH contract is: 0xbe98…9704»
+     *   weETH   ether.fi docs / the OFT registration for Etherfi on Ethereum
+     *
+     * They carry `stake: 'eth'` for the same reason the first two do: buying
+     * one IS staking, so the Farm screen can route it through our own swap at
+     * the normal fee instead of sending the user to a protocol site. The Farm
+     * join for the live rate is by DefiLlama project + symbol, and a token
+     * whose project we do not track simply renders NO rate (cbETH today) —
+     * never a guessed one.
+     */
+    { symbol: 'wstETH', name: 'Wrapped stETH', address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18, coingeckoId: 'wrapped-steth', stake: 'eth' },
+    { symbol: 'weETH', name: 'Wrapped eETH', address: '0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee', decimals: 18, coingeckoId: 'wrapped-eeth', stake: 'eth' },
+    { symbol: 'cbETH', name: 'Coinbase Wrapped Staked ETH', address: '0xBe9895146f7AF43049ca1c1AE358B0541Ea49704', decimals: 18, coingeckoId: 'coinbase-wrapped-staked-eth', stake: 'eth' }
   ],
   137: [
     { symbol: 'POL', name: 'Polygon', address: null, decimals: 18, native: true, coingeckoId: 'matic-network' },

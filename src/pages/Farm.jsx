@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+/*
+ * Farm's two new class families (the venue rail and the analysis drawer) ship
+ * with the PAGE, not with the app: this route is a lazy chunk, so its
+ * decoration stays off the first-paint critical path. Same convention as
+ * Shop.jsx → styles/shop-modern.css and Signals.jsx → styles/signals-intel.css.
+ */
+import '../styles/farm-venue.css';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
@@ -22,7 +29,7 @@ import {
   farmScore, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
   projectEarnings, rateIsUnusual, realShare
 } from '../lib/yields';
-import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
+import { getSolanaAssets, MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
 import { LST_ASSETS } from '../lib/solanaAssets';
 import {
   AUTOCOMPOUND_PROJECTS, buildYieldStrategies, chainIconKey, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
@@ -36,6 +43,7 @@ import {
  * row and the hub can never disagree about which pools this app can transact.
  */
 import FarmPositionHub, { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
+import VenueRail from '../components/Farm/VenueRail';
 import { feedErrorLabel } from '../lib/defi/farmErrors';
 import TrendChart from '../components/TrendChart';
 
@@ -76,7 +84,15 @@ const HORIZONS = ['day', 'week', 'month', 'year'];
  */
 const ETH_STAKE_JOIN = {
   stETH: { project: 'lido', feedSymbol: 'STETH' },
-  rETH: { project: 'rocket-pool', feedSymbol: 'RETH' }
+  rETH: { project: 'rocket-pool', feedSymbol: 'RETH' },
+  /* Added 2026-09-11 with the tokens themselves. wstETH is the same Lido stake
+     in its wrapped form, weETH is ether.fi's, and both join a project slug the
+     server allow-list already covers — so the rate on the row is a real feed
+     row, not a second-hand number. cbETH is deliberately ABSENT: its DefiLlama
+     project is not one we track, so the row renders without an estimated APY
+     instead of borrowing Lido's. */
+  wstETH: { project: 'lido', feedSymbol: 'WSTETH' },
+  weETH: { project: 'ether.fi-stake', feedSymbol: 'WEETH' }
 };
 const ethStakeTokens = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
 
@@ -120,6 +136,49 @@ const TVL_ICON = (
 
 const SORT_ICONS = { score: SCORE_ICON, apy: APY_ICON, tvlUsd: TVL_ICON };
 
+/*
+ * The analysis drawer's own glyphs — «در صفحه مشاهده تحلیل از آیکون‌ها و
+ * رنگ‌بندی مدرن‌تر استفاده کن». Small, offline, theme-neutral inline SVGs
+ * instead of emoji: an emoji renders in the OS's colour font, so the same
+ * screen looks like three different products on iOS, Android and a desktop,
+ * and none of them look like this app. These inherit `currentColor`, so the
+ * section that owns them tints them.
+ */
+const STATS_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <path d="M8 19v-6" />
+    <path d="M12.5 19V8.5" />
+    <path d="M17 19v-4" />
+  </svg>
+);
+const RISK_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3.2 20 6v6.2c0 4.2-3.2 7-8 8.6-4.8-1.6-8-4.4-8-8.6V6z" />
+    <path d="M12 9v4.4" />
+    <path d="M12 16.4h.01" />
+  </svg>
+);
+const ACTIONS_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 12h6l1.8-4 2.4 8L16 12h4" />
+  </svg>
+);
+
+/* One titled block in the analysis drawer: icon, label, content. */
+function AnaSection({ icon, title, children }) {
+  return (
+    <section className="farm-ana-section">
+      <div className="farm-ana-section-head">
+        <span className="farm-ana-section-icon" aria-hidden="true">{icon}</span>
+        <p className="farm-ana-section-title">{title}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function RiskPill({ risk, t }) {
   const normalized = ['low', 'medium', 'high'].includes(risk) ? risk : 'high';
   const cls = normalized === 'low' ? 'pill-neutral' : normalized === 'medium' ? 'pill-rgb' : 'pill-down';
@@ -132,9 +191,16 @@ function FreshnessPill({ freshness, t }) {
   return <span className={`pill ${cls}`}>{t(`farm.freshness.${status}`, { defaultValue: status })}</span>;
 }
 
-function Metric({ label, value, unavailable, strong }) {
+/*
+ * One readout tile. `tone` colours the VALUE by what it means instead of
+ * leaving nineteen identical white numbers in a grid: the rate it earns, the
+ * fee we take, what is left after the fee, and how much of it is real revenue.
+ * Colour is a label here, not decoration — mint for the number the user keeps,
+ * rose for the cut, cyan for the honest share.
+ */
+function Metric({ label, value, unavailable, strong, tone }) {
   return (
-    <div className="farm-metric">
+    <div className={`farm-metric${tone ? ` farm-metric-${tone}` : ''}`}>
       <span className="faint">{label}</span>
       <span className={`mono ${strong ? 'farm-metric-strong' : ''}`}>{unavailable ? '—' : value}</span>
     </div>
@@ -567,29 +633,40 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
 
   return (
     <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
-      <div className="row-between" style={{ gap: 10 }}>
-        {/* the drawer repeats the card's mark so the user never wonders whether
-            they opened the pool they meant to open */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      {/*
+        THE HERO. The drawer repeats the card's mark so the user never wonders
+        whether they opened the pool they meant to open — and now it leads with
+        the number they came for. The rate sits in its own tile at the end of
+        the row, tinted mint, so the headline is a figure rather than a label
+        followed by a figure somewhere in a grid of nineteen.
+      */}
+      <header className="farm-ana-hero">
+        <div className="farm-ana-hero-top">
           <PoolGlyph pool={pool} size={32} chainKey={chainIconKey(pool.chain)} />
-          <div style={{ minWidth: 0 }}>
-            <p className="section-label" style={{ margin: 0 }}>{t('farm.poolAnalytics')}</p>
-            <div className="farm-pool-sym" dir="ltr">{pool.symbol}</div>
+          <div className="farm-ana-id">
+            <p className="farm-ana-kicker">{t('farm.poolAnalytics')}</p>
+            <div className="farm-ana-sym" dir="ltr">{pool.symbol}</div>
+            <div className="farm-ana-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</div>
+          </div>
+          <div className="farm-ana-apy">
+            <span className="farm-ana-apy-value mono" dir="ltr">{pool.apy}%</span>
+            <span className="farm-ana-apy-label">{t('farm.estimatedApy')}</span>
           </div>
         </div>
-        <div className="farm-details-head" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="farm-ana-pills">
           <span className="pill pill-neutral">{FARM_PROTOCOL.name}</span>
           <span className="pill pill-neutral">{pool.type === 'staking' ? t('farm.category.staking') : t('farm.category.lp')}</span>
           {pool.score != null && <span className="pill pill-neutral">{t('farm.score', { score: pool.score })}</span>}
+          {pool.stablecoin && <span className="pill pill-neutral">{t('farm.stableShort')}</span>}
+          <FreshnessPill freshness={pool.freshness} t={t} />
           <RiskPill risk={pool.risk} t={t} />
         </div>
-      </div>
+        {pool.poolMeta && <p className="faint farm-ana-note">{t('farm.poolMeta')}: {pool.poolMeta}</p>}
+        <SplitBar pool={pool} t={t} />
+        <UnusualNote pool={pool} t={t} />
+      </header>
 
-      {pool.poolMeta && <p className="faint" style={{ margin: '6px 0 0' }}>{t('farm.poolMeta')}: {pool.poolMeta}</p>}
-
-      <SplitBar pool={pool} t={t} />
-      <UnusualNote pool={pool} t={t} />
-
+      <AnaSection icon={STATS_ICON} title={t('farm.ana.stats')}>
       <div className="farm-economics">
         <Metric label={t('farm.amount')} value={fmtUsd(amount)} />
         <Metric label={t('farm.protocol')} value={projectLabel(pool.project, t)} />
@@ -597,19 +674,21 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         <Metric label={t('farm.tvl')} value={fmtCompact(pool.tvlUsd)} />
         <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
         <Metric label={t('farm.volume7d')} value={research.volumeUsd7d == null ? null : fmtCompact(research.volumeUsd7d)} unavailable={research.volumeUsd7d == null} />
-        <Metric label={t('farm.grossApy')} value={`${pool.apy}%`} />
-        <Metric label={t('farm.apyBase')} value={research.apyBase == null ? null : `${research.apyBase}%`} unavailable={research.apyBase == null} />
-        <Metric label={t('farm.apyReward')} value={research.apyReward == null ? null : `${research.apyReward}%`} unavailable={research.apyReward == null} />
+        <Metric label={t('farm.grossApy')} value={`${pool.apy}%`} tone="apy" />
+        <Metric label={t('farm.apyBase')} value={research.apyBase == null ? null : `${research.apyBase}%`} unavailable={research.apyBase == null} tone="real" />
+        <Metric label={t('farm.apyReward')} value={research.apyReward == null ? null : `${research.apyReward}%`} unavailable={research.apyReward == null} tone="emission" />
         <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
-        <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} />
+        <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} tone="emission" />
         <Metric label={t('farm.protocolFees')} value={t('farm.includedInApy')} />
         <Metric label={t('farm.gasEstimate')} unavailable />
-        <Metric label={t('farm.fbtFee')} value={`${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`} />
-        <Metric label={t('farm.netBeforeGas')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong />
-        <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} />
-        <Metric label={t('farm.rewardYieldShare')} value={rewardPct == null ? null : `${rewardPct}%`} unavailable={rewardPct == null} />
+        <Metric label={t('farm.fbtFee')} value={`${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`} tone="fee" />
+        <Metric label={t('farm.netBeforeGas')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong tone="net" />
+        <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} tone="real" />
+        <Metric label={t('farm.rewardYieldShare')} value={rewardPct == null ? null : `${rewardPct}%`} unavailable={rewardPct == null} tone="emission" />
         <Metric label={t('farm.rateVs30d')} value={mean30 == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null} />
       </div>
+      <p className="faint farm-ana-note">{t('farm.ana.statsNote')}</p>
+      </AnaSection>
 
       <PoolHistory poolId={pool.id} t={t} />
       <HorizonEarningsChart pool={pool} amount={amount} t={t} />
@@ -628,11 +707,17 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         <div style={{ marginTop: 10 }}><ILToy pool={pool} t={t} /></div>
       )}
 
-      <div className="farm-risk-grid">
-        {Object.entries(factors).map(([key, value]) => (
-          <div key={key} className="farm-risk-row"><span>{t(`farm.riskFactor.${key}`)}</span><span className="mono">{t(`farm.risk.${value}`, { defaultValue: value })}</span></div>
-        ))}
-      </div>
+      <AnaSection icon={RISK_ICON} title={t('farm.ana.riskTitle')}>
+        <div className="farm-risk-grid">
+          {Object.entries(factors).map(([key, value]) => (
+            <div key={key} className={`farm-risk-row is-${['low', 'medium', 'high'].includes(value) ? value : 'high'}`}>
+              <span>{t(`farm.riskFactor.${key}`)}</span>
+              <span className="mono">{t(`farm.risk.${value}`, { defaultValue: value })}</span>
+            </div>
+          ))}
+        </div>
+        <p className="faint farm-ana-note">{t('farm.ana.riskNote')}</p>
+      </AnaSection>
 
       <InfoBox title={t('farm.howToInvestTitle')} defaultOpen={false} id="farm-how-to-invest">
         <p className="faint" style={{ margin: '0 0 6px', fontSize: 12, lineHeight: 1.8 }}>{t('farm.howToInvest1')}</p>
@@ -653,16 +738,18 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         the pool link. A pool an adapter CAN transact shows its own live
         panel below instead of dead buttons.
       */}
-      <div className="farm-action-grid">
-        {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
-        {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
-      </div>
-      {ExecutionPanel && (
-        <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
-          <ExecutionPanel pool={pool} />
+      <AnaSection icon={ACTIONS_ICON} title={t('farm.ana.actionsTitle')}>
+        <div className="farm-action-grid">
+          {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
+          {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
         </div>
-      )}
-      {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
+        {ExecutionPanel && (
+          <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
+            <ExecutionPanel pool={pool} />
+          </div>
+        )}
+        {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
+      </AnaSection>
     </motion.section>
   );
 }
@@ -796,6 +883,18 @@ export default function Farm() {
     return map;
   }, [solAssets]);
 
+  /*
+   * TOKENISED EQUITIES INSIDE THE IN-APP TAB — the same live rows the /stocks
+   * screen already shows, sorted by the only ranking that decides whether an
+   * order can be filled: liquidity. Deepest first, and the SAME depth gate
+   * (`MIN_EQUITY_LIQUIDITY`) the Stocks screen applies, so a token is listed on
+   * both screens or neither — two gates would drift, and the one that drifts
+   * open lists something nobody can exit.
+   */
+  const equities = useMemo(() => (solAssets?.equities ?? [])
+    .filter((row) => Number(row?.liquidity) >= MIN_EQUITY_LIQUIDITY)
+    .sort((a, b) => (Number(b.liquidity) || 0) - (Number(a.liquidity) || 0)), [solAssets]);
+
   const deposit = useMemo(() => {
     const n = Number(customAmount);
     return Number.isFinite(n) && n > 0 ? n : amount;
@@ -906,6 +1005,30 @@ export default function Farm() {
     haptic?.('select');
     navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(sym)}`);
   };
+  /*
+   * RISK ASSET IN-APP HANDOFF — tokenized equities (xStocks) bought through our
+   * own Solana swap. By MINT, like every other Solana handoff in this app: a
+   * symbol is exactly what the clones copy, and `findAsset` on the swap screen
+   * refuses any mint that is not on the curated, issuer-verified list.
+   */
+  const buyEquity = (asset) => {
+    haptic?.('select');
+    if (!asset?.mint) return;
+    navigate(`/solana?to=${encodeURIComponent(asset.mint)}`);
+  };
+  /*
+   * «اجرا و موقعیت» on a venue card: the money path lives in the «داخل اپ» tab
+   * (the five panels of FarmPositionHub), so this switches the tab and scrolls
+   * that venue's row into view. It does not open anything itself — an analysis
+   * surface must never be the thing that asks for a signature.
+   */
+  const gotoVenuePositions = (venueId) => {
+    haptic?.('select');
+    setParams({ tab: 'inapp' }, { replace: true });
+    setTimeout(() => {
+      document.querySelector(`[data-testid="farm-hub-row-${venueId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 140);
+  };
 
   const renderCards = (rows) => (
     <motion.div className="farm-pool-grid" variants={stagger} initial="hidden" animate="show">
@@ -924,6 +1047,23 @@ export default function Farm() {
         <h1 className="h1">{t('farm.title')}</h1>
         <p className="muted">{t('farm.subtitle')}</p>
       </motion.div>
+
+      {/*
+        THE FIVE VENUES, FIRST THING ON THE PAGE.
+        They used to be five collapsed rows inside the «داخل اپ» tab — below
+        the status card, the feed controls and the tab rail. Discovery belongs
+        at the top: one modern box, five cards, and a tap opens the analysis
+        and the chart of the highest and lowest rate on that network. The
+        analysis path transacts nothing; the execution panels stay exactly
+        where they were, in the in-app tab, behind their own rollout flags.
+      */}
+      <VenueRail
+        pools={opportunities}
+        t={t}
+        onGoToPositions={gotoVenuePositions}
+        onGetTokens={getTokens}
+        onOpenPool={openPool}
+      />
 
       <ProtocolStatusCard protocol={protocol} t={t} />
       <div className="row-between" style={{ marginBlock: 10 }}>
@@ -1035,7 +1175,18 @@ export default function Farm() {
       {tab === 'inapp' && (
         <>
           {!loading && (
-            <InAppTab pools={opportunities} deposit={deposit} liveByMint={liveByMint} onStakeLst={stakeLst} onBuyEth={buyEthStake} onBuyGold={buyGold} t={t} />
+            <InAppTab
+              pools={opportunities}
+              deposit={deposit}
+              liveByMint={liveByMint}
+              equities={equities}
+              onStakeLst={stakeLst}
+              onBuyEth={buyEthStake}
+              onBuyGold={buyGold}
+              onBuyEquity={buyEquity}
+              onSeeAllEquities={() => { haptic?.('select'); navigate('/stocks'); }}
+              t={t}
+            />
           )}
           {/*
             «هر ۵ شبکه که زیر صفحه فارم هست را بیار داخل تب داخل اپ» — the
@@ -1137,7 +1288,43 @@ function EthStakeRow({ token, pools, deposit, onBuy, t }) {
  * which is exactly why these rows carry working buttons while the protocol
  * pools below carry analysis plus a pool-page link.
  */
-function InAppTab({ pools, deposit, liveByMint, onStakeLst, onBuyEth, onBuyGold, t }) {
+/*
+ * One tokenised-equity row. Everything on it is LIVE (`/api/solana/assets`
+ * re-checks the issuer authority on every fetch), and it carries the two facts
+ * this asset class cannot be sold without: how deep the pool is, and that the
+ * issuer can freeze the token. The freeze pill is on EVERY row, not in a
+ * footnote below the list — the same placement rule the Stocks screen uses.
+ */
+function EquityPoolRow({ asset, onBuy, t }) {
+  const change = Number(asset?.change24h);
+  return (
+    <motion.div className="coin-row" variants={riseIn}>
+      <TokenIcon token={{ symbol: asset.symbol, icon: asset.icon }} size={34} />
+      <div className="coin-meta">
+        <div className="coin-sym" dir="ltr">{asset.symbol}</div>
+        <div className="coin-name">{asset.name}</div>
+        <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {Number.isFinite(change) && (
+            <span className={`pill ${change >= 0 ? 'pill-up' : 'pill-down'} mono`} dir="ltr">
+              {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+            </span>
+          )}
+          {asset.liquidity ? <span className="pill pill-neutral mono" dir="ltr">{fmtCompact(asset.liquidity)}</span> : null}
+          {/* Robinhood is the newest name on the curated list (the file's own
+              «RECENT LISTINGS» group), so it is flagged rather than left for
+              people to notice by scrolling. */}
+          {asset.id === 'hoodx' && <span className="pill pill-rgb">{t('farm.equityNew')}</span>}
+          <span className="pill pill-down">{t('farm.equityFreeze')}</span>
+        </div>
+      </div>
+      <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => onBuy(asset)}>
+        {t('farm.buyHere', { sym: asset.symbol })}
+      </button>
+    </motion.div>
+  );
+}
+
+function InAppTab({ pools, deposit, liveByMint, equities = [], onStakeLst, onBuyEth, onBuyGold, onBuyEquity, onSeeAllEquities, t }) {
   return (
     <div className="stack">
       <p className="faint" style={{ margin: '2px 0 0', fontSize: 12.3, lineHeight: 1.8 }}>{t('farm.inappIntro')}</p>
@@ -1162,6 +1349,30 @@ function InAppTab({ pools, deposit, liveByMint, onStakeLst, onBuyEth, onBuyGold,
         </motion.div>
         <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.6, lineHeight: 1.8 }}>{t('farm.ethStakingNote')}</p>
       </section>
+
+      {/*
+        TOKENISED EQUITIES — «استخرهای داخل اپ بیشتر توکن داشته باشند».
+        These are the xStocks rows (SPYx, QQQx, NVDAx … HOODx), bought through
+        our own Solana swap by MINT. The section renders only when the verified
+        list came back with rows: an empty heading over a market we could not
+        load would be worse than no heading. The full screen, with sectors and
+        the freeze disclosure in full, stays at /stocks.
+      */}
+      {equities.length > 0 && (
+        <section id="farm-inapp-equity">
+          <div className="row-between" style={{ gap: 8 }}>
+            <p className="section-label" style={{ margin: 0 }}>{t('farm.equityTitle')}</p>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onSeeAllEquities}>{t('farm.equityAll')}</button>
+          </div>
+          <p className="faint" style={{ margin: '0 0 8px', fontSize: 12.3, lineHeight: 1.8 }}>{t('farm.equityIntro')}</p>
+          <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
+            {equities.slice(0, 8).map((asset) => (
+              <EquityPoolRow key={asset.mint} asset={asset} onBuy={onBuyEquity} t={t} />
+            ))}
+          </motion.div>
+          <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.6, lineHeight: 1.8 }}>{t('farm.equityNote')}</p>
+        </section>
+      )}
 
       <section id="farm-inapp-gold">
         <p className="section-label">{t('farm.goldTitle')}</p>

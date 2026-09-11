@@ -1,0 +1,555 @@
+/*
+ * FARM VENUE RAIL + ANALYSIS DRAWER — page-local styles.
+ * ---------------------------------------------------------------------------
+ * These two families arrived with a redesign of the Farm screen («۵ تا شبکه
+ * بالای صفحه داخل باکس مدرن‌تر» and «صفحه مشاهده تحلیل: آیکون‌ها و رنگ‌بندی
+ * مدرن‌تر»), and they live in this file rather than in index.css for the reason
+ * every other page-local stylesheet in src/styles does: the global sheet is on
+ * the FIRST-PAINT critical path — it is a <link> in index.html — while this
+ * file is imported by src/pages/Farm.jsx, which is a lazy route chunk. Farm's
+ * decoration should not be downloaded by someone who never opens Farm, and the
+ * entry budget in test/wiring.mjs is measured, not guessed.
+ *
+ * The class OWNERSHIP audit in test/wiring.mjs reads src/index.css plus every
+ * file in src/styles/, so a class styled only here still counts as styled.
+ */
+
+/* ─── the five venues — the box at the very top of the Farm screen ──────────
+   «۵ تا شبکه … هر کدام باید بالای صفحه قرار بگیرند داخل باکس مدرن‌تر».
+   One box, one rail of five cards, one detail sheet that opens under the card
+   that was tapped. The rail scrolls sideways with snap and no visible
+   scrollbar (same pattern as the tab rail), so five venues keep their shape on
+   a 320px phone instead of collapsing into a column.
+
+   The palette is the app's own: cherry/rose accents (#ff2d5f family) on the
+   glass surface, mint for «بالاترین» and rose for «کمترین» — the two colours
+   already mean up and down everywhere else in this app. */
+.farm-venue-box {
+  margin-top: 12px;
+  padding: 13px 13px 11px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(120% 140% at 4% 0%, rgba(255, 45, 149, 0.14), transparent 58%),
+    radial-gradient(120% 130% at 100% 0%, rgba(0, 229, 255, 0.1), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 22px 44px -32px rgba(0, 0, 0, 0.95);
+  overflow: hidden;
+}
+.farm-venue-box-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.farm-venue-box-text { min-width: 0; }
+.farm-venue-box-title {
+  margin: 0;
+  font-size: 14.2px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+.farm-venue-box-sub {
+  margin: 3px 0 0;
+  font-size: 11.2px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.farm-venue-box-pill { flex: 0 0 auto; white-space: nowrap; }
+
+.farm-venue-rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.farm-venue-rail::-webkit-scrollbar { display: none; }
+.farm-venue-card {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  width: 134px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 10px 10px 9px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+.farm-venue-card:hover { transform: translateY(-1px); }
+.farm-venue-card:active { transform: translateY(0) scale(0.985); }
+.farm-venue-card.is-open {
+  border-color: rgba(255, 45, 149, 0.5);
+  background: linear-gradient(180deg, rgba(255, 45, 149, 0.16), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 0 0 1px rgba(255, 45, 149, 0.22), 0 12px 26px -20px rgba(255, 45, 149, 0.8);
+}
+.farm-venue-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.farm-venue-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-2);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+.farm-venue-chain > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.farm-venue-card-name {
+  font-size: 12.4px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-card-apy {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.4px;
+}
+.farm-venue-card-apy-label { font-size: 9.6px; color: var(--text-3); line-height: 1.3; }
+.farm-venue-card-range {
+  position: relative;
+  display: block;
+  height: 4px;
+  margin: 7px 1px 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 59, 107, 0.35), rgba(0, 255, 157, 0.35));
+}
+.farm-venue-card-range.is-empty { background: var(--line); opacity: 0.7; }
+.farm-venue-card-range-fill {
+  position: absolute;
+  inset-block: -3px;
+  width: 3px;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 7px rgba(255, 255, 255, 0.65);
+  transform: translateX(-50%);
+}
+.farm-venue-card-hint { font-size: 9.8px; color: var(--ink-cyan, var(--rgb-1)); line-height: 1.4; }
+.farm-venue-card.is-open .farm-venue-card-hint { color: var(--ink-magenta, var(--rgb-3)); }
+
+.farm-venue-detail {
+  margin-top: 11px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+}
+.farm-venue-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.farm-venue-detail-id { flex: 1 1 auto; min-width: 0; }
+.farm-venue-detail-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-detail-sub {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-pills {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.farm-venue-range-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+.farm-venue-range-cell {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.farm-venue-range-cell.is-high {
+  border-color: rgba(0, 255, 157, 0.34);
+  background: rgba(0, 255, 157, 0.09);
+}
+.farm-venue-range-cell.is-low {
+  border-color: rgba(255, 59, 107, 0.34);
+  background: rgba(255, 59, 107, 0.09);
+}
+.farm-venue-range-cell.is-here {
+  border-color: rgba(255, 45, 149, 0.42);
+  background: rgba(255, 45, 149, 0.1);
+}
+.farm-venue-range-role {
+  font-size: 9.8px;
+  color: var(--text-3);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-range-value {
+  font-size: 15.4px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+}
+.farm-venue-range-sym {
+  font-size: 10px;
+  color: var(--text-2);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.farm-venue-chart {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.farm-venue-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.farm-venue-chart-title { margin: 0; font-size: 12.4px; font-weight: 700; }
+.farm-venue-chart-ranges { display: flex; gap: 5px; }
+.farm-venue-chip {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font-size: 10.4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.farm-venue-chip.is-on {
+  color: #fff;
+  border-color: rgba(255, 45, 149, 0.5);
+  background: rgba(255, 45, 149, 0.22);
+}
+.farm-venue-chart-highlow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.farm-venue-chart-hl {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.farm-venue-chart-hl.is-high { border-color: rgba(0, 255, 157, 0.28); }
+.farm-venue-chart-hl.is-low { border-color: rgba(255, 59, 107, 0.28); }
+.farm-venue-skel { height: 132px; border-radius: 12px; }
+
+.farm-venue-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+  height: 124px;
+  padding: 0 2px;
+}
+.farm-venue-bar {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+.farm-venue-bar-value {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  text-align: center;
+  font-size: 9.2px;
+  color: var(--text-2);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.farm-venue-bar-fill {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 15px;
+  max-height: calc(100% - 32px);
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.07));
+}
+.farm-venue-bar.is-high .farm-venue-bar-fill {
+  background: linear-gradient(180deg, rgba(0, 255, 157, 0.85), rgba(0, 255, 157, 0.25));
+}
+.farm-venue-bar.is-low .farm-venue-bar-fill {
+  background: linear-gradient(180deg, rgba(255, 59, 107, 0.85), rgba(255, 59, 107, 0.25));
+}
+.farm-venue-bar.is-here .farm-venue-bar-fill {
+  box-shadow: 0 0 0 2px rgba(255, 45, 149, 0.75);
+}
+.farm-venue-bar-label {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-empty,
+.farm-venue-note {
+  font-size: 10.8px;
+  line-height: 1.7;
+  color: var(--text-2);
+  margin: 7px 0 0;
+}
+
+.farm-venue-analysis {
+  margin-top: 11px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.farm-venue-analysis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+}
+.farm-venue-analysis-row:first-child { border-top: 0; }
+.farm-venue-analysis-key { font-size: 11.2px; color: var(--text-2); }
+.farm-venue-analysis-val {
+  font-size: 11.6px;
+  font-weight: 650;
+  text-align: end;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-venue-verdict {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border-inline-start: 3px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11.4px;
+  line-height: 1.7;
+}
+.farm-venue-verdict.is-high { border-inline-start-color: var(--up); }
+.farm-venue-verdict.is-low { border-inline-start-color: var(--down); }
+.farm-venue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+:root[data-theme='light'] .farm-venue-box {
+  background:
+    radial-gradient(120% 140% at 4% 0%, rgba(255, 45, 149, 0.1), transparent 58%),
+    radial-gradient(120% 130% at 100% 0%, rgba(0, 180, 220, 0.1), transparent 55%),
+    #ffffff;
+  border-color: rgba(16, 20, 40, 0.1);
+  box-shadow: 0 2px 16px -10px rgba(16, 20, 40, 0.2);
+}
+:root[data-theme='light'] .farm-venue-card { background: #f7f8fc; }
+:root[data-theme='light'] .farm-venue-detail,
+:root[data-theme='light'] .farm-venue-analysis { background: #fbfbfe; }
+:root[data-theme='light'] .farm-venue-range-cell,
+:root[data-theme='light'] .farm-venue-chart-hl { background: #f7f8fc; }
+:root[data-theme='light'] .farm-venue-card-range-fill { background: #b3123f; }
+:root[data-theme='light'] .farm-venue-chip.is-on { color: #7a1140; }
+/* ─── RTL: the range bar is a low→high axis, so it must mirror ─────────────
+   `inset-inline-start` puts the marker on the right in Persian, but a 90deg
+   gradient is physical and stays left→right whatever the writing direction —
+   the two would disagree, drawing the LOWEST rate on the mint end of the bar.
+   Same for the 3px centring nudge: `translateX` is physical, so it has to
+   change sign. The rest of the rail needs nothing: it uses logical properties
+   and a flex row, which the browser already lays out right-to-left. */
+[dir='rtl'] .farm-venue-card-range {
+  background: linear-gradient(270deg, rgba(255, 59, 107, 0.35), rgba(0, 255, 157, 0.35));
+}
+[dir='rtl'] .farm-venue-card-range-fill { transform: translateX(50%); }
+
+@media (max-width: 420px) {
+  .farm-venue-range-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .farm-venue-card { width: 124px; }
+}
+
+/* ─── the analysis drawer: hero, sections, tinted numbers ───────────────────
+   «در صفحه مشاهده تحلیل از آیکون‌ها و رنگ‌بندی مدرن‌تر و قشنگ‌تر باشد».
+   The drawer used to be a label followed by a grid of nineteen identical
+   white numbers: no hierarchy, no colour, nothing that said which figure
+   mattered. Now the rate is the hero, every block has a glyph, and the numbers
+   are tinted by MEANING — mint for what the depositor keeps, rose for the cut,
+   cyan for how much of the yield is real revenue. Colour is a label here, so
+   it is also stated in words in the tiles themselves; nothing is encoded in
+   colour alone. */
+.farm-ana-hero {
+  padding: 12px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 130% at 0% 0%, rgba(0, 229, 255, 0.12), transparent 56%),
+    radial-gradient(120% 130% at 100% 0%, rgba(255, 45, 149, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+}
+.farm-ana-hero-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.farm-ana-id { flex: 1 1 auto; min-width: 0; }
+.farm-ana-kicker {
+  margin: 0;
+  font-size: 10.2px;
+  letter-spacing: 0.2px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.farm-ana-sym {
+  font-size: 15.6px;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-ana-meta {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.farm-ana-apy {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 7px 11px;
+  border-radius: 13px;
+  border: 1px solid rgba(0, 255, 157, 0.28);
+  background: rgba(0, 255, 157, 0.09);
+}
+.farm-ana-apy-value {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  color: var(--ink-mint, var(--rgb-4));
+}
+.farm-ana-apy-label { font-size: 9.4px; color: var(--text-2); line-height: 1.3; }
+.farm-ana-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.farm-ana-note {
+  margin: 8px 1px 0;
+  font-size: 10.8px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.farm-ana-section { margin-top: 12px; }
+.farm-ana-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.farm-ana-section-icon {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--ink-cyan, var(--rgb-1));
+  background: linear-gradient(140deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.12));
+  border: 1px solid rgba(0, 229, 255, 0.18);
+}
+.farm-ana-section-icon svg { width: 15px; height: 15px; }
+.farm-ana-section-title {
+  margin: 0;
+  font-size: 12.6px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.farm-metric-apy > span:last-child { color: var(--ink-mint, var(--rgb-4)) !important; }
+.farm-metric-real > span:last-child { color: var(--ink-cyan, var(--rgb-1)) !important; }
+.farm-metric-fee > span:last-child { color: var(--ink-magenta, var(--rgb-3)) !important; }
+.farm-metric-net > span:last-child {
+  color: var(--ink-mint, var(--rgb-4)) !important;
+  font-weight: 800;
+}
+.farm-metric-emission > span:last-child { color: var(--ink-amber, var(--rgb-5)) !important; }
+
+.farm-risk-row.is-low > span:last-child { color: var(--up); }
+.farm-risk-row.is-medium > span:last-child { color: var(--rgb-5); }
+.farm-risk-row.is-high > span:last-child { color: var(--down); }
+
+:root[data-theme='light'] .farm-ana-hero {
+  background:
+    radial-gradient(120% 130% at 0% 0%, rgba(0, 160, 200, 0.1), transparent 56%),
+    radial-gradient(120% 130% at 100% 0%, rgba(255, 45, 149, 0.08), transparent 58%),
+    #fbfbfe;
+}
+:root[data-theme='light'] .farm-ana-apy { background: rgba(0, 168, 107, 0.1); }
