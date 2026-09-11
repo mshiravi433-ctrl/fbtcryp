@@ -125,7 +125,11 @@ export async function run(container) {
   /* The report is about the PERSIAN screen. The app lazy-loads every locale
      but English through import.meta.glob, which a probe bundle cannot fetch —
      so the fa dictionary is registered the same way loadLocale() registers it
-     after a successful fetch, and the switch is then the app's own. */
+     after a successful fetch, and the switch is then the app's own.
+     The previous language is restored on the way out: npm test runs every
+     suite in ONE process, and leaving i18n on fa would silently translate the
+     screens a later probe asserts in English. */
+  const prevLang = String(i18n.language || 'en');
   i18n.addResourceBundle('fa', 'translation', faLocale, true, true);
   await act(async () => { await i18n.changeLanguage('fa'); });
   if (String(i18n.resolvedLanguage) !== 'fa') throw new Error(`probe could not switch to fa (resolved=${i18n.resolvedLanguage})`);
@@ -221,6 +225,7 @@ export async function run(container) {
     /همبستگی فقط با سری زمانی|Correlations need real paired history/.test(sectionText));
 
   await act(async () => { root.unmount(); });
+  await act(async () => { await i18n.changeLanguage(prevLang); });
   global.fetch = realFetch;
   console.error = realError;
   const realErrors = errors.filter((e) => !/Warning|act\(|Not implemented/i.test(e));
