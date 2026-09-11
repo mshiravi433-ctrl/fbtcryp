@@ -1007,6 +1007,39 @@ installDom();
 const { run: runSignalsPage } = await import('./.out/signalspage/signals-page-probe.js');
 report('signals page (real data · cards · sheets · every dynamic key)', await runSignalsPage(document.getElementById('r')));
 
+/* ------------------ 4b₃. Signals token picker, both tabs ---------------------- */
+/*
+ * The reported crash «سیگنال با انتخاب توکن هم اصلی و هم سولنا کرش میشه، اپ و
+ * سایت، میگه مشکلی پیش اومده». signals-page-probe clicks the Solana tab, the
+ * horizon switch, the alert sheet and the Why modal — but never opens the
+ * token picker and chooses a DIFFERENT asset, which is the interaction that
+ * took the whole screen to RouteBoundary.
+ *
+ * This mounts the page, opens the picker and selects another token on the
+ * global tab AND the Solana tab (and back again), waits for the re-analysis,
+ * and asserts the page survived and the new card rendered — once with clean
+ * local state, once with CORRUPTED watchlist/alert/history rows already in
+ * localStorage, because a real phone is not a fresh jsdom. It also pins the
+ * trend-chart header: the oversized 📈 line-chart glyph is gone, the header
+ * carries exactly ONE tiny direction arrow, and the full-width chart CSS can
+ * never match the small header marks again.
+ */
+console.log('\n▸ building the Signals token-picker suite…');
+npx(['vite', 'build', '-c', 'test/vite.signalspicker.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSignalsPicker } = await import('./.out/signalspicker/signals-token-picker-probe.js');
+report('signals token picker (both tabs · crash isolation · one tiny arrow)', await runSignalsPicker(document.getElementById('r')));
+
+/* Adversarial data-shape sweep across the same selection flow: sixteen
+   real-world upstream shapes (string numbers, null sparklines, flat and
+   one-point series, tiny PEPE prices, drifted pulse/smart-money/perp rows)
+   each mounted and token-switched; none may reach the route boundary. */
+console.log('\n▸ building the Signals selection fuzz suite…');
+npx(['vite', 'build', '-c', 'test/vite.signalsfuzz.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSignalsFuzz } = await import('./.out/signalsfuzz/signals-select-fuzz-probe.js');
+report('signals selection fuzz (16 hostile shapes · no route crash)', await runSignalsFuzz(document.getElementById('r')));
+
 /* ------------------ 4b-2. Global-intelligence CROSS tab, in Persian ----------- */
 /*
  * The «تحلیل کراس» fix, asserted on the RENDERED Persian screen rather than on
