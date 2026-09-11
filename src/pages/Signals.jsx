@@ -35,9 +35,9 @@ import { getPerpMarkets } from '../lib/perp';
 import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { fetchOverview } from '../lib/smartMoneyClient';
+import { fetchOverview, fetchToken } from '../lib/smartMoneyClient';
 import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
-import { swapUrlFor } from '../lib/coinToSwap';
+import { swapUrlFor, swapTargetFor } from '../lib/coinToSwap';
 import {
   computeHorizonRisks, computeSignalCard, computeEarlySignals,
   computePulseLocal, portfolioImpact, rankSignals, classKey
@@ -117,8 +117,48 @@ function SignalSection({ id, title, summary, defaultOpen = false, children }) {
   );
 }
 
-function Gauge({ score, label, confidence }) {
+/*
+ * One measured on-chain row.
+ *
+ * The direction glyph is SVG, not the ▲/▼ characters and not an emoji: an
+ * emoji is drawn by the OS (three different pictures on three phones), cannot
+ * take the page's accent colour, and is not announced consistently. This one
+ * inherits currentColor, so the same row is green-up or red-down everywhere it
+ * is rendered, and a row with no implied direction draws no arrow at all
+ * rather than a misleading one.
+ */
+function DirGlyph({ dir, tone }) {
+  if (!dir) return null;
+  return (
+    <svg
+      className={`sic-dir-glyph ${tone || dir}`}
+      width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"
+    >
+      {dir === 'up' ? <path d="M5 0 10 9H0z" /> : <path d="M5 10 0 1h10z" />}
+    </svg>
+  );
+}
+
+/* The shared renderer for the measured on-chain list. */
+function OnchainRowList({ rows }) {
   const { t } = useTranslation();
+  if (!rows?.length) return null;
+  return (
+    <div className="sic-key-value-list sic-onchain-list">
+      {rows.map((row) => (
+        <div key={row.key}>
+          <span>{t(`signals.onchain.${row.key}`)}</span>
+          <b className={`mono ${row.tone || ''}`}>
+            <DirGlyph dir={row.dir} tone={row.tone} />
+            {row.value}
+          </b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Gauge({ score, label, confidence }) {  const { t } = useTranslation();
   const pct = (score + 100) / 200;
   const angle = -90 + pct * 180;
   const color = score > 40 ? 'var(--up)' : score > 12 ? '#7ee787' : score < -40 ? 'var(--down)' : score < -12 ? '#ff8fa3' : 'var(--rgb-5)';
@@ -393,7 +433,7 @@ function EvidenceChips({ evidence, max = 5 }) {
 function WhyModal({ why, onClose }) {
   const { t } = useTranslation();
   if (!why) return null;
-  const { signal, loading, data } = why;
+  const { signal, loading, data, onchainRows = [] } = why;
   return (
     <div className="sic-modal-backdrop" role="presentation" onClick={onClose}>
       <motion.div className="sic-modal" role="dialog" aria-modal="true" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
@@ -431,6 +471,29 @@ function WhyModal({ why, onClose }) {
                 </div>
               </div>
             )}
+
+            {/*
+              ── THE MEASURED ON-CHAIN BLOCK ────────────────────────────────
+              Reported: "the on-chain section is not connected to the data".
+              The prose paragraph below is a model's *reading* of the
+              evidence, and until the
+              evidence carried real on-chain numbers it could only ever say
+              "unavailable". The numbers themselves are shown first, so the
+              section is anchored to a measurement the user can check, and the
+              prose that follows explains THAT rather than a null.
+            */}
+            <div className="sic-why-block">
+              <div className="k">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginInlineEnd: 5, color: 'var(--rgb-4)' }}>
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                {t('signals.onchain.measuredTitle')}
+              </div>
+              {onchainRows.length
+                ? <OnchainRowList rows={onchainRows} />
+                : <p className="sic-why-none">{t('signals.onchain.measuredNone')}</p>}
+            </div>
             {[
               ['technical', data.sections?.technical],
               ['market', data.sections?.market],
@@ -811,6 +874,7 @@ function TokenPicker({ coin, options, value, onChange, coins }) {
 }
 
 function SignalTrendChart({ series, coin }) {
+  const { t } = useTranslation();
   const values = toSeries(series).slice(-48);
   if (values.length < 2) return null;
   const min = Math.min(...values);
@@ -826,10 +890,36 @@ function SignalTrendChart({ series, coin }) {
   const rising = last >= first;
   const change = first ? ((last - first) / first) * 100 : 0;
   return (
-    <div className="sic-trend-chart" aria-label={`${coin?.symbol || 'asset'} price movement chart`}>
+    <div className="sic-trend-chart" aria-label={t('signals.intel.trendTitle', { symbol: coin?.symbol || '—' })}>
       <div className="sic-trend-head">
-        <span>📈 {coin?.symbol || 'Asset'} trend</span>
-        <b className={rising ? 'up' : 'down'}>{rising ? '+' : ''}{change.toFixed(2)}%</b>
+        {/*
+          Reported: "this emoji should be modern". The header carried the
+          chart emoji next to a hard-coded English word. An emoji renders differently on every device
+          (Apple/Google/Samsung each draw their own), it cannot take the page's
+          accent colour, and it is not localised. This is the same line-chart
+          glyph the rest of the screen draws in SVG: it inherits currentColor,
+          so it turns green/red with the direction it is describing.
+        */}
+        <span className="sic-trend-title">
+          <svg
+            className={`sic-trend-icon ${rising ? 'up' : 'down'}`}
+            width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+          >
+            <path d="M3 17.5 9 11l4 3.6L21 6.5" />
+            <path d="M15.5 6.5H21V12" />
+          </svg>
+          {t('signals.intel.trendTitle', { symbol: coin?.symbol || '—' })}
+        </span>
+        <b className={rising ? 'up' : 'down'}>
+          <svg
+            className={`sic-trend-arrow ${rising ? 'up' : 'down'}`}
+            width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"
+          >
+            {rising ? <path d="M5 0 10 9H0z" /> : <path d="M5 10 0 1h10z" />}
+          </svg>
+          {rising ? '+' : ''}{change.toFixed(2)}%
+        </b>
       </div>
       <svg viewBox="0 0 300 82" role="img" aria-hidden="true" preserveAspectRatio="none">
         <defs>
@@ -930,7 +1020,7 @@ function SignalBreakdown({
   invalidation,
   backtestInfo,
   hasOnchain,
-  intel
+  onchainRows
 }) {
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
@@ -1025,13 +1115,13 @@ function SignalBreakdown({
       )}
 
       {hasOnchain && (
-        <SignalSection id="onchain" title={t('signals.onchain.title')}>
-          <div className="sic-key-value-list">
-            {intel.whaleFlow?.direction && <div><span>{t('signals.onchain.whaleFlow')}</span><b className={`mono ${intel.whaleFlow.direction === 'outflow' ? 'down' : intel.whaleFlow.direction === 'inflow' ? 'up' : ''}`}>{t(`signals.onchain.flow.${intel.whaleFlow.direction}`)}</b></div>}
-            {intel.holderTrend?.change && <div><span>{t('signals.onchain.holderTrend')}</span><b className={`mono ${intel.holderTrend.change === 'rising' ? 'down' : 'up'}`}>{t(`signals.onchain.trend.${intel.holderTrend.change}`)}</b></div>}
-            {intel.topHolderPct != null && <div><span>{t('signals.onchain.topHolder')}</span><b className="mono">{intel.topHolderPct}%</b></div>}
-            {intel.dexActivity?.pressure && <div><span>{t('signals.onchain.dexActivity')}</span><b className={`mono ${intel.dexActivity.pressure === 'buy' ? 'up' : intel.dexActivity.pressure === 'sell' ? 'down' : ''}`}>{t(`signals.onchain.pressure.${intel.dexActivity.pressure}`)}</b></div>}
-          </div>
+        <SignalSection
+          id="onchain"
+          title={t('signals.onchain.title')}
+          summary={t('signals.acc.onchainSummary', { n: onchainRows.length })}
+        >
+          <OnchainRowList rows={onchainRows} />
+          <div className="faint sic-panel-note">{t('signals.onchain.measuredNote')}</div>
         </SignalSection>
       )}
 
@@ -1401,17 +1491,123 @@ export default function Signals() {
 
   const intel = solanaIntel && solanaIntel.configured ? solanaIntel : null;
 
-  /* On-chain row for the detail lab: Solana tab only, and only when Solscan
-     actually returned at least one measured metric — failing closed exactly
-     like the existing page did. */
-  const hasOnchain = Boolean(
-    intel && (
-      intel.whaleFlow?.direction
-      || intel.holderTrend?.change
-      || intel.topHolderPct != null
-      || intel.dexActivity?.pressure
-    )
-  );
+  /* ── THE ON-CHAIN READ, CONNECTED FOR EVERY ASSET ──────────────────────────
+     Reported on the Why-this-signal screen: "the on-chain section is not
+     connected to the data" — and it really was not. The on-chain row existed
+     for the Solana tab only, because a Solana mint was the one contract
+     address this page happened to hold. On
+     every other asset the row was hidden, and the Why-modal's on-chain
+     paragraph then had nothing measured to explain — the model was asked about
+     fields that were all null, so it answered "unavailable" every time.
+
+     The address was always resolvable: lib/coinToSwap.js maps a CoinGecko id to
+     the curated contract this app actually swaps, and the smart-money token
+     route (/api/v1/smart-money/token/:chain/:address) already serves holders,
+     concentration, exchange supply, liquidity and window-scoped flow for it.
+     So the row is now read for any asset with a resolvable contract.
+
+     It still fails CLOSED, exactly like before: no contract, no answer, or no
+     measured field means the row stays hidden — never a zero, never a guess. */
+  const onchainTarget = useMemo(() => {
+    if (tab === 'solana') return activeMint ? { chain: 'solana', address: activeMint } : null;
+    if (!coin) return null;
+    if (coin.id === 'solana') {
+      const sol = SOLANA_SIGNAL_ASSETS.find((a) => a.id === 'solana');
+      return sol ? { chain: 'solana', address: sol.mint } : null;
+    }
+    const target = swapTargetFor(coin.id);
+    if (target?.kind === 'evm' && target.token?.address) {
+      return { chain: target.chainId, address: target.token.address, chainName: target.chainName };
+    }
+    return null;
+  }, [tab, activeMint, coin]);
+
+  const [tokenOnchain, setTokenOnchain] = useState(null);
+  const onchainReqId = useRef(0);
+  useEffect(() => {
+    if (!onchainTarget) { setTokenOnchain(null); return undefined; }
+    const req = ++onchainReqId.current;
+    setTokenOnchain(null);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12_000);
+    fetchToken(onchainTarget.chain, onchainTarget.address, '24h', ctrl.signal)
+      .then((d) => { if (req === onchainReqId.current) setTokenOnchain(d); })
+      .catch(() => { if (req === onchainReqId.current) setTokenOnchain(null); })
+      .finally(() => clearTimeout(timer));
+    return () => { onchainReqId.current += 1; clearTimeout(timer); ctrl.abort(); };
+  }, [onchainTarget]);
+
+  /*
+   * The measured on-chain rows, built ONCE and shared by the detail lab and
+   * the Why-modal. Two surfaces reading the same asset used to be able to
+   * disagree; now they cannot, because they render the same array.
+   *
+   * Each row carries the direction it implies (`dir`) so the UI draws the same
+   * up/down glyph and colour for it everywhere.
+   */
+  const onchainRows = useMemo(() => {
+    const rows = [];
+    const push = (key, value, tone = '', dir = null) => {
+      if (value == null || value === '' || value === '—') return;
+      rows.push({ key, value, tone, dir });
+    };
+    const flow = tokenOnchain?.smartMoneyFlow;
+    const holders = tokenOnchain?.holders;
+
+    if (holders?.dataStatus === 'live') {
+      if (Number.isFinite(Number(holders.total))) {
+        push('holdersTotal', Number(holders.total).toLocaleString(), '', null);
+      }
+      if (Number.isFinite(Number(holders.top10Share))) {
+        const share = Number(holders.top10Share);
+        push('topHolder', `${share}%`, share > 50 ? 'down' : share > 30 ? 'warn' : 'up', share > 50 ? 'down' : 'up');
+      }
+      if (Number.isFinite(Number(holders.exchangeSupplyPct))) {
+        const sup = Number(holders.exchangeSupplyPct);
+        push('exchangeSupply', `${sup}%`, sup > 15 ? 'down' : '', sup > 15 ? 'down' : 'up');
+      }
+    }
+    if (Number.isFinite(Number(tokenOnchain?.liquidityUsd)) && Number(tokenOnchain.liquidityUsd) > 0) {
+      push('liquidityObserved', `$${fmtCompact(tokenOnchain.liquidityUsd)}`, '', null);
+    }
+    if (Number.isFinite(Number(flow?.netUsd))) {
+      const net = Number(flow.netUsd);
+      push(
+        'smartMoneyNet',
+        `${net >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(net))}`,
+        net > 0 ? 'up' : net < 0 ? 'down' : 'warn',
+        net > 0 ? 'up' : net < 0 ? 'down' : null
+      );
+    }
+    if (Number.isFinite(Number(flow?.buyUsd)) && Number.isFinite(Number(flow?.sellUsd)) && (Number(flow.buyUsd) + Number(flow.sellUsd)) > 0) {
+      const buying = Number(flow.buyUsd) >= Number(flow.sellUsd);
+      push('dexActivity', t(`signals.onchain.pressure.${buying ? 'buy' : 'sell'}`), buying ? 'up' : 'down', buying ? 'up' : 'down');
+    }
+
+    /* The Solana intel keeps its own measured fields; they join the same list
+       rather than rendering as a second, differently-labelled block. */
+    if (intel?.whaleFlow?.direction) {
+      const inflow = intel.whaleFlow.direction === 'inflow';
+      push('whaleFlow', t(`signals.onchain.flow.${intel.whaleFlow.direction}`), inflow ? 'up' : 'down', inflow ? 'up' : 'down');
+    }
+    if (intel?.holderTrend?.change) {
+      const rising = intel.holderTrend.change === 'rising';
+      push('holderTrend', t(`signals.onchain.trend.${intel.holderTrend.change}`), rising ? 'down' : 'up', rising ? 'down' : 'up');
+    }
+    if (Number.isFinite(Number(intel?.topHolderPct))) {
+      const pct = Number(intel.topHolderPct);
+      push('topHolder', `${pct}%`, pct > 50 ? 'down' : '', pct > 50 ? 'down' : 'up');
+    }
+    if (intel?.dexActivity?.pressure) {
+      const buy = intel.dexActivity.pressure === 'buy';
+      push('dexActivity', t(`signals.onchain.pressure.${intel.dexActivity.pressure}`), buy ? 'up' : 'down', buy ? 'up' : 'down');
+    }
+    return rows;
+  }, [tokenOnchain, intel, t]);
+
+  /* On-chain row for the detail lab: shown only when at least one metric was
+     actually measured — failing closed exactly like the existing page did. */
+  const hasOnchain = onchainRows.length > 0;
 
   const selectedSignal = useMemo(() => {
     if (tab === 'all') return globalSignals.find((signal) => signal.coin?.id === coinId) ?? null;
@@ -1483,7 +1679,7 @@ export default function Signals() {
   const openWhy = async (signal) => {
     if (!signal || signal.status !== 'READY') return;
     haptic?.('select');
-    setWhy({ signal, loading: true, data: null });
+    setWhy({ signal, loading: true, data: null, onchainRows });
     const ev = {};
     (signal.evidence ?? []).forEach((e) => {
       if (e.key === 'rsi') ev.rsi = e.pct != null ? 50 + (e.direction > 0 ? -15 : e.direction < 0 ? 15 : 0) : null;
@@ -1507,6 +1703,35 @@ export default function Signals() {
     ev.change24h = signal.momentum?.pct ?? null;
     ev.riskScore = signal.riskScore;
     ev.confidence = signal.confidence;
+
+    /*
+     * ── THE MEASURED ON-CHAIN HALF OF THE EVIDENCE ────────────────────────
+     * These five fields used to reach the model only when the deterministic
+     * engine happened to emit a whale/holder/DEX evidence key. On most assets
+     * it did not, so the model was handed an on-chain picture that was entirely
+     * null and answered "unavailable" — which is exactly what made the section
+     * read as disconnected. The numbers are read now (see onchainRows), so the
+     * explanation is built on the same measurement the card is showing.
+     *
+     * Every key below is on the server's evidence allowlist
+     * (server/signalEngine.js ALLOWED_EVIDENCE); nothing wallet-related is
+     * ever part of this payload.
+     */
+    const holders = tokenOnchain?.holders;
+    const flow = tokenOnchain?.smartMoneyFlow;
+    if (Number.isFinite(Number(holders?.top10Share))) ev.topHolderPct = Number(holders.top10Share);
+    else if (Number.isFinite(Number(intel?.topHolderPct))) ev.topHolderPct = Number(intel.topHolderPct);
+    if (Number.isFinite(Number(tokenOnchain?.liquidityUsd))) ev.liquidityUsd = Math.round(Number(tokenOnchain.liquidityUsd));
+    if (Number.isFinite(Number(flow?.netUsd))) ev.smartMoneyNetUsd = Math.round(Number(flow.netUsd));
+    if (
+      Number.isFinite(Number(flow?.buyUsd)) && Number.isFinite(Number(flow?.sellUsd))
+      && (Number(flow.buyUsd) + Number(flow.sellUsd)) > 0
+    ) {
+      ev.dexPressure = Number(flow.buyUsd) >= Number(flow.sellUsd) ? 'buy' : 'sell';
+    }
+    if (intel?.whaleFlow?.direction && !ev.whaleFlow) ev.whaleFlow = intel.whaleFlow.direction;
+    if (intel?.holderTrend?.change && !ev.holderTrend) ev.holderTrend = intel.holderTrend.change;
+
     const res = await getSignalWhy({
       symbol: signal.coin.symbol,
       name: signal.coin.name,
@@ -1517,7 +1742,7 @@ export default function Signals() {
       riskLabel: signal.risk,
       timeframe: signal.timeframe
     });
-    setWhy({ signal, loading: false, data: res });
+    setWhy({ signal, loading: false, data: res, onchainRows });
   };
 
   const onCardAction = (kind, signal) => {
@@ -1691,7 +1916,7 @@ export default function Signals() {
                       invalidation={invalidation}
                       backtestInfo={backtestInfo}
                       hasOnchain={hasOnchain}
-                      intel={intel}
+                      onchainRows={onchainRows}
                     />
                   </SectionGuard>
                 ) : (

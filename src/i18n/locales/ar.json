@@ -1600,13 +1600,21 @@
         "buy": "ضغط شراء",
         "sell": "ضغط بيع",
         "balanced": "متوازن"
-      }
+      },
+      "smartMoneyNet": "صافي تدفق الأموال الذكية",
+      "liquidityObserved": "السيولة المرصودة",
+      "holdersTotal": "عدد الحاملين",
+      "exchangeSupply": "المعروض المحتفظ به في المنصات",
+      "measuredTitle": "بيانات على السلسلة مقاسة",
+      "measuredNone": "لم تُقرأ أي بيانات على السلسلة لهذا الأصل الآن — لا يُخمَّن أي رقم.",
+      "measuredNote": "كل رقم مأخوذ من قراءة حقيقية؛ ويُعرض الاتجاه باللون والسهم."
     },
     "createIntent": "إنشاء نية",
     "acc": {
       "layersSummary": "{{n}} طبقات",
       "indicators": "المؤشرات الخام",
-      "indicatorsSummary": "{{n}} قراءات"
+      "indicatorsSummary": "{{n}} قراءات",
+      "onchainSummary": "{{n}} قراءات على السلسلة"
     },
     "intel": {
       "tabs": {
@@ -1951,7 +1959,8 @@
       },
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
-      "turnover": "Volume / mcap"
+      "turnover": "Volume / mcap",
+      "trendTitle": "اتجاه سعر {{symbol}}"
     },
     "aiPowered": "مدعوم بالذكاء الاصطناعي"
   },
@@ -6042,19 +6051,28 @@
     }
   },
   "sm": {
-"checking": "Connecting…",
-"offlineShort": "Offline",
-"windowAria": "النافذة الزمنية",
-"windows": {
-  "1h": "ساعة",
-  "4h": "٤ ساعات",
-  "24h": "يوم",
-  "7d": "أسبوع",
-  "30d": "شهر"
-},
-"windowPartial": "تم رصد {{pct}}٪ فقط من هذه النافذة ({{window}}) — تكتمل الأرقام مع استمرار الماسح.",
-"tokenWindowNote": "الشراء والبيع وصافي التدفق تغطي آخر {{window}}.",
-"tokenWindowFallback": "المقاييس أدناه من إحصاءات الزوج لـ ٢٤ ساعة؛ فقط أرقام التدفق تتبع النافذة المحددة."
+    "checking": "Connecting…",
+    "offlineShort": "Offline",
+    "windowAria": "النافذة الزمنية",
+    "windows": {
+      "1h": "ساعة",
+      "4h": "٤ ساعات",
+      "24h": "يوم",
+      "7d": "أسبوع",
+      "30d": "شهر"
+    },
+    "windowPartial": "تم رصد {{pct}}٪ فقط من هذه النافذة ({{window}}) — تكتمل الأرقام مع استمرار الماسح.",
+    "tokenWindowNote": "الشراء والبيع وصافي التدفق تغطي آخر {{window}}.",
+    "tokenWindowFallback": "المقاييس أدناه من إحصاءات الزوج لـ ٢٤ ساعة؛ فقط أرقام التدفق تتبع النافذة المحددة.",
+    "tokenDataFor": "قُرئت هذه الأرقام للرمز {{symbol}} على شبكة {{chain}} من عنوان العقد أدناه.",
+    "tokenContract": "العقد",
+    "tokenChainLabel": "الشبكة",
+    "showDetails": "إظهار تفاصيل الأموال الذكية",
+    "hideDetails": "إخفاء تفاصيل الأموال الذكية",
+    "tokenSummaryUp": "صافي التدفق موجب",
+    "tokenSummaryDown": "صافي التدفق سالب",
+    "tokenSummaryFlat": "لا يوجد تدفق مسجَّل",
+    "marketsChip": "أزواج نشطة"
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
@@ -6309,6 +6327,7 @@
   },
   "aiGlobal": {
     "title": "الذكاء العالمي",
-    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing",
+    "tabShort": "عالمي"
   }
 }
