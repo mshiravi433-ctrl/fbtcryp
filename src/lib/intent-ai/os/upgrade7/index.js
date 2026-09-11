@@ -41,7 +41,7 @@ export * from './runtime.js';
 
 import { buildDeepIntent, missingCriticalSlots } from './deepIntent.js';
 import {
-  createPlan, planStatusView, getResumablePlan, resumePlanWithAnswer, pausePlanForInput,
+  createPlan, planStatusView, getResumablePlan, resumePlanWithAnswer, pausePlanForInput, advancePlanFromEvidence,
   listPlans, detectPlanConflicts, savePlan
 } from './planner.js';
 import { synthesize, crossCheck, getMeshHealth, requestFingerprint } from './agentMesh.js';
@@ -82,7 +82,9 @@ export function enrich({
   baseConfidence = null,
   dataSnapshots = null,
   claims = null,
-  locale = 'fa'
+  locale = 'fa',
+  requiresConfirmation = false,
+  executionStatus = null
 } = {}) {
   try {
     /* 1 ── PERSONAL FINANCIAL CONTEXT (§9) */
@@ -170,6 +172,28 @@ export function enrich({
     if (clarification.shouldAsk && plan.status !== 'awaiting_input') {
       pausePlanForInput(plan, { slot: clarification.question.slot, question: clarification.question.text });
     }
+
+    /* 7b ── EVIDENCE ADVANCEMENT (§4 honesty) — the plan checklist reflects
+       what THIS turn actually did: live reads completed, genuinely-needed-but-
+       missing reads FAILED (never faked), synthesis outstanding while a
+       question is open. */
+    advancePlanFromEvidence(plan, {
+      ok: execution?.ok !== false,
+      executionStatus,
+      executionFailed: execution?.ok === false,
+      requiresConfirmation,
+      wallet,
+      portfolio,
+      market,
+      smartMoney,
+      yieldPresent: Boolean(
+        execution?.yieldOpportunities?.opportunities?.length ||
+        execution?.opportunities?.length
+      ),
+      newsPresent: Boolean(execution?.news),
+      intentType: baseIntent?.type,
+      awaitingInput: clarification.shouldAsk || plan.status === 'awaiting_input'
+    });
 
     /* 8 ── AGENT CROSS-CHECK + SYNTHESIS (§12 §13) */
     const results = agentResults || execution?.agentResults || {};

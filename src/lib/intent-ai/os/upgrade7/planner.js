@@ -221,6 +221,123 @@ export function advancePlan(plan, nodeId, { status = NODE_STATUS.COMPLETED, resu
   return plan;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  EVIDENCE ADVANCEMENT — the timeline shows what the turn actually did       */
+/* -------------------------------------------------------------------------- */
+
+/* Intent types that genuinely need a wallet read to answer. Everything else
+   treats a missing wallet as «not needed» (skipped), not as a failure. */
+const WALLET_NEEDED_TYPES = new Set([
+  'ANALYZE_PORTFOLIO', 'PORTFOLIO_ANALYSIS', 'REBALANCE', 'RISK_ANALYSIS',
+  'GET_BALANCE', 'BALANCE', 'SWAP', 'BUY', 'SELL', 'SEND', 'BRIDGE', 'DCA',
+  'STAKE', 'STAKING', 'FARM', 'LEND', 'STRATEGY_PLAN', 'GOAL_PLAN'
+]);
+
+/* Intent types that genuinely need a live market read to answer. */
+const MARKET_NEEDED_TYPES = new Set([
+  'ANALYZE_TOKEN', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'YIELD_DISCOVERY',
+  'INVESTMENT_PLAN', 'STRATEGY_PLAN', 'GOAL_PLAN', 'SMART_MONEY', 'WHALE',
+  'STAKING', 'FARM', 'LEND', 'NEWS_EXPLAIN', 'PRICE', 'SWAP', 'BUY', 'SELL', 'DCA'
+]);
+
+const hasLiveData = (v) => {
+  if (!v || typeof v !== 'object') return false;
+  const status = String(v.dataStatus || v.status || 'live').toLowerCase();
+  if (['unavailable', 'error', 'failed', 'missing'].includes(status)) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (Array.isArray(v.holdings) && v.holdings.length) return true;
+  if (Array.isArray(v.balances) && v.balances.length) return true;
+  if (v.totalValueUsd != null || v.current_price != null || v.price != null) return true;
+  if (v.connected === true || v.isConnected === true) return true;
+  return Object.keys(v).length > 0;
+};
+
+/**
+ * Mark each plan node from what this turn EVIDENTLY did — the only honest way
+ * to fill the «بررسی پرتفوی» checklist. Rules:
+ *
+ *   · a read node (wallet / market / news / yield) is completed only when the
+ *     corresponding live read is present; when the intent genuinely needed it
+ *     and it is missing, the node is FAILED (red) — that is the truth, and it
+ *     is exactly what tells the user why the answer is hedged;
+ *   · analysis / synthesis nodes complete when the turn itself succeeded;
+ *   · the permission node is RUNNING while an approval is outstanding and
+ *     SKIPPED when the answer needed none;
+ *   · execution / verify complete only on a real on-chain confirmation.
+ *
+ * Nodes already in a terminal state are never touched, so a resumed plan keeps
+ * its history and a blocked node (awaiting user input) keeps its blocker.
+ */
+export function advancePlanFromEvidence(plan, {
+  ok = true,
+  executionStatus = null,
+  executionFailed = false,
+  requiresConfirmation = false,
+  wallet = null,
+  portfolio = null,
+  market = null,
+  smartMoney = null,
+  yieldPresent = false,
+  newsPresent = false,
+  intentType = '',
+  awaitingInput = false
+} = {}) {
+  if (!plan?.graph || !Array.isArray(plan.graph.nodes)) return plan;
+  const type = String(intentType || '').toUpperCase();
+  const walletNeeded = WALLET_NEEDED_TYPES.has(type) || requiresConfirmation;
+  const marketNeeded = MARKET_NEEDED_TYPES.has(type);
+  const walletOk = hasLiveData(wallet) || hasLiveData(portfolio);
+  const marketOk = hasLiveData(market) || hasLiveData(smartMoney);
+  const confirmed = String(executionStatus || '').toUpperCase() === 'CONFIRMED';
+
+  for (const node of plan.graph.nodes) {
+    if (!node || node.status !== NODE_STATUS.PENDING) continue;
+    const agent = String(node.agent || '');
+    const kind = String(node.kind || '');
+    const id = String(node.id || '');
+    let next = null;
+
+    if (kind === 'permission') {
+      next = (requiresConfirmation || awaitingInput) ? NODE_STATUS.RUNNING : NODE_STATUS.SKIPPED;
+    } else if (awaitingInput && kind === 'synthesis') {
+      /* The turn ended in a question, not a recommendation — the synthesis
+         step is genuinely still outstanding. */
+      next = NODE_STATUS.PENDING;
+    } else if (kind === 'execution') {
+      next = confirmed ? NODE_STATUS.COMPLETED : (executionFailed ? NODE_STATUS.FAILED : NODE_STATUS.PENDING);
+    } else if (kind === 'verify') {
+      next = confirmed ? NODE_STATUS.COMPLETED : (executionFailed ? NODE_STATUS.FAILED : NODE_STATUS.PENDING);
+    } else if (agent === 'wallet-agent' || id === 'portfolio' || id === 'intent') {
+      if (id === 'intent') next = NODE_STATUS.COMPLETED;
+      else if (walletOk) next = NODE_STATUS.COMPLETED;
+      else if (walletNeeded && !ok) next = NODE_STATUS.FAILED;
+      else if (walletNeeded) next = NODE_STATUS.FAILED;
+      else next = NODE_STATUS.SKIPPED;
+    } else if (agent === 'market-agent' || ['market', 'price', 'trend', 'onchain', 'freshdata', 'yield'].includes(id)) {
+      const present = id === 'yield' ? (yieldPresent || marketOk) : marketOk;
+      if (present) next = NODE_STATUS.COMPLETED;
+      else if (marketNeeded) next = NODE_STATUS.FAILED;
+      else next = NODE_STATUS.SKIPPED;
+    } else if (agent === 'research-agent' || id === 'news') {
+      if (newsPresent) next = NODE_STATUS.COMPLETED;
+      else next = node.optional ? NODE_STATUS.SKIPPED : (marketNeeded ? NODE_STATUS.FAILED : NODE_STATUS.SKIPPED);
+    } else if (agent === 'risk-agent' || agent === 'strategy-agent' || agent === 'guardian-agent' || agent === 'execution-agent' || agent === 'verification-agent') {
+      next = ok ? NODE_STATUS.COMPLETED : NODE_STATUS.FAILED;
+    } else if (['analysis', 'synthesis', 'simulation', 'policy', 'read'].includes(kind)) {
+      next = ok ? NODE_STATUS.COMPLETED : NODE_STATUS.FAILED;
+    } else {
+      next = ok ? NODE_STATUS.COMPLETED : NODE_STATUS.FAILED;
+    }
+
+    if (next && next !== NODE_STATUS.PENDING) {
+      setNodeStatus(plan.graph, node.id, next);
+    }
+  }
+  plan.updatedAt = Date.now();
+  savePlan(plan);
+  return plan;
+}
+
 export function nextSteps(plan) {
   return readyNodes(plan?.graph);
 }

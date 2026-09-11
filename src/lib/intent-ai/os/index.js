@@ -588,7 +588,14 @@ export function createIntentOS({
               balance: executionResult?.balances ? { fetchedAt: executionResult.balances.fetchedAt, source: executionResult.balances.source || 'rpc' } : null,
               portfolio: context.portfolio ? { fetchedAt: context.portfolio.fetchedAt, source: context.portfolio.source || 'portfolio' } : null
             },
-            locale: currentLocale
+            locale: currentLocale,
+            // Evidence the plan checklist needs: an outstanding approval
+            // keeps the permission step RUNNING, a real on-chain
+            // confirmation completes execution/verify — never faked.
+            requiresConfirmation: Boolean(
+              executionResult?.requiresConfirmation || plan?.requiresPermission
+            ),
+            executionStatus: executionResult?.status || null
           });
         } catch { /* the intelligence layer is never load-bearing */ }
 

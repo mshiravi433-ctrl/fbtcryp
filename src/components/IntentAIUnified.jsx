@@ -368,7 +368,6 @@ const ConversationRow = memo(function ConversationRow({
   onAutonomyStop,
   onAutonomyTick
 }) {
-  const [fbSent, setFbSent] = useState(null);
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
   const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
@@ -378,7 +377,6 @@ const ConversationRow = memo(function ConversationRow({
   const actionRoutes = Array.isArray(m.actions)
     ? m.actions.filter((a) => a && typeof a.route === 'string' && a.route.trim())
     : [];
-  const showFeedback = m.role === 'ai' && (m.kind === 'assistant' || m.kind === 'result') && m.intentId && !fbSent;
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
       <div className="iaos-bubble">
@@ -530,38 +528,20 @@ const ConversationRow = memo(function ConversationRow({
         {m.upgrade7?.plan?.steps?.length ? (
           <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} />
         ) : null}
-        {m.upgrade7?.confidence ? (
-          <div data-testid="u7-confidence" style={{ marginTop: 8 }}>
-            <span className="iaos-conf-meter">
-              {m.upgrade7.confidence.display || (fa ? 'اطمینان' : 'Confidence')} · {m.upgrade7.confidence.score}%
-            </span>
-            {Array.isArray(m.upgrade7.confidence.notices) && m.upgrade7.confidence.notices.length ? (
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.85)', marginTop: 4, lineHeight: 1.6 }}>
-                {m.upgrade7.confidence.notices.map((n, i) => (<div key={i}>{n}</div>))}
-              </div>
-            ) : null}
+        {/*
+         * The confidence meter, its notices, the agent-consensus box and the
+         * feedback buttons used to render here. They are intentionally NOT
+         * rendered: on a phone they buried the answer under four rows of
+         * meta-chrome («اطمینان: پایین · 36%»، «اجماع Agentها»، 👍👎) that
+         * users read as clutter, not signal. The data still travels on the
+         * message (observability + probes keep it); only the render is gone.
+         * A genuine analysis divergence still surfaces as a plain warning so
+         * a disagreement that affects money is never silently hidden.
+         */}
+        {m.upgrade7?.synthesis?.divergence === true ? (
+          <div className="iaos-consensus-box" data-testid="u7-divergence">
+            <div className="iaos-divergence-warn">⚠ {m.upgrade7.synthesis.warning || (fa ? 'تحلیل‌ها اختلاف دارند.' : 'Analyses disagree.')}</div>
           </div>
-        ) : null}
-        {m.upgrade7?.synthesis ? (
-          m.upgrade7.synthesis.divergence === true ? (
-            <div className="iaos-consensus-box" data-testid="u7-divergence">
-              <div className="iaos-divergence-warn">⚠ {m.upgrade7.synthesis.warning || (fa ? 'تحلیل‌ها اختلاف دارند.' : 'Analyses disagree.')}</div>
-            </div>
-          ) : (
-            <div className="iaos-consensus-box" data-testid="u7-consensus">
-              <strong>{fa ? 'اجماع Agentها' : 'Agent consensus'}</strong>
-              <span>
-                {(m.upgrade7.synthesis.contributingAgents || []).length} agent{(m.upgrade7.synthesis.contributingAgents || []).length === 1 ? '' : 's'}
-                {m.upgrade7.synthesis.agreement != null ? ` · ${Math.round(m.upgrade7.synthesis.agreement * 100)}%` : ''}
-                {m.upgrade7.synthesis.stance && m.upgrade7.synthesis.stance !== 'unknown' ? ` · ${m.upgrade7.synthesis.stance}` : ''}
-              </span>
-              {Array.isArray(m.upgrade7.agentHealth) && m.upgrade7.agentHealth.some((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown') ? (
-                <div className="iaos-divergence-warn">
-                  ⚠ {m.upgrade7.agentHealth.filter((a) => a?.status && a.status !== 'healthy' && a.status !== 'unknown').length} {fa ? 'عامل نیازمند توجه' : 'agent(s) need attention'}
-                </div>
-              ) : null}
-            </div>
-          )
         ) : null}
         {intel?.uncertainty?.level === 'HIGH' ? (
           <div className="iaos-uncertainty" data-testid="intent-ai-uncertainty">
@@ -587,27 +567,11 @@ const ConversationRow = memo(function ConversationRow({
             ))}
           </div>
         ) : null}
-        {showFeedback ? (
-          <div className="iaos-feedback-row" data-testid="intent-ai-feedback">
-            <button
-              type="button"
-              className="iaos-fb-btn"
-              data-testid="intent-ai-feedback-up"
-              aria-label={fa ? 'مفید بود' : 'Helpful'}
-              onClick={() => { setFbSent(1); onFeedback?.(m, 1); }}
-            >👍</button>
-            <button
-              type="button"
-              className="iaos-fb-btn"
-              data-testid="intent-ai-feedback-down"
-              aria-label={fa ? 'مفید نبود' : 'Not helpful'}
-              onClick={() => { setFbSent(-1); onFeedback?.(m, -1); }}
-            >👎</button>
-          </div>
-        ) : null}
-        {fbSent ? (
-          <div className="iaos-fb-thanks">{fa ? 'ممنون از بازخوردت!' : 'Thanks for the feedback!'}</div>
-        ) : null}
+        {/*
+         * Feedback buttons removed (see the note above the consensus block):
+         * two emoji buttons under every answer read as clutter. Intent-level
+         * feedback still flows through the learning loop on the server.
+         */}
       </div>
     </div>
   );

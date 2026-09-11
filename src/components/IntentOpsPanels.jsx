@@ -591,6 +591,15 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
     return <div className="iaos-opp-empty">{opsText('opp.none', locale)}</div>;
   }
   const top = rows.slice(0, 5);
+  const riskOf = (o) => {
+    const r = String(o?.risk || '').toLowerCase();
+    if (r === 'high' || r === 'extreme') return { key: 'opp.riskHigh', tone: 'bad' };
+    if (r === 'medium') return { key: 'opp.riskMedium', tone: 'warn' };
+    return { key: 'opp.riskLow', tone: 'ok' };
+  };
+  const kindOf = (o) => ({
+    MARKET: 'opp.kindMarket', YIELD: 'opp.kindYield', FARM: 'opp.kindFarm', LENDING: 'opp.kindLending'
+  }[String(o?.kind || '').toUpperCase()] || null);
   return (
     <div className="iaos-opp-list" data-testid="intent-ai-opportunities">
       {goal ? (
@@ -598,21 +607,34 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
           {opsPhrase('goalEstimate', locale, fmtNum(goal?.targetReturnPct))}
         </div>
       ) : null}
-      {top.map((o) => (
-        <div key={o.id} className="iaos-opp-row">
-          <strong>{o.symbol || o.name} <small>{o.kind}</small></strong>
-          <span>
-            {o.expectedReturnPct != null ? `${fmtNum(o.expectedReturnPct, 1)}%` : '—'}
-            <small>{o.basis === 'apy' ? 'APY' : '7d/2'}</small>
-          </span>
-          <span className="iaos-opp-meta">
-            {o.probabilityPct != null ? `${opsText('opp.histRate', locale)} ${fmtNum(o.probabilityPct, 0)}%` : '—'}
-            {o.potentialDrawdownPct != null ? ` · DD ${fmtNum(o.potentialDrawdownPct, 0)}%` : ''}
-          </span>
-          <span className={`iaos-pill iaos-pill-${o.risk === 'high' ? 'bad' : o.risk === 'medium' ? 'warn' : 'ok'}`}>{o.risk.toUpperCase()}</span>
-          <button type="button" className="iaos-opp-monitor" onClick={() => onMonitor(o)}>{opsText('opp.monitor', locale)}</button>
-        </div>
-      ))}
+      {top.map((o) => {
+        const rk = riskOf(o);
+        const kk = kindOf(o);
+        return (
+          <div key={o.id} className="iaos-opp-row">
+            <strong className="iaos-opp-title">
+              {o.symbol || o.name}
+              {kk ? <span className="iaos-opp-kind">{opsText(kk, locale)}</span> : null}
+            </strong>
+            <span className="iaos-opp-num" dir="ltr">
+              {o.expectedReturnPct != null ? `${fmtNum(o.expectedReturnPct, 1)}%` : '—'}
+              <span className="iaos-opp-basis">{o.basis === 'apy' ? opsText('opp.basisApy', locale) : opsText('opp.basisTrend', locale)}</span>
+            </span>
+            <span className="iaos-opp-sub">
+              <span className="iaos-opp-risk" data-tone={rk.tone}>{opsText(rk.key, locale)}</span>
+              <span className="iaos-opp-meta">
+                {o.probabilityPct != null
+                  ? (<>{opsText('opp.histRate', locale)} <bdi dir="ltr">{fmtNum(o.probabilityPct, 0)}%</bdi></>)
+                  : '—'}
+                {o.potentialDrawdownPct != null ? (<> · {opsText('opp.drawdown', locale)} <bdi dir="ltr">{fmtNum(o.potentialDrawdownPct, 0)}%</bdi></>) : null}
+              </span>
+            </span>
+            <span className="iaos-opp-sub">
+              <button type="button" className="iaos-opp-monitor" onClick={() => onMonitor(o)}>{opsText('opp.monitor', locale)}</button>
+            </span>
+          </div>
+        );
+      })}
       <p className="iaos-opp-disclaimer">
         {opsText('opp.note', locale)}
       </p>

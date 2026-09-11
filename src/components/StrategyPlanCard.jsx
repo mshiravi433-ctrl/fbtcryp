@@ -26,6 +26,7 @@
  * never as an empty card.
  */
 import { useMemo, useState } from 'react';
+import { localizeStrategyPlan, domainDisplayName } from '../lib/strategyBrain/strategyLocales.js';
 
 const pct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}%` : '—');
 const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}` : '—');
@@ -105,15 +106,15 @@ function CoverageRow({ strategy, fa }) {
         <b dir="ltr">{cov.live ?? 0}/{cov.requested ?? 0} · {cov.pct ?? 0}%</b>
       </div>
       <div className="isp-domains">
-        {read.map((d) => <span key={d} className="isp-domain is-live">{d}</span>)}
+        {read.map((d) => <span key={d} className="isp-domain is-live" title={d}>{fa ? domainDisplayName(d, 'fa') : d}</span>)}
         {gaps.map((g) => (
-          <span key={g.domain} className="isp-domain is-gap" title={g.reason || ''}>{g.domain}</span>
+          <span key={g.domain} className="isp-domain is-gap" title={g.reason || g.domain}>{fa ? domainDisplayName(g.domain, 'fa') : g.domain}</span>
         ))}
       </div>
       {gaps.length ? (
         <p className="isp-note">
           {fa
-            ? `خوانده نشد: ${gaps.map((g) => g.domain).join('، ')}. استراتژی بدون آن‌ها ساخته شد و اعتمادش کمتر است.`
+            ? `خوانده نشد: ${gaps.map((g) => domainDisplayName(g.domain, 'fa')).join('، ')}. استراتژی بدون آن‌ها ساخته شد و اعتمادش کمتر است.`
             : `Not read: ${gaps.map((g) => g.domain).join(', ')}. The plan was built without them and its confidence is lower for it.`}
         </p>
       ) : null}
@@ -124,49 +125,56 @@ function CoverageRow({ strategy, fa }) {
 function ComparisonTable({ strategy, fa, picked, onPick }) {
   const rows = Array.isArray(strategy.comparison) ? strategy.comparison : [];
   if (!rows.length) return null;
+  /* A 5-column table inside a ~340px chat bubble is unreadable: the four
+     numeric columns crush into each other and RTL reorders the digits. Each
+     option is its own card instead — title on top, then four aligned stat
+     cells (بازده / ریسک / هزینه / اتکا) with LTR tabular figures. Same test
+     ids, same pick behaviour, readable on a phone. */
+  const stats = (r) => [
+    { key: 'ret', label: fa ? 'بازده' : 'Return', value: pct(r.expectedReturnPct), tone: 'ok' },
+    { key: 'risk', label: fa ? 'ریسک' : 'Risk', value: pct(r.riskPct, 1), tone: 'warn' },
+    { key: 'cost', label: fa ? 'هزینه' : 'Cost', value: pct(r.costPct), tone: '' },
+    { key: 'conf', label: fa ? 'اتکا' : 'Data', value: `${Math.round((r.confidence || 0) * 100)}%`, tone: '' }
+  ];
   return (
     <div className="isp-block" data-testid="strategy-comparison">
       <div className="isp-block-head">
         <span>{fa ? 'مقایسه گزینه‌ها' : 'Options compared'}</span>
         <b>{rows.length}</b>
       </div>
-      <table className="isp-table">
-        <thead>
-          <tr>
-            <th>{fa ? 'گزینه' : 'Plan'}</th>
-            <th dir="ltr">{fa ? 'بازده' : 'Return'}</th>
-            <th dir="ltr">{fa ? 'ریسک' : 'Risk'}</th>
-            <th dir="ltr">{fa ? 'هزینه' : 'Cost'}</th>
-            <th dir="ltr">{fa ? 'اتکا' : 'Data'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const why = (strategy.ranking || []).find((x) => x.id === r.id);
-            return (
-              <tr
-                key={r.id}
-                className={`${picked === r.id ? 'is-picked' : ''} ${r.role === 'default' ? 'is-default' : ''}`}
-                onClick={() => onPick?.(r.id)}
-                data-testid={`strategy-option-${r.id}`}
-              >
-                <td>
-                  <button type="button" className="isp-option-name" onClick={() => onPick?.(r.id)}>
-                    {r.title}
-                    {r.role === 'default' ? <em>{fa ? 'پیشنهاد' : 'default'}</em> : null}
-                    {r.role === 'stretch' ? <em className="is-stretch">{fa ? 'شانس هدف' : 'stretch'}</em> : null}
-                  </button>
-                  {why?.reason ? <small>{fa && why.verdict === 'CHOSEN' ? 'انتخاب شد' : why.reason}</small> : null}
-                </td>
-                <td dir="ltr">{pct(r.expectedReturnPct)}</td>
-                <td dir="ltr">{pct(r.riskPct, 1)}</td>
-                <td dir="ltr">{pct(r.costPct)}</td>
-                <td dir="ltr">{Math.round((r.confidence || 0) * 100)}%</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="isp-options" role="list">
+        {rows.map((r) => {
+          const why = (strategy.ranking || []).find((x) => x.id === r.id);
+          return (
+            <button
+              key={r.id}
+              type="button"
+              role="listitem"
+              className={`isp-option${picked === r.id ? ' is-picked' : ''}${r.role === 'default' ? ' is-default' : ''}${r.role === 'stretch' ? ' is-stretch' : ''}`}
+              onClick={() => onPick?.(r.id)}
+              data-testid={`strategy-option-${r.id}`}
+              aria-pressed={picked === r.id}
+            >
+              <span className="isp-option-head">
+                <span className="isp-option-name">
+                  {r.title}
+                  {r.role === 'default' ? <em>{fa ? 'پیشنهاد' : 'default'}</em> : null}
+                  {r.role === 'stretch' ? <em className="is-stretch">{fa ? 'شانس هدف' : 'stretch'}</em> : null}
+                </span>
+              </span>
+              <span className="isp-option-stats">
+                {stats(r).map((s) => (
+                  <span key={s.key} className={`isp-stat${s.tone ? ` is-${s.tone}` : ''}`}>
+                    <span className="isp-stat-label">{s.label}</span>
+                    <span className="isp-stat-value" dir="ltr">{s.value}</span>
+                  </span>
+                ))}
+              </span>
+              {why?.reason ? <span className="isp-option-why">{why.reason}</span> : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -191,14 +199,12 @@ function SleeveList({ sleeves, fa }) {
                 <b dir="ltr">{usd(s.amountUsd)}</b>
               </div>
               <div className="isp-bar"><i style={{ width: `${Math.max(2, Math.min(100, s.weightPct || 0))}%` }} /></div>
-              <div className="isp-sleeve-meta" dir="ltr">
-                <span>{pct(s.weightPct, 0)}</span>
+              <div className="isp-sleeve-meta">
+                <span dir="ltr">{pct(s.weightPct, 0)}</span>
                 <span>
-                  {s.returnPctAnnual != null ? `${pct(s.returnPctAnnual)} APY` : (fa ? 'بدون نرخ' : 'no rate')}
-                  <small> · {fa ? basis.fa : basis.en}</small>
+                  {s.returnPctAnnual != null ? (<><bdi dir="ltr">{pct(s.returnPctAnnual)} APY</bdi><small> · {fa ? basis.fa : basis.en}</small></>) : (fa ? 'بدون نرخ' : 'no rate')}
                 </span>
-                {s.horizonDrawdownPct != null ? <span>{fa ? 'افت' : 'DD'} {pct(s.horizonDrawdownPct, 1)}{s.drawdownBasis === 'assumed' ? '*' : ''}</span> : null}
-                {s.priceExposurePct != null ? null : null}
+                {s.horizonDrawdownPct != null ? <span>{fa ? 'افت' : 'DD'} <bdi dir="ltr">{pct(s.horizonDrawdownPct, 1)}{s.drawdownBasis === 'assumed' ? '*' : ''}</bdi></span> : null}
               </div>
               {s.handoff?.route ? (
                 <span className="isp-sleeve-route" dir="ltr">{s.handoff.route}</span>
@@ -232,7 +238,11 @@ function StageList({ stages, fa, onOpenRoute }) {
             <ul className="isp-stage-actions">
               {(st.actions || []).map((a, i) => (
                 <li key={`${a.operation}-${i}`}>
-                  <span dir="ltr">{a.module} · {a.operation}</span>
+                  {fa && (a.moduleFa || a.operationFa) ? (
+                    <span>{[a.moduleFa || a.module, a.operationFa || a.operation].filter(Boolean).join(' · ')}</span>
+                  ) : (
+                    <span dir="ltr">{a.module} · {a.operation}</span>
+                  )}
                   {a.requiresSignature ? <em>{fa ? 'امضای تو' : 'your signature'}</em> : null}
                   {onOpenRoute && a.route ? (
                     <button type="button" className="isp-link" onClick={() => onOpenRoute(a.route)}>{fa ? 'برو' : 'Open'} ↗</button>
@@ -259,7 +269,7 @@ function MonitorList({ monitors, fa }) {
       <ul className="isp-monitors">
         {monitors.map((m) => (
           <li key={m.id} data-severity={m.severity}>
-            <b dir="ltr">{m.condition}</b>
+            <b dir={fa ? undefined : 'ltr'}>{m.condition}</b>
             <span>{fa ? '→ ' : '→ '}{m.action}</span>
           </li>
         ))}
@@ -277,7 +287,9 @@ export function StrategyPlanCard({
 }) {
   const fa = String(locale).startsWith('fa');
   const [picked, setPicked] = useState(null);
-  const effective = useMemo(() => plan || null, [plan]);
+  /* Display copy in the user's language. The runtime keeps the canonical
+     object; only this render reads the localized strings. */
+  const effective = useMemo(() => localizeStrategyPlan(plan || null, locale), [plan, locale]);
 
   if (error) {
     return (
@@ -326,11 +338,11 @@ export function StrategyPlanCard({
       <div className="isp-head">
         <div className="isp-objective">
           <b dir="ltr">
-            {usd(goal.capitalUsd)} · {pct(goal.targetPct, 1)} · {goal.horizonDays}d
+            {usd(goal.capitalUsd)} · {pct(goal.targetPct, 1)} · {goal.horizonDays}{fa ? ' روز' : 'd'}
           </b>
           <small>
-            {fa ? `ریسک ${goal.riskProfile}` : `${goal.riskProfile} risk`}
-            {goal.capitalSource ? ` · ${fa ? 'سرمایه از' : 'capital from'} ${goal.capitalSource}` : ''}
+            {fa ? `ریسک ${goal.riskProfileFa || goal.riskProfile}` : `${goal.riskProfile} risk`}
+            {goal.capitalSource ? ` · ${fa ? 'سرمایه از' : 'capital from'} ${fa ? (goal.capitalSourceFa || goal.capitalSource) : goal.capitalSource}` : ''}
           </small>
         </div>
         <span
@@ -353,10 +365,17 @@ export function StrategyPlanCard({
       <p className="isp-honesty">{effective.honesty}</p>
 
       {view.regime ? (
-        <p className="isp-regime" dir="ltr">
-          regime: {view.regime} · bias {view.bias} · conviction {Math.round((view.conviction || 0) * 100)}%
-          <small> ({(view.readDomains || []).join(', ') || 'no read'})</small>
-        </p>
+        fa ? (
+          <p className="isp-regime">
+            رژیم: {view.regimeFa || view.regime} · سوگیری <bdi dir="ltr">{view.bias}</bdi> · اطمینان {Math.round((view.conviction || 0) * 100)}٪
+            <small> ({(view.readDomains || []).map((d) => domainDisplayName(d, 'fa')).join('، ') || 'خوانشی نیست'})</small>
+          </p>
+        ) : (
+          <p className="isp-regime" dir="ltr">
+            regime: {view.regime} · bias {view.bias} · conviction {Math.round((view.conviction || 0) * 100)}%
+            <small> ({(view.readDomains || []).join(', ') || 'no read'})</small>
+          </p>
+        )
       ) : null}
 
       {effective.alternatives?.stretch && effective.alternatives.stretchNote ? (
@@ -391,7 +410,11 @@ export function StrategyPlanCard({
             </span>
             {Array.isArray(risk.breaches) && risk.breaches.length ? (
               <ul>
-                {risk.breaches.map((b) => <li key={b.code} dir="ltr">{b.code}: {b.detail}</li>)}
+                {risk.breaches.map((b) => (
+                  <li key={b.code} dir={fa ? undefined : 'ltr'}>
+                    {fa ? `${b.codeFa || b.code}: ${b.detailFa || b.detail}` : `${b.code}: ${b.detail}`}
+                  </li>
+                ))}
               </ul>
             ) : null}
           </div>

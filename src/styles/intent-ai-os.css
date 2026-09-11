@@ -4149,6 +4149,98 @@ body:has(.iaos-page-v6) {
 .isp-option-name em.is-stretch { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
 .isp-table td small { display: block; color: #94a3b8; font-size: 10px; margin-top: 2px; }
 
+/* ── Option cards (replaces the 5-column table inside the chat bubble) ──────
+   Every figure sits in its own LTR cell with tabular numerals, so بازده /
+   ریسک / هزینه / اتکا stay in one line and one column even in RTL. */
+.isp-nums dd,
+.isp-stat-value,
+.isp-objective b,
+.isp-sleeve-top b,
+.isp-opp-num {
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
+.isp-options { display: flex; flex-direction: column; gap: 8px; }
+.isp-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.isp-option.is-picked { border-color: rgba(99, 102, 241, 0.65); background: rgba(99, 102, 241, 0.10); }
+.isp-option.is-default { border-inline-start: 3px solid rgba(110, 231, 183, 0.7); }
+.isp-option.is-stretch { border-style: dashed; border-color: rgba(251, 191, 36, 0.45); }
+.isp-option-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.isp-option .isp-option-name {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  color: #e2e8f0; font-weight: 700; font-size: 12px;
+}
+.isp-option-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.isp-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 5px 4px;
+  text-align: center;
+  min-width: 0;
+}
+.isp-stat-label { font-size: 9px; color: #94a3b8; font-weight: 600; white-space: nowrap; }
+.isp-stat-value { font-size: 12px; font-weight: 700; color: #e2e8f0; white-space: nowrap; }
+.isp-stat.is-ok .isp-stat-value { color: #6ee7b7; }
+.isp-stat.is-warn .isp-stat-value { color: #fcd34d; }
+.isp-option-why {
+  font-size: 10px; line-height: 1.7; color: #94a3b8;
+  border-top: 1px dashed rgba(148, 163, 184, 0.16);
+  padding-top: 6px;
+}
+:root[data-theme='light'] .isp-option { background: #f8fafc; border-color: rgba(15, 23, 42, .09); }
+:root[data-theme='light'] .isp-option.is-picked { background: rgba(99, 102, 241, .07); }
+:root[data-theme='light'] .isp-option .isp-option-name { color: #0f172a; }
+:root[data-theme='light'] .isp-stat-value { color: #0f172a; }
+:root[data-theme='light'] .isp-stat-label,
+:root[data-theme='light'] .isp-option-why { color: #64748b; }
+
+/* ── Opportunity rows: numbers never break the RTL line ─────────────────── */
+.iaos-opp-list { display: flex; flex-direction: column; gap: 8px; }
+.iaos-opp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.iaos-opp-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.iaos-opp-kind {
+  font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  background: rgba(99, 102, 241, .16); color: #a5b4fc; margin-inline-start: 6px;
+  white-space: nowrap;
+}
+.iaos-opp-num {
+  font-size: 13px; font-weight: 700; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.iaos-opp-basis { font-size: 9px; color: rgba(148, 163, 184, .8); font-weight: 600; margin-inline-start: 4px; }
+.iaos-opp-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; grid-column: 1 / -1; }
+.iaos-opp-risk { font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.iaos-opp-risk[data-tone='ok'] { color: #6ee7b7; background: rgba(16, 185, 129, .12); }
+.iaos-opp-risk[data-tone='warn'] { color: #fcd34d; background: rgba(245, 158, 11, .12); }
+.iaos-opp-risk[data-tone='bad'] { color: #fca5a5; background: rgba(239, 68, 68, .12); }
+
 .isp-sleeves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .isp-sleeves li {
   border: 1px solid rgba(148, 163, 184, 0.18);

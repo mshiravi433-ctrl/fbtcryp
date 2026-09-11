@@ -205,12 +205,17 @@ clearPlans(); resetIntentOS();
   const panel = readFileSync(join(repoRoot, 'src/components/IntentAIUnified.jsx'), 'utf8');
   t('plan steps render through the existing timeline',
     panel.includes('mapPlanStepsForTimeline(m.upgrade7.plan.steps)') && panel.includes('<AIActivityTimeline'));
-  t('confidence renders through the existing meter',
-    panel.includes('iaos-conf-meter') && panel.includes('u7-confidence'));
+  /* The confidence meter + agent-consensus box were deliberately removed from
+     the chat surface (user-verified clutter: «اطمینان: پایین · 36%» and
+     «اجماع Agentها» buried every answer). The data still travels on the
+     message for observability; only the render is gone. A genuine analysis
+     divergence still surfaces as a plain warning. */
+  t('confidence meter removed from the chat surface',
+    !panel.includes('u7-confidence'));
   t('divergence renders through the existing warning',
     panel.includes('iaos-divergence-warn') && panel.includes('u7-divergence'));
-  t('consensus renders through the existing box',
-    panel.includes('iaos-consensus-box') && panel.includes('u7-consensus'));
+  t('consensus box removed from the chat surface',
+    !panel.includes('u7-consensus'));
   t('predicted chips merge with suggestions', panel.includes('allChips') && panel.includes('predictedNext'));
   t('answers bind to the slot that asked', panel.includes('bindAnswer'));
   t('derived chips memoize (no render-time heavy work)',

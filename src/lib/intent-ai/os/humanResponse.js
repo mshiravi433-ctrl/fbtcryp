@@ -780,10 +780,17 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       : '';
 
     if (best.length) {
+      const riskFa = (r) => ({
+        low: 'کم', medium: 'متوسط', high: 'زیاد', extreme: 'خیلی زیاد'
+      }[String(r || '').toLowerCase()] || String(r || 'نامشخص'));
       const lines = best.map((o, i) => {
         const apy = Number.isFinite(Number(o.apy)) ? `${Number(o.apy).toFixed(1)}%` : 'N/A';
+        const name = o.protocol || o.symbol || (lang === 'fa' ? 'استخر' : 'pool');
+        if (lang === 'fa') {
+          return `${i + 1}. ${name} — ${apy} ٪ سالانه\n   ریسک: ${riskFa(o.risk)}${o.ilRisk ? ` · زیان ناپایدار: ${riskFa(o.ilRisk)}` : ''}`;
+        }
         const risk = o.risk || 'n/a';
-        return `${i + 1}. ${o.protocol || o.symbol || 'pool'} — ${apy} APY\n   Risk: ${risk}${o.ilRisk ? ` · IL: ${o.ilRisk}` : ''}`;
+        return `${i + 1}. ${name} — ${apy} APY\n   Risk: ${risk}${o.ilRisk ? ` · IL: ${o.ilRisk}` : ''}`;
       });
       const stamp = scan.updatedAt ? `\n\n${lang === 'fa' ? 'زمان داده' : 'As of'}: ${scan.updatedAt}` : '';
       return {

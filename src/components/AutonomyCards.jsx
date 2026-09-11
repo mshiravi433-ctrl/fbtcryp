@@ -22,6 +22,23 @@ const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleSt
    GOAL PLAN
    ══════════════════════════════════════════════════════════════════════════ */
 
+const GOAL_RISK_FA = Object.freeze({ low: 'کم‌ریسک', medium: 'متعادل', high: 'پرریسک', extreme: 'خیلی پرریسک' });
+
+/* Action labels arrive in English from the compiler (probes pin them); the
+   card renders the Persian shape from the same numbers, never a new number. */
+function goalActionLabelFa(label, fallback) {
+  const s = String(label || fallback || '');
+  let m = s.match(/^Supply\s+(\S+)\s+@\s+([\d.]+)%\s+APY$/i);
+  if (m) return `سپرده ${m[1]} با ${m[2]}٪ سالانه`;
+  m = s.match(/^Buy\s+(\S+)\s+@\s+([\d.]+)%\s+APY$/i);
+  if (m) return `خرید ${m[1]} با ${m[2]}٪ سالانه`;
+  m = s.match(/^Deposit into\s+(.+?)\s+@\s+([\d.]+)%\s+APY$/i);
+  if (m) return `واریز به ${m[1]} با ${m[2]}٪ سالانه`;
+  m = s.match(/^Open\s+(\S+)\s+(\S+)\s+([\dx.]+)\s*[—-]\s*funding-based,\s*high risk$/i);
+  if (m) return `بازکردن ${m[1] === 'long' ? 'لانگ' : m[1] === 'short' ? 'شورت' : m[1]} ${m[2]} ${m[3]} — بر اساس فاندینگ، ریسک زیاد`;
+  return s;
+}
+
 export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExecute = null, onOpenRoute = null, error = null }) {
   const fa = String(locale).startsWith('fa');
   const [picked, setPicked] = useState(null);
@@ -125,8 +142,8 @@ export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExe
               data-testid={`goal-option-${o.id}`}
             >
               <span className="iaos-goal-opt-title">{o.title}</span>
-              <span className="iaos-goal-opt-meta" dir="ltr">
-                {pct(o.apyPct)} · {o.risk} · {o.actions?.length || 0} {fa ? 'گام' : 'step(s)'}
+              <span className="iaos-goal-opt-meta">
+                <bdi dir="ltr">{pct(o.apyPct)}</bdi> · {fa ? (GOAL_RISK_FA[String(o.risk || '').toLowerCase()] || o.risk) : o.risk} · <bdi dir="ltr">{o.actions?.length || 0}</bdi> {fa ? 'گام' : 'step(s)'}
               </span>
             </button>
           ))}
@@ -138,7 +155,7 @@ export function GoalPlanCard({ plan, capital, locale = 'fa', busy = false, onExe
           {option.actions.map((a, i) => (
             <li key={`${a.venue || 'step'}-${i}`}>
               <span className="iaos-goal-step-venue" dir="ltr">{a.venue || a.type}</span>
-              <span className="iaos-goal-step-label">{a.label || `${a.type} ${a.asset || ''}`}</span>
+              <span className="iaos-goal-step-label">{fa ? goalActionLabelFa(a.label, `${a.type} ${a.asset || ''}`) : (a.label || `${a.type} ${a.asset || ''}`)}</span>
             </li>
           ))}
         </ol>

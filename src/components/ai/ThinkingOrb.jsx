@@ -195,27 +195,33 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
       </button>
       <div className="ai-timeline-steps" hidden={!open}>
       {steps.map((step, idx) => {
-        const status = step.status || 'pending';
-        let icon = '○';
-        let color = 'rgba(148, 163, 184, 0.6)';
-        if (status === 'completed' || status === 'done' || status === 'ok' || status === 'success') {
-          icon = '✓';
-          color = '#34d399';
-        } else if (status === 'active' || status === 'working' || status === 'in_progress') {
-          icon = '●';
-          color = '#22d3ee';
-        } else if (status === 'failed' || status === 'error') {
-          icon = '✕';
-          color = '#f87171';
-        }
+        const status = String(step.status || 'pending').toLowerCase();
+        /* Done = green filled circle, in-progress = pulsing cyan, failed or
+           blocked = red, not-done-yet = red hollow ring (the user asked that
+           an incomplete step read red, not grey), skipped = neutral grey. */
+        const tone = ['completed', 'done', 'ok', 'success'].includes(status)
+          ? 'ok'
+          : ['active', 'working', 'in_progress', 'running'].includes(status)
+            ? 'busy'
+            : ['failed', 'error', 'blocked'].includes(status)
+              ? 'bad'
+              : status === 'skipped'
+                ? 'skip'
+                : 'todo';
+        const labelColor = tone === 'ok' ? '#cbd5e1'
+          : tone === 'busy' ? '#e2e8f0'
+            : tone === 'bad' || tone === 'todo' ? '#fca5a5'
+              : 'rgba(148,163,184,0.7)';
 
         return (
-          <div key={`${step.id || idx}-${step.label}`} className="ai-timeline-step" data-status={status} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
-            <span className="ai-timeline-icon" style={{ color, fontWeight: 700, minWidth: 14, textAlign: 'center' }}>{icon}</span>
-            <span className="ai-timeline-label" style={{ color: status === 'completed' ? '#cbd5e1' : status === 'active' ? '#e2e8f0' : 'rgba(148,163,184,0.7)' }}>
+          <div key={`${step.id || idx}-${step.label}`} className="ai-timeline-step" data-status={status} data-tone={tone} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
+            <span className="ai-tl-dot" data-tone={tone} aria-hidden="true">
+              {tone === 'bad' ? <i>✕</i> : tone === 'ok' ? <i>✓</i> : null}
+            </span>
+            <span className="ai-timeline-label" style={{ color: labelColor }}>
               {fa ? (step.labelFa || step.label) : (step.labelEn || step.label)}
             </span>
-            {status === 'active' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
+            {tone === 'busy' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
           </div>
         );
       })}
@@ -271,6 +277,35 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
         }
         .ai-timeline-chevron { flex: 0 0 auto; font-size: 11px; color: rgba(148,163,184,.8); }
         .ai-timeline-steps { padding: 2px 6px 0; }
+        .ai-tl-dot {
+          width: 15px; height: 15px; border-radius: 50%;
+          flex: 0 0 auto; display: inline-grid; place-items: center;
+          font-size: 9px; font-style: normal; line-height: 1;
+        }
+        .ai-tl-dot i { font-style: normal; font-weight: 800; }
+        .ai-tl-dot[data-tone="ok"] {
+          background: #10b981;
+          box-shadow: 0 0 8px rgba(16,185,129,.65), inset 0 0 3px rgba(255,255,255,.5);
+          color: #fff;
+        }
+        .ai-tl-dot[data-tone="busy"] {
+          background: #22d3ee;
+          box-shadow: 0 0 8px rgba(34,211,238,.65);
+          animation: tlPulse 1.1s ease-in-out infinite;
+        }
+        .ai-tl-dot[data-tone="bad"] {
+          background: #ef4444;
+          box-shadow: 0 0 8px rgba(239,68,68,.6);
+          color: #fff;
+        }
+        .ai-tl-dot[data-tone="todo"] {
+          background: transparent;
+          border: 2px solid rgba(248,113,113,.75);
+        }
+        .ai-tl-dot[data-tone="skip"] {
+          background: transparent;
+          border: 2px solid rgba(148,163,184,.45);
+        }
         .ai-timeline-step {
           transition: all 0.2s ease;
         }
