@@ -246,7 +246,15 @@ export default function News() {
             style={{ isolation: 'isolate' }}
           >
             {tab === k && <SegIndicator id="newstab" />}
-            {k === 'global' ? t('aiGlobal.title') : t(`news.tab.${k}`)}
+            {/*
+              «اخبار هوش جهانی در تب جا نمی‌شود» — six tabs share one phone-width
+              rail, and «هوش جهانی» is the longest label of the six, so it
+              wrapped onto three lines and pushed the rail taller than every
+              other tab. The tab keeps the SHORT label; the full name stays as
+              the tooltip and as the heading inside the panel itself, so nothing
+              is lost — the rail just stops overflowing.
+            */}
+            {k === 'global' ? t('aiGlobal.tabShort') : t(`news.tab.${k}`)}
           </button>
         ))}
       </div>

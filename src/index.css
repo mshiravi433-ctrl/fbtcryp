@@ -10167,7 +10167,10 @@ body { overflow-x: clip; }
   font-weight: 800;
 }
 
-/* Five News modes remain visible on a 320px phone. Intelligence is therefore
+/* Six News modes remain visible on a 320px phone — تیترها · گفتگو · رادیو ·
+   هوشمندی · جهانی · آرامش. Every label is therefore a single short word: the
+   rail truncates with an ellipsis (nowrap below), so a two-word label like
+   «هوش جهانی» renders as «هوش جه…» and reads as a broken tab. Intelligence is
    truly after Radio, not technically after it but hidden off-screen. */
 .news-mode-tabs button {
   min-width: 0;
@@ -10176,6 +10179,12 @@ body { overflow-x: clip; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Six segments on a 320px screen is ~50px each, so the label drops a step
+   below the base 12px; below 360px it drops again rather than truncating. */
+.news-mode-tabs:has(button:nth-child(6)) button { font-size: 11px; }
+@media (max-width: 359px) {
+  .news-mode-tabs:has(button:nth-child(6)) button { font-size: 10px; letter-spacing: -0.2px; }
 }
 
 .insights-panel {

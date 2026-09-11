@@ -2535,13 +2535,21 @@
         "buy": "buy pressure",
         "sell": "sell pressure",
         "balanced": "balanced"
-      }
+      },
+      "smartMoneyNet": "Smart-money net flow",
+      "liquidityObserved": "Observed liquidity",
+      "holdersTotal": "Holder count",
+      "measuredTitle": "Measured on-chain data",
+      "measuredNone": "No on-chain data was read for this asset right now — no number is guessed.",
+      "measuredNote": "Every number comes from a real read; direction is shown with colour and an arrow.",
+      "exchangeSupply": "Supply held on exchanges"
     },
     "createIntent": "Create intent",
     "acc": {
       "layersSummary": "{{n}} layers",
       "indicators": "Raw indicators",
-      "indicatorsSummary": "{{n}} readings"
+      "indicatorsSummary": "{{n}} readings",
+      "onchainSummary": "{{n}} on-chain reads"
     },
     "intel": {
       "tabs": {
@@ -2886,7 +2894,8 @@
       },
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
-      "turnover": "Volume / mcap"
+      "turnover": "Volume / mcap",
+      "trendTitle": "{{symbol}} price trend"
     },
     "aiPowered": "Powered by AI"
   },
@@ -9144,7 +9153,7 @@
     },
     "windowPartial": "Only {{pct}}% of this {{window}} window has been observed so far — the ranges fill in while the scanner keeps running.",
     "tokenWindowNote": "Buying, selling and net flow cover the last {{window}}.",
-    "tokenWindowFallback": "The meters below come from the token\u2019s 24-hour pair statistics; only the flow numbers follow the selected window.",
+    "tokenWindowFallback": "The meters below come from the token’s 24-hour pair statistics; only the flow numbers follow the selected window.",
     "live": "Live",
     "tagline": "Track <b>whales</b>. Detect <b>accumulation</b>. Find unusual <b>wallet activity</b> — before it shows up in price.",
     "searchPlaceholder": "Wallet address, token contract, symbol or tx hash…",
@@ -9271,7 +9280,16 @@
     "observedExchanges": "Observed in flows",
     "windowCoverage": "Window coverage {{pct}}%",
     "checking": "Connecting…",
-    "offlineShort": "Offline"
+    "offlineShort": "Offline",
+    "tokenDataFor": "These numbers were read for {{symbol}} on {{chain}} from the contract address below.",
+    "tokenContract": "Contract",
+    "tokenChainLabel": "Network",
+    "showDetails": "Show smart-money details",
+    "hideDetails": "Hide smart-money details",
+    "tokenSummaryUp": "net flow positive",
+    "tokenSummaryDown": "net flow negative",
+    "tokenSummaryFlat": "no recorded flow",
+    "marketsChip": "active pairs"
   },
   "crossChain": {
     "youReceive": "You receive",
@@ -11438,7 +11456,8 @@
       "invalidInput": "Check {{field}}: {{message}}",
       "generic": "This action could not be completed (code {{code}}).",
       "detailToggle": "Details"
-    },    "quote": {
+    },
+    "quote": {
       "confirmTitle": "Confirm purchase?",
       "confirmBody": "You are preparing ${{coverage}} of protection for ${{total}} total (all fees included). Nothing is charged until you sign.",
       "confirmPrepare": "Confirm & Prepare",
@@ -11752,7 +11771,8 @@
   },
   "aiGlobal": {
     "title": "Global Intelligence",
-    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing",
+    "tabShort": "Global"
   },
   "pay": {
     "title": "Payment gateway",

@@ -188,10 +188,14 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'risk_mood',
       name: 'cross-class mood',
+      /* Persian pair for every signal: the screen renders these directly, so a
+         Persian UI no longer shows an English sentence inside a Persian box. */
+      nameFa: 'حال‌وهوای کلاس‌های دارایی',
       value,
       weight: 1.5,
       direction: directionOf(value),
       evidence: `${up} of ${regime.votes.length} asset classes up over 24h — regime ${String(regime.regime || 'MIXED').toLowerCase().replace(/_/g, ' ')}`,
+      evidenceFa: `${faD(up)} از ${faD(regime.votes.length)} کلاس دارایی در ۲۴ ساعت صعودی — رژیم ${NARRATIVE_REGIME_FA[regime.regime] || 'ترکیبی'}`,
       source: 'cross-asset-engine'
     });
   }
@@ -203,10 +207,12 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'dollar_pressure',
       name: 'dollar pressure',
+      nameFa: 'فشار دلار',
       value,
       weight: 1.0,
       direction: directionOf(value),
       evidence: `US Dollar Index ${dxy.priceUsd} (${dxy.change1dPct > 0 ? '+' : ''}${dxy.change1dPct}% over 1d) — dollar strength typically pressures risk assets`,
+      evidenceFa: `شاخص دلار ${faD(dxy.priceUsd)} (${pctFa(dxy.change1dPct)} در ۱ روز) — دلار قوی معمولاً به دارایی‌های پرریسک فشار می‌آورد`,
       source: dxy.source || 'macroData'
     });
   }
@@ -218,10 +224,12 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'safe_haven_bid',
       name: 'safe-haven bid',
+      nameFa: 'تقاضای پناهگاه امن (طلا)',
       value,
       weight: 0.8,
       direction: directionOf(value),
       evidence: `gold ${gold.priceUsd} (${gold.change7dPct > 0 ? '+' : ''}${gold.change7dPct}% over 7d) — a rising gold bid is hedging demand`,
+      evidenceFa: `طلا ${faD(gold.priceUsd)} (${pctFa(gold.change7dPct)} در ۷ روز) — رشد طلا تقاضای پوشش ریسک است، نه رشد`,
       source: gold.source || 'macroData'
     });
   }
@@ -233,10 +241,12 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'energy_inflation',
       name: 'energy inflation',
+      nameFa: 'تورم انرژی',
       value,
       weight: 0.8,
       direction: directionOf(value),
       evidence: `WTI crude ${wti.priceUsd} (${wti.change7dPct > 0 ? '+' : ''}${wti.change7dPct}% over 7d) — rising energy feeds inflation pressure`,
+      evidenceFa: `نفت WTI ${faD(wti.priceUsd)} (${pctFa(wti.change7dPct)} در ۷ روز) — رشد انرژی به فشار تورمی دامن می‌زند`,
       source: wti.source || 'macroData'
     });
   }
@@ -248,10 +258,12 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'long_rate',
       name: 'long rate',
+      nameFa: 'نرخ بهرهٔ بلندمدت',
       value,
       weight: 1.2,
       direction: directionOf(value),
       evidence: `US 10Y yield at ${teny.priceUsd}% (level ${teny.change7dPct > 0 ? '+' : ''}${teny.change7dPct}% over 7d) — a rising long rate tightens conditions`,
+      evidenceFa: `بازده ۱۰ سالهٔ آمریکا ${faD(teny.priceUsd)}٪ (${pctFa(teny.change7dPct)} در ۷ روز) — رشد نرخ بلندمدت شرایط مالی را تنگ می‌کند`,
       source: teny.source || 'macroData'
     });
   }
@@ -265,12 +277,16 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
     signals.push({
       id: 'yield_curve',
       name: 'yield curve',
+      nameFa: 'منحنی بازده',
       value,
       weight: 1.5,
       direction: directionOf(value),
       evidence: inverted
         ? `2s10s spread INVERTED at ${curve.spreadPct}pp — inversions have historically preceded US recessions`
         : `2s10s spread positive at ${curve.spreadPct}pp`,
+      evidenceFa: inverted
+        ? `منحنی ۲/۱۰ با ${faD(curve.spreadPct)} واحد درصد وارونه است — وارونگی از نظر تاریخی پیش‌درآمد رکود آمریکا بوده`
+        : `منحنی ۲/۱۰ با ${faD(curve.spreadPct)} واحد درصد مثبت است`,
       source: curve.source || 'macroData'
     });
   }
@@ -287,13 +303,23 @@ export function economicOutlook({ classes = {}, observed = [], regime = null, ma
       if (OUTLOOK_CONTRACTION.test(t)) contraction += 1;
     }
     const value = clamp1((supportive + growth - restrictive - contraction) / Math.max(1, items.length));
+    /* When no headline matched any bucket, the four zero counts are noise —
+       the honest sentence is «read, none classified», and the signal stays
+       neutral (grey) rather than implying a lean it did not measure. */
+    const matched = supportive + restrictive + growth + contraction;
     signals.push({
       id: 'macro_headlines',
       name: 'macro headlines',
+      nameFa: 'تیترهای کلان',
       value,
       weight: 1.0,
       direction: directionOf(value),
-      evidence: `${supportive} supportive / ${restrictive} restrictive / ${growth} growth / ${contraction} contraction of ${items.length} classified macro headlines`,
+      evidence: matched
+        ? `${supportive} supportive / ${restrictive} restrictive / ${growth} growth / ${contraction} contraction of ${items.length} classified macro headlines`
+        : `${items.length} classified macro headlines read; none matched a growth or contraction keyword`,
+      evidenceFa: matched
+        ? `${faD(supportive)} پشتیبان · ${faD(restrictive)} محدودکننده · ${faD(growth)} رشد · ${faD(contraction)} انقباض از ${faD(items.length)} تیتر دسته‌بندی‌شدهٔ کلان`
+        : `${faD(items.length)} تیتر کلان دسته‌بندی‌شده خوانده شد؛ هیچ‌کدام کلیدواژهٔ رشد یا انقباض نداشت`,
       source: 'macro:classifier'
     });
   }
@@ -486,6 +512,8 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, cryptoInst
      with zero AI providers configured; the LLM commentary (crossNarrative.js)
      rides ON TOP of it and is a separate, labelled field. */
   result.narrative = crossNarrative(result);
+  /* The same numbers as drawable lines — see crossNarrativeLines(). */
+  result.narrativeLines = crossNarrativeLines(result);
 
   result.id = `ca_${createHash('sha256').update(JSON.stringify({ at: now, observed, regime: result.regime?.regime || null, outlook: result.outlook?.label || null })).digest('hex').slice(0, 18)}`;
   return result;
@@ -527,7 +555,11 @@ const faReason = (reason) => {
   if (/TIMEOUT/.test(raw)) return 'زمان خواندن منبع تمام شد';
   return 'منبع پاسخ نداد';
 };
-const pctFa = (v) => (v === null || !Number.isFinite(v) ? null : faD(`${v > 0 ? '+' : ''}${Number(v).toFixed(2)}٪`));
+/* A hyphen-minus in front of Persian digits renders on the WRONG side of the
+   number in an RTL line («۱.۲۰-» reads as a trailing dash). U+2212 is a real
+   minus sign: bidi-neutral, and it stays where the sign belongs. */
+const faMinus = (v) => String(v).replace(/-/g, '\u2212');
+const pctFa = (v) => (v === null || !Number.isFinite(v) ? null : faMinus(faD(`${v > 0 ? '+' : ''}${Number(v).toFixed(2)}٪`)));
 const pctEn = (v) => (v === null || !Number.isFinite(v) ? null : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
 /* Persian digits for the numbers the narrative formats itself (counts, gaps,
    scores) — NOT a blanket conversion, which would mangle English words inside
@@ -601,7 +633,7 @@ export function crossNarrative(analysis) {
   const divs = Array.isArray(analysis.divergences) ? analysis.divergences.slice(0, 2) : [];
   for (const d of divs) {
     const [a, b] = d.classes;
-    fa.push(`واگرایی: ${NARRATIVE_CLASS_FA[a] || a} ${pctFa(d.avgChangePct[a])} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(d.avgChangePct[b])} (شکاف ${faD(d.gapPct)} واحد درصد).`);
+    fa.push(`واگرایی: ${NARRATIVE_CLASS_FA[a] || a} ${pctFa(d.avgChangePct[a])} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(d.avgChangePct[b])} (شکاف ${faMinus(faD(d.gapPct))} واحد درصد).`);
     en.push(`Divergence: ${a} ${pctEn(d.avgChangePct[a])} against ${b} ${pctEn(d.avgChangePct[b])} (${d.gapPct}pp gap).`);
   }
 
@@ -615,8 +647,8 @@ export function crossNarrative(analysis) {
   const curve = analysis.macro?.curve;
   if (curve && Number.isFinite(Number(curve.spreadPct))) {
     fa.push(curve.spreadPct < 0
-      ? `منحنی بهره ۲/۱۰ با ${curve.spreadPct} واحد درصد وارونه است — نشانهٔ کلاسیک فشار رکودی.`
-      : `منحنی بهره ۲/۱۰ با ${curve.spreadPct} واحد درصد طبیعی است.`);
+      ? `منحنی بهره ۲/۱۰ با ${faMinus(faD(curve.spreadPct))} واحد درصد وارونه است — نشانهٔ کلاسیک فشار رکودی.`
+      : `منحنی بهره ۲/۱۰ با ${faMinus(faD(curve.spreadPct))} واحد درصد طبیعی است.`);
     en.push(curve.spreadPct < 0
       ? `The 2s10s curve is inverted at ${curve.spreadPct}pp — the classic recession-pressure signal.`
       : `The 2s10s curve is positive at ${curve.spreadPct}pp.`);
@@ -627,7 +659,7 @@ export function crossNarrative(analysis) {
   if (outlook && outlook.label && outlook.label !== 'UNAVAILABLE') {
     const labelFa = NARRATIVE_OUTLOOK_FA[outlook.label] || String(outlook.label).replace(/_/g, ' ').toLowerCase();
     const top = (outlook.signals || []).slice().sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))[0];
-    fa.push(`چشم‌انداز اقتصادی: ${labelFa} با امتیاز ${faD(`${outlook.score > 0 ? '+' : ''}${outlook.score}`)}${top ? `؛ قوی‌ترین سیگنال: ${top.name} (${top.evidence})` : ''}.`);
+    fa.push(`چشم‌انداز اقتصادی: ${labelFa} با امتیاز ${faMinus(faD(`${outlook.score > 0 ? '+' : ''}${outlook.score}`))}${top ? `؛ قوی‌ترین سیگنال: ${top.name} (${top.evidence})` : ''}.`);
     en.push(`Economic outlook: ${String(outlook.label).replace(/_/g, ' ').toLowerCase()} at ${outlook.score > 0 ? '+' : ''}${outlook.score}${top ? `; strongest signal: ${top.name} (${top.evidence})` : ''}.`);
   }
 
@@ -642,6 +674,148 @@ export function crossNarrative(analysis) {
   en.push('This analysis is built only from this pass\u2019s read numbers — data, not trading advice.');
 
   return { fa: fa.join(' '), en: en.join(' ') };
+}
+
+/**
+ * THE SAME ANALYSIS, AS LINES THE SCREEN CAN DRAW (2026-09).
+ * ---------------------------------------------------------------------------
+ * Reported: «الان خیلی درهم هست و انگلیسی‌ها … باید داخل هر خط بنویسی با آیکون
+ * افزایش یا کاهش» — the paragraph above is honest, but on a phone it is one
+ * wall of text where a symbol, a class average, a signal name and a missing
+ * class all run together, and the outlook signal's evidence is an English
+ * sentence sitting inside a Persian box.
+ *
+ * So the engine now also emits the analysis as ORDERED LINES, each with the
+ * direction it implies:
+ *
+ *   { id, dir: 'up' | 'down' | 'neutral', text }
+ *
+ * The screen draws one row per line with a coloured arrow — and `neutral` is a
+ * real state, drawn grey, not a missing arrow. `crossNarrative()` above stays
+ * the canonical string (the AI digest and the commentary prompt both quote it,
+ * and a probe pins it), so this is an additional rendering of the SAME numbers,
+ * never a second opinion of them.
+ *
+ * A line exists only for something this pass actually read; a class that was
+ * not read appears once, at the end, named with its reason.
+ *
+ * @param {object} analysis the analyzeCrossAsset() result
+ * @returns {{ fa: Array, en: Array }}
+ */
+export function crossNarrativeLines(analysis) {
+  const fa = [];
+  const en = [];
+  if (!analysis) return { fa, en };
+  const dirOf = (v) => (Number(v) > 0 ? 'up' : Number(v) < 0 ? 'down' : 'neutral');
+  const push = (id, dir, faText, enText) => { fa.push({ id, dir, text: faText }); en.push({ id, dir, text: enText }); };
+
+  const observed = Array.isArray(analysis.observedClasses) ? analysis.observedClasses : [];
+  const classes = analysis.classes || {};
+
+  /* 1 · one line per class that was actually read, with its real average. */
+  for (const cls of observed) {
+    const c = classes[cls];
+    if (!c || !Number.isFinite(Number(c.avgChangePct))) continue;
+    const avg = Number(c.avgChangePct);
+    const breadthFa = c.withChange ? ` · ${faD(c.advancing)} از ${faD(c.withChange)} ابزار صعودی` : '';
+    const breadthEn = c.withChange ? ` · ${c.advancing}/${c.withChange} instruments up` : '';
+    const deskFa = c.fallbackSource ? ' (از میز داده کلان)' : '';
+    const deskEn = c.fallbackSource ? ' (macro desk)' : '';
+    push(`class:${cls}`, dirOf(avg),
+      `${NARRATIVE_CLASS_FA[cls] || cls}: ${pctFa(avg)}${breadthFa}${deskFa}`,
+      `${cls}: ${pctEn(avg)}${breadthEn}${deskEn}`);
+  }
+
+  /* 2 · the regime the pass computed. */
+  if (analysis.regime?.regime) {
+    const co = Math.round((Number(analysis.regime.coMovement) || 0) * 100);
+    const key = analysis.regime.regime;
+    const dir = key === 'RISK_ON' || key === 'RISK_ON_LEANING' ? 'up'
+      : key === 'RISK_OFF' || key === 'RISK_OFF_LEANING' ? 'down' : 'neutral';
+    push('regime', dir,
+      `رژیم کلی بازار: ${NARRATIVE_REGIME_FA[key] || String(key).replace(/_/g, ' ')} (هم‌حرکتی ${faD(co)}٪)`,
+      `Market regime: ${String(key).replace(/_/g, ' ').toLowerCase()} (${co}% co-movement)`);
+  }
+
+  /* 3 · the strongest and weakest instrument across the read classes. */
+  const movers = observed
+    .flatMap((cls) => [
+      ...(classes[cls]?.top || []).slice(0, 1).map((r) => ({ ...r, cls })),
+      ...(classes[cls]?.bottom || []).slice(0, 1).map((r) => ({ ...r, cls }))
+    ])
+    .sort((a, b) => b.changePct - a.changePct);
+  const leader = movers[0];
+  const laggard = movers[movers.length - 1];
+  if (leader && Number.isFinite(Number(leader.changePct))) {
+    push('leader', dirOf(leader.changePct),
+      `قوی‌ترین: ${leader.symbol} (${NARRATIVE_CLASS_FA[leader.cls] || leader.cls}) ${pctFa(leader.changePct)}`,
+      `Strongest: ${leader.symbol} (${leader.cls}) ${pctEn(leader.changePct)}`);
+  }
+  if (laggard && leader && laggard.symbol !== leader.symbol && Number.isFinite(Number(laggard.changePct))) {
+    push('laggard', dirOf(laggard.changePct),
+      `ضعیف‌ترین: ${laggard.symbol} (${NARRATIVE_CLASS_FA[laggard.cls] || laggard.cls}) ${pctFa(laggard.changePct)}`,
+      `Weakest: ${laggard.symbol} (${laggard.cls}) ${pctEn(laggard.changePct)}`);
+  }
+
+  /* 4 · the economic outlook: label + score, then its strongest signal. */
+  const outlook = analysis.outlook;
+  if (outlook && outlook.label && outlook.label !== 'UNAVAILABLE') {
+    push('outlook', dirOf(outlook.score),
+      `چشم‌انداز اقتصادی: ${NARRATIVE_OUTLOOK_FA[outlook.label] || String(outlook.label).replace(/_/g, ' ')} با امتیاز ${faMinus(faD(`${outlook.score > 0 ? '+' : ''}${outlook.score}`))}`,
+      `Economic outlook: ${String(outlook.label).replace(/_/g, ' ').toLowerCase()} at ${outlook.score > 0 ? '+' : ''}${outlook.score}`);
+    const top = (outlook.signals || []).slice().sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))[0];
+    if (top) {
+      push(`outlook:${top.id}`, top.direction === 'supportive' ? 'up' : top.direction === 'cautionary' ? 'down' : 'neutral',
+        `قوی‌ترین سیگنال — ${top.nameFa || top.name}: ${top.evidenceFa || top.evidence}`,
+        `Strongest signal — ${top.name}: ${top.evidence}`);
+    }
+  }
+
+  /* 5 · the macro desk: the biggest 1d move, then the curve. */
+  const quotes = Array.isArray(analysis.macro?.indicators) ? analysis.macro.indicators.filter((q) => q.change1dPct !== null) : [];
+  const mover = quotes.slice().sort((x, y) => Math.abs(y.change1dPct) - Math.abs(x.change1dPct))[0];
+  if (mover) {
+    push('macro:mover', dirOf(mover.change1dPct),
+      `بیشترین حرکت ۲۴ ساعتهٔ کلان: ${mover.symbol} ${pctFa(mover.change1dPct)}`,
+      `Biggest 1d macro move: ${mover.symbol} ${pctEn(mover.change1dPct)}`);
+  }
+  const curve = analysis.macro?.curve;
+  if (curve && Number.isFinite(Number(curve.spreadPct))) {
+    const inv = Number(curve.spreadPct) < 0;
+    push('macro:curve', inv ? 'down' : 'up',
+      inv
+        ? `منحنی بهرهٔ ۲/۱۰ با ${faMinus(faD(curve.spreadPct))} واحد درصد وارونه است — نشانهٔ کلاسیک فشار رکودی`
+        : `منحنی بهرهٔ ۲/۱۰ با ${faMinus(faD(curve.spreadPct))} واحد درصد طبیعی است`,
+      inv
+        ? `2s10s curve inverted at ${curve.spreadPct}pp — the classic recession-pressure signal`
+        : `2s10s curve positive at ${curve.spreadPct}pp`);
+  }
+
+  /* 6 · cross-class divergences (at most two — the biggest gaps). */
+  const divs = Array.isArray(analysis.divergences) ? analysis.divergences.slice(0, 2) : [];
+  for (const d of divs) {
+    const [a, b] = d.classes;
+    const gap = Number(d.gapPct);
+    push(`divergence:${a}:${b}`, dirOf(-Math.abs(gap)),
+      `واگرایی: ${NARRATIVE_CLASS_FA[a] || a} ${pctFa(d.avgChangePct[a])} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(d.avgChangePct[b])} (شکاف ${faD(gap)} واحد درصد)`,
+      `Divergence: ${a} ${pctEn(d.avgChangePct[a])} vs ${b} ${pctEn(d.avgChangePct[b])} (${gap}pp gap)`);
+  }
+
+  /* 7 · what was NOT read — one neutral line, named with its reason. */
+  const miss = Array.isArray(analysis.missing) ? analysis.missing : [];
+  if (miss.length) {
+    const faMiss = miss.map((c) => `${NARRATIVE_CLASS_FA[c] || c}${analysis.missingReasons?.[c] ? ` (${faReason(analysis.missingReasons[c])})` : ''}`).join('، ');
+    push('unread', 'neutral',
+      `خوانده نشد: ${faMiss} — در این تحلیل وارد نشده است.`,
+      `Not read: ${miss.join(', ')} — excluded from this analysis.`);
+  }
+
+  /* 8 · the standing caveat, so no line can be read as advice. */
+  push('caveat', 'neutral',
+    'فقط از اعداد خوانده‌شدهٔ همین دور ساخته شده — داده است، نه توصیهٔ معامله.',
+    'Built only from this pass\u2019s read numbers — data, not trading advice.');
+
+  return { fa, en };
 }
 
 /** The bounded, model-safe digest for chat/decision contexts. */

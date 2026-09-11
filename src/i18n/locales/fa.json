@@ -2638,13 +2638,21 @@
         "buy": "فشار خرید",
         "sell": "فشار فروش",
         "balanced": "متوازن"
-      }
+      },
+      "smartMoneyNet": "جریان خالص پول هوشمند",
+      "liquidityObserved": "نقدینگی مشاهده‌شده",
+      "holdersTotal": "شمار دارندگان",
+      "measuredTitle": "دادهٔ روی زنجیرهٔ اندازه‌گیری‌شده",
+      "measuredNone": "برای این دارایی در این لحظه دادهٔ روی زنجیره خوانده نشد — هیچ عددی حدس زده نمی‌شود.",
+      "measuredNote": "هر عدد از خوانش واقعی همین لحظه آمده؛ جهت با رنگ و پیکان نشان داده می‌شود.",
+      "exchangeSupply": "عرضهٔ نگهداری‌شده در صرافی‌ها"
     },
     "createIntent": "ساخت اینتنت",
     "acc": {
       "layersSummary": "{{n}} لایه",
       "indicators": "اندیکاتورهای خام",
-      "indicatorsSummary": "{{n}} قرائت"
+      "indicatorsSummary": "{{n}} قرائت",
+      "onchainSummary": "{{n}} قرائت زنجیره‌ای"
     },
     "intel": {
       "tabs": {
@@ -2989,7 +2997,8 @@
       },
       "breadth": "تعداد صعودی در ۲۰ تای اول",
       "avgChange": "میانگین تغییر ۲۴ساعته",
-      "turnover": "حجم به ارزش بازار"
+      "turnover": "حجم به ارزش بازار",
+      "trendTitle": "روند قیمت {{symbol}}"
     },
     "aiPowered": "با پشتیبانی هوش مصنوعی"
   },
@@ -9374,7 +9383,16 @@
     "observedExchanges": "دیده‌شده در جریان‌ها",
     "windowCoverage": "پوشش بازه {{pct}}٪",
     "checking": "در حال اتصال…",
-    "offlineShort": "آفلاین"
+    "offlineShort": "آفلاین",
+    "tokenDataFor": "این داده‌ها برای توکن {{symbol}} روی شبکه {{chain}} از آدرس قرارداد زیر خوانده شده است.",
+    "tokenContract": "قرارداد",
+    "tokenChainLabel": "شبکه",
+    "showDetails": "نمایش جزئیات هوشمند مانی",
+    "hideDetails": "بستن جزئیات هوشمند مانی",
+    "tokenSummaryUp": "جریان خالص مثبت",
+    "tokenSummaryDown": "جریان خالص منفی",
+    "tokenSummaryFlat": "بدون جریان ثبت‌شده",
+    "marketsChip": "جفت فعال"
   },
   "crossChain": {
     "youReceive": "دریافت می‌کنید",
@@ -11856,7 +11874,8 @@
   },
   "aiGlobal": {
     "title": "هوش جهانی",
-    "hint": "مغز جهانی Intent OS: پول هوشمند، نهنگ‌ها، کلان، سهام، فارکس، کالا و بریفینگ فعال"
+    "hint": "مغز جهانی Intent OS: پول هوشمند، نهنگ‌ها، کلان، سهام، فارکس، کالا و بریفینگ فعال",
+    "tabShort": "جهانی"
   },
   "pay": {
     "title": "درگاه پرداخت",

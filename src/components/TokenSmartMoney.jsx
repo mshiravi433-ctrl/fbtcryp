@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
+import { EVM_CHAINS } from '../lib/chains';
 import { FlowBar } from '../pages/SmartMoney';
 import SegIndicator from './SegIndicator';
 
@@ -40,6 +41,16 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [win, setWin] = useState('24h');
+  /*
+   * «حتماً بزار داخل باکس بازشونده تا صفحه شلوغیش کم بشه»
+   *
+   * Embedded in the token page this card sits between the chart and the safety
+   * box, and it is eleven metric tiles deep — enough to push the page's own
+   * content below the fold. So the embedded card starts COLLAPSED and the
+   * standalone /smart-money/token route starts OPEN, because there the user
+   * navigated precisely to read it.
+   */
+  const [open, setOpen] = useState(!embedded);
 
   useEffect(() => {
     if (!address) return undefined;
@@ -62,33 +73,108 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
   const holders = data?.holders;
   const windowScoped = flow?.window === win;
 
+  /*
+   * ── WHICH TOKEN THESE NUMBERS BELONG TO ─────────────────────────────────
+   * «ارتباط هوشمند مانی را با هر توکن بررسی کن ببین درسته» — the card asked
+   * /api/v1/smart-money/token/:chain/:address with the contract the token page
+   * resolved, and then showed eleven numbers with nothing on screen tying them
+   * back to a token. A wrong-chain address is invisible in that layout: the
+   * meters still draw, they just describe another asset.
+   *
+   * So the card now prints the identity the SERVER read back — the symbol and
+   * name DexScreener reports for that exact contract, plus the chain and the
+   * address it was asked about. If no pair was found the symbol is null and the
+   * line says so, rather than letting the reader assume the numbers are his
+   * token's.
+   */
+  const chainName = chain === 'solana' ? 'Solana' : (EVM_CHAINS[chain]?.name ?? String(chain));
+  const resolvedSymbol = data?.symbol || null;
+  const netUsd = Number(flow?.netUsd);
+  const headSummary = loading
+    ? null
+    : Number.isFinite(netUsd) && netUsd !== 0
+      ? `${netUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(netUsd))}`
+      : t('sm.tokenSummaryFlat');
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="sm-section"
+      className={`sm-section sm-token-card ${open ? 'is-open' : ''}`}
       style={embedded ? { margin: 0 } : undefined}
     >
-      <h3>
-        ✦ {t('sm.title')}
-        <span className="spacer" />
-        <span className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-token-window-tabs">
-          {WINDOWS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              role="tab"
-              aria-selected={win === w}
-              className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
-              data-testid={`sm-token-window-${w}`}
-              onClick={() => setWin(w)}
-            >
-              {win === w && <SegIndicator id={`sm-token-window-${chain}`} />}
-              {t(`sm.windows.${w}`)}
-            </button>
-          ))}
+      {/* ── the header is the collapse toggle, not a decorative h3 ───────── */}
+      <button
+        type="button"
+        className="sm-token-head"
+        aria-expanded={open}
+        aria-controls="sm-token-card-body"
+        data-testid="sm-token-toggle"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="sm-token-head-main">
+          <svg
+            className="sm-token-head-icon"
+            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+          >
+            <path d="M12 2.6 3.4 7.3v9.4L12 21.4l8.6-4.7V7.3z" />
+            <path d="M3.4 7.3 12 12l8.6-4.7" />
+            <path d="M12 21.4V12" />
+          </svg>
+          {t('sm.title')}
         </span>
-      </h3>
+        {headSummary ? <span className="sm-token-head-summary mono">{headSummary}</span> : null}
+        <svg
+          className={`sm-token-caret ${open ? 'is-open' : ''}`}
+          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {/* the identity line — the connection itself, visible and checkable */}
+      <div className="sm-token-identity" data-testid="sm-token-identity">
+        <span className="sm-token-identity-row">
+          <b className="sm-token-symbol">{resolvedSymbol || shortAddr(address)}</b>
+          {data?.name ? <span className="sm-token-name">{data.name}</span> : null}
+          <span className="sm-token-chip">{chainName}</span>
+          {data?.markets ? <span className="sm-token-chip ghost">{data.markets} {t('sm.marketsChip')}</span> : null}
+        </span>
+        <span className="sm-token-addr mono" title={address}>{address}</span>
+        <span className="sm-token-identity-note">
+          {t('sm.tokenDataFor', { symbol: resolvedSymbol || shortAddr(address), chain: chainName })}
+        </span>
+      </div>
+
+      {/*
+        ── THE WINDOW RAIL, ON ITS OWN ROW ──────────────────────────────────
+        «تبش خیلی دراز شده و از باکس زده بیرون» — the rail used to live INSIDE
+        the <h3>, on the same flex line as the title. Four labels (۱ ساعت ·
+        ۴ ساعت · ۲۴ ساعت · هفته) plus a title do not fit in one phone-width row,
+        so the rail overflowed the card's padding and the last tab was clipped.
+        It is now a block-level row of its own, full width, four equal
+        segments, each with a real 40px tap target.
+      */}
+      <div className="sm-seg-window sm-token-windows" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-token-window-tabs">
+        {WINDOWS.map((w) => (
+          <button
+            key={w}
+            type="button"
+            role="tab"
+            aria-selected={win === w}
+            className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
+            data-testid={`sm-token-window-${w}`}
+            onClick={() => setWin(w)}
+          >
+            {win === w && <SegIndicator id={`sm-token-window-${chain}`} />}
+            {t(`sm.windows.${w}`)}
+          </button>
+        ))}
+      </div>
+
+      {open && <div className="sm-token-body" id="sm-token-card-body">
 
       {loading && (
         <>
@@ -213,6 +299,8 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
           <div className="sm-disclaimer">{t('sm.tokenDisclaimer')}</div>
         </>
       )}
+
+      </div>}
     </motion.div>
   );
 }
