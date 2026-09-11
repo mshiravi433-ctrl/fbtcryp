@@ -50,6 +50,10 @@ export const CHAIN_ICON_KEYS = Object.freeze({
   Polygon: '137',
   Monad: '143',
   Sonic: '146',
+  /* The feed spells zkSync both ways; Scroll ships since 2026-09-11. */
+  Scroll: '534352',
+  zkSync: '324',
+  'zkSync Era': '324',
   Mantle: '5000',
   Base: '8453',
   Arbitrum: '42161',

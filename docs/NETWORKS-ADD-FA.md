@@ -104,3 +104,56 @@ node scripts/verify-fees.mjs --chain 143     # Monad
   در گیتِ زندهٔ fee-echo.
 - شبکه‌های «فقط دریافت» (TON/Tron) هنوز سواپ نمی‌شوند؛ افزودن سواپِ آن‌ها مسیر دیگری
   (غیر-EVM) است و خارج از این تغییر است.
+
+---
+
+## ۶) اصلاحیهٔ ۲۰۲۶-۰۹-۱۱ — «مسیری بین این دو توکن وجود ندارد» روی شبکه‌های جدید
+
+### علت ریشه‌ای (با شاهد زنده، نه حدس)
+
+گیت‌وی KyberSwap برای اسلاگ‌های `scroll`، `zksync` و `mantle` **HTTP 404** برمی‌گرداند
+(پروب زندهٔ `aggregator-api.kyberswap.com/{slug}/api/v1/routes` در ۲۰۲۶-۰۹-۱۱؛ در همان
+دقیقه linea/sonic/berachain/unichain/monad کوئوت واقعی برگرداندند). صفحهٔ رسمی
+supported-networks هم این سه شبکه را **بدون تیک aggregator** فهرست می‌کند. یعنی وجودِ
+اسلاگ در `NETWORK_SLUG` دیگر به معنای «Kyber این زنجیره را روت می‌کند» نبود؛ پرسیدن از یک
+endpoint مرده، Kyber را بازندهٔ قطعی هر مقایسه می‌کرد و چون OpenOcean با leash سه‌ثانیه‌ایِ
+طراحی‌شده برای «نظر دوم» اجرا می‌شد، هر کندیِ OpenOcean تبدیل می‌شد به
+«مسیری بین این دو توکن وجود ندارد».
+
+### چه چیزی عوض شد
+
+- `src/lib/aggregator.js` — مجموعهٔ `KYBER_LIVE` (پروب زنده) اضافه شد؛ `aggregatorSupports`
+  حالا یعنی «اسلاگ دارد **و** گیت‌وی زنده است».
+- `src/lib/swap.js` — منبعی که شبکه را سرو نمی‌کند اصلاً پرسیده نمی‌شود؛ روی زنجیره‌های
+  بدون Kyber، منبع OpenOcean به‌صورت **PRIMARY** با `timeoutMs: 12000` اجرا می‌شود.
+  همچنین گارد `if (!cfg?.router)` اضافه شد تا زنجیره‌های بدون روتر مستقیم، به‌جای سقوطِ
+  `new Contract(undefined, …)`، پاسخِ classify‌شده و قابل تلاش دوباره برگردانند.
+- `src/lib/openocean.js` — پارامتر `timeoutMs` برای همان ارتقا به منبع اصلی.
+- `scripts/verify-fees.mjs` — مسیر راستی‌آزمایی OpenOcean برای 5000/534352/324:
+  کوئوت (وجود مسیر) + ساخت calldata + خواندن `referrer` از `/decodeInputData`
+  (همان اثباتی که `verifyOpenOceanFee` پیش از امضا می‌خواهد). اسلاگ مردهٔ `mantle`
+  از نقشهٔ Kyber این ابزار حذف شد.
+- آدرس‌های توکن پین‌شدهٔ Mantle/Berachain/Unichain/Monad در `src/lib/chains.js`
+  (WMNT/USDT/USDC.e/WETH، WETH/USDC.e/HONEY/WBTC، USDC، WMON/USDC/WETH) هرکدام با یک
+  منبع زنده (GeckoTerminal pools / نقشهٔ پلتفرم CoinGecko) تأیید شد تا انتخاب‌گر توکن
+  حتی آفلاین یک جفت قابل سواپ داشته باشد.
+- همگام‌سازی نقشه‌هایی که از `EVM_CHAIN_ORDER` جا مانده بودند و دقیقاً همان
+  «توکن ندارد / سواپ نمی‌شود» را می‌ساختند:
+  `wallet-engine/adapters.js` (EVM_CHAIN_IDS + EXPLORERS)، `coinToSwap.js` و
+  `coinVenue.js` (CHAIN_PREFERENCE)، `tokenIcon.jsx` (TW_CHAIN + NATIVE_LOGO)،
+  `farmDeFi.js` (CHAIN_ICON_KEYS) و `scripts/gen-asset-icons.mjs` (NETWORKS).
+- `dexName` هر سه زنجیرهٔ بدون Kyber به `OpenOcean` تغییر کرد تا زیرنویس صفحهٔ سواپ
+  («سواپ واقعی روی زنجیره با …») منبع واقعی را بگوید.
+
+### گیت انتشار، نسخهٔ به‌روز
+
+```bash
+node scripts/verify-fees.mjs              # Kyber برای ۹ زنجیرهٔ زنده‌اش
+node scripts/verify-fees.mjs --chain 534352   # Scroll: مسیر OpenOcean + اکوی referrer
+node scripts/verify-fees.mjs --chain 324      # zkSync Era: همان مسیر
+node scripts/verify-fees.mjs --chain 5000     # Mantle: همان مسیر
+```
+
+خروجی مورد انتظار روی زنجیره‌های OpenOcean: «✓ OpenOcean route exists via …» و
+«✓ decoded calldata carries referrer 0xaf5C…24d6». اگر Kyber روزی اسلاگی را دوباره سرو
+کند، کافی است chainId به `KYBER_LIVE` برگردد — مقایسهٔ دومنعی خودبه‌خود برمی‌گردد.

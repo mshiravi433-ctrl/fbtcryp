@@ -57,7 +57,13 @@ const TW_CHAIN = {
   5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* Scroll + zkSync Era — TrustWallet's assets repo carries both chains
+     under these directory names. They were missing while chains.js already
+     shipped the networks, which is exactly the "verified token has no
+     picture" degradation the comment above warns about. */
+  534352: 'scroll',
+  324: 'zksync'
 };
 
 /**
@@ -82,7 +88,9 @@ const NATIVE_LOGO = {
   5000: 'https://assets-cdn.trustwallet.com/blockchains/mantle/info/logo.png',
   80094: 'https://assets-cdn.trustwallet.com/blockchains/berachain/info/logo.png',
   130: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png', // gas coin is ETH
-  143: 'https://assets-cdn.trustwallet.com/blockchains/monad/info/logo.png'
+  143: 'https://assets-cdn.trustwallet.com/blockchains/monad/info/logo.png',
+  534352: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png', // gas coin is ETH
+  324: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png' // gas coin is ETH
 };
 
 /**

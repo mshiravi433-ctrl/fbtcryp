@@ -37,8 +37,12 @@ import { FAMILY_CAPABILITIES } from './capabilities.js';
 
 export const ADAPTER_SCHEMA = 'fbt.wallet-adapter.v1';
 
-/** EVM chain ids this build supports — mirror of EVM_CHAIN_ORDER in chains.js. */
-export const EVM_CHAIN_IDS = Object.freeze([56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143]);
+/** EVM chain ids this build supports — mirror of EVM_CHAIN_ORDER in chains.js.
+ *  Scroll (534352) and zkSync Era (324) were missing from BOTH this list and
+ *  EXPLORERS below while chains.js already shipped them — the mirror had
+ *  drifted, so the wallet engine refused to validate addresses on the two
+ *  newest networks. Keep the two lists in lockstep with EVM_CHAIN_ORDER. */
+export const EVM_CHAIN_IDS = Object.freeze([56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324]);
 
 /** Well-known non-numeric chain references (CAIP-2 style). */
 export const CHAIN_REFS = Object.freeze({
@@ -91,7 +95,7 @@ const EXPLORERS = {
     137: 'https://polygonscan.com', 146: 'https://sonicscan.org', 8453: 'https://basescan.org',
     42161: 'https://arbiscan.io', 43114: 'https://snowtrace.io', 59144: 'https://lineascan.build',
     130: 'https://uniscan.xyz', 143: 'https://monadvision.com', 5000: 'https://explorer.mantle.xyz',
-    80094: 'https://berascan.com'
+    80094: 'https://berascan.com', 534352: 'https://scrollscan.com', 324: 'https://era.zksync.network'
   },
   solana: 'https://solscan.io',
   bitcoin: 'https://mempool.space'
