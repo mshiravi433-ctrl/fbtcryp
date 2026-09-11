@@ -741,6 +741,14 @@ export async function run(container) {
         ['signals.onchain.flow', ['inflow', 'outflow', 'mixed']],
         ['signals.onchain.trend', ['rising', 'falling']],
         ['signals.onchain.pressure', ['buy', 'sell', 'balanced']],
+        /* the measured on-chain rows (smart-money token intel + Solana intel)
+           that the detail lab and the Why-modal render through the SAME
+           `t(\`signals.onchain.${row.key}\`)` lookup — a key missing here would
+           print as its own dictionary path in both places at once. */
+        ['signals.onchain', ['whaleFlow', 'holderTrend', 'topHolder', 'dexActivity', 'holdersTotal', 'exchangeSupply', 'liquidityObserved', 'smartMoneyNet', 'measuredTitle', 'measuredNone', 'measuredNote']],
+        /* the trend-chart header, which builds its label from the symbol */
+        ['signals.intel', ['trendTitle']],
+        ['signals.acc', ['layersSummary', 'indicatorsSummary', 'onchainSummary']],
         /* src/lib/verdict.js layers, rendered in the detail lab */
         ['verdict.layerName', ['technical', 'historical', 'structural', 'macro', 'derivatives']]
       ];

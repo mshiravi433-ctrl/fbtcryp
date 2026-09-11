@@ -1007,6 +1007,40 @@ installDom();
 const { run: runSignalsPage } = await import('./.out/signalspage/signals-page-probe.js');
 report('signals page (real data · cards · sheets · every dynamic key)', await runSignalsPage(document.getElementById('r')));
 
+/* ------------------ 4b-2. Global-intelligence CROSS tab, in Persian ----------- */
+/*
+ * The «تحلیل کراس» fix, asserted on the RENDERED Persian screen rather than on
+ * the server payload: the class chart and the per-class readings are ONE card,
+ * every outlook criterion carries its own up/down marker in Persian (neutral is
+ * grey, not unmarked), the two duplicated analysis boxes are merged into a
+ * single «تحلیل سیستمی» of measured lines, the global-economy leader cards are
+ * built from the instruments the pass actually read, and no emoji or Latin
+ * percent fragment survives inside a Persian box.
+ *
+ * Its fixture is produced by the REAL analyzeCrossAsset() engine, so it also
+ * pins the server→screen contract (narrativeLines, nameFa, evidenceFa,
+ * macro.indicators) — a server that stops shipping them fails here.
+ */
+console.log('\n▸ building the cross-tab (Persian) suite…');
+npx(['vite', 'build', '-c', 'test/vite.crosstab.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runCrossTab } = await import('./.out/crosstab/cross-tab-probe.js');
+report('cross tab (Persian · one card · per-line analysis · real leaders)', await runCrossTab(document.getElementById('r')));
+
+/* ------------------ 4b-3. Token-page smart-money card ------------------------- */
+/*
+ * The per-token smart-money block: the 4h/24h/week rail used to sit inside the
+ * card title's flex line and overflow its box on a phone. It is now its own
+ * full-width grid row, the whole block is a disclosure collapsed by default on
+ * the token page, and the identity line prints only what the server read back
+ * (never a zero invented for an unread pair).
+ */
+console.log('\n▸ building the token smart-money suite…');
+npx(['vite', 'build', '-c', 'test/vite.tokensmartmoney.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runTokenSmartMoney } = await import('./.out/tokensmartmoney/token-smart-money-probe.js');
+report('token smart-money card (collapse · rail fit · real identity)', await runTokenSmartMoney(document.getElementById('r')));
+
 /* ------------------ 4c. Intent AI panel, driven like a user ------------------ */
 /*
  * Every intent-ai probe so far tests the LOGIC. None of them can catch the

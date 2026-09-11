@@ -2678,13 +2678,21 @@
         "buy": "buy pressure",
         "sell": "sell pressure",
         "balanced": "balanced"
-      }
+      },
+      "smartMoneyNet": "Smart-money net flow",
+      "liquidityObserved": "Observed liquidity",
+      "holdersTotal": "Holder count",
+      "measuredTitle": "Measured on-chain data",
+      "measuredNone": "No on-chain data was read for this asset right now — no number is guessed.",
+      "measuredNote": "Every number comes from a real read; direction is shown with colour and an arrow.",
+      "exchangeSupply": "Supply held on exchanges"
     },
     "createIntent": "Create intent",
     "acc": {
       "layersSummary": "{{n}} layers",
       "indicators": "Raw indicators",
-      "indicatorsSummary": "{{n}} readings"
+      "indicatorsSummary": "{{n}} readings",
+      "onchainSummary": "{{n}} on-chain reads"
     },
     "intel": {
       "tabs": {
@@ -3029,7 +3037,8 @@
       },
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
-      "turnover": "Volume / mcap"
+      "turnover": "Volume / mcap",
+      "trendTitle": "{{symbol}} price trend"
     },
     "aiPowered": "Powered by AI"
   },
@@ -9414,7 +9423,16 @@
     "observedExchanges": "Observed in flows",
     "windowCoverage": "Window coverage {{pct}}%",
     "checking": "Connecting…",
-    "offlineShort": "Offline"
+    "offlineShort": "Offline",
+    "tokenDataFor": "These numbers were read for {{symbol}} on {{chain}} from the contract address below.",
+    "tokenContract": "Contract",
+    "tokenChainLabel": "Network",
+    "showDetails": "Show smart-money details",
+    "hideDetails": "Hide smart-money details",
+    "tokenSummaryUp": "net flow positive",
+    "tokenSummaryDown": "net flow negative",
+    "tokenSummaryFlat": "no recorded flow",
+    "marketsChip": "active pairs"
   },
   "crossChain": {
     "youReceive": "You receive",
@@ -11896,7 +11914,8 @@
   },
   "aiGlobal": {
     "title": "Global Intelligence",
-    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+    "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing",
+    "tabShort": "Global"
   },
   "pay": {
     "title": "Payment gateway",

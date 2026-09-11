@@ -7218,8 +7218,12 @@ export default function run() {
       t('...the panel exists', existsSync('src/components/CalmPanel.jsx'));
       t('...News imports it', /CalmPanel/.test(read('src/pages/News.jsx')));
       /* Still last: market intelligence now sits immediately after Radio. */
+      /* The rail grew a `global` tab (Global Intelligence moved into News), so
+         Calm is last but no longer immediately after insights. What this check
+         is actually about — Calm has its own tab and News renders it — is
+         unchanged. */
       t('...and renders it behind its own tab',
-        /'listen', 'insights', 'global', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
+        /'listen', 'insights'(, 'global')?, 'calm'/.test(code(read('src/pages/News.jsx'))) &&
         /tab === 'calm'/.test(code(read('src/pages/News.jsx'))));
 
       /*
@@ -10799,8 +10803,7 @@ export default function run() {
     const news = code(read('src/pages/News.jsx'));
     t('the feed is reachable as a News tab',
       /'read', 'whales', 'community', 'listen', 'insights', 'calm'/.test(news) ||
-      /'read', 'community', 'listen', 'insights', 'calm'/.test(news) ||
-      /'read', 'community', 'listen', 'insights', 'global', 'calm'/.test(news));
+      /'read', 'community', 'listen', 'insights'(, 'global')?, 'calm'/.test(news));
     t('...and News actually renders the panel',
       /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
     t('...and P2P no longer mounts it',
@@ -12163,10 +12166,12 @@ export default function run() {
     const newsLib = read('src/lib/news.js');
     const css = read('src/index.css');
 
+    /* Same rail, same rule: insights sits immediately after Radio (`listen`)
+       and before Calm. `global` was inserted between them, which is why the
+       accepted orders below are written with it optional. */
     t('News places market intelligence immediately after Radio and before Calm',
       (/\['read', 'whales', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
-       /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
-       /\['read', 'community', 'listen', 'insights', 'global', 'calm'\]/.test(newsPage)) &&
+       /\['read', 'community', 'listen', 'insights'(, 'global')?, 'calm'\]/.test(newsPage)) &&
       /tab === 'insights'[\s\S]*?<MarketInsightsPanel/.test(newsPage));
     t('News keeps one feed request while the global header only reuses its cache',
       (newsPage.match(/getNews\(/g) || []).length === 1 &&
