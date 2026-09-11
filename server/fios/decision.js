@@ -49,6 +49,14 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     policyVerdict = null, preferences = null, goal = null,
     globalIntel = null, crossAsset = null, smartMoney = null,
     routeSimulations = null,
+    /* Phase 214 — the cross-chain route intelligence block (ranked routes +
+       the why of the best route), computed by the router from the quote
+       step's candidates. Stored on the record so the why engine can cite it. */
+    routeIntelligence = null,
+    /* Phase 215 — traditional-asset opportunities (stocks/forex/commodities/
+       rwa/etf/funds) scored through the SAME opportunity-fit contract as the
+       crypto candidates. Observation + fit verdict; never a return promise. */
+    opportunities = null,
     executionRequested = false,
     userConfirmed = false,
     authorizationScreenShown = false,
@@ -319,6 +327,56 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
         : null,
       liveSimulation: competition?.liveSimulation === true,
       routeSimulationCount: Array.isArray(routeSimulations) ? routeSimulations.length : (routeSimulations ? Object.keys(routeSimulations).length : 0),
+      /* Phase 214 — the route intelligence of the decision (additive; the why
+         engine reads it from the record, so the why block cites the same
+         numbers the decision ranked on). */
+      routeIntelligence: routeIntelligence && typeof routeIntelligence === 'object'
+        ? {
+            routeCount: routeIntelligence.routeCount ?? null,
+            bestRoute: routeIntelligence.bestRoute
+              ? {
+                  routeId: routeIntelligence.bestRoute.routeId,
+                  tool: routeIntelligence.bestRoute.tool,
+                  score: routeIntelligence.bestRoute.score,
+                  unknownDimensions: routeIntelligence.bestRoute.unknownDimensions || [],
+                  totalCostUsd: routeIntelligence.bestRoute.totalCostUsd,
+                  priceImpactPctEstimate: routeIntelligence.bestRoute.priceImpactPctEstimate,
+                  estimatedSeconds: routeIntelligence.bestRoute.estimatedSeconds,
+                  failureProbabilityPct: routeIntelligence.bestRoute.failureProbabilityPct,
+                  /* The per-dimension VALUES the why engine quotes — without
+                     them whyNetwork cannot point at a number in the block. */
+                  dimensions: (routeIntelligence.bestRoute.dimensions || []).map((d) => ({
+                    dimension: d.dimension,
+                    status: d.status,
+                    value: d.value,
+                    score: d.score
+                  }))
+                }
+              : null,
+            ranked: (routeIntelligence.ranked || []).slice(0, 5).map((r) => ({
+              routeId: r.routeId, tool: r.tool, rank: r.rank, score: r.score,
+              totalCostUsd: r.totalCostUsd, priceImpactPctEstimate: r.priceImpactPctEstimate,
+              unknownDimensions: r.unknownDimensions || []
+            })),
+            rejected: routeIntelligence.rejected || [],
+            bestRouteReasons: routeIntelligence.bestRouteReasons || [],
+            estimate: true
+          }
+        : null,
+      /* Phase 215 — the traditional opportunities this decision weighed, with
+         their fit verdicts and execution status (never simulated). */
+      opportunities: Array.isArray(opportunities)
+        ? opportunities.slice(0, 12).map((o) => ({
+            id: o.id || null,
+            assetClass: o.assetClass || null,
+            asset: o.asset || null,
+            venue: o.venue || null,
+            verdict: o.verdict || null,
+            score: o.score ?? null,
+            observation: o.observation || null,
+            execution: o.execution || null
+          }))
+        : null,
       riskAdjustedWinner: competition?.judge?.winnerId || null,
       scoringFactors: competition?.judge?.scoringFactors || null,
       policyId: policyVerdict?.policyId || authority.policyId || null,

@@ -43,7 +43,15 @@ export const FI_FLAG_NAMES = Object.freeze([
   'GOAL_SCENARIOS_ENABLED',
   'OPPORTUNITY_FIT_ENABLED',
   'GOAL_REASONING_ENABLED',
-  'AGENT_RUNTIME_OPS_ENABLED'
+  'AGENT_RUNTIME_OPS_ENABLED',
+  /* Phase 214 — Cross-Chain Route Intelligence. */
+  'ROUTE_INTELLIGENCE_ENABLED',
+  /* Phase 215 — Traditional assets (RWA/stocks/forex/commodities) in the
+     decision engine. */
+  'TRADITIONAL_ASSETS_ENABLED',
+  /* Phase 216 — the pending lending adapters (compound-v3, morpho,
+     solana-lending) surfaced through the FI. */
+  'LENDING_ADAPTERS_ENABLED'
 ]);
 
 /** Defaults: everything is ON. Autonomy is ON and stays PERMISSIONED — the
@@ -70,7 +78,10 @@ const DEFAULTS = Object.freeze({
   GOAL_SCENARIOS_ENABLED: true,
   OPPORTUNITY_FIT_ENABLED: true,
   GOAL_REASONING_ENABLED: true,
-  AGENT_RUNTIME_OPS_ENABLED: true
+  AGENT_RUNTIME_OPS_ENABLED: true,
+  ROUTE_INTELLIGENCE_ENABLED: true,
+  TRADITIONAL_ASSETS_ENABLED: true,
+  LENDING_ADAPTERS_ENABLED: true
 });
 
 const FALSEY = new Set(['0', 'false', 'no', 'off', 'disabled']);

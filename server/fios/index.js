@@ -65,13 +65,20 @@ import { createEvaluationEngine } from './evaluation.js';
 import { createAgentCouncilEngine } from './agentCouncil.js';
 import { createGoalScenariosEngine } from './goalScenarios.js';
 import { createOpportunityFitEngine } from './opportunityFit.js';
+/* Phase 214 — Cross-Chain Route Intelligence: candidate-route ranking over
+ * the real quote dimensions (cost, liquidity, time, historical success,
+ * bridge risk) with per-dimension scores and an honest UNKNOWN when data
+ * is missing. Phase 215 — Traditional asset classes (etf/funds/stocks/
+ * forex/commodities/rwa) through the SAME opportunity contract as crypto. */
+import { createRouteIntelligenceEngine } from './routeIntelligence.js';
+import { createTraditionalAssetsEngine } from './traditionalAssets.js';
 import { createConversationStateEngine } from './conversationState.js';
 import { createWalletContextEngine } from './walletContext.js';
 import { createAgentRuntime } from './agentRuntimeOps.js';
 import { createEventReplanningEngine } from './eventReplanning.js';
 import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
-import { createFiRouter } from './router.js';
+import { createFiRouter, setLendingProvider } from './router.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -249,7 +256,19 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   const whyEngine = createWhyEngine({ collections, observability, log });
   const evaluation = createEvaluationEngine({ collections, learning, observability, log });
   const agentCouncil = createAgentCouncilEngine({ collections, observability, log });
-  const goalScenarios = createGoalScenariosEngine({ collections, observability, log });
+  /* Phase 214 — the route plan is RANKING over candidate routes the quote
+     step produced; it dials no provider itself (no second gateway). */
+  const routeIntelligence = createRouteIntelligenceEngine({ collections, observability, log });
+  /* Phase 215 — built BEFORE goalScenarios: the multi-class hook below
+     allocates through this engine. */
+  const traditionalAssets = createTraditionalAssetsEngine({ collections, observability, log });
+  const goalScenarios = createGoalScenariosEngine({
+    collections, observability, log,
+    /* Phase 215 — the goal scenarios now carry a multi-class allocation
+       (stable/stocks/commodities/crypto) alongside the crypto ones; a
+       failure here is logged and the crypto scenarios stand on their own. */
+    multiClassFor: (owner, { financial, goal }) => multiClassFor(owner, { financial, goal })
+  });
   const opportunityFit = createOpportunityFitEngine({ collections, observability, log });
   const conversationState = createConversationStateEngine({ collections, observability, log });
   const agentRuntime = createAgentRuntime({ collections, registry: agents, observability, log });
@@ -482,6 +501,37 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     return globalIntel.snapshotFor(owner, { sections: sectionsFor(owner), refresh });
   }
 
+  /** Phase 215 — the goal-scenarios multi-class hook: discover the
+   *  traditional classes through the SAME global snapshot, allocate the
+   *  owner's capital across the four sleeves. `financial.net.netWorthUsd`
+   *  is the capital read (the SAME number the chat quoted — no second
+   *  feed); a missing read is NO_CAPITAL_READ, never a default. */
+  async function multiClassFor(owner, { financial = null, goal = null } = {}) {
+    try {
+      const prefs = await preferences.resolve(owner).catch(() => null);
+      const riskTolerance = prefs?.riskTolerance || goal?.riskTolerance || 'MODERATE';
+      const globalSnapshot = await globalIntelFor(owner).catch(() => null);
+      const disc = await traditionalAssets.discover(owner, {
+        globalSnapshot: globalSnapshot && globalSnapshot.status !== 'UNAVAILABLE' ? globalSnapshot : null,
+        persist: false
+      });
+      if (!disc?.ok || !disc.result?.count) {
+        return { ok: false, code: 'NO_TRADITIONAL_OPPORTUNITIES', detail: 'no readable traditional feed in this pass — the crypto scenarios stand alone' };
+      }
+      const capital = num(financial?.net?.netWorthUsd);
+      return await traditionalAssets.allocateFor(owner, {
+        capitalUsd: capital,
+        riskTolerance,
+        goal,
+        opportunities: disc.result.opportunities,
+        financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null
+      });
+    } catch (err) {
+      log(`goal-scenarios:multi-class-failed:${String(err?.message || err).slice(0, 80)}`);
+      return { ok: false, code: 'MULTICLASS_FAILED', detail: String(err?.message || err).slice(0, 120) };
+    }
+  }
+
   /** Phase 211 — cross-asset analysis over the world + global snapshot.
    *  Phase 211.2 — ACTIVE: reads the market through the brain when the state
    *  store is empty, stands the macro desk in for dead class feeds, and
@@ -578,6 +628,10 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
           agentRuntime: Boolean(agentRuntime),
           eventReplanning: Boolean(eventReplanning),
           eventBusAttached: Boolean(eventReplanning && eventReplanning.subscribe),
+          /* Phase 214/215 — the new deep engines report their flag state
+             from the SAME flags endpoint. */
+          routeIntelligence: Boolean(routeIntelligence),
+          traditionalAssets: Boolean(traditionalAssets),
           flags: fiFlags(),
           executionPermission: false
         },
@@ -656,8 +710,18 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     walletContext,
     agentRuntime,
     eventReplanning,
-    goalReasoning: { reason: reasonAboutGoal, requiredAnnualizedPct }
+    goalReasoning: { reason: reasonAboutGoal, requiredAnnualizedPct },
+    /* Phase 214/215 — the new deep engines + the multi-class hook the
+       goal-scenarios engine consumes. */
+    routeIntelligence,
+    traditionalAssets,
+    multiClassFor
   };
+
+  /* Phase 216 — hand the optional server-side on-chain provider (a node RPC
+     in a lending deployment; null for a wallet-less server) to the router so
+     /deep/lending/quote can read for real when one is wired. */
+  setLendingProvider(providers?.lending || null);
 
   const router = createFiRouter({ fi, ownerFor, stateStore, brain, events, log });
   fi.router = router;

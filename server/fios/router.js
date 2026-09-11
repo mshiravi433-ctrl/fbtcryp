@@ -22,6 +22,8 @@
  *                      through the API any more than it can resume itself.
  */
 import { Router } from 'express';
+import { fiFlags } from './flags.js';
+import { normalizeOpportunity } from './traditionalAssets.js';
 
 export const FI_ROUTES_SCHEMA = 'fbt.fi.routes.v1';
 
@@ -370,6 +372,50 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       ? await fi.crossAssetFor(owner, {}).catch(() => null)
       : null;
 
+    /* Phase 214 — Cross-Chain Route Intelligence. The CALLER passes the
+       candidate routes its quote step produced (LI.FI/bridge quotes, our own
+       simulator rows); the engine ranks them on the real dimensions — cost,
+       liquidity/impact, time, historical success, bridge risk — and the
+       decision record + why engine cite the result. No routes passed → the
+       decision stands without a route verdict (null, not an empty success).
+       The engine dials no provider: no second gateway. */
+    let routeIntelligenceResult = null;
+    if (Array.isArray(body.routes) && body.routes.length) {
+      const ri = await fi.routeIntelligence.plan(owner, {
+        request: {
+          fromChainId: body.fromChainId ?? body.fromChain ?? null,
+          toChainId: body.toChainId ?? body.toChain ?? null,
+          fromAsset: body.fromAsset || null,
+          toAsset: body.toAsset || null,
+          amountUsd: num(body.amountUsd)
+        },
+        routes: body.routes.slice(0, 20),
+        correlationId
+      }).catch(() => null);
+      if (ri?.ok) routeIntelligenceResult = ri.result;
+    }
+
+    /* Phase 215 — traditional-asset opportunities (stocks/forex/commodities/
+       rwa/etf/funds). Either the caller names raw rows (assetClass + observed
+       data) or asks for discovery from the global snapshot. The SAME
+       normalization the discovery engine uses, so the decision engine has no
+       parallel if/else for another asset class. */
+    let decisionOpportunities = null;
+    if (Array.isArray(body.opportunities) && body.opportunities.length) {
+      decisionOpportunities = body.opportunities
+        .slice(0, 20)
+        .map((o) => { const n = normalizeOpportunity(o, o?.assetClass, {}); return n.ok ? n.opportunity : null; })
+        .filter(Boolean);
+      if (!decisionOpportunities.length) decisionOpportunities = null;
+    } else if (body.opportunities === true) {
+      const g = await fi.globalIntelFor(owner).catch(() => null);
+      const disc = await fi.traditionalAssets.discover(owner, {
+        globalSnapshot: g && g.status !== 'UNAVAILABLE' ? g : null,
+        persist: false
+      }).catch(() => null);
+      if (disc?.ok && disc.result?.count) decisionOpportunities = disc.result.opportunities;
+    }
+
     let rows = Array.isArray(body.strategies) ? body.strategies.slice(0, 12) : null;
     if (!rows || rows.length < 2) {
       const gen = await fi.strategyEngine.generate({
@@ -447,6 +493,10 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       crossAsset,
       smartMoney,
       routeSimulations: routeSims,
+      /* Phase 214/215 — the ranked route verdict + the traditional
+         opportunities this decision weighed (both null when absent). */
+      routeIntelligence: routeIntelligenceResult,
+      opportunities: decisionOpportunities,
       policyVerdict,
       executionRequested,
       userConfirmed,
@@ -488,6 +538,11 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       bestStrategyId: comp.competition?.judge?.winnerId || decisionRow?.decision?.strategyId || null,
       smartMoney: decisionRow.smartMoney || null,
       alternatives: decisionRow.alternatives,
+      /* Phase 214 — the route verdict the decision weighed (estimate: true —
+         the dimensions are estimates from the quote data, not guarantees). */
+      routeIntelligence: decisionRow.routeIntelligence || null,
+      /* Phase 215 — the traditional opportunities the decision weighed. */
+      opportunities: decisionRow.opportunities || null,
       reason: decisionRow.reason,
       confidence: decisionRow.confidence,
       conditions: decisionRow.conditions,
@@ -1277,5 +1332,257 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return { ok: true, attempts: recent.attempts, triggers: fi.eventReplanning.TRIGGERS, durable: fi.collections.durable() };
   }));
 
+  /* ══════════════════════ Phase 214: CROSS-CHAIN ROUTE INTELLIGENCE ══════════════════════
+   * The intelligence layer RANKS candidate routes the quote step produced —
+   * it dials no provider (no second gateway). Every dimension it cannot read
+   * is UNKNOWN, and the total is the conservative weighted mean over the
+   * known dimensions only: no fake numbers, no invented cost. */
+
+  router.post('/deep/routes/intelligence', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const routes = Array.isArray(body.routes) ? body.routes.slice(0, 20) : null;
+    if (!routes || !routes.length) {
+      return reject(400, 'CANDIDATE_ROUTES_REQUIRED', 'pass the candidate routes from the quote step (routes[]) — the intelligence layer does not dial providers itself');
+    }
+    const out = await fi.routeIntelligence.plan(owner, {
+      request: {
+        fromChainId: body.fromChainId ?? body.fromChain ?? null,
+        toChainId: body.toChainId ?? body.toChain ?? null,
+        fromAsset: body.fromAsset || null,
+        toAsset: body.toAsset || null,
+        amountUsd: num(body.amountUsd)
+      },
+      routes,
+      correlationId: body.correlationId || req.get?.('x-fbt-request-id') || null
+    });
+    if (!out.ok) return reject(409, out.code, out.detail || null, out.result ? { routeIntelligence: out.result } : {});
+    return { ok: true, routeIntelligence: out.result, estimate: true, durable: fi.collections.durable() };
+  }));
+
+  router.get('/deep/routes/intelligence', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 10));
+    const out = await fi.routeIntelligence.recent(owner, { limit });
+    if (!out.ok) return reject(409, out.code, 'the route-plan store is not readable in this deployment');
+    return { ok: true, routePlans: out.plans, count: out.plans.length, durable: fi.collections.durable() };
+  }));
+
+  router.get('/deep/routes/intelligence/:id', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const got = await fi.routeIntelligence.get(owner, req.params.id);
+    if (!got.ok || !got.row) return reject(404, 'ROUTE_PLAN_NOT_FOUND', `no route plan ${req.params.id} for this owner`, { id: req.params.id });
+    return { ok: true, routeIntelligence: got.row, durable: fi.collections.durable() };
+  }));
+
+  /* ══════════════════════ Phase 215: TRADITIONAL ASSET CLASSES ══════════════════════
+   * etf / funds / stocks / forex / commodities / rwa flow through the SAME
+   * opportunity contract as crypto (normalizeOpportunity → scoreOpportunityFit
+   * → allocation). Execution exists ONLY through a properly configured
+   * broker/off-ramp provider; with none configured the engine says so
+   * honestly — it never simulates a fill. */
+
+  router.get('/deep/traditional-assets/discover', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const g = await fi.globalIntelFor(owner).catch(() => null);
+    const out = await fi.traditionalAssets.discover(owner, {
+      globalSnapshot: g && g.status !== 'UNAVAILABLE' ? g : null
+    });
+    if (!out.ok) return reject(409, out.code, out.detail || null, { flag: out.flag || null });
+    return { ok: true, opportunities: out.result, coverage: out.result.coverage, count: out.result.count, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/traditional-assets/fit', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const profile = await fi.personalProfile.profileFor(owner, { goal: body.goal || null }).catch(() => null);
+    const prefs = profile?.ok ? profile.profile : (await fi.preferences.resolve(owner).catch(() => null));
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    let opportunities = Array.isArray(body.opportunities) ? body.opportunities : null;
+    if (!opportunities || !opportunities.length) {
+      const g = await fi.globalIntelFor(owner).catch(() => null);
+      const disc = await fi.traditionalAssets.discover(owner, {
+        globalSnapshot: g && g.status !== 'UNAVAILABLE' ? g : null,
+        persist: false
+      }).catch(() => null);
+      opportunities = disc?.ok ? disc.result.opportunities : null;
+    }
+    const out = await fi.traditionalAssets.scoreFor(owner, {
+      opportunities,
+      profile: prefs,
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null,
+      goal: body.goal || null
+    });
+    if (!out.ok) return reject(409, out.code, out.detail || null, { flag: out.flag || null, ranked: out.result?.ranked || [] });
+    return { ok: true, ranked: out.result.ranked, count: out.result.count, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/traditional-assets/allocate', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const prefs = await fi.preferences.resolve(owner).catch(() => null);
+    let opportunities = Array.isArray(body.opportunities) ? body.opportunities : null;
+    if (!opportunities || !opportunities.length) {
+      const g = await fi.globalIntelFor(owner).catch(() => null);
+      const disc = await fi.traditionalAssets.discover(owner, {
+        globalSnapshot: g && g.status !== 'UNAVAILABLE' ? g : null,
+        persist: false
+      }).catch(() => null);
+      opportunities = disc?.ok ? disc.result.opportunities : null;
+    }
+    const out = await fi.traditionalAssets.allocateFor(owner, {
+      capitalUsd: num(body.capitalUsd) ?? (financial && financial.status !== 'UNAVAILABLE' ? num(financial.net?.netWorthUsd) : null),
+      riskTolerance: body.riskTolerance || prefs?.riskTolerance || 'MODERATE',
+      goal: body.goal || null,
+      opportunities,
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null
+    });
+    if (!out.ok) return reject(409, out.code, out.detail || null, { flag: out.flag || null });
+    return { ok: true, allocation: out.result, signs: false, submits: false, simulated: false, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/traditional-assets/execute', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    if (!body.assetClass) return reject(400, 'ASSET_CLASS_REQUIRED', 'name the asset class (etf/funds/stocks/forex/commodities/rwa/crypto)');
+    const out = await fi.traditionalAssets.executeCheck(owner, {
+      assetClass: body.assetClass,
+      instrument: body.instrument || null,
+      side: body.side || null,
+      amountUsd: num(body.amountUsd),
+      correlationId: body.correlationId || req.get?.('x-fbt-request-id') || null
+    });
+    /* executeCheck is ALWAYS honest: simulated:false, executionPermission:false.
+       A configured provider returns an UNSIGNED hand-off; an unconfigured one
+       returns the refusal note. We surface whichever it produced. */
+    return {
+      ok: out.ok === true,
+      code: out.ok === true ? null : (out.code || null),
+      executionStatus: out.executionStatus || null,
+      handoff: out.handoff || null,
+      simulated: false,
+      signs: false,
+      submits: false,
+      executionPermission: false,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.get('/deep/traditional-assets/providers', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const { listExecutionProviders, executionStatus, ALL_CLASSES } = await import('./traditionalAssets.js');
+    const providers = listExecutionProviders();
+    const perClass = Object.fromEntries(ALL_CLASSES.map((cls) => [cls, executionStatus(cls)]));
+    return { ok: true, providers, perClass, simulatedExecutionExists: false, durable: fi.collections.durable() };
+  }));
+
+  /* ══════════════════════ Phase 216: LENDING ADAPTERS ══════════════════════
+   * The three pending adapters (compound-v3, morpho, solana-lending) are now
+   * implemented and enabled. This surface is a READ of the adapter registry +
+   * a quote/build path that sits BEHIND the §31 security gates. The on-chain
+   * modules are Vite-shaped and cannot load in a plain-node runtime: a quote
+   * there answers ADAPTER_MODULE_UNAVAILABLE (a code), and a missing provider
+   * answers PROVIDER_REQUIRED — never a fabricated number, never a success. */
+
+  router.get('/deep/lending/adapters', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const { listAdapters, PROTOCOL_ALLOWLIST, listSolanaLendingPools } = await import('../../src/lib/lending-engine/index.js');
+    const { enabledNetworks, isNetworkEnabled } = await import('../../src/lib/lending-engine/networkConfig.js');
+    const adapters = listAdapters();
+    const networks = enabledNetworks().map((n) => ({
+      chainId: n.chainId, name: n.name, enabled: isNetworkEnabled(n.chainId),
+      protocols: n.protocols, rpcs: n.rpcs.length
+    }));
+    return {
+      ok: true,
+      adapters,
+      allowlist: PROTOCOL_ALLOWLIST,
+      networks,
+      solanaPools: listSolanaLendingPools(),
+      gates: { badAddress: 'BAD_ADDRESS', unsupportedChain: 'UNSUPPORTED_CHAIN', poolNotAllowed: 'POOL_NOT_ALLOWED', tokenNotAllowed: 'TOKEN_NOT_ALLOWED' },
+      signs: false,
+      submits: false,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.post('/deep/lending/quote', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const protocol = String(body.protocol || '').toLowerCase();
+    if (!protocol) return reject(400, 'PROTOCOL_REQUIRED', 'name the protocol (aave-v3/compound-v3/morpho/solana-lending)');
+    const { adapterFor } = await import('../../src/lib/lending-engine/index.js');
+    const entry = adapterFor(protocol);
+    if (!entry) return reject(404, 'ADAPTER_NOT_REGISTERED', `no ${protocol} adapter in this deployment`, { registered: ['aave-v3', 'compound-v3', 'morpho', 'solana-lending'] });
+    if (!entry.enabled) return reject(409, 'ADAPTER_DISABLED', `${protocol} is registered but disabled`);
+
+    const chainId = Number(body.chainId) || entry.chainIds?.[0] || null;
+    const action = String(body.action || 'quote').toLowerCase();
+    const build = body.build === true || action === 'build';
+
+    /* The server holds no wallet provider. A deployment that runs with an
+       on-chain provider injects it (setLendingProvider / providers.lending);
+       without one the adapter honestly refuses (PROVIDER_REQUIRED) — it does
+       not estimate. Solana's methods refuse on their own (pool registry). */
+    const adapter = entry.factory();
+    const map = {
+      supply: build ? 'buildSupplyTransaction' : 'getSupplyQuote',
+      withdraw: build ? 'buildWithdrawTransaction' : 'getWithdrawQuote',
+      borrow: build ? 'buildBorrowTransaction' : 'getBorrowQuote',
+      repay: build ? 'buildRepayTransaction' : 'getRepayQuote',
+      health: 'getHealthFactor',
+      position: 'getUserPosition',
+      markets: 'getMarkets',
+      market: 'getMarket',
+      quote: 'getMarkets'
+    };
+    const method = map[action] || null;
+    if (!method) return reject(400, 'ACTION_NOT_SUPPORTED', `${action} is not a ${protocol} action; expected ${Object.keys(map).join('/')}`);
+
+    let out;
+    try {
+      out = await adapter[method]({
+        provider: _lendingProvider,
+        chainId,
+        wallet: body.wallet || null,
+        asset: body.asset || 'USDC',
+        amount: num(body.amountUsd),
+        amountWei: body.amountWei ? String(body.amountWei) : null,
+        onBehalfOf: body.onBehalfOf || body.wallet || null
+      });
+    } catch (err) {
+      return reject(502, String(err?.code || 'ADAPTER_ERROR').slice(0, 48), String(err?.detail?.reason || err?.message || err).slice(0, 160));
+    }
+
+    if (out && out.ok === false) {
+      return reject(409, out.code || 'ADAPTER_REFUSED', out.detail || null, {
+        simulated: false, signs: false, submits: false
+      });
+    }
+    return {
+      ok: true,
+      protocol,
+      chainId,
+      action,
+      build,
+      result: out,
+      signs: false,
+      submits: false,
+      estimate: true,
+      durable: fi.collections.durable()
+    };
+  }));
+
   return router;
+}
+
+/* The optional server-side on-chain provider for lending reads. A deployment
+   that runs a node RPC injects it (setLendingProvider / providers.lending);
+   the default is null — a quote then answers PROVIDER_REQUIRED, the honest
+   state for a wallet-less server (never an estimate). */
+let _lendingProvider = null;
+export function setLendingProvider(provider) {
+  _lendingProvider = provider || null;
+  return _lendingProvider;
 }

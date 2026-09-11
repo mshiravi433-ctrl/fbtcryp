@@ -23,6 +23,7 @@
  */
 
 import { requireFlag } from './flags.js';
+import { routeIntelligenceWhyLines } from './routeIntelligence.js';
 
 export const WHY_ENGINE_SCHEMA = 'fbt.fi.why.v1';
 
@@ -63,6 +64,15 @@ export function explainDecision({
     if (hit) whyAsset.push(`macro transmission impulse on ${hit[0]} is ${hit[1]} (model, first-order)`);
   }
   if (decision.smartMoney?.alignment) whyAsset.push(`smart-money flows ${decision.smartMoney.alignment} this window`);
+  /* Phase 215 — traditional classes on the decision record (stocks/forex/
+     commodities/rwa/etf/funds): name the class, the observed 24h change
+     (a READ, not a model) and whether execution exists at all. */
+  if (Array.isArray(decision.opportunities) && decision.opportunities.length) {
+    for (const o of decision.opportunities.slice(0, 3)) {
+      const obs = o.observation?.change24hPct != null ? `observed ${o.observation.change24hPct}% in 24h (${o.venue || 'venue unread'})` : 'no observed price this pass';
+      whyAsset.push(`${o.assetClass}/${o.asset}: fit ${o.verdict} (score ${o.score}) — ${obs}; execution ${o.execution?.available ? 'available via ' + o.execution.via : 'analysis-only, no configured provider'}`);
+    }
+  }
   if (!whyAsset.length) whyAsset.push('no asset-level evidence was readable — the recommendation rests on ranking alone and must be treated as weak');
 
   /* ── why this network ───────────────────────────────────────────────── */
@@ -74,6 +84,11 @@ export function explainDecision({
   if (slip !== null) whyNetwork.push(`modelled slippage ${slip}% on the quoted route`);
   if (Array.isArray(preferences?.preferredChains) && preferences.preferredChains.length) whyNetwork.push(`the user prefers ${preferences.preferredChains.slice(0, 3).join(', ')}`);
   if (decision.liveSimulation) whyNetwork.push('the route was simulated live (fees, gas, slippage) before ranking');
+  /* Phase 214 — the route intelligence block stored on the decision record:
+     «این شبکه چون گاز کمتر و نقدینگی عمیق‌تر» — every line points at a
+     number in the block (cost, depth, impact, time, success, risk). */
+  const riLines = routeIntelligenceWhyLines(decision.routeIntelligence);
+  if (riLines.length) whyNetwork.push(...riLines);
   if (!whyNetwork.length) whyNetwork.push('no network choice was involved (or none was readable) in this decision');
 
   /* ── why now ────────────────────────────────────────────────────────── */

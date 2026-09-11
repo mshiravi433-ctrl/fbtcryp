@@ -160,8 +160,18 @@ t('a debt-free wallet has no liquidation risk and full headroom', (() => {
 t('every enabled network has rpcs, explorer, protocols and oracle config',
   enabledNetworks().every((n) => n.enabled === true && Array.isArray(n.rpcs) && n.rpcs.length >= 2 && n.explorer && Array.isArray(n.protocols) && n.protocols.length && n.oracle));
 
-t('Linea, Sonic and Solana are declared but feature-flagged OFF',
-  !isNetworkEnabled(59144) && !isNetworkEnabled(146) && !isNetworkEnabled(900001) && networkFor(900001)?.disabledReason === 'ADAPTER_PENDING');
+t('Linea and Sonic stay declared but feature-flagged OFF (no adapter)',
+  !isNetworkEnabled(59144) && !isNetworkEnabled(146) && networkFor(59144)?.disabledReason === 'POOL_NOT_WIRED');
+
+/* Phase 216 — the pending adapters are implemented, so Solana is enabled
+   and Base carries the two new protocols alongside Aave. A market that
+   cannot execute must not be shown: the empty Solana pool registry still
+   answers NO_POOL_REGISTERED, never a fake success (lending-adapters-probe). */
+t('Solana is enabled with the solana-lending protocol (Phase 216)',
+  isNetworkEnabled(900001) && networkFor(900001)?.protocols?.includes('solana-lending') === true);
+
+t('Base lists aave-v3, compound-v3 and morpho (Phase 216)',
+  (() => { const p = networkFor(8453)?.protocols || []; return p.includes('aave-v3') && p.includes('compound-v3') && p.includes('morpho'); })());
 
 t('the wired Aave chains are flagged ON',
   [1, 56, 137, 42161, 8453, 10, 43114].every((id) => isNetworkEnabled(id)));
@@ -177,8 +187,13 @@ t('the adapter interface fails loudly instead of returning garbage', (() => {
     .every((p) => p instanceof Promise && p.then(() => false, (e) => e.message === 'Adapter method not implemented'));
 })());
 
-t('the registry allowlists aave-v3 and keeps pending protocols disabled',
-  (() => { const list = listAdapters(); const aave = list.find((a) => a.id === 'aave-v3'); return !!aave && aave.enabled === true; })());
+t('the registry allowlists every wired protocol, all enabled (Phase 216)',
+  (() => {
+    const list = listAdapters();
+    const ids = list.map((a) => a.id);
+    return ['aave-v3', 'compound-v3', 'morpho', 'solana-lending'].every((id) => ids.includes(id))
+      && list.every((a) => a.enabled === true);
+  })());
 
 t('unknown contract addresses are refused before any dial', (() => {
   const poolByChain = { 42161: '0x794a61358D6845594F94dc1DB02A252b5b4814aD' };

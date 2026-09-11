@@ -12,10 +12,12 @@
  *   · protocols: what the router may route to on this chain
  *   · oracle: the price source feeding the Oracle Aggregator
  *
- * Keep `enabled` in sync with the pools actually wired in src/lib/lending.js
- * (AAVE_V3_POOLS). Linea, Sonic and Solana are declared but disabled: their
- * adapters are pending, and a market that cannot execute must not be shown
- * as one (§6's honesty rule).
+ * Keep `enabled` in sync with the adapters actually wired in
+ * src/lib/lending-engine/adapter.js. Phase 216: Base carries Compound III and
+ * Morpho Blue alongside Aave, and Solana carries the (pool-registry) Solana
+ * lending adapter — both now have code to drive them, so the networks are
+ * enabled. Linea and Sonic remain disabled: no adapter, and a market that
+ * cannot execute must not be shown as one (§6's honesty rule).
  */
 
 export const LENDING_NETWORKS = Object.freeze([
@@ -51,7 +53,10 @@ export const LENDING_NETWORKS = Object.freeze([
     chainId: 8453, key: 'base', name: 'Base', nativeToken: 'ETH',
     rpcs: ['https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://mainnet.base.org'],
     explorer: 'https://basescan.org', explorerTx: (h) => `https://basescan.org/tx/${h}`,
-    protocols: ['aave-v3'], oracle: 'aave-oracle',
+    /* Phase 216 — Base is the deepest lending chain in this deployment:
+       Aave v3 + Compound III (Comet USDC) + Morpho Blue (USDC/cbBTC), each
+       with a real adapter in src/lib/lending-engine/adapter.js. */
+    protocols: ['aave-v3', 'compound-v3', 'morpho'], oracle: 'aave-oracle',
     enabled: true, testnet: false, color: '#0052ff'
   },
   {
@@ -84,10 +89,15 @@ export const LENDING_NETWORKS = Object.freeze([
   },
   {
     chainId: 900001, key: 'solana', name: 'Solana', nativeToken: 'SOL',
-    rpcs: ['https://api.mainnet-beta.solana.com'],
+    rpcs: ['https://api.mainnet-beta.solana.com', 'https://solana-rpc.publicnode.com'],
     explorer: 'https://solscan.io', explorerTx: (h) => `https://solscan.io/tx/${h}`,
     protocols: ['solana-lending'], oracle: 'pyth',
-    enabled: false, disabledReason: 'ADAPTER_PENDING', testnet: false, color: '#9945ff'
+    /* Phase 216 — enabled: the solana-lending adapter exists and is
+       registered. Its pools come from the adapter's pool registry; with an
+       empty registry every quote answers NO_POOL_REGISTERED (a code, never a
+       fake success), so enabling the network advertises a real, refuse-
+       honestly capability — not a dead end. */
+    enabled: true, testnet: false, color: '#9945ff'
   }
 ]);
 

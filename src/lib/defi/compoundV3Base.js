@@ -10,6 +10,14 @@
  * risk surface and would need its own review; adding them to this file is how
  * a money-moving adapter quietly becomes a general-purpose one.
  *
+ * The lending engine's borrow/repay surface (Phase 216) lives in the sibling
+ * module `compoundV3Lending.js` — deliberately NOT here: a wiring pin in
+ * test/wiring.mjs parses this file's ABIs to prove the FARM money path can
+ * only ever encode supply/withdraw writes, and the borrow/repay writes must
+ * not be in the surface that pin reads. It imports the verification, the
+ * contract handles and the unit math from here, so there is still exactly one
+ * Comet implementation.
+ *
  * ─── ADDRESS PROVENANCE ─────────────────────────────────────────────────────
  * The three Comet addresses below are pinned in THIS FILE AND NOWHERE ELSE (a
  * wiring pin in test/wiring.mjs greps src/ to prove it). They are copied from
@@ -213,7 +221,9 @@ export class CompoundAdapterError extends Error {
 /* Units and rate maths                                                        */
 /* -------------------------------------------------------------------------- */
 
-const toUsdcWei = (amountUsdc) => {
+/** Exported for the lending sibling (compoundV3Lending.js) — one conversion,
+ *  not two implementations. */
+export const toUsdcWei = (amountUsdc) => {
   const s = String(amountUsdc ?? '').trim();
   if (!/^\d*\.?\d+$/.test(s)) throw new CompoundAdapterError('COMPOUND_BAD_AMOUNT', { amountUsdc });
   return toUnits(s, COMPOUND_V3_BASE.usdcDecimals);
@@ -279,7 +289,9 @@ export function perSecondRateToApyPct(ratePerSecond) {
 /* Contract handles                                                            */
 /* -------------------------------------------------------------------------- */
 
-async function contracts(provider) {
+/** Exported for the lending sibling (compoundV3Lending.js) — the same
+ *  verified contract handles, built exactly once per provider. */
+export async function contracts(provider) {
   const { Contract } = await loadEthers();
   return {
     Contract,

@@ -6,9 +6,11 @@
  * Morpho Blue market. The immutable market parameters and marketId are pinned
  * here and verified again on-chain before every plan.
  *
- * Scope: supply and withdraw the market's LOAN token (native Base USDC). The
- * cbBTC leg is identified and verified as the market collateral; this adapter
- * never supplies, borrows, or transfers collateral and never creates debt.
+ * Scope: supply, withdraw, borrow and repay the market's LOAN token (native
+ * Base USDC). The cbBTC leg is identified and verified as the market
+ * collateral: a borrow requires live collateral in this market (checked
+ * before any calldata is built), and this adapter still never supplies,
+ * transfers or liquidates COLLATERAL itself.
  */
 
 import { ERC20_ABI, EVM_CHAINS, getToken } from '../chains';
@@ -78,12 +80,24 @@ const MORPHO_ABI = [
   'function market(bytes32 id) view returns (uint128 totalSupplyAssets, uint128 totalSupplyShares, uint128 totalBorrowAssets, uint128 totalBorrowShares, uint128 lastUpdate, uint128 fee)',
   'function position(bytes32 id, address user) view returns (uint256 supplyShares, uint128 borrowShares, uint128 collateral)',
   `function supply(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, bytes data) returns (uint256 assetsSupplied, uint256 sharesSupplied)`,
-  `function withdraw(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, address receiver) returns (uint256 assetsWithdrawn, uint256 sharesWithdrawn)`
+  `function withdraw(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, address receiver) returns (uint256 assetsWithdrawn, uint256 sharesWithdrawn)`,
+  /* The two debt actions of the lending-engine borrow surface (Phase 216).
+     Same shape as `supply`: assets XOR shares, onBehalf, empty callback data
+     for an EOA signer. */
+  `function borrow(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, bytes data) returns (uint256 assetsBorrowed, uint256 sharesBorrowed)`,
+  `function repay(${MARKET_PARAMS_ABI} marketParams, uint256 assets, uint256 shares, address onBehalf, bytes data) returns (uint256 assetsRepaid, uint256 sharesRepaid)`
 ];
+/**
+ * The market's oracle — a separate contract with the canonical Morpho
+ * Oracle signature: `read(address token)` → 18-dp token/USD price.
+ */
+const ORACLE_ABI = ['function read(address token) view returns (uint256)'];
 /** Selectors derived from the deployed signatures; the encode path refuses to run without them. */
 export const MORPHO_ACTION_SELECTORS = Object.freeze({
   supply: '0xa99aad89',
-  withdraw: '0x5c2bea49'
+  withdraw: '0x5c2bea49',
+  borrow: '0xd811e665',
+  repay: '0x20b76e81'
 });
 const MORPHO_EVENT_ABI = [
   'event Supply(bytes32 indexed id, address indexed caller, address indexed onBehalf, uint256 assets, uint256 shares)',
@@ -406,6 +420,237 @@ export async function buildWithdrawPlan({ provider, owner, amountUsdc } = {}) {
     description: { key: checks.isMax ? 'farm.morpho.step.withdrawMax' : 'farm.morpho.step.withdraw', amount: checks.isMax ? null : fromUsdcWei(assets) }
   };
   return { checks, steps: [step] };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Borrow / repay (the lending-engine borrow surface, Phase 216)               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Pure `borrow` calldata for the pinned market: `borrow(marketParams, assets,
+ * 0, onBehalf, 0x)`. Same assets-XOR-shares law as supply; the callback stays
+ * empty for an EOA signer.
+ */
+export async function encodeBorrowCalldata({ owner, amountWei = 0n, sharesWei = 0n, callbackData = '0x' } = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  const assets = asBigInt(amountWei);
+  const shares = asBigInt(sharesWei);
+  if (assets <= 0n && shares <= 0n) throw new MorphoAdapterError('MORPHO_INVALID_AMOUNT', { assets, shares });
+  if (assets > 0n && shares > 0n) throw new MorphoAdapterError('MORPHO_INPUT_ASSETS_OR_SHARES', { assets, shares });
+  const iface = await morphoActionsInterface();
+  return iface.encodeFunctionData('borrow', [paramsArray(), assets, shares, owner, callbackData]);
+}
+
+/** Pure `repay` calldata: `repay(marketParams, assets, 0, onBehalf, 0x)`. */
+export async function encodeRepayCalldata({ owner, amountWei = 0n, sharesWei = 0n, callbackData = '0x' } = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  const assets = asBigInt(amountWei);
+  const shares = asBigInt(sharesWei);
+  if (assets <= 0n && shares <= 0n) throw new MorphoAdapterError('MORPHO_INVALID_AMOUNT', { assets, shares });
+  if (assets > 0n && shares > 0n) throw new MorphoAdapterError('MORPHO_INPUT_ASSETS_OR_SHARES', { assets, shares });
+  const iface = await morphoActionsInterface();
+  return iface.encodeFunctionData('repay', [paramsArray(), assets, shares, owner, callbackData]);
+}
+
+/**
+ * Ordered unsigned steps for a borrow. The Morpho-specific gate: an account
+ * can only borrow while it holds COLLATERAL in this market (cbBTC here) —
+ * `position.collateral` must be > 0, otherwise `MORPHO_NO_COLLATERAL`. A
+ * borrow that opens with no collateral is impossible on-chain; the plan
+ * refuses it instead of handing the wallet a guaranteed revert.
+ */
+export async function buildBorrowPlan({ provider, owner, amountUsdc, nativeBalance = null } = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  const deployment = await verifyDeployment(provider);
+  const c = await contracts(provider);
+  const checks = {
+    schema: 'fbt.morpho-blue-base.borrow-checks.v1',
+    deploymentVerified: Boolean(deployment?.ok),
+    amountWei: null,
+    amountUsdc: null,
+    hasCollateral: null,
+    collateralCbBtc: null,
+    nativeGasFloorOk: null,
+    blocked: []
+  };
+  const amount = parseUsdc(amountUsdc);
+  if (amount == null || amount <= 0n) checks.blocked.push('MORPHO_INVALID_AMOUNT');
+  else {
+    checks.amountWei = amount;
+    checks.amountUsdc = Number(amount) / 10 ** MORPHO_BLUE_BASE.loanDecimals;
+  }
+  if (amount == null || amount <= 0n) return { checks, steps: [] };
+
+  const pos = await getPosition(provider, owner);
+  checks.collateralCbBtc = pos.collateralCbBtc;
+  checks.hasCollateral = pos.collateralCbBtc > 0n;
+  if (!checks.hasCollateral) checks.blocked.push('MORPHO_NO_COLLATERAL');
+
+  const floor = NATIVE_GAS_FLOOR[MORPHO_BLUE_BASE.chainId];
+  if (floor == null || nativeBalance == null) {
+    checks.nativeGasFloorOk = null;
+    checks.blocked.push('MORPHO_NATIVE_BALANCE_UNKNOWN');
+  } else {
+    const { parseUnits } = await loadEthers();
+    checks.nativeGasFloorOk = asBigInt(nativeBalance) >= parseUnits(String(floor), 18);
+    if (!checks.nativeGasFloorOk) checks.blocked.push('MORPHO_NATIVE_GAS_FLOOR');
+  }
+  if (checks.blocked.length) return { checks, steps: [] };
+
+  return {
+    checks,
+    steps: [{
+      kind: 'borrow', to: MORPHO_BLUE_BASE.morpho,
+      data: await encodeBorrowCalldata({ owner, amountWei: amount }), value: 0n,
+      description: { key: 'farm.morpho.step.borrow', amount: fromUsdcWei(amount) }
+    }]
+  };
+}
+
+/**
+ * A single-step repay. Repaying more than the live debt is refused
+ * client-side (`MORPHO_REPAY_EXCEEDS_DEBT`): the debt in USDC is
+ * `borrowShares × totalBorrowAssets / totalBorrowShares` — the same share
+ * projection the market itself uses — and a plan must never hand the wallet
+ * a guaranteed revert. No debt → `MORPHO_NO_DEBT_TO_REPAY`.
+ */
+export async function buildRepayPlan({ provider, owner, amountUsdc, nativeBalance = null } = {}) {
+  if (!isAddr(owner)) throw new MorphoAdapterError('MORPHO_BAD_OWNER', { owner });
+  await verifyDeployment(provider);
+  const c = await contracts(provider);
+  const [pos, state] = await Promise.all([
+    getPosition(provider, owner),
+    c.morpho.market(MORPHO_BLUE_BASE.marketId)
+  ]);
+  const checks = {
+    schema: 'fbt.morpho-blue-base.repay-checks.v1',
+    deploymentVerified: true,
+    amountWei: null,
+    amountUsdc: null,
+    debtUsdcWei: null,
+    withinDebt: null,
+    balanceSufficient: null,
+    nativeGasFloorOk: null,
+    allowanceWei: null,
+    needsApproval: null,
+    blocked: []
+  };
+  const totalBorrowShares = asBigInt(state?.totalBorrowShares ?? state?.[3]);
+  const totalBorrowAssets = asBigInt(state?.totalBorrowAssets ?? state?.[2]);
+  checks.debtUsdcWei = pos.borrowShares === 0n
+    ? 0n
+    : (pos.borrowShares * totalBorrowAssets) / (totalBorrowShares === 0n ? 1n : totalBorrowShares);
+  if (checks.debtUsdcWei === 0n) checks.blocked.push('MORPHO_NO_DEBT_TO_REPAY');
+
+  const amount = parseUsdc(amountUsdc);
+  if (amount == null || amount <= 0n) checks.blocked.push('MORPHO_INVALID_AMOUNT');
+  else {
+    checks.amountWei = amount;
+    checks.amountUsdc = Number(amount) / 10 ** MORPHO_BLUE_BASE.loanDecimals;
+    checks.withinDebt = amount <= checks.debtUsdcWei;
+    if (!checks.withinDebt) checks.blocked.push('MORPHO_REPAY_EXCEEDS_DEBT');
+  }
+  if (checks.blocked.length) return { checks, steps: [] };
+
+  /*
+   * Morpho's repay() PULLS the loan token from msg.sender
+   * (`safeTransferFrom(msg.sender, address(this), assets)`) — the same
+   * balance + allowance discipline as supply: an exact approve first when
+   * needed, never unbounded.
+   */
+  try {
+    const balance = asBigInt(await c.usdc.balanceOf(owner));
+    checks.balanceSufficient = balance >= amount;
+    if (!checks.balanceSufficient) checks.blocked.push('MORPHO_INSUFFICIENT_BALANCE');
+  } catch {
+    checks.balanceSufficient = null;
+    checks.blocked.push('MORPHO_BALANCE_UNREADABLE');
+  }
+  const floor = NATIVE_GAS_FLOOR[MORPHO_BLUE_BASE.chainId];
+  if (floor == null || nativeBalance == null) {
+    checks.nativeGasFloorOk = null;
+    checks.blocked.push('MORPHO_NATIVE_BALANCE_UNKNOWN');
+  } else {
+    const { parseUnits } = await loadEthers();
+    checks.nativeGasFloorOk = asBigInt(nativeBalance) >= parseUnits(String(floor), 18);
+    if (!checks.nativeGasFloorOk) checks.blocked.push('MORPHO_NATIVE_GAS_FLOOR');
+  }
+  if (checks.blocked.length) return { checks, steps: [] };
+
+  const allowance = asBigInt(await c.usdc.allowance(owner, MORPHO_BLUE_BASE.morpho));
+  checks.allowanceWei = allowance;
+  checks.needsApproval = allowance < amount;
+  const { Interface } = await loadEthers();
+  const erc20 = new Interface(ERC20_ABI);
+  const steps = [];
+  if (checks.needsApproval) steps.push({
+    kind: 'approve', to: MORPHO_BLUE_BASE.loanToken,
+    data: erc20.encodeFunctionData('approve', [MORPHO_BLUE_BASE.morpho, amount]), value: 0n,
+    description: { key: 'farm.morpho.step.approve', amount: fromUsdcWei(amount) }
+  });
+  steps.push({
+    kind: 'repay', to: MORPHO_BLUE_BASE.morpho,
+    data: await encodeRepayCalldata({ owner, amountWei: amount }), value: 0n,
+    description: { key: 'farm.morpho.step.repay', amount: fromUsdcWei(amount) }
+  });
+  return { checks, steps };
+}
+
+/**
+ * The account's health factor, computed from REAL reads only:
+ *
+ *   hf = (collateralUSD × lltv) / borrowAssetsUSD
+ *
+ * where collateralUSD comes from the market's oracle (`read()`, 18 dp) × the
+ * pinned collateral, and borrowAssetsUSD from the same share projection the
+ * protocol uses. Any unread leg returns null — a fabricated "2.0, you are
+ * safe" is the exact lie this repo exists to stop.
+ */
+/**
+ * The account's health factor in THIS market, from live reads only:
+ * HF = (collateral USD × LLTV) / borrow USD, with the borrow derived the way
+ * Morpho does — the owner's borrow shares projected against the market's
+ * total borrow shares/assets. Returns `{ healthFactor: null, reason }`
+ * whenever any leg is unreadable or the number does not exist (no debt → no
+ * factor, never a fabricated "infinite"). A number in the result was read,
+ * not assumed.
+ */
+export async function getHealthFactor(provider, owner) {
+  if (!isAddr(owner)) return { healthFactor: null, reason: 'MORPHO_BAD_OWNER' };
+  try {
+    await verifyDeployment(provider);
+    const c = await contracts(provider);
+    const [pos, state] = await Promise.all([
+      c.morpho.position(MORPHO_BLUE_BASE.marketId, owner),
+      c.morpho.market(MORPHO_BLUE_BASE.marketId)
+    ]);
+    const borrowShares = asBigInt(pos?.borrowShares ?? pos?.[1]);
+    if (borrowShares === 0n) return { healthFactor: null, reason: 'no borrow in this market — nothing to liquidate, so no factor exists' };
+    const totalBorrowShares = asBigInt(state?.totalBorrowShares ?? state?.[3]);
+    const totalBorrowAssets = asBigInt(state?.totalBorrowAssets ?? state?.[2]);
+    if (totalBorrowShares === 0n) return { healthFactor: null, reason: 'MORPHO_MARKET_UNREADABLE' };
+    const borrowAssets = (borrowShares * totalBorrowAssets) / totalBorrowShares;
+    const { Contract } = await loadEthers();
+    const oracle = new Contract(MORPHO_BLUE_BASE.oracle, ORACLE_ABI, provider);
+    const price18 = asBigInt(await oracle.read(MORPHO_BLUE_BASE.collateralToken)); /* 18-dp collateral/USD price */
+    const collateral = asBigInt(pos?.collateral ?? pos?.[2]);
+    if (price18 === 0n || collateral === 0n) return { healthFactor: null, reason: 'unreadable collateral or price' };
+    /*
+     * Scaling: collateralUsdScaled = collateralUSD × 1e18, lltv = LLTV × 1e18,
+     * borrowedUsdScaled = borrowUSD × 1e18. The 1e18 factors cancel:
+     * (USDC×1e18 × L×1e18) / (USDB×1e18) / 1e18 = USDC×L/USDB — the raw ratio.
+     * (The trailing /1e18 in the expression below keeps that cancellation
+     * explicit; the result is the plain health factor, e.g. 860 → 860.)
+     */
+    const collateralUsdScaled = (collateral * price18) / 10n ** BigInt(MORPHO_BLUE_BASE.collateralDecimals); /* 18 dp */
+    const lltv = MORPHO_BLUE_BASE.lltv; /* 18 dp */
+    const borrowedUsdScaled = (borrowAssets * 10n ** 18n) / 10n ** BigInt(MORPHO_BLUE_BASE.loanDecimals); /* 18 dp */
+    if (borrowedUsdScaled === 0n) return { healthFactor: null, reason: 'borrow projection underflowed' };
+    const hf = (collateralUsdScaled * lltv) / (borrowedUsdScaled * 10n ** 18n); /* raw ratio */
+    return { healthFactor: Number(hf) };
+  } catch (err) {
+    return { healthFactor: null, reason: String(err?.code || err?.message || 'read failed').slice(0, 80) };
+  }
 }
 
 export async function buildRevokePlan({ provider, owner, spender = null } = {}) {

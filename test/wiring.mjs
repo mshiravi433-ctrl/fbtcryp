@@ -14479,7 +14479,7 @@ export default function run() {
     t('the seam fails open: unroutered plans keep their identity', /return plan;/.test(seam));
     t('the Routed-event proof exists and is exported', /export async function verifyRoutedDeposit/.test(seam));
     t('no adapter ever routes a withdraw', (() => {
-      const adapters = ['aaveV3Base.js', 'aaveV3Arbitrum.js', 'compoundV3Base.js', 'morphoBlueBase.js', 'lido.js'];
+      const adapters = ['aaveV3Base.js', 'aaveV3Arbitrum.js', 'compoundV3Base.js', 'compoundV3Lending.js', 'morphoBlueBase.js', 'lido.js'];
       return adapters.every((f) => !/routeSupplyPlan/.test(read(`src/lib/defi/${f}`)));
     })());
     /* the disclosure copy must exist in every language the app ships */

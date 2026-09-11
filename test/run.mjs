@@ -2033,7 +2033,10 @@ for (const [suite, file] of [
   ['FI OS council/agents/learning (batch 6)', 'fios/fios-intelligence-probe.mjs'],
   ['FI OS API over real HTTP (batch 7)', 'fios/fios-api-probe.mjs'],
   ['FI OS cross-asset intelligence (phase 211.2)', 'fios/cross-asset-probe.mjs'],
-  ['FI OS Financial Intelligence Brain (phase 210)', 'intent-ai/phase210-financial-brain-probe.mjs']
+  ['FI OS Financial Intelligence Brain (phase 210)', 'intent-ai/phase210-financial-brain-probe.mjs'],
+  ['FI OS Cross-Chain Route Intelligence (phase 214)', 'intent-ai/route-intelligence-probe.mjs'],
+  ['FI OS Traditional Assets Decision (phase 215)', 'intent-ai/traditional-assets-probe.mjs'],
+  ['FI OS Lending Adapters (phase 216)', 'intent-ai/lending-adapters-probe.mjs']
 ]) {
   console.log(`▸ ${suite}…`);
   try {

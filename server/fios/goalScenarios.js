@@ -145,11 +145,22 @@ export function buildWhatIfs({ sections = {}, financial = null, now = Date.now()
 }
 
 /** The engine wrapper. */
-export function createGoalScenariosEngine({ collections = null, observability = null, log = () => {}, now = () => Date.now() } = {}) {
+export function createGoalScenariosEngine({ collections = null, observability = null, log = () => {}, now = () => Date.now(), multiClassFor = null } = {}) {
   async function scenariosFor(owner, { goal = null, financial = null, liveYieldPct = null, correlationId = null } = {}) {
     const gate = requireFlag('GOAL_SCENARIOS_ENABLED');
     if (!gate.ok) return { ok: false, code: gate.code, flag: gate.flag };
     const out = buildGoalScenarios({ startUsd: num(financial?.computed?.netWorthUsd) ?? num(goal?.startUsd), goal, financial, liveYieldPct, now: now() });
+    /* Phase 215 — the multi-class allocation (traditional sleeves alongside
+       the crypto presets). Best-effort: a failure there must not take the
+       crypto scenarios down; the field is simply absent then. */
+    if (out.ok && typeof multiClassFor === 'function') {
+      try {
+        const mc = await multiClassFor(owner, { financial, goal });
+        if (mc?.ok) out.multiClass = mc.result;
+      } catch (err) {
+        log(`goal-scenarios:multiclass-failed:${String(err?.message || err).slice(0, 80)}`);
+      }
+    }
     if (out.ok && collections) {
       try {
         await collections.put('goal_scenarios', owner, { ...out, id: 'latest' }, { idKey: 'id' });
