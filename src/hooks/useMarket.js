@@ -12,20 +12,25 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(0);
   const alive = useRef(true);
+  const requestId = useRef(0);
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
   const run = useCallback(async () => {
+    // A request from the previous asset must not be allowed to paint after a
+    // picker change. `alive` alone is insufficient because the next effect
+    // sets the same ref back to true before the old request resolves.
+    const id = ++requestId.current;
     try {
       const d = await fnRef.current();
-      if (!alive.current) return;
+      if (!alive.current || id !== requestId.current) return;
       setData(d);
       setUpdatedAt(Date.now());
       setError(null);
     } catch (e) {
-      if (alive.current) setError(e);
+      if (alive.current && id === requestId.current) setError(e);
     } finally {
-      if (alive.current) setLoading(false);
+      if (alive.current && id === requestId.current) setLoading(false);
     }
   }, []);
 
@@ -53,6 +58,9 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
 
     return () => {
       alive.current = false;
+      // Invalidate in-flight work before the next dependency-driven effect
+      // marks this hook alive again.
+      requestId.current += 1;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
       offBus();

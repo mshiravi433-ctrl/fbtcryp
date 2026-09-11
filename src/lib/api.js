@@ -11,16 +11,12 @@
  */
 
 import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './offlineData';
+import { apiBase } from './apiBase';
 
-// `import.meta.env` is Vite-only; guard it so the module also loads under
-// plain bundlers / SSR / test harnesses.
-//
-// NOTE for the Android build: the APK serves its pages from https://localhost,
-// so a relative '/api' has no host to resolve against. Set VITE_API_BASE to
-// your deployed origin (e.g. https://fbt-swap.vercel.app/api) when building
-// the APK. Market data still falls back to the public CoinGecko endpoints, but
-// the AI routes have no fallback and simply won't work without it.
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+// `apiBase()` is deliberately resolved at request time. In the Capacitor
+// shell the page origin is https://localhost, so a relative `/api` would hit
+// the WebView's asset server instead of the deployed backend. The helper also
+// keeps the ordinary browser same-origin path unchanged.
 const PUBLIC_CG = 'https://api.coingecko.com/api/v3';
 
 const memo = new Map();
@@ -156,7 +152,7 @@ export function clearApiCache() {
 export function getGlobal() {
   return resilient('global', {
     ttl: 45000,
-    backend: () => fetchJson(`${API_BASE}/global`),
+    backend: () => fetchJson(`${apiBase()}/global`),
     direct: async () => {
       const raw = await fetchJson('https://api.coinlore.net/api/global/');
       return normalizeGlobal(Array.isArray(raw) ? raw[0] : raw);
@@ -190,7 +186,7 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   return resilient(`markets:${vs}:${page}:${perPage}`, {
     ttl: 30000,
     backend: async () => withProvenance(
-      await fetchJson(`${API_BASE}/markets?page=${page}&per_page=${perPage}&vs=${vs}`),
+      await fetchJson(`${apiBase()}/markets?page=${page}&per_page=${perPage}&vs=${vs}`),
       'live'
     ),
     direct: async () => {
@@ -246,7 +242,7 @@ export function getCategory(category, { perPage = 50, vs = 'usd' } = {}) {
      * we share with the rest of the app.
      */
     ttl: 300_000,
-    backend: () => fetchJson(`${API_BASE}/category/${slug}?per_page=${perPage}&vs=${vs}`),
+    backend: () => fetchJson(`${apiBase()}/category/${slug}?per_page=${perPage}&vs=${vs}`),
     direct: async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
@@ -315,7 +311,7 @@ export function getCoin(id, vs = 'usd') {
   if (!id) return Promise.resolve(null);
   return resilient(coinKey(id, vs), {
     ttl: 30000,
-    backend: () => fetchJson(`${API_BASE}/coin/${encodeURIComponent(id)}`),
+    backend: () => fetchJson(`${apiBase()}/coin/${encodeURIComponent(id)}`),
     direct: async () => {
       // The markets endpoint gives us sparkline + 1h/7d changes in one call,
       // which is exactly the shape the detail screen renders.
@@ -368,7 +364,7 @@ export function searchCoins(query) {
   if (q.length < 2) return Promise.resolve([]);
   return resilient(`search:${q.toLowerCase()}`, {
     ttl: 120000,
-    backend: () => fetchJson(`${API_BASE}/search?q=${encodeURIComponent(q)}`),
+    backend: () => fetchJson(`${apiBase()}/search?q=${encodeURIComponent(q)}`),
     direct: async () => {
       const raw = await fetchJson(`${PUBLIC_CG}/search?query=${encodeURIComponent(q)}`);
       return (raw.coins || []).slice(0, 25).map((c) => ({
@@ -395,7 +391,7 @@ export function searchCoins(query) {
 export function getTrending() {
   return resilient('trending', {
     ttl: 120000,
-    backend: () => fetchJson(`${API_BASE}/trending`),
+    backend: () => fetchJson(`${apiBase()}/trending`),
     direct: async () => {
       const raw = await fetchJson(`${PUBLIC_CG}/search/trending`);
       return (raw.coins || []).slice(0, 10).map(({ item }) => ({
@@ -423,7 +419,7 @@ export function getTrending() {
 export function getOhlc(id, days = 30, vs = 'usd') {
   return resilient(`ohlc:${id}:${days}`, {
     ttl: 60000,
-    backend: () => fetchJson(`${API_BASE}/ohlc/${id}?days=${days}&vs=${vs}`),
+    backend: () => fetchJson(`${apiBase()}/ohlc/${id}?days=${days}&vs=${vs}`),
     direct: async () => {
       const raw = await fetchJson(`${PUBLIC_CG}/coins/${id}/ohlc?vs_currency=${vs}&days=${days}`);
       return (Array.isArray(raw) ? raw : [])
@@ -437,7 +433,7 @@ export function getOhlc(id, days = 30, vs = 'usd') {
 export function getChart(id, days = 1, vs = 'usd') {
   return resilient(`chart:${id}:${days}`, {
     ttl: 60000,
-    backend: () => fetchJson(`${API_BASE}/chart/${id}?days=${days}&vs=${vs}`),
+    backend: () => fetchJson(`${apiBase()}/chart/${id}?days=${days}&vs=${vs}`),
     direct: async () => {
       const raw = await fetchJson(`${PUBLIC_CG}/coins/${id}/market_chart?vs_currency=${vs}&days=${days}`);
       return (raw.prices || []).map(([t, p]) => ({ t, p }));
@@ -450,7 +446,7 @@ export function getChart(id, days = 1, vs = 'usd') {
 export function getDexPools(network = 'bsc') {
   return resilient(`dex:${network}`, {
     ttl: 60000,
-    backend: () => fetchJson(`${API_BASE}/dex/${network}`),
+    backend: () => fetchJson(`${apiBase()}/dex/${network}`),
     direct: async () => {
       const raw = await fetchJson(`https://api.geckoterminal.com/api/v2/networks/${network}/trending_pools`);
       return (raw.data || []).slice(0, 12).map(normalizePool);
@@ -478,7 +474,7 @@ export async function getSimplePrices(ids = []) {
   const key = `simple:${ids.join(',')}`;
   return resilient(key, {
     ttl: 20000,
-    backend: () => fetchJson(`${API_BASE}/prices?ids=${ids.join(',')}`),
+    backend: () => fetchJson(`${apiBase()}/prices?ids=${ids.join(',')}`),
     direct: () => fetchJson(`${PUBLIC_CG}/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`),
     fallback: () =>
       Object.fromEntries(

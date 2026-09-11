@@ -810,7 +810,42 @@ function TokenPicker({ coin, options, value, onChange, coins }) {
   );
 }
 
-function SelectedSignalCard({ coin, signal, analysis, scanning, watched, whyLoading, onWhy, onWatch, onAlert }) {
+function SignalTrendChart({ series, coin }) {
+  const values = toSeries(series).slice(-48);
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, Math.abs(max) * 0.002, 1e-9);
+  const points = values.map((value, index) => {
+    const x = 8 + (index / (values.length - 1)) * 284;
+    const y = 8 + (1 - (value - min) / range) * 58;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const first = values[0];
+  const last = values[values.length - 1];
+  const rising = last >= first;
+  const change = first ? ((last - first) / first) * 100 : 0;
+  return (
+    <div className="sic-trend-chart" aria-label={`${coin?.symbol || 'asset'} price movement chart`}>
+      <div className="sic-trend-head">
+        <span>📈 {coin?.symbol || 'Asset'} trend</span>
+        <b className={rising ? 'up' : 'down'}>{rising ? '+' : ''}{change.toFixed(2)}%</b>
+      </div>
+      <svg viewBox="0 0 300 82" role="img" aria-hidden="true" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="signalsTrendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={rising ? '#00ff9d' : '#ff3b6b'} stopOpacity=".3" />
+            <stop offset="100%" stopColor={rising ? '#00ff9d' : '#ff3b6b'} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polyline points={`8,72 ${points} 292,72`} fill="url(#signalsTrendFill)" stroke="none" />
+        <polyline points={points} fill="none" stroke={rising ? '#00ff9d' : '#ff3b6b'} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
+  );
+}
+
+function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched, whyLoading, onWhy, onWatch, onAlert }) {
   const { t } = useTranslation();
   const ready = signal?.status === 'READY';
   const risk = String(signal?.risk || 'medium').toLowerCase();
@@ -840,6 +875,8 @@ function SelectedSignalCard({ coin, signal, analysis, scanning, watched, whyLoad
                 <span className={(coin.change24h ?? 0) >= 0 ? 'up' : 'down'}>{fmtPct(coin.change24h ?? 0)}</span>
               </div>
             </div>
+
+            <SignalTrendChart series={series} coin={coin} />
 
             <div className="sic-focus-overview">
               <Gauge score={analysis.score} label={analysis.label} confidence={analysis.confidence} />
@@ -1596,6 +1633,7 @@ export default function Signals() {
             coin={coin}
             signal={selectedSignal}
             analysis={analysis}
+            series={priceSeries}
             scanning={scanning}
             watched={watchedIds.has(activeId)}
             whyLoading={why?.signal?.coin?.id === activeId && why?.loading}

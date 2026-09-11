@@ -14,7 +14,7 @@
  * from memory (see session notes): SOL is native (wrapped mint), JUP/BONK/JTO/
  * PYTH/WIF/RAY are the canonical mainnet mints.
  */
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+import { apiBase } from './apiBase';
 
 export const SOLANA_SIGNAL_ASSETS = [
   { id: 'solana', symbol: 'SOL', mint: 'So11111111111111111111111111111111111111112' },
@@ -35,7 +35,7 @@ export async function getSolanaIntel(mint, { timeout = 12000 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(`${API_BASE}/solana/intel/${encodeURIComponent(mint)}`, {
+    const res = await fetch(`${apiBase()}/solana/intel/${encodeURIComponent(mint)}`, {
       signal: ctrl.signal,
       headers: { accept: 'application/json' }
     });

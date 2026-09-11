@@ -84,7 +84,9 @@ export const CHAIN_PAYOUT = {
   42161: env('VITE_PAYOUT_ARBITRUM') || '',
   8453: env('VITE_PAYOUT_BASE') || '',
   10: env('VITE_PAYOUT_OPTIMISM') || '',
-  43114: env('VITE_PAYOUT_AVALANCHE') || ''
+  43114: env('VITE_PAYOUT_AVALANCHE') || '',
+  534352: env('VITE_PAYOUT_SCROLL') || '',
+  324: env('VITE_PAYOUT_ZKSYNC') || ''
 };
 
 /**
@@ -137,8 +139,8 @@ export function resolvePayout(chainId, family = FAMILY.EVM) {
 export const payoutAddress = (chainId, family = FAMILY.EVM) => resolvePayout(chainId, family)?.address ?? null;
 
 /**
- * Everything the UI needs to display "where fees go", including the non-EVM
- * networks we accept value on but don't swap on yet.
+ * Everything the UI needs to display "where fees go", including every
+ * supported EVM network and the non-EVM networks we accept value on.
  *
  * `gas` explains, per network, which coin pays the network fee — the question
  * behind "it can't only be BNB". Gas is always paid in the chain's own native
@@ -159,6 +161,8 @@ export const PAYOUT_DIRECTORY = [
   { id: 'berachain', chainId: 80094, family: FAMILY.EVM, label: 'Berachain', gas: 'BERA', color: '#a855f7' },
   { id: 'unichain', chainId: 130, family: FAMILY.EVM, label: 'Unichain', gas: 'ETH', color: '#ff007a' },
   { id: 'monad', chainId: 143, family: FAMILY.EVM, label: 'Monad', gas: 'MON', color: '#7c3aed' },
+  { id: 'scroll', chainId: 534352, family: FAMILY.EVM, label: 'Scroll (SCR)', gas: 'ETH', color: '#f1c27d' },
+  { id: 'zksync', chainId: 324, family: FAMILY.EVM, label: 'zkSync Era (ZK)', gas: 'ETH', color: '#8c8dfc' },
   { id: 'solana', chainId: null, family: FAMILY.SOLANA, label: 'Solana', gas: 'SOL', color: '#14f195' },
   { id: 'tron', chainId: null, family: FAMILY.TRON, label: 'Tron (TRX / USDT TRC-20)', gas: 'TRX', color: '#ff060a' }
 ];
