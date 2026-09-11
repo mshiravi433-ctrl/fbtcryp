@@ -117,6 +117,20 @@ const coverage = {};
  * anything en.json does not contain. That last step is the one deletion that
  * is always safe: a key English lacks can never render.
  */
+/*
+ * i18next resolves a PLURAL key to `key_<cldr category>` — Russian asks for
+ * `productCount_few` and `productCount_many`, which English never has, because
+ * English only has `_one` and `_other`. Those keys are reachable at runtime and
+ * deleting them silently downgrades a correct Russian plural to the generic
+ * `_other` form. So a plural suffix is allowed whenever its parent key is.
+ */
+const PLURAL_SUFFIXES = ['_zero', '_one', '_two', '_few', '_many', '_other'];
+const withPlurals = (allowed) => {
+  const expanded = new Set(allowed);
+  for (const key of allowed) for (const suffix of PLURAL_SUFFIXES) expanded.add(`${key}${suffix}`);
+  return expanded;
+};
+
 function pruneToEnglish(obj, allowed, prefix = '') {
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -163,7 +177,7 @@ for (const lang of LANGS) {
     if (typeof before === 'string' && before !== byLang[lang]) overwritten.push(key);
   }
 
-  const json = pruneToEnglish(merged, enSet);
+  const json = pruneToEnglish(merged, withPlurals(enSet));
   const present = leaves(json).length;
   const pruned = leaves(merged).length - present;
   const onlyInFile = [...inherited].filter((k) => !SOURCES[k]).length;

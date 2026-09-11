@@ -87,22 +87,39 @@ export const PROTOCOL_MARKS = {
 };
 
 /**
- * The geometric accent, drawn on a 32×32 box and always white at 92% so it
- * reads on every gradient. Five shapes, five ideas:
- *   lending  an arch over a base — money placed under protection
- *   staking  a ring with a dot   — one token growing inside its own circle
- *   vault    three stacked bars  — layers of compounding
- *   pool     two overlapping discs — two assets, one pool
- *   perp     a rising line       — directional exposure
- *   bridge   two posts and a span — the same asset, another chain
+ * The geometric accent, drawn on a 32×32 box.
+ *
+ * ─── WHY EVERY SHAPE IS NOW A BERRY ─────────────────────────────────────────
+ * «بقیه استخرها ایکون الان انگور زده … اگر از میوه‌های قرمز مثل گیلاس یا
+ * آلبالو استفاده کنی قشنگ‌تره» — and they were right about the diagnosis. The
+ * old set was built from bare DISCS (a ring, two overlapping circles), which at
+ * 34px on a phone read as a bunch of grapes: three unrelated protocols in a row
+ * all showed what looked like the same fruit, and the mark that is supposed to
+ * answer «which protocol is this» answered nothing.
+ *
+ * So the accent family is redrawn as fruit — the *shapes* carry the meaning
+ * that the discs used to fumble, and the colours stay the protocol's own:
+ *
+ *   lending  one berry under a three-point crown — a pomegranate, money held
+ *            in something with a lid on it (the safest shape in the set)
+ *   staking  a single cherry on its stalk with one leaf — one token growing
+ *   vault    a cluster of three berries on one stem — layers compounding
+ *   pool     two cherries on one stalk — two assets, one pool, and the pair
+ *            reads as a pair at a glance (the old two-discs idea, kept)
+ *   perp     a rising branch with a leaf — directional exposure that grows
+ *   bridge   an arch carrying a berry at each end — the same asset, another
+ *            chain, joined rather than stacked
+ *
+ * Every path is filled (berries) and/or stroked (stalks, leaves, crowns) by
+ * `.farm-glyph-accent` in index.css, so one shape works on both themes.
  */
 export const KIND_ACCENTS = {
-  lending: 'M8 24V16.2a8 8 0 0 1 16 0V24h-3.4v-7.8a4.6 4.6 0 0 0-9.2 0V24z',
-  staking: 'M16 5.6a10.4 10.4 0 1 0 0 20.8 10.4 10.4 0 0 0 0-20.8zm0 3.4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm0 4.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z',
-  vault: 'M6.4 8.6h19.2v3.6H6.4zm0 5.8h19.2v3.6H6.4zm0 5.8h13v3.6h-13z',
-  pool: 'M12.6 9.4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm6.8 0a7 7 0 1 1 0 14 7 7 0 0 1 0-14z',
-  perp: 'M6 22.4 13 15l4.4 4.2L26 9.6v3.2h3.2V5.6h-7.2v3.2h3.06L17.2 15.2 12.8 11 4 19.8z',
-  bridge: 'M5 22.6V13h3.2v9.6zm18.8 0V13H27v9.6zM5 13a11 11 0 0 1 22 0H24a8.9 8.9 0 0 0-16 0z'
+  lending: 'M16 11.4a7.6 7.6 0 1 1 0 15.2 7.6 7.6 0 0 1 0-15.2zM16 4.6l2.3 3.4h-4.6zM7.7 6.4l3.6 1.1-2.3 3.5zM24.3 6.4l-1.3 4.6-3.5-1.1z',
+  staking: 'M16.4 12a7.1 7.1 0 1 1 0 14.2 7.1 7.1 0 0 1 0-14.2zM17.6 12.2c.3-2.9-.5-5.2-2.4-7M15.4 7.4c2.3-1.5 4.7-1.4 7.2.6-2.3 1.7-4.7 1.5-7.2-.6z',
+  vault: 'M16 5.4a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM10.4 17.2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM21.6 17.2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM16 10.4v6.4M13.2 18.6l2.8-1.8M18.8 18.6l-2.8-1.8',
+  pool: 'M10.6 15.6a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1 0-11.8zM21.4 15.6a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1 0-11.8zM10.6 16.4c.2-3.4 1.9-6 5.4-8M21.4 16.4c-.1-1.6-.6-3-1.5-4.3M15.8 8.2c1.7-1.2 3.6-1.1 5.6.4-1.8 1.4-3.6 1.3-5.6-.4z',
+  perp: 'M4.6 25.4c4.6-1.1 7.8-3.2 10.1-6.1 2.3-3 3.8-6.5 4.9-10.4l3.5 1c-1.2 4.4-3 8.4-5.7 11.9-2.9 3.7-6.9 6.2-12.4 7.3zM20.8 4.6c3-.7 5.7.3 8.4 3-2.8 2.7-5.5 3.3-8.4 2.7z',
+  bridge: 'M5.4 20.8a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6zM26.6 20.8a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6zM5.6 22.6C7.1 13 11.2 7.4 16 7.4s8.9 5.6 10.4 15.2h-3.3C21.7 14.6 19.3 11 16 11s-5.7 3.6-7.1 11.6z'
 };
 
 /** The letter is drawn, not typed — a font swap must not change a pool's mark. */
@@ -112,6 +129,34 @@ const LETTER_HINT = { /* slugs whose first letter is ambiguous are spelled out *
   woofi: 'W'
 };
 
+/**
+ * BERRY_HUES — the palette an UNCATALOGUED protocol falls back to.
+ *
+ * ─── WHY THE FALLBACK IS NO LONGER THE WHOLE HUE WHEEL ──────────────────────
+ * It used to be, and that was the other half of the complaint above. A feed row
+ * for a protocol we have not catalogued could land anywhere on the wheel, so
+ * one screen mixed grape-purple, mint, amber and cyan tiles that looked like
+ * six different design systems — and none of them this app's. On top of the
+ * disc-shaped accents, the whole list read as «انگور زده».
+ *
+ * Every hue below is a RED FRUIT — cherry, sour cherry, pomegranate,
+ * raspberry, redcurrant, watermelon, mulberry — plus one deep blackcurrant
+ * plum. `hashHue` still derives the slot from the slug, so two unknowns never
+ * collide into one tile and a protocol keeps its colour between reloads; what
+ * changed is that the family is coherent. Catalogued protocols keep THEIR OWN
+ * brand colours, because an Aave tile that is not Aave's colour is a worse lie
+ * than an ugly one.
+ */
+const BERRY_HUES = Object.freeze([
+  { hue: 348, sat: 82, light: 84 }, // cherry
+  { hue: 356, sat: 78, light: 78 }, // sour cherry
+  { hue: 12, sat: 76, light: 78 },  // pomegranate
+  { hue: 330, sat: 74, light: 80 }, // raspberry
+  { hue: 20, sat: 82, light: 80 },  // redcurrant / watermelon
+  { hue: 318, sat: 62, light: 76 }, // mulberry
+  { hue: 288, sat: 54, light: 74 }  // blackcurrant
+]);
+
 function hashHue(slug) {
   let h = 2166136261;
   const s = String(slug || '');
@@ -119,11 +164,14 @@ function hashHue(slug) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  return Math.abs(h) % 360;
+  return Math.abs(h) % BERRY_HUES.length;
 }
 
-function fromHue(hue, light) {
-  return `hsl(${hue} ${light ? 88 : 72}% ${light ? 72 : 42}%)`;
+/** One stop of a berry ramp; `deep` darkens the foot of the gradient. */
+function fromHue(berry, deep) {
+  const sat = Math.max(30, berry.sat - (deep ? 10 : 0));
+  const light = deep ? Math.max(28, berry.light - 34) : berry.light;
+  return `hsl(${berry.hue} ${sat}% ${light}%)`;
 }
 
 /**
@@ -148,8 +196,8 @@ export function protocolMark(slug) {
   const hue = hashHue(key);
   const words = key.replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
   return {
-    from: fromHue(hue, true),
-    to: fromHue((hue + 18) % 360, false),
+    from: fromHue(hue, false),
+    to: fromHue(hue, true),
     accent: guessAccent(key),
     letter: (words[0] || '?').charAt(0).toUpperCase(),
     known: false

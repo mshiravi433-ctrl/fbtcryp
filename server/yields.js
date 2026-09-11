@@ -156,6 +156,33 @@ const ALLOWED_PROJECTS = new Set([
   'pendle',
   // Solana liquid staking the Farm staking section joins onto
   'jupiter-staked-sol',
+  /*
+   * ─── SOLANA LSTs — added 2026-09-11, evidence recorded ────────────────────
+   * «توکن‌های جدید هم اضافه کن» — and these three are the deepest Solana
+   * stake pools we were not yet able to quote a live rate for. Each slug was
+   * read off the adapter itself, because the adapter FOLDER NAME is the slug
+   * and its `project:` literal is what our join matches on:
+   *
+   *   src/adaptors/blazestake/index.js            project: 'blazestake'          symbol 'bSOL'
+   *   src/adaptors/sanctum-infinity/index.js      project: 'sanctum-infinity'    symbol 'INF'
+   *   src/adaptors/helius-staked-sol/index.js     project: 'helius-staked-sol'   symbol 'HSOL'
+   *
+   * (master, read 2026-09-11 — all three use `getSanctumLstApy` + total supply
+   * × price, so `apyBase` is real and `apyReward` is absent: the emissions
+   * ceiling cannot fire on them.) They are Solana-only, which is why they are
+   * not in test/wiring.mjs's SLUG_EVIDENCE table — that table's rule is "at
+   * least three APP chains", and a single-chain Solana adapter can never
+   * satisfy it. The evidence lives here instead, in the same shape.
+   *
+   * A wrong slug upstream is an EMPTY contribution, never a wrong row: the LST
+   * list joins on project AND symbol (lib/solanaAssetsClient.js), so a drift
+   * makes one row show no rate and nothing else. That is the failure mode this
+   * list is allowed to have; the one it is not allowed to have is a plausible
+   * rate for the wrong token.
+   */
+  'blazestake',
+  'sanctum-infinity',
+  'helius-staked-sol',
   // Solana lending + AMMs with multi-year track records
   'kamino',
   'raydium',

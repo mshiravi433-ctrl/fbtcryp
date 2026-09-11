@@ -98,6 +98,75 @@ export const LST_ASSETS = [
     /* Jupiter publishes a 0% management fee on jupSOL. */
     protocolFeePct: 0,
     capturesMev: true
+  },
+  /*
+   * ─── THE NEXT THREE, ADDED 2026-09-11 («توکن‌های جدید هم اضافه کن») ────────
+   *
+   * These are the largest Solana LSTs we were still not offering, and each one
+   * was checked the way the rest of this file was: mint address against the
+   * issuer's OWN documentation, then the DefiLlama adapter that publishes its
+   * live APY (whose folder name is the `project` slug and whose
+   * `project:` literal is what the join matches on — read from master, same
+   * procedure as the uniswap-v4 evidence in server/yields.js).
+   *
+   *   bSOL   bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1
+   *          stake-docs.solblaze.org/developers/addresses — «bSOL token mint»
+   *          adapter src/adaptors/blazestake → project 'blazestake', symbol 'bSOL'
+   *   INF    5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm
+   *          Sanctum's own LST address table (the Infinity pool token)
+   *          adapter src/adaptors/sanctum-infinity → project 'sanctum-infinity', symbol 'INF'
+   *   hSOL   he1iusmfkpAdwvxLNGV8Y1iSbj4rUy6yMhEA3fotn9A
+   *          Solana Compass stake-pool record (mint = pool mint of Helius Staked SOL)
+   *          adapter src/adaptors/helius-staked-sol → project 'helius-staked-sol', symbol 'HSOL'
+   *
+   * `apyNote` discipline is unchanged: the rate is JOINED from the feed, never
+   * typed here, and if a slug ever drifts the row shows no rate rather than a
+   * stale one. The mint is still the runtime backstop — `issuerMatches()` on
+   * the server drops an LST Jupiter does not verify, so a bad address makes the
+   * row disappear instead of offering a stranger's token under a known name.
+   */
+  {
+    id: 'bsol',
+    mint: 'bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1',
+    symbol: 'bSOL',
+    name: 'BlazeStake Staked SOL',
+    decimals: 9,
+    llamaProject: 'blazestake',
+    llamaSymbol: 'BSOL',
+    /* BlazeStake's published reward fee on the standard stake pool. */
+    protocolFeePct: 5,
+    /* Spreads stake across 200+ validators through the official SPL stake-pool
+       program, the largest validator set of any Solana stake pool — which is
+       diversification, not extra yield. */
+    capturesMev: false
+  },
+  {
+    id: 'inf',
+    mint: '5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm',
+    symbol: 'INF',
+    name: 'Sanctum Infinity',
+    decimals: 9,
+    llamaProject: 'sanctum-infinity',
+    llamaSymbol: 'INF',
+    /* Sanctum charges 8 bps per swap and 10 bps on withdrawal, 90% of which
+       goes to INF holders — i.e. back to the depositor. */
+    protocolFeePct: 0.1,
+    /* Infinity is a MULTI-LST pool: the yield is the weighted average of the
+       LSTs inside it plus the swap fees it earns, so it is not one validator's
+       performance. That is what `capturesMev` is standing in for below — the
+       row's MEV pill has to be honest for a basket too. */
+    capturesMev: true
+  },
+  {
+    id: 'hsol',
+    mint: 'he1iusmfkpAdwvxLNGV8Y1iSbj4rUy6yMhEA3fotn9A',
+    symbol: 'hSOL',
+    name: 'Helius Staked SOL',
+    decimals: 9,
+    llamaProject: 'helius-staked-sol',
+    llamaSymbol: 'HSOL',
+    protocolFeePct: null,
+    capturesMev: true
   }
 ];
 
