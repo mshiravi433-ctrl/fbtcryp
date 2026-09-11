@@ -615,6 +615,12 @@
   color: var(--tag-dim);
 }
 
+/* Suggested agents: same card, dashed frame — a template, not a live agent. */
+.tag-card.tag-suggest {
+  border-style: dashed;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
 .tag-card-actions {
   display: flex;
   gap: 8px;

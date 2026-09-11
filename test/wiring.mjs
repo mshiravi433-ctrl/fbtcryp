@@ -137,6 +137,7 @@ export default function run() {
      * to it.
      */
     '/solana',                  // -> tab inside /swap
+    '/ai-global',               // -> 'global' tab inside /news (AiGlobalIntelligence renders there; the standalone URL is kept as a contract)
     '/ostium', '/dydx', '/derivatives', // -> derivatives / stocks tabs
     '/portfolio',               // -> Intelligence tile inside /wallet
     /*
@@ -7218,7 +7219,7 @@ export default function run() {
       t('...News imports it', /CalmPanel/.test(read('src/pages/News.jsx')));
       /* Still last: market intelligence now sits immediately after Radio. */
       t('...and renders it behind its own tab',
-        /'listen', 'insights', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
+        /'listen', 'insights', 'global', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
         /tab === 'calm'/.test(code(read('src/pages/News.jsx'))));
 
       /*
@@ -10798,7 +10799,8 @@ export default function run() {
     const news = code(read('src/pages/News.jsx'));
     t('the feed is reachable as a News tab',
       /'read', 'whales', 'community', 'listen', 'insights', 'calm'/.test(news) ||
-      /'read', 'community', 'listen', 'insights', 'calm'/.test(news));
+      /'read', 'community', 'listen', 'insights', 'calm'/.test(news) ||
+      /'read', 'community', 'listen', 'insights', 'global', 'calm'/.test(news));
     t('...and News actually renders the panel',
       /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
     t('...and P2P no longer mounts it',
@@ -12163,7 +12165,8 @@ export default function run() {
 
     t('News places market intelligence immediately after Radio and before Calm',
       (/\['read', 'whales', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
-       /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage)) &&
+       /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
+       /\['read', 'community', 'listen', 'insights', 'global', 'calm'\]/.test(newsPage)) &&
       /tab === 'insights'[\s\S]*?<MarketInsightsPanel/.test(newsPage));
     t('News keeps one feed request while the global header only reuses its cache',
       (newsPage.match(/getNews\(/g) || []).length === 1 &&

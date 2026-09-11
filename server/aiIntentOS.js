@@ -1737,6 +1737,30 @@ router.post('/automations/:id/pause', async (req, res) => {
   return res.json({ ok: true, automations: next });
 });
 
+/* Resume one automation in place. Without this the client "resumed" by
+   creating a brand-new automation — pausing then resuming duplicated the
+   agent on every cycle. */
+router.post('/automations/:id/resume', async (req, res) => {
+  const owner = ownerFor(req);
+  const now = nowMs();
+  const rows = await readAutomations(owner);
+  const row = rows.find((r) => String(r?.id) === String(req.params.id));
+  if (!row) return res.status(404).json({ ok: false, error: 'AUTOMATION_NOT_FOUND' });
+  const next = rows.map((r) => (String(r?.id) === String(req.params.id)
+    ? {
+        ...r,
+        status: 'ACTIVE',
+        active: true,
+        pausedAt: null,
+        nextExecution: nextFire(r, now),
+        nextRunAt: nextFire(r, now),
+        updatedAt: now
+      }
+    : r));
+  await writeAutomations(owner, next);
+  return res.json({ ok: true, automations: next });
+});
+
 router.post('/automations/:id/result', async (req, res) => {
   const owner = ownerFor(req);
   const body = req.body && typeof req.body === 'object' ? req.body : {};

@@ -130,16 +130,12 @@ export function ThinkingOrbLarge({ state = 'solving', size = 64, locale = 'fa', 
 
 /**
  * AI Activity Timeline — Spec §29
- * Shows operation status, not internal chain-of-thought
- * Example:
- * ● Understanding request
- * ✓ Wallet checked
- * ✓ Market data retrieved
- * ● Risk analysis
- * ○ Strategy
- * ○ Execution
+ * Shows operation status, not internal chain-of-thought. Each step carries a
+ * real dot: green-filled = done, red-filled = failed, pulsing cyan = working
+ * now, hollow grey = not started. `final` marks every non-failed step done —
+ * used under produced answers, where the work already happened.
  */
-export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', defaultOpen = false }) {
+export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', defaultOpen = false, final = false }) {
   const fa = locale.startsWith('fa');
   /*
    * The eight status lines used to be printed one under the other on every
@@ -150,28 +146,40 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
    */
   const [open, setOpen] = useState(Boolean(defaultOpen));
 
-  const total = steps?.length || 0;
+  /*
+   * On a produced answer (`final`) every non-failed step counts as done —
+   * the summary count, the head label and the dots all read from `shown`,
+   * so a finished plan shows «8/8 · همه مراحل انجام شد», never «0/8».
+   */
+  const shown = useMemo(() => (final
+    ? (steps || []).map((s) => {
+        const st = String(s?.status || 'pending');
+        return ['failed', 'error'].includes(st) ? s : { ...s, status: 'completed' };
+      })
+    : (steps || [])), [steps, final]);
+
+  const total = shown.length || 0;
   const doneCount = useMemo(
-    () => (steps || []).filter((s) => ['completed', 'done', 'ok', 'success'].includes(String(s?.status || ''))).length,
-    [steps]
+    () => shown.filter((s) => ['completed', 'done', 'ok', 'success'].includes(String(s?.status || ''))).length,
+    [shown]
   );
   const activeStep = useMemo(
-    () => (steps || []).find((s) => ['active', 'working', 'in_progress'].includes(String(s?.status || ''))),
-    [steps]
+    () => shown.find((s) => ['active', 'working', 'in_progress'].includes(String(s?.status || ''))),
+    [shown]
   );
   const failed = useMemo(
-    () => (steps || []).some((s) => ['failed', 'error'].includes(String(s?.status || ''))),
-    [steps]
+    () => shown.some((s) => ['failed', 'error'].includes(String(s?.status || ''))),
+    [shown]
   );
 
-  if (!steps || steps.length === 0) return null;
+  if (!shown || shown.length === 0) return null;
 
   const stepLabel = (s) => (fa ? (s?.labelFa || s?.label) : (s?.labelEn || s?.label)) || '';
   const headLabel = activeStep
     ? stepLabel(activeStep)
     : doneCount >= total
       ? (fa ? 'همه مراحل انجام شد' : 'All steps done')
-      : stepLabel(steps[Math.min(doneCount, total - 1)]);
+      : stepLabel(shown[Math.min(doneCount, total - 1)]);
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
 
   return (
@@ -194,28 +202,23 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
         <span className="ai-timeline-chevron" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
       </button>
       <div className="ai-timeline-steps" hidden={!open}>
-      {steps.map((step, idx) => {
+      {shown.map((step, idx) => {
         const status = step.status || 'pending';
-        let icon = '○';
-        let color = 'rgba(148, 163, 184, 0.6)';
-        if (status === 'completed' || status === 'done' || status === 'ok' || status === 'success') {
-          icon = '✓';
-          color = '#34d399';
-        } else if (status === 'active' || status === 'working' || status === 'in_progress') {
-          icon = '●';
-          color = '#22d3ee';
-        } else if (status === 'failed' || status === 'error') {
-          icon = '✕';
-          color = '#f87171';
-        }
+        const tone = ['completed', 'done', 'ok', 'success'].includes(status)
+          ? 'done'
+          : ['active', 'working', 'in_progress'].includes(status)
+            ? 'busy'
+            : ['failed', 'error'].includes(status)
+              ? 'bad'
+              : 'idle';
 
         return (
           <div key={`${step.id || idx}-${step.label}`} className="ai-timeline-step" data-status={status} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
-            <span className="ai-timeline-icon" style={{ color, fontWeight: 700, minWidth: 14, textAlign: 'center' }}>{icon}</span>
-            <span className="ai-timeline-label" style={{ color: status === 'completed' ? '#cbd5e1' : status === 'active' ? '#e2e8f0' : 'rgba(148,163,184,0.7)' }}>
+            <span className="ai-timeline-dot" data-tone={tone} aria-hidden="true" />
+            <span className="ai-timeline-label" style={{ color: tone === 'done' ? '#cbd5e1' : tone === 'busy' ? '#e2e8f0' : tone === 'bad' ? '#fca5a5' : 'rgba(148,163,184,0.7)' }}>
               {fa ? (step.labelFa || step.label) : (step.labelEn || step.label)}
             </span>
-            {status === 'active' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
+            {tone === 'busy' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
           </div>
         );
       })}
@@ -279,6 +282,29 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
           border-radius: 6px;
           padding: 3px 8px !important;
           margin: 1px -4px;
+        }
+        /*
+         * Status dots — real shapes, not glyphs: green-filled = done,
+         * red-filled = failed/incomplete, pulsing cyan = working now,
+         * hollow grey = not started yet.
+         */
+        .ai-timeline-dot {
+          width: 11px; height: 11px; border-radius: 50%;
+          flex: 0 0 auto;
+          border: 1.5px solid rgba(148, 163, 184, 0.55);
+          background: transparent;
+        }
+        .ai-timeline-dot[data-tone="done"] {
+          background: #34d399; border-color: #34d399;
+          box-shadow: 0 0 6px rgba(52, 211, 153, 0.55);
+        }
+        .ai-timeline-dot[data-tone="bad"] {
+          background: #f87171; border-color: #f87171;
+          box-shadow: 0 0 6px rgba(248, 113, 113, 0.55);
+        }
+        .ai-timeline-dot[data-tone="busy"] {
+          background: #22d3ee; border-color: #22d3ee;
+          animation: tlPulse 1.2s ease-in-out infinite;
         }
       `}</style>
     </div>

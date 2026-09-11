@@ -21,6 +21,22 @@ export const HISTORY_MAX_CONVERSATIONS = 300;
 export const HISTORY_MAX_OPERATIONS = 200;
 export const HISTORY_MAX_SEASONS = 50;
 
+/*
+ * THREAD SNAPSHOTS — the FULL conversation of a season (cards, choices,
+ * strategy/goal plans), one key per season. The archive rows above are
+ * text-only on purpose (cheap, searchable); the snapshot is what «ادامه»
+ * restores, so a continued season looks exactly like the live thread did.
+ * Device-local, like everything else in this module.
+ */
+export const THREAD_SNAPSHOT_PREFIX = 'fbt.intent-os.thread.v1.';
+export const THREAD_SNAPSHOT_SCHEMA = 'fbt.intent-os-thread.v1';
+export const THREAD_SNAPSHOTS_KEPT = 8;
+export const THREAD_SNAPSHOT_BYTES = 350_000;
+
+function snapshotKey(seasonId) {
+  return `${THREAD_SNAPSHOT_PREFIX}${String(seasonId || '').slice(0, 80)}`;
+}
+
 const FORBIDDEN = /privatekey|mnemonic|seedphrase|seed|signature|signedpayload|apikey|password|secret/i;
 
 function stripSecretsDeep(value, depth = 0) {
@@ -111,6 +127,7 @@ export function appendOperation(entry, { store = defaultStorage(), now = Date.no
     ref: String(entry?.ref || '').slice(0, 64) || null,
     refKind: String(entry?.refKind || '').slice(0, 24) || null,
     conversationId: String(entry?.conversationId || '').slice(0, 64),
+    seasonId: entry?.seasonId ? String(entry.seasonId).slice(0, 64) : null,
     messageOriginal: String(entry?.messageOriginal || '').slice(0, 400),
     txHash: String(entry?.txHash || '').slice(0, 128) || null,
     at: now
@@ -203,6 +220,92 @@ export function seasonsFromHistory({ history = null, store = defaultStorage() } 
     }
   }
   return [...byConv.values()].sort((a, b) => (Number(b.lastAt) || 0) - (Number(a.lastAt) || 0));
+}
+
+/** All archived turns of one season, oldest first (the snapshot fallback). */
+export function conversationsForSeason(seasonId, { history = null, store = defaultStorage() } = {}) {
+  const data = history || read(store);
+  return (data.conversations || [])
+    .filter((c) => c.seasonId === seasonId || (!c.seasonId && c.conversationId === seasonId))
+    .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+}
+
+/*
+ * Drop the one blob that dwarfs a thread: the strategy plan's raw ecosystem
+ * `state` (all 21 domain reads). The plan itself — comparison, sleeves,
+ * stages, verdict — stays; the state was evidence for building it, and the
+ * card never renders it.
+ */
+function lightenThread(messages) {
+  return (Array.isArray(messages) ? messages : []).map((m) => {
+    if (!m || typeof m !== 'object') return m;
+    if (!m.strategyPlan || typeof m.strategyPlan !== 'object') return m;
+    const { state, ...plan } = m.strategyPlan;
+    void state;
+    return { ...m, strategyPlan: plan };
+  });
+}
+
+function pruneThreadSnapshots(store) {
+  try {
+    const keys = [];
+    for (let i = 0; i < (store?.length || 0); i += 1) {
+      const k = store.key(i);
+      if (k && k.startsWith(THREAD_SNAPSHOT_PREFIX)) keys.push(k);
+    }
+    if (keys.length <= THREAD_SNAPSHOTS_KEPT) return;
+    const dated = keys.map((k) => {
+      try { return { k, at: Number(JSON.parse(store.getItem(k))?.at) || 0 }; }
+      catch { return { k, at: 0 }; }
+    });
+    dated.sort((a, b) => a.at - b.at);
+    for (const d of dated.slice(0, dated.length - THREAD_SNAPSHOTS_KEPT)) {
+      try { store.removeItem(d.k); } catch { /* keep pruning */ }
+    }
+  } catch { /* pruning must never break the save */ }
+}
+
+export function saveThreadSnapshot(seasonId, messages, { store = defaultStorage() } = {}) {
+  if (!seasonId || !store) return false;
+  try {
+    const light = lightenThread(messages);
+    const turns = light.filter((m) => m?.kind !== 'hello');
+    // A greeting-only thread is not a conversation: no snapshot, and any
+    // stale one for this id goes away.
+    if (!turns.length) {
+      try { store.removeItem(snapshotKey(seasonId)); } catch {}
+      return true;
+    }
+    let payload = { schema: THREAD_SNAPSHOT_SCHEMA, seasonId, at: Date.now(), messages: light };
+    let json = JSON.stringify(payload);
+    if (json.length > THREAD_SNAPSHOT_BYTES) {
+      // Oversized: keep the thread's anchor (first user turn) plus the
+      // newest 60 turns. Old strategy plans stay readable in the archive.
+      const firstUser = light.find((m) => m?.role === 'user');
+      const tail = light.slice(-60);
+      const merged = firstUser && !tail.includes(firstUser) ? [firstUser, ...tail] : tail;
+      payload = { schema: THREAD_SNAPSHOT_SCHEMA, seasonId, at: Date.now(), messages: merged, trimmed: true };
+      json = JSON.stringify(payload);
+    }
+    store.setItem(snapshotKey(seasonId), json);
+    pruneThreadSnapshots(store);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadThreadSnapshot(seasonId, { store = defaultStorage() } = {}) {
+  if (!seasonId || !store) return null;
+  try {
+    const raw = store.getItem(snapshotKey(seasonId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.messages) || !parsed.messages.length) return null;
+    return parsed.messages;
+  } catch {
+    return null;
+  }
 }
 
 /** Group operations by kind for the History tabs. */

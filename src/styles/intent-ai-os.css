@@ -967,6 +967,14 @@
   font-size: 13px;
   white-space: nowrap;
 }
+/* An answered question keeps its answer visible instead of dead buttons. */
+.iaos-choice-answered {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+:root[data-theme='light'] .iaos-choice-answered { color: #047857; }
 
 /* ============================ OPERATIONS CENTER ============================
    Operations / History / Status panels + chat cards for monitors, conditional
@@ -1814,6 +1822,14 @@
 .iaos-intel-card small {
   font-size: 10px;
   color: #64748b;
+}
+
+.iaos-intel-spawn {
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  border-radius: 999px;
 }
 
 /*
@@ -4092,7 +4108,8 @@ body:has(.iaos-page-v6) {
   padding: 6px 8px;
 }
 .isp-nums dt { font-size: 10px; color: #94a3b8; }
-.isp-nums dd { margin: 2px 0 0; font-size: 13px; font-weight: 700; }
+.isp-nums dd { margin: 2px 0 0; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.isp-objective b, .isp-sleeve-top b, .isp-risk span { font-variant-numeric: tabular-nums; }
 
 .isp-honesty { margin: 0; font-size: 12px; line-height: 1.7; color: #e2e8f0; }
 .isp-regime { margin: 0; font-size: 11px; color: #94a3b8; }
@@ -4124,21 +4141,28 @@ body:has(.iaos-page-v6) {
 
 .isp-note { margin: 0; font-size: 11px; color: #94a3b8; line-height: 1.6; }
 
-.isp-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.isp-table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; scrollbar-width: thin; }
+.isp-table { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 340px; }
 .isp-table th {
   text-align: start;
   font-weight: 600;
   color: #94a3b8;
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   padding: 4px 6px;
+  white-space: nowrap;
 }
-.isp-table td { padding: 6px; border-bottom: 1px solid rgba(148, 163, 184, 0.10); vertical-align: top; }
+.isp-table td { padding: 8px 6px; border-bottom: 1px solid rgba(148, 163, 184, 0.10); vertical-align: top; }
 .isp-table tr { cursor: pointer; }
 .isp-table tr.is-picked { background: rgba(99, 102, 241, 0.12); }
 .isp-table tr.is-default td:first-child { border-inline-start: 2px solid rgba(110, 231, 183, 0.6); }
+/* Latin digits inside Persian prose: tabular figures keep every option's
+   return/risk/cost/data columns aligned instead of drifting per-character. */
+.isp-table .isp-num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; font-weight: 700; color: #e2e8f0; }
+.isp-table .isp-cell-name { min-width: 130px; max-width: 220px; }
 .isp-option-name {
   background: none; border: 0; padding: 0; cursor: pointer;
   color: #e2e8f0; font-weight: 700; font-size: 11px; text-align: start;
+  line-height: 1.5;
 }
 .isp-option-name em {
   display: inline-block; margin-inline-start: 6px;
@@ -4147,7 +4171,36 @@ body:has(.iaos-page-v6) {
   background: rgba(16, 185, 129, 0.15); color: #6ee7b7;
 }
 .isp-option-name em.is-stretch { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
-.isp-table td small { display: block; color: #94a3b8; font-size: 10px; margin-top: 2px; }
+.isp-table td small, .isp-table .isp-why { display: block; color: #94a3b8; font-size: 10px; margin-top: 3px; line-height: 1.6; }
+
+/*
+ * Narrow screens: the 5-column table becomes one stacked card per option —
+ * name on its own line, then return/risk/cost/data each on their own labelled
+ * line. Nothing overlaps, nothing needs horizontal scrolling.
+ */
+@media (max-width: 560px) {
+  .isp-table { min-width: 0; }
+  .isp-table thead { display: none; }
+  .isp-table tbody { display: flex; flex-direction: column; gap: 8px; }
+  .isp-table tbody tr {
+    display: block;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 12px;
+    padding: 4px 10px 8px;
+    background: rgba(15, 23, 42, 0.35);
+  }
+  .isp-table tbody tr.is-picked { background: rgba(99, 102, 241, 0.14); }
+  .isp-table tbody td { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 1px dashed rgba(148, 163, 184, 0.12); padding: 6px 0; text-align: end; }
+  .isp-table tbody td:last-child { border-bottom: 0; }
+  .isp-table tbody td::before {
+    content: attr(data-th);
+    font-size: 10px; font-weight: 600; color: #94a3b8; text-align: start;
+  }
+  .isp-table tbody td.isp-cell-name { flex-direction: column; align-items: stretch; gap: 2px; text-align: start; }
+  .isp-table tbody td.isp-cell-name::before { display: none; }
+  .isp-table .isp-cell-name { min-width: 0; max-width: none; }
+  .isp-option-name { font-size: 12px; }
+}
 
 .isp-sleeves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .isp-sleeves li {
@@ -4260,6 +4313,15 @@ body:has(.iaos-page-v6) {
 :root[data-theme='light'] .isp-nums dd,
 :root[data-theme='light'] .isp-block-head b { color: #0f172a; }
 :root[data-theme='light'] .isp-table tr.is-picked { background: rgba(99, 102, 241, 0.08); }
+:root[data-theme='light'] .isp-table .isp-num,
+:root[data-theme='light'] .isp-option-name { color: #0f172a; }
+:root[data-theme='light'] .isp-table .isp-why { color: #475569; }
+@media (max-width: 560px) {
+  :root[data-theme='light'] .isp-table tbody tr { background: #f8fafc; border-color: rgba(15, 23, 42, .12); }
+  :root[data-theme='light'] .isp-table tbody tr.is-picked { background: rgba(99, 102, 241, 0.10); }
+  :root[data-theme='light'] .isp-table tbody td { border-bottom-color: rgba(15, 23, 42, .08); }
+  :root[data-theme='light'] .isp-table tbody td::before { color: #64748b; }
+}
 :root[data-theme='light'] .isp-refusal { color: #92400e; }
 :root[data-theme='light'] .isp-btn.is-ghost { color: #0f172a; border-color: rgba(15, 23, 42, .18); }
 
