@@ -426,7 +426,19 @@ function InvestButton({ pool, route, onGetTokens, t }) {
 }
 
 function ProtocolStatusCard({ protocol, t }) {
+  /*
+   * COLLAPSED BY DEFAULT — «المان پروتکل متصل است بالای صفحه به یک باکس
+   * کشویی منتقل شود تا شلوغی صفحه کم شود».
+   * The status card is infrastructure reassurance, not content: the one fact
+   * worth showing at a glance («پروتکل متصل است» + its live pill) stays
+   * visible as the closed row, and the readout, the 2×2 meta grid and the
+   * error line only render once the row is tapped open — the exact pattern
+   * PoolCard below already uses, so the page reads as one language. A
+   * protocol ERROR forces the box open: a failure is the one state the user
+   * must not have to discover by tapping.
+   */
   const status = protocol?.status || 'CONNECTING';
+  const [open, setOpen] = useState(() => status === 'UNAVAILABLE' || Boolean(protocol?.error));
   const statusLabel = status === 'ACTIVE'
     ? t('farm.protocolActive')
     : status === 'UNAVAILABLE' ? t('farm.protocolUnavailable') : status === 'STALE' ? t('farm.freshness.STALE') : t('farm.protocolConnecting');
@@ -437,8 +449,13 @@ function ProtocolStatusCard({ protocol, t }) {
   const capabilities = (protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ');
 
   return (
-    <motion.section className="card card-rgb card-glow-cyan farm-protocol-card" variants={riseIn} initial="hidden" animate="show">
-      <div className="farm-protocol-head">
+    <motion.section className={`card card-rgb card-glow-cyan farm-protocol-card ${open ? 'is-open' : ''}`} variants={riseIn} initial="hidden" animate="show">
+      <button
+        type="button"
+        className="farm-protocol-head farm-protocol-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <span className="farm-protocol-icon" aria-hidden="true">
           <IconShield width={20} height={20} />
         </span>
@@ -447,8 +464,10 @@ function ProtocolStatusCard({ protocol, t }) {
           <span className="farm-protocol-sub">{FARM_PROTOCOL.name}</span>
         </span>
         <span className={`pill ${status === 'ACTIVE' ? 'pill-neutral' : status === 'UNAVAILABLE' ? 'pill-down' : 'pill-rgb'}`}>{statusLabel}</span>
-      </div>
+        <span className="farm-protocol-chevron" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
+      </button>
 
+      {open && <>
       <div className="farm-protocol-readout">
         <span className="pill pill-neutral">
           {EXECUTION_LIVE
@@ -488,6 +507,7 @@ function ProtocolStatusCard({ protocol, t }) {
         </div>
       </div>
       {protocol?.error && <p className="faint" style={{ margin: '7px 0 0' }}>{feedErrorLabel(protocol.error, t)}</p>}
+      </>}
     </motion.section>
   );
 }

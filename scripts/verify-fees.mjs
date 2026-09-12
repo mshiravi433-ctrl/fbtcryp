@@ -11,11 +11,17 @@
  *      the right family for that chain. A Tron address configured on an EVM
  *      chain is not a payment, it is a burn.
  *
- *   2. LIVE ROUTE ECHO — asks the KyberSwap aggregator for a real quote with
- *      our fee params and confirms `routeSummary.extraFee` comes back with OUR
- *      address and OUR basis points. This is the one that matters: extraFee is
- *      what gets signed into the calldata, so if the echo is wrong the money
- *      goes elsewhere no matter what our source says.
+ *   2. LIVE ROUTE ECHO — asks the routing source the client actually uses for
+ *      that chain for a real quote with our fee params and confirms the fee
+ *      comes back with OUR address and OUR basis points. On Kyber-served
+ *      chains that is `routeSummary.extraFee`; on chains Kyber's gateway no
+ *      longer serves (Mantle, Scroll, zkSync Era — HTTP 404, live-probed
+ *      2026-09-11) the client routes through OpenOcean, so the echo is their
+ *      /decodeInputData reading of the built calldata's `referrer` — the same
+ *      proof verifyOpenOceanFee() demands before a user ever signs. This is
+ *      the one that matters: it inspects what would actually be signed, so if
+ *      the echo is wrong the money goes elsewhere no matter what our source
+ *      says.
  *
  *   3. ARITHMETIC — recomputes the fee from amountIn and checks it against
  *      what the aggregator reports, so a units mistake shows up as a number
@@ -45,13 +51,50 @@ const SLUG = {
   10: 'optimism',
   8453: 'base',
   43114: 'avalanche',
-  /* The four 2026-09 additions (see docs/NETWORKS-ADD-FA.md). Linea + Sonic
+  /* The 2026-09 additions (see docs/NETWORKS-ADD-FA.md). Linea + Sonic
      already route fees but are intentionally not re-added here to keep this
-     tool's existing behaviour unchanged. */
-  5000: 'mantle',
+     tool's existing behaviour unchanged.
+     Mantle (5000) was REMOVED on 2026-09-11: Kyber's gateway answers HTTP
+     404 for the `mantle`, `scroll` and `zksync` slugs, so asking it here
+     would only ever print "could not verify live" — the honest verifier for
+     those three is the OpenOcean pass below, which is what the client
+     actually uses to route them (KYBER_LIVE in src/lib/aggregator.js). */
   80094: 'berachain',
   130: 'unichain',
   143: 'monad'
+};
+
+/*
+ * ─── THE OPENOCEAN PASS ──────────────────────────────────────────────────────
+ * Chains the Kyber aggregator does NOT serve but OpenOcean v4 does. These are
+ * the chains where OpenOcean is not a second opinion but the ONLY routing
+ * source (src/lib/swap.js promotes it to primary exactly there), so the fee
+ * gate has to speak OpenOcean's protocol on them:
+ *
+ *   quote  → proves a route exists (a 404/no-route here IS the user-visible
+ *            «مسیری بین این دو توکن وجود ندارد»),
+ *   swap   → builds real calldata (never broadcast — `account` is required by
+ *            their API and we pass the payout address, which cannot receive a
+ *            transaction it never signed),
+ *   decode → reads `referrer` back OUT of that calldata: the same proof
+ *            verifyOpenOceanFee() requires before the app lets a user sign.
+ *
+ * Slugs mirror OO_SLUG in src/lib/openocean.js — keep both in lockstep.
+ */
+const OO_BASE = 'https://open-api.openocean.finance/v4';
+const OO_SLUG = {
+  5000: 'mantle',
+  534352: 'scroll',
+  324: 'zksync'
+};
+
+/* A liquid native -> token pair per OpenOcean-routed chain. Same addresses
+   pinned in src/lib/chains.js TOKENS, each cross-checked against the chain's
+   live pool registry (GeckoTerminal) on 2026-09-11. */
+const OO_TARGET = {
+  5000: { name: 'USDT', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6 },
+  534352: { name: 'USDC', address: '0x06eFdbFF2a14a7c8E15944D1F4A48F9F95F663A4', decimals: 6 },
+  324: { name: 'USDC', address: '0x1d17CbCf0D6D143135aE902365d2E5e2A16538d4', decimals: 6 }
 };
 
 /**
@@ -69,10 +112,11 @@ const STABLE = {
   8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   43114: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
   /* New 2026-09 chains. Outputs are wrapped-native / bridged-USDC so the pair
-     native -> token is liquid. Source of each: Mantle = official bridge FAQ,
-     Berachain = official contracts page (WBERA), Unichain = Uniswap deployment
-     table (WETH), Monad = Uniswap deployment table (WMON). */
-  5000: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', // Mantle bridged USDC
+     native -> token is liquid. Source of each: Berachain = official contracts
+     page (WBERA), Unichain = Uniswap deployment table (WETH), Monad =
+     Uniswap deployment table (WMON). Mantle is NOT here: Kyber's gateway
+     404s on the `mantle` slug, so it is verified through the OpenOcean pass
+     (OO_TARGET) instead. */
   80094: '0x6969696969696969696969696969696969696969', // WBERA
   130: '0x4200000000000000000000000000000000000006', // WETH
   143: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' // WMON
@@ -90,6 +134,102 @@ const bad = (s) => `\x1b[31m✗\x1b[0m ${s}`;
 const warn = (s) => `\x1b[33m!\x1b[0m ${s}`;
 
 let failures = 0;
+
+/**
+ * The OpenOcean echo, for chains the Kyber aggregator no longer serves
+ * (Mantle, Scroll, zkSync Era). Same three promises as the Kyber pass —
+ * route exists, fee is ours, arithmetic checks out — proven against the
+ * endpoint the client actually routes these chains through.
+ */
+async function checkOpenOcean(row, resolved) {
+  const { chainId, gas } = row;
+  const slug = OO_SLUG[chainId];
+  const target = OO_TARGET[chainId];
+  const amountIn = 10n ** 18n; // 1 native unit
+  const percent = String(FEE_BPS / 100); // 70 bps -> "0.7" — OO's referrerFee is a PERCENT
+
+  const params = new URLSearchParams({
+    inTokenAddress: NATIVE,
+    outTokenAddress: target.address,
+    amountDecimals: String(amountIn),
+    gasPriceDecimals: '1000000000', // 1 gwei reference — only feeds OO's gas optimisation
+    slippage: '0.5',
+    referrer: resolved.address,
+    referrerFee: percent
+  });
+
+  try {
+    /* 1. ROUTE — the quote must return a real output amount. A no-route here
+       IS the user-visible «مسیری بین این دو توکن وجود ندارد», so unlike a
+       network hiccup it counts as a failure, not a warning. */
+    const qRes = await fetch(`${OO_BASE}/${slug}/quote?${params}`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    const qBody = await qRes.json().catch(() => null);
+    if (!qRes.ok || qBody?.code !== 200) {
+      console.log(warn(`OpenOcean quote returned HTTP ${qRes.status}${qBody?.message ? ` (${qBody.message})` : ''} — could not verify live`));
+      return;
+    }
+    const out = BigInt(qBody?.data?.outAmount ?? '0');
+    if (out <= 0n) {
+      console.log(bad('OpenOcean returned NO ROUTE — swaps on this chain would fail with «مسیری بین این دو توکن وجود ندارد»'));
+      failures += 1;
+      return;
+    }
+    const dexes = Array.isArray(qBody.data.dexes) ? qBody.data.dexes.join(', ') : 'direct';
+    console.log(ok(`OpenOcean route exists via ${dexes} — 1 ${gas} → ${(Number(out) / 10 ** target.decimals).toFixed(4)} ${target.name}`));
+
+    /* 2. ECHO — build the calldata that would be signed and read our
+       `referrer` back OUT of it through their /decodeInputData endpoint.
+       Nothing here is ever broadcast; `account` is required by their API and
+       we pass the payout address, which cannot receive a transaction nobody
+       signed. This mirrors verifyOpenOceanFee() in src/lib/openocean.js —
+       the client refuses to sign unless this same proof passes. */
+    const sParams = new URLSearchParams(params);
+    sParams.set('account', resolved.address);
+    const sRes = await fetch(`${OO_BASE}/${slug}/swap?${sParams}`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    const sBody = await sRes.json().catch(() => null);
+    const calldata = sBody?.data?.data;
+    if (!sRes.ok || sBody?.code !== 200 || !calldata) {
+      console.log(warn(`OpenOcean /swap build failed (HTTP ${sRes.status}${sBody?.message ? `: ${sBody.message}` : ''}) — could not verify the fee echo`));
+      return;
+    }
+    const dRes = await fetch(`${OO_BASE}/${slug}/decodeInputData`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ data: calldata, method: 'swap' }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const dBody = await dRes.json().catch(() => null);
+    const referrer = dBody?.desc?.referrer ?? dBody?.data?.desc?.referrer ?? null;
+    if (!referrer) {
+      console.log(bad('referrer MISSING from the decoded calldata — this swap would pay us nothing (the client refuses to sign: FEE_NOT_APPLIED)'));
+      failures += 1;
+      return;
+    }
+    if (String(referrer).toLowerCase() !== resolved.address.toLowerCase()) {
+      console.log(bad(`fee would go to ${referrer}, NOT ${resolved.address}`));
+      failures += 1;
+      return;
+    }
+    console.log(ok(`decoded calldata carries referrer ${referrer} — ${percent}% (${FEE_BPS} bps) of the input token`));
+
+    /* 3. ARITHMETIC */
+    const expected = (amountIn * BigInt(FEE_BPS)) / 10000n;
+    console.log(
+      ok(
+        `arithmetic: 1.0 ${gas} in → ${(Number(expected) / 1e18).toFixed(6)} ${gas} fee ` +
+          `(OpenOcean keeps 20% of it — our net is ${(Number(expected) * 0.8 / 1e18).toFixed(6)} ${gas})`
+      )
+    );
+  } catch (e) {
+    console.log(warn(`OpenOcean live check failed: ${String(e.message).slice(0, 80)}`));
+  }
+}
 
 async function checkChain(row) {
   const { chainId, family, label } = row;
@@ -110,10 +250,16 @@ async function checkChain(row) {
   console.log(ok(`recipient ${resolved.address}${resolved.fallback ? ' (via fallback)' : ''}`));
   console.log(`  gas on this network is paid in ${row.gas}`);
 
-  /* Non-EVM chains have no aggregator route to test — swaps do not run there
-     yet, they are receive-only, so there is nothing further to verify. */
+  /* Chains the Kyber aggregator does not serve: Mantle, Scroll and zkSync Era
+     route through OpenOcean (their gateway 404s on those slugs — live-probed
+     2026-09-11), so the fee echo is verified against OpenOcean instead.
+     Anything with neither source truly is receive-only. */
   const slug = SLUG[chainId];
   if (!slug) {
+    if (OO_SLUG[chainId] && OO_TARGET[chainId]) {
+      await checkOpenOcean(row, resolved);
+      return;
+    }
     console.log(warn('receive-only network — no swap route to verify'));
     return;
   }

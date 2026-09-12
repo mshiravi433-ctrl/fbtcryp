@@ -41,21 +41,51 @@ const NETWORK_SLUG = {
      before being listed — see the note in chains.js. */
   59144: 'linea',
   146: 'sonic',
-  /* Official KyberSwap slugs — see docs/NETWORKS-ADD-FA.md. The live fee-echo
-     quote test that Linea/Sonic passed has NOT been rerun here (sandbox has no
-     access to the aggregator); run it before enabling these for real volume. */
-  5000: 'mantle',
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
+  /* Mantle, Scroll and zkSync Era keep their slugs for reference (the server
+     proxy mirrors this map), but Kyber's gateway answers HTTP 404 for all
+     three — see KYBER_LIVE below. Swaps on them route through OpenOcean. */
+  5000: 'mantle',
   534352: 'scroll',
   324: 'zksync'
 };
 
+/**
+ * Chains Kyber's v1 aggregator ACTUALLY serves — live-probed 2026-09-11.
+ *
+ * ─── WHY THIS SET EXISTS ────────────────────────────────────────────────────
+ * «مسیری بین این دو توکن وجود ندارد» on the newly added networks was not a
+ * liquidity problem. Kyber's gateway answers HTTP 404 for the `mantle`,
+ * `scroll` and `zksync` slugs — their own supported-networks page lists those
+ * rows WITHOUT the aggregator check, and probing
+ * aggregator-api.kyberswap.com/{slug}/api/v1/routes returned 404 for all
+ * three while linea/sonic/berachain/unichain/monad returned real routes in
+ * the same minute. A slug in NETWORK_SLUG therefore no longer means "Kyber
+ * routes this chain": asking a dead endpoint made Kyber the guaranteed loser
+ * of every comparison on those chains, and because OpenOcean ran on a 3s
+ * bonus-leash designed for a SECOND opinion, the screen answered "no route"
+ * whenever OpenOcean was merely slow.
+ *
+ * On chains absent from this set, swap.js does not ask Kyber at all and
+ * promotes OpenOcean to the PRIMARY source with a real (longer) timeout.
+ * Re-probe with `node scripts/verify-fees.mjs`; if Kyber ever serves one of
+ * these slugs again, add the chain id here and swaps get their second
+ * opinion back automatically.
+ */
+const KYBER_LIVE = new Set([
+  56, 1, 137, 42161, 10, 8453, 43114, // the original seven
+  59144, 146,                          // Linea, Sonic — fee-echo verified
+  80094, 130, 143                      // Berachain, Unichain, Monad — probed live 2026-09-11
+]);
+
 /** Identifies our app to KyberSwap. Not a secret, not an API key. */
 const CLIENT_ID = 'fbt-swap';
 
-export const aggregatorSupports = (chainId) => Boolean(NETWORK_SLUG[chainId]);
+/** True when KyberSwap can actually route this chain (slug AND live-probed). */
+export const aggregatorSupports = (chainId) =>
+  Boolean(NETWORK_SLUG[chainId]) && KYBER_LIVE.has(Number(chainId));
 
 /** Map our token shape to what the aggregator expects. */
 export const toAggAddress = (token) => (token.native ? NATIVE_SENTINEL : token.address);

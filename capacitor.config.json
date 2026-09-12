@@ -16,7 +16,9 @@
       "showSpinner": false
     },
     "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": ["badge", "sound", "alert"],
+      "smallIcon": "ic_stat_notification",
+      "iconColor": "#00E5FF"
     }
   }
 }

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  STATUS-BAR / SHADE SMALL ICON — the FBT mark as a monochrome vector.
+
+  «نوار نوتیفیکیشن موبایل باید مدرن باشد: لوگوی SVG و رنگ‌ها درست» — until this
+  file existed, every notification Android posted (FCM messages included, when
+  the app is closed) fell back to the LAUNCHER icon: a 512px neon artwork the
+  system silhouettes into an unrecognisable white blob at 24dp. Android's rule
+  for small icons is alpha-only — one flat colour the OS tints — so the mark
+  is drawn here as pure white geometry: the circular two-arrow swap glyph of
+  the logo, the same coordinates scripts/gen-notification-icons.mjs rasterises
+  for the web badge PNGs, so shade, status bar and browser all show one brand.
+
+  Wired three ways, because Android looks the icon up in three places:
+    • AndroidManifest  com.google.firebase.messaging.default_notification_icon
+    • FCM payload      android.notification.icon  (server/fcm.js)
+    • Capacitor plugin config "smallIcon" (capacitor.config.json), whose
+      built-in fallback name is aliased to this drawable in values/push_icon.xml
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- right arc: top → bottom-right, clockwise -->
+    <path
+        android:pathData="M13.94,4.76 A7.5,7.5 0 0 1 13.94,19.24"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- left arc: bottom → top-left, clockwise -->
+    <path
+        android:pathData="M10.06,19.24 A7.5,7.5 0 0 1 10.06,4.76"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- right arrowhead, pointing down the way the cycle flows -->
+    <path
+        android:pathData="M10.08,20.28 L14.61,21.75 L13.27,16.73 Z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- left arrowhead, pointing up -->
+    <path
+        android:pathData="M13.92,3.72 L9.39,2.25 L10.73,7.27 Z"
+        android:fillColor="#FFFFFFFF" />
+</vector>

@@ -49,8 +49,11 @@ import { getTokensSync } from './tokenLists.js';
  * chain almost always has better liquidity there. What matters most is that
  * they are HERE AT ALL — a chain absent from this list is a chain whose
  * curated tokens (MNT, BERA, MON) the coin page answers "cannot swap" for.
+ * Scroll (534352) and zkSync Era (324) were exactly that bug: shipped in
+ * chains.js, forgotten here, so any coin whose only contract lives on them
+ * (SCR, ZK, …) had no swap target at all.
  */
-const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 1];
+const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 1];
 
 /**
  * ─── SOLANA ITSELF IS CURATED, NOT A COIN-VENUE LOOKUP ─────────────────────

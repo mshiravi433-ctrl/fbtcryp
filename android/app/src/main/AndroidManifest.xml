@@ -12,6 +12,24 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/AppTheme">
 
+        <!--
+          Notification presentation defaults (Android 8+ FCM channel-less
+          messages and any notification the OS builds on our behalf).
+
+          Without these, Android's fallback small icon is the LAUNCHER icon —
+          a 512px neon artwork squashed to 24dp and silhouetted into a white
+          blob. `ic_stat_notification` is the monochrome brand mark (a real
+          vector, res/drawable/), and the colour is the brand cyan already
+          defined as brand_accent — the same #00E5FF the theme, splash and
+          web notification icons use, so the shade matches the app.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/brand_accent" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"

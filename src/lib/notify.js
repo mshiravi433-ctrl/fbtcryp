@@ -794,6 +794,40 @@ export async function autoRegisterNativePush() {
 }
 
 /**
+ * Silent web-push refresh for devices that ALREADY opted in.
+ *
+ * «نوتیفیکیشن باید حتی وقتی اپ یا سایت بسته است برسد» — a web push survives a
+ * closed SITE (the service worker is woken by the push service itself), but
+ * not a lost subscription: clearing site data, an expired push subscription
+ * or a service-worker eviction all drop the endpoint while the server still
+ * believes it holds one, and every later send then 404s into the void. The
+ * user opted in once; making them find the toggle again to fix an invisible
+ * break is a silent failure of the feature they asked for.
+ *
+ * Deliberately narrow: it only ever runs for a device whose stored settings
+ * say "opted in", and only when the OS permission is still 'granted' — so it
+ * can re-subscribe, never prompt. Native devices have their own boot-time
+ * path (autoRegisterNativePush) and are skipped here.
+ */
+export async function refreshWebPushIfOptedIn() {
+  if (isNativeApp()) return { ok: false, reason: 'NATIVE' };
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+    return { ok: false, reason: 'NOT_GRANTED' };
+  }
+  const s = getNotifySettings();
+  if (!s.pushSubscribed && !s.news) return { ok: false, reason: 'NOT_OPTED_IN' };
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    if (!reg?.pushManager) return { ok: false, reason: 'UNSUPPORTED' };
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return { ok: true, reason: 'ALREADY_SUBSCRIBED' };
+    return registerPush();
+  } catch {
+    return { ok: false, reason: 'ERROR' };
+  }
+}
+
+/**
  * Register for push on whichever transport this device actually supports.
  *
  * Callers should use this rather than picking a transport themselves — that

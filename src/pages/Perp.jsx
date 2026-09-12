@@ -15,6 +15,7 @@ import { anyVenueEarns, withReferral } from '../lib/venueReferral';
 import { SPECULATION_ENABLED } from '../lib/features';
 import SegIndicator from '../components/SegIndicator';
 import lazyRetry from '../lib/lazyRetry';
+import '../styles/perp-modern.css';
 
 const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 /*
@@ -193,7 +194,7 @@ export default function Perp() {
           {LazyOnchain && <LazyOnchain />}
         </Suspense>
       ) : (
-        <>
+        <div className="perp-modern">
 
       {/*
         ─── THE RISK NOTICE STAYS VISIBLE; THE EXPLAINER FOLDS ───────────────
@@ -233,34 +234,42 @@ export default function Perp() {
       {loading ? (
         <div className="skel" style={{ height: 150 }} />
       ) : coin && indexOffline ? (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" data-testid="perp-index-unavailable">
+        <motion.section className="card perp-hero perp-hero-offline" variants={riseIn} initial="hidden" animate="show" data-testid="perp-index-unavailable">
           <div className="faint">{coin.symbol}-PERP · {t('perp.indexPrice')}</div>
           <p className="notice" style={{ marginTop: 8 }}>{t('perp.marketDataUnavailable')}</p>
         </motion.section>
       ) : coin ? (
-        <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+        <motion.section className="card card-rgb perp-hero" variants={riseIn} initial="hidden" animate="show">
           <div className="sheen" />
-          <div className="row-between">
-            <div>
-              <div className="faint">{coin.symbol}-PERP · {t('perp.indexPrice')}</div>
-              <div className="stat-value">
+          <div className="perp-hero-top">
+            <div className="perp-hero-price">
+              <div className="perp-hero-tag">
+                <span className="perp-hero-sym">{coin.symbol}-PERP</span>
+                <span className="perp-hero-live" aria-hidden="true"><i /></span>
+                <span className="faint">{t('perp.indexPrice')}</span>
+              </div>
+              <div className="stat-value perp-hero-value">
                 <AnimatedNumber value={coin.price} format={(v) => `$${fmtPrice(v)}`} />
               </div>
-              <span className={`pill ${coin.change24h >= 0 ? 'pill-up' : 'pill-down'}`} style={{ marginTop: 5 }}>
+              <span className={`pill ${coin.change24h >= 0 ? 'pill-up' : 'pill-down'}`}>
                 {fmtPct(coin.change24h)}
               </span>
             </div>
-            <div style={{ textAlign: 'end' }}>
-              <div className="faint">{t('coin.high24h')}</div>
-              <div className="mono" style={{ fontSize: 12 }}>${fmtPrice(coin.high24h)}</div>
-              <div className="faint" style={{ marginTop: 4 }}>{t('coin.low24h')}</div>
-              <div className="mono" style={{ fontSize: 12 }}>${fmtPrice(coin.low24h)}</div>
+            <div className="perp-hero-range">
+              <div className="perp-hero-range-cell">
+                <span className="faint">{t('coin.high24h')}</span>
+                <span className="mono perp-hero-range-high">${fmtPrice(coin.high24h)}</span>
+              </div>
+              <div className="perp-hero-range-cell">
+                <span className="faint">{t('coin.low24h')}</span>
+                <span className="mono perp-hero-range-low">${fmtPrice(coin.low24h)}</span>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: 10 }}>
+          <div className="perp-hero-spark">
             <Sparkline data={coin.sparkline ?? []} up={coin.change24h >= 0} width={440} height={56} strokeWidth={2} />
           </div>
-          <p className="faint" style={{ marginTop: 8 }}>{t('perp.indexNote')}</p>
+          <p className="faint perp-hero-note">{t('perp.indexNote')}</p>
         </motion.section>
       ) : null}
 
@@ -278,14 +287,14 @@ export default function Perp() {
       <FundingPanel />
 
       {/* ---------- why we don't run the engine ---------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card perp-honest" variants={riseIn} initial="hidden" animate="show">
         <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}>
+          <span className="perp-honest-icon" aria-hidden="true">
             <IconShield width={20} height={20} />
           </span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t('perp.honestTitle')}</div>
-            <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t('perp.honestBody')}</p>
+            <div className="perp-honest-title">{t('perp.honestTitle')}</div>
+            <p className="muted perp-honest-body">{t('perp.honestBody')}</p>
           </div>
         </div>
       </motion.section>
@@ -303,15 +312,16 @@ export default function Perp() {
         Explaining it BEFORE the venue list is deliberate. After the list is
         after the decision.
       */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card perp-learn" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 10 }}>{t('perp.learnTitle')}</p>
         <div className="stack" style={{ gap: 12 }}>
-          {['what', 'funding', 'liquidation', 'leverage', 'costs'].map((k) => (
-            <div key={k}>
-              <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 3 }}>
+          {['what', 'funding', 'liquidation', 'leverage', 'costs'].map((k, i) => (
+            <div key={k} className="perp-learn-item">
+              <div className="perp-learn-q">
+                <span className="perp-learn-num" aria-hidden="true">{i + 1}</span>
                 {t(`perp.learn.${k}.q`)}
               </div>
-              <p className="muted" style={{ fontSize: 12.2, lineHeight: 1.8, margin: 0 }}>
+              <p className="muted perp-learn-a">
                 {t(`perp.learn.${k}.a`)}
               </p>
             </div>
@@ -323,25 +333,27 @@ export default function Perp() {
           land; a column showing that 50x liquidates on a 2% move does.
         */}
         <p className="section-label" style={{ margin: '14px 0 8px' }}>{t('perp.liqTitle')}</p>
-        <table className="perp-liq">
-          <thead>
-            <tr>
-              <th>{t('perp.liqLeverage')}</th>
-              <th>{t('perp.liqMove')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[2, 5, 10, 25, 50, 100].map((x) => (
-              <tr key={x}>
-                <td className="mono">{x}×</td>
-                {/* 100/x, the actual arithmetic — not a rounded illustration. */}
-                <td className="mono" style={{ color: x >= 25 ? 'var(--down)' : 'var(--text-2)' }}>
-                  {(100 / x).toFixed(x >= 50 ? 1 : 0)}%
-                </td>
+        <div className="perp-liq-wrap">
+          <table className="perp-liq">
+            <thead>
+              <tr>
+                <th>{t('perp.liqLeverage')}</th>
+                <th>{t('perp.liqMove')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {[2, 5, 10, 25, 50, 100].map((x) => (
+                <tr key={x} className={x >= 25 ? 'perp-liq-danger' : ''}>
+                  <td className="mono"><span className="perp-liq-x">{x}×</span></td>
+                  {/* 100/x, the actual arithmetic — not a rounded illustration. */}
+                  <td className="mono" style={{ color: x >= 25 ? 'var(--down)' : 'var(--text-2)' }}>
+                    {(100 / x).toFixed(x >= 50 ? 1 : 0)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7 }}>
           {t('perp.liqNote')}
         </p>
@@ -350,29 +362,32 @@ export default function Perp() {
       {/* ---------- venues ---------- */}
       <section>
         <p className="section-label">{t('perp.venues')}</p>
-        <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+        <motion.div className="perp-venues" variants={stagger} initial="hidden" animate="show">
           {VENUES.map((v) => (
             <motion.button
               key={v.id}
-              className="wallet-option"
+              className="perp-venue"
+              style={{ '--perp-venue-accent': v.color }}
               variants={riseIn}
               whileTap={{ scale: 0.985 }}
               onClick={() => openVenue(v.id, v.url)}
             >
-              <span className="wallet-badge" style={{ color: v.color }}>
+              <span className="perp-venue-badge">
                 {t(`perp.venue.${v.id}.short`)}
               </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+              <span className="perp-venue-body">
+                <span className="perp-venue-name">
                   {t(`perp.venue.${v.id}.name`)}
                 </span>
-                <span className="set-row-sub">{t(`perp.venue.${v.id}.desc`)}</span>
-                <span className="row" style={{ gap: 5, marginTop: 5 }}>
+                <span className="set-row-sub perp-venue-desc">{t(`perp.venue.${v.id}.desc`)}</span>
+                <span className="perp-venue-pills">
                   <span className="pill pill-neutral">{v.pairs} {t('perp.pairs')}</span>
                   <span className="pill pill-rgb">{t('perp.upTo')} {v.leverage}</span>
                 </span>
               </span>
-              <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+              <span className="perp-venue-go" aria-hidden="true">
+                <IconExternal width={16} height={16} />
+              </span>
             </motion.button>
           ))}
         </motion.div>
@@ -397,7 +412,7 @@ export default function Perp() {
       </InfoBox>
 
       <motion.button
-        className="card card-rgb"
+        className="card card-rgb perp-cta"
         variants={riseIn}
         initial="hidden"
         animate="show"
@@ -408,13 +423,13 @@ export default function Perp() {
         <div className="sheen" />
         <div className="row-between">
           <div>
-            <div style={{ fontWeight: 700 }}>{t('perp.tryPredict')}</div>
+            <div className="perp-cta-title">{t('perp.tryPredict')}</div>
             <div className="faint">{t('perp.tryPredictSub')}</div>
           </div>
-          <span style={{ fontSize: 20 }}>›</span>
+          <span className="perp-cta-arrow" aria-hidden="true">›</span>
         </div>
       </motion.button>
-        </>
+        </div>
       )}
     </PageTransition>
   );
