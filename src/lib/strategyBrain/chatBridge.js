@@ -219,7 +219,7 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
         inflowUsd: num(flows.inflowUsd),
         outflowUsd: num(flows.outflowUsd),
         whaleEvents: num(ctx?.overview?.metrics?.whaleActivity?.value),
-        tokens: (ctx?.overview?.tokenActivity || []).slice(0, 5).map((t) => ({ symbol: t.symbol, netUsd: num(t.netUsd) })),
+        tokens: (Array.isArray(ctx?.overview?.tokenActivity) ? ctx.overview.tokenActivity : []).slice(0, 5).map((t) => ({ symbol: t.symbol, netUsd: num(t.netUsd) })),
         dataPoints: (ctx?.dataPoints || []).slice(0, 6)
       };
     },

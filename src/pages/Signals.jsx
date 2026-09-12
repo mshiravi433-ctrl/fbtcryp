@@ -1460,15 +1460,29 @@ export default function Signals() {
   useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [activeId]);
 
   /* ── smart-money symbol index (real tokenActivity from the flow engine) ── */
-  const smBySymbol = useMemo(() => {
+  /* Reported after the page already had safeCalc + SectionGuard everywhere:
+     «در صفحه سیگنال هنوز وقتی میزنی گاهی میزنه مشکلی پیش امده». The overview
+     payload is CDN-cached (s-maxage=60, stale-while-revalidate=300), so a
+     proxy or a stale edge entry can hand back an overview whose tokenActivity
+     is NOT an array — an object, a number, a boolean. That row is truthy, so
+     `?? []` kept it, and the bare `for…of` threw «is not iterable» HERE, in
+     the page body — outside every SectionGuard, straight into RouteBoundary:
+     the whole screen became the crash card. «گاهی», because only responses
+     served from the stale cache carry the drifted shape; the live server
+     always sends an array. So the page's own law applies one read deeper:
+     the field is coerced to an array first, and the whole index computation
+     is a safeCalc — one bad field costs an empty symbol index (cards simply
+     lose their smart-money line), never the route. */
+  const smBySymbol = useMemo(() => safeCalc(() => {
     const m = new Map();
-    for (const r of sm?.tokenActivity ?? []) {
+    const tokenRows = Array.isArray(sm?.tokenActivity) ? sm.tokenActivity : [];
+    for (const r of tokenRows) {
       if (!r?.symbol) continue;
       const prev = m.get(r.symbol);
       if (!prev || Math.abs(r.netUsd ?? 0) > Math.abs(prev.netUsd ?? 0)) m.set(r.symbol, r);
     }
     return m;
-  }, [sm]);
+  }, new Map()), [sm]);
 
   /* ── Global signal cards (deterministic engine over real market data) ── */
   const globalSignals = useMemo(() => {
@@ -1986,11 +2000,15 @@ export default function Signals() {
         <p style={{ fontSize: 12.5, lineHeight: 1.9 }}>{t('signals.intel.disclaimer')} — {t('signals.disclaimer')}</p>
       </InfoBox>
 
-      {/* A dead modal closes instead of taking the page with it. */}
-      <SectionGuard onError={() => setWhy(null)}>
+      {/* A dead modal closes instead of taking the page with it. resetKey so
+          the NEXT open retries: without it the guard would sit in its error
+          state for the rest of the session and every later tap on Why or the
+          bell would do nothing at all — a crash once, then a silent dead
+          button. A fresh open is a fresh render of the modal with new data. */}
+      <SectionGuard resetKey={why ? String(why?.signal?.coin?.id ?? 'open') : 'closed'} onError={() => setWhy(null)}>
         <WhyModal why={why} onClose={() => setWhy(null)} />
       </SectionGuard>
-      <SectionGuard onError={() => setAlertFor(null)}>
+      <SectionGuard resetKey={alertFor ? String(alertFor) : 'closed'} onError={() => setAlertFor(null)}>
         <AlertSheet symbol={alertFor} onClose={() => setAlertFor(null)} />
       </SectionGuard>
     </PageTransition>

@@ -27,7 +27,7 @@ import {
 /** Convert whale-ish flow events into the adapter's event shape. */
 function toWhaleEvents(overview) {
   const rows = [];
-  for (const r of overview?.tokenActivity || []) {
+  for (const r of Array.isArray(overview?.tokenActivity) ? overview.tokenActivity : []) {
     rows.push({
       kind: r.netUsd >= 0 ? 'outflow' : 'inflow',
       valueUsd: Math.abs(r.netUsd || 0),
@@ -80,7 +80,7 @@ function buildDataPoints(overview) {
     out.push({ label: 'Exchange outflow USD', source: 'onchain:cex-registry', observedAt: at, value: f.outflowUsd || 0, unit: 'usd' });
     out.push({ label: 'Net exchange flow USD', source: 'onchain:cex-registry', observedAt: at, value: f.netUsd || 0, unit: 'usd' });
   }
-  for (const r of (overview?.tokenActivity || []).slice(0, 5)) {
+  for (const r of (Array.isArray(overview?.tokenActivity) ? overview.tokenActivity : []).slice(0, 5)) {
     out.push({ label: `Smart-money net flow ${r.symbol}`, source: 'onchain:wallet-flow', observedAt: at, value: r.netUsd || 0, unit: 'usd' });
   }
   return out;
@@ -92,7 +92,7 @@ function buildDataPoints(overview) {
  */
 export async function whaleTokenRanking({ window = '24h' } = {}) {
   const overview = await fetchOverview(window);
-  return (overview?.tokenActivity || []).map((r) => ({
+  return (Array.isArray(overview?.tokenActivity) ? overview.tokenActivity : []).map((r) => ({
     symbol: r.symbol,
     chain: r.chainShort,
     netUsd: r.netUsd,

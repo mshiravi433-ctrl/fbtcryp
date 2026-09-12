@@ -1040,6 +1040,33 @@ installDom();
 const { run: runSignalsFuzz } = await import('./.out/signalsfuzz/signals-select-fuzz-probe.js');
 report('signals selection fuzz (16 hostile shapes · no route crash)', await runSignalsFuzz(document.getElementById('r')));
 
+/* ------------------ 4b₄. Signals crash hunt ------------------------------- */
+/*
+ * The report, AFTER the page already had safeCalc + SectionGuard everywhere:
+ *   «در صفحه سیگنال هنوز وقتی میزنی گاهی میزنه مشکلی پیش امده، دوباره
+ *    امتحان کنید»
+ *
+ * The suites above pass — so this one feeds the shapes none of them did:
+ * the smart-money overview whose tokenActivity arrives as a truthy
+ * NON-iterable (an object / number / boolean — what a stale CDN entry or a
+ * proxy hands back, since s-maxage=60 + stale-while-revalidate=300 serve old
+ * payloads for minutes), whole endpoints resolving to bare primitives
+ * (pulse/chart/global/coin/brief/outlook/why as 42, "x", []…), a pulse whose
+ * NESTED fields are primitives, primitive-branched Solana intel — and it
+ * taps through the picker, both tabs, Why, watch, the alert sheet, the
+ * detail tabs and the horizon switch ON TOP of that data, plus a
+ * taps-during-poll-landing race, because «گاهی» is a race, not a shape.
+ *
+ * This is the suite that caught the bare `for…of` over `sm.tokenActivity`
+ * throwing «is not iterable» in the page BODY — outside every SectionGuard,
+ * straight into RouteBoundary, the reported crash card.
+ */
+console.log('\n▸ building the Signals crash-hunt suite…');
+npx(['vite', 'build', '-c', 'test/vite.crashhunt.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSignalsCrashHunt } = await import('./.out/crashhunt/signals-crash-hunt-probe.js');
+report('signals crash hunt (33 hostile shapes + tap sweep · no route crash)', await runSignalsCrashHunt(document.getElementById('r')));
+
 /* ------------------ 4b-2. Global-intelligence CROSS tab, in Persian ----------- */
 /*
  * The «تحلیل کراس» fix, asserted on the RENDERED Persian screen rather than on
