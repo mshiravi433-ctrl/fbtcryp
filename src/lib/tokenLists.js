@@ -94,8 +94,26 @@ const LIST_SOURCES = {
   534352: [
     { id: 'coingecko-scroll', url: 'https://tokens.coingecko.com/scroll/all.json' }
   ],
+  /*
+   * Corrected 2026-09-13 — «Zk هم فقط ۵ تا توکن داره». CoinGecko's per-chain
+   * list file is keyed by THEIR network slug, which for zkSync Era is
+   * `zksync`, NOT `zksync-era`. The old URL answered S3 `AccessDenied`, the
+   * fetch failed silently, and the picker fell back to the handful of pinned
+   * curated tokens — exactly the five the user counted. Same file, right
+   * key: tokens.coingecko.com/zksync/all.json serves the full Era universe
+   * (live-checked: WSTETH, ZK, WBTC, CAKE, LUSD, …).
+   */
   324: [
-    { id: 'coingecko-zksync-era', url: 'https://tokens.coingecko.com/zksync-era/all.json' }
+    { id: 'coingecko-zksync', url: 'https://tokens.coingecko.com/zksync/all.json' }
+  ],
+  /*
+   * Robinhood Chain (4663) — CoinGecko serves a dedicated `robinhood` list
+   * (live-checked 2026-09-13: Stock Tokens TSEM/JOBY/SOFI/RGTI/UBER/… plus
+   * the chain's meme layer). This is the long-tail source; the pinned
+   * curated set in chains.js stays the offline floor.
+   */
+  4663: [
+    { id: 'coingecko-robinhood', url: 'https://tokens.coingecko.com/robinhood/all.json' }
   ]
 };
 

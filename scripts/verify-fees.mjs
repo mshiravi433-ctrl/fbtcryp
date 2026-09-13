@@ -61,7 +61,10 @@ const SLUG = {
      actually uses to route them (KYBER_LIVE in src/lib/aggregator.js). */
   80094: 'berachain',
   130: 'unichain',
-  143: 'monad'
+  143: 'monad',
+  /* Robinhood Chain — gateway live-probed 2026-09-13: real routes AND the
+     70 bps fee echoed back with our receiver (see docs/NETWORKS-ADD-FA.md). */
+  4663: 'robinhood'
 };
 
 /*
@@ -85,7 +88,28 @@ const OO_BASE = 'https://open-api.openocean.finance/v4';
 const OO_SLUG = {
   5000: 'mantle',
   534352: 'scroll',
-  324: 'zksync'
+  324: 'zksync',
+  /* Fallback verifier for Robinhood too. Today SLUG[4663]='robinhood' wins
+     (Kyber's gateway is live there), so this row only kicks in if that slug
+     ever dies — exactly the scenario that moved Mantle/Scroll/zkSync here. */
+  4663: '4663'
+};
+
+/* Native-coin address spelling per chain — MIRROR of OO_NATIVE_BY_CHAIN in
+   src/lib/openocean.js (kept in lockstep like the slug tables above).
+   OpenOcean v4 is not uniform: docs.openocean.finance documents 0xEeee…EEeE
+   for eth/bsc/base/arbitrum/optimism/linea/unichain/zksync/scroll but
+   0x0000…0000 for mantle/monad/berachain/sonic/avalanche/robinhood (checked
+   2026-09-13). Sending 0xEeee… to a 0x0 chain is the bug that broke swaps —
+   so this pass quotes with the DOCUMENTED spelling first and falls back to
+   the other one once, exactly like the client does. */
+const OO_EEEE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+const OO_ZERO = '0x0000000000000000000000000000000000000000';
+const OO_NATIVE_SPELLING = {
+  5000: OO_ZERO,
+  534352: OO_EEEE,
+  324: OO_EEEE,
+  4663: OO_ZERO
 };
 
 /* A liquid native -> token pair per OpenOcean-routed chain. Same addresses
@@ -94,7 +118,10 @@ const OO_SLUG = {
 const OO_TARGET = {
   5000: { name: 'USDT', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6 },
   534352: { name: 'USDC', address: '0x06eFdbFF2a14a7c8E15944D1F4A48F9F95F663A4', decimals: 6 },
-  324: { name: 'USDC', address: '0x1d17CbCf0D6D143135aE902365d2E5e2A16538d4', decimals: 6 }
+  324: { name: 'USDC', address: '0x1d17CbCf0D6D143135aE902365d2E5e2A16538d4', decimals: 6 },
+  /* Robinhood Chain — USDG, the quote asset inside every live ETH→stock route
+     on the chain (Blockscout token record, checked 2026-09-13). */
+  4663: { name: 'USDG', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6 }
 };
 
 /**
@@ -119,7 +146,11 @@ const STABLE = {
      (OO_TARGET) instead. */
   80094: '0x6969696969696969696969696969696969696969', // WBERA
   130: '0x4200000000000000000000000000000000000006', // WETH
-  143: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' // WMON
+  143: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A', // WMON
+  /* Robinhood Chain — USDG (Global Dollar), the stablecoin quote asset that
+     sits inside every live KyberSwap ETH→stock route on the chain
+     (Blockscout token record, checked 2026-09-13). */
+  4663: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168'
 };
 
 const arg = (name) => {
@@ -148,37 +179,54 @@ async function checkOpenOcean(row, resolved) {
   const amountIn = 10n ** 18n; // 1 native unit
   const percent = String(FEE_BPS / 100); // 70 bps -> "0.7" — OO's referrerFee is a PERCENT
 
-  const params = new URLSearchParams({
-    inTokenAddress: NATIVE,
-    outTokenAddress: target.address,
-    amountDecimals: String(amountIn),
-    gasPriceDecimals: '1000000000', // 1 gwei reference — only feeds OO's gas optimisation
-    slippage: '0.5',
-    referrer: resolved.address,
-    referrerFee: percent
-  });
+  /* The client's spelling order: documented first, the other spelling once as
+     a fallback. A wrong spelling on a strict chain is indistinguishable from
+     "no route" — quoting only one spelling would make this gate lie. */
+  const documented = OO_NATIVE_SPELLING[chainId] ?? NATIVE;
+  const fallback = documented === OO_EEEE ? OO_ZERO : OO_EEEE;
+
+  const makeParams = (nativeIn) => {
+    const p = new URLSearchParams({
+      inTokenAddress: nativeIn,
+      outTokenAddress: target.address,
+      amountDecimals: String(amountIn),
+      gasPriceDecimals: '1000000000', // 1 gwei reference — only feeds OO's gas optimisation
+      slippage: '0.5',
+      referrer: resolved.address,
+      referrerFee: percent
+    });
+    return p;
+  };
 
   try {
+    let qBody = null;
+    let usedSpelling = documented;
+    for (const nativeIn of [documented, fallback]) {
+      const qRes = await fetch(`${OO_BASE}/${slug}/quote?${makeParams(nativeIn)}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(20000)
+      });
+      const body = await qRes.json().catch(() => null);
+      if (qRes.ok && body?.code === 200 && body?.data && BigInt(body.data.outAmount ?? '0') > 0n) {
+        qBody = body;
+        usedSpelling = nativeIn;
+        break;
+      }
+      qBody = body;
+    }
+
     /* 1. ROUTE — the quote must return a real output amount. A no-route here
        IS the user-visible «مسیری بین این دو توکن وجود ندارد», so unlike a
        network hiccup it counts as a failure, not a warning. */
-    const qRes = await fetch(`${OO_BASE}/${slug}/quote?${params}`, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(20000)
-    });
-    const qBody = await qRes.json().catch(() => null);
-    if (!qRes.ok || qBody?.code !== 200) {
-      console.log(warn(`OpenOcean quote returned HTTP ${qRes.status}${qBody?.message ? ` (${qBody.message})` : ''} — could not verify live`));
-      return;
-    }
-    const out = BigInt(qBody?.data?.outAmount ?? '0');
-    if (out <= 0n) {
-      console.log(bad('OpenOcean returned NO ROUTE — swaps on this chain would fail with «مسیری بین این دو توکن وجود ندارد»'));
+    if (!qBody || BigInt(qBody?.data?.outAmount ?? '0') <= 0n) {
+      const msg = qBody?.message ? ` (${qBody.message})` : '';
+      console.log(bad(`OpenOcean returned NO ROUTE on BOTH native spellings${msg} — swaps on this chain would fail with «مسیری بین این دو توکن وجود ندارد»`));
       failures += 1;
       return;
     }
+    const out = BigInt(qBody.data.outAmount);
     const dexes = Array.isArray(qBody.data.dexes) ? qBody.data.dexes.join(', ') : 'direct';
-    console.log(ok(`OpenOcean route exists via ${dexes} — 1 ${gas} → ${(Number(out) / 10 ** target.decimals).toFixed(4)} ${target.name}`));
+    console.log(ok(`OpenOcean route exists via ${dexes} (native spelling ${usedSpelling === OO_ZERO ? '0x000…0000' : '0xEeee…EEeE'}) — 1 ${gas} → ${(Number(out) / 10 ** target.decimals).toFixed(4)} ${target.name}`));
 
     /* 2. ECHO — build the calldata that would be signed and read our
        `referrer` back OUT of it through their /decodeInputData endpoint.
@@ -186,7 +234,7 @@ async function checkOpenOcean(row, resolved) {
        we pass the payout address, which cannot receive a transaction nobody
        signed. This mirrors verifyOpenOceanFee() in src/lib/openocean.js —
        the client refuses to sign unless this same proof passes. */
-    const sParams = new URLSearchParams(params);
+    const sParams = makeParams(usedSpelling);
     sParams.set('account', resolved.address);
     const sRes = await fetch(`${OO_BASE}/${slug}/swap?${sParams}`, {
       headers: { accept: 'application/json' },

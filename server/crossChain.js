@@ -78,6 +78,7 @@ export const WALLET_SUPPORTED_CHAIN_IDS = Object.freeze([
   143,      /* Monad */
   534352,   /* Scroll */
   324,      /* zkSync Era */
+  4663,     /* Robinhood Chain */
   1151111081099710 /* Solana (SVM — signed through the Solana wallet adapter) */
 ]);
 

@@ -138,7 +138,7 @@ export function venueRoute(venue, { side = 'buy' } = {}) {
      screen can trade. Scroll (534352) and zkSync Era (324) were missing
      while already live in chains.js — that is precisely the failure this
      comment warns about. */
-  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 1];
+  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663, 1];
   entries.sort(
     (a, b) => PREFERENCE.indexOf(Number(a[0])) - PREFERENCE.indexOf(Number(b[0]))
   );

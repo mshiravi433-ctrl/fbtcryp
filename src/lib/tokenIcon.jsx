@@ -63,7 +63,11 @@ const TW_CHAIN = {
      shipped the networks, which is exactly the "verified token has no
      picture" degradation the comment above warns about. */
   534352: 'scroll',
-  324: 'zksync'
+  324: 'zksync',
+  /* Robinhood Chain — TrustWallet's assets repo keys the chain under this
+     directory name; if it is absent the onError walk just falls through to
+     the monogram, so a wrong guess here can only ever lose a picture. */
+  4663: 'robinhoodchain'
 };
 
 /**

@@ -90,7 +90,13 @@ export const PLATFORM_SLUGS = {
   143: 'monad',
   /* CoinGecko's own platform ids for the Scroll + zkSync Era additions. */
   534352: 'scroll',
-  324: 'zksync'
+  324: 'zksync',
+  /* Robinhood Chain — same slug CoinGecko's own token-list CDN serves the
+     chain under (tokens.coingecko.com/robinhood/all.json, live-checked
+     2026-09-13). Their CDN slugs have matched the platform ids for every
+     other chain in this map; if a future price pull matches nothing, this
+     literal is the first thing to re-check. */
+  4663: 'robinhood'
 };
 
 /** Six hours. New listings are not urgent; hammering a free API is rude. */

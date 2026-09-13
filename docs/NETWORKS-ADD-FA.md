@@ -157,3 +157,58 @@ node scripts/verify-fees.mjs --chain 5000     # Mantle: همان مسیر
 خروجی مورد انتظار روی زنجیره‌های OpenOcean: «✓ OpenOcean route exists via …» و
 «✓ decoded calldata carries referrer 0xaf5C…24d6». اگر Kyber روزی اسلاگی را دوباره سرو
 کند، کافی است chainId به `KYBER_LIVE` برگردد — مقایسهٔ دومنعی خودبه‌خود برمی‌گردد.
+
+---
+
+## ۷) اصلاحیهٔ ۲۰۲۶-۰۹-۱۳ — چهار شبکهٔ خراب، توکن‌های zkSync و افزودن Robinhood Chain
+
+### علت ریشه‌ای سواپ خراب روی Mantle/Monad/Scroll/zkSync (با شاهد، نه حدس)
+
+قرارداد آدرس سکهٔ بومی در OpenOcean v4 روی شبکه‌ها **یکنواخت نیست**. صفحهٔ رسمی
+supported-chains دو قرارداد را مستند می‌کند: `0x0000…0000` برای
+mantle/monad/berachain/sonic/avalanche/…/robinhood و `0xEeee…EEeE` برای
+eth/bsc/base/arbitrum/optimism/linea/unichain/zksync/scroll. کد قدیمی همه‌جا
+`0xEeee…` می‌فرستاد؛ روی آن چهار شبکه (به‌جز scroll که هر دو را می‌پذیرد) یعنی
+«توکن ورودی نامعتبر» — کوئوت صفر یا خطا، و پیام کاربر «دوباره امتحان کنید».
+
+### چه چیزی عوض شد
+
+- `src/lib/openocean.js` — نقشهٔ `OO_NATIVE_BY_CHAIN` (املای مستند هر زنجیره) +
+  ارسال **دوامایی**: کوئوت اول با املای مستند، اگر رد شد یک بار با املای دیگر
+  (timeout = min(leash, 6000ms)). املای برنده در `quote.nativeAddress` برمی‌گردد
+  و تا calldata نهایی (buildOpenOceanSwap → execute) همان حفظ می‌شود.
+  خروجی قدیمی `toOOAddress` (sentinel) صرفاً برای سازگاری تست‌ها سر جایش است.
+- `src/lib/chains.js` — zkSync Era لیست منتخبش از ۵ توکن به ۸ رسید (ZK، WETH
+  و USDC اضافه شدند؛ ZK = `0x5A7d…af3E` طبق zknation.io) و **DAI جعلیِ Scroll
+  حذف شد** (لیست رسمی CoinGecko اسکورل DAI ندارد). Mantle WETH به آدرس رسمی
+  `0xdead…1111` اصلاح شد.
+- `src/lib/tokenLists.js` — حالا برای هر زنجیره لیست رسمی CoinGecko
+  (`tokens.coingecko.com/{platform}/all.json`) را هم merge می‌کند (منتخب برنده است،
+  سقف ۴۰۰۰ توکن) → انتخاب‌گر zkSync دیگر ۵ تایی نیست؛ صدها توکن دارد.
+- **Robinhood Chain (4663)** — با همان گیت چندجایگاهی بالا اضافه شد:
+  chains.js/aggregator.js/adapters.js/crossChain.js/coinToSwap/coinVenue/
+  permissions/tokenIcon/coinIndex/payout/verify-fees/swapProxy (اسلاگ OO: `4663`)
+  و اسلاگ Kyber `robinhood` (پروب زنده: uniswap-v4 + pancake-infinity + tessera؛
+  هاب‌های نقدشوندگی WETH و USDG). توکن‌های منتخب: ETH/WETH/USDG +
+  سه سهام توکنیزهٔ اثبات‌شده با اکوی کارمزد (RGTI/JOBY/SOFI).
+  پلتفرم CoinGecko برای لیست توکن: `robinhood`.
+
+### گیت انتشار، نسخهٔ به‌روز
+
+```bash
+node scripts/verify-fees.mjs --chain 4663      # Robinhood: اکوی Kyber (اسلاگ robinhood زنده است)
+node scripts/verify-fees.mjs --chain 143       # Monad: اکوی Kyber
+node scripts/verify-fees.mjs --chain 5000      # Mantle: مسیر OpenOcean + اکوی referrer
+node scripts/verify-fees.mjs --chain 534352    # Scroll: همان مسیر
+node scripts/verify-fees.mjs --chain 324       # zkSync Era: همان مسیر
+```
+
+مسیر OpenOceanِ این ابزار حالا مثل کلاینت دوامایی عمل می‌کند: کوئوت با املای
+مستندِ بومیِ همان زنجیره (`OO_NATIVE_SPELLING`) و اگر رد شد، یک بار با املای
+دیگر — ردیف 4663 هم در OO_SLUG/OO_TARGET هست تا اگر روزی اسلاگ Kyberِ
+robinhood مرد، گیت همان‌جا ادامه دهد.
+
+توجه: این دومین بار است که نقشه‌های آینه از `EVM_CHAIN_ORDER` جا می‌مانند
+(اولین بار: اصلاحیهٔ ۲۰۲۶-۰۹-۱۱). موقعِ افزودن زنجیرهٔ بعدی، همزمانیِ
+همهٔ نقشه‌های جدول بخش ۳ را با `grep -rn "<chainId>" src server scripts`
+چک کنید — این بار coinToSwap/coinVenue/permissions/crossChain هم اضافه شدند.
