@@ -44,16 +44,22 @@ const NETWORK_SLUG = {
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
+  /* Robinhood Chain — gateway live-probed 2026-09-13: real routes for
+     ETH→RGTI/JOBY/SOFI (uniswap-v3/v4 pools on-chain) AND the 70 bps fee
+     echoed back with our receiver. See chains.js for the full evidence. */
+  4663: 'robinhood',
   /* Mantle, Scroll and zkSync Era keep their slugs for reference (the server
      proxy mirrors this map), but Kyber's gateway answers HTTP 404 for all
-     three — see KYBER_LIVE below. Swaps on them route through OpenOcean. */
+     three — re-probed 2026-09-13, see KYBER_LIVE below. Swaps on them route
+     through OpenOcean. */
   5000: 'mantle',
   534352: 'scroll',
   324: 'zksync'
 };
 
 /**
- * Chains Kyber's v1 aggregator ACTUALLY serves — live-probed 2026-09-11.
+ * Chains Kyber's v1 aggregator ACTUALLY serves — live-probed 2026-09-11,
+ * plus Robinhood Chain probed 2026-09-13.
  *
  * ─── WHY THIS SET EXISTS ────────────────────────────────────────────────────
  * «مسیری بین این دو توکن وجود ندارد» on the newly added networks was not a
@@ -77,7 +83,8 @@ const NETWORK_SLUG = {
 const KYBER_LIVE = new Set([
   56, 1, 137, 42161, 10, 8453, 43114, // the original seven
   59144, 146,                          // Linea, Sonic — fee-echo verified
-  80094, 130, 143                      // Berachain, Unichain, Monad — probed live 2026-09-11
+  80094, 130, 143,                     // Berachain, Unichain, Monad — probed live 2026-09-11
+  4663                                 // Robinhood Chain — probed + fee-echo verified 2026-09-13
 ]);
 
 /** Identifies our app to KyberSwap. Not a secret, not an API key. */

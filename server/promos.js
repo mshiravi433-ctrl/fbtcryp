@@ -41,9 +41,9 @@ export const PROMOS = {
     ar: ['كيف تحرك السوق اليوم؟', 'أسعار حية لأكثر من ألف عملة مجاناً.']
   },
   promo2: {
-    fa: ['سواپ روی ۱۰ شبکه', 'BNB، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا — همه از کیف پول خودت.'],
-    en: ['Swap across 10 networks', 'BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana — all from your own wallet.'],
-    ar: ['التبادل على ١٠ شبكات', 'من محفظتك مباشرة على عشر شبكات.']
+    fa: ['سواپ روی ۱۷ شبکه', 'BNB، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، منتل، براچین، یونی‌چین، موناد، اسکرول، زک‌سینک ارا و رابین‌هود چین — همه از کیف پول خودت.'],
+    en: ['Swap across 17 networks', 'BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood Chain and Solana — all from your own wallet.'],
+    ar: ['التبادل على ١٧ شبكات', 'BNB، الإيثيريوم، بوليجون، أربيتروم، Base، أوبتيميزم، أفالانش، لينيا، سونيك، مانتل، بيراتشين، يوني تشين، موناد، سكرول، zkSync Era و Robinhood Chain — من محفظتك مباشرة.']
   },
   promo3: {
     fa: ['خبرهای امروز رمزارز', 'خلاصه اخبار مهم بازار، هر ۲۴ ساعت یک بار.'],

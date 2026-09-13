@@ -163,6 +163,7 @@ export const PAYOUT_DIRECTORY = [
   { id: 'monad', chainId: 143, family: FAMILY.EVM, label: 'Monad', gas: 'MON', color: '#7c3aed' },
   { id: 'scroll', chainId: 534352, family: FAMILY.EVM, label: 'Scroll (SCR)', gas: 'ETH', color: '#f1c27d' },
   { id: 'zksync', chainId: 324, family: FAMILY.EVM, label: 'zkSync Era (ZK)', gas: 'ETH', color: '#8c8dfc' },
+  { id: 'robinhood', chainId: 4663, family: FAMILY.EVM, label: 'Robinhood Chain (HOOD)', gas: 'ETH', color: '#00c805' },
   { id: 'solana', chainId: null, family: FAMILY.SOLANA, label: 'Solana', gas: 'SOL', color: '#14f195' },
   { id: 'tron', chainId: null, family: FAMILY.TRON, label: 'Tron (TRX / USDT TRC-20)', gas: 'TRX', color: '#ff060a' }
 ];

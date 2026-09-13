@@ -1,3 +1,23 @@
+# ۲۰۲۶-۰۹-۱۳ — تعمیر سواپ روی Mantle/Monad/Scroll/zkSync + توکن‌های zkSync + شبکهٔ Robinhood Chain
+
+چهار شبکه‌ای که «دوباره امتحان کنید» می‌دادند، یک علت مشترک داشتند: املای آدرس
+سکهٔ بومی در OpenOcean v4 روی زنجیره‌ها یکنواخت نیست (`0x0000…0000` روی
+mantle/monad/… در برابر `0xEeee…EEeE` روی eth/bsc/scroll/zksync/…). کد قدیمی
+همه‌جا `0xEeee…` می‌فرستاد. حالا `openocean.js` املای مستند هر زنجیره را از
+نقشهٔ `OO_NATIVE_BY_CHAIN` می‌خواند و اگر رد شد، یک بار با املای دیگر امتحان
+می‌کند؛ املای برنده در `quote.nativeAddress` تا لحظهٔ ساخت calldata حفظ می‌شود.
+
+- **Mantle/Monad/Scroll/zkSync سواپ می‌شوند** — کوئوت + build + execute روی هر چهار.
+- **zkSync Era بیش از ۵ توکن** — لیست منتخب +ZK/WETH/USDC شد و انتخاب‌گر حالا
+  لیست رسمی CoinGecko (`tokens.coingecko.com/zksync/all.json`) را هم مرج می‌کند.
+  DAI جعلیِ Scroll حذف و Mantle WETH به `0xdead…1111` اصلاح شد.
+- **Robinhood Chain (4663) اضافه شد** — نه فقط روی کاغذ: سواپ کامل (OpenOcean
+  اسلاگ `4663` + Kyber `robinhood` با پروب زندهٔ uniswap-v4/pancake-infinity)،
+  گاز ETH، توکن‌های منتخب ETH/WETH/USDG/RGTI/JOBY/SOFI، اکسپلورر
+  robinhoodchain.blockscout.com، و همگام‌سازی همهٔ نقشه‌های آینهٔ
+  EVM_CHAIN_ORDER (coinToSwap/coinVenue/permissions/crossChain/adapters/…).
+- شمارندهٔ شبکه‌ها همه‌جا ۱۷ شد (index.html/README/i18n/About/promo2/FAQ).
+
 # Unreleased — Phase 212–216: مغز عمیق مالی + Route Intelligence بین‌زنجیره‌ای + دارایی‌های سنتی در چرخه تصمیم + آداپتورهای وام واقعی؛ ۱۹۶ فاز، همه لایو
 
 FBT Intent OS از «دستیار اجرا» به «سیستم‌عامل هوش مالی خودمختار» ارتقا یافت.

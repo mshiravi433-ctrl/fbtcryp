@@ -71,6 +71,8 @@ const KYBER_SLUG = {
   80094: 'berachain',
   130: 'unichain',
   143: 'monad',
+  /* Robinhood Chain — gateway live-probed 2026-09-13 (routes + fee echo). */
+  4663: 'robinhood',
   534352: 'scroll',
   324: 'zksync'
 };
@@ -88,15 +90,21 @@ const OO_SLUG = {
   59144: 'linea',
   146: 'sonic',
   5000: 'mantle',
-  80094: 'berachain',
-  130: 'unichain',
+  /* Corrected 2026-09-13 against OpenOcean's supported-chains table: their
+     chain codes are `bera` and `uni` — the previous `berachain`/`unichain`
+     spellings answered 404, so the proxy silently never served the
+     second-opinion quote on those two chains. */
+  80094: 'bera',
+  130: 'uni',
   143: 'monad',
   /* Scroll + zkSync Era — same lockstep rule as above. Since 2026-09-11 these
      two (plus Mantle) are OpenOcean-only chains client-side, so this proxy
      path is their reachability fallback of LAST resort — the one standing
      between a geo-blocked user and «مسیری بین این دو توکن وجود ندارد». */
   534352: 'scroll',
-  324: 'zksync'
+  324: 'zksync',
+  /* Robinhood Chain — OpenOcean's chain code for it IS the chain id. */
+  4663: '4663'
 };
 
 /** Chains Velora supports. Must mirror the SUPPORTED set in lib/velora.js. */

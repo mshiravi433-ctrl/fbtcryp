@@ -52,7 +52,7 @@ export const DEFAULT_POLICY_CAPS = Object.freeze({
  * execution time it is a hard Guardian rejection, and at quote/analysis time
  * it is a named warning (guardian.js).
  */
-const ALLOWED_CHAINS = new Set([1, 10, 56, 130, 137, 146, 195, 196, 324, 501, 5000, 8453, 42161, 43114, 59144, 8757, 81457, 534352]);
+const ALLOWED_CHAINS = new Set([1, 10, 56, 130, 137, 146, 195, 196, 324, 501, 5000, 8453, 42161, 43114, 59144, 8757, 81457, 534352, 4663]);
 const ALLOWED_PROTOCOLS = new Set([
   'swap', 'bridge', 'defi', 'farm', 'futures', 'dydx', 'cex',
   'stablecoin', 'lending', 'liquidity', 'staking', 'rwa', 'investment',

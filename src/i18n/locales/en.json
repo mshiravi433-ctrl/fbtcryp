@@ -2451,7 +2451,9 @@
       "Bittensor": "Bittensor",
       "Sei": "Sei",
       "Joule": "Joule",
-      "Celo Mainnet": "Celo"
+      "Celo Mainnet": "Celo",
+      "Robinhood Chain": "Robinhood Chain",
+      "Robinhood": "Robinhood"
     },
     "projectLabels": {
       "aave-v3": "Aave v3",
@@ -4333,8 +4335,8 @@
       "body": "Live prices for a thousand-plus coins, free and with no signup."
     },
     "promo2": {
-      "title": "Swap across 14 networks",
-      "body": "BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad and Solana — all from your own wallet."
+      "title": "Swap across 17 networks",
+      "body": "BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood Chain and Solana — all from your own wallet."
     },
     "promo3": {
       "title": "Today's crypto headlines",

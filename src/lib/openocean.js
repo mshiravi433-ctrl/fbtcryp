@@ -69,13 +69,20 @@
  * why we do not simply trust the bigger number.
  */
 
-/** OpenOcean uses the same native-coin sentinel as KyberSwap. */
-export const OO_NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-
 const OO_BASE = 'https://open-api.openocean.finance/v4';
 
 /**
  * Chain id -> OpenOcean slug.
+ *
+ * ⚠️ Slugs are OpenOcean's OWN chain codes from their supported-chains table
+ * (docs.openocean.finance/docs/overview/supported-chains, re-checked live
+ * 2026-09-13) — not our names for the chains. Two of these were wrong until
+ * today: OpenOcean's codes are `bera` (not `berachain`) and `uni` (not
+ * `unichain`), so the "second opinion" quote on those two chains never had
+ * a chance — it 404ed inside its 3s leash and nobody noticed, because
+ * KyberSwap happened to be serving them. A slug that silently never works
+ * is worse than no slug: it makes the comparison layer look redundant in
+ * the one case where it is the safety net.
  *
  * Every chain we support on the KyberSwap path is here too — and it MUST be,
  * for a reason the 2026-09 chain additions made concrete: on the newer
@@ -107,22 +114,86 @@ const OO_SLUG = {
   59144: 'linea',
   146: 'sonic',
   5000: 'mantle',
-  80094: 'berachain',
-  130: 'unichain',
+  80094: 'bera',   /* their chain code is `bera`, not `berachain` */
+  130: 'uni',      /* their chain code is `uni`, not `unichain` */
   143: 'monad',
   /* Scroll + zkSync Era + Mantle — OpenOcean serves all three (v4 registry:
      scroll-mainnet, zksync-mainnet, mantle-mainnet). Since 2026-09-11 these
      are not second-opinion slugs: Kyber's aggregator gateway answers HTTP
-     *404* for `scroll`, `zksync` and `mantle`, so OpenOcean is the ONLY
-     routing source on these chains and swap.js gives it a primary-grade
-     timeout there. If a slug ever stops being served the quote fails and
-     the screen says «no route» honestly — there is no other source to fall
-     back to until Kyber's gateway comes back (re-probe: verify-fees.mjs). */
+     *404* for `scroll`, `zksync` and `mantle` (re-probed 2026-09-13), so
+     OpenOcean is the ONLY routing source on these chains and swap.js gives
+     it a primary-grade timeout there. If a slug ever stops being served the
+     quote fails and the screen says «no route» honestly — there is no other
+     source to fall back to until Kyber's gateway comes back (re-probe:
+     verify-fees.mjs). */
   534352: 'scroll',
-  324: 'zksync'
+  324: 'zksync',
+  /* Robinhood Chain — OpenOcean's table lists it with the chain id itself
+     as the chain code: `4663` (Swap API: Yes, native token address 0x0). */
+  4663: '4663'
 };
 
 export const openOceanSupports = (chainId) => Boolean(OO_SLUG[chainId]);
+
+/**
+ * ─── HOW OPENOCEAN SPELLS "THE NATIVE COIN" (per chain) ────────────────────
+ * OpenOcean's supported-chains table publishes a `Native Token Address`
+ * column, and the values are NOT uniform. The Ethereum-family chains take
+ * the classic 0xEeee…EEeE sentinel — but Mantle, Monad, Berachain, Sonic,
+ * Avalanche, Robinhood and friends are listed with the ZERO address, and
+ * Polygon with 0x…1010. A quote request that names the native coin with the
+ * wrong spelling is not a routable request; it is a request for a token
+ * that does not exist, and it dies with an opaque error that the screen
+ * renders as «مسیری بین این دو توکن وجود ندارد» — on exactly the chains
+ * (Mantle/Scroll/zkSync Era) where OpenOcean is the ONLY routing source,
+ * i.e. a total outage.
+ *
+ * So the quote path no longer guesses one spelling: it tries the DOCUMENTED
+ * spelling for the chain first, and on any failure retries once with the
+ * other one. Whichever spelling produced the winning quote is carried on
+ * the quote (`nativeAddress`) and reused at build/sign time, so the
+ * transaction is built exactly like the quote we showed the user.
+ *
+ * Documented values re-read from OpenOcean's table on 2026-09-13.
+ */
+export const OO_NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+export const OO_ZERO = '0x0000000000000000000000000000000000000000';
+
+const OO_NATIVE_BY_CHAIN = {
+  56: OO_NATIVE,
+  1: OO_NATIVE,
+  137: '0x0000000000000000000000000000000000001010', // Polygon's native POL
+  42161: OO_NATIVE,
+  10: OO_NATIVE,
+  8453: OO_NATIVE,
+  43114: OO_ZERO,
+  59144: OO_NATIVE,
+  146: OO_ZERO,
+  130: OO_NATIVE,
+  80094: OO_ZERO,
+  143: OO_ZERO,
+  5000: OO_ZERO,
+  534352: OO_NATIVE,
+  324: OO_NATIVE,
+  4663: OO_ZERO
+};
+
+/** The documented native spelling for a chain (falls back to the sentinel). */
+export const ooNativeAddress = (chainId) => OO_NATIVE_BY_CHAIN[Number(chainId)] ?? OO_NATIVE;
+
+/**
+ * The two spellings a chain may accept, in try order:
+ * the documented one first, the classic sentinel second.
+ */
+function nativeSpellings(chainId) {
+  const documented = ooNativeAddress(chainId);
+  return documented.toLowerCase() === OO_NATIVE.toLowerCase()
+    ? [OO_NATIVE, OO_ZERO]
+    : [documented, OO_NATIVE];
+}
+
+/** Address with the native coin spelled the way THIS quote's chain wants. */
+const asOOAddress = (token, nativeAddress) => (token.native ? nativeAddress : token.address);
 
 export const toOOAddress = (token) => (token.native ? OO_NATIVE : token.address);
 
@@ -276,43 +347,71 @@ export async function getOpenOceanQuote({
   if (!slug) throw new Error('CHAIN_UNSUPPORTED');
 
   const amountInWei = parseUnits(String(amountIn), fromToken.decimals);
-
-  const params = new URLSearchParams({
-    inTokenAddress: toOOAddress(fromToken),
-    outTokenAddress: toOOAddress(toToken),
-    amountDecimals: String(amountInWei),
-    gasPriceDecimals: String(defaultGasPriceWei(chainId)),
-    slippage: String(Math.max(0.05, Math.min(50, slippage)))
-  });
+  const leash = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : OO_TIMEOUT_MS;
 
   /*
-   * Ask for the fee so the comparison is like-for-like.
-   *
-   * OpenOcean expresses `referrerFee` as a PERCENT (1.2 means 1.2%), while we
-   * hold basis points. 70 bps -> 0.7. Getting this conversion wrong by a
-   * factor of 100 would either quote a 70% fee (every quote fails) or a
-   * 0.007% one (we compare against a number we cannot actually charge), so it
-   * is unit-tested.
+   * One quote attempt with a specific native-coin spelling. Everything else
+   * (amount, fee, slippage) is identical between attempts — only the address
+   * that names the chain's gas coin changes, so a retry is a genuinely
+   * different request, not a blind re-send.
    */
-  if (feeBps > 0 && feeReceiver) {
-    params.set('referrer', feeReceiver);
-    params.set('referrerFee', String(bpsToPercent(feeBps)));
+  const quoteOnce = async (nativeAddress, timeout) => {
+    const params = new URLSearchParams({
+      inTokenAddress: asOOAddress(fromToken, nativeAddress),
+      outTokenAddress: asOOAddress(toToken, nativeAddress),
+      amountDecimals: String(amountInWei),
+      gasPriceDecimals: String(defaultGasPriceWei(chainId)),
+      slippage: String(Math.max(0.05, Math.min(50, slippage)))
+    });
+
+    /*
+     * Ask for the fee so the comparison is like-for-like.
+     *
+     * OpenOcean expresses `referrerFee` as a PERCENT (1.2 means 1.2%), while we
+     * hold basis points. 70 bps -> 0.7. Getting this conversion wrong by a
+     * factor of 100 would either quote a 70% fee (every quote fails) or a
+     * 0.007% one (we compare against a number we cannot actually charge), so it
+     * is unit-tested.
+     */
+    if (feeBps > 0 && feeReceiver) {
+      params.set('referrer', feeReceiver);
+      params.set('referrerFee', String(bpsToPercent(feeBps)));
+    }
+
+    return ooFetch(`${OO_BASE}/${slug}/quote?${params.toString()}`, {
+      endpoint: 'quote',
+      chainId,
+      timeout
+    });
+  };
+
+  /*
+   * Try the documented native spelling first, then the other one. When
+   * neither side of the pair is the native coin, the spellings produce the
+   * SAME request — retrying would just double the latency of a failing
+   * call, so a single attempt is made.
+   */
+  const spellings = nativeSpellings(chainId);
+  const attempts = fromToken.native || toToken.native
+    ? spellings.map((nativeAddress, i) => ({
+        nativeAddress,
+        timeout: i === 0 ? leash : Math.min(leash, 6000)
+      }))
+    : [{ nativeAddress: spellings[0], timeout: leash }];
+
+  let data = null;
+  let usedNative = spellings[0];
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try {
+      data = await quoteOnce(attempt.nativeAddress, attempt.timeout);
+      usedNative = attempt.nativeAddress;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
   }
-
-  /*
-   * `timeoutMs` promotes this call from second opinion to PRIMARY source.
-   * On chains Kyber's gateway no longer serves (Mantle, Scroll, zkSync Era —
-   * see KYBER_LIVE in lib/aggregator.js), OpenOcean is the only routing
-   * source, and the 3s bonus-leash is the wrong budget for the only quote
-   * standing between the user and «مسیری بین این دو توکن وجود ندارد». The
-   * caller passes a longer leash exactly there; everywhere else the default
-   * keeps the "never slower than KyberSwap alone" contract.
-   */
-  const data = await ooFetch(`${OO_BASE}/${slug}/quote?${params.toString()}`, {
-    endpoint: 'quote',
-    chainId,
-    timeout: Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : OO_TIMEOUT_MS
-  });
+  if (!data) throw lastErr;
 
   const outWeiRaw = data?.outAmount;
   if (outWeiRaw == null) throw new Error('NO_ROUTE');
@@ -335,6 +434,8 @@ export async function getOpenOceanQuote({
 
   return {
     source: 'openocean',
+    /* The native spelling this quote was priced with — build/sign reuse it. */
+    nativeAddress: usedNative,
     amountInWei,
     amountOutWei,
     minOutWei,
@@ -378,6 +479,11 @@ const MIN_OUTPUT_CHAINS = new Set([56, 1, 8453]);
  * fee must reach the API as a PERCENT of the input, `account` must be the
  * signer (without it the API returns a quote with no calldata), and
  * `minOutput` must only ever be sent on chains where it is supported.
+ *
+ * `nativeAddress` is the native-coin spelling the winning quote was priced
+ * with (see the OO_NATIVE_BY_CHAIN note). Passing it through keeps the
+ * signed transaction on the same interpretation of the pair as the quote
+ * the user approved; when absent, the chain's documented spelling is used.
  */
 export function ooSwapParams({
   chainId,
@@ -388,11 +494,13 @@ export function ooSwapParams({
   account,
   feeBps = 0,
   feeReceiver = null,
-  minOutWei = null
+  minOutWei = null,
+  nativeAddress = null
 }) {
+  const native = nativeAddress || ooNativeAddress(chainId);
   const params = new URLSearchParams({
-    inTokenAddress: toOOAddress(fromToken),
-    outTokenAddress: toOOAddress(toToken),
+    inTokenAddress: asOOAddress(fromToken, native),
+    outTokenAddress: asOOAddress(toToken, native),
     amountDecimals: String(amountInWei),
     gasPriceDecimals: String(defaultGasPriceWei(chainId)),
     slippage: String(Math.max(0.05, Math.min(50, slippage))),
@@ -427,7 +535,8 @@ export async function buildOpenOceanSwap({
   account,
   feeBps = 0,
   feeReceiver = null,
-  minOutWei = null
+  minOutWei = null,
+  nativeAddress = null
 }) {
   const slug = OO_SLUG[chainId];
   if (!slug) throw new Error('CHAIN_UNSUPPORTED');
@@ -441,7 +550,8 @@ export async function buildOpenOceanSwap({
     account,
     feeBps,
     feeReceiver,
-    minOutWei
+    minOutWei,
+    nativeAddress
   });
 
   const data = await ooFetch(`${OO_BASE}/${slug}/swap?${params.toString()}`, {
@@ -598,7 +708,10 @@ export async function executeOpenOceanSwap({
     account,
     feeBps: expectFeeBps,
     feeReceiver: expectFeeReceiver,
-    minOutWei: quote.minOutWei
+    minOutWei: quote.minOutWei,
+    /* The native spelling the winning quote was priced with — the signed
+       transaction must interpret the pair exactly like the quote shown. */
+    nativeAddress: quote.nativeAddress || null
   });
 
   /*
@@ -655,7 +768,8 @@ function defaultGasPriceWei(chainId) {
     130: 0.05,    // Unichain
     143: 1,       // Monad
     534352: 0.05, // Scroll — ETH L2, same ballpark as Linea/Unichain
-    324: 0.05     // zkSync Era
+    324: 0.05,    // zkSync Era
+    4663: 0.03    // Robinhood Chain — Arbitrum Orbit, ~0.03 gwei live probed
   }[chainId] ?? 5;
   // Kept integral: the endpoint wants wei with no decimal point.
   return Math.round(gwei * 1e9);

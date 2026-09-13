@@ -55,6 +55,8 @@ export const CHAIN_ICON_KEYS = Object.freeze({
   zkSync: '324',
   'zkSync Era': '324',
   Mantle: '5000',
+  'Robinhood Chain': '4663',
+  Robinhood: '4663',
   Base: '8453',
   Arbitrum: '42161',
   Avalanche: '43114',

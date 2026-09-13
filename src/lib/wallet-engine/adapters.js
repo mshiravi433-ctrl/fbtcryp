@@ -42,7 +42,7 @@ export const ADAPTER_SCHEMA = 'fbt.wallet-adapter.v1';
  *  EXPLORERS below while chains.js already shipped them — the mirror had
  *  drifted, so the wallet engine refused to validate addresses on the two
  *  newest networks. Keep the two lists in lockstep with EVM_CHAIN_ORDER. */
-export const EVM_CHAIN_IDS = Object.freeze([56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324]);
+export const EVM_CHAIN_IDS = Object.freeze([56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663]);
 
 /** Well-known non-numeric chain references (CAIP-2 style). */
 export const CHAIN_REFS = Object.freeze({
@@ -95,7 +95,8 @@ const EXPLORERS = {
     137: 'https://polygonscan.com', 146: 'https://sonicscan.org', 8453: 'https://basescan.org',
     42161: 'https://arbiscan.io', 43114: 'https://snowtrace.io', 59144: 'https://lineascan.build',
     130: 'https://uniscan.xyz', 143: 'https://monadvision.com', 5000: 'https://explorer.mantle.xyz',
-    80094: 'https://berascan.com', 534352: 'https://scrollscan.com', 324: 'https://era.zksync.network'
+    80094: 'https://berascan.com', 534352: 'https://scrollscan.com', 324: 'https://era.zksync.network',
+    4663: 'https://robinhoodchain.blockscout.com'
   },
   solana: 'https://solscan.io',
   bitcoin: 'https://mempool.space'

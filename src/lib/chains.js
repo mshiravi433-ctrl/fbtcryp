@@ -290,11 +290,61 @@ export const EVM_CHAINS = {
        OpenOcean serves zksync-mainnet — it is the routing source here. */
     dexName: 'OpenOcean',
     color: '#8c8dfc'
+  },
+  /*
+   * ─── ROBINHOOD CHAIN ──────────────────────────────────────────────────────
+   * Added 2026-09-13 («Rabinhood شبکه هم اضافه کن»). Robinhood Chain is the
+   * brokerage's public Ethereum L2 — Arbitrum Orbit (Nitro) settling to
+   * Ethereum via blobs — built for tokenized stocks (Stock Tokens), ETFs and
+   * the DeFi around them. Live mainnet since 2026-07-01.
+   *
+   * Chain-level facts, each cross-checked against a live source on
+   * 2026-09-13 (NOT copied from a list):
+   *   chain id 4663 / hex 0x1237, gas coin ETH — Robinhood/QuickNode/dwellir
+   *     developer docs all agree.
+   *   RPC https://rpc.mainnet.chain.robinhood.com — the official public
+   *     endpoint (rate-limited, no key). It is the ONLY free endpoint, so
+   *     unlike the other chains there is no second entry here to round-robin.
+   *   explorer robinhoodchain.blockscout.com — the Blockscout instance the
+   *     docs link; its API confirmed the pinned contracts below.
+   *   WETH 0x0Bd7D308…cAD73 — Blockscout token record: name WETH,
+   *     exchange_rate = the ETH price (it is the chain's canonical wrapped
+   *     ether), 545k holders, $448M 24h volume. It is also the token every
+   *     live KyberSwap route enters through (their router unwraps the native
+   *     sentinel into it).
+   *   ROUTING — live-probed the same hour: KyberSwap's `robinhood` gateway
+   *     returned REAL routes (uniswap-v3/v4 pools on-chain) for ETH→RGTI,
+   *     ETH→JOBY, ETH→SOFI and ETH→ROBINHOOD, AND echoed our 70 bps fee
+   *     back with our receiver — `extraFee.feeAmount:"70",
+   *     feeReceiver:"0xaf5ce154…"` — which is the whole test (see
+   *     docs/NETWORKS-ADD-FA.md). So unlike Mantle/Scroll/zkSync Era, this
+   *     chain is a first-class KyberSwap chain from day one, with
+   *     OpenOcean's `4663` route as the second opinion.
+   *
+   * ⚠️ THE TOKEN SPACE IS POLLUTED. Blockscout search for "USDC" on this
+   * chain returns a dozen unverified clones with 1B minted supply and no
+   * market data. Everything pinned below was taken from a live, attributable
+   * source (Blockscout's own token record, or CoinGecko's robinhood list
+   * paired with a live KyberSwap route that day); everything else arrives at
+   * runtime unverified and renders with the address + import warning. Do
+   * not pin a Robinhood-chain token just because its symbol looks right.
+   */
+  4663: {
+    id: 4663,
+    hexId: '0x1237',
+    name: 'Robinhood Chain',
+    short: 'HOOD',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.mainnet.chain.robinhood.com'],
+    explorer: 'https://robinhoodchain.blockscout.com',
+    wrapped: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', // WETH — Blockscout-verified
+    dexName: 'KyberSwap',
+    color: '#00c805'
   }
 };
 
 export const DEFAULT_CHAIN = 56;
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663];
 
 /**
  * Platform fee — always charged, on every chain.
@@ -518,10 +568,18 @@ export const TOKENS = {
     { symbol: 'WMNT', name: 'Wrapped Mantle', address: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8', decimals: 18, coingeckoId: 'mantle' },
     { symbol: 'USDT', name: 'Tether USD', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6, coingeckoId: 'tether' },
     { symbol: 'USDC', name: 'USD Coin (bridged)', address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', decimals: 6, coingeckoId: 'usd-coin' },
-    /* Canonical Mantle-bridged WETH — 40 hex chars. A truncated spelling
-       (36 hex) made every Mantle WETH pair fail at the aggregator with a
-       bad-address rejection that the UI surface as a routing outage. */
-    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xdEAddEaDdeadDEadDEADDEAddEADDEAddead1111', decimals: 18, coingeckoId: 'ethereum' }
+    /*
+     * Canonical Mantle-bridged WETH — corrected 2026-09-13. The pinned value
+     * here used to be `0xdEAddEaD…dead1111`, a spelling that MIXED Mantle's
+     * real terminator (…dead1111) with Metis' alternating DeadDeAd pattern —
+     * no such contract exists on Mantle, so EVERY WETH pair on this chain
+     * failed at the aggregator with a bad-token rejection that the screen
+     * rendered as «مسیری بین این دو توکن وجود ندارد». The real contract is
+     * the all-`dead` system address, confirmed against Mantle's own live
+     * entry in CoinGecko's mantle token list AND the network's deepest pools
+     * (USDT0/WETH): 0xdeaddeaddeaddeaddeaddeaddeaddeaddead1111.
+     */
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xdeaddeaddeaddeaddeaddeaddeaddeaddead1111', decimals: 18, coingeckoId: 'ethereum' }
   ],
   80094: [
     { symbol: 'BERA', name: 'Berachain', address: null, decimals: 18, native: true, coingeckoId: 'berachain' },
@@ -551,8 +609,17 @@ export const TOKENS = {
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
     { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5300000000000000000000000000000000000004', decimals: 18, coingeckoId: 'ethereum' },
     { symbol: 'USDC', name: 'USD Coin', address: '0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4', decimals: 6, coingeckoId: 'usd-coin' },
-    { symbol: 'USDT', name: 'Tether USD', address: '0xf55bec9cafdbe8730f096aa55dad6d22d44099df', decimals: 6, coingeckoId: 'tether' },
-    { symbol: 'DAI', name: 'Dai', address: '0xcfa5712e9ef4b61e611f7b3a2d3c5f8a91213385', decimals: 18, coingeckoId: 'dai' }
+    { symbol: 'USDT', name: 'Tether USD', address: '0xf55bec9cafdbe8730f096aa55dad6d22d44099df', decimals: 6, coingeckoId: 'tether' }
+    /*
+     * NO pinned DAI on Scroll — removed 2026-09-13. The old entry
+     * (`0xcfa5712e…`) could not be verified against ANY live source (the
+     * chain's own CoinGecko list carries no DAI at all, and no explorer
+     * record matched). Per this registry's own law — «هرگز یک آدرس حدسی» —
+     * an unprovable stable address is worse than no stable address: every
+     * DAI pair built on it died as a bad-token rejection that looked like a
+     * routing outage. If a canonical Scroll DAI is ever confirmed, re-add it
+     * here with the evidence in the comment.
+     */
   ],
   324: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
@@ -562,7 +629,46 @@ export const TOKENS = {
        was one hex digit short (39 instead of 40), so every USDT pair on this
        chain was rejected by the aggregator before a route could form. */
     { symbol: 'USDT', name: 'Tether USD', address: '0x493257fD37EDB34451f62EDf8D2a0C418852bA4C', decimals: 6, coingeckoId: 'tether' },
-    { symbol: 'DAI', name: 'Dai', address: '0x3e7676937a7e96cfb7616f255b9ad9ff47363d4b', decimals: 18, coingeckoId: 'dai' }
+    { symbol: 'DAI', name: 'Dai', address: '0x4b9eb6c0b6ea15176bbf62841c6b2a8a398cb656', decimals: 18, coingeckoId: 'zksync-erc20-bridged-dai-zksync' },
+    /* DAI correction 2026-09-13: the old pin 0x3e76…3d4b does not exist on
+       GeckoTerminal (404, zero pools) — every DAI pair built on it would die
+       as a bad-token rejection. The real Era DAI is the zkSync ERC20 Bridged
+       DAI 0x4b9eb6c0…b656: live in CoinGecko's official zksync list AND in
+       GeckoTerminal with real reserves ($0.997, checked 2026-09-13). */
+    /*
+     * The native ZK token — «Zk هم فقط ۵ تا توکن داره». ZK is the chain's
+     * own asset, traded against WETH/USDC across Era's deepest pools, so it
+     * belongs in the offline floor next to them, not only in the runtime
+     * list. Address from ZKsync's official governance docs (zknation.io,
+     * L2 Contracts → Token) — the same address CoinGecko's zksync list
+     * carries for symbol ZK.
+     */
+    { symbol: 'ZK', name: 'ZKsync', address: '0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E', decimals: 18, coingeckoId: 'zksync' }
+  ],
+  /*
+   * Robinhood Chain — the offline floor. One attributable source per entry,
+   * all checked live on 2026-09-13:
+   *   WETH  Blockscout token record (exchange_rate = ETH price; the token
+   *         every KyberSwap route enters through).
+   *   USDG  Blockscout token record: Global Dollar, $0.9999, 6 decimals,
+   *         $3.3B cap, 320k holders — Robinhood is a Global Dollar Network
+   *         partner, and USDG is the quote asset inside Kyber's live
+   *         ETH→stock routes on this chain (every probed route hopped
+   *         WETH → USDG → stock token).
+   *   RGTI / JOBY / SOFI — Stock Tokens straight from CoinGecko's official
+   *         robinhood list (chainId 4663), each confirmed routable by a live
+   *         KyberSwap quote the same day. More Stock Tokens (UBER, TSEM,
+   *         MTSI, ZETA, …) arrive via the runtime list; Kyber's per-token
+   *         index on this chain is still filling in, so a specific pair can
+   *         honestly answer «no route» until their side indexes it.
+   */
+  4663: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', decimals: 18, coingeckoId: 'ethereum' },
+    { symbol: 'USDG', name: 'Global Dollar', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, coingeckoId: 'global-dollar' },
+    { symbol: 'RGTI', name: 'Rigetti Computing • Robinhood Token', address: '0x284358abc07f9359f19f4b5b4ac91901be2597ba', decimals: 18 },
+    { symbol: 'JOBY', name: 'Joby Aviation, Inc. • Robinhood Token', address: '0xb334c5ce741b80b5b671f47f5c269cb193fe8e24', decimals: 18 },
+    { symbol: 'SOFI', name: 'SoFi Technologies • Robinhood Token', address: '0x98e75885157c80992a8d41b696d8c9c6fb30a926', decimals: 18 }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },
