@@ -43,7 +43,8 @@
     "smartWallet": "Smart Wallet",
     "intentOS": "Intent OS",
     "loan": "Loans",
-    "protection": "Protection"
+    "protection": "Protection",
+    "launch": "Launch"
   },
   "common": {
     "balance": "Balance",
@@ -590,7 +591,9 @@
     "refreshFailed": "Refresh failed — try again",
     "btcSent": "Bitcoin send broadcast",
     "buySellCompleted": "Buy completed after blockchain verification",
-    "iranBuyConfirmed": "USDT settlement was recorded after chain confirmation"
+    "iranBuyConfirmed": "USDT settlement was recorded after chain confirmation",
+    "launchError": "Launch preparation failed",
+    "launchAddedToSwap": "Token added to FBT Swap"
   },
   "swap": {
     "title": "Swap",
@@ -7615,7 +7618,175 @@
     }
   },
   "launch": {
-    "step": "Step {{n}} of {{total}}"
+    "step": {
+      "network": "Network",
+      "token": "Token",
+      "rules": "Rules",
+      "liquidity": "Liquidity",
+      "review": "Launch"
+    },
+    "title": "FBT Launch",
+    "subtitle": "Create a token, launch a pool, go live — non-custodial, end to end.",
+    "nonCustodial": "Non-custodial",
+    "steps": "Launch steps",
+    "back": "Back",
+    "next": "Continue",
+    "network": {
+      "title": "Choose a network",
+      "dex": "DEX",
+      "ready": "Ready",
+      "noFactory": "Factory pending",
+      "soon": "Coming soon",
+      "verifying": "Verifying DEX on-chain…",
+      "verified": "DEX verified on-chain — {{dex}}",
+      "verifyFailed": "DEX verification failed ({{reason}}). Launch is blocked until the chain is reachable.",
+      "factoryTitle": "FBT factory not deployed here yet",
+      "factoryBody": "The FBTTokenFactory contract must be deployed on this network first (npm run launch:deploy-factory, or set FBTLAUNCH_FACTORY_<chainId>). Nothing is signed before the factory is verified on-chain."
+    },
+    "token": {
+      "title": "Your token",
+      "name": "Token name",
+      "symbol": "Symbol",
+      "decimals": "Decimals",
+      "supply": "Total supply",
+      "logo": "Logo (optional)",
+      "description": "Description (optional)",
+      "namePh": "e.g. FBT Gold",
+      "symbolPh": "e.g. FBTG",
+      "supplyPh": "e.g. 1000000000",
+      "supplyFull": "Full supply (smallest units)",
+      "localOnly": "Kept on this device. Nothing is uploaded."
+    },
+    "err": {
+      "NAME_REQUIRED": "Name is required",
+      "NAME_TOO_LONG": "Name too long (max 64)",
+      "SYMBOL_REQUIRED": "Symbol is required",
+      "SYMBOL_TOO_LONG": "Symbol too long (max 32)",
+      "SYMBOL_INVALID": "Symbol may only use letters, numbers, +, -, .",
+      "DECIMALS_INVALID": "Decimals must be 0–18",
+      "SUPPLY_INVALID": "Supply must be a positive number",
+      "SUPPLY_ZERO": "Supply must be above zero",
+      "SUPPLY_TOO_LARGE": "Supply is unreasonably large",
+      "CAPABILITY_UNKNOWN": "Unknown capability selected"
+    },
+    "rules": {
+      "title": "Token rules",
+      "basic": "Basic token",
+      "recommended": "Recommended",
+      "basicDesc": "Fixed supply, no mint, no pause, no transfer ceilings, no tax, no blacklist. The capabilities below are off and cannot be switched on later — the token's power set is decided now, on-chain, forever.",
+      "advanced": "Advanced (owner powers — each one raises your risk score)",
+      "advancedDesc": "Every toggle below is an owner power that survives deployment. Each is disclosed here, on the contract, and in the risk score. Use only what you truly need."
+    },
+    "cap": {
+      "mintable": "Mintable",
+      "mintableWarn": "The owner can create new supply — inflation risk. Risk +20.",
+      "burnable": "Burnable",
+      "burnableWarn": "Holders can burn their own balance. Risk +5.",
+      "pausable": "Pausable",
+      "pausableWarn": "The owner can halt all transfers at any time. Risk +15.",
+      "maxWallet": "Max wallet",
+      "maxWalletWarn": "The owner can set (and change) a per-wallet ceiling. Risk +10.",
+      "maxTx": "Max transaction",
+      "maxTxWarn": "The owner can set (and change) a per-transfer ceiling. Risk +10."
+    },
+    "risk": {
+      "score": "Risk score",
+      "band": {
+        "low": "Low",
+        "moderate": "Moderate",
+        "elevated": "Elevated",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "finding": {
+        "mintable": "Owner can mint new supply",
+        "burnable": "Holders can burn balances",
+        "pausable": "Owner can pause all transfers",
+        "maxWallet": "Owner can restrict wallet size",
+        "maxTx": "Owner can restrict transaction size",
+        "extremePrice": "Initial price is outside the sane band",
+        "thinLiquidity": "Pool liquidity is below 1,000 quote units — one trade can move the price violently",
+        "thinLiquidityBody": "With this little liquidity, a single market order can spike the price and exit with profit while everyone else is left with the bag. If you really intend this pool to trade, add more on the quote side.",
+        "shallowLiquidity": "Pool liquidity is shallow (< 10,000 quote units) — expect high slippage",
+        "oddDecimals": "0 decimals is unusual for a tradable token",
+        "badDecimals": "Decimals above 18 are non-standard",
+        "largeSupply": "Very large total supply",
+        "lpOwnedByCreator": "LP tokens stay in your wallet — no lock, no third party",
+        "noTaxNoBlacklist": "No tax, no blacklist, no honeypot logic — by contract design"
+      },
+      "gate": {
+        "dexUnverified": "DEX factory could not be verified on-chain — launch blocked",
+        "factoryNotDeployed": "FBT factory is not deployed on this network — launch blocked"
+      }
+    },
+    "liq": {
+      "title": "Initial liquidity",
+      "quote": "Pair with",
+      "tokenAmount": "Token amount",
+      "quoteAmount": "Quote amount",
+      "price": "Initial price",
+      "priceImplied": "Implied price",
+      "slippage": "Slippage tolerance",
+      "feeTier": "DEX fee tier",
+      "tvl": "Initial pool value",
+      "lpTitle": "Where the LP tokens go",
+      "lpBody": "Liquidity-provider tokens mint directly to your wallet. There is no lock contract, no vesting and no third party — you can remove the liquidity at any time. That is the most non-custodial outcome possible."
+    },
+    "review": {
+      "title": "Review & launch",
+      "supply": "Total supply",
+      "price": "Initial price",
+      "liquidity": "Initial liquidity",
+      "fee": "FBT launch fee",
+      "swapFee": "Swap fee (on this pool)",
+      "signatures": "Signatures required",
+      "signaturesCount": "up to {{n}} (your wallet signs each one)",
+      "launch": "Confirm & Launch",
+      "noQuoteBalance": "Insufficient {{sym}} balance",
+      "noQuoteBalanceBody": "Your wallet does not hold enough {{sym}} on this network to fund the initial liquidity. Move the funds first — the launch cannot proceed without them.",
+      "confirmWarn": "This launch carries a HIGH risk score. Type the token symbol to acknowledge every finding above and enable the launch button."
+    },
+    "run": {
+      "title": "Launching…",
+      "createToken": "Create token",
+      "approveToken": "Approve token → router",
+      "approveQuote": "Approve quote → router",
+      "createPair": "Create pool",
+      "addLiquidity": "Add initial liquidity",
+      "poolPhase": "Pool & liquidity phase",
+      "state": {
+        "pending": "Waiting",
+        "ready": "Ready",
+        "signing": "Sign in your wallet…",
+        "submitted": "Submitted, waiting for the block…",
+        "confirmed": "Confirmed on-chain",
+        "failed": "Failed",
+        "skipped": "Skipped"
+      },
+      "signatureNote": "Every signature happens in your own wallet. FBT sees only the public transaction hashes.",
+      "cancel": "Cancel (keep what already mined)"
+    },
+    "result": {
+      "live": "Your token is LIVE",
+      "liveBody": "Verified on-chain: token state, pool reserves and your LP balance all read back exactly as signed. The pool is tradable now.",
+      "partialTitle": "Partial result — here is exactly what happened",
+      "partialBody": "Token: {{token}} · Pool: {{pool}}. The system will never claim a launch finished when it did not — the recovery path below starts from the chain's own state.",
+      "failedBody": "The launch did not complete and nothing was claimed. Check the failed step above, fix the cause (funds, gas, network) and start again — the previous attempt cost nothing but gas.",
+      "token": "Token contract",
+      "pool": "Pool contract",
+      "lp": "Your LP balance",
+      "addSwap": "Add to FBT Swap",
+      "retryPool": "Retry the pool",
+      "newLaunch": "Start a new launch"
+    },
+    "history": {
+      "title": "Your launches",
+      "empty": "No launches yet on this device.",
+      "clear": "Clear"
+    },
+    "footer": {
+      "statement": "Non-custodial by construction. You control your assets. FBT never holds your funds, never receives your private keys or seed phrase, and never signs a financial transaction for you."
+    }
   },
   "wealth": {
     "title": "Wealth Hub",

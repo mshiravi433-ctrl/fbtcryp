@@ -16,6 +16,7 @@ import {
   IconInfo,
   IconKey,
   IconMarket,
+  IconRocket,
   IconNews,
   IconPools,
   IconSettings,
@@ -103,7 +104,12 @@ const GROUPS = [
       /* Cross-chain. Sits next to Swap because that is the question it
          answers: "my token is on the wrong network". */
       { to: '/bridge', key: 'nav.bridge', Icon: IconSwap, hue: 'var(--rgb-3)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
+      /* FBT Launch — token & liquidity launchpad. Sits with the trading
+         destinations because that is the question it answers: "I want my
+         own token trading on FBT Swap". Non-custodial: the user's wallet
+         signs every step (see src/pages/Launch.jsx). */
+      { to: '/launch', key: 'nav.launch', Icon: IconRocket, hue: 'var(--rgb-1)' }
       /*
        * ─── SOLANA IS NOT LISTED HERE ANY MORE ─────────────────────────────
        * It is a TAB inside /swap now, on the owner's instruction: «سواپ و

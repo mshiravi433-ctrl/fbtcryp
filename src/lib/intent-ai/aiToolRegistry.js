@@ -44,6 +44,15 @@ export const AI_TOOLS = Object.freeze([
   Object.freeze({ id: 'getFuturesMarkets', kind: 'read', scope: 'futures', route: '/perp?tab=onchain', live: true }),
   Object.freeze({ id: 'getStockMarkets', kind: 'read', scope: 'stocks', route: '/stocks', live: true }),
   Object.freeze({ id: 'createIntent', kind: 'write', scope: 'intent', route: '/intent', live: true }),
+  /*
+   * FBT Launch — the AI plans a token launch and hands the user a prefilled
+   * /launch deep link. It is `quote`-kind on purpose: the tool produces a
+   * PLAN, and the only execution path is the launch module where the user
+   * reviews the deterministic risk score and signs every step in their own
+   * wallet. The AI never signs, and the launch module never skips the user.
+   */
+  Object.freeze({ id: 'launch.plan', kind: 'quote', scope: 'launch', route: '/launch', live: true, requiresSignature: true }),
+  Object.freeze({ id: 'launch.create_token', kind: 'execute', scope: 'launch', route: '/launch', live: false, status: 'MODULE_OWNED', requiresSignature: true, note: 'Execution happens inside the /launch module (state machine + user wallet), not through the AI' }),
   Object.freeze({ id: 'getIntent', kind: 'read', scope: 'intent', route: '/v1/ai/context', live: true }),
   Object.freeze({ id: 'createDCA', kind: 'write', scope: 'automation', route: '/v1/ai/automations', live: true }),
   Object.freeze({ id: 'createFinancialGoal', kind: 'write', scope: 'goal', route: '/v1/ai/goal', live: true }),

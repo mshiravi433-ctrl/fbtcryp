@@ -32,6 +32,18 @@ export const IconSwap = (p) => (
   </svg>
 );
 
+/* FBT Launch — token & liquidity launchpad. A rocket, in the same line-art
+   language as the rest of the set (currentColor, 1.75 stroke). */
+export const IconRocket = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 15c-2 0-3-1-3-3 0-3.5 1.5-6.5 3-8 1.5 1.5 3 4.5 3 8 0 2-1 3-3 3Z" />
+    <path d="M9 13.5c-1.6.3-2.9 1.4-3.4 3.1.9-.4 1.8-.6 2.8-.6" />
+    <path d="M15 13.5c1.6.3 2.9 1.4 3.4 3.1-.9-.4-1.8-.6-2.8-.6" />
+    <path d="M12 15v4M10 19h4" />
+    <path d="M10.5 21.5c.4-.8 2.6-.8 3 0" />
+  </svg>
+);
+
 export const IconPools = (p) => (
   <svg {...base} {...p}>
     <ellipse cx="12" cy="6" rx="8" ry="3" />
