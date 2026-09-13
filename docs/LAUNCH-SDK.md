@@ -40,7 +40,7 @@ No parameters.
       "explorer": "https://bscscan.com",
       "dex": { "id": "pancakeswap-v2", "name": "PancakeSwap", "factory": "0x…", "router": "0x…", "wrapped": "0x…", "feeTierBps": 25 },
       "quotes": [ { "symbol": "BNB", "native": true }, { "symbol": "USDT", "address": "0x…", "decimals": 6 } ],
-      "fbtFactory": "0x…", "status": "ready"
+      "fbtFactory": null, "mode": "direct", "tokenDeployReady": true, "status": "ready"
     }
   ],
   "fees": { "launchFeeBps": 0, "swapFeeBps": 70, "protocolFeeBps": 0, "notes": { "launch": "0%", "swap": "0.70%", "protocol": "0%" } },
@@ -49,9 +49,17 @@ No parameters.
   "noCustody": { "holdsFunds": false, "holdsKeys": false, "signsUserTransactions": false, "statement": "…" }
 }
 ```
-`networks[].status` is `ready` (an FBT factory address is configured for the
-chain) or `no-factory` (launch is blocked on that chain until one is
-deployed — the app shows this honestly rather than signing against nothing).
+`networks[].status` is `ready` when a V2-family DEX is pinned for the chain
+(still re-verified on-chain before any signature), and the chain is ABSENT
+from the list when it is not — a chain is never offered and then blocked.
+
+`networks[].mode` says who the token transaction talks to, and it is per chain:
+`direct` (the v1 default — the token's creation bytecode is sent straight from
+the user's wallet, `to: null`, no FBT contract involved) or `factory` (an
+FBTTokenFactory is pinned for the chain through `FBTLAUNCH_FACTORY_<id>`; the
+factory is a stateless deployer/registry and the path a future on-chain launch
+fee would need). `tokenDeployReady` is `true` in both modes, because direct
+deploy needs no operator contract at all.
 
 ### `GET /api/launch/prepare`
 Query parameters (all optional; the set that makes sense per phase):
@@ -65,7 +73,9 @@ Query parameters (all optional; the set that makes sense per phase):
 | `tokenAmount`, `quoteAmount` | decimal string | both | initial pool sizes, human units |
 | `slippageBps` | number | both | default 100 |
 | `creator` | address | both | the user's wallet (LP goes here) |
-| `factoryAddress` | address | one | override the configured FBT factory |
+| `mode` | "direct" \| "factory" | one | force a mode; default comes from `FBTLAUNCH_FACTORY_<id>` (absent ⇒ `direct`) |
+| `factoryAddress` | address | one | force factory mode with this address |
+| `nonce` | number | one | the creator's transaction count, used ONLY to predict the direct-deploy address (re-read before signing) |
 | `tokenAddress` | address | **two** | existing token — enables pool/liquidity phase |
 | `createPairNeeded` | "true" | two | whether the pool must be created |
 | `pairAddress` | address | two | existing pair, when any |
@@ -85,7 +95,9 @@ when needed) + `add-liquidity` / `addLiquidityETH`.
   "plan": {
     "schema": "fbt.launch-plan.v1", "phase": "token" | "pool", "chainId": 56,
     "dex": { "id": "…", "factory": "0x…", "router": "0x…", "wrapped": "0x…" },
-    "steps": [ { "id": "create-token", "to": "0x…", "data": "0x…", "value": "0", "description": "…" } ],
+    "mode": "direct",
+    "predictedTokenAddress": "0x…",
+    "steps": [ { "id": "create-token", "to": null, "data": "0x…", "value": "0", "deploy": true, "predictedAddress": "0x…", "expectedCode": "0x…", "description": "…" } ],
     "signatureOrder": ["token.create", "pool.create", "liquidity.approve", "liquidity.approveQuote", "liquidity.add"],
     "createPairNeeded": null, "pairAddress": null
   },
@@ -96,9 +108,20 @@ when needed) + `add-liquidity` / `addLiquidityETH`.
 UI uses, and includes the live DEX verification result — the plan and its
 risk verdict leave the API together.
 
+In `direct` mode the `create-token` step is a plain CREATE: `to` is `null`,
+`data` is the token creation bytecode followed by
+`abi.encode(name, symbol, decimals, initialSupply, creator, capabilities)`,
+and `predictedAddress`/`predictedTokenAddress` is the address the token WILL
+be created at — the last 160 bits of `keccak256(rlp([creator, nonce]))`, shown
+before the signature. After the receipt, the app checks that the transaction
+was a deployment that landed at EXACTLY that address and that the code there
+equals the published runtime bytecode byte for byte
+(`codeMatches` → `DIRECT_CODE_MISMATCH` and friends); there is no
+`TokenCreated` event to read in this mode.
+
 Errors: `CHAIN_NOT_SUPPORTED`, `SPEC_INVALID` (with `errors[]`),
 `QUOTE_INVALID`, `AMOUNT_INVALID`, `CREATOR_REQUIRED`,
-`FACTORY_NOT_DEPLOYED` (409), `PHASE_TWO_NEEDS_QUOTE` (409),
+`FACTORY_NOT_DEPLOYED` (409, factory mode only), `PHASE_TWO_NEEDS_QUOTE` (409),
 `NO_RPC`/`ANCHOR_PAIR_MISSING` (dex.verified=false, launch stays blocked).
 
 ### `GET /api/launch/verify`
@@ -202,12 +225,17 @@ the original intent.
 ## 4. Environment (server)
 
 ```bash
-# FBT factory deployment per chain (public constant — paste after deploy)
+# FBT factory deployment per chain (public constant — paste after deploy).
+# OPTIONAL: setting one switches THAT chain to factory mode. A chain with no
+# address launches in the default DIRECT mode (the user's wallet deploys the
+# token; no FBT contract is involved and there is nothing to pay us).
 FBTLAUNCH_FACTORY_8453=
 FBTLAUNCH_FACTORY_56=
 FBTLAUNCH_FACTORY_42161=
 FBTLAUNCH_FACTORY_137=
 FBTLAUNCH_FACTORY_1=
+FBTLAUNCH_FACTORY_10=
+FBTLAUNCH_FACTORY_43114=
 
 # Optional DEX factory overrides (default: built-in registry, re-verified live)
 FBTLAUNCH_DEX_FACTORY_56=

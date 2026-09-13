@@ -25,6 +25,11 @@ import './lending-engine-probe.mjs';
    API and SDK), the DRAFT→…→LIVE state machine with honest partial-failure
    reporting, and history sanitization. */
 import './launch-probe.mjs';
+/* Solana launch (separate workstream, deliberately NOT shipped): the SPL
+   token plan decoded byte-for-byte against a mock provider, the named
+   refusals, and the honesty door that keeps the UI on COMING_SOON while the
+   wallet-signing path and the Raydium IDL are unfinished. No mainnet calls. */
+import './launch-solana-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the

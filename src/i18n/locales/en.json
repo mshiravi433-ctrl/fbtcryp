@@ -7641,7 +7641,13 @@
       "verified": "DEX verified on-chain — {{dex}}",
       "verifyFailed": "DEX verification failed ({{reason}}). Launch is blocked until the chain is reachable.",
       "factoryTitle": "FBT factory not deployed here yet",
-      "factoryBody": "The FBTTokenFactory contract must be deployed on this network first (npm run launch:deploy-factory, or set FBTLAUNCH_FACTORY_<chainId>). Nothing is signed before the factory is verified on-chain."
+      "factoryBody": "The FBTTokenFactory contract must be deployed on this network first (npm run launch:deploy-factory, or set FBTLAUNCH_FACTORY_<chainId>). Nothing is signed before the factory is verified on-chain.",
+      "verifyingShort": "Verifying…",
+      "blocked": "Blocked",
+      "tapToVerify": "Checking…",
+      "directTitle": "Direct deploy — nothing of ours in your transaction",
+      "directBody": "The token's ready-made bytecode is sent straight from your wallet as a plain contract creation. No FBT contract is involved, so there is nothing to deploy and nothing to pay us: this launch costs you gas and nothing else. The address is shown before you sign and verified on-chain afterwards.",
+      "factoryModeBody": "This chain has an FBTTokenFactory pinned for it, so the token is created through that contract (still signed by your own wallet — the factory never holds funds or keys). This is the compatible path for a future on-chain launch fee."
     },
     "token": {
       "title": "Your token",
@@ -7744,7 +7750,10 @@
       "launch": "Confirm & Launch",
       "noQuoteBalance": "Insufficient {{sym}} balance",
       "noQuoteBalanceBody": "Your wallet does not hold enough {{sym}} on this network to fund the initial liquidity. Move the funds first — the launch cannot proceed without them.",
-      "confirmWarn": "This launch carries a HIGH risk score. Type the token symbol to acknowledge every finding above and enable the launch button."
+      "confirmWarn": "This launch carries a HIGH risk score. Type the token symbol to acknowledge every finding above and enable the launch button.",
+      "deployMode": "Token deployment",
+      "predictedTitle": "Your token will be created at this address",
+      "predictedNote": "Read from your account's next transaction (nonce) before you sign, then verified on-chain: the transaction must be a deployment, it must land at exactly this address, and the code there must match the published token bytecode byte for byte. If any of that fails, the launch stops instead of creating a pool."
     },
     "run": {
       "title": "Launching…",
@@ -7764,7 +7773,20 @@
         "skipped": "Skipped"
       },
       "signatureNote": "Every signature happens in your own wallet. FBT sees only the public transaction hashes.",
-      "cancel": "Cancel (keep what already mined)"
+      "cancel": "Cancel (keep what already mined)",
+      "predictedNote": "The address is re-read from the chain right before you sign. After it mines, the code at this address is compared with the token bytecode; a mismatch stops the launch.",
+      "err": {
+        "DIRECT_CODE_MISMATCH": "The code at that address is not the token you signed for — the launch stopped before creating any pool.",
+        "DIRECT_NO_CODE": "Nothing was deployed at the predicted address — the launch stopped.",
+        "DIRECT_ADDRESS_MISMATCH": "The contract landed at a different address than predicted (your nonce moved). The launch stopped so no pool points at the wrong contract.",
+        "DIRECT_TX_REVERTED": "The deploy transaction reverted on-chain. Nothing was created.",
+        "DIRECT_TX_NOT_DEPLOY": "That transaction was not a deployment — the launch stopped.",
+        "DIRECT_RECEIPT_ADDRESS_MISSING": "The receipt did not report a contract address — the launch stopped.",
+        "DIRECT_PREDICTED_ADDRESS_MISSING": "No address could be predicted for the deploy — the launch stopped.",
+        "TOKEN_EVENT_NOT_FOUND": "The factory receipt carried no TokenCreated event — the launch stopped.",
+        "TX_REVERTED": "The transaction reverted on-chain.",
+        "USER_REJECTED": "You declined the signature in your wallet. Nothing was sent."
+      }
     },
     "result": {
       "live": "Your token is LIVE",
@@ -7777,7 +7799,9 @@
       "lp": "Your LP balance",
       "addSwap": "Add to FBT Swap",
       "retryPool": "Retry the pool",
-      "newLaunch": "Start a new launch"
+      "newLaunch": "Start a new launch",
+      "directNote": "Deployed directly from your wallet: the code at this address was compared with the published token bytecode and matched.",
+      "factoryNote": "Created through the FBTTokenFactory deployment pinned for this chain, and its TokenCreated event was read back from the receipt."
     },
     "history": {
       "title": "Your launches",
@@ -7786,7 +7810,28 @@
     },
     "footer": {
       "statement": "Non-custodial by construction. You control your assets. FBT never holds your funds, never receives your private keys or seed phrase, and never signs a financial transaction for you."
-    }
+    },
+    "mode": {
+      "direct": "Direct deploy",
+      "factory": "Factory mode",
+      "directFull": "Direct — your wallet deploys the token (no FBT contract)",
+      "factoryFull": "FBT factory — deployed through the pinned FBTTokenFactory"
+    },
+    "howTitle": "How it works",
+    "howSub": "Five steps, every signature yours",
+    "howStep1": "Pick a chain — only chains whose DEX has been verified on-chain are listed.",
+    "howStep2": "Describe the token: name, symbol, supply and capabilities. The capability bitmap is written into the contract at creation and then locked forever — what you choose here is permanent.",
+    "howStep3": "Risk scoring and simulation: a 0–100 score with fatal gates, all of it visible in the review panel before any signature.",
+    "howStep4": "Sign the token creation — with your own wallet only. FBT never sees a key and never holds funds.",
+    "howStep5": "The pool is created and liquidity is added on the chain's own DEX, then read back from the chain for confirmation.",
+    "howNote": "Gas for every transaction is paid by you, from your own wallet. The FBT launch fee in v1 is zero.",
+    "warnTitle": "Risk & safety warnings",
+    "warnSub": "Read before you sign",
+    "warn1": "Tokens created here are experiments: they may end up with no market and no liquidity at all.",
+    "warn2": "Capabilities (mint / pause / max-tx / max-wallet) are locked into the contract forever at creation — decide before you sign, because they cannot be changed or removed later.",
+    "warn3": "FBT is non-custodial: your wallet, your keys, your responsibility. Nobody can reverse a signed transaction for you.",
+    "warn4": "A chain marked as pending has no verified DEX pipeline yet, so launching on it is not possible — it is listed as unavailable rather than launched and broken.",
+    "warn5": "Before every signature, check the destination address and the amount in the risk panel, and confirm the result on that chain's own explorer afterwards."
   },
   "wealth": {
     "title": "Wealth Hub",

@@ -19,7 +19,7 @@
  * same surface: `prepare(poolIntent) -> steps[]`, `verify(pair) -> state`.
  */
 import artifact from './artifacts.js';
-import { LAUNCH_DEX, LAUNCH_CHAINS, dexForChain } from './networks.js';
+import { LAUNCH_DEX, LAUNCH_CHAINS, LAUNCH_MODES, dexForChain, launchModeFor } from './networks.js';
 import { EVM_CHAINS } from '../chains.js';
 
 export const LAUNCH_STEPS = Object.freeze({
@@ -34,6 +34,24 @@ export const TOKEN_ABI = artifact.contracts.FBTBasicToken.abi;
 export const FACTORY_ABI = artifact.contracts.FBTTokenFactory.abi;
 export const TOKEN_BYTECODE = artifact.contracts.FBTBasicToken.bytecode;
 export const FACTORY_BYTECODE = artifact.contracts.FBTTokenFactory.bytecode;
+/**
+ * The runtime code of the token, as compiled (artifacts.json → deployedBytecode).
+ * The direct-deploy path does not parse an event to learn where the token is:
+ * after the CREATE transaction mines it reads `eth_getCode` at the predicted
+ * address and compares it BYTE FOR BYTE with this constant. A different
+ * contract at that address is a named failure, never a silently accepted token.
+ */
+export const TOKEN_DEPLOYED_BYTECODE = artifact.contracts.FBTBasicToken.deployedBytecode;
+
+/* The token constructor, exactly as declared in contracts/FBTTokenFactory.sol:
+     constructor(string name_, string symbol_, uint8 decimals_,
+                 uint256 initialSupply_, address creator_, uint256 capabilities_)
+   `creator` is always the DEPLOYER (the user's own wallet) — in direct mode
+   the wallet is both the sender and the creator, so the address that receives
+   the initial supply is the one that signed. */
+export const TOKEN_CONSTRUCTOR_TYPES = Object.freeze([
+  'string', 'string', 'uint8', 'uint256', 'address', 'uint256'
+]);
 
 /* The Uniswap V2-family surface every launch DEX exposes. Identical across
    Uniswap V2, PancakeSwap V2, QuickSwap and Sushi V2 — which is exactly why
@@ -55,6 +73,7 @@ const V2_PAIR_ABI = [
 const V2_ROUTER_ABI = [
   'function addLiquidity(address tokenA, address tokenB, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline) payable returns (uint256 amountA, uint256 amountB, uint256 liquidity)',
   'function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity)',
+  'function factory() view returns (address)',
   'function WETH() view returns (address)'
 ];
 const ERC20_ABI = [
@@ -84,22 +103,69 @@ export { loadInterfaces };
 /* ─────────────────────────── DEX verification ─────────────────────────── */
 
 /**
- * Runtime verification of a DEX's factory address against its anchor pair.
+ * Runtime verification of a chain's DEX constants, run before ANY signature.
  * See networks.js header for why this exists.
  *
- * @returns {{ok:boolean, factory:(string|null), anchorPair:(string|null), reason?:string}}
+ * The four proofs, in order of what they protect:
+ *   FACTORY_NO_CODE      — the pinned factory address is empty on this chain
+ *   ANCHOR_PAIR_MISSING  — getPair(anchor) is zero: not this factory's market
+ *   PAIR_FACTORY_MISMATCH— the anchor pair belongs to a DIFFERENT factory
+ *   ROUTER_FACTORY_MISMATCH — the router we would approve routes to another
+ *                          factory (a stale constant, or a router from a
+ *                          different DEX family that cannot run these bytes)
+ *   ROUTER_WRAPPED_MISMATCH — router.WETH() ≠ the wrapped native we pair with
+ *
+ * Any failure ⇒ ok:false and the launch is BLOCKED (safe failure). The checks
+ * are read-only view calls; nothing here signs, sends or holds anything.
+ *
+ * @returns {{ok:boolean, factory:(string|null), anchorPair:(string|null),
+ *            router:(string|null), reason:(string|undefined), problems:string[]}}
  */
 export async function verifyDex(provider, chainId, dex = LAUNCH_DEX[chainId]) {
-  if (!provider || !dex) return { ok: false, factory: null, anchorPair: null, reason: 'NO_DEX' };
+  if (!provider || !dex) return { ok: false, factory: null, anchorPair: null, router: null, reason: 'NO_DEX', problems: ['NO_DEX'] };
   const { Contract } = await import('ethers');
-  const factory = new Contract(dex.factory, V2_FACTORY_ABI, provider);
+  const problems = [];
+  const routerAddress = dex.router || EVM_CHAINS[chainId]?.router || null;
+  let anchorPair = null;
   try {
+    const code = await provider.getCode(dex.factory);
+    if (!code || code === '0x') problems.push('FACTORY_NO_CODE');
+
+    const factory = new Contract(dex.factory, V2_FACTORY_ABI, provider);
     const pair = await factory.getPair(dex.anchor.a, dex.anchor.b);
-    const ok = Boolean(pair && pair !== '0x0000000000000000000000000000000000000000');
-    return { ok, factory: dex.factory, anchorPair: ok ? pair : null, reason: ok ? undefined : 'ANCHOR_PAIR_MISSING' };
+    const exists = Boolean(pair && pair !== '0x0000000000000000000000000000000000000000');
+    if (!exists) problems.push('ANCHOR_PAIR_MISSING');
+    anchorPair = exists ? pair : null;
+
+    // The pair must point back at this factory: a factory address that merely
+    // answers getPair is not proof, a pair that names it as its creator is.
+    if (exists) {
+      const pairC = new Contract(pair, V2_PAIR_ABI, provider);
+      const back = await pairC.factory().catch(() => null);
+      if (!back || String(back).toLowerCase() !== dex.factory.toLowerCase()) problems.push('PAIR_FACTORY_MISMATCH');
+    }
+
+    // The router we hand the user's approvals to must belong to that same
+    // factory, and must wrap the native we are pairing against.
+    if (routerAddress) {
+      const router = new Contract(routerAddress, V2_ROUTER_ABI, provider);
+      const rFactory = await router.factory().catch(() => null);
+      if (!rFactory || String(rFactory).toLowerCase() !== dex.factory.toLowerCase()) problems.push('ROUTER_FACTORY_MISMATCH');
+      const rWrapped = await router.WETH().catch(() => null);
+      const wrapped = dex.wrapped || EVM_CHAINS[chainId]?.wrapped || null;
+      if (wrapped && (!rWrapped || String(rWrapped).toLowerCase() !== String(wrapped).toLowerCase())) problems.push('ROUTER_WRAPPED_MISMATCH');
+    }
   } catch (e) {
-    return { ok: false, factory: dex.factory, anchorPair: null, reason: String(e?.shortMessage || e?.message || 'VERIFY_FAILED') };
+    problems.push(String(e?.shortMessage || e?.message || 'VERIFY_FAILED'));
   }
+  return {
+    ok: problems.length === 0,
+    factory: dex.factory,
+    anchorPair,
+    router: routerAddress,
+    reason: problems[0],
+    problems
+  };
 }
 
 /** The existing pair for (token, quote) on the chain's DEX, or null. */
@@ -163,6 +229,106 @@ export async function parseTokenCreatedLog(log) {
     decimals: Number(decimals),
     supply: totalSupply.toString(),
     capabilities: Number(capabilities)
+  };
+}
+
+/* ─────────────────── direct (no-factory) token deployment ─────────────── */
+
+/**
+ * The CREATE address of a contract deployed by `deployer` with `nonce`:
+ *
+ *   address = last 160 bits of keccak256(rlp([deployer, nonce]))
+ *
+ * This is Ethereum's original deployment rule (and every EVM chain's). It is
+ * reimplemented here rather than assumed, because the launch screen shows the
+ * user where their token WILL be created BEFORE they sign — an address that
+ * turns out wrong after the fact would be a broken promise printed on a
+ * confirmation screen.
+ *
+ * @param {string} deployer 0x-address that sends the CREATE transaction
+ * @param {number|bigint} nonce the deployer's transaction count (pre-tx)
+ * @returns {string} the predicted 0x-address (checksummed)
+ */
+export async function predictCreateAddress(deployer, nonce) {
+  const { getAddress, getCreateAddress, keccak256, encodeRlp } = await import('ethers');
+  const from = getAddress(deployer);
+  const n = BigInt(nonce ?? 0);
+  if (n < 0n) throw new Error('NONCE_INVALID');
+  /* The nonce enters the RLP list as a minimal big-endian byte string:
+     zero is the EMPTY string (0x80), 1 is 0x01, 256 is 0x0100. */
+  let nonceHex = n.toString(16);
+  if (nonceHex === '0') nonceHex = '0x';
+  else nonceHex = `0x${nonceHex.length % 2 ? '0' : ''}${nonceHex}`;
+  // Belt and braces: this hand-rolled rule and ethers' own implementation
+  // must agree. If they ever did not, we would rather throw than print a
+  // wrong address to a user who is about to sign.
+  const viaRlp = getAddress(`0x${keccak256(encodeRlp([from, nonceHex])).slice(-40)}`);
+  const viaEthers = getCreateAddress({ from, nonce: n });
+  if (viaEthers.toLowerCase() !== viaRlp.toLowerCase()) throw new Error('CREATE_ADDRESS_RULE_DIVERGED');
+  return viaRlp;
+}
+
+/**
+ * Build the DIRECT token deployment transaction — the v1 default.
+ *
+ * There is no factory, no registry and no operator contract in this path:
+ * the transaction's `to` is null (a plain CREATE) and its data is the token's
+ * creation bytecode followed by the ABI-encoded constructor arguments:
+ *
+ *   data = <creationBytecode> + abi.encode(name, symbol, decimals,
+ *                                           initialSupply, deployer, caps)
+ *
+ * `creator` is the deployer: the wallet that signs is the wallet that owns
+ * the token and receives the entire initial supply. FBT is not in this
+ * transaction in any form.
+ *
+ * @param {object} p
+ *   p.spec    validated spec from capabilities.js
+ *             { name, symbol, decimals, supplyWei, capabilities }
+ *   p.creator the user's own wallet address (the deployer, and the creator)
+ *   p.nonce   the deployer's transaction count, used for the address
+ *             prediction only — the UI re-reads it right before signing
+ * @returns {{to:null, data:string, value:string, id:string, deploy:true,
+ *            predictedAddress:string, nonce:string, expectedCode:string,
+ *            description:string, event:null}}
+ */
+export async function buildDirectTokenCreateTx({ spec, creator, nonce = 0 }) {
+  if (!creator || !/^0x[0-9a-fA-F]{40}$/.test(creator)) throw new Error('CREATOR_ADDRESS_INVALID');
+  if (!spec || !spec.name || !spec.symbol) throw new Error('SPEC_REQUIRED');
+  const { AbiCoder, getAddress } = await import('ethers');
+  const deployer = getAddress(creator);
+  const args = AbiCoder.defaultAbiCoder().encode(
+    [...TOKEN_CONSTRUCTOR_TYPES],
+    [
+      spec.name,
+      spec.symbol,
+      Number(spec.decimals),
+      BigInt(spec.supplyWei),
+      deployer,
+      BigInt(spec.capabilities || 0)
+    ]
+  );
+  return {
+    to: null,
+    data: TOKEN_BYTECODE + args.slice(2),
+    value: '0',
+    id: LAUNCH_STEPS.CREATE_TOKEN,
+    deploy: true,
+    /* No event to read: the address is PREDICTED, then proven by code. */
+    event: null,
+    predictedAddress: await predictCreateAddress(deployer, nonce),
+    expectedCode: TOKEN_DEPLOYED_BYTECODE,
+    creator: deployer,
+    nonce: String(nonce ?? 0),
+    constructorArgs: {
+      name: spec.name,
+      symbol: spec.symbol,
+      decimals: Number(spec.decimals),
+      initialSupply: String(spec.supplyWei),
+      creator: deployer,
+      capabilities: Number(spec.capabilities || 0)
+    },
+    description: `Deploy ${spec.symbol} (${spec.name}) directly from your wallet`
   };
 }
 
@@ -312,8 +478,18 @@ export async function buildLiquiditySteps(p) {
  * the token mines). Fake zero-address bytes would be a lie; a deferred step
  * is a promise with its parameters pinned.
  *
+ * DIRECT IS THE DEFAULT, THE FACTORY IS OPTIONAL
+ * ---------------------------------------------------------------------------
+ * When the chain has no FBTTokenFactory pinned (the normal case), the token
+ * step is a plain CREATE from the user's wallet: `to: null`, data = creation
+ * bytecode + constructor args (buildDirectTokenCreateTx). The factory path is
+ * used only when an address is pinned for that chain, and the plan always says
+ * which mode it is in (`plan.mode`), so no consumer has to guess.
+ *
  * @param {object} p
  *   p.chainId, p.factoryAddress, p.spec      (phase one)
+ *   p.mode              'direct' | 'factory' (defaults from the factory pin)
+ *   p.nonce             deployer nonce for the direct address prediction
  *   p.tokenAddress      real address once the token exists (phase two)
  *   p.quote             { address, decimals, native, symbol }
  *   p.tokenAmount, p.quoteAmount              human units
@@ -326,19 +502,26 @@ export async function buildLaunchPlan(p) {
   const {
     chainId, factoryAddress, spec, tokenAddress = null, quote,
     tokenAmount, quoteAmount, slippageBps, creator,
-    pairAddress = null, createPairNeeded = null, provider = null, deadlineSeconds
+    pairAddress = null, createPairNeeded = null, provider = null, deadlineSeconds,
+    nonce = 0
   } = p;
   if (!LAUNCH_CHAINS.includes(chainId)) throw new Error('CHAIN_NOT_SUPPORTED');
   const chain = EVM_CHAINS[chainId];
   const dex = dexForChain(chainId);
+  const mode = p.mode || launchModeFor(chainId, factoryAddress ? { [String(chainId)]: factoryAddress } : {});
 
   const steps = [];
   const signatureOrder = [];
 
   // Phase one — token creation (only before the token exists)
   if (!tokenAddress) {
-    if (!factoryAddress) throw new Error('FACTORY_NOT_DEPLOYED');
-    steps.push(await buildTokenCreateTx({ factoryAddress, spec }));
+    if (mode === LAUNCH_MODES.FACTORY) {
+      if (!factoryAddress) throw new Error('FACTORY_NOT_DEPLOYED');
+      steps.push(await buildTokenCreateTx({ factoryAddress, spec }));
+    } else {
+      // Direct deploy — no operator contract anywhere in this transaction.
+      steps.push(await buildDirectTokenCreateTx({ spec, creator, nonce }));
+    }
     signatureOrder.push('token.create');
 
     if (quote) {
@@ -346,7 +529,7 @@ export async function buildLaunchPlan(p) {
       let needPair = createPairNeeded;
       let resolvedPair = pairAddress || null;
       if (provider) {
-        const quoteAddr = quote.native ? chain.wrapped : quote.address;
+        const quoteAddr = quote.native ? dex.wrapped : quote.address;
         resolvedPair = (await getExistingPair(provider, chainId, tokenAddress, quoteAddr)) || null;
         needPair = !resolvedPair;
       } else if (needPair == null) {
@@ -379,16 +562,21 @@ export async function buildLaunchPlan(p) {
       schema: 'fbt.launch-plan.v1',
       phase: 'token',
       chainId,
+      mode,
       dex,
       steps,
       createPairNeeded,
       pairAddress: pairAddress || null,
-      signatureOrder
+      signatureOrder,
+      /* Only meaningful in direct mode: the token's exact future address, for
+         the review panel. In factory mode the address is unknown until the
+         factory's TokenCreated event is parsed. */
+      predictedTokenAddress: steps[0].predictedAddress || null
     };
   }
 
   // Phase two — pool + liquidity with the real token address
-  const quoteAddress = quote.native ? chain.wrapped : quote.address;
+  const quoteAddress = quote.native ? dex.wrapped : quote.address;
   let resolvedPair = pairAddress || null;
   let needPair = createPairNeeded;
   if (provider) {
@@ -416,6 +604,7 @@ export async function buildLaunchPlan(p) {
     schema: 'fbt.launch-plan.v1',
     phase: 'pool',
     chainId,
+    mode,
     dex,
     steps,
     createPairNeeded: needPair,
