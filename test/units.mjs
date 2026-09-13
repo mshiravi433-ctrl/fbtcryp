@@ -115,6 +115,7 @@ import {
   recordFailure
 } from '../server/providerStatus.js';
 import { bpsToPercent, ooSwapParams, openOceanSupports, toOOAddress } from '../src/lib/openocean.js';
+import { aggregatorSupports } from '../src/lib/aggregator.js';
 import { betaToBtc, cyclePosition, macroContext, marketRegime } from '../src/lib/macro.js';
 import { CONFIDENCE_CEILING, verdict } from '../src/lib/verdict.js';
 import {
@@ -243,8 +244,8 @@ import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
 import { classifyQuoteFailure, formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
-import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
-import { kyberSlug, kyberUpstreamUrl, ooSlug, ooUpstreamUrl, veloraChainOk, veloraUpstreamUrl } from '../server/swapProxy.js';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT, TOKENS } from '../src/lib/chains.js';
+import { kyberSlug, kyberUpstreamUrl, ooSlug, ooUpstreamUrl, proxyOoDecode, veloraChainOk, veloraUpstreamUrl } from '../server/swapProxy.js';
 import {
   DCA_INTERVALS,
   TRAIL_MAX_PCT,
@@ -2889,6 +2890,35 @@ export default async function run() {
       minOutWei: 4900000n
     });
     t('minOutput is NOT sent on unsupported chains', polyParams.get('minOutput') === null);
+
+    /*
+     * ─── TOKEN ADDRESS INTEGRITY (the silent SCR/ZK killer) ─────────────────
+     * A single missing hex digit turns a liquid pair into an aggregator
+     * rejection that the UI surfaces as «اتصال به سرویس مسیریابی برقرار نشد».
+     * Pin every curated address to a real 20-byte EVM address, and pin the
+     * two known-broken spellings that shipped with Scroll/zkSync/Mantle.
+     */
+    const isEvmAddr = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
+    let badAddr = 0;
+    for (const id of EVM_CHAIN_ORDER) {
+      for (const tok of TOKENS[id] || []) {
+        if (tok.native) continue;
+        if (!isEvmAddr(tok.address)) badAddr += 1;
+      }
+      const wrapped = EVM_CHAINS[id]?.wrapped;
+      if (wrapped && !isEvmAddr(wrapped)) badAddr += 1;
+    }
+    t('every curated non-native token address is a full 20-byte EVM address', badAddr === 0);
+    t('zkSync Era USDT is the official 40-hex contract (not the truncated one)',
+      (TOKENS[324] || []).some((x) => x.symbol === 'USDT' && x.address.toLowerCase() === '0x493257fd37edb34451f62edf8d2a0c418852ba4c'));
+    t('Mantle WETH is the official 40-hex bridged contract (not the truncated one)',
+      (TOKENS[5000] || []).some((x) => x.symbol === 'WETH' && x.address.toLowerCase() === '0xdeaddeaddeaddeaddeaddeaddeaddeaddead1111'));
+    t('Scroll ships a usable native + stable pair offline',
+      (TOKENS[534352] || []).some((x) => x.native) &&
+      (TOKENS[534352] || []).some((x) => x.symbol === 'USDC' && isEvmAddr(x.address)));
+    t('zkSync Era ships a usable native + stable pair offline',
+      (TOKENS[324] || []).some((x) => x.native) &&
+      (TOKENS[324] || []).some((x) => x.symbol === 'USDC' && isEvmAddr(x.address)));
   }
 
   /* --------------------- swap failure classification ---------------------- */
@@ -2947,6 +2977,30 @@ export default async function run() {
     })());
     t('chainId never reaches the upstream', !kyberUpstreamUrl('routes', { chainId: '56', tokenIn: '0x1' }).includes('chainId'));
     t('every supported EVM chain has a kyber slug', EVM_CHAIN_ORDER.every((id) => kyberSlug(id)));
+    /*
+     * Scroll + zkSync Era + Mantle: OpenOcean is the ONLY live routing source
+     * (Kyber's gateway 404s those slugs). The proxy must still map them, or a
+     * geo-blocked user on those chains has no fallback at all — which is the
+     * failure the owner reported as «اتصال به سرویس مسیریابی برقرار نشد».
+     */
+    t('Scroll maps to the openocean scroll slug', ooSlug(534352) === 'scroll');
+    t('zkSync Era maps to the openocean zksync slug', ooSlug(324) === 'zksync');
+    t('Mantle maps to the openocean mantle slug', ooSlug(5000) === 'mantle');
+    t('OpenOcean is the live router on Scroll (Kyber is not)', openOceanSupports(534352) && !aggregatorSupports(534352));
+    t('OpenOcean is the live router on zkSync Era (Kyber is not)', openOceanSupports(324) && !aggregatorSupports(324));
+    t('OpenOcean is the live router on Mantle (Kyber is not)', openOceanSupports(5000) && !aggregatorSupports(5000));
+    t('Scroll proxy quote URL uses the scroll slug',
+      ooUpstreamUrl('quote', { chainId: '534352', inTokenAddress: '0xEeee' })
+        .startsWith('https://open-api.openocean.finance/v4/scroll/quote?'));
+    t('zkSync proxy quote URL uses the zksync slug',
+      ooUpstreamUrl('quote', { chainId: '324', inTokenAddress: '0xEeee' })
+        .startsWith('https://open-api.openocean.finance/v4/zksync/quote?'));
+    /* decode proxy: body.chainId routes, missing calldata is refused closed.
+       These are pure allowlist checks — no upstream fetch is made. */
+    const decodeUnknown = await proxyOoDecode({ chainId: 999, data: '0xab' });
+    t('oo decode refuses an unknown chain', decodeUnknown.status === 400 && decodeUnknown.body?.error === 'CHAIN_UNSUPPORTED');
+    const decodeEmpty = await proxyOoDecode({ chainId: 56 });
+    t('oo decode refuses missing calldata', decodeEmpty.status === 400 && decodeEmpty.body?.error === 'MISSING_CALLDATA');
 
     /*
      * ─── VELORA'S PROXY (previously missing) ────────────────────────────────

@@ -518,7 +518,10 @@ export const TOKENS = {
     { symbol: 'WMNT', name: 'Wrapped Mantle', address: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8', decimals: 18, coingeckoId: 'mantle' },
     { symbol: 'USDT', name: 'Tether USD', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6, coingeckoId: 'tether' },
     { symbol: 'USDC', name: 'USD Coin (bridged)', address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', decimals: 6, coingeckoId: 'usd-coin' },
-    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xDeaDdeaDDeAdDeAdDEAdDEADdeadDeAD1111', decimals: 18, coingeckoId: 'ethereum' }
+    /* Canonical Mantle-bridged WETH — 40 hex chars. A truncated spelling
+       (36 hex) made every Mantle WETH pair fail at the aggregator with a
+       bad-address rejection that the UI surface as a routing outage. */
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xdEAddEaDdeadDEadDEADDEAddEADDEAddead1111', decimals: 18, coingeckoId: 'ethereum' }
   ],
   80094: [
     { symbol: 'BERA', name: 'Berachain', address: null, decimals: 18, native: true, coingeckoId: 'berachain' },
@@ -555,7 +558,10 @@ export const TOKENS = {
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
     { symbol: 'WETH', name: 'Wrapped Ether', address: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', decimals: 18, coingeckoId: 'ethereum' },
     { symbol: 'USDC', name: 'USD Coin', address: '0x1d17cbcf0d6d143135ae902365d2e5e2a16538d4', decimals: 6, coingeckoId: 'usd-coin' },
-    { symbol: 'USDT', name: 'Tether USD', address: '0x493257fd37edb34451f62edf8d2a0c418852ba4', decimals: 6, coingeckoId: 'tether' },
+    /* Official zkSync Era USDT (era.zksync.network). The previous spelling
+       was one hex digit short (39 instead of 40), so every USDT pair on this
+       chain was rejected by the aggregator before a route could form. */
+    { symbol: 'USDT', name: 'Tether USD', address: '0x493257fD37EDB34451f62EDf8D2a0C418852bA4C', decimals: 6, coingeckoId: 'tether' },
     { symbol: 'DAI', name: 'Dai', address: '0x3e7676937a7e96cfb7616f255b9ad9ff47363d4b', decimals: 18, coingeckoId: 'dai' }
   ],
   56: [

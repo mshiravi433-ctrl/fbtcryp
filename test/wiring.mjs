@@ -9641,6 +9641,37 @@ export default function run() {
     }
 
     /*
+     * ─── SAME-ORIGIN PROXY MUST CARRY chainId ───────────────────────────────
+     * The direct OpenOcean/Kyber URLs put the chain in the PATH. Our proxy has
+     * no path slug and routes by `chainId` query/body. Without re-injecting
+     * chainId on the fallback retry, every network-filtered user (Iranian
+     * mobile on SCR/ZK especially — OpenOcean is their only source) got
+     * CHAIN_UNSUPPORTED and the screen said «اتصال به سرویس مسیریابی برقرار نشد».
+     */
+    const ooSrc = read('src/lib/openocean.js');
+    const ooCode = code(ooSrc);
+    t('OpenOcean proxy retry re-injects chainId into the query',
+      /qs\.set\('chainId', String\(chainId\)\)/.test(ooCode) && /chainId = null/.test(ooCode));
+    t('OpenOcean quote and swap both pass chainId into ooFetch',
+      /ooFetch\([^)]*\{[^}]*chainId/.test(ooSrc) ||
+      (/endpoint: 'quote'/.test(ooSrc) && /chainId,/.test(ooSrc) && /endpoint: 'swap'/.test(ooSrc)));
+    t('Kyber proxy retry also re-injects chainId',
+      /qs\.set\('chainId', String\(chainId\)\)/.test(code(aggSrc)));
+    t('OpenOcean fee-verify falls back through /swap/oo/decode',
+      /proxyBase\(\)\)\/decode/.test(ooCode) || /`\$\{proxyBase\(\)\}\/decode`/.test(ooSrc));
+    t('server exposes the OpenOcean decode proxy route',
+      /proxyOoDecode/.test(read('server/app.js')) && /'\/api\/swap\/oo\/decode'/.test(read('server/app.js')));
+    t('server swapProxy implements proxyOoDecode',
+      /export async function proxyOoDecode/.test(read('server/swapProxy.js')));
+    /* Truncated addresses that shipped with SCR/ZK/Mantle must stay fixed. */
+    t('zkSync USDT is the full 40-hex official contract',
+      chainsSrc.includes('0x493257fD37EDB34451f62EDf8D2a0C418852bA4C'));
+    t('Mantle WETH is the full 40-hex bridged contract',
+      /0xdEAddEaDdeadDEadDEADDEAddEADDEAddead1111/i.test(chainsSrc));
+    t('no truncated 39-hex zkSync USDT remains',
+      !chainsSrc.includes('0x493257fd37edb34451f62edf8d2a0c418852ba4\''));
+
+    /*
      * ─── NEW SECTORS, AND THE CHECK THAT ACTUALLY MATTERS ───────────────────
      * Asked for oil, AI and newer listings. A wrong mint address is the one
      * unrecoverable mistake this file can make — it sends money to a token
