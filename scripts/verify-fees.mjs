@@ -18,10 +18,13 @@
  *      longer serves (Mantle, Scroll, zkSync Era — HTTP 404, live-probed
  *      2026-09-11) the client routes through OpenOcean, so the echo is their
  *      /decodeInputData reading of the built calldata's `referrer` — the same
- *      proof verifyOpenOceanFee() demands before a user ever signs. This is
- *      the one that matters: it inspects what would actually be signed, so if
- *      the echo is wrong the money goes elsewhere no matter what our source
- *      says.
+ *      proof verifyOpenOceanFee() demands before a user ever signs. The five
+ *      2026-09 networks ALSO run the LI.FI pass (checkLifi): its feeSplit is
+ *      signed into the transactionRequest calldata, and the same evidence is
+ *      what verifyLifiFee() (src/lib/lifi.js) and server/lifi.js demand
+ *      before a user ever signs. This is the one that matters: it inspects
+ *      what would actually be signed, so if the echo is wrong the money goes
+ *      elsewhere no matter what our source says.
  *
  *   3. ARITHMETIC — recomputes the fee from amountIn and checks it against
  *      what the aggregator reports, so a units mistake shows up as a number
@@ -123,6 +126,121 @@ const OO_TARGET = {
      on the chain (Blockscout token record, checked 2026-09-13). */
   4663: { name: 'USDG', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6 }
 };
+
+/* ─── THE LI.FI PASS ─────────────────────────────────────────────────────────
+ * LI.FI is the third executable source (src/lib/lifi.js): the PRIMARY on
+ * Mantle/Scroll/zkSync Era — where OpenOcean's edge has been blocking our
+ * server (UPSTREAM_HTTP_403, probed 2026-09-13) — and a second opinion on
+ * Monad/Robinhood. Its fee echo is a feeSplit signed into the transaction's
+ * calldata by their diamond router: our FEE_BPS share to OUR wallet plus
+ * LI.FI's own fixed 25 bps. Same three promises as the other passes: route
+ * exists, our share is ours, arithmetic checks out.
+ *
+ * ⚠️ LI.FI matches token addresses CASE-SENSITIVELY (their /v1/tokens list is
+ * the source of truth) — the addresses below are spelled exactly as LI.FI's
+ * own token registry returns them, not as OpenOcean's case-insensitive table
+ * spells them.
+ */
+const LIFI_BASE = 'https://li.quest/v1';
+const LIFI_INTEGRATOR = 'fbt-swap';
+const LIFI_NATIVE = {
+  5000: 'MNT',
+  143: 'MON',
+  534352: 'ETH',
+  324: 'ETH',
+  4663: 'ETH'
+};
+const LIFI_TARGET = {
+  5000: { name: 'USDT', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6 },
+  143: { name: 'USDC', address: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603', decimals: 6 },
+  534352: { name: 'USDC', address: '0x06eFdBfF2a14a7c8E15944D1F4A48F9F95F663A4', decimals: 6 },
+  324: { name: 'USDC', address: '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4', decimals: 6 },
+  4663: { name: 'USDG', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6 }
+};
+
+async function checkLifi(row, resolved) {
+  const { chainId, gas } = row;
+  const target = LIFI_TARGET[chainId];
+  const amountIn = 10n ** 18n; // 1 native unit
+  const params = new URLSearchParams({
+    fromChain: String(chainId),
+    toChain: String(chainId),
+    fromToken: LIFI_NATIVE[chainId],
+    toToken: target.address,
+    fromAmount: String(amountIn),
+    /* Quote-only, never signed — the payout address can receive nothing here. */
+    fromAddress: resolved.address,
+    integrator: LIFI_INTEGRATOR,
+    fee: String(FEE_BPS / 10000) // 70 bps -> 0.007 (LI.FI takes fractions)
+  });
+
+  try {
+    const res = await fetch(`${LIFI_BASE}/quote?${params}`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body) {
+      console.log(warn(`LI.FI returned HTTP ${res.status} (${body?.message ?? 'no body'}) — could not verify live`));
+      return;
+    }
+
+    /* 1. ROUTE — a real output AND a signable transactionRequest. */
+    const out = BigInt(body?.estimate?.toAmount ?? 0);
+    if (out <= 0n || !body?.transactionRequest?.data || !body?.transactionRequest?.to) {
+      console.log(bad(`LI.FI returned no executable route (${body?.message ?? 'no toAmount/transactionRequest'}) — the client would show «دوباره امتحان کنید»`));
+      failures += 1;
+      return;
+    }
+    const tool = body?.tool ?? 'unknown';
+    console.log(ok(`LI.FI route exists via ${tool} — 1 ${gas} → ${(Number(out) / 10 ** target.decimals).toFixed(4)} ${target.name} (transactionRequest present)`));
+
+    /* 2. ECHO — root integrator/fee, the feeSplit share, and the wallet the
+       share is signed to. Mirrors verifyLifiFee() in src/lib/lifi.js and the
+       server-side gate in server/lifi.js. */
+    if (String(body?.integrator ?? '') !== LIFI_INTEGRATOR) {
+      console.log(bad(`LI.FI quote integrator is ${body?.integrator}, not ${LIFI_INTEGRATOR} — fee is not ours`));
+      failures += 1;
+      return;
+    }
+    if (Math.abs(Number(body?.fee ?? 0) - FEE_BPS / 10000) > 1e-9) {
+      console.log(bad(`LI.FI quote fee is ${body?.fee}, expected ${FEE_BPS / 10000} (${FEE_BPS} bps)`));
+      failures += 1;
+      return;
+    }
+    const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
+    const split = feeCosts.find((fc) => fc?.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
+    const ours = split?.recipients?.find((r) => String(r?.name) === LIFI_INTEGRATOR) ?? null;
+    const fromWei = BigInt(body?.action?.fromAmount ?? 0);
+    if (!ours || fromWei <= 0n || BigInt(String(ours.fee ?? 0)) * 10000n !== fromWei * BigInt(FEE_BPS)) {
+      console.log(bad('our share is MISSING or not 70 bps of the input — this swap would pay us nothing'));
+      failures += 1;
+      return;
+    }
+    const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
+    const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
+    const wallet = wallets.find((r) => String(r?.name) === LIFI_INTEGRATOR)?.config?.defaultWallet ?? null;
+    if (!wallet || String(wallet).toLowerCase() !== resolved.address.toLowerCase()) {
+      console.log(bad(`LI.FI signed the fee to ${wallet ?? '(missing)'}, NOT ${resolved.address}`));
+      failures += 1;
+      return;
+    }
+    console.log(ok(`feeSplit signed into calldata: ${FEE_BPS} bps → ${wallet} (+ LI.FI's fixed 25 bps)`));
+
+    /* 3. ARITHMETIC — our share + LI.FI's fixed fee = the total the user pays. */
+    const lifiFeeWei = BigInt(String(split?.lifiFee ?? 0));
+    const total = lifiFeeWei + BigInt(String(ours.fee));
+    const expectedShare = (amountIn * BigInt(FEE_BPS)) / 10000n;
+    console.log(
+      ok(
+        `arithmetic: 1.0 ${gas} in → ${(Number(expectedShare) / 1e18).toFixed(6)} ${gas} ours + ` +
+          `${(Number(lifiFeeWei) / 1e18).toFixed(6)} ${gas} LI.FI = ${(Number(total) / 1e18).toFixed(6)} ${gas} total (${(Number(total) * 10000n) / Number(amountIn)} bps shown to the user)`
+      )
+    );
+  } catch (e) {
+    console.log(warn(`LI.FI live check failed: ${String(e.message).slice(0, 80)}`));
+  }
+}
 
 /**
  * A liquid token per chain to quote native -> token against. Only used to make
@@ -297,6 +415,14 @@ async function checkChain(row) {
   }
   console.log(ok(`recipient ${resolved.address}${resolved.fallback ? ' (via fallback)' : ''}`));
   console.log(`  gas on this network is paid in ${row.gas}`);
+
+  /* LI.FI is a live swap source on the five 2026-09 networks — the PRIMARY on
+     Mantle/Scroll/zkSync Era and a second opinion on Monad/Robinhood (see
+     src/lib/lifi.js). Verify its fee echo alongside the chain's other
+     sources; the client refuses to sign a LI.FI quote that fails these. */
+  if (LIFI_TARGET[chainId]) {
+    await checkLifi(row, resolved);
+  }
 
   /* Chains the Kyber aggregator does not serve: Mantle, Scroll and zkSync Era
      route through OpenOcean (their gateway 404s on those slugs — live-probed

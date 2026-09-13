@@ -173,3 +173,145 @@ export async function integratorStatus() {
 export function _resetLifiCache() {
   cache.clear();
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * SWAP QUOTES (same-chain) — the source that keeps the OpenOcean-only chains
+ * quotable when OpenOcean's edge is unreachable, and a second opinion on
+ * Monad / Robinhood. Mounted at GET /api/swap/lifi/quote (server/app.js).
+ *
+ * SECURITY SHAPE — the same boundary as the bridge path above:
+ *   • integrator + fee are attached HERE, from env, never from the caller;
+ *   • the parameter allow-list is the outer boundary (chain ids + tokens +
+ *     amounts only — no URLs, no headers);
+ *   • the FEE ECHO is verified before the quote is returned, so a response
+ *     that does not provably pay our swap wallet never leaves this module.
+ * ----------------------------------------------------------------------------
+ */
+
+const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
+const AMOUNT_RE = /^[0-9]+(\.[0-9]+)?$/;
+const SYMBOL_RE = /^[A-Za-z]{2,12}$/;
+
+/** Chain ids this swap proxy is willing to forward. Same set the EVM swap
+ *  screen supports (mirrors EVM_CHAIN_ORDER in src/lib/chains.js). */
+const SWAP_CHAIN_IDS = new Set([56, 1, 137, 42161, 10, 8453, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663]);
+
+/**
+ * The swap fee — our cut, as a decimal fraction (0.007 = 70 bps).
+ *
+ * Deliberately separate from `bridgeFee()`: the bridge has its own rate knob
+ * (LIFI_FEE) that must not leak into swaps, where the platform fee is FEE_BPS
+ * (70 bps) and is verified against the echo, not merely requested.
+ */
+export function swapFee() {
+  const raw = Number(process.env.LIFI_SWAP_FEE ?? 0.007);
+  if (!Number.isFinite(raw) || raw < 0 || raw > 0.01) return 0.007;
+  return raw;
+}
+
+/**
+ * Where our swap cut must land — the EVM payout address (see src/lib/payout.js).
+ * A RECEIVING address only; there is no key here and there must never be.
+ */
+export const swapFeeRecipient = () =>
+  String(process.env.LIFI_SWAP_FEE_RECIPIENT || '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6').trim();
+
+const isAddr = (a) => typeof a === 'string' && ADDR_RE.test(a);
+
+/** Checksum a token address with ethers when available; falls back to the
+ *  raw string (LI.FI accepts well-formed addresses regardless of case, and a
+ *  failed checksum must never take quoting down). */
+async function checksummed(addr) {
+  try {
+    const { getAddress } = await import('ethers');
+    return getAddress(addr);
+  } catch {
+    return addr;
+  }
+}
+
+/**
+ * LI.FI same-chain swap quote with OUR fee attached and the echo verified.
+ *
+ * @returns {Promise<{ok:boolean, status:number, body:object}>}
+ */
+export async function lifiSwapQuote(params = {}) {
+  const fromChain = Number(params.fromChain);
+  const toChain = Number(params.toChain);
+  const fromAmount = String(params.fromAmount ?? '');
+  const fromAddress = String(params.fromAddress ?? '');
+  const fromToken = String(params.fromToken ?? '');
+  const toToken = String(params.toToken ?? '');
+
+  if (!SWAP_CHAIN_IDS.has(fromChain) || toChain !== fromChain) {
+    return { ok: false, status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+  }
+  if (!AMOUNT_RE.test(fromAmount) || Number(fromAmount) <= 0) {
+    return { ok: false, status: 400, body: { error: 'BAD_AMOUNT' } };
+  }
+  if (!isAddr(fromAddress)) {
+    return { ok: false, status: 400, body: { error: 'BAD_FROM_ADDRESS' } };
+  }
+  /* fromToken / toToken: a contract address or a coin symbol (native coins
+     travel as symbols like ETH/MNT/MON, which is how LI.FI spells them). */
+  const tokenOk = (t) => isAddr(t) || SYMBOL_RE.test(t);
+  if (!tokenOk(fromToken) || !tokenOk(toToken)) {
+    return { ok: false, status: 400, body: { error: 'BAD_TOKEN' } };
+  }
+
+  const q = new URLSearchParams({
+    fromChain: String(fromChain),
+    toChain: String(toChain),
+    fromToken: isAddr(fromToken) ? await checksummed(fromToken) : fromToken,
+    toToken: isAddr(toToken) ? await checksummed(toToken) : toToken,
+    fromAmount,
+    fromAddress,
+    /* The user's own address is always the destination for a swap. */
+    toAddress: String(params.toAddress ?? fromAddress),
+    slippage: String(Math.min(0.5, Math.max(0.0005, Number(params.slippage) || 0.005))),
+    integrator: integratorId(),
+    fee: String(swapFee())
+  });
+
+  const res = await lifiFetch(`/quote?${q.toString()}`);
+  if (!res.ok) return { ok: false, status: res.status, body: res.body ?? { error: 'UPSTREAM_FAILED' } };
+
+  /* ── THE FEE ECHO GATE — before this response leaves the server ──────────
+   * What ends up signed is the calldata LI.FI built for THIS quote, and its
+   * fee fields must prove OUR cut lands in OUR wallet. Anything less is
+   * rejected here so the client never even sees a quote we cannot honour.
+   * (The client re-verifies the same evidence before signing — one gate is
+   * a wall, two is a wall with an alarm.) */
+  const fee = swapFee();
+  const id = integratorId();
+  const body = res.body;
+  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
+  const split = feeCosts.find((fc) => fc && fc.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
+  const ours = split?.recipients?.find((r) => String(r?.name) === id) ?? null;
+  const fromWei = BigInt(body?.action?.fromAmount ?? 0);
+  const expectBps = Math.round(fee * 10000);
+  const shareOk =
+    ours != null && fromWei > 0n && BigInt(String(ours.fee ?? 0)) * 10000n === fromWei * BigInt(expectBps);
+
+  const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
+  const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
+  const walletEntry = wallets.find((r) => String(r?.name) === id) ?? null;
+  const walletOk =
+    walletEntry != null && isAddr(walletEntry?.config?.defaultWallet) &&
+    walletEntry.config.defaultWallet.toLowerCase() === swapFeeRecipient().toLowerCase();
+
+  if (!(String(body?.integrator) === id && Math.abs(Number(body?.fee ?? 0) - fee) < 1e-9)) {
+    return { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
+  }
+  if (!shareOk) {
+    return { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
+  }
+  if (!walletOk) {
+    return { ok: false, status: 502, body: { error: 'FEE_RECIPIENT_MISMATCH' } };
+  }
+  if (!body?.transactionRequest?.data || !body?.transactionRequest?.to) {
+    return { ok: false, status: 502, body: { error: 'NO_TRANSACTION_REQUEST' } };
+  }
+
+  return { ok: true, status: 200, body };
+}

@@ -658,7 +658,8 @@ export default function Swap() {
           fromToken,
           toToken,
           amountIn: rawAmt,
-          slippage: effectiveSlippage
+          slippage: effectiveSlippage,
+          fromAddress: wallet.address
         });
         if (controller?.signal?.aborted) return;
         if (seq !== quoteSeq.current) return;
@@ -962,7 +963,8 @@ export default function Swap() {
       setTxState({ stage: 'quoting' });
       const fresh = await getQuote({
         provider, chainId, fromToken, toToken, amountIn: amount,
-        slippage: effectiveSlippage
+        slippage: effectiveSlippage,
+        fromAddress: wallet.address
       });
       if (!fresh || fresh.error) throw new Error('QUOTE_EXPIRED');
 
