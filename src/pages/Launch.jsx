@@ -5,19 +5,22 @@ import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
+import { IconRocket } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import {
   LAUNCH_CHAINS,
-  SOLANA_LAUNCH_STATUS,
+  LAUNCH_MODES,
   describeAllLaunchChains,
   quoteAssetsFor
 } from '../lib/launch/networks';
+import { solanaLaunchStatus } from '../lib/launch/solana/status';
 import { CAPABILITIES, capsToBitmap, validateTokenSpec } from '../lib/launch/capabilities';
 import { scoreLaunch, bandFor } from '../lib/launch/risk';
 import { computeLaunchFee, LAUNCH_FEES } from '../lib/launch/fees';
 import {
   buildLaunchPlan,
+  buildDirectTokenCreateTx,
   buildLiquiditySteps,
   verifyDex,
   getExistingPair,
@@ -25,7 +28,7 @@ import {
   FACTORY_ABI
 } from '../lib/launch/calldata';
 import * as engine from '../lib/launch/engine';
-import { verifyLaunch } from '../lib/launch/verify';
+import { verifyLaunch, verifyDirectToken } from '../lib/launch/verify';
 import { listHistory, recordLaunch, clearHistory } from '../lib/launch/history';
 import { fetchLaunchConfig, postLaunchRecord } from '../lib/launch/api';
 import { importTokenByAddress } from '../lib/tokenLists';
@@ -34,6 +37,16 @@ import { useAppStore } from '../store/useAppStore';
 import '../styles/launch.css';
 
 const STEPS = ['network', 'token', 'rules', 'liquidity', 'review'];
+
+/*
+ * The Solana slot is driven by the status module, not by a hardcoded string:
+ * `shipping` is false while ANY part of that workstream (wallet signing, the
+ * Raydium pool flow, live-cluster verification) is unfinished, and the card
+ * below is the COMING_SOON surface in that case. When all parts land the flag
+ * flips by itself and this card becomes the entry point — the badge can never
+ * say "coming soon" over a flow that is already signing, or the reverse.
+ */
+const SOLANA = solanaLaunchStatus();
 
 const stepLabel = (id) => {
   const map = {
@@ -120,7 +133,17 @@ export default function Launch() {
   const factoryAddress = meta?.fbtFactory || null;
   const dexOk = dexCheck[chainId]?.ok === true;
   const dexChecking = dexCheck[chainId]?.checking === true;
-  const factoryReady = Boolean(factoryAddress);
+  /*
+   * DEPLOY MODE — decided per chain, disclosed before any signature.
+   *   · 'direct'  (default, v1): the token's creation bytecode is sent from the
+   *     user's own wallet as a plain CREATE. No FBT contract exists in the
+   *     transaction, so there is nothing to deploy and nothing to pay us.
+   *   · 'factory': only when the deployment pins FBTTokenFactory for this
+   *     chain (FBTLAUNCH_FACTORY_<chainId>) — the path a future on-chain fee
+   *     would need. Compatible, opt-in, never a requirement.
+   */
+  const deployMode = meta?.mode || (factoryAddress ? LAUNCH_MODES.FACTORY : LAUNCH_MODES.DIRECT);
+  const directDeploy = deployMode === LAUNCH_MODES.DIRECT;
 
   const quotes = useMemo(() => quoteAssetsFor(chainId), [chainId]);
   const quote = useMemo(() => {
@@ -178,10 +201,17 @@ export default function Launch() {
       quoteAmount: amountValid ? quoteAmount : '0',
       quoteDecimals: quote?.decimals || 0,
       dexVerified: dexOk === true,
-      factoryReady,
+      /*
+       * The token step is never blocked by a missing FBT factory any more: in
+       * direct mode (the default) the token bytes are sent as a plain CREATE
+       * by the user's own wallet, so there is no operator contract to be
+       * missing. The risk engine's factory gate is left untouched for
+       * deployments that pin themselves to factory-only mode.
+       */
+      factoryReady: true,
       lpqToUser: true
     });
-  }, [spec, amountValid, tokenAmount, quoteAmount, quote, dexOk, factoryReady]);
+  }, [spec, amountValid, tokenAmount, quoteAmount, quote, dexOk]);
 
   const launchFee = computeLaunchFee(amountValid ? quoteAmount : '0', LAUNCH_FEES.launchFeeBps);
   // Maximum signatures for a full launch (the pair step is skipped at
@@ -198,13 +228,13 @@ export default function Launch() {
   // ── step gating ───────────────────────────────────────────────────────
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return dexOk && factoryReady;
+      case 0: return dexOk; // the DEX anchor + router proof, checked on-chain
       case 1: return specResult.ok;
       case 2: return true;
       case 3: return Boolean(quote) && amountValid && !risk?.blocked;
       default: return false;
     }
-  }, [step, dexOk, factoryReady, specResult.ok, quote, amountValid, risk]);
+  }, [step, dexOk, specResult.ok, quote, amountValid, risk]);
 
   // ─────────────────────────── execution ───────────────────────────────
   const runRef = useRef(false);
@@ -300,7 +330,38 @@ export default function Launch() {
     const provider = await wallet.getReadProvider(l.config.chainId);
     let tokenFacts = null;
     let poolFacts = null;
-    if (st.id === 'create-token') {
+    if (st.id === 'create-token' && st.deploy) {
+      /*
+       * DIRECT DEPLOY — there is no factory event to parse. The chain's word
+       * is three facts: the transaction succeeded, it was a deployment that
+       * landed at the address PREDICTED BEFORE THE SIGNATURE, and the code
+       * there equals the token bytecode we published, byte for byte. Any
+       * failure stops the launch with a named reason instead of pairing
+       * liquidity into a contract we cannot vouch for.
+       */
+      const vres = await verifyDirectToken(provider, receipt, {
+        predictedAddress: st.predictedAddress,
+        expectedCode: st.expectedCode
+      });
+      if (!vres.ok) {
+        engine.stepFailed(l, st.id, vres.problems.join(',') || 'DIRECT_DEPLOY_UNVERIFIED');
+        setLaunch({ ...l });
+        return;
+      }
+      const s = l.config.spec;
+      tokenFacts = {
+        address: vres.address,
+        name: s.name,
+        symbol: s.symbol,
+        decimals: s.decimals,
+        supply: s.supplyWei,
+        capabilities: Number(s.capabilities || 0),
+        txHash: receipt.transactionHash,
+        mode: LAUNCH_MODES.DIRECT,
+        codeVerified: true
+      };
+    }
+    if (st.id === 'create-token' && !st.deploy) {
       for (const log of receipt.logs || []) {
         if (log.address?.toLowerCase() !== l.config.factoryAddress.toLowerCase()) continue;
         const parsed = await parseTokenCreatedLog(log).catch(() => null);
@@ -375,6 +436,31 @@ export default function Launch() {
         if (st.deferred) break;
         queue.push(st);
       }
+
+      /*
+       * DIRECT DEPLOY: freeze the address right before the signature. The
+       * nonce that produces the CREATE address is read live (pending), the
+       * bytes are rebuilt for it, and that frozen address is what the
+       * confirmation step later verifies the chain against. If the nonce had
+       * moved since the review screen, the user is looking at the new,
+       * authoritative address in this panel — never at a stale one.
+       */
+      if (directDeploy && queue[0]?.deploy) {
+        try {
+          const liveNonce = await provider.getTransactionCount(wallet.address, 'pending');
+          const fresh = await buildDirectTokenCreateTx({ spec: cur.config.spec, creator: cur.config.creator, nonce: liveNonce });
+          const keep = { status: queue[0].status, gasLimit: queue[0].gasLimit };
+          Object.assign(queue[0], fresh, keep);
+          cur.config.predictedTokenAddress = fresh.predictedAddress;
+          cur.config.nonce = fresh.nonce;
+          setLaunch({ ...cur });
+        } catch (e) {
+          engine.stepFailed(cur, queue[0].id, `ADDRESS_PREDICTION_FAILED: ${String(e?.message || 'NONCE_UNREADABLE').slice(0, 120)}`);
+          setLaunch({ ...cur });
+          return;
+        }
+      }
+
       // simulate the remaining phase-one steps right now (gas prices move)
       engine.simulateStart(cur);
       const gas = {};
@@ -495,9 +581,24 @@ export default function Launch() {
     if (!spec || !quote || !amountValid) return;
     setPlanning(true);
     try {
+      // Direct mode shows the user the address their token WILL be deployed
+      // at before they sign, so the plan needs the account nonce. It is
+      // re-read right before signing (startLaunch) — a nonce that moved in
+      // between must never make the printed address a lie.
+      let nonce = 0;
+      if (directDeploy && wallet.address) {
+        try {
+          const provider = await wallet.getReadProvider(chainId);
+          nonce = await provider.getTransactionCount(wallet.address, 'pending');
+        } catch {
+          nonce = 0;
+        }
+      }
       const p = await buildLaunchPlan({
         chainId,
         factoryAddress,
+        mode: deployMode,
+        nonce,
         spec,
         quote,
         tokenAmount,
@@ -511,7 +612,7 @@ export default function Launch() {
     } finally {
       setPlanning(false);
     }
-  }, [spec, quote, amountValid, chainId, factoryAddress, tokenAmount, quoteAmount, slippage, wallet.address, notify]);
+  }, [spec, quote, amountValid, chainId, factoryAddress, deployMode, directDeploy, tokenAmount, quoteAmount, slippage, wallet.address, notify]);
 
   useEffect(() => {
     if (step === 4 && !plan && !planning) doPlan();
@@ -550,7 +651,9 @@ export default function Launch() {
     const cfg = {
       chainId,
       dex,
+      mode: deployMode,
       factoryAddress,
+      predictedTokenAddress: plan?.predictedTokenAddress || null,
       spec,
       quote,
       tokenAmount,
@@ -685,21 +788,33 @@ export default function Launch() {
   return (
     <PageTransition>
       <div className="launch-page">
-        <div className="launch-head">
-          <div className="launch-title">
-            <span className="launch-rocket" aria-hidden>🚀</span>
-            <div>
-              <h1>{t('launch.title')}</h1>
-              <p>{t('launch.subtitle')}</p>
+        {/* HERO — glass box: the icon floats, its flame pulses, the copy sits
+            inside the same surface as the badges. Motion is decorative only
+            and switches off entirely under prefers-reduced-motion (launch.css). */}
+        <header className="launch-hero">
+          <span className="launch-hero-aurora" aria-hidden />
+          <div className="launch-hero-row">
+            <div className="launch-title">
+              <span className="launch-rocket" aria-hidden>
+                <span className="launch-rocket-glow" />
+                <IconRocket className="launch-rocket-icon" width={30} height={30} />
+              </span>
+              <div className="launch-title-text">
+                <h1>{t('launch.title')}</h1>
+                <p>{t('launch.subtitle')}</p>
+              </div>
+            </div>
+            <div className="launch-badges">
+              <span className="launch-badge nc">
+                <span className="launch-badge-dot" aria-hidden />
+                {t('launch.nonCustodial')}
+              </span>
+              <span className={`launch-badge mode ${directDeploy ? 'direct' : 'factory'}`}>
+                {directDeploy ? t('launch.mode.direct') : t('launch.mode.factory')}
+              </span>
             </div>
           </div>
-          <div className="launch-badges">
-            <span className="launch-badge nc">
-              <span className="launch-badge-dot" aria-hidden />
-              {t('launch.nonCustodial')}
-            </span>
-          </div>
-        </div>
+        </header>
 
         <AnimatePresence mode="wait">
           {view === 'wizard' && (
@@ -740,19 +855,34 @@ export default function Launch() {
                           <span className="launch-chain-dot" style={{ background: c.color }} aria-hidden />
                           <span className="launch-chain-name">{c.name}</span>
                           <span className="launch-chain-dex">{t('launch.network.dex')}: {c.dex.name}</span>
-                          <span className={`launch-chain-status ${c.status === 'ready' ? 'ok' : 'warn'}`}>
-                            {c.status === 'ready' ? t('launch.network.ready') : t('launch.network.noFactory')}
+                          <span className={`launch-chain-mode ${c.mode === 'factory' ? 'factory' : 'direct'}`}>
+                            {c.mode === 'factory' ? t('launch.mode.factory') : t('launch.mode.direct')}
+                          </span>
+                          <span className={`launch-chain-status ${check?.checking ? 'warn' : check?.ok === true ? 'ok' : check?.ok === false ? 'warn' : ''}`}>
+                            {check?.checking ? t('launch.network.verifyingShort')
+                              : check?.ok === true ? t('launch.network.ready')
+                                : check?.ok === false ? t('launch.network.blocked')
+                                  : t('launch.network.tapToVerify')}
                           </span>
                         </button>
                       );
                     })}
-                    {/* Solana slot — honest coming-soon, adapter interface is ready */}
-                    <div className="launch-chain soon" aria-disabled="true">
-                      <span className="launch-chain-dot" style={{ background: '#14f195' }} aria-hidden />
-                      <span className="launch-chain-name">Solana</span>
-                      <span className="launch-chain-dex">SPL · Raydium / Meteora / Orca</span>
-                      <span className="launch-chain-status warn">{t('launch.network.soon')}</span>
-                    </div>
+                    {/* Solana slot — driven by lib/launch/solana/status.js. The
+                        pending list is named (never a vague "in progress"), so
+                        the badge and the reason under it cannot disagree. */}
+                    {!SOLANA.shipping && (
+                      <div
+                        className="launch-chain soon"
+                        aria-disabled="true"
+                        title={SOLANA.statement}
+                        data-solana-pending={SOLANA.pending.join(',')}
+                      >
+                        <span className="launch-chain-dot" style={{ background: '#14f195' }} aria-hidden />
+                        <span className="launch-chain-name">Solana</span>
+                        <span className="launch-chain-dex">SPL · {SOLANA.pending.length} parts pending</span>
+                        <span className="launch-chain-status warn">{t('launch.network.soon')}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* DEX verification banner — the runtime proof, visible */}
@@ -764,11 +894,13 @@ export default function Launch() {
                     </div>
                   )}
 
-                  {!factoryReady && (
-                    <InfoBox tone="warn" title={t('launch.network.factoryTitle')}>
-                      {t('launch.network.factoryBody')}
-                    </InfoBox>
-                  )}
+                  {/* Which mode this chain launches in — said out loud, before
+                      any signature, because the two paths differ in exactly
+                      one way the user cares about: whether an FBT contract is
+                      in their transaction at all. */}
+                  <InfoBox tone="info" title={directDeploy ? t('launch.network.directTitle') : t('launch.network.factoryTitle')}>
+                    {directDeploy ? t('launch.network.directBody') : t('launch.network.factoryModeBody')}
+                  </InfoBox>
                 </section>
               )}
 
@@ -956,8 +1088,21 @@ export default function Launch() {
                     <ReviewRow k={t('launch.review.liquidity')} v={amountValid ? `${tokenAmount} ${symbol} + ${quoteAmount} ${quoteSym}` : '—'} mono />
                     <ReviewRow k={t('launch.review.fee')} v={`${launchFee} ${quoteSym} (${LAUNCH_FEES.launchFeeBps / 100}%)`} mono />
                     <ReviewRow k={t('launch.review.swapFee')} v={`${LAUNCH_FEES.swapFeeBps / 100}%`} mono />
+                    <ReviewRow k={t('launch.review.deployMode')} v={directDeploy ? t('launch.mode.directFull') : t('launch.mode.factoryFull')} />
                     <ReviewRow k={t('launch.review.signatures')} v={t('launch.review.signaturesCount', { n: sigCount })} />
                   </div>
+
+                  {/* The address the user is about to create — shown BEFORE the
+                      signature, in direct mode. It is recomputed from the live
+                      nonce right before signing and then verified on-chain
+                      against the receipt; the wording says exactly that. */}
+                  {directDeploy && plan?.predictedTokenAddress && (
+                    <div className="launch-predicted">
+                      <p className="launch-predicted-title">{t('launch.review.predictedTitle')}</p>
+                      <p className="launch-predicted-addr mono">{plan.predictedTokenAddress}</p>
+                      <p className="launch-hint">{t('launch.review.predictedNote')}</p>
+                    </div>
+                  )}
 
                   {balanceInfo && !balanceInfo.enough && (
                     <InfoBox tone="warn" title={t('launch.review.noQuoteBalance')}>
@@ -1007,7 +1152,7 @@ export default function Launch() {
                       {t('launch.back')}
                     </button>
                     <button type="button" className="btn btn-primary launch-cta" onClick={onLaunch} disabled={!launchReady}>
-                      {planning ? <span className="spinner spinner-sm" /> : '🚀'} {t('launch.review.launch')}
+                      {planning ? <span className="spinner spinner-sm" /> : <IconRocket width={16} height={16} />} {t('launch.review.launch')}
                     </button>
                   </div>
                 </section>
@@ -1063,6 +1208,55 @@ export default function Launch() {
           </section>
         )}
 
+        {/* ── Explainers: native <details>, the same disclosure pattern the
+            Help screen uses — no JS state, keyboard-accessibly openable, and
+            one chevron that rotates on [open]. They sit BELOW the wizard and
+            the result panel so they never push the actual flow down. ── */}
+        <section className="launch-explains">
+          <details className="launch-disclosure">
+            <summary className="launch-disclosure-head">
+              <span className="launch-disclosure-ico" aria-hidden><IconRocket width={16} height={16} /></span>
+              <span className="launch-disclosure-text">
+                <span className="launch-disclosure-title">{t('launch.howTitle')}</span>
+                <span className="launch-disclosure-sub">{t('launch.howSub')}</span>
+              </span>
+              <span className="launch-disclosure-caret" aria-hidden>⌄</span>
+            </summary>
+            <div className="launch-disclosure-body">
+              <ol className="launch-how">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <li key={n} className="launch-how-step">
+                    <span className="launch-how-num" aria-hidden>{n}</span>
+                    <span className="launch-how-text">{t(`launch.howStep${n}`)}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="launch-how-note">{t('launch.howNote')}</p>
+            </div>
+          </details>
+
+          <details className="launch-disclosure warn">
+            <summary className="launch-disclosure-head">
+              <span className="launch-disclosure-ico warn" aria-hidden>⚠</span>
+              <span className="launch-disclosure-text">
+                <span className="launch-disclosure-title">{t('launch.warnTitle')}</span>
+                <span className="launch-disclosure-sub">{t('launch.warnSub')}</span>
+              </span>
+              <span className="launch-disclosure-caret" aria-hidden>⌄</span>
+            </summary>
+            <div className="launch-disclosure-body">
+              <ul className="launch-warns">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <li key={n} className="launch-warn-item">
+                    <span className="launch-warn-mark" aria-hidden>•</span>
+                    <span>{t(`launch.warn${n}`)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        </section>
+
         <footer className="launch-footer">
           <p>🔒 {t('launch.footer.statement')}</p>
         </footer>
@@ -1091,11 +1285,43 @@ function RiskPill({ risk, t }) {
   );
 }
 
+/*
+ * Named failure → plain language. The engine keeps the machine-readable code
+ * (that is what the probes assert on); the panel translates the ones a user
+ * can actually act on and falls back to the raw code for anything else —
+ * never to a generic "something went wrong", which would hide the reason a
+ * launch stopped.
+ */
+const RUN_ERR_CODES = [
+  'DIRECT_CODE_MISMATCH', 'DIRECT_NO_CODE', 'DIRECT_ADDRESS_MISMATCH',
+  'DIRECT_TX_REVERTED', 'DIRECT_TX_NOT_DEPLOY', 'DIRECT_RECEIPT_ADDRESS_MISSING',
+  'DIRECT_PREDICTED_ADDRESS_MISSING', 'TOKEN_EVENT_NOT_FOUND', 'TX_REVERTED',
+  'USER_REJECTED'
+];
+
+function errorText(t, raw) {
+  const code = String(raw || '').split(':')[0].trim();
+  if (RUN_ERR_CODES.includes(code)) {
+    const body = t(`launch.run.err.${code}`);
+    // i18next returns the key itself when it is missing — fall back to the code.
+    return body === `launch.run.err.${code}` ? code : body;
+  }
+  return String(raw || '');
+}
+
 function RunPanel({ launch, t, onCancel, chainId }) {
   const steps = launch.steps;
+  const directStep = steps.find((s) => s.deploy);
   return (
     <div className="launch-run">
       <h2 className="launch-h2">{t('launch.run.title')}</h2>
+      {directStep?.predictedAddress && (
+        <div className="launch-predicted">
+          <p className="launch-predicted-title">{t('launch.review.predictedTitle')}</p>
+          <p className="launch-predicted-addr mono">{directStep.predictedAddress}</p>
+          <p className="launch-hint">{t('launch.run.predictedNote')}</p>
+        </div>
+      )}
       <ol className="launch-run-list">
         {steps.map((s) => (
           <li key={s.id} className={`launch-run-step ${s.status}`}>
@@ -1104,7 +1330,9 @@ function RunPanel({ launch, t, onCancel, chainId }) {
             </span>
             <div className="launch-run-info">
               <p className="launch-run-name">{t(stepLabel(s.id))}</p>
-              <p className="launch-run-desc">{s.description || s.error || t(`launch.run.state.${s.status}`)}</p>
+              {s.error
+                ? <p className="launch-run-desc err">{errorText(t, s.error)}</p>
+                : <p className="launch-run-desc">{s.description || t(`launch.run.state.${s.status}`)}</p>}
               {s.txHash && (
                 <a className="launch-run-hash mono" href={explorerTx(chainId, s.txHash)} target="_blank" rel="noreferrer">
                   {shortAddress(s.txHash, 6)} ↗
@@ -1150,6 +1378,14 @@ function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer }) {
           <a className="mono launch-result-addr" href={`${explorer}/token/${token.address}`} target="_blank" rel="noreferrer">
             {token.address} ↗
           </a>
+          {/* How the token came to exist, and what was proven about it: in
+              direct mode the bytecode at that address was compared with the
+              published token bytecode, byte for byte. */}
+          <p className="launch-hint">
+            {token.mode === 'direct' || token.codeVerified
+              ? t('launch.result.directNote')
+              : t('launch.result.factoryNote')}
+          </p>
         </div>
       )}
       {pool?.address && (

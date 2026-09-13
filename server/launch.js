@@ -67,10 +67,25 @@ function dexOverrides() {
 export function launchConfig() {
   const registry = factoryRegistry();
   const networks = describeAllLaunchChains(registry);
+  const factories = Object.keys(registry).length;
   return {
     schema: LAUNCH_SCHEMA,
     solana: { status: SOLANA_LAUNCH_STATUS, note: 'SPL + Raydium/Meteora/Orca adapters arrive after the EVM phase is audited' },
     networks,
+    /*
+     * The token step needs NO operator contract: the deployed token bytecode
+     * ships with the client and is sent as a plain CREATE from the user's own
+     * wallet (mode 'direct'). A chain only switches to mode 'factory' when a
+     * FBTTokenFactory address is pinned for it via FBTLAUNCH_FACTORY_<id> —
+     * the path future on-chain fees would need. `factoryRegistry` stays in the
+     * response for exactly that reason.
+     */
+    deploy: {
+      defaultMode: 'direct',
+      factoryChains: Object.keys(registry).map(Number),
+      factoryCount: factories,
+      statement: 'Direct mode deploys the token straight from the user\'s wallet: the launch costs nothing but gas, and no FBT contract is in the transaction.'
+    },
     fees: feeSummary(),
     factoryRegistry: registry,
     durableRecords: storeDurable(),
@@ -151,19 +166,28 @@ function parsePrepareQuery(q) {
   const creator = isAddress(q.creator) ? q.creator : null;
   const tokenAddress = isAddress(q.tokenAddress) ? q.tokenAddress : null;
   const factoryAddress = isAddress(q.factoryAddress) ? q.factoryAddress : factoryRegistry()[String(chainId)] || null;
+  /* Direct deploy is the default: no factory address is required to build the
+     token bytes, and the deployer nonce (for the CREATE address prediction)
+     comes from the caller — the server never reads a user's account state
+     without being asked. `mode` may be forced ('direct' | 'factory'); it is
+     omitted when not asked for, so the default stays the chain's mode. */
+  const nonce = Number.isFinite(Number(q.nonce)) && Number(q.nonce) >= 0 ? Number(q.nonce) : 0;
+  const mode = q.mode === 'direct' || q.mode === 'factory' ? q.mode : undefined;
+  const withMode = mode ? { mode } : {};
 
   if (!quote) {
     if (tokenAddress) return { error: 'PHASE_TWO_NEEDS_QUOTE' };
-    if (!factoryAddress) return { error: 'FACTORY_NOT_DEPLOYED' };
+    // Phase one is buildable with OR without a factory — direct mode needs
+    // nothing but the spec and the creator's own address.
+    if (!factoryAddress && !creator) return { error: 'CREATOR_REQUIRED' };
     return {
       ok: true,
-      params: { chainId, factoryAddress, spec: spec.value, tokenAddress: null, quote: null, creator }
+      params: { chainId, factoryAddress, spec: spec.value, tokenAddress: null, quote: null, creator, nonce, ...withMode }
     };
   }
 
   if (!/^\d+(\.\d+)?$/.test(tokenAmount) || !/^\d+(\.\d+)?$/.test(quoteAmount)) return { error: 'AMOUNT_INVALID' };
   if (!creator) return { error: 'CREATOR_REQUIRED' };
-  if (!tokenAddress && !factoryAddress) return { error: 'FACTORY_NOT_DEPLOYED' };
 
   return {
     ok: true,
@@ -176,7 +200,9 @@ function parsePrepareQuery(q) {
       tokenAmount,
       quoteAmount,
       slippageBps: Math.max(0, Math.min(5000, Number(q.slippageBps ?? 100))),
-      creator
+      creator,
+      nonce,
+      ...withMode
     }
   };
 }
@@ -219,7 +245,13 @@ export async function launchPrepareHandler(req, res) {
       quoteAmount: params.quote ? params.quoteAmount : '0',
       quoteDecimals: params.quote ? params.quote.decimals : 0,
       dexVerified: dexCheck.ok,
-      factoryReady: Boolean(params.tokenAddress || params.factoryAddress),
+      /*
+       * The token step needs no factory: in direct mode the bytes are sent as
+       * a plain CREATE from the caller's wallet, so the "factory not
+       * deployed" gate can never apply here. The gate stays in the risk
+       * engine for any deployment that pins itself to factory-only mode.
+       */
+      factoryReady: true,
       lpqToUser: true
     });
 

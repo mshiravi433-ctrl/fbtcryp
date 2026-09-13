@@ -21,12 +21,21 @@ import {
 } from '../src/lib/launch/capabilities.js';
 import { scoreLaunch, RISK_BANDS } from '../src/lib/launch/risk.js';
 import { computeLaunchFee, LAUNCH_FEES } from '../src/lib/launch/fees.js';
-import { LAUNCH_CHAINS, LAUNCH_DEX, SOLANA_LAUNCH_STATUS } from '../src/lib/launch/networks.js';
+import { readFileSync } from 'node:fs';
+import {
+  LAUNCH_CHAINS, LAUNCH_DEX, SOLANA_LAUNCH_STATUS, LAUNCH_MODES,
+  quoteAssetsFor, nativeFor, dexForChain, describeLaunchChain
+} from '../src/lib/launch/networks.js';
+import { EVM_CHAINS } from '../src/lib/chains.js';
 import * as engine from '../src/lib/launch/engine.js';
 import {
   buildLaunchPlan, buildTokenCreateTx, parseTokenCreatedLog,
-  FACTORY_ABI, minWithSlippage
+  FACTORY_ABI, minWithSlippage,
+  TOKEN_BYTECODE, TOKEN_DEPLOYED_BYTECODE, TOKEN_CONSTRUCTOR_TYPES,
+  predictCreateAddress, buildDirectTokenCreateTx, verifyDex
 } from '../src/lib/launch/calldata.js';
+import { checkDirectDeploy, codeMatches } from '../src/lib/launch/verify.js';
+import { solanaLaunchStatus } from '../src/lib/launch/solana/status.js';
 import { sanitizeRecord } from '../src/lib/launch/history.js';
 import artifact from '../src/lib/launch/artifacts.js';
 import { ethers } from 'ethers';
@@ -117,6 +126,42 @@ t('networks: fee tiers are within the V2 1–120 bps sanity band',
   LAUNCH_CHAINS.every((id) => LAUNCH_DEX[id].feeTierBps >= 1 && LAUNCH_DEX[id].feeTierBps <= 120));
 t('networks: solana is an honest coming-soon slot (not silently shipped)',
   typeof SOLANA_LAUNCH_STATUS === 'string' && /COMING/i.test(SOLANA_LAUNCH_STATUS));
+t('networks: solana keeps its badge until every part is finished',
+  solanaLaunchStatus().shipping === false && /COMING/i.test(solanaLaunchStatus().badge));
+t('networks: the launch set is exactly the fully-verified chain set',
+  LAUNCH_CHAINS.join(',') === '8453,56,42161,137,1,10,43114');
+t('networks: every factory is a valid EIP-55 checksummed address',
+  LAUNCH_CHAINS.every((id) => {
+    try { return ethers.getAddress(LAUNCH_DEX[id].factory) === LAUNCH_DEX[id].factory; } catch { return false; }
+  }));
+t('networks: arbitrum uses Sushi\'s standard factory, not the rejected constant',
+  LAUNCH_DEX[42161].factory === '0xc35DADB65012eC5796536bD9864eD8773aBc74C4'
+  && !Object.values(LAUNCH_DEX).some((d) => d.factory.toLowerCase() === '0x4726b504e477d31e09e2a0c38e10f226f3104881'));
+t('networks: dex ids are unique across chains', new Set(LAUNCH_CHAINS.map((id) => LAUNCH_DEX[id].id)).size === LAUNCH_CHAINS.length);
+t('networks: every anchor is a pair of DISTINCT tokens',
+  LAUNCH_CHAINS.every((id) => LAUNCH_DEX[id].anchor.a.toLowerCase() !== LAUNCH_DEX[id].anchor.b.toLowerCase()));
+t('networks: chains whose swap router is another DEX family pin their own router',
+  dexForChain(10).routerOwner === 'dex' && dexForChain(43114).routerOwner === 'dex'
+  && [8453, 56, 42161, 137, 1].every((id) => dexForChain(id).routerOwner === 'chain'));
+t('networks: OP/AVAX route through their own Sushi router, never the chain swap router',
+  dexForChain(10).router === '0x2ABf469074dc0b54d793850807E6eb5Faf2625b1'
+  && dexForChain(43114).router === '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506'
+  && dexForChain(10).router !== EVM_CHAINS[10].router
+  && dexForChain(43114).router !== EVM_CHAINS[43114].router);
+t('networks: pinning a router also pins the wrapped native it pairs with',
+  dexForChain(10).wrapped === '0x4200000000000000000000000000000000000006'
+  && dexForChain(43114).wrapped === '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7');
+t('networks: every launch chain has quotes and a native entry',
+  LAUNCH_CHAINS.every((id) => quoteAssetsFor(id).length > 0 && Boolean(nativeFor(id))));
+t('networks: an unlisted chain is null, not a fake ready card',
+  [59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663].every((id) => describeLaunchChain(id) === null));
+t('networks: every listed chain is ready AND token-deployable without any factory',
+  LAUNCH_CHAINS.every((id) => {
+    const d = describeLaunchChain(id);
+    return d.status === 'ready' && d.tokenDeployReady === true && d.mode === LAUNCH_MODES.DIRECT;
+  }));
+t('networks: a pinned FBT factory flips the mode to factory (per chain, disclosed)',
+  describeLaunchChain(8453, { factoryAddress: '0x' + '11'.repeat(20) }).mode === LAUNCH_MODES.FACTORY);
 
 /* ── calldata: byte-exactness ────────────────────────────────────────────── */
 
@@ -135,6 +180,224 @@ t('calldata: createToken targets the factory and costs nothing (token mints to c
 
 t('calldata: slippage floor is exact (floor division)', minWithSlippage('10000', 100) === 9900n);
 t('calldata: slippage 0 = unchanged', minWithSlippage('12345', 0) === 12345n);
+
+/* ── direct deploy (the v1 default): bytes, address, verification ───────── */
+
+const directCreator = '0x' + '22'.repeat(20);
+const directTx = await buildDirectTokenCreateTx({ spec: goodSpec.value, creator: directCreator, nonce: 0 });
+const ctorBytes = '0x' + directTx.data.slice(TOKEN_BYTECODE.length);
+const ctorDecoded = coder.decode([...TOKEN_CONSTRUCTOR_TYPES], ctorBytes);
+
+t('direct: data is EXACTLY creation bytecode ‖ constructor args',
+  directTx.data.startsWith(TOKEN_BYTECODE)
+  && directTx.data.length === TOKEN_BYTECODE.length + ctorBytes.length - 2);
+t('direct: constructor args decode to the exact intent (independent decode)',
+  ctorDecoded[0] === goodSpec.value.name && ctorDecoded[1] === goodSpec.value.symbol
+  && Number(ctorDecoded[2]) === goodSpec.value.decimals
+  && ctorDecoded[3] === BigInt(goodSpec.value.supplyWei)
+  && ctorDecoded[4].toLowerCase() === directCreator
+  && ctorDecoded[5] === 0n);
+t('direct: creator is the signing wallet — the whole supply mints to it', directTx.creator.toLowerCase() === directCreator);
+t('direct: a plain CREATE — to is null, value 0, no factory, no event to parse',
+  directTx.to === null && directTx.deploy === true && directTx.event === null && directTx.value === '0'
+  && directTx.id === 'create-token');
+t('direct: expected code is the token runtime bytecode we published',
+  directTx.expectedCode === TOKEN_DEPLOYED_BYTECODE && TOKEN_DEPLOYED_BYTECODE.length > 100);
+t('direct: the predicted address is filled in before signing', directTx.predictedAddress === await predictCreateAddress(directCreator, 0));
+
+/* The CREATE rule, pinned to vectors other clients publish: nonce 0/1 are the
+   classic go-ethereum/ethereumjs values, 255/256 exercise the RLP minimal-byte
+   boundary (0x80 empty string vs 0x01 vs 0xff vs 0x0100). */
+const VECTOR_ADDR = '0x6ac7ea33f8831ea9dcc53393aaa88b25a785dbf0';
+t('direct: create address @nonce 0 matches the published vector',
+  (await predictCreateAddress(VECTOR_ADDR, 0)).toLowerCase() === '0xcd234a471b72ba2f1ccf0a70fcaba648a5eecd8d');
+t('direct: create address @nonce 1 matches the published vector',
+  (await predictCreateAddress(VECTOR_ADDR, 1)).toLowerCase() === '0x343c43a37d37dff08ae8c4a11544c718abb4fcf8');
+t('direct: nonce 255 and 256 (RLP multi-byte) match the reference client',
+  (await predictCreateAddress(VECTOR_ADDR, 255)).toLowerCase() === '0x3ef7c1a519e4b4431e317d7839340e3139b03c65'
+  && (await predictCreateAddress(VECTOR_ADDR, 256)).toLowerCase() === '0x3837c1ae70354f670550c746580199ac6a73cb0a');
+t('direct: a bad deployer or a negative nonce is refused by name',
+  await predictCreateAddress('0x' + '22'.repeat(20), 0).then(() => false, () => false) === false
+  && await buildDirectTokenCreateTx({ spec: goodSpec.value, creator: 'nope' }).then(() => false, (e) => e.message === 'CREATOR_ADDRESS_INVALID'));
+
+/* checkDirectDeploy — the check that replaces the factory's TokenCreated event. */
+const okDeploy = checkDirectDeploy({
+  status: 1, to: null, predictedAddress: directCreator, contractAddress: directCreator,
+  expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: TOKEN_DEPLOYED_BYTECODE
+});
+t('verify: a clean direct deploy passes with no problems', okDeploy.ok === true && okDeploy.problems.length === 0);
+t('verify: the reported address is the receipt\'s own (the chain\'s word)',
+  okDeploy.address.toLowerCase() === directCreator && okDeploy.code === TOKEN_DEPLOYED_BYTECODE);
+t('verify: code that differs in one byte is a NAMED failure',
+  checkDirectDeploy({
+    status: 1, to: null, predictedAddress: directCreator, contractAddress: directCreator,
+    expectedCode: TOKEN_DEPLOYED_BYTECODE,
+    actualCode: TOKEN_DEPLOYED_BYTECODE.slice(0, -2) + (TOKEN_DEPLOYED_BYTECODE.endsWith('00') ? '11' : '00')
+  }).problems.includes('DIRECT_CODE_MISMATCH'));
+t('verify: no code at the address is a named failure',
+  checkDirectDeploy({ status: 1, to: null, predictedAddress: directCreator, contractAddress: directCreator, expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: '0x' })
+    .problems.includes('DIRECT_NO_CODE'));
+t('verify: landing somewhere else than predicted blocks the launch (nonce moved)',
+  checkDirectDeploy({
+    status: 1, to: null, predictedAddress: directCreator, contractAddress: '0x' + '44'.repeat(20),
+    expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: TOKEN_DEPLOYED_BYTECODE
+  }).problems.includes('DIRECT_ADDRESS_MISMATCH'));
+t('verify: a reverted deploy and a non-deploy transaction have their own names',
+  checkDirectDeploy({ status: 0, to: null, predictedAddress: directCreator, contractAddress: null, expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: '0x' })
+    .problems.includes('DIRECT_TX_REVERTED')
+  && checkDirectDeploy({ status: 1, to: directCreator, predictedAddress: directCreator, contractAddress: null, expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: TOKEN_DEPLOYED_BYTECODE })
+    .problems.includes('DIRECT_TX_NOT_DEPLOY'));
+t('verify: a receipt without a contract address is caught',
+  checkDirectDeploy({ status: 1, to: null, predictedAddress: directCreator, contractAddress: null, expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: TOKEN_DEPLOYED_BYTECODE })
+    .problems.includes('DIRECT_RECEIPT_ADDRESS_MISSING'));
+t('verify: a missing prediction is caught, never papered over',
+  checkDirectDeploy({ status: 1, to: null, predictedAddress: null, contractAddress: directCreator, expectedCode: TOKEN_DEPLOYED_BYTECODE, actualCode: TOKEN_DEPLOYED_BYTECODE })
+    .problems.includes('DIRECT_PREDICTED_ADDRESS_MISSING'));
+
+/* codeMatches — length first, then the first differing byte. */
+t('codeMatches: identical code passes', codeMatches(TOKEN_DEPLOYED_BYTECODE, TOKEN_DEPLOYED_BYTECODE.toUpperCase().replace('0X', '0x')).ok === true);
+t('codeMatches: a truncated reply is a LENGTH_MISMATCH (never a pass)',
+  codeMatches(TOKEN_DEPLOYED_BYTECODE, TOKEN_DEPLOYED_BYTECODE.slice(0, -4)).reason === 'LENGTH_MISMATCH');
+t('codeMatches: a one-byte difference reports where it diverged',
+  (() => {
+    const other = TOKEN_DEPLOYED_BYTECODE.slice(0, 40) + (TOKEN_DEPLOYED_BYTECODE[40] === '0' ? '1' : '0') + TOKEN_DEPLOYED_BYTECODE.slice(41);
+    const res = codeMatches(TOKEN_DEPLOYED_BYTECODE, other);
+    return res.ok === false && res.reason === 'BYTE_MISMATCH' && res.at === 40;
+  })());
+t('codeMatches: empty replies are NO_CODE', codeMatches(TOKEN_DEPLOYED_BYTECODE, '0x').reason === 'NO_CODE');
+
+/* ── verifyDex: the pre-signature gate, against a stubbed chain ───────────
+ * A stub provider (no network) answers the view calls with whatever the test
+ * wants. The point is not the encoding — it is that EVERY wrong constant has
+ * a NAMED reason and blocks, and that the router used is the DEX's own.
+ */
+{
+  const v2 = new ethers.Interface([
+    'function getPair(address,address) view returns (address)',
+    'function factory() view returns (address)',
+    'function WETH() view returns (address)'
+  ]);
+  const sel = (fn) => v2.getFunction(fn).selector;
+  const enc = (type, value) => coder.encode([type], [value]);
+  const ZERO = '0x' + '00'.repeat(20);
+
+  /* Addresses in the stub are arbitrary but distinct from every real one. */
+  const pairAddr = '0x' + 'aa'.repeat(20);
+  const otherFactory = '0x' + 'bb'.repeat(20);
+  const stub = (dex, over = {}) => ({
+    async getCode() { return over.code ?? '0x6000366000'; },
+    async call(tx) {
+      const to = String(tx.to).toLowerCase();
+      const data = tx.data;
+      if (to === dex.factory.toLowerCase() && data.startsWith(sel('getPair'))) {
+        return enc('address', over.pair === null ? ZERO : (over.pair ?? pairAddr));
+      }
+      if (to === pairAddr.toLowerCase() && data.startsWith(sel('factory'))) {
+        return enc('address', over.pairFactory ?? dex.factory);
+      }
+      if (dex.router && to === dex.router.toLowerCase() && data.startsWith(sel('factory'))) {
+        return enc('address', over.routerFactory ?? dex.factory);
+      }
+      if (dex.router && to === dex.router.toLowerCase() && data.startsWith(sel('WETH'))) {
+        return enc('address', over.routerWrapped ?? dex.wrapped);
+      }
+      return '0x';
+    }
+  });
+
+  const dexBase = dexForChain(8453);
+  const good = await verifyDex(stub(dexBase), 8453, dexBase);
+  t('verifyDex: a fully consistent DEX passes and reports the anchor pair',
+    good.ok === true && good.problems.length === 0 && good.anchorPair.toLowerCase() === pairAddr && good.reason === undefined);
+  t('verifyDex: the router it verified is the chain\'s swap router here',
+    good.router.toLowerCase() === EVM_CHAINS[8453].router.toLowerCase());
+
+  const dexOp = dexForChain(10);
+  t('verifyDex: on OP it verifies the Sushi router it will actually approve',
+    (await verifyDex(stub(dexOp), 10, dexOp)).ok === true && dexOp.router === LAUNCH_DEX[10].router);
+
+  const emptyFactory = await verifyDex(stub(dexBase, { code: '0x' }), 8453, dexBase);
+  t('verifyDex: an empty factory address is FACTORY_NO_CODE', emptyFactory.problems.includes('FACTORY_NO_CODE') && emptyFactory.ok === false);
+  const noAnchor = await verifyDex(stub(dexBase, { pair: null }), 8453, dexBase);
+  t('verifyDex: a zero anchor pair is ANCHOR_PAIR_MISSING (wrong factory)',
+    noAnchor.problems.includes('ANCHOR_PAIR_MISSING') && noAnchor.anchorPair === null);
+  const wrongPairOwner = await verifyDex(stub(dexBase, { pairFactory: otherFactory }), 8453, dexBase);
+  t('verifyDex: a pair that names another factory is PAIR_FACTORY_MISMATCH',
+    wrongPairOwner.problems.includes('PAIR_FACTORY_MISMATCH'));
+  const wrongRouter = await verifyDex(stub(dexBase, { routerFactory: otherFactory }), 8453, dexBase);
+  t('verifyDex: a router from another factory is ROUTER_FACTORY_MISMATCH',
+    wrongRouter.problems.includes('ROUTER_FACTORY_MISMATCH'));
+  const wrongWrapped = await verifyDex(stub(dexBase, { routerWrapped: '0x' + 'cc'.repeat(20) }), 8453, dexBase);
+  t('verifyDex: a router wrapping another native is ROUTER_WRAPPED_MISMATCH',
+    wrongWrapped.problems.includes('ROUTER_WRAPPED_MISMATCH'));
+  t('verifyDex: no provider / no dex is a refusal, not a pass',
+    (await verifyDex(null, 8453, dexBase)).ok === false && (await verifyDex(stub(dexBase), 9999, null)).ok === false);
+}
+
+/* ── the UI path: direct mode never reads a factory event ────────────────── */
+{
+  const launchSrc = readFileSync('src/pages/Launch.jsx', 'utf8');
+  t('ui: the direct branch verifies the predicted address + code, not an event',
+    /verifyDirectToken\(provider, receipt/.test(launchSrc));
+  t('ui: TokenCreated is parsed ONLY in the factory branch (guarded)',
+    /if \(st\.id === 'create-token' && !st\.deploy\)/.test(launchSrc)
+    && /if \(st\.id === 'create-token' && st\.deploy\)/.test(launchSrc));
+  t('ui: the pending nonce is re-read immediately before signing a direct deploy',
+    /buildDirectTokenCreateTx\(\{ spec: cur\.config\.spec, creator: cur\.config\.creator, nonce: liveNonce \}\)/.test(launchSrc));
+  t('ui: the mode badge and the deploy-mode review row are wired to the chain mode',
+    /launch-badge mode/.test(launchSrc) && /launch\.review\.deployMode/.test(launchSrc));
+  t('ui: the explainers are native <details> (no JS state to get stuck)',
+    (launchSrc.match(/<details className="launch-disclosure/g) || []).length === 2
+    && (launchSrc.match(/<summary className="launch-disclosure-head"/g) || []).length === 2);
+  t('ui: they render the five how-steps and the five warnings from i18n',
+    /launch\.howStep\$\{n\}/.test(launchSrc) && /launch\.warn\$\{n\}/.test(launchSrc));
+  t('ui: Solana is gated by the status module, not by copy',
+    /solanaLaunchStatus\(\)/.test(launchSrc) && /SOLANA\.shipping/.test(launchSrc));
+}
+
+/* ── i18n: the new copy exists in BOTH en and fa, actually translated ────── */
+{
+  const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8')).launch;
+  const fa = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8')).launch;
+  const pick = (o, path) => path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), o);
+  const NEW_KEYS = [
+    'howTitle', 'howSub', 'howStep1', 'howStep2', 'howStep3', 'howStep4', 'howStep5', 'howNote',
+    'warnTitle', 'warnSub', 'warn1', 'warn2', 'warn3', 'warn4', 'warn5',
+    'mode.direct', 'mode.factory', 'mode.directFull', 'mode.factoryFull',
+    'network.verifyingShort', 'network.blocked', 'network.tapToVerify',
+    'network.directTitle', 'network.directBody', 'network.factoryModeBody',
+    'review.deployMode', 'review.predictedTitle', 'review.predictedNote',
+    'run.predictedNote', 'result.directNote', 'result.factoryNote',
+    'run.err.DIRECT_CODE_MISMATCH', 'run.err.DIRECT_NO_CODE', 'run.err.DIRECT_ADDRESS_MISMATCH',
+    'run.err.DIRECT_TX_REVERTED', 'run.err.DIRECT_TX_NOT_DEPLOY', 'run.err.DIRECT_RECEIPT_ADDRESS_MISSING',
+    'run.err.DIRECT_PREDICTED_ADDRESS_MISSING', 'run.err.TOKEN_EVENT_NOT_FOUND',
+    'run.err.TX_REVERTED', 'run.err.USER_REJECTED'
+  ];
+  const missing = NEW_KEYS.filter((k) => typeof pick(en, k) !== 'string' || typeof pick(fa, k) !== 'string');
+  t('i18n: every new key is present in en AND fa (no raw keys on screen)', missing.length === 0);
+  t('i18n: fa is a translation, not the English string copied over',
+    NEW_KEYS.filter((k) => pick(fa, k) === pick(en, k)).length === 0);
+  t('i18n: the warnings say what a token cannot do after creation',
+    /locked/i.test(pick(en, 'warn2')) && /قفل/.test(pick(fa, 'warn2')));
+}
+
+/* ── the presentation promises, pinned in CSS (layout can't be jsdom-tested) ─ */
+{
+  const css = readFileSync('src/styles/launch.css', 'utf8');
+  t('css: the chain grid is auto-fill ≥150px (7 chains fit a 390px phone)',
+    /\.launch-chain-grid\s*\{[^}]*repeat\(auto-fill,\s*minmax\(150px,\s*1fr\)\)/.test(css));
+  t('css: the hero is one glass box with a lit rim and a soft gradient',
+    /\.launch-hero\s*\{[^}]*border-radius:\s*22px/.test(css) && /linear-gradient/.test(css) && /mask-composite/.test(css));
+  t('css: the rocket floats and its glow pulses (decorative only)',
+    /@keyframes launchFloat/.test(css) && /@keyframes launchGlow/.test(css));
+  t('css: prefers-reduced-motion switches every launch animation OFF',
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}\.launch-rocket[\s\S]{0,200}animation:\s*none/.test(css));
+  t('css: the default <details> marker is hidden and the caret rotates',
+    /::-webkit-details-marker\s*\{\s*display:\s*none/.test(css)
+    && /\.launch-disclosure\[open\][\s\S]{0,160}rotate\(180deg\)/.test(css));
+  t('css: light theme and the native shell get their own treatment',
+    /:root\[data-theme='light'\] \.launch-hero/.test(css) && /:root\[data-native='true'\]/.test(css));
+}
 
 const usdt = { symbol: 'USDT', name: 'Tether USD', address: '0x' + '55'.repeat(20), decimals: 6, native: false };
 const bnb = { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true };

@@ -12,9 +12,73 @@
   padding-bottom: calc(var(--nav-h) + var(--sp-6));
 }
 
-/* ── header ─────────────────────────────────────────────────────────── */
+/* ── hero (the glass header box) ─────────────────────────────────────── *
+ * The same visual family as .wallet-hero-modern / .lab-card: rounded glass,
+ * a soft gradient, a lit rim and one aurora wash that never pushes content.
+ * The rocket is a line-art SVG (IconRocket) that floats gently while a gold
+ * flame-glow behind it pulses. Both animations are PURELY decorative and are
+ * switched off wholesale under prefers-reduced-motion (bottom of this file).
+ */
+.launch-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 100% at 8% -20%, rgba(0, 229, 255, 0.14), transparent 58%),
+    radial-gradient(90% 90% at 96% 0%, rgba(255, 209, 102, 0.12), transparent 60%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 18px 44px -26px rgba(0, 0, 0, 0.9);
+  padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px);
+}
 
-.launch-head {
+/* Lit rim, drawn with a masked gradient ring so it never widens the box. */
+.launch-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, var(--rgb-1), var(--rgb-2), var(--rgb-5), transparent 72%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.launch-hero-aurora {
+  position: absolute;
+  inset: -60px -30px auto -30px;
+  height: 220px;
+  pointer-events: none;
+  z-index: -1;
+}
+.launch-hero-aurora::before,
+.launch-hero-aurora::after {
+  content: '';
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  filter: blur(64px);
+}
+.launch-hero-aurora::before {
+  left: -80px;
+  top: -120px;
+  background: radial-gradient(circle at 30% 30%, var(--rgb-1), transparent 62%);
+  opacity: 0.22;
+}
+.launch-hero-aurora::after {
+  right: -70px;
+  top: -100px;
+  background: radial-gradient(circle at 70% 30%, var(--rgb-5), transparent 62%);
+  opacity: 0.18;
+}
+
+.launch-hero-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -25,13 +89,52 @@
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  min-width: 0;
 }
 
+/* Holds the icon, its glow and the (decorative) flame. */
 .launch-rocket {
-  font-size: 30px;
-  line-height: 1.1;
-  filter: drop-shadow(0 0 12px rgba(0, 229, 255, 0.45));
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  color: var(--rgb-1);
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: linear-gradient(150deg, rgba(0, 229, 255, 0.16), rgba(255, 209, 102, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: launchFloat 3.4s ease-in-out infinite;
 }
+
+.launch-rocket-icon { display: block; }
+
+/* The golden glow that pulses behind the rocket. */
+.launch-rocket-glow {
+  position: absolute;
+  inset: -6px;
+  border-radius: 20px;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 62%, rgba(255, 209, 102, 0.5), transparent 66%);
+  filter: blur(9px);
+  opacity: 0.5;
+  animation: launchGlow 2.8s ease-in-out infinite;
+}
+
+@keyframes launchFloat {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(-4px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes launchGlow {
+  0%   { opacity: 0.32; transform: scale(0.94); }
+  50%  { opacity: 0.72; transform: scale(1.06); }
+  100% { opacity: 0.32; transform: scale(0.94); }
+}
+
+.launch-title-text { min-width: 0; }
 
 .launch-title h1 {
   margin: 0;
@@ -53,6 +156,47 @@
   flex-direction: column;
   gap: 6px;
   align-items: flex-end;
+}
+
+/* Mode badge (direct vs factory) — informational, not an alarm. */
+.launch-badge.mode {
+  color: var(--rgb-1);
+  border-color: rgba(0, 229, 255, 0.32);
+  background: rgba(0, 229, 255, 0.08);
+}
+.launch-badge.mode.factory {
+  color: var(--rgb-5);
+  border-color: rgba(255, 209, 102, 0.34);
+  background: rgba(255, 209, 102, 0.09);
+}
+
+/* Light theme: the glass goes white-ish, the rim keeps its tint. */
+:root[data-theme='light'] .launch-hero {
+  background:
+    radial-gradient(120% 100% at 8% -20%, rgba(0, 140, 190, 0.10), transparent 58%),
+    radial-gradient(90% 90% at 96% 0%, rgba(214, 158, 20, 0.10), transparent 60%),
+    rgba(255, 255, 255, 0.86);
+  box-shadow: 0 12px 30px -20px rgba(13, 16, 32, 0.35);
+}
+:root[data-theme='light'] .launch-hero-aurora::before,
+:root[data-theme='light'] .launch-hero-aurora::after { opacity: 0.14; }
+:root[data-theme='light'] .launch-rocket { color: #0b6e86; }
+:root[data-theme='light'] .launch-badge.mode { color: #0b6e86; }
+:root[data-theme='light'] .launch-badge.mode.factory { color: #8a6200; }
+
+/* Native shell: no backdrop blur / heavy blur anywhere near the shell — the
+   same rule the wallet and swap surfaces follow (see wallet-modern.css). */
+:root[data-native='true'] .launch-hero,
+:root[data-native='true'] .launch-rocket-glow { backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-native='true'] .launch-rocket { animation: none; }
+
+/* ── old header row (kept: the hero reuses .launch-title/.launch-badges) ── */
+
+.launch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
 }
 
 .launch-badge {
@@ -171,14 +315,19 @@
 
 /* ── step 1: networks ───────────────────────────────────────────────── */
 
+/* The registry now carries every EVM chain with a verified V2 venue, so the
+   grid has to hold a long list without ever overflowing a 390px phone:
+   auto-fill columns with a 150px floor (= two comfortable columns at 390px,
+   more as the screen grows) and hard min-width:0 on the cells so a long chain
+   name can never push the page sideways. */
 .launch-chain-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
 
 @media (min-width: 700px) {
-  .launch-chain-grid { grid-template-columns: repeat(3, 1fr); }
+  .launch-chain-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 }
 
 .launch-chain {
@@ -192,16 +341,41 @@
   border: 1px solid var(--line);
   background: var(--bg-panel);
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
-  min-height: 96px;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+  min-height: 104px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
+.launch-chain:hover { border-color: var(--line-strong); background: var(--bg-raised); }
 .launch-chain:active { transform: scale(0.985); }
-.launch-chain.active { background: var(--bg-raised); }
+.launch-chain.active {
+  background: var(--bg-raised);
+  box-shadow: 0 10px 26px -18px rgba(0, 0, 0, 0.9);
+}
 
 .launch-chain.soon {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* Direct vs factory, on the card itself, before anything is selected. */
+.launch-chain-mode {
+  align-self: flex-start;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--rgb-1);
+  background: rgba(0, 229, 255, 0.07);
+}
+.launch-chain-mode.factory {
+  color: var(--rgb-5);
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.08);
 }
 
 .launch-chain-dot {
@@ -231,6 +405,11 @@
 
 .launch-chain-status.ok { color: var(--rgb-4); }
 .launch-chain-status.warn { color: var(--rgb-5); }
+.launch-chain-status:not(.ok):not(.warn) { color: var(--text-3); }
+
+/* Auto-fill means ONE card can sit alone in the last row on a phone — it
+   stretches to the full width instead of leaving a dead half-column. */
+.launch-chain-grid > .launch-chain:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 .launch-dexcheck {
   display: flex;
@@ -867,10 +1046,250 @@
   line-height: 1.55;
 }
 
+/* ── predicted address (direct deploy) ──────────────────────────────── *
+ * The address the token WILL be created at, shown before the signature and
+ * again while the deploy is in flight. Monospace, selectable, full width —
+ * the user is meant to be able to copy it into the chain's explorer.
+ */
+.launch-predicted {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: linear-gradient(160deg, rgba(0, 229, 255, 0.07), rgba(255, 255, 255, 0.02));
+}
+
+.launch-predicted-title {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--rgb-1);
+}
+
+.launch-predicted-addr {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-1);
+  word-break: break-all;
+  user-select: all;
+}
+
+:root[data-theme='light'] .launch-predicted-title { color: #0b6e86; }
+
+/* ── explainers (native <details>) ──────────────────────────────────── *
+ * Same disclosure pattern as Help / long-form panels: marker removed, one
+ * chevron that rotates on [open], a real card surface, keyboard focusable.
+ */
+.launch-explains {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: var(--sp-2);
+}
+
+.launch-disclosure {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+  overflow: hidden;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.launch-disclosure:hover { border-color: var(--line-strong); }
+
+.launch-disclosure[open] {
+  border-color: rgba(0, 229, 255, 0.3);
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.05), rgba(255, 255, 255, 0.015));
+}
+
+.launch-disclosure.warn[open] {
+  border-color: rgba(255, 209, 102, 0.34);
+  background: linear-gradient(180deg, rgba(255, 209, 102, 0.06), rgba(255, 255, 255, 0.015));
+}
+
+.launch-disclosure-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.launch-disclosure-head::-webkit-details-marker { display: none; }
+.launch-disclosure-head::marker { content: ''; }
+
+.launch-disclosure-head:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+.launch-disclosure[open] > .launch-disclosure-head { border-bottom: 1px solid var(--line); }
+
+.launch-disclosure-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--rgb-1);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.launch-disclosure-ico.warn {
+  border-color: rgba(255, 209, 102, 0.34);
+  background: rgba(255, 209, 102, 0.1);
+  color: var(--rgb-5);
+}
+
+.launch-disclosure-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.launch-disclosure-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
+.launch-disclosure-sub {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.launch-disclosure-caret {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-3);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.launch-disclosure[open] > .launch-disclosure-head .launch-disclosure-caret {
+  transform: rotate(180deg);
+  color: var(--rgb-1);
+}
+
+.launch-disclosure.warn[open] > .launch-disclosure-head .launch-disclosure-caret { color: var(--rgb-5); }
+
+.launch-disclosure-body { padding: 12px 13px 14px; }
+
+.launch-how {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  counter-reset: launch-how;
+}
+
+.launch-how-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.launch-how-num {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #001016;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+}
+
+.launch-how-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+  padding-top: 2px;
+}
+
+.launch-how-note {
+  margin: 11px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.launch-warns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.launch-warn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.launch-warn-mark { color: var(--rgb-5); flex: 0 0 auto; line-height: 1.5; }
+
+/* A failed step says WHY, in words, not just "failed". */
+.launch-run-desc.err { color: var(--down); }
+
+/* ── phones (390px is the narrowest we target) ──────────────────────── *
+ * The hero stacks: title first, badges as a wrapping row underneath, and the
+ * chain grid keeps its two auto-fill columns. Nothing here may create a
+ * horizontal scrollbar — that is what `min-width: 0` + `overflow-wrap` on the
+ * cards and `max-width: 100%` here are for.
+ */
+@media (max-width: 420px) {
+  .launch-hero { border-radius: 18px; padding: 13px 13px 14px; }
+  .launch-hero-row { flex-direction: column; gap: 10px; }
+  .launch-badges { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .launch-title { gap: 10px; }
+  .launch-rocket { width: 42px; height: 42px; border-radius: 13px; }
+  .launch-title p { max-width: 100%; }
+  .launch-chain-grid { gap: 8px; }
+  .launch-chain { padding: 11px 10px; }
+  .launch-predicted { padding: 11px 12px; }
+}
+
 /* ── native shell: trim effects (same rule as the swap ticket) ──────── */
 
 :root[data-native='true'] .launch-token-card,
-:root[data-native='true'] .launch-review-card {
+:root[data-native='true'] .launch-review-card,
+:root[data-native='true'] .launch-disclosure {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* ── motion: decorative only, and switched off entirely when the OS asks ── *
+ * Nothing here carries meaning, so the reduced-motion branch removes the
+ * float, the glow pulse and every transition rather than slowing them down.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .launch-rocket,
+  .launch-rocket-glow { animation: none; }
+  .launch-rocket-glow { opacity: 0.4; }
+  .launch-chain,
+  .launch-disclosure,
+  .launch-disclosure-caret,
+  .launch-risk-bar > div { transition: none; }
 }
