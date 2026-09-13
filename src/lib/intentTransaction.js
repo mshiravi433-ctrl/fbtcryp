@@ -27,6 +27,7 @@
  */
 
 import { canonicalJson, sha256Hex } from './executionProof.js';
+import { verifyLifiFee, LIFI_INTEGRATOR } from './lifi.js';
 
 export const INTENT_TRANSACTION_SCHEMA = 'fbt.intent-transaction.v1';
 
@@ -130,7 +131,7 @@ async function lazyBuilders(overrides) {
  * @returns {Promise<{ok:true, request:object}|{ok:false, code:string}>}
  *   Failure codes: CHAIN_UNSUPPORTED · BAD_ACCOUNT · UNSUPPORTED_SOURCE ·
  *   FEE_NOT_APPLIED · FEE_RECIPIENT_MISMATCH · BUILD_FAILED ·
- *   ROUTER_MISMATCH · MIN_OUTPUT_REGRESSED · QUOTE_EXPIRED
+ *   ROUTER_MISMATCH · CHAIN_MISMATCH · MIN_OUTPUT_REGRESSED · QUOTE_EXPIRED
  */
 export async function buildIntentTransactionRequest({
   chainId,
@@ -235,9 +236,50 @@ export async function buildIntentTransactionRequest({
       amountOutWei: raw.amountOutWei ?? quote.amountOutWei ?? null,
       spender: raw.spender ?? raw.to
     };
+  } else if (source === 'lifi') {
+    /*
+     * LI.FI's transactionRequest IS the build — the fee split was signed into
+     * that calldata at quote time, so there is no upstream build call. The
+     * gate re-verifies the signed evidence (integrator share + our wallet)
+     * before these bytes are allowed anywhere near a signer.
+     */
+    const fee = verifyLifiFee({
+      body: {
+        action: { fromAmount: String(quote.amountInWei ?? 0n) },
+        estimate: { feeCosts: quote.lifi?.feeSplit ? [{ feeSplit: quote.lifi.feeSplit }] : [] },
+        includedSteps: quote.lifi?.feeWallet
+          ? [{
+              action: {
+                integratorFees: {
+                  recipients: [{ name: LIFI_INTEGRATOR, config: { defaultWallet: quote.lifi.feeWallet } }]
+                }
+              }
+            }]
+          : [],
+        integrator: quote.lifi?.integrator,
+        fee: quote.lifi?.fee
+      },
+      feeBps: expectFeeBps,
+      feeReceiver: expectFeeReceiver
+    });
+    if (!fee.ok) return { ok: false, code: fee.code };
+
+    const tr = quote.lifi?.transactionRequest;
+    if (!tr?.to || !HEX_DATA.test(String(tr?.data ?? ''))) return { ok: false, code: 'BUILD_FAILED' };
+    if (Number(tr.chainId) !== Number(chainId)) return { ok: false, code: 'CHAIN_MISMATCH' };
+    routerAddress = tr.to;
+    built = {
+      to: tr.to,
+      data: tr.data,
+      value: BigInt(tr.value ?? '0'),
+      gasLimit: tr.gasLimit ? BigInt(tr.gasLimit) : null,
+      minOutWei: quote.minOutWei ?? null,
+      amountOutWei: quote.amountOutWei ?? null,
+      spender: quote.approvalAddress ?? tr.to
+    };
   } else {
     /* Direct-router and gasless paths keep their existing flow; this builder
-       only claims the two aggregator adapters it can verify end to end. */
+       only claims the aggregator adapters it can verify end to end. */
     return { ok: false, code: 'UNSUPPORTED_SOURCE' };
   }
 

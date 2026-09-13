@@ -142,7 +142,8 @@ export default function useIntentBroadcast(wallet) {
         fromToken,
         toToken,
         amountIn,
-        slippage: posNumber(terms.slippagePct) ?? 0.5
+        slippage: posNumber(terms.slippagePct) ?? 0.5,
+        fromAddress: runtime?.account
       });
     } catch (err) {
       return fail('NO_QUOTE', err?.message || 'The live quote failed.');

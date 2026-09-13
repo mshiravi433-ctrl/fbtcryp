@@ -229,6 +229,15 @@ export function WalletProvider({ children }) {
   const getReadProvider = useCallback(async (targetChain = DEFAULT_CHAIN) => {
     const { FallbackProvider } = await loadEthers();
     const providers = await buildReadProviders(targetChain);
+    /*
+     * Single-endpoint chains return the JsonRpcProvider ITSELF. The previous
+     * code returned `providers[0].provider` — but `providers[0]` IS already a
+     * JsonRpcProvider, and `.provider` is undefined on it. That silently
+     * broke EVERY read on chains with exactly one RPC entry (Robinhood 4663,
+     * Avalanche, Linea, Sonic): balances, gas estimates, price-impact probes
+     * and token imports all threw on an undefined provider while the wallet
+     * screen answered «دوباره امتحان کنید». Fixed 2026-09-13.
+     */
     return providers.length > 1
       ? new FallbackProvider(
           providers.map((provider, i) => ({
@@ -240,7 +249,7 @@ export function WalletProvider({ children }) {
           targetChain,
           { quorum: 1, cacheTimeout: 15_000 }
         )
-      : providers[0].provider;
+      : providers[0];
   }, [buildReadProviders]);
 
   /**

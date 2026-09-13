@@ -76,6 +76,7 @@ import {
 } from './iranBuy.js';
 import { publicUsdtTmnRate } from './providers/iranWallexPublic.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
+import { lifiSwapQuote } from './lifi.js';
 import {
   chainTokens,
   crossChainHealth,
@@ -5252,6 +5253,19 @@ app.post('/api/swap/oo/decode', async (req, res) => {
 app.get('/api/swap/velora/prices', async (req, res) => {
   const r = await proxyVeloraPrices(req.query);
   recordProviderHealth('velora', r);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * LI.FI same-chain swap source (see server/lifi.js) — the route that keeps
+ * Mantle/Scroll/zkSync Era quotable while OpenOcean's edge blocks us, and a
+ * second opinion on Monad/Robinhood. The integrator + fee are attached
+ * server-side and the fee echo is verified server-side before the response
+ * ever leaves — an open proxy would be both a revenue hole and a fee hole.
+ */
+app.get('/api/swap/lifi/quote', async (req, res) => {
+  const r = await lifiSwapQuote(req.query ?? {});
+  recordProviderHealth('lifi-swap', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

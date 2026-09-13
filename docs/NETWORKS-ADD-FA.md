@@ -212,3 +212,59 @@ robinhood مرد، گیت همان‌جا ادامه دهد.
 (اولین بار: اصلاحیهٔ ۲۰۲۶-۰۹-۱۱). موقعِ افزودن زنجیرهٔ بعدی، همزمانیِ
 همهٔ نقشه‌های جدول بخش ۳ را با `grep -rn "<chainId>" src server scripts`
 چک کنید — این بار coinToSwap/coinVenue/permissions/crossChain هم اضافه شدند.
+
+---
+
+## بخش ۵ — LI.FI به‌عنوان منبع سوم سواپ (۲۰۲۶-۰۹-۱۳)
+
+### مشکل واقعی
+
+- **Mantle/Scroll/zkSync Era** فقط OpenOcean داشتند. پروب زندهٔ پروداکشن در
+  ۲۰۲۶-۰۹-۱۳ نشان داد لبهٔ Cloudflare خودِ OpenOcean به سرور ما
+  `UPSTREAM_HTTP_403` («Just a moment…») می‌دهد — روی **همهٔ** زنجیره‌ها،
+  حتی BSC. یعنی برای آن سه زنجیره هیچ مسیر کوئوتی وجود نداشت: «دوباره امتحان
+  کنید» برای همیشه.
+- **Robinhood (4663)** فقط یک RPC در رجیستری دارد. در `WalletContext.getReadProvider`
+  شاخهٔ تک‌پرووایدر `providers[0].provider` برمی‌گرداند — ولی `providers[0]`
+  خودش `JsonRpcProvider` است و `.provider` روی آن undefined است → هر خوانشِ
+  زنجیره (بالانس، گس، ایمپورت توکن) با provider نامعتبر می‌افتاد. اصلاح شد
+  (`providers[0]`) و روی Avalanche/Linea/Sonic هم همین باگ خاموش وجود داشت.
+
+### راه‌حل: LI.FI به‌عنوان منبع قابل اجرای سوم
+
+- **پروب زندهٔ ۲۰۲۶-۰۹-۱۳**: `li.quest/v1/quote` هم‌زنجیره‌ای برای هر پنج زنجیره
+  (Mantle/Monad/Scroll/zkSync/Robinhood) کوئوت واقعی برمی‌گرداند و اکوی کارمزد
+  ما را امضا می‌کند: feeSplit با ۲۵ bps ثابت LI.FI + ۷۰ bps سهم ما →
+  `defaultWallet: 0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6`. کال‌دیتا در خود
+  کوئوت (`transactionRequest`) هست — یک تراکنش، بدون مرحلهٔ build جدا.
+- **آدرس توکن‌ها به حروف کوچک/بزرگ حساس است**: همیشه از املای EIP-55 استفاده
+  کنید (کلاینت با `ethers.getAddress` چک‌سام می‌کند، سرور هم).
+- **مرز امنیتی مثل بریج**: `integrator` و `fee` فقط سمت سرور وصل می‌شوند
+  (server/lifi.js → `GET /api/swap/lifi/quote`) و اکوی کارمزد هم سمت سرور چک
+  می‌شود؛ کلاینت قبل از امضا دوباره همان شواهد را می‌سنجد
+  (`verifyLifiFee` در src/lib/lifi.js) — الگوی دوگیت مثل Kyber/OO.
+- **صداقت در نمایش کارمزد**: کاربر روی مسیر LI.FI جمعاً ۹۵ bps می‌پردازد
+  (۷۰ ما + ۲۵ LI.FI)؛ UI همین جمع را نشان می‌دهد (`quote.feeBps = 95`) و
+  `integratorFeeBps = 70` سهم ماست که گیت کارمزد چک می‌کند.
+
+### فایل‌های درگیر (با grep زنجیره‌ای جدید همگام نگه دارید)
+
+- `server/lifi.js` — `lifiSwapQuote` (والیدیشن + اکو گیت؛ `LIFI_SWAP_FEE` پیش‌فرض
+  0.007، سقف 0.01 — جدا از `LIFI_FEE` بریج)
+- `server/app.js` — mount مسیر `GET /api/swap/lifi/quote`
+- `src/lib/lifi.js` — کلاینت (کوئوت از طریق پروکسی خودمان فقط؛ `executeLifiSwap`)
+- `src/lib/swap.js` — منبع چهارم در مسابقهٔ کوئوت + شاخهٔ اجرا + `spenderFor`
+- `src/lib/intentTransaction.js` — شاخهٔ `lifi` در بیلدر intent
+- `src/pages/Swap.jsx` / `src/hooks/useIntentBroadcast.js` — ارسال `fromAddress`
+- `scripts/verify-fees.mjs` — پاس LI.FI برای هر پنج زنجیره (اکو از feeSplit)
+- `.env.example` — `LIFI_SWAP_FEE` / `LIFI_SWAP_FEE_RECIPIENT`
+
+### گیت انتشار (به‌روز)
+
+```bash
+node scripts/verify-fees.mjs --chain 5000      # Mantle: Kyber(404)→OO→LI.FI
+node scripts/verify-fees.mjs --chain 534352    # Scroll: همان
+node scripts/verify-fees.mjs --chain 324       # zkSync: همان
+node scripts/verify-fees.mjs --chain 143       # Monad: Kyber + LI.FI
+node scripts/verify-fees.mjs --chain 4663      # Robinhood: Kyber + LI.FI
+```

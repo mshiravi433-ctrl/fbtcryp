@@ -216,9 +216,11 @@ export const EVM_CHAINS = {
     wrapped: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8',
     /* Kyber's aggregator gateway answers HTTP 404 for the `mantle` slug
        (live-probed 2026-09-11; their supported-networks page lists Mantle
-       WITHOUT the aggregator check), so OpenOcean — whose v4 API serves
-       mantle-mainnet — is the routing source and the honest dexName. */
-    dexName: 'OpenOcean',
+       WITHOUT the aggregator check). OpenOcean serves mantle-mainnet but its
+       edge has been blocking our server (UPSTREAM_HTTP_403, probed
+       2026-09-13), so LI.FI — whose same-chain quote carries our fee echo —
+       is the routing source and the honest dexName (see lib/lifi.js). */
+    dexName: 'LI.FI',
     color: '#f0b90b' /* placeholder brand tone — cosmetic only */
   },
   80094: {
@@ -272,9 +274,11 @@ export const EVM_CHAINS = {
        ندارد» on this chain: Kyber's aggregator gateway answers HTTP 404 for
        the `scroll` slug (live-probed; their supported-networks page lists
        Scroll WITHOUT the aggregator check). OpenOcean's v4 API serves
-       scroll-mainnet with protocol fees included, so it — not KyberSwap —
-       supplies the route, and swap.js promotes it to primary here. */
-    dexName: 'OpenOcean',
+       scroll-mainnet, but its edge has been blocking our server
+       (UPSTREAM_HTTP_403, probed 2026-09-13), so LI.FI — live-quoted with
+       our fee echo — supplies the route and swap.js races it as primary
+       (see lib/lifi.js). */
+    dexName: 'LI.FI',
     color: '#f1c27d'
   },
   324: {
@@ -287,8 +291,9 @@ export const EVM_CHAINS = {
     explorer: 'https://era.zksync.network',
     wrapped: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',
     /* Same correction as Scroll: Kyber's gateway 404s on the `zksync` slug,
-       OpenOcean serves zksync-mainnet — it is the routing source here. */
-    dexName: 'OpenOcean',
+       and OpenOcean's edge blocks our server (UPSTREAM_HTTP_403), so LI.FI
+       — live-quoted with our fee echo — is the routing source here. */
+    dexName: 'LI.FI',
     color: '#8c8dfc'
   },
   /*

@@ -35,6 +35,7 @@ import {
 } from './aggregator';
 import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean';
 import { getVeloraQuote, veloraSupports } from './velora';
+import { getLifiQuote, executeLifiSwap, lifiSupports } from './lifi';
 import { quoteAllSources } from './bestQuote';
 
 const loadEthers = () => import('ethers');
@@ -229,7 +230,7 @@ export async function getBalances(provider, tokens, owner) {
  * Ask the router what `amountIn` of `fromToken` is worth in `toToken`.
  * Returns null when there is no route or the pool is empty.
  */
-export async function getQuote({ provider, chainId, fromToken, toToken, amountIn, slippage = DEFAULT_SLIPPAGE }) {
+export async function getQuote({ provider, chainId, fromToken, toToken, amountIn, slippage = DEFAULT_SLIPPAGE, fromAddress = null }) {
   if (!amountIn || Number(amountIn) <= 0) return null;
   const { Contract, parseUnits, formatUnits } = await loadEthers();
 
@@ -242,8 +243,15 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   // gateway, live-probed 2026-09-11, see KYBER_LIVE in lib/aggregator.js).
   // On those chains OpenOcean gets a longer leash, because a 3s budget for a
   // second opinion is a death sentence for a primary.
+  //
+  // LI.FI (lib/lifi.js) is the third executable source on the five 2026-09
+  // networks: the PRIMARY on Mantle/Scroll/zkSync Era (where OpenOcean's edge
+  // has been unreachable for our server — UPSTREAM_HTTP_403, live-probed
+  // 2026-09-13) and a second opinion on Monad/Robinhood. It needs the user's
+  // address for its fee-collection step, so callers pass `fromAddress`.
   const kyberLive = aggregatorSupports(chainId);
   const ooLive = openOceanSupports(chainId);
+  const lifiLive = lifiSupports(chainId) && Boolean(fromAddress);
   if (aggregatorFeeEnabled(chainId) && (kyberLive || ooLive)) {
     try {
       const feeReceiver = feeRecipientFor(chainId);
@@ -296,6 +304,12 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        */
       if (veloraSupports(chainId)) {
         sources.push({ id: 'velora', quote: () => getVeloraQuote(common) });
+      }
+      /* LI.FI — same-origin proxy only; the integrator + fee are attached
+         server-side (see lib/lifi.js). Runs concurrently with everything
+         else, so it can only ever make quoting more reliable, not slower. */
+      if (lifiLive) {
+        sources.push({ id: 'lifi', quote: () => getLifiQuote({ ...common, fromAddress }) });
       }
 
       const { best, checked, beatenBy, failures, answered, trace } = await quoteAllSources(sources);
@@ -421,6 +435,9 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 export function spenderFor(chainId, quote = null) {
   if (quote?.source === 'openocean') return quote.spender;
   if (quote?.source === 'aggregator' && quote.routerAddress) return quote.routerAddress;
+  /* LI.FI pulls ERC-20 inputs through its per-quote approval address (the
+     diamond/router contract that then collects the fee and swaps). */
+  if (quote?.source === 'lifi' && quote.approvalAddress) return quote.approvalAddress;
   return feeEnabled() ? FEE_ROUTER_ADDRESS : EVM_CHAINS[chainId].router;
 }
 
@@ -502,6 +519,20 @@ export async function executeSwap({
       toToken,
       quote,
       slippage: quote.slippage ?? DEFAULT_SLIPPAGE,
+      expectFeeBps: FEE_BPS,
+      expectFeeReceiver: feeRecipientFor(chainId)
+    });
+  }
+
+  // LI.FI is the third EXECUTABLE source — the one that keeps Mantle/Scroll/
+  // zkSync Era quotable while OpenOcean's edge blocks our server, and the
+  // second opinion on Monad/Robinhood. The fee split signed into its
+  // transactionRequest is re-verified before the user signs (lib/lifi.js).
+  if (quote.source === 'lifi') {
+    return executeLifiSwap({
+      signer,
+      chainId,
+      quote,
       expectFeeBps: FEE_BPS,
       expectFeeReceiver: feeRecipientFor(chainId)
     });

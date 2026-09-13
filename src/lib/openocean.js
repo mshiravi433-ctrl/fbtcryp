@@ -1,7 +1,13 @@
 /**
  * OPENOCEAN — a second aggregator, quoted in parallel with KyberSwap; the
- * SOLE and primary source on chains Kyber's gateway no longer serves
+ * historical SOLE source on chains Kyber's gateway no longer serves
  * (Mantle, Scroll, zkSync Era — see KYBER_LIVE in lib/aggregator.js).
+ *
+ * NOTE 2026-09-13: OpenOcean's Cloudflare edge began challenging our server
+ * (UPSTREAM_HTTP_403 on every chain, incl. BSC), so LI.FI (lib/lifi.js) is
+ * now the PRIMARY source on Mantle/Scroll/zkSync Era. This module remains
+ * the second opinion wherever OpenOcean's edge lets us through — the quote
+ * is still fee-verified and executable, nothing about that changed.
  * ---------------------------------------------------------------------------
  * ─── WHY A SECOND ONE AT ALL ────────────────────────────────────────────────
  * We already route through KyberSwap, which searches every DEX on the chain —
@@ -120,12 +126,11 @@ const OO_SLUG = {
   /* Scroll + zkSync Era + Mantle — OpenOcean serves all three (v4 registry:
      scroll-mainnet, zksync-mainnet, mantle-mainnet). Since 2026-09-11 these
      are not second-opinion slugs: Kyber's aggregator gateway answers HTTP
-     *404* for `scroll`, `zksync` and `mantle` (re-probed 2026-09-13), so
-     OpenOcean is the ONLY routing source on these chains and swap.js gives
-     it a primary-grade timeout there. If a slug ever stops being served the
-     quote fails and the screen says «no route» honestly — there is no other
-     source to fall back to until Kyber's gateway comes back (re-probe:
-     verify-fees.mjs). */
+     *404* for `scroll`, `zksync` and `mantle` (re-probed 2026-09-13), and
+     since 2026-09-13 LI.FI is the primary there while OpenOcean's edge
+     blocks our server (UPSTREAM_HTTP_403) — see lib/lifi.js. swap.js still
+     gives this source a primary-grade timeout, so the moment OpenOcean's
+     edge lets us through again its better route can win the comparison. */
   534352: 'scroll',
   324: 'zksync',
   /* Robinhood Chain — OpenOcean's table lists it with the chain id itself
