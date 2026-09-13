@@ -211,20 +211,37 @@ async function ooFetchOnce(url, timeout) {
  * Fetch with the same-origin proxy as a network-level fallback.
  *
  * Only fires when the direct call failed at the network layer (see
- * `isNetworkFailure`); the proxied attempt sends the SAME query string, so
- * it is a retry, not a different request. If the proxy also fails, the
- * ORIGINAL error is thrown — the proxy's failure says nothing about the
- * user's network and would only confuse the caller.
+ * `isNetworkFailure`); the proxied attempt sends the SAME query string PLUS
+ * `chainId`, so it is a retry of the same pair on the same chain. If the
+ * proxy also fails, the ORIGINAL error is thrown — the proxy's failure says
+ * nothing about the user's network and would only confuse the caller.
+ *
+ * ─── WHY `chainId` MUST BE RE-INJECTED ──────────────────────────────────────
+ * The direct OpenOcean URL puts the chain in the PATH (`/v4/scroll/quote`),
+ * not the query string. The same-origin proxy has no path slug — it reads
+ * `chainId` from the query and maps it to a slug server-side (see
+ * `ooSlug` in server/swapProxy.js). Forwarding only the original query left
+ * the proxy with no chain at all, so every network-fallback retry answered
+ * `CHAIN_UNSUPPORTED` and the screen showed «اتصال به سرویس مسیریابی برقرار
+ * نشد» for every pair on every chain whose direct call was filtered —
+ * Iranian mobile networks on Scroll/zkSync/Mantle being the loudest case,
+ * because those three have no second aggregator to rescue them.
  */
-async function ooFetch(url, { timeout = OO_TIMEOUT_MS, endpoint = null } = {}) {
+async function ooFetch(url, { timeout = OO_TIMEOUT_MS, endpoint = null, chainId = null } = {}) {
   try {
     return await ooFetchOnce(url, timeout);
   } catch (err) {
     if (!isNetworkFailure(err)) throw err;
     // The proxy routes are per-endpoint (/api/swap/oo/quote, /api/swap/oo/swap),
-    // so the endpoint name has to survive into the proxied URL.
+    // so the endpoint name has to survive into the proxied URL. chainId is
+    // our routing key — inject it even though the direct URL never carried it.
     const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
-    const proxied = await ooFetchOnce(`${proxyBase()}/${endpoint}${q ? `?${q}` : ''}`, timeout + 2000).catch(() => null);
+    const qs = new URLSearchParams(q);
+    if (chainId != null && chainId !== '' && !qs.has('chainId')) qs.set('chainId', String(chainId));
+    const proxied = await ooFetchOnce(
+      `${proxyBase()}/${endpoint}?${qs.toString()}`,
+      timeout + 2000
+    ).catch(() => null);
     if (proxied) return proxied;
     throw err;
   }
@@ -293,6 +310,7 @@ export async function getOpenOceanQuote({
    */
   const data = await ooFetch(`${OO_BASE}/${slug}/quote?${params.toString()}`, {
     endpoint: 'quote',
+    chainId,
     timeout: Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : OO_TIMEOUT_MS
   });
 
@@ -426,7 +444,10 @@ export async function buildOpenOceanSwap({
     minOutWei
   });
 
-  const data = await ooFetch(`${OO_BASE}/${slug}/swap?${params.toString()}`, { endpoint: 'swap' });
+  const data = await ooFetch(`${OO_BASE}/${slug}/swap?${params.toString()}`, {
+    endpoint: 'swap',
+    chainId
+  });
   if (!data?.to || !data?.data) throw new Error('BUILD_FAILED');
 
   const amountOutWei = BigInt(data.outAmount ?? '0');
@@ -464,13 +485,37 @@ export async function buildOpenOceanSwap({
  * false and the swap is refused (FEE_NOT_APPLIED), exactly like the KyberSwap
  * extraFee echo check.
  */
+/**
+ * POST once to a decode endpoint (direct OpenOcean or our same-origin proxy).
+ * Returns the decoded body on HTTP success, or null on any failure.
+ */
+async function ooDecodeOnce(url, body, signal) {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal,
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) return { ok: false, status: res.status, body: null };
+    const json = await res.json().catch(() => null);
+    return { ok: true, status: res.status, body: json };
+  } catch (err) {
+    /* Network / abort — signal to the caller that a proxy retry is worth it. */
+    if (err?.name === 'AbortError' || err instanceof TypeError) {
+      return { ok: false, status: 0, body: null, network: true };
+    }
+    return { ok: false, status: 0, body: null, network: true };
+  }
+}
+
 export async function verifyOpenOceanFee({ chainId, calldata, feeBps = 0, feeReceiver = null }) {
   if (!(feeBps > 0 && feeReceiver)) return true; // no fee configured — nothing to verify
   const slug = OO_SLUG[chainId];
   if (!slug) return false;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), OO_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), OO_TIMEOUT_MS + 2000);
   try {
     /*
      * Their docs show the decode payload without the 0x prefix; real
@@ -481,25 +526,43 @@ export async function verifyOpenOceanFee({ chainId, calldata, feeBps = 0, feeRec
     const spellings = [calldata, String(calldata).replace(/^0x/, '')];
     let referrer = null;
     let lastStatus = 0;
+    let sawNetworkFailure = false;
     for (const spelling of new Set(spellings)) {
-      const res = await fetch(`${OO_BASE}/${slug}/decodeInputData`, {
-        method: 'POST',
-        signal: ctrl.signal,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: spelling, method: 'swap' })
-      });
-      lastStatus = res.status;
-      if (!res.ok) continue;
-      const body = await res.json().catch(() => null);
-      referrer = body?.desc?.referrer ?? body?.data?.desc?.referrer ?? null;
-      if (referrer) break;
+      const payload = { data: spelling, method: 'swap' };
+      const direct = await ooDecodeOnce(`${OO_BASE}/${slug}/decodeInputData`, payload, ctrl.signal);
+      lastStatus = direct.status;
+      if (direct.network) sawNetworkFailure = true;
+      if (direct.ok) {
+        referrer = direct.body?.desc?.referrer ?? direct.body?.data?.desc?.referrer ?? null;
+        if (referrer) break;
+      }
+      /*
+       * Same reachability rule as quote/swap: a network-level failure on the
+       * direct decode is retried through our origin. chainId goes in the body
+       * so the proxy can map it to the OpenOcean slug (path has no slug on
+       * our side). Without this, SCR/ZK/Mantle users behind a filter could
+       * quote and build successfully and then be refused at fee-check with
+       * FEE_NOT_APPLIED for a route that actually paid us.
+       */
+      if (direct.network || direct.status === 403 || direct.status === 429 || direct.status >= 500) {
+        const proxied = await ooDecodeOnce(
+          `${proxyBase()}/decode`,
+          { ...payload, chainId },
+          ctrl.signal
+        );
+        lastStatus = proxied.status || lastStatus;
+        if (proxied.ok) {
+          referrer = proxied.body?.desc?.referrer ?? proxied.body?.data?.desc?.referrer ?? null;
+          if (referrer) break;
+        }
+      }
     }
     const ok = Boolean(referrer) && String(referrer).toLowerCase() === String(feeReceiver).toLowerCase();
     if (!ok) {
       // eslint-disable-next-line no-console
       console.warn(
         `[openocean] fee verification failed: referrer=${referrer ?? '(missing)'} expected=${feeReceiver} ` +
-          `(status ${lastStatus}) — swap refused`
+          `(status ${lastStatus}${sawNetworkFailure ? ', network' : ''}) — swap refused`
       );
     }
     return ok;
@@ -590,7 +653,9 @@ function defaultGasPriceWei(chainId) {
     5000: 2,      // Mantle
     80094: 1,     // Berachain
     130: 0.05,    // Unichain
-    143: 1        // Monad
+    143: 1,       // Monad
+    534352: 0.05, // Scroll — ETH L2, same ballpark as Linea/Unichain
+    324: 0.05     // zkSync Era
   }[chainId] ?? 5;
   // Kept integral: the endpoint wants wei with no decimal point.
   return Math.round(gwei * 1e9);

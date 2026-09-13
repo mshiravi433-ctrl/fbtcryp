@@ -161,19 +161,44 @@ async function aggFetchOnce(url, options = {}, timeout = 15000) {
  * Fetch with the same-origin proxy as a network-level fallback.
  *
  * The proxied request carries the same query string (and body) as the direct
- * one, so it is a retry, not a different request. If the proxy also fails,
- * the ORIGINAL error is thrown — the proxy's failure says nothing about the
- * user's network.
+ * one, PLUS `chainId` — see the matching note in lib/openocean.js. The direct
+ * Kyber URL puts the chain in the PATH (`/bsc/api/v1/routes`); the proxy has
+ * no path slug and routes by `chainId` query/body field. Without re-injecting
+ * it, every network-fallback retry answered CHAIN_UNSUPPORTED and the swap
+ * screen showed a routing-service outage for pairs that still had liquidity.
+ * If the proxy also fails, the ORIGINAL error is thrown — the proxy's failure
+ * says nothing about the user's network.
  */
-async function aggFetch(url, options = {}, timeout = 15000, proxyPath = null) {
+async function aggFetch(url, options = {}, timeout = 15000, proxyPath = null, chainId = null) {
   try {
     return await aggFetchOnce(url, options, timeout);
   } catch (err) {
     if (!proxyPath || !isNetworkFailure(err)) throw err;
     const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
-    const proxied = await aggFetchOnce(`${proxyBase()}/${proxyPath}${q ? `?${q}` : ''}`, options, timeout + 2000).catch(
-      () => null
-    );
+    const qs = new URLSearchParams(q);
+    if (chainId != null && chainId !== '' && !qs.has('chainId')) qs.set('chainId', String(chainId));
+    const qsStr = qs.toString();
+
+    /* POST /route/build carries chainId in the JSON body, not the query —
+       proxyKyberBuild reads body.chainId. Inject it the same way. */
+    let proxyOptions = options;
+    if (options?.body && chainId != null && chainId !== '') {
+      try {
+        const parsed = typeof options.body === 'string' ? JSON.parse(options.body) : { ...options.body };
+        if (parsed && typeof parsed === 'object' && parsed.chainId == null) {
+          parsed.chainId = chainId;
+          proxyOptions = { ...options, body: JSON.stringify(parsed) };
+        }
+      } catch {
+        /* keep original body — a parse failure must not block the retry */
+      }
+    }
+
+    const proxied = await aggFetchOnce(
+      `${proxyBase()}/${proxyPath}${qsStr ? `?${qsStr}` : ''}`,
+      proxyOptions,
+      timeout + 2000
+    ).catch(() => null);
     if (proxied) return proxied;
     throw err;
   }
@@ -216,7 +241,7 @@ export async function getAggregatorRoute({
     params.set('feeReceiver', feeReceiver);
   }
 
-  const body = await aggFetch(`${AGG_BASE}/${slug}/api/v1/routes?${params.toString()}`, {}, 15000, 'routes');
+  const body = await aggFetch(`${AGG_BASE}/${slug}/api/v1/routes?${params.toString()}`, {}, 15000, 'routes', chainId);
   const summary = body?.data?.routeSummary;
   if (!summary) throw new Error('NO_ROUTE');
 
@@ -289,7 +314,7 @@ export async function buildAggregatorTx({
       deadline: Math.floor(Date.now() / 1000) + deadlineMinutes * 60,
       source: CLIENT_ID
     })
-  }, 15000, 'build');
+  }, 15000, 'build', chainId);
 
   const data = body?.data;
   if (!data?.data) throw new Error('BUILD_FAILED');

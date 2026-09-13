@@ -98,7 +98,7 @@ import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from '
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
-import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
+import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
 import { providerStatusReport, recordFailure, recordSuccess } from './providerStatus.js';
@@ -5237,6 +5237,13 @@ app.get('/api/swap/oo/quote', async (req, res) => {
 
 app.get('/api/swap/oo/swap', async (req, res) => {
   const r = await proxyOoSwap(req.query);
+  recordProviderHealth('openocean', r);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/* OpenOcean calldata decode — fee-verification fallback (see lib/openocean.js). */
+app.post('/api/swap/oo/decode', async (req, res) => {
+  const r = await proxyOoDecode(req.body ?? {});
   recordProviderHealth('openocean', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });

@@ -228,6 +228,37 @@ export async function proxyOoSwap(params = {}) {
   return upstream({ url });
 }
 
+/**
+ * POST /v4/{slug}/decodeInputData — decode a built swap's calldata so the
+ * client can verify our referrer is inside the transaction before signing.
+ *
+ * Without this proxy, a user whose network cannot reach OpenOcean directly
+ * could get a quote (via proxyOoQuote) and build a swap (via proxyOoSwap)
+ * but then fail fee verification at the last step and be told FEE_NOT_APPLIED
+ * for a route that actually paid us. That is exactly the SCR / ZK / Mantle
+ * path: OpenOcean is the only routing source, so a dead verify call is a
+ * total swap outage after a working quote.
+ *
+ * `chainId` is consumed for slug lookup; `data` + optional `method` are the
+ * body OpenOcean expects.
+ */
+export async function proxyOoDecode(params = {}) {
+  const slug = ooSlug(params.chainId);
+  if (!slug) return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+  const payload = {
+    data: params.data,
+    method: params.method || 'swap'
+  };
+  if (payload.data == null || payload.data === '') {
+    return { status: 400, body: { error: 'MISSING_CALLDATA' } };
+  }
+  return upstream({
+    url: `${OO_BASE}/${slug}/decodeInputData`,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 /** GET /prices — Velora's quote-only price comparison. */
 export async function proxyVeloraPrices(params = {}) {
   let url;
