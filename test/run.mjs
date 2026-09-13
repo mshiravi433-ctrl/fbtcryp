@@ -19,6 +19,12 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
+/* FBT Launch — the non-custodial token & liquidity launchpad: spec
+   validation, capability bitmaps, the deterministic risk engine with its
+   fatal gates, v1-zero fees, byte-exact calldata (one builder shared by app,
+   API and SDK), the DRAFT→…→LIVE state machine with honest partial-failure
+   reporting, and history sanitization. */
+import './launch-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the

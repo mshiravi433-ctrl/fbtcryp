@@ -10,7 +10,13 @@
  * project's official docs and BscScan/Tonviewer.
  */
 
-import { FAMILY, PAYOUT_ADDRESSES, payoutAddress } from './payout';
+/*
+ * Explicit .js extension (not Vite's default extensionless form): the launch
+ * module (src/lib/launch/*) is imported by BOTH the Vite browser bundle and
+ * the plain-Node server, and Node ESM refuses to resolve `./payout`. Vite
+ * treats the explicit form identically.
+ */
+import { FAMILY, PAYOUT_ADDRESSES, payoutAddress } from './payout.js';
 
 /**
  * Supported chains.
@@ -310,7 +316,7 @@ export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 
  * importing it from this file would pull the whole chain + token registry into
  * the entry chunk.
  */
-export { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from './feeBps';
+export { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from './feeBps.js';
 
 /**
  * Where the 0.5% goes.

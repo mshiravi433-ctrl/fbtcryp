@@ -530,8 +530,118 @@ const TOOLS = [
     requiresWallet: true,
     requiresConfirmation: false,
     route: '/orders'
+  },
+  /*
+   * FBT LAUNCH — natural-language on-ramp to the token & liquidity launchpad.
+   *
+   * WHY `plan` AND NOT `execute`
+   * ---------------------------------------------------------------------
+   * A launch is a multi-signature financial action (create token → approve →
+   * create pool → add liquidity → verify). The Intent OS must NEVER be the
+   * thing that signs it. This tool PLANS: it runs the same deterministic
+   * spec-validation + risk engine the launch page uses, then hands the user
+   * a fully-prefilled /launch deep link. From the link onward the user is
+   * in the launch module, reviewing the risk score and signing every step
+   * in their own wallet. The AI can ask for the missing parameters (price,
+   * liquidity) because that is a conversation, not a signature.
+   *
+   * readOnly:true + requiresConfirmation:false because the tool itself moves
+   * nothing — it only assembles a plan and a link. The financial execution
+   * authority stays with the launch module + the user's wallet, full stop.
+   */
+  {
+    id: 'launch.plan',
+    name: 'Plan Token Launch',
+    description: 'Plan a token + liquidity launch on a chosen network and open it prefilled',
+    category: 'launch',
+    capabilities: ['plan', 'launch', 'token', 'liquidity', 'risk'],
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        symbol: { type: 'string' },
+        supply: { type: 'string' },
+        decimals: { type: 'number' },
+        network: { type: 'number' },
+        pair: { type: 'string' },
+        tokenAmount: { type: 'string' },
+        quoteAmount: { type: 'string' },
+        price: { type: 'string' }
+      }
+    },
+    execute: async (input, ctx) => {
+      try {
+        const { validateTokenSpec } = await import('../../launch/capabilities.js');
+        const { scoreLaunch } = await import('../../launch/risk.js');
+        const { LAUNCH_CHAINS } = await import('../../launch/networks.js');
+        const chainId = Number(input?.network) || null;
+        if (chainId && !LAUNCH_CHAINS.includes(chainId)) {
+          return { ok: false, reason: 'NETWORK_NOT_SUPPORTED', chainId, supported: LAUNCH_CHAINS };
+        }
+        const spec = validateTokenSpec({
+          name: input?.name,
+          symbol: input?.symbol,
+          decimals: input?.decimals ?? 18,
+          supply: input?.supply,
+          caps: {}
+        });
+        const missing = [];
+        if (!spec.ok) missing.push('token');
+        if (!chainId) missing.push('network');
+        if (!input?.tokenAmount || !input?.quoteAmount) missing.push('liquidity');
+        const plan = {
+          schema: 'fbt.launch-plan.v1',
+          chainId,
+          token: spec.ok ? spec.value : null,
+          pair: input?.pair || null,
+          tokenAmount: input?.tokenAmount || null,
+          quoteAmount: input?.quoteAmount || null,
+          missing
+        };
+        if (spec.ok) {
+          plan.risk = scoreLaunch({
+            capabilities: 0,
+            decimals: spec.value.decimals,
+            supplyWei: spec.value.supplyWei,
+            tokenAmount: input?.tokenAmount || '0',
+            quoteAmount: input?.quoteAmount || '0',
+            dexVerified: true,
+            factoryReady: true,
+            lpqToUser: true
+          });
+        }
+        return {
+          ok: missing.length === 0,
+          plan,
+          missing,
+          route: '/launch',
+          deepLink: buildLaunchDeepLink(input),
+          note: missing.length
+            ? `Ask the user for: ${missing.join(', ')}`
+            : 'Plan is complete — open the launch page, review the risk score, and sign each step in your wallet.'
+        };
+      } catch {
+        return { ok: false, reason: 'LAUNCH_PLAN_FAILED', route: '/launch' };
+      }
+    },
+    readOnly: true,
+    requiresWallet: false,
+    requiresConfirmation: false,
+    supportedChains: [8453, 56, 42161, 137, 1],
+    route: '/launch'
   }
 ];
+
+/** Encode a launch plan into a /launch deep link the page can prefill. */
+function buildLaunchDeepLink(input) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(input || {})) {
+    if (v === undefined || v === null || v === '') continue;
+    q.set(k, String(v));
+  }
+  const s = q.toString();
+  return `/launch${s ? `?${s}` : ''}`;
+}
 
 // Index for fast lookup
 const toolMap = new Map(TOOLS.map(t => [t.id, t]));

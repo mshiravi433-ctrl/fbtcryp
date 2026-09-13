@@ -126,6 +126,17 @@ const Vault = lazyRetry(() => import('./pages/Vault'));
  */
 const Loan = lazyRetry(() => import('./pages/Loan'));
 
+/*
+ * FBT Launch — token & liquidity launchpad (/launch).
+ *
+ * Standalone MODULE by design (spec §33): nothing existing is replaced.
+ * It reuses the wallet layer (non-custodial signing in the user's wallet),
+ * the swap token lists (a launched token can be imported into Swap), and
+ * the deterministic engine in src/lib/launch — the same modules the public
+ * API (server/launch.js) imports, so app and SDK sign identical bytes.
+ */
+const Launch = lazyRetry(() => import('./pages/Launch'));
+
 /* FBT Insurance OS — /insurance module (§ "FBT Insurance OS"). */
 const InsuranceShell = lazyRetry(() => import('./pages/insurance/InsuranceShell'));
 const InsuranceDashboard = lazyRetry(() => import('./pages/insurance/InsuranceDashboard'));
@@ -405,6 +416,8 @@ function AnimatedRoutes() {
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />
+            {/* FBT Launch — token & liquidity launchpad. Non-custodial module. */}
+            <Route path="/launch" element={<Launch />} />
 
             {/* FBT Insurance OS — production marketplace. Non-custodial;
                 live providers only (sandbox exists only in dev/test builds). */}

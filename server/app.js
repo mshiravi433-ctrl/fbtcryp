@@ -130,6 +130,13 @@ import {
 import { REPUTATION_LIMITATIONS, getReputation, getReputationSnapshot } from './ecosystemReputation.js';
 import { openApiDocument } from './openapi.js';
 import { PORTFOLIO_LIMITATIONS, readPortfolioAgent, savePortfolioAgent } from './portfolioAgents.js';
+import {
+  launchConfigHandler,
+  launchPrepareHandler,
+  launchRecordHandler,
+  launchRecordsHandler,
+  launchVerifyHandler
+} from './launch.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
 import { apiKeyScopes, authenticateApiKey, createApiKey, hasScope, looksLikeApiKey, revokeApiKey } from './developerKeys.js';
@@ -1086,6 +1093,22 @@ app.get('/api/environments', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(environmentList());
 });
+
+/*
+ * FBT LAUNCH — token & liquidity launchpad (non-custodial).
+ *
+ * The module prepares BYTES; the user's own wallet signs. This API never
+ * signs, sends or holds anything — the /config endpoint says so in the
+ * payload, and the handlers in server/launch.js hold no key material.
+ * `prepare` and `verify` are read-only/orchestration: plan calldata and
+ * on-chain reads. `record` is a non-sensitive-only public log that refuses
+ * (503) rather than loses when no durable store is configured.
+ */
+app.get('/api/launch/config', launchConfigHandler);
+app.get('/api/launch/prepare', launchPrepareHandler);
+app.get('/api/launch/verify', launchVerifyHandler);
+app.post('/api/launch/record', launchRecordHandler);
+app.get('/api/launch/records/:chainId', launchRecordsHandler);
 /*
  * A TIGHTER BUDGET FOR REGISTRY WRITES.
  *

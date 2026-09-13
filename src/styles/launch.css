@@ -1,0 +1,876 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   FBT LAUNCH — token & liquidity launchpad
+   Dark glass surface, RGB accents, 4pt grid — same tokens as the rest of
+   the app (see :root in index.css). Mobile-first single column; on wide
+   screens the page centers with a comfortable max-width.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.launch-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-bottom: calc(var(--nav-h) + var(--sp-6));
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+
+.launch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.launch-title {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.launch-rocket {
+  font-size: 30px;
+  line-height: 1.1;
+  filter: drop-shadow(0 0 12px rgba(0, 229, 255, 0.45));
+}
+
+.launch-title h1 {
+  margin: 0;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+}
+
+.launch-title p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  max-width: 34ch;
+}
+
+.launch-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.launch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.launch-badge.nc {
+  color: var(--rgb-4);
+  border-color: rgba(0, 255, 157, 0.35);
+  background: rgba(0, 255, 157, 0.08);
+}
+
+.launch-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rgb-4);
+  box-shadow: 0 0 8px var(--rgb-4);
+}
+
+/* ── stepper ────────────────────────────────────────────────────────── */
+
+.launch-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.launch-step {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  padding: 8px 4px 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: default;
+  transition: border-color 0.18s ease, background 0.18s ease;
+  min-height: 52px;
+}
+
+.launch-step:disabled { cursor: default; }
+
+.launch-step.done { cursor: pointer; border-color: rgba(0, 255, 157, 0.4); }
+.launch-step.done:hover { background: rgba(0, 255, 157, 0.06); }
+
+.launch-step.active {
+  border-color: var(--rgb-1);
+  background: rgba(0, 229, 255, 0.07);
+  box-shadow: 0 0 18px -6px rgba(0, 229, 255, 0.5);
+}
+
+.launch-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-2);
+  background: var(--bg-raised);
+}
+
+.launch-step.active .launch-step-num {
+  color: #001016;
+  background: var(--rgb-1);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+
+.launch-step.done .launch-step-num {
+  color: #00110a;
+  background: var(--rgb-4);
+}
+
+.launch-step-label {
+  font-size: 9.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.launch-step.active .launch-step-label { color: var(--rgb-1); }
+
+/* ── sections ───────────────────────────────────────────────────────── */
+
+.launch-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.launch-h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.01em;
+}
+
+.launch-h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── step 1: networks ───────────────────────────────────────────────── */
+
+.launch-chain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 700px) {
+  .launch-chain-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.launch-chain {
+  appearance: none;
+  text-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  min-height: 96px;
+}
+
+.launch-chain:active { transform: scale(0.985); }
+.launch-chain.active { background: var(--bg-raised); }
+
+.launch-chain.soon {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.launch-chain-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+
+.launch-chain-name {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.launch-chain-dex {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.launch-chain-status {
+  margin-top: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.launch-chain-status.ok { color: var(--rgb-4); }
+.launch-chain-status.warn { color: var(--rgb-5); }
+
+.launch-dexcheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+.launch-dexcheck.ok { color: var(--rgb-4); border-color: rgba(0, 255, 157, 0.3); background: rgba(0, 255, 157, 0.05); }
+.launch-dexcheck.bad { color: var(--rgb-5); border-color: rgba(255, 179, 0, 0.3); background: rgba(255, 179, 0, 0.05); }
+.launch-dexcheck.checking { color: var(--text-2); }
+
+/* ── step 2: token form ─────────────────────────────────────────────── */
+
+.launch-token-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.launch-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.launch-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid var(--line-strong);
+}
+
+.launch-logo.lg { width: 56px; height: 56px; }
+
+.launch-logo-ph {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: #001016;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+}
+
+.launch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  flex: 1;
+}
+
+.launch-field-row {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .launch-field-row { flex-direction: column; gap: 0; }
+}
+
+.launch-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 15px;
+  padding: 11px 12px;
+  min-height: 44px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.launch-input:focus { border-color: var(--rgb-1); }
+
+.launch-input:disabled { opacity: 0.55; }
+
+.launch-input.mono { font-family: var(--font-mono); font-size: 14px; }
+
+.launch-textarea {
+  resize: none;
+  min-height: 60px;
+  line-height: 1.5;
+}
+
+.launch-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  word-break: break-all;
+}
+
+.launch-asset-tag {
+  position: absolute;
+  inset-inline-end: 10px;
+  bottom: 11px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  pointer-events: none;
+  letter-spacing: 0.04em;
+}
+
+/* ── errors ─────────────────────────────────────────────────────────── */
+
+.launch-errors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.launch-error-chip {
+  font-size: 11px;
+  color: var(--down);
+  border: 1px solid rgba(255, 59, 107, 0.35);
+  background: rgba(255, 59, 107, 0.07);
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+
+/* ── step 3: rules ──────────────────────────────────────────────────── */
+
+.launch-mode-card {
+  padding: var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.launch-mode-card.active {
+  border-color: rgba(0, 255, 157, 0.45);
+  background: rgba(0, 255, 157, 0.05);
+}
+
+.launch-mode-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launch-mode-name {
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.launch-mode-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #00110a;
+  background: var(--rgb-4);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.launch-mode-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.launch-cap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.launch-cap-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.launch-cap-warn {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ── risk pill / panel ──────────────────────────────────────────────── */
+
+.launch-risk {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-4);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.launch-risk.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.launch-risk-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.launch-risk-score {
+  font-size: 34px;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.launch-risk-score.sm { font-size: 18px; }
+
+.launch-risk-band {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* band colours */
+.launch-risk.low { border-color: rgba(0, 255, 157, 0.35); }
+.launch-risk.low .launch-risk-score, .launch-risk.low .launch-risk-band { color: var(--rgb-4); }
+.launch-risk.moderate { border-color: rgba(255, 179, 0, 0.3); }
+.launch-risk.moderate .launch-risk-score, .launch-risk.moderate .launch-risk-band { color: var(--rgb-5); }
+.launch-risk.elevated { border-color: rgba(255, 179, 0, 0.5); }
+.launch-risk.elevated .launch-risk-score, .launch-risk.elevated .launch-risk-band { color: var(--rgb-5); }
+.launch-risk.high { border-color: rgba(255, 45, 149, 0.5); }
+.launch-risk.high .launch-risk-score, .launch-risk.high .launch-risk-band { color: var(--rgb-3); }
+.launch-risk.critical { border-color: rgba(255, 59, 107, 0.6); background: rgba(255, 59, 107, 0.06); }
+.launch-risk.critical .launch-risk-score, .launch-risk.critical .launch-risk-band { color: var(--down); }
+
+.launch-risk-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.launch-risk-bar > div {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rgb-4), var(--rgb-5), var(--rgb-3));
+  transition: width 0.3s ease;
+}
+
+.launch-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.finding {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.finding .finding-mark { flex-shrink: 0; }
+.finding.high { color: var(--text-1); }
+.finding.info { color: var(--text-3); }
+
+.launch-gates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.launch-gate {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--down);
+}
+
+/* ── step 4: liquidity ──────────────────────────────────────────────── */
+
+.launch-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launch-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 16px;
+  min-height: 40px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.launch-chip.active {
+  color: #001016;
+  background: var(--rgb-1);
+  border-color: var(--rgb-1);
+  box-shadow: 0 0 14px -2px rgba(0, 229, 255, 0.5);
+}
+
+.launch-price-row {
+  position: relative;
+}
+
+.launch-range {
+  width: 100%;
+  accent-color: var(--rgb-1);
+}
+
+.launch-liq-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.launch-liq-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.launch-liq-row span:last-child { color: var(--text-1); font-weight: 600; }
+
+/* ── step 5: review ─────────────────────────────────────────────────── */
+
+.launch-review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.launch-review-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.launch-review-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.launch-review-sym {
+  color: var(--text-3);
+  font-weight: 700;
+}
+
+.launch-review-sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.launch-review-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 13px;
+}
+
+.launch-review-k { color: var(--text-3); }
+.launch-review-v { color: var(--text-1); font-weight: 600; text-align: end; word-break: break-all; }
+
+.launch-confirm-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 45, 149, 0.4);
+  background: rgba(255, 45, 149, 0.06);
+}
+
+.launch-confirm-box p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.launch-cta { flex: 1; }
+
+.launch-nav { padding-top: 4px; }
+
+/* ── run view ───────────────────────────────────────────────────────── */
+
+.launch-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.launch-run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.launch-run-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.launch-run-step.confirmed { border-color: rgba(0, 255, 157, 0.35); }
+.launch-run-step.failed { border-color: rgba(255, 59, 107, 0.45); }
+.launch-run-step.signing, .launch-run-step.submitted { border-color: rgba(0, 229, 255, 0.4); }
+
+.launch-run-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+
+.launch-run-step.confirmed .launch-run-ico { color: #00110a; background: var(--rgb-4); }
+.launch-run-step.failed .launch-run-ico { color: #fff; background: var(--down); }
+.launch-run-step.signing .launch-run-ico,
+.launch-run-step.submitted .launch-run-ico { color: #001016; background: var(--rgb-1); }
+
+.launch-run-info { min-width: 0; }
+
+.launch-run-name {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.launch-run-desc {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.launch-run-hash {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--rgb-1);
+  text-decoration: none;
+}
+
+.launch-run-hash:hover { text-decoration: underline; }
+
+/* ── result view ────────────────────────────────────────────────────── */
+
+.launch-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.launch-result-banner {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+}
+
+.launch-result-banner.ok {
+  border-color: rgba(0, 255, 157, 0.45);
+  background: rgba(0, 255, 157, 0.06);
+  box-shadow: 0 12px 40px -18px rgba(0, 255, 157, 0.4);
+}
+
+.launch-result-banner.warn {
+  border-color: rgba(255, 179, 0, 0.4);
+  background: rgba(255, 179, 0, 0.05);
+}
+
+.launch-result-ico { font-size: 30px; line-height: 1.1; }
+
+.launch-result-banner h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.launch-result-banner p {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.launch-result-card {
+  padding: var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.launch-result-label {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.launch-result-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.launch-result-addr {
+  color: var(--rgb-1);
+  text-decoration: none;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.launch-result-addr:hover { text-decoration: underline; }
+
+/* ── history ────────────────────────────────────────────────────────── */
+
+.launch-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.launch-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  font-size: 12px;
+}
+
+.launch-state-chip {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.launch-state-chip.live { color: #00110a; background: var(--rgb-4); }
+.launch-state-chip.retryable, .launch-state-chip.expired { color: #1a1200; background: var(--rgb-5); }
+.launch-state-chip.failed, .launch-state-chip.cancelled { color: #fff; background: var(--down); }
+
+.launch-history-name { font-weight: 700; }
+.launch-history-net { color: var(--text-3); }
+.launch-history-addr { color: var(--text-3); margin-inline-start: auto; }
+
+/* ── footer ─────────────────────────────────────────────────────────── */
+
+.launch-footer {
+  margin-top: var(--sp-2);
+  padding: var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px dashed rgba(0, 255, 157, 0.3);
+  background: rgba(0, 255, 157, 0.04);
+  text-align: center;
+}
+
+.launch-footer p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+/* ── native shell: trim effects (same rule as the swap ticket) ──────── */
+
+:root[data-native='true'] .launch-token-card,
+:root[data-native='true'] .launch-review-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
