@@ -17,9 +17,11 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
 import SegIndicator from './SegIndicator';
+import AssetIcon from './AssetIcon';
 import WalletConnectSheet from './WalletConnectSheet';
 import { IconCheck, IconChevronRight, IconClock, IconCopy, IconExternal, IconLock, IconRefresh, IconShield, IconWallet } from './Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
+import { evmToTronAddress, isValidTronAddress } from '../lib/tronAddress';
 import { useAppStore } from '../store/useAppStore';
 import { emitEvent } from '../lib/intent-ai/os/eventBus';
 import { requestSoftRefresh } from '../lib/refresh';
@@ -46,15 +48,22 @@ const RATE_POLL_MS = 60_000;
 const QUICK_AMOUNTS = ['500000', '1000000', '2000000', '5000000'];
 /* The referral guide's fixed order. Withdraw is the network-sensitive step. */
 const REFERRAL_STEPS = ['signup', 'kyc', 'deposit', 'buy', 'withdraw', 'return'];
-/* Bitpin USDT withdrawal networks that match this app's EVM wallet.
-   TRC20/TON/Solana are omitted: a different address family would burn funds. */
+/* Bitpin USDT withdrawal networks.
+   TRC20 (Tron) is included on purpose: bitpin's USDT withdrawal form offers
+   it (fee ~2 USDT vs ~4.3 on ERC20), and the SAME connected secp256k1 wallet
+   key already controls a Tron mainnet address. The Tron address is derived
+   deterministically in ReferralAddressCard (Base58Check 0x41 + the same 20
+   bytes, verified both ways against the canonical USDT-TRC20 contract pair).
+   Solana/TON — different address families, no deterministic key reuse — are
+   omitted: showing them would burn funds. */
 const BITPIN_USDT_NETWORKS = [
-  { id: 'BEP20', label: 'BEP20', chainId: 56 },
-  { id: 'ERC20', label: 'ERC20', chainId: 1 },
-  { id: 'POLYGON', label: 'Polygon', chainId: 137 },
-  { id: 'ARBITRUM', label: 'Arbitrum', chainId: 42161 },
-  { id: 'OPTIMISM', label: 'Optimism', chainId: 10 },
-  { id: 'AVALANCHE', label: 'Avalanche', chainId: 43114 }
+  { id: 'BEP20', label: 'BEP20', walletFamily: 'EVM', chainId: 56 },
+  { id: 'TRC20', label: 'TRC20', walletFamily: 'TRON', chainId: null },
+  { id: 'ERC20', label: 'ERC20', walletFamily: 'EVM', chainId: 1 },
+  { id: 'POLYGON', label: 'Polygon', walletFamily: 'EVM', chainId: 137 },
+  { id: 'ARBITRUM', label: 'Arbitrum', walletFamily: 'EVM', chainId: 42161 },
+  { id: 'OPTIMISM', label: 'Optimism', walletFamily: 'EVM', chainId: 10 },
+  { id: 'AVALANCHE', label: 'Avalanche', walletFamily: 'EVM', chainId: 43114 }
 ];
 
 /** Best-effort clipboard write; a missing/blocked API never throws upward. */
@@ -351,26 +360,40 @@ function OrderProgress({ order, t }) {
  */
 function ReferralAddressCard({ onConnect, onSwitch, onSelectNetwork, referral, selectedNetwork, t, wallet }) {
   const [copied, setCopied] = useState(false);
-  const address = String(wallet?.address || '');
-  const connected = Boolean(wallet?.isConnected && address);
+  const evmAddress = String(wallet?.address || '');
+  const connected = Boolean(wallet?.isConnected && evmAddress);
   const networkLabel = String(selectedNetwork?.label || referral?.network?.label || referral?.network?.id || '').trim();
+  /* TRC20 is the one non-EVM row: derive the Tron T-address from the same
+     connected key. A server-sent referral network (id-only) is treated as
+     Tron the same way a chip selection is. */
+  const isTron = selectedNetwork?.walletFamily === 'TRON' || selectedNetwork?.id === 'TRC20';
+  const tronAddress = useMemo(
+    () => (connected && isTron ? evmToTronAddress(evmAddress) : null),
+    [connected, isTron, evmAddress]
+  );
+  /* The address printed + copied must match the SELECTED network exactly —
+     a 0x… string on a TRC20 withdrawal is an unrecoverable burn, so for
+     TRC20 nothing renders unless the derived T-address passes its real
+     Base58Check. */
+  const displayAddress = isTron ? (tronAddress || '') : evmAddress;
+  const addressOk = isTron ? isValidTronAddress(tronAddress) : /^0x[a-fA-F0-9]{40}$/.test(evmAddress);
   const targetChain = Number(selectedNetwork?.chainId || referral?.network?.chainId);
-  const chainMismatch = connected && Number.isFinite(targetChain) && targetChain > 0
+  const chainMismatch = connected && !isTron && Number.isFinite(targetChain) && targetChain > 0
     && Number(wallet?.chainId) !== targetChain;
 
   const copy = useCallback(async () => {
-    if (!address) return;
-    if (await copyText(address)) {
+    if (!displayAddress) return;
+    if (await copyText(displayAddress)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2_000);
     }
-  }, [address]);
+  }, [displayAddress]);
 
   return (
     <div className="iran-buy-address" data-testid="iran-buy-address">
       <div className="iran-buy-address-head">
         <span>{t('iranBuy.referral.addressLabel')}</span>
-        {networkLabel && <em className="iran-buy-address-network">{t('iranBuy.referral.addressNetwork', { network: networkLabel })}</em>}
+        {networkLabel && <em className={isTron ? 'is-tron' : ''}>{t('iranBuy.referral.addressNetwork', { network: networkLabel })}</em>}
       </div>
       <div className="iran-buy-chips iran-buy-network-chips" role="group" aria-label={t('iranBuy.network')} data-testid="iran-buy-networks">
         {BITPIN_USDT_NETWORKS.map((network) => (
@@ -381,23 +404,40 @@ function ReferralAddressCard({ onConnect, onSwitch, onSelectNetwork, referral, s
             onClick={() => onSelectNetwork?.(network)}
             data-testid={`iran-buy-network-${network.id}`}
           >
+            <AssetIcon chain={network.walletFamily === 'TRON' ? 'tron' : network.chainId} size={15} />
             {network.label}
           </button>
         ))}
       </div>
       {connected ? (
         <>
-          <code className="iran-buy-address-value" dir="ltr" data-testid="iran-buy-address-value">{address}</code>
+          {addressOk
+            ? (
+              <code className="iran-buy-address-value" dir="ltr" data-testid="iran-buy-address-value">{displayAddress}</code>
+            ) : (
+              <p className="iran-buy-address-error" role="alert" data-testid="iran-buy-address-error">
+                <IconLock width={12} height={12} />
+                {isTron ? t('iranBuy.referral.addressTronUnavailable') : t('iranBuy.referral.addressNeedsWallet')}
+              </p>
+            )}
           <div className="iran-buy-address-actions">
-            <button type="button" className="btn btn-ghost btn-sm iran-buy-address-copy" onClick={copy} data-testid="iran-buy-address-copy">
-              <IconCopy width={14} height={14} /> {copied ? t('iranBuy.referral.copied') : t('iranBuy.referral.copyAddress')}
-            </button>
+            {addressOk && (
+              <button type="button" className="btn btn-ghost btn-sm iran-buy-address-copy" onClick={copy} data-testid="iran-buy-address-copy">
+                <IconCopy width={14} height={14} /> {copied ? t('iranBuy.referral.copied') : t('iranBuy.referral.copyAddress')}
+              </button>
+            )}
             {chainMismatch && (
               <button type="button" className="btn btn-ghost btn-sm iran-buy-wallet-action" onClick={onSwitch} data-testid="iran-buy-address-switch">
                 {t('iranBuy.switchWalletNetwork')}
               </button>
             )}
           </div>
+          {isTron && addressOk && (
+            <p className="iran-buy-address-tron-note" data-testid="iran-buy-address-tron-note">
+              <AssetIcon chain="tron" size={14} />
+              {t('iranBuy.referral.addressTronNote')}
+            </p>
+          )}
           <p className="iran-buy-address-warning" role="alert">
             <IconLock width={12} height={12} />
             {networkLabel
@@ -531,7 +571,13 @@ export default function IranianBuyPanel({ capability }) {
       discountNote: capability?.referral?.discountNote || null,
       network: capability?.referral?.network || BITPIN_USDT_NETWORKS[0]
     };
-  const [selectedNetwork, setSelectedNetwork] = useState(() => BITPIN_USDT_NETWORKS[0]);
+  const [selectedNetwork, setSelectedNetwork] = useState(() => {
+    /* When the server pins a specific bitpin withdrawal network (e.g. an
+       operator set IRAN_BUY_REFERRAL_USDT_NETWORK=TRC20), open on that
+       network instead of silently contradicting it with BEP20. */
+    const serverId = String(capability?.referral?.network?.id || '').toUpperCase();
+    return BITPIN_USDT_NETWORKS.find((row) => row.id === serverId) || BITPIN_USDT_NETWORKS[0];
+  });
 
   useEffect(() => {
     if (!preview?.expiresAt) return undefined;

@@ -13,34 +13,49 @@
  * lands on the provider's own site with everything already typed in and
  * performs the single remaining action there: confirm and pay.
  *
- * ─── WHY THIS NEEDS NO API KEY, AND WHAT THAT HONESTLY MEANS ────────────────
+ * ─── WHY THIS NEEDS NO PARTNER API KEY, AND WHAT THAT HONESTLY MEANS ────────
  * The provider's hosted widget is a public web page. Prefill parameters
  * (asset code, fiat amount, destination wallet) are part of its public URL
  * contract; opening it is exactly what a bookmark or a printed link would
- * do. No credential of ours is involved, therefore:
+ * do. No partner credential of OURS is involved (the only key on the wire is
+ * Ramp's own site-published consumer key, described below), therefore:
  *
- * ─── WHICH PUBLIC PAGE, AND WHY (the «Integration issue detected» fix) ─────
- * The PARTNER widget host, app.rampnetwork.com, hard-requires a valid
- * `hostApiKey`: opened without one it renders Ramp's own error page —
- * «Integration issue detected. The application isn't properly connected to
- * Ramp Network. You can visit Ramp Network directly to buy or sell crypto.»
- * (Ramp support: «The most common case for this issue is the wrong
- * hostApiKey value used in the widget configuration code or lack thereof.»)
- * A keyless rail can therefore NEVER point at that host — and the correct
- * keyless destination is the very one that error page itself offers: Ramp's
- * own public consumer pages, where Ramp runs the same widget with Ramp's
- * OWN integration, so no partner key is involved at all:
+ * ─── WHICH PUBLIC PAGE, AND WHY (the «لینک رمپ اصلاً کار نمی‌کند» fix) ──────
+ * HISTORY — two rounds of this bug, both verified against the live hosts:
  *
- *     BUY  → https://buy.ramp.network/
- *     SELL → https://ramp.network/sell   (docs.rampnetwork.com support:
- *            «How to sell crypto? → Head to https://ramp.network/sell»)
+ *  1. Ramp migrated its whole domain from ramp.network → rampnetwork.com.
+ *     The old keyless consumer pages were retired with it: `buy.ramp.network`
+ *     no longer has a DNS record at all (the handoff link therefore died at
+ *     the resolver — a dead tap, every time), and `ramp.network/sell` went
+ *     with the old domain.
  *
- * The pages run the same widget, so the same documented search parameters
- * apply; Ramp's migration guide (docs.rampnetwork.com/search-params-migration)
- * states the widget auto-converts the legacy prefill keys we send. Worst
- * case an unrecognised parameter is ignored and the user picks by hand —
- * degradation is an extra tap, never an error page, and NEVER a fabricated
- * credential shoved into the URL to make the partner host load.
+ *  2. On the NEW host the widget lives at app.rampnetwork.com. Two distinct
+ *     paths exist there:
+ *       • /        the PARTNER widget — hard-requires a valid hostApiKey and
+ *                  renders «Integration issue detected. The application isn't
+ *                  properly connected to Ramp Network» without one.
+ *       • /landing Ramp's OWN public consumer entry — the exact URL Ramp
+ *                  puts behind the «Buy, Sell or Swap» button on its own
+ *                  marketing site (rampnetwork.com), carrying Ramp's OWN
+ *                  site-published hostApiKey, so the widget runs under
+ *                  Ramp's own integration instead of a partner's.
+ *
+ *  So the correct keyless destination for BOTH sides is:
+ *
+ *     BUY  → https://app.rampnetwork.com/landing?…ONRAMP…
+ *     SELL → https://app.rampnetwork.com/landing?…OFFRAMP…
+ *
+ *  Verified end to end (Sep 2026): /landing auto-converts the legacy prefill
+ *  keys we already send (swapAsset/offrampAsset, fiatCurrency/fiatValue,
+ *  swapAmount, userAddress, enabledFlows/defaultFlow) — a BUY link lands
+ *  titled «Buy USDT for $100.00», a SELL link titled «Sell 100.00 USDT»; the
+ *  migration guide (docs.rampnetwork.com/search-params-migration) documents
+ *  the conversion. The key below is NOT a partner credential of ours: it is
+ *  the public key embedded in rampnetwork.com's own consumer CTA, which
+ *  exists precisely so direct visitors can run the widget. Worst case an
+ *  unrecognised parameter is ignored and the user picks by hand —
+ *  degradation is an extra tap, never an error page, and NEVER a fabricated
+ *  partner credential shoved into the URL to make the widget host load.
  *
  *   • the provider performs its OWN checks (KYC, card 3-DS, region rules)
  *     on its own site — nothing here can or does bypass any of them;
@@ -65,20 +80,28 @@
 import { TOKENS, EVM_CHAINS } from './chains';
 
 /* The one destination this rail currently composes URLs for: Ramp Network's
-   PUBLIC CONSUMER pages — not the partner widget host. app.rampnetwork.com
-   refuses keyless visitors with «Integration issue detected»; these pages
-   are the keyless entry points Ramp itself publishes for direct buyers and
-   sellers. Per-side hosts as data, so a second keyless destination is an
-   append, not a rewrite. */
+   OWN public consumer entry — app.rampnetwork.com/landing — not the partner
+   widget root (app.rampnetwork.com/ answers any direct visitor, key or no
+   key, with «Integration issue detected»; /landing is the path behind the
+   «Buy, Sell or Swap» button on rampnetwork.com itself). Both sides use the
+   same landing path; the flow is chosen by enabledFlows/defaultFlow. Per-
+   side hosts as data, so a second keyless destination is an append. */
 export const GUIDED_PROVIDER = {
   id: 'ramp',
   name: 'Ramp Network',
   hosts: {
-    BUY: 'https://buy.ramp.network/',
-    SELL: 'https://ramp.network/sell'
+    BUY: 'https://app.rampnetwork.com/landing',
+    SELL: 'https://app.rampnetwork.com/landing'
   },
   enabled: true
 };
+
+/* Ramp's OWN site-published consumer key, copied verbatim from the
+   «Buy, Sell or Swap» CTA on rampnetwork.com (the marketing site deep-links
+   to /landing with exactly this key). It is the integration Ramp itself
+   runs for direct visitors — it is not a partner credential registered to
+   us, and there is deliberately no partner key anywhere in this rail. */
+export const RAMP_PUBLIC_HOST_API_KEY = 'wn25y7nx6cyb4oqutc5obnnywwwt4gz36yw5fypw';
 
 /* network code used across this app → { chainId, ramp: provider chain prefix } */
 export const GUIDED_NETWORKS = {
@@ -87,7 +110,8 @@ export const GUIDED_NETWORKS = {
   base: { chainId: 8453, ramp: 'BASE', label: 'Base' },
   optimism: { chainId: 10, ramp: 'OPTIMISM', label: 'Optimism' },
   polygon: { chainId: 137, ramp: 'MATIC', label: 'Polygon' },
-  bsc: { chainId: 56, ramp: 'BSC', label: 'BNB Chain' }
+  bsc: { chainId: 56, ramp: 'BSC', label: 'BNB Chain' },
+  avalanche: { chainId: 43114, ramp: 'AVAX', label: 'Avalanche' }
 };
 
 /* Which asset symbols we prefill per network. Only pairs that exist BOTH in
@@ -231,6 +255,9 @@ export function buildGuidedCheckoutUrl({
   if (!fiat) fail('GUIDED_FIAT_INVALID');
 
   const params = new URLSearchParams();
+  /* Ramp's own site-published consumer key — required by /landing and the
+     exact key Ramp's own marketing CTA ships. See RAMP_PUBLIC_HOST_API_KEY. */
+  params.set('hostApiKey', RAMP_PUBLIC_HOST_API_KEY);
   params.set('userAddress', wallet);
   params.set('fiatCurrency', fiat);
   if (side === 'BUY') {
@@ -250,8 +277,9 @@ export function buildGuidedCheckoutUrl({
   }
   if (typeof finalUrl === 'string' && /^https?:\/\//.test(finalUrl)) params.set('finalUrl', finalUrl);
 
-  /* The side-specific public consumer page — see GUIDED_PROVIDER above for
-     why the partner widget host must never be used here. */
+  /* Ramp's own consumer landing — the same entry Ramp's marketing site uses,
+     with Ramp's own key. The partner widget ROOT (/), which answers keyless
+     visitors with «Integration issue detected», is never used. */
   const host = GUIDED_PROVIDER.hosts[side];
   if (!host) fail('GUIDED_SIDE_INVALID');
 

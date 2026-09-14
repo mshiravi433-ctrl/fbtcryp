@@ -124,6 +124,15 @@
 .iran-buy-chips > button { min-height: 30px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, .12); border-radius: 999px; color: var(--text-2); background: rgba(255, 255, 255, .03); font-family: var(--font-mono); font-size: 10.5px; cursor: pointer; }
 .iran-buy-chips > button.is-active { border-color: var(--rgb-1); color: var(--rgb-1); background: rgba(0, 229, 255, .1); }
 .iran-buy-chips > button:disabled { opacity: .5; cursor: not-allowed; }
+/* Withdrawal-network chips now carry the real network mark next to the
+   name: icon + label on one centered row, even padding, no touching text. */
+.iran-buy-network-chips { gap: 7px; }
+.iran-buy-network-chips > button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px; padding: 0 12px; font-weight: 700;
+}
+.iran-buy-network-chips > button .asset-icon { flex: 0 0 auto; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px rgba(255, 255, 255, .14); }
+.iran-buy-network-chips > button.is-active .asset-icon { box-shadow: 0 0 0 1px rgba(0, 229, 255, .55); }
 .iran-buy-estimate { margin: 9px 1px 0; color: var(--text-2); font-size: 11px; line-height: 1.7; }
 .iran-buy-estimate strong { color: var(--rgb-4); font-family: var(--font-mono); font-size: 12.5px; }
 .iran-buy-estimate small { display: block; color: var(--text-3); font-size: 9.5px; line-height: 1.6; }
@@ -176,6 +185,13 @@
 .iran-buy-address .iran-buy-wallet-action { min-height: 44px; }
 .iran-buy-address-warning { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--down); font-size: 10px; line-height: 1.7; }
 .iran-buy-address-warning svg { flex: 0 0 auto; margin-top: 3px; }
+/* TRC20 (Tron) explanatory note: the T-address is the same key's Tron
+   address, so the user is not surprised to see a different string. */
+.iran-buy-address-tron-note { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 7px 9px; border: 1px solid rgba(196, 52, 43, .3); border-radius: 10px; background: rgba(196, 52, 43, .07); color: var(--text-2); font-size: 9.8px; line-height: 1.7; }
+.iran-buy-address-tron-note .asset-icon { flex: 0 0 auto; margin-top: 1px; box-shadow: 0 0 0 1px rgba(196, 52, 43, .45); border-radius: 5px; overflow: hidden; }
+.iran-buy-address-head em.is-tron { border-color: rgba(196, 52, 43, .55); color: #ff8a82; }
+.iran-buy-address-error { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--down); font-size: 10px; line-height: 1.7; }
+.iran-buy-address-error svg { flex: 0 0 auto; margin-top: 3px; }
 .iran-buy-address-empty { display: grid; gap: 8px; justify-items: start; }
 .iran-buy-address-empty p { margin: 0; color: var(--text-3); font-size: 10px; line-height: 1.7; }
 .iran-buy-referral-steps { display: grid; gap: 9px; margin: 0; padding: 12px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 13px; background: rgba(255, 255, 255, .02); list-style: none; }

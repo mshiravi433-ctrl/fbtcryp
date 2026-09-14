@@ -11816,6 +11816,8 @@
       "addressNeedsWallet": "The receiving address is read only from your own wallet. Connect a wallet to see it.",
       "addressWarning": "Send on the {{network}} network only. Choosing the wrong network means losing the funds.",
       "addressWarningGeneric": "Send on the approved network only. Choosing the wrong network means losing the funds.",
+      "addressTronNote": "It starts with T — this is your wallet's official Tron (TRC20) address, derived from the same connected wallet key; your 0x address and this T address are one wallet.",
+      "addressTronUnavailable": "Could not derive a Tron address from the connected wallet. Pick an EVM network or reconnect the wallet.",
       "popupBlocked": "Automatic opening was blocked. Copy this link and open it in your browser:",
       "steps": {
         "signup": {

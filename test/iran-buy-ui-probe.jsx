@@ -8,6 +8,7 @@ import { act } from 'react-dom/test-utils';
 import i18n, { setLanguage } from '../src/i18n/index.js';
 import { WalletProvider } from '../src/context/WalletContext.jsx';
 import BuySellPanel from '../src/components/BuySellPanel.jsx';
+import { evmToTronAddress, isValidTronAddress } from '../src/lib/tronAddress.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const capability = {
@@ -112,22 +113,20 @@ export async function run(container) {
       iranPanel?.textContent.includes('USDT') && iranPanel?.textContent.includes('ERC20') && iranPanel?.querySelectorAll('select').length === 0);
     check('the disconnected state offers the shared wallet connection path and no manual destination field',
       Boolean(iranPanel?.querySelector('.iran-buy-wallet-action')) && !iranPanel?.querySelector('input[aria-label*="کیف پول مقصد"]'));
-    check('the terms stay collapsed until requested, keeping the mobile flow focused', iranPanel?.querySelector('.iran-buy-terms')?.open === false);
-    check('the live Toman rate from the public market endpoint is shown with its source',
-      iranPanel?.querySelector('[data-testid="iran-buy-rate"]')?.textContent.includes('۶۲٬۵۰۰'));
-    check('the four-step journey is explained before anything is signed or paid',
-      iranPanel?.querySelectorAll('.iran-buy-guide li').length === 4);
-
-    const amountInput = iranPanel?.querySelector('.iran-buy-amount input');
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(amountInput, '1250000');
-      amountInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-      await sleep(40);
-    });
-    check('a Toman amount produces a labelled estimate instead of a promised amount',
-      container.querySelector('[data-testid="iran-buy-estimate"]')?.textContent.includes('۲۰')
-      && container.querySelector('[data-testid="iran-buy-estimate"]')?.textContent.includes('USDT'));
+    /* The direct Toman rail is intentionally switched off (see the hard
+       `enabled = false` in IranianBuyPanel): this surface is Bitpin-only. The
+       live rate, calculator and terms details are not rendered; the six-step
+       withdrawal guide and the network chips are. */
+    check('the Bitpin-only surface hides the live rate, calculator, terms and pay CTA',
+      !iranPanel?.querySelector('[data-testid="iran-buy-rate"]')
+      && !iranPanel?.querySelector('.iran-buy-amount')
+      && !iranPanel?.querySelector('.iran-buy-terms')
+      && !iranPanel?.querySelector('[data-testid="iran-buy-pay"]'));
+    check('the bitpin withdrawal guide lists its six steps inside the collapsed disclosure',
+      iranPanel?.querySelectorAll('.iran-buy-referral-steps li').length === 6);
+    check('the network chips offer the EVM rows plus TRC20 even on the default surface',
+      ['BEP20', 'TRC20', 'ERC20', 'POLYGON', 'ARBITRUM', 'OPTIMISM', 'AVALANCHE']
+        .every((id) => iranPanel?.querySelector(`[data-testid="iran-buy-network-${id}"]`)));
 
     /* Not-yet-live deployment: the tab must stay a complete, honest surface. */
     await act(async () => { root.unmount(); });
@@ -175,6 +174,11 @@ export async function run(container) {
       !flow?.querySelector('[data-testid="iran-buy-referral-swap-cta"]')
       && Boolean(flow?.querySelector('[data-testid="iran-buy-networks"]'))
       && Boolean(flow?.querySelector('[data-testid="iran-buy-network-BEP20"]')));
+    check('bitpin TRC20 (Tron) is offered because bitpin withdrawals support it',
+      Boolean(flow?.querySelector('[data-testid="iran-buy-network-TRC20"]')));
+    check('every network chip carries its real network mark',
+      [...flow.querySelectorAll('.iran-buy-network-chips button')].every((chip) => Boolean(chip.querySelector('.asset-icon svg')))
+      && Boolean(flow.querySelector('[data-testid="iran-buy-network-TRC20"] .asset-icon svg')));
     check('the referral block names only USDT and no other asset',
       !/BTC|SOL|BNB|DOGE|TRX|XRP|ADA|LTC|SHIB|ETC\b/i.test(flow?.textContent || ''));
 
@@ -243,6 +247,36 @@ export async function run(container) {
     check('the copy button copies exactly the address and nothing else', copiedValue === WALLET_ADDRESS);
     check('the guide warns that a wrong network selection loses the funds',
       /شبکهٔ اشتباه|از دست رفتن/.test(connectedFlow?.querySelector('.iran-buy-address-warning')?.textContent || ''));
+
+    /* ── TRC20 (Tron): the selected network must print the wallet's TRON
+       address, not its 0x address — the wrong string on a TRC20 withdrawal
+       burns the USDT. The T-address is deterministically derived from the
+       same connected key and must pass the real Base58Check. ──────────── */
+    const expectedTron = evmToTronAddress(WALLET_ADDRESS);
+    check('the Tron address derived from the connected EVM key passes Base58Check', isValidTronAddress(expectedTron));
+    await act(async () => {
+      connectedFlow?.querySelector('[data-testid="iran-buy-network-TRC20"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(60);
+    });
+    check('selecting TRC20 replaces the 0x address with the full T address',
+      connectedFlow?.querySelector('[data-testid="iran-buy-address-value"]')?.textContent === expectedTron
+      && connectedFlow?.querySelector('[data-testid="iran-buy-address-value"]')?.textContent.startsWith('T'));
+    check('the TRC20 view explains the T address and offers no chain-switch',
+      Boolean(connectedFlow?.querySelector('[data-testid="iran-buy-address-tron-note"]'))
+      && !connectedFlow?.querySelector('[data-testid="iran-buy-address-switch"]'));
+    copiedValue = null;
+    await act(async () => {
+      connectedFlow?.querySelector('[data-testid="iran-buy-address-copy"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(60);
+    });
+    check('copy under TRC20 copies the T address character-exact', copiedValue === expectedTron);
+    await act(async () => {
+      connectedFlow?.querySelector('[data-testid="iran-buy-network-ERC20"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await sleep(60);
+    });
+    check('switching back to an EVM network restores the 0x address',
+      connectedFlow?.querySelector('[data-testid="iran-buy-address-value"]')?.textContent === WALLET_ADDRESS);
+
     check('opening the guide and unmounting produced no unexpected React error', errors.length === 0);
     delete window.ethereum;
     try { delete window.navigator.clipboard; } catch { /* optional stub cleanup */ }
