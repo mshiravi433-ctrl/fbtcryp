@@ -4,7 +4,7 @@
  * ─── WHAT THIS PAGE IS ─────────────────────────────────────────────────────
  * A single screen with three groups (Practice · Learn · Advanced) and nine
  * child screens behind them. The home view shows the user's level and
- * virtual balance, plus the 3×3 card grid. Tapping a card drills into the
+ * virtual balance, plus the card grid. Tapping a card drills into the
  * corresponding simulator.
  *
  * ─── WHY THREE GROUPS, NOT NINE TABS ──────────────────────────────────────
@@ -26,6 +26,13 @@
  * to `localStorage` under `fbt-lab-v1`. No balance or XP ever leaves the
  * device. The Lab persists independently of the main app wallet so resetting
  * one does not reset the other.
+ *
+ * ─── THE 2026 VISUAL PASS ─────────────────────────────────────────────────
+ * Emoji are out, `LabIcons` SVGs are in; the tab strip is a segmented control
+ * with a pill that slides between tabs (framer `layoutId`); the header is an
+ * aurora hero with a level ring and spring-animated counters; cards cascade in
+ * and carry a pointer spotlight. All of it collapses to a still, instant
+ * render when reduced motion is on — see `useStill()`.
  */
 
 import { useEffect, useState } from 'react';
@@ -33,8 +40,10 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTelegram } from '../context/TelegramContext';
+import { useStill } from '../components/AnimatedIcon';
 import PageTransition from '../components/PageTransition';
-import { LabHeader } from '../components/Lab/Shared';
+import { IconChevronLeft, IconFlask, LabIcon } from '../components/Lab/LabIcons';
+import { LAB_EASE, LabCard, LabHeader } from '../components/Lab/Shared';
 import PracticeGroup from '../components/Lab/PracticeGroup';
 import LearnGroup from '../components/Lab/LearnGroup';
 import AdvancedGroup from '../components/Lab/AdvancedGroup';
@@ -45,22 +54,28 @@ import '../styles/lab-v2.css';
 import '../styles/lab-modern.css'; // re-use the older glass / aurora styles that already exist
 import '../styles/lab-polish.css';
 
+/* `icon` is a name in the LabIcons registry, `accent` an .acc-* utility.
+   Both are data, not markup — that is what keeps the three group files
+   identical apart from their card tables. */
 const GROUPS = [
-  { id: 'practice', Group: PracticeGroup },
-  { id: 'learn', Group: LearnGroup },
-  { id: 'advanced', Group: AdvancedGroup }
+  { id: 'practice', Group: PracticeGroup, icon: 'bolt', accent: 'cyan' },
+  { id: 'learn', Group: LearnGroup, icon: 'cap', accent: 'amber' },
+  { id: 'advanced', Group: AdvancedGroup, icon: 'rocket', accent: 'magenta' }
 ];
 
 const MORE_TOOLS = [
-  { id: 'compare', icon: '⚖️' },
-  { id: 'level', icon: '🏆' },
-  { id: 'leaderboard', icon: '🎖️' }
+  { id: 'compare', icon: 'scale', accent: 'cyan' },
+  { id: 'level', icon: 'trophy', accent: 'amber' },
+  { id: 'leaderboard', icon: 'medal', accent: 'magenta' }
 ];
+
+const TAB_SPRING = { type: 'spring', stiffness: 480, damping: 38, mass: 0.75 };
 
 export default function Lab() {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const navigate = useNavigate();
+  const still = useStill();
   const [params, setParams] = useSearchParams();
 
   const fromUrlTab = params.get('tab');
@@ -99,47 +114,75 @@ export default function Lab() {
   };
 
   const ActiveGroup = GROUPS.find((g) => g.id === tab)?.Group;
+  const activeAccent = GROUPS.find((g) => g.id === tab)?.accent ?? 'cyan';
 
   return (
     <PageTransition>
       <div className="lab2">
-        <div className="row" style={{ gap: 10, marginBottom: 2 }}>
+        {/* Ambient wash behind the whole screen. First child, z-index 0; every
+            sibling is lifted above it by `.lab2 > *`. */}
+        <div className="lab2-bg" aria-hidden="true">
+          <span className="lab2-bg-grid" />
+        </div>
+
+        <div className="lab2-topbar">
           <button
-            className="icon-btn"
+            className="lab2-icon-btn"
+            type="button"
             onClick={() => navigate(-1)}
             aria-label={t('common.back', 'Back')}
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-1)' }}
           >
-            ←
+            <span className="lab2-back-glyph" style={{ display: 'inline-flex' }}>
+              <IconChevronLeft width={19} height={19} />
+            </span>
           </button>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>🧪 {t('lab2.title')}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('lab2.subtitle')}</div>
+          <div className="lab2-topbar-text">
+            <div className="lab2-topbar-title">
+              <span className="lab2-grad-text">{t('lab2.title')}</span>
+            </div>
+            <div className="lab2-topbar-sub">{t('lab2.subtitle')}</div>
+          </div>
+          <div className="lab2-screen-badge acc-violet" aria-hidden="true">
+            <IconFlask width={23} height={23} />
           </div>
         </div>
 
         <LabHeader />
 
-        {/* Main tabs: Practice / Learn / Advanced */}
-        <div className="lab2-tabs" style={{ marginTop: 6 }}>
-          {GROUPS.map((g) => (
-            <button
-              key={g.id}
-              className={`lab2-tab ${tab === g.id && !tool ? 'active' : ''}`}
-              onClick={() => selectTab(g.id)}
-            >
-              {t(`lab2.${g.id}`)}
-            </button>
-          ))}
+        {/* Main tabs: Practice / Learn / Advanced — a segmented control whose
+            active pill physically travels between tabs. */}
+        <div className={`lab2-tabs acc-${activeAccent}`} role="tablist" aria-label={t('lab2.title')}>
+          {GROUPS.map((g) => {
+            const active = tab === g.id && !tool;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`lab2-tab acc-${g.accent} ${active ? 'active' : ''}`}
+                onClick={() => selectTab(g.id)}
+              >
+                {active && !still && (
+                  <motion.span className="lab2-tab-pill" layoutId="lab2-tab-pill" transition={TAB_SPRING} />
+                )}
+                <span className="lab2-tab-icon" aria-hidden="true">
+                  <LabIcon name={g.icon} width={16} height={16} />
+                </span>
+                <span>{t(`lab2.${g.id}`)}</span>
+              </button>
+            );
+          })}
         </div>
 
         <AnimatePresence mode="wait">
           {tool === 'compare' && (
             <motion.div
               key="tool-compare"
-              initial={{ opacity: 0, y: 6 }}
+              initial={still ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
+              exit={still ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.3, ease: LAB_EASE }}
             >
               <ComparePortfolios onBack={() => selectTool(null)} />
             </motion.div>
@@ -147,9 +190,10 @@ export default function Lab() {
           {tool === 'level' && (
             <motion.div
               key="tool-level"
-              initial={{ opacity: 0, y: 6 }}
+              initial={still ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
+              exit={still ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.3, ease: LAB_EASE }}
             >
               <LevelSystem onBack={() => selectTool(null)} />
             </motion.div>
@@ -157,9 +201,10 @@ export default function Lab() {
           {tool === 'leaderboard' && (
             <motion.div
               key="tool-lb"
-              initial={{ opacity: 0, y: 6 }}
+              initial={still ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
+              exit={still ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.3, ease: LAB_EASE }}
             >
               <Leaderboard onBack={() => selectTool(null)} />
             </motion.div>
@@ -168,9 +213,10 @@ export default function Lab() {
           {!tool && ActiveGroup && (
             <motion.div
               key={`group-${tab}`}
-              initial={{ opacity: 0, y: 6 }}
+              initial={still ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
+              exit={still ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.3, ease: LAB_EASE }}
             >
               <ActiveGroup activeChild={child} onSelectChild={selectChild} />
             </motion.div>
@@ -179,26 +225,32 @@ export default function Lab() {
 
         {/* More tools row */}
         {!tool && !child && (
-          <div className="lab2-group">
-            <div className="lab2-group-title">
-              <span className="lab2-group-emoji">🧰</span>
+          <motion.section
+            className="lab2-group"
+            initial={still ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: LAB_EASE, delay: still ? 0 : 0.18 }}
+          >
+            <div className="lab2-group-title acc-amber">
+              <span className="lab2-group-icon" aria-hidden="true">
+                <LabIcon name="toolbox" width={15} height={15} />
+              </span>
               {t('lab2.more')}
             </div>
             <div className="lab2-grid">
-              {MORE_TOOLS.map((m) => (
-                <button
+              {MORE_TOOLS.map((m, i) => (
+                <LabCard
                   key={m.id}
-                  className="lab2-card"
+                  icon={m.icon}
+                  accent={m.accent}
+                  index={i}
+                  title={t(`lab2.cards.${m.id}.title`)}
+                  sub={t(`lab2.cards.${m.id}.sub`)}
                   onClick={() => selectTool(m.id)}
-                >
-                  <div className="lab2-card-glow amber" />
-                  <div className="lab2-card-icon">{m.icon}</div>
-                  <div className="lab2-card-title">{t(`lab2.cards.${m.id}.title`)}</div>
-                  <div className="lab2-card-sub">{t(`lab2.cards.${m.id}.sub`)}</div>
-                </button>
+                />
               ))}
             </div>
-          </div>
+          </motion.section>
         )}
       </div>
     </PageTransition>

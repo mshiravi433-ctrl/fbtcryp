@@ -4,10 +4,17 @@
  * Definitions live in i18n (`lab2.screens.glossary.terms.*`), not in this
  * file. Hard-coding Persian here is why changing the app language left the
  * whole screen in Farsi.
+ *
+ * VISUAL PASS: a real search field (icon inside, focus ring in the accent),
+ * monogram tiles for each term, and a staggered reveal so a 40-item list
+ * arrives as a cascade instead of a wall. Accents rotate through the palette
+ * per item — a shelf of identical grey cards is why glossaries feel dead.
  */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LabBack, Panel, Notice } from './Shared';
+import { motion } from 'framer-motion';
+import { Empty, LAB_EASE, LabBack, Notice, Panel, SearchInput } from './Shared';
+import { useStill } from '../AnimatedIcon';
 
 const TERM_IDS = [
   'liquidation',
@@ -57,8 +64,11 @@ const TERM_IDS = [
   'portfolio'
 ];
 
+const ACCENTS = ['cyan', 'violet', 'magenta', 'mint', 'amber'];
+
 export default function Glossary({ onBack }) {
   const { t } = useTranslation();
+  const still = useStill();
   const [query, setQuery] = useState('');
 
   const terms = useMemo(
@@ -87,28 +97,34 @@ export default function Glossary({ onBack }) {
     <div className="lab2-screen">
       <LabBack
         onBack={onBack}
-        title={`📖 ${t('lab2.screens.glossary.title')}`}
+        icon="book"
+        accent="violet"
+        title={t('lab2.screens.glossary.title')}
         sub={t('lab2.screens.glossary.sub')}
       />
 
-      <div className="lab2-glossary-search">
-        <input
-          className="lab2-glossary-input"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('lab2.screens.glossary.search')}
-          aria-label={t('lab2.screens.glossary.search')}
-        />
-      </div>
+      <SearchInput
+        value={query}
+        onChange={setQuery}
+        placeholder={t('lab2.screens.glossary.search')}
+      />
 
-      <Panel title={t('lab2.screens.glossary.count', { count: filtered.length })}>
+      <Panel title={t('lab2.screens.glossary.count', { count: filtered.length })} icon="search" accent="violet">
         <div className="lab2-glossary-list">
           {filtered.length ? (
-            filtered.map((term) => (
-              <div className="lab2-glossary-item" key={term.id}>
+            filtered.map((term, i) => (
+              <motion.div
+                className={`lab2-glossary-item acc-${ACCENTS[i % ACCENTS.length]}`}
+                key={term.id}
+                initial={still ? false : { opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.34, ease: LAB_EASE, delay: still ? 0 : Math.min(i * 0.028, 0.35) }}
+              >
                 <div className="lab2-glossary-term">
                   <span className="lab2-glossary-en" dir="ltr">
+                    <span className="lab2-monogram" aria-hidden="true">
+                      {term.en.slice(0, 1).toUpperCase()}
+                    </span>
                     {term.en}
                   </span>
                   {term.local && term.local !== term.en ? (
@@ -116,15 +132,15 @@ export default function Glossary({ onBack }) {
                   ) : null}
                 </div>
                 <div className="lab2-glossary-def">{term.def}</div>
-              </div>
+              </motion.div>
             ))
           ) : (
-            <div className="lab2-glossary-empty">{t('lab2.screens.glossary.empty')}</div>
+            <Empty icon="search">{t('lab2.screens.glossary.empty')}</Empty>
           )}
         </div>
       </Panel>
 
-      <Notice icon="💡">{t('lab2.screens.glossary.note')}</Notice>
+      <Notice variant="tip" icon="bulb">{t('lab2.screens.glossary.note')}</Notice>
     </div>
   );
 }

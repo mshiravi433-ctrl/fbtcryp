@@ -1,15 +1,33 @@
 /**
  * Interactive Lessons — "Learning by Doing" quizzes.
  * Each lesson is one question with four options.
+ *
+ * VISUAL PASS: the correct answer pops and turns mint, a wrong one shakes and
+ * turns rose — the body learns from the motion before the explanation is read.
+ * Completed lessons carry a tick inside their chip, so the strip doubles as a
+ * progress list.
  */
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LabBack, Panel, Row, Notice } from './Shared';
+import { LAB_EASE, LabBack, LabChips, Meter, Notice, Panel, ResultCard, Row } from './Shared';
+import { LabIcon } from './LabIcons';
 import { LESSONS } from '../../lib/lab/scenarios';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
+
+/* Same idea as the scenario table: ids → registry names, data file untouched. */
+const LESSON_ICON = {
+  'lesson-01': 'book',
+  'lesson-02': 'shield',
+  'lesson-03': 'trend',
+  'lesson-04': 'flame',
+  'lesson-05': 'droplet',
+  'lesson-06': 'pie',
+  'lesson-07': 'alert',
+  'lesson-08': 'scale'
+};
 
 export default function Lesson({ onBack }) {
   const { t } = useTranslation();
@@ -25,6 +43,7 @@ export default function Lesson({ onBack }) {
   const active = LESSONS.find((l) => l.id === activeId) ?? LESSONS[0];
   const isDone = lessonState.completed.includes(active.id);
   const bestScore = lessonState.scores[active.id] ?? 0;
+  const doneCount = lessonState.completed.length;
 
   const question = t(`lab2.lessons.${active.id}.question`);
   const options = t(`lab2.lessons.${active.id}.options`, { returnObjects: true }) || [];
@@ -49,38 +68,54 @@ export default function Lesson({ onBack }) {
     setRevealed(false);
   };
 
+  const lessonChips = LESSONS.map((l) => ({
+    id: l.id,
+    label: t(`lab2.lessons.${l.id}.title`),
+    icon: LESSON_ICON[l.id] ?? 'book',
+    tick: lessonState.completed.includes(l.id)
+  }));
+
+  const correct = selected === active.correct;
+
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title={`🧠 ${t('lab2.screens.lessons.title')}`} sub={t('lab2.screens.lessons.sub')} />
+      <LabBack
+        onBack={onBack}
+        icon="brain"
+        accent="amber"
+        title={t('lab2.screens.lessons.title')}
+        sub={t('lab2.screens.lessons.sub')}
+      />
 
-      <Panel title={t('lab2.lesson.progress')}>
-        <Row label={t('lab2.level.lessonsCompleted')} value={<span className="lab2-num">{lessonState.completed.length} / {LESSONS.length}</span>} />
+      <Panel title={t('lab2.lesson.progress')} icon="trophy" accent="amber">
+        <Row
+          label={t('lab2.level.lessonsCompleted')}
+          value={<span className="lab2-num">{doneCount} / {LESSONS.length}</span>}
+        />
+        <Meter value={(doneCount / LESSONS.length) * 100} accent="amber" />
         <Row label={t('lab2.lesson.totalXp')} value={<span className="lab2-num">{xp.toLocaleString()}</span>} />
       </Panel>
 
-      <Panel title={t('lab2.lesson.pick')}>
-        <div className="lab2-defi-tabs">
-          {LESSONS.map((l) => {
-            const done = lessonState.completed.includes(l.id);
-            return (
-              <button
-                key={l.id}
-                className={`lab2-defi-tab ${activeId === l.id ? 'active' : ''}`}
-                onClick={() => { setActiveId(l.id); setSelected(null); setRevealed(false); }}
-              >
-                {done ? '✓ ' : ''}{l.icon} {t(`lab2.lessons.${l.id}.title`)}
-              </button>
-            );
-          })}
-        </div>
+      <Panel title={t('lab2.lesson.pick')} icon="layers" accent="violet">
+        <LabChips
+          items={lessonChips}
+          value={activeId}
+          layoutId="lesson-pick"
+          accent="violet"
+          onChange={(id) => { setActiveId(id); setSelected(null); setRevealed(false); }}
+        />
       </Panel>
 
-      <Panel title={`${active.icon} ${t(`lab2.lessons.${active.id}.title`)}`}>
-        <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 500, marginBottom: 10 }}>
+      <Panel
+        title={t(`lab2.lessons.${active.id}.title`)}
+        icon={LESSON_ICON[active.id] ?? 'book'}
+        accent="cyan"
+      >
+        <div style={{ fontSize: 13.5, color: 'var(--text-1)', fontWeight: 600, lineHeight: 1.7 }}>
           {question}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {options.map((opt, idx) => {
+        <div className="lab2-stack">
+          {(Array.isArray(options) ? options : []).map((opt, idx) => {
             const isCorrect = idx === active.correct;
             const isPicked = selected === idx;
             let cls = 'lab2-quiz-option';
@@ -89,29 +124,59 @@ export default function Lesson({ onBack }) {
               else if (isPicked) cls += ' wrong';
             }
             return (
-              <button key={idx} className={cls} onClick={() => handle(idx)}>
-                <span className="lab2-quiz-letter">{String.fromCharCode(65 + idx)}</span>
+              <motion.button
+                key={idx}
+                type="button"
+                className={cls}
+                onClick={() => handle(idx)}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.32, ease: LAB_EASE, delay: idx * 0.05 }}
+              >
+                <span className="lab2-quiz-letter">
+                  {revealed && (isCorrect || isPicked) ? (
+                    <LabIcon name={isCorrect ? 'check' : 'close'} width={13} height={13} />
+                  ) : (
+                    String.fromCharCode(65 + idx)
+                  )}
+                </span>
                 <span>{opt}</span>
-              </button>
+              </motion.button>
             );
           })}
         </div>
       </Panel>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {revealed && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-            <ResultInline
-              correct={selected === active.correct}
-              explanation={explanation}
-              score={selected === active.correct ? 100 : 25}
+          <motion.div
+            key={`lesson-result-${active.id}-${selected}`}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.36, ease: LAB_EASE }}
+          >
+            <ResultCard
+              kind={correct ? 'win' : 'loss'}
+              icon={correct ? 'checkCircle' : 'xCircle'}
+              figure={<span className="lab2-num">{t('lab2.lesson.score', { score: correct ? 100 : 25 })}</span>}
+              title={correct ? t('lab2.lesson.correct') : t('lab2.lesson.notQuite')}
+              sub={explanation}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button className="lab2-btn ghost full" onClick={() => { setSelected(null); setRevealed(false); }}>
+              <button
+                className="lab2-btn ghost full"
+                type="button"
+                onClick={() => { setSelected(null); setRevealed(false); }}
+              >
+                <LabIcon name="refresh" width={15} height={15} />
                 {t('lab2.tryAgain')}
               </button>
-              <button className="lab2-btn primary full" onClick={next}>
-                {t('lab2.nextLesson')} <span className="lab2-arrow">→</span>
+              <button className="lab2-btn primary full" type="button" onClick={next}>
+                {t('lab2.nextLesson')}
+                <span className="lab2-arrow">
+                  <LabIcon name="next" width={15} height={15} />
+                </span>
               </button>
             </div>
           </motion.div>
@@ -119,24 +184,10 @@ export default function Lesson({ onBack }) {
       </AnimatePresence>
 
       {isDone && (
-        <Notice icon="🏆">
+        <Notice variant="success" icon="trophy">
           {t('lab2.lesson.alreadyDone', { score: bestScore })}
         </Notice>
       )}
-    </div>
-  );
-}
-
-function ResultInline({ correct, explanation, score }) {
-  const { t } = useTranslation();
-  return (
-    <div className={`lab2-result ${correct ? 'win' : 'loss'}`}>
-      <div className="lab2-result-emoji">{correct ? '✅' : '❌'}</div>
-      <div className="lab2-result-title">{correct ? t('lab2.lesson.correct') : t('lab2.lesson.notQuite')}</div>
-      <div className="lab2-result-sub lab2-num">{t('lab2.lesson.score', { score })}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 8, textAlign: 'start' }}>
-        {explanation}
-      </div>
     </div>
   );
 }

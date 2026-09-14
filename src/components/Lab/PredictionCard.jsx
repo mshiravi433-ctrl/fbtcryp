@@ -10,23 +10,43 @@
  * Lab balance (separate ledger, separate XP system), it compares the user's
  * call against an "AI prediction" and against the real outcome, and the
  * whole point is to teach pattern recognition, not to pay out 1.9×.
+ *
+ * ─── VISUAL PASS ────────────────────────────────────────────────────────────
+ * The price panel now leads with `PriceBlock` (tabular numerals, a pair tag and
+ * a blinking LIVE pill) over a smoothed, self-drawing `Sparkline`. Coin and
+ * duration pickers are `LabChips` — coin chips carry a monogram tile in the
+ * coin's own colour, so the strip reads as a row of assets rather than a row of
+ * identical grey pills. Confidence is a `LabSlider`, which shows its filled
+ * track and the live percentage while the thumb is under your finger.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LabBack, AICoach, Panel, Row, Notice, ResultCard, Sparkline } from './Shared';
+import {
+  AICoach,
+  DirGlyph,
+  LAB_EASE,
+  LabBack,
+  LabChips,
+  LabSlider,
+  Meter,
+  Notice,
+  Panel,
+  PriceBlock,
+  Row,
+  Sparkline
+} from './Shared';
+import { IconCheck, IconClock, IconXCircle, LabIcon } from './LabIcons';
 import { COINS, getPrices, tickPrice } from '../../lib/lab/marketData';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
 const DURATIONS = [
-  { key: '1m', ms: 60000 },
-  { key: '5m', ms: 300000 },
-  { key: '15m', ms: 900000 }
+  { key: '1m', ms: 60000, icon: 'bolt' },
+  { key: '5m', ms: 300000, icon: 'clock' },
+  { key: '15m', ms: 900000, icon: 'hourglass' }
 ];
-
-const PREDICTIONS_KEY = 'fbt-lab-predictions-v1';
 
 function aiHeuristic(coin, recent) {
   // Simple: short MA vs long MA, returns 'up' or 'down'.
@@ -52,8 +72,6 @@ export default function PredictionCard({ onBack }) {
   const [coinId, setCoinId] = useState('bitcoin');
   const [duration, setDuration] = useState(DURATIONS[0]);
   const [confidence, setConfidence] = useState(60);
-  const [dir, setDir] = useState(null);
-  const [entryPrice, setEntryPrice] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [livePrice, setLivePrice] = useState(null);
@@ -76,19 +94,16 @@ export default function PredictionCard({ onBack }) {
 
   // Tick the live price every 3s for the sparkline feel
   useEffect(() => {
-    const t = setInterval(() => {
-      setLivePrice((prev) => {
-        if (!prev) return prev;
-        return tickPrice(coinId, prev, 0);
-      });
+    const id = setInterval(() => {
+      setLivePrice((prev) => (prev ? tickPrice(coinId, prev, 0) : prev));
     }, 3000);
-    return () => clearInterval(t);
+    return () => clearInterval(id);
   }, [coinId]);
 
   // Tick the countdown clock every 1s
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
   const aiDir = useMemo(() => aiHeuristic(coinId, history), [history, coinId]);
@@ -111,8 +126,6 @@ export default function PredictionCard({ onBack }) {
   const onPredict = (chosenDir) => {
     if (!livePrice || activeId) return;
     haptic?.('select');
-    setDir(chosenDir);
-    setEntryPrice(livePrice);
     const id = recordPrediction({
       coinId,
       dir: chosenDir,
@@ -124,86 +137,124 @@ export default function PredictionCard({ onBack }) {
   };
 
   const closedMine = predictions.filter((p) => p.settled && p.coinId === coinId).slice(0, 3);
-  const symbol = COINS.find((c) => c.id === coinId)?.symbol;
+  const coin = COINS.find((c) => c.id === coinId);
+  const symbol = coin?.symbol;
+
+  const coinChips = COINS.slice(0, 6).map((c) => ({
+    id: c.id,
+    label: c.symbol,
+    color: c.color,
+    initials: c.symbol.slice(0, 3)
+  }));
+
+  const durationChips = DURATIONS.map((d) => ({
+    id: d.key,
+    label: t(`lab2.durations.${d.key}`),
+    icon: d.icon
+  }));
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title={`🔮 ${t('lab2.screens.predict.title')}`} sub={t('lab2.screens.predict.sub')} />
+      <LabBack
+        onBack={onBack}
+        icon="flask"
+        accent="violet"
+        title={t('lab2.screens.predict.title')}
+        sub={t('lab2.screens.predict.sub')}
+      />
 
-      <Panel title={`${symbol} · ${t('lab2.prediction.livePrice')}`}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <div className="lab2-num" style={{ fontSize: 28, fontWeight: 700 }}>
-            ${livePrice?.toLocaleString('en-US', { maximumFractionDigits: livePrice < 1 ? 5 : 2 }) ?? '—'}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('lab2.prediction.vsUsd')}</div>
-        </div>
+      <Panel title={`${symbol} · ${t('lab2.prediction.livePrice')}`} icon="activity" accent="cyan">
+        <PriceBlock price={livePrice} pair={t('lab2.prediction.vsUsd')} loading={livePrice == null} />
         <Sparkline data={history} />
         <div className="lab2-row">
-          <span>{t('lab2.prediction.aiPredicts')}</span>
-          <strong style={{ color: aiDir === 'up' ? 'var(--up)' : aiDir === 'down' ? 'var(--down)' : 'var(--text-2)' }}>
-            {aiDir === 'up' ? `📈 ${t('lab2.up')}` : aiDir === 'down' ? `📉 ${t('lab2.down')}` : `➖ ${t('lab2.neutral')}`}
+          <span>
+            <LabIcon name="robot" width={14} height={14} style={{ verticalAlign: '-2px', marginInlineEnd: 6 }} />
+            {t('lab2.prediction.aiPredicts')}
+          </span>
+          <strong
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: aiDir === 'up' ? 'var(--up)' : aiDir === 'down' ? 'var(--down)' : 'var(--text-2)'
+            }}
+          >
+            <DirGlyph dir={aiDir} />
+            {aiDir === 'up' ? t('lab2.up') : aiDir === 'down' ? t('lab2.down') : t('lab2.neutral')}
           </strong>
         </div>
       </Panel>
 
-      <Panel title={t('lab2.prediction.coin')}>
-        <div className="lab2-defi-tabs">
-          {COINS.slice(0, 6).map((c) => (
-            <button
-              key={c.id}
-              className={`lab2-defi-tab ${coinId === c.id ? 'active' : ''}`}
-              onClick={() => { setCoinId(c.id); setActiveId(null); }}
-            >
-              {c.symbol}
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title={t('lab2.prediction.duration')}>
-        <div className="lab2-defi-tabs">
-          {DURATIONS.map((d) => (
-            <button
-              key={d.key}
-              className={`lab2-defi-tab ${duration.key === d.key ? 'active' : ''}`}
-              onClick={() => setDuration(d)}
-            >
-              {t(`lab2.durations.${d.key}`)}
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title={`${t('lab2.prediction.confidence')}: ${confidence}%`}>
-        <input
-          type="range"
-          min="10"
-          max="100"
-          step="5"
-          value={confidence}
-          onChange={(e) => setConfidence(Number(e.target.value))}
-          className="lab2-slider"
+      <Panel title={t('lab2.prediction.coin')} icon="coins" accent="amber">
+        <LabChips
+          items={coinChips}
+          value={coinId}
+          layoutId="predict-coin"
+          accent="amber"
+          onChange={(id) => { setCoinId(id); setActiveId(null); }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
-          <span>{t('lab2.prediction.guess')}</span>
-          <span>{t('lab2.prediction.strongConviction')}</span>
+      </Panel>
+
+      <Panel title={t('lab2.prediction.duration')} icon="clock" accent="cyan">
+        <LabChips
+          items={durationChips}
+          value={duration.key}
+          layoutId="predict-duration"
+          accent="cyan"
+          onChange={(id) => setDuration(DURATIONS.find((d) => d.key === id) ?? DURATIONS[0])}
+        />
+      </Panel>
+
+      <Panel title={t('lab2.prediction.confidence')} icon="gauge" accent="violet">
+        <LabSlider
+          value={confidence}
+          min={10}
+          max={100}
+          step={5}
+          accent="violet"
+          onChange={setConfidence}
+          display={<span className="lab2-num">{confidence}%</span>}
+        />
+        <div className="lab2-row" style={{ border: 'none', paddingBlock: 0 }}>
+          <span className="lab2-muted">{t('lab2.prediction.guess')}</span>
+          <span className="lab2-muted">{t('lab2.prediction.strongConviction')}</span>
         </div>
       </Panel>
 
-      {!activeId ? (
-        <div className="lab2-choices">
-          <button className="lab2-btn buy full" onClick={() => onPredict('up')}>
-            📈 {t('lab2.up')}
-          </button>
-          <button className="lab2-btn sell full" onClick={() => onPredict('down')}>
-            📉 {t('lab2.down')}
-          </button>
-        </div>
-      ) : (
-        <ActiveRound myOpen={myOpen} now={now} entryPrice={entryPrice} coinId={coinId} />
-      )}
+      <AnimatePresence mode="wait">
+        {!activeId ? (
+          <motion.div
+            key="call"
+            className="lab2-choices"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.26, ease: LAB_EASE }}
+          >
+            <button className="lab2-btn buy full" type="button" onClick={() => onPredict('up')}>
+              <DirGlyph dir="up" size={17} />
+              {t('lab2.up')}
+            </button>
+            <button className="lab2-btn sell full" type="button" onClick={() => onPredict('down')}>
+              <DirGlyph dir="down" size={17} />
+              {t('lab2.down')}
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="round"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.34, ease: LAB_EASE }}
+          >
+            <ActiveRound myOpen={myOpen} now={now} livePrice={livePrice} coinId={coinId} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AICoach
+        tone={confidence < 40 ? 'warn' : 'neutral'}
         message={
           activeId
             ? t('lab2.prediction.coachLive')
@@ -214,17 +265,21 @@ export default function PredictionCard({ onBack }) {
       />
 
       {closed.length > 0 && (
-        <Panel title={t('lab2.prediction.recentCalls')}>
+        <Panel title={t('lab2.prediction.recentCalls')} icon="layers" accent="magenta">
           {closed.map((p) => {
             const sym = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
-            const move = ((p.exitPrice - p.entryPrice) / p.entryPrice) * 100;
             return (
               <div key={p.id} className="lab2-row">
-                <span>
-                  {sym} · {p.dir === 'up' ? '📈' : '📉'} <span className="lab2-num">{p.confidence}%</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                  <DirGlyph dir={p.dir} size={14} />
+                  {sym} · <span className="lab2-num">{p.confidence}%</span>
                 </span>
-                <strong className={p.correct ? 'pos' : 'neg'}>
-                  {p.correct ? '✓' : '✗'} <span className="lab2-num">{p.accuracy.toFixed(0)}%</span>
+                <strong
+                  className={p.correct ? 'pos' : 'neg'}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {p.correct ? <IconCheck width={14} height={14} /> : <IconXCircle width={14} height={14} />}
+                  <span className="lab2-num">{p.accuracy.toFixed(0)}%</span>
                 </strong>
               </div>
             );
@@ -233,15 +288,26 @@ export default function PredictionCard({ onBack }) {
       )}
 
       {closedMine.length > 0 && (
-        <Panel title={t('lab2.prediction.yourAccuracyVsAi')}>
+        <Panel title={t('lab2.prediction.yourAccuracyVsAi')} icon="scale" accent="cyan">
           {closedMine.map((p) => {
             const sym = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
             const aiAcc = 50 + Math.random() * 30; // the AI's own accuracy; simulated
             return (
               <div key={p.id} className="lab2-row">
-                <span>{sym} · {p.dir === 'up' ? '📈' : '📉'}</span>
-                <span>
-                  {t('lab2.you')} <strong className={p.correct ? 'pos' : 'neg'}><span className="lab2-num">{p.accuracy.toFixed(0)}%</span></strong> · {t('lab2.prediction.ai')} <strong><span className="lab2-num">{aiAcc.toFixed(0)}%</span></strong>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                  <DirGlyph dir={p.dir} size={14} />
+                  {sym}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {t('lab2.you')}
+                  <strong className={p.correct ? 'pos' : 'neg'}>
+                    <span className="lab2-num">{p.accuracy.toFixed(0)}%</span>
+                  </strong>
+                  <span className="lab2-vs" style={{ width: 22, height: 22, fontSize: 8 }}>VS</span>
+                  {t('lab2.prediction.ai')}
+                  <strong>
+                    <span className="lab2-num">{aiAcc.toFixed(0)}%</span>
+                  </strong>
                 </span>
               </div>
             );
@@ -249,41 +315,48 @@ export default function PredictionCard({ onBack }) {
         </Panel>
       )}
 
-      <Panel title={t('lab2.prediction.yourStanding')}>
+      <Panel title={t('lab2.prediction.yourStanding')} icon="medal" accent="amber">
         <Row label={t('lab2.prediction.xp')} value={<span className="lab2-num">{xp.toLocaleString()}</span>} />
         <Row label={t('lab2.prediction.globalRank')} value={`#${rank}`} />
         <Row label={t('lab2.prediction.totalPredictions')} value={<span className="lab2-num">{predictions.length}</span>} />
       </Panel>
 
-      <Notice icon="🎓">
+      <Notice variant="tip" icon="cap">
         {t('lab2.prediction.notice')}
       </Notice>
     </div>
   );
 }
 
-function ActiveRound({ myOpen, now, entryPrice, coinId }) {
+function ActiveRound({ myOpen, now, livePrice, coinId }) {
   const { t } = useTranslation();
+  if (!myOpen) return null;
   const remaining = Math.max(0, myOpen.expiry - now);
-  const totalMs = myOpen.expiry - myOpen.at;
+  const totalMs = Math.max(1, myOpen.expiry - myOpen.at);
   const pct = Math.max(0, Math.min(100, (1 - remaining / totalMs) * 100));
   const symbol = COINS.find((c) => c.id === coinId)?.symbol ?? coinId;
+  const inProfit = livePrice != null && (myOpen.dir === 'up' ? livePrice >= myOpen.entryPrice : livePrice <= myOpen.entryPrice);
 
   return (
-    <Panel title={`${t('lab2.prediction.openRound')} · ${symbol}`}>
-      <Row label={t('lab2.prediction.entry')} value={<span className="lab2-num">${entryPrice?.toLocaleString('en-US', { maximumFractionDigits: entryPrice < 1 ? 5 : 2 })}</span>} />
-      <Row label={t('lab2.prediction.yourCall')} value={myOpen.dir === 'up' ? `📈 ${t('lab2.up')}` : `📉 ${t('lab2.down')}`} />
+    <Panel title={`${t('lab2.prediction.openRound')} · ${symbol}`} icon="clock" accent="magenta">
+      <Row label={t('lab2.prediction.entry')} value={<span className="lab2-num">${myOpen.entryPrice?.toLocaleString('en-US', { maximumFractionDigits: myOpen.entryPrice < 1 ? 5 : 2 })}</span>} />
+      <Row
+        label={t('lab2.prediction.yourCall')}
+        value={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <DirGlyph dir={myOpen.dir} size={14} />
+            {myOpen.dir === 'up' ? t('lab2.up') : t('lab2.down')}
+          </span>
+        }
+        valueClass={myOpen.dir === 'up' ? 'pos' : 'neg'}
+      />
       <Row label={t('lab2.prediction.confidenceLabel')} value={<span className="lab2-num">{myOpen.confidence}%</span>} />
-      <div style={{ marginTop: 6 }}>
-        <div className="lab2-bar">
-          <motion.div
-            className="lab2-bar-fill"
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 1, ease: 'linear' }}
-          />
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-          ⏱ {t('lab2.prediction.secondsRemaining', { s: Math.ceil(remaining / 1000) })}
+
+      <div className="lab2-stack" style={{ gap: 6 }}>
+        <Meter value={pct} accent={inProfit ? 'mint' : 'magenta'} animate={false} />
+        <div className="lab2-row" style={{ border: 'none', paddingBlock: 0, justifyContent: 'center', gap: 6 }}>
+          <IconClock width={13} height={13} />
+          <span className="lab2-muted lab2-num">{t('lab2.prediction.secondsRemaining', { s: Math.ceil(remaining / 1000) })}</span>
         </div>
       </div>
     </Panel>
