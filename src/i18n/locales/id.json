@@ -1227,7 +1227,23 @@
     },
     "ctaTitle": "Masih ada pertanyaan?",
     "companyFull": "Fanous Bazaar Pishgam",
-    "footNote": "Data pasar bersifat informatif, bukan nasihat keuangan. Kripto sangat fluktuatif; bertransaksilah hanya dengan dana yang siap kamu relakan."
+    "footNote": "Data pasar bersifat informatif, bukan nasihat keuangan. Kripto sangat fluktuatif; bertransaksilah hanya dengan dana yang siap kamu relakan.",
+    "principles": {
+      "title": "Prinsip kami",
+      "lead": "Enam prinsip yang membentuk semua yang kami bangun di FBT — dari antarmuka hingga cara AI mengambil keputusan.",
+      "userControlTitle": "Kontrol pengguna",
+      "userControlBody": "Pengguna tetap menjadi pusat keputusan finansial.",
+      "automationTitle": "Otomasi cerdas",
+      "automationBody": "AI harus mengurangi kompleksitas, bukan menghilangkan transparansi.",
+      "transparencyTitle": "Transparansi",
+      "transparencyBody": "Tindakan, risiko, dan biaya penting harus dapat dipahami.",
+      "openTitle": "Infrastruktur terbuka",
+      "openBody": "Membangun di sekitar jaringan dan protokol yang interoperable bila memungkinkan.",
+      "dataTitle": "Kecerdasan berbasis data",
+      "dataBody": "Gunakan data nyata, bukan asumsi.",
+      "improvementTitle": "Peningkatan berkelanjutan",
+      "improvementBody": "Sistem harus belajar dari hasil dan meningkat seiring waktu tanpa mengorbankan keamanan pengguna."
+    }
   },
   "contact": {
     "title": "Hubungi kami",

@@ -1220,7 +1220,23 @@
     },
     "ctaTitle": "还有疑问？",
     "companyFull": "Fanous Bazaar Pishgam",
-    "footNote": "市场数据仅供参考，不构成财务建议。加密货币波动剧烈——只投入您能承受损失的资金。"
+    "footNote": "市场数据仅供参考，不构成财务建议。加密货币波动剧烈——只投入您能承受损失的资金。",
+    "principles": {
+      "title": "我们的原则",
+      "lead": "塑造我们在 FBT 一切构建的六项原则——从界面到 AI 的决策方式。",
+      "userControlTitle": "用户掌控",
+      "userControlBody": "用户始终处于财务决策的中心。",
+      "automationTitle": "智能自动化",
+      "automationBody": "AI 应降低复杂性，而不是消除透明度。",
+      "transparencyTitle": "透明",
+      "transparencyBody": "重要的操作、风险和成本应易于理解。",
+      "openTitle": "开放基础设施",
+      "openBody": "在适当情况下围绕可互操作的网络和协议构建。",
+      "dataTitle": "数据驱动智能",
+      "dataBody": "使用真实数据而非假设。",
+      "improvementTitle": "持续改进",
+      "improvementBody": "系统应从结果中学习并不断改进，同时不损害用户安全。"
+    }
   },
   "contact": {
     "title": "联系我们",
