@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { currencyOf } from '../lib/currency';
 import { setDisplaySymbol, setHideBalances } from '../lib/format';
+import { isStandalone } from '../lib/platform';
 
 export const useSettingsStore = create(
   persist(
@@ -127,8 +128,15 @@ export const useSettingsStore = create(
       setEvmChain(id) {
         set({ evmChainId: Number(id) || 56 });
       },
+      /**
+       * Solana cluster. Validated rather than stored verbatim: this value picks
+       * the RPC every balance read and every signature goes through, so a
+       * typo'd or stale string must fall back to the real network instead of an
+       * endpoint nobody serves.
+       */
       setSolanaCluster(c) {
-        set({ solanaCluster: c });
+        const v = String(c || '').toLowerCase();
+        set({ solanaCluster: v === 'devnet' ? 'devnet' : v === 'testnet' ? 'testnet' : 'mainnet-beta' });
       },
       setRpc(key, url) {
         set({ [key]: String(url).slice(0, 200) });
@@ -357,10 +365,38 @@ export function applyHideBalances(on) {
   setHideBalances(on);
 }
 
+/**
+ * Device class flags on <html>, written once at boot.
+ *
+ * `data-native` — the packaged Capacitor app. Every GPU-saving rule in the
+ * codebase was keyed off this and ONLY this, which left a whole platform
+ * paying full price: an iPhone. There is no iOS build of this app, so an
+ * iPhone user runs the home-screen PWA, and Safari's standalone mode is not
+ * `Capacitor.isNativePlatform()` — so the iPhone got the drifting 60vw blurred
+ * orbs, the scrolling grid, the floating nav and two permanent full-width
+ * backdrop-filters, on the one browser engine most sensitive to all four.
+ * Reported as «سرعت سایت در اپ و اپ سایتی ایفون خیلی کمه».
+ *
+ * `data-standalone` — launched from a home-screen icon (iOS or Android PWA).
+ *
+ * `data-lite` — the union that CSS should actually key off for anything whose
+ * only purpose is motion or frost: native shell, installed PWA, or a device
+ * that reports very little memory. `data-native` stays exactly as narrow as it
+ * was, because a good number of existing rules use it for behaviour that is
+ * genuinely about the Capacitor runtime (sheet stacking, the More tiles' inline
+ * styles) and widening it would change more than the frame rate.
+ */
 export function applyNativeFlag() {
   if (typeof document === 'undefined') return;
+  const root = document.documentElement;
   const native = Boolean(window.Capacitor?.isNativePlatform?.());
-  document.documentElement.setAttribute('data-native', native ? 'true' : 'false');
+  const standalone = isStandalone();
+  /* `deviceMemory` is Chromium-only; its ABSENCE must not mean "low power",
+     or every Safari and Firefox device would be downgraded by a missing API. */
+  const lowMemory = Number(navigator.deviceMemory || 0) > 0 && Number(navigator.deviceMemory) <= 3;
+  root.setAttribute('data-native', native ? 'true' : 'false');
+  root.setAttribute('data-standalone', standalone ? 'true' : 'false');
+  root.setAttribute('data-lite', native || standalone || lowMemory ? 'true' : 'false');
 }
 
 export function initTheme() {

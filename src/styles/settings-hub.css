@@ -866,6 +866,110 @@ button.set-swatch .set-swatch-tick svg { inline-size: 11px; block-size: 11px; }
 :root[data-theme='light'] .set-input { background: #fff; }
 
 /* ==========================================================================
+   5d · SOLANA NETWORK PROBE  —  «سولانا مین‌نت یا آزمایشی کار بده»
+   --------------------------------------------------------------------------
+   The cluster switch and the RPC field both needed a way to be CHECKED, not
+   just stored. The probe sits under whichever control it belongs to, matches
+   the chip language of the rest of this screen, and states its result in one
+   line: which node answered and how fast, or the named reason none did.
+   ========================================================================== */
+
+.set-netprobe {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.set-netprobe-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 7px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line-strong, var(--line));
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.set-netprobe-btn:hover { border-color: color-mix(in srgb, var(--rgb-1) 45%, var(--line)); }
+.set-netprobe-btn:active { transform: scale(0.98); }
+.set-netprobe-btn:disabled { opacity: 0.6; cursor: progress; }
+.set-netprobe-btn:focus-visible { outline: 2px solid var(--st-ink, var(--rgb-1)); outline-offset: 2px; }
+
+.set-netprobe-out {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text-3) 7%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.set-netprobe[data-state='ok'] .set-netprobe-out {
+  color: var(--up, #2ee6a8);
+  border-color: color-mix(in srgb, var(--up, #2ee6a8) 34%, transparent);
+  background: color-mix(in srgb, var(--up, #2ee6a8) 9%, transparent);
+}
+
+.set-netprobe[data-state='bad'] .set-netprobe-out {
+  color: var(--rgb-5, #ffb300);
+  border-color: color-mix(in srgb, var(--rgb-5, #ffb300) 34%, transparent);
+  background: color-mix(in srgb, var(--rgb-5, #ffb300) 9%, transparent);
+}
+
+/* The per-node list is diagnostic detail: monospace, left-to-right (hostnames
+   are Latin in every language), and quiet. */
+.set-netprobe-tried {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.7;
+  opacity: 0.72;
+  direction: ltr;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+/* "The change landed" — the answer to a switch that used to prove nothing. */
+.set-netnote {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4, #00ff9d) 30%, transparent);
+  background: color-mix(in srgb, var(--rgb-4, #00ff9d) 8%, transparent);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.7;
+  color: var(--text-1);
+}
+
+.set-netnote-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .set-netprobe-btn { background: #fff; }
+:root[data-theme='light'] .set-netprobe-out { background: #f6f8fc; }
+
+/* ==========================================================================
    6 · MOTION AND CONTRAST ESCAPES
    ========================================================================== */
 

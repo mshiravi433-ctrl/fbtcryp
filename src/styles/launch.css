@@ -1985,6 +1985,38 @@
 
 .launch-wallet-ok-text { flex: 1 1 auto; min-width: 0; font-weight: 600; }
 
+/*
+ * WHICH CHECK IS GREEN.
+ * «تیک سبز دارد و اینکه ارور میزنه» — a green tick next to a red error read as
+ * the screen contradicting itself, because neither said what it was about. The
+ * tick is the WALLET; the error is the NODE. Both are labelled now, so both can
+ * be true at once without looking broken.
+ */
+.launch-wallet-ok-kind {
+  display: inline-block;
+  margin-inline-end: 7px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: #00110a;
+  background: var(--rgb-4);
+  vertical-align: 1px;
+}
+
+/* The second line inside a node-status row: which endpoints were tried, or the
+   raw reason. Small, quiet, and never allowed to widen the row. */
+.launch-dexcheck-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.65;
+  opacity: 0.74;
+  overflow-wrap: anywhere;
+}
+
 .launch-wallet-ok-change {
   flex: 0 0 auto;
   appearance: none;

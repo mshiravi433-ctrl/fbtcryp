@@ -29,6 +29,36 @@
   overflow-x: clip;
 }
 
+/*
+ * ─── THE RHYTHM BETWEEN BOXES ───────────────────────────────────────────────
+ * Reported: «فاصله‌گذاری بین باکس‌ها در هوشمند مانی رعایت نشده».
+ *
+ * Spacing on this page was each block's own private business: `.sm-hero` and
+ * `.sm-section` carried `margin-bottom: 14px`, but a good number of siblings
+ * carried none at all — the tab rail, `.sm-card-grid`, `.sm-coverage`,
+ * `.sm-scores` inside a fragment — so those boxes sat flush against the next
+ * one, and the page read as a stack of cards that had been dropped rather than
+ * laid out.
+ *
+ * Rather than audit every block for a margin it may or may not have, the page
+ * box now owns the rhythm: every direct child after the first gets the same
+ * 14px. Adjacent sibling margins collapse to the LARGER of the two, so a block
+ * that already had `margin-bottom: 14px` does not become 28px — the rule is
+ * additive only where spacing was missing, which is exactly the defect.
+ */
+.sm-page > * + * { margin-top: 14px; }
+
+/*
+ * The tab rail is the worst offender and needs its own line. `ScrollRail`'s
+ * track buys room for its buttons' shadows with `padding-block: 4px 6px` and
+ * takes the same 10px back out with `margin-block: -4px -6px`. Those negative
+ * margins collapse OUT of the rail shell (which has no padding or border), so
+ * the rail not only had no bottom spacing of its own — it ate 6px of whatever
+ * came next. Inside this page the compensation is dropped: the rail keeps the
+ * padding (shadows still have room) and the page rhythm supplies the gap.
+ */
+.sm-page > .scroll-rail > .scroll-rail-track { margin-block: 0; }
+
 .sm-hero {
   position: relative;
   overflow: hidden;
@@ -425,8 +455,20 @@
 .sm-seg-window-item.active { opacity: 1; color: var(--text-1, #fff); }
 .sm-seg-window-item .seg-indicator { border-radius: 10px; }
 
-/* The rail is the page's headline control, so it gets its own row on phones. */
-.sm-page > .sm-seg-window { margin-bottom: 12px; }
+/* The rail is the page's headline control, so it gets its own row on phones.
+ *
+ * `display: flex` + `width: fit-content` rather than the base `inline-flex`:
+ * an INLINE-level box never collapses its vertical margins with its siblings,
+ * so under the page rhythm above it would have added its own 12px on top of the
+ * 14px gap and read as a hole in the layout. As a block-level box that still
+ * hugs its buttons, it takes part in the same collapsing as every other box. */
+.sm-page > .sm-seg-window {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 0;
+}
+.sm-page > .sm-seg-window:has(button:nth-child(4)) { width: 100%; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TOKEN CARD — collapsible, with the identity line and the rail on their own

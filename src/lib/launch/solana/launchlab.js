@@ -64,6 +64,28 @@
  * derivation and instruction building need the library and are async.
  */
 
+/*
+ * ─── BUFFER IS IMPORTED, NOT ASSUMED ────────────────────────────────────────
+ * Reported: «دسترسی به RPC سولانا ممکن نیست» on the Solana launch screen, on a
+ * phone with a working connection and whether or not a wallet was connected.
+ *
+ * Nothing was wrong with the RPC. Every PDA seed below is built with
+ * `Buffer.from(...)`, and `Buffer` is a NODE global — a browser has no such
+ * name. The reference threw a ReferenceError on the very first line of the
+ * on-chain read, the caller's `catch` mapped any throw to RPC_UNAVAILABLE, and
+ * the screen blamed the network for a missing identifier.
+ *
+ * It looked intermittent because one other module (lib/dydx.js) installs
+ * `globalThis.Buffer` as a side effect of its own lazy load: open the dYdX
+ * screen first and the launch page worked; open the launch page first and it
+ * failed. A bug whose trigger is "which screen did you visit before this one"
+ * is a bug nobody can report usefully.
+ *
+ * So the polyfill is an explicit import in every module that uses it, which is
+ * also what keeps it inside this lazy chunk instead of the entry bundle.
+ */
+import { Buffer } from 'buffer';
+
 /* ── §1 · pinned constants ─────────────────────────────────────────────── */
 
 /** LaunchLab program, mainnet-beta — the docs' canonical table + the IDL. */

@@ -30,6 +30,15 @@
  * feature that is not shipped (same rule as src/lib/solanaWallet.js).
  */
 
+/*
+ * `Buffer` is a Node global and the browser has no such name — see the long
+ * note in ./launchlab.js. Importing it here is what makes the instruction
+ * builders below (every one of which lays bytes out with Buffer) actually run
+ * on a phone instead of throwing a ReferenceError that a caller reports as a
+ * network failure.
+ */
+import { Buffer } from 'buffer';
+
 /* ── protocol constants ─────────────────────────────────────────────────────
  * These three addresses are fixed by the Solana protocol / token program and
  * are asserted in the probe. They are NOT configurable: a "wrong" token

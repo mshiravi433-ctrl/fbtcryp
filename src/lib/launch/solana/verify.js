@@ -22,6 +22,7 @@
  * app's own Connection (the user's cluster), with 'confirmed' commitment.
  */
 
+import { Buffer } from 'buffer';
 import {
   WSOL_MINT, METADATA_PROGRAM_ID,
   decodeLaunchpadConfig, decodeLaunchpadPlatform, decodeLaunchpadPool,

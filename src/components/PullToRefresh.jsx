@@ -58,6 +58,11 @@ import { IconRefresh } from './Icons';
 const TRIGGER_PX = 68; // distance to pull before release triggers a refresh
 const MAX_PULL_PX = 110; // rubber-band ceiling; pulling further has no extra effect
 const PILL_TOP_PX = 10;
+/* Height of the indicator capsule, matching `.ptr-capsule` in index.css. The
+   capsule is parked in the MIDDLE of the space the drag reveals, which needs
+   the height in JS — a CSS `top: 50%` cannot know how much space was revealed
+   because that is a number in a state variable, not a layout fact. */
+const CAPSULE_H = 36;
 
 export default function PullToRefresh({ children }) {
   const { t } = useTranslation();
@@ -175,29 +180,59 @@ export default function PullToRefresh({ children }) {
         ? t('refresh.releaseToRefresh')
         : t('refresh.pullToRefresh');
 
+  /*
+   * ─── CENTRED BY LAYOUT, NOT BY TRANSLATE ──────────────────────────────────
+   * Reported: «ایکون رفرش و کلمه‌ش وسط صفحه نیست».
+   *
+   * The indicator was `left: 50%` + `transform: translate(-50%, y)`, which
+   * centres the BOX — and the box was shrink-to-fit against the half of the
+   * screen to the right of centre. A Persian label («برای تازه‌سازی رها کن») is
+   * wider than that half, so the box hit its cap and the TEXT overflowed it:
+   * the icon sat at centre and the words spilled to one side. The -50% then
+   * shifted a box whose width had nothing to do with the text inside it.
+   *
+   * Now the indicator spans the full width (`left: 0; right: 0`) and centres
+   * its capsule with flexbox, so the icon and its label are one unit and are
+   * centred together in every language and both directions. The inline
+   * transform is vertical only.
+   */
+  const progress = Math.max(0, Math.min(1, pull / TRIGGER_PX));
+  /* Space revealed by the drag: the content is pushed down by `pull`, or parks
+     at a fixed offset while the refresh runs. The capsule sits in its middle. */
+  const gap = phase === 'refreshing' ? PILL_TOP_PX + 30 : pull;
+  const dropY = (gap - CAPSULE_H) / 2;
+  const visible = pull > 4 || phase === 'refreshing';
+
   return (
     <div ref={containerRef} className="ptr-root">
       <div
         className="ptr-indicator"
+        data-phase={phase}
         style={{
-          opacity: pull > 4 || phase === 'refreshing' ? 1 : 0,
-          transform: `translate(-50%, ${Math.max(pull, phase === 'refreshing' ? PILL_TOP_PX + 24 : 0) - 34}px)`
+          opacity: visible ? 1 : 0,
+          transform: `translateY(${dropY}px) scale(${reducedMotion ? 1 : 0.9 + progress * 0.1})`
         }}
         aria-hidden={phase === 'idle'}
       >
-        <span className="ptr-pill" data-ready={phase === 'ready' || phase === 'refreshing' ? 'true' : 'false'}>
-          <IconRefresh
-            width={15}
-            height={15}
-            className={phase === 'refreshing' && !reducedMotion ? 'refresh-spin' : undefined}
-            style={
-              phase !== 'refreshing' && !reducedMotion
-                ? { transform: `rotate(${Math.min(180, (pull / TRIGGER_PX) * 180)}deg)`, transition: 'transform 0.05s linear' }
-                : undefined
-            }
-          />
+        <span className="ptr-capsule" data-ready={phase === 'ready' || phase === 'refreshing' ? 'true' : 'false'}>
+          {/* The ring IS the drag distance: it fills to full at the trigger
+              point, so "how much further" is visible without reading a number.
+              While refreshing it becomes an indeterminate arc. */}
+          <span className="ptr-ring" style={{ '--ptr-progress': progress.toFixed(3) }} aria-hidden="true">
+            <svg viewBox="0 0 36 36" width="26" height="26">
+              <circle className="ptr-ring-track" cx="18" cy="18" r="15.5" />
+              <circle className="ptr-ring-bar" cx="18" cy="18" r="15.5" />
+            </svg>
+            <span className="ptr-ring-ico">
+              <IconRefresh
+                width={13}
+                height={13}
+                className={phase === 'refreshing' && !reducedMotion ? 'refresh-spin' : undefined}
+              />
+            </span>
+          </span>
+          <span className="ptr-label">{label}</span>
         </span>
-        <span className="ptr-label">{label}</span>
       </div>
       <motion.div
         className="ptr-content"

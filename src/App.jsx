@@ -442,8 +442,65 @@ function AnimatedRoutes() {
   );
 }
 
+/*
+ * ─── A COLD START LANDS ON THE MARKET, NEVER ON THE AI ──────────────────────
+ * Reported: «پس از ورود از صفحه ولکام وارد هوش مصنوعی میشه باید وارد بازار شود»
+ * — finish the welcome flow and the app opens on the AI screen instead of the
+ * market.
+ *
+ * Nothing in the first-run flow navigates anywhere: Splash → Welcome →
+ * Onboarding → Guide all just clear a flag, and the router mounts afterwards at
+ * whatever `window.location.hash` already held. The route table's own home is
+ * Market (`<Route path="/" element={<Market />} />`), so an empty hash was
+ * always correct — and the hash is not empty on the two platforms that matter:
+ *
+ *   · an iOS home-screen icon stores the URL it was created from, so anyone who
+ *     added the app while reading the AI chat launches into `#/intent` forever;
+ *   · a WebView that was killed on the AI screen can be restored on it.
+ *
+ * Both put a first-run user at the end of the welcome flow on a screen they
+ * never asked for, with the market one tap away and no idea why.
+ *
+ * So the AI routes are treated as "no destination" at cold start. Every other
+ * hash is respected: a shared `#/coin/...`, a `#/pay/:code` checkout return and
+ * a push-notification deep link are all deliberate addresses, and clobbering
+ * those would be a worse bug than the one being fixed. Notification taps are
+ * safe by ordering — they write the hash from a listener that can only fire
+ * after this has run.
+ */
+const AI_LANDING_HASH = /^#\/(intent|intent-ai|ai-control|ai-global)([/?]|$)/i;
+
+function normalizeColdStartRoute() {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash || '';
+  if (!AI_LANDING_HASH.test(hash)) return false;
+  try {
+    /*
+     * replaceState, not `location.hash = '#/'`.
+     *
+     * The router is not mounted yet — this runs during App's first render and
+     * `<HashRouter>` is created later in the same pass — so there is nothing to
+     * notify, and a real hash write would push a history entry the Back button
+     * then has to walk back through on a screen the user never chose.
+     */
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, '', `${pathname}${search}#/`);
+    return true;
+  } catch {
+    /* A browser that refuses the write still routes on the old hash; the market
+       is one tap away in the bottom nav either way. */
+    return false;
+  }
+}
+
 export default function App() {
   const { t } = useTranslation();
+  /*
+   * Lazy initialiser, so this runs exactly once and BEFORE <HashRouter> is
+   * created below — a `useEffect` would run after the router had already read
+   * the stale hash, and the AI page would mount and unmount on the way past.
+   */
+  useState(normalizeColdStartRoute);
   const onboarded = useSettingsStore((s) => s.onboarded);
   // Subscribed rather than read once, so "replay guide" from Help re-opens it
   // immediately instead of only after a restart.

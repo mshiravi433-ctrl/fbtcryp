@@ -129,6 +129,26 @@ export default function SolanaSwap({ embedded = false }) {
    * change the user just made and appear broken all over again.
    */
   const defaultSlippage = useSettingsStore((s) => s.defaultSlippage);
+  const setSolanaCluster = useSettingsStore((s) => s.setSolanaCluster);
+
+  /*
+   * ─── THE CLUSTER SETTING, HONESTLY ────────────────────────────────────────
+   * Requested: «سولانا مین‌نت یا آزمایشی کار بده وقتی روی آن باشد».
+   *
+   * The switch does take effect — balances, on-chain reads, the launch lab and
+   * the broadcast path all follow it (lib/solanaRpc.js). What it CANNOT do is
+   * make this screen work on devnet: the quote comes from Jupiter and
+   * OpenOcean, which serve mainnet mints only. Before this, selecting Devnet
+   * left the swap quoting real mainnet prices and then handing the wallet a
+   * transaction for a network it was not on — a failure with no explanation,
+   * which is worse than either working or refusing.
+   *
+   * So on devnet this screen says what it can and cannot do, offers the one-tap
+   * way back, and the swap button is gated. Everything else on the page (the
+   * wallet, its devnet balance, the launch lab link) still works.
+   */
+  const cluster = useSettingsStore((s) => s.solanaCluster);
+  const devnet = cluster === 'devnet';
 
   /*
    * Percent to basis points, which is what OpenOcean expects. 0.5% -> 50.
@@ -320,6 +340,21 @@ export default function SolanaSwap({ embedded = false }) {
 
   useEffect(() => {
     loadWalletBalances();
+  }, [loadWalletBalances]);
+
+  /*
+   * A network switch re-reads the balances.
+   *
+   * `loadWalletBalances` is keyed on the address and the two mints, so picking
+   * Devnet in Settings used to leave the numbers from mainnet on screen — the
+   * setting had changed and the screen had not. Settings announces the change
+   * on `fbt:solana-network`; this answers it. The quote itself is not re-run
+   * because on devnet there is no quote to run (see the devnet notice above).
+   */
+  useEffect(() => {
+    const onNetwork = () => { void loadWalletBalances(); };
+    window.addEventListener('fbt:solana-network', onNetwork);
+    return () => window.removeEventListener('fbt:solana-network', onNetwork);
   }, [loadWalletBalances]);
 
   /* ------------------------------- quoting ------------------------------- */
@@ -746,10 +781,42 @@ export default function SolanaSwap({ embedded = false }) {
               {address ? shortAddress(address) : t('solana.notConnected')}
             </div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/wallet?tab=solana')}>
-            {address ? t('solana.manageWallet') : t('wallet.connect')}
-          </button>
+          <div className="row" style={{ gap: 7 }}>
+            {/* Which network this screen is reading — the setting made visible
+                where it has its effect, not only where it is stored. */}
+            <span className={`sol-net-chip${devnet ? ' is-devnet' : ''}`} title={cluster}>
+              <span className="sol-net-dot" aria-hidden="true" />
+              {devnet ? 'Devnet' : 'Mainnet'}
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/wallet?tab=solana')}>
+              {address ? t('solana.manageWallet') : t('wallet.connect')}
+            </button>
+          </div>
         </div>
+
+        {devnet && (
+          <div className="sol-devnet-note" role="status">
+            <p>{t('solana.devnetSwapTitle')}</p>
+            <span>{t('solana.devnetSwapBody')}</span>
+            <div className="row" style={{ gap: 8, marginTop: 9, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setSolanaCluster('mainnet-beta');
+                  try {
+                    window.dispatchEvent(new CustomEvent('fbt:solana-network', { detail: { cluster: 'mainnet-beta' } }));
+                  } catch { /* the store write is the part that matters */ }
+                }}
+              >
+                {t('solana.devnetSwapBack')}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate('/launch')}>
+                {t('solana.devnetSwapLaunch')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {address ? (
           <div className="row-between" style={{ marginTop: 9 }}>
@@ -861,10 +928,10 @@ export default function SolanaSwap({ embedded = false }) {
         <button
           className="btn btn-primary"
           style={{ marginTop: 14 }}
-          disabled={!address || !order?.outAmount || busy}
+          disabled={devnet || !address || !order?.outAmount || busy}
           onClick={swap}
         >
-          {busy ? t('swap.dontClose') : t('nav.swap')}
+          {busy ? t('swap.dontClose') : devnet ? t('solana.devnetSwapCta') : t('nav.swap')}
         </button>
 
         {txErr && (
