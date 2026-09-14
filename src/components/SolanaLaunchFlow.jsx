@@ -19,6 +19,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+/*
+ * `Buffer` is a Node global; a browser does not have one. The PDA derivation
+ * below seeds `findProgramAddressSync` with `Buffer.from('global_config')`, and
+ * without this import that line threw a ReferenceError which the catch reported
+ * as RPC_UNAVAILABLE — «دسترسی به RPC سولانا ممکن نیست» on a phone whose
+ * connection was fine. See lib/launch/solana/launchlab.js for the full story.
+ */
+import { Buffer } from 'buffer';
 import InfoBox from './InfoBox';
 import {
   IconCheck, IconCoins, IconCopy, IconExternal, IconRefresh,
@@ -42,6 +50,7 @@ import {
   getSolanaLaunchConnection, solanaLaunchCluster, runLaunchLeg,
   estimateLaunchCost, wipeKeypair, LAUNCH_CREATE_COMPUTE_UNITS
 } from '../lib/launch/solana/signing';
+import { probeSolanaRpc } from '../lib/solanaRpc';
 import {
   loadLaunchlabConfig, loadLaunchlabPlatform, verifySolanaLaunch
 } from '../lib/launch/solana/verify';
@@ -66,6 +75,10 @@ function baseToDecimalString(base, decimals) {
   return (neg ? '-' : '') + head + (tail ? `.${tail}` : '');
 }
 const lamportsToSol = (l) => baseToDecimalString(l, 9);
+/** Host only — naming the node that refused is useful, its query string is not. */
+const hostOf = (url) => {
+  try { return new URL(String(url)).host; } catch { return String(url || '').slice(0, 48); }
+};
 const numOnly = (s) => {
   const c = String(s ?? '').replace(/[^0-9.]/g, '');
   const i = c.indexOf('.');
@@ -104,13 +117,64 @@ function useSolanaWallet() {
   return { address, walletName: address ? solanaWalletName() : null, busy, error, connect, disconnect, t };
 }
 
-/* ── live LaunchLab accounts (config + platform, re-read per review) ────── */
+/*
+ * ── live LaunchLab accounts (config + platform, re-read per review) ──────
+ *
+ * TWO THINGS THIS HOOK NOW SAYS OUT LOUD.
+ *
+ * 1 · WHICH NODE, AND WHY IT REFUSED.
+ * The catch used to map EVERY throw to RPC_UNAVAILABLE — «دسترسی به RPC سولانا
+ * ممکن نیست» — so a missing `Buffer` global, a throttled public node, a
+ * censored host and a genuinely offline phone all produced the same sentence,
+ * and the only advice on screen was "check your connection". The read is now
+ * preceded by an explicit probe of the candidate list (lib/solanaRpc.js), which
+ * names the failure: RATE_LIMITED (retry helps), TIMEOUT (retry may help),
+ * UNREACHABLE (the network is blocking the host — retrying does not help, and
+ * saying so is the difference between a user who waits and a user who switches
+ * network). The endpoint that answered, or the list that did not, is kept so
+ * the row can show it.
+ *
+ * 2 · THIS READ NEEDS NO WALLET.
+ * Asked directly: «ببین برای چیه ایا بخاطر وصل نبودن کیف پوله» — is the error
+ * because the wallet is not connected? It cannot be. Reading a config account
+ * is a public JSON-RPC query; nothing in it is signed and no provider is
+ * consulted. The green tick beside it is the WALLET being connected, which is
+ * a separate check with a separate meaning — so the two now carry their own
+ * labels instead of looking like one contradiction.
+ */
+const RPC_ERROR_CODES = Object.freeze({
+  RATE_LIMITED: 'RPC_RATE_LIMITED',
+  TIMEOUT: 'RPC_TIMEOUT',
+  UNREACHABLE: 'RPC_BLOCKED',
+  UNAVAILABLE: 'RPC_UNAVAILABLE'
+});
+
 function useLiveAccounts(cluster) {
-  const [state, setState] = useState({ loading: true, config: null, platform: null, error: null, nonce: 0 });
-  const reload = useCallback(() => setState((s) => ({ ...s, loading: true, error: null, nonce: s.nonce + 1 })), []);
+  const [state, setState] = useState({
+    loading: true, config: null, platform: null, error: null,
+    endpoint: null, attempts: null, nonce: 0
+  });
+  const reload = useCallback(
+    () => setState((s) => ({ ...s, loading: true, error: null, endpoint: null, attempts: null, nonce: s.nonce + 1 })),
+    []
+  );
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
     (async () => {
+      /* Probe FIRST: it picks the endpoint AND names the failure if none
+         answers, which is the honest half of this screen. */
+      const probe = await probeSolanaRpc({ cluster, signal: controller.signal });
+      if (!alive) return;
+      if (!probe.ok) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: RPC_ERROR_CODES[probe.reason] || 'RPC_UNAVAILABLE',
+          attempts: probe.attempts || null
+        }));
+        return;
+      }
       try {
         const connection = await getSolanaLaunchConnection();
         const cc = launchlabClusterConfig(cluster);
@@ -122,7 +186,7 @@ function useLiveAccounts(cluster) {
         );
         const cfg = await loadLaunchlabConfig(connection, { cluster, programId: cc.programId, configId: configId.toBase58() });
         if (!cfg.ok) {
-          if (alive) setState((s) => ({ ...s, loading: false, error: cfg.problems[0] || 'CONFIG_NOT_FOUND' }));
+          if (alive) setState((s) => ({ ...s, loading: false, error: cfg.problems[0] || 'CONFIG_NOT_FOUND', endpoint: probe.url }));
           return;
         }
         const plat = await loadLaunchlabPlatform(connection, { programId: cc.programId, platformId: cc.platformId });
@@ -131,14 +195,22 @@ function useLiveAccounts(cluster) {
             ...s, loading: false, config: cfg.decoded,
             platform: plat.ok ? plat.decoded : null,
             platformProblems: plat.ok ? [] : plat.problems,
-            error: null
+            error: null,
+            endpoint: probe.url
           }));
         }
       } catch (e) {
-        if (alive) setState((s) => ({ ...s, loading: false, error: 'RPC_UNAVAILABLE' }));
+        /* The node answered a health check and then failed the real read: say
+           that, rather than repeating the unreachable-network line. */
+        if (alive) {
+          setState((s) => ({
+            ...s, loading: false, error: 'RPC_READ_FAILED',
+            endpoint: probe.url, detail: String(e?.message || e || '').slice(0, 160)
+          }));
+        }
       }
     })();
-    return () => { alive = false; };
+    return () => { alive = false; controller.abort(); };
   }, [cluster, state.nonce]);
   return { ...state, reload };
 }
@@ -571,7 +643,23 @@ export default function SolanaLaunchFlow({ onBack, onHistory }) {
           {!live.loading && live.error && (
             <div className="launch-dexcheck bad" role="status">
               <span className="launch-dexcheck-ico" aria-hidden><IconShield width={15} height={15} /></span>
-              <span className="launch-dexcheck-text">{t(`launch.sol.err.${live.error}`, { defaultValue: live.error })}</span>
+              <span className="launch-dexcheck-text">
+                {t(`launch.sol.err.${live.error}`, { defaultValue: live.error })}
+                {/*
+                  The two lines below are the answer to «ببین برای چیه» — why
+                  this happens and what it is NOT. A node list nobody can see
+                  makes a throttle indistinguishable from a dead feature, and
+                  blaming the wallet for a public read sends the user to fix
+                  the one thing that was never broken.
+                */}
+                <small className="launch-dexcheck-note">
+                  {t('launch.sol.rpcNoWalletNote')}
+                  {live.attempts?.length
+                    ? ` · ${live.attempts.map((a) => hostOf(a.url)).join(' ، ')}`
+                    : live.endpoint ? ` · ${hostOf(live.endpoint)}` : ''}
+                </small>
+                {live.detail ? <small className="launch-dexcheck-note mono" dir="ltr">{live.detail}</small> : null}
+              </span>
               <button type="button" className="launch-dexcheck-retry" onClick={live.reload}>
                 <IconRefresh width={13} height={13} aria-hidden /> {t('launch.network.retry')}
               </button>
@@ -582,6 +670,9 @@ export default function SolanaLaunchFlow({ onBack, onHistory }) {
               <span className="launch-dexcheck-ico" aria-hidden><IconCheck width={15} height={15} /></span>
               <span className="launch-dexcheck-text">
                 {t('launch.sol.configFound', { fee: (Number(cfg.tradeFeeRate) / 10000).toFixed(2) })}
+                {/* Which node vouched for those numbers — the same transparency
+                    the failure row has, on the success row. */}
+                {live.endpoint ? <small className="launch-dexcheck-note mono" dir="ltr">{hostOf(live.endpoint)}</small> : null}
               </span>
             </div>
           )}
@@ -810,6 +901,13 @@ export default function SolanaLaunchFlow({ onBack, onHistory }) {
                 <div className="launch-wallet-ok">
                   <span className="launch-wallet-ok-ico" aria-hidden><IconCheck width={13} height={13} /></span>
                   <span className="launch-wallet-ok-text">
+                    {/*
+                      Labelled on purpose. An unlabelled green tick beside a red
+                      node error reads as one contradicting itself; naming each
+                      check makes them two facts — «wallet connected» and «node
+                      unreachable» — which can both be true at once.
+                    */}
+                    <b className="launch-wallet-ok-kind">{t('launch.sol.walletOkLabel')}</b>
                     {wallet.walletName || 'Solana'} · <span className="mono">{shortAddress(wallet.address)}</span>
                   </span>
                   <button type="button" className="launch-wallet-ok-change" onClick={wallet.disconnect}>

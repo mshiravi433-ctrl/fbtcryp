@@ -80,6 +80,27 @@ export default function SolanaWalletTab() {
     refreshBalance(address);
   }, [address, refreshBalance]);
 
+  /*
+   * ─── THE BALANCE FOLLOWS THE NETWORK SWITCH ───────────────────────────────
+   * «سولانا مین‌نت یا آزمایشی کار بده وقتی روی آن باشد».
+   *
+   * `refreshBalance` depends on `address` alone, so changing the cluster in
+   * Settings left this tab showing the number it had read from the OTHER
+   * network — a devnet balance under a Mainnet label, or the reverse, until
+   * something else happened to re-run the effect. A balance is only a fact
+   * together with the network it was read from.
+   *
+   * Settings dispatches `fbt:solana-network` when the cluster changes (see
+   * applySolanaCluster in pages/Settings.jsx); this listens and re-reads. The
+   * subscription is on the window, not the store, so the tab does not have to
+   * carry a settings dependency it otherwise has no use for.
+   */
+  useEffect(() => {
+    const onNetwork = () => { refreshBalance(address); };
+    window.addEventListener('fbt:solana-network', onNetwork);
+    return () => window.removeEventListener('fbt:solana-network', onNetwork);
+  }, [address, refreshBalance]);
+
   const connect = useCallback(async () => {
     setWalletErr(null);
     setConnecting(true);

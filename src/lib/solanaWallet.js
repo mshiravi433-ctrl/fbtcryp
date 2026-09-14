@@ -643,16 +643,32 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
  * plaintext is worth refusing outright rather than failing obscurely.
  */
 async function solanaRpcUrl() {
+  let devnet = false;
   try {
     const { useSettingsStore } = await import('../store/useSettingsStore');
     const st = useSettingsStore.getState();
     const custom = String(st.solanaRpc || '').trim();
+    devnet = st.solanaCluster === 'devnet';
     if (/^https:\/\//i.test(custom)) return custom;
-    return st.solanaCluster === 'devnet'
+    /*
+     * ─── AND NOW IT ALSO FAILS OVER ────────────────────────────────────────
+     * Reading the setting was only half of "the setting works". The cluster
+     * default was a SINGLE public host, and `api.mainnet-beta.solana.com`
+     * answers a browser with HTTP 429 whenever it is busy (and is unreachable
+     * from some networks altogether), so balances read as zero and a broadcast
+     * failed with a network error that was really a throttle.
+     *
+     * lib/solanaRpc.js owns the candidate list, probes it with a real
+     * `getHealth`, remembers the winner for the session and NAMES the failure
+     * when nothing answers. Imported dynamically to keep this module's own
+     * import cost at zero, per the file header.
+     */
+    const { getSolanaRpcUrl } = await import('./solanaRpc.js');
+    return await getSolanaRpcUrl({ cluster: devnet ? 'devnet' : 'mainnet-beta' });
+  } catch {
+    return devnet
       ? 'https://api.devnet.solana.com'
       : 'https://api.mainnet-beta.solana.com';
-  } catch {
-    return 'https://api.mainnet-beta.solana.com';
   }
 }
 

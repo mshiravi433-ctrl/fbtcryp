@@ -357,6 +357,26 @@ body {
    Header
    ========================================================================== */
 
+/*
+ * ─── THE STATUS-BAR SPACE WAS NEVER RESERVED ────────────────────────────────
+ * Reported from an iPhone: «در ایفون اسکرین کوچک هیدر خیلی بالا کشیده شده» —
+ * the header sat up inside the status bar.
+ *
+ * index.html ships `viewport-fit=cover` AND
+ * `apple-mobile-web-app-status-bar-style=black-translucent`, and its own comment
+ * says the layout "must respect env(safe-area-inset-top); it does (see .top-bar
+ * in index.css)". It did not: this rule was a flat `padding: 14px 16px 12px`.
+ * In a home-screen PWA on iOS those two metas together mean the page draws UNDER
+ * the clock and the notch, so the brand, the medal and the cog were rendered
+ * into the status bar — and on a notched iPhone the coin logo disappeared behind
+ * the dynamic island. There is no iOS build of this app, so the home-screen PWA
+ * is every iPhone user, and this was their first impression of it.
+ *
+ * The inset is added to the top padding rather than replacing it: the bar's own
+ * breathing room stays exactly what it was, and the reserved strip above it is
+ * background only. env() is 0 in a normal browser tab and on the Android
+ * WebView (whose status bar is outside the web area), so nothing else moves.
+ */
 .top-bar {
   position: sticky;
   top: 0;
@@ -365,7 +385,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 16px 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 11px) 16px 10px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 55%, transparent);
   backdrop-filter: blur(12px);
 }
@@ -1799,6 +1819,71 @@ select option {
   border-color: rgba(255, 59, 107, 0.3);
 }
 .notice-danger::before { background: var(--down); color: #fff; }
+
+/* ---------------------------------------------------------------------------
+   SOLANA NETWORK CHIP + DEVNET NOTICE
+   ---------------------------------------------------------------------------
+   «سولانا مین‌نت یا آزمایشی کار بده وقتی روی آن باشد» — the cluster switch has
+   to be VISIBLE where it has its effect, not only where it is stored. The chip
+   names the network the screen is actually reading; the notice says what that
+   network can and cannot do here, because a swap quote from Jupiter is a
+   mainnet fact and showing one on devnet would be a price that cannot land.
+   --------------------------------------------------------------------------- */
+.sol-net-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4, #00ff9d) 34%, transparent);
+  background: color-mix(in srgb, var(--rgb-4, #00ff9d) 10%, transparent);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.sol-net-chip.is-devnet {
+  border-color: color-mix(in srgb, var(--rgb-5, #ffb300) 40%, transparent);
+  background: color-mix(in srgb, var(--rgb-5, #ffb300) 12%, transparent);
+}
+
+.sol-net-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rgb-4, #00ff9d);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--rgb-4, #00ff9d) 70%, transparent);
+}
+
+.sol-net-chip.is-devnet .sol-net-dot {
+  background: var(--rgb-5, #ffb300);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--rgb-5, #ffb300) 70%, transparent);
+}
+
+.sol-devnet-note {
+  margin-top: 11px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--rgb-5, #ffb300) 30%, transparent);
+  background: color-mix(in srgb, var(--rgb-5, #ffb300) 8%, transparent);
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.sol-devnet-note > p {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .sol-devnet-note { background: #fff8e6; color: #4a3800; }
+:root[data-theme='light'] .sol-net-chip { background: #f2fbf6; }
+:root[data-theme='light'] .sol-net-chip.is-devnet { background: #fff6e0; }
 
 /*
  * Light theme: raise the tint and border until the block reads as a distinct
@@ -6069,46 +6154,162 @@ input, select, textarea { font-size: 16px !important; }
 .ptr-indicator {
   position: absolute;
   top: 0;
-  left: 50%;
+  /*
+   * left/right 0 + flex centring, NOT `left: 50%` + `translate(-50%)`.
+   *
+   * The old centring moved the BOX, and the box was shrink-to-fit against the
+   * half of the screen beyond centre — so a long Persian label overflowed it
+   * and the words landed off to one side of the icon («ایکون رفرش و کلمه‌ش وسط
+   * صفحه نیست»). A full-width flex container centres the capsule as one unit,
+   * in every language and in both directions, and leaves the inline transform
+   * free to do the vertical drop only.
+   */
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
   z-index: 25; /* under the sticky .top-bar (30), above page content */
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.18s ease;
+  will-change: transform;
 }
 
-.ptr-pill {
+/*
+ * ONE CAPSULE — icon, progress ring and label together.
+ *
+ * The previous shape was a 30px circle with the words stacked under it, which
+ * read as two unrelated objects and doubled the indicator's height in the
+ * middle of a drag. A single glass pill is what every modern pull-to-refresh
+ * ships (iOS 18, Material You, Telegram), and it is the shape that can carry
+ * the ring without growing.
+ */
+.ptr-capsule {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(10, 11, 18, 0.88);
+  gap: 9px;
+  max-width: calc(100vw - 32px);
+  min-height: 36px;
+  padding: 4px 14px 4px 5px;
+  border-radius: 999px;
+  background: rgba(10, 11, 18, 0.82);
   border: 1px solid var(--line-strong);
+  box-shadow:
+    0 14px 34px -14px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+/* RTL: the ring leads, so the padding follows the writing direction. */
+[dir='rtl'] .ptr-capsule { padding: 4px 5px 4px 14px; }
+
+/* Ready = the drag passed the trigger. The capsule lights up in the accent
+   colour so "release now" is felt, not read. */
+.ptr-capsule[data-ready='true'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 12%, rgba(10, 11, 18, 0.86));
+  box-shadow:
+    0 14px 34px -12px rgba(0, 0, 0, 0.8),
+    0 0 22px -6px color-mix(in srgb, var(--rgb-1) 60%, transparent);
+}
+
+/* The ring: a track plus a bar whose dash offset is the drag distance. */
+.ptr-ring {
+  position: relative;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+
+.ptr-ring svg {
+  position: absolute;
+  inset: 0;
+  /* Rotate with the drag so the arc grows clockwise from the top, which is
+     what a hand pulling downward expects to see. */
+  transform: rotate(-90deg);
+}
+
+.ptr-ring-track,
+.ptr-ring-bar {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.ptr-ring-track { stroke: rgba(255, 255, 255, 0.14); }
+
+.ptr-ring-bar {
+  stroke: var(--rgb-1);
+  /* 2πr for r=15.5 */
+  stroke-dasharray: 97.4;
+  stroke-dashoffset: calc(97.4 - 97.4 * var(--ptr-progress, 0));
+  transition: stroke-dashoffset 0.06s linear, stroke 0.2s ease;
+}
+
+.ptr-capsule[data-ready='true'] .ptr-ring-bar { stroke: var(--rgb-4, #00ff9d); }
+
+.ptr-ring-ico {
+  position: relative;
+  display: grid;
+  place-items: center;
   color: var(--text-2);
-  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.6);
-  margin-inline: auto;
 }
 
-.ptr-pill[data-ready='true'] {
-  color: var(--rgb-1);
-  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+.ptr-capsule[data-ready='true'] .ptr-ring-ico { color: var(--text-1); }
+
+/* While the refresh runs the ring stops being a gauge and becomes an
+   indeterminate arc — the honest signal for "working, unknown duration". */
+.ptr-indicator[data-phase='refreshing'] .ptr-ring svg {
+  animation: ptr-ring-spin 0.95s linear infinite;
 }
 
-/* The text label sits centred under the pill; kept out of layout flow via
-   the parent's absolute positioning, so it never nudges the header. */
+.ptr-indicator[data-phase='refreshing'] .ptr-ring-bar {
+  stroke-dashoffset: 68;
+  transition: none;
+}
+
+@keyframes ptr-ring-spin {
+  from { transform: rotate(-90deg); }
+  to { transform: rotate(270deg); }
+}
+
 .ptr-label {
   display: block;
-  text-align: center;
-  margin-top: 4px;
   font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--text-3);
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  color: var(--text-2);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 62vw;
 }
 
-:root[data-theme='light'] .ptr-pill {
-  background: #fff;
-  box-shadow: 0 6px 16px -8px rgba(15, 23, 42, 0.35);
+.ptr-capsule[data-ready='true'] .ptr-label { color: var(--text-1); }
+
+:root[data-theme='light'] .ptr-capsule {
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px -14px rgba(15, 23, 42, 0.45);
+}
+
+:root[data-theme='light'] .ptr-ring-track { stroke: rgba(15, 23, 42, 0.14); }
+
+/* The WebView composites every backdrop blur against the page behind it, and
+   this one is on screen mid-drag — exactly when a dropped frame is felt. The
+   capsule keeps its shape and loses the blur. */
+:root[data-native='true'] .ptr-capsule,
+:root[data-lite='true'] .ptr-capsule {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(10, 11, 18, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr-indicator[data-phase='refreshing'] .ptr-ring svg { animation: none; }
+  .ptr-ring-bar { transition: none; }
 }
 
 /* Splash social row */
@@ -6281,7 +6482,9 @@ input, select, textarea { font-size: 16px !important; }
   .top-bar {
     max-width: 680px;
     margin-inline: auto;
-    padding: 14px 16px 12px;
+    /* env() repeated here on purpose: this block re-writes the shorthand, and
+       a wide-screen iPad launched from its home-screen icon has a real inset. */
+    padding: calc(env(safe-area-inset-top, 0px) + 11px) 16px 10px;
   }
 
   /* Two-up on wide screens: these grids are single-column on a phone and
@@ -6512,8 +6715,9 @@ input, select, textarea { font-size: 16px !important; }
   /* Give the page back the vertical room the nav no longer needs. */
   .app-shell { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px); }
 
-  /* The top bar is sticky and competes for the same scarce height. */
-  .top-bar { padding-block: 6px; }
+  /* The top bar is sticky and competes for the same scarce height. The
+     safe-area term is kept: a short viewport does not mean no status bar. */
+  .top-bar { padding-block: calc(env(safe-area-inset-top, 0px) + 6px) 6px; }
 }
 
 /* ---- Hover is a capability, not a screen size ----------------------------
@@ -13851,4 +14055,105 @@ button.settings-quick-action {
 :root[data-theme='light'] .farm-hot-score { background: #f4f5fa; }
 @media (max-width: 420px) {
   .farm-yield-center-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ==========================================================================
+   SMALL-PHONE HEADER  +  THE LITE-GPU LAYER
+   --------------------------------------------------------------------------
+   Reported together, and they are the same complaint from two directions:
+   «سرعت سایت در اپ و اپ سایتی ایفون خیلی کمه» and «در ایفون اسکرین کوچک هیدر
+   خیلی بالا کشیده شده».
+
+   The iPhone case deserves its own paragraph because it is the one platform
+   this app cannot ship natively: there is no iOS build (no Apple Developer
+   account), so an iPhone user runs the HOME-SCREEN PWA — Safari's standalone
+   mode. That mode is neither "a browser tab" nor "a native app", and the code
+   kept treating it as a browser tab:
+
+     · every GPU-saving rule in this codebase is keyed off
+       `:root[data-native='true']`, which only Capacitor sets — so the iPhone
+       PWA got the full desktop treatment: three 60vw orbs blurred at 70px and
+       drifting forever, a scrolling perspective grid, a permanently floating
+       bottom nav, and a blur(12px) header re-sampling all of it on every
+       scroll frame;
+     · RgbBackground froze its orbs for `Capacitor.isNativePlatform()` only, so
+       the same iPhone paid for the animation the APK was explicitly spared;
+     · and the header never reserved `env(safe-area-inset-top)` (fixed above),
+       so it was drawn up into the status bar.
+
+   `data-lite='true'` is the missing third class of device: an installed PWA, a
+   native shell, or a phone that reports very little memory / very few cores.
+   It is written by `applyNativeFlag()` beside `data-native`, so every rule
+   below is live on an iPhone the moment it is added to the home screen — no
+   build, no store, no per-component decision.
+   ========================================================================== */
+
+/* ---- 1 · the header on a phone gives back the height it does not need ---- *
+ * The status-bar strip is reserved (see .top-bar above); the bar's OWN padding
+ * is what shrinks here. A 34px brand stage inside 11px + 10px of padding is a
+ * 55px bar before the inset, which on an iPhone SE is most of a thumb's reach.
+ */
+@media (max-width: 430px) {
+  .top-bar {
+    padding: calc(env(safe-area-inset-top, 0px) + 7px) 12px 7px;
+    gap: 8px;
+  }
+
+  .header-brand-stage { max-width: 196px; }
+  .brand-name { font-size: 13.8px; }
+  .brand-sub { font-size: 8px; letter-spacing: 0.06em; margin-top: 1px; }
+}
+
+/* ---- 2 · the lite-GPU layer --------------------------------------------- */
+
+/* The light field: same palette, same depth, zero per-frame cost. This is the
+   exact treatment `.rgb-still` already gives the packaged app. */
+:root[data-lite='true'] .rgb-orb {
+  animation: none !important;
+  filter: blur(52px);
+  will-change: auto;
+}
+
+:root[data-lite='true'] .rgb-grid::before {
+  animation: none !important;
+  will-change: auto;
+}
+
+/*
+ * The two PERMANENT glass surfaces. Every other backdrop-filter in the app
+ * belongs to a sheet or a card that comes and goes; the header and the nav are
+ * on screen for the whole session, they sit directly above the drifting orbs,
+ * and the nav also carries its own 12s float animation — so together they are
+ * the largest continuous compositing cost in the product. Replacing the blur
+ * with a slightly more opaque background keeps the same silhouette and the
+ * same legibility (both already sit on a ~90% dark gradient) and removes a
+ * full-screen re-sample per frame.
+ */
+:root[data-lite='true'] .top-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: linear-gradient(180deg, rgba(3, 5, 12, 0.97) 62%, rgba(3, 5, 12, 0.86));
+}
+
+:root[data-lite='true'] .bottom-nav {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(8, 9, 16, 0.96);
+  animation: none;
+}
+
+/* Light theme: the same two surfaces, opaque instead of frosted. */
+:root[data-lite='true'][data-theme='light'] .top-bar {
+  background: linear-gradient(180deg, rgba(244, 245, 250, 0.99) 62%, rgba(244, 245, 250, 0.94));
+}
+
+:root[data-lite='true'][data-theme='light'] .bottom-nav { background: rgba(255, 255, 255, 0.98); }
+
+/* Decorative sheen sweeps are pure cost with no information in them. */
+:root[data-lite='true'] .derivatives-hero::after,
+:root[data-lite='true'] .ad-shine,
+:root[data-lite='true'] .wallet-hero-aurora::before,
+:root[data-lite='true'] .wallet-hero-aurora::after {
+  animation: none !important;
+  opacity: 0.14;
 }

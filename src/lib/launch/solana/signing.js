@@ -39,37 +39,35 @@
 import {
   getSolanaProvider, getMwaWallet, mwaAccountInfo, confirmSolanaSignature
 } from '../../solanaWallet.js';
+import {
+  getSolanaRpcUrl, makeSolanaConnection, readSolanaNetworkSettings
+} from '../../solanaRpc.js';
 import { LAUNCHLAB_ACCOUNT_SIZE } from './launchlab.js';
 
 const CREATE_COMPUTE_UNITS = 600_000;
 
-/** Settings-aware RPC, mirroring the wallet stack (custom → cluster default). */
+/**
+ * Settings-aware RPC, with FAILOVER.
+ *
+ * This used to return one hard-coded public endpoint per cluster and the
+ * caller had no second opinion to fall back on. `api.mainnet-beta.solana.com`
+ * answers a browser with HTTP 429 whenever it is busy and is unreachable from
+ * some networks entirely, so the launch screen reported «دسترسی به RPC سولانا
+ * ممکن نیست» on a perfectly good connection. lib/solanaRpc.js now owns the
+ * candidate list, the probe and the named failure reasons; this stays as the
+ * launch path's own name for the same answer.
+ */
 export async function solanaLaunchRpcUrl() {
-  try {
-    const { useSettingsStore } = await import('../../../store/useSettingsStore');
-    const st = useSettingsStore.getState();
-    const custom = String(st.solanaRpc || '').trim();
-    if (/^https:\/\//i.test(custom)) return custom;
-    return st.solanaCluster === 'devnet'
-      ? 'https://api.devnet.solana.com'
-      : 'https://api.mainnet-beta.solana.com';
-  } catch {
-    return 'https://api.mainnet-beta.solana.com';
-  }
+  return getSolanaRpcUrl();
 }
 
 export async function solanaLaunchCluster() {
-  try {
-    const { useSettingsStore } = await import('../../../store/useSettingsStore');
-    return useSettingsStore.getState().solanaCluster === 'devnet' ? 'devnet' : 'mainnet-beta';
-  } catch {
-    return 'mainnet-beta';
-  }
+  const { cluster } = await readSolanaNetworkSettings();
+  return cluster === 'devnet' ? 'devnet' : 'mainnet-beta';
 }
 
 export async function getSolanaLaunchConnection(commitment = 'confirmed') {
-  const { Connection } = await import('@solana/web3.js');
-  return new Connection(await solanaLaunchRpcUrl(), commitment);
+  return makeSolanaConnection(commitment);
 }
 
 /**

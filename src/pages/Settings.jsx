@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /*
  * The footer read a hardcoded 'v1.0.0' while the app shipped 1.5.x — a version
@@ -68,6 +68,7 @@ import {
 import { describeExitPath, buildExitPackage, performExit } from '../lib/intent-ai';
 import { buildReaders, buildErasers, localUserId, forgetLocalUserId } from '../lib/userDataStores';
 import {
+  IconActivity,
   IconBell,
   IconSparkle,
   IconCopy,
@@ -302,6 +303,85 @@ function OptionGrid({ options, value, onChange, cols, flat = false, ariaLabel })
   );
 }
 
+/*
+ * ─── SOLANA NETWORK PROBE ───────────────────────────────────────────────────
+ * Requested: «در تنظیمات، شبکه‌ها، سولانا مین‌نت یا آزمایشی کار بده وقتی روی آن
+ * باشد» — when Mainnet or Devnet is selected, it must actually work.
+ *
+ * This project's own history is a long list of settings that were stored,
+ * redrawn from what was stored, and read by nothing (the EVM RPC, expertMode,
+ * autoLockMinutes, the Solana RPC before it). A cluster switch is worse than
+ * those, because it decides WHICH MONEY a signature touches: a user who picks
+ * Devnet and is silently still on Mainnet has been told something untrue about
+ * their own funds.
+ *
+ * So the switch is now verifiable on the spot. One tap asks the real candidate
+ * list for that cluster (lib/solanaRpc.js) and prints which node answered and
+ * how fast, or the named reason none did — throttled, timed out, or unreachable
+ * from this network. A setting that can be tested is a setting that can be
+ * trusted; one that cannot is a decoration.
+ *
+ * The prober is imported on demand: Settings is one of the heaviest screens in
+ * the app and this is the only place in it that talks to a blockchain.
+ */
+function SolanaNetProbe({ cluster, custom, onChange }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  /* A different cluster or a freshly typed RPC invalidates the last answer —
+     showing "mainnet answered in 240 ms" beside a Devnet selector is the exact
+     kind of stale reassurance this control exists to remove. */
+  useEffect(() => { setResult(null); setBusy(false); }, [cluster, custom]);
+
+  const run = useCallback(async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const { probeSolanaRpc } = await import('../lib/solanaRpc');
+      const r = await probeSolanaRpc({ cluster, custom });
+      setResult(r);
+      onChange?.(r);
+    } catch {
+      setResult({ ok: false, reason: 'UNAVAILABLE', attempts: [] });
+    } finally {
+      setBusy(false);
+    }
+  }, [cluster, custom, onChange]);
+
+  const host = (u) => {
+    try { return new URL(String(u)).host; } catch { return String(u || '').slice(0, 48); }
+  };
+
+  return (
+    <div className="set-netprobe" data-state={busy ? 'busy' : result ? (result.ok ? 'ok' : 'bad') : 'idle'}>
+      <button type="button" className="set-netprobe-btn" onClick={run} disabled={busy}>
+        {busy ? <span className="spinner spinner-sm" aria-hidden="true" /> : <IconActivity width={14} height={14} aria-hidden="true" />}
+        <span>{busy ? t('settings.solRpcTesting') : t('settings.solRpcTest')}</span>
+      </button>
+
+      {result && (
+        <p className="set-netprobe-out" role="status">
+          {result.ok
+            ? t('settings.solRpcOk', { host: host(result.url), ms: Math.max(1, Math.round(result.ms || 0)) })
+            : (
+              <>
+                <b>{t('settings.solRpcFailTitle')}</b>
+                {' — '}
+                {t(`settings.solRpcFail.${result.reason}`, { defaultValue: result.reason })}
+              </>
+            )}
+          {result.attempts?.length > 1 && (
+            <span className="set-netprobe-tried">
+              {t('settings.solRpcTried')} {result.attempts.map((a) => `${host(a.url)}${a.ok ? ' ✓' : ` ✗ ${a.reason || ''}`}`).join(' · ')}
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -363,6 +443,49 @@ export default function Settings() {
   /* The RPC editor is a second level of the networks popup; the draft is the
      input's value while it is open, and null when it is not. */
   const [rpcDraft, setRpcDraft] = useState(null);
+
+  /*
+   * Confirmation that a Solana cluster change actually LANDED, and the one
+   * thing the user may still have to do.
+   *
+   * A switch that redraws itself proves only that the store was written. Which
+   * node the next read goes through, and whether a wallet that was already
+   * connected is still sitting on the old cluster, are separate facts — and the
+   * second one is the reason «کار بده وقتی روی آن باشد» was not satisfied by
+   * the selector alone: an injected Phantom does not switch chains for us, so
+   * the honest answer after a change is "applied, and reconnect the wallet".
+   */
+  const [solNetNote, setSolNetNote] = useState(null);
+  const solNetTimer = useRef(null);
+  useEffect(() => () => clearTimeout(solNetTimer.current), []);
+
+  const applySolanaCluster = useCallback((v) => {
+    const cluster = v === 'devnet' ? 'devnet' : 'mainnet-beta';
+    haptic?.('select');
+    s.setSolanaCluster(cluster);
+    /*
+     * The remembered node belongs to the OLD cluster. lib/solanaRpc.js caches
+     * the endpoint that answered, keyed by cluster + custom URL, so the key
+     * changes on its own — clearing it here too means a re-probe even when the
+     * user flips back to a cluster visited a minute ago.
+     */
+    void import('../lib/solanaRpc')
+      .then(({ resetSolanaRpcChoice }) => resetSolanaRpcChoice())
+      .catch(() => { /* the key changes anyway; nothing to recover */ });
+    /*
+     * Every Solana surface re-reads on this: balances, the launch lab's live
+     * config, the swap screen's notice. Without an event each of them would
+     * keep the numbers it fetched from the other cluster until a manual
+     * refresh — which is how a screen comes to show devnet lamports under a
+     * mainnet label.
+     */
+    try {
+      window.dispatchEvent(new CustomEvent('fbt:solana-network', { detail: { cluster } }));
+    } catch { /* an environment without CustomEvent still has the store */ }
+    clearTimeout(solNetTimer.current);
+    setSolNetNote(cluster);
+    solNetTimer.current = setTimeout(() => setSolNetNote(null), 9000);
+  }, [haptic, s]);
   const [slipCustom, setSlipCustom] = useState('');
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioErr, setBioErr] = useState(null);
@@ -1429,12 +1552,23 @@ export default function Settings() {
           flat
           ariaLabel={t('settings.solana')}
           value={s.solanaCluster}
-          onChange={(v) => { haptic?.('select'); s.setSolanaCluster(v); }}
+          onChange={applySolanaCluster}
           options={[
             { value: 'mainnet-beta', label: 'Mainnet', sub: t('settings.hub.mainnetSub', { defaultValue: 'Real funds' }) },
             { value: 'devnet', label: 'Devnet', sub: t('settings.hub.devnetSub', { defaultValue: 'Test funds only' }) }
           ]}
         />
+
+        {/* Proof, not a promise: ask the cluster's own nodes and print which
+            one answered. */}
+        <SolanaNetProbe cluster={s.solanaCluster} custom={s.solanaRpc} />
+
+        {solNetNote && (
+          <p className="set-netnote" role="status">
+            <span>{t('settings.solRpcApplied', { cluster: solNetNote === 'devnet' ? 'Devnet' : 'Mainnet' })}</span>
+            <span className="set-netnote-sub">{t('settings.solRpcReconnect', { cluster: solNetNote === 'devnet' ? 'Devnet' : 'Mainnet' })}</span>
+          </p>
+        )}
       </Field>
 
       <div className="set-group">
@@ -1471,6 +1605,19 @@ export default function Settings() {
           onChange={(e) => s.setRpc('solanaRpc', e.target.value)}
           placeholder="https://api.mainnet-beta.solana.com"
           aria-label="Solana RPC"
+          dir="ltr"
+        />
+        {/* Typed a node of your own? Prove it answers before a transaction
+            depends on it — and drop the remembered choice so the next read
+            re-probes with the new URL. */}
+        <SolanaNetProbe
+          cluster={s.solanaCluster}
+          custom={s.solanaRpc}
+          onChange={() => {
+            void import('../lib/solanaRpc')
+              .then(({ resetSolanaRpcChoice }) => resetSolanaRpcChoice())
+              .catch(() => {});
+          }}
         />
       </Field>
 

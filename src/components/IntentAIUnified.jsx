@@ -1314,6 +1314,39 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * not at import time — so no probe or first paint pays for ethers.
    */
   const autonomyDriversRef = useRef(null);
+
+  /*
+   * ── WARM ONCE, AT IDLE ────────────────────────────────────────────────────
+   * «هوش مصنوعی کنده» on iPhone.
+   *
+   * Ten dynamic imports — ethers, the perp engine, lending, the Solana SDK —
+   * were kicked off from the effect below, which depends on `wallet` and
+   * `solanaTick`. Two costs followed from that: the warm competed with the
+   * chat's own first paint for the main thread, and every wallet or Solana
+   * tick walked all ten import edges again. Nothing was downloaded twice (the
+   * bundler caches that), but ten module-cache lookups and ten microtask
+   * chains per tick is exactly the kind of invisible work that makes a screen
+   * feel heavy on a phone.
+   *
+   * So the warm happens ONCE, deferred to the first idle moment after paint.
+   * `requestIdleCallback` where it exists (Chrome/Android); a plain delayed
+   * timeout where it does not (iOS Safari has never shipped it) — on the
+   * device that reported the problem, the timeout IS the mechanism. The effect
+   * below still awaits the warm before building drivers, which is now free:
+   * warmAutonomyDrivers() is idempotent and every caller joins one promise.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const ric = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback.bind(window) : null;
+    const start = () => { if (!cancelled) void warmAutonomyDrivers().catch(() => {}); };
+    const handle = ric ? ric(start, { timeout: 4000 }) : setTimeout(start, 1200);
+    return () => {
+      cancelled = true;
+      if (ric) window.cancelIdleCallback?.(handle);
+      else clearTimeout(handle);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {

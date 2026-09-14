@@ -20,6 +20,39 @@
 
 import { classifyFailure } from './failureModes.js';
 
+/*
+ * BASE64 WITHOUT `Buffer`.
+ *
+ * These two helpers used to call `Buffer.from(...)` — a NODE global that a
+ * browser does not have. The envelope writer therefore threw on every save in
+ * the app and the APK, and the reader threw inside its own try/catch, which
+ * reported "corrupt snapshot" and produced a CLEAN START every single time.
+ * The visible symptom was an AI session that never survived a reload, with no
+ * error anywhere, because both failure paths were (correctly) designed to be
+ * silent.
+ *
+ * `btoa`/`atob` plus TextEncoder/TextDecoder are available in every browser
+ * this app runs in and in Node ≥16, so the polyfill is not needed at all — and
+ * not pulling `buffer` into the AI chunk is worth ~50 KB of parse time on a
+ * phone, which is the screen this module belongs to.
+ */
+function bytesToBase64(u8) {
+  const bytes = u8 instanceof Uint8Array ? u8 : new Uint8Array(u8);
+  let bin = '';
+  const chunk = 0x8000; // avoid "too many arguments" on long arrays
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(String(b64));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export const PERSISTENCE_SCHEMA = 'fbt.session-persistence.v1';
 export const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -107,7 +140,7 @@ export async function encryptSnapshot({ snapshot = null, deviceSecret = null, cr
     base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
   );
   const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(snapshot.body)));
-  const b64 = (u8) => Buffer.from(u8).toString('base64');
+  const b64 = (u8) => bytesToBase64(u8);
   return {
     ok: true,
     schema: PERSISTENCE_SCHEMA,
@@ -137,7 +170,7 @@ export async function restoreSnapshot({ envelope = null, deviceSecret = null, cr
   try {
     const dec = new TextDecoder();
     const enc = new TextEncoder();
-    const u8 = (b64) => new Uint8Array(Buffer.from(String(b64), 'base64'));
+    const u8 = (b64) => base64ToBytes(b64);
     const base = await crypto.subtle.importKey('raw', enc.encode(deviceSecret), 'PBKDF2', false, ['deriveKey']);
     const key = await crypto.subtle.deriveKey(
       { name: 'PBKDF2', salt: u8(envelope.salt), iterations: 120_000, hash: 'SHA-256' },

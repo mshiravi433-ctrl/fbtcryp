@@ -52,16 +52,36 @@ async function loadPerpRisk() {
 }
 
 /**
- * Warm every module the drivers can need. Safe to call repeatedly — the
- * bundler caches the imports and the guards above cache the namespace objects.
- * The chat calls this when the wallet changes, before the first execution.
+ * ONE warm for the whole session.
+ *
+ * `warmAutonomyDrivers()` was safe to call repeatedly in the sense that nothing
+ * was imported twice — but every call still walked ten `await import()` edges,
+ * ten microtask chains and ten module-cache lookups, and the chat called it on
+ * EVERY wallet / Solana tick. On an iPhone that is the difference between the
+ * AI screen answering and the AI screen stalling: the work lands in the same
+ * frames as the render it is supposed to serve.
+ *
+ * So the promise is remembered. The first caller pays, every later caller —
+ * including one that arrives while the first is still in flight — joins the
+ * same promise and resolves immediately once it has settled. A warm that
+ * partially failed still counts as done: `Promise.allSettled` never rejects,
+ * the per-module guards stay null for whatever failed, and the executors report
+ * their own named failure, exactly as before.
  */
-export async function warmAutonomyDrivers() {
-  await Promise.allSettled([
-    loadSwap(), loadChains(), loadLending(), loadAaveBase(), loadPerp(),
-    loadPerpMarkets(), loadSolana(), loadSolanaWallet(), loadSolanaAssets(), loadPerpRisk()
-  ]);
-  return { ok: true };
+let warmPromise = null;
+
+/**
+ * Warm every module the drivers can need. Idempotent for the lifetime of the
+ * page: concurrent and repeat calls share one in-flight warm.
+ */
+export function warmAutonomyDrivers() {
+  if (!warmPromise) {
+    warmPromise = Promise.allSettled([
+      loadSwap(), loadChains(), loadLending(), loadAaveBase(), loadPerp(),
+      loadPerpMarkets(), loadSolana(), loadSolanaWallet(), loadSolanaAssets(), loadPerpRisk()
+    ]).then(() => ({ ok: true }));
+  }
+  return warmPromise;
 }
 
 /** Which venues can actually run right now, for the confirmation card. */
