@@ -21,9 +21,53 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-import { loadVault, saveVault } from './localWallet';
+import { loadVault, saveVault } from './localWallet.js';
 
 const isNative = () => typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+const MIN_PBKDF2_ITERATIONS = 100_000;
+const MAX_PBKDF2_ITERATIONS = 2_000_000;
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+function decodedLength(value) {
+  if (typeof value !== 'string' || value.length > 8192 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return -1;
+  try {
+    const bytes = Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+    // Reject non-canonical encodings and hidden trailing data.
+    const canonical = btoa(String.fromCharCode(...bytes));
+    return canonical === value ? bytes.length : -1;
+  } catch {
+    return -1;
+  }
+}
+
+/** Validate untrusted backup metadata before it can replace the local vault. */
+function validatedVault(parsed) {
+  if (!parsed || parsed._type !== 'fbt-swap-wallet-backup') throw new Error('WRONG_FILE');
+  if (parsed._version !== 1 || (parsed.v ?? 1) !== 1 || (parsed.kdf ?? 'PBKDF2') !== 'PBKDF2') {
+    throw new Error('UNSUPPORTED_FILE');
+  }
+  const iterations = Number(parsed.iterations ?? 310_000);
+  if (!Number.isSafeInteger(iterations) || iterations < MIN_PBKDF2_ITERATIONS || iterations > MAX_PBKDF2_ITERATIONS) {
+    throw new Error('UNSAFE_KDF');
+  }
+  if (!EVM_ADDRESS.test(parsed.address || '')) throw new Error('INCOMPLETE');
+  if (decodedLength(parsed.salt) !== 16 || decodedLength(parsed.iv) !== 12) throw new Error('INCOMPLETE');
+  const ciphertextLength = decodedLength(parsed.ct);
+  // A 12-word mnemonic plus GCM tag is small; this generous ceiling supports
+  // future phrase formats while preventing storage/memory abuse.
+  if (ciphertextLength < 32 || ciphertextLength > 4096) throw new Error('INCOMPLETE');
+  const createdAt = Number(parsed.createdAt);
+  return {
+    v: 1,
+    kdf: 'PBKDF2',
+    iterations,
+    salt: parsed.salt,
+    iv: parsed.iv,
+    ct: parsed.ct,
+    address: parsed.address,
+    createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now()
+  };
+}
 
 /** Human-readable location, so we can tell the user exactly where it went. */
 export const BACKUP_FILENAME = 'fbt-wallet-backup.json';
@@ -218,41 +262,28 @@ export async function importWalletBackup(fileText) {
     throw new Error('BAD_FILE');
   }
 
-  if (parsed?._type !== 'fbt-swap-wallet-backup') throw new Error('WRONG_FILE');
-  if (!parsed.ct || !parsed.salt || !parsed.iv || !parsed.address) throw new Error('INCOMPLETE');
-
+  const vault = validatedVault(parsed);
   const existing = loadVault();
-  if (existing && existing.address?.toLowerCase() !== parsed.address?.toLowerCase()) {
+  if (existing && existing.address?.toLowerCase() !== vault.address.toLowerCase()) {
     // Refuse to silently replace a different wallet — the caller must confirm.
     throw new Error('DIFFERENT_WALLET');
   }
 
-  saveVault({
-    v: parsed.v ?? 1,
-    kdf: parsed.kdf ?? 'PBKDF2',
-    iterations: parsed.iterations ?? 310000,
-    salt: parsed.salt,
-    iv: parsed.iv,
-    ct: parsed.ct,
-    address: parsed.address,
-    createdAt: parsed.createdAt ?? Date.now()
-  });
-
-  return { ok: true, address: parsed.address };
+  saveVault(vault);
+  return { ok: true, address: vault.address };
 }
 
 /** Force-restore, used after the user confirms overwriting a different wallet. */
 export async function forceImportWalletBackup(fileText) {
-  const parsed = JSON.parse(fileText);
-  saveVault({
-    v: parsed.v ?? 1,
-    kdf: parsed.kdf ?? 'PBKDF2',
-    iterations: parsed.iterations ?? 310000,
-    salt: parsed.salt,
-    iv: parsed.iv,
-    ct: parsed.ct,
-    address: parsed.address,
-    createdAt: parsed.createdAt ?? Date.now()
-  });
-  return { ok: true, address: parsed.address };
+  let parsed;
+  try {
+    parsed = JSON.parse(fileText);
+  } catch {
+    throw new Error('BAD_FILE');
+  }
+  // "Force" only bypasses the different-address confirmation. It must never
+  // bypass cryptographic/file validation.
+  const vault = validatedVault(parsed);
+  saveVault(vault);
+  return { ok: true, address: vault.address };
 }
