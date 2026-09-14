@@ -20,6 +20,13 @@
 const STORAGE_KEY = 'fbt-wallet-v1';
 const PBKDF2_ITERATIONS_DESKTOP = 250_000;
 const PBKDF2_ITERATIONS_MOBILE = 140_000;
+const MIN_PASSWORD_LENGTH = 8;
+
+function assertWalletPassword(password) {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error('PASSWORD_TOO_SHORT');
+  }
+}
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -145,9 +152,15 @@ export async function validateMnemonic(phrase) {
  * the largest avoidable delay on iPhone. The signer remains memory-only.
  */
 export async function createVaultWithSigner(mnemonic, password, provider) {
+  // Security invariants belong at the crypto boundary, not only in the UI.
+  // Otherwise another caller (or a future UI regression) can persist a vault
+  // encrypted with an empty/trivial password.
+  assertWalletPassword(password);
+  if (typeof mnemonic !== 'string') throw new Error('BAD_MNEMONIC');
   await yieldFrame();
-  const { HDNodeWallet } = await loadEthers();
-  const phrase = mnemonic.trim();
+  const { HDNodeWallet, Mnemonic } = await loadEthers();
+  const phrase = mnemonic.trim().replace(/\s+/g, ' ');
+  if (!Mnemonic.isValidMnemonic(phrase)) throw new Error('BAD_MNEMONIC');
   // WebCrypto derives on its own implementation thread; let it overlap the
   // synchronous HD-address derivation instead of putting the two waits in line.
   const [blob, wallet] = await Promise.all([
