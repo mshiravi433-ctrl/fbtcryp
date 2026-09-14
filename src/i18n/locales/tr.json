@@ -1227,7 +1227,23 @@
     },
     "ctaTitle": "Hâlâ bir sorun mu var?",
     "companyFull": "Fanous Bazaar Pishgam",
-    "footNote": "Piyasa verileri bilgilendirme amaçlıdır, finansal tavsiye değildir. Kripto oynaktır; yalnızca kaybetmeyi göze alabileceğin kadarıyla işlem yap."
+    "footNote": "Piyasa verileri bilgilendirme amaçlıdır, finansal tavsiye değildir. Kripto oynaktır; yalnızca kaybetmeyi göze alabileceğin kadarıyla işlem yap.",
+    "principles": {
+      "title": "İlkelerimiz",
+      "lead": "FBT’de ürettiğimiz her şeyi şekillendiren altı ilke — arayüzden yapay zekânın karar verme biçimine kadar.",
+      "userControlTitle": "Kullanıcı kontrolü",
+      "userControlBody": "Kullanıcılar finansal kararların merkezinde kalır.",
+      "automationTitle": "Akıllı otomasyon",
+      "automationBody": "Yapay zekâ karmaşıklığı azaltmalı, şeffaflığı kaldırmamalı.",
+      "transparencyTitle": "Şeffaflık",
+      "transparencyBody": "Önemli eylemler, riskler ve maliyetler anlaşılır olmalı.",
+      "openTitle": "Açık altyapı",
+      "openBody": "Uygun olduğunda birlikte çalışabilir ağlar ve protokoller etrafında inşa et.",
+      "dataTitle": "Veri odaklı zekâ",
+      "dataBody": "Varsayımlar yerine gerçek veri kullan.",
+      "improvementTitle": "Sürekli iyileşme",
+      "improvementBody": "Sistemler sonuçlardan öğrenmeli ve kullanıcı güvenliğinden ödün vermeden zamanla gelişmeli."
+    }
   },
   "contact": {
     "title": "Bize ulaşın",

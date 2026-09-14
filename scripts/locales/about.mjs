@@ -220,6 +220,42 @@ export default {
   },
 
   /* ------------------------------- close -------------------------------- */
+  /* ------------------------------ principles ---------------------------- */
+  'about.principles.title': { zh: '我们的原则', hi: 'हमारे सिद्धांत', es: 'Nuestros principios', fr: 'Nos principes', ru: 'Наши принципы', tr: 'İlkelerimiz', ur: 'ہمارے اصول', id: 'Prinsip kami', pt: 'Os nossos princípios' },
+  'about.principles.lead': {
+    zh: '塑造我们在 FBT 一切构建的六项原则——从界面到 AI 的决策方式。',
+    hi: 'छह सिद्धांत जो FBT में हमारे बनाए हर काम को आकार देते हैं — इंटरफ़ेस से लेकर AI के निर्णय लेने के तरीके तक।',
+    es: 'Seis principios que dan forma a todo lo que construimos en FBT, desde la interfaz hasta cómo decide la IA.',
+    fr: 'Six principes qui façonnent tout ce que nous construisons chez FBT — de l\u2019interface à la manière dont l\u2019IA décide.',
+    ru: 'Шесть принципов, определяющих всё, что мы создаём в FBT — от интерфейса до того, как ИИ принимает решения.',
+    tr: 'FBT\u2019de ürettiğimiz her şeyi şekillendiren altı ilke — arayüzden yapay zekânın karar verme biçimine kadar.',
+    ur: 'چھ اصول جو FBT میں ہماری ہر بنائی ہوئی چیز کو شکل دیتے ہیں — انٹرفیس سے لے کر AI کے فیصلے کرنے کے طریقے تک۔',
+    id: 'Enam prinsip yang membentuk semua yang kami bangun di FBT — dari antarmuka hingga cara AI mengambil keputusan.',
+    pt: 'Seis princípios que moldam tudo o que construímos na FBT — da interface à forma como a IA decide.'
+  },
+  'about.principles.userControlTitle': { zh: '用户掌控', hi: 'उपयोगकर्ता नियंत्रण', es: 'Control del usuario', fr: 'Contrôle de l\u2019utilisateur', ru: 'Контроль пользователя', tr: 'Kullanıcı kontrolü', ur: 'صارف کا کنٹرول', id: 'Kontrol pengguna', pt: 'Controlo do utilizador' },
+  'about.principles.userControlBody': { zh: '用户始终处于财务决策的中心。', hi: 'उपयोगकर्ता वित्तीय निर्णयों के केंद्र में रहते हैं।', es: 'Los usuarios permanecen en el centro de las decisiones financieras.', fr: 'Les utilisateurs restent au centre des décisions financières.', ru: 'Пользователи остаются в центре финансовых решений.', tr: 'Kullanıcılar finansal kararların merkezinde kalır.', ur: 'صارفین مالی فیصلوں کے مرکز میں رہتے ہیں۔', id: 'Pengguna tetap menjadi pusat keputusan finansial.', pt: 'Os utilizadores permanecem no centro das decisões financeiras.' },
+  'about.principles.automationTitle': { zh: '智能自动化', hi: 'बुद्धिमान स्वचालन', es: 'Automatización inteligente', fr: 'Automatisation intelligente', ru: 'Умная автоматизация', tr: 'Akıllı otomasyon', ur: 'ذہین آٹومیشن', id: 'Otomasi cerdas', pt: 'Automação inteligente' },
+  'about.principles.automationBody': { zh: 'AI 应降低复杂性，而不是消除透明度。', hi: 'AI को जटिलता घटानी चाहिए, पारदर्शिता हटानी नहीं।', es: 'La IA debe reducir la complejidad, no eliminar la transparencia.', fr: 'L\u2019IA doit réduire la complexité, pas supprimer la transparence.', ru: 'ИИ должен уменьшать сложность, а не убирать прозрачность.', tr: 'Yapay zekâ karmaşıklığı azaltmalı, şeffaflığı kaldırmamalı.', ur: 'AI کو پیچیدگی کم کرنی چاہیے، شفافیت ختم نہیں کرنی۔', id: 'AI harus mengurangi kompleksitas, bukan menghilangkan transparansi.', pt: 'A IA deve reduzir a complexidade, não remover a transparência.' },
+  'about.principles.transparencyTitle': { zh: '透明', hi: 'पारदर्शिता', es: 'Transparencia', fr: 'Transparence', ru: 'Прозрачность', tr: 'Şeffaflık', ur: 'شفافیت', id: 'Transparansi', pt: 'Transparência' },
+  'about.principles.transparencyBody': { zh: '重要的操作、风险和成本应易于理解。', hi: 'महत्वपूर्ण क्रियाएँ, जोखिम और लागतें समझने योग्य होनी चाहिए।', es: 'Las acciones, riesgos y costes importantes deben ser comprensibles.', fr: 'Les actions, risques et coûts importants doivent être compréhensibles.', ru: 'Важные действия, риски и расходы должны быть понятны.', tr: 'Önemli eylemler, riskler ve maliyetler anlaşılır olmalı.', ur: 'اہم اعمال، خطرات اور اخراجات قابلِ فہم ہونے چاہیئیں۔', id: 'Tindakan, risiko, dan biaya penting harus dapat dipahami.', pt: 'Ações, riscos e custos importantes devem ser compreensíveis.' },
+  'about.principles.openTitle': { zh: '开放基础设施', hi: 'खुला इंफ्रास्ट्रक्चर', es: 'Infraestructura abierta', fr: 'Infrastructure ouverte', ru: 'Открытая инфраструктура', tr: 'Açık altyapı', ur: 'کھلا ڈھانچہ', id: 'Infrastruktur terbuka', pt: 'Infraestrutura aberta' },
+  'about.principles.openBody': { zh: '在适当情况下围绕可互操作的网络和协议构建。', hi: 'जहाँ उपयुक्त हो, इंटरऑपरेबल नेटवर्क और प्रोटोकॉल के इर्द-गिर्द निर्माण करें।', es: 'Construir en torno a redes y protocolos interoperables cuando sea apropiado.', fr: 'Construire autour de réseaux et protocoles interopérables lorsque c\u2019est pertinent.', ru: 'Строим вокруг совместимых сетей и протоколов, где это уместно.', tr: 'Uygun olduğunda birlikte çalışabilir ağlar ve protokoller etrafında inşa et.', ur: 'جہاں مناسب ہو، باہمی تعامل پذیر نیٹ ورکس اور پروٹوکولز کے گرد تعمیر کریں۔', id: 'Membangun di sekitar jaringan dan protokol yang interoperable bila memungkinkan.', pt: 'Construir em torno de redes e protocolos interoperáveis quando apropriado.' },
+  'about.principles.dataTitle': { zh: '数据驱动智能', hi: 'डेटा-संचालित बुद्धिमत्ता', es: 'Inteligencia basada en datos', fr: 'Intelligence fondée sur les données', ru: 'Интеллект на основе данных', tr: 'Veri odaklı zekâ', ur: 'ڈیٹا پر مبنی ذہانت', id: 'Kecerdasan berbasis data', pt: 'Inteligência baseada em dados' },
+  'about.principles.dataBody': { zh: '使用真实数据而非假设。', hi: 'अनुमानों के बजाय वास्तविक डेटा का उपयोग करें।', es: 'Usar datos reales en lugar de suposiciones.', fr: 'Utiliser des données réelles plutôt que des hypothèses.', ru: 'Используем реальные данные вместо предположений.', tr: 'Varsayımlar yerine gerçek veri kullan.', ur: 'اندازوں کے بجائے حقیقی ڈیٹا استعمال کریں۔', id: 'Gunakan data nyata, bukan asumsi.', pt: 'Usar dados reais em vez de suposições.' },
+  'about.principles.improvementTitle': { zh: '持续改进', hi: 'निरंतर सुधार', es: 'Mejora continua', fr: 'Amélioration continue', ru: 'Постоянное улучшение', tr: 'Sürekli iyileşme', ur: 'مسلسل بہتری', id: 'Peningkatan berkelanjutan', pt: 'Melhoria contínua' },
+  'about.principles.improvementBody': {
+    zh: '系统应从结果中学习并不断改进，同时不损害用户安全。',
+    hi: 'सिस्टम को परिणामों से सीखना चाहिए और समय के साथ उपयोगकर्ता सुरक्षा से समझौता किए बिना बेहतर होना चाहिए।',
+    es: 'Los sistemas deben aprender de los resultados y mejorar con el tiempo sin comprometer la seguridad del usuario.',
+    fr: 'Les systèmes doivent apprendre des résultats et s\u2019améliorer avec le temps sans compromettre la sécurité de l\u2019utilisateur.',
+    ru: 'Системы должны учиться на результатах и совершенствоваться со временем, не ставя под угрозу безопасность пользователей.',
+    tr: 'Sistemler sonuçlardan öğrenmeli ve kullanıcı güvenliğinden ödün vermeden zamanla gelişmeli.',
+    ur: 'نظاموں کو نتائج سے سیکھنا چاہیے اور وقت کے ساتھ صارف کی سیکیورٹی سے سمجھوتہ کیے بغیر بہتر ہونا چاہیے۔',
+    id: 'Sistem harus belajar dari hasil dan meningkat seiring waktu tanpa mengorbankan keamanan pengguna.',
+    pt: 'Os sistemas devem aprender com os resultados e melhorar ao longo do tempo sem comprometer a segurança do utilizador.'
+  },
+
   'about.ctaTitle': { zh: '还有疑问？', hi: 'अब भी कोई सवाल है?', es: '¿Todavía tienes dudas?', fr: 'Une question ?', ru: 'Остались вопросы?', tr: 'Hâlâ bir sorun mu var?', ur: 'اب بھی کوئی سوال ہے؟', id: 'Masih ada pertanyaan?', pt: 'Ainda tem dúvidas?' },
   'about.companyFull': { zh: 'Fanous Bazaar Pishgam', hi: 'Fanous Bazaar Pishgam', es: 'Fanous Bazaar Pishgam', fr: 'Fanous Bazaar Pishgam', ru: 'Fanous Bazaar Pishgam', tr: 'Fanous Bazaar Pishgam', ur: 'Fanous Bazaar Pishgam', id: 'Fanous Bazaar Pishgam', pt: 'Fanous Bazaar Pishgam' },
   'about.footNote': {

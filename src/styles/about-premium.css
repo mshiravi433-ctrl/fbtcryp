@@ -1,39 +1,62 @@
 /* ==========================================================================
    ABOUT — FBT Swap
    --------------------------------------------------------------------------
-   Written for the column it is actually rendered in.
+   Written for the column it is actually rendered in: `.app-shell` is
+   `max-width: 520px`, so this screen is never wider than a phone no matter
+   how large the viewport is. Grids use `auto-fit` so a second column appears
+   only when the column is genuinely wide enough, and one column otherwise.
 
-   `.app-shell` is `max-width: 520px`, so this screen is never wider than a
-   phone no matter how large the viewport is. The previous stylesheet was
-   authored as if it were a 1120px landing page: every grid carried a
-   `min-width: 900px` two-column breakpoint that could never fire, so ~20
-   sections stacked into one very long single column — which is exactly the
-   "صفحه شلوغ شده" the redesign is answering.
+   THEME IS TOKEN-DRIVEN. Every colour, surface, border and shadow on this
+   page comes from the `--ab-*` custom properties defined on `.about-page`;
+   the light theme redefines the tokens and nothing else. A text or card
+   colour hardcoded in a component rule is a light-theme bug waiting to be
+   reported as «تم روشن خرابه» — so there are none.
 
-   So: nothing here assumes a wide viewport. Grids use `auto-fit` so they
-   become two columns only when the column is genuinely wide enough (a large
-   phone in landscape), and one column otherwise.
-
-   Dark-first, with a small light-theme block at the bottom so the page does
-   not turn into a black rectangle for the half of users on the light theme.
+   No `color-mix()`: the app still opens on Android WebViews old enough to
+   lack it, so tinted surfaces use the 8-digit-hex-alpha trick the JSX
+   already prepares (`--hue-soft`, `--hue-line`, `--hue-glow`).
    ========================================================================== */
 
 .about-page {
-  --about-text: #eef2ff;
-  --about-body: #a8b3cc;
-  --about-dim: #7b87a4;
-  --about-card: rgba(255, 255, 255, 0.04);
-  --about-card-hover: rgba(255, 255, 255, 0.06);
-  --about-line: rgba(255, 255, 255, 0.08);
-  --about-line-strong: rgba(255, 255, 255, 0.14);
-  --about-void: #07070d;
+  /* brand ramp */
+  --ab-cyan: #00e5ff;
+  --ab-violet: #7c4dff;
+  --ab-magenta: #ff2d95;
+  --ab-amber: #ffb347;
+
+  /* text + surfaces (dark) */
+  --ab-text: #f1f4ff;
+  --ab-body: #aab4cf;
+  --ab-dim: #7c87a3;
+  --ab-card: rgba(255, 255, 255, 0.048);
+  --ab-card-strong: rgba(255, 255, 255, 0.065);
+  --ab-card-hover: rgba(255, 255, 255, 0.07);
+  --ab-line: rgba(255, 255, 255, 0.09);
+  --ab-line-strong: rgba(255, 255, 255, 0.17);
+  --ab-void: #07080e;
+  --ab-shadow-soft: 0 6px 20px rgba(2, 6, 23, 0.4);
+  --ab-shadow-lift: 0 16px 40px rgba(2, 6, 23, 0.5);
+  --ab-blur: blur(14px);
+
+  /* gradients — bright enough to read on a near-black canvas */
+  --ab-grad-text: linear-gradient(96deg, #4ee3ff, #a08bff 46%, #ff6db4);
+  --ab-grad-btn: linear-gradient(135deg, #00e5ff, #7c4dff 52%, #ff2d95);
+  --ab-grad-mark: conic-gradient(from 0deg, #00e5ff, #7c4dff, #ff2d95, #00e5ff);
+  --ab-grad-edge: linear-gradient(90deg, transparent, rgba(124, 77, 255, 0.85), rgba(0, 229, 255, 0.85), transparent);
+  --ab-grad-custody: linear-gradient(120deg, #00ff9d, #00e5ff);
+
+  /* shape + rhythm */
+  --ab-r-xl: 26px;
+  --ab-r-lg: 20px;
+  --ab-gap-section: 42px;
+  --ab-gap-block: 16px;
 
   position: relative;
   isolation: isolate;
   overflow-x: clip;
-  color: var(--about-text);
+  color: var(--ab-text);
   font-family: var(--font-display);
-  padding-block: 6px 4px;
+  padding-block: 8px 4px;
 }
 
 .about-page *,
@@ -42,42 +65,45 @@
   box-sizing: border-box;
 }
 
-/* ---------- Ambient light ---------- */
+/* ------------------------------- ambience ------------------------------- */
 /*
- * Fixed to the page, not the viewport: this component unmounts on navigate,
- * and a `position: fixed` glow would outlive nothing but still cost a layer.
- * It is decorative, so it is hidden from assistive tech and from hit-testing.
+ * Two soft brand blobs under the hero, drifting very slowly so the page
+ * feels alive without moving anything the user reads. Decorative only:
+ * no pointer events, hidden from assistive tech.
  */
 .about-aurora {
   position: absolute;
   z-index: 0;
-  inset-block-start: -140px;
-  inset-inline: -60px;
-  height: 460px;
+  inset-block-start: -160px;
+  inset-inline: -70px;
+  height: 500px;
   pointer-events: none;
   background:
-    radial-gradient(50% 46% at 24% 30%, rgba(124, 77, 255, 0.28), transparent 70%),
-    radial-gradient(46% 42% at 78% 22%, rgba(0, 229, 255, 0.18), transparent 70%),
-    radial-gradient(52% 50% at 52% 74%, rgba(255, 45, 149, 0.12), transparent 72%);
-  filter: blur(4px);
+    radial-gradient(46% 42% at 22% 30%, rgba(124, 77, 255, 0.32), transparent 70%),
+    radial-gradient(42% 40% at 80% 20%, rgba(0, 229, 255, 0.22), transparent 70%),
+    radial-gradient(52% 48% at 52% 78%, rgba(255, 45, 149, 0.15), transparent 72%);
+  filter: blur(6px);
+  animation: about-aurora-drift 16s ease-in-out infinite alternate;
 }
 
-/*
- * A faint dot grid under the hero. Masked to fade out before the first
- * section so it reads as texture, never as a table. Pure CSS, no image.
- */
+@keyframes about-aurora-drift {
+  from { transform: translate3d(-14px, -6px, 0) scale(1); }
+  to { transform: translate3d(14px, 10px, 0) scale(1.05); }
+}
+
+/* Faint dot grid under the hero, masked to fade before the first section. */
 .about-grid {
   position: absolute;
   z-index: 0;
   inset-block-start: 0;
   inset-inline: 0;
-  height: 380px;
+  height: 400px;
   pointer-events: none;
   background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.2px);
-  background-size: 22px 22px;
-  -webkit-mask-image: radial-gradient(70% 70% at 50% 24%, #000 20%, transparent 100%);
-  mask-image: radial-gradient(70% 70% at 50% 24%, #000 20%, transparent 100%);
-  opacity: 0.55;
+  background-size: 24px 24px;
+  -webkit-mask-image: radial-gradient(70% 72% at 50% 24%, #000 18%, transparent 100%);
+  mask-image: radial-gradient(70% 72% at 50% 24%, #000 18%, transparent 100%);
+  opacity: 0.5;
 }
 
 .about-shell {
@@ -85,43 +111,45 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--ab-gap-section);
   padding-inline: 16px;
 }
 
-/* =========================== HERO / WHO WE ARE =========================== */
+/* ================================ HERO =================================== */
 .about-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
-  padding-block-start: 10px;
+  gap: 14px;
+  padding-block-start: 14px;
 }
 
 /*
- * The mark: a slowly rotating conic gradient with a dark inner disk, so the
- * ring carries the motion while the glyph itself stays perfectly still.
+ * The mark: a slowly rotating conic ring with a dark inner disk, so the ring
+ * carries the motion while the glyph itself stays perfectly still, and the
+ * whole tile floats on an 8-second cycle.
  */
 .about-mark {
   position: relative;
-  width: 74px;
-  height: 74px;
-  border-radius: 26%;
+  width: 84px;
+  height: 84px;
+  border-radius: 28%;
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--about-void);
+  background: var(--ab-void);
   box-shadow:
-    0 14px 38px rgba(124, 77, 255, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 18px 44px rgba(124, 77, 255, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.07);
+  animation: about-mark-float 8s ease-in-out infinite;
 }
 
 .about-mark::before {
   content: '';
   position: absolute;
   inset: -45%;
-  background: conic-gradient(from 0deg, #00e5ff, #7c4dff, #ff2d95, #00e5ff);
+  background: var(--ab-grad-mark);
   animation: about-mark-spin 16s linear infinite;
 }
 
@@ -129,8 +157,8 @@
   content: '';
   position: absolute;
   inset: 3px;
-  border-radius: 23%;
-  background: var(--about-void);
+  border-radius: 24%;
+  background: var(--ab-void);
 }
 
 .about-mark svg {
@@ -144,20 +172,25 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes about-mark-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
 .about-hero-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  margin-block-start: 2px;
+  gap: 4px;
+  margin-block-start: 4px;
 }
 
 .about-hero-name {
-  font-size: 21px;
+  font-size: 23px;
   font-weight: 800;
-  letter-spacing: 0.005em;
+  letter-spacing: 0.01em;
   line-height: 1.2;
-  background: linear-gradient(96deg, #00e5ff, #a78bfa 48%, #ff2d95);
+  background: var(--ab-grad-text);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -170,11 +203,11 @@
  * which visibly breaks the cursive joining of Persian.
  */
 .about-hero-tag {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--about-dim);
+  color: var(--ab-dim);
 }
 
 [dir='rtl'] .about-hero-tag {
@@ -182,57 +215,167 @@
 }
 
 .about-hero-title {
-  margin: 6px 0 0;
-  font-size: clamp(25px, 7.4vw, 33px);
+  margin: 8px 0 0;
+  font-size: clamp(26px, 7.6vw, 34px);
   font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  background: var(--ab-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .about-hero-summary {
   margin: 0;
   max-width: 48ch;
   font-size: 13.5px;
-  line-height: 1.95;
-  color: var(--about-body);
+  line-height: 2;
+  color: var(--ab-body);
   text-wrap: pretty;
 }
 
-/* ---------- Figures ---------- */
+/* ------------------------------ trust chips ----------------------------- */
+.about-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 7px;
+  padding-inline: 9px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ab-text);
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  box-shadow: var(--ab-shadow-soft);
+  backdrop-filter: var(--ab-blur);
+  -webkit-backdrop-filter: var(--ab-blur);
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.24s ease;
+}
+
+.about-fact:hover {
+  transform: translateY(-2px);
+  border-color: var(--hue-line);
+}
+
+.about-fact-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--hue-soft, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--hue-line, var(--ab-line));
+  /* the glow follows the chip's own hue, not a global purple */
+  box-shadow: 0 0 10px var(--hue-glow, transparent);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hue, var(--ab-violet));
+}
+
+/* ============================== SECTIONS ================================= */
+.about-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ab-gap-block);
+}
+
+/* Marker bar on the inline-start edge + a hairline trailing the title into
+   the margin — an editorial rhythm that keeps ten sections scannable. */
+.about-block-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ab-text);
+}
+
+.about-block-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: var(--ab-grad-btn);
+  box-shadow: 0 0 12px rgba(124, 77, 255, 0.5);
+}
+
+.about-block-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--ab-line-strong), transparent 85%);
+}
+
+/* -------------------------------- figures ------------------------------- */
 /*
  * Three numbers, three cells, always three across: even at 320px each cell
- * still gets ~90px, which is enough for a two-digit figure and a one-word
- * label. `dd` before `dt` in the markup so the number leads visually; the
- * <dl> keeps the pairing for assistive tech either way.
+ * still gets ~90px, enough for a two-digit figure and a one-word label.
  */
 .about-figures {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 2px 0 0;
+  gap: 9px;
+  margin: 4px 0 0;
   padding: 0;
 }
 
 .about-figure {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 13px 8px 11px;
-  border-radius: 16px;
+  gap: 3px;
+  padding: 16px 8px 14px;
+  border-radius: var(--ab-r-lg);
   text-align: center;
-  background: var(--about-card);
-  border: 1px solid var(--about-line);
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  overflow: hidden;
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.26s ease;
+}
+
+/* brand hairline across the top edge of every stat card */
+.about-figure::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 14%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--ab-grad-edge);
+  opacity: 0.8;
+}
+
+.about-figure:hover {
+  transform: translateY(-2px);
+  border-color: var(--ab-line-strong);
 }
 
 .about-figure dd {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  background: linear-gradient(120deg, #00e5ff, #a78bfa 60%, #ff2d95);
+  background: var(--ab-grad-text);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -241,7 +384,7 @@
 /* The zero is the point of the third cell: hold it in the "up" colour so it
    reads as a promise kept, not as a missing value. */
 .about-figure--custody dd {
-  background: linear-gradient(120deg, #00ff9d, #00e5ff);
+  background: var(--ab-grad-custody);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -249,16 +392,16 @@
 .about-figure dt {
   font-size: 10.5px;
   font-weight: 600;
-  line-height: 1.4;
-  color: var(--about-dim);
+  line-height: 1.5;
+  color: var(--ab-dim);
 }
 
-/* ---------- Network chips ---------- */
+/* ------------------------------ network chips --------------------------- */
 .about-networks {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
+  gap: 7px;
+  margin: 2px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -266,182 +409,135 @@
 .about-network {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  gap: 7px;
+  padding: 6px 12px;
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #d7deef;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid var(--about-line);
+  color: var(--ab-body);
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s ease, color 0.22s ease;
+}
+
+.about-network:hover {
+  transform: translateY(-1px);
+  border-color: var(--net, var(--ab-violet));
+  color: var(--ab-text);
 }
 
 .about-network-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--net, #7c4dff);
-  box-shadow: 0 0 8px var(--net, #7c4dff);
+  background: var(--net, var(--ab-violet));
+  box-shadow: 0 0 8px var(--net, var(--ab-violet));
   flex-shrink: 0;
 }
 
-/* ---------- How it works ---------- */
+/* ------------------------------ how it works ---------------------------- */
 /*
- * A vertical rail runs through the step numbers. It is drawn on the <li>
- * (not the list) so it starts at the first number and stops at the last
- * instead of overshooting either end. Logical properties, so the rail
- * mirrors to the right in RTL.
+ * Three glass cards, numbered with a gradient badge that sits INSIDE the
+ * card, linked by a short fading tail below each card's badge. Logical
+ * properties, so the tail mirrors to the right in RTL.
  */
 .about-steps {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-  counter-reset: about-step;
 }
 
 .about-step {
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 12px;
-  padding-block: 0 18px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--ab-r-lg);
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.26s ease, background 0.26s ease;
 }
 
-.about-step:last-child {
-  padding-block-end: 0;
+.about-step:hover {
+  transform: translateY(-2px);
+  background: var(--ab-card-hover);
+  border-color: var(--ab-line-strong);
 }
 
-.about-step::before {
+/* the fading connector between one badge and the next */
+.about-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  inset-inline-start: 16px;
-  inset-block: 34px 0;
+  inset-block-start: calc(100% + 1px);
+  inset-inline-start: 38px;
   width: 2px;
-  background: linear-gradient(180deg, rgba(124, 77, 255, 0.55), rgba(124, 77, 255, 0.08));
-}
-
-.about-step:last-child::before {
-  display: none;
+  height: 11px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, rgba(124, 77, 255, 0.55), transparent);
 }
 
 .about-step-num {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  font-size: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #06070d;
-  background: linear-gradient(135deg, #00e5ff, #7c4dff);
-  box-shadow: 0 8px 20px rgba(124, 77, 255, 0.35);
+  background: linear-gradient(135deg, var(--ab-cyan), var(--ab-violet));
+  box-shadow: 0 8px 22px rgba(124, 77, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* each step gets its own accent so the sequence reads as a journey */
+.about-step:nth-child(2) .about-step-num {
+  background: linear-gradient(135deg, var(--ab-violet), var(--ab-magenta));
+  box-shadow: 0 8px 22px rgba(255, 45, 149, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.about-step:nth-child(3) .about-step-num {
+  background: linear-gradient(135deg, var(--ab-magenta), var(--ab-amber));
+  box-shadow: 0 8px 22px rgba(255, 179, 71, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .about-step-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-block-start: 5px;
+  gap: 5px;
+  padding-block-start: 4px;
 }
 
 .about-step-copy strong {
   font-size: 14px;
   font-weight: 800;
-  line-height: 1.35;
-  color: #fff;
+  line-height: 1.4;
+  color: var(--ab-text);
 }
 
 .about-step-copy p {
   margin: 0;
   font-size: 12.5px;
-  line-height: 1.85;
-  color: var(--about-body);
+  line-height: 1.9;
+  color: var(--ab-body);
   text-wrap: pretty;
 }
 
-/* ---------- Trust facts ---------- */
-.about-facts {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.about-fact {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 13px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #ccd6ec;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--about-line);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.about-fact-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--hue-soft, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--hue-line, rgba(255, 255, 255, 0.12));
-  box-shadow: 0 0 9px rgba(124, 77, 255, 0.45);
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--hue, #7c4dff);
-}
-
-/* ============================== SECTIONS ================================= */
-.about-block {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.about-block-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 16.5px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: #fff;
-}
-
-/* Inline-start marker. Flex respects `dir`, so this lands on the right in
-   Persian without a separate rule. */
-.about-block-title::before {
-  content: '';
-  width: 3px;
-  height: 15px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  background: linear-gradient(180deg, #00e5ff, #7c4dff);
-}
-
-/* ---------- Feature cards ---------- */
+/* ------------------------------ feature cards --------------------------- */
 /*
- * `auto-fit` + `minmax(150px, 1fr)`: two cards side by side only when the
- * column can give each at least 150px, one column on a small phone. No
+ * `auto-fit` + `minmax(160px, 1fr)`: two cards side by side only when the
+ * column can give each at least 160px, one column on a small phone. No
  * breakpoint, so it is correct at every width the shell can ever have.
  */
 .about-features {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
 
@@ -449,21 +545,41 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 13px;
-  border-radius: 18px;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--ab-r-lg);
   text-decoration: none;
   color: inherit;
-  background: var(--about-card);
-  border: 1px solid var(--about-line);
-  transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  overflow: hidden;
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), background 0.26s ease, border-color 0.26s ease, box-shadow 0.26s ease;
+}
+
+/* hue-tinted hairline that only appears on hover */
+.about-feature::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 10%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--hue), transparent);
+  opacity: 0;
+  transition: opacity 0.26s ease;
 }
 
 .about-feature:hover,
 .about-feature:focus-visible {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   background: var(--hue-soft);
   border-color: var(--hue-line);
+  box-shadow: 0 14px 32px -12px var(--hue-glow, transparent);
+}
+
+.about-feature:hover::before,
+.about-feature:focus-visible::before {
+  opacity: 1;
 }
 
 .about-feature:focus-visible {
@@ -472,16 +588,16 @@
 }
 
 .about-feature-icon {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--hue);
-  background: var(--hue-soft);
+  background: linear-gradient(135deg, var(--hue-soft), transparent 72%);
   border: 1px solid var(--hue-line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 16px -6px var(--hue-glow, transparent);
 }
 
 .about-feature-copy {
@@ -495,22 +611,27 @@
 .about-feature-copy strong {
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
-  line-height: 1.3;
+  color: var(--ab-text);
+  line-height: 1.35;
 }
 
 .about-feature-copy small {
   font-size: 11px;
-  line-height: 1.5;
-  color: var(--about-dim);
+  line-height: 1.55;
+  color: var(--ab-dim);
 }
 
 .about-feature-arrow {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  color: var(--about-dim);
-  transition: transform 0.25s ease, color 0.25s ease;
+  color: var(--ab-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), color 0.26s ease, background 0.26s ease, border-color 0.26s ease;
 }
 
 [dir='rtl'] .about-feature-arrow {
@@ -520,6 +641,8 @@
 .about-feature:hover .about-feature-arrow,
 .about-feature:focus-visible .about-feature-arrow {
   color: var(--hue);
+  background: var(--hue-soft);
+  border-color: var(--hue-line);
   transform: translateX(3px);
 }
 
@@ -528,12 +651,7 @@
   transform: scaleX(-1) translateX(3px);
 }
 
-/* ---------- Principles (icon grid) ---------- */
-/*
- * Six cards on a phone: 2 columns × 3 rows. The icons are the load-bearing
- * decoration; the card itself is just a tinted surface, so this grid
- * carries the rhythm that the rest of the page doesn't.
- */
+/* --------------------------- principles (icon grid) --------------------- */
 .about-principles-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -543,51 +661,52 @@
 .about-principle {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
-  padding: 13px 13px 14px;
-  border-radius: 18px;
-  background: var(--about-card);
-  border: 1px solid var(--about-line);
-  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.24s ease, background 0.24s ease;
+  gap: 12px;
+  padding: 15px 14px 16px;
+  border-radius: var(--ab-r-lg);
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.26s ease, background 0.26s ease, box-shadow 0.26s ease;
 }
 
 .about-principle:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: var(--hue-line);
   background: var(--hue-soft);
+  box-shadow: 0 14px 32px -12px var(--hue-glow, transparent);
 }
 
 .about-principle-icon {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 13px;
   color: var(--hue);
-  background: var(--hue-soft);
+  background: linear-gradient(135deg, var(--hue-soft), transparent 72%);
   border: 1px solid var(--hue-line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 16px -6px var(--hue-glow, transparent);
 }
 
 .about-principle-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
 }
 
 .about-principle-copy strong {
   font-size: 12.5px;
   font-weight: 800;
-  color: #fff;
-  line-height: 1.3;
+  color: var(--ab-text);
+  line-height: 1.4;
 }
 
 .about-principle-copy small {
   font-size: 11px;
-  line-height: 1.55;
-  color: var(--about-body);
+  line-height: 1.6;
+  color: var(--ab-body);
 }
 
 @media (max-width: 420px) {
@@ -596,24 +715,25 @@
   }
 }
 
-/* ---------- FAQ ---------- */
+/* --------------------------------- FAQ ----------------------------------- */
 .about-faq {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .about-faq-item {
-  border-radius: 16px;
+  border-radius: var(--ab-r-lg);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid var(--about-line);
-  transition: background 0.22s ease, border-color 0.22s ease;
+  background: var(--ab-card);
+  border: 1px solid var(--ab-line);
+  transition: background 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
 }
 
 .about-faq-item.is-open {
-  background: rgba(124, 77, 255, 0.08);
-  border-color: rgba(124, 77, 255, 0.3);
+  background: rgba(124, 77, 255, 0.075);
+  border-color: rgba(124, 77, 255, 0.38);
+  box-shadow: 0 12px 30px -14px rgba(124, 77, 255, 0.55);
 }
 
 .about-faq-q {
@@ -622,40 +742,43 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 15px;
+  padding: 15px 16px;
   border: 0;
   background: none;
-  color: #eaefff;
+  color: var(--ab-text);
   font-family: inherit;
-  font-size: 12.8px;
-  font-weight: 600;
-  line-height: 1.5;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
   text-align: start;
   cursor: pointer;
 }
 
 .about-faq-q:focus-visible {
-  outline: 2px solid #a78bfa;
+  outline: 2px solid var(--ab-lavender, #a78bfa);
   outline-offset: -2px;
-  border-radius: 16px;
+  border-radius: var(--ab-r-lg);
 }
 
 .about-faq-chevron {
-  width: 25px;
-  height: 25px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  color: var(--about-dim);
-  background: rgba(255, 255, 255, 0.06);
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.25s ease, color 0.25s ease;
+  border-radius: 50%;
+  color: var(--ab-dim);
+  background: var(--ab-card-strong, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--ab-line);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), background 0.26s ease, color 0.26s ease, border-color 0.26s ease;
 }
 
 .about-faq-item.is-open .about-faq-chevron {
   transform: rotate(180deg);
-  color: #c4b5fd;
-  background: rgba(124, 77, 255, 0.18);
+  color: #fff;
+  background: var(--ab-grad-btn);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(124, 77, 255, 0.45);
 }
 
 /*
@@ -667,7 +790,7 @@
 .about-faq-a {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: grid-template-rows 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .about-faq-item.is-open .about-faq-a {
@@ -676,28 +799,40 @@
 
 .about-faq-a > p {
   overflow: hidden;
-  margin: 0;
-  padding-inline: 15px;
-  font-size: 12.3px;
-  line-height: 1.9;
-  color: var(--about-body);
+  margin: 0 16px;
+  padding-inline: 0;
+  font-size: 12.5px;
+  line-height: 1.95;
+  color: var(--ab-body);
   text-wrap: pretty;
 }
 
+/* a fading divider separates the answer from the question when open */
 .about-faq-item.is-open .about-faq-a > p {
-  padding-block-end: 14px;
+  padding-block: 12px 15px;
+  border-block-start: 1px solid var(--ab-line);
 }
 
-/* ---------- Closing CTA ---------- */
+/* ------------------------------ closing CTA ----------------------------- */
+/*
+ * Gradient-stroke panel: `padding-box` carries the surface, `border-box`
+ * carries the brand ramp on a 1px ring — the cleanest way to draw a gradient
+ * border and the surface in one background shorthand.
+ */
 .about-cta {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  padding: 26px 20px;
-  border-radius: 24px;
+  padding: 30px 22px;
+  border-radius: var(--ab-r-xl);
   text-align: center;
-  background: #06070d;
-  border: 1px solid rgba(124, 77, 255, 0.22);
+  background:
+    radial-gradient(72% 92% at 20% 10%, rgba(124, 77, 255, 0.3), transparent 68%) padding-box,
+    radial-gradient(66% 86% at 84% 90%, rgba(0, 229, 255, 0.18), transparent 70%) padding-box,
+    var(--ab-void) padding-box,
+    var(--ab-grad-btn) border-box;
+  border: 1.5px solid transparent;
+  box-shadow: var(--ab-shadow-lift);
 }
 
 .about-cta::before {
@@ -705,40 +840,43 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(70% 90% at 22% 12%, rgba(124, 77, 255, 0.28), transparent 68%),
-    radial-gradient(64% 84% at 82% 88%, rgba(0, 229, 255, 0.16), transparent 70%);
   pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(80% 80% at 50% 0%, #000 10%, transparent 80%);
+  mask-image: radial-gradient(80% 80% at 50% 0%, #000 10%, transparent 80%);
+  opacity: 0.5;
 }
 
 .about-cta-title {
-  margin: 0 0 16px;
-  font-size: 17.5px;
+  margin: 0 0 18px;
+  font-size: 18.5px;
   font-weight: 800;
   letter-spacing: -0.01em;
+  color: var(--ab-text);
 }
 
 .about-cta-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 11px;
 }
 
 .about-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 20px;
-  border-radius: 999px;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 15px;
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, background 0.22s ease, border-color 0.22s ease, filter 0.22s ease;
 }
 
 .about-btn:focus-visible {
@@ -747,52 +885,53 @@
 }
 
 .about-btn:active {
-  transform: translateY(0) scale(0.985);
+  transform: translateY(0) scale(0.97);
 }
 
 .about-btn--primary {
   color: #06070d;
-  background: linear-gradient(135deg, #00e5ff, #7c4dff 55%, #ff2d95);
-  box-shadow: 0 10px 26px rgba(124, 77, 255, 0.34);
+  background: var(--ab-grad-btn);
+  box-shadow: 0 12px 28px rgba(124, 77, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .about-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 15px 32px rgba(124, 77, 255, 0.46);
+  transform: translateY(-2px);
+  filter: brightness(1.07);
+  box-shadow: 0 18px 38px rgba(124, 77, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .about-btn--ghost {
-  color: #e8edff;
-  background: rgba(255, 255, 255, 0.055);
-  border-color: var(--about-line-strong);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  color: var(--ab-text);
+  background: var(--ab-card);
+  border-color: var(--ab-line-strong);
+  backdrop-filter: var(--ab-blur);
+  -webkit-backdrop-filter: var(--ab-blur);
 }
 
 .about-btn--ghost:hover {
-  transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-2px);
+  background: var(--ab-card-hover);
+  border-color: var(--ab-line-strong);
 }
 
-/* ---------- Footer ---------- */
+/* -------------------------------- footer -------------------------------- */
 .about-foot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding-block: 2px 6px;
+  gap: 5px;
+  padding-block: 0 8px;
   text-align: center;
   font-size: 10.5px;
-  line-height: 1.7;
-  color: #5d6883;
+  line-height: 1.8;
+  color: var(--ab-dim);
 }
 
-/* =========================== SCROLL REVEAL =============================== */
+/* ============================= scroll reveal ============================= */
 .about-reveal {
   opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(20px) scale(0.985);
+  transition: opacity 0.65s ease, transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .about-reveal.is-visible {
@@ -800,7 +939,7 @@
   transform: none;
 }
 
-/* ========================= REDUCED MOTION ================================ */
+/* ============================ reduced motion ============================= */
 /*
  * `!important` is doing real work here. The IntersectionObserver is skipped
  * entirely when the user prefers reduced motion, so `.is-visible` is never
@@ -814,7 +953,9 @@
     transition: none;
   }
 
-  .about-mark::before {
+  .about-mark,
+  .about-mark::before,
+  .about-aurora {
     animation: none;
   }
 
@@ -822,73 +963,144 @@
   .about-faq-chevron,
   .about-feature,
   .about-feature-arrow,
+  .about-principle,
+  .about-step,
+  .about-network,
+  .about-fact,
+  .about-figure,
   .about-btn {
     transition-duration: 0.01ms;
   }
 }
 
-/* ============================ LIGHT THEME ================================= */
+/* ============================== LIGHT THEME ============================== */
 /*
- * The screen is dark by design, but half the users run the light theme and a
- * black panel inside a white app reads as a rendering fault. Only the tokens
- * that carry contrast are redefined; the layout is untouched.
+ * The explicit app setting. Every colour on this page reads from these
+ * tokens, so redefining the tokens IS redefining the theme — no element
+ * rule below carries a hardcoded colour that would need overriding here.
  */
 :root[data-theme='light'] .about-page {
-  --about-text: #141a2a;
-  --about-body: #4a5568;
-  --about-dim: #7a849c;
-  --about-card: rgba(15, 23, 42, 0.035);
-  --about-line: rgba(15, 23, 42, 0.09);
-  --about-line-strong: rgba(15, 23, 42, 0.16);
-  --about-void: #ffffff;
+  --ab-text: #0f1830;
+  --ab-body: #47536b;
+  --ab-dim: #6d7890;
+  --ab-card: rgba(255, 255, 255, 0.78);
+  --ab-card-strong: rgba(15, 23, 42, 0.05);
+  --ab-card-hover: rgba(255, 255, 255, 0.94);
+  --ab-line: rgba(15, 23, 42, 0.09);
+  --ab-line-strong: rgba(15, 23, 42, 0.16);
+  --ab-void: #ffffff;
+  --ab-shadow-soft: 0 6px 20px rgba(15, 23, 42, 0.07);
+  --ab-shadow-lift: 0 18px 44px rgba(15, 23, 42, 0.12);
+  /* deeper ramp so the gradient text keeps its contrast on white */
+  --ab-grad-text: linear-gradient(96deg, #0288c9, #6d3df0 46%, #d61c7f);
 }
 
-:root[data-theme='light'] .about-aurora {
-  background:
-    radial-gradient(50% 46% at 24% 30%, rgba(124, 77, 255, 0.16), transparent 70%),
-    radial-gradient(46% 42% at 78% 22%, rgba(0, 190, 255, 0.12), transparent 70%),
-    radial-gradient(52% 50% at 52% 74%, rgba(255, 45, 149, 0.09), transparent 72%);
+/*
+ * Boot fallback: no `data-theme` attribute yet AND the OS prefers light —
+ * the same window index.css covers for the whole app. Scoped INSIDE the
+ * media query on purpose: on a dark-OS phone the first paint must stay dark,
+ * or the page would flash light and flip a frame later.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-page {
+    --ab-text: #0f1830;
+    --ab-body: #47536b;
+    --ab-dim: #6d7890;
+    --ab-card: rgba(255, 255, 255, 0.78);
+    --ab-card-strong: rgba(15, 23, 42, 0.05);
+    --ab-card-hover: rgba(255, 255, 255, 0.94);
+    --ab-line: rgba(15, 23, 42, 0.09);
+    --ab-line-strong: rgba(15, 23, 42, 0.16);
+    --ab-void: #ffffff;
+    --ab-shadow-soft: 0 6px 20px rgba(15, 23, 42, 0.07);
+    --ab-shadow-lift: 0 18px 44px rgba(15, 23, 42, 0.12);
+    --ab-grad-text: linear-gradient(96deg, #0288c9, #6d3df0 46%, #d61c7f);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-aurora,
+  :root[data-theme='light'] .about-aurora {
+    background:
+      radial-gradient(46% 42% at 22% 30%, rgba(124, 77, 255, 0.16), transparent 70%),
+      radial-gradient(42% 40% at 80% 20%, rgba(0, 170, 255, 0.12), transparent 70%),
+      radial-gradient(52% 48% at 52% 78%, rgba(255, 45, 149, 0.09), transparent 72%);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-grid,
+  :root[data-theme='light'] .about-grid {
+    background-image: radial-gradient(rgba(15, 23, 42, 0.2) 1px, transparent 1.2px);
+  }
+
+  /* element-level boot-fallback overrides — same light values, but they may
+     only ever paint on an OS that actually prefers light. */
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-mark {
+    box-shadow: 0 16px 38px rgba(124, 77, 255, 0.24), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-step-num {
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(2, 6, 23, 0.18);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-cta {
+    background:
+      radial-gradient(72% 92% at 20% 10%, rgba(124, 77, 255, 0.12), transparent 68%) padding-box,
+      radial-gradient(66% 86% at 84% 90%, rgba(0, 170, 255, 0.1), transparent 70%) padding-box,
+      #ffffff padding-box,
+      var(--ab-grad-btn) border-box;
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-cta::before {
+    background-image: radial-gradient(rgba(15, 23, 42, 0.14) 1px, transparent 1.2px);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-faq-item.is-open {
+    background: rgba(124, 77, 255, 0.06);
+    border-color: rgba(124, 77, 255, 0.32);
+    box-shadow: 0 12px 28px -14px rgba(124, 77, 255, 0.3);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-btn--ghost {
+    background: rgba(15, 23, 42, 0.045);
+  }
+
+  :root:not([data-theme='dark']):not([data-theme='light']) .about-btn--ghost:hover {
+    background: rgba(15, 23, 42, 0.08);
+  }
 }
 
+/* ---- explicit light: element-level rules the tokens alone can't carry --- */
 :root[data-theme='light'] .about-mark {
-  box-shadow: 0 12px 30px rgba(124, 77, 255, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 16px 38px rgba(124, 77, 255, 0.24), 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
-:root[data-theme='light'] .about-block-title,
-:root[data-theme='light'] .about-cta-title,
-:root[data-theme='light'] .about-faq-q,
-:root[data-theme='light'] .about-feature-copy strong {
-  color: #0f172a;
-}
-
-:root[data-theme='light'] .about-fact {
-  color: #334155;
-  background: rgba(15, 23, 42, 0.04);
+/* number badges read on white with white text */
+:root[data-theme='light'] .about-step-num {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.18);
 }
 
 :root[data-theme='light'] .about-cta {
-  background: #ffffff;
-  border-color: rgba(124, 77, 255, 0.22);
+  background:
+    radial-gradient(72% 92% at 20% 10%, rgba(124, 77, 255, 0.12), transparent 68%) padding-box,
+    radial-gradient(66% 86% at 84% 90%, rgba(0, 170, 255, 0.1), transparent 70%) padding-box,
+    #ffffff padding-box,
+    var(--ab-grad-btn) border-box;
+}
+
+:root[data-theme='light'] .about-cta::before {
+  background-image: radial-gradient(rgba(15, 23, 42, 0.14) 1px, transparent 1.2px);
+}
+
+:root[data-theme='light'] .about-faq-item.is-open {
+  background: rgba(124, 77, 255, 0.06);
+  border-color: rgba(124, 77, 255, 0.32);
+  box-shadow: 0 12px 28px -14px rgba(124, 77, 255, 0.3);
 }
 
 :root[data-theme='light'] .about-btn--ghost {
-  color: #1e293b;
-  background: rgba(15, 23, 42, 0.04);
+  background: rgba(15, 23, 42, 0.045);
 }
 
-:root[data-theme='light'] .about-grid {
-  background-image: radial-gradient(rgba(15, 23, 42, 0.22) 1px, transparent 1.2px);
-}
-
-:root[data-theme='light'] .about-network {
-  color: #1e293b;
-  background: rgba(15, 23, 42, 0.04);
-}
-
-:root[data-theme='light'] .about-step-copy strong {
-  color: #0f172a;
-}
-
-:root[data-theme='light'] .about-principle-copy strong {
-  color: #0f172a;
+:root[data-theme='light'] .about-btn--ghost:hover {
+  background: rgba(15, 23, 42, 0.08);
 }

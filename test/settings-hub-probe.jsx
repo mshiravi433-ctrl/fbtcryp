@@ -32,6 +32,7 @@ import { TelegramProvider } from '../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../src/context/WalletContext.jsx';
 import { HashRouter } from 'react-router-dom';
 import { useSettingsStore } from '../src/store/useSettingsStore.js';
+import { currencyOf } from '../src/lib/currency.js';
 import { getNotifySettings } from '../src/lib/notify.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -187,9 +188,20 @@ export async function run(container) {
   const deadline = qa('.set-opt', document).find((b) => (b.textContent || '').includes('30'));
   await press(deadline);
   t('a deadline chip writes the default deadline', useSettingsStore.getState().defaultDeadlineMin === 30);
-  const eur = qa('.set-opt', document).find((b) => (b.textContent || '').includes('EUR'));
-  await press(eur);
-  t('the currency grid writes the display currency', useSettingsStore.getState().currency === 'EUR');
+  /*
+   * USD-only, by owner decision: the picker grid is gone, so the walk
+   * asserts the ABSENCE instead of pressing a chip — no EUR option exists
+   * to press, the field is a static USD row, and a legacy code persisted by
+   * a picker-era install still resolves back to USD instead of rendering
+   * `undefined` beside every price.
+   */
+  t('the currency picker is gone — no EUR option to press',
+    !qa('.set-opt', document).some((b) => (b.textContent || '').includes('EUR')));
+  const currencyRow = qa('.set-row', document).find((r) => (r.textContent || '').includes(i18n.t('settings.currencySub')));
+  t('the currency row is a static USD label, not a control',
+    Boolean(currencyRow) && (currencyRow.textContent || '').includes('USD') && !currencyRow.closest('button'));
+  t('a legacy picker-era code resolves back to USD',
+    currencyOf('EUR').code === 'USD' && currencyOf('IRT').code === 'USD' && currencyOf(undefined).code === 'USD');
   t('the expert-mode switch is a real role=switch', Boolean(q('[role="switch"]', document)));
 
   /* --------------------------- 4 · networks chain ---------------------- */
