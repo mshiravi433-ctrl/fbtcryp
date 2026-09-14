@@ -10,6 +10,8 @@ import {
   parseAmountWei, sendPayTransfers, formatWei, splitPayWei
 } from '../lib/payLink';
 import { IconCheck } from '../components/Icons';
+import AssetIcon from '../components/AssetIcon';
+import { publicAppUrl } from '../lib/nativeShell';
 import '../styles/pay-gateway.css';
 
 function BrandMark() {
@@ -39,6 +41,37 @@ function BrandMark() {
         <path d="M9.4 17.4v-2.9h2.9" stroke="url(#payBrandGrad)" />
       </svg>
     </div>
+  );
+}
+
+/**
+ * THE LOGO IS A LINK TO OUR SITE.
+ *
+ * «لوگو ما وقتی روش میزنی وارد سایت ما شود.» It used to be a decorative
+ * `<div>`: the one thing on a payment page that looks tappable did nothing,
+ * which on a page a stranger opened from a QR code is also the one place a
+ * payer checks that the merchant is a real business before signing.
+ *
+ * It points at `publicAppUrl('/')` — the canonical https://fbtswap.ir in
+ * production, the preview host when this is running in a sandbox — and NOT at
+ * `window.location`, because inside the Android APK that is `https://localhost`
+ * and a logo that "enters our site" must not open the user's own phone.
+ */
+function BrandLink({ t }) {
+  return (
+    <a
+      className="pay-landing-brand"
+      href={publicAppUrl('/')}
+      aria-label={t('pay.landing.brandLink')}
+      data-testid="pay-landing-brand-link"
+    >
+      <BrandMark />
+      <span className="pay-landing-brand-text">
+        <strong>FBT Swap</strong>
+        <span className="pay-landing-brand-sub">{t('pay.landing.brandSub')}</span>
+      </span>
+      <span className="pay-landing-brand-go" aria-hidden="true">↗</span>
+    </a>
   );
 }
 
@@ -136,11 +169,9 @@ export default function PayLanding() {
 
   if (!payload) {
     return (
-      <div className="pay-landing" style={style}>
-        <div className="pay-landing-brand">
-          <BrandMark />
-          <strong>FBT Swap</strong>
-        </div>
+      <div className="pay-landing pay-landing-modern" style={style}>
+        <div className="pay-landing-aurora" aria-hidden="true" />
+        <BrandLink t={t} />
         <div className="pay-landing-card">
           <p>{t('pay.landing.invalid')}</p>
         </div>
@@ -149,28 +180,79 @@ export default function PayLanding() {
   }
 
   return (
-    <div className="pay-landing" style={style}>
-      <div className="pay-landing-brand">
-        <BrandMark />
-        <strong>FBT Swap</strong>
-      </div>
+    <div className="pay-landing pay-landing-modern" style={style}>
+      {/*
+        A soft accent wash behind the card. Purely decorative (aria-hidden, and
+        the reduced-motion block at the bottom of the stylesheet drops it), but
+        it is what separates "a page someone generated" from "the payment page
+        of a business" — which on a QR-code landing is the whole first
+        impression the payer has of the merchant.
+      */}
+      <div className="pay-landing-aurora" aria-hidden="true" />
+      <BrandLink t={t} />
 
       <div className="pay-landing-card">
-        {payload.name && <div className="pay-landing-name">{payload.name}</div>}
+        {payload.name && (
+          <div className="pay-landing-merchant">
+            <span className="pay-landing-merchant-mark" aria-hidden="true">
+              {(payload.name.trim()[0] || '?').toUpperCase()}
+            </span>
+            <span className="pay-landing-name">{payload.name}</span>
+          </div>
+        )}
         <h1 className="pay-landing-title">{t('pay.landing.title')}</h1>
 
         {done ? (
           <div className="pay-landing-done">
-            <IconCheck width={36} height={36} />
+            <span className="pay-landing-done-ring" aria-hidden="true"><IconCheck width={36} height={36} /></span>
             <h2>{t('pay.landing.done')}</h2>
             {done.hash && chain && (
               <a className="pay-landing-hash mono" href={explorerTx(payload.chainId, done.hash)} target="_blank" rel="noreferrer">
                 {t('pay.landing.hash')}: {done.hash}
               </a>
             )}
+            {/* The payer's next step after paying: where this page came from. */}
+            <a className="pay-landing-btn pay-landing-btn-ghost" href={publicAppUrl('/')}>
+              {t('pay.landing.brandLink')}
+            </a>
           </div>
         ) : (
           <>
+            {/*
+              THE AMOUNT IS THE HERO. A payer opens this page to answer one
+              question — "how much am I about to send, in what, on which
+              network?" — so that answer is the biggest thing on the page,
+              with the network and token marked with their own artwork rather
+              than described in words a first-time payer has to trust.
+            */}
+            <div className="pay-landing-hero">
+              {payload.amount ? (
+                <div className="pay-landing-amount">
+                  {payload.amount}
+                  <span className="pay-landing-amount-sym" dir="ltr">{payload.token}</span>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                  placeholder="0.00"
+                  aria-label={t('pay.landing.amount')}
+                />
+              )}
+              <div className="pay-landing-marks">
+                <span className="pay-landing-mark">
+                  <AssetIcon symbol={payload.token} chain={String(payload.chainId)} size={20} />
+                  <span dir="ltr">{payload.token}</span>
+                </span>
+                <span className="pay-landing-mark">
+                  <AssetIcon chain={String(payload.chainId)} size={20} />
+                  <span>{chain?.name || payload.chainId}</span>
+                </span>
+              </div>
+            </div>
+
             <div className="pay-landing-meta">
               <div>
                 <span>{t('pay.landing.to')}</span>
@@ -180,21 +262,12 @@ export default function PayLanding() {
                 <span>{t('pay.landing.network')}</span>
                 <div>{chain?.name || payload.chainId} · {payload.token}</div>
               </div>
-              <div>
-                <span>{t('pay.landing.amount')}</span>
-                {payload.amount ? (
-                  <div className="pay-landing-amount">{payload.amount} {payload.token}</div>
-                ) : (
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-                    placeholder="0.00"
-                    aria-label={t('pay.landing.amount')}
-                  />
-                )}
-              </div>
+              {!payload.amount && (
+                <div>
+                  <span>{t('pay.landing.amount')}</span>
+                  <div className="mono">{amount || '—'}</div>
+                </div>
+              )}
             </div>
 
             <p className="pay-landing-fee">{t('pay.landing.fee')}</p>

@@ -45,7 +45,11 @@ export function createYieldsApi({ pools = fetchYields, history = fetchYieldHisto
     const freshness = stale ? 'STALE' : 'FRESH';
     return {
       ...value, freshness,
-      ...(value.pools ? { pools: value.pools.map((pool) => ({ ...pool, freshness })) } : {})
+      ...(value.pools ? { pools: value.pools.map((pool) => ({ ...pool, freshness })) } : {}),
+      /* The five venue rows travel with the same feed and carry the same
+         staleness contract: a rate that survived from an older cache must say
+         so on the rail too, not only in the discovery list. */
+      ...(Array.isArray(value.venues) ? { venues: value.venues.map((pool) => ({ ...pool, freshness })) } : {})
     };
   }
 
@@ -71,7 +75,16 @@ export function createYieldsApi({ pools = fetchYields, history = fetchYieldHisto
       if (!isYieldPoolId(id)) return res.status(400).set('Cache-Control', 'no-store').json({ error: 'INVALID_POOL_ID' });
       try {
         const feed = await read('pools', pools);
-        if (!feed.pools.some((pool) => pool.id === id)) {
+        /*
+         * A venue's own row is a legitimate history target even when it never
+         * cleared the discovery floor — that is the entire reason the rail
+         * pins it. Rejecting it here would have left the venue's chart on
+         * POOL_NOT_FOUND while the card next to it quoted the rate, which is
+         * the "3 of 5 live" complaint wearing a different hat.
+         */
+        const known = feed.pools.some((pool) => pool.id === id)
+          || (Array.isArray(feed.venues) && feed.venues.some((pool) => pool.id === id));
+        if (!known) {
           return res.status(404).set('Cache-Control', 'no-store').json({ error: 'POOL_NOT_FOUND' });
         }
         return send(res, await read(`history:${id}`, () => history(id)));

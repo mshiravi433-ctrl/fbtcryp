@@ -1852,5 +1852,30 @@
   "aiGlobal": {
     "title": "全球智能",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "实时",
+    "hello": "你好 — 我是 Intent AI。可以和我聊聊你的钱包、市场，或任何理财目标。",
+    "noReply": "我无法为这个问题准备答案。",
+    "error": "我无法连接到 Intent AI。请重试。",
+    "placeholder": "向 Intent AI 提问…",
+    "send": "发送",
+    "actions": "操作",
+    "manage": "管理",
+    "autosTitle": "进行中的自动化",
+    "suggestions": "相关建议",
+    "drawerNote": "这些按钮只是快捷方式；没有它们助手也能工作。",
+    "solanaConnect": "连接 Solana 钱包",
+    "readyTitle": "准备执行",
+    "working": "处理中…",
+    "confirm": "确认",
+    "edit": "编辑",
+    "automationCreated": "自动化已保存并在调度器中启用。",
+    "goalCreated": "理财目标已创建并连接到 Financial OS。",
+    "executionReady": "准备执行。正在带你前往真实的执行页面以完成钱包签名。",
+    "executionBlocked": "已在钱包中排队 — 仍需你的签名。",
+    "executionFailed": "没有成功。交易未完成。",
+    "connectWallet": "连接钱包"
   }
 }

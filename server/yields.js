@@ -262,6 +262,137 @@ const MIN_APY = 0.5;
  */
 const MAX_EMISSION_SHARE = 0.7;
 
+/**
+ * ─── THE FIVE EXECUTION VENUES ARE PINNED, NOT FILTERED ──────────────────────
+ * Reported as: «در The five venues, side by side فقط ۳ تاش از ۵ تا لایوه» —
+ * the Farm's venue rail advertises five venues and only three of them carried
+ * a live rate.
+ *
+ * The rail was never the problem. It is derived from this feed, and this feed
+ * is a DISCOVERY list with a floor under it: MIN_APY (0.5%), MIN_TVL ($5m) and
+ * a 500-row cap ranked by score. Those gates are right for a list of 4 000
+ * anonymous pools — they are what stops a 90 000% scam token from topping the
+ * screen. They are wrong for the five markets this app can actually sign for,
+ * because a venue that exists, that we transact, and that pays 0.4% this week
+ * is not a discovery candidate; it is a fact about a product we ship.
+ *
+ * The Morpho case is the concrete one, read off the live feed on 2026-09-14
+ * (yields.llama.fi/poolsEnriched?pool=7d33d57d-…): tvlUsd 2 940 374 905,
+ * apy 0, apyMean30d 0, outlier false. A $2.9bn market paying exactly nothing
+ * because nobody is borrowing it — and MIN_APY turned that honest zero into a
+ * missing row, which the rail then rendered as an em-dash. An em-dash reads
+ * as "we could not look", not as "it pays 0%". The zero is the better answer.
+ *
+ * So pinned rows are returned in their OWN field (`venues`) rather than being
+ * pushed into `pools`: the discovery list keeps every one of its gates, and a
+ * 0% market never appears among the "investable" recommendations. The rail
+ * reads `venues` first and falls back to `pools`.
+ *
+ * ─── WHAT IS STILL CHECKED ON A PINNED ROW ──────────────────────────────────
+ * Pinning skips the RANKING gates, not the honesty gates. A pinned row must
+ * still have a real UUID and symbol, must not carry DefiLlama's own outlier
+ * flag, and its rate must be inside 0–100% — a lending market reporting 400%
+ * is a feed glitch, and publishing it under our own brand would be worse than
+ * publishing nothing. Nothing here is ever invented: a pin the feed does not
+ * contain is reported in `venuesMissing`, and the rail shows an em-dash.
+ *
+ * ─── WHY THIS TABLE LIVES HERE AND NOT ONLY IN THE CLIENT ───────────────────
+ * The client's adapter table (components/Farm/FarmPositionHub.jsx) is the
+ * authority on what we can SIGN. This table is only "which feed row describes
+ * that market", and it is kept next to the filters it exempts, because that is
+ * where the exemption has to be justified. test/farm-venue-pins.test.js fails
+ * if the two tables drift apart.
+ */
+export const VENUE_PINS = Object.freeze([
+  Object.freeze({ venue: 'aave-base', project: 'aave-v3', chain: 'Base', symbol: 'USDC' }),
+  Object.freeze({ venue: 'compound-base', project: 'compound-v3', chain: 'Base', symbol: 'USDC' }),
+  Object.freeze({ venue: 'aave-arbitrum', project: 'aave-v3', chain: 'Arbitrum', symbol: 'USDC' }),
+  /* Lido's feed row is the stETH pool itself; the adapter also accepts wstETH,
+     but the rail pins the market the panel stakes into. */
+  Object.freeze({ venue: 'lido', project: 'lido', chain: 'Ethereum', symbol: 'STETH' }),
+  /*
+   * Morpho is matched by UUID and never by symbol: the feed labels this market
+   * "CBBTC" (its collateral) while the asset a depositor supplies is USDC. A
+   * symbol match here would have bound our rate to whatever collateral label
+   * upstream happens to use this month. The UUID is a data identifier only —
+   * the transaction target stays the market id verified on-chain
+   * (lib/defi/morphoBlueBase.js), exactly as docs/defi/morpho-blue-base-market.md
+   * requires.
+   */
+  Object.freeze({ venue: 'morpho-base', project: 'morpho-blue', chain: 'Base', pool: '7d33d57d-36dc-414b-9538-22a223250468' })
+]);
+
+/** Does this upstream row describe this pinned venue? */
+export function matchesVenuePin(pin, p) {
+  if (!pin || !p) return false;
+  if (String(p.project ?? '').toLowerCase() !== pin.project.toLowerCase()) return false;
+  if (String(p.chain ?? '').toLowerCase() !== pin.chain.toLowerCase()) return false;
+  if (pin.pool) return String(p.pool ?? '') === pin.pool;
+  return String(p.symbol ?? '').toUpperCase().trim() === pin.symbol.toUpperCase();
+}
+
+/**
+ * The honesty gates that survive pinning. Deliberately NOT isEligible(): that
+ * function's job is to rank a stranger's pool, and MIN_APY/MIN_TVL/allow-list
+ * ranking have no business deciding whether we can quote our own venue.
+ */
+export function isPinnableVenueRow(p) {
+  if (!p || typeof p !== 'object') return false;
+  if (!isYieldPoolIdLike(p.pool)) return false;
+  if (typeof p.symbol !== 'string' || !p.symbol.trim() || p.symbol.length > 120) return false;
+  if (p.outlier === true) return false;
+  const apy = metric(p.apy);
+  /* A pinned market may honestly pay 0 — that is the whole point of pinning.
+     It may not pay 400%: that is a broken observation, not a yield. */
+  if (apy == null || apy < 0 || apy > 100) return false;
+  const tvl = metric(p.tvlUsd);
+  return tvl != null && tvl >= 0;
+}
+
+/** Same UUID shape as `isYieldPoolId`, hoisted above its declaration. */
+const isYieldPoolIdLike = (id) => typeof id === 'string'
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+/**
+ * Pull the five venue rows out of the raw feed, whether or not they cleared
+ * the discovery gates. Returns `{ venues, missing }` — `missing` is the list
+ * of pin ids the feed did not contain, so an empty rail can be explained
+ * instead of guessed at.
+ */
+export function extractVenueRows(rows, { updatedAt = new Date().toISOString() } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const venues = [];
+  const missing = [];
+  for (const pin of VENUE_PINS) {
+    /* Deterministic pick when a protocol lists two rows for one market (Lido
+       has stETH on several chains, Aave has several USDC markets): the pin
+       names chain + symbol, and among those the deepest TVL is the market a
+       person would actually be pointed at. Ties break on the UUID so the same
+       feed always produces the same row. */
+    const candidates = list
+      .filter((p) => matchesVenuePin(pin, p) && isPinnableVenueRow(p))
+      .sort((a, b) => (Number(b.tvlUsd) || 0) - (Number(a.tvlUsd) || 0) || String(a.pool).localeCompare(String(b.pool)));
+    const row = candidates[0];
+    if (!row) {
+      missing.push(pin.venue);
+      continue;
+    }
+    venues.push({
+      ...normalizePool(row),
+      venue: pin.venue,
+      pinned: true,
+      /* Set when the row was one the discovery list would have dropped, so
+         the client (and anyone reading the JSON) can see the exemption
+         happened rather than trusting that it did not. */
+      belowDiscoveryFloor: !isEligible(row),
+      source: 'defillama',
+      updatedAt,
+      freshness: 'FRESH'
+    });
+  }
+  return { venues, missing };
+}
+
 async function fetchJson(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -438,8 +569,17 @@ export async function fetchYields() {
     .slice(0, 500)
     .map((pool) => ({ ...pool, source: 'defillama', updatedAt, freshness: 'FRESH' }));
 
+  /*
+   * The five execution venues, resolved against the SAME raw feed in the same
+   * pass — never a second request, and never from the ranked slice, because
+   * the ranking is exactly what a low-rate venue must not depend on.
+   */
+  const { venues, missing } = extractVenueRows(rows, { updatedAt });
+
   return {
     pools: ranked,
+    venues,
+    venuesMissing: missing,
     /*
      * Reported so the UI can show how many pools survived filtering. That
      * single line does more to explain what this screen is than any amount of

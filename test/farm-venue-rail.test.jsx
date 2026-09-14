@@ -79,6 +79,10 @@ vi.mock('framer-motion', () => {
 import Farm from '../src/pages/Farm';
 import { FARM_VENUES, venuePosition } from '../src/components/Farm/VenueRail';
 import { FARM_EXECUTION_ADAPTERS } from '../src/components/Farm/FarmPositionHub';
+/* The server half of the same five venues: the pin table and the extractor
+   that resolves it against the raw upstream feed. Imported here so the rail
+   test drives the REAL pinned rows rather than a hand-written copy of them. */
+import { VENUE_PINS, extractVenueRows } from '../server/yields.js';
 
 const base = { apyBase: 5, apyReward: 0, apr: null, tvlUsd: 500_000_000, stablecoin: true, ilRisk: false, risk: 'low', exposure: 'single', source: 'defillama' };
 /* A UUID id on purpose: getYieldHistory() refuses anything else, and a
@@ -88,8 +92,26 @@ const lidoRow = { ...base, id: 'lido-row', project: 'lido', chain: 'Ethereum', s
 const highRow = { ...base, id: 'high-row', project: 'uniswap-v3', chain: 'Base', symbol: 'USDC-WETH', apy: 22, risk: 'high', ilRisk: true, exposure: 'multi' };
 const lowRow = { ...base, id: 'low-row', project: 'morpho-blue', chain: 'Base', symbol: 'DAI', apy: 1.4, stablecoin: true };
 
+/*
+ * The RAW upstream shape (DefiLlama's own field names: `pool`, `ilRisk: 'no'`,
+ * string symbols) for the five pinned venues — fed through the server's real
+ * extractor below. Two of the five deliberately sit under the discovery floor:
+ * Compound at 0.3% (MIN_APY is 0.5%) and the pinned Morpho market at exactly
+ * 0%, which is the rate that market reported live on 2026-09-14 with $2.94bn
+ * of TVL. Those two are the «3 از 5» the rail used to print.
+ */
+const RAW_VENUE_ROWS = [
+  { pool: 'aaaaaaaa-0000-4000-8000-000000000001', project: 'aave-v3', chain: 'Base', symbol: 'USDC', apy: 4.2, apyBase: 4.2, apyReward: 0, tvlUsd: 60_000_000, stablecoin: true, ilRisk: 'no', exposure: 'single' },
+  { pool: 'aaaaaaaa-0000-4000-8000-000000000002', project: 'compound-v3', chain: 'Base', symbol: 'USDC', apy: 0.3, apyBase: 0.3, apyReward: 0, tvlUsd: 42_000_000, stablecoin: true, ilRisk: 'no', exposure: 'single' },
+  { pool: 'aaaaaaaa-0000-4000-8000-000000000003', project: 'aave-v3', chain: 'Arbitrum', symbol: 'USDC', apy: 5.1, apyBase: 5.1, apyReward: 0, tvlUsd: 88_000_000, stablecoin: true, ilRisk: 'no', exposure: 'single' },
+  { pool: 'aaaaaaaa-0000-4000-8000-000000000004', project: 'lido', chain: 'Ethereum', symbol: 'STETH', apy: 3.1, apyBase: 3.1, apyReward: 0, tvlUsd: 9_000_000_000, stablecoin: false, ilRisk: 'no', exposure: 'single' },
+  { pool: '7d33d57d-36dc-414b-9538-22a223250468', project: 'morpho-blue', chain: 'Base', symbol: 'CBBTC', apy: 0, apyBase: 0, apyReward: 0, apyMean30d: 0, tvlUsd: 2_940_374_905, stablecoin: false, ilRisk: 'no', exposure: 'single' }
+];
+
 const json = (data) => new Response(JSON.stringify(data));
-const feed = (pools) => ({ pools, at: Date.now(), freshness: 'FRESH', source: 'defillama', considered: pools.length });
+const feed = (pools, venues = []) => ({
+  pools, venues, venuesMissing: [], at: Date.now(), freshness: 'FRESH', source: 'defillama', considered: pools.length
+});
 const history = (pool) => ({
   pool,
   points: [
@@ -222,5 +244,76 @@ describe('the venue rail at the top of Farm', () => {
     const cta = await screen.findByText(t('farm.venue.executeCta'));
     fireEvent.click(cta);
     await waitFor(() => expect(container.querySelector('[data-testid="farm-position-hub"]')).toBeTruthy());
+  });
+
+  it('the server pins exactly the venues this rail renders', () => {
+    /*
+     * Two tables describe the same five markets: the client's
+     * FARM_EXECUTION_ADAPTERS (what we can SIGN) and the server's VENUE_PINS
+     * (which feed row describes it). They live in different processes, so the
+     * only thing keeping them honest is this test: a pin that drifts means the
+     * rail shows an em-dash for a venue the hub happily transacts — the exact
+     * «3 از 5 زنده» bug, reintroduced by an edit to one file.
+     */
+    expect(VENUE_PINS.map((p) => p.venue)).toEqual(FARM_EXECUTION_ADAPTERS.map((a) => a.id));
+    for (const pin of VENUE_PINS) {
+      const descriptor = FARM_EXECUTION_ADAPTERS.find((a) => a.id === pin.venue).descriptor;
+      expect(String(descriptor.project).toLowerCase()).toBe(pin.project.toLowerCase());
+      expect(String(descriptor.chain).toLowerCase()).toBe(pin.chain.toLowerCase());
+      if (!pin.pool) expect(String(descriptor.symbol).toLowerCase()).toBe(pin.symbol.toLowerCase());
+    }
+    // Morpho is matched by UUID, never by the collateral symbol upstream uses.
+    expect(VENUE_PINS.find((p) => p.venue === 'morpho-base').pool)
+      .toBe(FARM_EXECUTION_ADAPTERS.find((a) => a.id === 'morpho-base').descriptor.pool);
+  });
+
+  it('reads 5 of 5 live when the server pins the venues — including an honest 0%', async () => {
+    /*
+     * THE REPORTED BUG, end to end. The discovery list carries only what
+     * cleared its floor; the five venue rows arrive in `venues`, resolved by
+     * the REAL server extractor from the raw upstream shape. Compound sits at
+     * 0.3% (under MIN_APY) and the pinned Morpho market reports the rate it
+     * actually had on 2026-09-14 — a $2.9bn market paying exactly 0%. Neither
+     * may become an em-dash, and neither may be invented.
+     */
+    const { venues } = extractVenueRows(RAW_VENUE_ROWS);
+    expect(venues).toHaveLength(5);
+    fetch.mockImplementation(async (url) => {
+      const href = String(url);
+      if (href.endsWith('/history')) return json(history(aaveRow.id));
+      return json(feed([aaveRow, lidoRow, highRow, lowRow], venues));
+    });
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.farm-venue-rail')).toBeTruthy());
+    expect(container.querySelector('.farm-venue-box-pill').textContent)
+      .toBe(t('farm.venue.liveCount', { count: 5, total: 5 }));
+    // Every card names its own number — no em-dash left on the rail.
+    for (const venue of FARM_VENUES) {
+      const card = screen.getByTestId(`farm-venue-card-${venue.id}`);
+      expect(card.querySelector('.farm-venue-card-apy').textContent).not.toBe('—');
+    }
+    // …and the honest zero is rendered as a rate, not as missing data.
+    const morpho = screen.getByTestId('farm-venue-card-morpho-base');
+    expect(morpho.querySelector('.farm-venue-card-apy').textContent).toBe('0%');
+    const compound = screen.getByTestId('farm-venue-card-compound-base');
+    expect(compound.querySelector('.farm-venue-card-apy').textContent).toBe('0.3%');
+  });
+
+  it('still says how many are live when the feed only returned some venues', async () => {
+    /* The honest middle state: three venues quoted, two without a row. The
+       count must not be dressed up to five, and the missing two must stay
+       em-dashes rather than borrow a neighbour's rate. */
+    const { venues } = extractVenueRows(RAW_VENUE_ROWS.slice(0, 3));
+    fetch.mockImplementation(async (url) => {
+      const href = String(url);
+      if (href.endsWith('/history')) return json(history(aaveRow.id));
+      return json(feed([aaveRow, lidoRow, highRow, lowRow], venues));
+    });
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.farm-venue-rail')).toBeTruthy());
+    expect(container.querySelector('.farm-venue-box-pill').textContent)
+      .toBe(t('farm.venue.liveCount', { count: 4, total: 5 }));
+    expect(screen.getByTestId('farm-venue-card-morpho-base')
+      .querySelector('.farm-venue-card-apy').textContent).toBe('—');
   });
 });

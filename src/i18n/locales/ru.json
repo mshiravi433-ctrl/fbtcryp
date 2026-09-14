@@ -1863,5 +1863,30 @@
   "aiGlobal": {
     "title": "Глобальный интеллект",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "Онлайн",
+    "hello": "Привет — я Intent AI. Расскажите о своём кошельке, рынке или любой финансовой цели.",
+    "noReply": "Я не смог подготовить ответ на это.",
+    "error": "Не удалось связаться с Intent AI. Попробуйте ещё раз.",
+    "placeholder": "Спросите Intent AI…",
+    "send": "Отправить",
+    "actions": "Действия",
+    "manage": "Управление",
+    "autosTitle": "АКТИВНЫЕ АВТОМАТИЗАЦИИ",
+    "suggestions": "Похожие предложения",
+    "drawerNote": "Эти кнопки — только ярлыки; ассистент работает и без них.",
+    "solanaConnect": "Подключить кошелёк Solana",
+    "readyTitle": "Готово к выполнению",
+    "working": "Выполняется…",
+    "confirm": "Подтвердить",
+    "edit": "Изменить",
+    "automationCreated": "Автоматизация сохранена и активна в планировщике.",
+    "goalCreated": "Финансовая цель создана и подключена к Financial OS.",
+    "executionReady": "Готово к выполнению. Открываю экран реального исполнения для подписи в кошельке.",
+    "executionBlocked": "Запрос в очереди в кошельке — всё ещё нужна ваша подпись.",
+    "executionFailed": "Не прошло. Транзакция не была завершена.",
+    "connectWallet": "Подключить кошелёк"
   }
 }

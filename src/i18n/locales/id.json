@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "Intelijensi global",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "Langsung",
+    "hello": "Halo — saya Intent AI. Bicarakan dompet Anda, pasar, atau tujuan keuangan apa pun dengan saya.",
+    "noReply": "Saya tidak bisa menyiapkan jawaban untuk itu.",
+    "error": "Saya tidak dapat menghubungi Intent AI. Coba lagi.",
+    "placeholder": "Tanya Intent AI…",
+    "send": "Kirim",
+    "actions": "Tindakan",
+    "manage": "Kelola",
+    "autosTitle": "OTOMASI AKTIF",
+    "suggestions": "Saran terkait",
+    "drawerNote": "Tombol-tombol ini hanya pintasan; asisten tetap bekerja tanpanya.",
+    "solanaConnect": "Hubungkan dompet Solana",
+    "readyTitle": "Siap dieksekusi",
+    "working": "Sedang bekerja…",
+    "confirm": "Konfirmasi",
+    "edit": "Ubah",
+    "automationCreated": "Otomasi tersimpan dan aktif di penjadwal.",
+    "goalCreated": "Tujuan keuangan dibuat dan terhubung ke Financial OS.",
+    "executionReady": "Siap dieksekusi. Saya antar ke layar eksekusi asli untuk tanda tangan dompet.",
+    "executionBlocked": "Antre di Dompet — tanda tangan Anda masih diperlukan.",
+    "executionFailed": "Tidak berhasil. Transaksi tidak selesai.",
+    "connectWallet": "Hubungkan dompet"
   }
 }
