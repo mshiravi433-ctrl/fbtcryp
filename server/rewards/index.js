@@ -41,7 +41,8 @@ export const REWARDS_LIMITATIONS = Object.freeze([
   'Points are a reputation score on the FBT ledger — not a token balance, not money, not withdrawable.',
   'FBT is not an issued token; on-chain FBT balance, price and markets do not exist yet (FBT_MARKET = not_launched).',
   'Claim endpoints issue and simulate nonces only; broadcasting requires a deployed reward distributor contract (env FBT_REWARDS_DISTRIBUTOR_*).',
-  'Ledger durability equals the existing KV store: durable on Vercel Blob when configured, per-instance otherwise.',
+  'Ledger durability equals the existing KV store: durable on Upstash Redis or Vercel Blob when configured, per-instance otherwise.',
+  'Idempotency and the ledger read-modify-write are atomic on Upstash Redis (meta.atomic = upstash-redis). Without Redis they fall back to a single-process lock, which does not protect across instances.',
   'Wallet-controlled funds never touch this API: no private key, no custody, no broadcast.'
 ]);
 
@@ -52,6 +53,9 @@ const io = engine.ioDefault(kv);
 const meta = () => ({
   schema: REWARDS_SCHEMA,
   durable: kv.durable(),
+  /* Which guarantee is actually live right now. `process-lock` is honest about
+     being weaker: it serialises within one instance only. */
+  atomic: kv.atomicBackend(),
   tables: [...kv.TABLES],
   limitations: [...REWARDS_LIMITATIONS]
 });
@@ -113,7 +117,9 @@ export function rewardsRouter() {
     const raw = Array.isArray(req.body?.events) ? req.body.events.slice(0, 25) : [];
     if (raw.length === 0) return error(res, 'EVENTS_REQUIRED');
 
-    /* one account at a time: serialize read-modify-write per owner in-process */
+    /* One account at a time: the engine takes a short lease on the ledger so
+       two serverless instances cannot read the same counter, each credit their
+       own event, and have the last write erase the other's points. */
     const out = await engine.ingestEvents({
       owner: who.owner,
       events: raw,
@@ -124,6 +130,14 @@ export function rewardsRouter() {
         onReferralOpportunity: (ctx) => engine.referralOpportunity({ ...ctx, io })
       }
     });
+
+    /* The lease was contended and nothing was credited. Say so with a retry
+       hint instead of reporting success for events that never landed — the
+       client queue already retries, and silence here would lose points. */
+    if (out.busy) {
+      res.set('retry-after', '2');
+      return error(res, 'LEDGER_BUSY', 503);
+    }
 
     res.set('cache-control', 'private, no-store');
     return res.json({

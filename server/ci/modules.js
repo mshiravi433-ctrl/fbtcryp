@@ -28,7 +28,7 @@ import {
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { defineModule } from '../../src/lib/central/registry.js';
 import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
-import { storeGet, storeSet, storeDurable } from '../store.js';
+import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -623,7 +623,7 @@ export function createModules(ctx = {}) {
       const list = Array.isArray(rows) ? rows : [];
       if (list.length >= MAX_ALERTS) return unavailable('TOO_MANY_ALERTS');
       const record = { ...condition.value, id: `alert_${randomUUID().slice(0, 8)}`, owner: hash(owner), createdAt: Date.now(), active: true };
-      await storeSet(alertKey(owner), [record, ...list].slice(0, MAX_ALERTS));
+      await storeSet(alertKey(owner), [record, ...list].slice(0, MAX_ALERTS), EPHEMERAL_TTL_MS);
       return ok('EXECUTED', { alert: record, durable: storeDurable() }, { source: 'alerts-store' });
     },
     verify: async (input = {}) => {

@@ -19,7 +19,7 @@
  */
 import { CI_SCHEMA, STATE_SECTION_IDS } from '../../src/lib/central/schema.js';
 import { createSystemState, writeSection, markSectionFailure, freshness, stateSnapshot } from '../../src/lib/central/state.js';
-import { storeGet, storeSet, storeDurable } from '../store.js';
+import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createHash } from 'node:crypto';
 
 export const STATE_STORE_SCHEMA = 'fbt.central-state-store.v1';
@@ -100,7 +100,7 @@ export function createCentralStateStore({ log = () => {} } = {}) {
     if (Date.now() - last < WRITE_THROTTLE_MS) return { persisted: false, reason: 'THROTTLED' };
     lastWrite.set(owner, Date.now());
     try {
-      await storeSet(KEY(owner), { schema: STATE_STORE_SCHEMA, brain: CI_SCHEMA, owner: null, revision: state.revision, savedAt: Date.now(), sections: compactSections(state) });
+      await storeSet(KEY(owner), { schema: STATE_STORE_SCHEMA, brain: CI_SCHEMA, owner: null, revision: state.revision, savedAt: Date.now(), sections: compactSections(state) }, EPHEMERAL_TTL_MS);
       return { persisted: true };
     } catch (error) {
       log('persist-failed', String(error?.message || error).slice(0, 120));

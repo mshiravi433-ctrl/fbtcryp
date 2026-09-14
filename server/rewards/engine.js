@@ -18,7 +18,8 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   ACTIONS, LEVELS, MISSIONS, ACHIEVEMENTS, REFERRAL, CLAIM, FBT,
-  canonicalAction, levelFor
+  SEEN_CAP, DAYS_RETAINED,
+  canonicalAction, levelFor, fingerprintKey
 } from './config.js';
 
 /* -------------------------------------------------------------------------- */
@@ -220,12 +221,38 @@ async function verifyEvidence(ev, verify) {
  * return `credited: true` with the points that landed.
  */
 export async function ingestEvents({ owner, events, io, now = Date.now(), verify = null, opts = {} }) {
+  /* Serialise this account's read-modify-write.
+     Two serverless instances can otherwise read the same ledger, each credit
+     their own event, and have the last write silently erase the other's
+     points — a lost credit on a ledger people are meant to redeem one day. */
+  const canLease = typeof io.acquireLedgerLease === 'function';
+  const lease = canLease ? await io.acquireLedgerLease(owner) : null;
+  if (canLease && !lease) {
+    return {
+      results: (events || []).map((raw) => ({
+        ok: false, code: 'LEDGER_BUSY', action: raw?.action ?? null
+      })),
+      ledger: null,
+      busy: true
+    };
+  }
+  try {
+    return await runIngest({ owner, events, io, now, verify, opts });
+  } finally {
+    if (lease && typeof io.releaseLedgerLease === 'function') {
+      await io.releaseLedgerLease(owner, lease).catch(() => {});
+    }
+  }
+}
+
+async function runIngest({ owner, events, io, now = Date.now(), verify = null, opts = {} }) {
   const results = [];
-  let ledger = await io.getLedger(owner);
+  /* Read past the warm in-process cache: a lease is worthless if the holder
+     still reads a value this process cached before another instance wrote. */
+  let ledger = await (io.getLedgerFresh ? io.getLedgerFresh(owner) : io.getLedger(owner));
   let mutated = false;
   const day = dayKey(now);
-  const seen = await io.getSeen(owner);
-  const freshSeen = [];
+  const seenWriter = makeSeenWriter(io, owner);
 
   for (const raw of events || []) {
     const v = validateEvent(raw);
@@ -236,11 +263,7 @@ export async function ingestEvents({ owner, events, io, now = Date.now(), verify
     let ev = v.clean;
     ev = ensureEventId(owner, ev);
 
-    const fingerprint = eventFingerprint(owner, ev);
-    if (seen.some((r) => r.k === fingerprint)) {
-      results.push({ ok: true, duplicate: true, action: ev.action, eventId: ev.id });
-      continue;
-    }
+    const fpKey = fingerprintKey(eventFingerprint(owner, ev));
 
     /* daily cap — counted on the LOCAL DAY THE ACTIVITY HAPPENED, so a late
        replay of an old event can never fill today's budget */
@@ -263,8 +286,25 @@ export async function ingestEvents({ owner, events, io, now = Date.now(), verify
       continue;
     }
 
-    /* commit */
     const at = Number.isFinite(ev.at) ? ev.at : now;
+
+    /* Claim the idempotency key here: AFTER verification, so an event the
+       chain could not confirm stays claimable and the client can replay it —
+       but BEFORE crediting, so a replay can never pay twice. */
+    const claimed = await seenWriter.claim(fpKey, at);
+    if (claimed === false) {
+      results.push({ ok: true, duplicate: true, action: ev.action, eventId: ev.id });
+      continue;
+    }
+    if (claimed === null) {
+      /* The store could not answer. Crediting blind is the one failure that
+         permanently inflates the ledger, so this fails closed and lets the
+         client's queue retry instead. */
+      results.push({ ok: false, code: 'SEEN_STORE_UNAVAILABLE', action: ev.action, eventId: ev.id });
+      continue;
+    }
+
+    /* commit */
     if (!ledger.created) ledger.created = at;
     ledger.updated = at;
     ledger.points += def.points;
@@ -313,7 +353,6 @@ export async function ingestEvents({ owner, events, io, now = Date.now(), verify
       referralResult = await opts.onReferralOpportunity({ owner, ev, ledger, at, day });
     }
 
-    freshSeen.push({ k: fingerprint, at });
     mutated = true;
     results.push({ ok: true, credited: true, action: ev.action, eventId: ev.id, pts: def.points, missionBonuses, referral: referralResult });
   }
@@ -323,17 +362,54 @@ export async function ingestEvents({ owner, events, io, now = Date.now(), verify
     const dayKeys = Object.keys(ledger.days || {}).sort();
     for (const k of dayKeys.slice(0, -DAYS_RETAINED)) delete ledger.days[k];
     await io.saveLedger(owner, ledger);
-    const combined = [...seen, ...freshSeen];
-    if (combined.length) {
-      combined.sort((a, b) => (a.at || 0) - (b.at || 0));
-      await io.saveSeen(owner, combined.slice(-SEEN_CAP));
-    }
+    await seenWriter.flush();
   }
   return { results, ledger };
 }
 
-const DAYS_RETAINED = 45;
-const SEEN_CAP = 300;
+
+
+/**
+ * Claim idempotency keys for one ingest call.
+ *
+ * An atomic backend claims each fingerprint in a single command, which is both
+ * safer and cheaper than loading the whole set, checking it and writing it
+ * back — and it removes the read-modify-write window in which two instances
+ * could both decide an event was new.
+ *
+ * A backend without one keeps the array, but buffered: one read and one write
+ * per batch rather than per event. `claim` returns true (credit it), false
+ * (duplicate) or null (the store could not answer — never credit).
+ */
+function makeSeenWriter(io, owner) {
+  const atomicClaim = typeof io.seenAddAtomic === 'function' ? io.seenAddAtomic : null;
+  let atomicLive = Boolean(atomicClaim);
+  let rows = null;
+  let dirty = false;
+
+  return {
+    claim: async (member, at) => {
+      if (atomicLive) {
+        const verdict = await atomicClaim(owner, member, at);
+        if (verdict === 1) return true;
+        if (verdict === 0) return false;
+        if (verdict === null) return null;
+        atomicLive = false; // undefined → this backend cannot answer atomically
+      }
+      if (!rows) rows = await io.getSeen(owner);
+      if (rows.some((r) => r.k === member)) return false;
+      rows.push({ k: member, at });
+      dirty = true;
+      return true;
+    },
+    flush: async () => {
+      if (!dirty) return;
+      rows.sort((a, b) => (a.at || 0) - (b.at || 0));
+      await io.saveSeen(owner, rows.slice(-SEEN_CAP));
+      dirty = false;
+    }
+  };
+}
 
 function recordCredit(ledger, entry) {
   const rows = ledger.history || [];
@@ -613,16 +689,32 @@ function safeEqualHex(a, b) {
 /* plumbing                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export const ioDefault = (kv) => ({
-  getLedger: (o) => kv.getLedger(o),
-  saveLedger: (o, l) => kv.saveLedger(o, l),
-  getSeen: (o) => kv.getSeen(o),
-  saveSeen: (o, s) => kv.saveSeen(o, s),
-  getRefcode: (c) => kv.getRefcode(c),
-  bindRefcode: (x) => kv.bindRefcode(x),
-  getRefbind: (w) => kv.getRefbind(w),
-  getRefattr: (c) => kv.getRefattr(c),
-  addRefattr: (c, w, at) => kv.addRefattr(c, w, at),
-  getPendingNonces: (o) => kv.getPendingNonces ? kv.getPendingNonces(o) : Promise.resolve([]),
-  savePendingNonces: (o, n) => kv.savePendingNonces ? kv.savePendingNonces(o, n) : Promise.resolve(n)
-});
+/**
+ * Adapt a store onto the engine's `io` surface.
+ *
+ * The four capabilities below are OPTIONAL and only wired through when the
+ * store has them. That is deliberate: the probe's in-memory double implements
+ * just `getLedger/saveLedger/getSeen/saveSeen`, and it must keep working
+ * unchanged, while the real store upgrades itself to atomic claims and leases
+ * the moment Redis is configured.
+ */
+export function ioDefault(kv) {
+  const io = {
+    getLedger: (o) => kv.getLedger(o),
+    saveLedger: (o, l) => kv.saveLedger(o, l),
+    getSeen: (o) => kv.getSeen(o),
+    saveSeen: (o, s) => kv.saveSeen(o, s),
+    getRefcode: (c) => kv.getRefcode(c),
+    bindRefcode: (x) => kv.bindRefcode(x),
+    getRefbind: (w) => kv.getRefbind(w),
+    getRefattr: (c) => kv.getRefattr(c),
+    addRefattr: (c, w, at) => kv.addRefattr(c, w, at),
+    getPendingNonces: (o) => kv.getPendingNonces ? kv.getPendingNonces(o) : Promise.resolve([]),
+    savePendingNonces: (o, n) => kv.savePendingNonces ? kv.savePendingNonces(o, n) : Promise.resolve(n)
+  };
+  if (typeof kv.getLedgerFresh === 'function') io.getLedgerFresh = (o) => kv.getLedgerFresh(o);
+  if (typeof kv.seenAddAtomic === 'function') io.seenAddAtomic = (o, m, at) => kv.seenAddAtomic(o, m, at);
+  if (typeof kv.acquireLedgerLease === 'function') io.acquireLedgerLease = (o) => kv.acquireLedgerLease(o);
+  if (typeof kv.releaseLedgerLease === 'function') io.releaseLedgerLease = (o, t) => kv.releaseLedgerLease(o, t);
+  return io;
+}

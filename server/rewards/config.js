@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * FBT REWARDS — canonical configuration.
  * ---------------------------------------------------------------------------
@@ -31,6 +33,26 @@ export const LEVELS = Object.freeze([
   { id: 'platinum', index: 3, min: 6000 },
   { id: 'diamond', index: 4, min: 15000 }
 ]);
+
+/**
+ * Bounded storage — the caps that keep rewards from growing into a database.
+ * ---------------------------------------------------------------------------
+ * `SEEN_CAP` is the one worth understanding. It is how many event
+ * fingerprints an account keeps, and it is the largest thing rewards stores.
+ *
+ * Redis keeps a sorted set of ≤128 short members in a compact "listpack"
+ * layout; past that it converts to a skip list, where each member costs
+ * several times more bytes. So lowering this cap to 128 or below makes the
+ * set much smaller than the arithmetic suggests — but it also shortens how
+ * long a replay of an old event is still recognised as a duplicate.
+ *
+ * The default keeps the previous behaviour (300) because shortening replay
+ * protection is a product decision, not a storage one. It is env-tunable for
+ * anyone who would rather trade that window for space.
+ */
+export const SEEN_CAP = Number(process.env.REWARDS_SEEN_CAP) || 300;
+export const DAYS_RETAINED = 45;
+export const LEDGER_HISTORY_CAP = 25;
 
 /** An action definition. */
 /**
@@ -236,6 +258,27 @@ export function levelProgress(points, current, next) {
   if (!next) return 1;
   const span = next.min - current.min;
   return span > 0 ? Math.min(1, Math.max(0, (points - current.min) / span)) : 1;
+}
+
+/**
+ * The stored form of an idempotency fingerprint.
+ *
+ * A raw fingerprint is `tx:8453:0x<64 hex>:0x<40 hex>` — 117 characters — and
+ * the seen-set keeps 300 of them. That is ~42 KB of Redis per account for a
+ * value whose only job is to answer "have I seen this before?", which made it
+ * roughly twenty times larger than the ledger it protects.
+ *
+ * Fingerprints are never displayed, so they are hashed to 8 bytes (16 hex
+ * characters) before they are stored: ~42 KB becomes ~4.7 KB. Across 300 keys
+ * the chance of a 64-bit collision is about 2 in a quadrillion — far below the
+ * chance that the same account loses its data to something else entirely.
+ *
+ * This lives in config.js because the engine (which creates the fingerprint)
+ * and the store (which persists it) must agree on it exactly, and config.js is
+ * the one module both already import.
+ */
+export function fingerprintKey(raw) {
+  return createHash('sha256').update(String(raw)).digest('hex').slice(0, 16);
 }
 
 /** FBT tier benefit rows (mirror src/lib/fbt.js FBT_TIERS). */
