@@ -136,8 +136,12 @@ function safeKey(key) {
   return PREFIX + encodeURIComponent(key).replace(/%/g, '_') + '.json';
 }
 
-/** Run one Redis command over Upstash REST without exposing credentials. */
-async function upstashCommand(command) {
+/**
+ * Run one Redis command over Upstash REST without exposing credentials.
+ * Exported so callers can use the atomic primitives Redis provides (ZADD NX,
+ * EVAL, SET NX EX) instead of a read-modify-write that races across instances.
+ */
+export async function upstashCommand(command) {
   if (!upstashConfigured()) return { ok: false, result: null };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);

@@ -61,10 +61,21 @@ export async function storeGetFresh(key, fallback = null) {
   return mem.has(key) ? mem.get(key) : fallback;
 }
 
-export async function storeSet(key, value) {
+/**
+ * Persist one key.
+ *
+ * `ttlMs` defaults to a year, which is right for records that ARE the product
+ * (a points ledger, an order). Callers holding derived or perishable state —
+ * an assistant's memory, a rolling alert list — pass a shorter TTL so a finite
+ * store budget is not spent remembering things nobody will read again.
+ *
+ * The budget matters: Upstash is metered on storage, and the cheapest byte is
+ * the one that expires on its own.
+ */
+export async function storeSet(key, value, ttlMs = YEAR) {
   mem.set(key, value);
   if (blobConfigured()) {
-    const persisted = await blobSet(`kv:${key}`, value, YEAR);
+    const persisted = await blobSet(`kv:${key}`, value, ttlMs);
     // A configured provider is a durability contract, not a best-effort cache.
     // Propagate a failed REST/Blob write so probes cannot report stored:true
     // merely because credentials were present while the provider was paused,
@@ -73,6 +84,9 @@ export async function storeSet(key, value) {
   }
   return value;
 }
+
+/** A sane TTL for derived, re-computable, per-account state. Env-tunable. */
+export const EPHEMERAL_TTL_MS = Number(process.env.STORE_EPHEMERAL_TTL_MS || 30 * 24 * 3600_000);
 
 /* -------------------------------------------------------------------------- */
 /* points were never stored here                                               */

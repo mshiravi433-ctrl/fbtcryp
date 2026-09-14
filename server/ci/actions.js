@@ -31,7 +31,7 @@ import {
   STATE_SECTIONS, round
 } from '../../src/lib/central/schema.js';
 import { claimIdempotency, saveIdempotency } from '../idempotency.js';
-import { storeGet, storeSet, storeDurable } from '../store.js';
+import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 
 export const ACTION_ENGINE_SCHEMA = 'fbt.central-action-engine.v1';
 const MAX_PENDING = 40;
@@ -301,7 +301,7 @@ export function createActionEngine({ modules = {}, events = null, log = () => {}
       if (!storeDurable()) return { mirrored: false, reason: 'NO_DURABLE_STORE' };
       const bucket = prune(owner);
       const rows = [...bucket.pending, ...bucket.recent].slice(0, 20).map(({ input, ...rest }) => ({ ...rest, input: { keys: Object.keys(input || {}) } }));
-      await storeSet(`ci:actions:v1:${owner}`, { at: Date.now(), actions: rows });
+      await storeSet(`ci:actions:v1:${owner}`, { at: Date.now(), actions: rows }, EPHEMERAL_TTL_MS);
       return { mirrored: true, count: rows.length };
     },
     async restoreFromStore(owner) {

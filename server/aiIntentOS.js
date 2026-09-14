@@ -67,7 +67,7 @@ import {
   evaluateAllMonitors,
   monitorEngineStatus
 } from './intentMonitoring.js';
-import { storeGet, storeSet, storeDurable } from './store.js';
+import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from './store.js';
 /* Central Intelligence OS: share one world view between the V1 chat and the
    central brain (wallet/portfolio truth + page awareness, §5/§7). */
 import { ingestClientData as centralIngestClientData, setPage as centralSetPage } from './central/stateStore.js';
@@ -494,7 +494,10 @@ async function appendMemory(owner, payload = {}) {
   for (const field of ['goals', 'preferences', 'activeTasks', 'recentIntents']) {
     if (Array.isArray(next[field])) next[field] = next[field].slice(-MAX_MEMORY);
   }
-  await storeSet(`ai:memory:v1:${owner}`, next);
+  /* An assistant memory is a convenience, not a record: it is per-account and
+     grows with every conversation, so it carries the short TTL rather than
+     occupying metered storage forever. */
+  await storeSet(`ai:memory:v1:${owner}`, next, EPHEMERAL_TTL_MS);
   return next;
 }
 
@@ -690,7 +693,7 @@ async function readPending(owner) {
 }
 
 async function writePending(owner, intent) {
-  await storeSet(`ai:pending:v1:${owner}`, intent || null);
+  await storeSet(`ai:pending:v1:${owner}`, intent || null, EPHEMERAL_TTL_MS);
   return intent;
 }
 
@@ -714,7 +717,7 @@ async function readAutomations(owner) {
 }
 
 async function writeAutomations(owner, rows) {
-  await storeSet(`ai:automations:v1:${owner}`, rows);
+  await storeSet(`ai:automations:v1:${owner}`, rows, EPHEMERAL_TTL_MS);
   return rows;
 }
 
