@@ -43,6 +43,7 @@ import Rewards from '../src/pages/Rewards.jsx';
 import Signals from '../src/pages/Signals.jsx';
 import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
+import Launch from '../src/pages/Launch.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
 import Compare from '../src/pages/Compare.jsx';
 import Shop from '../src/pages/Shop.jsx';
@@ -233,6 +234,17 @@ export async function run(container) {
    */
   await mount('Farm (no network)', <Farm />);
   await mount('CoinDetail (no id)', <CoinDetail />);
+  /*
+   * The launchpad. It was MISSING from this list, and that gap is exactly how
+   * «صفحه لانچ میگه با مشکل برخورد و نمیاره» reached a user: the page read a
+   * `useState` binding from a dependency array declared ~400 lines above the
+   * state, so it threw on every render. The build stayed green, the launch
+   * module probes stayed green, and this suite — the one place that would have
+   * seen it in a second — never mounted the route. `npm run test:launch-page`
+   * (test/launch-crash-hunt-probe.jsx) is the deeper suite: it asserts the
+   * wizard painted AND sweeps malformed /api/launch/config shapes.
+   */
+  await mount('Launch', <Launch />);
   /*
    * Stocks under a dead network. It deliberately has no cached fallback (a
    * stale equity price can be a whole weekend old, and a cached row would not
