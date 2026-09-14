@@ -12,6 +12,73 @@ import { usePoll } from '../hooks/useMarket';
 import { getTrending } from '../lib/api';
 
 /**
+ * Site logo with graceful fallback.
+ *
+ * Upstream: Google's public favicon service, which returns the favicon at
+ * the requested size for any domain. Width 64 so the icon survives retina
+ * without pixelating; `loading=lazy` so the 12+ rows don't fight each other
+ * for bandwidth when the screen first renders.
+ *
+ * Fallback: the first letter of the localised name on the item's chosen
+ * hue. The hue is here, in the data, so the fallback doesn't have to guess
+ * a colour from a URL.
+ *
+ * `onError` flips the flag and the icon disappears — we render the
+ * monogram instead, so a slow/blocked favicon service degrades to "letter
+ * on coloured tile", not to a broken-image icon.
+ */
+function SiteLogo({ item, name }) {
+  const [failed, setFailed] = useState(false);
+  const host = useMemo(() => {
+    try {
+      return new URL(item.url).host.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  }, [item.url]);
+
+  if (failed || !host) {
+    return (
+      <span
+        className="disc-mark disc-mark-fallback"
+        aria-hidden="true"
+        style={{ background: `linear-gradient(135deg, ${item.hue}, color-mix(in srgb, ${item.hue} 70%, #000))`, color: '#fff', boxShadow: `0 6px 14px color-mix(in srgb, ${item.hue} 22%, transparent)`, width: 40, height: 40, borderRadius: 12, fontSize: 16, fontWeight: 800 }}
+      >
+        {String(name || item.id).slice(0, 1).toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="disc-mark"
+      aria-hidden="true"
+      style={{
+        background: `linear-gradient(135deg, ${item.hue}, color-mix(in srgb, ${item.hue} 70%, #000))`,
+        color: '#fff',
+        boxShadow: `0 6px 14px color-mix(in srgb, ${item.hue} 22%, transparent)`,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        overflow: 'hidden'
+      }}
+    >
+      <img
+        src={`https://www.google.com/s2/favicons?sz=64&domain=${host}`}
+        alt=""
+        width={28}
+        height={28}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        style={{ display: 'block' }}
+      />
+    </span>
+  );
+}
+
+/**
  * DISCOVER — curated links, opened in the system browser.
  *
  * ─── WHY THIS IS A LIST AND NOT AN ADDRESS BAR ──────────────────────────────
@@ -227,28 +294,29 @@ export default function Discover({ embedded = false }) {
         <motion.section key={group.cat} variants={stagger} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 8 }}>{t(`discover.cat.${group.cat}`)}</p>
           <div className="disc-grid">
-            {group.items.map((item) => (
-              <motion.button
-                key={item.id}
-                className="disc-card"
-                variants={riseIn}
-                whileTap={{ scale: 0.975 }}
-                onClick={() => go(item)}
-                style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
-              >
-                <span className="disc-mark" aria-hidden="true" style={{ background: `linear-gradient(135deg, \${item.hue}, color-mix(in srgb, \${item.hue} 70%, #000))`, color: '#fff', boxShadow: `0 6px 14px color-mix(in srgb, \${item.hue} 22%, transparent)`, width: 36, height: 36, borderRadius: 11, fontSize: 15 }}>
-                  {t(`discover.site.${item.id}`).slice(0, 1)}
-                </span>
-                <span className="disc-body">
-                  <span className="disc-name">{t(`discover.site.${item.id}`)}</span>
-                  {/* The domain is shown deliberately: it is the only thing
-                      that distinguishes a real site from a lookalike, and a
-                      user who reads it here learns what to check elsewhere. */}
-                  <span className="disc-host mono">{host(item.url)}</span>
-                </span>
-                <span className="disc-go"><IconExternal width={12} height={12} /></span>
-              </motion.button>
-            ))}
+            {group.items.map((item) => {
+              const name = t(`discover.site.${item.id}`);
+              return (
+                <motion.button
+                  key={item.id}
+                  className="disc-card"
+                  variants={riseIn}
+                  whileTap={{ scale: 0.975 }}
+                  onClick={() => go(item)}
+                  style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
+                >
+                  <SiteLogo item={item} name={name} />
+                  <span className="disc-body">
+                    <span className="disc-name">{name}</span>
+                    {/* The domain is shown deliberately: it is the only thing
+                        that distinguishes a real site from a lookalike, and a
+                        user who reads it here learns what to check elsewhere. */}
+                    <span className="disc-host mono">{host(item.url)}</span>
+                  </span>
+                  <span className="disc-go"><IconExternal width={12} height={12} /></span>
+                </motion.button>
+              );
+            })}
           </div>
         </motion.section>
       ))}

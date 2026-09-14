@@ -4955,7 +4955,7 @@ input, select, textarea { font-size: 16px !important; }
    DISCOVER
    ========================================================================== */
 
-.disc-grid { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.disc-grid { display: grid; grid-template-columns: 1fr; gap: 9px; }
 @media (min-width: 420px) { .disc-grid { grid-template-columns: 1fr 1fr; } }
 
 /* Search over the curated list. Deliberately NOT an address bar — see the
@@ -4965,11 +4965,19 @@ input, select, textarea { font-size: 16px !important; }
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 12px;
-  border-radius: 14px;
+  padding: 0 14px;
+  border-radius: 16px;
   border: 1px solid var(--line);
-  background: var(--bg-panel);
+  background: linear-gradient(155deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.022) 48%, rgba(255,255,255,0.04) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   color: var(--text-3);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.disc-search:focus-within {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rgb-1) 14%, transparent), inset 0 1px 0 rgba(255,255,255,0.10);
 }
 
 .disc-search input {
@@ -4978,8 +4986,9 @@ input, select, textarea { font-size: 16px !important; }
   border: none;
   background: none;
   color: var(--text-1);
-  padding: 12px 0;
+  padding: 13px 0;
   font-family: inherit;
+  font-size: 13.5px;
   outline: none;
 }
 
@@ -4997,42 +5006,77 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 .disc-card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   padding: 13px 14px;
   border-radius: 16px;
-  border: none;
-  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.07);
+  background: linear-gradient(155deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.022) 48%, rgba(255,255,255,0.04) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   color: var(--text-1);
   font-family: inherit;
   cursor: pointer;
   text-align: start;
-  transition: border-color 0.2s, transform 0.16s, box-shadow 0.2s;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+  overflow: hidden;
 }
-.disc-card:hover { border-color: color-mix(in srgb, var(--disc-hue) 55%, transparent); }
-.disc-card:active { transform: scale(0.985); }
+.disc-card::after {
+  /* A 1px coloured rim that brightens on hover. The `--disc-hue` carries the
+     card's accent; the rim follows it. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--disc-hue) 75%, transparent), transparent 60%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.28;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.disc-card:hover {
+  border-color: color-mix(in srgb, var(--disc-hue) 50%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--disc-hue) 18%, transparent), inset 0 1px 0 rgba(255,255,255,0.10);
+}
+.disc-card:hover::after { opacity: 0.72; }
+.disc-card:active { transform: translateY(0) scale(0.985); }
 
 .disc-mark {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: 14px;
-  color: #000;
+  font-size: 16px;
+  color: #fff;
   background: var(--disc-hue);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--disc-hue) 28%, transparent), inset 0 1px 0 rgba(255,255,255,0.35);
+  overflow: hidden;
+}
+.disc-mark img {
+  width: 26px;
+  height: 26px;
+  display: block;
+  border-radius: 6px;
+}
+.disc-mark-fallback {
+  letter-spacing: 0.5px;
 }
 :root[data-theme='light'] .disc-mark { color: #fff; }
 
 .disc-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.disc-name { font-size: 12.8px; font-weight: 700; }
+.disc-name { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
 
 /* The domain is the anti-phishing signal, so it stays LTR and legible even in
    an RTL layout — a reordered hostname is worse than none. */
@@ -5046,7 +5090,27 @@ input, select, textarea { font-size: 16px !important; }
   text-overflow: ellipsis;
 }
 
-.disc-go { color: var(--text-3); flex-shrink: 0; display: grid; place-items: center; }
+.disc-go {
+  color: var(--text-3);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--disc-hue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--disc-hue) 24%, transparent);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background 0.18s ease, color 0.18s ease;
+}
+.disc-card:hover .disc-go {
+  transform: translateX(2px);
+  background: color-mix(in srgb, var(--disc-hue) 22%, transparent);
+  color: color-mix(in srgb, var(--disc-hue) 80%, white);
+}
+[dir='rtl'] .disc-card:hover .disc-go {
+  transform: translateX(-2px);
+}
+[dir='rtl'] .disc-go svg { transform: scaleX(-1); }
 
 /* ==========================================================================
    NFT VIEWER
