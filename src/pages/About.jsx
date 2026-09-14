@@ -7,6 +7,8 @@ import {
   IconActivity,
   IconArrowDown,
   IconChevronRight,
+  IconGlobe,
+  IconLock,
   IconMail,
   IconPools,
   IconRefresh,
@@ -236,7 +238,22 @@ const FEATURES = [
 
 /* Three facts a first-time visitor needs before anything else. All three are
    already true of the shipped app — no aspirational copy here. */
-const FACTS = ['trust.nonCustodial', 'trust.multiChain', 'value.access.title'];
+const FACTS = [
+  { key: 'trust.nonCustodial', Icon: IconLock, hue: '#00e5ff' },
+  { key: 'trust.multiChain', Icon: IconGlobe, hue: '#7c4dff' },
+  { key: 'value.access.title', Icon: IconSparkle, hue: '#ff2d95' }
+];
+
+/* Six principles, each tied to its own icon. The icon order matches
+   `principlesLeadBody` in the locale; reordering requires updating both. */
+const PRINCIPLE_ICONS = [
+  IconLock,        // userControl
+  IconActivity,    // automation
+  IconShield,      // transparency
+  IconGlobe,       // open
+  IconSparkle,     // dataTitle
+  IconRefresh      // improvement
+];
 
 /* The three-step walkthrough. Numbered in the stylesheet, so the copy keys
    are all that lives here. */
@@ -344,9 +361,15 @@ export default function About() {
             <h1 className="about-hero-title">{t('about.headline')}</h1>
 
             <ul className="about-facts" role="list">
-              {FACTS.map((key) => (
-                <li key={key} className="about-fact">
-                  <span className="about-fact-dot" aria-hidden="true" />
+              {FACTS.map(({ key, Icon, hue }) => (
+                <li
+                  key={key}
+                  className="about-fact"
+                  style={{ '--hue': hue, '--hue-soft': `${hue}1f`, '--hue-line': `${hue}38` }}
+                >
+                  <span className="about-fact-dot" aria-hidden="true">
+                    <Icon width={11} height={11} />
+                  </span>
                   {t(`about.${key}`)}
                 </li>
               ))}
@@ -426,6 +449,39 @@ export default function About() {
                     <IconChevronRight width={14} height={14} />
                   </span>
                 </Link>
+              ))}
+            </div>
+          </section>
+
+          {/* ================= PRINCIPLES (icon grid) ================= */}
+          <section className="about-block about-reveal" aria-labelledby="about-principles-title">
+            <h2 className="about-block-title" id="about-principles-title">
+              {t('about.principles.title')}
+            </h2>
+            <p className="about-hero-summary" style={{ margin: '0 0 4px' }}>{t('about.principles.lead')}</p>
+
+            <div className="about-principles-grid">
+              {[
+                { key: 'userControl', Icon: IconLock, hue: '#00e5ff' },
+                { key: 'automation', Icon: IconActivity, hue: '#7c4dff' },
+                { key: 'transparency', Icon: IconShield, hue: '#00ff9d' },
+                { key: 'open', Icon: IconGlobe, hue: '#ff2d95' },
+                { key: 'dataTitle', Icon: IconSparkle, hue: '#a78bfa' },
+                { key: 'improvement', Icon: IconRefresh, hue: '#ffb347' }
+              ].map(({ key, Icon, hue }) => (
+                <div
+                  key={key}
+                  className="about-principle"
+                  style={{ '--hue': hue, '--hue-soft': `${hue}1f`, '--hue-line': `${hue}38` }}
+                >
+                  <span className="about-principle-icon" aria-hidden="true">
+                    <Icon width={18} height={18} />
+                  </span>
+                  <span className="about-principle-copy">
+                    <strong>{t(`about.principles.${key}Title`)}</strong>
+                    <small>{t(`about.principles.${key}Body`)}</small>
+                  </span>
+                </div>
               ))}
             </div>
           </section>
