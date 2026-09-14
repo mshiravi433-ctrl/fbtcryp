@@ -113,6 +113,48 @@ function apiBaseUrl(webAppUrl) {
   }
 }
 
+/**
+ * The command menu, as data.
+ *
+ * Exported because two different processes have to publish the SAME list: the
+ * long-polling dev server and the serverless webhook. A second hand-written
+ * copy would drift, and the menu is the only documentation a user sees before
+ * they type anything.
+ */
+export const BOT_COMMANDS = [
+  { command: 'app', description: 'Open the FBT Swap Mini App' },
+  { command: 'help', description: 'Help center: fees, wallets, safety, troubleshooting' },
+  { command: 'fees', description: 'What a swap costs, and why gas is separate' },
+  { command: 'networks', description: 'Supported networks and how tokens are listed' },
+  { command: 'security', description: 'Safety rules and how to spot a scam' },
+  { command: 'guide', description: 'Developer guide for the Mini App and API' },
+  { command: 'api', description: 'API reference and authentication quick start' },
+  { command: 'support', description: 'Reach a human, and what to include' },
+  { command: 'price', description: 'Look up a coin price, for example /price btc' },
+  { command: 'top', description: 'Show the top 10 coins by market cap' },
+  { command: 'trending', description: 'Show trending coins' },
+  { command: 'global', description: 'Show the global crypto market snapshot' }
+];
+
+/**
+ * Build the bot and register every handler — WITHOUT connecting to Telegram.
+ *
+ * Split out from startBot() because the handlers now have two homes:
+ *
+ *   · server/index.js keeps a long-polling process open (local, self-hosted);
+ *   · server/app.js serves them from a webhook route (Vercel, where no
+ *     process survives between requests, so polling is impossible).
+ *
+ * Nothing here performs I/O, which is what makes it safe to call at module
+ * scope in a serverless function: a cold start must not depend on an outbound
+ * call to api.telegram.org succeeding.
+ */
+export function buildBot({ token, webAppUrl }) {
+  const bot = new Telegraf(token);
+  registerHandlers(bot, { webAppUrl });
+  return bot;
+}
+
 export async function startBot({ token, webAppUrl }) {
   const bot = new Telegraf(token);
 
@@ -123,21 +165,28 @@ export async function startBot({ token, webAppUrl }) {
    * naming it twice ("Help — help"), because this list is the only
    * documentation a user sees before they type anything.
    */
-  await bot.telegram.setMyCommands([
-    { command: 'app', description: 'Open the FBT Swap Mini App' },
-    { command: 'help', description: 'Help center: fees, wallets, safety, troubleshooting' },
-    { command: 'fees', description: 'What a swap costs, and why gas is separate' },
-    { command: 'networks', description: 'Supported networks and how tokens are listed' },
-    { command: 'security', description: 'Safety rules and how to spot a scam' },
-    { command: 'guide', description: 'Developer guide for the Mini App and API' },
-    { command: 'api', description: 'API reference and authentication quick start' },
-    { command: 'support', description: 'Reach a human, and what to include' },
-    { command: 'price', description: 'Look up a coin price, for example /price btc' },
-    { command: 'top', description: 'Show the top 10 coins by market cap' },
-    { command: 'trending', description: 'Show trending coins' },
-    { command: 'global', description: 'Show the global crypto market snapshot' }
-  ]).catch((err) => console.warn('setMyCommands failed:', err?.message ?? err));
+  await bot.telegram.setMyCommands(BOT_COMMANDS)
+    .catch((err) => console.warn('setMyCommands failed:', err?.message ?? err));
 
+  registerHandlers(bot, { webAppUrl });
+
+  await bot.launch();
+  console.log('▸ Telegram bot started (long polling)');
+
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+  return bot;
+}
+
+/**
+ * Register every handler on a Telegraf instance.
+ *
+ * Pure wiring, no I/O: identical behaviour whether the updates arrive by long
+ * polling or by webhook, so the deployed bot cannot answer differently from
+ * the one tested locally.
+ */
+function registerHandlers(bot, { webAppUrl }) {
   bot.start(async (ctx) => {
     const name = html(ctx.from?.first_name ?? 'trader');
     const referralCode = validReferralCode(ctx.startPayload);
@@ -405,13 +454,11 @@ export async function startBot({ token, webAppUrl }) {
     );
   });
 
+  /*
+   * A handler that throws must not take the process (or the serverless
+   * invocation) down with it. Telegraf routes every handler rejection here.
+   */
   bot.catch((err) => console.error('bot error:', err?.message ?? err));
-
-  await bot.launch();
-  console.log('▸ Telegram bot started (long polling)');
-
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
   return bot;
 }

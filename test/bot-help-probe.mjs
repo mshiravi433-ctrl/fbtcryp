@@ -211,6 +211,67 @@ t('free-text answers are limited to private chats', /chat\?\.type !== 'private'/
 t('the welcome message takes its network count from the shared constant',
   /\$\{NETWORK_COUNT\} networks/.test(botSource) && !/across 10 networks/.test(botSource));
 
+/* ------------------- the bot is actually REACHABLE in prod ---------------- */
+/*
+ * The help center was complete, tested and UNREACHABLE: startBot() is only
+ * called from server/index.js, and Vercel runs api/index.js instead — so no
+ * process ever held a polling connection and no webhook was registered. The
+ * code was live in the repository and dead in production.
+ *
+ * These assertions pin the delivery path itself, because "the handler works"
+ * and "a user can reach the handler" are different claims and only the second
+ * one matters to someone typing /help.
+ */
+const appSource = readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
+const setupSource = readFileSync(new URL('../scripts/telegram-webhook-setup.mjs', import.meta.url), 'utf8');
+
+t('the serverless app exposes a webhook route', /'\/api\/telegram\/webhook'/.test(appSource));
+/* The import is dynamic on purpose — a static one would drag Telegraf into the
+   cold start of every unrelated API route — so match either form. What matters
+   is that the webhook runs the SAME handlers, never a second copy. */
+t('handlers are shared, not re-implemented for the webhook',
+  /buildBot/.test(appSource) && /(await import\('\.\/bot\.js'\)|from '\.\/bot\.js')/.test(appSource));
+t('Telegraf is not pulled into every API cold start',
+  !/^import .*from '\.\/bot\.js';$/m.test(appSource));
+t('the command menu is one exported list, not two hand-written copies',
+  /export const BOT_COMMANDS/.test(botSource) && /BOT_COMMANDS/.test(setupSource));
+
+/* The security property: an unauthenticated public URL that drives a bot is a
+   defect, so a missing secret must disable the route rather than open it. */
+t('the webhook refuses to run without a configured secret',
+  /WEBHOOK_SECRET_NOT_CONFIGURED/.test(appSource));
+t('the webhook verifies Telegram\'s secret-token header',
+  /x-telegram-bot-api-secret-token/.test(appSource));
+t('the secret comparison is timing-safe and length-checked',
+  /a\.length === b\.length && timingSafeEqual\(a, b\)/.test(appSource));
+t('an unauthenticated update is rejected before any handler runs',
+  /webhookSecretOk\(req\)\) return res\.status\(401\)/.test(appSource));
+
+/* Telegram redelivers anything that is not 2xx. Answering before handling is
+   what stops one failure becoming three copies of the same reply. */
+t('the webhook acknowledges before handling, so a failure is not redelivered',
+  /Acknowledge BEFORE handling/.test(appSource));
+t('a throwing handler cannot escape the webhook route',
+  /await bot\.handleUpdate\(req\.body\);[\s\S]{0,200}catch/.test(appSource));
+
+t('there is a status endpoint for diagnosing a silent bot',
+  /'\/api\/telegram\/webhook-status'/.test(appSource));
+t('the status endpoint reports readiness without leaking the secret',
+  /webhookSecretConfigured: Boolean\(WEBHOOK_SECRET\)/.test(appSource) &&
+  !/webhookSecret: WEBHOOK_SECRET/.test(appSource));
+
+/* The setup script is the step that actually puts the bot live. */
+t('the setup script registers a secret token with the webhook',
+  /setWebhook/.test(setupSource) && /secret_token: SECRET/.test(setupSource));
+t('the setup script asks only for the update types the bot handles',
+  /allowed_updates: \['message', 'callback_query', 'inline_query'\]/.test(setupSource));
+t('the setup script refuses a non-HTTPS webhook URL',
+  /only delivers webhooks over HTTPS/.test(setupSource));
+t('the setup script can remove the webhook to restore local polling',
+  /deleteWebhook/.test(setupSource));
+t('the setup script verifies the result instead of assuming success',
+  /getWebhookInfo/.test(setupSource) && /info\.url !== webhookUrl/.test(setupSource));
+
 export default rows;
 
 if (import.meta.url === `file://${process.argv[1]}`) {

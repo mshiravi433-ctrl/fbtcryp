@@ -427,6 +427,38 @@ Verified by simulation — dice EV 0.973, wheel EV 0.972 per unit staked.
 | `/global` | Total cap, volume, BTC/ETH dominance |
 | inline | Type `@fbtco_bot btc` in any chat to share a price card |
 
+### Putting the bot live (webhook)
+
+On Vercel there is no long-running process, so the bot cannot poll — and until
+a webhook is registered, Telegram has nowhere to deliver updates and the bot is
+silent no matter how correct the handlers are.
+
+1. Choose a secret and set it in **Vercel → Settings → Environment Variables**
+   as `TELEGRAM_WEBHOOK_SECRET` (alongside `TELEGRAM_BOT_TOKEN` and
+   `WEBAPP_URL`), then **redeploy** — variables are read at boot.
+2. Register the webhook and publish the command menu:
+
+   ```bash
+   TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... WEBAPP_URL=https://fbtswap.ir \
+     node scripts/telegram-webhook-setup.mjs
+   ```
+
+3. Check it: `curl -s https://fbtswap.ir/api/telegram/webhook-status | jq`
+   (`ready: true` means the token and secret are both configured).
+
+`--status` inspects without changing anything; `--delete` removes the webhook
+so a local `npm start` can use long polling again. **Telegram allows only one
+delivery method per bot** — registering a webhook silently stops `getUpdates`,
+so never run both against the same bot.
+
+The route (`POST /api/telegram/webhook`) **fails closed**: with no
+`TELEGRAM_WEBHOOK_SECRET` configured it answers 503 rather than accepting
+unauthenticated updates, because the URL is public and a forged update could
+otherwise make the bot reply anywhere. Telegram's secret token is compared with
+a timing-safe, length-checked comparison, and the route acknowledges an update
+*before* handling it — anything other than 2xx makes Telegram redeliver, which
+would send the user the same reply several times.
+
 ### In-chat help center
 
 `/help` is a topic-based help center, in English, defined once as data in
