@@ -1865,7 +1865,7 @@ export default function run() {
     t('the version reference is guarded for other bundlers', /typeof __APP_VERSION__ !== 'undefined'/.test(settingsRaw));
   }
 
-  /* ---- 24. the currency selector must actually change prices ------------ */
+  /* ---- 24. display currency — USD only, legacy codes fall back ---------- */
   /*
    * REAL BUG, same class as the biometric toggle: Settings offered
    * USD/EUR/IRT/AED, wrote `currency` to the store, and NOTHING read it. Every
@@ -1873,8 +1873,12 @@ export default function run() {
    * read dollar signs over dollar numbers - told their portfolio was worth
    * something it was not.
    *
-   * IRT is gone because no feed we use quotes Iranian rial, so it could only
-   * ever have been a rial label over a USD figure.
+   * The owner's call ended the era entirely: USD is now the ONLY display
+   * currency. The picker is gone from Settings, `CURRENCIES` is frozen to a
+   * single entry, and the checks below pin that contract plus the two seams
+   * that survive it — the display-symbol formatter and the `vsOf` feed seam —
+   * and the legacy fallback for installs that still hold 'EUR' / 'IRT' in
+   * their persisted store.
    */
   {
     /*
@@ -1890,7 +1894,10 @@ export default function run() {
     const hook = read('src/hooks/useMarket.js');
     const settings = strip(read('src/pages/Settings.jsx'));
 
-    t('IRT is no longer offered', !/'IRT'/.test(settings) && !/'IRT'/.test(cur));
+    t('USD is the only display currency on offer',
+      /export const CURRENCIES = Object\.freeze\(\[USD\]\)/.test(cur));
+    t('the settings screen renders no currency picker',
+      !/CURRENCIES\.map/.test(settings) && !/vs_currency=/.test(settings));
     /*
      * Assert the actual template, not just that the word appears somewhere -
      * renaming the variable left the check green while the `$` was back.
@@ -1904,13 +1911,19 @@ export default function run() {
     t('the currency is re-applied when it changes', /subscribe\(\(st\) => applyCurrency/.test(store));
 
     /*
-     * Symbol alone is a lie - EUR beside a dollar number. The feed must be
-     * asked for the currency so the FIGURE converts too.
+     * The feed seam stays currency-aware even with one currency: if a picker
+     * ever returns, upstream conversion is already wired instead of being a
+     * label-only lie again.
      */
-    t('market data is fetched in the display currency', /vsOf\(/.test(hook));
+    t('market data is fetched through the currency seam', /vsOf\(/.test(hook));
 
-    // A legacy stored value must not render `undefined` beside every price.
-    t('unknown/legacy codes fall back rather than breaking', /\?\? DEFAULT/.test(cur));
+    /*
+     * Installs that picked EUR/IRT before the picker was removed still hold
+     * that code in their persisted store. currencyOf() must map them back to
+     * USD rather than rendering `undefined` beside every price.
+     */
+    t('unknown/legacy codes fall back to USD rather than breaking',
+      /export function currencyOf/.test(cur) && /return DEFAULT/.test(cur) && !/Object\.freeze\(\[USD,/.test(cur));
   }
 
   /* ---- 25. contact + legal --------------------------------------------- */

@@ -38,7 +38,7 @@ import {
   verifyTotp
 } from '../lib/security';
 import { langMeta } from '../i18n/languages';
-import { CURRENCIES, currencyOf } from '../lib/currency';
+import { currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
 import ProfileBadge from '../components/ProfileBadge';
@@ -78,6 +78,7 @@ import {
   IconNews,
   IconVibrate,
   IconVolume,
+  IconCheck,
   IconGlobe,
   IconInfo,
   IconMail,
