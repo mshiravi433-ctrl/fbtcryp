@@ -417,11 +417,36 @@ Verified by simulation — dice EV 0.973, wheel EV 0.972 per unit staked.
 |---|---|
 | `/start` | Welcome + launch button (retains legacy `?start=REFCODE` referrals) |
 | `/app` | Opens the Mini App |
+| `/help` | In-chat help center — index with a button per topic |
+| `/help <topic>` | Opens one topic directly, e.g. `/help fees`, `/help security` |
+| `/fees` `/networks` `/security` `/support` | Shortcuts to the most-asked topics |
+| `/guide` `/api` | Developer guide, then the API/auth quick reference |
 | `/price btc` | Spot price, 1h/24h/7d change, cap, volume |
 | `/top` | Top 10 by market cap |
 | `/trending` | CoinGecko trending list |
 | `/global` | Total cap, volume, BTC/ETH dominance |
 | inline | Type `@fbtco_bot btc` in any chat to share a price card |
+
+### In-chat help center
+
+`/help` is a topic-based help center, in English, defined once as data in
+[`server/botHelp.js`](server/botHelp.js) — so the same answer is served whether
+it is reached from a button, a slash command or a typed question, and a fact
+that changes is changed in one place.
+
+Topics: getting started · all commands · swapping · fees and gas · networks and
+tokens · wallets · bridging · safety and scams · developers · troubleshooting ·
+privacy · support.
+
+In a **private** chat the bot also matches a plain-language question
+("what are the fees", "my balance is gone") to a topic. It answers only on a
+confident match and otherwise points at `/help`; it never guesses, and in
+groups it stays silent unless commanded. The copy may not claim funds are
+simulated, promise a return, or ask for a recovery phrase —
+[`test/bot-help-probe.mjs`](test/bot-help-probe.mjs) enforces that, along with
+Telegram's 4096-character and 64-byte `callback_data` limits and HTML validity
+(a malformed message is a 400, which the user experiences as a bot that ignored
+them).
 
 **Official Mini App:** [@fbtco_bot](https://t.me/fbtco_bot) (public Bot ID
 `7837421575`). Referral links use Telegram's Main Mini App form,
