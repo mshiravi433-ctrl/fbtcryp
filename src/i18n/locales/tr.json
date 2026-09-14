@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "Küresel zekâ",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "Canlı",
+    "hello": "Merhaba — ben Intent AI. Cüzdanın, piyasa ya da herhangi bir finansal hedefin hakkında benimle konuş.",
+    "noReply": "Bunun için bir yanıt hazırlayamadım.",
+    "error": "Intent AI’ya ulaşamadım. Tekrar dene.",
+    "placeholder": "Intent AI’ya sor…",
+    "send": "Gönder",
+    "actions": "İşlemler",
+    "manage": "Yönet",
+    "autosTitle": "ETKİN OTOMASYONLAR",
+    "suggestions": "İlgili öneriler",
+    "drawerNote": "Bu düğmeler yalnızca kısayol; asistan onlarsız da çalışır.",
+    "solanaConnect": "Solana cüzdanını bağla",
+    "readyTitle": "Çalıştırmaya hazır",
+    "working": "Çalışıyor…",
+    "confirm": "Onayla",
+    "edit": "Düzenle",
+    "automationCreated": "Otomasyon kaydedildi ve zamanlayıcıda etkin.",
+    "goalCreated": "Finansal hedef oluşturuldu ve Financial OS’a bağlandı.",
+    "executionReady": "Çalıştırmaya hazır. Cüzdan imzası için gerçek işlem ekranına yönlendiriyorum.",
+    "executionBlocked": "Cüzdan’da sırada — imzan hâlâ gerekli.",
+    "executionFailed": "Gerçekleşmedi. İşlem tamamlanmadı.",
+    "connectWallet": "Cüzdanı bağla"
   }
 }

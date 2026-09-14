@@ -121,16 +121,86 @@
   color: var(--pay-fg, #e8fff6);
 }
 
+/*
+ * ─── THE MODERN PASS ────────────────────────────────────────────────────────
+ * «صفحه لتدینگ هم مدرن و خاص باشد.» Everything below is additive: the base
+ * rules above still carry the merchant's own theme colours (the six accents a
+ * merchant picks when they create the link), so a gold link still reads gold.
+ * What changes is depth — a lit background, a real card edge, a hairline
+ * highlight — which is the difference between a generated page and a payment
+ * page belonging to a business.
+ */
+.pay-landing-modern {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.pay-landing-aurora {
+  position: absolute;
+  inset: -30% -20% auto;
+  height: 62vh;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(45% 55% at 22% 18%, color-mix(in srgb, var(--pay-accent) 34%, transparent), transparent 70%),
+    radial-gradient(40% 50% at 78% 8%, color-mix(in srgb, var(--pay-accent) 20%, transparent), transparent 72%),
+    radial-gradient(60% 40% at 50% 0%, color-mix(in srgb, var(--pay-fg) 8%, transparent), transparent 75%);
+  filter: blur(18px);
+  animation: pay-aurora 14s ease-in-out infinite alternate;
+}
+
+@keyframes pay-aurora {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.85; }
+  to { transform: translate3d(0, 3%, 0) scale(1.06); opacity: 1; }
+}
+
 .pay-landing-brand {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 28px;
+  /* It is a link now (the logo takes you to our site), so it needs the
+     affordances a link has and a decorative div never needed. */
+  color: inherit;
+  text-decoration: none;
+  width: fit-content;
+  padding: 6px 12px 6px 6px;
+  margin-inline-start: -6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pay-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--pay-fg) 5%, transparent);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.pay-landing-brand:hover,
+.pay-landing-brand:focus-visible {
+  border-color: color-mix(in srgb, var(--pay-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--pay-accent) 12%, transparent);
+  transform: translateY(-1px);
 }
 
 .pay-landing-brand strong {
   font-size: 15px;
   letter-spacing: 0.02em;
+}
+
+.pay-landing-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.pay-landing-brand-sub {
+  font-size: 10.5px;
+  opacity: 0.62;
+  letter-spacing: 0.04em;
+}
+
+.pay-landing-brand-go {
+  margin-inline-start: 4px;
+  font-size: 13px;
+  opacity: 0.75;
 }
 
 .pay-landing-card {
@@ -139,6 +209,100 @@
   background: color-mix(in srgb, var(--pay-fg) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--pay-accent) 35%, transparent);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+/* Glass card: a lit top edge and a deeper shadow, so the amount inside it
+   reads as the object on the page rather than as text on a background. */
+.pay-landing-modern .pay-landing-card {
+  position: relative;
+  padding: 24px 20px 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--pay-fg) 10%, transparent), color-mix(in srgb, var(--pay-fg) 4%, transparent));
+  border-color: color-mix(in srgb, var(--pay-accent) 42%, transparent);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 color-mix(in srgb, var(--pay-fg) 16%, transparent);
+  backdrop-filter: blur(14px);
+  animation: pay-card-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pay-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.pay-landing-merchant {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+
+.pay-landing-merchant-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--pay-bg, #071510);
+  background: var(--pay-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pay-accent) 22%, transparent);
+}
+
+/* ─── the amount as the hero of the page ─────────────────────────────────── */
+
+.pay-landing-hero {
+  padding: 6px 0 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--pay-fg) 12%, transparent);
+}
+
+.pay-landing-hero .pay-landing-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-landing-amount-sym {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+}
+
+.pay-landing-hero input {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-align: start;
+}
+
+/* The token and the network, each with its own mark — the two facts a payer
+   must be able to check without trusting a sentence. */
+.pay-landing-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pay-landing-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  border: 1px solid color-mix(in srgb, var(--pay-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--pay-fg) 6%, transparent);
 }
 
 .pay-landing-name {
@@ -210,6 +374,38 @@
   cursor: default;
 }
 
+.pay-landing-modern .pay-landing-btn {
+  min-height: 52px;
+  border-radius: 16px;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--pay-accent) 30%, transparent);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.pay-landing-modern .pay-landing-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--pay-accent) 38%, transparent);
+}
+
+.pay-landing-modern .pay-landing-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* The secondary action — after paying, "go to the site this came from". Same
+   shape as the primary, none of its weight: one page, one loud button. */
+.pay-landing-btn-ghost {
+  display: block;
+  margin-top: 14px;
+  text-decoration: none;
+  text-align: center;
+  background: color-mix(in srgb, var(--pay-fg) 8%, transparent);
+  color: var(--pay-fg, #e8fff6);
+  border: 1px solid color-mix(in srgb, var(--pay-accent) 34%, transparent);
+  box-shadow: none;
+}
+
 .pay-landing-hint {
   font-size: 12px;
   opacity: 0.65;
@@ -228,6 +424,25 @@
   padding: 12px 0 4px;
 }
 
+/* The success mark gets the ring, so "paid" is recognisable before the text
+   under it has been read. */
+.pay-landing-done-ring {
+  display: inline-grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  color: var(--pay-bg, #071510);
+  background: var(--pay-accent);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--pay-accent) 20%, transparent);
+  animation: pay-done-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pay-done-pop {
+  from { transform: scale(0.72); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .pay-landing-done h2 {
   margin: 10px 0 6px;
   font-size: 22px;
@@ -242,5 +457,17 @@
 @media (prefers-reduced-motion: reduce) {
   .pay-landing {
     background: var(--pay-bg, #071510);
+  }
+  /* Nothing on this page may move for someone who asked the OS not to: the
+     wash stays (it is colour, not motion) but stops breathing, and the card
+     and success mark appear instead of animating in. */
+  .pay-landing-aurora,
+  .pay-landing-modern .pay-landing-card,
+  .pay-landing-done-ring {
+    animation: none;
+  }
+  .pay-landing-modern .pay-landing-btn,
+  .pay-landing-brand {
+    transition: none;
   }
 }

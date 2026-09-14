@@ -7769,8 +7769,18 @@ export default function run() {
      * quote carried and ours deliberately does not. Unchanged, that is a
      * permanently disabled button on a working integration.
      */
+    /*
+     * The gate may legitimately carry extra conditions in FRONT of the quote
+     * check — `devnet ||` was added when the screen learned to say "there is
+     * no quote to run on devnet" instead of pretending otherwise. What must
+     * never change is the substance: the button is enabled by a QUOTE
+     * (`order?.outAmount`) and never by a `transaction` field this integration
+     * does not carry. So the assertion checks the invariant, not the exact
+     * string, and separately forbids the regression it was written for.
+     */
     t('the swap button is gated on a quote, not on a transaction',
-      /disabled=\{!address \|\| !order\?\.outAmount \|\| busy\}/.test(pageCode));
+      /disabled=\{(?:devnet \|\| )?!address \|\| !order\?\.outAmount \|\| busy\}/.test(pageCode)
+      && !/disabled=\{[^}]*order\?\.transaction[^}]*\}/.test(pageCode));
 
     /*
      * The disclosure must follow the SAME number that is charged. It read

@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "Inteligência global",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "Ao vivo",
+    "hello": "Olá — sou o Intent AI. Fale comigo sobre a sua carteira, o mercado ou qualquer objetivo financeiro.",
+    "noReply": "Não consegui preparar uma resposta para isso.",
+    "error": "Não consegui contactar o Intent AI. Tente novamente.",
+    "placeholder": "Pergunte ao Intent AI…",
+    "send": "Enviar",
+    "actions": "Ações",
+    "manage": "Gerir",
+    "autosTitle": "AUTOMAÇÕES ATIVAS",
+    "suggestions": "Sugestões relacionadas",
+    "drawerNote": "Estes botões são apenas atalhos; o assistente funciona sem eles.",
+    "solanaConnect": "Ligar carteira Solana",
+    "readyTitle": "Pronto para executar",
+    "working": "A trabalhar…",
+    "confirm": "Confirmar",
+    "edit": "Editar",
+    "automationCreated": "A automação está guardada e ativa no agendador.",
+    "goalCreated": "O objetivo financeiro foi criado e ligado ao Financial OS.",
+    "executionReady": "Pronto para executar. A levar-te ao ecrã real de execução para a assinatura da carteira.",
+    "executionBlocked": "Está em fila na Carteira — a tua assinatura ainda é necessária.",
+    "executionFailed": "Não passou. A transação não foi concluída.",
+    "connectWallet": "Ligar carteira"
   }
 }

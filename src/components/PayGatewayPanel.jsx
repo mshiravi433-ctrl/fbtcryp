@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import qrcode from 'qrcode-generator';
 import InfoBox from './InfoBox';
 import LanguagePicker from './LanguagePicker';
+import ModernSelect from './ModernSelect';
 import {
   IconWallet, IconSparkle, IconCoins, IconLink, IconCopy, IconCheck, IconQr
 } from './Icons';
@@ -61,6 +62,40 @@ export default function PayGatewayPanel() {
     const list = TOKENS[next] || [];
     if (!list.some((tk) => tk.symbol === token)) setToken(list[0]?.symbol || '');
   };
+
+  /*
+   * Option rows for the two pickers. Every row carries the artwork ModernSelect
+   * knows how to draw: `chain` for the network mark, `symbol` + `chain` for the
+   * offline token art (so a payer on a blocked CDN still sees the coin's face),
+   * and `token`/`chainId` so an address-keyed token resolves to its own icon
+   * rather than borrowing a look-alike's.
+   */
+  const networkOptions = useMemo(
+    () => EVM_CHAIN_ORDER
+      .filter((id) => EVM_CHAINS[id])
+      .map((id) => ({
+        value: id,
+        label: EVM_CHAINS[id].name,
+        sublabel: EVM_CHAINS[id].native?.symbol
+          ? `${t('pay.gasIn', { gas: EVM_CHAINS[id].native.symbol })}`
+          : undefined,
+        chain: String(id)
+      })),
+    [t]
+  );
+
+  const tokenOptions = useMemo(
+    () => tokens.map((tk) => ({
+      value: tk.symbol,
+      label: tk.symbol,
+      sublabel: tk.name,
+      symbol: tk.symbol,
+      chain: String(chainId),
+      token: tk,
+      chainId
+    })),
+    [tokens, chainId]
+  );
 
   const create = () => {
     setFormErr('');
@@ -184,22 +219,45 @@ export default function PayGatewayPanel() {
       </InfoBox>
 
       <InfoBox title={t('pay.section.payment')} id="pay-payment" icon={<IconCoins width={16} height={16} />}>
-        <label className="pay-field">
+        {/*
+          ─── THE TWO PICKERS USED TO BE PLAIN <select> BOXES ──────────────────
+          «درگاه پرداخت باکس انتخاب توکن و شبکه مدرن شود.» A native dropdown on
+          a payment screen is the one control that cannot show the two things a
+          payer actually checks: WHICH network (every EVM chain reuses the same
+          0x address, so the network is the difference between paid and lost)
+          and WHICH token (USDT on BSC is not USDT on Ethereum). Both now use
+          the app's ModernSelect — the same bottom-sheet picker the swap and
+          farm screens use — with the network mark, the token's own artwork and
+          the native gas coin named on every row. One vocabulary, and a payer
+          can no longer pick a token by guessing from three letters.
+        */}
+        <div className="pay-field">
           <span>{t('pay.network')}</span>
-          <select value={chainId} onChange={(e) => onChain(e.target.value)}>
-            {EVM_CHAIN_ORDER.filter((id) => EVM_CHAINS[id]).map((id) => (
-              <option key={id} value={id}>{EVM_CHAINS[id].name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="pay-field">
+          <ModernSelect
+            value={chainId}
+            onChange={(value) => onChain(value)}
+            options={networkOptions}
+            title={t('pay.network')}
+            placeholder={t('pay.network')}
+            ariaLabel={t('pay.network')}
+            testId="pay-network-select"
+          />
+        </div>
+        <div className="pay-field">
           <span>{t('pay.token')}</span>
-          <select value={token} onChange={(e) => setToken(e.target.value)}>
-            {tokens.map((tk) => (
-              <option key={tk.symbol} value={tk.symbol}>{tk.symbol}</option>
-            ))}
-          </select>
-        </label>
+          <ModernSelect
+            value={token}
+            onChange={(value) => setToken(value)}
+            options={tokenOptions}
+            title={t('pay.token')}
+            placeholder={t('pay.token')}
+            ariaLabel={t('pay.token')}
+            testId="pay-token-select"
+          />
+          <p className="faint" style={{ fontSize: 11.5, marginTop: 6 }}>
+            {t('pay.gasNote', { gas: EVM_CHAINS[chainId]?.native?.symbol || '—' })}
+          </p>
+        </div>
         <label className="pay-field">
           <span>{t('pay.amount')}</span>
           <input

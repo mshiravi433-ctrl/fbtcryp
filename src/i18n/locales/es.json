@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "Inteligencia global",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "En vivo",
+    "hello": "Hola — soy Intent AI. Háblame de tu cartera, del mercado o de cualquier meta financiera.",
+    "noReply": "No pude preparar una respuesta para eso.",
+    "error": "No pude conectar con Intent AI. Inténtalo de nuevo.",
+    "placeholder": "Pregunta a Intent AI…",
+    "send": "Enviar",
+    "actions": "Acciones",
+    "manage": "Gestionar",
+    "autosTitle": "AUTOMATIZACIONES ACTIVAS",
+    "suggestions": "Sugerencias relacionadas",
+    "drawerNote": "Estos botones son solo atajos; el asistente funciona sin ellos.",
+    "solanaConnect": "Conectar cartera Solana",
+    "readyTitle": "Listo para ejecutar",
+    "working": "Procesando…",
+    "confirm": "Confirmar",
+    "edit": "Editar",
+    "automationCreated": "La automatización está guardada y activa en el programador.",
+    "goalCreated": "La meta financiera se creó y se conectó a Financial OS.",
+    "executionReady": "Listo para ejecutar. Te llevo a la pantalla real de ejecución para la firma de la cartera.",
+    "executionBlocked": "Está en cola en Cartera — todavía hace falta tu firma.",
+    "executionFailed": "No se completó. La transacción no terminó.",
+    "connectWallet": "Conectar cartera"
   }
 }

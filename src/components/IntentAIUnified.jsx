@@ -498,7 +498,10 @@ function trimUpgrade7ForMessage(u7) {
   };
 }
 
-const ConversationRow = memo(function ConversationRow({
+/* Exported for the greeting-language suite (test/intent-ai-greeting-language.test.jsx):
+   the row is where a persisted hello becomes visible, so that is where the
+   "it must follow the language picker" rule has to be provable. */
+export const ConversationRow = memo(function ConversationRow({
   m,
   t,
   locale,
@@ -534,7 +537,19 @@ const ConversationRow = memo(function ConversationRow({
   return (
     <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
       <div className="iaos-bubble">
-        <div className="iaos-msg-text">{m.content}</div>
+        {/*
+          THE GREETING IS TRANSLATED AT RENDER TIME, NOT WHEN IT IS CREATED.
+          «با وجود زبان انگلیسی در هوش مصنوعی باز این جمله فارسیه — سلام من AI
+          هستم…» The hello used to be baked into the message as a string, so it
+          froze in whatever language the app happened to be in when the thread
+          started — and because the thread is persisted and restored, an English
+          session resumed on a device that had once been Persian reopened with a
+          Persian greeting and no way to change it short of wiping the thread.
+          Every other turn is the user's own words or a real answer, so those
+          keep their stored text; only `kind === 'hello'` is re-read from the
+          dictionary, which means it follows the language picker instantly.
+        */}
+        <div className="iaos-msg-text">{m.kind === 'hello' ? t('intentAIOS.hello') : m.content}</div>
         {m.ui?.type === 'CONNECT_WALLET' ? (
           <button
             type="button"
@@ -542,7 +557,7 @@ const ConversationRow = memo(function ConversationRow({
             data-testid="intent-ai-connect-wallet"
             onClick={onConnectWallet}
           >
-            {t('intentAIOS.connectWallet', { defaultValue: 'اتصال کیف پول' })}
+            {t('intentAIOS.connectWallet')}
           </button>
         ) : null}
         {Array.isArray(m.choices) && m.choices.length && !m.responded ? (
@@ -905,7 +920,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return [{
       id: makeId(),
       role: 'ai',
-      content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
+      content: t('intentAIOS.hello'),
       kind: 'hello',
       ui: { type: 'TEXT' }
     }];
@@ -2395,7 +2410,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const reply = res.reply || {};
       const uiType = reply.ui?.type || 'TEXT';
       const thanks = opts.resume ? formatConnectThanks(locale) : '';
-      const body = visibleText(reply, t('intentAIOS.noReply', { defaultValue: 'نتوانستم پاسخی آماده کنم.' }));
+      const body = visibleText(reply, t('intentAIOS.noReply'));
       const nextMessage = {
         id: makeId(),
         role: 'ai',
@@ -3241,7 +3256,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: t('intentAIOS.automationCreated', { defaultValue: 'برنامه خودکار ثبت شد و در Scheduler فعال است. هر اجرا همچنان به امضای شما نیاز دارد.' }),
+          content: t('intentAIOS.automationCreated'),
           kind: 'automation',
           ui: { type: 'RESULT_CARD' },
           automation: made.automation || null
@@ -3260,7 +3275,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: t('intentAIOS.goalCreated', { defaultValue: 'هدف مالی ایجاد شد و به Financial OS وصل شد.' }),
+          content: t('intentAIOS.goalCreated'),
           kind: 'goal',
           ui: { type: 'RESULT_CARD' },
           goal: made.goal || null
@@ -3852,10 +3867,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         message: `${row.kind || row.type} ${row.asset || ''}`.trim(),
         intentType: run.action.type,
         card: {
-          title: t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' }),
+          title: t('intentAIOS.readyTitle'),
           kind: run.action.type,
-          confirmLabel: t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }),
-          editLabel: t('intentAIOS.edit', { defaultValue: 'ویرایش' })
+          confirmLabel: t('intentAIOS.confirm'),
+          editLabel: t('intentAIOS.edit')
         }
       });
       // The confirmation card lives in the chat — take the user to it.
@@ -4894,7 +4909,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const hello = {
       id: makeId(),
       role: 'ai',
-      content: t('intentAIOS.hello', { defaultValue: 'سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.' }),
+      content: t('intentAIOS.hello'),
       kind: 'hello',
       ui: { type: 'TEXT' }
     };
@@ -5197,7 +5212,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             {pendingExecution ? (
               <div className="iaos-exec-card" role="group" data-testid="intent-ai-action-card">
                 <div className="iaos-exec-title">
-                  {card?.title || t('intentAIOS.readyTitle', { defaultValue: '✦ آماده اجرا' })}
+                  {card?.title || t('intentAIOS.readyTitle')}
                 </div>
                 {card?.headline ? <div className="iaos-exec-line">{card.headline}</div> : null}
                 {Array.isArray(card?.rows) && card.rows.length ? (
@@ -5231,12 +5246,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     {executing ? (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <ThinkingOrb state="working" size={16} locale={locale} />
-                        {t('intentAIOS.working', { defaultValue: 'در حال اجرا…' })}
+                        {t('intentAIOS.working')}
                       </span>
-                    ) : (card?.confirmLabel || t('intentAIOS.confirm', { defaultValue: 'تأیید و اجرا' }))}
+                    ) : (card?.confirmLabel || t('intentAIOS.confirm'))}
                   </button>
                   <button type="button" className="iaos-btn iss-ghost" onClick={editExecution}>
-                    {card?.editLabel || t('intentAIOS.edit', { defaultValue: 'ویرایش' })}
+                    {card?.editLabel || t('intentAIOS.edit')}
                   </button>
                 </div>
               </div>
@@ -5276,7 +5291,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         {allChips.length ? (
           <div className="iaos-suggestions">
-            <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions', { defaultValue: 'پیشنهادهای مرتبط' })}</div>
+            <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions')}</div>
             <div className="iaos-suggestions-row">
               {allChips.map((s) => (
                 <button key={s.id} type="button" className="iaos-suggestion" onClick={() => sendSuggested(s)}>
@@ -5289,7 +5304,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         {solana.available && !solanaAddressLive ? (
           <button type="button" className="iaos-solana-connect" onClick={connectWalletIfNeeded}>
-            {t('intentAIOS.solanaConnect', { defaultValue: 'اتصال کیف پول Solana' })}
+            {t('intentAIOS.solanaConnect')}
           </button>
         ) : null}
 
@@ -5606,7 +5621,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 </button>
               ))}
             </div>
-            <p className="iaos-drawer-note">{t('intentAIOS.drawerNote', { defaultValue: 'پیشنهادات بر اساس موقعیت فعلی شما و پرتفوی است.' })}</p>
+            <p className="iaos-drawer-note">{t('intentAIOS.drawerNote')}</p>
           </div>
         </div>
       ) : null}

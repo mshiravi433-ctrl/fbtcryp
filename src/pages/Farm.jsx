@@ -933,6 +933,29 @@ export default function Farm() {
     return (data?.pools || []).map((pool) => normalizeFarmOpportunity(pool, metadata));
   }, [data]);
 
+  /*
+   * THE VENUE RAIL'S OWN ROWS.
+   *
+   * `data.venues` is the server's pinned slice: the five markets this app can
+   * sign for, resolved against the raw feed whether or not they cleared the
+   * discovery floor (server/yields.js VENUE_PINS). Feeding the rail from
+   * `opportunities` alone is what made it read «3 از 5 زنده» — a venue paying
+   * below the 0.5% MIN_APY, or one ranked past the 500-row cap, simply was not
+   * in that list, and the rail drew an em-dash where a real number belonged.
+   *
+   * Merged by id, pinned rows first, so a venue present in BOTH lists can never
+   * be counted twice in the rail's own chain high/low maths. The discovery
+   * tabs below keep reading `opportunities` untouched: a 0% market is a true
+   * fact about a venue and a bad recommendation, and those are two screens.
+   */
+  const venueOpportunities = useMemo(() => {
+    const metadata = { source: data?.source || 'defillama', updatedAt: data?.at || null, freshness: data?.freshness };
+    const pinned = (data?.venues || []).map((pool) => normalizeFarmOpportunity(pool, metadata));
+    if (!pinned.length) return opportunities;
+    const ids = new Set(pinned.map((p) => p.id));
+    return [...pinned, ...opportunities.filter((p) => !ids.has(p.id))];
+  }, [data, opportunities]);
+
   const filtered = useMemo(() => {
     let rows = opportunities;
     if (chain !== 'all') rows = rows.filter((p) => p.chain === chain);
@@ -1086,7 +1109,7 @@ export default function Farm() {
         where they were, in the in-app tab, behind their own rollout flags.
       */}
       <VenueRail
-        pools={opportunities}
+        pools={venueOpportunities}
         t={t}
         onGoToPositions={gotoVenuePositions}
         onGetTokens={getTokens}

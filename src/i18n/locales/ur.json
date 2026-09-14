@@ -1855,5 +1855,30 @@
   "aiGlobal": {
     "title": "عالمی ذہانت",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "لائیو",
+    "hello": "السلام علیکم — میں Intent AI ہوں۔ اپنے والٹ، مارکیٹ یا کسی بھی مالیاتی مقصد کے بارے میں مجھ سے بات کریں۔",
+    "noReply": "میں اس کا جواب تیار نہیں کر سکا۔",
+    "error": "میں Intent AI تک نہیں پہنچ سکا۔ دوبارہ کوشش کریں۔",
+    "placeholder": "Intent AI سے پوچھیں…",
+    "send": "بھیجیں",
+    "actions": "اقدامات",
+    "manage": "منتظم کریں",
+    "autosTitle": "فعال آٹومیشنز",
+    "suggestions": "متعلقہ تجاویز",
+    "drawerNote": "یہ بٹن صرف شارٹ کٹ ہیں؛ معاون ان کے بغیر بھی کام کرتا ہے۔",
+    "solanaConnect": "Solana والٹ جوڑیں",
+    "readyTitle": "عمل درآمد کے لیے تیار",
+    "working": "کام جاری ہے…",
+    "confirm": "تصدیق کریں",
+    "edit": "ترمیم کریں",
+    "automationCreated": "آٹومیشن محفوظ ہو گیا اور شیڈولر میں فعال ہے۔",
+    "goalCreated": "مالیاتی مقصد بنایا گیا اور Financial OS سے جوڑ دیا گیا۔",
+    "executionReady": "عمل درآمد کے لیے تیار۔ والٹ دستخط کے لیے آپ کو اصل اسکرین پر لے جا رہا ہوں۔",
+    "executionBlocked": "یہ والٹ میں قطار میں ہے — آپ کے دستخط ابھی درکار ہیں۔",
+    "executionFailed": "یہ مکمل نہیں ہوا۔ ٹرانزیکشن مکمل نہیں ہوئی۔",
+    "connectWallet": "والٹ جوڑیں"
   }
 }

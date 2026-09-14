@@ -128,8 +128,17 @@ describe('Farm execution surface — build with the money path closed', () => {
     // The page header keeps calling itself read-only, because in this build it
     // is: the badge is derived from the adapter table, not hardcoded.
     expect(screen.getAllByText(t('farm.readOnly')).length).toBeGreaterThan(0);
+    /* The protocol readout sits inside a disclosure that now starts COLLAPSED
+       (the head used to be always-open). Open it, because the property under
+       test is what this build ADVERTISES — and a collapsed disclosure is not
+       an excuse to stop checking it. */
+    const protocolHead = document.querySelector('.farm-protocol-toggle');
+    expect(protocolHead).toBeTruthy();
+    fireEvent.click(protocolHead);
+    await waitFor(() => expect(document.querySelector('.farm-protocol-readout')).toBeTruthy());
     expect(screen.getByText(t('farm.protocolMode'))).toBeTruthy();
     expect(screen.queryByText(t('farm.executionLive'))).toBeNull();
+    expect(screen.queryByText(t('farm.protocolModeExec'))).toBeNull();
   });
 
   it.each(['en', 'fa'])('mounts the position hub for a visitor with no wallet connected (%s)', async (lang) => {

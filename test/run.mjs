@@ -183,6 +183,17 @@ const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pip
  * which is what is set here. Raise this number, not the locale glob.
  */
 const SHIP_NODE_OPTIONS = '--max-old-space-size=3072';
+/*
+ * Escape hatch for the in-suite dist/ builds (see the arcade block below).
+ * A 3 GB child peaks around 2.6 GB RSS; by the time the runner reaches that
+ * block it is itself holding ~1 GB of jsdom, bundle strings and asset lists,
+ * so on a 4 GB box the kernel kills the child mid-build — `status: 137`,
+ * every assertion before it already green. FBT_TEST_BUILD_HEAP lets such a
+ * box lower the CHILD heap without changing the default for a roomier one.
+ * The build genuinely needs well above Node's ~1.95 GB default, so do not
+ * point this at anything near that.
+ */
+const BUILD_NODE_OPTIONS = process.env.FBT_TEST_BUILD_HEAP || SHIP_NODE_OPTIONS;
 const npxShip = (args) => {
   const env = { ...process.env };
   delete env.NODE_ENV;
@@ -1344,7 +1355,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
     /* The same 4 GB-box heap trap the IIFE build hit (see npxShip above),
        caught here instead of in the suite: these builds write dist/ for the
        chunk assertions, so they run with the same raised heap. */
-    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false', NODE_OPTIONS: SHIP_NODE_OPTIONS };
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false', NODE_OPTIONS: BUILD_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1363,7 +1374,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
        The speculation build is the LARGER of the two and is the one that
        OOMs on a 4 GB box at Node's default ~1.95 GB heap — verified on the
        base commit in this environment — so it gets the same raised heap. */
-    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true', NODE_OPTIONS: SHIP_NODE_OPTIONS };
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true', NODE_OPTIONS: BUILD_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
       stdio: ['ignore', 'pipe', 'pipe'],

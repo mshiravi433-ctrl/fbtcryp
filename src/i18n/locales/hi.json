@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "ग्लोबल इंटेलिजेंस",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "लाइव",
+    "hello": "नमस्ते — मैं Intent AI हूँ। अपने वॉलेट, बाज़ार या किसी भी वित्तीय लक्ष्य के बारे में मुझसे बात करें।",
+    "noReply": "मैं इसके लिए उत्तर तैयार नहीं कर सका।",
+    "error": "मैं Intent AI तक नहीं पहुँच सका। फिर से कोशिश करें।",
+    "placeholder": "Intent AI से पूछें…",
+    "send": "भेजें",
+    "actions": "कार्रवाइयाँ",
+    "manage": "प्रबंधित करें",
+    "autosTitle": "सक्रिय ऑटोमेशन",
+    "suggestions": "संबंधित सुझाव",
+    "drawerNote": "ये बटन केवल शॉर्टकट हैं; सहायक इनके बिना भी काम करता है।",
+    "solanaConnect": "Solana वॉलेट कनेक्ट करें",
+    "readyTitle": "निष्पादन के लिए तैयार",
+    "working": "काम हो रहा है…",
+    "confirm": "पुष्टि करें",
+    "edit": "संपादित करें",
+    "automationCreated": "ऑटोमेशन सहेजा गया और शेड्यूलर में सक्रिय है।",
+    "goalCreated": "वित्तीय लक्ष्य बनाया गया और Financial OS से जोड़ा गया।",
+    "executionReady": "निष्पादन के लिए तैयार। वॉलेट हस्ताक्षर के लिए आपको असली निष्पादन स्क्रीन पर ले जा रहा हूँ।",
+    "executionBlocked": "यह वॉलेट में कतार में है — आपके हस्ताक्षर अब भी आवश्यक हैं।",
+    "executionFailed": "यह पूरा नहीं हुआ। लेन-देन पूर्ण नहीं हुआ।",
+    "connectWallet": "वॉलेट कनेक्ट करें"
   }
 }

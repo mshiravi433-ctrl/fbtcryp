@@ -170,6 +170,34 @@ export function WalletProvider({ children }) {
    */
   const addressRef = useRef(null);
   addressRef.current = address;
+  /*
+   * Render-time mirror of `chainId`, for the same reason: the vault callbacks
+   * below need to know which network the user had selected BEFORE the unlock,
+   * and closing over the state variable would capture the value from the
+   * render in which the callback was created.
+   */
+  const chainIdRef = useRef(null);
+  chainIdRef.current = chainId;
+
+  /**
+   * The network an in-app (local) wallet should come up on.
+   *
+   * Unlocking the vault used to hard-set DEFAULT_CHAIN in all three paths
+   * below, which threw the user off the network they had just picked: choose
+   * Base, unlock your in-app wallet, and the app is back on BNB Smart Chain
+   * with the signer re-pointed at BSC's RPC. Nothing crashed — the label and
+   * the signer agreed — but the next "send USDT" was a BSC transfer the user
+   * never asked for, and the balance they were looking at was the wrong chain's.
+   *
+   * So: keep the selected chain when it is one this app supports, and fall back
+   * to DEFAULT_CHAIN only when there is nothing to keep (first boot, or a chain
+   * the registry does not know). The signer is always connected to whichever
+   * chain this returns, so the two can never disagree.
+   */
+  const localTargetChain = useCallback(() => {
+    const current = Number(chainIdRef.current);
+    return EVM_CHAINS[current] ? current : DEFAULT_CHAIN;
+  }, []);
 
   const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
 
@@ -1102,15 +1130,16 @@ export function WalletProvider({ children }) {
   const attachLocal = useCallback(() => {
     const vault = loadVault();
     if (!vault) return false;
+    const cid = localTargetChain();
     setMode('local');
     setAddress(vault.address);
-    setChainId(DEFAULT_CHAIN);
+    setChainId(cid);
     setLocked(true);
     signerRef.current = null;
     eip1193Ref.current = null;
-    refreshBalance(vault.address, DEFAULT_CHAIN);
+    refreshBalance(vault.address, cid);
     return true;
-  }, [refreshBalance]);
+  }, [refreshBalance, localTargetChain]);
 
   /**
    * Attach the memory-only signer returned while a new vault was encrypted.
@@ -1121,10 +1150,11 @@ export function WalletProvider({ children }) {
     async (createdSigner) => {
       const vault = loadVault();
       if (!vault || !createdSigner) return false;
+      const cid = localTargetChain();
       try {
         const signerAddress = createdSigner.address || await createdSigner.getAddress();
         if (signerAddress.toLowerCase() !== vault.address.toLowerCase()) return false;
-        const provider = await getReadProvider(DEFAULT_CHAIN);
+        const provider = await getReadProvider(cid);
         const signer = createdSigner.provider ? createdSigner : createdSigner.connect(provider);
         /*
          * Only after the vault has PROVED it matches disk state: entering
@@ -1138,48 +1168,56 @@ export function WalletProvider({ children }) {
          */
         void releaseWc();
         signerRef.current = signer;
-        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signerAddress, chainId: DEFAULT_CHAIN, getReadProvider });
+        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signerAddress, chainId: cid, getReadProvider });
         setMode('local');
         setAddress(signerAddress);
-        setChainId(DEFAULT_CHAIN);
+        setChainId(cid);
         setLocked(false);
         setError(null);
         // Balance RPC latency must not hold the creation sheet open.
-        void refreshBalance(signerAddress, DEFAULT_CHAIN);
+        void refreshBalance(signerAddress, cid);
         return true;
       } catch {
         setError('UNLOCK_FAILED');
         return false;
       }
     },
-    [getReadProvider, refreshBalance, releaseWc]
+    [getReadProvider, refreshBalance, releaseWc, localTargetChain]
   );
 
   const unlockLocal = useCallback(
     async (password) => {
       setError(null);
+      /*
+       * The network the user had selected, not a hard-coded default. The
+       * signer is connected to this chain's RPC below, so a send issued right
+       * after unlock goes to the chain the screen says it goes to — before
+       * this, unlocking snapped the app back to DEFAULT_CHAIN and the balance
+       * on screen was a different network's than the one just chosen.
+       */
+      const cid = localTargetChain();
       try {
-        const provider = await getReadProvider(DEFAULT_CHAIN);
+        const provider = await getReadProvider(cid);
         const signer = await unlockVault(password, provider);
         /* Same mode-switch teardown as attachCreatedLocal() — and only AFTER
            the password has proven correct: a BAD_PASSWORD must leave an
            existing WalletConnect connection exactly as it was. */
         void releaseWc();
         signerRef.current = signer;
-        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signer.address, chainId: DEFAULT_CHAIN, getReadProvider });
+        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signer.address, chainId: cid, getReadProvider });
         setMode('local');
         setAddress(signer.address);
-        setChainId(DEFAULT_CHAIN);
+        setChainId(cid);
         setLocked(false);
         // Unlock succeeds as soon as signing is ready; slow mobile RPC runs behind it.
-        void refreshBalance(signer.address, DEFAULT_CHAIN);
+        void refreshBalance(signer.address, cid);
         return true;
       } catch (e) {
         setError(e.message === 'BAD_PASSWORD' ? 'BAD_PASSWORD' : 'UNLOCK_FAILED');
         return false;
       }
     },
-    [getReadProvider, refreshBalance, releaseWc]
+    [getReadProvider, refreshBalance, releaseWc, localTargetChain]
   );
 
   /** Drop the in-memory signer but keep the encrypted vault on disk. */

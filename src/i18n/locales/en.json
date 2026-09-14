@@ -12455,7 +12455,9 @@
       "rejected": "The payment was rejected.",
       "failed": "The payment did not go through.",
       "openAmount": "Enter the amount to pay.",
-      "trustHint": "Opens Trust Wallet. If Trust is already in this browser, it connects directly."
+      "trustHint": "Opens Trust Wallet. If Trust is already in this browser, it connects directly.",
+      "brandSub": "Secure crypto payments",
+      "brandLink": "Go to the FBT Swap website"
     },
     "theme": {
       "mint": "Mint",
@@ -12464,6 +12466,8 @@
       "rose": "Rose",
       "gold": "Gold",
       "night": "Night"
-    }
+    },
+    "gasNote": "Network fee is paid in {{gas}} — the merchant never holds it.",
+    "gasIn": "Gas in {{gas}}"
   }
 }

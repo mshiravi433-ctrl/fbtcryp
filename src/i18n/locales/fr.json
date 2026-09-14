@@ -1859,5 +1859,30 @@
   "aiGlobal": {
     "title": "Intelligence mondiale",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
+  },
+  "intentAIOS": {
+    "header": "Intent AI",
+    "live": "En direct",
+    "hello": "Bonjour — je suis Intent AI. Parlez-moi de votre portefeuille, du marché ou de tout objectif financier.",
+    "noReply": "Je n’ai pas pu préparer de réponse à cela.",
+    "error": "Je n’ai pas pu joindre Intent AI. Réessayez.",
+    "placeholder": "Demandez à Intent AI…",
+    "send": "Envoyer",
+    "actions": "Actions",
+    "manage": "Gérer",
+    "autosTitle": "AUTOMATISATIONS ACTIVES",
+    "suggestions": "Suggestions liées",
+    "drawerNote": "Ces boutons ne sont que des raccourcis ; l’assistant fonctionne sans eux.",
+    "solanaConnect": "Connecter le portefeuille Solana",
+    "readyTitle": "Prêt à exécuter",
+    "working": "En cours…",
+    "confirm": "Confirmer",
+    "edit": "Modifier",
+    "automationCreated": "L’automatisation est enregistrée et active dans le planificateur.",
+    "goalCreated": "L’objectif financier a été créé et connecté à Financial OS.",
+    "executionReady": "Prêt à exécuter. Je vous emmène vers l’écran d’exécution réel pour la signature du portefeuille.",
+    "executionBlocked": "C’est en file d’attente dans Portefeuille — votre signature est encore nécessaire.",
+    "executionFailed": "Cela n’a pas abouti. La transaction n’a pas été terminée.",
+    "connectWallet": "Connecter le portefeuille"
   }
 }
