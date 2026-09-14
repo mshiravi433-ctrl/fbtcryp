@@ -1241,19 +1241,19 @@ export default function Settings() {
       </Field>
 
       {/*
-        No rial option, on purpose: none of the price feeds we use quotes it,
-        so it could only ever have been a rial label sitting over a dollar
-        number. currencyOf() maps any legacy stored code back to USD, so an
-        existing install does not render a blank selection after upgrading.
+        USD-only on purpose: a multi-currency picker looked live but only the
+        chain-aware portfolio hook (vs_currency on CoinGecko) ever converted
+        upstream, so every other screen would have shown a euro/aed/rial
+        label sitting over a dollar number. currencyOf() maps any legacy
+        stored code back to USD, so existing installs do not render a blank
+        selection after upgrading.
       */}
-      <Field label={t('settings.currency')} hint={currencyOf(s.currency).code}>
-        <OptionGrid
-          cols={4}
-          flat
-          ariaLabel={t('settings.currency')}
-          value={currencyOf(s.currency).code}
-          onChange={(v) => { haptic?.('select'); s.setCurrency(v); }}
-          options={CURRENCIES.map((c) => ({ value: c.code, label: c.code, sub: c.symbol.trim() || c.name }))}
+      <Field label={t('settings.currency')} hint="USD">
+        <Row
+          icon={IconGlobe}
+          label="USD"
+          sub={t('settings.currencySub')}
+          right={<Chip icon={IconCheck} tone="good">USD</Chip>}
         />
       </Field>
 

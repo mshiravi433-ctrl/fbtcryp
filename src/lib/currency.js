@@ -1,59 +1,52 @@
 /**
  * DISPLAY CURRENCY.
  *
- * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────────
- * Settings had a currency selector offering USD / EUR / IRT / AED. It wrote
- * `currency` into the store and **nothing ever read it**. Every price in the
- * app was formatted by `fmtUsd`, which hardcodes a `$`. So the control looked
- * live, persisted a value, and changed absolutely nothing on screen.
+ * ─── USD-ONLY ON PURPOSE ────────────────────────────────────────────────────
+ * Settings used to expose a multi-currency picker (USD / EUR / IRT / AED /
+ * GBP / TRY / CNY / INR / RUB). The picker looked live but did nothing on
+ * most screens: every price was formatted by `fmtUsd`, which hardcoded `$`,
+ * and only the chain-aware portfolio hook (which sends `vs_currency` to
+ * CoinGecko) actually converted upstream.
  *
- * That is the same class as the biometric toggle that locked people out: a
- * setting wired to nothing. On a money screen it is worse than cosmetic — a
- * user who selects EUR and then reads "$1,240" has been told their portfolio
- * is worth something it is not.
+ * The owner asked us to drop the picker entirely and keep USD as the only
+ * display currency. That removes the implicit lie — a euro/aed label sitting
+ * over a dollar number — and makes every screen agree with every other.
  *
- * ─── WHY IRT (IRANIAN RIAL) IS GONE ─────────────────────────────────────────
- * Removed at the owner's request, and it was the right call technically too:
- * no price feed we use quotes IRT, so it could only ever have been a label
- * over a USD number. A currency symbol that lies about the unit is the single
- * most dangerous kind of wrong on a financial screen.
- *
- * ─── WHY THESE CURRENCIES ───────────────────────────────────────────────────
- * Every code here is one CoinGecko actually quotes, so the conversion is a
- * real upstream price rather than a client-side multiplication against a
- * stale hardcoded rate. If the feed cannot price it, we do not offer it.
+ * If we ever re-add a multi-currency picker, the upstream conversion has to
+ * be wired through `fmtUsd` / `fmtCompact` / `fmtPrice` first, otherwise we
+ * are back to the same bug.
  */
 
-/** Supported display currencies. `id` is the CoinGecko `vs_currency` code. */
-export const CURRENCIES = [
-  { id: 'usd', code: 'USD', symbol: '$', name: 'US Dollar' },
-  { id: 'eur', code: 'EUR', symbol: '€', name: 'Euro' },
-  { id: 'aed', code: 'AED', symbol: 'AED ', name: 'UAE Dirham' },
-  { id: 'gbp', code: 'GBP', symbol: '£', name: 'British Pound' },
-  { id: 'try', code: 'TRY', symbol: '₺', name: 'Turkish Lira' },
-  { id: 'cny', code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-  { id: 'inr', code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-  { id: 'rub', code: 'RUB', symbol: '₽', name: 'Russian Ruble' }
-];
+const USD = Object.freeze({
+  id: 'usd',
+  code: 'USD',
+  symbol: '$',
+  name: 'US Dollar'
+});
 
-const DEFAULT = CURRENCIES[0];
+/** Supported display currencies. USD only, by owner decision. */
+export const CURRENCIES = Object.freeze([USD]);
+
+const DEFAULT = USD;
 
 /**
  * Resolve a stored code to a currency.
  *
- * Falls back to USD for anything unknown — which includes the legacy 'IRT'
- * value still sitting in the store of every existing install. Without this
- * they would render `undefined` beside every price after the upgrade.
+ * Falls back to USD for anything unknown — including the legacy `IRT` /
+ * `EUR` / `AED` / … values still sitting in the store of installs that
+ * picked them before the picker was removed. Without this they would render
+ * `undefined` beside every price after the upgrade.
  */
 export function currencyOf(code) {
   if (!code) return DEFAULT;
   const want = String(code).toUpperCase();
-  return CURRENCIES.find((c) => c.code === want) ?? DEFAULT;
+  if (want === USD.code) return USD;
+  return DEFAULT;
 }
 
-/** The `vs_currency` value to send upstream. */
-export const vsOf = (code) => currencyOf(code).id;
+/** The `vs_currency` value to send upstream. Always `usd`. */
+export const vsOf = (_code) => USD.id;
 
-/** True when a stored preference is no longer supported (e.g. the old IRT). */
+/** True when a stored preference is no longer supported. */
 export const isLegacyCurrency = (code) =>
-  Boolean(code) && !CURRENCIES.some((c) => c.code === String(code).toUpperCase());
+  Boolean(code) && String(code).toUpperCase() !== USD.code;
