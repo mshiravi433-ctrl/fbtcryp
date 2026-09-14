@@ -110,6 +110,32 @@ const compactNum = (n, precision = 12) => {
   return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
 };
 
+/*
+ * THE API'S CHAIN REGISTRY, TRUSTED ONLY IN THE SHAPE WE ASKED FOR.
+ *
+ * `fetchLaunchConfig` REPLACES the built-in chain defaults with whatever the
+ * endpoint returned, and the screen then reads the rows unguarded in render
+ * (`chainMeta.find((c) => c.chainId === …)`, `c.dex.name` in the chain grid).
+ * A payload that is not the descriptor list — a gateway error page that still
+ * parses as JSON, a half-finished deploy, `{"networks":"maintenance"}` — was
+ * spread straight into state and threw during render, landing on the crash
+ * card exactly like the temporal-dead-zone bug inside the component below.
+ *
+ * The module is offline-first by design (see lib/launch/api), so the correct
+ * degradation already exists: keep LOCAL truth and ignore the payload. Rows
+ * that do not describe a chain with a DEX are dropped rather than repaired;
+ * a registry with nothing usable in it is `null`, not an empty list.
+ */
+const apiNetworkRows = (cfg) => {
+  if (!cfg || typeof cfg !== 'object' || !Array.isArray(cfg.networks)) return null;
+  const rows = cfg.networks.filter((c) => (
+    c && typeof c === 'object'
+    && Number.isFinite(Number(c.chainId))
+    && c.dex && typeof c.dex === 'object'
+  ));
+  return rows.length ? rows : null;
+};
+
 export default function Launch() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -153,9 +179,9 @@ export default function Launch() {
     let alive = true;
     fetchLaunchConfig().then((r) => {
       if (!alive || !r.ok || !r.json) return;
-      const cfg = r.json;
-      if (cfg && cfg.networks) {
-        setChainMeta(cfg.networks);
+      const rows = apiNetworkRows(r.json);
+      if (rows) {
+        setChainMeta(rows);
         setConfigSource('api');
       }
     }).catch(() => {});
@@ -272,6 +298,24 @@ export default function Launch() {
     if (!Number.isFinite(supplyNum) || supplyNum <= 0) return;
     setTokenAmount(compactNum((supplyNum * pct) / 100));
   }, [supplyNum]);
+
+  /*
+   * BALANCE — the quote + gas read for the liquidity and review screens.
+   *
+   * DECLARED HERE, ABOVE `setQuoteMax`, AND THAT IS LOAD-BEARING. The state
+   * used to live further down with the other review-step state, while the MAX
+   * callback that reads it sits up here. A dependency ARRAY is evaluated
+   * DURING the render, in source order, so `[balanceInfo, quote, …]` was read
+   * before `const [balanceInfo] = useState(null)` had run — the whole page
+   * threw `ReferenceError: Cannot access 'balanceInfo' before initialization`
+   * on EVERY render, and the route fell through to the crash card:
+   * «صفحه لانچ میگه با مشکل برخورد و نمیاره». A `const` in the same function
+   * scope is in the temporal dead zone until its own line executes, so state
+   * read by an earlier callback must be declared before it. Moving this line
+   * back down re-breaks the page — `test/launch-crash-hunt-probe.jsx` mounts
+   * the real screen and fails if it does.
+   */
+  const [balanceInfo, setBalanceInfo] = useState(null);
 
   // MAX for the quote side: ERC-20 quotes only. A native quote must NEVER be
   // maxed out — the wallet would be left with no gas for the signatures that
@@ -679,7 +723,6 @@ export default function Launch() {
   const [plan, setPlan] = useState(null);
   const [planning, setPlanning] = useState(false);
   const [confirmText, setConfirmText] = useState('');
-  const [balanceInfo, setBalanceInfo] = useState(null);
 
   const doPlan = useCallback(async () => {
     if (!spec || !quote || !amountValid) return;

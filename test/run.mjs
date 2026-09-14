@@ -917,6 +917,36 @@ installDom();
 const { run: runScreens } = await import('./.out/screens/screens.js');
 report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
 
+/* ------------ 4a₀. the launchpad page, mounted and looked at ------------- */
+/*
+ * Reported: «صفحه لانچ میگه با مشکل برخورد و نمیاره» — the /launch route landed
+ * on the crash card and never painted.
+ *
+ * Nothing in this file could have caught it. `launch-probe.mjs` and
+ * `launch-solana-probe.mjs` lock the launch MODULE — validation, bitmaps, the
+ * risk engine, calldata bytes, the state machine — and every one of those was
+ * correct and green while the page was dead. The defect lived in the component:
+ * a `useState` binding read from a dependency array ~400 lines above the state
+ * declaration, which throws `ReferenceError: Cannot access 'balanceInfo'
+ * before initialization` on every render, in dev and in production alike.
+ * `screens.jsx` — the suite whose stated job is "mount every routed screen" —
+ * did not list /launch, so a lazy route that threw on mount stayed invisible.
+ *
+ * This mounts the REAL page under the REAL providers in StrictMode, inside
+ * RouteBoundary exactly as App.jsx does, and asserts the wizard PAINTED (hero,
+ * five steps, the chain grid, the network section) rather than merely that
+ * nothing threw. It then sweeps the hostile shapes of `/api/launch/config` —
+ * dead, HTML error page, bare primitives, a registry that is not a list, rows
+ * that are not chain descriptors — because that registry REPLACES the built-in
+ * chain defaults and a malformed one used to reach state and take the page down
+ * the same way. `npm run test:launch-page` runs it on its own.
+ */
+console.log('\n▸ building the launchpad page crash-hunt suite…');
+npx(['vite', 'build', '-c', 'test/vite.launchhunt.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runLaunchPage } = await import('./.out/launchhunt/launch-crash-hunt-probe.js');
+report('launchpad page (mounts · paints · survives a malformed registry)', await runLaunchPage(document.getElementById('r')));
+
 /* -------- 4a. unified Buy / Sell surface is mounted by the screens suite --- */
 /* The former language-gated CEX tab suite was deleted with that CEX adapter.
    `test/screens.jsx` now mounts BuySellPanel through its native Buy page. */
