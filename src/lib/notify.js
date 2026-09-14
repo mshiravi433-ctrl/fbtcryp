@@ -811,7 +811,10 @@ export async function autoRegisterNativePush() {
  */
 export async function refreshWebPushIfOptedIn() {
   if (isNativeApp()) return { ok: false, reason: 'NATIVE' };
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+  // The canonical guard (identical semantics: webNotificationApi() IS the
+  // typeof check) so the static existence-check audit sees every bare read
+  // behind the same idiom.
+  if (!webNotificationApi() || Notification.permission !== 'granted') {
     return { ok: false, reason: 'NOT_GRANTED' };
   }
   const s = getNotifySettings();

@@ -24,6 +24,14 @@ import { motion } from 'framer-motion';
  * track. Travel has to follow the writing direction — which is exactly the
  * kind of correction that gets dropped when a component is duplicated by hand.
  */
+/*
+ * THE CONTRACT (fixed 2026-09-14): `onChange` receives the NEW BOOLEAN state
+ * as its first argument — `onChange(!on, event)`. It used to forward the raw
+ * click handler, so a caller doing `onChange={(v) => set(v)}` stored the
+ * CLICK EVENT (always truthy) as the value: the launchpad's rule toggles
+ * could be switched ON but never back OFF. Argless callers
+ * (`onChange={() => toggle()}`) are unaffected by the extra argument.
+ */
 export default function Switch({ on, onChange, label, disabled = false }) {
   const rtl = typeof document !== 'undefined'
     && document.documentElement.getAttribute('dir') === 'rtl';
@@ -33,7 +41,7 @@ export default function Switch({ on, onChange, label, disabled = false }) {
     <button
       className="switch"
       data-on={Boolean(on)}
-      onClick={onChange}
+      onClick={(e) => onChange?.(!on, e)}
       disabled={disabled}
       type="button"
       role="switch"

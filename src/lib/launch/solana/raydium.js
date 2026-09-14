@@ -1,74 +1,99 @@
 /**
- * SOLANA LAUNCH — the DEX adapter boundary, and why it currently REFUSES.
+ * SOLANA LAUNCH — the DEX adapter boundary (Raydium LaunchLab).
  * ============================================================================
  *
- * The EVM side can afford to pin a V2 factory address and PROVE it at runtime
- * (`getPair` + `pair.factory()` + `router.factory()` before any signature),
- * because every V2 fork exposes the same three view calls. Raydium's AMM does
- * not: pool creation is a specific instruction with a specific account list
- * derived from constants inside Raydium's own program, and those constants
- * (program id, AMM config ids, fee destinations, authority PDAs) change with
- * each program version.
+ * HISTORY: this adapter used to target Raydium AMM v4 pool creation and
+ * REFUSED to emit bytes, because that path needs an OpenBook market plus
+ * program-version-specific config accounts — none of it pinnable or provable
+ * here. Guessing would have produced "a transaction that moves a user's
+ * tokens somewhere we cannot name", so `buildPoolPlan` threw
+ * RAYDIUM_IDL_NOT_PINNED and the UI showed COMING_SOON.
  *
- * So this adapter does the only honest thing until the official IDL is pinned
- * in this repository and reviewed:
+ * WHAT CHANGED (2026-09-14): the adapter now targets Raydium LAUNCHLAB, the
+ * launchpad-native path, with every byte derived from pinned, reviewed
+ * sources — see the pin list in ./launchlab.js. The refusal philosophy is
+ * unchanged, only the verdict: every input the flow cannot derive is still a
+ * NAMED error (unknown config values, unreadable platform, unproven
+ * simulation), and NOTHING is guessed to fill a gap.
  *
- *   · `status` says NOT_READY with the exact missing pieces,
- *   · `buildPoolPlan()` THROWS `RAYDIUM_IDL_NOT_PINNED` instead of inventing
- *     an account list, and
- *   · `verifyPool()` still exists — because the CHECK does not depend on the
- *     pool creation bytes at all: a pool is only acceptable when its on-chain
- *     account names the user's mint as one of its two tokens (`checkPoolTokens`
- *     in ./spl.js).
- *
- * Guessing here would not produce a revert — it would produce a transaction
- * that moves a user's tokens somewhere we cannot name. That is precisely the
- * failure mode this refusal exists to prevent.
+ * The adapter stays dependency-light: it delegates to ./launchlab.js, which
+ * dynamic-imports @solana/web3.js only inside the async builders.
  */
 
-export const RAYDIUM_ADAPTER_ID = 'raydium-amm';
+import {
+  LAUNCHLAB_PROGRAM_ID,
+  LAUNCHLAB_SOL_CONFIG_MAINNET,
+  RAYDIUM_PLATFORM_ID,
+  buildLaunchlabPlan
+} from './launchlab.js';
 
-/* The one address we CAN state without an IDL: Raydium's AMM program id is a
-   published, long-standing constant. Everything else it needs (AMM config,
-   fee destination, authority PDA, the openbook market for the pair) is NOT
-   pinned here — see the refusal below. */
-export const RAYDIUM_AMM_PROGRAM_ID = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
+export const RAYDIUM_ADAPTER_ID = 'raydium-launchlab';
+
+/**
+ * Pinned addresses. The program id is the docs' canonical table value,
+ * cross-checked against the published IDL's own `address` field; the config
+ * is Raydium's API-published SOL curve; the platform is Raydium's default.
+ * All three are RE-DERIVED and RE-READ live at runtime — pins are the
+ * expectation, the chain is the authority.
+ */
+export const LAUNCHLAB_PINNED = Object.freeze({
+  programId: LAUNCHLAB_PROGRAM_ID,
+  solConfig: LAUNCHLAB_SOL_CONFIG_MAINNET,
+  platformId: RAYDIUM_PLATFORM_ID
+});
 
 /** Parts of the Raydium flow and their honest state. */
 export const RAYDIUM_PARTS = Object.freeze([
-  { id: 'program-id', status: 'READY', detail: 'The AMM program id is a published constant.' },
-  { id: 'idl', status: 'PENDING', detail: 'The official IDL (instruction discriminators + account layouts) is not pinned in this repository.' },
-  { id: 'amm-config', status: 'PENDING', detail: 'The pool\'s AMM config id and fee destination are program-version specific and are not pinned.' },
-  { id: 'market', status: 'PENDING', detail: 'An OpenBook market (or the CPMM path) for the pair must be chosen per launch; nothing is guessed.' }
+  {
+    id: 'program-id',
+    status: 'READY',
+    detail: 'LaunchLab program id pinned from the docs’ canonical table and the published IDL (both agree).'
+  },
+  {
+    id: 'idl',
+    status: 'READY',
+    detail: 'Instruction discriminators + account lists pinned from the official SDK source (the docs’ canonical interface), cross-checked against the published IDL; the config-PDA derivation reproduces Raydium’s API-published config address.'
+  },
+  {
+    id: 'curve-config',
+    status: 'READY',
+    detail: 'The SOL bonding-curve config is derived (never chosen) and its values are read live and range-checked before anything is signed.'
+  },
+  {
+    id: 'pool-bytes',
+    status: 'READY',
+    detail: 'initialize_v2 + buy_exact_in bytes are built from the pinned layouts and decoded by hand in the probe; every transaction is simulated on the user’s cluster before any wallet prompt.'
+  }
 ]);
 
 export function raydiumAdapterStatus() {
   const pending = RAYDIUM_PARTS.filter((p) => p.status !== 'READY').map((p) => p.id);
   return {
     id: RAYDIUM_ADAPTER_ID,
-    programId: RAYDIUM_AMM_PROGRAM_ID,
+    programId: LAUNCHLAB_PROGRAM_ID,
     status: pending.length ? 'NOT_READY' : 'READY',
     pending,
     parts: RAYDIUM_PARTS.map((p) => ({ ...p })),
     statement: pending.length
       ? `Pool creation on Raydium is not buildable yet (${pending.join(', ')}). The adapter refuses to emit bytes it cannot derive from a pinned, reviewed IDL.`
-      : 'Raydium pool creation is ready.'
+      : 'Raydium LaunchLab pool creation is ready: pinned instruction layouts, live config reads, and pre-signature simulation.'
   };
 }
 
 /**
- * The pool-creation plan. DELIBERATELY throws: see the header. A caller that
- * wants to know why should read `raydiumAdapterStatus().pending`.
+ * The pool-creation plan. Now BUILDS (via ./launchlab.js) — and still refuses
+ * with NAMED errors whenever an input is missing, unreadable, or outside the
+ * live config's bounds. See buildLaunchlabPlan for the full contract.
  */
-export function buildPoolPlan(_intent) {
-  const err = new Error('RAYDIUM_IDL_NOT_PINNED');
-  err.detail = raydiumAdapterStatus().pending;
-  throw err;
+export async function buildPoolPlan(intent) {
+  return buildLaunchlabPlan(intent);
 }
 
 /**
- * The verification half, which does not need the IDL: given a decoded pool
- * account, the pool is yours only if it references your mint.
+ * The verification half: given a decoded pool account, the pool is yours
+ * only if it references your mint. (The full back-check with all seven
+ * fields is verifyPoolState in ./launchlab.js; this stays as the simple,
+ * IDL-independent statement of the rule.)
  *
  * @param {object} pool { mintA, mintB } as read from the chain
  * @param {object} expected { mint }
