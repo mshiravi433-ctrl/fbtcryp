@@ -3,94 +3,106 @@
  * ============================================================================
  *
  * Solana is a DIFFERENT workstream: creating a token there is not a contract
- * deployment, the wallet stack is different (Web3 provider / Wallet-Standard
- * mobile / Mobile Wallet Adapter), and the pool side is a third-party program
- * (Raydium) rather than a factory we can call with Uniswap-shaped bytes.
+ * deployment, the wallet stack is different (injected provider / Wallet
+ * Standard / Mobile Wallet Adapter), and the pool side is a third-party
+ * program (Raydium LaunchLab) rather than a factory we call with
+ * Uniswap-shaped bytes.
  *
  * ── THE RULE THIS FILE EXISTS TO ENFORCE ───────────────────────────────────
- * A signing path that is not finished AND tested does not ship. Not behind a
- * flag for power users, not "beta": if the bytes cannot be proven, the UI
- * shows COMING_SOON and the user is told what is missing. The EVM launchpad
- * (direct deploy + the 7 verified DEX chains) does not depend on any of this.
+ * A signing path that is not finished AND tested does not ship. For a long
+ * time that rule kept this workstream on COMING_SOON: the wallet signing
+ * path, the pool flow and live-cluster verification were all unfinished, and
+ * `shipping` stayed false.
  *
- * The status below is the SINGLE source the UI reads, so the badge and the
- * explanation under it can never disagree — and each pending part names the
- * concrete thing that is missing rather than a vague "in progress".
+ * As of 2026-09-14 all three are finished, and "tested" means the same three
+ * things it means on the EVM side:
+ *
+ *   1. OFFLINE BYTE PROOFS (test/launch-solana-probe.mjs, no network): the
+ *      config PDA derived here reproduces Raydium's API-published address;
+ *      discriminators are recomputed from sha256("global:<name>"); every
+ *      instruction's bytes are decoded BY HAND against the pinned SDK
+ *      layouts; the curve math is asserted against known answers; and the
+ *      two-signer assembly (mint keypair + wallet) is proven with generated
+ *      keypairs, signatures verified.
+ *   2. A PRE-SIGNATURE SIMULATION GATE (src/lib/launch/solana/signing.js):
+ *      every transaction is simulated on the USER's cluster before any wallet
+ *      prompt opens — the exact equivalent of the EVM estimateGas gate. A
+ *      reverting transaction costs the user nothing and names its reason.
+ *   3. LIVE-CLUSTER VERIFICATION (src/lib/launch/solana/verify.js): after
+ *      confirmation the pool, mint, vaults and metadata accounts are read
+ *      back and reconciled with the plan before the launch is called LIVE.
+ *
+ * The wallet half of signing (provider.signTransaction on the partially
+ * signed transaction) is the same provider call the Solana swap path already
+ * uses in production — no new wallet primitive was invented for launches.
  *
  * Nothing here imports @solana/web3.js: this module is tiny, ships with the
  * page, and must not pull a 19 MB library into the entry chunk (the same rule
  * src/lib/solanaWallet.js follows with dynamic imports).
  */
 
-export const SOLANA_STATUS = 'COMING_SOON';
+export const SOLANA_STATUS = 'READY';
 
 /**
- * What is DONE and TESTED in this repository right now
- * (`test/launch-solana-probe.mjs`, mock provider only — no mainnet calls):
+ * What is DONE and TESTED in this repository right now:
  *
- *   ✓ the capability model — the same "decide once, then it is locked"
- *     semantics as the EVM bitmap, expressed in Solana's own terms
- *     (mint authority, freeze authority, revoke-on-create)
- *   ✓ the SPL token plan — SystemProgram.createAccount, InitializeMint,
- *     associated token account, MintTo, and the optional SetAuthority, with
- *     the account list and instruction data asserted through an INDEPENDENT
- *     decoder (never against our own encoder)
- *
- * What is NOT done, and therefore NOT shipped:
- *
- *   ✗ the wallet signing path — partial-signing a transaction with the
- *     ephemeral mint keypair AND the user's wallet (Wallet-Standard mobile /
- *     Mobile Wallet Adapter) is still unbuilt here
- *   ✗ the Raydium pool flow — pool creation/fee-account instructions need the
- *     OFFICIAL IDL pinned and reviewed; the adapter refuses to emit guessed
- *     bytes in the meantime
- *   ✗ post-signature verification against a live cluster (mint account state,
- *     metadata, pool back-check that mintA/mintB are the two tokens)
- *
- * Until all three are done and proven, `shipping` stays false and the UI keeps
- * the COMING_SOON badge. This is a product decision, not a technical debt note.
+ *   ✓ the capability model — fixed supply, no freeze authority, mint
+ *     authority revoked at creation: LaunchLab's own fixed rules, disclosed
+ *     as read-only facts (there is nothing to toggle)
+ *   ✓ the LaunchLab plan — initialize_v2 (+ the optional first-buy legs),
+ *     with addresses derived, config bounds checked, and bytes asserted
+ *     through an INDEPENDENT hand decoder
+ *   ✓ the wallet signing path — mint-keypair partial signing plus the
+ *     user's wallet through the production swap-path provider calls, with a
+ *     simulation gate before every signature and sequential execution
+ *     (the buy is only built after the create confirms)
+ *   ✓ the Raydium pool flow — the official SDK interface pinned and
+ *     reviewed (see the pin list in ./launchlab.js); the adapter still
+ *     refuses with named errors whenever a live input is missing
+ *   ✓ post-signature verification against a live cluster (pool state,
+ *     mint state, vault reconciliation, metadata back-check)
  */
 export const SOLANA_PARTS = Object.freeze([
   {
     id: 'capability-model',
     status: 'READY',
-    detail: 'Token decisions (mint authority, freeze authority, revoke-on-create) map the same capability semantics as the EVM token, and are tested.'
+    detail: 'Fixed supply, no freeze authority, mint authority revoked at creation — LaunchLab’s fixed rules, shown as read-only facts and re-verified on-chain after confirmation.'
   },
   {
-    id: 'spl-token-plan',
+    id: 'launchlab-plan',
     status: 'READY',
-    detail: 'The SPL instruction plan (mint account, InitializeMint, associated token account, MintTo, and the optional SetAuthority revoke) is built and its accounts/data are asserted by an independent decoder, against a mock provider.'
+    detail: 'The initialize_v2 plan (+ optional first buy) is built from pinned layouts; addresses are derived, config bounds are checked, and the bytes are asserted by an independent hand decoder.'
   },
   {
     id: 'wallet-signing',
-    status: 'PENDING',
-    detail: 'Partial signing with the ephemeral mint keypair plus the user\'s wallet is not finished or tested, so no Solana transaction is ever requested.'
+    status: 'READY',
+    detail: 'Mint-keypair partial signing plus the user’s wallet through the production swap-path provider calls. Every transaction is simulated on the user’s cluster before any prompt; legs run sequentially.'
   },
   {
     id: 'raydium-pool',
-    status: 'PENDING',
-    detail: 'Raydium pool creation needs the official IDL pinned and reviewed. The adapter refuses to build bytes from anything else.'
+    status: 'READY',
+    detail: 'The official SDK interface is pinned and reviewed. The adapter still refuses with named errors whenever a live input is missing or out of bounds.'
   },
   {
     id: 'on-chain-verification',
-    status: 'PENDING',
-    detail: 'Live-cluster verification (mint account, metadata, and a pool back-check that mintA/mintB are the two tokens) is not implemented. Tests use a mock provider only.'
+    status: 'READY',
+    detail: 'After confirmation the pool, mint, vaults and metadata are read back and reconciled with the plan before the launch is reported live.'
   }
 ]);
 
-/** The object the UI renders. `shipping:false` is what keeps the badge. */
+/** The object the UI renders. `shipping:true` offers the flow. */
 export function solanaLaunchStatus() {
   const pending = SOLANA_PARTS.filter((p) => p.status !== 'READY').map((p) => p.id);
   return {
     chain: 'solana',
     status: SOLANA_STATUS,
     badge: SOLANA_STATUS,
-    shipping: false,
+    shipping: pending.length === 0,
     parts: SOLANA_PARTS.map((p) => ({ ...p })),
     pending,
     statement: pending.length
       ? `Solana token launching is not shipped yet: ${pending.join(', ')}. No Solana transaction is requested from your wallet until all of it is finished and tested.`
-      : 'Solana token launching is shipped.'
+      : 'Solana token launching is shipped: Raydium LaunchLab bonding-curve launches with pre-signature simulation and post-confirmation verification.'
   };
 }
 

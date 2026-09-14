@@ -42,14 +42,21 @@ export function sanitizeRecord(record) {
   for (const field of ALLOWED_FIELDS) {
     if (src[field] !== undefined) out[field] = src[field];
   }
+  // Solana transactions are base58 signatures (64 bytes); Solana wallets
+  // are base58 addresses (32 bytes). Either chain's shape is accepted, and
+  // anything else is still dropped — the shape check stays exact per chain.
+  const isEvmHash = (h) => /^0x[0-9a-fA-F]{64}$/.test(h);
+  const isSolSig = (h) => /^[1-9A-HJ-NP-Za-km-z]{86,90}$/.test(h);
+  const isEvmAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(a);
+  const isSolAddr = (a) => /^[1-9A-HJ-NP-Za-km-z]{32,45}$/.test(a);
   if (out.txHashes != null) {
     out.txHashes = Array.isArray(out.txHashes)
-      ? out.txHashes.filter((h) => typeof h === 'string' && /^0x[0-9a-fA-F]{64}$/.test(h))
+      ? out.txHashes.filter((h) => typeof h === 'string' && (isEvmHash(h) || isSolSig(h)))
       : [];
   }
   // creatorPublicAddress is a PUBLIC address by definition; enforce the shape
   // so a malformed value can never masquerade as an identity.
-  if (out.creatorPublicAddress && !/^0x[0-9a-fA-F]{40}$/.test(out.creatorPublicAddress)) {
+  if (out.creatorPublicAddress && !isEvmAddr(out.creatorPublicAddress) && !isSolAddr(out.creatorPublicAddress)) {
     delete out.creatorPublicAddress;
   }
   return out;

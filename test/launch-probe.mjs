@@ -124,10 +124,14 @@ t('networks: anchor entries are 40-hex addresses (token a, token b)',
   }));
 t('networks: fee tiers are within the V2 1–120 bps sanity band',
   LAUNCH_CHAINS.every((id) => LAUNCH_DEX[id].feeTierBps >= 1 && LAUNCH_DEX[id].feeTierBps <= 120));
-t('networks: solana is an honest coming-soon slot (not silently shipped)',
-  typeof SOLANA_LAUNCH_STATUS === 'string' && /COMING/i.test(SOLANA_LAUNCH_STATUS));
-t('networks: solana keeps its badge until every part is finished',
-  solanaLaunchStatus().shipping === false && /COMING/i.test(solanaLaunchStatus().badge));
+t('networks: solana ships only because every part finished (no silent ship)',
+  solanaLaunchStatus().shipping === true
+  && solanaLaunchStatus().status === 'READY'
+  && solanaLaunchStatus().pending.length === 0
+  && solanaLaunchStatus().parts.length === 5
+  && solanaLaunchStatus().parts.every((p) => p.status === 'READY'));
+t('networks: the networks export agrees with the status module (single truth)',
+  SOLANA_LAUNCH_STATUS === 'READY' && /ready/i.test(solanaLaunchStatus().badge));
 t('networks: the launch set is exactly the fully-verified chain set',
   LAUNCH_CHAINS.join(',') === '8453,56,42161,137,1,10,43114');
 t('networks: every factory is a valid EIP-55 checksummed address',

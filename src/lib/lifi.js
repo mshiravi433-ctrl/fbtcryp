@@ -37,8 +37,8 @@
  * so the request travels through GET /api/swap/lifi/quote.
  */
 
-import { apiBase } from './apiBase';
-import { EVM_CHAINS } from './chains';
+import { apiBase } from './apiBase.js';
+import { EVM_CHAINS } from './chains.js';
 
 const loadEthers = () => import('ethers');
 

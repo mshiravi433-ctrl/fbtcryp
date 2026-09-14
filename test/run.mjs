@@ -25,10 +25,12 @@ import './lending-engine-probe.mjs';
    API and SDK), the DRAFT→…→LIVE state machine with honest partial-failure
    reporting, and history sanitization. */
 import './launch-probe.mjs';
-/* Solana launch (separate workstream, deliberately NOT shipped): the SPL
-   token plan decoded byte-for-byte against a mock provider, the named
-   refusals, and the honesty door that keeps the UI on COMING_SOON while the
-   wallet-signing path and the Raydium IDL are unfinished. No mainnet calls. */
+/* Solana launch (Raydium LaunchLab, SHIPPED): the SPL token plan decoded
+   byte-for-byte, the LaunchLab config PDA golden check, discriminator
+   recomputation, the SDK-ported curve math with known answers, hand-decoded
+   initializeV2/buyExactIn bytes, the two-signer assembly, named refusals,
+   and the status door that ships only when every part is READY. No mainnet
+   calls. */
 import './launch-solana-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the

@@ -5861,39 +5861,24 @@ export default async function run() {
       isSwappable('mantle') && isSwappable('berachain') && isSwappable('monad'));
 
     /*
-     * The 2026-09 stablecoins are NOT curated (unverified addresses are not
-     * committed there), so a counter-leg they fill cannot travel by symbol —
-     * `?from=<symbol>` is pinned to curated tokens only, the one-tap
-     * phishing guard. It travels by ADDRESS on the ?fromAddress= import
-     * path instead. Seed the token-list cache the way the swap screen fills
-     * it, and check the URL the coin page builds.
+     * The 2026-09 networks USED to ship without curated stablecoins, so the
+     * counter-leg travelled by ADDRESS on the ?fromAddress= import path
+     * (a symbol from a URL selecting an arbitrary token is a one-tap
+     * phishing vector, so ?from=/?to= are pinned to curated tokens only).
+     * That premise is obsolete: every resolvable new network now carries a
+     * curated stable (Berachain: USDC), so both legs travel by symbol —
+     * exactly what the curated-chain assertion below blesses. The address
+     * branch stays in the builder as the defensive path for legs the
+     * curated list does not know.
      */
-    const store = new Map([[
-      'fbt-tokens-v2:80094',
-      JSON.stringify({
-        at: Date.now(),
-        tokens: [{
-          symbol: 'USDT', name: 'Tether USD', decimals: 18, chainId: 80094,
-          address: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-        }]
-      })
-    ]]);
-    globalThis.localStorage = {
-      getItem: (k) => (store.has(k) ? store.get(k) : null),
-      setItem: (k, v) => store.set(k, String(v)),
-      removeItem: (k) => store.delete(k),
-      key: (i) => [...store.keys()][i] ?? null,
-      get length() { return store.size; }
-    };
     const buyBera = swapUrlFor('berachain', 'buy');
-    t('a new-network buy spends the list-only stablecoin BY ADDRESS',
-      /fromAddress=0xdAC17F958D2ee523a2206206994597C13D831ec7/.test(buyBera) && /to=BERA/.test(buyBera));
+    t('a new-network buy spends the curated stablecoin by symbol',
+      /from=USDC&to=BERA/.test(buyBera || ''));
     const sellBera = swapUrlFor('berachain', 'sell');
-    t('...and the sell keeps the curated side as a plain symbol',
-      /from=BERA/.test(sellBera) && /toAddress=0xdAC17F958D2ee523a2206206994597C13D831ec7/.test(sellBera));
+    t('...and the sell keeps both sides as plain symbols',
+      /from=BERA&to=USDC/.test(sellBera || ''));
     t('...while a curated chain still uses symbols only',
       /from=USDT&to=BNB/.test(swapUrlFor('binancecoin', 'buy')));
-    delete globalThis.localStorage;
   }
 
   /* ============ coin venue: resolved (non-curated) coin pages ============ */

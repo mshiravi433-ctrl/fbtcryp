@@ -6,6 +6,7 @@ import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import WalletConnectSheet from '../components/WalletConnectSheet';
+import SolanaLaunchFlow from '../components/SolanaLaunchFlow';
 import {
   IconCheck,
   IconClock,
@@ -120,6 +121,7 @@ export default function Launch() {
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
 
   const [step, setStep] = useState(0);
+  const [solanaMode, setSolanaMode] = useState(false);
   const [view, setView] = useState('wizard'); // wizard | running | result
   const [launch, setLaunch] = useState(null);
   const [history, setHistory] = useState(() => listHistory());
@@ -972,6 +974,12 @@ export default function Launch() {
           </div>
         </header>
 
+        {solanaMode ? (
+          <SolanaLaunchFlow
+            onBack={() => setSolanaMode(false)}
+            onHistory={() => setHistory(listHistory())}
+          />
+        ) : (
         <AnimatePresence mode="wait">
           {view === 'wizard' && (
             <motion.div key="wizard" className="launch-flow" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
@@ -1044,7 +1052,32 @@ export default function Launch() {
                     {/* Solana slot — driven by lib/launch/solana/status.js. The
                         pending list is named (never a vague "in progress"), so
                         the badge and the reason under it cannot disagree. */}
-                    {!SOLANA.shipping && (
+                    {SOLANA.shipping ? (
+                      <button
+                        type="button"
+                        className="launch-chain"
+                        onClick={() => setSolanaMode(true)}
+                        style={{ '--chain-color': '#14f195' }}
+                      >
+                        <span className="launch-chain-top">
+                          <ChainMark color="#14f195" short="SOL" size={38} />
+                          <span className="launch-chain-id">
+                            <span className="launch-chain-name">Solana</span>
+                            <span className="launch-chain-dex">{t('launch.sol.cardDex')}</span>
+                          </span>
+                          <span className="launch-chain-tick" aria-hidden>
+                            <IconCheck width={12} height={12} />
+                          </span>
+                        </span>
+                        <span className="launch-chain-pills">
+                          <span className="launch-chain-mode">LaunchLab</span>
+                          <span className="launch-chain-status ok">
+                            <span className="launch-status-dot" aria-hidden />
+                            {t('launch.network.ready')}
+                          </span>
+                        </span>
+                      </button>
+                    ) : (
                       <div
                         className="launch-chain soon"
                         aria-disabled="true"
@@ -1546,12 +1579,13 @@ export default function Launch() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
 
         {/* In-place wallet connect: the wizard never unmounts behind it. */}
         <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
 
-        {/* history */}
-        {view === 'wizard' && (
+        {/* history — shared: Solana launches land in the same list */}
+        {(view === 'wizard' || solanaMode) && (
           <section className="launch-history">
             <div className="row-between">
               <h3 className="launch-h3">{t('launch.history.title')}</h3>
@@ -1564,9 +1598,10 @@ export default function Launch() {
             {history.length === 0 && <p className="launch-hint">{t('launch.history.empty')}</p>}
             {history.slice(0, 5).map((h) => {
               const hm = chainMeta.find((c) => c.chainId === h.network) || null;
+              const isSol = h.network === 'solana';
               return (
                 <div key={h.launchId} className="launch-history-row">
-                  <ChainMark color={hm?.color || '#8892a8'} short={hm?.short || '?'} size={26} />
+                  <ChainMark color={isSol ? '#14f195' : hm?.color || '#8892a8'} short={isSol ? 'SOL' : hm?.short || '?'} size={26} />
                   <span className={`launch-state-chip ${String(h.status).toLowerCase()}`}>{h.status}</span>
                   <span className="launch-history-name">{h.tokenName || h.symbol || '—'}</span>
                   <span className="launch-history-net">{h.networkName}</span>

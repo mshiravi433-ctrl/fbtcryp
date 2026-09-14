@@ -77,13 +77,15 @@ export const LAUNCH_SCHEMA = 'fbt.launch-config.v1';
 export const LAUNCH_CHAINS = Object.freeze([8453, 56, 42161, 137, 1, 10, 43114]);
 
 /**
- * Phase-two slot. The adapter interface already exists (dex adapters are
- * plain objects, see calldata.js); Solana needs its own wallet stack, SPL
- * token program and the Raydium/Meteora/Orca program ABIs — a separate,
- * separately-audited workstream, which is why the UI shows it as coming soon
- * instead of shipping an untested signing path.
+ * Phase-two slot, now shipped. This export is DERIVED from the status module
+ * (the single source of truth) — it can never disagree with the badge the UI
+ * renders, in either direction. Solana ships on Raydium LaunchLab: its own
+ * wallet stack (W3M + injected + native shells), SPL mint + Metaplex
+ * metadata, deterministic initializeV2/buyExactIn bytes, pre-signature
+ * simulation and post-confirmation on-chain verification.
  */
-export const SOLANA_LAUNCH_STATUS = 'COMING_SOON';
+import { solanaLaunchStatus as _solanaLaunchStatus } from './solana/status.js';
+export const SOLANA_LAUNCH_STATUS = _solanaLaunchStatus().shipping ? 'READY' : 'COMING_SOON';
 
 /**
  * Deployment mode of the TOKEN step. Both are non-custodial; they differ in
