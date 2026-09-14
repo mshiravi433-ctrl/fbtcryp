@@ -1227,7 +1227,23 @@
     },
     "ctaTitle": "Une question ?",
     "companyFull": "Fanous Bazaar Pishgam",
-    "footNote": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptomonnaies sont volatiles : ne tradez que ce que vous pouvez vous permettre de perdre."
+    "footNote": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptomonnaies sont volatiles : ne tradez que ce que vous pouvez vous permettre de perdre.",
+    "principles": {
+      "title": "Nos principes",
+      "lead": "Six principes qui façonnent tout ce que nous construisons chez FBT — de l’interface à la manière dont l’IA décide.",
+      "userControlTitle": "Contrôle de l’utilisateur",
+      "userControlBody": "Les utilisateurs restent au centre des décisions financières.",
+      "automationTitle": "Automatisation intelligente",
+      "automationBody": "L’IA doit réduire la complexité, pas supprimer la transparence.",
+      "transparencyTitle": "Transparence",
+      "transparencyBody": "Les actions, risques et coûts importants doivent être compréhensibles.",
+      "openTitle": "Infrastructure ouverte",
+      "openBody": "Construire autour de réseaux et protocoles interopérables lorsque c’est pertinent.",
+      "dataTitle": "Intelligence fondée sur les données",
+      "dataBody": "Utiliser des données réelles plutôt que des hypothèses.",
+      "improvementTitle": "Amélioration continue",
+      "improvementBody": "Les systèmes doivent apprendre des résultats et s’améliorer avec le temps sans compromettre la sécurité de l’utilisateur."
+    }
   },
   "contact": {
     "title": "Nous contacter",

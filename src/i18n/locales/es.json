@@ -1227,7 +1227,23 @@
     },
     "ctaTitle": "¿Todavía tienes dudas?",
     "companyFull": "Fanous Bazaar Pishgam",
-    "footNote": "Los datos de mercado son informativos, no asesoramiento financiero. Las criptomonedas son volátiles: opera solo con lo que puedas permitirte perder."
+    "footNote": "Los datos de mercado son informativos, no asesoramiento financiero. Las criptomonedas son volátiles: opera solo con lo que puedas permitirte perder.",
+    "principles": {
+      "title": "Nuestros principios",
+      "lead": "Seis principios que dan forma a todo lo que construimos en FBT, desde la interfaz hasta cómo decide la IA.",
+      "userControlTitle": "Control del usuario",
+      "userControlBody": "Los usuarios permanecen en el centro de las decisiones financieras.",
+      "automationTitle": "Automatización inteligente",
+      "automationBody": "La IA debe reducir la complejidad, no eliminar la transparencia.",
+      "transparencyTitle": "Transparencia",
+      "transparencyBody": "Las acciones, riesgos y costes importantes deben ser comprensibles.",
+      "openTitle": "Infraestructura abierta",
+      "openBody": "Construir en torno a redes y protocolos interoperables cuando sea apropiado.",
+      "dataTitle": "Inteligencia basada en datos",
+      "dataBody": "Usar datos reales en lugar de suposiciones.",
+      "improvementTitle": "Mejora continua",
+      "improvementBody": "Los sistemas deben aprender de los resultados y mejorar con el tiempo sin comprometer la seguridad del usuario."
+    }
   },
   "contact": {
     "title": "Contáctanos",

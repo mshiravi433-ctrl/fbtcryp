@@ -244,17 +244,6 @@ const FACTS = [
   { key: 'value.access.title', Icon: IconSparkle, hue: '#ff2d95' }
 ];
 
-/* Six principles, each tied to its own icon. The icon order matches
-   `principlesLeadBody` in the locale; reordering requires updating both. */
-const PRINCIPLE_ICONS = [
-  IconLock,        // userControl
-  IconActivity,    // automation
-  IconShield,      // transparency
-  IconGlobe,       // open
-  IconSparkle,     // dataTitle
-  IconRefresh      // improvement
-];
-
 /* The three-step walkthrough. Numbered in the stylesheet, so the copy keys
    are all that lives here. */
 const STEPS = ['step1', 'step2', 'step3'];
@@ -365,10 +354,15 @@ export default function About() {
                 <li
                   key={key}
                   className="about-fact"
-                  style={{ '--hue': hue, '--hue-soft': `${hue}1f`, '--hue-line': `${hue}38` }}
+                  style={{
+                    '--hue': hue,
+                    '--hue-soft': `${hue}1f`,
+                    '--hue-line': `${hue}38`,
+                    '--hue-glow': `${hue}2e`,
+                  }}
                 >
                   <span className="about-fact-dot" aria-hidden="true">
-                    <Icon width={11} height={11} />
+                    <Icon width={12} height={12} />
                   </span>
                   {t(`about.${key}`)}
                 </li>
@@ -434,9 +428,14 @@ export default function About() {
                   key={f.key}
                   to={f.to}
                   className="about-feature"
-                  // 8-digit hex so the same hue gives a fill and a border with
-                  // no `color-mix()` and no second colour to keep in sync.
-                  style={{ '--hue': f.hue, '--hue-soft': `${f.hue}1f`, '--hue-line': `${f.hue}38` }}
+                  // 8-digit hex so the same hue gives a fill, a border and a
+                  // glow with no `color-mix()` and no second colour to sync.
+                  style={{
+                    '--hue': f.hue,
+                    '--hue-soft': `${f.hue}1f`,
+                    '--hue-line': `${f.hue}38`,
+                    '--hue-glow': `${f.hue}2e`,
+                  }}
                 >
                   <span className="about-feature-icon" aria-hidden="true">
                     <f.icon width={18} height={18} />
@@ -466,13 +465,18 @@ export default function About() {
                 { key: 'automation', Icon: IconActivity, hue: '#7c4dff' },
                 { key: 'transparency', Icon: IconShield, hue: '#00ff9d' },
                 { key: 'open', Icon: IconGlobe, hue: '#ff2d95' },
-                { key: 'dataTitle', Icon: IconSparkle, hue: '#a78bfa' },
+                { key: 'data', Icon: IconSparkle, hue: '#a78bfa' },
                 { key: 'improvement', Icon: IconRefresh, hue: '#ffb347' }
               ].map(({ key, Icon, hue }) => (
                 <div
                   key={key}
                   className="about-principle"
-                  style={{ '--hue': hue, '--hue-soft': `${hue}1f`, '--hue-line': `${hue}38` }}
+                  style={{
+                    '--hue': hue,
+                    '--hue-soft': `${hue}1f`,
+                    '--hue-line': `${hue}38`,
+                    '--hue-glow': `${hue}2e`,
+                  }}
                 >
                   <span className="about-principle-icon" aria-hidden="true">
                     <Icon width={18} height={18} />
