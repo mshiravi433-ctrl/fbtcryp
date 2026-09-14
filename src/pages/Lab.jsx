@@ -53,6 +53,7 @@ import Leaderboard from '../components/Lab/Leaderboard';
 import '../styles/lab-v2.css';
 import '../styles/lab-modern.css'; // re-use the older glass / aurora styles that already exist
 import '../styles/lab-polish.css';
+import { IconArrowDown } from '../components/Icons';
 
 /* `icon` is a name in the LabIcons registry, `accent` an .acc-* utility.
    Both are data, not markup — that is what keeps the three group files
@@ -85,6 +86,7 @@ export default function Lab() {
   const [tab, setTab] = useState(validTab ? fromUrlTab : GROUPS[0].id);
   const [child, setChild] = useState(fromUrlChild || null);
   const [tool, setTool] = useState(fromUrlTool || null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Sync tab from URL (back button)
   useEffect(() => {
@@ -223,33 +225,74 @@ export default function Lab() {
           )}
         </AnimatePresence>
 
-        {/* More tools row */}
+        {/* More tools row — wrapped in a collapsible box so the three extra
+            tools don't claim the same visual weight as the three primary tabs
+            above. Default closed: nobody needs every tool on first visit, and
+            an always-open grid pulls the active group off the fold. */}
         {!tool && !child && (
           <motion.section
-            className="lab2-group"
+            className="lab2-more-box"
             initial={still ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: LAB_EASE, delay: still ? 0 : 0.18 }}
+            aria-labelledby="lab2-more-title"
           >
-            <div className="lab2-group-title acc-amber">
-              <span className="lab2-group-icon" aria-hidden="true">
-                <LabIcon name="toolbox" width={15} height={15} />
+            <button
+              type="button"
+              className="lab2-more-trigger"
+              aria-expanded={moreOpen}
+              aria-controls="lab2-more-panel"
+              onClick={() => {
+                haptic?.('select');
+                setMoreOpen((v) => !v);
+              }}
+            >
+              <div className="lab2-more-head">
+                <span className="lab2-more-head-icon" aria-hidden="true">
+                  <LabIcon name="toolbox" width={15} height={15} />
+                </span>
+                <span className="lab2-more-head-text">
+                  <span id="lab2-more-title" className="lab2-more-head-title">
+                    {t('lab2.more')}
+                  </span>
+                  <span className="lab2-more-head-sub">{t('lab2.moreHint')}</span>
+                </span>
+              </div>
+              <span
+                className={`lab2-more-chev ${moreOpen ? 'is-open' : ''}`}
+                aria-hidden="true"
+              >
+                <IconArrowDown width={16} height={16} />
               </span>
-              {t('lab2.more')}
-            </div>
-            <div className="lab2-grid">
-              {MORE_TOOLS.map((m, i) => (
-                <LabCard
-                  key={m.id}
-                  icon={m.icon}
-                  accent={m.accent}
-                  index={i}
-                  title={t(`lab2.cards.${m.id}.title`)}
-                  sub={t(`lab2.cards.${m.id}.sub`)}
-                  onClick={() => selectTool(m.id)}
-                />
-              ))}
-            </div>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {moreOpen && (
+                <motion.div
+                  id="lab2-more-panel"
+                  className="lab2-more-panel"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: LAB_EASE }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className="lab2-grid" style={{ paddingTop: 14 }}>
+                    {MORE_TOOLS.map((m, i) => (
+                      <LabCard
+                        key={m.id}
+                        icon={m.icon}
+                        accent={m.accent}
+                        index={i}
+                        title={t(`lab2.cards.${m.id}.title`)}
+                        sub={t(`lab2.cards.${m.id}.sub`)}
+                        onClick={() => selectTool(m.id)}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.section>
         )}
       </div>

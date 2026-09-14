@@ -226,6 +226,9 @@ export default function Leaderboard({ embedded = false }) {
       {/* ---------------- where your points came from ---------------- */}
       <section>
         <p className="section-label">{t('rank.historyTitle')}</p>
+        <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.7, marginTop: 6, marginBottom: 0 }}>
+          {t('rank.historyHint')}
+        </p>
 
         {history.length === 0 ? (
           /*
@@ -279,7 +282,10 @@ export default function Leaderboard({ embedded = false }) {
 
       {/* ---------------- how to earn points ---------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('rank.howTo')}</p>
+        <p className="section-label" style={{ marginBottom: 6 }}>{t('rank.howTo')}</p>
+        <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.7, marginBottom: 10 }}>
+          {t('rank.howToHint')}
+        </p>
         {Object.entries(POINT_VALUES).map(([k, v], i) => (
           <motion.div
             key={k}
