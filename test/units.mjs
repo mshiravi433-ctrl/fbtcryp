@@ -218,6 +218,7 @@ import {
   GUIDED_CATALOG,
   GUIDED_NETWORKS,
   GUIDED_PROVIDER,
+  RAMP_PUBLIC_HOST_API_KEY,
   buildGuidedCheckoutUrl,
   guidedAssetCode,
   guidedTokenMeta,
@@ -9449,31 +9450,37 @@ export default async function run() {
       fiatCurrency: 'USD', fiatAmount: '150'
     });
     const buyUrl = new URL(buy.url);
-    t('the BUY handoff points at the official public consumer page, never the key-requiring partner host',
+    t('the BUY handoff points at Ramp own /landing consumer entry on the live host',
       buy.url.startsWith(GUIDED_PROVIDER.hosts.BUY) && buyUrl.protocol === 'https:'
-      && !/app\.(demo\.)?rampnetwork\.com/.test(buyUrl.host));
+      && buyUrl.host === 'app.rampnetwork.com' && buyUrl.pathname === '/landing'
+      && !/buy\.ramp\.network|ramp\.network\/sell/.test(buy.url)
+      && !/app\.demo\.rampnetwork\.com/.test(buyUrl.host));
     t('BUY prefills swapAsset, fiatValue, fiatCurrency and the user wallet',
       buyUrl.searchParams.get('swapAsset') === 'ARBITRUM_USDT'
       && buyUrl.searchParams.get('fiatValue') === '150'
       && buyUrl.searchParams.get('fiatCurrency') === 'USD'
       && buyUrl.searchParams.get('userAddress') === wallet
       && buyUrl.searchParams.get('defaultFlow') === 'ONRAMP');
-    t('no credential of ours ever appears in the guided URL',
-      !/hostApiKey|apiKey|secret|token/i.test(buy.url));
+    t('the only key in the guided URL is Ramp OWN site-published consumer key (never a partner secret/token)',
+      buyUrl.searchParams.get('hostApiKey') === RAMP_PUBLIC_HOST_API_KEY
+      && RAMP_PUBLIC_HOST_API_KEY.length === 40
+      && !/secret|access[_-]?token|private/i.test(buy.url));
 
     const sell = buildGuidedCheckoutUrl({
       side: 'SELL', asset: 'USDT', network: 'arbitrum', walletAddress: wallet,
       fiatCurrency: 'EUR', cryptoAmount: '2.5'
     });
     const sellUrl = new URL(sell.url);
-    t('the SELL handoff points at the official consumer sell page',
+    t('the SELL handoff points at the same /landing entry with the off-ramp flow',
       sell.url.startsWith(GUIDED_PROVIDER.hosts.SELL) && sellUrl.protocol === 'https:'
-      && !/app\.(demo\.)?rampnetwork\.com/.test(sellUrl.host));
+      && sellUrl.host === 'app.rampnetwork.com' && sellUrl.pathname === '/landing'
+      && !/app\.demo\.rampnetwork\.com/.test(sellUrl.host));
     t('SELL prefills offrampAsset and the amount in exact base units',
       sellUrl.searchParams.get('offrampAsset') === 'ARBITRUM_USDT'
       && sellUrl.searchParams.get('swapAmount') === '2500000'
       && sellUrl.searchParams.get('enabledFlows') === 'OFFRAMP'
-      && sellUrl.searchParams.get('defaultFlow') === 'OFFRAMP');
+      && sellUrl.searchParams.get('defaultFlow') === 'OFFRAMP'
+      && sellUrl.searchParams.get('hostApiKey') === RAMP_PUBLIC_HOST_API_KEY);
 
     /* ---- fail-closed validation with stable codes ---- */
     const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };

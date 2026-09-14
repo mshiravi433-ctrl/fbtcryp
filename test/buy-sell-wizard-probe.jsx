@@ -29,7 +29,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import '../src/i18n/index.js';
 import BuySellPanel from '../src/components/BuySellPanel.jsx';
-import { GUIDED_PROVIDER } from '../src/lib/guidedCheckout.js';
+import { GUIDED_PROVIDER, RAMP_PUBLIC_HOST_API_KEY } from '../src/lib/guidedCheckout.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -204,6 +204,20 @@ export async function run(container) {
     t('the asset step is reachable', activeStep() === 2);
     t('the asset step shows both controls, forward enabled', Boolean(backBtn()) && nextBtn().disabled === false);
 
+    /* «باکس انتخاب شبکه درست نیست، آیکون نداره، فاصله اسم شبکه غلطه» — every
+       network chip must render the chain's REAL mark plus a spaced name. */
+    const networkChips = () => [...container.querySelectorAll('[data-testid="buy-sell-networks"] button')];
+    t('the network picker renders one chip per network', networkChips().length >= 4);
+    t('every network chip carries a real SVG network mark', networkChips().every((chip) => chip.querySelector('.asset-icon svg')));
+    t('every network chip shows a non-cramped label beside the icon', networkChips().every((chip) => {
+      const label = chip.querySelector('.bsw-network-label');
+      return label && label.textContent.trim().length > 0 && getComputedStyle(chip).display !== 'block';
+    }));
+    t('no network chip falls back to an UPPERCASE raw slug label', networkChips().every((chip) => {
+      const text = chip.querySelector('.bsw-network-label')?.textContent.trim();
+      return text && !/^(ETHEREUM|ARBITRUM|OPTIMISM|POLYGON|BSC|BASE)$/.test(text);
+    }));
+
     await click(nextBtn());
     t('the review step is reachable', activeStep() === 3);
 
@@ -216,10 +230,16 @@ export async function run(container) {
 
     await click(nextBtn());
     t('pressing it opens the provider checkout', typeof opened === 'string'
+      && Object.values(GUIDED_PROVIDER.hosts).every((host) => host.endsWith('/landing'))
       && Object.values(GUIDED_PROVIDER.hosts).some((host) => opened.startsWith(host))
-      /* …and NEVER the partner widget host, which demands a key we do not
-         have and answers keyless visitors with «Integration issue detected». */
-      && !/app\.(demo\.)?rampnetwork\.com/.test(new URL(opened).host));
+      /* /landing is Ramp's OWN consumer entry; the PARTNER widget root,
+         which answers keyless visitors with «Integration issue detected»,
+         the dead buy.ramp.network host and the demo host are forbidden. */
+      && opened.includes(`hostApiKey=${RAMP_PUBLIC_HOST_API_KEY}`)
+      && !/buy\.ramp\.network|ramp\.network\/sell/.test(opened)
+      && !/app\.rampnetwork\.com\/?\?/.test(opened)
+      && !/app\.demo\.rampnetwork\.com/.test(new URL(opened).host));
+    t('the /landing handoff selects the on-ramp flow', /[?&]defaultFlow=ONRAMP/.test(opened) && /[?&]enabledFlows=ONRAMP/.test(opened));
     t('the prefilled hand-off carries the wallet address', String(opened).toLowerCase().includes(WALLET.toLowerCase()));
     t('after the hand-off the action bar is still complete', Boolean(backBtn()) && Boolean(nextBtn()));
     t('...and the action becomes "reopen", so the screen is never a dead end', nextBtn().disabled === false);

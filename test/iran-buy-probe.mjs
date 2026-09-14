@@ -371,15 +371,22 @@ try {
     && !/location\??\.?assign|location\.href\s*=/.test(referralFn));
   check('a blocked referral popup is reported instead of silently ignored',
     /REFERRAL_POPUP_BLOCKED/.test(referralFn) && /REFERRAL_POPUP_BLOCKED/.test(browserPanel));
-  check('the referral card renders only with an approved capability and discloses the commission',
+  check('the referral card prefers the server-approved URL, falls back only to the plain partner homepage (no hardcoded ref code) and discloses the commission',
     /data-testid="iran-buy-referral"/.test(browserPanel)
     && /iranBuy\.referral\.disclosure/.test(browserPanel)
-    && /capability\?\.referral\?\.url \? capability\.referral : null/.test(browserPanel));
-  const addressCard = /function ReferralAddressCard[\s\S]*?\n}/.exec(browserPanel)?.[0] || '';
-  check('the guide address is read only from the connected wallet and is never shortened',
+    && /capability\?\.referral\?\.url\s*\?\s*capability\.referral\s*:/.test(browserPanel)
+    && /url: 'https:\/\/bitpin\.ir'/.test(browserPanel)
+    && !/bitpin\.ir\/register\?ref=/.test(browserPanel));
+  const addressCardStart = browserPanel.indexOf('function ReferralAddressCard');
+  const addressCardEnd = browserPanel.indexOf('function ReferralGuide', addressCardStart);
+  const addressCard = addressCardStart >= 0 ? browserPanel.slice(addressCardStart, addressCardEnd > addressCardStart ? addressCardEnd : undefined) : '';
+  check('the guide address comes only from the connected wallet (the Tron T-address is derived from the same key), is never shortened and is never typed',
     /data-testid="iran-buy-address-value"/.test(browserPanel)
-    && /\{address\}/.test(addressCard)
-    && !/shortAddress/.test(addressCard));
+    && /\{displayAddress\}/.test(addressCard)
+    && /evmToTronAddress\(evmAddress\)/.test(addressCard)
+    && /isValidTronAddress\(tronAddress\)/.test(addressCard)
+    && !/shortAddress/.test(addressCard)
+    && !/<input/.test(addressCard));
   check('no hardcoded Persian copy in the Iranian panel — every string goes through i18n',
     !/[\u0600-\u06ff]/.test(browserPanel.split('\n').filter((line) => !/[\u06f0-\u06f9\u0660-\u066c\u060c]/.test(line)).join('\n')));
 } catch (error) {

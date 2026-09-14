@@ -99,12 +99,14 @@ review** — and always works, even with zero server configuration:
 | Engine | When | What happens |
 | --- | --- | --- |
 | **Tracked flow** | `RAMP_*` credentials configured | quote → order → explicit confirm → hosted checkout → signed webhook → on-chain settlement verification (unchanged, documented above) |
-| **Guided handoff** | no credentials | `src/lib/guidedCheckout.js` composes the URL of the provider's OFFICIAL PUBLIC CONSUMER page with only documented parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact base units, `fiatCurrency`, `userAddress`) and opens it. Buy → `buy.ramp.network`, Sell → `ramp.network/sell` — the keyless entry points Ramp itself publishes (the partner widget host `app.rampnetwork.com` hard-requires a `hostApiKey` and shows «Integration issue detected» without one, so a keyless rail must never point there). The user confirms and pays on the provider's own site, under the provider's own KYC and fees. |
+| **Guided handoff** | no credentials | `src/lib/guidedCheckout.js` composes the URL of Ramp's OWN public consumer entry — `app.rampnetwork.com/landing`, both Buy and Sell (the flow is selected by `enabledFlows`/`defaultFlow`) — with documented parameters (`swapAsset`/`offrampAsset`, `fiatValue`/`swapAmount` in exact base units, `fiatCurrency`, `userAddress`) and opens it. The legacy hosts `buy.ramp.network` / `ramp.network/sell` were retired with Ramp's `ramp.network → rampnetwork.com` migration (the former no longer resolves in DNS, which made every handoff link dead). `/landing` is the exact entry behind Ramp's own «Buy, Sell or Swap» CTA on rampnetwork.com and carries Ramp's OWN site-published `hostApiKey` (`RAMP_PUBLIC_HOST_API_KEY`) — never a partner credential registered to us. The partner widget root `app.rampnetwork.com/` still hard-requires a partner key and answers a bare visitor with «Integration issue detected», so the rail never links there. The user confirms and pays on Ramp's own site, under Ramp's own KYC and fees. |
 
 Guided-rail guarantees, unit-tested in `test/units.mjs`:
 
-- **No credential exists or appears** — the URL contains no `hostApiKey`,
-  token or secret of any kind. It is the same public page a bookmark reaches.
+- **No credential of ours exists or appears** — the only key in the URL is
+  Ramp's own site-published consumer key; there is no partner `hostApiKey`,
+  secret or private token. It is the same public page Ramp's own marketing
+  site opens.
 - **Nothing is submitted on the user's behalf** — prefill is best-effort; an
   unrecognised parameter simply falls back to the provider's own selector.
 - **The catalog is verifiable** — every asset/network pair maps to contract

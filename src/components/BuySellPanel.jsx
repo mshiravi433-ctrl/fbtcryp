@@ -25,6 +25,7 @@ import { getIranBuyCapability, readIranBuyGatewayReturn } from '../lib/iranBuy';
 import {
   GUIDED_CATALOG,
   GUIDED_FIAT,
+  GUIDED_NETWORKS,
   GUIDED_PROVIDER,
   buildGuidedCheckoutUrl,
   isEvmAddress,
@@ -255,6 +256,24 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const assetSymbols = useMemo(() => [...new Set(catalog.map((row) => row.asset))], [catalog]);
   const assetNetworks = useMemo(() => catalog.filter((row) => row.asset === asset).map((row) => row.network), [catalog, asset]);
   const activeAsset = useMemo(() => catalog.find((row) => row.asset === asset && row.network === network) || null, [catalog, asset, network]);
+  /* The vendored artwork registry (AssetIcon) is keyed by NUMERIC chain id,
+     while both catalogs speak lowercase slugs ('arbitrum', 'bsc', …). Merge
+     the curated slug→chain map with the server list (which carries chainId
+     per row), so every network chip resolves to its REAL mark. Before this,
+     the chip passed the raw slug: 'bsc'/'base' happened to resolve through
+     the THOR alias table but 'ethereum', 'arbitrum', 'optimism' and
+     'polygon' missed every key and rendered as a generic monogram, and the
+     block-level icon broke the pill layout (wrong box size, no gap). */
+  const networkChainById = useMemo(() => {
+    const map = {};
+    Object.entries(GUIDED_NETWORKS).forEach(([slug, row]) => { map[slug] = row.chainId; });
+    (assets || []).forEach((row) => { if (row?.network && row.chainId) map[row.network] = Number(row.chainId); });
+    return map;
+  }, [assets]);
+  const networkLabel = useCallback(
+    (code) => GUIDED_NETWORKS[code]?.label || String(code || '').replace(/^./, (c) => c.toUpperCase()),
+    []
+  );
   const paymentMethods = useMemo(() => (provider?.paymentMethods?.length ? provider.paymentMethods : ['CARD_PAYMENT']), [provider?.paymentMethods]);
 
   const resetQuote = useCallback(() => {
@@ -545,7 +564,7 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const summaryRows = [
     { key: 'amount', label: t('buySell.wizard.summaryAmount'), value: sell ? amount(Number(cryptoAmount), asset) : money(fiatAmount, fiatCurrency), step: 0 },
     { key: 'wallet', label: t('buySell.wizard.summaryWallet'), value: shortAddress(walletAddress), step: 1 },
-    { key: 'asset', label: t('buySell.wizard.summaryAsset'), value: `${asset} · ${String(network).toUpperCase()}`, step: 2 }
+    { key: 'asset', label: t('buySell.wizard.summaryAsset'), value: `${asset} · ${networkLabel(network)}`, step: 2 }
   ];
 
   /* The wizard stays on screen through the tracked flow's explicit confirm
@@ -693,14 +712,15 @@ export default function BuySellPanel({ initialOrderId = null }) {
                         ))}
                       </div>
                       <p className="bsw-subtitle">{t('buySell.network')}</p>
-                      <div className="bsw-chips" role="group" aria-label={t('buySell.network')}>
+                      <div className="bsw-chips bsw-networks" role="group" aria-label={t('buySell.network')} data-testid="buy-sell-networks">
                         {(assetNetworks.length ? assetNetworks : [network]).map((code) => (
                           <button key={code} type="button" className={code === network ? 'active' : ''} onClick={() => { setNetwork(code); resetQuote(); }}>
-                            <AssetIcon chain={code} size={22} /><span dir="ltr">{String(code).toUpperCase()}</span>
+                            <AssetIcon chain={networkChainById[code] ?? code} size={20} />
+                            <span className="bsw-network-label" dir="ltr">{networkLabel(code)}</span>
                           </button>
                         ))}
                       </div>
-                      <p className="bsw-hint">{t('buySell.walletNetworkNote', { network: String(network).toUpperCase() })}</p>
+                      <p className="bsw-hint">{t('buySell.walletNetworkNote', { network: networkLabel(network) })}</p>
                     </motion.div>
                   )}
 
