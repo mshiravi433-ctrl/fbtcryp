@@ -758,6 +758,17 @@ console.log('▸ probing the WalletConnect connect timeout (the "spins forever" 
   report('WalletConnect connect timeout', await runWcTimeout());
 }
 
+/* ------------------------------ 0c-2b. bot help center --------------------- */
+/* The Telegram bot's /help is now a topic-based help center. Three ways it can
+   fail silently or dangerously: a message Telegram refuses (length, bad HTML,
+   oversized callback_data), copy that re-introduces the "virtual credits" lie,
+   and a matcher that answers the wrong topic to a typed question about money. */
+console.log('▸ probing the Telegram bot help center (sendable, honest, no guessing)…');
+{
+  const { default: botHelpRows } = await import('./bot-help-probe.mjs');
+  report('telegram bot help center', botHelpRows);
+}
+
 /* ------------------------------ 0c-3. WC storage hygiene ------------------- */
 /* Runtime probe: purgeWcStorage removes exactly the SDK/AppKit connection
    artifacts — the stale deep-link choice and persisted session that made the

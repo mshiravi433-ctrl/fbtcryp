@@ -678,6 +678,152 @@ app.get('/api/telegram/whoami-bot', async (req, res) => {
   });
 });
 
+/* --------------------------- the bot, as a webhook ------------------------ */
+/*
+ * ─── WHY THIS ROUTE EXISTS AT ALL ───────────────────────────────────────────
+ * The bot's handlers live in server/bot.js and were only ever reachable from
+ * server/index.js, which holds a long-polling connection open. Vercel never
+ * runs that file — it runs api/index.js, which imports this app. So in
+ * production NOBODY was answering /help, /price or any other command: the code
+ * existed, was tested, and was never connected to Telegram.
+ *
+ * A serverless function cannot poll; there is no process between requests. The
+ * supported alternative is a webhook, where Telegram POSTs each update to us.
+ * That fits the platform exactly: no process to keep alive, no extra host.
+ *
+ * ─── WHY THE SECRET TOKEN IS NOT OPTIONAL ───────────────────────────────────
+ * This URL is public. Without proof of origin, anyone who guesses it can POST
+ * a forged update and make the bot reply to a chat of their choosing, with
+ * `from` set to whoever they like. Telegram's answer is setWebhook's
+ * secret_token: it echoes the value back in X-Telegram-Bot-Api-Secret-Token on
+ * every delivery.
+ *
+ * So the route FAILS CLOSED. No TELEGRAM_WEBHOOK_SECRET configured means the
+ * webhook is off entirely (503) rather than open — an unauthenticated bot
+ * endpoint is worse than a bot that does not answer. The comparison is
+ * timing-safe and length-checked, like every other secret comparison here.
+ *
+ * ─── WHY IT ALWAYS ANSWERS 200 ──────────────────────────────────────────────
+ * Once an update is authenticated, Telegram must be told we received it.
+ * Telegram retries anything that is not 2xx, so an error bubbling out of a
+ * handler would make it redeliver the SAME update — and the user would get the
+ * same reply several times. We therefore acknowledge first and let bot.catch()
+ * log the failure. A dropped reply is bad; three copies of it is worse.
+ *
+ * Mounted BEFORE the /api rate limiter deliberately: every update arrives from
+ * Telegram's IPs and would share one bucket, so a busy minute would 429 real
+ * users' messages — and each 429 becomes a retry, which is a feedback loop.
+ * Telegram's own per-bot limits are the real budget here.
+ */
+const WEBHOOK_SECRET = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+
+let webhookBot = null;
+let webhookBotFailed = false;
+/*
+ * Built on the first AUTHENTICATED update, via a dynamic import.
+ *
+ * Deliberately not a static `import { buildBot }` at the top of this file:
+ * that would pull Telegraf into the cold start of all ~300 API routes, almost
+ * none of which are the bot. Here the cost is paid once, by the first real
+ * update, on the one invocation that needs it. A construction failure is
+ * remembered so a broken build cannot be retried on every delivery.
+ */
+async function telegramWebhookBot() {
+  if (webhookBot || webhookBotFailed) return webhookBot;
+  try {
+    const { buildBot } = await import('./bot.js');
+    webhookBot = buildBot({ token: BOT_TOKEN, webAppUrl: process.env.WEBAPP_URL || '' });
+  } catch (err) {
+    webhookBotFailed = true;
+    console.error('telegram webhook: bot construction failed:', err?.message ?? err);
+  }
+  return webhookBot;
+}
+
+function webhookSecretOk(req) {
+  if (!WEBHOOK_SECRET) return false;
+  const provided = String(req.get('x-telegram-bot-api-secret-token') || '');
+  const a = Buffer.from(WEBHOOK_SECRET);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+app.post('/api/telegram/webhook', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(503).json({ error: 'NO_BOT_TOKEN' });
+  if (!WEBHOOK_SECRET) return res.status(503).json({ error: 'WEBHOOK_SECRET_NOT_CONFIGURED' });
+  /* 401 with no detail. A forged request learns nothing about why it failed. */
+  if (!webhookSecretOk(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+
+  const bot = await telegramWebhookBot();
+  if (!bot) return res.status(503).json({ error: 'BOT_UNAVAILABLE' });
+
+  /* Acknowledge BEFORE handling, so a slow or failing handler cannot turn into
+     a redelivery of the same update. */
+  res.status(200).json({ ok: true });
+
+  try {
+    await bot.handleUpdate(req.body);
+  } catch (err) {
+    console.error('telegram webhook: update failed:', err?.message ?? err);
+  }
+});
+
+/*
+ * Is the webhook actually wired up? Answers the question "I deployed, why is
+ * the bot still silent?" without exposing the token or the secret: it reports
+ * only whether each piece is configured, plus Telegram's own view of the
+ * registered URL. Full detail requires CRON_SECRET or a verified Mini App
+ * session, because getWebhookInfo includes the URL we chose.
+ */
+app.get('/api/telegram/webhook-status', async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET || '';
+  const provided =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || String(req.query.key || '');
+  const a = Buffer.from(cronSecret);
+  const b = Buffer.from(provided);
+  const secretOk = Boolean(cronSecret) && a.length === b.length && timingSafeEqual(a, b);
+  const fullOk = secretOk || Boolean(req.tgUser?.id);
+
+  const base = {
+    tokenConfigured: Boolean(BOT_TOKEN),
+    webhookSecretConfigured: Boolean(WEBHOOK_SECRET),
+    webAppUrlConfigured: Boolean(process.env.WEBAPP_URL),
+    /* The single most useful line: everything needed to answer a message. */
+    ready: Boolean(BOT_TOKEN && WEBHOOK_SECRET)
+  };
+
+  res.set('cache-control', 'private, no-store');
+  if (!fullOk) return res.json({ data: base, meta: { schema: 'fbt.telegram-webhook-status.v1', scope: 'public' } });
+  if (!BOT_TOKEN) return res.json({ data: base, meta: { schema: 'fbt.telegram-webhook-status.v1', scope: 'full' } });
+
+  let info = null;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    const payload = await response.json().catch(() => null);
+    if (payload?.ok) {
+      info = {
+        url: payload.result?.url || null,
+        hasCustomCertificate: Boolean(payload.result?.has_custom_certificate),
+        pendingUpdateCount: payload.result?.pending_update_count ?? null,
+        /* The field that explains a silent bot after a bad deploy. */
+        lastErrorMessage: payload.result?.last_error_message || null,
+        lastErrorDate: payload.result?.last_error_date || null,
+        maxConnections: payload.result?.max_connections ?? null,
+        allowedUpdates: payload.result?.allowed_updates ?? null
+      };
+    }
+  } catch {
+    info = null;
+  }
+
+  return res.json({
+    data: { ...base, telegramReachable: info !== null, webhook: info },
+    meta: { schema: 'fbt.telegram-webhook-status.v1', scope: 'full' }
+  });
+});
+
 /* ------------------------------ rate limiting ----------------------------- */
 
 const hits = new Map();

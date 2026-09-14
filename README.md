@@ -417,11 +417,68 @@ Verified by simulation — dice EV 0.973, wheel EV 0.972 per unit staked.
 |---|---|
 | `/start` | Welcome + launch button (retains legacy `?start=REFCODE` referrals) |
 | `/app` | Opens the Mini App |
+| `/help` | In-chat help center — index with a button per topic |
+| `/help <topic>` | Opens one topic directly, e.g. `/help fees`, `/help security` |
+| `/fees` `/networks` `/security` `/support` | Shortcuts to the most-asked topics |
+| `/guide` `/api` | Developer guide, then the API/auth quick reference |
 | `/price btc` | Spot price, 1h/24h/7d change, cap, volume |
 | `/top` | Top 10 by market cap |
 | `/trending` | CoinGecko trending list |
 | `/global` | Total cap, volume, BTC/ETH dominance |
 | inline | Type `@fbtco_bot btc` in any chat to share a price card |
+
+### Putting the bot live (webhook)
+
+On Vercel there is no long-running process, so the bot cannot poll — and until
+a webhook is registered, Telegram has nowhere to deliver updates and the bot is
+silent no matter how correct the handlers are.
+
+1. Choose a secret and set it in **Vercel → Settings → Environment Variables**
+   as `TELEGRAM_WEBHOOK_SECRET` (alongside `TELEGRAM_BOT_TOKEN` and
+   `WEBAPP_URL`), then **redeploy** — variables are read at boot.
+2. Register the webhook and publish the command menu:
+
+   ```bash
+   TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... WEBAPP_URL=https://fbtswap.ir \
+     node scripts/telegram-webhook-setup.mjs
+   ```
+
+3. Check it: `curl -s https://fbtswap.ir/api/telegram/webhook-status | jq`
+   (`ready: true` means the token and secret are both configured).
+
+`--status` inspects without changing anything; `--delete` removes the webhook
+so a local `npm start` can use long polling again. **Telegram allows only one
+delivery method per bot** — registering a webhook silently stops `getUpdates`,
+so never run both against the same bot.
+
+The route (`POST /api/telegram/webhook`) **fails closed**: with no
+`TELEGRAM_WEBHOOK_SECRET` configured it answers 503 rather than accepting
+unauthenticated updates, because the URL is public and a forged update could
+otherwise make the bot reply anywhere. Telegram's secret token is compared with
+a timing-safe, length-checked comparison, and the route acknowledges an update
+*before* handling it — anything other than 2xx makes Telegram redeliver, which
+would send the user the same reply several times.
+
+### In-chat help center
+
+`/help` is a topic-based help center, in English, defined once as data in
+[`server/botHelp.js`](server/botHelp.js) — so the same answer is served whether
+it is reached from a button, a slash command or a typed question, and a fact
+that changes is changed in one place.
+
+Topics: getting started · all commands · swapping · fees and gas · networks and
+tokens · wallets · bridging · safety and scams · developers · troubleshooting ·
+privacy · support.
+
+In a **private** chat the bot also matches a plain-language question
+("what are the fees", "my balance is gone") to a topic. It answers only on a
+confident match and otherwise points at `/help`; it never guesses, and in
+groups it stays silent unless commanded. The copy may not claim funds are
+simulated, promise a return, or ask for a recovery phrase —
+[`test/bot-help-probe.mjs`](test/bot-help-probe.mjs) enforces that, along with
+Telegram's 4096-character and 64-byte `callback_data` limits and HTML validity
+(a malformed message is a 400, which the user experiences as a bot that ignored
+them).
 
 **Official Mini App:** [@fbtco_bot](https://t.me/fbtco_bot) (public Bot ID
 `7837421575`). Referral links use Telegram's Main Mini App form,
