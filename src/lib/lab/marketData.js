@@ -48,7 +48,12 @@ export async function getPrices(ids = coinGeckoIds, vs = 'usd') {
     const data = await r.json();
     const out = {};
     for (const id of ids) {
-      out[id] = data[id]?.[vs] ?? mockPrice(id);
+      const v = Number(data?.[id]?.[vs]);
+      // An API that answers with null, a missing field or a zero must not reach
+      // the UI: NaN renders as "$NaN" in the price block, and 0 divides through
+      // the P&L, allocation and shock maths downstream. Anything that is not a
+      // positive finite number falls back to the deterministic walk.
+      out[id] = Number.isFinite(v) && v > 0 ? v : mockPrice(id);
     }
     return out;
   } catch {
@@ -65,8 +70,13 @@ function mockPrice(id) {
   // does not flicker every render.
   const minute = Math.floor(Date.now() / 60000);
   const seed = hashStr(id) + minute;
-  const wobble = (rand(seed) - 0.5) * 0.02; // ±1%
-  return +(base * (1 + wobble)).toFixed(base < 1 ? 5 : 2);
+  // `rand` is a generator *factory* — it must be called to draw a number.
+  // Subtracting the function itself yielded NaN, so every offline Lab price
+  // rendered as "$NaN" and poisoned the P&L maths built on top of it.
+  const draw = rand(seed);
+  const wobble = (draw() - 0.5) * 0.02; // ±1%
+  const out = +(base * (1 + wobble)).toFixed(base < 1 ? 5 : 2);
+  return Number.isFinite(out) ? out : base;
 }
 
 function hashStr(s) {

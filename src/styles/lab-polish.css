@@ -1,23 +1,86 @@
-/* Lab visual polish: readable in both themes, with expressive but restrained accents. */
-.lab2-card:hover, .lab2-card:focus-visible { border-color: color-mix(in srgb, var(--rgb-1) 48%, transparent); box-shadow: 0 12px 28px -20px var(--rgb-1); }
-.lab2-btn { min-height: 44px; border-radius: 14px; border: 1px solid transparent; box-shadow: 0 8px 18px -14px currentColor; transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
-.lab2-btn:hover:not(:disabled) { filter: brightness(1.08) saturate(1.08); transform: translateY(-1px); }
-.lab2-btn.buy { border-color: color-mix(in srgb, var(--up) 55%, transparent); box-shadow: 0 10px 24px -15px var(--up); }
-.lab2-btn.sell { border-color: color-mix(in srgb, var(--down) 55%, transparent); box-shadow: 0 10px 24px -15px var(--down); }
-.lab2-btn.ghost { background: var(--surface-2, rgba(255,255,255,.06)); border-color: var(--line-strong); }
-.lab-dir-btn { letter-spacing: .01em; }
-.lab-dir-btn .lab-dir-glyph { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 900; text-shadow: 0 3px 14px currentColor; }
-:root[data-theme='light'] .lab2-header,
-:root[data-theme='light'] .lab2-card,
-:root[data-theme='light'] .lab2-panel,
-:root[data-theme='light'] .lab2-choice,
-:root[data-theme='light'] .lab2-quiz-option,
-:root[data-theme='light'] .lab2-btn.ghost {
-  border-color: rgba(35,62,91,.14);
-  background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(241,246,252,.78));
-  box-shadow: 0 12px 28px -22px rgba(35,62,91,.7);
+/* ==========================================================================
+   LAB POLISH — the last 5% that makes the Aurora Glass system feel finished.
+   --------------------------------------------------------------------------
+   Loaded after lab-v2.css by Lab.jsx only. Everything in here is additive:
+   focus rings, loading skeletons, and the handful of details that are easy to
+   forget until somebody tabs through the screen with a keyboard or opens it on
+   a 320px phone.
+
+   Nothing here restyles another page. `lab-modern.css` (Predict / Invest /
+   Trade / Swap / Buy) is deliberately untouched.
+   ========================================================================== */
+
+/* ─── Keyboard focus ────────────────────────────────────────────────────────
+   The app is touch-first, so most of these rings are never seen — but a
+   Bluetooth keyboard on the Android build, or a desktop browser, tabs straight
+   through the Lab. A focus style that is only `outline: none` is a wall. */
+
+.lab2 :where(button, input, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--acc, var(--rgb-1)) 80%, transparent);
+  outline-offset: 2px;
+  border-radius: inherit;
 }
-:root[data-theme='light'] .lab2-card-icon { background: linear-gradient(135deg, rgba(0,145,170,.12), rgba(106,58,224,.12)); border-color: rgba(35,62,91,.12); }
-:root[data-theme='light'] .lab-dir-btn.up { background: linear-gradient(145deg, #e6fbf3, #f7fffc); color: #087653; border-color: rgba(0,130,84,.24); }
-:root[data-theme='light'] .lab-dir-btn.down { background: linear-gradient(145deg, #fff0f4, #fffafd); color: #bf3158; border-color: rgba(191,49,88,.24); }
-@media (prefers-reduced-motion: reduce) { .lab2-card, .lab2-btn { transition: none; } }
+
+.lab2-tab:focus-visible,
+.lab2-defi-tab:focus-visible,
+.lab2-chip:focus-visible { outline-offset: 1px; }
+
+/* ─── Loading skeletons ─────────────────────────────────────────────────────
+   Prices arrive over the network (and fall back to a deterministic walk when
+   it does not). While that is in flight the price block and the chart show a
+   shimmering placeholder instead of a dash, so the screen never looks broken
+   for the half-second it takes. */
+
+.lab2-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: transparent !important;
+  min-width: 84px;
+  min-height: 1em;
+}
+
+.lab2-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+  transform: translateX(-100%);
+  animation: lab-skeleton 1.5s ease-in-out infinite;
+}
+
+@keyframes lab-skeleton { to { transform: translateX(100%); } }
+
+:root[data-theme='light'] .lab2-skeleton { background: rgba(24, 42, 74, 0.08); }
+:root[data-theme='light'] .lab2-skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent); }
+
+/* ─── Legacy emoji compatibility ────────────────────────────────────────────
+   A few data tables still carry an emoji (scenario icons come from i18n, not
+   from this repo's code). If one is rendered inside a tile, keep it sized and
+   clipped instead of letting it overflow the rounded box. */
+
+.lab2-group-emoji,
+.lab2-card-icon .emoji,
+.lab2-result-emoji { overflow: hidden; line-height: 1; }
+
+.lab2-card-icon .emoji { font-size: 23px; }
+
+/* ─── Tiny screens ────────────────────────────────────────────────────────── */
+
+@media (max-width: 340px) {
+  .lab2-grid { grid-template-columns: 1fr; }
+  .lab2-card { min-height: 0; flex-direction: row; align-items: center; gap: 12px; }
+  .lab2-card-sub { display: none; }
+  .lab2-card-arrow { position: static; opacity: 1; transform: none; }
+  .lab2-stats { grid-template-columns: 1fr; }
+  .lab2-badge-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Motion off ──────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .lab2-skeleton::after { animation: none; }
+}
+
+:root[data-reduce-motion='true'] .lab2-skeleton::after { animation: none; }

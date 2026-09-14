@@ -1,23 +1,32 @@
 /**
  * Level / Progress — the user-facing summary of their training.
+ *
+ * VISUAL PASS: badges are tiles, not list rows. An earned badge carries its
+ * accent gradient, a check medallion and a slow diagonal shine; a locked one is
+ * dimmed with a padlock. Scanning the grid tells you what is left to do without
+ * reading a single description.
  */
 
 import { useTranslation } from 'react-i18next';
-import { LabBack, Panel, Row, Notice, labLevelName } from './Shared';
+import { motion } from 'framer-motion';
+import { AnimatedNumber, LAB_EASE, LabBack, Meter, Notice, Panel, Row, labLevelName } from './Shared';
+import { IconCheck, IconLock, LabIcon } from './LabIcons';
 import { levelFromXp, useLabStore } from '../../store/useLabStore';
+import { useStill } from '../AnimatedIcon';
 
 const BADGES = [
-  { id: 'predictor', icon: '🔮' },
-  { id: 'trader', icon: '📈' },
-  { id: 'graduate', icon: '🎓' },
-  { id: 'strategist', icon: '🧪' },
-  { id: 'riskpro', icon: '🛡️' },
-  { id: 'defi', icon: '🏦' },
-  { id: 'master', icon: '👑' }
+  { id: 'predictor', icon: 'flask', accent: 'violet' },
+  { id: 'trader', icon: 'trend', accent: 'cyan' },
+  { id: 'graduate', icon: 'cap', accent: 'amber' },
+  { id: 'strategist', icon: 'atom', accent: 'magenta' },
+  { id: 'riskpro', icon: 'shield', accent: 'mint' },
+  { id: 'defi', icon: 'bank', accent: 'cyan' },
+  { id: 'master', icon: 'crown', accent: 'amber' }
 ];
 
 export default function LevelSystem({ onBack }) {
   const { t } = useTranslation();
+  const still = useStill();
   const xp = useLabStore((s) => s.xp);
   const lessonsDone = useLabStore((s) => s.lessonsDone);
   const predictionsCount = useLabStore((s) => s.predictionsCount);
@@ -32,7 +41,7 @@ export default function LevelSystem({ onBack }) {
   const lvl = levelFromXp(xp);
   const accuracy = predictionsCount > 0 ? Math.round((correctPredictions / predictionsCount) * 100) : 0;
   const winRate = tradesCount > 0 ? Math.round((winningTrades / tradesCount) * 100) : 0;
-  const highRiskTrades = paperTrades.filter((t) => t.riskScore >= 90).length;
+  const highRiskTrades = paperTrades.filter((x) => x.riskScore >= 90).length;
   const defiKinds = new Set(defi.map((d) => d.kind)).size;
   const masteredLevel = lvl.lvl >= 10;
 
@@ -50,37 +59,101 @@ export default function LevelSystem({ onBack }) {
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title={`🏆 ${t('lab2.screens.level.title')}`} sub={t('lab2.level.badgesEarned', { earned: earnedCount, total: BADGES.length })} />
+      <LabBack
+        onBack={onBack}
+        icon="trophy"
+        accent="amber"
+        title={t('lab2.screens.level.title')}
+        sub={t('lab2.level.badgesEarned', { earned: earnedCount, total: BADGES.length })}
+      />
 
-      <Panel title={t('lab2.level.level')}>
+      <Panel title={t('lab2.level.level')} icon="sparkles" accent="violet">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div
+            className="lab2-level-badge"
+            style={{ background: 'linear-gradient(140deg, var(--rgb-1), var(--rgb-2) 55%, var(--rgb-3))' }}
+          >
+            {lvl.lvl}
+          </div>
+          <div className="lab2-level-info" style={{ flex: 1 }}>
+            <div className="lab2-level-name">
+              <strong>{labLevelName(t, lvl)}</strong>
+              <span className="lab2-num">
+                <AnimatedNumber value={xp} /> / {lvl.nextXp.toLocaleString()}
+              </span>
+            </div>
+            <div className="lab2-bar">
+              <motion.div
+                className="lab2-bar-fill"
+                initial={still ? false : { width: 0 }}
+                animate={{ width: `${lvl.pct}%` }}
+                transition={{ duration: 0.9, ease: LAB_EASE }}
+              />
+            </div>
+          </div>
+        </div>
         <Row label={t('lab2.level.currentLevel')} value={`${lvl.lvl} · ${labLevelName(t, lvl)}`} />
-        <Row label={t('lab2.level.xp')} value={<span className="lab2-num">{xp.toLocaleString()} / {lvl.nextXp.toLocaleString()}</span>} />
         <Row label={t('lab2.level.progressToNext')} value={<span className="lab2-num">{lvl.pct}%</span>} />
       </Panel>
 
-      <Panel title={t('lab2.level.disciplineScores')}>
-        <Row label={t('lab2.level.predictionAccuracy')} value={<span className="lab2-num">{accuracy}%</span>} valueClass={accuracy >= 60 ? 'pos' : ''} />
-        <Row label={t('lab2.level.tradeWinRate')} value={<span className="lab2-num">{winRate}%</span>} valueClass={winRate >= 55 ? 'pos' : ''} />
+      <Panel title={t('lab2.level.disciplineScores')} icon="gauge" accent="mint">
+        <div className="lab2-stack" style={{ gap: 12 }}>
+          <div className="lab2-stack" style={{ gap: 6 }}>
+            <Row
+              label={t('lab2.level.predictionAccuracy')}
+              value={<span className="lab2-num">{accuracy}%</span>}
+              valueClass={accuracy >= 60 ? 'pos' : ''}
+            />
+            <Meter value={accuracy} accent={accuracy >= 60 ? 'mint' : 'amber'} />
+          </div>
+          <div className="lab2-stack" style={{ gap: 6 }}>
+            <Row
+              label={t('lab2.level.tradeWinRate')}
+              value={<span className="lab2-num">{winRate}%</span>}
+              valueClass={winRate >= 55 ? 'pos' : ''}
+            />
+            <Meter value={winRate} accent={winRate >= 55 ? 'mint' : 'amber'} />
+          </div>
+          <div className="lab2-stack" style={{ gap: 6 }}>
+            <Row
+              label={t('lab2.level.badges')}
+              value={<span className="lab2-num">{earnedCount} / {BADGES.length}</span>}
+            />
+            <Meter value={(earnedCount / BADGES.length) * 100} accent="violet" />
+          </div>
+        </div>
         <Row label={t('lab2.level.strategiesBacktested')} value={<span className="lab2-num">{strategies.length}</span>} />
         <Row label={t('lab2.level.challengeWins')} value={<span className="lab2-num">{challenges}</span>} />
         <Row label={t('lab2.level.lessonsCompleted')} value={<span className="lab2-num">{lessonsDone}</span>} />
       </Panel>
 
-      <Panel title={t('lab2.level.badges')}>
-        {BADGES.map((b) => (
-          <div key={b.id} className="lab2-row">
-            <span style={{ opacity: earned[b.id] ? 1 : 0.4 }}>
-              {b.icon} <strong style={{ color: earned[b.id] ? 'var(--text-1)' : 'var(--text-3)' }}>{t(`lab2.level.badgesList.${b.id}.name`)}</strong>
-              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>{t(`lab2.level.badgesList.${b.id}.desc`)}</span>
-            </span>
-            <strong style={{ color: earned[b.id] ? 'var(--up)' : 'var(--text-3)' }}>
-              {earned[b.id] ? '✓' : '🔒'}
-            </strong>
-          </div>
-        ))}
+      <Panel title={t('lab2.level.badges')} icon="medal" accent="amber">
+        <div className="lab2-badge-grid">
+          {BADGES.map((b, i) => {
+            const got = Boolean(earned[b.id]);
+            return (
+              <motion.div
+                key={b.id}
+                className={`lab2-badge acc-${b.accent} ${got ? 'earned' : ''}`}
+                initial={still ? false : { opacity: 0, y: 14, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.42, ease: LAB_EASE, delay: still ? 0 : i * 0.05 }}
+              >
+                <span className="lab2-badge-state" aria-hidden="true">
+                  {got ? <IconCheck width={13} height={13} /> : <IconLock width={12} height={12} />}
+                </span>
+                <span className="lab2-badge-icon" aria-hidden="true">
+                  <LabIcon name={b.icon} width={21} height={21} />
+                </span>
+                <span className="lab2-badge-name">{t(`lab2.level.badgesList.${b.id}.name`)}</span>
+                <span className="lab2-badge-desc">{t(`lab2.level.badgesList.${b.id}.desc`)}</span>
+              </motion.div>
+            );
+          })}
+        </div>
       </Panel>
 
-      <Notice icon="⭐">
+      <Notice variant="tip" icon="star">
         {t('lab2.level.notice')}
       </Notice>
     </div>
