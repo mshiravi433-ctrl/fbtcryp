@@ -7647,7 +7647,9 @@
       "tapToVerify": "Checking…",
       "directTitle": "Direct deploy — nothing of ours in your transaction",
       "directBody": "The token's ready-made bytecode is sent straight from your wallet as a plain contract creation. No FBT contract is involved, so there is nothing to deploy and nothing to pay us: this launch costs you gas and nothing else. The address is shown before you sign and verified on-chain afterwards.",
-      "factoryModeBody": "This chain has an FBTTokenFactory pinned for it, so the token is created through that contract (still signed by your own wallet — the factory never holds funds or keys). This is the compatible path for a future on-chain launch fee."
+      "factoryModeBody": "This chain has an FBTTokenFactory pinned for it, so the token is created through that contract (still signed by your own wallet — the factory never holds funds or keys). This is the compatible path for a future on-chain launch fee.",
+      "retry": "Retry",
+      "solanaPending": "{{n}} parts pending"
     },
     "token": {
       "title": "Your token",
@@ -7661,7 +7663,8 @@
       "symbolPh": "e.g. FBTG",
       "supplyPh": "e.g. 1000000000",
       "supplyFull": "Full supply (smallest units)",
-      "localOnly": "Kept on this device. Nothing is uploaded."
+      "localOnly": "Kept on this device. Nothing is uploaded.",
+      "logoFallback": "No logo? Your network's mark is used instead — the token always has an identity."
     },
     "err": {
       "NAME_REQUIRED": "Name is required",
@@ -7736,7 +7739,16 @@
       "feeTier": "DEX fee tier",
       "tvl": "Initial pool value",
       "lpTitle": "Where the LP tokens go",
-      "lpBody": "Liquidity-provider tokens mint directly to your wallet. There is no lock contract, no vesting and no third party — you can remove the liquidity at any time. That is the most non-custodial outcome possible."
+      "lpBody": "Liquidity-provider tokens mint directly to your wallet. There is no lock contract, no vesting and no third party — you can remove the liquidity at any time. That is the most non-custodial outcome possible.",
+      "nativeTag": "native",
+      "modeAmounts": "By amounts",
+      "modePrice": "By price",
+      "computed": "auto",
+      "computedFromPrice": "Calculated from your price × token amount.",
+      "balance": "Balance",
+      "max": "MAX",
+      "ofSupply": "of total supply",
+      "priceHint": "Type both amounts above, or switch to “By price”."
     },
     "review": {
       "title": "Review & launch",
@@ -7753,7 +7765,13 @@
       "confirmWarn": "This launch carries a HIGH risk score. Type the token symbol to acknowledge every finding above and enable the launch button.",
       "deployMode": "Token deployment",
       "predictedTitle": "Your token will be created at this address",
-      "predictedNote": "Read from your account's next transaction (nonce) before you sign, then verified on-chain: the transaction must be a deployment, it must land at exactly this address, and the code there must match the published token bytecode byte for byte. If any of that fails, the launch stops instead of creating a pool."
+      "predictedNote": "Read from your account's next transaction (nonce) before you sign, then verified on-chain: the transaction must be a deployment, it must land at exactly this address, and the code there must match the published token bytecode byte for byte. If any of that fails, the launch stops instead of creating a pool.",
+      "connectWallet": "Connect wallet to launch",
+      "connectSub": "Your wallet signs every transaction — FBT never holds your funds.",
+      "walletReady": "Wallet connected",
+      "changeWallet": "Change",
+      "noGas": "No gas balance",
+      "noGasBody": "This wallet holds no {{native}} on {{chain}} to pay gas with. Fund it first — every signature needs gas, and a launch without gas cannot proceed."
     },
     "run": {
       "title": "Launching…",
@@ -7785,7 +7803,11 @@
         "DIRECT_PREDICTED_ADDRESS_MISSING": "No address could be predicted for the deploy — the launch stopped.",
         "TOKEN_EVENT_NOT_FOUND": "The factory receipt carried no TokenCreated event — the launch stopped.",
         "TX_REVERTED": "The transaction reverted on-chain.",
-        "USER_REJECTED": "You declined the signature in your wallet. Nothing was sent."
+        "USER_REJECTED": "You declined the signature in your wallet. Nothing was sent.",
+        "NO_SIGNER": "No wallet is connected. Connect your wallet and try again — nothing was sent.",
+        "SIGNER_UNAVAILABLE": "The wallet disconnected mid-launch. Reconnect and retry — confirmed steps stay confirmed.",
+        "CHAIN_SWITCH_REJECTED": "The network switch was rejected in your wallet. The launch stays on hold until you approve it.",
+        "CHAIN_SWITCH_TIMEOUT": "The wallet did not switch networks in time. Switch to the launch network and retry."
       }
     },
     "result": {
@@ -7801,7 +7823,8 @@
       "retryPool": "Retry the pool",
       "newLaunch": "Start a new launch",
       "directNote": "Deployed directly from your wallet: the code at this address was compared with the published token bytecode and matched.",
-      "factoryNote": "Created through the FBTTokenFactory deployment pinned for this chain, and its TokenCreated event was read back from the receipt."
+      "factoryNote": "Created through the FBTTokenFactory deployment pinned for this chain, and its TokenCreated event was read back from the receipt.",
+      "copy": "Copy address"
     },
     "history": {
       "title": "Your launches",

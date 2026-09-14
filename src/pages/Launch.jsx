@@ -5,7 +5,22 @@ import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
-import { IconRocket } from '../components/Icons';
+import WalletConnectSheet from '../components/WalletConnectSheet';
+import {
+  IconCheck,
+  IconClock,
+  IconCoins,
+  IconCopy,
+  IconExternal,
+  IconInfo,
+  IconLock,
+  IconRefresh,
+  IconRocket,
+  IconShield,
+  IconTrophy,
+  IconWallet,
+  IconX
+} from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import {
@@ -60,6 +75,40 @@ const stepLabel = (id) => {
   return map[id] || id;
 };
 
+/* Keep only digits and a SINGLE dot — "12.5.3" used to pass the sanitiser and
+   then silently fail validation, leaving the user wondering why Next stayed
+   disabled. */
+const numOnly = (s) => {
+  const c = String(s ?? '').replace(/[^0-9.]/g, '');
+  const i = c.indexOf('.');
+  if (i === -1) return c.replace(/^0+(?=\d)/, '');
+  return (c.slice(0, i + 1) + c.slice(i + 1).replace(/\./g, '')).replace(/^0+(?=\d)/, '');
+};
+
+/*
+ * Compact a computed decimal: N significant digits, no trailing zeros, and
+ * NEVER scientific notation. "1e-9" would fail the digits-and-dot validation
+ * and strand the user — and memecoin prices (tiny) and supplies (huge) hit
+ * scientific notation constantly, so expanding here is load-bearing.
+ */
+const compactNum = (n, precision = 12) => {
+  if (!Number.isFinite(n)) return '';
+  let s = String(Number(n.toPrecision(precision)));
+  if (/[eE]/.test(s)) {
+    const neg = s.startsWith('-');
+    const [m, e] = (neg ? s.slice(1) : s).split(/[eE]/);
+    const exp = parseInt(e, 10);
+    const [ip, fp = ''] = m.split('.');
+    const digits = (ip + fp).replace(/^0+(?=\d)/, '') || '0';
+    const point = ip.replace(/^0+(?=\d)/, '').length + exp;
+    if (point <= 0) s = `0.${'0'.repeat(-point)}${digits}`;
+    else if (point >= digits.length) s = digits + '0'.repeat(point - digits.length);
+    else s = `${digits.slice(0, point)}.${digits.slice(point)}`;
+    if (neg) s = `-${s}`;
+  }
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+};
+
 export default function Launch() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -95,6 +144,8 @@ export default function Launch() {
   const [chainMeta, setChainMeta] = useState(() => describeAllLaunchChains());
   const [dexCheck, setDexCheck] = useState({}); // chainId -> {ok, checking, reason}
   const [configSource, setConfigSource] = useState('local');
+  const [dexNonce, setDexNonce] = useState(0); // bump to re-verify on demand
+  const [connectOpen, setConnectOpen] = useState(false); // in-place wallet popup
 
   useEffect(() => {
     let alive = true;
@@ -111,6 +162,8 @@ export default function Launch() {
 
   // DEX anchor verification for the selected chain — the runtime proof that
   // the DEX factory constant is the real one (see networks.js header).
+  // Re-runs on chain select, on wallet change, and on manual retry (a flaky
+  // public RPC must never look like a permanently broken chain).
   useEffect(() => {
     let alive = true;
     setDexCheck((m) => ({ ...m, [chainId]: { ok: null, checking: true } }));
@@ -125,7 +178,7 @@ export default function Launch() {
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainId, wallet.address, wallet.chainId]);
+  }, [chainId, wallet.address, wallet.chainId, dexNonce]);
 
   const chain = EVM_CHAINS[chainId];
   const meta = chainMeta.find((c) => c.chainId === chainId) || null;
@@ -176,19 +229,56 @@ export default function Launch() {
 
   const impliedPrice = amountValid ? Number(quoteAmount) / Number(tokenAmount) : null;
 
-  // price-mode helper: entering a price + token amount fills the quote amount
+  /*
+   * PRICE MODE (fixed 2026-09-14): the price field used to be `disabled`
+   * until `priceMode` became 'price' — but the ONLY code that set 'price'
+   * was the disabled field's own onChange, which a disabled input never
+   * fires. The field was unreachable: "Initial price کار نمیده". Now a
+   * segmented control switches modes explicitly, and each mode derives the
+   * other field instead of fighting over state.
+   */
   useEffect(() => {
     if (priceMode !== 'price') return;
     const p = Number(initialPrice);
     const ta = Number(tokenAmount);
-    if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(ta) || ta <= 0) return;
-    setQuoteAmount(String(Number((p * ta).toPrecision(12))));
+    if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(ta) || ta <= 0) {
+      setQuoteAmount('');
+      return;
+    }
+    setQuoteAmount(compactNum(p * ta));
   }, [initialPrice, tokenAmount, priceMode]);
 
-  useEffect(() => {
-    if (priceMode !== 'price' || !amountValid) return;
-    setInitialPrice(String(Number((Number(quoteAmount) / Number(tokenAmount)).toPrecision(12))));
-  }, [quoteAmount, amountValid, priceMode]);
+  // Switching modes never strands the user on an empty field: entering price
+  // mode seeds the price from the amounts already typed (when valid).
+  const setPriceModeExplicit = useCallback((m) => {
+    if (m === 'price' && m !== priceMode && impliedPrice != null) {
+      setInitialPrice(compactNum(impliedPrice));
+    }
+    setPriceMode(m);
+  }, [priceMode, impliedPrice]);
+
+  // What the (read-only) side of each mode displays.
+  const priceShown = priceMode === 'price'
+    ? initialPrice
+    : (impliedPrice != null ? compactNum(impliedPrice) : '');
+
+  // % of total supply shortcuts for the token amount (only when the supply
+  // typed on the token step is a real positive number).
+  const supplyNum = Number(supply);
+  const supplyValid = Number.isFinite(supplyNum) && supplyNum > 0;
+  const setTokenPct = useCallback((pct) => {
+    if (!Number.isFinite(supplyNum) || supplyNum <= 0) return;
+    setTokenAmount(compactNum((supplyNum * pct) / 100));
+  }, [supplyNum]);
+
+  // MAX for the quote side: ERC-20 quotes only. A native quote must NEVER be
+  // maxed out — the wallet would be left with no gas for the signatures that
+  // come after, stranding the launch mid-flow.
+  const setQuoteMax = useCallback(() => {
+    if (!balanceInfo?.human || quote?.native) return;
+    setPriceModeExplicit('amounts');
+    setQuoteAmount(balanceInfo.human);
+  }, [balanceInfo, quote, setPriceModeExplicit]);
 
   // ── risk (live, deterministic, no network) ────────────────────────────
   const risk = useMemo(() => {
@@ -517,7 +607,19 @@ export default function Launch() {
           }
           continue;
         }
-        await runStep(cur, next);
+        /*
+         * A missing signer (wallet disconnected mid-flow) must become a NAMED
+         * failure on the step — never an uncaught throw that freezes the run
+         * view with no explanation. The wallet gate in onLaunch makes this
+         * nearly unreachable; this is the belt to its suspenders.
+         */
+        try {
+          await runStep(cur, next);
+        } catch (e) {
+          engine.stepFailed(cur, next.id, 'SIGNER_UNAVAILABLE');
+          setLaunch({ ...cur });
+          break;
+        }
         if (!['AWAITING_CONFIRMATION', 'CONFIRMING'].includes(cur.state)) break; // failed/retryable/cancelled
       }
 
@@ -614,38 +716,86 @@ export default function Launch() {
     }
   }, [spec, quote, amountValid, chainId, factoryAddress, deployMode, directDeploy, tokenAmount, quoteAmount, slippage, wallet.address, notify]);
 
+  /*
+   * A plan is a snapshot of THESE inputs. Going back to edit amounts (or the
+   * token, quote, slippage…) and returning must rebuild it — reviewing stale
+   * numbers while signing fresh ones is exactly how money gets wasted.
+   */
+  const planKey = JSON.stringify([chainId, name, symbol, decimals, supply, caps, quoteSym, tokenAmount, quoteAmount, slippage, wallet.address]);
+  useEffect(() => { setPlan(null); }, [planKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (step === 4 && !plan && !planning) doPlan();
   }, [step, plan, planning, doPlan]);
 
-  // quote balance check for the review screen (honest, read-only)
+  /*
+   * Quote + gas balance check for the liquidity AND review screens (honest,
+   * read-only, debounced so typing doesn't spam the RPC).
+   *
+   * PRECISION (fixed 2026-09-14): the old check computed
+   * `BigInt(Math.ceil(Number(amount) * 10 ** decimals))` — for an 18-decimal
+   * quote, `10 ** 18` already exceeds float precision, so the comparison
+   * could BOTH wrongly block a funded launch and wrongly pass an unfunded
+   * one. parseUnits does the decimal math exactly; a parse failure means the
+   * amount is not even representable, which is itself a block.
+   */
   useEffect(() => {
-    if (step !== 4 || !quote || !amountValid || !wallet.address) return;
+    if ((step !== 3 && step !== 4) || !quote || !wallet.address) { setBalanceInfo(null); return; }
     let alive = true;
-    (async () => {
-      try {
-        const provider = await wallet.getReadProvider(chainId);
-        let bal;
-        if (quote.native) bal = (await provider.getBalance(wallet.address)).toString();
-        else {
-          const { Contract } = await import('ethers');
-          const c = new Contract(quote.address, ['function balanceOf(address) view returns (uint256)'], provider);
-          bal = (await c.balanceOf(wallet.address)).toString();
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const provider = await wallet.getReadProvider(chainId);
+          const { Contract, parseUnits, formatUnits } = await import('ethers');
+          let bal;
+          if (quote.native) bal = await provider.getBalance(wallet.address);
+          else {
+            const c = new Contract(quote.address, ['function balanceOf(address) view returns (uint256)'], provider);
+            bal = await c.balanceOf(wallet.address);
+          }
+          const gasWei = quote.native ? bal : await provider.getBalance(wallet.address);
+          let enough = null;
+          if (amountValid) {
+            try {
+              enough = BigInt(bal.toString()) >= parseUnits(quoteAmount, quote.decimals);
+            } catch { enough = false; }
+          }
+          if (alive) {
+            setBalanceInfo({
+              wei: bal.toString(),
+              human: compactNum(Number(formatUnits(bal, quote.decimals))),
+              decimals: quote.decimals,
+              enough,
+              gasWei: gasWei.toString(),
+              gasOk: BigInt(gasWei.toString()) > 0n
+            });
+          }
+        } catch {
+          if (alive) setBalanceInfo(null);
         }
-        if (alive) setBalanceInfo({ wei: bal, decimals: quote.decimals, enough: BigInt(bal) >= BigInt(Math.ceil(Number(quoteAmount) * 10 ** quote.decimals)) });
-      } catch {
-        if (alive) setBalanceInfo(null);
-      }
-    })();
-    return () => { alive = false; };
+      })();
+    }, 350);
+    return () => { alive = false; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, quote, amountValid, wallet.address, quoteAmount, chainId]);
 
-  const launchReady = canNext && step === 4 && risk && !risk.blocked && (
+  const walletReady = Boolean(wallet.address);
+  /*
+   * KNOWN-insufficient balance (quote or gas) blocks the button: launching
+   * anyway would burn gas on a reverting addLiquidity. UNKNOWN balance
+   * (still loading / RPC hiccup) does NOT block — the pre-signature
+   * simulation in startLaunch re-checks everything and fails NAMED before
+   * any signature, so an unfunded launch can never cost more than zero.
+   */
+  const fundsOk = balanceInfo?.enough !== false && balanceInfo?.gasOk !== false;
+  const launchReady = canNext && step === 4 && risk && !risk.blocked && walletReady && fundsOk && (
     !risk.confirmRequired || confirmText.trim().toUpperCase() === symbol.trim().toUpperCase()
   ) && !planning && Boolean(plan);
 
   const onLaunch = () => {
+    // No wallet, no run: open the connect sheet IN PLACE (never navigate
+    // away to the wallet screen — the wizard state must survive connecting).
+    if (!wallet.address) { setConnectOpen(true); return; }
     if (!launchReady) return;
     const l = engine.createLaunch();
     const cfg = {
@@ -727,7 +877,13 @@ export default function Launch() {
       while (true) {
         const next = engine.nextPendingStep(l);
         if (!next) break;
-        await runStep(l, next);
+        try {
+          await runStep(l, next);
+        } catch (e) {
+          engine.stepFailed(l, next.id, 'SIGNER_UNAVAILABLE');
+          setLaunch({ ...l });
+          break;
+        }
         if (!['AWAITING_CONFIRMATION', 'CONFIRMING'].includes(l.state)) break;
       }
       if (l.state === 'CONFIRMING' || l.state === 'AWAITING_CONFIRMATION') {
@@ -818,7 +974,10 @@ export default function Launch() {
 
         <AnimatePresence mode="wait">
           {view === 'wizard' && (
-            <motion.div key="wizard" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
+            <motion.div key="wizard" className="launch-flow" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
+              {/* .launch-flow: the wizard wrapper used to be a BARE motion.div,
+                  so the stepper, the section and the buttons stacked with ZERO
+                  gap. One flex column fixes the button/box spacing. */}
               {/* stepper */}
               <div className="launch-stepper" role="tablist" aria-label={t('launch.steps')}>
                 {STEPS.map((s, i) => (
@@ -831,7 +990,7 @@ export default function Launch() {
                     onClick={() => { if (i < step) setStep(i); }}
                     disabled={i > step}
                   >
-                    <span className="launch-step-num">{i < step ? '✓' : i + 1}</span>
+                    <span className="launch-step-num">{i < step ? <IconCheck width={12} height={12} /> : i + 1}</span>
                     <span className="launch-step-label">{t(`launch.step.${s}`)}</span>
                   </button>
                 ))}
@@ -844,25 +1003,40 @@ export default function Launch() {
                   <div className="launch-chain-grid">
                     {chainMeta.map((c) => {
                       const check = dexCheck[c.chainId];
+                      const selected = chainId === c.chainId;
+                      const statusCls = check?.checking ? 'warn' : check?.ok === true ? 'ok' : check?.ok === false ? 'bad' : '';
                       return (
                         <button
                           key={c.chainId}
                           type="button"
-                          className={`launch-chain${chainId === c.chainId ? ' active' : ''}`}
+                          className={`launch-chain${selected ? ' active' : ''}`}
                           onClick={() => setChainId(c.chainId)}
-                          style={{ borderColor: chainId === c.chainId ? c.color : undefined }}
+                          aria-pressed={selected}
+                          style={{ '--chain-color': c.color }}
                         >
-                          <span className="launch-chain-dot" style={{ background: c.color }} aria-hidden />
-                          <span className="launch-chain-name">{c.name}</span>
-                          <span className="launch-chain-dex">{t('launch.network.dex')}: {c.dex.name}</span>
-                          <span className={`launch-chain-mode ${c.mode === 'factory' ? 'factory' : 'direct'}`}>
-                            {c.mode === 'factory' ? t('launch.mode.factory') : t('launch.mode.direct')}
+                          <span className="launch-chain-top">
+                            <ChainMark color={c.color} short={c.short} size={38} />
+                            <span className="launch-chain-id">
+                              <span className="launch-chain-name">{c.name}</span>
+                              <span className="launch-chain-dex">{c.dex.name}</span>
+                            </span>
+                            {selected && (
+                              <span className="launch-chain-tick" aria-hidden>
+                                <IconCheck width={12} height={12} />
+                              </span>
+                            )}
                           </span>
-                          <span className={`launch-chain-status ${check?.checking ? 'warn' : check?.ok === true ? 'ok' : check?.ok === false ? 'warn' : ''}`}>
-                            {check?.checking ? t('launch.network.verifyingShort')
-                              : check?.ok === true ? t('launch.network.ready')
-                                : check?.ok === false ? t('launch.network.blocked')
-                                  : t('launch.network.tapToVerify')}
+                          <span className="launch-chain-pills">
+                            <span className={`launch-chain-mode ${c.mode === 'factory' ? 'factory' : 'direct'}`}>
+                              {c.mode === 'factory' ? t('launch.mode.factory') : t('launch.mode.direct')}
+                            </span>
+                            <span className={`launch-chain-status ${statusCls}`}>
+                              <span className="launch-status-dot" aria-hidden />
+                              {selected && check?.checking ? t('launch.network.verifyingShort')
+                                : selected && check?.ok === true ? t('launch.network.ready')
+                                  : selected && check?.ok === false ? t('launch.network.blocked')
+                                    : t('launch.network.tapToVerify')}
+                            </span>
                           </span>
                         </button>
                       );
@@ -877,20 +1051,49 @@ export default function Launch() {
                         title={SOLANA.statement}
                         data-solana-pending={SOLANA.pending.join(',')}
                       >
-                        <span className="launch-chain-dot" style={{ background: '#14f195' }} aria-hidden />
-                        <span className="launch-chain-name">Solana</span>
-                        <span className="launch-chain-dex">SPL · {SOLANA.pending.length} parts pending</span>
-                        <span className="launch-chain-status warn">{t('launch.network.soon')}</span>
+                        <span className="launch-chain-top">
+                          <ChainMark color="#14f195" short="SOL" size={38} dim />
+                          <span className="launch-chain-id">
+                            <span className="launch-chain-name">Solana</span>
+                            <span className="launch-chain-dex">SPL · {t('launch.network.solanaPending', { n: SOLANA.pending.length })}</span>
+                          </span>
+                          <span className="launch-chain-tick soon" aria-hidden>
+                            <IconClock width={13} height={13} />
+                          </span>
+                        </span>
+                        <span className="launch-chain-pills">
+                          <span className="launch-chain-status warn">
+                            <span className="launch-status-dot" aria-hidden />
+                            {t('launch.network.soon')}
+                          </span>
+                        </span>
                       </div>
                     )}
                   </div>
 
-                  {/* DEX verification banner — the runtime proof, visible */}
+                  {/* DEX verification banner — the runtime proof, visible, with
+                      a retry for flaky public RPCs. Shows the LAUNCH dex name
+                      (meta.dex.name), never the swap router's (chain.dexName
+                      is Velodrome on Optimism while the launch runs on
+                      Uniswap V2 — the old fallback printed the wrong DEX). */}
                   {chain && (
-                    <div className={`launch-dexcheck ${dexChecking ? 'checking' : dexOk ? 'ok' : 'bad'}`}>
-                      {dexChecking && <><span className="spinner spinner-sm" /> {t('launch.network.verifying')}</>}
-                      {!dexChecking && dexOk && <>✓ {t('launch.network.verified', { dex: chain.dexName || dex?.dexName })}</>}
-                      {!dexChecking && !dexOk && <>⚠ {t('launch.network.verifyFailed', { reason: dexCheck[chainId]?.reason || '' })}</>}
+                    <div className={`launch-dexcheck ${dexChecking ? 'checking' : dexOk ? 'ok' : 'bad'}`} role="status">
+                      <span className="launch-dexcheck-ico" aria-hidden>
+                        {dexChecking ? <span className="spinner spinner-sm" />
+                          : dexOk ? <IconCheck width={15} height={15} />
+                            : <IconShield width={15} height={15} />}
+                      </span>
+                      <span className="launch-dexcheck-text">
+                        {dexChecking && t('launch.network.verifying')}
+                        {!dexChecking && dexOk && t('launch.network.verified', { dex: dex?.name || chain.dexName })}
+                        {!dexChecking && !dexOk && t('launch.network.verifyFailed', { reason: dexCheck[chainId]?.reason || '' })}
+                      </span>
+                      {!dexChecking && !dexOk && (
+                        <button type="button" className="launch-dexcheck-retry" onClick={() => setDexNonce((n) => n + 1)}>
+                          <IconRefresh width={13} height={13} aria-hidden />
+                          {t('launch.network.retry')}
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -910,21 +1113,32 @@ export default function Launch() {
                   <h2 className="launch-h2">{t('launch.token.title')}</h2>
                   <div className="launch-token-card">
                     <div className="launch-logo-row">
+                      {/* No custom logo → the NETWORK's mark (modern gradient,
+                          not a grey box): the token always has an identity. */}
                       {logo
                         ? <img className="launch-logo" src={logo} alt="" />
-                        : <div className="launch-logo launch-logo-ph">{(symbol || '?').slice(0, 2).toUpperCase()}</div>}
-                      <label className="btn btn-ghost btn-sm">
-                        {t('launch.token.logo')}
-                        <input type="file" accept="image/png,image/jpeg" hidden
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            const rd = new FileReader();
-                            rd.onload = () => setLogo(String(rd.result));
-                            rd.readAsDataURL(f);
-                          }} />
-                      </label>
+                        : <ChainMark color={meta?.color || '#00e5ff'} short={symbol?.slice(0, 3) || meta?.short || '?'} size={52} />}
+                      <div className="launch-logo-cta">
+                        <label className="btn btn-ghost btn-sm">
+                          {t('launch.token.logo')}
+                          <input type="file" accept="image/png,image/jpeg" hidden
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                  const rd = new FileReader();
+                              rd.onload = () => setLogo(String(rd.result));
+                              rd.readAsDataURL(f);
+                              e.target.value = '';
+                            }} />
+                        </label>
+                        {logo && (
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLogo(null)}>
+                            <IconX width={13} height={13} aria-hidden />
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    <p className="launch-hint">{t('launch.token.logoFallback')}</p>
                     <div className="launch-field">
                       <label className="field-label">{t('launch.token.name')}</label>
                       <input className="launch-input" value={name} maxLength={64} placeholder={t('launch.token.namePh')}
@@ -946,7 +1160,7 @@ export default function Launch() {
                     <div className="launch-field">
                       <label className="field-label">{t('launch.token.supply')}</label>
                       <input className="launch-input mono" inputMode="decimal" value={supply} placeholder={t('launch.token.supplyPh')}
-                        onChange={(e) => setSupply(e.target.value.replace(/[^0-9.]/g, ''))} />
+                        onChange={(e) => setSupply(numOnly(e.target.value))} />
                       {specResult.ok && spec && (
                         <p className="launch-hint">{t('launch.token.supplyFull')}: {spec.supplyWei}</p>
                       )}
@@ -982,15 +1196,28 @@ export default function Launch() {
                       <span className="launch-mode-name">{t('launch.rules.advanced')}</span>
                     </div>
                     <p className="launch-mode-desc">{t('launch.rules.advancedDesc')}</p>
-                    {CAPABILITIES.map((cap) => (
-                      <div key={cap.id} className="launch-cap-row">
-                        <div>
-                          <p className="launch-cap-name">{t(cap.labelKey)}</p>
-                          <p className="launch-cap-warn">{t(cap.warnKey)}</p>
+                    {CAPABILITIES.map((cap) => {
+                      const enabled = Boolean(caps[cap.id]);
+                      return (
+                        <div key={cap.id} className={`launch-cap-row${enabled ? ' on' : ''}`}>
+                          <div className="launch-cap-text">
+                            <p className="launch-cap-name">
+                              {enabled && <span className="launch-cap-dot" aria-hidden />}
+                              {t(cap.labelKey)}
+                              <span className="launch-cap-risk">+{cap.risk}</span>
+                            </p>
+                            <p className="launch-cap-warn">{t(cap.warnKey)}</p>
+                          </div>
+                          {/* Explicit toggle (never stores the click event):
+                              ON and OFF both work, in both directions. */}
+                          <Switch
+                            on={enabled}
+                            label={t(cap.labelKey)}
+                            onChange={() => setCaps((c) => ({ ...c, [cap.id]: !c[cap.id] }))}
+                          />
                         </div>
-                        <Switch on={Boolean(caps[cap.id])} onChange={(v) => setCaps((c) => ({ ...c, [cap.id]: v }))} />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {risk && (
                     <RiskPill risk={risk} t={t} />
@@ -1004,48 +1231,129 @@ export default function Launch() {
                   <h2 className="launch-h2">{t('launch.liq.title')}</h2>
                   <div className="launch-field">
                     <label className="field-label">{t('launch.liq.quote')}</label>
-                    <div className="launch-chip-row">
-                      {quotes.map((q) => (
-                        <button key={q.symbol} type="button"
-                          className={`launch-chip${quoteSym === q.symbol ? ' active' : ''}`}
-                          onClick={() => setQuoteSym(q.symbol)}>
-                          {q.native ? q.symbol : q.symbol}
+                    <div className="launch-chip-row" role="radiogroup" aria-label={t('launch.liq.quote')}>
+                      {quotes.map((q) => {
+                        const active = quoteSym === q.symbol;
+                        return (
+                          <button key={q.symbol} type="button" role="radio" aria-checked={active}
+                            className={`launch-chip${active ? ' active' : ''}`}
+                            onClick={() => setQuoteSym(q.symbol)}>
+                            {active && <IconCheck width={13} height={13} aria-hidden />}
+                            <span>{q.symbol}</span>
+                            {q.native && <span className="launch-chip-tag">{t('launch.liq.nativeTag')}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Pricing mode: type AMOUNTS and read the price, or type the
+                      PRICE and read the quote amount. Explicit control — the
+                      old UI had no way to reach price mode at all. */}
+                  <div className="launch-seg" role="tablist" aria-label={t('launch.liq.price')}>
+                    <button type="button" role="tab" aria-selected={priceMode === 'amounts'}
+                      className={`launch-seg-btn${priceMode === 'amounts' ? ' active' : ''}`}
+                      onClick={() => setPriceModeExplicit('amounts')}>
+                      <IconCoins width={14} height={14} aria-hidden />
+                      {t('launch.liq.modeAmounts')}
+                    </button>
+                    <button type="button" role="tab" aria-selected={priceMode === 'price'}
+                      className={`launch-seg-btn${priceMode === 'price' ? ' active' : ''}`}
+                      onClick={() => setPriceModeExplicit('price')}>
+                      <IconInfo width={14} height={14} aria-hidden />
+                      {t('launch.liq.modePrice')}
+                    </button>
+                  </div>
+
+                  <div className="launch-amount-card">
+                    <div className="launch-amount">
+                      <div className="launch-amount-head">
+                        <label className="field-label" htmlFor="launch-token-amt">{t('launch.liq.tokenAmount')}</label>
+                        {supplyValid && (
+                          <span className="launch-pct-row" aria-label={t('launch.liq.ofSupply')}>
+                            {[10, 25, 50, 100].map((p) => (
+                              <button key={p} type="button" className="launch-pct"
+                                onClick={() => setTokenPct(p)} title={t('launch.liq.ofSupply')}>
+                                {p}%
+                              </button>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                      <div className="launch-amount-box">
+                        <input id="launch-token-amt" className="launch-amount-input mono" inputMode="decimal"
+                          value={tokenAmount} placeholder="100000"
+                          onChange={(e) => setTokenAmount(numOnly(e.target.value))} />
+                        <span className="launch-amount-sym">{symbol || 'TOKEN'}</span>
+                      </div>
+                    </div>
+                    <div className="launch-amount">
+                      <div className="launch-amount-head">
+                        <label className="field-label" htmlFor="launch-quote-amt">{t('launch.liq.quoteAmount')}</label>
+                        {wallet.address && balanceInfo && (
+                          <span className="launch-bal">
+                            {t('launch.liq.balance')}: <span className="mono">{balanceInfo.human} {quoteSym}</span>
+                            {!quote?.native && (
+                              <button type="button" className="launch-pct max" onClick={setQuoteMax}>
+                                {t('launch.liq.max')}
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <div className={`launch-amount-box${priceMode === 'price' ? ' derived' : ''}`}>
+                        <input id="launch-quote-amt" className="launch-amount-input mono" inputMode="decimal"
+                          value={quoteAmount} placeholder="10000"
+                          readOnly={priceMode === 'price'}
+                          onChange={(e) => setQuoteAmount(numOnly(e.target.value))} />
+                        <span className="launch-amount-sym">{quoteSym}</span>
+                      </div>
+                      {priceMode === 'price' && (
+                        <p className="launch-hint">{t('launch.liq.computedFromPrice')}</p>
+                      )}
+                    </div>
+                    <div className="launch-amount">
+                      <div className="launch-amount-head">
+                        <label className="field-label" htmlFor="launch-price">{t('launch.liq.price')}</label>
+                        {priceMode === 'amounts' && amountValid && (
+                          <span className="launch-auto-badge">{t('launch.liq.computed')}</span>
+                        )}
+                      </div>
+                      <div className={`launch-amount-box${priceMode === 'amounts' ? ' derived' : ''}`}>
+                        <input id="launch-price" className="launch-amount-input mono" inputMode="decimal"
+                          value={priceShown}
+                          readOnly={priceMode === 'amounts'}
+                          placeholder={priceMode === 'price' ? '0.1' : '—'}
+                          onChange={(e) => setInitialPrice(numOnly(e.target.value))} />
+                        <span className="launch-amount-sym">1 {symbol || 'TOKEN'} = {quoteSym}</span>
+                      </div>
+                      {priceMode === 'amounts' && (
+                        <p className="launch-hint">
+                          {amountValid && impliedPrice != null
+                            ? `${t('launch.liq.priceImplied')}: ${compactNum(impliedPrice, 6)} ${quoteSym}`
+                            : t('launch.liq.priceHint')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="launch-field">
+                    <div className="launch-amount-head">
+                      <label className="field-label">{t('launch.liq.slippage')}</label>
+                      <span className="launch-slip-val mono">{slippage}%</span>
+                    </div>
+                    <div className="launch-pct-row slip">
+                      {[0.5, 1, 3].map((p) => (
+                        <button key={p} type="button"
+                          className={`launch-pct${slippage === p ? ' active' : ''}`}
+                          onClick={() => setSlippage(p)}>
+                          {p}%
                         </button>
                       ))}
                     </div>
-                  </div>
-                  <div className="launch-field-row">
-                    <div className="launch-field">
-                      <label className="field-label">{t('launch.liq.tokenAmount')}</label>
-                      <input className="launch-input mono" inputMode="decimal" value={tokenAmount}
-                        onChange={(e) => setTokenAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="100000" />
-                      <span className="launch-asset-tag">{symbol || 'TOKEN'}</span>
-                    </div>
-                    <div className="launch-field">
-                      <label className="field-label">{t('launch.liq.quoteAmount')}</label>
-                      <input className="launch-input mono" inputMode="decimal" value={quoteAmount}
-                        onChange={(e) => setQuoteAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="10000" />
-                      <span className="launch-asset-tag">{quoteSym}</span>
-                    </div>
-                  </div>
-                  <div className="launch-field">
-                    <label className="field-label">{t('launch.liq.price')}</label>
-                    <div className="launch-price-row">
-                      <input className="launch-input mono" inputMode="decimal" value={initialPrice}
-                        disabled={priceMode === 'amounts'}
-                        onChange={(e) => { setPriceMode('price'); setInitialPrice(e.target.value.replace(/[^0-9.]/g, '')); }} />
-                      <span className="launch-asset-tag">1 {symbol || 'TOKEN'} = {quoteSym}</span>
-                    </div>
-                    {amountValid && impliedPrice != null && (
-                      <p className="launch-hint">
-                        {t('launch.liq.priceImplied')}: {Number(impliedPrice.toPrecision(6))} {quoteSym}
-                      </p>
-                    )}
-                  </div>
-                  <div className="launch-field">
-                    <label className="field-label">{t('launch.liq.slippage')} — {slippage}%</label>
                     <input type="range" min={0.5} max={10} step={0.5} value={slippage}
-                      onChange={(e) => setSlippage(Number(e.target.value))} className="launch-range" />
+                      onChange={(e) => setSlippage(Number(e.target.value))} className="launch-range"
+                      aria-label={t('launch.liq.slippage')} />
                   </div>
                   <div className="launch-liq-summary">
                     <div className="launch-liq-row">
@@ -1060,10 +1368,13 @@ export default function Launch() {
                   <InfoBox tone="info" title={t('launch.liq.lpTitle')}>
                     {t('launch.liq.lpBody')}
                   </InfoBox>
+                  {/* Money-critical warnings are ALWAYS visible, with the full
+                      text INSIDE the box — never collapsed behind a tap. */}
                   {risk && risk.findings.some((f) => f.id === 'thinLiquidity') && (
-                    <InfoBox tone="warn" title={t('launch.risk.finding.thinLiquidity')}>
+                    <LaunchAlert tone="warn" icon={<IconShield width={16} height={16} />}
+                      title={t('launch.risk.finding.thinLiquidity')}>
                       {t('launch.risk.finding.thinLiquidityBody')}
-                    </InfoBox>
+                    </LaunchAlert>
                   )}
                 </section>
               )}
@@ -1077,14 +1388,15 @@ export default function Launch() {
                     <div className="launch-review-hero">
                       {logo
                         ? <img className="launch-logo lg" src={logo} alt="" />
-                        : <div className="launch-logo launch-logo-ph lg">{(symbol || '?').slice(0, 2).toUpperCase()}</div>}
-                      <div>
+                        : <ChainMark color={meta?.color || '#00e5ff'} short={symbol?.slice(0, 3) || meta?.short || '?'} size={56} />}
+                      <div className="launch-review-id">
                         <p className="launch-review-name">{name || '—'} <span className="launch-review-sym">{symbol}</span></p>
-                        <p className="launch-review-sub">{chain?.name} · {dex?.dexName}</p>
+                        <p className="launch-review-sub">{chain?.name} · {dex?.name || ''}</p>
                       </div>
+                      <ChainMark color={meta?.color || '#00e5ff'} short={meta?.short || '?'} size={30} ghost />
                     </div>
                     <ReviewRow k={t('launch.review.supply')} v={spec ? `${spec.supplyHuman} ${symbol}` : '—'} mono />
-                    <ReviewRow k={t('launch.review.price')} v={impliedPrice != null ? `1 ${symbol} = ${Number(impliedPrice.toPrecision(6))} ${quoteSym}` : '—'} mono />
+                    <ReviewRow k={t('launch.review.price')} v={impliedPrice != null ? `1 ${symbol} = ${compactNum(impliedPrice, 6)} ${quoteSym}` : '—'} mono />
                     <ReviewRow k={t('launch.review.liquidity')} v={amountValid ? `${tokenAmount} ${symbol} + ${quoteAmount} ${quoteSym}` : '—'} mono />
                     <ReviewRow k={t('launch.review.fee')} v={`${launchFee} ${quoteSym} (${LAUNCH_FEES.launchFeeBps / 100}%)`} mono />
                     <ReviewRow k={t('launch.review.swapFee')} v={`${LAUNCH_FEES.swapFeeBps / 100}%`} mono />
@@ -1104,15 +1416,29 @@ export default function Launch() {
                     </div>
                   )}
 
-                  {balanceInfo && !balanceInfo.enough && (
-                    <InfoBox tone="warn" title={t('launch.review.noQuoteBalance')}>
+                  {/* Two money gates, always visible, text inside the box. The old
+                      title rendered the RAW template ("موجودی {{sym}} کافی
+                      نیست") because the interpolation was never passed. */}
+                  {wallet.address && balanceInfo && balanceInfo.enough === false && (
+                    <LaunchAlert tone="warn" icon={<IconWallet width={16} height={16} />}
+                      title={t('launch.review.noQuoteBalance', { sym: quoteSym })}>
                       {t('launch.review.noQuoteBalanceBody', { sym: quoteSym })}
-                    </InfoBox>
+                    </LaunchAlert>
+                  )}
+
+                  {wallet.address && balanceInfo && balanceInfo.gasOk === false && (
+                    <LaunchAlert tone="danger" icon={<IconShield width={16} height={16} />}
+                      title={t('launch.review.noGas')}>
+                      {t('launch.review.noGasBody', { native: chain?.native?.symbol || '', chain: chain?.name || '' })}
+                    </LaunchAlert>
                   )}
 
                   {risk && (
                     <div className={`launch-risk ${risk.band}`}>
                       <div className="launch-risk-head">
+                        <span className="launch-risk-ico" aria-hidden>
+                          <IconShield width={18} height={18} />
+                        </span>
                         <span className="launch-risk-score">{risk.score}</span>
                         <span className="launch-risk-band">{t(`launch.risk.band.${risk.band}`)}</span>
                       </div>
@@ -1120,20 +1446,28 @@ export default function Launch() {
                       <ul className="launch-findings">
                         {risk.findings.filter((f) => f.weight > 0).map((f) => (
                           <li key={f.id} className={`finding ${f.severity}`}>
-                            <span className="finding-mark" aria-hidden>{f.severity === 'high' ? '⛔' : f.severity === 'medium' ? '⚠' : '•'}</span>
+                            <span className="finding-mark" aria-hidden>
+                              {f.severity === 'high' ? <IconX width={11} height={11} />
+                                : f.severity === 'medium' ? <IconShield width={11} height={11} />
+                                  : <IconInfo width={11} height={11} />}
+                            </span>
                             {t(f.key)}
                           </li>
                         ))}
                         {risk.findings.filter((f) => f.weight === 0).map((f) => (
                           <li key={f.id} className="finding info">
-                            <span className="finding-mark" aria-hidden>✓</span>
+                            <span className="finding-mark" aria-hidden><IconCheck width={11} height={11} /></span>
                             {t(f.key)}
                           </li>
                         ))}
                       </ul>
                       {risk.blocked && (
                         <div className="launch-gates">
-                          {risk.gates.map((g) => <p key={g.id} className="launch-gate">⛔ {t(g.key)}</p>)}
+                          {risk.gates.map((g) => (
+                            <p key={g.id} className="launch-gate">
+                              <IconX width={12} height={12} aria-hidden /> {t(g.key)}
+                            </p>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -1147,11 +1481,39 @@ export default function Launch() {
                     </div>
                   )}
 
+                  {/* Wallet gate: connect IN PLACE. The button below never
+                      navigates to /wallet — the sheet opens over the wizard
+                      and every typed value survives connecting. */}
+                  {!wallet.address ? (
+                    <button type="button" className="launch-wallet-cta" onClick={() => setConnectOpen(true)}>
+                      <span className="launch-wallet-cta-ico" aria-hidden>
+                        <IconWallet width={20} height={20} />
+                      </span>
+                      <span className="launch-wallet-cta-text">
+                        <span className="launch-wallet-cta-title">{t('launch.review.connectWallet')}</span>
+                        <span className="launch-wallet-cta-sub">{t('launch.review.connectSub')}</span>
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="launch-wallet-ok">
+                      <span className="launch-wallet-ok-ico" aria-hidden>
+                        <IconCheck width={13} height={13} />
+                      </span>
+                      <span className="launch-wallet-ok-text">
+                        {t('launch.review.walletReady')} · <span className="mono">{shortAddress(wallet.address)}</span>
+                      </span>
+                      <button type="button" className="launch-wallet-ok-change" onClick={() => setConnectOpen(true)}>
+                        {t('launch.review.changeWallet')}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="btn-row">
                     <button type="button" className="btn btn-ghost" onClick={() => setStep(3)} disabled={planning}>
                       {t('launch.back')}
                     </button>
-                    <button type="button" className="btn btn-primary launch-cta" onClick={onLaunch} disabled={!launchReady}>
+                    <button type="button" className="btn btn-primary launch-cta" onClick={onLaunch}
+                      disabled={!launchReady && Boolean(wallet.address)}>
                       {planning ? <span className="spinner spinner-sm" /> : <IconRocket width={16} height={16} />} {t('launch.review.launch')}
                     </button>
                   </div>
@@ -1173,17 +1535,20 @@ export default function Launch() {
           )}
 
           {view === 'running' && launch && (
-            <motion.div key="running" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
+            <motion.div key="running" className="launch-flow" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
               <RunPanel launch={launch} t={t} onCancel={onCancelRun} chainId={launch.config.chainId} />
             </motion.div>
           )}
 
           {view === 'result' && launch && (
-            <motion.div key="result" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
-              <ResultPanel launch={launch} t={t} onRetry={onRetryPool} onAddToSwap={onAddToSwap} onRestart={() => { setView('wizard'); setStep(4); }} explorer={chain?.explorer} />
+            <motion.div key="result" className="launch-flow" variants={riseIn} initial="hidden" animate="show" exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>
+              <ResultPanel launch={launch} t={t} onRetry={onRetryPool} onAddToSwap={onAddToSwap} onRestart={() => { setView('wizard'); setStep(4); }} explorer={chain?.explorer} chainMeta={meta} />
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* In-place wallet connect: the wizard never unmounts behind it. */}
+        <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
 
         {/* history */}
         {view === 'wizard' && (
@@ -1197,14 +1562,18 @@ export default function Launch() {
               )}
             </div>
             {history.length === 0 && <p className="launch-hint">{t('launch.history.empty')}</p>}
-            {history.slice(0, 5).map((h) => (
-              <div key={h.launchId} className="launch-history-row">
-                <span className={`launch-state-chip ${String(h.status).toLowerCase()}`}>{h.status}</span>
-                <span className="launch-history-name">{h.tokenName || h.symbol || '—'}</span>
-                <span className="launch-history-net">{h.networkName}</span>
-                {h.tokenAddress && <span className="launch-history-addr mono">{shortAddress(h.tokenAddress)}</span>}
-              </div>
-            ))}
+            {history.slice(0, 5).map((h) => {
+              const hm = chainMeta.find((c) => c.chainId === h.network) || null;
+              return (
+                <div key={h.launchId} className="launch-history-row">
+                  <ChainMark color={hm?.color || '#8892a8'} short={hm?.short || '?'} size={26} />
+                  <span className={`launch-state-chip ${String(h.status).toLowerCase()}`}>{h.status}</span>
+                  <span className="launch-history-name">{h.tokenName || h.symbol || '—'}</span>
+                  <span className="launch-history-net">{h.networkName}</span>
+                  {h.tokenAddress && <span className="launch-history-addr mono">{shortAddress(h.tokenAddress)}</span>}
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -1258,7 +1627,10 @@ export default function Launch() {
         </section>
 
         <footer className="launch-footer">
-          <p>🔒 {t('launch.footer.statement')}</p>
+          <p>
+            <IconLock width={13} height={13} aria-hidden />
+            {' '}{t('launch.footer.statement')}
+          </p>
         </footer>
       </div>
     </PageTransition>
@@ -1266,6 +1638,48 @@ export default function Launch() {
 }
 
 /* ─────────────────────────── sub-views ─────────────────────────────── */
+
+/*
+ * ChainMark — the modern network logo used everywhere a chain needs a face:
+ * chain cards, the token-logo fallback ("no logo → network mark"), history.
+ * A layered gradient built from the chain's own colour + its short code, so
+ * it works offline, in both themes, with zero image requests.
+ */
+function ChainMark({ color = '#00e5ff', short = '?', size = 40, dim = false, ghost = false }) {
+  const label = String(short || '?').slice(0, 3).toUpperCase();
+  return (
+    <span
+      className={`launch-mark${dim ? ' dim' : ''}${ghost ? ' ghost' : ''}`}
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        fontSize: Math.max(9, Math.round(size * 0.26)),
+        '--mark-color': color
+      }}
+    >
+      <span className="launch-mark-ring" />
+      <span className="launch-mark-letter">{label}</span>
+    </span>
+  );
+}
+
+/*
+ * LaunchAlert — the money-warning box. Unlike InfoBox (collapsible, for
+ * education), this is ALWAYS open with the full text INSIDE the box: a
+ * balance or liquidity warning nobody reads is not a warning.
+ */
+function LaunchAlert({ tone = 'warn', icon, title, children }) {
+  return (
+    <div className={`launch-alert ${tone}`} role="alert">
+      <span className="launch-alert-ico" aria-hidden>{icon}</span>
+      <div className="launch-alert-body">
+        <p className="launch-alert-title">{title}</p>
+        <div className="launch-alert-text">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 function ReviewRow({ k, v, mono = false }) {
   return (
@@ -1296,7 +1710,8 @@ const RUN_ERR_CODES = [
   'DIRECT_CODE_MISMATCH', 'DIRECT_NO_CODE', 'DIRECT_ADDRESS_MISMATCH',
   'DIRECT_TX_REVERTED', 'DIRECT_TX_NOT_DEPLOY', 'DIRECT_RECEIPT_ADDRESS_MISSING',
   'DIRECT_PREDICTED_ADDRESS_MISSING', 'TOKEN_EVENT_NOT_FOUND', 'TX_REVERTED',
-  'USER_REJECTED'
+  'USER_REJECTED', 'NO_SIGNER', 'SIGNER_UNAVAILABLE',
+  'CHAIN_SWITCH_REJECTED', 'CHAIN_SWITCH_TIMEOUT'
 ];
 
 function errorText(t, raw) {
@@ -1326,7 +1741,10 @@ function RunPanel({ launch, t, onCancel, chainId }) {
         {steps.map((s) => (
           <li key={s.id} className={`launch-run-step ${s.status}`}>
             <span className="launch-run-ico" aria-hidden>
-              {s.status === 'confirmed' ? '✓' : s.status === 'failed' ? '✕' : s.status === 'signing' || s.status === 'submitted' ? <span className="spinner spinner-sm" /> : s.status === 'skipped' ? '—' : '•'}
+              {s.status === 'confirmed' ? <IconCheck width={13} height={13} />
+                : s.status === 'failed' ? <IconX width={13} height={13} />
+                  : s.status === 'signing' || s.status === 'submitted' ? <span className="spinner spinner-sm" />
+                    : s.status === 'skipped' ? '—' : <span className="launch-run-dot" />}
             </span>
             <div className="launch-run-info">
               <p className="launch-run-name">{t(stepLabel(s.id))}</p>
@@ -1335,7 +1753,7 @@ function RunPanel({ launch, t, onCancel, chainId }) {
                 : <p className="launch-run-desc">{s.description || t(`launch.run.state.${s.status}`)}</p>}
               {s.txHash && (
                 <a className="launch-run-hash mono" href={explorerTx(chainId, s.txHash)} target="_blank" rel="noreferrer">
-                  {shortAddress(s.txHash, 6)} ↗
+                  {shortAddress(s.txHash, 6)} <IconExternal width={11} height={11} aria-hidden />
                 </a>
               )}
             </div>
@@ -1352,14 +1770,38 @@ function RunPanel({ launch, t, onCancel, chainId }) {
   );
 }
 
-function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer }) {
+function CopyAddr({ addr, explorer, t }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(addr);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard unavailable — the link still works */ }
+  }, [addr]);
+  return (
+    <span className="launch-addr-row">
+      <a className="mono launch-result-addr" href={`${explorer}/token/${addr}`} target="_blank" rel="noreferrer">
+        {addr} <IconExternal width={11} height={11} aria-hidden />
+      </a>
+      <button type="button" className={`launch-copy${copied ? ' done' : ''}`} onClick={copy}
+        aria-label={t('launch.result.copy')}>
+        {copied ? <IconCheck width={13} height={13} aria-hidden /> : <IconCopy width={13} height={13} aria-hidden />}
+      </button>
+    </span>
+  );
+}
+
+function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer, chainMeta }) {
   const { state, token, pool, partial } = launch;
   const live = state === 'LIVE';
   return (
     <div className={`launch-result ${live ? 'live' : 'partial'}`}>
       <div className={`launch-result-banner ${live ? 'ok' : 'warn'}`}>
-        <span className="launch-result-ico" aria-hidden>{live ? '🎉' : '⚠'}</span>
-        <div>
+        <span className="launch-result-ico" aria-hidden>
+          {live ? <IconTrophy width={26} height={26} /> : <IconShield width={26} height={26} />}
+        </span>
+        <div className="launch-result-banner-text">
           <h2>{live ? t('launch.result.live') : t('launch.result.partialTitle')}</h2>
           <p>
             {live
@@ -1369,15 +1811,16 @@ function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer }) {
                 : t('launch.result.failedBody'))}
           </p>
         </div>
+        {chainMeta && (
+          <ChainMark color={chainMeta.color || '#00e5ff'} short={chainMeta.short || '?'} size={34} ghost />
+        )}
       </div>
 
       {token && (
         <div className="launch-result-card">
           <p className="launch-result-label">{t('launch.result.token')}</p>
           <p className="launch-result-name">{token.name} ({token.symbol})</p>
-          <a className="mono launch-result-addr" href={`${explorer}/token/${token.address}`} target="_blank" rel="noreferrer">
-            {token.address} ↗
-          </a>
+          <CopyAddr addr={token.address} explorer={explorer} t={t} />
           {/* How the token came to exist, and what was proven about it: in
               direct mode the bytecode at that address was compared with the
               published token bytecode, byte for byte. */}
@@ -1391,9 +1834,7 @@ function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer }) {
       {pool?.address && (
         <div className="launch-result-card">
           <p className="launch-result-label">{t('launch.result.pool')}</p>
-          <a className="mono launch-result-addr" href={`${explorer}/token/${pool.address}`} target="_blank" rel="noreferrer">
-            {pool.address} ↗
-          </a>
+          <CopyAddr addr={pool.address} explorer={explorer} t={t} />
           {pool.lpBalance && <p className="launch-hint">{t('launch.result.lp')} — <span className="mono">{pool.lpBalance}</span></p>}
         </div>
       )}

@@ -143,11 +143,15 @@ t('networks: every anchor is a pair of DISTINCT tokens',
 t('networks: chains whose swap router is another DEX family pin their own router',
   dexForChain(10).routerOwner === 'dex' && dexForChain(43114).routerOwner === 'dex'
   && [8453, 56, 42161, 137, 1].every((id) => dexForChain(id).routerOwner === 'chain'));
-t('networks: OP/AVAX route through their own Sushi router, never the chain swap router',
-  dexForChain(10).router === '0x2ABf469074dc0b54d793850807E6eb5Faf2625b1'
+t('networks: OP/AVAX route through their own DEX router, never the chain swap router',
+  dexForChain(10).router === '0x4A7b5Da61326A6379179b40d00F57E5bbDC962c2'
   && dexForChain(43114).router === '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506'
   && dexForChain(10).router !== EVM_CHAINS[10].router
   && dexForChain(43114).router !== EVM_CHAINS[43114].router);
+t('networks: optimism uses canonical Uniswap V2, not the rejected Sushi constant',
+  LAUNCH_DEX[10].id === 'uniswap-v2-optimism'
+  && LAUNCH_DEX[10].factory === '0x0c3c1c532F1e39EdF36BE9Fe0bE1410313E074Bf'
+  && !Object.values(LAUNCH_DEX).some((d) => d.factory.toLowerCase() === '0xfbc12984689e5f15626bad03ad60160fe98b303c'));
 t('networks: pinning a router also pins the wrapped native it pairs with',
   dexForChain(10).wrapped === '0x4200000000000000000000000000000000000006'
   && dexForChain(43114).wrapped === '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7');

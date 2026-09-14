@@ -900,9 +900,6 @@
       "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
     }
   },
-  "launch": {
-    "step": "Step {{n}} of {{total}}"
-  },
   "loan": {
     "pageTitle": "قرض",
     "pageSubtitle": "قرض دینا اور لینا — ایپ میں",

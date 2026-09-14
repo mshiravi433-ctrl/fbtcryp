@@ -89,7 +89,11 @@ export const EVM_CHAINS = {
     name: 'Polygon',
     short: 'POL',
     native: { symbol: 'POL', decimals: 18, coingeckoId: 'matic-network' },
-    rpc: ['https://polygon-rpc.com', 'https://rpc.ankr.com/polygon'],
+    /* 2026-09-14: polygon-rpc.com rate-limits aggressively (429s), which made
+       every Polygon READ — including the launchpad's DEX verification — fail
+       while the chain itself was fine. publicnode/drpc/llamarpc first (the
+       same trio the other launch chains use), legacy endpoints as fallback. */
+    rpc: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org', 'https://polygon.llamarpc.com', 'https://polygon-rpc.com', 'https://rpc.ankr.com/polygon'],
     explorer: 'https://polygonscan.com',
     router: '0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff', // QuickSwap
     wrapped: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // WMATIC
@@ -128,7 +132,10 @@ export const EVM_CHAINS = {
     name: 'Optimism',
     short: 'OP',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://mainnet.optimism.io', 'https://rpc.ankr.com/optimism'],
+    /* 2026-09-14: mainnet.optimism.io throttles public traffic; with only two
+       endpoints the launchpad's verification stalled and Optimism read as
+       permanently blocked. Same fix as Polygon: generous endpoints first. */
+    rpc: ['https://optimism-rpc.publicnode.com', 'https://optimism.drpc.org', 'https://optimism.llamarpc.com', 'https://mainnet.optimism.io', 'https://rpc.ankr.com/optimism'],
     explorer: 'https://optimistic.etherscan.io',
     router: '0x9c12939390052919aF3155f41Bf4160Fd3666A6f', // Velodrome-compatible
     wrapped: '0x4200000000000000000000000000000000000006', // WETH

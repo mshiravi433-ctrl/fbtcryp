@@ -43,8 +43,10 @@
  * HOW THE ADDRESSES BELOW WERE ESTABLISHED (no guessing, ever)
  * ---------------------------------------------------------------------------
  *   · factory/router pairs come from the DEX's own published deployment
- *     config (Sushi's `sushiswap-v2.ts` chain registry for chains 10, 43114,
- *     42161), NOT from an unverified third-party list;
+ *     config (Sushi's `sushiswap-v2.ts` chain registry for chains 43114 and
+ *     42161; Uniswap's official v2-deployments page for chains 8453, 1 and
+ *     10; the DEX's own GitHub for chains 56 and 137), NOT from an
+ *     unverified third-party list;
  *   · each anchor is then CROSS-CHECKED cryptographically: for the anchor's
  *     two tokens, CREATE2(factory, keccak256(tokenA‖tokenB), pairInitHash)
  *     must equal the address of a live pool that an independent indexer
@@ -169,27 +171,40 @@ export const LAUNCH_DEX = Object.freeze({
   },
   10: {
     /*
-     * Optimism's swap router in lib/chains.js is Velodrome, whose router is
-     * NOT Uniswap-V2-compatible (its addLiquidity takes a `stable` flag), so
-     * launching through it with V2 calldata would revert at best. SushiSwap V2
-     * is the chain's V2-family venue with a published deployment config — and
-     * the same address pair Sushi pins for Linea — so the launch DEX pins its
-     * own router/wrapped here and `verifyDex` proves router.factory() is this
-     * factory before anything is signed.
+     * CORRECTED 2026-09-14. The previous entry pinned a SushiSwap factory
+     * (0xFbc1…B303C) copied from ANOTHER chain's deployment config — and the
+     * chain proved it wrong: CREATE2(factory, keccak256(USDC‖WETH)) lands at
+     * 0x3f8f…b098, an address that has never held code or a transaction, so
+     * `verifyDex` returned ANCHOR_PAIR_MISSING on every attempt and Optimism
+     * was permanently, silently unlaunchable. The runtime check did exactly
+     * its job (a wrong factory became a BLOCK, never a wrong pool); the
+     * constant was the bug.
+     *
+     * Optimism now launches on canonical Uniswap V2, whose Optimism
+     * deployment is published in Uniswap's own docs (v2-deployments page):
+     * factory 0x0c3c…74Bf with Router02 0x4A7b…62c2. Cross-checked the same
+     * way as every other anchor: CREATE2(factory, keccak256(WETH‖USDC))
+     * reproduces 0x4C43…7815, a live pair holding WETH + USDC. `verifyDex`
+     * still re-proves factory/router/wrapped/anchor on the user's own RPC
+     * before any signature.
+     *
+     * Optimism's swap router in lib/chains.js stays Velodrome (a different
+     * DEX family whose addLiquidity takes a `stable` flag), so the launch
+     * DEX keeps pinning its own router/wrapped here.
      */
-    id: 'sushi-v2-optimism',
-    dexName: 'SushiSwap',
-    factory: '0xFbc12984689e5f15626Bad03Ad60160Fe98B303C',
-    router: '0x2ABf469074dc0b54d793850807E6eb5Faf2625b1',
+    id: 'uniswap-v2-optimism',
+    dexName: 'Uniswap V2',
+    factory: '0x0c3c1c532F1e39EdF36BE9Fe0bE1410313E074Bf',
+    router: '0x4A7b5Da61326A6379179b40d00F57E5bbDC962c2',
     wrapped: '0x4200000000000000000000000000000000000006', // WETH
     feeTierBps: 30,
     /*
-     * USDC / WETH — this factory's deepest market on Optimism. Honest note:
-     * Sushi V2 is a thin venue on Optimism, so the anchor proves the factory
-     * (it is long-lived and was created by this exact factory), and the UI
-     * does not claim more than that.
+     * WETH / USDC — a live market on this factory (0x4C43…7815, holding WETH
+     * + USDC at the time of writing). Honest note: V2 is a thin venue on
+     * Optimism (most liquidity is V3), so the anchor proves the factory and
+     * the pool flow — the UI does not claim deep liquidity around the pair.
      */
-    anchor: { a: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', b: '0x4200000000000000000000000000000000000006' }
+    anchor: { a: '0x4200000000000000000000000000000000000006', b: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' }
   },
   43114: {
     /*
