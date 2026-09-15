@@ -31,6 +31,8 @@
  * everyone in this space is trying to prevent.
  */
 
+import { isNativeShell } from './nativeShell.js';
+
 let BrowserPlugin = null;
 let pluginChecked = false;
 
@@ -62,6 +64,96 @@ export function isSafeUrl(raw) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Hand a WALLET deep link to the phone.
+ *
+ * ─── WHY THIS IS NOT openUrl() ─────────────────────────────────────────────
+ * `openUrl()` exists for arbitrary external websites: https only, always
+ * through the system browser, never injected into. A wallet hand-off is a
+ * different animal with a different failure mode, and it needs its own
+ * channel for one reason: a deep link must LEAVE the WebView.
+ *
+ * The reported bug — «با زدن بازکردن ارور دیپ لینک میزنه» — was AppKit doing
+ * `window.open('trust://wc?uri=…', '_self')` inside the packaged app's
+ * WebView. A custom scheme is navigable from a real browser and from nothing
+ * else: a WebView answers with its own error page ("Invalid URL" /
+ * net::ERR_UNKNOWN_URL_SCHEME) with the URL printed underneath. lib/wcDeepLink
+ * already rewrites those links to the wallet's https universal link (Trust
+ * publishes `https://link.trustwallet.com/wc?uri=…` for exactly this); this
+ * function is what opens it:
+ *
+ *   • packaged app  → @capacitor/browser (Android Custom Tabs). The browser is
+ *     a real browser, so the OS resolves Android App Links to the wallet —
+ *     and if the wallet is not installed the user lands on the wallet's own
+ *     web page instead of our WebView error page.
+ *   • Telegram      → WebApp.openLink(): Telegram's opener leaves the Mini App
+ *     alive underneath rather than navigating our page away.
+ *   • plain web     → the very call AppKit intended, same target and features,
+ *     only with the URL that can actually open a wallet.
+ *
+ * @returns {Promise<boolean>} false when the URL was rejected or nothing could
+ *          be opened (callers treat that as "the user still has the QR code").
+ */
+export async function openWalletLink(url, { target = '_self', features = 'noreferrer noopener', win, openWindow } = {}) {
+  const raw = String(url || '').trim();
+  if (!raw) return false;
+  const view = win ?? (typeof window !== 'undefined' ? window : null);
+  const https = isSafeUrl(raw);
+
+  /*
+   * Inside Telegram, Telegram's own opener is the only way to leave the Mini
+   * App without killing the page underneath — and it accepts http(s) links
+   * only, so a custom scheme is handled further down.
+   */
+  const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null;
+  if (https && tg?.openLink) {
+    tg.openLink(raw, { try_instant_view: false });
+    return true;
+  }
+
+  /*
+   * In the packaged app the WebView must not be the thing that navigates:
+   * whether a WebViewClient intercepts a custom scheme — or loads an app-link
+   * URL inside itself — is outside our control, and that is precisely what
+   * the bug report was about. Custom Tabs is a separate activity: a real
+   * browser, with real scheme/app-link resolution, and our page stays alive
+   * underneath.
+   */
+  if (isNativeShell()) {
+    const plugin = await getPlugin();
+    if (plugin) {
+      try {
+        await plugin.open({ url: raw, toolbarColor: '#0a0c12' });
+        return true;
+      } catch {
+        /* fall through to the plain navigation below */
+      }
+    }
+  }
+
+  if (view) {
+    /* `openWindow` is the ORIGINAL window.open when this call came from the
+       pairing bridge in lib/wcDeepLink.js — using the live one there would
+       re-enter the bridge forever. */
+    const open = openWindow ?? view.open?.bind(view);
+    try {
+      if (open && open(raw, target, features)) return true;
+    } catch {
+      /* pop-up blocked, or the target was rejected — try the frame itself */
+    }
+    try {
+      /* A same-frame navigation is always permitted, and it is what AppKit
+         itself does. Never reached in the native shell without having tried
+         Custom Tabs above. */
+      view.location.assign(raw);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**

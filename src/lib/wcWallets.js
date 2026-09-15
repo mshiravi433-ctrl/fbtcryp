@@ -150,6 +150,111 @@ export function walletDeepLinks(key, uri) {
 }
 
 /**
+ * The scheme a URL (or a wallet's native base) registers: `trust://wc?uri=…`
+ * and `trust://` both answer `trust`. '' when there is no scheme at all.
+ */
+export function urlScheme(raw) {
+  const m = /^\s*([a-z][a-z0-9+.-]*):/i.exec(String(raw || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+
+/** The host a URL lives on. '' for a custom-scheme URL and for junk. */
+export function urlHost(raw) {
+  try {
+    return new URL(String(raw)).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** The scheme a promoted wallet registers (`trust://` → `trust`). */
+export function walletScheme(wallet) {
+  return urlScheme(wallet?.native);
+}
+
+/** The host a promoted wallet's https link lives on (`link.trustwallet.com`). */
+export function walletHost(wallet) {
+  return urlHost(wallet?.universal);
+}
+
+/**
+ * Which promoted wallet does this URL belong to — by custom scheme
+ * (`trust://wc?uri=…`) or by https host (`https://link.trustwallet.com/wc?…`)?
+ * null when it is not one of ours.
+ */
+export function walletForUrl(raw) {
+  const scheme = urlScheme(raw);
+  if (scheme) {
+    const byScheme = MOBILE_WALLETS.find((w) => walletScheme(w) === scheme);
+    if (byScheme) return byScheme;
+  }
+  const host = urlHost(raw);
+  if (host) {
+    const byHost = MOBILE_WALLETS.find((w) => walletHost(w) === host);
+    if (byHost) return byHost;
+  }
+  return null;
+}
+
+/**
+ * Which promoted wallet is this WALLET OBJECT?
+ *
+ * Tried in order of trustworthiness: the explorer id (stable, unique), the
+ * `mobile_link` scheme (what the SDK actually builds the link from), then the
+ * display name (the only thing a hand-made `customWallets` entry is guaranteed
+ * to carry).
+ */
+export function walletForWalletObject(wallet) {
+  if (!wallet || typeof wallet !== 'object') return null;
+  if (wallet.id) {
+    const byId = MOBILE_WALLETS.find((w) => w.id === wallet.id);
+    if (byId) return byId;
+  }
+  const scheme = urlScheme(wallet.mobile_link);
+  if (scheme) {
+    const byScheme = MOBILE_WALLETS.find((w) => walletScheme(w) === scheme);
+    if (byScheme) return byScheme;
+  }
+  if (wallet.name) {
+    const name = String(wallet.name).trim().toLowerCase();
+    const byName = MOBILE_WALLETS.find((w) => w.name.toLowerCase() === name);
+    if (byName) return byName;
+  }
+  return null;
+}
+
+/**
+ * Give an AppKit wallet object the https `link_mode` the explorer response
+ * does not carry for these wallets.
+ *
+ * ─── WHY THIS IS THE BUG, MEASURED ─────────────────────────────────────────
+ * The wallet the user taps on a phone is NOT our `customWallets` entry — the
+ * ethereum-provider runs the modal in `basic` mode, so the mobile screen is
+ * AppKit's own explorer list (`w3m-all-wallets-list` → `ApiController.state`).
+ * Fetched live with THIS project's id:
+ *
+ *   GET https://api.web3modal.org/getWallets?projectId=8e36ecca…&sv=html-core-1.8.19
+ *     Trust Wallet → { "mobile_link": "trust://",    "link_mode": null }
+ *     MetaMask     → { "mobile_link": "metamask://", "link_mode": null }
+ *
+ * `link_mode: null` makes `CoreHelperUtil.formatNativeUrl()` return
+ * `redirectUniversalLink: undefined`, so
+ * `experimental_preferUniversalLinks` has nothing to prefer and AppKit opens
+ * the CUSTOM SCHEME — which a WebView cannot navigate to. Adding the https
+ * base here is what makes the SDK's own link the one that works everywhere.
+ *
+ * Returns the SAME object when there is nothing to add: AppKit keeps these
+ * objects in its recent-wallet list and re-renders lists on identity change,
+ * so a pointless copy is churn (and a re-render mid-tap).
+ */
+export function withLinkMode(wallet) {
+  if (!wallet || typeof wallet !== 'object' || wallet.link_mode) return wallet;
+  const known = walletForWalletObject(wallet);
+  if (!known) return wallet;
+  return { ...wallet, link_mode: walletLinkBase(known.universal) };
+}
+
+/**
  * The promoted wallets in the shape APPKIT ACTUALLY CONSUMES.
  *
  * `mobile_link` is the field `onConnectMobile()` reads; `link_mode` is the

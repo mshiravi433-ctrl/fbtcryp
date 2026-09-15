@@ -801,6 +801,18 @@ console.log('▸ probing mobile wallet deep links (Trust Wallet "Invalid URL")�
   report('mobile wallet deep links', runWcWallets());
 }
 
+/* ------------------------------ 0c-6. deep-link delivery ------------------- */
+/* The other half of the "Invalid URL" bug, measured against the REAL SDK:
+   with `link_mode: null` (what the explorer returns for Trust/MetaMask) AppKit's
+   `onConnectMobile()` opens the custom scheme even with
+   `experimental_preferUniversalLinks` on; with the link-mode patch installed the
+   same tap opens Trust's https link, and the window.open bridge delivers it. */
+console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لینک» fix)…');
+{
+  const { default: runWcDeepLink } = await import('./wc-deeplink-probe.mjs');
+  report('wallet deep-link delivery', await runWcDeepLink());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered

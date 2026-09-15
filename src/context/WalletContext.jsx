@@ -16,6 +16,9 @@ import {
 } from '../lib/wcTimeout';
 import { purgeWcStorage } from '../lib/wcStorage';
 import { appKitCustomWallets, legacyModalWallets } from '../lib/wcWallets';
+import { installWalletOpenBridge } from '../lib/wcDeepLink';
+import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
+import { openWalletLink } from '../lib/browser';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
 import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
@@ -553,6 +556,24 @@ export function WalletProvider({ children }) {
       experimental_preferUniversalLinks: true,
       metadata: wcPublicMetadata()
     };
+    /*
+     * The wallet the user actually taps on a phone is an EXPLORER object
+     * (AppKit's `basic` modal lists `ApiController.state`, not our
+     * `customWallets`), and those objects carry `link_mode: null` for Trust /
+     * MetaMask — measured against the live API with this project's id. Without
+     * `link_mode` there is no universal link to prefer, so the SDK builds the
+     * custom scheme. lib/wcAppKitPatch.js wraps the single function that builds
+     * that link so every wallet object arrives with the https base.
+     * Best effort: a false return only means the bridge in lib/wcDeepLink.js is
+     * the one that has to catch the URL.
+     */
+    try {
+      /* Emitted as an outcome IN THE NAME (the trace's own idiom, see
+         metadata_repaired/metadata_repair_failed): the buffer must never be
+         able to carry a value that is not a fixed fact. */
+      if (await installAppKitLinkModePatch()) wcEvent('appkit_link_mode_patched');
+      else wcEvent('appkit_link_mode_patch_failed');
+    } catch { /* never blocks Connect */ }
     try {
       /* Primary: the modal instance ethereum-provider already built. */
       const update = wc?.modal?.updateOptions;
@@ -800,6 +821,9 @@ export function WalletProvider({ children }) {
        reload at that moment is how sessions die before they exist. */
     const connectGuard = holdRefreshGuard('wc-connect');
     let wc;
+    /* The window.open bridge installed for this pairing attempt — removed in
+       the finally block so a finished attempt cannot rewrite later links. */
+    let uninstallWalletBridge = null;
     try {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
@@ -858,6 +882,41 @@ export function WalletProvider({ children }) {
        * visible in the trace, it must not make Connect fail.
        */
       await applyAppKitWalletLinks(wc);
+
+      /*
+       * LAST METRE: own the URL the modal hands to the phone.
+       *
+       * Even with the options above applied, AppKit builds the mobile link
+       * from the wallet object the user tapped — and on a phone that object
+       * comes from the SDK's explorer list, whose Trust/MetaMask entries carry
+       * `mobile_link: 'trust://'` with `link_mode: null` (measured against the
+       * live API with this project's id). No `link_mode` means no universal
+       * link, which means `experimental_preferUniversalLinks` has nothing to
+       * prefer and the CUSTOM SCHEME is opened: `trust://wc?uri=…` inside a
+       * WebView is exactly the reported «ارور دیپ لینک».
+       *
+       * lib/wcAppKitPatch.js gives the SDK the missing `link_mode` at the one
+       * place it builds a link; lib/wcDeepLink.js wraps window.open for the
+       * duration of the pairing and rewrites any wallet deep link it still
+       * sees into the wallet's https universal link before it is delivered
+       * (Telegram opener / system browser from the APK / plain navigation on
+       * the web). Installed here, BEFORE wc.connect() opens the modal, and
+       * removed in the finally block below — a bridge left installed would
+       * rewrite links for the rest of the session.
+       */
+      uninstallWalletBridge = installWalletOpenBridge({
+        openWallet: (url, opts) => {
+          if (opts?.rewritten) wcEvent('deeplink_rewritten');
+          else wcEvent('deeplink_opened');
+          /* One settle handler for both outcomes, written as plain literal
+             calls: the trace audit (test/wc-connect-probe.mjs) reads event
+             names out of this source and must be able to see every one. */
+          const settled = (ok) => {
+            if (!ok) wcEvent('deeplink_open_failed');
+          };
+          void openWalletLink(url, opts).then(settled, () => settled(false));
+        }
+      });
 
       /*
        * init() also loads a persisted session when one is on disk. The purge
@@ -997,6 +1056,7 @@ export function WalletProvider({ children }) {
       try { wc?.disconnect?.(); } catch { /* already gone, or never finished initialising */ }
       return false;
     } finally {
+      try { uninstallWalletBridge?.(); } catch { /* noop */ }
       setConnecting(false);
       wcInitingRef.current = false;
       connectGuard.release();
