@@ -1,105 +1,83 @@
-name: Build Android APK
-
-# Builds a debug APK on GitHub's runners (this repo's dev sandbox has no JDK or
-# Android SDK, so compilation has to happen here). The artifact appears under
-# the workflow run, and tagged builds also get attached to a GitHub Release.
-
-on:
-  push:
-    branches: ['**']
-    tags: ['v*']
-  workflow_dispatch:
-    inputs:
-      release:
-        description: 'Also publish a GitHub Release'
-        type: boolean
-        default: false
-
+name: Build APK
+on: [push, workflow_dispatch]
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-
-      # Gradle 8.2.1 / AGP 8.2.1 (pinned by Capacitor 6) support JDK 17.
-      # JDK 21 fails here with "Unsupported class file major version 65".
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-          cache: gradle
+          java-version: 17
+      # The Android SDK.
+      #
+      # `android-actions/setup-android` is kept only as a fast path and is
+      # explicitly ALLOWED TO FAIL. It was the single point of failure for every
+      # recent run: the job died at this step (step 5 of 8) before npm, Vite,
+      # Capacitor or Gradle ran at all, so no APK was ever produced and the
+      # GitHub release kept serving an old binary — making source fixes look
+      # like they had not been applied. The action re-downloads the SDK
+      # command-line tools from dl.google.com on every run and hard-fails when
+      # Google rotates the archive name.
+      #
+      # ci/ensure-android-sdk.sh then guarantees a usable SDK either way: it
+      # prefers the one already installed on the runner image and only downloads
+      # anything if none exists. A broken upstream action can no longer stop the
+      # build from shipping.
+      - uses: android-actions/setup-android@v3
+        continue-on-error: true
+      - name: Ensure Android SDK
+        run: bash ci/ensure-android-sdk.sh
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build web bundle
+      # GitHub does NOT expose secrets to a script automatically — they only
+      # reach the process through an explicit `env:` block. Without this the
+      # build silently falls back to a debug APK even when all four secrets
+      # are set, which looks like the keystore "not working".
+      - run: bash ci/build-both.sh
         env:
-          # Public, client-side values. Anything secret must NOT live here —
-          # VITE_* variables are compiled into the JS and readable by anyone.
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
-          VITE_FEE_ROUTER_ADDRESS: ${{ vars.VITE_FEE_ROUTER_ADDRESS }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          # Anything the code reads via import.meta.env must be listed here or
+          # Vite bakes in the DEFAULT at build time. Setting VITE_FEE_BPS in
+          # Vercel changes the website but leaves the APK on 0.5% — the fee
+          # silently differs between platforms, which is the worst outcome
+          # because both look correct in isolation.
+          VITE_FEE_BPS: ${{ vars.VITE_FEE_BPS }}
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_FEE_RECIPIENT: ${{ vars.VITE_FEE_RECIPIENT }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_SENDER_ID: ${{ vars.VITE_FIREBASE_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-        run: npm run build
+          APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
+          APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
 
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Grant gradlew permission
-        run: chmod +x android/gradlew
-
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
-
-      - name: Rename APK
-        run: |
-          mkdir -p out
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-             "out/FBT-Swap-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}.apk"
-          ls -lh out/
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      # Upload whatever was produced. `if-no-files-found: ignore` on the AAB
+      # keeps unsigned (debug) runs from failing the job.
+      - uses: actions/upload-artifact@v4
         with:
-          name: FBT-Swap-apk
-          path: out/*.apk
-          retention-days: 90
+          name: FBT-Swap-app
+          path: |
+            out/*.apk
+            out/*.aab
+          if-no-files-found: warn
 
-      - name: Publish Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          files: out/*.apk
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}
-          name: FBT Swap ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build {0}', github.run_number) }}
-          generate_release_notes: true
-          body: |
-            ## FBT Swap — Android build
-
-            **Install:** download the `.apk` below, then allow
-            *Install unknown apps* for your browser when Android prompts you.
-
-            This is a **debug-signed** build for testing and direct distribution.
-            For Google Play you need a release build signed with your own
-            upload key — see the README.
-
-            ⚠️ Always verify you downloaded this from the official repository.
+          tag_name: latest
+          name: FBT Swap - latest
+          files: |
+            out/*.apk
+            out/*.aab
