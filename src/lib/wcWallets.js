@@ -90,6 +90,95 @@ export const MOBILE_WALLETS = Object.freeze([
 export const WC_WALLET_IDS = Object.freeze(MOBILE_WALLETS.map((w) => w.id));
 
 /**
+ * HTML-entity spelling of `&`, in every form an HTML serialization can leave
+ * behind. `&amp;` is the one that was actually observed in a user report; the
+ * numeric twins are here because a page is free to escape either way.
+ */
+const ENTITY_AMP = /&(?:amp|#0*38|#x0*26);/gi;
+
+/**
+ * Does this look like a WalletConnect v2 pairing URI?
+ *
+ * Deliberately damage-tolerant: a URI whose `&`s were escaped reads
+ * `…&amp;relay-protocol=irn&amp;symKey=…`, so a test that insists on a real
+ * `&` before `symKey=` would refuse to look at the very strings that need
+ * repairing. Topic and version are checked because they are the only parts a
+ * pairing URI can be recognised by when everything else is suspect.
+ */
+export function looksLikePairingUri(raw) {
+  const text = String(raw || '').trim();
+  return /^wc:[0-9a-f]{8,}@\d/i.test(text) && /symKey=/i.test(text);
+}
+
+/**
+ * REPAIR A PAIRING URI WHOSE `&`s WERE HTML-ESCAPED — «Invalid Url: wc:…».
+ * ---------------------------------------------------------------------------
+ * THE REPORT: connecting to a wallet answers with a bare
+ * **`Invalid Url:wc:198a…@2?expiryTimestamp=…&amp;relay-protocol=irn&amp;symKey=…`**
+ * — an SDK-generated pairing URI in which every `&` has become `&amp;`.
+ *
+ * Where does that come from? Not from this app and not from the SDK: measured
+ * against the installed `@walletconnect/core`, `pairing.create()` emits
+ * `wc:<topic>@2?expiryTimestamp=…&relay-protocol=irn&symKey=…` with plain `&`
+ * (the parameter order is alphabetical because `formatUri()` sorts its keys).
+ * `&amp;` appears only where a URL has been **serialized into HTML and read
+ * back as a string** — an error page printing the URL it refused to load, an
+ * `href` copied out of page source, a wallet echoing the URI it was handed.
+ * That is exactly the surface a stuck deep link ends up on.
+ *
+ * AND IT IS FATAL, NOT COSMETIC (measured — test/wc-uri-hygiene-probe.mjs):
+ * fed to the SDK's own `pairing.pair()`, the escaped string fails with
+ * `Missing or invalid. pair() uri#relay-protocol` — the escaped ampersands glue
+ * `amp;relay-protocol` and `amp;symKey` into the previous value, so the relay
+ * protocol and the symmetric key both disappear and no pairing can ever be
+ * made. The un-escaped twin parses.
+ *
+ * Repairing is safe by construction: a WC v2 pairing URI's values are hex, a
+ * decimal version and a numeric expiry (the SDK percent-encodes anything
+ * else), so a literal `&amp;` can never be a legitimate part of one. When
+ * there is nothing to repair this returns its input unchanged — a no-op, never
+ * a re-encoding.
+ */
+export function repairPairingUri(raw) {
+  const text = String(raw || '').trim();
+  if (!text || !looksLikePairingUri(text)) return String(raw || '');
+  const repaired = text.replace(ENTITY_AMP, '&');
+  return repaired === text ? String(raw || '') : repaired;
+}
+
+/**
+ * The wallet whose hand-off AppKit is about to perform.
+ *
+ * `ConnectionControllerUtil.onConnectMobile(wallet)` is the single place the
+ * SDK turns a tap into a URL, and lib/wcAppKitPatch.js wraps it — so the
+ * moment before a link is built is exactly where the tapped wallet can be
+ * recorded, truthfully and without guessing. It is what lets a BARE pairing
+ * URI (see `decideWalletOpen`) be completed into the right wallet's https
+ * link instead of being handed to a WebView, which can open no wallet at all.
+ *
+ * Only the public entry of the promoted table is kept: no account data, no
+ * pairing URI, nothing that could leak a session.
+ */
+let tappedWallet = null;
+
+/** Remember the wallet AppKit is handing a pairing to (called by the patch). */
+export function rememberTappedWallet(wallet) {
+  const known = walletForWalletObject(wallet);
+  tappedWallet = known ? known.key : null;
+  return tappedWallet;
+}
+
+/** The last tapped wallet's table entry, or null. */
+export function lastTappedWallet() {
+  return tappedWallet ? MOBILE_WALLETS.find((w) => w.key === tappedWallet) ?? null : null;
+}
+
+/** Test hook: forget the last tap. */
+export function forgetTappedWallet() {
+  tappedWallet = null;
+}
+
+/**
  * Normalise a deep-link base the way AppKit does.
  *
  * This mirrors `CoreHelperUtil.formatNativeUrl()` in @reown/appkit-controllers
@@ -125,7 +214,15 @@ export function walletLinkBase(base) {
  */
 export function walletLink(base, uri) {
   const safeBase = walletLinkBase(base);
-  const safeUri = String(uri || '').trim();
+  /*
+   * `repairPairingUri` first: a URI that arrived through an HTML surface comes
+   * back with `&amp;` where the `&` must be, and encoding THAT would hand the
+   * wallet a pairing it can never parse (`pair() uri#relay-protocol` — see the
+   * function's own note and test/wc-uri-hygiene-probe.mjs). For every healthy
+   * URI this is a byte-for-byte no-op, so the single-encoding contract below
+   * is unchanged.
+   */
+  const safeUri = repairPairingUri(String(uri || '').trim());
   if (!safeBase || !safeUri) return '';
   return `${safeBase}wc?uri=${encodeURIComponent(safeUri)}`;
 }

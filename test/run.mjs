@@ -813,6 +813,18 @@ console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لین
   report('wallet deep-link delivery', await runWcDeepLink());
 }
 
+/* ------------------------------ 0c-7. pairing-URI hygiene ------------------- */
+/* The «Invalid Url: wc:…&amp;…» report: a pairing URI whose `&`s were
+   HTML-escaped cannot pair at all (measured against the real SDK in a child
+   process), and a BARE `wc:` URI names no wallet app — so it is repaired and
+   completed into the tapped wallet's https link instead of being handed to a
+   WebView that can open no wallet. */
+console.log('▸ probing pairing-URI hygiene (the «Invalid Url: wc:…&amp;…» report)…');
+{
+  const { default: runWcUriHygiene } = await import('./wc-uri-hygiene-probe.mjs');
+  report('pairing-URI hygiene', await runWcUriHygiene());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered
