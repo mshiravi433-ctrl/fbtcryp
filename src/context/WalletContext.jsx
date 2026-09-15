@@ -15,6 +15,7 @@ import {
   isRelayClassError
 } from '../lib/wcTimeout';
 import { purgeWcStorage } from '../lib/wcStorage';
+import { appKitCustomWallets, legacyModalWallets } from '../lib/wcWallets';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
 import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
@@ -37,6 +38,24 @@ import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
  * https://localhost and the Android app ID ir.fbtswap.app.
  */
 const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
+
+const WC_APP_NAME = 'FBT Swap';
+const WC_APP_DESCRIPTION = 'Non-custodial decentralized exchange';
+
+/**
+ * The identity every wallet prompt shows. Built from `publicAppUrl()` — never
+ * from `window.location.origin`, which is `https://localhost` inside the APK
+ * (see the note on populateAppMetadata() in repairSignClientMetadata()).
+ */
+function wcPublicMetadata() {
+  const url = publicAppUrl('/').replace(/\/+$/, '');
+  return {
+    name: WC_APP_NAME,
+    description: WC_APP_DESCRIPTION,
+    url,
+    icons: [`${url}/icon-512.png`]
+  };
+}
 
 const SLOW_DEVICE = (() => {
   if (typeof navigator === 'undefined') return false;
@@ -435,63 +454,26 @@ export function WalletProvider({ children }) {
         themeMode: 'dark',
         enableExplorer: true,
         explorerExcludedWalletIds: 'ALL',
-        explorerRecommendedWalletIds: [
-          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust
-          '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369', // Rainbow
-          'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase Wallet
-          '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
-        ],
         /*
-         * ON EVERY MOBILE PLATFORM, NOT JUST iOS: give the modal the exact
-         * native + universal links for the wallets we surface, so tapping
-         * one opens that wallet directly instead of depending on
-         * `api.web3modal.org` to resolve a deep link at pairing time.
+         * 'NONE' on purpose — see applyAppKitWalletLinks().
          *
-         * ─── WHY THIS WAS iOS-ONLY AND WHY THAT WAS WRONG ────────────────
-         * Without an explicit `mobileWallets` entry, the modal falls back to
-         * fetching wallet metadata (including its deep-link template) from
-         * the WalletConnect explorer API. That is a THIRD-PARTY network
-         * dependency sitting directly in the connect path — reachable most
-         * places, but Iranian mobile networks that filter WalletConnect's
-         * infrastructure can filter this alongside the relay. The reported
-         * "sometimes the wallet list appears but tapping Trust/MetaMask does
-         * nothing" is exactly this failure mode: the LIST can render from a
-         * cached/partial response while the actual deep-link template never
-         * arrives, so the tap has nothing to open.
-         *
-         * Supplying the links ourselves removes that dependency entirely for
-         * the three wallets we actually promote — the tap works even if
-         * every WalletConnect-operated API (not just the relay) is blocked.
-         * `explorerExcludedWalletIds: 'ALL'` already means nothing else is
-         * offered, so this list is exhaustive for what a user can pick.
+         * `explorerRecommendedWalletIds` is one of the few qrModalOptions that
+         * convertWCMToAppKitOptions() DOES forward (as `featuredWalletIds`).
+         * Leaving the five explorer ids here meant the promoted wallets were
+         * rendered from the explorer API response — so on a network that
+         * filters api.web3modal.org they vanished, and any copy we shipped
+         * locally was filtered out of `customWallets` for carrying a
+         * duplicate id. Clearing it makes lib/wcWallets.js the single source
+         * for the promoted list, reachable or not.
          */
-        mobileWallets: [
-          {
-            id: 'metamask',
-            name: 'MetaMask',
-            links: {
-              native: 'metamask://',
-              universal: 'https://metamask.app.link/'
-            }
-          },
-          {
-            id: 'trust',
-            name: 'Trust Wallet',
-            links: {
-              native: 'trust://',
-              universal: 'https://link.trustwallet.com/'
-            }
-          },
-          {
-            id: 'rainbow',
-            name: 'Rainbow',
-            links: {
-              native: 'rainbow://',
-              universal: 'https://rnbwapp.com/'
-            }
-          }
-        ]
+        explorerRecommendedWalletIds: 'NONE',
+        /*
+         * Kept for the legacy standalone-modal shape; AppKit only carries
+         * `{ id, name, links }` forward and never reads `links`, so this list
+         * alone cannot open a wallet. The links that actually ship are applied
+         * in applyAppKitWalletLinks() after init().
+         */
+        mobileWallets: legacyModalWallets()
       },
       metadata: {
         name: 'FBT Swap',
@@ -513,6 +495,90 @@ export function WalletProvider({ children }) {
         }
       }
     };
+  }, []);
+
+  /**
+   * Hand the bundled AppKit modal the deep links it cannot derive itself.
+   *
+   * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────
+   * "MetaMask and WalletConnect connect in the browser, but opening Trust
+   * Wallet from the app or from the site shows **Invalid URL** with a link
+   * under it and never connects."
+   *
+   * The pairing was never the problem. The URL we handed to the phone was.
+   *
+   * Since `@walletconnect/ethereum-provider@2.23` the QR modal is
+   * **@reown/appkit**, and `qrModalOptions` is translated by
+   * `convertWCMToAppKitOptions()`, which keeps only `{ id, name, links }`.
+   * AppKit never reads `links`: `determinePlatforms()` and
+   * `onConnectMobile()` both work with the EXPLORER field names —
+   * `mobile_link`, `link_mode`. So an entry that only has `links` has no
+   * deep link at all, and a tap on it lands on the "unsupported" screen.
+   *
+   * And when a link DID exist it was the custom scheme (`trust://wc?uri=…`).
+   * A custom scheme is navigable from a system browser and from nothing
+   * else: inside a WebView — the packaged app, Telegram, or Trust Wallet's
+   * own browser — it is an unknown scheme, and the WebView renders exactly
+   * the reported error: "Invalid URL", with the URL printed underneath.
+   *
+   * ─── WHAT THIS DOES ─────────────────────────────────────────────────────
+   * 1. `customWallets` in AppKit's own shape, so `mobile_link` exists and a
+   *    platform is found at all.
+   * 2. `link_mode` per wallet, so AppKit also computes the https universal
+   *    link (`https://link.trustwallet.com/wc?uri=…`).
+   * 3. `experimental_preferUniversalLinks: true`, so AppKit OPENS that https
+   *    link instead of the custom scheme. An https link is understood by a
+   *    browser, by a WebView and by the OS alike: it routes to the installed
+   *    wallet, and where the app is missing it degrades to a web page
+   *    instead of an error. This is the single line that kills "Invalid URL".
+   * 4. The public metadata, so the modal does not describe this dapp to the
+   *    wallet with the WebView's own origin (https://localhost in the APK).
+   *
+   * ─── WHY IT RUNS AFTER init() ───────────────────────────────────────────
+   * EthereumProvider owns the modal: it creates it inside init() and stores
+   * it on `wc.modal`. There is no supported way to pass AppKit-native
+   * `customWallets` THROUGH ethereum-provider's options, but the instance it
+   * created exposes `updateOptions()` (→ OptionsController.setOptions), which
+   * is the same setter AppKit uses on itself at construction. Applying it
+   * here — before `wc.connect()` opens the modal — is the supported surface.
+   *
+   * Best effort by design: if a future SDK renames the setter, we fall back
+   * to the controllers package, and if that is gone too we trace
+   * `appkit_links_failed` and the modal keeps whatever links it had. The
+   * wallet list still renders either way; only the deep link is lost.
+   */
+  const applyAppKitWalletLinks = useCallback(async (wc) => {
+    const options = {
+      customWallets: appKitCustomWallets(),
+      experimental_preferUniversalLinks: true,
+      metadata: wcPublicMetadata()
+    };
+    try {
+      /* Primary: the modal instance ethereum-provider already built. */
+      const update = wc?.modal?.updateOptions;
+      if (typeof update === 'function') {
+        update.call(wc.modal, options);
+        wcEvent('appkit_links_applied');
+        return true;
+      }
+    } catch {
+      /* fall through to the controllers singleton */
+    }
+    try {
+      /* Fallback: the same singleton the modal reads. Only reached when the
+         instance API is missing, so a failure here is loud in the trace
+         instead of silent in front of the user. */
+      const controllers = await import('@reown/appkit-controllers');
+      const C = controllers?.OptionsController;
+      C?.setCustomWallets?.(options.customWallets);
+      C?.setPreferUniversalLinks?.(options.experimental_preferUniversalLinks);
+      C?.setMetadata?.(options.metadata);
+      wcEvent('appkit_links_applied', 1);
+      return true;
+    } catch {
+      wcEvent('appkit_links_failed');
+      return false;
+    }
   }, []);
 
   /**
@@ -592,35 +658,42 @@ export function WalletProvider({ children }) {
    * the public origin — this is the value that lands in the session proposal
    * the wallet renders.
    *
-   * ─── WHY THE OLD REPAIR DID NOTHING ──────────────────────────────────────
-   * It mutated `wc.signer.client.metadata`. Verified against the installed
-   * @walletconnect/sign-client@2.23.10: the SignClient stores its metadata on
-   * ITSELF (`this.metadata = populateAppMetadata(...)` in the constructor) and
-   * the engine serializes the proposal from `this.client.metadata` where
-   * `this.client` is the SIGN CLIENT, not the Core — `wc.signer.client` is the
-   * Core, which has NO `metadata` property at all. The guard
-   * `if (signClient?.metadata)` therefore never fired: the "repair" was a
-   * silent no-op and every session proposed from the APK still carried
-   * `https://localhost` as the dapp identity.
+   * ─── WHERE THE METADATA ACTUALLY LIVES (verified against the installed
+   * ─── @walletconnect/universal-provider@2.23.10 + sign-client@2.23.10) ────
+   * UniversalProvider.createClient() does `this.client = SignClient.init(…)`,
+   * and the SignClient constructor does
+   * `this.metadata = populateAppMetadata(opts.metadata)`. The engine then
+   * serialises the proposal from `this.client.metadata`.
    *
-   * The Core branch is kept defensively (an SDK upgrade that moves metadata
-   * back onto the Core must not resurrect the bug), and the result is
-   * verified and traced so a future SDK shape change fails LOUDLY in the
-   * event trace instead of silently in front of the user.
+   * So the object that reaches the wallet is `wc.signer.client.metadata` —
+   * the SIGN CLIENT, not the Core. An earlier revision of this function
+   * aimed at `wc.signer.metadata` (the UniversalProvider, which has no such
+   * property) and reported `metadata_repair_failed` from that same dead
+   * reference, so the trace claimed failure on every single connect even
+   * though the second branch had repaired the live object. A diagnostic that
+   * always cries wolf is worse than none: nobody believes it when it is
+   * right. The branches below are ordered by what is true in this SDK, and
+   * the return value reports the object that is actually read.
+   *
+   * The extra branches are kept defensively — an SDK upgrade that moves the
+   * metadata onto a different object must not silently resurrect a dapp that
+   * introduces itself to every wallet as https://localhost.
    */
   const repairSignClientMetadata = useCallback((wc) => {
-    const publicUrl = publicAppUrl('/').replace(/\/$/, '');
+    const { url, icons } = wcPublicMetadata();
     try {
-      const signClient = wc?.signer;
-      if (signClient?.metadata) {
-        signClient.metadata.url = publicUrl;
-        signClient.metadata.icons = [`${publicUrl}/icon-512.png`];
+      /* Ordered so `signClient` is the object the engine reads. */
+      const signClient = wc?.signer?.client ?? wc?.signer;
+      const targets = [
+        signClient?.metadata,
+        wc?.signer?.metadata,
+        wc?.rpc?.metadata
+      ].filter(Boolean);
+      for (const target of targets) {
+        target.url = url;
+        target.icons = [...icons];
       }
-      if (wc?.signer?.client?.metadata) {
-        wc.signer.client.metadata.url = publicUrl;
-        wc.signer.client.metadata.icons = [`${publicUrl}/icon-512.png`];
-      }
-      return signClient?.metadata?.url === publicUrl;
+      return Boolean(targets.length) && signClient?.metadata?.url === url;
     } catch {
       /* non-fatal: fall back to the SDK-derived metadata */
       return false;
@@ -777,6 +850,16 @@ export function WalletProvider({ children }) {
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
       /*
+       * Deep links the modal cannot derive from qrModalOptions — the fix for
+       * "Invalid URL" when opening Trust Wallet from the app or the site.
+       * Must run BEFORE wc.connect() below: connect() is what opens the modal,
+       * and the very first tap inside it has to find a real link.
+       * Never blocks: a failure here degrades to the old behaviour and is
+       * visible in the trace, it must not make Connect fail.
+       */
+      await applyAppKitWalletLinks(wc);
+
+      /*
        * init() also loads a persisted session when one is on disk. The purge
        * above should have removed it, but a concurrent tab can still race one
        * back in — and an explicit Connect means a NEW pairing, so a resurrected
@@ -919,7 +1002,7 @@ export function WalletProvider({ children }) {
       connectGuard.release();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attachWcListeners, buildWcInitConfig, initWcProvider, repairSignClientMetadata, detachInjectedListeners, refreshBalance]);
+  }, [attachWcListeners, buildWcInitConfig, initWcProvider, repairSignClientMetadata, applyAppKitWalletLinks, detachInjectedListeners, refreshBalance]);
 
   /* ------------------------ WalletConnect session restore ----------------- */
 

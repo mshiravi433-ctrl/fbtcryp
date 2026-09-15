@@ -123,10 +123,35 @@ export default function run() {
     (code.match(/wc\.connect\(\)/g) || []).length === 1);
   t('the connect call is bounded by a timeout (no infinite spin on a blocked relay)',
     /withTimeout\(wc\.connect\(\), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(code));
-  t('the mobile wallet list includes Trust Wallet, not just MetaMask',
-    /id:\s*'trust'/.test(code) && /id:\s*'metamask'/.test(code));
-  t('the mobile wallet list supplies a universal link for Trust',
-    /link\.trustwallet\.com/.test(code));
+  /*
+   * The promoted wallet table now lives in src/lib/wcWallets.js — one source
+   * for both the legacy modal shape and the AppKit shape — so the checks
+   * below read it there instead of trusting an inlined copy.
+   */
+  const walletTable = readFileSync('src/lib/wcWallets.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  t('the promoted wallet list includes Trust Wallet, not just MetaMask',
+    /name: 'Trust Wallet'/.test(walletTable) && /name: 'MetaMask'/.test(walletTable));
+  t('the promoted wallet list supplies Trust Wallet\'s documented universal host',
+    /universal: 'https:\/\/link\.trustwallet\.com\/'/.test(walletTable));
+  /*
+   * THE "INVALID URL" FIX. AppKit reads `mobile_link` / `link_mode` — the
+   * explorer field names — and never `links: { native, universal }`. An entry
+   * with only `links` has no deep link at all, and the link it did build was
+   * the `trust://` custom scheme, which a WebView (the APK, Telegram, Trust's
+   * own browser) cannot navigate to and answers with "Invalid URL".
+   */
+  t('the links handed to AppKit carry mobile_link (the field it reads)',
+    /mobile_link:/.test(walletTable));
+  t('the links handed to AppKit carry link_mode (without it there is no https link)',
+    /link_mode:/.test(walletTable));
+  t('every promoted wallet ships an https universal link, not only a custom scheme',
+    (walletTable.match(/universal: 'https:\/\//g) || []).length >= 3);
+  t('WalletContext consumes the shared wallet table instead of inlining links',
+    /mobileWallets: legacyModalWallets\(\)/.test(code)
+      && /customWallets: appKitCustomWallets\(\)/.test(code));
+  t('the modal is told to prefer https universal links over custom schemes',
+    /experimental_preferUniversalLinks: true/.test(code));
 
   /* ---- 8. the modal never depends on the explorer API for deep links ---- */
   t('the modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));
@@ -138,7 +163,21 @@ export default function run() {
    * Supplying the links ourselves on EVERY platform removes that dependency.
    */
   t('mobile wallet deep links are supplied unconditionally (not gated behind an iOS check)',
-    /mobileWallets: \[/.test(code) && !/\.\.\.\(ios\s*\?/.test(code));
+    /mobileWallets: legacyModalWallets\(\)/.test(code) && !/\.\.\.\(ios\s*\?/.test(code));
+  /*
+   * The promoted list must not come from the explorer API either: with
+   * `explorerRecommendedWalletIds` left set, the same wallets were rendered
+   * from the API response where reachable and dropped where it is filtered.
+   */
+  t('the promoted list does not depend on the explorer API response',
+    /explorerRecommendedWalletIds: 'NONE'/.test(code));
+  /*
+   * And the links must be applied to the modal instance BEFORE connect()
+   * opens it — the first tap inside it has to find a real deep link.
+   */
+  t('the deep links are applied to the modal before connect() opens it',
+    code.indexOf('await applyAppKitWalletLinks(wc)') > code.indexOf('wc = await initWcProvider(')
+      && code.indexOf('await applyAppKitWalletLinks(wc)') < code.indexOf('await withTimeout(wc.connect()'));
 
   /* ---- 9. session restore: the "Trust disconnected me" fix ----
      A persisted WC session used to be picked up only from the Connect
@@ -200,27 +239,39 @@ export default function run() {
     /startWalletConnect[\s\S]{0,500}\.then\(\(ok\) =>/.test(sheet));
 
   /* ---- 14. the metadata repair targets the REAL metadata object ----
-     THE FAKE "SECURITY RISK" MESSAGE. In sign-client 2.x the SignClient keeps
-     metadata on ITSELF (`this.metadata = populateAppMetadata(...)`), and the
-     proposal is serialized from `this.client.metadata` where `this.client` is
-     the SIGN CLIENT — while `wc.signer.client` is the CORE, which has NO
-     metadata property. The old repair mutated `wc.signer.client.metadata`
-     (always undefined) so it silently did nothing, and the session proposal
-     from the APK carried `https://localhost` as the dapp identity — which is
-     exactly what Trust Wallet's security scanner flags. The repair must touch
-     `wc.signer.metadata` FIRST. */
+     THE FAKE "SECURITY RISK" MESSAGE. `populateAppMetadata()` (verified in the
+     installed @walletconnect/utils@2.23.10) OVERWRITES `metadata.url` with
+     window.location.origin whenever the hosts differ — so inside the APK the
+     dapp introduces itself to every wallet as `https://localhost`, which is
+     exactly what Trust Wallet's security scanner flags and MetaMask answers
+     with "Invalid URL".
+
+     WHERE THAT METADATA LIVES (verified in the installed packages, and against
+     the belief this file used to encode): UniversalProvider.createClient()
+     does `this.client = SignClient.init(...)`, and the SignClient constructor
+     does `this.metadata = populateAppMetadata(...)`. The engine serialises the
+     proposal from `this.client.metadata`. So `wc.signer.client` IS the sign
+     client — it is NOT the Core, and it does have `metadata`. The repair must
+     therefore write `wc.signer.client.metadata` FIRST; the UniversalProvider
+     branch is the defensive one, and the reported result must come from the
+     object the engine actually reads (an earlier revision reported failure
+     from a reference that never existed, so the trace cried wolf on every
+     connect). */
+  const repairStart = walletSrc.indexOf('const repairSignClientMetadata');
   const repairBlock = walletSrc.slice(
-    walletSrc.indexOf('const repairSignClientMetadata'),
-    walletSrc.indexOf('};', walletSrc.indexOf('const repairSignClientMetadata'))
+    repairStart,
+    walletSrc.indexOf('}, [', repairStart)
   );
-  t('the metadata repair mutates the SignClient itself (wc.signer.metadata), not only the Core',
-    /wc\?\.signer\b/.test(repairBlock) && /signClient\.metadata\.url = publicUrl/.test(repairBlock));
-  t('the old dead target (core-only metadata) is no longer the sole repair path',
-    !/wc\?\.signer\?\.client;[^}]*metadata/.test(repairBlock));
-  t('the repair keeps the Core branch as a defensive fallback for future SDK shapes',
-    /wc\?\.signer\?\.client\?\.metadata/.test(repairBlock));
-  t('the repair verifies its own result and reports it',
-    /return signClient\?\.metadata\?\.url === publicUrl/.test(repairBlock)
+  t('the metadata repair targets the SignClient (wc.signer.client), which the engine reads',
+    /wc\?\.signer\?\.client \?\? wc\?\.signer/.test(repairBlock));
+  t('the repair also rewrites the provider\'s own copy of the metadata',
+    /wc\?\.rpc\?\.metadata/.test(repairBlock));
+  t('the UniversalProvider branch survives as a defensive fallback for a future SDK shape',
+    /wc\?\.signer\?\.metadata/.test(repairBlock));
+  t('the repair writes the public url, never the WebView origin',
+    /wcPublicMetadata\(\)/.test(repairBlock) && !/window\.location\.origin/.test(repairBlock));
+  t('the repair verifies its own result against the object it just wrote',
+    /return Boolean\(targets\.length\) && signClient\?\.metadata\?\.url === url/.test(repairBlock)
       && /metadata_repaired/.test(walletSrc) && /metadata_repair_failed/.test(walletSrc));
 
   /* ---- 15. disconnect / forget leave a CLEAN SLATE ----
