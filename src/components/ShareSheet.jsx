@@ -49,6 +49,7 @@ export default function ShareSheet({ open, onClose, onShared, url, text = '', ti
           {shareTargets(url, text).map((s) => (
             <a
               key={s.id}
+              data-id={s.id}
               className="share-target"
               href={s.href}
               target="_blank"

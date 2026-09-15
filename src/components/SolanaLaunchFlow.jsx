@@ -284,7 +284,11 @@ export default function SolanaLaunchFlow({ onBack, onHistory }) {
   const identity = useMemo(() => validateLaunchlabIdentity({ name, symbol, uri }), [name, symbol, uri]);
 
   const curveInputs = useMemo(() => {
-    const supplyBase = parseDecimalToBase(supply, 0);
+    // Solana LaunchLab SPL tokens use 6 decimals. The input represents whole
+    // tokens (e.g. 1B), which must be converted to base units (10^15) so that
+    // checkCurveParams and on-chain instructions compare against the live
+    // config's minSupplyA (also scaled by 10^decimals).
+    const supplyBase = parseDecimalToBase(supply, 6);
     const pct = /^\d+(\.\d+)?$/.test(sellPct.trim()) ? Number(sellPct) : NaN;
     const raiseLamports = parseDecimalToBase(raiseSol, 9);
     const buyLamports = firstBuySol.trim() === '' ? 0n : parseDecimalToBase(firstBuySol, 9);
