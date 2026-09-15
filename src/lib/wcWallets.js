@@ -1,71 +1,24 @@
 /**
- * MOBILE WALLET DEEP LINKS (WalletConnect v2)
+ * MOBILE WALLET HAND-OFF REGISTRY (WalletConnect v2)
  * ---------------------------------------------------------------------------
- * The one place that knows how to hand a pairing URI to a wallet app.
+ * One authoritative table for the native scheme, universal fallback, Explorer
+ * identity and Android package of every wallet promoted by this app.
  *
- * ─── WHY THIS MODULE EXISTS ────────────────────────────────────────────────
- * The reported bug — "MetaMask and WalletConnect connect in the browser, but
- * opening Trust Wallet from the app or the site shows *Invalid URL* with a
- * link under it and never connects" — was never about the pairing. The relay,
- * the project id and the session were all fine. What was broken was the last
- * metre: the URL we handed to the phone.
+ * Native deep links are primary. An HTTPS app/universal link may open the
+ * correct application after a redirector drops `uri=wc:…`, which produces a
+ * wallet home screen with no connection proposal. The universal form remains
+ * necessary for Telegram and install/fallback UX; packaged Android instead
+ * receives the raw pairing URI through a package-scoped ACTION_VIEW intent.
  *
- * Two separate mistakes met in that URL:
- *
- *   1. THE LINKS WERE WRITTEN IN A SHAPE THE MODAL DOES NOT READ.
- *      `buildWcInitConfig()` passed `qrModalOptions.mobileWallets` with
- *      `links: { native, universal }` (the old Web3Modal-standalone shape).
- *      Since `@walletconnect/ethereum-provider@2.23` the modal is
- *      **@reown/appkit**, and `convertWCMToAppKitOptions()` copies only
- *      `{ id, name, links }` into AppKit's `customWallets`. AppKit itself
- *      never reads `links`: `w3m-connecting-wc-view.determinePlatforms()` and
- *      `ConnectionControllerUtil.onConnectMobile()` both work exclusively with
- *      the EXPLORER field names — `mobile_link`, `desktop_link`,
- *      `webapp_link`, `link_mode`. A wallet entry with only `links` therefore
- *      has no link at all: `determinePlatforms()` finds no platform and the
- *      tap lands on the "unsupported" screen instead of a wallet.
- *
- *   2. THE LINK THAT WAS USED WAS A CUSTOM SCHEME (`trust://…`).
- *      AppKit builds `${mobile_link}wc?uri=<encoded>` and, by default, opens
- *      that custom scheme. A custom scheme is only navigable from a real
- *      browser. From a WebView — the packaged Android app, Telegram, or Trust
- *      Wallet's OWN in-app browser — `trust://…` is an unknown scheme, and the
- *      WebView answers exactly what was reported: **"Invalid URL"**, with the
- *      offending URL printed underneath it as a link. Nothing pairs, because
- *      nothing was ever opened.
- *
- *      Trust Wallet's own integration docs prescribe the https form:
- *        `https://link.trustwallet.com/wc?uri=${encodeURIComponent(uri)}`
- *      An https universal link is understood by every context: it opens the
- *      wallet app through Android App Links / iOS Universal Links, and where
- *      the app is missing it degrades to a web page instead of an error page.
- *
- * This module produces BOTH shapes from one table, so the two can never drift
- * apart again, and it is plain data + pure functions so the whole contract is
- * unit-testable without a browser, a bundler or a wallet — see
- * test/wc-wallets-probe.mjs.
+ * URL building is pure and encodes the repaired pairing URI exactly once. See
+ * test/wc-wallets-probe.mjs and test/wc-deeplink-probe.mjs.
  */
 
 /**
- * The wallets this app promotes, in display order.
- *
- * `id` is the Reown/WalletConnect explorer id. Keeping the real explorer id
- * (rather than a short name like 'trust') matters: AppKit keys its recent-
- * wallet storage, its analytics and its "All wallets" dedup on that id, so a
- * home-made id would show the same wallet twice under two identities.
- *
- * `native` / `universal` are BASES, not URLs: the caller (or AppKit) appends
- * `wc?uri=<encoded pairing uri>`. Both must end in '/'.
- *
- * `imageId` / `homepage` are the explorer identity of the wallet. They are not
- * decoration: a `customWallets` entry without `image_url` is rendered by
- * AppKit with a generic wallet glyph, and "the three wallets all wear the same
- * grey icon" is exactly the «the shape changed and it looks wrong» report.
- * Every id and every base below was read back from the LIVE explorer API with
- * this project's own id (`GET https://explorer-api.walletconnect.com/v3/wallets
- * ?projectId=8e36ecca…&search=<name>`) — the `mobile.native` and
- * `mobile.universal` fields of each listing, verbatim, plus the trailing slash
- * `walletLinkBase()` adds.
+ * Promoted wallets in display order. IDs, mobile link bases and image IDs come
+ * from their live Reown Explorer records. `androidPackage` is fixed alongside
+ * the native scheme so the APK can never turn web content into a generic
+ * package/intent launcher.
  */
 export const MOBILE_WALLETS = Object.freeze([
   {
@@ -74,6 +27,7 @@ export const MOBILE_WALLETS = Object.freeze([
     name: 'MetaMask',
     native: 'metamask://',
     universal: 'https://metamask.app.link/',
+    androidPackage: 'io.metamask',
     imageId: 'eebe4a7f-7166-402f-92e0-1f64ca2aa800',
     homepage: 'https://metamask.io/'
   },
@@ -81,15 +35,40 @@ export const MOBILE_WALLETS = Object.freeze([
     key: 'trust',
     id: '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0',
     name: 'Trust Wallet',
-    /* The scheme Trust registers for its own app. Kept as the NATIVE fallback:
-       it is the right thing on a real browser, and it is what the WebView
-       chokes on — which is why `universal` is preferred everywhere. */
+    /* Trust documents this native route for installed-wallet campaigns. */
     native: 'trust://',
     /* From Trust Wallet's developer docs ("Mobile (WalletConnect)"), the
        documented deep link is exactly this host + `/wc?uri=`. */
     universal: 'https://link.trustwallet.com/',
+    androidPackage: 'com.wallet.crypto.trustapp',
     imageId: '7677b54f-3486-46e2-4e37-bf8747814f00',
     homepage: 'https://trustwallet.com/'
+  },
+  {
+    /*
+     * UNISWAP'S EXPLORER RECORD IS NOT ENOUGH ON ANDROID.
+     *
+     * The record advertises both `uniswap://` and `https://uniswap.org/app`,
+     * but the https hop may open the application after dropping the `uri`
+     * payload — exactly the reported "the app opens and nothing asks to
+     * connect" symptom. The wallet's current open-source mobile app declares
+     * and parses the native form below verbatim:
+     *
+     *   UNISWAP_URL_SCHEME_WALLETCONNECT_AS_PARAM = 'uniswap://wc?uri='
+     *
+     * Keep both bases for Telegram/iOS fallback, but prefer the native route
+     * where the platform can launch it directly. In the packaged Android app
+     * the Java bridge sends the raw `wc:` URI to this exact package, avoiding
+     * both the browser redirect and proprietary URL parser entirely.
+     */
+    key: 'uniswap',
+    id: 'c03dfee351b6fcc421b4494ea33b9d4b92a984f87aa76d1663bb28705e95034a',
+    name: 'Uniswap Wallet',
+    native: 'uniswap://',
+    universal: 'https://uniswap.org/app/',
+    androidPackage: 'com.uniswap.mobile',
+    imageId: 'bff9cf1f-df19-42ce-f62a-87f04df13c00',
+    homepage: 'https://uniswap.org/'
   },
   {
     /*
@@ -118,6 +97,7 @@ export const MOBILE_WALLETS = Object.freeze([
     name: 'SafePal',
     native: 'safepalwallet://',
     universal: 'https://link.safepal.io/',
+    androidPackage: 'io.safepal.wallet',
     imageId: '252753e7-b783-4e03-7f77-d39864530900',
     homepage: 'https://safepal.com/'
   },
@@ -127,6 +107,7 @@ export const MOBILE_WALLETS = Object.freeze([
     name: 'Rainbow',
     native: 'rainbow://',
     universal: 'https://rnbwapp.com/',
+    androidPackage: 'me.rainbow',
     imageId: '7a33d7f1-3d12-4b5c-f3ee-5cd83cb1b500',
     homepage: 'https://rainbow.me/'
   }
@@ -296,9 +277,8 @@ export function walletLink(base, uri) {
 /**
  * Both flavours of the deep link for one wallet.
  *
- * `universal` is the https link — the one to prefer, because it is the only
- * form a WebView can navigate to. `native` is kept for contexts that
- * demonstrably handle custom schemes (a system browser on Android/iOS).
+ * `native` is the payload-preserving primary route. `universal` is the HTTPS
+ * fallback for restricted channels such as Telegram.
  *
  * @returns {{native: string, universal: string, wallet: object}|null}
  */
@@ -387,28 +367,10 @@ export function walletForWalletObject(wallet) {
 }
 
 /**
- * Give an AppKit wallet object the https `link_mode` the explorer response
- * does not carry for these wallets.
- *
- * ─── WHY THIS IS THE BUG, MEASURED ─────────────────────────────────────────
- * The wallet the user taps on a phone is NOT our `customWallets` entry — the
- * ethereum-provider runs the modal in `basic` mode, so the mobile screen is
- * AppKit's own explorer list (`w3m-all-wallets-list` → `ApiController.state`).
- * Fetched live with THIS project's id:
- *
- *   GET https://api.web3modal.org/getWallets?projectId=8e36ecca…&sv=html-core-1.8.19
- *     Trust Wallet → { "mobile_link": "trust://",    "link_mode": null }
- *     MetaMask     → { "mobile_link": "metamask://", "link_mode": null }
- *
- * `link_mode: null` makes `CoreHelperUtil.formatNativeUrl()` return
- * `redirectUniversalLink: undefined`, so
- * `experimental_preferUniversalLinks` has nothing to prefer and AppKit opens
- * the CUSTOM SCHEME — which a WebView cannot navigate to. Adding the https
- * base here is what makes the SDK's own link the one that works everywhere.
- *
- * Returns the SAME object when there is nothing to add: AppKit keeps these
- * objects in its recent-wallet list and re-renders lists on identity change,
- * so a pointless copy is churn (and a re-render mid-tap).
+ * Fill AppKit's optional HTTPS fallback for Explorer rows that omit link_mode.
+ * This does NOT select it: WalletContext keeps preferUniversalLinks false. The
+ * wrapper also gives restricted channels a known fallback without mutating the
+ * Explorer/recent-wallet object in place.
  */
 export function withLinkMode(wallet) {
   if (!wallet || typeof wallet !== 'object' || wallet.link_mode) return wallet;

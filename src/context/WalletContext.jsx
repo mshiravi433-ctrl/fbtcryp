@@ -600,54 +600,17 @@ export function WalletProvider({ children }) {
   }, []);
 
   /**
-   * Hand the bundled AppKit modal the deep links it cannot derive itself.
+   * Give the bundled AppKit modal a deterministic promoted-wallet table.
    *
-   * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────
-   * "MetaMask and WalletConnect connect in the browser, but opening Trust
-   * Wallet from the app or from the site shows **Invalid URL** with a link
-   * under it and never connects."
+   * ethereum-provider translates the legacy `mobileWallets` option into an
+   * AppKit shape that has historically drifted across releases. Updating the
+   * modal after init ensures every row has the explorer fields AppKit actually
+   * reads (`mobile_link`, `link_mode`, image_url). Native links are primary;
+   * link_mode remains available only as the Telegram/compatibility fallback.
    *
-   * The pairing was never the problem. The URL we handed to the phone was.
-   *
-   * Since `@walletconnect/ethereum-provider@2.23` the QR modal is
-   * **@reown/appkit**, and `qrModalOptions` is translated by
-   * `convertWCMToAppKitOptions()`, which keeps only `{ id, name, links }`.
-   * AppKit never reads `links`: `determinePlatforms()` and
-   * `onConnectMobile()` both work with the EXPLORER field names —
-   * `mobile_link`, `link_mode`. So an entry that only has `links` has no
-   * deep link at all, and a tap on it lands on the "unsupported" screen.
-   *
-   * And when a link DID exist it was the custom scheme (`trust://wc?uri=…`).
-   * A custom scheme is navigable from a system browser and from nothing
-   * else: inside a WebView — the packaged app, Telegram, or Trust Wallet's
-   * own browser — it is an unknown scheme, and the WebView renders exactly
-   * the reported error: "Invalid URL", with the URL printed underneath.
-   *
-   * ─── WHAT THIS DOES ─────────────────────────────────────────────────────
-   * 1. `customWallets` in AppKit's own shape, so `mobile_link` exists and a
-   *    platform is found at all.
-   * 2. `link_mode` per wallet, so AppKit also computes the https universal
-   *    link (`https://link.trustwallet.com/wc?uri=…`).
-   * 3. `experimental_preferUniversalLinks: true`, so AppKit OPENS that https
-   *    link instead of the custom scheme. An https link is understood by a
-   *    browser, by a WebView and by the OS alike: it routes to the installed
-   *    wallet, and where the app is missing it degrades to a web page
-   *    instead of an error. This is the single line that kills "Invalid URL".
-   * 4. The public metadata, so the modal does not describe this dapp to the
-   *    wallet with the WebView's own origin (https://localhost in the APK).
-   *
-   * ─── WHY IT RUNS AFTER init() ───────────────────────────────────────────
-   * EthereumProvider owns the modal: it creates it inside init() and stores
-   * it on `wc.modal`. There is no supported way to pass AppKit-native
-   * `customWallets` THROUGH ethereum-provider's options, but the instance it
-   * created exposes `updateOptions()` (→ OptionsController.setOptions), which
-   * is the same setter AppKit uses on itself at construction. Applying it
-   * here — before `wc.connect()` opens the modal — is the supported surface.
-   *
-   * Best effort by design: if a future SDK renames the setter, we fall back
-   * to the controllers package, and if that is gone too we trace
-   * `appkit_links_failed` and the modal keeps whatever links it had. The
-   * wallet list still renders either way; only the deep link is lost.
+   * The compatibility wrapper also records the row the user tapped. That lets
+   * wcDeepLink complete a rare bare `wc:` open request without guessing a
+   * wallet. All failures here are best-effort: pairing and QR remain usable.
    */
   const applyAppKitWalletLinks = useCallback(async (wc) => {
     /*
@@ -670,20 +633,13 @@ export function WalletProvider({ children }) {
          same ones AppKit would have used for the same wallets had they come
          from its explorer response. */
       customWallets: appKitCustomWallets(WC_PROJECT_ID),
-      experimental_preferUniversalLinks: true,
+      /* Native wallet schemes preserve the pairing payload end-to-end. The
+         bridge routes Telegram to HTTPS and the APK to ACTION_VIEW itself. */
+      experimental_preferUniversalLinks: false,
       metadata: wcPublicMetadata()
     };
-    /*
-     * The wallet the user actually taps on a phone is an EXPLORER object
-     * (AppKit's `basic` modal lists `ApiController.state`, not our
-     * `customWallets`), and those objects carry `link_mode: null` for Trust /
-     * MetaMask — measured against the live API with this project's id. Without
-     * `link_mode` there is no universal link to prefer, so the SDK builds the
-     * custom scheme. lib/wcAppKitPatch.js wraps the single function that builds
-     * that link so every wallet object arrives with the https base.
-     * Best effort: a false return only means the bridge in lib/wcDeepLink.js is
-     * the one that has to catch the URL.
-     */
+    /* Explorer rows often omit link_mode. Fill that fallback and record the
+       selected wallet without changing AppKit's native-first choice. */
     try {
       /* Emitted as an outcome IN THE NAME (the trace's own idiom, see
          metadata_repaired/metadata_repair_failed): the buffer must never be
@@ -1020,36 +976,19 @@ export function WalletProvider({ children }) {
       /* populateAppMetadata() overwrite repair — see repairSignClientMetadata(). */
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
-      /*
-       * Deep links the modal cannot derive from qrModalOptions — the fix for
-       * "Invalid URL" when opening Trust Wallet from the app or the site.
-       * Must run BEFORE wc.connect() below: connect() is what opens the modal,
-       * and the very first tap inside it has to find a real link.
-       * Never blocks: a failure here degrades to the old behaviour and is
-       * visible in the trace, it must not make Connect fail.
-       */
+      /* Apply deterministic native + fallback wallet metadata before connect()
+         opens the modal. Best effort: QR/manual pairing remains available. */
       await applyAppKitWalletLinks(wc);
 
       /*
        * LAST METRE: own the URL the modal hands to the phone.
        *
-       * Even with the options above applied, AppKit builds the mobile link
-       * from the wallet object the user tapped — and on a phone that object
-       * comes from the SDK's explorer list, whose Trust/MetaMask entries carry
-       * `mobile_link: 'trust://'` with `link_mode: null` (measured against the
-       * live API with this project's id). No `link_mode` means no universal
-       * link, which means `experimental_preferUniversalLinks` has nothing to
-       * prefer and the CUSTOM SCHEME is opened: `trust://wc?uri=…` inside a
-       * WebView is exactly the reported «ارور دیپ لینک».
-       *
-       * lib/wcAppKitPatch.js gives the SDK the missing `link_mode` at the one
-       * place it builds a link; lib/wcDeepLink.js wraps window.open for the
-       * duration of the pairing and rewrites any wallet deep link it still
-       * sees into the wallet's https universal link before it is delivered
-       * (Telegram opener / system browser from the APK / plain navigation on
-       * the web). Installed here, BEFORE wc.connect() opens the modal, and
-       * removed in the finally block below — a bridge left installed would
-       * rewrite links for the rest of the session.
+       * Native custom schemes preserve `uri=wc:…` better than HTTPS redirect
+       * services, but WebViews need a platform escape hatch. The bridge keeps
+       * this dapp document alive and passes native + universal + raw URI to the
+       * channel-aware opener: Android ACTION_VIEW, browser-native deep link,
+       * or Telegram HTTPS fallback. It is installed before connect() opens the
+       * modal and always removed in the finally block.
        */
       uninstallWalletBridge = installWalletOpenBridge({
         openWallet: (url, opts) => {

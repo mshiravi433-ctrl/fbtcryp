@@ -155,16 +155,9 @@ export default function runWcPairingSurface() {
 
   /* ---- 3. one deep link per promoted wallet, and each one round-trips --- */
   {
-    /*
-     * FOUR wallets, not three. SafePal was added as the explicit alternative
-     * («الترناتیو که مثل تراست والت باشه»): a mobile-first WalletConnect v2
-     * wallet whose explorer listing carries BOTH a scheme and an https
-     * link_mode, on infrastructure that shares nothing with Trust's. The
-     * order is asserted too — the sheet renders the table in order, and
-     * silently reordering a list users have learned is its own bug report.
-     */
-    t('the promoted table names the four wallets the sheet renders, in order',
-      MOBILE_WALLETS.map((w) => w.key).join(',') === 'metamask,trust,safepal,rainbow');
+    /* The order is user-visible because the sheet maps this table directly. */
+    t('the promoted table names all five wallets the sheet renders, in order',
+      MOBILE_WALLETS.map((w) => w.key).join(',') === 'metamask,trust,uniswap,safepal,rainbow');
     t('…and every one of them can carry a brand logo (no grey glyphs)',
       MOBILE_WALLETS.every((w) => Boolean(w.imageId) && Boolean(w.homepage)));
     for (const w of MOBILE_WALLETS) {
@@ -172,7 +165,7 @@ export default function runWcPairingSurface() {
       const url = links?.universal || '';
       let host = '';
       try { host = new URL(url).host; } catch { host = ''; }
-      t(`${w.name}: the button opens an https universal link (never a bare scheme)`,
+      t(`${w.name}: an https fallback exists on the wallet's official host`,
         url.startsWith('https://') && host === new URL(w.universal).host);
       const param = new URLSearchParams(url.slice(url.indexOf('?'))).get('uri');
       t(`${w.name}: the uri= parameter decodes back to the pairing URI exactly`,
@@ -280,10 +273,14 @@ export default function runWcPairingSurface() {
     t('…targeting a NEW tab, never this one',
       /target="_blank"/.test(code) && /rel="noreferrer noopener"/.test(code)
       && !/'_self'/.test(code));
-    t('the app\'s own opener is used only where an anchor cannot do the job',
-      /walletHandOffChannel\(\)/.test(code) && /openWalletLink\(href, \{ target: '_blank' \}\)/.test(code));
-    t('…Telegram and the packaged app take over; the open web lets the anchor go',
-      /if \(channel === 'web'\) return/.test(code));
+    t('the app\'s own opener receives native, universal, package and raw pairing forms',
+      /walletHandOffChannel\(\)/.test(code)
+      && /openWalletLink\(links\.native/.test(code)
+      && /walletPackage: promoted\.androidPackage/.test(code)
+      && /pairingUri: pairUri/.test(code)
+      && /fallbackUrl: links\.universal/.test(code));
+    t('…Telegram and the APK take over; the open web keeps the direct native anchor',
+      /if \(channel === 'web-native'\) return/.test(code));
     t('the wallet rows are dead until a URI exists (no empty-payload opens)',
       /aria-disabled=\{!pairUri\}/.test(code) && /pointerEvents: 'none'/.test(code));
     t('each row carries the wallet\'s own brand logo over the generic glyph',

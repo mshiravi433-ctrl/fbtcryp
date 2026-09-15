@@ -42,8 +42,8 @@
  *   5. `walletLink()` emits `%26` between parameters — never `&amp;` — even
  *      when it is handed a damaged URI.
  *   6. A BARE `wc:` URI (the reported error, which names no app) is completed
- *      into the tapped wallet's https link instead of being left to a WebView,
- *      and nothing is invented when no wallet was tapped.
+ *      into the tapped wallet's native link with HTTPS fallback, and nothing
+ *      is invented when no wallet was tapped.
  *   7. The wallet is recorded at the SDK's real hand-off (`onConnectMobile`),
  *      which is what makes (6) possible — driven against the real controllers.
  */
@@ -167,12 +167,14 @@ export default async function run() {
 
   /* ---- 5. the links we build are never escaped and never double-encoded ---- */
   const healedLink = walletLink(TRUST.universal, REPORTED);
+  const healedNative = walletLink(TRUST.native, REPORTED);
   t('a link built from a damaged URI carries %26 separators, not &amp;',
     healedLink === `https://link.trustwallet.com/wc?uri=${encodeURIComponent(REPORTED_HEALTHY)}`
       && !healedLink.includes('&amp;') && !healedLink.includes('&'));
-  t('…exactly one encoding level (the nested URI is not double-encoded)',
+  t('…exactly one encoding level in both native and universal forms',
     healedLink.includes(encodeURIComponent('%26')) === false
-      && healedLink.includes(encodeURIComponent(REPORTED_HEALTHY)));
+      && healedLink.includes(encodeURIComponent(REPORTED_HEALTHY))
+      && healedNative === `trust://wc?uri=${encodeURIComponent(REPORTED_HEALTHY)}`);
 
   /* ---- 6. a bare `wc:` URI is completed for the tapped wallet, never guessed ---- */
   forgetTappedWallet();
@@ -182,18 +184,22 @@ export default async function run() {
 
   rememberTappedWallet(TRUST_WALLET_OBJECT);
   const completed = decideWalletOpen(REPORTED);
-  t('with a tapped wallet, the bare URI becomes that wallet\'s https link',
-    completed.action === 'open' && completed.url === healedLink);
+  t('with a tapped wallet, the bare URI becomes that wallet\'s native link',
+    completed.action === 'open'
+      && completed.url === healedNative
+      && completed.fallbackUrl === healedLink
+      && completed.pairingUri === REPORTED_HEALTHY);
   t('…and it is flagged as both repaired and rewritten',
     completed.repaired === true && completed.rewritten === true && completed.wallet?.key === 'trust');
   const completedClean = decideWalletOpen(REPORTED_HEALTHY);
   t('a healthy bare URI reports repaired:false (the flag stays honest)',
-    completedClean.url === healedLink && completedClean.repaired === false);
+    completedClean.url === healedNative && completedClean.repaired === false);
 
   const damagedDeepLink = decideWalletOpen(`trust://wc?uri=${encodeURIComponent(REPORTED)}`);
-  t('an escaped CUSTOM-SCHEME deep link is repaired and delivered as https',
+  t('an escaped custom-scheme link is repaired but remains native-first',
     damagedDeepLink.action === 'open'
-      && damagedDeepLink.url === `https://link.trustwallet.com/wc?uri=${encodeURIComponent(REPORTED_HEALTHY)}`
+      && damagedDeepLink.url === healedNative
+      && damagedDeepLink.fallbackUrl === healedLink
       && damagedDeepLink.repaired === true);
   t('AppKit\'s own links are still never touched',
     decideWalletOpen('https://reown.com/').action === 'pass'
@@ -209,9 +215,13 @@ export default async function run() {
       openWallet: (url, opts) => delivered.push([url, opts])
     });
     win.open(REPORTED, '_self', 'noreferrer noopener');
-    t('the bridge delivers the wallet\'s https link for a bare pairing URI',
-      delivered.length === 1 && delivered[0][0] === healedLink);
-    t('…and reports `repaired`, so the trace can name what it saw',
+    t('the bridge delivers the native link plus HTTPS fallback for a bare pairing URI',
+      delivered.length === 1
+        && delivered[0][0] === healedNative
+        && delivered[0][1].fallbackUrl === healedLink
+        && delivered[0][1].pairingUri === REPORTED_HEALTHY
+        && delivered[0][1].walletPackage === 'com.wallet.crypto.trustapp');
+    t('…and reports `repaired`, so diagnostics can name what it saw',
       delivered[0][1].repaired === true);
     t('…while AppKit\'s own links still reach the original opener',
       (win.open('https://reown.com/', '_self'), calls.length === 1));

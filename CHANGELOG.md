@@ -1,3 +1,42 @@
+# ۲۰۲۶-۰۹-۱۵ (۵) — رفع ریشه‌ای handoff موبایل: native-first + Android ACTION_VIEW
+
+> این مدخل نتیجه‌گیری دورهای (۳) و (۴) دربارهٔ «ترجیح universal link در همه‌جا»
+> را جایگزین می‌کند. بازشدن اپ کیف پول به معنی رسیدن pairing URI نیست.
+
+- **نقطهٔ شکست مشخص شد:** QR موفق بود، پس Project ID، relay و خود pairing
+  سالم بودند. مسیر HTTPS قبلی Trust/Uniswap را باز می‌کرد اما redirector
+  می‌توانست `uri=wc:…` را حذف کند؛ در نتیجه اپ باز می‌شد و هیچ proposalی وجود
+  نداشت. MetaMask نیز سابقهٔ همین حذف payload در universal redirect دارد.
+- **وب موبایل native-first شد:** `experimental_preferUniversalLinks: false`؛
+  `wcDeepLink` لینک بومی (`trust://` / `metamask://` / `uniswap://`) را اصلی و
+  HTTPS را fallback نگه می‌دارد. universal ورودی نیز برای کیف پول شناخته‌شده
+  به native همان کیف پول normalize می‌شود. صفحهٔ dApp با `_blank` زنده می‌ماند.
+- **APK مسیر native واقعی گرفت:** `FBTWalletLink` در `MainActivity` ابتدا raw
+  `wc:` را با `Intent.ACTION_VIEW` و package صریح باز می‌کند و اگر wallet آن
+  scheme را register نکرده باشد، deep link بومی را با `Uri.Builder` می‌سازد؛
+  هیچ redirector یا Custom Tab در مسیر اصلی نیست. URI و package/scheme هر دو
+  allowlist و validate می‌شوند.
+- **Android 11 visibility:** packageهای `io.metamask`،
+  `com.wallet.crypto.trustapp`، `com.uniswap.mobile`، `io.safepal.wallet` و
+  `me.rainbow` در manifest اضافه شدند.
+- **Uniswap Wallet اضافه شد:** Explorer ID رسمی، `uniswap://` و package
+  `com.uniswap.mobile`؛ فرم `uniswap://wc?uri=` با کد متن‌باز خود wallet تطبیق
+  داده شد.
+- **Telegram استثناست:** API مینی‌اپ فقط http(s) می‌پذیرد، پس همان‌جا universal
+  fallback استفاده می‌شود؛ در صورت ناسازگاری WebView، Open in browser مسیر
+  توصیه‌شده است.
+- **SDK:** `@walletconnect/ethereum-provider` از `2.23.10` به `2.25.0` ارتقا یافت.
+- **PWA:** shell cache از v9 به v10 رفت تا باندل universal-first قدیمی روی
+  نصب‌های موجود باقی نماند.
+- **Dashboard:** علاوه بر Project ID، allowlist باید `https://fbtswap.ir` و برای
+  APK شناسهٔ `ir.fbtswap.app` (و در صورت ورودی جداگانهٔ WebView،
+  `https://localhost`) را پوشش دهد. Secret یا IP allowlist لازم نیست. متغیر
+  Vercel در runtime فعلی خوانده نمی‌شود؛ ID واحد داخل source است.
+- **تست:** probeهای registry، pairing surface، URI hygiene، AppKit واقعی،
+  channelهای browser/Telegram/Android و دفاع native به رفتار native-first
+  بازنویسی شدند. گزارش و checklist کامل:
+  `docs/WALLETCONNECT-MOBILE-HANDOFF-FA.md`.
+
 # ۲۰۲۶-۰۹-۱۵ (۴) — «Invalid Url:wc:…» ریشه‌یابی شد: URIِ HTML-escapeشده + URIِ بی‌مالک
 
 - **رشته‌ای که در خطا دیده می‌شود خودِ pairing URI است، نه لینکی که ما ساختیم.**

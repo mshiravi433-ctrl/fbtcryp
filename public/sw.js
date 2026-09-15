@@ -57,8 +57,13 @@
  * relay nobody was listening to. An install still holding the v8 shell keeps
  * that behaviour byte for byte until its cached shell is evicted — renaming
  * the cache is what evicts it, on the PWA and on an in-place APK update alike.
+ *
+ * v9 -> v10: wallet hand-off is now native-first. Trust/Uniswap universal
+ * redirectors could open the app after dropping `uri=wc:…`, so users saw the
+ * wallet home screen with no proposal. The web now uses native schemes and the
+ * APK uses a package-scoped ACTION_VIEW bridge with the raw pairing URI.
  */
-const SHELL = 'fbt-shell-v9';
+const SHELL = 'fbt-shell-v10';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

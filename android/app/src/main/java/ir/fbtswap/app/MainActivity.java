@@ -1,9 +1,13 @@
 package ir.fbtswap.app;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+
+import java.util.regex.Pattern;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.WindowCompat;
@@ -71,7 +75,7 @@ public class MainActivity extends BridgeActivity {
     super.onCreate(savedInstanceState);
     applySystemBarTheme(false);
     getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-    wireThemeBridge();
+    wireNativeBridges();
   }
 
   /*
@@ -105,12 +109,20 @@ public class MainActivity extends BridgeActivity {
    * bridge is up, which is after super.onCreate() has run — exactly where
    * this is called from.
    */
-  private void wireThemeBridge() {
+  private void wireNativeBridges() {
     Bridge bridge = getBridge();
     if (bridge == null) return;
     WebView webView = bridge.getWebView();
     if (webView == null) return;
     webView.addJavascriptInterface(new SystemUi(this), "FBTSystemUI");
+    /*
+     * A Custom Tab/universal-link redirect can open a wallet after dropping
+     * WalletConnect's `uri` query. Give the web layer a tiny, package-scoped
+     * ACTION_VIEW bridge so the raw pairing payload reaches Android intact.
+     * WalletLink validates both arguments against fixed allowlists below; web
+     * content can neither launch arbitrary packages nor arbitrary URI schemes.
+     */
+    webView.addJavascriptInterface(new WalletLink(this), "FBTWalletLink");
   }
 
   /*
@@ -138,6 +150,79 @@ public class MainActivity extends BridgeActivity {
           );
         }
       });
+    }
+  }
+
+  /**
+   * WalletConnect's native Android last metre.
+   *
+   * Try the protocol URI first (`wc:topic@2?...`), as recommended for native
+   * Android dapps. Some wallets register only their branded scheme, so the
+   * second attempt builds `trust://wc?uri=...` / `metamask://wc?uri=...`
+   * directly with Uri.Builder. Neither path uses an HTTPS redirector.
+   */
+  private static final class WalletLink {
+    private static final Pattern PAIRING_URI = Pattern.compile(
+      "^wc:[A-Za-z0-9_-]+@2\\?(?=[^#\\s]*relay-protocol=[^&#\\s]+(?:&|$))" +
+      "(?=[^#\\s]*symKey=[0-9a-fA-F]{64}(?:&|$))[^#\\s]+$"
+    );
+
+    private final MainActivity activity;
+
+    WalletLink(MainActivity activity) {
+      this.activity = activity;
+    }
+
+    @JavascriptInterface
+    public boolean openWallet(final String pairingUri, final String packageName) {
+      if (pairingUri == null || pairingUri.length() > 4096 || !PAIRING_URI.matcher(pairingUri).matches()) {
+        return false;
+      }
+      final String walletScheme = schemeForPackage(packageName);
+      if (walletScheme == null) return false;
+
+      Intent protocolIntent = walletIntent(Uri.parse(pairingUri), packageName);
+      if (canOpen(protocolIntent)) return launch(protocolIntent);
+
+      Uri nativeUri = new Uri.Builder()
+        .scheme(walletScheme)
+        .authority("wc")
+        .appendQueryParameter("uri", pairingUri)
+        .build();
+      Intent nativeIntent = walletIntent(nativeUri, packageName);
+      return canOpen(nativeIntent) && launch(nativeIntent);
+    }
+
+    private Intent walletIntent(Uri uri, String packageName) {
+      Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+      intent.setPackage(packageName);
+      intent.addCategory(Intent.CATEGORY_BROWSABLE);
+      return intent;
+    }
+
+    private boolean canOpen(Intent intent) {
+      return intent.resolveActivity(activity.getPackageManager()) != null;
+    }
+
+    private boolean launch(final Intent intent) {
+      activity.runOnUiThread(new Runnable() {
+        @Override
+        public void run() {
+          activity.startActivity(intent);
+        }
+      });
+      return true;
+    }
+
+    /* Package + scheme are a pair. Never accept either value from JavaScript
+       independently: this is a signing application, not a generic intent proxy. */
+    private static String schemeForPackage(String packageName) {
+      if ("io.metamask".equals(packageName)) return "metamask";
+      if ("com.wallet.crypto.trustapp".equals(packageName)) return "trust";
+      if ("com.uniswap.mobile".equals(packageName)) return "uniswap";
+      if ("io.safepal.wallet".equals(packageName)) return "safepalwallet";
+      if ("me.rainbow".equals(packageName)) return "rainbow";
+      return null;
     }
   }
 }

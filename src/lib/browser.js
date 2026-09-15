@@ -31,8 +31,6 @@
  * everyone in this space is trying to prevent.
  */
 
-import { isNativeShell } from './nativeShell.js';
-
 let BrowserPlugin = null;
 let pluginChecked = false;
 
@@ -67,171 +65,132 @@ export function isSafeUrl(raw) {
 }
 
 /**
- * Which channel a wallet hand-off will travel through, so a caller can decide
- * whether to let the browser navigate a real `<a target="_blank">` (never
- * pop-up blocked, and the page survives) or hand the URL to `openWalletLink()`
- * instead.
+ * Which channel a wallet hand-off will travel through.
  *
- *   'telegram'    — the Mini App iframe: only Telegram's own opener can leave
- *                   it without unloading the app underneath.
- *   'custom-tabs' — the packaged app: the WebView must not navigate, so the
- *                   system browser takes the URL.
- *   'web'         — a plain browser: an anchor with `target="_blank"` is the
- *                   best possible delivery and needs no help.
+ * `android-intent` is deliberately not called Custom Tabs: current APKs use a
+ * package-scoped ACTION_VIEW intent with the raw `wc:` URI. `telegram` can only
+ * carry HTTPS. A plain browser receives the wallet's native custom scheme.
  */
 export function walletHandOffChannel(win) {
   const view = win ?? (typeof window !== 'undefined' ? window : null);
   if (view?.Telegram?.WebApp?.openLink) return 'telegram';
-  /* The same test `isNativeShell()` makes, spelled out against the window we
-     were handed so a caller (or a probe) can ask about a window that is not
-     the global one. */
-  if (view?.Capacitor?.isNativePlatform?.()) return 'custom-tabs';
-  return 'web';
+  if (view?.Capacitor?.isNativePlatform?.()) return 'android-intent';
+  return 'web-native';
+}
+
+function isNativeWalletUrl(raw) {
+  const url = String(raw || '').trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url);
+}
+
+function isPairingUri(raw) {
+  const uri = String(raw || '').trim();
+  return /^wc:[^\s@]+@2\?(?=[^#]*\brelay-protocol=)(?=[^#]*\bsymKey=)[^#]+$/i.test(uri);
 }
 
 /**
- * Hand a WALLET deep link to the phone.
+ * Hand one WalletConnect pairing to a mobile wallet while this page and its
+ * relay socket remain alive.
  *
- * ─── WHY THIS IS NOT openUrl() ─────────────────────────────────────────────
- * `openUrl()` exists for arbitrary external websites: https only, always
- * through the system browser, never injected into. A wallet hand-off is a
- * different animal with a different failure mode, and it needs its own
- * channel for two reasons: a deep link must LEAVE the WebView, and — the one
- * that survived three rounds of fixes — it must not TAKE THIS PAGE WITH IT.
+ * `url` is the native wallet deep link. The decoded `pairingUri`, exact Android
+ * package and HTTPS `fallbackUrl` are supplied by wcDeepLink/wcWallets:
  *
- * ─── THE MEASURED ROOT CAUSE OF «ارور دیپ لینک» ────────────────────────────
- * Three rounds of fixes corrected the URL (`trust://` → the https universal
- * link, `&amp;` → `&`, one level of encoding) and the report did not change,
- * because the URL was never the last thing that was wrong. The TARGET was.
- * Read out of the installed SDK, `@reown/appkit-controllers@1.8.19`,
- * `ConnectionControllerUtil.onConnectMobile()`:
+ *   • packaged Android → raw `wc:` ACTION_VIEW intent, package-scoped;
+ *   • ordinary browser → native custom scheme in a separate browsing context;
+ *   • Telegram         → universal HTTPS fallback (its only accepted scheme).
  *
- *     const target = CoreHelperUtil.isIframe() ? '_top' : '_self';
- *     CoreHelperUtil.openHref(universalLink, target);   // → window.open(url, '_self')
- *
- * `window.open(url, '_self')` REPLACES the current document. So on a phone,
- * tapping a wallet in the modal navigated this tab to
- * `https://link.trustwallet.com/wc?uri=…` and destroyed, in that instant, the
- * WalletConnect client, its relay socket and the pending `connect()` promise.
- * The user then approves in Trust; the wallet publishes the approval to the
- * relay; nobody is left to receive it. The tab shows Trust's own
- * "Download the app" page — the «شکل عوض شده و زشت شده» report — and the
- * session never exists. Every byte of the URL was correct and the connection
- * still could not complete.
- *
- * (AppKit only special-cases Telegram here — "Only '_blank' deeplinks work in
- * Telegram context". For the open web it uses `_self`, which is precisely
- * wrong for a pairing: a wallet hand-off is a round trip, and a round trip
- * needs the caller to still be alive when the answer arrives.)
- *
- * So this function's rule is: a wallet hand-off NEVER navigates this document.
- *
- *   • packaged app  → @capacitor/browser (Android Custom Tabs). The browser is
- *     a real browser, so the OS resolves Android App Links to the wallet —
- *     and if the wallet is not installed the user lands on the wallet's own
- *     web page instead of our WebView error page. Our page stays underneath.
- *   • Telegram      → WebApp.openLink(): Telegram's opener leaves the Mini App
- *     alive underneath rather than navigating our page away.
- *   • plain web     → `window.open(url, '_blank')` — the target Trust Wallet's
- *     own developer docs prescribe (`window.open(deepLink, '_blank',
- *     'noreferrer noopener')`). The pairing page survives in its own tab and
- *     is still connected when the wallet answers.
- *
- * A `_blank` that a pop-up blocker refuses is retried once through a real
- * `<a target="_blank">` click, which is not a scripted window and is
- * therefore not blocked. What this function will NOT do as a last resort is
- * `location.assign()`: navigating away would look like success and quietly
- * kill the pairing it was called to make.
- *
- * @returns {Promise<boolean>} false when the URL was rejected or nothing could
- *          be opened (callers treat that as "the user still has the QR code").
+ * A universal link opening an app is not treated as primary success: redirect
+ * services may strip the pairing query, which opens the wallet home screen but
+ * produces no session proposal.
  */
-export async function openWalletLink(url, { target = '_blank', features = 'noreferrer noopener', win, openWindow } = {}) {
+export async function openWalletLink(url, {
+  target = '_blank',
+  features = 'noreferrer noopener',
+  win,
+  openWindow,
+  wallet = null,
+  walletPackage = wallet?.androidPackage || '',
+  pairingUri = '',
+  fallbackUrl = ''
+} = {}) {
   const raw = String(url || '').trim();
-  if (!raw) return false;
+  const fallback = isSafeUrl(fallbackUrl)
+    ? String(fallbackUrl).trim()
+    : (isSafeUrl(raw) ? raw : '');
+  const native = isNativeWalletUrl(raw) ? raw : '';
   const view = win ?? (typeof window !== 'undefined' ? window : null);
-  const https = isSafeUrl(raw);
+  const channel = walletHandOffChannel(view);
 
-  /*
-   * Inside Telegram, Telegram's own opener is the only way to leave the Mini
-   * App without killing the page underneath — and it accepts http(s) links
-   * only, so a custom scheme is handled further down.
-   *
-   * Read off `view` (the window we were handed), not the global: every other
-   * branch of this function honours the injected window, and a branch that
-   * quietly reads `window` instead is one a caller cannot test or override.
-   */
-  const tg = view?.Telegram?.WebApp ?? null;
-  if (https && tg?.openLink) {
-    tg.openLink(raw, { try_instant_view: false });
-    return true;
+  /* Android's generic `wc:` intent is the protocol-native hand-off recommended
+     by WalletConnect. The explicit package prevents another wallet from
+     stealing the tap. MainActivity validates the package allowlist and URI
+     shape again before Android ever sees it. */
+  if (channel === 'android-intent') {
+    if (walletPackage && isPairingUri(pairingUri)) {
+      try {
+        const bridge = view?.FBTWalletLink;
+        if (bridge && typeof bridge.openWallet === 'function') {
+          const opened = bridge.openWallet(pairingUri, walletPackage);
+          if (opened === true || opened === 'true') return true;
+        }
+      } catch {
+        /* An old/partially upgraded APK falls through to its HTTPS compatibility path. */
+      }
+    }
+
+    if (fallback) {
+      const plugin = await getPlugin();
+      if (plugin) {
+        try {
+          await plugin.open({ url: fallback, toolbarColor: '#0a0c12' });
+          return true;
+        } catch {
+          /* Keep the pairing page alive; never replace its WebView as fallback. */
+        }
+      }
+    }
+    return false;
   }
 
-  /*
-   * In the packaged app the WebView must not be the thing that navigates:
-   * whether a WebViewClient intercepts a custom scheme — or loads an app-link
-   * URL inside itself — is outside our control, and that is precisely what
-   * the bug report was about. Custom Tabs is a separate activity: a real
-   * browser, with real scheme/app-link resolution, and our page stays alive
-   * underneath.
-   */
-  if (isNativeShell()) {
-    const plugin = await getPlugin();
-    if (plugin) {
-      try {
-        await plugin.open({ url: raw, toolbarColor: '#0a0c12' });
-        return true;
-      } catch {
-        /* fall through to the plain navigation below */
-      }
+  if (channel === 'telegram') {
+    if (!fallback) return false;
+    try {
+      view.Telegram.WebApp.openLink(fallback, { try_instant_view: false });
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  if (!view) return false;
+  const launchUrl = native || fallback;
+  if (!launchUrl || !view) return false;
 
-  /*
-   * THE TARGET RULE. `_self` / `_top` / '' all mean "replace this document",
-   * and for a wallet hand-off that is the bug, not a fallback. Everything
-   * that is not an explicit named window becomes `_blank`.
-   */
+  /* Never accept AppKit's `_self`/`_top` here: replacing this document destroys
+     the pending connect() promise before the wallet publishes its approval. */
   const asked = String(target || '_blank');
   const safeTarget = asked === '_self' || asked === '_top' || asked === '' ? '_blank' : asked;
-
-  /* `openWindow` is the ORIGINAL window.open when this call came from the
-     pairing bridge in lib/wcDeepLink.js — using the live one there would
-     re-enter the bridge forever. */
   const open = openWindow ?? view.open?.bind(view);
   if (open) {
     try {
-      if (open(raw, safeTarget, features)) return true;
+      if (open(launchUrl, safeTarget, features)) return true;
     } catch {
-      /* a refused target or a thrown SecurityError — try the anchor below */
+      /* A real anchor below is the final non-destructive fallback. */
     }
   }
 
-  /*
-   * POP-UP BLOCKED. A real anchor click is not a scripted window, so the
-   * blocker does not apply to it — and we are still inside the user's own
-   * click task, so the gesture is intact. This is the difference between
-   * "tap Trust Wallet and nothing happens" and a hand-off that works with
-   * strict blocker settings.
-   */
   if (typeof view.document?.createElement === 'function') {
     try {
       const a = view.document.createElement('a');
-      a.href = raw;
+      a.href = launchUrl;
       a.target = '_blank';
       a.rel = 'noreferrer noopener';
-      /* The anchor is never visible and never needs to be: click() works on a
-         detached-then-appended element, and appending first is what makes the
-         navigation count as a real link activation in every engine. */
       a.style.display = 'none';
       view.document.body?.appendChild(a);
       a.click();
       a.remove();
       return true;
     } catch {
-      /* nothing left that would not destroy the pairing */
+      /* No same-document navigation: leaving the QR visible is safer. */
     }
   }
   return false;
