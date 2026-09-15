@@ -139,6 +139,65 @@ export function resolvePayout(chainId, family = FAMILY.EVM) {
 export const payoutAddress = (chainId, family = FAMILY.EVM) => resolvePayout(chainId, family)?.address ?? null;
 
 /**
+ * Every address this operator can legitimately receive a platform fee on.
+ *
+ * ─── WHY A SET AND NOT ONE ADDRESS ───────────────────────────────────────────
+ * Several verifiers need to answer "does this fee land in a wallet of OURS?",
+ * and the honest answer is a SET, because more than one place can name our
+ * receiving wallet and they do not always agree:
+ *
+ *   • `VITE_FEE_RECIPIENT` — a build-time override read by chains.js;
+ *   • `VITE_PAYOUT_EVM` / the per-chain `VITE_PAYOUT_*` overrides;
+ *   • the compiled-in defaults below;
+ *   • on the SERVER, `LIFI_SWAP_FEE_RECIPIENT` (server/lifi.js) — a variable
+ *     this bundle cannot see at all.
+ *
+ * The website and the packaged APK are built by two different pipelines with
+ * two different sets of variables (Vercel project settings vs. the
+ * `vars.*` block in .github/workflows/build-apk.yml). When they name
+ * different wallets, a client that insists on exactly ONE address rejects a
+ * fee that is genuinely ours. That is not a theoretical drift: it turned every
+ * LI.FI-routed quote into `FEE_RECIPIENT_MISMATCH` inside the APK while the
+ * website kept working — and because LI.FI is the PRIMARY routing source on
+ * Mantle, Scroll and zkSync Era, those networks answered «مسیری برای این جفت
+ * پیدا نشد» on pairs with plenty of liquidity.
+ *
+ * Membership is still a hard gate: the address has to be one of ours AND be
+ * echoed back by the aggregator's own signed fee payload. Nothing here lets a
+ * quote pay a stranger.
+ *
+ * @returns {string[]} lower-cased, deduplicated, valid addresses only
+ */
+export function knownPayoutAddresses(family = FAMILY.EVM) {
+  const candidates =
+    family === FAMILY.EVM
+      ? [
+          (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_RECIPIENT) || '',
+          PAYOUT_ADDRESSES.evm,
+          ...Object.values(CHAIN_PAYOUT)
+        ]
+      : family === FAMILY.SOLANA
+        ? [PAYOUT_ADDRESSES.solana]
+        : family === FAMILY.TRON
+          ? [PAYOUT_ADDRESSES.tron]
+          : [];
+  const out = [];
+  for (const c of candidates) {
+    const v = String(c ?? '').trim();
+    if (!isValidFor(family, v)) continue;
+    const lower = v.toLowerCase();
+    if (!out.includes(lower)) out.push(lower);
+  }
+  return out;
+}
+
+/** True when `addr` is one of the operator's own receiving addresses. */
+export function isKnownPayoutAddress(addr, family = FAMILY.EVM) {
+  const v = String(addr ?? '').trim().toLowerCase();
+  return Boolean(v) && knownPayoutAddresses(family).includes(v);
+}
+
+/**
  * Everything the UI needs to display "where fees go", including every
  * supported EVM network and the non-EVM networks we accept value on.
  *

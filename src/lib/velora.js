@@ -74,7 +74,7 @@ const TIMEOUT_MS = 3000;
  * Resolved through apiBase() so it also works inside the packaged app,
  * where a relative '/api' would 404 against the WebView's own localhost.
  */
-import { apiBase } from './apiBase';
+import { apiBase } from './apiBase.js';
 
 const proxyBase = () => apiBase() + '/swap/velora';
 

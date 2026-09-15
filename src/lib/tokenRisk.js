@@ -39,7 +39,24 @@ export function goplusChainId(chainId) {
   return GOPLUS_CHAINS[Number(chainId)] ?? null;
 }
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+import { apiBase } from './apiBase.js';
+
+/*
+ * THE API ORIGIN IS NOT A CONSTANT ANY MORE.
+ *
+ * This used to read `import.meta.env?.VITE_API_BASE || '/api'`. That is the
+ * exact expression lib/apiBase.js was written to replace, and it is wrong in
+ * one place only — but the place that matters: inside the packaged Android
+ * app the WebView serves the bundle from https://localhost, so a relative
+ * '/api' resolves to the phone's OWN static asset server and every request
+ * 404s. On the website the same expression is correct (same origin), which is
+ * precisely why these modules looked fine and quietly died in the APK.
+ *
+ * apiBase() answers the question once: VITE_API_BASE when it is a usable
+ * absolute origin, the canonical origin inside the native shell, '/api'
+ * everywhere else.
+ */
+const API_BASE = apiBase();
 
 const YES = new Set(['1', 'true', 'yes', true, 1]);
 const isYes = (v) => YES.has(v) || YES.has(String(v ?? '').toLowerCase());

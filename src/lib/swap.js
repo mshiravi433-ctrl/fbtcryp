@@ -27,16 +27,16 @@ import {
   feeEnabled,
   aggregatorFeeEnabled,
   buildPath
-} from './chains';
+} from './chains.js';
 import {
   aggregatorSupports,
   executeAggregatorSwap,
   getAggregatorQuote
-} from './aggregator';
-import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean';
-import { getVeloraQuote, veloraSupports } from './velora';
-import { getLifiQuote, executeLifiSwap, lifiSupports } from './lifi';
-import { quoteAllSources } from './bestQuote';
+} from './aggregator.js';
+import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean.js';
+import { getVeloraQuote, veloraSupports } from './velora.js';
+import { getLifiQuote, executeLifiSwap, lifiSupports } from './lifi.js';
+import { quoteAllSources } from './bestQuote.js';
 
 const loadEthers = () => import('ethers');
 
@@ -133,9 +133,37 @@ export const isStableSymbol = (s) => STABLES.has(String(s ?? '').toUpperCase());
  * @param {Array<Error>} opts.failures  rejection reasons from quoteAllSources
  * @param {number}       opts.answered  how many sources returned any response
  */
+/**
+ * Failures that say something about OUR configuration, not about the pair.
+ *
+ * Both are raised by the fee gates (lib/aggregator.js, lib/openocean.js,
+ * lib/lifi.js) when an aggregator's echo does not prove our cut lands in our
+ * wallet. That is a defect on our side of the wire — the liquidity is there
+ * and the route exists.
+ */
+const FEE_CONFIGURATION_CODES = new Set(['FEE_NOT_APPLIED', 'FEE_RECIPIENT_MISMATCH']);
+
 export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
   if (answered === 0 && failures.length > 0 && failures.every((f) => f?.network === true)) {
     return 'QUOTE_NETWORK';
+  }
+  /*
+   * A fee-gate rejection must never be reported as «مسیری بین این دو توکن
+   * وجود ندارد». That sentence is a claim about the pair, and it sends the
+   * user to change tokens, lower the amount or give up — none of which can
+   * help, because the pair routes fine and the quote was thrown away by our
+   * own verification. This is how a build whose `VITE_FEE_RECIPIENT` differed
+   * from the server's presented itself inside the APK: "no route" on exactly
+   * the networks whose primary router is LI.FI, while the website worked.
+   *
+   * `QUOTE_FAILED` is retriable in the UI and is honest: we could not produce
+   * a price.
+   */
+  if (
+    failures.length > 0 &&
+    failures.every((f) => FEE_CONFIGURATION_CODES.has(String(f?.message ?? '')))
+  ) {
+    return 'QUOTE_FAILED';
   }
   return 'NO_ROUTE';
 }

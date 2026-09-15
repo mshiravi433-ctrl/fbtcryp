@@ -1,6 +1,11 @@
 import { createIntentOSState } from './contracts.js';
+import { apiBase } from '../../../apiBase.js';
 
-const BASE = '/api/v1/ai/os';
+/* Resolved through apiBase() — a hardcoded relative '/api' is correct in the
+   browser and silently fatal in the packaged app, where it resolves against
+   https://localhost (Capacitor's androidScheme) and 404s. Evaluated per call
+   so a late VITE_API_BASE cannot be frozen in at module load. */
+const BASE = () => `${apiBase()}/v1/ai/os`;
 const DEVICE_KEY = 'fbt.intent-os.device-id';
 
 function getDeviceId() {
@@ -23,7 +28,7 @@ async function call(path, options = {}) {
   };
   const deviceId = getDeviceId();
   if (deviceId) headers['x-fbt-device'] = deviceId;
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await fetch(`${BASE()}${path}`, {
     method: options.method || 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,

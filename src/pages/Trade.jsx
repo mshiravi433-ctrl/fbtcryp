@@ -168,7 +168,10 @@ export default function Trade() {
         <button
           className="coin-row"
           onClick={() => setPickerOpen(true)}
-          style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 16, background: 'rgba(255,255,255,0.04)' }}
+          /* `var(--bg-raised)`, not a hardcoded rgba(255,255,255,.04): an inline style
+             outranks every stylesheet, so a dark-only literal here could never be
+             themed — it was an invisible white wash on the light canvas. */
+            style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 16, background: 'var(--bg-raised)' }}
         >
           <CoinLogo coin={coin} />
           <div className="coin-meta" style={{ textAlign: 'start' }}>

@@ -10,10 +10,9 @@ import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import FundingPanel from '../components/FundingPanel';
-import { IconExternal, IconShield } from '../components/Icons';
+import { IconActivity, IconChevronRight, IconExternal, IconShield, IconSparkle, IconTrend } from '../components/Icons';
 import { anyVenueEarns, withReferral } from '../lib/venueReferral';
 import { SPECULATION_ENABLED } from '../lib/features';
-import SegIndicator from '../components/SegIndicator';
 import lazyRetry from '../lib/lazyRetry';
 import '../styles/perp-modern.css';
 
@@ -28,6 +27,15 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
 
 const TAB_LABEL_KEY = { overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
+
+/**
+ * One icon per venue, so the rail says what each tab IS instead of asking the
+ * reader to parse three near-identical words:
+ *   overview → the price curve (this screen's own index/funding view)
+ *   dydx     → the activity of an external, client-signed venue
+ *   onchain  → the shield, because that tab is the self-custodial one
+ */
+const TAB_ICON = { overview: IconTrend, dydx: IconActivity, onchain: IconShield };
 
 /**
  * Perpetual futures.
@@ -169,20 +177,40 @@ export default function Perp() {
         <p className="muted">{t('perp.subtitle')}</p>
       </motion.div>
 
-      <div className="segmented" role="tablist" aria-label={t('perp.title')} style={{ marginTop: 12 }}>
-        {PERP_TABS.map((k) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={perpTab === k}
-            className={perpTab === k ? 'active' : ''}
-            onClick={() => setPerpTab(k)}
-            style={{ isolation: 'isolate' }}
-          >
-            {perpTab === k && <SegIndicator id="perp-tab" />}
-            {t(TAB_LABEL_KEY[k])}
-          </button>
-        ))}
+      {/*
+        ─── THE TAB RAIL ───────────────────────────────────────────────────
+        «تب مرپچوال آخر صفحه … هم اندازه نادرست است هم مدرن نیست و بدون
+        ایکون» — this used to be a generic `.segmented` control: 12px text,
+        9px of padding, no icon, and an active state that was a grey pill with
+        a ✓ in front of the word. Three venues, three identical grey words, no
+        way to tell at a glance which one is self-custodial.
+
+        It is its own component-shaped control now rather than the shared
+        segmented one, because it is a DESTINATION picker (each tab mounts a
+        different screen), not a value toggle: equal-width cells, an icon per
+        venue, a gradient active cell, and a real 44px tap height. The shared
+        `.segmented` stays as it is for the value toggles that use it.
+      */}
+      <div className="perp-rail" role="tablist" aria-label={t('perp.title')}>
+        {PERP_TABS.map((k) => {
+          const active = perpTab === k;
+          const Icon = TAB_ICON[k];
+          return (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`perp-rail-tab ${active ? 'is-active' : ''}`}
+              onClick={() => setPerpTab(k)}
+            >
+              <span className="perp-rail-ico" aria-hidden="true">
+                <Icon width={16} height={16} />
+              </span>
+              <span className="perp-rail-label">{t(TAB_LABEL_KEY[k])}</span>
+            </button>
+          );
+        })}
       </div>
 
       {perpTab === 'dydx' ? (
@@ -411,6 +439,18 @@ export default function Perp() {
         </p>
       </InfoBox>
 
+      {/*
+        ─── THE "PRACTICE WITH VIRTUAL CREDIT" DOORWAY ─────────────────────
+        «…آخر صفحه با اعتبار مجازی هم اندازه نادرست است هم مدرن نیست و بدون
+        ایکون». It was a bare two-line card with a text `›` for an arrow: no
+        icon, no visual weight, and the title set at the body size so the whole
+        thing read as a footnote rather than as the next thing to tap.
+
+        Same destination, same copy keys, same honesty (it still says the
+        credit is virtual) — restyled as a real card: an icon tile, a title at
+        title weight, a chevron instead of a glyph, and a minimum height so it
+        matches the venue tiles above it.
+      */}
       <motion.button
         className="card card-rgb perp-cta"
         variants={riseIn}
@@ -421,12 +461,15 @@ export default function Perp() {
         style={{ textAlign: 'start', cursor: 'pointer' }}
       >
         <div className="sheen" />
-        <div className="row-between">
-          <div>
-            <div className="perp-cta-title">{t('perp.tryPredict')}</div>
-            <div className="faint">{t('perp.tryPredictSub')}</div>
-          </div>
-          <span className="perp-cta-arrow" aria-hidden="true">›</span>
+        <div className="perp-cta-row">
+          <span className="perp-cta-ico" aria-hidden="true"><IconSparkle width={18} height={18} /></span>
+          <span className="perp-cta-copy">
+            <span className="perp-cta-title">{t('perp.tryPredict')}</span>
+            <span className="perp-cta-sub">{t('perp.tryPredictSub')}</span>
+          </span>
+          <span className="perp-cta-arrow" aria-hidden="true">
+            <IconChevronRight width={16} height={16} />
+          </span>
         </div>
       </motion.button>
         </div>

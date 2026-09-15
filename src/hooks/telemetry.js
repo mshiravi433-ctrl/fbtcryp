@@ -26,6 +26,7 @@
 import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { weightsSnapshotId } from '../lib/learning';
+import { apiBase } from '../lib/apiBase.js';
 
 export const STABLE_MS = 5000;
 const DAY_MS = 24 * 3600 * 1000;
@@ -48,7 +49,7 @@ function markSent(m) {
 
 function postEvent(payload, consent) {
   try {
-    fetch('/api/learning/event', {
+    fetch(`${apiBase()}/learning/event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-telemetry-consent': consent },
       body: JSON.stringify(payload),

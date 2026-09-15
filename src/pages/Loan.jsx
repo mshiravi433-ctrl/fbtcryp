@@ -50,6 +50,7 @@ import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
+import { apiBase } from '../lib/apiBase';
 import {
   lendingVenue, lendingSupported, lendingAssetsFor,
   readReserves, readUserAccount, readAssetPosition, readAllowance,
@@ -1457,7 +1458,7 @@ export default function Loan() {
    */
   useEffect(() => {
     let alive = true;
-    fetch('/api/lending/status')
+    fetch(`${apiBase()}/lending/status`)
       .then((res) => res.json())
       .then((json) => { if (alive) setReadOnly(Boolean(json?.data?.readOnly)); })
       .catch(() => { if (alive) setReadOnly(false); });

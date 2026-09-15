@@ -39,6 +39,7 @@
 
 import { apiBase } from './apiBase.js';
 import { EVM_CHAINS } from './chains.js';
+import { FAMILY, isKnownPayoutAddress } from './payout.js';
 
 const loadEthers = () => import('ethers');
 
@@ -99,7 +100,27 @@ export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integrator
   const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
   const walletEntry = wallets.find((r) => String(r?.name) === integratorId) ?? null;
   const wallet = walletEntry?.config?.defaultWallet ?? null;
-  if (!isAddr(wallet) || wallet.toLowerCase() !== feeReceiver.toLowerCase()) {
+  /*
+   * ─── THE WALLET MUST BE OURS, NOT NECESSARILY THE ONE THIS BUILD NAMED ────
+   * The fee wallet is attached SERVER-side from `LIFI_SWAP_FEE_RECIPIENT`
+   * (server/lifi.js) — a variable this bundle cannot read. The client used to
+   * demand it equal `feeRecipientFor(chainId)`, which is `VITE_FEE_RECIPIENT`
+   * when that build variable exists. The website and the APK are built by two
+   * pipelines with two variable sets, so the moment those two names diverged,
+   * EVERY LI.FI quote failed here with FEE_RECIPIENT_MISMATCH — and since
+   * LI.FI is the primary router on Mantle / Scroll / zkSync Era, the swap
+   * screen reported «no route between these two tokens» for pairs that route
+   * perfectly on the website. Same code, different build, opposite behaviour.
+   *
+   * The security property is unchanged: the wallet still has to be echoed by
+   * LI.FI's own signed feeSplit AND be one of the operator's own addresses
+   * (lib/payout.js#knownPayoutAddresses). A quote that pays a stranger is
+   * still rejected before it can reach a signer.
+   */
+  const walletOk =
+    isAddr(wallet) &&
+    (wallet.toLowerCase() === feeReceiver.toLowerCase() || isKnownPayoutAddress(wallet, FAMILY.EVM));
+  if (!walletOk) {
     return { ok: false, code: 'FEE_RECIPIENT_MISMATCH', totalFeeWei: 0n, shareWei: 0n };
   }
 

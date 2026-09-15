@@ -15,9 +15,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { apiBase } from '../lib/apiBase.js';
 
 const CACHE_KEY = 'fbt-learning-params-v1';
-const PARAMS_URL = '/api/learning/params';
+/* Resolved lazily, not at import time: inside the packaged Android app the
+   WebView origin is https://localhost, so a baked-in '/api' would 404 against
+   the phone's own asset server. lib/apiBase.js owns that decision. */
+const paramsUrl = () => `${apiBase()}/learning/params`;
 
 let memo = null; // module-level: one fetch per session
 let inflight = null;
@@ -42,7 +46,7 @@ function toSession(data) {
 export function fetchLearningParams() {
   if (memo) return Promise.resolve(memo);
   if (inflight) return inflight;
-  inflight = fetch(PARAMS_URL, { headers: { accept: 'application/json' } })
+  inflight = fetch(paramsUrl(), { headers: { accept: 'application/json' } })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
     .then((data) => {

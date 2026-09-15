@@ -257,7 +257,19 @@ function WalHero({
               <IconGlobe width={12} height={12} />
               <span>{t('wallet.allNetworks')}</span>
             </button>
-            {EVM_CHAIN_ORDER.slice(0, 6).map((cid) => {
+            {/*
+              EVERY network, not the first six.
+
+              This used to be `EVM_CHAIN_ORDER.slice(0, 6)` — a leftover from
+              when the registry held seven chains. Six of the sixteen networks
+              were therefore unreachable from the wallet screen, so a user
+              holding MON / ZK / SCR / MNT / HOOD saw «شبکه‌های جدید اضافه
+              نشده» and was right: the registry had grown and this list had
+              not. The picker is a wrapping flex row (`.wal-net-picker`), so
+              the extra chips cost a line or two of height and nothing else —
+              no hidden scroll, no "show more" tap.
+            */}
+            {EVM_CHAIN_ORDER.map((cid) => {
               const cfg = EVM_CHAINS[cid];
               const isActive = wallet.chainId === cid;
               return (

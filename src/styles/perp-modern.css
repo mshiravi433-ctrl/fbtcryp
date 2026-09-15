@@ -398,26 +398,155 @@
   transform: rotate(-45deg) scale(1.05); /* ↗ reads as "leaves the app" */
 }
 
-/* ─────────────────────────── PREDICT CTA ──────────────────────────────── */
-.perp-modern .perp-cta {
-  border-radius: 18px;
+/* ─────────────────────────── VENUE TAB RAIL ───────────────────────────── */
+/*
+ * Requested: «تب مرپچوال … هم اندازه نادرست است هم مدرن نیست و بدون ایکون».
+ *
+ * Lives at the TOP LEVEL of this file, deliberately NOT under `.perp-modern`:
+ * that wrapper is applied to the overview tab's CONTENT only, and the rail has
+ * to exist while the dYdX and On-Chain tabs are showing too. A rule scoped
+ * under `.perp-modern` would have styled the rail on one tab and dropped it on
+ * the other two — which is exactly the kind of half-applied restyle the scope
+ * rule at the top of this file exists to prevent.
+ *
+ * Sizing is the substance here, not decoration:
+ *   • 46px minimum height — above the 44px tap-target floor the app enforces
+ *     globally, where the old `.segmented` control gave 34px;
+ *   • equal-width cells, so three venues cannot compete for space and the
+ *     Persian labels never truncate differently from each other;
+ *   • a 16px icon in a 30px tile, and the label at 12.5px/800 — the previous
+ *     12px/600 grey text was the "no icon, wrong size" complaint in one line.
+ */
+.perp-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 5px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
 }
-.perp-modern .perp-cta-title {
+.perp-rail-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.perp-rail-tab:active { transform: scale(0.97); }
+.perp-rail-ico {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.perp-rail-label {
+  font-size: 12.5px;
   font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
 }
-.perp-modern .perp-cta-arrow {
+/* The active venue is the only one that carries colour, so the eye lands on it
+   without the rail becoming three loud buttons. */
+.perp-rail-tab.is-active {
+  color: var(--text-1);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--rgb-1) 16%, transparent),
+    color-mix(in srgb, var(--rgb-2) 12%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rgb-1) 34%, transparent),
+    0 8px 20px -14px color-mix(in srgb, var(--rgb-1) 80%, transparent);
+}
+.perp-rail-tab.is-active .perp-rail-ico {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #04121a;
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--rgb-1) 85%, transparent);
+}
+
+/* ─────────────────────────── PREDICT CTA ──────────────────────────────── */
+/*
+ * The "practise with virtual credit" doorway at the bottom of the page.
+ * Icon tile + two-line copy + chevron, at the same 60px height as the venue
+ * tiles above it, so the last card on the screen does not read as a footnote.
+ */
+.perp-cta {
+  border-radius: 20px;
+  min-height: 76px;
+  padding: 14px 16px;
+}
+.perp-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.perp-cta-ico {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #04121a;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--rgb-1) 90%, transparent);
+}
+.perp-cta-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.perp-cta-title {
+  font-size: 14.5px;
+  font-weight: 900;
+  line-height: 1.3;
+  color: var(--text-1);
+}
+.perp-cta-sub {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.perp-cta-arrow {
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  font-size: 19px;
-  line-height: 1;
-  color: #061018;
-  background: linear-gradient(135deg, var(--perp-accent-a), var(--perp-accent-b));
-  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--perp-accent-a) 70%, transparent);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  transition: transform 160ms ease, color 160ms ease, border-color 160ms ease;
 }
+.perp-cta:hover .perp-cta-arrow {
+  color: var(--rgb-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  transform: translateX(2px);
+}
+/* RTL: the chevron points the reading direction, so it mirrors and the hover
+   nudge goes the other way. */
+:dir(rtl) .perp-cta-arrow svg { transform: scaleX(-1); }
+:dir(rtl) .perp-cta:hover .perp-cta-arrow { transform: translateX(-2px); }
 
 /* ─────────────────────────── LIGHT THEME ──────────────────────────────── */
 /*

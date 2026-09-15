@@ -230,7 +230,7 @@ const OO_TIMEOUT_MS = 3000;
  * WebView's own https://localhost inside the packaged app and 404s, which
  * would silently disable this fallback exactly where it matters most.
  */
-import { apiBase } from './apiBase';
+import { apiBase } from './apiBase.js';
 
 const proxyBase = () => apiBase() + '/swap/oo';
 
