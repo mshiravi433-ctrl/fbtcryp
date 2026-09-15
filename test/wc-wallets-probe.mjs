@@ -161,7 +161,7 @@ export default function run() {
      try/catch owning flow, so a thrown modal update cannot reject Connect. */
   t('the link application is best effort (inside the connect try/catch)',
     code.indexOf('await applyAppKitWalletLinks(wc)') > code.indexOf('wc = await initWcProvider(')
-      && code.indexOf('await applyAppKitWalletLinks(wc)') < code.indexOf('await withTimeout(wc.connect()'));
+      && code.indexOf('await applyAppKitWalletLinks(wc)') < code.indexOf('wc.connect()'));
 
   return rows;
 }

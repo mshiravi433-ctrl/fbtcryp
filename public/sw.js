@@ -38,8 +38,17 @@
  * device installed before this deploy can therefore keep reproducing «ارور
  * دیپ‌لینک» on a flaky connection until the cached shell is evicted; renaming
  * the cache is what evicts it, on the PWA and on an in-place APK update alike.
+ *
+ * v7 -> v8: the WalletConnect pairing surface moved INTO the app
+ * (`showQrModal: false` + our own QR/deep-link sheet). Navigations are
+ * network-first here, but the cache fallback still serves a previously stored
+ * index.html — and that document names the OLD hashed chunk, i.e. the code
+ * that still handed the last metre to the SDK's modal. An install from before
+ * this deploy would keep reproducing «invalid deep link» / «the QR does
+ * nothing» until its cached shell is evicted; renaming the cache evicts it on
+ * the PWA and on an in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v7';
+const SHELL = 'fbt-shell-v8';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

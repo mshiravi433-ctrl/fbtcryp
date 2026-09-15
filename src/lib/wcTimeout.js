@@ -19,6 +19,31 @@
 export const WC_CONNECT_TIMEOUT_MS = 20_000;
 
 /**
+ * HOW LONG A HUMAN GETS TO APPROVE — the ceiling once a pairing URI exists.
+ * ---------------------------------------------------------------------------
+ * One flat timeout cannot serve both halves of a pairing, and conflating them
+ * is what produced this app's worst misdiagnosis:
+ *
+ *   • BEFORE a pairing URI exists, every millisecond is the RELAY's: a
+ *     proposal that has not been published within WC_CONNECT_TIMEOUT_MS is
+ *     not coming, and saying so fast is the entire point of the bound.
+ *   • AFTER the URI exists the relay has already proven itself — it issued the
+ *     topic and the symmetric key and published the proposal. What is left is
+ *     a person picking up a phone, opening Trust, and tapping approve; on the
+ *     QR path they may be walking to a second device. Cutting that off at 20s
+ *     aborts a perfectly healthy pairing and reports it as "relay
+ *     unreachable", which sends the user off to fix a network that was never
+ *     broken.
+ *
+ * Five minutes is not an arbitrary grace period: it is the lifetime of a
+ * WalletConnect v2 pairing, so the ceiling can never outlive the thing it is
+ * waiting for. Expiry is reported as WC_PAIRING_EXPIRED, which the connect
+ * catch-block maps to the honest "the request expired before the wallet
+ * approved it" — never to the relay error.
+ */
+export const WC_PAIRING_TTL_MS = 300_000;
+
+/**
  * RELAY ENDPOINTS, IN TRY ORDER.
  * ---------------------------------------------------------------------------
  * `EthereumProvider.init()` was called without a `relayUrl`, so every

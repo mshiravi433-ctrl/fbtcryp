@@ -825,6 +825,19 @@ console.log('▸ probing pairing-URI hygiene (the «Invalid Url: wc:…&amp;…�
   report('pairing-URI hygiene', await runWcUriHygiene());
 }
 
+/* ------------------------------ 0c-8. the pairing surface ------------------ */
+/* The «invalid deep link» + «the QR does not work» report, measured on the
+   bytes we actually hand the phone: the sheet's QR is re-decoded with a
+   second library (jsQR) and must come back as the pairing URI byte for byte;
+   every promoted wallet's link must decode back to that same URI at exactly
+   one encoding level; and the wiring must take the URI from the SDK's own
+   display_uri event with no SDK modal in the way. */
+console.log('▸ probing the WalletConnect pairing surface (QR + deep links, end to end)…');
+{
+  const { default: runWcPairingSurface } = await import('./wc-pairing-surface-probe.mjs');
+  report('WalletConnect pairing surface', runWcPairingSurface());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered

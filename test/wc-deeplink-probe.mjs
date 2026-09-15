@@ -236,7 +236,7 @@ export default async function run() {
       /installWalletOpenBridge\(\{/.test(code));
     t('…before connect(), so the very first tap is covered',
       code.indexOf('installWalletOpenBridge({') > code.indexOf('await applyAppKitWalletLinks(wc)')
-      && code.indexOf('installWalletOpenBridge({') < code.indexOf('await withTimeout(wc.connect()'));
+      && code.indexOf('installWalletOpenBridge({') < code.indexOf('wc.connect()'));
     t('…and removes it in the finally block (no session-long rewrite)',
       /finally\s*\{[\s\S]{0,160}uninstallWalletBridge/.test(code));
     t('the link-mode patch is installed where the modal options are applied',
