@@ -158,7 +158,10 @@ export default function run() {
     (walletTable.match(/universal: 'https:\/\//g) || []).length >= 3);
   t('WalletContext consumes the shared wallet table instead of inlining links',
     /mobileWallets: legacyModalWallets\(\)/.test(code)
-      && /customWallets: appKitCustomWallets\(\)/.test(code));
+      /* …with the project id, which is what buys each customWallet its brand
+         logo (`image_url`); without it AppKit draws a generic grey glyph for
+         every promoted wallet — half of why the list read as broken. */
+      && /customWallets: appKitCustomWallets\(WC_PROJECT_ID\)/.test(code));
   t('the modal is told to prefer https universal links over custom schemes',
     /experimental_preferUniversalLinks: true/.test(code));
 
@@ -215,7 +218,10 @@ export default function run() {
   t('restore NEVER initiates a pairing (no connect() call inside it)',
     !/wc\.connect\(/.test(restoreBlock));
   t('restore re-attaches through the identical init config as connect (no identity drift)',
-    restoreBlock.includes('buildWcInitConfig()'));
+    /* Same builder, same metadata/chains/relay — only the MODAL differs: a
+       silent restore never opens a pairing screen, so it must not pay for
+       `createAppKit()` on first paint. */
+    restoreBlock.includes('buildWcInitConfig(false)'));
   t('restore registers the same exactly-once instance-scoped listeners',
     restoreBlock.includes('attachWcListeners(wc)'));
   t('restore runs on mount and on foreground return', /visibilitychange/.test(code)
@@ -240,12 +246,17 @@ export default function run() {
     wcCalls.length >= 5 && wcCalls.every((c) =>
       /^wcEvent\(['"][a-z_]+['"](, (\d+|true|false|Number\([a-z]+\)))?\)$/.test(c)));
 
-  /* ---- 13. the internal sheet IS the pairing surface ----
-     The SDK no longer opens a modal (showQrModal: false), so there is nothing
-     to withdraw for: the sheet stays open and renders the pairing itself. */
+  /* ---- 13. TWO pairing surfaces, never on screen at once ----
+     The SDK modal is the primary surface again; this sheet is what the user
+     gets when that modal cannot be built. While the modal owns the screen the
+     sheet withdraws — two stacked modals means two blurred backdrops and two
+     scroll locks, which on the Android WebView composited into the reported
+     "grey box flickering like a fluorescent tube". */
   const sheet = readFileSync('src/components/WalletConnectSheet.jsx', 'utf8');
-  t('the sheet stays open through the pairing attempt (no second modal to yield to)',
-    /<Sheet open=\{open\}/.test(sheet) && !/wcFlowActive/.test(sheet));
+  t('the sheet yields to the SDK modal while it owns the pairing',
+    /<Sheet open=\{open && !wallet\.wcModalActive\}/.test(sheet));
+  t('…and is still the surface when there is no modal to yield to',
+    /wallet\.wcPairUri/.test(sheet) && /view === 'pair'/.test(sheet));
   t('the sheet returns to the chooser with the named error when pairing fails',
     /startWalletConnect[\s\S]{0,700}\.then\(\(ok\) =>[\s\S]{0,200}setView\('choose'\)/.test(sheet));
   t('the pairing URI is read from the wallet context, not from a modal',

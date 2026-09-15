@@ -66,6 +66,28 @@ function wcPublicMetadata() {
   };
 }
 
+/**
+ * Is this init() failure the MODAL failing, rather than the connection?
+ *
+ * EthereumProvider's init wraps the whole AppKit bootstrap — the dynamic
+ * `import('@reown/appkit/core')` and the `createAppKit()` call — in one
+ * try/catch and rethrows its own message:
+ *
+ *     throw new Error('To use QR modal, please install @reown/appkit package')
+ *
+ * (verified against the installed @walletconnect/ethereum-provider@2.23.10).
+ * That single string covers every way the surface can fail to appear: the
+ * chunk could not be fetched, `createAppKit` threw on a missing network list,
+ * a bundler renamed the entry. None of them say anything about the relay, the
+ * project id or the origin — so classifying them as a connection failure
+ * would report "the relay is unreachable" for a modal that never rendered,
+ * which is exactly the misdiagnosis this file has already paid for once.
+ */
+function isAppKitModalError(err) {
+  const msg = String(err?.message || '');
+  return /QR modal/i.test(msg) || /@reown\/appkit/i.test(msg);
+}
+
 const SLOW_DEVICE = (() => {
   if (typeof navigator === 'undefined') return false;
   if (isIOSDevice()) return true;
@@ -191,15 +213,24 @@ export function WalletProvider({ children }) {
   /*
    * THE PAIRING URI THE SDK ISSUED — the one string the whole flow turns on.
    *
-   * `showQrModal: false` (see buildWcInitConfig) means no AppKit modal, so the
-   * app renders the pairing itself: this state is the `wc:<topic>@2?relay-
-   * protocol=irn&symKey=…` string the provider emits on `display_uri`, and
-   * WalletConnectSheet turns it into (a) a real QR of exactly those bytes and
-   * (b) one deep link per promoted wallet via lib/wcWallets.js. Null outside a
-   * pairing attempt — a URI left in state after the attempt settles is how a
-   * wallet gets opened on a pairing that no longer exists.
+   * This is the `wc:<topic>@2?relay-protocol=irn&symKey=…` string the provider
+   * emits on `display_uri`. Two surfaces can render it, and which one is up is
+   * `wcModalActive` below: the SDK's own AppKit modal (the normal path, and the
+   * surface users recognise) or the app's own pairing view — a real QR of
+   * exactly those bytes plus one deep link per promoted wallet via
+   * lib/wcWallets.js — which is what the user gets when the modal could not be
+   * built, or when they ask for the QR by hand. Null outside a pairing attempt:
+   * a URI left in state after the attempt settles is how a wallet gets opened
+   * on a pairing that no longer exists.
    */
   const [wcPairUri, setWcPairUri] = useState(null);
+  /*
+   * True while the SDK's AppKit modal owns the pairing screen. The connection
+   * sheet withdraws for that window (no second backdrop, no second scroll
+   * lock — two stacked modals composited into the "grey box flickering" report
+   * on the Android WebView) and comes back the moment the attempt settles.
+   */
+  const [wcModalActive, setWcModalActive] = useState(false);
   /* The in-flight provider, so Cancel can tear down the attempt that owns the
      URI (wcRef is only assigned on SUCCESS). */
   const wcPairingRef = useRef(null);
@@ -462,7 +493,7 @@ export function WalletProvider({ children }) {
    * re-verify against, and a mismatch there is a source of the wallet-side
    * re-prompts and silent session drops this context keeps hunting.
    */
-  const buildWcInitConfig = useCallback(() => {
+  const buildWcInitConfig = useCallback((withModal = true) => {
     /* One canonical identity for every wallet prompt. publicAppUrl rejects
        the retired lawpoetics.ir env value; using the runtime origin here
        made Solana and EVM prompts disagree about which site was connecting. */
@@ -473,35 +504,48 @@ export function WalletProvider({ children }) {
       chains: [DEFAULT_CHAIN],
       optionalChains: Object.keys(EVM_CHAINS).map(Number),
       /*
-       * showQrModal: false — THE PAIRING SURFACE IS OURS, NOT APPKIT'S.
+       * showQrModal: THE SDK MODAL IS THE SURFACE AGAIN — and this time the
+       * last metre is fixed underneath it, not removed around it.
        *
-       * With `true`, `EthereumProvider.initialize()` builds a full @reown/appkit
-       * modal (verified against the installed @walletconnect/ethereum-provider@
-       * 2.23.10: `if (this.rpc.showQrModal) { const { createAppKit } = await
-       * import('@reown/appkit/core'); … }`). That modal pulls the wallet list
-       * over the network from `api.web3modal.org`, renders it as Lit web
-       * components, and builds the phone link inside
-       * `ConnectionControllerUtil.onConnectMobile()`. Four separate places a
-       * pairing can die that this app cannot see and cannot repair — and the
-       * «invalid deep link» / «QR does nothing» reports survived two rounds of
-       * patching exactly those four places.
+       * ─── HISTORY, AND WHY THE PREVIOUS ROUND WAS WRONG ──────────────────
+       * An earlier round set this to `false` and rendered its own pairing
+       * sheet, on the reasoning that AppKit's modal had four places a pairing
+       * could die (a wallet-list fetch, Lit components, its own link builder,
+       * its own `window.open`). The report did not change, and the surface
+       * users knew — the standard WalletConnect modal with wallet logos and a
+       * QR — was replaced by something that read as broken («شکل عوض شده، زشت
+       * و نادرست»). Removing the modal fixed nothing because the modal was
+       * never what was failing.
        *
-       * The SDK does not need the modal to hand us the pairing: the provider
-       * emits `display_uri` with the raw `wc:<topic>@2?relay-protocol=irn&symKey=…`
-       * string (UniversalProvider: `this.uri = uri; this.events.emit(
-       * 'display_uri', uri)`, re-emitted verbatim by EthereumProvider). So the
-       * app now listens for it and renders its OWN pairing sheet: a real QR of
-       * that exact string plus one button per promoted wallet, built by the
-       * already-tested lib/wcWallets.js `walletDeepLinks()`. Same URI, same
-       * relay, no wallet-list fetch, no web components, no `window.open`
-       * interception — and the QR the user scans is the URI the SDK issued,
-       * byte for byte.
+       * ─── WHAT WAS ACTUALLY FAILING (measured, not inferred) ─────────────
+       * `@reown/appkit-controllers@1.8.19`,
+       * ConnectionControllerUtil.onConnectMobile():
        *
-       * `qrModalOptions` is kept (and is inert while showQrModal is false) so
-       * the promoted-wallet table stays declared in one place; if the modal is
-       * ever switched back on, the links it needs are still here.
+       *     const target = CoreHelperUtil.isIframe() ? '_top' : '_self';
+       *     CoreHelperUtil.openHref(universalLink, target);
+       *
+       * `window.open(url, '_self')` replaces the current document. The wallet
+       * hand-off therefore DESTROYED the dApp mid-pairing: the WalletConnect
+       * client, its relay socket and the pending connect() promise all died in
+       * the same instant the wallet opened. The approval the user tapped in
+       * Trust was published to a relay nobody was listening to any more, and
+       * the tab was left on Trust's own "Download the app" page. That is the
+       * whole report — «deep-link error», «the shape changed», «still not
+       * connected» — from one argument to window.open.
+       *
+       * So the modal is back (this line), and the delivery target is fixed in
+       * lib/browser.js (`openWalletLink`, which never navigates this document)
+       * and enforced on the SDK's own call by the window.open bridge installed
+       * in connectWalletConnect() below.
+       *
+       * ─── AND THE FALLBACK IS STILL HERE ─────────────────────────────────
+       * The sheet's own pairing view (QR + one button per wallet + copyable
+       * URI) is kept: it is what the user gets if the AppKit chunk cannot be
+       * imported (a blocked CDN, an offline shell) — init() is retried
+       * without a modal in that case — or if they open it by hand from the
+       * choose view. `display_uri` feeds it either way.
        */
-      showQrModal: false,
+      showQrModal: withModal,
       /* MOBILE: on a phone the wallet is another app on the SAME device, so
          there is no second screen to point a camera at. Our pairing sheet
          therefore leads with "open this wallet" buttons that deep-link into
@@ -607,19 +651,25 @@ export function WalletProvider({ children }) {
    */
   const applyAppKitWalletLinks = useCallback(async (wc) => {
     /*
-     * NO MODAL, NOTHING TO PATCH. `showQrModal: false` means
-     * EthereumProvider never creates the AppKit instance, so there is no
-     * `wc.modal` to hand deep links to. Returning here (instead of falling
-     * through to the controllers singleton) keeps the trace honest: writing
-     * options into a controller no modal reads would report
-     * `appkit_links_applied` for work that changed nothing.
+     * NO MODAL, NOTHING TO PATCH. Reached only on the degraded path — an
+     * init() that was retried WITHOUT the modal because the AppKit chunk
+     * could not be imported (see connectWalletConnect). Returning here
+     * (instead of falling through to the controllers singleton) keeps the
+     * trace honest: writing options into a controller no modal reads would
+     * report `appkit_links_applied` for work that changed nothing.
      */
     if (!wc?.modal) {
       wcEvent('appkit_modal_absent');
       return false;
     }
     const options = {
-      customWallets: appKitCustomWallets(),
+      /* The project id goes in because AppKit renders `image_url` for a
+         customWallet and falls back to a generic grey glyph without one —
+         and "every wallet wears the same icon" is half of why the promoted
+         list read as broken. The URLs are the explorer's own logo CDN, the
+         same ones AppKit would have used for the same wallets had they come
+         from its explorer response. */
+      customWallets: appKitCustomWallets(WC_PROJECT_ID),
       experimental_preferUniversalLinks: true,
       metadata: wcPublicMetadata()
     };
@@ -934,8 +984,38 @@ export function WalletProvider({ children }) {
         const purged = purgeWcStorage();
         wcEvent('storage_purged', Number(purged));
       }
-      wc = await initWcProvider(EthereumProvider, buildWcInitConfig());
-      wcEvent('init');
+      /*
+       * INIT — WITH THE MODAL, AND HONESTLY WITHOUT IT IF IT CANNOT LOAD.
+       *
+       * `showQrModal: true` makes EthereumProvider `await import(
+       * '@reown/appkit/core')` and call `createAppKit()`; when either fails it
+       * throws "To use QR modal, please install @reown/appkit package" (read
+       * out of the installed @walletconnect/ethereum-provider@2.23.10). That is
+       * a SURFACE failure, not a connectivity one, and it must not cost the
+       * user the connection: the attempt is retried once without the modal and
+       * the app's own pairing sheet (QR + wallet buttons + copyable URI, fed
+       * by `display_uri`) takes over. Anything else that init throws is a
+       * relay/project failure and is rethrown untouched — retrying those with
+       * a different surface would only hide them.
+       */
+      try {
+        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(true));
+        wcEvent('init');
+      } catch (modalErr) {
+        if (!isAppKitModalError(modalErr)) throw modalErr;
+        wcEvent('appkit_modal_unavailable');
+        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false));
+        wcEvent('init_without_modal');
+      }
+      /*
+       * Which surface owns the pairing from here on. The sheet reads this to
+       * withdraw while the SDK modal is up: two stacked modals means two
+       * blurred backdrops and two scroll locks, which on the Android WebView
+       * composited into the "grey box flickering like a fluorescent tube"
+       * report. When there is no modal, the sheet stays and renders the
+       * pairing itself.
+       */
+      setWcModalActive(Boolean(wc?.modal));
 
       /* populateAppMetadata() overwrite repair — see repairSignClientMetadata(). */
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
@@ -1211,6 +1291,7 @@ export function WalletProvider({ children }) {
        * which is precisely the "invalid deep link" class of report.
        */
       setWcPairUri(null);
+      setWcModalActive(false);
       wcPairingRef.current = null;
       wcCancelRef.current = null;
       setConnecting(false);
@@ -1322,7 +1403,15 @@ export function WalletProvider({ children }) {
        * this path is opportunistic (the explicit Connect button is the real
        * one) and must never stall a resume either way.
        */
-      wc = await initWcProvider(EthereumProvider, buildWcInitConfig());
+      /*
+       * NO MODAL ON A SILENT RESTORE. This path is opportunistic — it revives
+       * a session already on disk when the app resumes — so building the
+       * AppKit instance (a dynamic import of `@reown/appkit/core` plus a
+       * `createAppKit()` call) would be weight on first paint for a surface
+       * that is never opened. The explicit Connect button is what asks for
+       * the modal.
+       */
+      wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false));
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
       /* init() loads persisted sessions internally; if the wallet already
@@ -1752,10 +1841,17 @@ export function WalletProvider({ children }) {
       connectWalletConnect,
       /*
        * The pairing surface: the URI the SDK issued for the in-flight attempt
-       * (null when there is none) and the control that ends it. The sheet
-       * renders the QR and the wallet buttons from this one string.
+       * (null when there is none), which surface currently owns the screen,
+       * and the control that ends the attempt. The sheet renders the QR and
+       * the wallet buttons from that one string, and withdraws while
+       * `wcModalActive` so two modals never stack.
        */
       wcPairUri,
+      wcModalActive,
+      /* The WalletConnect project id, exposed so the sheet can build the same
+         explorer logo URLs the modal uses (lib/wcWallets.js `walletLogo`)
+         without a second copy of the id living in a component. */
+      wcProjectId: WC_PROJECT_ID,
       cancelWcPairing,
       restoreWcSession,
       attachLocal,
@@ -1797,6 +1893,7 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       wcPairUri,
+      wcModalActive,
       cancelWcPairing,
       restoreWcSession,
       attachLocal,

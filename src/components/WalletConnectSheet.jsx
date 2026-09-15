@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import Sheet from './Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
-import { openWalletLink } from '../lib/browser';
-import { MOBILE_WALLETS, repairPairingUri, walletDeepLinks } from '../lib/wcWallets';
+import { openWalletLink, walletHandOffChannel } from '../lib/browser';
+import { MOBILE_WALLETS, repairPairingUri, walletDeepLinks, walletLogo } from '../lib/wcWallets';
+import { publicAppUrl } from '../lib/nativeShell';
 import {
   createVaultWithSigner,
   generateMnemonic,
@@ -37,6 +38,20 @@ function useEip6963() {
   }, []);
   return providers;
 }
+
+/**
+ * QR QUIET ZONE, IN MODULES.
+ *
+ * ISO/IEC 18004 requires four light modules of margin around the symbol, and
+ * `qrcode-generator` does NOT include it: measured on a real v8 pairing URI,
+ * `getModuleCount()` is 49 (= 17 + 4×8, the symbol alone) and 119 modules on
+ * its outer ring are dark. Rendering that grid edge-to-edge and leaving the
+ * margin to CSS padding produced a quiet zone of ~2.7 modules at 220px — under
+ * spec, and the reason a scanner that should have read it needed three
+ * attempts. The margin therefore belongs in the VIEWBOX, where it scales with
+ * the symbol at any size and can never be lost to a CSS change.
+ */
+const QR_QUIET_MODULES = 4;
 
 /** Friendly label for known EIP-6963 reverse-DNS names. */
 function providerName(info, t) {
@@ -76,27 +91,36 @@ export default function WalletConnectSheet({ open, onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   /*
-   * THE PAIRING VIEW IS THIS SHEET.
+   * THE PAIRING VIEW IS THE FALLBACK SURFACE — AND THE ONE THAT IS ALWAYS
+   * RIGHT IN FRONT OF US.
    *
-   * This sheet used to WITHDRAW while a WalletConnect pairing was in flight,
-   * because `showQrModal: true` made the SDK stack its own AppKit modal on
-   * top — two modals, two blurred backdrops, two scroll locks, which on the
-   * Android WebView composited into the reported "grey box flickering like a
-   * fluorescent tube". The SDK no longer opens a modal at all
-   * (WalletContext builds it with `showQrModal: false`), so the sheet stays
-   * open and renders the pairing itself from `wallet.wcPairUri`: a real QR of
-   * exactly the bytes the SDK issued, plus one button per promoted wallet.
+   * The SDK's own AppKit modal is the primary screen for a WalletConnect
+   * pairing again (that is the surface users recognise: wallet logos, a QR,
+   * "Open" per wallet), and while it is up this sheet withdraws —
+   * `wallet.wcModalActive`. Two stacked modals means two blurred backdrops and
+   * two scroll locks, which on the Android WebView composited into the
+   * reported "grey box flickering like a fluorescent tube".
    *
-   * That is the fix for both halves of the standing report — «invalid deep
-   * link» and «the QR does not work». Neither the wallet list nor the link is
-   * fetched from `api.web3modal.org` any more, and the QR is not a Lit
-   * component's rendering of a URI it read from a controller: it is our own
-   * encoding of the string in `wallet.wcPairUri`, which the sheet also prints
-   * so a user can copy it into a wallet by hand if every automatic path
-   * fails.
+   * The pairing view below is what remains when that modal cannot be built
+   * (WalletContext retries init() without it and traces
+   * `appkit_modal_unavailable`), and it is built from the same one string the
+   * SDK publishes on `display_uri` (`wallet.wcPairUri`): a real QR of exactly
+   * those bytes, one deep link per promoted wallet, and the URI itself in
+   * copyable text. Nothing here is fetched from `api.web3modal.org`, so this
+   * path works on a network that filters it.
+   *
+   * Both surfaces deliver through the same rule, and it is the rule that
+   * actually fixes the standing report: a wallet hand-off NEVER navigates this
+   * page away. `window.open(url, '_self')` — what the SDK does on the open web
+   * (`ConnectionControllerUtil.onConnectMobile`, appkit-controllers@1.8.19:
+   * `const target = isIframe() ? '_top' : '_self'`) — replaces the document
+   * and destroys the pairing mid-flight. So every wallet row here is a real
+   * `<a target="_blank">`: not pop-up blockable, and this page is still alive
+   * to receive the approval.
    */
   const [openedWallet, setOpenedWallet] = useState(null);
   const [copiedUri, setCopiedUri] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [pairQr, setPairQr] = useState(null);
 
   const injected = useEip6963();
@@ -155,6 +179,12 @@ export default function WalletConnectSheet({ open, onClose }) {
     setPassword2('');
     setAck(false);
     setErr(null);
+    /* Pairing-view residue: a row still saying "opened — confirm in the
+       wallet" and a button still saying "copied" would both be lying about an
+       attempt that is over. */
+    setOpenedWallet(null);
+    setCopiedUri(false);
+    setCopiedUrl(false);
   };
 
   const close = () => {
@@ -192,26 +222,51 @@ export default function WalletConnectSheet({ open, onClose }) {
       .catch(() => setView('choose'));
   };
 
+  /*
+   * The https universal link for a wallet — the href the anchor carries.
+   *
+   * The link itself comes from lib/wcWallets.js: the https universal link
+   * (`https://link.trustwallet.com/wc?uri=…`, `https://metamask.app.link/wc?…`)
+   * that each wallet's own docs prescribe, because a custom scheme
+   * (`trust://…`) is navigable from a system browser and from nothing else —
+   * a WebView answers it with the «invalid deep link» error page.
+   *
+   * It is an HREF, not something built inside a click handler, for two
+   * reasons: an anchor with a real href is never pop-up blocked (the blocker
+   * only applies to scripted windows), and if this sheet's JavaScript dies the
+   * link is still a link. Trust Wallet's own developer docs prescribe exactly
+   * this URL, and their example even opens it with `_blank` — the target this
+   * sheet now uses everywhere, because `_self` replaces this document and
+   * takes the pending pairing down with it.
+   */
+  const walletHref = (key) => (pairUri ? walletDeepLinks(key, pairUri)?.universal || '' : '');
+
   /**
    * Hand the pairing to a wallet app.
    *
-   * The link comes from lib/wcWallets.js — the https universal link
-   * (`https://link.trustwallet.com/wc?uri=…`, `https://metamask.app.link/wc?…`)
-   * that Trust's own docs prescribe, because a custom scheme (`trust://…`) is
-   * navigable from a system browser and from nothing else: a WebView answers
-   * it with the «invalid deep link» error page. Delivery goes through
-   * `openWalletLink`, which picks the channel per context (Telegram's opener,
-   * Android Custom Tabs in the packaged app, plain navigation on the web) and
-   * encodes the URI exactly once.
+   * On the open web this does almost nothing — and that is the point. The
+   * anchor does the navigating: a new tab, our page untouched, and the OS
+   * resolving Android App Links / iOS Universal Links to the installed wallet.
+   * Only in the two contexts where an anchor cannot do the job does this take
+   * over: inside Telegram (the Mini App iframe must be left through Telegram's
+   * own opener or the app underneath is unloaded) and in the packaged app
+   * (the WebView must not navigate at all — Android Custom Tabs takes the URL
+   * instead).
    */
-  const openWalletApp = async (key) => {
-    if (!pairUri) return;
-    const links = walletDeepLinks(key, pairUri);
-    if (!links) return;
+  const openWalletApp = (e, key) => {
+    const href = walletHref(key);
+    if (!href) {
+      e.preventDefault();
+      return;
+    }
     setOpenedWallet(key);
     haptic?.('light');
-    const ok = await openWalletLink(links.universal, { target: '_self' });
-    if (!ok) setOpenedWallet(null);
+    const channel = walletHandOffChannel();
+    if (channel === 'web') return; /* let the anchor open its own tab */
+    e.preventDefault();
+    void openWalletLink(href, { target: '_blank' }).then((ok) => {
+      if (!ok) setOpenedWallet(null);
+    }, () => setOpenedWallet(null));
   };
 
   const copyUri = async () => {
@@ -222,6 +277,23 @@ export default function WalletConnectSheet({ open, onClose }) {
       haptic?.('success');
       setTimeout(() => setCopiedUri(false), 1800);
     } catch { /* clipboard is a convenience, the text is on screen anyway */ }
+  };
+
+  /*
+   * The address of THIS site, for the deep-link-free path: paste it into the
+   * wallet's own browser tab and the injected provider takes over. Copied from
+   * `publicAppUrl` rather than `window.location` so the address a user gets is
+   * the canonical https one — inside the packaged app the runtime origin is
+   * `https://localhost`, which is exactly the string that must never be
+   * handed to another app.
+   */
+  const copySiteUrl = async () => {
+    try {
+      await navigator.clipboard?.writeText(publicAppUrl('/'));
+      setCopiedUrl(true);
+      haptic?.('success');
+      setTimeout(() => setCopiedUrl(false), 1800);
+    } catch { /* nothing else to hand over; the hint above names the site */ }
   };
 
   const startCreate = async () => {
@@ -278,14 +350,21 @@ export default function WalletConnectSheet({ open, onClose }) {
 
   return (
     /*
-     * This sheet is the only surface during a pairing now (no SDK modal is
-     * created any more), so it stays open for the whole attempt. The exit and
-     * re-enter animations are handled by AnimatePresence inside Sheet, so a
-     * quick close→open cannot produce two panels — React re-keys nothing, and
-     * a re-open mid-exit animates the SAME element back instead of mounting a
-     * second one.
+     * TWO SURFACES, NEVER AT ONCE.
+     *
+     * While the SDK's AppKit modal owns the pairing (`wallet.wcModalActive`)
+     * this sheet withdraws: two stacked modals means two blurred backdrops and
+     * two body-scroll locks, which on the Android WebView composited into the
+     * reported "grey box flickering like a fluorescent tube". The moment the
+     * attempt settles the context clears the flag and the sheet is back — with
+     * the choose view naming the outcome, never a silent dead end.
+     *
+     * The exit and re-enter animations are handled by AnimatePresence inside
+     * Sheet, so a quick close→open cannot produce two panels — React re-keys
+     * nothing, and a re-open mid-exit animates the SAME element back instead
+     * of mounting a second one.
      */
-    <Sheet open={open} onClose={close}>
+    <Sheet open={open && !wallet.wcModalActive} onClose={close}>
       {/* ------------------------------ choose ------------------------------ */}
       {view === 'choose' && (
         <>
@@ -417,31 +496,62 @@ export default function WalletConnectSheet({ open, onClose }) {
           <p className="muted" style={{ marginBottom: 12 }}>{t('wallet.pairSubtitle')}</p>
 
           {/*
-            One row per promoted wallet. Enabled the moment the SDK has
-            issued a URI — before that there is nothing to hand over and a
-            tap would open a wallet with an empty payload, which is exactly
-            the «invalid deep link» screen.
+            One row per promoted wallet, as a REAL LINK.
+
+            • `href` is the wallet's documented https universal link, so the
+              browser — not our JavaScript — performs the hand-off, in a new
+              tab. This page stays connected and is still holding the pending
+              pairing when the wallet answers.
+            • `target="_blank"` is not a preference: `_self`/`_top` replace
+              this document, and a WalletConnect pairing whose dApp has
+              navigated away can never complete. (The SDK's own mobile
+              hand-off used `_self` — that single argument is what the
+              «deep-link error / never connects» report was.)
+            • The brand logo comes from the same explorer CDN AppKit renders
+              in its modal, with the generic glyph underneath it as the
+              fallback if the image cannot be fetched.
+            • Enabled the moment the SDK has issued a URI — before that there
+              is nothing to hand over and a tap would open a wallet with an
+              empty payload, which is exactly the «invalid deep link» screen.
           */}
           <div className="stack" style={{ gap: 9 }}>
-            {MOBILE_WALLETS.map((w) => (
-              <motion.button
-                key={w.key}
-                className="wallet-option"
-                whileTap={{ scale: 0.98 }}
-                disabled={!pairUri}
-                onClick={() => openWalletApp(w.key)}
-              >
-                <span className="wallet-badge">
-                  <IconLink width={20} height={20} />
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{w.name}</span>
-                  <span className="set-row-sub">
-                    {openedWallet === w.key ? t('wallet.pairOpened') : t('wallet.pairOpenIn')}
+            {MOBILE_WALLETS.map((w) => {
+              const href = walletHref(w.key);
+              const logo = walletLogo(w.imageId, wallet.wcProjectId);
+              return (
+                <motion.a
+                  key={w.key}
+                  className="wallet-option"
+                  whileTap={{ scale: 0.98 }}
+                  href={href || undefined}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  aria-disabled={!pairUri}
+                  onClick={(e) => openWalletApp(e, w.key)}
+                  style={!pairUri ? { opacity: 0.55, pointerEvents: 'none' } : undefined}
+                >
+                  <span className="wallet-badge">
+                    <IconLink width={20} height={20} />
+                    {logo ? (
+                      <img
+                        src={logo}
+                        alt=""
+                        width={40}
+                        height={40}
+                        loading="lazy"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : null}
                   </span>
-                </span>
-              </motion.button>
-            ))}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{w.name}</span>
+                    <span className="set-row-sub">
+                      {openedWallet === w.key ? t('wallet.pairOpened') : t('wallet.pairOpenIn')}
+                    </span>
+                  </span>
+                </motion.a>
+              );
+            })}
           </div>
 
           {!pairUri && (
@@ -463,10 +573,12 @@ export default function WalletConnectSheet({ open, onClose }) {
                     background: '#fff'
                   }}
                 >
-                  {/* viewBox = the module grid; crisp at any size, and the
-                      path is the encoder's own output — no re-derivation. */}
+                  {/* viewBox = the module grid PLUS the spec's 4-module quiet
+                      zone (the encoder emits none — see QR_QUIET_MODULES);
+                      crisp at any size, and the path is the encoder's own
+                      output — no re-derivation. */}
                   <svg
-                    viewBox={`0 0 ${pairQr.count} ${pairQr.count}`}
+                    viewBox={`${-QR_QUIET_MODULES} ${-QR_QUIET_MODULES} ${pairQr.count + QR_QUIET_MODULES * 2} ${pairQr.count + QR_QUIET_MODULES * 2}`}
                     shapeRendering="crispEdges"
                     style={{ width: 'min(62vw, 220px)', height: 'min(62vw, 220px)' }}
                     role="img"
@@ -478,32 +590,68 @@ export default function WalletConnectSheet({ open, onClose }) {
               ) : null}
 
               {/*
-                The URI in plain text. Every automatic path can fail (a
-                blocked relay, a wallet that will not open, a WebView that
-                refuses a scheme) and this is the one that still works:
-                copy, paste into the wallet's WalletConnect scanner.
+                THE MANUAL PATH, folded away.
+
+                Every automatic path can fail (a blocked relay, a wallet that
+                will not open, a WebView that refuses a scheme) and this is the
+                one that still works: copy the URI, paste it into the wallet's
+                own WalletConnect scanner. It is inside a <details> because a
+                200-character hex string across the middle of the sheet is what
+                made the surface read as broken — but it must stay ONE TAP
+                away, not behind a menu: when the deep links are the thing
+                that is failing, this is the only control on screen that works.
               */}
-              <p
-                className="mono"
-                style={{
-                  marginTop: 10,
-                  fontSize: 10.5,
-                  lineHeight: 1.5,
-                  wordBreak: 'break-all',
-                  color: 'var(--text-3)'
-                }}
-              >
-                {pairUri}
-              </p>
-              <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={copyUri}>
-                {copiedUri ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
-                <span style={{ marginInlineStart: 6 }}>
-                  {copiedUri ? t('common.copied') : t('wallet.pairCopyUri')}
-                </span>
-              </button>
-              <p className="muted" style={{ marginTop: 10, fontSize: 11.5 }}>
-                {t('wallet.pairStuck')}
-              </p>
+              <details className="notice" style={{ marginTop: 12 }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 12.5 }}>
+                  {t('wallet.pairManualTitle')}
+                </summary>
+                <p
+                  className="mono"
+                  style={{
+                    marginTop: 10,
+                    fontSize: 10.5,
+                    lineHeight: 1.5,
+                    wordBreak: 'break-all',
+                    color: 'var(--text-3)'
+                  }}
+                >
+                  {pairUri}
+                </p>
+                <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={copyUri}>
+                  {copiedUri ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
+                  <span style={{ marginInlineStart: 6 }}>
+                    {copiedUri ? t('common.copied') : t('wallet.pairCopyUri')}
+                  </span>
+                </button>
+              </details>
+
+              {/*
+                THE ALTERNATIVE THAT NEEDS NO DEEP LINK AT ALL.
+
+                Asked for explicitly («الترناتیو که مثل تراست والت باشه»), and
+                worth more than another wallet button: opening THIS SITE inside
+                the wallet's own browser uses the injected provider (EIP-6963 /
+                window.ethereum). No deep link, no universal link, no relay —
+                the three things this whole report has been about — so it is
+                the path that still works when every one of them is blocked.
+                It is a button rather than a paragraph of instructions because
+                it copies the address for the user; the only step left is
+                paste-and-go inside the wallet.
+              */}
+              <div className="notice" style={{ marginTop: 10 }}>
+                <p style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 4 }}>
+                  {t('wallet.pairAltTitle')}
+                </p>
+                <p className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
+                  {t('wallet.pairAltBrowserHint')}
+                </p>
+                <button className="btn btn-ghost" onClick={copySiteUrl}>
+                  {copiedUrl ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
+                  <span style={{ marginInlineStart: 6 }}>
+                    {copiedUrl ? t('common.copied') : t('wallet.pairAltBrowser')}
+                  </span>
+                </button>
+              </div>
             </>
           )}
 

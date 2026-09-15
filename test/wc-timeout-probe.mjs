@@ -78,10 +78,10 @@ export default async function run() {
     /msg === 'WC_PAIRING_EXPIRED'[\s\S]{0,200}setError\('WC_EXPIRED'\)/.test(wallet));
   t('EthereumProvider.init() is bounded too — via the shared initWcProvider failover helper',
     /const initWcProvider = useCallback/.test(walletCode)
-      && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
+      && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig(true))'));
   t('restoreWcSession goes through the same bounded failover init as connect()',
     walletCode.indexOf('const restoreWcSession') > -1
-      && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
+      && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig(false))'));
   t('a timed-out connect attempt disconnects the abandoned instance (no zombie socket/modal)',
     /catch \(e\) \{[\s\S]{0,4000}wc\?\.disconnect\?\.\(\)/.test(wallet));
   t('the timeout classifies as the actionable WC_RELAY_UNREACHABLE error, not a bare CONNECT_FAILED',
