@@ -32,7 +32,7 @@
 
         <!--
           SYSTEM BARS (status bar = battery header, navigation bar = mobile
-          buttons footer). 0x8C00030F is brand black at 55% alpha: the web
+          buttons footer). #8C00030F is brand black at 55% alpha: the web
           content paints behind the bar (edge-to-edge, set in MainActivity)
           and the site's animated backdrop shows through, so the bar reads
           as frosted glass in the site's own colour.
@@ -45,8 +45,19 @@
           On Android 15+ the OS ignores these colours and the bars are fully
           transparent — the same glass effect.
         -->
-        <item name="android:statusBarColor">0x8C00030F</item>
-        <item name="android:navigationBarColor">0x8C00030F</item>
+        <!--
+          #AARRGGBB, not 0xAARRGGBB. An Android resource colour is parsed by
+          AAPT2, which only accepts the `#` literal form; the Java/Kotlin
+          `0x` prefix is a raw string to it and fails the build outright:
+
+              values.xml:1011: error: expected color but got (raw string) 0x8C00030F
+              error: failed linking references.
+
+          This is a compile-time error, not a rendering quirk, so it took the
+          whole APK down with it.
+        -->
+        <item name="android:statusBarColor">#8C00030F</item>
+        <item name="android:navigationBarColor">#8C00030F</item>
         <!-- White clock/battery and nav buttons on the dark glass. -->
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>

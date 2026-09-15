@@ -299,6 +299,40 @@ SDKMANAGER="$(command -v sdkmanager || true)"
 if [ -z "$SDKMANAGER" ] && [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
   SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 fi
+
+# Self-heal instead of failing.
+#
+# The workflow runs ci/ensure-android-sdk.sh before this script, but the
+# workflow file is the one file in this repo that is routinely edited by hand on
+# a phone and reverted — and when the SDK step is missing, THIS is where the
+# build used to stop dead. So if no sdkmanager is visible, provision one here
+# too. The helper prefers the SDK already on the runner and only downloads when
+# there is genuinely nothing, so on a healthy machine this costs nothing.
+if [ -z "$SDKMANAGER" ] && [ -f "$HERE/ensure-android-sdk.sh" ]; then
+  echo "  ▸ no sdkmanager visible — running ci/ensure-android-sdk.sh"
+  # Run it as a CHILD, not with `.`: that script ends in `exit 1` when it truly
+  # cannot get an SDK, and a sourced `exit` would kill this build with no
+  # message. It publishes its results the Actions way (KEY=value lines into
+  # $GITHUB_ENV, directories into $GITHUB_PATH), so pointing those at temp files
+  # gives us the same values back without inheriting its `set -e`.
+  _sdk_env="$(mktemp)"; _sdk_path="$(mktemp)"
+  GITHUB_ENV="$_sdk_env" GITHUB_PATH="$_sdk_path" bash "$HERE/ensure-android-sdk.sh" || true
+  while IFS='=' read -r k v; do
+    [ -n "$k" ] && export "$k=$v"
+  done < "$_sdk_env"
+  while read -r p; do
+    [ -n "$p" ] && PATH="$p:$PATH"
+  done < "$_sdk_path"
+  export PATH
+  rm -f "$_sdk_env" "$_sdk_path"
+  SDK_ROOT="${ANDROID_HOME:-$SDK_ROOT}"
+  SDKMANAGER="$(command -v sdkmanager || true)"
+  if [ -z "$SDKMANAGER" ] && [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+    SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+  fi
+  cd "$ROOT"
+fi
+
 if [ -z "$SDKMANAGER" ]; then
   fail <<MSG
 No \`sdkmanager\` on PATH and $SDK_ROOT has no cmdline-tools/latest/bin/sdkmanager.
