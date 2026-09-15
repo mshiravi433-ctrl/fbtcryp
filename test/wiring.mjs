@@ -12082,8 +12082,14 @@ export default function run() {
       /https-proxy-agent/.test(vite) &&
       /src\/shims\/https-proxy-agent\.js/.test(vite) &&
       /class HttpsProxyAgent/.test(read('src/shims/https-proxy-agent.js')));
-    t('the service-worker shell cache moved to v6',
-      /fbt-shell-v6/.test(sw) && !/fbt-shell-v5/.test(sw));
+    /* The shell cache is VERSIONED on purpose (see public/sw.js): renaming it
+       is how a shipped fix evicts a stale cached shell from every install.
+       Pinning one specific number here made every future bump fail the suite
+       for no reason, so what is asserted is the property that matters — the
+       cache is versioned and the superseded generations are gone. */
+    t('the service-worker shell cache is versioned, past the superseded generations',
+      /fbt-shell-v\d+/.test(sw)
+      && !/fbt-shell-v5/.test(sw) && !/fbt-shell-v6/.test(sw));
   }
 
   /* ---- 102. the wallet glow layer must not push the panel down ---------- */

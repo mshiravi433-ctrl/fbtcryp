@@ -30,8 +30,16 @@
  * OLD handler — old icon paths, old click routing — until the sw file itself
  * is refetched; renaming the shell cache is what forces that refresh on
  * next navigation, exactly like the stale-HTML evictions above.
+ *
+ * v6 -> v7: the WalletConnect deep-link fix (lib/wcDeepLink.js +
+ * lib/wcAppKitPatch.js). Navigations are network-first here, but the cache
+ * fallback above still serves a previously stored index.html — and that
+ * document names the OLD hashed chunk, i.e. the code without the fix. A
+ * device installed before this deploy can therefore keep reproducing «ارور
+ * دیپ‌لینک» on a flaky connection until the cached shell is evicted; renaming
+ * the cache is what evicts it, on the PWA and on an in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v6';
+const SHELL = 'fbt-shell-v7';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
