@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useWallet } from '../../context/WalletContext';
 import { insuranceApi } from '../../lib/insuranceClient.js';
+import { lockBodyScroll } from '../../lib/scrollLock.js';
+import { IconX } from '../../components/Icons.jsx';
 import { statusLabel } from './insStatus.js';
 import InsuranceExplain from './InsuranceExplain.jsx';
 import { InsIconShield, InsIconBell, InsIconWallet, InsIconChevronEnd, InsIconInfo, INS_TAB_ICONS } from './InsuranceIcons.jsx';
@@ -51,6 +54,24 @@ export default function InsuranceShell() {
     setConfirmState({ title: opts.title || t('insurance.common.confirm'), message: opts.message || '', confirmLabel: opts.confirmLabel || t('insurance.common.confirm'), danger: !!opts.danger });
   }), [t]);
   const settleConfirm = (v) => { if (confirmRef.current) confirmRef.current(v); confirmRef.current = null; setConfirmState(null); };
+
+  // Lock body scroll and support Escape key dismiss when an overlay is open
+  useEffect(() => {
+    if (!sheet && !showWallet && !confirmState) return undefined;
+    const unlock = lockBodyScroll();
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (sheet) setSheet(false);
+        else if (showWallet) setShowWallet(false);
+        else if (confirmState) settleConfirm(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      unlock();
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [sheet, showWallet, confirmState]);
 
   // Server connectivity probe
   useEffect(() => {
@@ -206,10 +227,21 @@ export default function InsuranceShell() {
       <InsuranceExplain />
 
       {/* Wallet dialog (connected wallet management only) */}
-      {showWallet && (
+      {showWallet && typeof document !== 'undefined' && createPortal(
         <div className="ins-modal-backdrop" onClick={() => setShowWallet(false)}>
-          <div className="ins-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t('insurance.shell.wallet')}</h3>
+          <div className="ins-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="ins-modal-head">
+              <h3>{t('insurance.shell.wallet')}</h3>
+              <button
+                type="button"
+                className="ins-sheet-close"
+                onClick={() => setShowWallet(false)}
+                aria-label={t('insurance.common.close')}
+                title={t('insurance.common.close')}
+              >
+                <IconX width={16} height={16} />
+              </button>
+            </div>
             {connectedAddr ? (
               <>
                 <p>{t('insurance.shell.connectedAs')}: <b style={{ color: 'var(--text-1)', wordBreak: 'break-all' }}>{connectedAddr}</b> ({chainLabel})</p>
@@ -228,65 +260,113 @@ export default function InsuranceShell() {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Alerts sheet */}
-      {sheet && (
-        <>
-          <div className="ins-modal-backdrop" onClick={() => setSheet(false)} />
-          <div className="ins-sheet">
+      {sheet && typeof document !== 'undefined' && createPortal(
+        <div className="ins-sheet-portal">
+          <div
+            className="ins-modal-backdrop"
+            onClick={() => setSheet(false)}
+            aria-hidden="true"
+          />
+          <aside
+            className="ins-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('insurance.shell.alerts')}
+          >
             <div className="ins-sheet-head">
-              <h3>{t('insurance.shell.alerts')}</h3>
-              <button className="ins-btn ghost small" onClick={() => setSheet(false)}>{t('insurance.common.close')}</button>
-            </div>
-            {alerts.length === 0 && <div className="ins-ok neutral"><InsIconInfo /><span>{t('insurance.shell.noAlerts')}</span></div>}
-            {alerts.map((a, i) => (
-              <div className="ins-alert-item" key={i}>
-                <span className={'ins-chip ' + (SEV_CHIP[a.sev] || 'INFO')}>{statusLabel(t, a.sev)}</span>
-                <div style={{ minWidth: 0 }}>
-                  <b>{a.title}</b>
-                  <span className="body">{a.body}</span>
-                </div>
+              <div className="ins-sheet-head-title">
+                <span className="ins-sheet-head-ico" aria-hidden="true"><InsIconBell /></span>
+                <h3>{t('insurance.shell.alerts')}</h3>
               </div>
-            ))}
-            {events.length > 0 && (
-              <>
-                <div className="ins-sheet-head" style={{ marginTop: 12 }}>
-                  <h3>{t('insurance.shell.recentEvents')}</h3>
-                </div>
-                {events.map((ev, i) => (
-                  <div className="ins-alert-item" key={i}>
-                    <span className="ins-event-time">{new Date(ev.at || ev.timestamp || Date.now()).toLocaleString()}</span>
-                    <div style={{ minWidth: 0 }}><span className="body" style={{ color: 'var(--text-1)' }}>{ev.type || ev.message}</span></div>
+              <div className="ins-sheet-head-actions">
+                <button
+                  type="button"
+                  className="ins-btn ghost small ins-sheet-close-text"
+                  onClick={() => setSheet(false)}
+                >
+                  {t('insurance.common.close')}
+                </button>
+                <button
+                  type="button"
+                  className="ins-sheet-close"
+                  onClick={() => setSheet(false)}
+                  aria-label={t('insurance.common.close')}
+                  title={t('insurance.common.close')}
+                >
+                  <IconX width={18} height={18} />
+                </button>
+              </div>
+            </div>
+            <div className="ins-sheet-body">
+              {alerts.length === 0 && <div className="ins-ok neutral"><InsIconInfo /><span>{t('insurance.shell.noAlerts')}</span></div>}
+              {alerts.map((a, i) => (
+                <div className="ins-alert-item" key={i}>
+                  <span className={'ins-chip ' + (SEV_CHIP[a.sev] || 'INFO')}>{statusLabel(t, a.sev)}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <b>{a.title}</b>
+                    <span className="body">{a.body}</span>
                   </div>
-                ))}
-              </>
-            )}
-          </div>
-        </>
+                </div>
+              ))}
+              {events.length > 0 && (
+                <>
+                  <div className="ins-sheet-section-title">
+                    <h3>{t('insurance.shell.recentEvents')}</h3>
+                  </div>
+                  {events.map((ev, i) => (
+                    <div className="ins-alert-item" key={i}>
+                      <span className="ins-event-time">{new Date(ev.at || ev.timestamp || Date.now()).toLocaleString()}</span>
+                      <div style={{ minWidth: 0 }}><span className="body" style={{ color: 'var(--text-1)' }}>{ev.type || ev.message}</span></div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </aside>
+        </div>,
+        document.body
       )}
 
       {/* Confirm modal */}
-      {confirmState && (
-        <div className="ins-modal-backdrop">
-          <div className="ins-modal">
-            <h3>{confirmState.title}</h3>
+      {confirmState && typeof document !== 'undefined' && createPortal(
+        <div className="ins-modal-backdrop" onClick={() => settleConfirm(false)}>
+          <div className="ins-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="ins-modal-head">
+              <h3>{confirmState.title}</h3>
+              <button
+                type="button"
+                className="ins-sheet-close"
+                onClick={() => settleConfirm(false)}
+                aria-label={t('insurance.common.cancel')}
+                title={t('insurance.common.cancel')}
+              >
+                <IconX width={16} height={16} />
+              </button>
+            </div>
             <p>{confirmState.message}</p>
             <div className="ins-modal-actions">
               <button className="ins-btn ghost" onClick={() => settleConfirm(false)}>{t('insurance.common.cancel')}</button>
               <button className={confirmState.danger ? 'ins-btn warn' : 'ins-btn'} onClick={() => settleConfirm(true)}>{confirmState.confirmLabel}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Toasts */}
-      <div className="ins-toast-wrap">
-        {toasts.map((toast) => (
-          <div className={'ins-toast ' + toast.type} key={toast.id} role="status">{toast.msg}</div>
-        ))}
-      </div>
+      {toasts.length > 0 && typeof document !== 'undefined' && createPortal(
+        <div className="ins-toast-wrap">
+          {toasts.map((toast) => (
+            <div className={'ins-toast ' + toast.type} key={toast.id} role="status">{toast.msg}</div>
+          ))}
+        </div>,
+        document.body
+      )}
 
       {/* server health strip */}
       <div className="ins-health">

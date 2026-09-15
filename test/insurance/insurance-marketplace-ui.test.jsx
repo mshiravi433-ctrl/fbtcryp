@@ -167,3 +167,53 @@ describe('shell tab rail', () => {
     expect(container.querySelector('a.ins-tab.active')).toBeTruthy();
   });
 });
+
+describe('insurance alerts notification sheet & modal overlays', () => {
+  it('opens alerts sheet via bell, renders in body portal, and closes via X button', async () => {
+    const { container } = mount('/insurance');
+    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
+    const bell = container.querySelector('.ins-bell');
+
+    // Click bell to open alerts sheet
+    fireEvent.click(bell);
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
+
+    const sheetEl = document.body.querySelector('.ins-sheet');
+    expect(sheetEl).toBeTruthy();
+    // Verify portal: rendered directly inside document.body (under .ins-sheet-portal), outside the page container
+    expect(container.querySelector('.ins-sheet')).toBeFalsy();
+
+    // Verify header has close cross icon (IconX) and text button
+    const closeBtn = sheetEl.querySelector('.ins-sheet-close');
+    expect(closeBtn).toBeTruthy();
+    expect(closeBtn.querySelector('svg')).toBeTruthy();
+    const textCloseBtn = sheetEl.querySelector('.ins-sheet-close-text');
+    expect(textCloseBtn).toBeTruthy();
+
+    // Click the X close button
+    fireEvent.click(closeBtn);
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
+  });
+
+  it('closes alerts sheet via backdrop click', async () => {
+    const { container } = mount('/insurance');
+    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
+    fireEvent.click(container.querySelector('.ins-bell'));
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
+
+    const backdrop = document.body.querySelector('.ins-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop);
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
+  });
+
+  it('closes alerts sheet via Escape key', async () => {
+    const { container } = mount('/insurance');
+    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
+    fireEvent.click(container.querySelector('.ins-bell'));
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
+  });
+});
