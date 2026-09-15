@@ -789,6 +789,18 @@ console.log('▸ probing WalletConnect chain resolution (Trust-on-Ethereum repor
   report('WalletConnect chain resolution', runWcChain());
 }
 
+/* ------------------------------ 0c-5. mobile wallet deep links ------------- */
+/* Runtime + wiring probe: the URL we hand to the phone. Two things went wrong
+   in the reported "Trust Wallet shows Invalid URL and never connects": the
+   links were written in a shape AppKit never reads (`links`, not
+   `mobile_link`), and the link it did build was the `trust://` custom scheme —
+   which a WebView cannot navigate to. */
+console.log('▸ probing mobile wallet deep links (Trust Wallet "Invalid URL")…');
+{
+  const { default: runWcWallets } = await import('./wc-wallets-probe.mjs');
+  report('mobile wallet deep links', runWcWallets());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered
