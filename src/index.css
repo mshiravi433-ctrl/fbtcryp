@@ -6384,11 +6384,46 @@ input, select, textarea { font-size: 16px !important; }
 .ptr-capsule[data-ready='true'] .ptr-label { color: var(--text-1); }
 
 :root[data-theme='light'] .ptr-capsule {
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 12px 28px -14px rgba(15, 23, 42, 0.45);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(16, 20, 40, 0.16);
+  box-shadow:
+    0 12px 28px -12px rgba(15, 23, 42, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+}
+
+:root[data-theme='light'] .ptr-capsule[data-ready='true'] {
+  border-color: rgba(0, 131, 146, 0.5);
+  background: rgba(238, 250, 252, 0.98);
+  box-shadow:
+    0 12px 28px -12px rgba(0, 131, 146, 0.28),
+    0 0 16px -4px rgba(0, 131, 146, 0.25);
+}
+
+:root[data-theme='light'] .ptr-label {
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .ptr-capsule[data-ready='true'] .ptr-label {
+  color: var(--ink-cyan);
 }
 
 :root[data-theme='light'] .ptr-ring-track { stroke: rgba(15, 23, 42, 0.14); }
+
+:root[data-theme='light'] .ptr-ring-bar {
+  stroke: var(--ink-cyan);
+}
+
+:root[data-theme='light'] .ptr-capsule[data-ready='true'] .ptr-ring-bar {
+  stroke: var(--ink-mint);
+}
+
+:root[data-theme='light'] .ptr-ring-ico {
+  color: var(--ink-dim);
+}
+
+:root[data-theme='light'] .ptr-capsule[data-ready='true'] .ptr-ring-ico {
+  color: var(--ink-cyan);
+}
 
 /* The WebView composites every backdrop blur against the page behind it, and
    this one is on screen mid-drag — exactly when a dropped frame is felt. The
@@ -6398,6 +6433,21 @@ input, select, textarea { font-size: 16px !important; }
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   background: rgba(10, 11, 18, 0.94);
+}
+
+:root[data-theme='light'][data-native='true'] .ptr-capsule,
+:root[data-theme='light'][data-lite='true'] .ptr-capsule {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: #ffffff;
+  border-color: rgba(16, 20, 40, 0.16);
+  box-shadow: 0 10px 24px -10px rgba(15, 23, 42, 0.2);
+}
+
+:root[data-theme='light'][data-native='true'] .ptr-capsule[data-ready='true'],
+:root[data-theme='light'][data-lite='true'] .ptr-capsule[data-ready='true'] {
+  background: #effafc;
+  border-color: rgba(0, 131, 146, 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {
