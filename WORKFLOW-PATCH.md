@@ -1,72 +1,78 @@
-# CI is not producing an APK — one file you must paste yourself
+# چرا APK ساخته نمی‌شود — علت واقعی (از روی لاگ، نه حدس)
 
-## What is actually broken
+## خطای دقیق
 
-Every recent **Build APK** run has failed at step **5 of 8**:
+از لاگ ران `34914591474` (مرحله ۵ از ۸):
 
 ```
-✓ Set up job
-✓ actions/checkout@v4
-✓ actions/setup-node@v4
-✓ actions/setup-java@v4
-X android-actions/setup-android@v3     <-- dies here
-- bash ci/build-both.sh                (skipped)
-- actions/upload-artifact@v4           (skipped)
-- softprops/action-gh-release@v2       (skipped)
+[command] /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager tools
+Warning: Failed to find package 'tools'
+Error: The process 'sdkmanager' failed with exit code 1
 ```
 
-Runs 34897787077, 34913374862, 34913510957, 34914591474 — all the same.
+**هیچ چیزی دانلود نشد و هیچ لینکی خراب نبود.** ورودی پیش‌فرض `packages` در اکشن
+`android-actions/setup-android@v3` دقیقاً این رشته است: `tools platform-tools`.
+اکشن برای هر کدام یک بار `sdkmanager <pkg>` اجرا می‌کند. بسته‌ی `tools` همان
+**SDK Tools منسوخ** است که گوگل از مخزن حذفش کرده — پس `sdkmanager` نمی‌تواند
+پیدایش کند، با کد ۱ خارج می‌شود و کل جاب می‌میرد. جالب اینکه `platform-tools`
+که واقعاً لازم است، اصلاً نوبتش نمی‌رسد نصب شود.
 
-The job dies **before npm, Vite, Capacitor or Gradle run at all**. Nothing in
-this repository's own code is involved. That is why:
+این خطا **گذرا نیست**. دوباره اجرا کردن هرگز کمک نمی‌کند: هر ران دقیقاً همین‌جا
+می‌میرد تا وقتی ورک‌فلو بسته‌ای را بخواهد که دیگر وجود ندارد.
 
-* no new APK has been published — the `latest` release still holds an **old**
-  binary;
-* the Trust Wallet deep-link fix (commit `dd09bdc`) looks like it "did not
-  work" on the phone. It was never in a build you installed. The source fix is
-  correct and unchanged; it simply has not shipped.
+نتیجه: npm و Vite و Capacitor و Gradle **هرگز اجرا نشدند**، هیچ APK ساخته نشد،
+و ریلیز `latest` همچنان باینری قدیمی را سرو می‌کند. به همین دلیل فیکس دیپ‌لینک
+Trust Wallet «کار نکرده» به نظر می‌رسد — آن فیکس درست است ولی هرگز داخل بیلدی
+که شما نصب کرده‌اید نبوده.
 
-The upstream action re-downloads the Android command-line tools from
-`dl.google.com` on every run and hard-fails when Google rotates the archive
-name (upstream issue android-actions/setup-android#536).
+## وضعیت فیکس Trust Wallet
 
-## The fix (already committed)
+کد سالم است و تست شده. هر ۳۴ ادعای `test/wc-wallets-probe.mjs` پاس می‌شود:
 
-* `ci/ensure-android-sdk.sh` — new. Uses the Android SDK **already installed on
-  the GitHub runner image** and only downloads anything if none exists, trying
-  several known archive revisions so one rotated filename cannot stop the build.
-* `ci/build-apk.sh` — self-heals: if no `sdkmanager` is visible it provisions
-  one itself, so the build survives even a hand-edited workflow file.
-* `ci/build-apk.yml` — the workflow, updated and ready to copy.
+```
+total: 34 failed: 0
+```
 
-## The one manual step
+از جمله: «لینک Trust دقیقاً بایت‌به‌بایت همان چیزی است که داکیومنت خودشان
+می‌گوید» و «URI دقیقاً یک بار encode شده». فقط باید در یک بیلد تازه بنشیند.
 
-GitHub **refuses** to let this agent's token write anything under
-`.github/workflows/`:
+## فیکس (کامیت‌شده)
+
+- `ci/build-apk.yml` — ورک‌فلوی کامل و اصلاح‌شده.
+- `ci/ensure-android-sdk.sh` — از SDK‌ای که **از قبل روی رانر گیت‌هاب هست**
+  (`/usr/local/lib/android/sdk`) استفاده می‌کند و هرگز بسته‌ی منسوخ `tools` را
+  درخواست نمی‌کند.
+- `ci/build-apk.sh` — اگر `sdkmanager` نبود خودش فراهم می‌کند.
+
+## تنها کار دستی: دو خط
+
+گیت‌هاب به توکن این ایجنت اجازه‌ی نوشتن در `.github/workflows/` را **نمی‌دهد** —
+نه با push، نه با Contents API، نه با Git Data API (هر سه 403):
 
 ```
 ! [remote rejected] refusing to allow a GitHub App to create or update
   workflow `.github/workflows/build-apk.yml` without `workflows` permission
 ```
 
-So please apply these two edits to `.github/workflows/build-apk.yml` yourself
-(GitHub web editor is fine — it is a two-line change). Replace:
+پس لطفاً در `.github/workflows/build-apk.yml` این خط:
 
 ```yaml
       - uses: android-actions/setup-android@v3
 ```
 
-with:
+را با این جایگزین کنید:
 
 ```yaml
       - uses: android-actions/setup-android@v3
         continue-on-error: true
+        with:
+          packages: platform-tools
       - name: Ensure Android SDK
         run: bash ci/ensure-android-sdk.sh
 ```
 
-Everything else in the file stays as it is. `ci/build-apk.yml` in this repo is
-the complete, already-patched version if you prefer to copy the whole file.
+خط کلیدی `packages: platform-tools` است — همان که بسته‌ی منسوخ `tools` را از
+درخواست حذف می‌کند. دو خط دیگر بیمه‌اند تا اگر این اکشن دوباره خراب شد، بیلد
+به‌جای مردن از SDK موجود روی رانر استفاده کند.
 
-Once that lands, the build reaches Gradle and publishes a fresh APK, and the
-Trust Wallet fix will finally be in the binary you install.
+فایل کامل در `ci/build-apk.yml` است اگر ترجیح می‌دهید کل فایل را کپی کنید.

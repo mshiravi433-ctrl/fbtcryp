@@ -16,21 +16,27 @@ jobs:
           java-version: 17
       # The Android SDK.
       #
-      # `android-actions/setup-android` is kept only as a fast path and is
-      # explicitly ALLOWED TO FAIL. It was the single point of failure for every
-      # recent run: the job died at this step (step 5 of 8) before npm, Vite,
-      # Capacitor or Gradle ran at all, so no APK was ever produced and the
-      # GitHub release kept serving an old binary — making source fixes look
-      # like they had not been applied. The action re-downloads the SDK
-      # command-line tools from dl.google.com on every run and hard-fails when
-      # Google rotates the archive name.
+      # `packages:` MUST be set. The action's default is the literal string
+      # 'tools platform-tools', and it runs one `sdkmanager <pkg>` per entry.
+      # `tools` is the OBSOLETE SDK Tools package, which Google has removed
+      # from the repository, so every run died here — step 5 of 8 — with:
       #
-      # ci/ensure-android-sdk.sh then guarantees a usable SDK either way: it
-      # prefers the one already installed on the runner image and only downloads
-      # anything if none exists. A broken upstream action can no longer stop the
-      # build from shipping.
+      #     Warning: Failed to find package 'tools'
+      #     Error: The process 'sdkmanager' failed with exit code 1
+      #
+      # npm, Vite, Capacitor and Gradle therefore never ran, no APK was ever
+      # produced, and the GitHub release kept serving an old binary — which is
+      # why fixes in the source looked like they had not been applied. Asking
+      # only for `platform-tools` removes the stale package from the request.
+      #
+      # continue-on-error + ci/ensure-android-sdk.sh are the belt and braces:
+      # the runner image already ships a complete SDK at
+      # /usr/local/lib/android/sdk, so even if this action breaks again the
+      # build still gets a usable SDK instead of stopping dead.
       - uses: android-actions/setup-android@v3
         continue-on-error: true
+        with:
+          packages: platform-tools
       - name: Ensure Android SDK
         run: bash ci/ensure-android-sdk.sh
 

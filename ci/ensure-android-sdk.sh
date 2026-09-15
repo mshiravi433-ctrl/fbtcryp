@@ -14,24 +14,39 @@
 # binary — which is why a source fix (the Trust Wallet deep link) could look
 # "not applied" on the phone: the phone never received a build containing it.
 #
-# That third-party action breaks for reasons that have nothing to do with this
-# repository — it re-downloads the SDK command-line tools from
-# dl.google.com on every run and hard-fails when Google rotates the archive
-# name, and it also fails with EACCES when the runner image changes where the
-# SDK lives. A build pipeline must not be one upstream URL rotation away from
-# shipping nothing.
+# ─── THE ACTUAL ERROR (from the run log, not a guess) ────────────────────────
+#
+#     [command] /usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager tools
+#     Warning: Failed to find package 'tools'
+#     Error: The process 'sdkmanager' failed with exit code 1
+#
+# Nothing was downloaded and no URL rotated. The action's DEFAULT `packages`
+# input is the literal string 'tools platform-tools', and it runs one
+# `sdkmanager <pkg>` per entry. `tools` is the OBSOLETE SDK Tools package:
+# Google removed it from the repository, so sdkmanager cannot resolve it,
+# exits 1, and the action fails the whole job — while `platform-tools`, the
+# part that actually matters, never even gets installed.
+#
+# So the failure is a default input that went stale upstream. It is not
+# transient and re-running never helps: every run fails identically until the
+# workflow stops asking for a package that no longer exists.
 #
 # ─── WHAT THIS DOES INSTEAD ──────────────────────────────────────────────────
-# GitHub's ubuntu-latest image ALREADY SHIPS a full Android SDK (it is what the
-# action mostly just re-points at). So:
+# GitHub's ubuntu-latest image ALREADY SHIPS a full Android SDK at
+# /usr/local/lib/android/sdk, including cmdline-tools and platform-tools — the
+# action was mostly just re-pointing at it. So:
 #
 #   1. Look for a usable SDK in ANDROID_HOME / ANDROID_SDK_ROOT and in the
 #      well-known image locations.
 #   2. If one is found, export ANDROID_HOME/ANDROID_SDK_ROOT and put its
 #      tool directories on PATH. Nothing is downloaded — the fast, offline path.
 #   3. Only if NOTHING is found, download the command-line tools ourselves,
-#      trying several known archive revisions AND the plain `latest` name, so a
-#      single rotated filename cannot take the build down again.
+#      trying several known archive revisions, so a single rotated filename
+#      cannot take the build down either.
+#
+# Crucially, the obsolete `tools` package is never requested. ci/build-apk.sh
+# installs exactly what the project needs (platform-tools, the platform for
+# compileSdkVersion, and matching build-tools) and nothing else.
 #
 # Exporting happens through $GITHUB_ENV / $GITHUB_PATH when running in Actions
 # so later steps inherit it, and through plain `export` otherwise, so the same
