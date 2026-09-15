@@ -56,6 +56,16 @@
  *
  * `native` / `universal` are BASES, not URLs: the caller (or AppKit) appends
  * `wc?uri=<encoded pairing uri>`. Both must end in '/'.
+ *
+ * `imageId` / `homepage` are the explorer identity of the wallet. They are not
+ * decoration: a `customWallets` entry without `image_url` is rendered by
+ * AppKit with a generic wallet glyph, and "the three wallets all wear the same
+ * grey icon" is exactly the «the shape changed and it looks wrong» report.
+ * Every id and every base below was read back from the LIVE explorer API with
+ * this project's own id (`GET https://explorer-api.walletconnect.com/v3/wallets
+ * ?projectId=8e36ecca…&search=<name>`) — the `mobile.native` and
+ * `mobile.universal` fields of each listing, verbatim, plus the trailing slash
+ * `walletLinkBase()` adds.
  */
 export const MOBILE_WALLETS = Object.freeze([
   {
@@ -63,7 +73,9 @@ export const MOBILE_WALLETS = Object.freeze([
     id: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
     name: 'MetaMask',
     native: 'metamask://',
-    universal: 'https://metamask.app.link/'
+    universal: 'https://metamask.app.link/',
+    imageId: 'eebe4a7f-7166-402f-92e0-1f64ca2aa800',
+    homepage: 'https://metamask.io/'
   },
   {
     key: 'trust',
@@ -75,16 +87,70 @@ export const MOBILE_WALLETS = Object.freeze([
     native: 'trust://',
     /* From Trust Wallet's developer docs ("Mobile (WalletConnect)"), the
        documented deep link is exactly this host + `/wc?uri=`. */
-    universal: 'https://link.trustwallet.com/'
+    universal: 'https://link.trustwallet.com/',
+    imageId: '7677b54f-3486-46e2-4e37-bf8747814f00',
+    homepage: 'https://trustwallet.com/'
+  },
+  {
+    /*
+     * THE ALTERNATIVE THAT IS ASKED FOR («الترناتیو که مثل تراست والت باشه»).
+     *
+     * SafePal is promoted alongside Trust because it answers the same report
+     * with a different set of moving parts: it is a mobile-first WalletConnect
+     * v2 wallet, its explorer listing carries BOTH a scheme
+     * (`safepalwallet://`) and an https `link_mode` (`https://link.safepal.io`,
+     * read from the live API), and — the part that matters when Trust itself
+     * refuses a hand-off — it resolves the `wc?uri=` path on its own universal
+     * host, verified by requesting
+     * `https://link.safepal.io/wc?uri=wc%3A…` and watching it carry the
+     * pairing through to `safepal.com/en/download?fromlink=1&p=/wc&uri=wc%3A…`
+     * (i.e. the payload survives the redirect, so Android App Links can still
+     * hand it to the installed app).
+     *
+     * A fourth entry also fixes a structural weakness: with three promoted
+     * wallets, one broken hand-off took out a third of the surface. With four
+     * independent wallets — two of which (SafePal, Rainbow) share no
+     * infrastructure with Trust — a user whose Trust hand-off fails still has
+     * a working path in the same modal, without leaving the sheet.
+     */
+    key: 'safepal',
+    id: '0b415a746fb9ee99cce155c2ceca0c6f6061b1dbca2d722b3ba16381d0562150',
+    name: 'SafePal',
+    native: 'safepalwallet://',
+    universal: 'https://link.safepal.io/',
+    imageId: '252753e7-b783-4e03-7f77-d39864530900',
+    homepage: 'https://safepal.com/'
   },
   {
     key: 'rainbow',
     id: '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369',
     name: 'Rainbow',
     native: 'rainbow://',
-    universal: 'https://rnbwapp.com/'
+    universal: 'https://rnbwapp.com/',
+    imageId: '7a33d7f1-3d12-4b5c-f3ee-5cd83cb1b500',
+    homepage: 'https://rainbow.me/'
   }
 ]);
+
+/**
+ * The explorer's logo CDN. `projectId` is a public client-side identifier (the
+ * SDK ships it in every request), so building the URL here leaks nothing — but
+ * it must be passed in rather than duplicated: two copies of the project id is
+ * how a dashboard rotation silently breaks every wallet icon.
+ */
+const EXPLORER_LOGO_BASE = 'https://explorer-api.walletconnect.com/v3/logo/sm';
+
+/**
+ * The brand logo AppKit should render for a promoted wallet — '' when there is
+ * no project id to ask for it with, in which case the field is omitted and
+ * AppKit draws its own placeholder rather than a broken image.
+ */
+export function walletLogo(imageId, projectId) {
+  const id = String(imageId || '').trim();
+  const pid = String(projectId || '').trim();
+  if (!id || !pid) return '';
+  return `${EXPLORER_LOGO_BASE}/${encodeURIComponent(id)}?projectId=${encodeURIComponent(pid)}`;
+}
 
 /** Every promoted wallet's explorer id, for AppKit option lists. */
 export const WC_WALLET_IDS = Object.freeze(MOBILE_WALLETS.map((w) => w.id));
@@ -363,13 +429,25 @@ export function withLinkMode(wallet) {
  * competes with the QR code on desktop) and `webapp_link` (none of these
  * three has a browser-side WalletConnect app).
  */
-export function appKitCustomWallets() {
-  return MOBILE_WALLETS.map((w) => ({
-    id: w.id,
-    name: w.name,
-    mobile_link: walletLinkBase(w.native),
-    link_mode: walletLinkBase(w.universal)
-  }));
+export function appKitCustomWallets(projectId) {
+  return MOBILE_WALLETS.map((w) => {
+    const image = walletLogo(w.imageId, projectId);
+    return {
+      id: w.id,
+      name: w.name,
+      mobile_link: walletLinkBase(w.native),
+      link_mode: walletLinkBase(w.universal),
+      /* AppKit's wallet list renders `image_url` when it is present and falls
+         back to a generic glyph when it is not. Omitted (not '') when there
+         is no project id, so the fallback is a placeholder and never a
+         request to `/logo/sm/?projectId=`. */
+      ...(image ? { image_url: image } : {}),
+      /* `homepage` is what AppKit links from the wallet's own row ("Don't have
+         X? Get it here"), and it is also the field `WalletUtil` uses when it
+         decides two entries are the same wallet. */
+      ...(w.homepage ? { homepage: w.homepage } : {})
+    };
+  });
 }
 
 /**

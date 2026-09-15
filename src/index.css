@@ -2415,6 +2415,16 @@ input, select, textarea { font-size: 16px !important; }
 }
 .wallet-option:active { transform: scale(0.985); }
 .wallet-option[data-featured='true'] { border-color: rgba(0, 229, 255, 0.45); }
+/*
+ * A wallet row can be an <a>, not only a <button>: the WalletConnect pairing
+ * view renders each wallet as a real link with target="_blank", because a real
+ * anchor is the one hand-off a pop-up blocker cannot refuse and — unlike
+ * window.open(url, '_self') — it does not replace this page mid-pairing. So
+ * the card must not inherit the underline/blue of a visited link.
+ */
+a.wallet-option,
+.wallet-option:link,
+.wallet-option:visited { color: var(--text-1); text-decoration: none; }
 
 .wallet-badge {
   width: 42px;
@@ -2426,7 +2436,12 @@ input, select, textarea { font-size: 16px !important; }
   background: linear-gradient(140deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.16));
   border: 1px solid var(--line);
   color: var(--rgb-1);
+  /* The brand logo is layered over the fallback glyph (see WalletConnectSheet);
+     both rules are what keep it inside the rounded square. */
+  position: relative;
+  overflow: hidden;
 }
+.wallet-badge > img { position: absolute; inset: 0; margin: auto; border-radius: 11px; }
 
 /* Settings list rows */
 .set-group {

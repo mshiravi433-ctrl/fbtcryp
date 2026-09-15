@@ -47,8 +47,18 @@
  * this deploy would keep reproducing «invalid deep link» / «the QR does
  * nothing» until its cached shell is evicted; renaming the cache evicts it on
  * the PWA and on an in-place APK update alike.
+ *
+ * v8 -> v9: the wallet hand-off stopped navigating this page away
+ * (`window.open(url, '_self')` → a real `<a target="_blank">`, and
+ * `openWalletLink()` refusing `_self`/`_top` outright), the SDK modal is the
+ * pairing surface again, and the QR gained the spec's 4-module quiet zone.
+ * `_self` is the exact mechanism behind «ارور دیپ‌لینک / وصل نمی‌شود»: it
+ * replaced the dApp document mid-pairing, so the wallet's approval reached a
+ * relay nobody was listening to. An install still holding the v8 shell keeps
+ * that behaviour byte for byte until its cached shell is evicted — renaming
+ * the cache is what evicts it, on the PWA and on an in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v8';
+const SHELL = 'fbt-shell-v9';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

@@ -227,7 +227,104 @@ export default async function run() {
     win.open = () => ({}); /* the SDK keeps the reference it captured — harmless */
   });
 
-  /* ---- 4. WalletContext wiring (static: the failure class is wiring) ---- */
+  /*
+   * ---- 4. THE DELIVERY TARGET — the actual cause of the standing report ---
+   *
+   * The URL was fixed three times and the report never moved, because the URL
+   * was not the last thing wrong. `ConnectionControllerUtil.onConnectMobile()`
+   * in @reown/appkit-controllers@1.8.19 opens the hand-off with:
+   *
+   *     const target = CoreHelperUtil.isIframe() ? '_top' : '_self';
+   *     CoreHelperUtil.openHref(universalLink, target);
+   *
+   * `window.open(url, '_self')` REPLACES the current document: the
+   * WalletConnect client, its relay socket and the pending connect() promise
+   * all die in the same instant the wallet opens. The approval the user then
+   * taps in Trust is published to a relay nobody is listening to any more, and
+   * the tab is left on the wallet's own "download the app" page. Every byte of
+   * the URL was correct and the connection still could not complete.
+   *
+   * So these assertions drive the REAL `openWalletLink()` (no mock of our own
+   * code) against a fake window and lock the rule: a wallet hand-off never
+   * navigates the page it was called from.
+   */
+  {
+    const { openWalletLink, walletHandOffChannel } = await import('../src/lib/browser.js');
+
+    const makeWin = ({ openReturns = {} } = {}) => {
+      const opened = [];
+      const assigned = [];
+      const clicked = [];
+      return {
+        opened,
+        assigned,
+        clicked,
+        win: {
+          open: (...args) => {
+            opened.push(args);
+            return openReturns;
+          },
+          location: { assign: (u) => assigned.push(u) },
+          document: {
+            createElement: () => ({
+              style: {},
+              click() { clicked.push(this.href); },
+              remove() {}
+            }),
+            body: { appendChild: () => {} }
+          }
+        }
+      };
+    };
+
+    const a = makeWin();
+    await openWalletLink(TRUST_HTTPS, { target: '_self', win: a.win });
+    t('a hand-off asked for as _self is opened in a NEW tab instead',
+      a.opened.length === 1 && a.opened[0][1] === '_blank');
+    t('…and this document is never navigated to the wallet link',
+      a.assigned.length === 0);
+
+    const b = makeWin();
+    await openWalletLink(TRUST_HTTPS, { target: '_top', win: b.win });
+    t('_top is refused for the same reason', b.opened[0]?.[1] === '_blank');
+
+    const c = makeWin();
+    await openWalletLink(TRUST_HTTPS, { win: c.win });
+    t('the default target is _blank (Trust\'s own documented call)',
+      c.opened[0]?.[1] === '_blank');
+
+    /* A pop-up blocker returns null from window.open. The old code answered
+       with location.assign() — i.e. it destroyed the pairing to look useful.
+       The new code clicks a real anchor, which a blocker does not apply to. */
+    const d = makeWin({ openReturns: null });
+    const dOk = await openWalletLink(TRUST_HTTPS, { win: d.win });
+    t('a blocked pop-up falls back to a real anchor click…',
+      dOk === true && d.clicked.length === 1 && d.clicked[0] === TRUST_HTTPS);
+    t('…and still never navigates this page', d.assigned.length === 0);
+
+    const e = makeWin({ openReturns: null });
+    e.win.document = undefined; /* no anchor possible either */
+    const eOk = await openWalletLink(TRUST_HTTPS, { win: e.win });
+    t('with nothing left it reports failure instead of killing the pairing',
+      eOk === false && e.assigned.length === 0);
+
+    /* The channel picker decides when the sheet must take over from the
+       anchor: only where an anchor cannot leave the context at all. */
+    t('the open web is left to the anchor',
+      walletHandOffChannel({}) === 'web');
+    t('Telegram takes its own opener',
+      walletHandOffChannel({ Telegram: { WebApp: { openLink: () => {} } } }) === 'telegram');
+    t('the packaged app takes Custom Tabs',
+      walletHandOffChannel({ Capacitor: { isNativePlatform: () => true } }) === 'custom-tabs');
+    const tgOpened = [];
+    await openWalletLink(TRUST_HTTPS, {
+      win: { Telegram: { WebApp: { openLink: (u) => tgOpened.push(u) } } }
+    });
+    t('inside Telegram the hand-off goes through Telegram\'s opener',
+      tgOpened.length === 1 && tgOpened[0] === TRUST_HTTPS);
+  }
+
+  /* ---- 5. WalletContext wiring (static: the failure class is wiring) ---- */
   {
     const src = readFileSync('src/context/WalletContext.jsx', 'utf8');
     const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');

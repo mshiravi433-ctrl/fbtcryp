@@ -67,36 +67,86 @@ export function isSafeUrl(raw) {
 }
 
 /**
+ * Which channel a wallet hand-off will travel through, so a caller can decide
+ * whether to let the browser navigate a real `<a target="_blank">` (never
+ * pop-up blocked, and the page survives) or hand the URL to `openWalletLink()`
+ * instead.
+ *
+ *   'telegram'    — the Mini App iframe: only Telegram's own opener can leave
+ *                   it without unloading the app underneath.
+ *   'custom-tabs' — the packaged app: the WebView must not navigate, so the
+ *                   system browser takes the URL.
+ *   'web'         — a plain browser: an anchor with `target="_blank"` is the
+ *                   best possible delivery and needs no help.
+ */
+export function walletHandOffChannel(win) {
+  const view = win ?? (typeof window !== 'undefined' ? window : null);
+  if (view?.Telegram?.WebApp?.openLink) return 'telegram';
+  /* The same test `isNativeShell()` makes, spelled out against the window we
+     were handed so a caller (or a probe) can ask about a window that is not
+     the global one. */
+  if (view?.Capacitor?.isNativePlatform?.()) return 'custom-tabs';
+  return 'web';
+}
+
+/**
  * Hand a WALLET deep link to the phone.
  *
  * ─── WHY THIS IS NOT openUrl() ─────────────────────────────────────────────
  * `openUrl()` exists for arbitrary external websites: https only, always
  * through the system browser, never injected into. A wallet hand-off is a
  * different animal with a different failure mode, and it needs its own
- * channel for one reason: a deep link must LEAVE the WebView.
+ * channel for two reasons: a deep link must LEAVE the WebView, and — the one
+ * that survived three rounds of fixes — it must not TAKE THIS PAGE WITH IT.
  *
- * The reported bug — «با زدن بازکردن ارور دیپ لینک میزنه» — was AppKit doing
- * `window.open('trust://wc?uri=…', '_self')` inside the packaged app's
- * WebView. A custom scheme is navigable from a real browser and from nothing
- * else: a WebView answers with its own error page ("Invalid URL" /
- * net::ERR_UNKNOWN_URL_SCHEME) with the URL printed underneath. lib/wcDeepLink
- * already rewrites those links to the wallet's https universal link (Trust
- * publishes `https://link.trustwallet.com/wc?uri=…` for exactly this); this
- * function is what opens it:
+ * ─── THE MEASURED ROOT CAUSE OF «ارور دیپ لینک» ────────────────────────────
+ * Three rounds of fixes corrected the URL (`trust://` → the https universal
+ * link, `&amp;` → `&`, one level of encoding) and the report did not change,
+ * because the URL was never the last thing that was wrong. The TARGET was.
+ * Read out of the installed SDK, `@reown/appkit-controllers@1.8.19`,
+ * `ConnectionControllerUtil.onConnectMobile()`:
+ *
+ *     const target = CoreHelperUtil.isIframe() ? '_top' : '_self';
+ *     CoreHelperUtil.openHref(universalLink, target);   // → window.open(url, '_self')
+ *
+ * `window.open(url, '_self')` REPLACES the current document. So on a phone,
+ * tapping a wallet in the modal navigated this tab to
+ * `https://link.trustwallet.com/wc?uri=…` and destroyed, in that instant, the
+ * WalletConnect client, its relay socket and the pending `connect()` promise.
+ * The user then approves in Trust; the wallet publishes the approval to the
+ * relay; nobody is left to receive it. The tab shows Trust's own
+ * "Download the app" page — the «شکل عوض شده و زشت شده» report — and the
+ * session never exists. Every byte of the URL was correct and the connection
+ * still could not complete.
+ *
+ * (AppKit only special-cases Telegram here — "Only '_blank' deeplinks work in
+ * Telegram context". For the open web it uses `_self`, which is precisely
+ * wrong for a pairing: a wallet hand-off is a round trip, and a round trip
+ * needs the caller to still be alive when the answer arrives.)
+ *
+ * So this function's rule is: a wallet hand-off NEVER navigates this document.
  *
  *   • packaged app  → @capacitor/browser (Android Custom Tabs). The browser is
  *     a real browser, so the OS resolves Android App Links to the wallet —
  *     and if the wallet is not installed the user lands on the wallet's own
- *     web page instead of our WebView error page.
+ *     web page instead of our WebView error page. Our page stays underneath.
  *   • Telegram      → WebApp.openLink(): Telegram's opener leaves the Mini App
  *     alive underneath rather than navigating our page away.
- *   • plain web     → the very call AppKit intended, same target and features,
- *     only with the URL that can actually open a wallet.
+ *   • plain web     → `window.open(url, '_blank')` — the target Trust Wallet's
+ *     own developer docs prescribe (`window.open(deepLink, '_blank',
+ *     'noreferrer noopener')`). The pairing page survives in its own tab and
+ *     is still connected when the wallet answers.
+ *
+ * A `_blank` that a pop-up blocker refuses is retried once through a real
+ * `<a target="_blank">` click, which is not a scripted window and is
+ * therefore not blocked. What this function will NOT do as a last resort is
+ * `location.assign()`: navigating away would look like success and quietly
+ * kill the pairing it was called to make.
  *
  * @returns {Promise<boolean>} false when the URL was rejected or nothing could
  *          be opened (callers treat that as "the user still has the QR code").
  */
-export async function openWalletLink(url, { target = '_self', features = 'noreferrer noopener', win, openWindow } = {}) {
+export async function openWalletLink(url, { target = '_blank', features = 'noreferrer noopener', win, openWindow } = {}) {
   const raw = String(url || '').trim();
   if (!raw) return false;
   const view = win ?? (typeof window !== 'undefined' ? window : null);
@@ -106,8 +156,12 @@ export async function openWalletLink(url, { target = '_self', features = 'norefe
    * Inside Telegram, Telegram's own opener is the only way to leave the Mini
    * App without killing the page underneath — and it accepts http(s) links
    * only, so a custom scheme is handled further down.
+   *
+   * Read off `view` (the window we were handed), not the global: every other
+   * branch of this function honours the injected window, and a branch that
+   * quietly reads `window` instead is one a caller cannot test or override.
    */
-  const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null;
+  const tg = view?.Telegram?.WebApp ?? null;
   if (https && tg?.openLink) {
     tg.openLink(raw, { try_instant_view: false });
     return true;
@@ -133,24 +187,51 @@ export async function openWalletLink(url, { target = '_self', features = 'norefe
     }
   }
 
-  if (view) {
-    /* `openWindow` is the ORIGINAL window.open when this call came from the
-       pairing bridge in lib/wcDeepLink.js — using the live one there would
-       re-enter the bridge forever. */
-    const open = openWindow ?? view.open?.bind(view);
+  if (!view) return false;
+
+  /*
+   * THE TARGET RULE. `_self` / `_top` / '' all mean "replace this document",
+   * and for a wallet hand-off that is the bug, not a fallback. Everything
+   * that is not an explicit named window becomes `_blank`.
+   */
+  const asked = String(target || '_blank');
+  const safeTarget = asked === '_self' || asked === '_top' || asked === '' ? '_blank' : asked;
+
+  /* `openWindow` is the ORIGINAL window.open when this call came from the
+     pairing bridge in lib/wcDeepLink.js — using the live one there would
+     re-enter the bridge forever. */
+  const open = openWindow ?? view.open?.bind(view);
+  if (open) {
     try {
-      if (open && open(raw, target, features)) return true;
+      if (open(raw, safeTarget, features)) return true;
     } catch {
-      /* pop-up blocked, or the target was rejected — try the frame itself */
+      /* a refused target or a thrown SecurityError — try the anchor below */
     }
+  }
+
+  /*
+   * POP-UP BLOCKED. A real anchor click is not a scripted window, so the
+   * blocker does not apply to it — and we are still inside the user's own
+   * click task, so the gesture is intact. This is the difference between
+   * "tap Trust Wallet and nothing happens" and a hand-off that works with
+   * strict blocker settings.
+   */
+  if (typeof view.document?.createElement === 'function') {
     try {
-      /* A same-frame navigation is always permitted, and it is what AppKit
-         itself does. Never reached in the native shell without having tried
-         Custom Tabs above. */
-      view.location.assign(raw);
+      const a = view.document.createElement('a');
+      a.href = raw;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      /* The anchor is never visible and never needs to be: click() works on a
+         detached-then-appended element, and appending first is what makes the
+         navigation count as a real link activation in every engine. */
+      a.style.display = 'none';
+      view.document.body?.appendChild(a);
+      a.click();
+      a.remove();
       return true;
     } catch {
-      return false;
+      /* nothing left that would not destroy the pairing */
     }
   }
   return false;
