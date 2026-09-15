@@ -5,6 +5,7 @@ import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
@@ -69,6 +70,7 @@ public class MainActivity extends BridgeActivity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     applySystemBarTheme(false);
+    getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_YES);
     wireThemeBridge();
   }
 
@@ -131,6 +133,9 @@ public class MainActivity extends BridgeActivity {
         @Override
         public void run() {
           activity.applySystemBarTheme(light);
+          activity.getDelegate().setLocalNightMode(
+            light ? AppCompatDelegate.MODE_NIGHT_NO : AppCompatDelegate.MODE_NIGHT_YES
+          );
         }
       });
     }

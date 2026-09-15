@@ -19,15 +19,16 @@
 
     <!--
       The theme the Activity actually runs under (BridgeActivity swaps to it in
-      onCreate). `android:background: @null` left the window with no colour of
-      its own, so a WebView that has not painted yet shows through as whatever
-      is underneath — white on most devices. Giving it the brand black means
-      the worst case is a black frame on a black app, i.e. invisible.
+      onCreate). `android:windowBackground` keeps the window black while loading
+      so a WebView that has not painted yet shows our brand black instead of
+      a white frame. Note: `android:background` must NOT be set at the theme
+      level, as setting it overrides child view backgrounds, causing system
+      popups, ActionModes and the floating text-selection menu (Copy/Share) to
+      have a forced black background with unreadable dark text in light mode.
     -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-        <item name="android:background">@color/ic_launcher_background</item>
         <item name="android:windowBackground">@color/ic_launcher_background</item>
 
         <!--

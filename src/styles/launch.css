@@ -2143,6 +2143,20 @@
 
 .launch-copy:hover { border-color: var(--rgb-1); color: var(--rgb-1); }
 .launch-copy.done { color: #00110a; background: var(--rgb-4); border-color: var(--rgb-4); }
+:root[data-theme='light'] .launch-copy {
+  color: var(--text-2);
+  background: #ffffff;
+  border-color: rgba(16, 20, 40, 0.14);
+}
+:root[data-theme='light'] .launch-copy:hover {
+  border-color: var(--ink-cyan);
+  color: var(--ink-cyan);
+}
+:root[data-theme='light'] .launch-copy.done {
+  color: #ffffff;
+  background: var(--up);
+  border-color: var(--up);
+}
 
 /* ── stepper modernisation ──────────────────────────────────────────── */
 
