@@ -17,6 +17,7 @@ import {
   generateDailyBrief,
   orchestrateBrain
 } from '../../lib/brain/index.js';
+import { apiBase } from '../../lib/apiBase.js';
 
 /* ── Styles (scoped to this component) ─────────────────────────────────── */
 const STYLES = `
@@ -94,10 +95,10 @@ function AiControlCenterInner() {
     async function fetchBrainState() {
       try {
         const [stateRes, monitorRes, profileRes, goalsRes] = await Promise.allSettled([
-          fetch('/api/brain/financial/state').then(r => r.json()),
-          fetch('/api/brain/financial/monitor').then(r => r.json()),
-          fetch('/api/brain/financial/profile').then(r => r.json()),
-          fetch('/api/brain/financial/goals').then(r => r.json())
+          fetch(`${apiBase()}/brain/financial/state`).then(r => r.json()),
+          fetch(`${apiBase()}/brain/financial/monitor`).then(r => r.json()),
+          fetch(`${apiBase()}/brain/financial/profile`).then(r => r.json()),
+          fetch(`${apiBase()}/brain/financial/goals`).then(r => r.json())
         ]);
 
         if (cancelled) return;

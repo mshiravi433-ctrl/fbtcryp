@@ -942,6 +942,28 @@ npx(['vite', 'build', '-c', 'test/vite.signalintel.mjs', '--logLevel', 'error'])
   report('signal intelligence', await signalIntelRows());
 }
 
+/* The practice-trade page and the token detail sheet («گس و شبکه انتخابی») in
+   light theme. Same discipline as the AI probe: real stylesheets in import
+   order, WCAG contrast measured from computed style — the light theme shipped
+   a dark-gradient portfolio strip carrying light-theme text at 1.06:1, and a
+   Send/Swap button pair whose white fill sat on a white sheet at 1.16:1. */
+console.log('\n▸ measuring the trade + token-sheet surface in light and dark…');
+{
+  const { default: tradeThemeRows } = await import('./trade-light-theme-probe.mjs');
+  report('trade + token sheet theme', tradeThemeRows);
+}
+
+/* App ↔ site parity. The website and the packaged Android app are one bundle
+   built by two pipelines, which is how a fix lands on one and not the other:
+   the API origin, the LI.FI fee wallet, and the wording of a quote failure.
+   Covers the five networks the owner named by hand (Monad, zkSync Era,
+   Scroll, Mantle, Robinhood Chain) end to end through the server allowlist. */
+console.log('\n▸ probing app ↔ site parity (api base · LI.FI fee · networks)…');
+{
+  const { default: parityRows } = await import('./app-network-parity-probe.mjs');
+  report('app ↔ site parity', parityRows);
+}
+
 /* ------------------------------ 1. units -------------------------------- */
 /* Pure logic first: it is the fastest suite and the one whose failures point
    most precisely at a cause. Bundled with Vite so extensionless imports and

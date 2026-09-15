@@ -118,7 +118,7 @@ export const toAggAddress = (token) => (token.native ? NATIVE_SENTINEL : token.a
  * https://localhost and 404s, which silently disabled this fallback for
  * exactly the users it exists for.
  */
-import { apiBase } from './apiBase';
+import { apiBase } from './apiBase.js';
 
 const proxyBase = () => apiBase() + '/swap/kyber';
 

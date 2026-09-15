@@ -329,6 +329,102 @@
   box-shadow: 0 14px 30px -12px rgba(255,59,107,0.5);
 }
 
+/* ==========================================================================
+   LIGHT THEME — THE VIRTUAL-CREDIT (PRACTICE TRADE) SCREEN
+   --------------------------------------------------------------------------
+   «در صفحه اعتبار مجازی در تم روشن خیلی زشته و رنگ بندی تم روشنش خرابه»
+
+   Every surface on /trade was authored for the dark canvas and none of them
+   had a light counterpart. The two that mattered most:
+
+     • `.lab-hero` painted `linear-gradient(165deg,#12141f,#090a10)` — a
+       near-BLACK card — while its text kept `var(--text-1)`, which in the
+       light theme is #0d1020. Dark ink on a dark card: measured 1.06:1, i.e.
+       the balance figure was effectively invisible.
+     • `.trade-ticket` shared its base rule with `.swap-ticket`, and the light
+       overrides written for the swap screen named ONLY `.swap-ticket`. So on a
+       #f4f5fa page the ticket was white-at-6% over transparent (no card), with
+       a white-at-10% border (no edge) and a 0.35-alpha black shadow underneath
+       (a dirty smudge where a card should have been).
+
+   The swap screen's light treatment is the house style for exactly this
+   surface, so the ticket now shares it rather than inventing a second one.
+   ========================================================================== */
+
+/* The hero is a card, so it becomes a light card with a tinted wash — not a
+   black rectangle. The RGB tints stay, at light-theme strength. */
+:root[data-theme='light'] .lab-hero {
+  border-color: rgba(16, 20, 40, 0.10);
+  /* Plain rgba rather than `color-mix(var(--rgb-*))`: the light overrides in
+     this file already spell their tints out (see `.swap-ticket` below), and a
+     literal is also the only form every CSS parser in the toolchain — jsdom in
+     the theme probes included — can actually resolve. */
+  background:
+    radial-gradient(120% 100% at 10% -10%, rgba(106, 58, 224, 0.14), rgba(255, 255, 255, 0) 58%),
+    radial-gradient(90% 80% at 95% 0%, rgba(0, 181, 224, 0.10), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(165deg, #ffffff, #f2f4fb 62%);
+  box-shadow: 0 14px 34px -22px rgba(15, 23, 42, 0.34);
+}
+:root[data-theme='light'] .lab-hero .lab-hero-price { color: var(--text-1); }
+
+/* The aurora is tuned for a dark canvas at 0.9 opacity; on white it reads as
+   two grey bruises. The wallet screen already halves it for the same reason. */
+:root[data-theme='light'] .lab-aurora { opacity: 0.34; }
+:root[data-theme='light'] .lab-aurora::before,
+:root[data-theme='light'] .lab-aurora::after { filter: blur(80px); }
+
+/* The ticket: the swap screen's light surface, verbatim, so the two screens
+   stop disagreeing about what a card looks like on paper. */
+:root[data-theme='light'] .trade-ticket {
+  border-color: rgba(16, 20, 40, 0.12);
+  background:
+    radial-gradient(110% 90% at 8% -10%, rgba(106, 58, 224, 0.08), transparent 55%),
+    #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 14px 34px -22px rgba(15, 23, 42, 0.34);
+}
+
+/* The dashed divider between the fee rows was white-on-white — the numbers
+   ran together into one undifferentiated block. */
+:root[data-theme='light'] .trade-summary-row {
+  border-bottom-color: rgba(16, 20, 40, 0.14);
+}
+
+/* Position / holding cards. Same treatment, and the black 0.35 shadow that
+   looked like depth on #05070f is a smudge on #f4f5fa. */
+:root[data-theme='light'] .lab-card {
+  border-color: rgba(16, 20, 40, 0.10);
+  background: linear-gradient(145deg, #ffffff, #f6f7fc);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 10px 26px -18px rgba(15, 23, 42, 0.40);
+}
+:root[data-theme='light'] .lab-round,
+:root[data-theme='light'] .lab-stat,
+:root[data-theme='light'] .lab-count {
+  border-color: rgba(16, 20, 40, 0.10);
+  background: rgba(16, 20, 40, 0.035);
+}
+
+/*
+ * The Buy CTA. `color:#fff` over `#00c98a → #00e5ff` measured 1.9:1 — below the
+ * 3:1 floor for large text in BOTH themes, which is why this is not inside the
+ * light block: it is a defect, not a theme difference. The app already has a
+ * convention for a green/cyan gradient under text (`.btn-success`,
+ * `.xfer-submit`) and it is dark ink, so the buy button follows it. The sell
+ * button keeps white — magenta/crimson carries it at 4.6:1.
+ */
+.trade-cta.buy { color: #04211a; }
+:root[data-theme='light'] .trade-cta.buy {
+  background: linear-gradient(90deg, #00b57c, #00c2e0);
+  box-shadow: 0 12px 26px -14px rgba(0, 168, 107, 0.55);
+}
+:root[data-theme='light'] .trade-cta.sell {
+  background: linear-gradient(90deg, #e0244f, #d5008f);
+  box-shadow: 0 12px 26px -14px rgba(224, 36, 79, 0.5);
+}
+
 /* Buy/Sell (fiat in/out) route rows — glass cards with a tinted icon tile. */
 .buy-route {
   display: flex;

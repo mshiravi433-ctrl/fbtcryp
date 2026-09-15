@@ -31,8 +31,13 @@
  */
 
 import { useSettingsStore } from '../store/useSettingsStore';
+import { apiBase } from './apiBase.js';
 
-const PARAMS_URL = '/api/learning/params';
+/* Resolved through apiBase(): inside the packaged app a hardcoded relative
+   '/api' resolves against https://localhost and 404s, so the params fetch
+   would silently fail and the engine would run untuned for every app user. */
+const PARAMS_PATH = '/learning/params';
+const PARAMS_URL = () => apiBase() + PARAMS_PATH;
 const TELEMETRY_KEY = 'fbt-telemetry-v1';
 const DAY_MS = 24 * 3600 * 1000;
 const WINDOW_MS = 60 * DAY_MS; // outcomes older than the training window are pointless
@@ -46,7 +51,7 @@ let paramsPromise = null;
 export function loadLearningParams(force = false) {
   if (paramsCache && !force) return Promise.resolve(paramsCache);
   if (paramsPromise) return paramsPromise;
-  paramsPromise = fetch(PARAMS_URL, { headers: { accept: 'application/json' } })
+  paramsPromise = fetch(PARAMS_URL(), { headers: { accept: 'application/json' } })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
     .then((data) => {
@@ -140,11 +145,13 @@ function saveTelemetryMap(m) {
   }
 }
 
+/* `path` is relative to the API origin, resolved per call for the same
+   reason as PARAMS_URL above. */
 function post(path, rec) {
   const token = consentToken();
   if (!token) return;
   try {
-    fetch(path, {
+    fetch(apiBase() + path, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...rec, consent: token }),
@@ -187,7 +194,7 @@ export function telemetrySignal({ coin, horizon, stance, confidence, regime, ser
     }
     m[key] = { ts: Date.now(), px };
     saveTelemetryMap(m);
-    post('/api/telemetry/signal', {
+    post('/telemetry/signal', {
       t: 's',
       c,
       h: horizon,
@@ -225,7 +232,7 @@ export function telemetryResolve({ coin, series }) {
       for (const days of horizons) {
         if (now - rec.ts < days * DAY_MS) continue;
         const pct = ((px - rec.px) / rec.px) * 100;
-        post('/api/telemetry/resolve', { t: 'r', c, h, ts: rec.ts, r: { [days]: bucketReturn(pct) } });
+        post('/telemetry/resolve', { t: 'r', c, h, ts: rec.ts, r: { [days]: bucketReturn(pct) } });
         changed = true;
       }
       if (now - rec.ts >= horizons[horizons.length - 1] * DAY_MS) rec.done = true;

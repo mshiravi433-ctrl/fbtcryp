@@ -22,8 +22,15 @@
  * is never allowed to affect an execution.
  */
 
+import { apiBase } from './apiBase.js';
+
 export const INTENT_OBSERVATION_SCHEMA = 'fbt.intent-execution-observation.v1';
-export const OBSERVATION_ENDPOINT = '/api/intents/v1/observations';
+
+/* A path, resolved at call time. Inside the packaged app the page origin is
+   https://localhost, so a frozen '/api/…' string would POST to the phone's own
+   asset server and silently lose every observation. */
+export const OBSERVATION_PATH = '/intents/v1/observations';
+export const observationEndpoint = () => apiBase() + OBSERVATION_PATH;
 
 export const OBSERVATION_KINDS = Object.freeze(['swap', 'outcome', 'automation', 'workflow']);
 export const OBSERVATION_CHAINS = Object.freeze([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144]);
@@ -235,7 +242,7 @@ export function validateObservationShape(payload) {
 export async function submitIntentObservation(observation, {
   consentToken = '',
   fetchImpl = null,
-  endpoint = OBSERVATION_ENDPOINT
+  endpoint = observationEndpoint()
 } = {}) {
   const valid = validateObservationShape(observation);
   if (!valid.ok) return { ok: false, code: valid.code };

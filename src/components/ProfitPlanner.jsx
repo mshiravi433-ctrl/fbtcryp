@@ -33,6 +33,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { apiBase } from '../lib/apiBase.js';
 
 const RISK_OPTIONS = ['conservative', 'balanced', 'aggressive'];
 
@@ -86,7 +87,7 @@ export default function ProfitPlanner() {
 
     setState({ phase: 'loading' });
     try {
-      const res = await fetch('/api/intents/v1/profit-plan', {
+      const res = await fetch(`${apiBase()}/intents/v1/profit-plan`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

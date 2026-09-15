@@ -37,6 +37,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { apiBase } from '../lib/apiBase.js';
 
 /*
  * Cube states, painted from the runtime report — never invented here.
@@ -116,10 +117,10 @@ export function ActivationDashboard() {
   const load = useCallback(async () => {
     try {
       const [psRes, fzRes, evRes, cfRes] = await Promise.all([
-        globalThis.fetch('/api/intents/v1/phase-status'),
-        globalThis.fetch('/api/intents/v1/freeze-status'),
-        globalThis.fetch('/api/intents/v1/evidence-status'),
-        globalThis.fetch('/api/intents/v1/activation-config')
+        globalThis.fetch(`${apiBase()}/intents/v1/phase-status`),
+        globalThis.fetch(`${apiBase()}/intents/v1/freeze-status`),
+        globalThis.fetch(`${apiBase()}/intents/v1/evidence-status`),
+        globalThis.fetch(`${apiBase()}/intents/v1/activation-config`)
       ]);
       if (psRes.ok) setData(await psRes.json());
       if (fzRes.ok) setFreeze(await fzRes.json());
@@ -159,10 +160,10 @@ export function ActivationDashboard() {
     setChecking(true);
     setRun(null);
     const probes = [
-      '/api/intents/v1/self-probe',
-      '/api/intents/v1/ops-probe?force=1',
-      '/api/intents/v1/stage3-probe?force=1',
-      '/api/intents/v1/later-phase-probe'
+      `${apiBase()}/intents/v1/self-probe`,
+      `${apiBase()}/intents/v1/ops-probe?force=1`,
+      `${apiBase()}/intents/v1/stage3-probe?force=1`,
+      `${apiBase()}/intents/v1/later-phase-probe`
     ];
     const results = await Promise.allSettled(probes.map(async (url) => {
       const res = await globalThis.fetch(url);

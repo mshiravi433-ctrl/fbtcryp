@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { publicAppUrl } from '../lib/nativeShell';
+import { apiBase } from '../lib/apiBase';
 import { createSandboxProject, loadProjectDrafts, PROJECT_SCOPES } from '../lib/developerProjects';
 import DeveloperConsole from '../components/DeveloperConsole';
 import ReviewerConsole from '../components/ReviewerConsole';
@@ -136,7 +137,7 @@ export default function Developers() {
   const [envFailed, setEnvFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    fetch('/api/environments', { headers: { accept: 'application/json' } })
+    fetch(`${apiBase()}/environments`, { headers: { accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
       .then((x) => {
         if (!active) return;

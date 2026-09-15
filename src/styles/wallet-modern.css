@@ -225,6 +225,49 @@
   -webkit-text-fill-color: transparent;
 }
 
+/*
+ * ─── THE TOKEN SHEET'S SEND / SWAP BUTTONS WERE INVISIBLE ON PAPER ─────────
+ * «در صفحه گس و شبکه انتخابی دکمه سواپ و ارسال در تم روشن معلوم نیست»
+ *
+ * The sheet that opens on a held asset is where the gas coin and the networks
+ * the token lives on are shown, and its two primary actions are Send and Swap.
+ * The generic light override above set `.wallet-action-modern` to a 78% white
+ * card with a 7%-alpha border — correct for the big cards it was written for
+ * (they sit on the page canvas and carry their own shadow), and invisible for
+ * a button that sits on an already-white sheet: white fill, no edge, no
+ * contrast, nothing to press.
+ *
+ * So the two action variants get what a button actually needs on a light
+ * surface — a tinted fill in the action's own hue, a border you can see, and
+ * dark ink for the label. The icon tiles already carried their gradients, so
+ * only the container and the text were missing.
+ */
+:root[data-theme='light'] .wallet-action-modern {
+  color: var(--text-1);
+}
+:root[data-theme='light'] .wallet-action-modern.send {
+  background: linear-gradient(145deg, rgba(255, 45, 149, 0.10), rgba(124, 77, 255, 0.07));
+  border-color: rgba(214, 30, 120, 0.34);
+  box-shadow: 0 8px 20px -14px rgba(214, 30, 120, 0.75);
+}
+:root[data-theme='light'] .wallet-action-modern.recv {
+  background: linear-gradient(145deg, rgba(0, 176, 122, 0.11), rgba(0, 160, 200, 0.08));
+  border-color: rgba(0, 140, 110, 0.34);
+  box-shadow: 0 8px 20px -14px rgba(0, 150, 130, 0.75);
+}
+:root[data-theme='light'] .wallet-action-modern.send:hover {
+  border-color: rgba(214, 30, 120, 0.5);
+  box-shadow: 0 12px 26px -14px rgba(214, 30, 120, 0.8);
+}
+:root[data-theme='light'] .wallet-action-modern.recv:hover {
+  border-color: rgba(0, 140, 110, 0.5);
+  box-shadow: 0 12px 26px -14px rgba(0, 150, 130, 0.8);
+}
+:root[data-theme='light'] .wallet-action-modern .wallet-action-label {
+  color: var(--text-1);
+  font-weight: 800;
+}
+
 
 /* Speed: reduce heavy blur on low-end, use will-change for transforms */
 .wallet-hero-modern, .wallet-token-row-modern, .wallet-action-modern {
