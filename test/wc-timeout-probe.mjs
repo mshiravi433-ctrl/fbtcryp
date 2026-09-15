@@ -18,6 +18,7 @@
  */
 import {
   WC_CONNECT_TIMEOUT_MS,
+  WC_PAIRING_TTL_MS,
   WC_PRIMARY_RELAY_TIMEOUT_MS,
   WC_RELAY_URLS,
   isRelayClassError,
@@ -68,7 +69,13 @@ export default async function run() {
   t('WalletContext imports the shared timeout helper (single source of truth)',
     /import \{[\s\S]{0,200}\bWC_CONNECT_TIMEOUT_MS\b[\s\S]{0,200}\bwithTimeout\b[\s\S]{0,200}\} from '\.\.\/lib\/wcTimeout'/.test(wallet));
   t('connectWalletConnect wraps wc.connect() in the bounded timeout',
-    /withTimeout\(wc\.connect\(\), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(wallet));
+    /armBound\(WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(wallet)
+      && /await Promise\.race\(\[wc\.connect\(\), cancelled, bound\]\)/.test(wallet));
+  t('the fuse is re-armed to the pairing TTL once the SDK has issued a URI',
+    /armBound\(WC_PAIRING_TTL_MS, 'WC_PAIRING_EXPIRED'\)/.test(wallet)
+      && WC_PAIRING_TTL_MS > WC_CONNECT_TIMEOUT_MS);
+  t('…and a slow approval is reported as expired, never as an unreachable relay',
+    /msg === 'WC_PAIRING_EXPIRED'[\s\S]{0,200}setError\('WC_EXPIRED'\)/.test(wallet));
   t('EthereumProvider.init() is bounded too — via the shared initWcProvider failover helper',
     /const initWcProvider = useCallback/.test(walletCode)
       && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
@@ -76,7 +83,7 @@ export default async function run() {
     walletCode.indexOf('const restoreWcSession') > -1
       && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
   t('a timed-out connect attempt disconnects the abandoned instance (no zombie socket/modal)',
-    /catch \(e\) \{[\s\S]{0,3000}wc\?\.disconnect\?\.\(\)/.test(wallet));
+    /catch \(e\) \{[\s\S]{0,4000}wc\?\.disconnect\?\.\(\)/.test(wallet));
   t('the timeout classifies as the actionable WC_RELAY_UNREACHABLE error, not a bare CONNECT_FAILED',
     /WC_CONNECT_TIMEOUT[\s\S]{0,120}\|\|[\s\S]{0,200}WC_RELAY_UNREACHABLE|msg === 'WC_CONNECT_TIMEOUT'/.test(wallet));
   t('the timeout window is generous enough for a slow-but-working relay (not just fast networks)',

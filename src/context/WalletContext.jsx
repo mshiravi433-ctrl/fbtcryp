@@ -9,13 +9,19 @@ import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { wcEvent } from '../lib/wcTrace';
 import {
   WC_CONNECT_TIMEOUT_MS,
+  WC_PAIRING_TTL_MS,
   withTimeout,
   WC_PRIMARY_RELAY_TIMEOUT_MS,
   WC_RELAY_URLS,
   isRelayClassError
 } from '../lib/wcTimeout';
 import { purgeWcStorage } from '../lib/wcStorage';
-import { appKitCustomWallets, legacyModalWallets } from '../lib/wcWallets';
+import {
+  appKitCustomWallets,
+  legacyModalWallets,
+  looksLikePairingUri,
+  repairPairingUri
+} from '../lib/wcWallets';
 import { installWalletOpenBridge } from '../lib/wcDeepLink';
 import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
 import { openWalletLink } from '../lib/browser';
@@ -182,6 +188,25 @@ export function WalletProvider({ children }) {
   const wcInitingRef = useRef(false);
   const wcListenersRef = useRef(null);
   const injectedListenersRef = useRef(null);
+  /*
+   * THE PAIRING URI THE SDK ISSUED — the one string the whole flow turns on.
+   *
+   * `showQrModal: false` (see buildWcInitConfig) means no AppKit modal, so the
+   * app renders the pairing itself: this state is the `wc:<topic>@2?relay-
+   * protocol=irn&symKey=…` string the provider emits on `display_uri`, and
+   * WalletConnectSheet turns it into (a) a real QR of exactly those bytes and
+   * (b) one deep link per promoted wallet via lib/wcWallets.js. Null outside a
+   * pairing attempt — a URI left in state after the attempt settles is how a
+   * wallet gets opened on a pairing that no longer exists.
+   */
+  const [wcPairUri, setWcPairUri] = useState(null);
+  /* The in-flight provider, so Cancel can tear down the attempt that owns the
+     URI (wcRef is only assigned on SUCCESS). */
+  const wcPairingRef = useRef(null);
+  /* Cancel switch for the in-flight connect: cancelling must settle the
+     promise NOW, not wait for the 20s bound, or the next tap is swallowed by
+     the wcInitingRef single-flight. */
+  const wcCancelRef = useRef(null);
   // Forwarding ref so callbacks defined early can call the latest disconnect()
   // without creating a useCallback cycle through the deps array.
   const disconnectRef = useRef(() => {});
@@ -447,11 +472,41 @@ export function WalletProvider({ children }) {
       projectId: WC_PROJECT_ID,
       chains: [DEFAULT_CHAIN],
       optionalChains: Object.keys(EVM_CHAINS).map(Number),
-      showQrModal: true,
+      /*
+       * showQrModal: false — THE PAIRING SURFACE IS OURS, NOT APPKIT'S.
+       *
+       * With `true`, `EthereumProvider.initialize()` builds a full @reown/appkit
+       * modal (verified against the installed @walletconnect/ethereum-provider@
+       * 2.23.10: `if (this.rpc.showQrModal) { const { createAppKit } = await
+       * import('@reown/appkit/core'); … }`). That modal pulls the wallet list
+       * over the network from `api.web3modal.org`, renders it as Lit web
+       * components, and builds the phone link inside
+       * `ConnectionControllerUtil.onConnectMobile()`. Four separate places a
+       * pairing can die that this app cannot see and cannot repair — and the
+       * «invalid deep link» / «QR does nothing» reports survived two rounds of
+       * patching exactly those four places.
+       *
+       * The SDK does not need the modal to hand us the pairing: the provider
+       * emits `display_uri` with the raw `wc:<topic>@2?relay-protocol=irn&symKey=…`
+       * string (UniversalProvider: `this.uri = uri; this.events.emit(
+       * 'display_uri', uri)`, re-emitted verbatim by EthereumProvider). So the
+       * app now listens for it and renders its OWN pairing sheet: a real QR of
+       * that exact string plus one button per promoted wallet, built by the
+       * already-tested lib/wcWallets.js `walletDeepLinks()`. Same URI, same
+       * relay, no wallet-list fetch, no web components, no `window.open`
+       * interception — and the QR the user scans is the URI the SDK issued,
+       * byte for byte.
+       *
+       * `qrModalOptions` is kept (and is inert while showQrModal is false) so
+       * the promoted-wallet table stays declared in one place; if the modal is
+       * ever switched back on, the links it needs are still here.
+       */
+      showQrModal: false,
       /* MOBILE: on a phone the wallet is another app on the SAME device, so
-         there is no second screen to point a camera at. The modal therefore
-         renders quick "open this wallet" buttons that deep-link into each
-         wallet app; the QR code stays as the fallback for a second device. */
+         there is no second screen to point a camera at. Our pairing sheet
+         therefore leads with "open this wallet" buttons that deep-link into
+         each wallet app; the QR code stays as the fallback for a second
+         device. */
       optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
       qrModalOptions: {
         themeMode: 'dark',
@@ -551,6 +606,18 @@ export function WalletProvider({ children }) {
    * wallet list still renders either way; only the deep link is lost.
    */
   const applyAppKitWalletLinks = useCallback(async (wc) => {
+    /*
+     * NO MODAL, NOTHING TO PATCH. `showQrModal: false` means
+     * EthereumProvider never creates the AppKit instance, so there is no
+     * `wc.modal` to hand deep links to. Returning here (instead of falling
+     * through to the controllers singleton) keeps the trace honest: writing
+     * options into a controller no modal reads would report
+     * `appkit_links_applied` for work that changed nothing.
+     */
+    if (!wc?.modal) {
+      wcEvent('appkit_modal_absent');
+      return false;
+    }
     const options = {
       customWallets: appKitCustomWallets(),
       experimental_preferUniversalLinks: true,
@@ -946,25 +1013,78 @@ export function WalletProvider({ children }) {
       }
 
       /*
-       * Mobile deep links are handled by the WalletConnect modal itself
-       * (showQrModal: true). It builds the correct `metamask://wc` /
-       * `trust://wc` native links — and their https universal-link equivalents
-       * — and encodes the pairing URI exactly once.
+       * TAKE THE PAIRING URI FROM THE SDK, NOT FROM A MODAL.
        *
-       * A previous version ALSO registered a display_uri handler that, on iOS,
-       * hard-navigated the page to metamask.app.link. That did two harmful
-       * things: it forced every iOS user into MetaMask (so Trust and Rainbow
-       * could never be selected), and it navigated the browser away
-       * mid-pairing, dropping the in-memory client. Let the modal own deep
-       * links on every platform instead.
+       * `display_uri` is the one event the WalletConnect SDK guarantees: it
+       * carries the pairing URI as a plain string (UniversalProvider does
+       * `this.uri = uri; this.events.emit('display_uri', uri)`, and
+       * EthereumProvider re-emits it verbatim). From it the sheet renders a QR
+       * of exactly those bytes and one deep link per promoted wallet — so the
+       * last metre no longer depends on a wallet-list fetch, a Lit component
+       * tree, or a `window.open` interception.
+       *
+       * Both payload shapes are accepted (string, or `{ uri }`) because the
+       * SignClient/UniversalProvider pair has used both across versions; the
+       * URI is validated with the same tolerant detector the repair path uses,
+       * and `&amp;` damage is fixed BEFORE it can reach a QR or a wallet
+       * (test/wc-uri-hygiene-probe.mjs measures why: an escaped URI cannot
+       * pair at all).
        */
+      wcPairingRef.current = wc;
+
       /*
-       * Bounded wait — see WC_CONNECT_TIMEOUT_MS above. This is what turns an
-       * unreachable relay from "spins forever" into a named, actionable
-       * failure the user can act on (switch network / VPN) within seconds
-       * rather than minutes.
+       * TWO-PHASE BOUND — "the relay is dead" is not "the user is still
+       * walking to their wallet". See WC_PAIRING_TTL_MS in lib/wcTimeout.js
+       * for why one flat number here produced this file's worst
+       * misdiagnosis: a healthy pairing cut off at 20s reported itself as an
+       * unreachable relay, and sent users off to fix a network that was never
+       * broken.
        */
-      await withTimeout(wc.connect(), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT');
+      let cancelReject = null;
+      let boundReject = null;
+      let boundTimer = null;
+      const armBound = (ms, code) => {
+        clearTimeout(boundTimer);
+        boundTimer = setTimeout(() => boundReject?.(new Error(code)), ms);
+      };
+
+      const onPairUri = (payload) => {
+        const raw = typeof payload === 'string' ? payload : String(payload?.uri || '');
+        if (!looksLikePairingUri(raw)) return;
+        const uri = repairPairingUri(raw);
+        setWcPairUri(uri);
+        /* The relay has now proven itself: hand the remaining wait to the
+           human, bounded by the pairing's own lifetime. */
+        armBound(WC_PAIRING_TTL_MS, 'WC_PAIRING_EXPIRED');
+        wcEvent('pair_uri_ready');
+      };
+      wc.on('display_uri', onPairUri);
+
+      /*
+       * The cancel switch is raced in as well: the user dismissing our pairing
+       * sheet must settle THIS promise immediately. Without it the attempt
+       * would sit on the SDK's own wait for the rest of the bound while
+       * holding `wcInitingRef`, and the very next tap on Connect would be
+       * swallowed by the single-flight guard — which reads exactly like "the
+       * button is dead".
+       */
+      const cancelled = new Promise((_, reject) => { cancelReject = reject; });
+      const bound = new Promise((_, reject) => { boundReject = reject; });
+      /* A cancel or an expiry that arrives after the race already settled
+         rejects a promise nobody is listening to — swallow both here so a
+         late event can never surface as an unhandled rejection. */
+      cancelled.catch(() => {});
+      bound.catch(() => {});
+      wcCancelRef.current = () => cancelReject(new Error('WC_USER_CANCELLED'));
+      armBound(WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT');
+      try {
+        await Promise.race([wc.connect(), cancelled, bound]);
+      } finally {
+        clearTimeout(boundTimer);
+        wcCancelRef.current = null;
+        try { wc.removeListener('display_uri', onPairUri); } catch { /* noop */ }
+        setWcPairUri(null);
+      }
       wcEvent('session_settled');
       const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
@@ -1040,12 +1160,28 @@ export function WalletProvider({ children }) {
          * it as a red "connection failed" invited exactly the mystified
          * re-taps that made the modal look like it was flickering.
          */
-        /connection request reset/i.test(msg)
+        /connection request reset/i.test(msg) ||
+        /*
+         * OUR OWN pairing sheet was dismissed (cancelWcPairing). Same class as
+         * the two above: a cancellation, not a failure. Naming it here is what
+         * stops a Cancel from being reported back as "connection failed" —
+         * the mistake that turned one dismiss into a support report.
+         */
+        msg === 'WC_USER_CANCELLED'
       ) {
         setError('USER_REJECTED');
       } else if (/origin not allowed|unauthorized|project id/i.test(msg)) {
         setError('WC_ORIGIN_BLOCKED');
-      } else if (/proposal expired|expired/i.test(msg)) {
+      } else if (
+        /*
+         * Our own pairing TTL elapsed while the wallet still had not
+         * approved. Named explicitly (and matched before the relay branch)
+         * because the honest answer here is "try again", not "your network is
+         * blocking the relay" — the relay demonstrably worked, it issued the
+         * URI this attempt was showing.
+         */
+        msg === 'WC_PAIRING_EXPIRED' || /proposal expired|expired/i.test(msg)
+      ) {
         setError('WC_EXPIRED');
       } else if (
         msg === 'WC_CONNECT_TIMEOUT' ||
@@ -1067,12 +1203,55 @@ export function WalletProvider({ children }) {
       return false;
     } finally {
       try { uninstallWalletBridge?.(); } catch { /* noop */ }
+      /*
+       * The pairing URI must not outlive the attempt on ANY exit path — the
+       * success path (a connected wallet needs no QR), the cancel path, the
+       * timeout path. A URI left on screen after the attempt is over is a
+       * button that opens a wallet app on a pairing that no longer exists,
+       * which is precisely the "invalid deep link" class of report.
+       */
+      setWcPairUri(null);
+      wcPairingRef.current = null;
+      wcCancelRef.current = null;
       setConnecting(false);
       wcInitingRef.current = false;
       connectGuard.release();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachWcListeners, buildWcInitConfig, initWcProvider, repairSignClientMetadata, applyAppKitWalletLinks, detachInjectedListeners, refreshBalance]);
+
+  /**
+   * CANCEL AN IN-FLIGHT PAIRING — the button on our own pairing sheet.
+   *
+   * With the AppKit modal gone there is no backdrop tap to cancel with, so the
+   * sheet needs a real control. Two things have to happen, in this order:
+   *
+   *   1. the connect promise must settle NOW. `UniversalProvider.
+   *      abortPairingAttempt()` is a deprecated no-op in 2.23.10 (verified in
+   *      the installed dist), so the switch is our own: the promise the
+   *      connect flow races against. Settling it releases the
+   *      `wcInitingRef` single-flight, so the very next tap can start a fresh
+   *      pairing instead of being silently swallowed for up to 20 seconds.
+   *   2. the abandoned provider must be torn down, bounded — a relay that is
+   *      already unreachable must not make Cancel hang either.
+   *
+   * Safe to call when nothing is pairing: it is a no-op then.
+   */
+  const cancelWcPairing = useCallback(async () => {
+    const wc = wcPairingRef.current;
+    setWcPairUri(null);
+    try { wcCancelRef.current?.(new Error('WC_USER_CANCELLED')); } catch { /* noop */ }
+    if (!wc) return false;
+    try {
+      await withTimeout(
+        Promise.resolve(wc.disconnect()).catch(() => {}),
+        4_000,
+        'WC_CANCEL_TEARDOWN'
+      );
+    } catch { /* a dead relay must never make Cancel hang */ }
+    wcEvent('pair_cancelled');
+    return true;
+  }, []);
 
   /* ------------------------ WalletConnect session restore ----------------- */
 
@@ -1571,6 +1750,13 @@ export function WalletProvider({ children }) {
       hasLocalVault: Boolean(loadVault()),
       connectInjected,
       connectWalletConnect,
+      /*
+       * The pairing surface: the URI the SDK issued for the in-flight attempt
+       * (null when there is none) and the control that ends it. The sheet
+       * renders the QR and the wallet buttons from this one string.
+       */
+      wcPairUri,
+      cancelWcPairing,
       restoreWcSession,
       attachLocal,
       attachCreatedLocal,
@@ -1610,6 +1796,8 @@ export function WalletProvider({ children }) {
       locked,
       connectInjected,
       connectWalletConnect,
+      wcPairUri,
+      cancelWcPairing,
       restoreWcSession,
       attachLocal,
       attachCreatedLocal,

@@ -121,8 +121,17 @@ export default function run() {
    */
   t('connect() runs exactly once (no iOS-only MetaMask branch)',
     (code.match(/wc\.connect\(\)/g) || []).length === 1);
+  /* The bound is now TWO-PHASE and raced with the user's cancel switch: a
+     relay that never issues a URI fails in WC_CONNECT_TIMEOUT_MS, while a
+     human holding a phone gets the pairing's own lifetime. A flat 20s over
+     the whole connect used to abort healthy pairings and report them as an
+     unreachable relay. */
   t('the connect call is bounded by a timeout (no infinite spin on a blocked relay)',
-    /withTimeout\(wc\.connect\(\), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(code));
+    /armBound\(WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(code)
+      && /await Promise\.race\(\[wc\.connect\(\), cancelled, bound\]\)/.test(code));
+  t('…and once a pairing URI exists the wait belongs to the user, not to the 20s fuse',
+    /armBound\(WC_PAIRING_TTL_MS, 'WC_PAIRING_EXPIRED'\)/.test(code)
+      && code.indexOf("armBound(WC_PAIRING_TTL_MS") < code.indexOf('wc.connect()'));
   /*
    * The promoted wallet table now lives in src/lib/wcWallets.js — one source
    * for both the legacy modal shape and the AppKit shape — so the checks
@@ -175,9 +184,9 @@ export default function run() {
    * And the links must be applied to the modal instance BEFORE connect()
    * opens it — the first tap inside it has to find a real deep link.
    */
-  t('the deep links are applied to the modal before connect() opens it',
+  t('the deep links are applied to the modal before connect() runs',
     code.indexOf('await applyAppKitWalletLinks(wc)') > code.indexOf('wc = await initWcProvider(')
-      && code.indexOf('await applyAppKitWalletLinks(wc)') < code.indexOf('await withTimeout(wc.connect()'));
+      && code.indexOf('await applyAppKitWalletLinks(wc)') < code.indexOf('wc.connect()'));
 
   /* ---- 9. session restore: the "Trust disconnected me" fix ----
      A persisted WC session used to be picked up only from the Connect
@@ -231,12 +240,16 @@ export default function run() {
     wcCalls.length >= 5 && wcCalls.every((c) =>
       /^wcEvent\(['"][a-z_]+['"](, (\d+|true|false|Number\([a-z]+\)))?\)$/.test(c)));
 
-  /* ---- 13. the internal sheet must withdraw while the wallet modal owns the screen ---- */
+  /* ---- 13. the internal sheet IS the pairing surface ----
+     The SDK no longer opens a modal (showQrModal: false), so there is nothing
+     to withdraw for: the sheet stays open and renders the pairing itself. */
   const sheet = readFileSync('src/components/WalletConnectSheet.jsx', 'utf8');
-  t('the internal sheet closes in a controlled way while the AppKit modal is up',
-    /open && !wcFlowActive/.test(sheet));
-  t('the sheet re-opens with the named error when pairing fails',
-    /startWalletConnect[\s\S]{0,500}\.then\(\(ok\) =>/.test(sheet));
+  t('the sheet stays open through the pairing attempt (no second modal to yield to)',
+    /<Sheet open=\{open\}/.test(sheet) && !/wcFlowActive/.test(sheet));
+  t('the sheet returns to the chooser with the named error when pairing fails',
+    /startWalletConnect[\s\S]{0,700}\.then\(\(ok\) =>[\s\S]{0,200}setView\('choose'\)/.test(sheet));
+  t('the pairing URI is read from the wallet context, not from a modal',
+    /wallet\.wcPairUri/.test(sheet));
 
   /* ---- 14. the metadata repair targets the REAL metadata object ----
      THE FAKE "SECURITY RISK" MESSAGE. `populateAppMetadata()` (verified in the
