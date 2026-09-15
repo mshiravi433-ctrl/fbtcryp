@@ -17,6 +17,37 @@ export function isNativeShell() {
 }
 
 /**
+ * Re-tint the Android system bars to match the app's theme.
+ *
+ * Inside the packaged APK the "mobile's own header" (the status bar — time,
+ * signal, battery level) and the "mobile's own footer" (the navigation bar —
+ * back / home / recents) are drawn by ANDROID, not by this page. The only
+ * place they can be restyled is native code: MainActivity exposes
+ * `window.FBTSystemUI` for exactly this. It makes both bars translucent and
+ * tinted with the active theme's canvas colour (frosted glass in the site's
+ * own colour — the site's animated backdrop shows through) and flips the
+ * icon colour (white clock/battery and nav buttons on dark glass, black on
+ * light glass).
+ *
+ * Called from useSettingsStore.applyTheme, i.e. on boot and on every theme
+ * switch, so the bars can never be the opposite theme of the site behind
+ * them.
+ *
+ * A no-op everywhere else: in a browser or Telegram the object simply does
+ * not exist. There the browser chrome is themed by the theme-color meta the
+ * settings store already updates, and the iOS home-screen PWA already runs
+ * black-translucent under its status bar — so the site side is covered.
+ */
+export function setNativeSystemBarTheme(theme) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.FBTSystemUI?.setTheme?.(theme);
+  } catch {
+    /* not a native shell — nothing to tell */
+  }
+}
+
+/**
  * The public URL of this app.
  *
  * `window.location` is wrong inside the APK: Capacitor serves from

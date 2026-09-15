@@ -29,6 +29,27 @@
         <item name="windowNoTitle">true</item>
         <item name="android:background">@color/ic_launcher_background</item>
         <item name="android:windowBackground">@color/ic_launcher_background</item>
+
+        <!--
+          SYSTEM BARS (status bar = battery header, navigation bar = mobile
+          buttons footer). 0x8C00030F is brand black at 55% alpha: the web
+          content paints behind the bar (edge-to-edge, set in MainActivity)
+          and the site's animated backdrop shows through, so the bar reads
+          as frosted glass in the site's own colour.
+
+          These are the DARK-THEME defaults — dark is the app's default
+          theme, so the first frame never shows a wrong-coloured slab.
+          MainActivity.java re-tints both bars and flips the icon colour
+          (white on dark glass, black on light glass) the moment the web
+          layer reports the active theme via window.FBTSystemUI.setTheme().
+          On Android 15+ the OS ignores these colours and the bars are fully
+          transparent — the same glass effect.
+        -->
+        <item name="android:statusBarColor">0x8C00030F</item>
+        <item name="android:navigationBarColor">0x8C00030F</item>
+        <!-- White clock/battery and nav buttons on the dark glass. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 
     <!--
