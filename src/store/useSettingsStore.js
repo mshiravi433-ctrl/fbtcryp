@@ -11,6 +11,7 @@ import { persist } from 'zustand/middleware';
 import { currencyOf } from '../lib/currency';
 import { setDisplaySymbol, setHideBalances } from '../lib/format';
 import { isStandalone } from '../lib/platform';
+import { setNativeSystemBarTheme } from '../lib/nativeShell';
 
 export const useSettingsStore = create(
   persist(
@@ -256,6 +257,14 @@ export function applyTheme(theme) {
   if (typeof document === 'undefined') return;
   const resolved = resolveTheme(theme);
   document.documentElement.setAttribute('data-theme', resolved);
+  /*
+   * Android system bars (status bar with the battery, navigation bar with
+   * the mobile buttons) are drawn by the OS, so the web theme attribute
+   * cannot reach them. MainActivity (Android) exposes window.FBTSystemUI
+   * for this exact hand-off: translucent glass bars tinted with the theme's
+   * canvas colour and icons flipped to match. No-op in browser / Telegram.
+   */
+  setNativeSystemBarTheme(resolved);
   // keep the Telegram chrome in step with the app
   const tg = window.Telegram?.WebApp;
   const bg = resolved === 'light' ? '#f4f5fa' : '#000000';

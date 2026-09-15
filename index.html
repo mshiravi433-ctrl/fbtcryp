@@ -412,6 +412,21 @@
             var m = document.querySelector('meta[name="theme-color"]');
             if (m) m.setAttribute('content', '#f4f5fa');
           }
+          /*
+           * ANDROID GLASS BARS — no flash for light-theme users.
+           *
+           * Inside the APK the OS draws the status bar (battery header)
+           * and the navigation bar (mobile-buttons footer); MainActivity
+           * exposes window.FBTSystemUI and they are glass by default in
+           * the DARK theme. A user who chose light would otherwise boot
+           * with one dark-tinted frame before React's applyTheme flips
+           * them. This script already runs before first paint with the
+           * resolved theme, so it hands the theme to the native side
+           * here. No-op in browser / Telegram (object does not exist).
+           */
+          try {
+            if (window.FBTSystemUI && theme === 'light') window.FBTSystemUI.setTheme(theme);
+          } catch (e) {}
         } catch (e) {
           /* keep the dark default even if storage is unavailable */
           document.documentElement.setAttribute('data-theme', 'dark');
