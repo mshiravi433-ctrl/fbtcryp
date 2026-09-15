@@ -1,52 +1,22 @@
 /**
  * WALLET DEEP-LINK DELIVERY — owning the last metre
  * ---------------------------------------------------------------------------
- * THE REPORT: «با زدن بازکردن ارور دیپ لینک میزنه» — tapping **Open** in the
- * WalletConnect sheet (app AND site) shows a deep-link error page instead of
- * opening Trust Wallet.
+ * A wallet application opening is not proof that a WalletConnect hand-off
+ * worked. Universal-link redirectors can launch Trust/Uniswap/MetaMask after
+ * losing the `uri=wc:…` payload, leaving the wallet home screen with no
+ * proposal. WalletConnect's current mobile-linking guidance prefers a native
+ * deep link and keeps the universal link as a fallback.
  *
- * ─── WHAT IS ACTUALLY ON THE WIRE (measured against the installed SDK) ─────
- * AppKit builds the mobile link from the wallet object the user tapped:
+ * AppKit still sends mobile links through `window.open()`. For the duration of
+ * a pairing this module narrowly wraps that call and gives browser.js all
+ * three useful forms:
  *
- *   CoreHelperUtil.formatNativeUrl(wallet.mobile_link, uri, wallet.link_mode)
- *     → { redirect: `${mobile_link}wc?uri=…`,          // custom scheme
- *         redirectUniversalLink: link_mode ? `${link_mode}wc?uri=…` : undefined }
+ *   • the wallet's native deep link (primary in an ordinary mobile browser),
+ *   • its HTTPS universal link (Telegram / fallback), and
+ *   • the decoded raw `wc:` pairing URI (Android ACTION_VIEW intent).
  *
- * and `ConnectionControllerUtil.onConnectMobile()` then opens:
- *
- *   experimental_preferUniversalLinks && redirectUniversalLink
- *     ? redirectUniversalLink      // https — the one a WebView can carry
- *     : redirect                   // trust://wc?uri=…  ← the reported error
- *
- * On a phone the tapped object comes from AppKit's own explorer list, whose
- * entries (fetched live with this project's id) are:
- *
- *   Trust Wallet → { mobile_link: 'trust://',    link_mode: null }
- *   MetaMask     → { mobile_link: 'metamask://', link_mode: null }
- *
- * `link_mode: null` ⇒ no `redirectUniversalLink` ⇒ the custom scheme is
- * opened, no matter that the app asks for universal links. A custom scheme is
- * navigable from a real browser and from nothing else; a WebView answers with
- * its error page and the URL printed underneath — exactly the report.
- *
- * ─── WHAT THIS MODULE IS FOR ──────────────────────────────────────────────
- * `withLinkMode()` (lib/wcWallets.js) fixes the link at its source. This module
- * is the safety net that makes the LAST METRE ours: for the duration of a
- * pairing it wraps `window.open` — the one function AppKit's `openHref()` uses
- * — and:
- *
- *   • a known wallet's deep link is rewritten to that wallet's https universal
- *     link before it leaves the page;
- *   • the delivery itself goes through `openWalletLink()` (lib/browser.js):
- *     Telegram's opener inside the Mini App, Android Custom Tabs in the
- *     packaged app, an ordinary navigation on the web — never the WebView's
- *     own opinion about what a scheme means.
- *
- * Everything after `scheme://` is copied VERBATIM. The SDK already encoded the
- * pairing URI exactly once; re-encoding turns a pairing into a silent failure,
- * so this module never touches the query string.
- *
- * Pure functions + one idempotent wrapper: unit-testable without a DOM, see
+ * Ordinary pages, auth popups, store links and unknown HTTPS origins pass
+ * through untouched. Pure helpers and the idempotent wrapper are exercised by
  * test/wc-deeplink-probe.mjs.
  */
 
@@ -54,64 +24,37 @@ import {
   lastTappedWallet,
   looksLikePairingUri,
   repairPairingUri,
+  walletDeepLinks,
   walletForUrl,
-  walletLink,
   walletLinkBase
 } from './wcWallets.js';
 
-/** Split a URL into `{ scheme, rest }`, `rest` being everything after `scheme://`. */
+/** Split a URL into `{ scheme, rest }`, preserving everything after the scheme. */
 export function splitUrl(raw) {
   const text = String(raw || '').trim();
   const m = /^([a-z][a-z0-9+.-]*):\/\/([\s\S]*)$/i.exec(text);
   if (m) return { scheme: m[1].toLowerCase(), rest: m[2] };
-  /* `trust:wc?uri=…` (no slashes) is accepted by Android and by the wallets
-     themselves, so it is recognised too — with leading slashes removed so the
-     rebuilt URL is uniform. */
+  /* Android and some wallets also accept `trust:wc?uri=…` (without slashes). */
   const loose = /^([a-z][a-z0-9+.-]*):([\s\S]*)$/i.exec(text);
   if (loose) return { scheme: loose[1].toLowerCase(), rest: loose[2].replace(/^\/+/, '') };
   return null;
 }
 
-/** Is this an https URL? (The only scheme a WebView — and our opener — can carry.) */
 export function isHttpsUrl(raw) {
   return /^https:\/\//i.test(String(raw || '').trim());
 }
 
-/** Does this URL carry a WalletConnect pairing payload? */
 export function carriesPairingUri(raw) {
   return /(?:^|[?&])uri=/i.test(String(raw || ''));
 }
 
 /**
- * REPAIR A DEEP LINK WHOSE PAYLOAD WAS HTML-ESCAPED (`&amp;`).
+ * Repair a deep link whose pairing payload was HTML-escaped (`&amp;`).
  *
- * Two shapes arrive in practice, and both are the same bug:
- *
- *   • `wc:…&amp;relay-protocol=irn&amp;symKey=…` — a pairing URI straight out
- *     of an HTML surface (the reported «Invalid Url: wc:…» string);
- *   • `trust://wc?uri=wc%3A…%26amp%3Brelay-protocol%3Dirn…` — the same damage
- *     inside the `uri=` payload of a wallet deep link, i.e. a link built from
- *     an already-escaped URI.
- *
- * Both are repaired here — the one place every URL our bridge is about to
- * deliver passes through — by decoding the payload, restoring the real `&`s
- * and encoding it exactly once again. `uri=` is the LAST parameter of every
- * wallet hand-off (`<scheme>://wc?uri=<payload>`), which is what makes the
- * payload unambiguous even when it was never percent-encoded at all.
- *
- * A URL with nothing to repair is returned BYTE-FOR-BYTE unchanged: the
- * "everything after `scheme://` is copied verbatim" promise of this module
- * still holds for every healthy link, so a working pairing is never
- * re-encoded — and re-encoding is what turns a pairing into a silent failure.
- *
- * Why it matters (measured, test/wc-uri-hygiene-probe.mjs): handed an escaped
- * URI, the SDK's own `pairing.pair()` answers
- * `Missing or invalid. pair() uri#relay-protocol` — `amp;relay-protocol` and
- * `amp;symKey` are swallowed as parameter names and the relay protocol and
- * symmetric key vanish, so no pairing can ever be made from that string.
- *
- * @param {string} raw
- * @returns {string} the same string, or the repaired one.
+ * A healthy link is returned byte-for-byte unchanged. When the payload is
+ * damaged, it is decoded, repaired and encoded exactly once. Without this,
+ * WalletConnect parses `amp;relay-protocol` instead of `relay-protocol` and
+ * rejects the pairing before a proposal can exist.
  */
 export function repairPairingInUrl(raw) {
   const text = String(raw || '').trim();
@@ -123,18 +66,32 @@ export function repairPairingInUrl(raw) {
   try {
     decoded = decodeURIComponent(payload);
   } catch {
-    /* Not valid percent-encoding — repair the raw form, then encode it once. */
+    /* Invalid percent encoding: repair the raw form, then encode it once. */
   }
   const repaired = repairPairingUri(decoded);
   if (repaired === decoded) return text;
   return `${text.slice(0, m.index + m[1].length)}${encodeURIComponent(repaired)}`;
 }
 
+/** Decode and validate the `uri=` payload carried by a wallet link. */
+export function pairingUriFromWalletLink(raw) {
+  const text = String(raw || '').trim();
+  if (looksLikePairingUri(text)) return repairPairingUri(text);
+  const match = /(?:^|[?&])uri=([\s\S]*)$/i.exec(text);
+  if (!match) return '';
+  let decoded = match[1];
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch {
+    /* A few wallets accept an unencoded URI. Validate it below, never guess. */
+  }
+  decoded = repairPairingUri(decoded);
+  return looksLikePairingUri(decoded) ? decoded : '';
+}
+
 /**
- * The https universal link for a wallet deep link — '' when the URL is not a
- * wallet hand-off we know, or is already https.
- *
- *   trust://wc?uri=wc%3A… → https://link.trustwallet.com/wc?uri=wc%3A…
+ * Return the HTTPS equivalent of a known native wallet link. This helper is a
+ * fallback builder only; decideWalletOpen deliberately prefers native links.
  */
 export function universalForWalletLink(raw) {
   const text = String(raw || '').trim();
@@ -142,128 +99,101 @@ export function universalForWalletLink(raw) {
   const wallet = walletForUrl(text);
   if (!wallet) return '';
   const base = walletLinkBase(wallet.universal);
-  if (!base) return '';
   const parts = splitUrl(text);
-  if (!parts) return '';
+  if (!base || !parts) return '';
   return `${base}${parts.rest}`;
 }
 
+function knownWalletDecision({ wallet, pairingUri, originalUrl, repaired }) {
+  const links = walletDeepLinks(wallet.key, pairingUri);
+  if (!links.native) return null;
+  /* Rebuild from the validated raw pairing URI. This canonicalizes rare
+     unencoded `uri=wc:…&symKey=…` inputs and cannot double-encode because
+     walletLink receives the decoded URI, never the incoming query bytes. */
+  const nativeUrl = links.native;
+  return {
+    action: 'open',
+    url: nativeUrl,
+    fallbackUrl: links.universal || '',
+    pairingUri,
+    wallet,
+    rewritten: nativeUrl !== originalUrl,
+    repaired
+  };
+}
+
 /**
- * What should happen to a URL AppKit asked us to open?
+ * Decide whether a URL AppKit asked to open belongs to the pairing hand-off.
  *
- *   { action: 'open', url, wallet, rewritten, repaired } — deliver it through
- *                                               openWalletLink().
- *   { action: 'pass', url: null }              — not a wallet hand-off: the
- *                                               caller leaves the original
- *                                               call untouched.
- *
- * `rewritten` says the URL was rebuilt into a wallet's https link;
- * `repaired` says it arrived with HTML-escaped `&`s (`&amp;`) and was restored
- * to a pairing URI the SDK can actually parse. A bare `wc:` pairing URI is
- * completed into the tapped wallet's https link when the SDK told us which
- * wallet that was.
- *
- * The rules are deliberately narrow, because this bridge sits on `window.open`
- * for the whole pairing and AppKit also uses it for its own links ("Get a
- * wallet", store pages, Reown branding). Only a URL that clearly carries a
- * pairing to a wallet app is touched.
+ * Open decisions always use a native URL as `url`, with `fallbackUrl` and the
+ * raw `pairingUri` alongside it. The delivery layer may choose differently for
+ * Telegram, but universal HTTPS is never silently promoted to the primary path.
  */
 export function decideWalletOpen(raw) {
-  /*
-   * FIRST: undo HTML-entity damage, before any rule looks at the URL. A link
-   * that came back from an HTML surface (`wc:…&amp;relay-protocol=…`, or the
-   * same damage percent-encoded inside a `uri=` payload) can never pair —
-   * measured: `pair()` answers `Missing or invalid. pair() uri#relay-protocol`
-   * — so no rule below may be applied to the damaged bytes. A healthy URL
-   * comes out of this byte-for-byte unchanged.
-   */
   const incoming = String(raw || '').trim();
   const text = repairPairingInUrl(incoming);
   const repaired = text !== incoming;
   if (!text) return { action: 'pass', url: null };
+
   const parts = splitUrl(text);
   const scheme = parts?.scheme || '';
 
-  /* A web link: ours only when it is already a wallet hand-off carrying a
-     pairing URI on a host we know (e.g. a hand-built universal link). */
+  /* Known HTTPS wallet hand-offs are normalized back to the native route. */
   if (scheme === 'http' || scheme === 'https') {
     const wallet = walletForUrl(text);
-    if (wallet && isHttpsUrl(text) && carriesPairingUri(text)) {
-      return { action: 'open', url: text, wallet, rewritten: false, repaired };
+    const pairingUri = pairingUriFromWalletLink(text);
+    if (wallet && isHttpsUrl(text) && pairingUri) {
+      return knownWalletDecision({ wallet, pairingUri, originalUrl: text, repaired });
     }
     return { action: 'pass', url: null };
   }
 
-  /* In-page schemes the SDK may legitimately open — never ours. */
+  /* In-page schemes used by the SDK are not wallet hand-offs. */
   if (!scheme || scheme === 'about' || scheme === 'blob' || scheme === 'data' || scheme === 'javascript') {
     return { action: 'pass', url: null };
   }
 
-  /*
-   * A BARE PAIRING URI (`wc:<topic>@2?…`) — «Invalid Url:wc:…» in the report.
-   *
-   * `wc:` names no app, so it is not a hand-off on its own and the default
-   * behaviour (leave it to the WebView) is the worst possible one: a WebView
-   * can open no wallet, answers an unknown scheme with its error page, and
-   * prints the URI underneath that page — which is how the URI reaches a user
-   * (HTML-escaped) in the first place. So when the SDK asks us to open the
-   * pairing URI itself, we complete it into an https link for the wallet the
-   * user actually tapped — the tap that AppKit announced through
-   * `onConnectMobile()` a moment earlier (lib/wcAppKitPatch.js records it).
-   *
-   * Without a known wallet nothing is invented: a pairing URI opened on a
-   * desktop (where the QR is the intended path) must not be turned into a
-   * random wallet's link, so it is left exactly as it was.
-   */
+  /* A bare `wc:` URI names no app. Complete it only after AppKit recorded the
+     wallet the user tapped; otherwise preserve the original browser behavior. */
   if (scheme === 'wc' && looksLikePairingUri(text)) {
-    /* The damage here is in the URI itself, not inside a `uri=` payload, so
-       `repairPairingInUrl` above has nothing to look at — repair it directly
-       and report the fact honestly. */
-    const repairedUri = repairPairingUri(text);
+    const pairingUri = repairPairingUri(text);
     const wallet = lastTappedWallet();
-    if (wallet) {
-      return {
-        action: 'open',
-        url: walletLink(wallet.universal, repairedUri),
-        wallet,
-        rewritten: true,
-        repaired: repaired || repairedUri !== text
-      };
-    }
-    return { action: 'pass', url: null };
+    if (!wallet) return { action: 'pass', url: null };
+    return knownWalletDecision({
+      wallet,
+      pairingUri,
+      originalUrl: text,
+      repaired: repaired || pairingUri !== text
+    });
   }
 
-  /* A custom scheme WITHOUT a pairing payload is not a wallet hand-off (store
-     links, `market://`, wallet homepages). Leave it to the WebView. */
+  /* Store/home links have no pairing payload and must pass through untouched. */
   if (!carriesPairingUri(text)) return { action: 'pass', url: null };
 
   const wallet = walletForUrl(text);
-  const universal = universalForWalletLink(text);
-  if (wallet && universal) {
-    return { action: 'open', url: universal, wallet, rewritten: true, repaired };
+  const pairingUri = pairingUriFromWalletLink(text);
+  if (wallet && pairingUri) {
+    return knownWalletDecision({ wallet, pairingUri, originalUrl: text, repaired });
   }
-  /* A pairing for a wallet we have no https link for: still delivered through
-     the opener — a real browser resolves custom schemes, our WebView may not.
-     `openWalletLink` itself refuses non-https in the Telegram context, where
-     the platform only accepts http(s) links. */
-  return { action: 'open', url: text, wallet: null, rewritten: false, repaired };
+
+  /* Unknown custom wallet: a real browser may still understand its scheme.
+     There is no package-safe Android or Telegram fallback we can invent. */
+  return {
+    action: 'open',
+    url: text,
+    fallbackUrl: '',
+    pairingUri,
+    wallet: null,
+    rewritten: false,
+    repaired
+  };
 }
 
 /**
- * Install the wallet hand-off bridge on `win.open`.
+ * Install the narrow wallet hand-off bridge on `window.open`.
  *
- * @param {object}   options
- * @param {Window}   options.win         defaults to the global window
- * @param {Function} options.openWallet  `(url, { target, features }) => void`
- *                                       — the delivery channel (lib/browser.js
- *                                       `openWalletLink`). A throw falls back
- *                                       to the original call.
- * @returns {Function} uninstall — always call it: a bridge left installed
- *                    would keep rewriting links for the whole session.
- *
- * FAIL-OPEN BY CONSTRUCTION: an opener that throws, a window without `open`,
- * an unknown URL — every path degrades to exactly the behaviour that existed
- * before this module, never to a silent dead tap.
+ * FAIL-OPEN BY CONSTRUCTION: unsupported URLs, a throwing delivery channel,
+ * and missing browser APIs all fall back to the original `window.open` call.
  */
 export function installWalletOpenBridge({ win, openWallet } = {}) {
   const target = win ?? (typeof window !== 'undefined' ? window : null);
@@ -284,17 +214,15 @@ export function installWalletOpenBridge({ win, openWallet } = {}) {
         target: name || '_self',
         features: features || 'noreferrer noopener',
         wallet: decision.wallet ?? null,
+        walletPackage: decision.wallet?.androidPackage || '',
+        fallbackUrl: decision.fallbackUrl || '',
+        pairingUri: decision.pairingUri || '',
         rewritten: decision.rewritten,
-        /* True when the URL arrived with HTML-escaped `&`s and left repaired.
-           Surfaced so the trace can say a damaged link was seen — the fact a
-           support screenshot needs, and the one that used to be invisible. */
         repaired: Boolean(decision.repaired),
-        /* The ORIGINAL opener: the live `window.open` is this bridge, so a
-           delivery that falls back to window.open would recurse forever. */
+        /* The live window.open is this bridge; using the original prevents a
+           fallback from recursing into itself forever. */
         openWindow: original.bind(target)
       });
-      /* AppKit ignores the return value on this path (CoreHelperUtil.openHref)
-         and must not be told a Window object exists for a deep link. */
       return null;
     } catch {
       return original.call(target, decision.url, name, features);

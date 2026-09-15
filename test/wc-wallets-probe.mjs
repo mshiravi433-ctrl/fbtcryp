@@ -1,28 +1,9 @@
 /**
- * MOBILE WALLET DEEP-LINK PROBE (runtime, no DOM, no bundler)
+ * MOBILE WALLET REGISTRY PROBE
  * ---------------------------------------------------------------------------
- * The reported bug: "MetaMask and WalletConnect connect in the browser, but
- * opening Trust Wallet from the app or from the site shows *Invalid URL* with
- * a link under it and never connects."
- *
- * The pairing was never at fault — the URL we handed to the phone was:
- *
- *   1. `qrModalOptions.mobileWallets` used `links: { native, universal }`.
- *      Since @walletconnect/ethereum-provider@2.23 the modal is @reown/appkit,
- *      and `convertWCMToAppKitOptions()` forwards only `{ id, name, links }`
- *      while AppKit itself reads the EXPLORER field names `mobile_link` and
- *      `link_mode`. An entry with only `links` has no deep link at all, so
- *      `determinePlatforms()` finds no platform and the tap goes nowhere.
- *
- *   2. The link that WAS built was the custom scheme `trust://wc?uri=…`. A
- *      custom scheme is navigable from a system browser only. Inside a WebView
- *      — the packaged app, Telegram, Trust Wallet's own browser — it is an
- *      unknown scheme, and the WebView renders "Invalid URL" with the URL
- *      printed underneath. Trust's own docs prescribe the https form.
- *
- * This probe locks both halves: the links we emit are the https universal
- * links, they are shaped so AppKit can actually find them, and they survive
- * AppKit's own formatting rule byte for byte.
+ * Locks the URL forms AppKit reads and the app delivers: native custom schemes
+ * are primary so `uri=wc:…` survives, HTTPS links remain restricted-channel
+ * fallbacks, and every promoted wallet has a package-scoped Android identity.
  */
 import { readFileSync } from 'node:fs';
 import {
@@ -68,9 +49,7 @@ export default function run() {
     walletLink(trust.universal, URI).includes(encodeURIComponent(URI))
       && !walletLink(trust.universal, URI).includes(encodeURIComponent(encodeURIComponent(URI))));
 
-  /* ---- 3. the invariant that kills "Invalid URL" ----
-     Every promoted wallet must offer an https universal link. A custom scheme
-     is the thing a WebView cannot navigate to. */
+  /* ---- 3. both hand-off forms and the Android identity stay complete ---- */
   const links = walletDeepLinks('trust', URI);
   t('a promoted wallet resolves to both a native and an https link',
     Boolean(links?.native) && Boolean(links?.universal));
@@ -78,6 +57,13 @@ export default function run() {
     MOBILE_WALLETS.every((w) => w.universal.startsWith('https://')));
   t('the universal link is the one pointed at the wallet app host',
     MOBILE_WALLETS.every((w) => /^https:\/\/[a-z0-9.-]+\//.test(w.universal)));
+  t('the native link is the primary payload-preserving route',
+    links?.native === `trust://wc?uri=${encodeURIComponent(URI)}`);
+  const uniswap = MOBILE_WALLETS.find((w) => w.key === 'uniswap');
+  t('Uniswap Wallet is promoted with its official native scheme and Android package',
+    uniswap?.native === 'uniswap://' && uniswap?.androidPackage === 'com.uniswap.mobile');
+  t('every promoted wallet has an explicit Android package (no chooser/hijack)',
+    MOBILE_WALLETS.every((w) => typeof w.androidPackage === 'string' && w.androidPackage.includes('.')));
   t('an unknown wallet key resolves to nothing rather than a guess',
     walletDeepLinks('not-a-wallet', URI) === null);
 
@@ -148,8 +134,8 @@ export default function run() {
     /from '\.\.\/lib\/wcWallets(\.js)?'/.test(code));
   t('WalletContext applies the links to the modal before connect()',
     /applyAppKitWalletLinks\(wc\)/.test(code));
-  t('the modal is told to PREFER https universal links over custom schemes',
-    /experimental_preferUniversalLinks:\s*true/.test(code));
+  t('the modal prefers native wallet schemes (HTTPS is fallback only)',
+    /experimental_preferUniversalLinks:\s*false/.test(code));
   t('the init config no longer hardcodes a wallet deep link',
     !/native:\s*'trust:\/\/'/.test(code));
   /* The application must be wired where it runs, not merely defined. */

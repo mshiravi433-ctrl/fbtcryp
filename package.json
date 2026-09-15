@@ -281,7 +281,7 @@
     "@velocity-exchange/sdk": "^0.21.0",
     "@vercel/blob": "^2.6.1",
     "@wallet-standard/app": "^1.1.1",
-    "@walletconnect/ethereum-provider": "^2.23.10",
+    "@walletconnect/ethereum-provider": "2.25.0",
     "buffer": "^6.0.3",
     "capacitor-native-biometric": "^4.2.2",
     "cors": "^2.8.6",

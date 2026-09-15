@@ -131,9 +131,16 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
-    <!-- Android 11+ package visibility: needed so the app can hand off to a
-         browser or an installed wallet via openLink / deep links. -->
+    <!-- Android 11+ package visibility. The WalletConnect hand-off bridge
+         resolves an ACTION_VIEW intent against one exact installed wallet;
+         without these package declarations resolveActivity() is deliberately
+         hidden by Android even when the wallet is installed. -->
     <queries>
+        <package android:name="io.metamask" />
+        <package android:name="com.wallet.crypto.trustapp" />
+        <package android:name="com.uniswap.mobile" />
+        <package android:name="io.safepal.wallet" />
+        <package android:name="me.rainbow" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />

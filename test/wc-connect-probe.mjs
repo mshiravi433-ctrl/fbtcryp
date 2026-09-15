@@ -139,8 +139,10 @@ export default function run() {
    */
   const walletTable = readFileSync('src/lib/wcWallets.js', 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-  t('the promoted wallet list includes Trust Wallet, not just MetaMask',
-    /name: 'Trust Wallet'/.test(walletTable) && /name: 'MetaMask'/.test(walletTable));
+  t('the promoted wallet list includes Trust, MetaMask and Uniswap',
+    /name: 'Trust Wallet'/.test(walletTable)
+      && /name: 'MetaMask'/.test(walletTable)
+      && /name: 'Uniswap Wallet'/.test(walletTable));
   t('the promoted wallet list supplies Trust Wallet\'s documented universal host',
     /universal: 'https:\/\/link\.trustwallet\.com\/'/.test(walletTable));
   /*
@@ -162,8 +164,8 @@ export default function run() {
          logo (`image_url`); without it AppKit draws a generic grey glyph for
          every promoted wallet — half of why the list read as broken. */
       && /customWallets: appKitCustomWallets\(WC_PROJECT_ID\)/.test(code));
-  t('the modal is told to prefer https universal links over custom schemes',
-    /experimental_preferUniversalLinks: true/.test(code));
+  t('the modal prefers native links so the pairing payload bypasses HTTPS redirectors',
+    /experimental_preferUniversalLinks: false/.test(code));
 
   /* ---- 8. the modal never depends on the explorer API for deep links ---- */
   t('the modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));

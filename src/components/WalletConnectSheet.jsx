@@ -109,14 +109,11 @@ export default function WalletConnectSheet({ open, onClose }) {
    * copyable text. Nothing here is fetched from `api.web3modal.org`, so this
    * path works on a network that filters it.
    *
-   * Both surfaces deliver through the same rule, and it is the rule that
-   * actually fixes the standing report: a wallet hand-off NEVER navigates this
-   * page away. `window.open(url, '_self')` — what the SDK does on the open web
-   * (`ConnectionControllerUtil.onConnectMobile`, appkit-controllers@1.8.19:
-   * `const target = isIframe() ? '_top' : '_self'`) — replaces the document
-   * and destroys the pairing mid-flight. So every wallet row here is a real
-   * `<a target="_blank">`: not pop-up blockable, and this page is still alive
-   * to receive the approval.
+   * Both surfaces use the same channel-aware rule: native custom scheme on the
+   * mobile web, raw `wc:` ACTION_VIEW in the APK, and universal HTTPS only
+   * where Telegram requires it. Every wallet row is also a real
+   * `<a target="_blank">`, so this page and its pending relay subscription stay
+   * alive to receive approval.
    */
   const [openedWallet, setOpenedWallet] = useState(null);
   const [copiedUri, setCopiedUri] = useState(false);
@@ -223,48 +220,43 @@ export default function WalletConnectSheet({ open, onClose }) {
   };
 
   /*
-   * The https universal link for a wallet — the href the anchor carries.
-   *
-   * The link itself comes from lib/wcWallets.js: the https universal link
-   * (`https://link.trustwallet.com/wc?uri=…`, `https://metamask.app.link/wc?…`)
-   * that each wallet's own docs prescribe, because a custom scheme
-   * (`trust://…`) is navigable from a system browser and from nothing else —
-   * a WebView answers it with the «invalid deep link» error page.
-   *
-   * It is an HREF, not something built inside a click handler, for two
-   * reasons: an anchor with a real href is never pop-up blocked (the blocker
-   * only applies to scripted windows), and if this sheet's JavaScript dies the
-   * link is still a link. Trust Wallet's own developer docs prescribe exactly
-   * this URL, and their example even opens it with `_blank` — the target this
-   * sheet now uses everywhere, because `_self` replaces this document and
-   * takes the pending pairing down with it.
+   * Native wallet links are the primary hand-off on the mobile web. Telegram
+   * is the one exception: its Mini App API accepts only http(s), so its anchor
+   * carries the universal fallback. The packaged Android app intercepts the
+   * tap and sends the raw pairing URI through MainActivity.ACTION_VIEW.
    */
-  const walletHref = (key) => (pairUri ? walletDeepLinks(key, pairUri)?.universal || '' : '');
+  const linksForWallet = (key) => (pairUri ? walletDeepLinks(key, pairUri) : null);
+  const walletHref = (key) => {
+    const links = linksForWallet(key);
+    if (!links) return '';
+    return walletHandOffChannel() === 'telegram' ? links.universal : links.native;
+  };
 
   /**
-   * Hand the pairing to a wallet app.
-   *
-   * On the open web this does almost nothing — and that is the point. The
-   * anchor does the navigating: a new tab, our page untouched, and the OS
-   * resolving Android App Links / iOS Universal Links to the installed wallet.
-   * Only in the two contexts where an anchor cannot do the job does this take
-   * over: inside Telegram (the Mini App iframe must be left through Telegram's
-   * own opener or the app underneath is unloaded) and in the packaged app
-   * (the WebView must not navigate at all — Android Custom Tabs takes the URL
-   * instead).
+   * Keep the direct native anchor for a normal browser so browser user
+   * activation cannot expire inside an async callback. Telegram and the APK
+   * need platform APIs, therefore those two channels prevent the anchor and
+   * call the shared delivery layer with native + universal + raw URI together.
    */
   const openWalletApp = (e, key) => {
-    const href = walletHref(key);
-    if (!href) {
+    const promoted = MOBILE_WALLETS.find((entry) => entry.key === key);
+    const links = linksForWallet(key);
+    if (!promoted || !links || !pairUri) {
       e.preventDefault();
       return;
     }
     setOpenedWallet(key);
     haptic?.('light');
     const channel = walletHandOffChannel();
-    if (channel === 'web') return; /* let the anchor open its own tab */
+    if (channel === 'web-native') return; /* direct custom-scheme anchor */
     e.preventDefault();
-    void openWalletLink(href, { target: '_blank' }).then((ok) => {
+    void openWalletLink(links.native, {
+      target: '_blank',
+      wallet: promoted,
+      walletPackage: promoted.androidPackage,
+      pairingUri: pairUri,
+      fallbackUrl: links.universal
+    }).then((ok) => {
       if (!ok) setOpenedWallet(null);
     }, () => setOpenedWallet(null));
   };
@@ -498,15 +490,12 @@ export default function WalletConnectSheet({ open, onClose }) {
           {/*
             One row per promoted wallet, as a REAL LINK.
 
-            • `href` is the wallet's documented https universal link, so the
-              browser — not our JavaScript — performs the hand-off, in a new
-              tab. This page stays connected and is still holding the pending
-              pairing when the wallet answers.
-            • `target="_blank"` is not a preference: `_self`/`_top` replace
-              this document, and a WalletConnect pairing whose dApp has
-              navigated away can never complete. (The SDK's own mobile
-              hand-off used `_self` — that single argument is what the
-              «deep-link error / never connects» report was.)
+            • `href` is the wallet's native deep link in a normal browser, so
+              the pairing URI reaches the wallet without an HTTPS redirector.
+              Telegram alone receives the documented universal fallback.
+            • `target="_blank"` keeps this document (and its relay socket)
+              alive. In the APK the click is intercepted before navigation and
+              MainActivity opens a package-scoped ACTION_VIEW intent.
             • The brand logo comes from the same explorer CDN AppKit renders
               in its modal, with the generic glyph underneath it as the
               fallback if the image cannot be fetched.

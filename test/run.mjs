@@ -790,11 +790,9 @@ console.log('▸ probing WalletConnect chain resolution (Trust-on-Ethereum repor
 }
 
 /* ------------------------------ 0c-5. mobile wallet deep links ------------- */
-/* Runtime + wiring probe: the URL we hand to the phone. Two things went wrong
-   in the reported "Trust Wallet shows Invalid URL and never connects": the
-   links were written in a shape AppKit never reads (`links`, not
-   `mobile_link`), and the link it did build was the `trust://` custom scheme —
-   which a WebView cannot navigate to. */
+/* Runtime + wiring probe: every promoted wallet has a native deep link, an
+   HTTPS fallback and (on Android) an exact package. The pairing payload must
+   reach the wallet; merely opening its home screen is not success. */
 console.log('▸ probing mobile wallet deep links (Trust Wallet "Invalid URL")…');
 {
   const { default: runWcWallets } = await import('./wc-wallets-probe.mjs');
@@ -802,11 +800,9 @@ console.log('▸ probing mobile wallet deep links (Trust Wallet "Invalid URL")�
 }
 
 /* ------------------------------ 0c-6. deep-link delivery ------------------- */
-/* The other half of the "Invalid URL" bug, measured against the REAL SDK:
-   with `link_mode: null` (what the explorer returns for Trust/MetaMask) AppKit's
-   `onConnectMobile()` opens the custom scheme even with
-   `experimental_preferUniversalLinks` on; with the link-mode patch installed the
-   same tap opens Trust's https link, and the window.open bridge delivers it. */
+/* Last-mile delivery, measured against the real SDK: AppKit stays native-first;
+   the bridge preserves native + HTTPS + raw wc URI; Android uses package-scoped
+   ACTION_VIEW and Telegram alone selects the universal fallback. */
 console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لینک» fix)…');
 {
   const { default: runWcDeepLink } = await import('./wc-deeplink-probe.mjs');
@@ -814,11 +810,9 @@ console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لین
 }
 
 /* ------------------------------ 0c-7. pairing-URI hygiene ------------------- */
-/* The «Invalid Url: wc:…&amp;…» report: a pairing URI whose `&`s were
-   HTML-escaped cannot pair at all (measured against the real SDK in a child
-   process), and a BARE `wc:` URI names no wallet app — so it is repaired and
-   completed into the tapped wallet's https link instead of being handed to a
-   WebView that can open no wallet. */
+/* The «Invalid Url: wc:…&amp;…» report: HTML-escaped URI parameters cannot pair.
+   Repair them first, then complete a bare `wc:` URI into the tapped wallet's
+   native hand-off with an explicit HTTPS fallback. */
 console.log('▸ probing pairing-URI hygiene (the «Invalid Url: wc:…&amp;…» report)…');
 {
   const { default: runWcUriHygiene } = await import('./wc-uri-hygiene-probe.mjs');
@@ -829,9 +823,9 @@ console.log('▸ probing pairing-URI hygiene (the «Invalid Url: wc:…&amp;…�
 /* The «invalid deep link» + «the QR does not work» report, measured on the
    bytes we actually hand the phone: the sheet's QR is re-decoded with a
    second library (jsQR) and must come back as the pairing URI byte for byte;
-   every promoted wallet's link must decode back to that same URI at exactly
-   one encoding level; and the wiring must take the URI from the SDK's own
-   display_uri event with no SDK modal in the way. */
+   every promoted wallet's native and fallback links must decode to that same
+   URI at exactly one encoding level; and the wiring must take the URI from the
+   SDK's own display_uri event before connect(). */
 console.log('▸ probing the WalletConnect pairing surface (QR + deep links, end to end)…');
 {
   const { default: runWcPairingSurface } = await import('./wc-pairing-surface-probe.mjs');
