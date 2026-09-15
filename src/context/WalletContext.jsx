@@ -906,6 +906,16 @@ export function WalletProvider({ children }) {
        */
       uninstallWalletBridge = installWalletOpenBridge({
         openWallet: (url, opts) => {
+          /*
+           * A URL that arrived with HTML-escaped `&`s (`&amp;`) is the
+           * «Invalid Url:wc:…» report exactly: a pairing URI that came back
+           * from an HTML surface and can never pair as-is. Recorded as its own
+           * fact, because it says something different from a rewrite — the
+           * damage existed above us, in whatever printed or stored the link.
+           * Plain literal calls only: the trace audit reads event names out of
+           * this source and must be able to see every one.
+           */
+          if (opts?.repaired) wcEvent('deeplink_uri_repaired');
           if (opts?.rewritten) wcEvent('deeplink_rewritten');
           else wcEvent('deeplink_opened');
           /* One settle handler for both outcomes, written as plain literal

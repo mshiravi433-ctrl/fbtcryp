@@ -39,7 +39,7 @@
  * lib/wcDeepLink.js still rewrites whatever URL the SDK ends up opening.
  */
 
-import { withLinkMode } from './wcWallets.js';
+import { rememberTappedWallet, withLinkMode } from './wcWallets.js';
 
 /** The exact wrapper object we installed, so re-applying is a no-op. */
 let installed = null;
@@ -57,6 +57,15 @@ export async function installAppKitLinkModePatch() {
     if (installed && util.onConnectMobile === installed) return true;
     const original = util.onConnectMobile;
     const wrapper = function onConnectMobile(wallet, wcPayUrl) {
+      /*
+       * Record WHICH wallet is being handed a pairing, here, at the only place
+       * the SDK knows it. lib/wcDeepLink.js needs it for one case it cannot
+       * otherwise serve: the SDK opening the pairing URI itself (`wc:…`) — the
+       * «Invalid Url:wc:…» report — where the URI has to be completed into the
+       * tapped wallet's https link, because a WebView can open no wallet at
+       * all. Public entry only; no URI, no account, nothing session-bearing.
+       */
+      rememberTappedWallet(wallet);
       return original.call(util, withLinkMode(wallet), wcPayUrl);
     };
     util.onConnectMobile = wrapper;
