@@ -8,6 +8,13 @@ import android.webkit.WebView;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+/*
+ * `Bridge` is a sibling class of BridgeActivity in com.getcapacitor, not a
+ * nested type, so importing BridgeActivity alone does NOT bring it into scope.
+ * Without this line wireThemeBridge() fails to compile with
+ * "cannot find symbol: class Bridge" and takes the whole APK down.
+ */
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
 /*
