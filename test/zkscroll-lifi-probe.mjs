@@ -192,6 +192,8 @@ export default async function run() {
     t('ZK: our 70 bps cut is inside the signed evidence (95 bps total incl. LI.FI 25)', Number(q?.feeBps) === 95);
     t('ZK: amountOut tracks the production evidence (~2.374 USDC)', q?.amountOut > 2.3 && q?.amountOut < 2.5);
     t('ZK: LI.FI endpoint was actually asked', calls.some((u) => u.includes('/swap/lifi/quote?fromChain=324')));
+    t('ZK: native ETH is sent as the zero-address sentinel, not the ticker ETH',
+      calls.some((u) => u.includes('fromToken=0x0000000000000000000000000000000000000000')));
 
     /* ── 2. Scroll (534352): ETH→USDC with a wallet connected ────────────── */
     calls = installFetchStub({
@@ -235,7 +237,7 @@ export default async function run() {
       slippage: 0.5,
       fromAddress: null
     });
-    t('ZK (no wallet): never claims «no route» for a routing outage', q?.error === 'QUOTE_NETWORK' || q?.error === 'QUOTE_FAILED');
+    t('ZK (no wallet): still quotes via the fee-receiver stand-in — never «no route»', !q?.error && q?.source === 'lifi');
     t('ZK (no wallet): retryable, never NO_ROUTE', q?.error !== 'NO_ROUTE');
 
     /* ── 4. A fee echo paying a stranger must be QUOTE_FAILED, not NO_ROUTE ─ */
@@ -350,6 +352,9 @@ export default async function run() {
         t('SCR (proxy): mis-cased token is normalised before li.quest ever sees it',
           upstreamCall.includes('toToken=0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4') &&
           !upstreamCall.includes('0x06eFdBfF'));
+        t('SCR (proxy): native ticker ETH is rewritten to the zero-address sentinel',
+          upstreamCall.includes('fromToken=0x0000000000000000000000000000000000000000') &&
+          !/fromToken=ETH(&|$)/.test(upstreamCall));
         t('SCR (proxy): the quote passes the server-side fee gate', r.ok === true && r.status === 200);
       } finally {
         globalThis.fetch = realFetch2;

@@ -191,6 +191,8 @@ export function _resetLifiCache() {
 const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 const AMOUNT_RE = /^[0-9]+(\.[0-9]+)?$/;
 const SYMBOL_RE = /^[A-Za-z]{2,12}$/;
+const LIFI_NATIVE = '0x0000000000000000000000000000000000000000';
+const NATIVE_TICKERS = new Set(['ETH', 'MNT', 'MON', 'BNB', 'AVAX', 'POL', 'S', 'BERA']);
 
 /** Chain ids this swap proxy is willing to forward. Same set the EVM swap
  *  screen supports (mirrors EVM_CHAIN_ORDER in src/lib/chains.js). */
@@ -264,11 +266,17 @@ export async function lifiSwapQuote(params = {}) {
     return { ok: false, status: 400, body: { error: 'BAD_TOKEN' } };
   }
 
+  const asLifiToken = async (t) => {
+    if (isAddr(t)) return checksummed(t);
+    if (NATIVE_TICKERS.has(String(t).toUpperCase())) return LIFI_NATIVE;
+    return t;
+  };
+
   const q = new URLSearchParams({
     fromChain: String(fromChain),
     toChain: String(toChain),
-    fromToken: isAddr(fromToken) ? await checksummed(fromToken) : fromToken,
-    toToken: isAddr(toToken) ? await checksummed(toToken) : toToken,
+    fromToken: await asLifiToken(fromToken),
+    toToken: await asLifiToken(toToken),
     fromAmount,
     fromAddress,
     /* The user's own address is always the destination for a swap. */

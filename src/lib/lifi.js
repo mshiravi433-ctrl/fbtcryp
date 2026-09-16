@@ -66,6 +66,16 @@ export const LIFI_INTEGRATOR = 'fbt-swap';
 const isAddr = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
 
 /**
+ * LI.FI's native-coin sentinel. Sending the SYMBOL `ETH` is ambiguous:
+ * zkSync Era and Scroll both gas in ETH, and LI.FI's token lookup has
+ * historically resolved a bare `ETH` against Ethereum mainnet (error 1003
+ * «Could not find token») while the SAME pair quoted with the zero address
+ * returns a real same-chain route. Hood/Mon/Mint work without this because
+ * KyberSwap is their primary — ZK/SCR have no Kyber slug that answers.
+ */
+export const LIFI_NATIVE = '0x0000000000000000000000000000000000000000';
+
+/**
  * ─── THE FEE ECHO GATE ──────────────────────────────────────────────────────
  * Same discipline as KyberSwap's extraFee check and OpenOcean's decode check:
  * the fee that gets enforced on-chain is whatever LI.FI signs into the
@@ -128,11 +138,13 @@ export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integrator
   return { ok: true, code: null, totalFeeWei: lifiFeeWei + shareWei, shareWei };
 }
 
-/** Checksummed address for a token, or the chain's native symbol. */
+/** Checksummed address for a token, or LI.FI's native sentinel. */
 async function lifiTokenRef(token, chainId) {
-  if (token.native) {
-    const sym = EVM_CHAINS[chainId]?.native?.symbol;
-    if (sym) return sym;
+  if (token?.native) return LIFI_NATIVE;
+  /* Wrapped-native spelled as the chain's gas coin with no address. */
+  const nativeSym = EVM_CHAINS[chainId]?.native?.symbol;
+  if (nativeSym && String(token?.symbol || '').toUpperCase() === String(nativeSym).toUpperCase() && !isAddr(token?.address)) {
+    return LIFI_NATIVE;
   }
   if (isAddr(token.address)) {
     try {

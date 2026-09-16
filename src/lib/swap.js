@@ -40,6 +40,8 @@ import { quoteAllSources } from './bestQuote.js';
 
 const loadEthers = () => import('ethers');
 
+const isAddrLike = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
+
 export const DEFAULT_SLIPPAGE = 0.5; // percent
 export const DEFAULT_DEADLINE_MIN = 20;
 
@@ -289,8 +291,15 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   // address for its fee-collection step, so callers pass `fromAddress`.
   const kyberLive = aggregatorSupports(chainId);
   const ooLive = openOceanSupports(chainId);
-  const lifiLive = lifiSupports(chainId) && Boolean(fromAddress);
-  if (aggregatorFeeEnabled(chainId) && (kyberLive || ooLive)) {
+  /* LI.FI is the PRIMARY on Scroll/zkSync/Mantle. It used to require a
+     connected wallet before we even ASKED it — so a disconnected preview
+     (and getPriceImpact, which forgot to pass fromAddress) skipped the only
+     live router on those chains and the screen answered NO_ROUTE. Quote
+     with the fee-receiver as a stand-in when the user has not connected;
+     execution still needs the real wallet (executeLifiSwap signs from it). */
+  const lifiQuoteAddress = isAddrLike(fromAddress) ? fromAddress : feeRecipientFor(chainId);
+  const lifiLive = lifiSupports(chainId) && Boolean(lifiQuoteAddress);
+  if (aggregatorFeeEnabled(chainId) && (kyberLive || ooLive || lifiLive)) {
     try {
       const feeReceiver = feeRecipientFor(chainId);
       const common = {
@@ -347,7 +356,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
          server-side (see lib/lifi.js). Runs concurrently with everything
          else, so it can only ever make quoting more reliable, not slower. */
       if (lifiLive) {
-        sources.push({ id: 'lifi', quote: () => getLifiQuote({ ...common, fromAddress }) });
+        sources.push({ id: 'lifi', quote: () => getLifiQuote({ ...common, fromAddress: lifiQuoteAddress }) });
       }
 
       const { best, checked, beatenBy, failures, answered, trace } = await quoteAllSources(sources);
@@ -664,7 +673,8 @@ export async function getPriceImpact({ provider, chainId, fromToken, toToken, am
       fromToken,
       toToken,
       amountIn: Math.max(Number(amountIn) / 1000, 10 ** -fromToken.decimals),
-      slippage: 0
+      slippage: 0,
+      fromAddress: quote?.lifi?.transactionRequest?.from || null
     });
     if (!probe?.rate || !quote?.rate) return null;
     const impact = ((probe.rate - quote.rate) / probe.rate) * 100;
