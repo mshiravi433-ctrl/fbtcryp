@@ -139,7 +139,18 @@ async function lifiTokenRef(token, chainId) {
       const { getAddress } = await loadEthers();
       return getAddress(token.address);
     } catch {
-      return token.address;
+      /*
+       * Invalid EIP-55 mix (a display string that is neither lowercase nor
+       * canonically checksummed — live-probed 2026-09-15 against LI.FI:
+       * `0x06eFdBfF…F663a4` → 1003 «Could not find token», the lowercase and
+       * the canonical forms of the SAME address → real quotes). Forwarding
+       * the raw string hands LI.FI an address it refuses to resolve and the
+       * screen still answers «مسیری بین این دو توکن وجود ندارد» — for a
+       * token that routes perfectly. LI.FI accepts the all-lowercase form
+       * and normalises it, so that is the honest fallback: a case the
+       * upstream can read rather than one it cannot.
+       */
+      return token.address.toLowerCase();
     }
   }
   return token.address ?? token.symbol;

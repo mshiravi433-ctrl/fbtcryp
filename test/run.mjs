@@ -1816,6 +1816,20 @@ console.log('\n▸ timing the multi-aggregator quote race…');
 }
 
 /*
+ * zkSync Era (324) + Scroll (534352) — «هیچ توکنی از این دو شبکه کار نمیده».
+ * Replays the 2026-09-15 PRODUCTION evidence (LI.FI quotes with our 70 bps
+ * fee echo; Kyber 404; OpenOcean Cloudflare-blocked) through the real
+ * getQuote/fee-gate/classifier path, so a regression that puts «مسیری بین
+ * این دو توکن وجود ندارد» back on those two chains fails CI rather than
+ * reaching the user again.
+ */
+console.log('\n▸ proving zkSync + Scroll swap quotes via LI.FI…');
+{
+  const { default: runZkScr } = await import('./zkscroll-lifi-probe.mjs');
+  report('zkSync/Scroll LI.FI quotes', await runZkScr());
+}
+
+/*
  * The wallet panel. Its geometry broke twice from class-cascade conflicts, so
  * the structure is now asserted rather than assumed.
  */

@@ -62,8 +62,16 @@
  * redirectors could open the app after dropping `uri=wc:…`, so users saw the
  * wallet home screen with no proposal. The web now uses native schemes and the
  * APK uses a package-scoped ACTION_VIEW bridge with the raw pairing URI.
+ *
+ * v10 -> v11: the zkSync Era + Scroll swap-fix deploy («هیچ توکنی از این دو
+ * شبکه کار نمیده» — LI.FI quoting hardened: fee-gate rejects now classify
+ * honestly instead of «مسیری بین این دو توکن وجود ندارد», and mis-cased
+ * token addresses are normalised before li.quest ever sees them). An install
+ * still holding the v10 shell names the OLD hashed chunk, i.e. the code that
+ * kept answering «no route» on both chains; renaming the cache evicts it on
+ * the site and on an in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v10';
+const SHELL = 'fbt-shell-v11';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
