@@ -565,7 +565,11 @@
       "weight": "وزن در پورتفولیو",
       "contract": "مشاهدهٔ قرارداد",
       "noChart": "دادهٔ نمودار نیست"
-    }
+    },
+    "healthOriginBlocked": "آدرس فعلی {{origin}} در فهرست دامنه‌های مجاز Reown نیست — کیف پول درخواست را به دلیل origin رد می‌کند. در داشبورد Allowed Domains باید https://fbtswap.ir و https://localhost باشد.",
+    "healthOrphanHint": "حافظهٔ اتصال قدیمی بدون نشست روی این دستگاه باقی مانده (کلیدهای AppKit بدون wc@2 session). این می‌تواند دکمهٔ اتصال بعدی را منحرف کند. پاک‌سازی بی‌خطر است.",
+    "healthOrphanClear": "پاک‌سازی کلیدهای قدیمی",
+    "healthOrphanCleared": "{{count}} کلید پاک شد — حالا دوباره متصل شو."
   },
   "toast": {
     "insufficientBalance": "موجودی کافی نیست",

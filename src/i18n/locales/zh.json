@@ -139,7 +139,11 @@
     "wcExpired": "钱包批准前连接请求已过期。请重新打开钱包列表再试一次。",
     "resetDesc": "把虚拟余额、持仓、计划和历史记录全部恢复到初始状态。",
     "noWcProject": "在 .env 中设置 VITE_WALLETCONNECT_PROJECT_ID 以启用 WalletConnect。可在 cloud.reown.com 免费获取。",
-    "showAllNetworks": "显示所有网络"
+    "showAllNetworks": "显示所有网络",
+    "healthOriginBlocked": "Current origin {{origin}} is not in the Reown Allowed Domains — the wallet refuses the request by origin. Allowed Domains must include https://fbtswap.ir and https://localhost.",
+    "healthOrphanHint": "Stale connection storage remains on this device (AppKit keys without a wc@2 session). It can steer the next Connect into a dead pairing. Clearing it is safe.",
+    "healthOrphanClear": "Clear stale keys",
+    "healthOrphanCleared": "Cleared {{count}} keys — try connecting again."
   },
   "settings": {
     "title": "设置",

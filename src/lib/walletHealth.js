@@ -202,10 +202,34 @@ export {
 } from './wcRelayProbe.js';
 
 
+/**
+ * Is the current origin allowed by the dashboard's allowedOrigins list?
+ * Mirrors the SDK's own check: empty allows all, exact origin or host match.
+ */
+export function isOriginAllowed(currentOrigin, list) {
+  if (!Array.isArray(list)) return null;
+  if (list.length === 0) return true;
+  const o = String(currentOrigin || '').trim();
+  if (!o) return null;
+  let host = '';
+  try { host = new URL(o).host; } catch { host = o; }
+  const norm = (v) => String(v || '').trim();
+  return list.some((entry) => {
+    const e = norm(entry);
+    if (!e) return false;
+    if (e === o) return true;
+    if (e === host) return true;
+    try { if (new URL(e).host === host) return true; } catch {}
+    if (!e.includes('://') && e === host.replace(/^www\./, '')) return true;
+    if (!e.includes('://') && host.endsWith(`.${e}`)) return true;
+    return false;
+  });
+}
+
 /** Storage facts as booleans and counts — never values. */
 export function storageFacts(storage) {
   const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
-  const facts = { sdkLoginMarker: false, ourMarker: false, wcSessionKeys: 0, appkitConnectionKeys: 0 };
+  const facts = { sdkLoginMarker: false, ourMarker: false, wcSessionKeys: 0, appkitConnectionKeys: 0, orphanKeys: false };
   if (!target) return facts;
   try {
     facts.sdkLoginMarker = String(target.getItem(SDK_LOGIN_KEY) || '') === 'true';
@@ -230,6 +254,7 @@ export function storageFacts(storage) {
         }
       }
     }
+    facts.orphanKeys = facts.appkitConnectionKeys > 0 && facts.wcSessionKeys === 0;
   } catch { /* storage unavailable: the false/0 defaults are the honest answer */ }
   return facts;
 }
@@ -292,6 +317,26 @@ export async function collectWalletHealth({
   ]);
   const relayHosts = relay.hosts;
   const list = Array.isArray(origins?.body?.allowedOrigins) ? origins.body.allowedOrigins : null;
+  const originAllowed = (() => {
+    if (!Array.isArray(list)) return null;
+    if (list.length === 0) return true;
+    const o = String(currentOrigin || '').trim();
+    if (!o) return null;
+    let host = '';
+    try { host = new URL(o).host; } catch { host = o; }
+    const norm = (v) => String(v || '').trim();
+    return list.some((entry) => {
+      const e = norm(entry);
+      if (!e) return false;
+      if (e === o) return true;
+      if (e === host) return true;
+      try { if (new URL(e).host === host) return true; } catch {}
+      // bare domain without scheme
+      if (!e.includes('://') && e === host.replace(/^www\./, '')) return true;
+      if (!e.includes('://') && host.endsWith(`.${e}`)) return true;
+      return false;
+    });
+  })();
   const verdict = { verdict: relay.verdict, openUrls: relay.openUrls, httpsUrls: relay.httpsUrls };
   const reachable = relayHosts.find((host) => host.socket?.ok);
   return {
@@ -312,7 +357,9 @@ export async function collectWalletHealth({
       list,
       /* Measured SDK rule: an EMPTY list allows every origin. Reported so an
          empty list is never mistaken for a block. */
-      emptyMeansAllowAll: list !== null && list.length === 0
+      emptyMeansAllowAll: list !== null && list.length === 0,
+      originAllowed,
+      currentOrigin
     },
     /* `relay` stays the single-answer field the panel's first row reads: the
        first host that opened, or the default host's failure when none did —

@@ -139,7 +139,11 @@
     "wcExpired": "Bağlantı isteği cüzdan onaylamadan önce süresi doldu. Cüzdan listesini açıp yeniden deneyin.",
     "resetDesc": "Sanal bakiyenizi, pozisyonlarınızı, planlarınızı ve geçmişinizi başlangıç durumuna döndürür.",
     "noWcProject": "WalletConnect için .env dosyanızda VITE_WALLETCONNECT_PROJECT_ID ayarlayın. cloud.reown.com adresinde ücretsiz.",
-    "showAllNetworks": "Tüm ağları göster"
+    "showAllNetworks": "Tüm ağları göster",
+    "healthOriginBlocked": "Current origin {{origin}} is not in the Reown Allowed Domains — the wallet refuses the request by origin. Allowed Domains must include https://fbtswap.ir and https://localhost.",
+    "healthOrphanHint": "Stale connection storage remains on this device (AppKit keys without a wc@2 session). It can steer the next Connect into a dead pairing. Clearing it is safe.",
+    "healthOrphanClear": "Clear stale keys",
+    "healthOrphanCleared": "Cleared {{count}} keys — try connecting again."
   },
   "settings": {
     "title": "Ayarlar",

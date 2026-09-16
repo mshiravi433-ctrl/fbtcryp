@@ -139,7 +139,11 @@
     "wcExpired": "La demande de connexion a expiré avant l'approbation du portefeuille. Rouvrez la liste des portefeuilles et réessayez.",
     "resetDesc": "Remet votre solde virtuel, vos positions, vos plans et votre historique à l'état initial.",
     "noWcProject": "Définissez VITE_WALLETCONNECT_PROJECT_ID dans votre .env pour activer WalletConnect. Gratuit sur cloud.reown.com.",
-    "showAllNetworks": "Afficher tous les réseaux"
+    "showAllNetworks": "Afficher tous les réseaux",
+    "healthOriginBlocked": "Current origin {{origin}} is not in the Reown Allowed Domains — the wallet refuses the request by origin. Allowed Domains must include https://fbtswap.ir and https://localhost.",
+    "healthOrphanHint": "Stale connection storage remains on this device (AppKit keys without a wc@2 session). It can steer the next Connect into a dead pairing. Clearing it is safe.",
+    "healthOrphanClear": "Clear stale keys",
+    "healthOrphanCleared": "Cleared {{count}} keys — try connecting again."
   },
   "settings": {
     "title": "Réglages",
