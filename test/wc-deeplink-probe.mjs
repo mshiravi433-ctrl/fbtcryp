@@ -87,6 +87,23 @@ export default async function run() {
       && nativeDecision.pairingUri === URI
       && nativeDecision.wallet?.androidPackage === 'com.wallet.crypto.trustapp');
 
+  /* Telegram-Android double-encodes the payload (the client decodes once in
+     transit). A one-pass extractor read that as "no pairing" and the tap
+     died silently; the multi-pass extractor must still find the URI, and the
+     decision must rebuild the canonical single-encoded links from it. */
+  const TRUST_NATIVE_DOUBLE = `trust://wc?uri=${encodeURIComponent(ENCODED)}`;
+  t('a Telegram-Android double-encoded payload still yields the raw pairing URI',
+    pairingUriFromWalletLink(TRUST_NATIVE_DOUBLE) === URI
+      && pairingUriFromWalletLink(
+        `https://link.trustwallet.com/wc?uri=${encodeURIComponent(ENCODED)}`
+      ) === URI);
+  const doubleDecision = decideWalletOpen(TRUST_NATIVE_DOUBLE);
+  t('a double-encoded hand-off is rebuilt single-encoded, native-first, with fallbacks intact',
+    doubleDecision.action === 'open'
+      && doubleDecision.url === TRUST_NATIVE
+      && doubleDecision.fallbackUrl === TRUST_HTTPS
+      && doubleDecision.pairingUri === URI);
+
   const httpsDecision = decideWalletOpen(TRUST_HTTPS);
   t('a known universal hand-off is normalized BACK to the native route',
     httpsDecision.action === 'open'
@@ -228,13 +245,77 @@ export default async function run() {
         && walletHandOffChannel({ Telegram: { WebApp: { openLink() {} } } }) === 'telegram'
         && walletHandOffChannel({ Capacitor: { isNativePlatform: () => true } }) === 'android-intent');
 
+    /* Trust's universal page no longer auto-redirects (and its own trust://
+       anchor is dead inside Telegram's WebView), so the PRIMARY Telegram
+       delivery is a user-gesture window.open() of the wallet's native
+       scheme — exactly what the WalletConnect SDK does there — and the
+       HTTPS openLink is only the last-resort delivery. */
     const tgOpened = [];
-    await openWalletLink(TRUST_NATIVE, {
+    const tgNoWindowOk = await openWalletLink(TRUST_NATIVE, {
       fallbackUrl: TRUST_HTTPS,
       win: { Telegram: { WebApp: { openLink: (u) => tgOpened.push(u) } } }
     });
-    t('Telegram alone receives the HTTPS universal fallback',
-      tgOpened.length === 1 && tgOpened[0] === TRUST_HTTPS);
+    t('a Telegram client with no window.open keeps HTTPS openLink as its last delivery',
+      tgNoWindowOk === true && tgOpened.length === 1 && tgOpened[0] === TRUST_HTTPS);
+
+    const tgIosArgs = [];
+    const tgIosLink = [];
+    const tgWallet = { native: 'trust://', androidPackage: 'com.wallet.crypto.trustapp' };
+    const tgIosOk = await openWalletLink(TRUST_NATIVE, {
+      fallbackUrl: TRUST_HTTPS,
+      pairingUri: URI,
+      walletPackage: tgWallet.androidPackage,
+      wallet: tgWallet,
+      win: {
+        open: (...args) => { tgIosArgs.push(args); return {}; },
+        navigator: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' },
+        Telegram: { WebApp: { openLink: (u) => tgIosLink.push(u) } }
+      }
+    });
+    t('Telegram iOS opens the single-encoded native scheme in a new context',
+      tgIosOk === true
+        && tgIosArgs.length === 1
+        && tgIosArgs[0][0] === TRUST_NATIVE
+        && tgIosArgs[0][1] === '_blank'
+        && tgIosLink.length === 0);
+
+    /* The SDK's own measured rule, mirrored byte for byte: Telegram-Android
+       decodes the URL once while handing it to the OS, so the pairing URI
+       must be sent double-encoded or the wallet sees `&`-fragments. */
+    const tgAndroidArgs = [];
+    await openWalletLink(TRUST_NATIVE, {
+      fallbackUrl: TRUST_HTTPS,
+      pairingUri: URI,
+      walletPackage: tgWallet.androidPackage,
+      wallet: tgWallet,
+      win: {
+        open: (...args) => { tgAndroidArgs.push(args); return {}; },
+        navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' },
+        Telegram: { WebApp: { openLink() {} } }
+      }
+    });
+    t('Telegram-Android receives the pairing URI double-encoded (it decodes once in transit)',
+      tgAndroidArgs.length === 1
+        && tgAndroidArgs[0][0] === TRUST_NATIVE_DOUBLE
+        && pairingUriFromWalletLink(tgAndroidArgs[0][0]) === URI);
+
+    const tgFallArgs = [];
+    const tgFallLink = [];
+    const tgFallOk = await openWalletLink(TRUST_NATIVE, {
+      fallbackUrl: TRUST_HTTPS,
+      pairingUri: URI,
+      walletPackage: tgWallet.androidPackage,
+      wallet: tgWallet,
+      win: {
+        open: (...args) => { tgFallArgs.push(args); return null; },
+        Telegram: { WebApp: { openLink: (u) => tgFallLink.push(u) } }
+      }
+    });
+    t('a blocked popup inside Telegram still lands on the HTTPS page',
+      tgFallOk === true
+        && tgFallArgs.length === 1
+        && tgFallLink.length === 1
+        && tgFallLink[0] === TRUST_HTTPS);
 
     const intents = [];
     const androidOk = await openWalletLink(TRUST_NATIVE, {

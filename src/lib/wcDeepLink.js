@@ -73,20 +73,41 @@ export function repairPairingInUrl(raw) {
   return `${text.slice(0, m.index + m[1].length)}${encodeURIComponent(repaired)}`;
 }
 
-/** Decode and validate the `uri=` payload carried by a wallet link. */
+/**
+ * Decode and validate the `uri=` payload carried by a wallet link.
+ *
+ * ONE DECODE IS NOT ENOUGH ANYWHERE TELEGRAM-ANDROID TOUCHES THE URL.
+ * WalletConnect's own SDK double-encodes the payload there
+ * (`isTelegram() && isAndroid()` → `encodeURIComponent(wcUri)` before the
+ * usual `encodeURIComponent`), because Telegram's client decodes the deep
+ * link once while handing it to the OS. A single decode here therefore
+ * returns `wc%3A…` — still encoded, failing `looksLikePairingUri` — and the
+ * caller used to conclude the link carried no pairing at all: a Trust tap
+ * inside Telegram-Android fell through to the unknown-wallet branch and
+ * opened NOTHING (no wallet, no fallback). Decode in passes, validating
+ * after each, up to a small cap that still gives up on genuinely bad input.
+ */
 export function pairingUriFromWalletLink(raw) {
   const text = String(raw || '').trim();
   if (looksLikePairingUri(text)) return repairPairingUri(text);
   const match = /(?:^|[?&])uri=([\s\S]*)$/i.exec(text);
   if (!match) return '';
   let decoded = match[1];
-  try {
-    decoded = decodeURIComponent(decoded);
-  } catch {
-    /* A few wallets accept an unencoded URI. Validate it below, never guess. */
+  for (let pass = 0; pass < 4; pass += 1) {
+    decoded = repairPairingUri(decoded);
+    if (looksLikePairingUri(decoded)) return decoded;
+    let next;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      /* Invalid percent encoding: a few wallets accept an unencoded URI.
+         Validate what we hold, never guess. */
+      return looksLikePairingUri(decoded) ? decoded : '';
+    }
+    if (next === decoded) return '';
+    decoded = next;
   }
-  decoded = repairPairingUri(decoded);
-  return looksLikePairingUri(decoded) ? decoded : '';
+  return '';
 }
 
 /**

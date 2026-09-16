@@ -12,7 +12,9 @@ QR کار می‌کرد؛ بنابراین Project ID، ساخت pairing URI، �
 
 - وب موبایل: deep link بومی کیف پول (`trust://wc?uri=…`، `uniswap://wc?uri=…`، `metamask://wc?uri=…`).
 - APK اندروید: `ACTION_VIEW` با pairing URI خام `wc:…` و package صریح کیف پول؛ اگر کیف پول URI خام را register نکرده باشد، MainActivity همان‌جا لینک scheme بومی را با `Uri.Builder` می‌سازد. هیچ‌کدام از این دو مسیر از redirector HTTPS عبور نمی‌کنند.
-- Telegram Mini App: universal HTTPS به‌عنوان fallback، چون API تلگرام فقط `http(s)` را می‌پذیرد.
+- Telegram Mini App: طرح بومی کیف پول با `window.open(…, '_blank')` و gesture کاربر — همان مکانیزمی که SDK خودِ WalletConnect داخل تلگرام به کلاینت تحویل می‌دهد تا OS اپ را launch کند. در تلگرام-اندروید pairing URI double-encoded فرستاده می‌شود چون کلاینت URL را یک‌بار در مسیر decode می‌کند. `Telegram.WebApp.openLink(https)` فقط fallback آخر است.
+
+> ⚠️ **به‌روزرسانی ۲۰۲۶-۰۹-۱۵ (مدخل ۶ CHANGELOG):** `link.trustwallet.com/wc?uri=…` دیگر redirect خودکار به اپ ندارد؛ صفحهٔ فعلی یک landing دستی است («Open in Trust Wallet» با anchor نوع `trust://`). آن anchor داخل WebView تلگرام intent ایجاد نمی‌کند، پس universal link در تلگرام دیگر بن‌بست است. به همین دلیل تحویل اصلی تلگرام به scheme بومی برگشت و HTTPS آخرین fallback ماند.
 - صفحهٔ dApp همیشه زنده می‌ماند (`_blank`، نه `_self`) تا socket رله و Promise اتصال قبل از پاسخ کیف پول نابود نشوند.
 - Uniswap Wallet با scheme رسمی `uniswap://` و package رسمی `com.uniswap.mobile` به فهرست اضافه شد.
 - `@walletconnect/ethereum-provider` از `2.23.10` به `2.25.0` ارتقا یافت.
@@ -98,7 +100,7 @@ QR کار می‌کرد؛ بنابراین Project ID، ساخت pairing URI، �
 5. APK تازه را نصب کنید؛ APK قدیمی bridge اندروید را ندارد.
 6. بازگشت از کیف پول باید صفحهٔ dApp را زنده و در حال انتظار نگه داشته باشد.
 7. QR را نیز دوباره تست کنید تا regression در مسیر پایه رد شود.
-8. در Telegram، اگر universal link فقط اپ را باز کرد و proposal نرسید، گزینهٔ «Open in browser» را استفاده کنید؛ محدودیت scheme در WebView تلگرام خارج از کنترل dApp است.
+8. در Telegram، لمس کیف پول باید همان لحظه اپ را launch کند (تحویل با `window.open` روی scheme بومی). اگر به‌جای آن صفحهٔ `link.trustwallet.com` باز شد، یعنی کلاینت تلگرام window.open را پذیرفته و به fallback رسیده‌ایم — در آن صورت گزینهٔ «Open in browser» یا مسیر «باز کردن سایت داخل مرورگر خودِ کیف پول» راه قطعی است.
 
 ## نتیجه
 

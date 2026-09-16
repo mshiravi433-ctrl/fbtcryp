@@ -354,6 +354,8 @@
     "connectSubtitle": "You keep your keys. This app never sees them.",
     "wc": "WalletConnect",
     "wcDesc": "MetaMask, Trust, Rainbow… via QR or deep link",
+    "emailSocial": "Email & Social",
+    "emailSocialDesc": "Sign in with email, Google or Apple — a secure wallet is created right here, no app to install",
     "pairTitle": "Connect your wallet",
     "pairSubtitle": "Choose your wallet app, or scan the code from another device.",
     "pairPreparing": "Preparing the connection request…",
@@ -415,7 +417,8 @@
     "mode": {
       "injected": "Browser",
       "wc": "WalletConnect",
-      "local": "In-app"
+      "local": "In-app",
+      "email": "Email/Social"
     },
     "tab": {
       "overview": "Overview",

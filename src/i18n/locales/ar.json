@@ -320,6 +320,8 @@
     "connectSubtitle": "You keep your keys. This app never sees them.",
     "wc": "WalletConnect",
     "wcDesc": "MetaMask, Trust, Rainbow… via QR or deep link",
+    "emailSocial": "البريد والدخول الاجتماعي",
+    "emailSocialDesc": "الدخول بالبريد أو Google أو Apple — تُنشأ محفظة آمنة هنا فورًا، دون تثبيت تطبيق",
     "pairTitle": "اربط محفظتك",
     "pairSubtitle": "اختر تطبيق المحفظة أو امسح الرمز بجهاز آخر.",
     "pairPreparing": "جارٍ تجهيز طلب الاتصال…",
@@ -381,7 +383,8 @@
     "mode": {
       "injected": "المتصفح",
       "wc": "WalletConnect",
-      "local": "داخلي"
+      "local": "داخلي",
+      "email": "بريد/اجتماعي"
     },
     "tab": {
       "overview": "Overview",

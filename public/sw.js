@@ -63,15 +63,27 @@
  * wallet home screen with no proposal. The web now uses native schemes and the
  * APK uses a package-scoped ACTION_VIEW bridge with the raw pairing URI.
  *
- * v10 -> v11: the zkSync Era + Scroll swap-fix deploy («هیچ توکنی از این دو
- * شبکه کار نمیده» — LI.FI quoting hardened: fee-gate rejects now classify
- * honestly instead of «مسیری بین این دو توکن وجود ندارد», and mis-cased
- * token addresses are normalised before li.quest ever sees them). An install
- * still holding the v10 shell names the OLD hashed chunk, i.e. the code that
- * kept answering «no route» on both chains; renaming the cache evicts it on
- * the site and on an in-place APK update alike.
+ * v10 -> v11: link.trustwallet.com stopped auto-redirecting into the app
+ * (it is now a manual download page), so inside Telegram the wallet's own
+ * scheme is delivered through a user-gesture window.open() — the delivery
+ * Telegram clients actually hand to the OS — with the pairing URI
+ * double-encoded on Android, and HTTPS openLink kept only as the last
+ * fallback. (Shipped together with the email/social login bundle change.)
+ *
+ * v10 -> v11 (parallel branch): the zkSync Era + Scroll swap-fix deploy
+ * («هیچ توکنی از این دو شبکه کار نمیده» — LI.FI quoting hardened: fee-gate
+ * rejects now classify honestly instead of «مسیری بین این دو توکن وجود
+ * ندارد», and mis-cased token addresses are normalised before li.quest ever
+ * sees them). An install still holding the v10 shell names the OLD hashed
+ * chunk, i.e. the code that kept answering «no route» on both chains; the
+ * cache rename evicts it on the site and on an in-place APK update alike.
+ *
+ * v11 -> v12 -> v13: the two deploys above moved the shell name forward in
+ * PARALLEL (v11 LI.FI on main, v12 wallet/email on the other branch). The
+ * merged tree carries both fixes at once, so it takes a fresh name — v13 —
+ * evicting installs pinned to v10, v11 or v12 alike.
  */
-const SHELL = 'fbt-shell-v11';
+const SHELL = 'fbt-shell-v13';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

@@ -1,3 +1,73 @@
+# ۲۰۲۶-۰۹-۱۶ — اتصال با ایمیل و سوشال: سومین مسیرِ کیف پول، روی خودِ AppKit
+
+> درخواست: «ایمیل و ورود با سوشیال هم اضافه کن؛ ببین AppKit اپگرید و آخرین
+> ورژنش هست؛ وبسایت و اپ هر دو درست باشند و کدهای قبلی تداخل نداشته باشد.»
+
+- **چیزی که اضافه شد:** دکمهٔ «ایمیل و ورود با سوشال» در شیت اتصال، بین ردیف
+  WalletConnect و ردیف‌های کیفِ تزریقی. همان مدالِ Reown AppKit
+  (`@reown/appkit@1.8.19` با `@reown/appkit-adapter-ethers` — همان نسخه‌ای که
+  سطح جفت‌شدنی به آن سنجیده‌شده pinned است و **یک کپیِ واحد** در کل درخت) یک
+  کیف پول غیرحضانتیِ embedded می‌سازد؛ بدون نصب هیچ اپ، روی وب و روی APK یکسان
+  (فریم احراز داخل خود WebView کار می‌کند و به شکاف سیستم‌عامل وابسته نیست).
+- **قراردادِ ایزوله‌بودن، در کد و در تست:** نمونهٔ دوم AppKit در
+  `src/lib/emailSocialWallet.js` با `enableWalletConnect:false` و
+  `enableInjected:false` ساخته می‌شود و هرگز `manualWCControl` پاس نمی‌دهد —
+  مالک اتصال‌های این نمونه فقط AppKit است. چون `<w3m-modal>` بین دو نمونه
+  **مشترک** است، سطح جفت‌شدنی خط‌به‌باز features مشترکِ `OptionsController` را
+  پیش از هر open مسطح می‌کند (`email:false`) و سطح ایمیل آن را پیش از open
+  خودش برمی‌گرداند (`reassertEmailFeatures`).
+- **مرزبندی با جریان‌های قبلی دست‌نخورده‌اند:** اتصال تزریقی/WalletConnect هر
+  زمان برتری بگیرند، مارکر بوتِ ایمیل (`fbt_email_social_connected`) پاک
+  می‌شود؛ cold-start بعدِ loadVault ابتدا مارکر ایمیل را می‌خواند بعد وجه
+  WalletConnect را؛ خروجِ صریح کاربر هر دو را هم‌زمان logout می‌کند. شیت
+  هم‌اکنون زیر **هر دو** فلگِ مدال (`wcModalActive`, `emailModalActive`)
+  کنار می‌رود: یک‌بار هم نبودنِ backdropها همان قانونِ قبلیِ «grey box» است.
+- **PWA:** shell cache از v11 به v12 رفت تا باندلِ دارایِ مسیرِ ایمیل روی
+  نصب‌های موجود نماند.
+- **محقق:** `test/email-social-probe.mjs` (۲۶ ادعا روی خودِ بستهٔ واقعی:
+  گزینه‌ها، شبکه‌ها از registry زنجیره‌ها، آتش‌بسِ features، مارکرِ بوت روی
+  Storage استتار، سیم‌کشیِ کانتکست و شیت، کلیدهای سه locale، pin پکیج‌ها).
+  به‌دلیلِ نمونهٔ واقعی AppKit زنده‌مانده‌ای که jsdom globals را نیاز دارد،
+  این سوئیت **آخرین** بلاکِ `test/run.mjs` است (دلیل داخل خود فایل).
+- **مستندِ عملیات:** `docs/EMAIL-SOCIAL-LOGIN-FA.md` — چک‌لیستِ Dashboard
+  (روشن‌کردن Email & Social، Allowed Origins از جملهٔ `https://localhost` برای
+  APK، و این‌که رمزهای Dashboard فقط سمتِ سرور می‌مانند).
+
+# ۲۰۲۶-۰۹-۱۵ (۶) — صفحهٔ «Continue in Trust Wallet» دیگر خودکار باز نمی‌شود: تحویل تلگرام به scheme بومی برگشت
+
+> گزارش: «در تراست والت — Continue in Trust Wallet / Open and continue in the
+> wallet — دیگه لینک را خودکار باز نمیکند و وارد صفحه والت نمیشود»
+
+- **ریشه، خارجی و اندازه‌گیری‌شده:** `link.trustwallet.com/wc?uri=…` دیگر redirect
+  خودکار به اپ ندارد. صفحهٔ فعلی یک صفحهٔ دانلود ایستاست («Have the app
+  already? Open in Trust Wallet») که تنها راهِ ادامهٔ آن لمس دستیِ یک anchor
+  با آدرس `trust://…` است. آن anchor داخل WebView تلگرام هیچ intentی را آتش
+  نمی‌زند، پس لینک universalای که برای تلگرام می‌فرستادیم حالا سندی است که
+  کاربر نمی‌تواند از آن خارج شود — عین جملهٔ گزارش.
+- **چیزی که کلاینت تلگرام قبول دارد** `window.open()` با طرح بومی کیف پول و
+  gesture کاربر است؛ 클라이نت آن را به‌عنوان launch اپ خارجی به OS می‌دهد — همان
+  مکانیزمی که SDK خودِ WalletConnect داخل تلگرام استفاده می‌کند
+  (`openHref(…, '_blank')`). پس در `openWalletLink()` کانال `telegram` اول
+  scheme بومی را با `_blank` باز می‌کند و `Telegram.WebApp.openLink(https)`
+  فقط fallback آخر است (کلاینت‌های بدون window.open سالم).
+- **قانون دوم خودِ SDK هم mirror شد:** در تلگرام-اندروید کلاینت URL را یک‌بار
+  در مسیر تحویل decode می‌کند، پس pairing URI به‌صورت double-encoded فرستاده
+  می‌شود (`trust://wc?uri=wc%253A…`)؛ iOS تک-encoded می‌ماند.
+- **`pairingUriFromWalletLink()` چندپاس شد:** payload دوبار-encodeشدهٔ
+  تلگرام-اندروید با یک decode هنوز `wc%3A…` است و استخراج شکست می‌خورد — در
+  نتیجه تصمیم به شاخهٔ «کیف‌پول ناشناس بدون fallback» می‌افتاد و در تلگرام
+  **هیچ‌چیز** باز نمی‌شد. حالا تا پیداشدن URI معتبر decode می‌کند (سقف ۴ پاس،
+  ورودی خراب همچنان '' می‌گیرد) و decision همان لینک native تک-encoded کانونی +
+  fallback را بازمی‌سازد.
+- **PWA:** shell cache از v10 به v11 رفت تا باندل تحویل-به-https قدیمی روی
+  نصب‌های موجود نماند.
+- **مسیرهای دیگر دست‌نخورده و سالم:** وب موبایل native-first (`trust://` با
+  `_blank`، gesture از لمس حفظ می‌شود)، APK همان `ACTION_VIEW` با raw `wc:` و
+  package صریح، دسکتاپ همان QR.
+- **تست:** `test/wc-deeplink-probe.mjs` — استخراج double-encoded، بازسازی
+  تک-encoded decision، تحویل iOS تک-encoded، تحویل اندروید double-encoded،
+  fallback هنگام popup مسدود و کلاینتِ بدون window.open.
+
 # ۲۰۲۶-۰۹-۱۵ (۵) — رفع ریشه‌ای handoff موبایل: native-first + Android ACTION_VIEW
 
 > این مدخل نتیجه‌گیری دورهای (۳) و (۴) دربارهٔ «ترجیح universal link در همه‌جا»
