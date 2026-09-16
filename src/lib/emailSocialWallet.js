@@ -60,6 +60,17 @@ import { EVM_CHAINS, DEFAULT_CHAIN } from './chains.js';
  * its presence lazily initialises the embedded-wallet instance. It stores
  * no address, no token, nothing identifiable — AppKit keeps its own auth
  * session under `@appkit-wallet/` and re-derives the account from it.
+ *
+ * ITS LIFETIME IS DELIBERATELY WIDER THAN A PROVEN ACCOUNT. Email OTP and
+ * social OAuth are redirect-shaped on mobile: the browser leaves the site to
+ * verify and comes back as a FRESH document owning none of the listeners the
+ * flow registered. So the marker is claimed when an attempt STARTS — in
+ * WalletContext's connectEmailSocial, before the modal opens — which is what
+ * routes that returning cold start into restoreEmailSocial(). Every path that
+ * ends with nothing to restore hands it back: rollbackEmailSocialMarker()
+ * below, restoreEmailSocial()'s own timeout, and clearEmailSocialSession() on
+ * disconnect or when another wallet mode attaches. A marker that lies for one
+ * boot and self-corrects beats a truth that arrives one page-load too late.
  */
 export const EMAIL_SOCIAL_FLAG_KEY = 'fbt_email_social_connected';
 
@@ -190,6 +201,39 @@ export function setEmailSocialMarker(on, storage) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Hand the boot marker back when a connect attempt ended with nothing to
+ * restore.
+ *
+ * connectEmailSocial() claims the marker up front, because a flow that
+ * survives can be cut off by the redirect before any attach happens in-page —
+ * and the returning document only knows where to look because of that claim.
+ * The cost of claiming early is the obligation to un-claim: an attempt the
+ * user cancelled (or that threw inside attachEmailProvider) must not leave a
+ * returning visitor paying for a restore of a session that does not exist.
+ *
+ * The rollback is HONEST rather than blind, and that distinction is the whole
+ * point of the helper. AppKit's own answer is what decides: if the instance
+ * still reports a connected account, the session is real even though THIS
+ * attempt failed (an ethers chunk that refused to load, a transient RPC
+ * timeout on getNetwork — cases where the next cold start is exactly the
+ * recovery the marker exists for), so the marker stays. Only a definitive
+ * "nothing is connected" clears it. Returns true when it cleared.
+ */
+export function rollbackEmailSocialMarker(modal, storage) {
+  let connected = false;
+  try {
+    connected = Boolean(
+      modal?.getIsConnectedState?.() && modal?.getAddress?.('eip155')
+    );
+  } catch {
+    connected = false; /* an SDK that cannot answer is not an answer */
+  }
+  if (connected) return false;
+  setEmailSocialMarker(false, storage);
+  return true;
 }
 
 /* The one live instance. Module-scoped like the WC provider references in

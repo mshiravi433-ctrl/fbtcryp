@@ -14,11 +14,16 @@
  *   2. The shared-singleton truce, for real: flatten the features the way
  *      the WalletConnect surface does, reassert, and read the restored
  *      state out of OptionsController.
- *   3. Boot marker round-trip on a fake Storage (providers never touch it).
+ *   3. Boot marker round-trip on a fake Storage (providers never touch it),
+ *      plus the claim/rollback half of the redirect fix: a cancel or a failed
+ *      attach hands the marker back, a session AppKit still holds does not.
  *   4. Wiring: WalletConnect surface flattens features before its opens,
- *      connect/disconnect/restore call the right functions, the sheet
- *      withdraws under both modal flags, locale keys exist in all three
- *      languages, and the package pins that keep ONE copy of @reown/*.
+ *      connect/disconnect/restore call the right functions, the marker is
+ *      claimed BEFORE the modal opens (so a returning redirect page restores),
+ *      every self-clearing boundary still exists to undo a claim that led
+ *      nowhere, the sheet withdraws under both modal flags, locale keys exist
+ *      in all three languages, and the package pins that keep ONE copy of
+ *      @reown/*.
  */
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
@@ -32,6 +37,7 @@ import {
   getEmailSocialAppKit,
   hasEmailSocialMarker,
   reassertEmailFeatures,
+  rollbackEmailSocialMarker,
   setEmailSocialMarker
 } from '../src/lib/emailSocialWallet.js';
 
@@ -134,6 +140,32 @@ export default async function run() {
     await clearEmailSocialSession({ storage: fakeStorage });
     t('clearEmailSocialSession forgets the marker even with no live instance',
       hasEmailSocialMarker(fakeStorage) === false);
+
+    /* THE CLAIM/ROLLBACK HALF OF THE REDIRECT FIX: connectEmailSocial() now
+       writes the marker before the modal opens, so an attempt that ends with
+       nothing to restore has to hand it back — and rollbackEmailSocialMarker
+       is honest about what "nothing" means: an instance still holding a
+       session keeps the claim (that is precisely the case the redirect bug
+       produced), while a definitively disconnected one clears it. */
+    const connected = {
+      getIsConnectedState: () => true,
+      getAddress: () => '0x1111111111111111111111111111111111111111'
+    };
+    const disconnected = { getIsConnectedState: () => false, getAddress: () => '' };
+    const answering = (m) => {
+      setEmailSocialMarker(true, fakeStorage);
+      const cleared = rollbackEmailSocialMarker(m, fakeStorage);
+      return cleared === !hasEmailSocialMarker(fakeStorage);
+    };
+    t('rollback keeps a claim AppKit can still honour, and forgets one it cannot',
+      answering(connected) && answering(disconnected));
+    t('a modal that throws while being asked counts as disconnected (never trust a lie)',
+      answering({
+        getIsConnectedState: () => { throw new Error('frame gone'); },
+        getAddress: () => '0x1'
+      }));
+    t('no instance at all still clears the claim (a marker nobody can restore is a loop)',
+      answering(null));
   }
 
   /* ---- 3. real createAppKit + the shared-singleton truce ---------------- */
@@ -183,6 +215,56 @@ export default async function run() {
     t('connectEmailSocial holds the refresh guard and builds the lazy instance with our id',
       /holdRefreshGuard\('email-connect'\)/.test(ctx)
         && /getEmailSocialAppKit\(WC_PROJECT_ID, wcPublicMetadata\(\)\)/.test(ctx));
+
+    /* THE REDIRECT FIX, AS A SOURCE CONTRACT. Emails and OAuth logins leave
+       the site and come back as a new document; only the boot marker crosses
+       that boundary, so the claim has to happen before the flow can be
+       interrupted — and every self-clearing boundary must stay to undo a
+       claim that led nowhere. Both halves are order-sensitive, so they are
+       measured by position, not by counting calls. */
+    const claimStart = ctx.indexOf('const connectEmailSocial = useCallback');
+    const connectBlock = ctx.slice(claimStart, ctx.indexOf('const restoreEmailSocial = useCallback'));
+    const attachBlock = ctx.slice(
+      ctx.indexOf('const attachEmailProvider = useCallback'),
+      claimStart
+    );
+    const restoreBlock = ctx.slice(
+      ctx.indexOf('const restoreEmailSocial = useCallback'),
+      ctx.indexOf('const buildWcInitConfig')
+    );
+    const claim = connectBlock.indexOf('setEmailSocialMarker(true)');
+    t('the marker is claimed inside connectEmailSocial, before the flow can be cut off',
+      claim > -1
+        && claim < connectBlock.indexOf('getEmailSocialAppKit(')
+        && claim < connectBlock.indexOf('modal.open()')
+        && claim < connectBlock.indexOf('setEmailModalActive(true)'));
+    t('the claim comes AFTER the one-wallet teardown (which clears the marker synchronously)',
+      connectBlock.indexOf('disconnectRef.current?.()') < claim);
+    t('a proven account still re-writes the marker, so a retried tap self-heals',
+      /setEmailSocialMarker\(true\)/.test(attachBlock));
+    /* Three dead ends, three rollbacks — and the outer catch is only one of
+       them, so a count here would pass with the wrong one missing. Each call
+       is pinned by what it is attached to. */
+    t('a warm session that refuses to attach hands the claim back',
+      /if \(!attached\) rollbackEmailSocialMarker\(modal\);[\s\S]{0,40}return attached;/.test(connectBlock));
+    t('a cancel settles through the same rollback (settle owns it, both attach outcomes)',
+      /const settle = \(ok\) => \{[\s\S]{0,120}if \(!ok\) rollbackEmailSocialMarker\(modal\);/.test(connectBlock)
+        && /\.then\(settle, \(\) => \{[\s\S]{0,80}settle\(false\);/.test(connectBlock));
+    t('a flow that never even reached an instance rolls back in its catch',
+      /catch\s*\{\s*rollbackEmailSocialMarker\(modal\);/.test(connectBlock));
+    t('the rollback goes through the honest helper, never a blind clear',
+      !/setEmailSocialMarker\(false\)/.test(connectBlock)
+        && (connectBlock.match(/rollbackEmailSocialMarker\(modal\)/g) || []).length === 3);
+    t('a restore with no account in its 8s window still forgets the marker (no dead loop)',
+      /8_000/.test(restoreBlock)
+        && /if \(!acct\) \{[^}]*await clearEmailSocialSession\(\{ disconnect: false \}\)/.test(restoreBlock));
+    t('a restore that THREW keeps the marker, so the next cold start retries',
+      /catch\s*\{\s*return false;/.test(restoreBlock)
+        && !/clearEmailSocialSession|setEmailSocialMarker\(false\)/.test(
+          restoreBlock.slice(restoreBlock.lastIndexOf('} catch'))
+        ));
+    t('an explicit disconnect still washes the early claim (no logout resurrection)',
+      /try \{ void clearEmailSocialSession\(\); \} catch/.test(ctx));
     t('explicit disconnect also logs the email session out',
       /clearEmailSocialSession\(\)/.test(ctx));
     t('cold start prefers the email restore over the WalletConnect restore when marked',

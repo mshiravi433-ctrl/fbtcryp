@@ -82,8 +82,20 @@
  * PARALLEL (v11 LI.FI on main, v12 wallet/email on the other branch). The
  * merged tree carries both fixes at once, so it takes a fresh name — v13 —
  * evicting installs pinned to v10, v11 or v12 alike.
+ *
+ * v13 -> v14: the email/social REDIRECT RETURN fix. The boot marker
+ * (`fbt_email_social_connected`) used to be written only after an in-page
+ * attach, so a mobile login that left the site for the OTP/OAuth step came
+ * back to a fresh document with no reason to look for AppKit's warm session:
+ * the wallet never attached until the user tapped a second time. It is now
+ * claimed before the modal opens, and handed back by rollbackEmailSocialMarker
+ * when the attempt ends with nothing to restore. That behaviour lives in the
+ * shell bundle — and for this feature the shell is what decides whether a
+ * returning page restores — so an install pinned to v13 keeps reproducing the
+ * bug byte for byte. Renaming the cache evicts it on the site and on an
+ * in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v13';
+const SHELL = 'fbt-shell-v14';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
