@@ -256,7 +256,9 @@ export default function run() {
      "grey box flickering like a fluorescent tube". */
   const sheet = readFileSync('src/components/WalletConnectSheet.jsx', 'utf8');
   t('the sheet yields to the SDK modal while it owns the pairing',
-    /<Sheet open=\{open && !wallet\.wcModalActive\}/.test(sheet));
+    /<Sheet open=\{open && !wallet\.wcModalActive/.test(sheet));
+  t('the sheet also yields to the email/social login modal (one modal at a time)',
+    /<Sheet open=\{open && !wallet\.wcModalActive && !wallet\.emailModalActive\}/.test(sheet));
   t('…and is still the surface when there is no modal to yield to',
     /wallet\.wcPairUri/.test(sheet) && /view === 'pair'/.test(sheet));
   t('the sheet returns to the chooser with the named error when pairing fails',
@@ -335,7 +337,9 @@ export default function run() {
   t('restore re-checks for an attached wallet before committing state',
     /if \(addressRef\.current\) \{[\s\S]{0,300}restore_skipped_local/.test(walletSrc));
   t('a local vault on disk wins the cold start (no restore overwrite of the in-app wallet)',
-    /if \(!loadVault\(\)\) \{\s*\/\*[\s\S]{0,400}void restoreWcSession\(\{ announce: false \}\);/.test(walletSrc));
+    /if \(!loadVault\(\)\) \{[\s\S]{0,900}void restoreWcSession\(\{ announce: false \}\)/.test(walletSrc));
+  t('an email/social boot marker takes precedence over the WalletConnect restore on cold start',
+    /if \(!loadVault\(\)\) \{[\s\S]{0,900}if \(hasEmailSocialMarker\(\)\) void restoreEmailSocial\(\);[\s\S]{0,100}else void restoreWcSession\(\{ announce: false \}\)/.test(walletSrc));
 
   return rows;
 }

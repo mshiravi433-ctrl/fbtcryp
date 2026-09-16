@@ -220,6 +220,27 @@ export default function WalletConnectSheet({ open, onClose }) {
   };
 
   /*
+   * EMAIL & SOCIAL — same settle contract as WalletConnect and the injected
+   * rows, deliberately: the sheet stays mounted under AppKit's modal
+   * (withdrawing via wallet.emailModalActive exactly like wcModalActive), a
+   * modal dismissal resolves false and leaves the user back here, and a
+   * connection closes the sheet. While the modal is up `wallet.connecting`
+   * keeps every other row inert, so the two AppKit surfaces can never both
+   * be open (they physically share the one <w3m-modal> element).
+   */
+  const startEmailSocial = () => {
+    if (wallet.connecting) return;
+    setErr(null);
+    wallet
+      .connectEmailSocial()
+      .then((ok) => {
+        if (ok) close();
+        else setView('choose');
+      })
+      .catch(() => setView('choose'));
+  };
+
+  /*
    * Native wallet links are the primary hand-off on the mobile web. Telegram
    * is the one exception: its Mini App API accepts only http(s), so its anchor
    * carries the universal fallback. The packaged Android app intercepts the
@@ -342,21 +363,23 @@ export default function WalletConnectSheet({ open, onClose }) {
 
   return (
     /*
-     * TWO SURFACES, NEVER AT ONCE.
+     * THREE SURFACES, NEVER AT ONCE.
      *
-     * While the SDK's AppKit modal owns the pairing (`wallet.wcModalActive`)
-     * this sheet withdraws: two stacked modals means two blurred backdrops and
-     * two body-scroll locks, which on the Android WebView composited into the
-     * reported "grey box flickering like a fluorescent tube". The moment the
-     * attempt settles the context clears the flag and the sheet is back — with
-     * the choose view naming the outcome, never a silent dead end.
+     * While an AppKit modal owns the screen — the SDK's pairing modal
+     * (`wallet.wcModalActive`) or the email/social login modal
+     * (`wallet.emailModalActive`) — this sheet withdraws: two stacked modals
+     * means two blurred backdrops and two body-scroll locks, which on the
+     * Android WebView composited into the reported "grey box flickering like
+     * a fluorescent tube". The moment the attempt settles the context clears
+     * the flag and the sheet is back — with the choose view naming the
+     * outcome, never a silent dead end.
      *
      * The exit and re-enter animations are handled by AnimatePresence inside
      * Sheet, so a quick close→open cannot produce two panels — React re-keys
      * nothing, and a re-open mid-exit animates the SAME element back instead
      * of mounting a second one.
      */
-    <Sheet open={open && !wallet.wcModalActive} onClose={close}>
+    <Sheet open={open && !wallet.wcModalActive && !wallet.emailModalActive} onClose={close}>
       {/* ------------------------------ choose ------------------------------ */}
       {view === 'choose' && (
         <>
@@ -379,6 +402,25 @@ export default function WalletConnectSheet({ open, onClose }) {
                 <span className="set-row-sub">{t('wallet.wcDesc')}</span>
               </span>
               <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
+            </motion.button>
+
+            {/* Email & Social (Reown AppKit embedded wallet): no wallet app
+                to install, the provisioned wallet attaches through the same
+                EIP-1193 path an injected wallet uses — see
+                lib/emailSocialWallet.js for why it is its own instance. */}
+            <motion.button
+              className="wallet-option"
+              whileTap={{ scale: 0.98 }}
+              onClick={startEmailSocial}
+              disabled={wallet.connecting}
+            >
+              <span className="wallet-badge">
+                <IconKey width={21} height={21} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.emailSocial')}</span>
+                <span className="set-row-sub">{t('wallet.emailSocialDesc')}</span>
+              </span>
             </motion.button>
 
             {/*

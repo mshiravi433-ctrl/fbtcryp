@@ -62,8 +62,15 @@
  * redirectors could open the app after dropping `uri=wc:…`, so users saw the
  * wallet home screen with no proposal. The web now uses native schemes and the
  * APK uses a package-scoped ACTION_VIEW bridge with the raw pairing URI.
+ *
+ * v10 -> v11: link.trustwallet.com stopped auto-redirecting into the app
+ * (it is now a manual download page), so inside Telegram the wallet's own
+ * scheme is delivered through a user-gesture window.open() — the delivery
+ * Telegram clients actually hand to the OS — with the pairing URI
+ * double-encoded on Android, and HTTPS openLink kept only as the last
+ * fallback.
  */
-const SHELL = 'fbt-shell-v10';
+const SHELL = 'fbt-shell-v12';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

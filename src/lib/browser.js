@@ -31,6 +31,8 @@
  * everyone in this space is trying to prevent.
  */
 
+import { walletLink } from './wcWallets.js';
+
 let BrowserPlugin = null;
 let pluginChecked = false;
 
@@ -86,6 +88,23 @@ function isNativeWalletUrl(raw) {
 function isPairingUri(raw) {
   const uri = String(raw || '').trim();
   return /^wc:[^\s@]+@2\?(?=[^#]*\brelay-protocol=)(?=[^#]*\bsymKey=)[^#]+$/i.test(uri);
+}
+
+/**
+ * Does this hand-off view run on Android? Read from the PASSED window first
+ * (callers in tests and in bridges supply their own), then the real global.
+ * Telegram's Android client percent-decodes a deep-link payload once while
+ * handing it to the OS — the SDK's measured reason for double-encoding the
+ * pairing URI there — so this one boolean changes the bytes a wallet
+ * receives.
+ */
+function isAndroidView(view) {
+  const ua = String(
+    view?.navigator?.userAgent
+      ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '')
+      ?? ''
+  );
+  return /Android/i.test(ua);
 }
 
 /**
@@ -152,7 +171,44 @@ export async function openWalletLink(url, {
     return false;
   }
 
+  /* ─── TELEGRAM ───────────────────────────────────────────────────────────
+   *
+   * THE MEASURED CHANGE ABOVE US: `link.trustwallet.com/wc?uri=…` no longer
+   * redirects into the app. It now renders a static download page — "Have
+   * the app already? Open in Trust Wallet" — whose only door is a MANUAL
+   * tap on a `trust://…` anchor. That anchor fires an app intent from a
+   * real browser, but Telegram's WebView never fires one from it, so the
+   * HTTPS universal link we used to send is now a document the user cannot
+   * leave: «دیگه لینک را خودکار باز نمی‌کند و وارد صفحهٔ والت نمی‌شود».
+   *
+   * What a Telegram client DOES honour is a user-gesture `window.open()` of
+   * the wallet's own scheme: the client hands it to the OS as an external
+   * app launch. That is exactly how WalletConnect's own SDK delivers wallet
+   * links inside Telegram (`openHref(…, '_blank')`), including its second
+   * measured rule — on Android the client decodes the URL once in transit,
+   * so the pairing payload must travel DOUBLE-encoded (`trust://wc?uri=
+   * wc%253A…`) or the wallet parses `&`-separated fragments instead of a
+   * `uri=wc:…` value.
+   *
+   * The HTTPS openLink stays, but LAST: it is the only path a client
+   * without a working window.open can take, accepting that it lands on
+   * Trust's manual page rather than inside the wallet.
+   */
   if (channel === 'telegram') {
+    const scheme =
+      native && wallet && isPairingUri(pairingUri)
+        ? walletLink(
+            wallet.native,
+            isAndroidView(view) ? encodeURIComponent(pairingUri) : pairingUri
+          )
+        : native;
+    if (scheme && typeof view.open === 'function') {
+      try {
+        if (view.open(scheme, '_blank', features)) return true;
+      } catch {
+        /* fall through to the HTTPS delivery below */
+      }
+    }
     if (!fallback) return false;
     try {
       view.Telegram.WebApp.openLink(fallback, { try_instant_view: false });

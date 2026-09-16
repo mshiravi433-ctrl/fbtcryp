@@ -24,6 +24,12 @@ import {
 } from '../lib/wcWallets';
 import { installWalletOpenBridge } from '../lib/wcDeepLink';
 import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
+import {
+  clearEmailSocialSession,
+  getEmailSocialAppKit,
+  hasEmailSocialMarker,
+  setEmailSocialMarker
+} from '../lib/emailSocialWallet';
 import { openWalletLink } from '../lib/browser';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 import { setCentralWalletState, snapshotFromAppWallet } from '../lib/intent-ai/os/centralWalletState.js';
@@ -231,6 +237,10 @@ export function WalletProvider({ children }) {
    * on the Android WebView) and comes back the moment the attempt settles.
    */
   const [wcModalActive, setWcModalActive] = useState(false);
+  /* The email/social AppKit modal's open state — the sheet withdraws while
+     EITHER modal owns the screen (two stacked blurred backdrops composited
+     into the «grey box flickering» report on the Android WebView). */
+  const [emailModalActive, setEmailModalActive] = useState(false);
   /* The in-flight provider, so Cancel can tear down the attempt that owns the
      URI (wcRef is only assigned on SUCCESS). */
   const wcPairingRef = useRef(null);
@@ -482,6 +492,159 @@ export function WalletProvider({ children }) {
     }
   }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
+  /* ---------------------- email & social (Reown AppKit) ------------------ */
+
+  /**
+   * Attach AppKit's embedded wallet (email/social) to the SAME state the
+   * injected path fills: the EIP-1193 provider in eip1193Ref, an ethers
+   * signer, mode 'email'. Everything downstream — swap signing, the send
+   * sheet, balances, the Intent AI execution path — already speaks that
+   * language, so no consumer branch-cases on 'email'.
+   */
+  const attachEmailProvider = useCallback(async (modal, acct) => {
+    const eip = modal?.getWalletProvider?.();
+    if (!eip || !acct) return false;
+    const { BrowserProvider } = await loadEthers();
+    const provider = new BrowserProvider(eip, 'any');
+    const signer = await provider.getSigner();
+    const net = await provider.getNetwork();
+    const cid = Number(net.chainId);
+    const honest = EVM_CHAINS[cid] ? cid : DEFAULT_CHAIN;
+    detachInjectedListeners();
+    eip1193Ref.current = eip;
+    signerRef.current = signer;
+    setMode('email');
+    setInjectedInfo(null);
+    setAddress(acct);
+    setChainId(honest);
+    setLocked(false);
+    /* The boot marker is written HERE, only after the account is proven —
+       never at button-tap time. A marker without a working session would
+       make every later cold start pay for a restore that cannot succeed. */
+    setEmailSocialMarker(true);
+    attachInjectedListeners(eip);
+    await refreshBalance(acct, honest);
+    return true;
+  }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
+
+  /**
+   * Email & Social connect. Owns the whole UX contract:
+   *  - one attached wallet at a time (the rule the other three paths follow);
+   *  - an already-warm session attaches without re-opening the modal;
+   *  - closing the modal before any connection is a plain cancel (resolve
+   *    false, no error state — mirroring the injected path's USER_REJECTED
+   *    is wrong here: the user may have opened it just to look).
+   */
+  const connectEmailSocial = useCallback(async () => {
+    if (connecting) return false;
+    setError(null);
+    setConnecting(true);
+    /* Same contract as the other paths: refresh/reload stays frozen while
+       an auth modal can legitimately be mid-flow. */
+    const connectGuard = holdRefreshGuard('email-connect');
+    try {
+      if (eip1193Ref.current || wcRef.current) disconnectRef.current?.();
+
+      const modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
+      if (!modal) throw new Error('APPKIT_UNAVAILABLE');
+      /* The features re-assertion (lib/emailSocialWallet.js) already ran in
+         getEmailSocialAppKit() — the shared-singleton truce documented in
+         applyAppKitWalletLinks() — so the modal description is deterministic
+         here. */
+
+      const warm = modal.getIsConnectedState?.() && modal.getAddress?.('eip155');
+      if (warm) return await attachEmailProvider(modal, warm);
+
+      setEmailModalActive(true);
+      return await new Promise((resolve) => {
+        let settled = false;
+        let unsubAccount = null;
+        let unsubState = null;
+        const settle = (ok) => {
+          if (settled) return;
+          settled = true;
+          setEmailModalActive(false);
+          try { unsubAccount?.(); } catch { /* noop */ }
+          try { unsubState?.(); } catch { /* noop */ }
+          resolve(ok);
+        };
+        try {
+          unsubAccount = modal.subscribeAccount?.((acct) => {
+            if (!acct?.isConnected || !acct?.address) return;
+            void attachEmailProvider(modal, acct.address).then(settle, () => {
+              setError('CONNECT_FAILED');
+              settle(false);
+            });
+          });
+        } catch { /* subscription is best-effort; the close-watch still settles */ }
+        try {
+          unsubState = modal.subscribeState?.((s) => {
+            if (s && s.open === false) settle(false);
+          });
+        } catch { /* then only a connection can settle it */ }
+        try {
+          modal.open();
+        } catch {
+          settle(false);
+        }
+      });
+    } catch {
+      setError('CONNECT_FAILED');
+      return false;
+    } finally {
+      setConnecting(false);
+      connectGuard.release();
+    }
+  }, [connecting, attachEmailProvider]);
+
+  /**
+   * Silent cold-start restore for a returning email/social user — the
+   * counterpart of restoreWcSession, gated on OUR marker instead of a
+   * `wc@2:` session key. Bounded (AppKit rehydrates its auth session
+   * asynchronously through its own frame handshake) and fail-quiet: the
+   * definitive "no account came back" case forgets the marker so dead
+   * restores don't loop, while a thrown error (offline, blocked chunk)
+   * keeps it so the next cold start can retry — restoreWcSession's exact
+   * treatment of a relay hiccup.
+   */
+  const restoreEmailSocial = useCallback(async () => {
+    if (typeof window === 'undefined' || address) return false;
+    if (!hasEmailSocialMarker()) return false;
+    try {
+      const modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
+      let acct = modal.getIsConnectedState?.() ? modal.getAddress?.('eip155') : null;
+      if (!acct) {
+        acct = await new Promise((resolve) => {
+          let off = null;
+          const timer = setTimeout(() => {
+            try { off?.(); } catch { /* noop */ }
+            resolve(null);
+          }, 8_000);
+          try {
+            off = modal.subscribeAccount?.((a) => {
+              if (!a?.isConnected || !a?.address) return;
+              clearTimeout(timer);
+              try { off?.(); } catch { /* noop */ }
+              resolve(a.address);
+            });
+          } catch {
+            clearTimeout(timer);
+            resolve(null);
+          }
+        });
+      }
+      if (!acct) {
+        /* The auth session is definitively gone (expired, logged out from
+           another surface) — forget the marker rather than loop. */
+        await clearEmailSocialSession({ disconnect: false }).catch(() => {});
+        return false;
+      }
+      return await attachEmailProvider(modal, acct);
+    } catch {
+      return false; /* offline/blocked chunk: marker survives for the next cold start */
+    }
+  }, [address, attachEmailProvider]);
+
   /* --------------------------- WalletConnect v2 -------------------------- */
 
   /**
@@ -636,7 +799,21 @@ export function WalletProvider({ children }) {
       /* Native wallet schemes preserve the pairing payload end-to-end. The
          bridge routes Telegram to HTTPS and the APK to ACTION_VIEW itself. */
       experimental_preferUniversalLinks: false,
-      metadata: wcPublicMetadata()
+      metadata: wcPublicMetadata(),
+      /* THE SHARED-SINGLETON TRUCE, THIS SURFACE'S HALF.
+         ------------------------------------------------
+         The email/social login runs its OWN AppKit instance (see
+         lib/emailSocialWallet.js for why the provider's embedded modal can
+         never offer it), and both instances share the OptionsController
+         singleton and the one <w3m-modal> element. Every surface therefore
+         re-asserts its own `features` immediately before opening its modal —
+         cheap, idempotent and order-proof. On THIS surface the assertion is
+         { email: false, socials: false }: an email row here would produce an
+         auth connection that the pending wc.connect() can never settle on,
+         and the user would sit under a spinning pairing that thinks it is
+         still waiting for a wallet app. The twin assertion lives in
+         reassertEmailFeatures() and runs before the email modal opens. */
+      features: { email: false, socials: false }
     };
     /* Explorer rows often omit link_mode. Fill that fallback and record the
        selected wallet without changing AppKit's native-first choice. */
@@ -667,6 +844,9 @@ export function WalletProvider({ children }) {
       C?.setCustomWallets?.(options.customWallets);
       C?.setPreferUniversalLinks?.(options.experimental_preferUniversalLinks);
       C?.setMetadata?.(options.metadata);
+      /* Same features truce on the singleton fallback path — without it, a
+         controllers-only write still inherits the email surface's flags. */
+      C?.setFeatures?.(options.features);
       wcEvent('appkit_links_applied', 1);
       return true;
     } catch {
@@ -1435,12 +1615,18 @@ export function WalletProvider({ children }) {
        the commit guard inside restoreWcSession() backstops the foreground
        path. */
     if (!loadVault()) {
-      /* Quiet on cold start — the announce variant belongs to the two
-         user-visible moments: returning from the wallet app, and Refresh. */
-      void restoreWcSession({ announce: false });
+      /* Email/social and WalletConnect restores are mutually gated: a user
+         whose LAST connection was email restores THAT one, and the wc
+         session — if any — stays on disk for an explicit WalletConnect tap.
+         Without this gate the two restores race on cold start and the
+         traffic-light winner overwrites the user's wallet of choice. */
+      if (hasEmailSocialMarker()) void restoreEmailSocial();
+      else void restoreWcSession({ announce: false });
     }
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && !addressRef.current) {
+      /* The email restore is cold-start only: no wallet app to bounce back
+         from, so the foreground moment teaches nothing new. */
+      if (document.visibilityState === 'visible' && !addressRef.current && !hasEmailSocialMarker()) {
         void restoreWcSession({ announce: true });
       }
     };
@@ -1621,6 +1807,12 @@ export function WalletProvider({ children }) {
         .catch(() => { /* fire-and-forget; the purge below is synchronous */ });
     }
     try { purgeWcStorage(); } catch { /* storage unavailable */ }
+    /* An email/social session ends in the same pass: forget the boot marker
+       and tell AppKit (bounded — see lib/emailSocialWallet.js). Without it,
+       tomorrow's cold start would resurrect the very logout the user just
+       performed, and the one-wallet-at-a-time rule in connectEmailSocial()
+       would inherit a ghost. */
+    try { void clearEmailSocialSession(); } catch { /* noop */ }
     // Clean up injected listeners
     detachInjectedListeners();
     eip1193Ref.current = null;
@@ -1704,6 +1896,17 @@ export function WalletProvider({ children }) {
   }, []);
 
   /*
+   * Attaching any OTHER wallet mode retires the email/social boot marker.
+   * Otherwise the next cold start would resurrect the email wallet and
+   * overwrite the very connection the user just chose. 'email' itself is
+   * excluded — its marker is written inside attachEmailProvider(), during
+   * the same mode transition this effect watches.
+   */
+  useEffect(() => {
+    if (mode && mode !== 'email') void clearEmailSocialSession().catch(() => {});
+  }, [mode]);
+
+  /*
    * ─── THE "CONNECT YOUR WALLET" QUEST, FIRED WHERE IT ACTUALLY HAPPENS ────
    * The Earn screen advertises "+100, connect your wallet" and nothing marked
    * it done. There are THREE ways to arrive connected — injected, WalletConnect
@@ -1778,6 +1981,10 @@ export function WalletProvider({ children }) {
       hasLocalVault: Boolean(loadVault()),
       connectInjected,
       connectWalletConnect,
+      /* Email & Social login (Reown AppKit embedded wallet): same attach
+         contract as the injected path, mode 'email'. */
+      connectEmailSocial,
+      emailModalActive,
       /*
        * The pairing surface: the URI the SDK issued for the in-flight attempt
        * (null when there is none), which surface currently owns the screen,
@@ -1831,6 +2038,8 @@ export function WalletProvider({ children }) {
       locked,
       connectInjected,
       connectWalletConnect,
+      connectEmailSocial,
+      emailModalActive,
       wcPairUri,
       wcModalActive,
       cancelWcPairing,

@@ -294,7 +294,7 @@ export default function runWcPairingSurface() {
       /view === 'pair' && wallet\.connecting/.test(code)
       && /wallet\.cancelWcPairing\?\.\\?\(\)/.test(code));
     t('the sheet withdraws while the SDK modal owns the screen (no stacked modals)',
-      /<Sheet open=\{open && !wallet\.wcModalActive\}/.test(code));
+      /<Sheet open=\{open && !wallet\.wcModalActive/.test(code));
   }
 
   /* ---- 6. every locale can name the pairing screen ---------------------- */

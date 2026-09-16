@@ -2282,5 +2282,18 @@ for (const [suite, file] of [
   }
 }
 
+/* ------------------------------ LAST. email & social login ----------------
+   The Reown AppKit embedded wallet (email/social) and its isolation contract:
+   a second AppKit instance is only safe when every surface re-asserts its own
+   features before opening the shared modal — measured on the real package.
+   RUNS LAST ON PURPOSE: creating the real instance needs jsdom globals that
+   must stay installed until the process exits (the probe documents why), so
+   no other suite may run after a live window exists. */
+console.log('▸ probing email & social login (Reown AppKit embedded wallet)…');
+{
+  const { default: runEmailSocial } = await import('./email-social-probe.mjs');
+  report('email & social login', await runEmailSocial());
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);
