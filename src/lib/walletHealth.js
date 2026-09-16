@@ -254,7 +254,13 @@ export function storageFacts(storage) {
         }
       }
     }
-    facts.orphanKeys = facts.appkitConnectionKeys > 0 && facts.wcSessionKeys === 0;
+    // Orphan = stale WC debris that will break the NEXT WalletConnect attempt.
+    // When the email boot marker stands, those @appkit/* keys are owned by the
+    // email AppKit instance (getEmailSocialAppKit) and are not orphan — purging
+    // them would churn 5→4→4 (observed) and break the restore they were created for.
+    // Mirrors the same !hasEmailSocialMarker() guard as the cold-start purge
+    // in WalletContext.jsx; @appkit-wallet/* is a separate prefix and never counted.
+    facts.orphanKeys = facts.appkitConnectionKeys > 0 && facts.wcSessionKeys === 0 && !facts.ourMarker;
   } catch { /* storage unavailable: the false/0 defaults are the honest answer */ }
   return facts;
 }
