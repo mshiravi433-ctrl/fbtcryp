@@ -337,9 +337,15 @@ export default function run() {
   t('restore re-checks for an attached wallet before committing state',
     /if \(addressRef\.current\) \{[\s\S]{0,300}restore_skipped_local/.test(walletSrc));
   t('a local vault on disk wins the cold start (no restore overwrite of the in-app wallet)',
-    /if \(!loadVault\(\)\) \{[\s\S]{0,900}void restoreWcSession\(\{ announce: false \}\)/.test(walletSrc));
+    /if \(!loadVault\(\)\) \{[\s\S]{0,900}resumeWc\(false\)/.test(walletSrc));
   t('an email/social boot marker takes precedence over the WalletConnect restore on cold start',
-    /if \(!loadVault\(\)\) \{[\s\S]{0,900}if \(hasEmailSocialMarker\(\)\) void restoreEmailSocial\(\);[\s\S]{0,100}else void restoreWcSession\(\{ announce: false \}\)/.test(walletSrc));
+    /if \(!loadVault\(\)\) \{[\s\S]{0,900}if \(hasEmailSocialMarker\(\)\) resumeEmailThenWc\(false\);[\s\S]{0,100}else resumeWc\(false\)/.test(walletSrc));
+  /* The precedence above is a strict ORDER, not a lock: the email claim runs
+     first and hands the pass over only when AppKit has already answered that
+     nothing is connected (the rollback deleted the marker). A marker still
+     standing means the frame could not answer — nothing preempts it. */
+  t('the email claim hands a dead return over to the stored WalletConnect session',
+    /const resumeEmailThenWc = \(announce\) => \{[\s\S]{0,240}if \(ok \|\| addressRef\.current \|\| hasEmailSocialMarker\(\)\) return;[\s\S]{0,60}resumeWc\(announce\);/.test(walletSrc));
 
   return rows;
 }

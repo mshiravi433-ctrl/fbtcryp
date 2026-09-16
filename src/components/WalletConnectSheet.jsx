@@ -16,6 +16,7 @@ import {
   validateMnemonic
 } from '../lib/localWallet';
 import { IconCheck, IconCopy, IconKey, IconLink, IconLock, IconPlus, IconWallet } from './Icons';
+import WalletHealthPanel from './WalletHealthPanel';
 
 /**
  * EIP-6963 multi-provider discovery. Returns an array of {uuid, info, provider}
@@ -520,6 +521,19 @@ export default function WalletConnectSheet({ open, onClose }) {
           {wallet.error === 'CONNECT_FAILED' && (
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
           )}
+
+          {/*
+            THE EVIDENCE, ONE TAP AWAY, WHERE THE FAILURE HAPPENED.
+
+            Every wallet report this app receives is about a link the UI cannot
+            show: the project-config answer, the allowed-origins list, the
+            relay socket and the embedded-wallet frame. This panel measures
+            those four on the DEVICE and the NETWORK where the user is, and
+            prints the JSON to copy — so the next report arrives with the
+            failing hop named instead of described. Its collector is a lazy
+            import (see the component): nothing here is in the entry chunk.
+          */}
+          <WalletHealthPanel projectId={wallet.wcProjectId} />
         </>
       )}
 

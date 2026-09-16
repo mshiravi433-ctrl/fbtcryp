@@ -9,8 +9,10 @@
 |---|---|
 | `src/lib/emailSocialWallet.js` | گزینه‌ها، ساختن lazy نمونهٔ AppKit، آتش‌بسِ features مشترک، مارکرِ بوت + `rollbackEmailSocialMarker` |
 | `src/context/WalletContext.jsx` | `connectEmailSocial` / `restoreEmailSocial` / `attachEmailProvider` + فلگ `emailModalActive` |
-| `src/components/WalletConnectSheet.jsx` | ردیفِ «ایمیل و ورود با سوشال» بین WalletConnect و کیف‌های تزریقی |
-| `test/email-social-probe.mjs` | ۳۹ ادعا روی خودِ بستهٔ واقعی (`@reown/appkit@1.8.19`) |
+| `src/components/WalletConnectSheet.jsx` | ردیفِ «ایمیل و ورود با سوشال» بین WalletConnect و کیف‌های تزریقی + پنلِ «بررسی سلامت اتصال» |
+| `src/lib/walletHealth.js` + `src/components/WalletHealthPanel.jsx` | گزارشِ چهار پیوندِ نامرئی (تنظیماتِ پروژه، دامنه‌های مجاز، رله، فریمِ کیفِ سوشال) برای فرستادن به پشتیبانی |
+| `test/email-social-probe.mjs` | ۴۹ ادعا روی خودِ بستهٔ واقعی (`@reown/appkit@1.8.19`) |
+| `test/wallet-health-probe.mjs` | ۳۶ ادعا روی قواعدِ گزارشِ سلامت (هر لبهٔ شبکه‌ای شبیه‌سازی‌شده) |
 
 قانونِ طلاییِ زندگیِ مشترک با سطحِ WalletConnect: مودال `<w3m-modal>` بین دو
 نمونه **مشترک** است؛ سطح جفت‌شدنی پیش از open خودش features مشترک را مسطح
@@ -61,19 +63,49 @@
 | مرز | رفتار |
 |---|---|
 | `rollbackEmailSocialMarker(modal)` | هر پایانِ بی‌اتصال (لغو مودال، خطای `modal.open()`، attach خطادده/بازگشتِ false) مارکر را پس می‌دهد — **مگر** خودِ AppKit هنوز حسابِ متصل داشته باشد؛ آنجا مارکر واقعیت است و باید بماند تا cold-start بعدی درستش کند |
-| `restoreEmailSocial()` | اگر تا ۸ ثانیه حسابی نبیند، مارکر را پاک می‌کند (لوپِ مرده نمی‌شود)؛ ولی اگر خودش **خطا** بدهد (آفلاین، چانکِ مسدود) مارکر می‌ماند تا بوت بعدی دوباره تلاش کند |
+| `restoreEmailSocial()` | تا `EMAIL_RESTORE_WINDOW_MS` = **۳۰ ثانیه** منتظر می‌ماند (سقفِ خودِ SDK برای همان iframe ۲۰ ثانیه است؛ پنجرهٔ ۸ ثانیه‌ای قبلی از خودِ SDK کوچک‌تر بود و همیشه می‌باخت). اگر حسابی نیامد، تصمیم با `rollbackEmailSocialMarker(modal)` است: AppKit گفته «وصل نیست» → مارکر پاک می‌شود؛ AppKit **نتوانست جواب بدهد** → مارکر می‌ماند تا بازگشتِ بعدی دوباره بپرسد. تک‌پروازی (`emailRestoreRef`) که cold-start و `pageshow` و foreground را از مسابقه بیرون می‌کند؛ اگر خودش **خطا** بدهد هم مارکر می‌ماند |
 | `disconnect()` | نشستِ ایمیل را logout و مارکر را پاک می‌کند (خروج، احیا نمی‌شود) |
 | افکت `[mode]` | اتصالِ هر کیفِ دیگر (`injected`/`wc`/vault) مارکر ایمیل را می‌شوید |
 
 هیچ‌کدام از این‌ها ریسکِ «ریکاوریِ بی‌تجربه» ندارد: بدترین حالتِ یک claimِ بی‌نتیجه،
-یک بیلدِ lazy و یک تایمرِ ۸ ثانیه‌ای است که خودش را پاک می‌کند — نه یک حلقه.
+یک بیلدِ lazy و یک پنجرهٔ کرانه‌دار است که در نهایت خودش را پس می‌دهد — نه یک حلقه.
+
+### مارکرِ خودِ SDK: چرا برگشتنِ ایمیل «نامرئی» بود (ریشه‌ی سوم)
+
+خودِ AppKit هم یک مارکر دارد و آن هم در `localStorage` مرورگرِ کاربر است:
+
+```
+@appkit-wallet/EMAIL_LOGIN_USED_KEY   ← فقط بعد از یک ورودِ موفق نوشته می‌شود ('true')
+```
+
+`W3mFrameProvider` (کلاسِ کیفِ درون‌سایتی) این کلید را **در سازنده** می‌خواند و
+اگر نباشد اصلاً iframe را نمی‌سازد؛ یعنی AppKit از همان لحظهٔ اول «چیزی برای
+بازیابی نیست» را نتیجه می‌گیرد. بدتر: `isConnected()` هر `false` یا هر **خطا** را
+با `deleteAuthLoginCache()` جواب می‌دهد و آن تابع `EMAIL_LOGIN_USED_KEY` و
+`EMAIL` و `SOCIAL_USERNAME` و `LAST_USED_CHAIN_KEY` را پاک می‌کند. روی یک بوتِ
+سردِ کند یا شبکه‌ای که `secure.walletconnect.org` را کند/مسدود می‌کند، همین یک
+پاک‌شدن کافی است تا هر بار «کیف پول ساخته نشد» ببینیم — و تنها راهِ قبلی،
+«یک بار دیگر بزن» بود.
+
+اکنون `getEmailSocialAppKit()` پیش از `createAppKit()` تابع `rearmSdkLoginMarker()`
+را صدا می‌زند: اگر **مارکرِ ما** هست و کلیدِ SDK غایب است، همان مقدارِ خودِ SDK
+(`'true'`) برگردانده می‌شود تا سازندهٔ provider iframe را بسازد و نشستِ گرم
+واقعاً پرسیده شود. مقدارِ برگشتی (`present` / `rearmed` / `not_marked` /
+`unavailable`) در trace ثبت می‌شود؛ هیچ‌وقت در حالتِ «بدونِ claim» نمی‌نویسد.
 
 ## آزمون
 
 ```bash
 npm test            # شامل email-social-probe به‌عنوان آخرین سوئیت
-node test/run.mjs   # خروجی: «email & social login — 39 assertions, 0 failures»
+node test/run.mjs   # خروجی: «email & social login — 49 assertions, 0 failures»
+                    #        «wallet health — 36 assertions, 0 failures»
 ```
+
+اگر کاربری گزارش «ایمیل تأیید شد ولی والت نیامد» داد، اول از همه از او
+**گزارشِ سلامتِ اتصال** را بگیر: در شیتِ اتصال، بخشِ «بررسی سلامت اتصال»
+(پنلِ `WalletHealthPanel`) چهار پیوندِ نامرئی را روی همان دستگاه می‌سنجد و JSON
+قابل‌کپی می‌دهد — تنظیماتِ پروژه در Reown، فهرستِ دامنه‌های مجاز، سوکتِ رله و
+صفحهٔ کیفِ سوشال. جزئیات در `src/lib/walletHealth.js` و `test/wallet-health-probe.mjs`.
 
 نکته: در محیط‌های بدون شبکه به `api.web3modal.org` پیامِ fallback به مقادیر
 local چاپ می‌شود؛ این رفتارِ خودِ SDK است و گزینه‌های ما local اعمال می‌شوند.

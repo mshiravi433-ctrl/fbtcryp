@@ -29,13 +29,18 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { EVM_CHAINS, DEFAULT_CHAIN } from '../src/lib/chains.js';
 import {
+  EMAIL_RESTORE_WINDOW_MS,
   EMAIL_SOCIAL_FLAG_KEY,
+  SDK_LOGIN_USED_KEY,
+  SDK_LOGIN_USED_VALUE,
   SOCIAL_PROVIDERS,
   buildEmailNetworks,
   clearEmailSocialSession,
   emailSocialOptions,
   getEmailSocialAppKit,
   hasEmailSocialMarker,
+  readSdkLoginMarker,
+  rearmSdkLoginMarker,
   reassertEmailFeatures,
   rollbackEmailSocialMarker,
   setEmailSocialMarker
@@ -166,6 +171,43 @@ export default async function run() {
       }));
     t('no instance at all still clears the claim (a marker nobody can restore is a loop)',
       answering(null));
+
+    /*
+     * THE SDK'S OWN LOGIN MARKER, MEASURED — AND WHY WE RE-ARM IT.
+     * `W3mFrameProvider`'s CONSTRUCTOR only creates the secure-site iframe
+     * `if (getLoginEmailUsed())`, and `deleteAuthLoginCache()` — reached from
+     * `isConnected()`'s not-connected branch AND from its catch — removes that
+     * key. A blocked/slow wallet frame therefore deletes the dApp's own record
+     * of the login, and every later boot short-circuits to "not connected"
+     * without asking anybody: the wallet is unreachable even though the
+     * session inside the frame is intact. Our marker is the durable copy, so
+     * it hands the key back before the instance is built.
+     */
+    {
+      const store = new Map();
+      const storage = {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k)
+      };
+      t('nothing is written when our own marker is absent',
+        rearmSdkLoginMarker(storage) === 'not_marked'
+          && readSdkLoginMarker(storage) === '');
+      setEmailSocialMarker(true, storage);
+      t('the SDK key is handed back with the SDK’s own value once an attempt is marked',
+        rearmSdkLoginMarker(storage) === 'rearmed'
+          && readSdkLoginMarker(storage) === SDK_LOGIN_USED_VALUE
+          && SDK_LOGIN_USED_KEY === '@appkit-wallet/EMAIL_LOGIN_USED_KEY');
+      t('an SDK marker that is already there is never rewritten',
+        rearmSdkLoginMarker(storage) === 'present');
+      /* The measured sequence that produced the report: a blocked frame wipes
+         the SDK key while our marker survives. */
+      storage.removeItem(SDK_LOGIN_USED_KEY);
+      t('a wiped SDK marker is re-armed from our surviving claim',
+        readSdkLoginMarker(storage) === ''
+          && rearmSdkLoginMarker(storage) === 'rearmed'
+          && readSdkLoginMarker(storage) === SDK_LOGIN_USED_VALUE);
+    }
   }
 
   /* ---- 3. real createAppKit + the shared-singleton truce ---------------- */
@@ -208,6 +250,14 @@ export default async function run() {
   /* ---- 4. WalletContext + sheet wiring (source contract) ---------------- */
   {
     const ctx = strip(readFileSync('src/context/WalletContext.jsx', 'utf8'));
+    /* The module + the installed SDK's own frame provider, so the window
+       assertion above can compare OUR bound with the SDK's measured one
+       instead of trusting a number we wrote down. */
+    const emailSrc = strip(readFileSync('src/lib/emailSocialWallet.js', 'utf8'));
+    const sdkProviderSrc = readFileSync(
+      'node_modules/@reown/appkit-wallet/dist/esm/src/W3mFrameProvider.js',
+      'utf8'
+    );
     t('the WalletConnect surface flattens email/social before every pairing open',
       /features:\s*\{\s*email:\s*false,\s*socials:\s*false\s*\}/.test(ctx));
     t('the controllers fallback path applies the same flattening',
@@ -215,6 +265,27 @@ export default async function run() {
     t('connectEmailSocial holds the refresh guard and builds the lazy instance with our id',
       /holdRefreshGuard\('email-connect'\)/.test(ctx)
         && /getEmailSocialAppKit\(WC_PROJECT_ID, wcPublicMetadata\(\)\)/.test(ctx));
+    t('the SDK login marker is handed back BEFORE createAppKit builds the frame',
+      /rearmSdkLoginMarker\(\);\s*if \(!emailAppKit\) \{/.test(emailSrc)
+        && emailSrc.indexOf('rearmSdkLoginMarker();') < emailSrc.indexOf('createAppKit({'));
+    /* A returning page is not always a fresh document: the APK WebView never
+       reloads, and iOS/Chrome restore a frozen page (pageshow + persisted)
+       with no mount at all. Both paths must re-run the SAME recovery for both
+       wallet modes — the email marker included, which the old handler
+       deliberately skipped («cold-start only»). */
+    t('a returning page (foreground OR bfcache) re-runs BOTH restores',
+      /window\.addEventListener\('pageshow', onPageShow\)/.test(ctx)
+        && /if \(event\?\.persisted\) onReturn\(false\)/.test(ctx)
+        && /const onReturn = \(announce\) => \{[\s\S]{0,120}if \(hasEmailSocialMarker\(\)\) \{[\s\S]{0,60}resumeEmailThenWc\(announce\);/.test(ctx));
+    t('a WalletConnect instance that exists WITHOUT an account is released and re-probed',
+      /const resumeWc = \(announce\) => \{[\s\S]{0,160}if \(wcRef\.current && !wcInitingRef\.current\) \{[\s\S]{0,80}releaseWc\(false\)\.then\(\(\) => restoreWcSession\(\{ announce \}\)\)/.test(ctx));
+    /* The marker decides the ORDER, never the OUTCOME: a claim AppKit has
+       already answered «no» for is dead, and the `wc@2:` session on disk may
+       well be the user's real wallet — so that pass probes it. A marker still
+       standing means the frame could not answer, and then nothing may preempt
+       the session inside it. */
+    t('a dead email claim hands the return to the stored WalletConnect session',
+      /const resumeEmailThenWc = \(announce\) => \{[\s\S]{0,240}if \(ok \|\| addressRef\.current \|\| hasEmailSocialMarker\(\)\) return;[\s\S]{0,60}resumeWc\(announce\);/.test(ctx));
 
     /* THE REDIRECT FIX, AS A SOURCE CONTRACT. Emails and OAuth logins leave
        the site and come back as a new document; only the boot marker crosses
@@ -255,12 +326,30 @@ export default async function run() {
     t('the rollback goes through the honest helper, never a blind clear',
       !/setEmailSocialMarker\(false\)/.test(connectBlock)
         && (connectBlock.match(/rollbackEmailSocialMarker\(modal\)/g) || []).length === 3);
-    t('a restore with no account in its 8s window still forgets the marker (no dead loop)',
-      /8_000/.test(restoreBlock)
-        && /if \(!acct\) \{[^}]*await clearEmailSocialSession\(\{ disconnect: false \}\)/.test(restoreBlock));
+    /*
+     * THE OLD CONTRACT HERE WAS WRONG, AND IT WAS THE BUG.
+     * It pinned an 8-second window and a blind `clearEmailSocialSession()` on
+     * expiry. Measured against the installed SDK: `appEvent()` waits on the
+     * secure-site iframe and gives IT 20_000 ms before declaring failure — so
+     * an 8s bound lost a race the SDK had not even finished running, and the
+     * losing branch then DELETED the only durable record of the login. One
+     * slow boot became a permanent one, which is why the shipped workaround
+     * was «یک بار دیگر بزن». The window must outlive the SDK's own bound and
+     * a timeout must go through the honest rollback — never a blind clear.
+     */
+    t('a restore with no account waits LONGER than the SDK gives its own iframe',
+      /EMAIL_RESTORE_WINDOW_MS/.test(restoreBlock)
+        && /EMAIL_RESTORE_WINDOW_MS\s*=\s*30_000/.test(emailSrc)
+        && /20_000/.test(sdkProviderSrc));
+    t('a restore with no account hands the claim back HONESTLY, never blindly',
+      /if \(!acct\) \{[\s\S]{0,600}rollbackEmailSocialMarker\(modal\)/.test(restoreBlock)
+        && !/clearEmailSocialSession\(\{ disconnect: false \}\)/.test(restoreBlock));
+    t('the restore is single-flighted (cold start + pageshow + foreground can race)',
+      /if \(emailRestoreRef\.current\) return false;/.test(restoreBlock)
+        && /finally\s*\{\s*emailRestoreRef\.current = false;/.test(restoreBlock));
     t('a restore that THREW keeps the marker, so the next cold start retries',
-      /catch\s*\{\s*return false;/.test(restoreBlock)
-        && !/clearEmailSocialSession|setEmailSocialMarker\(false\)/.test(
+      /catch\s*\{[\s\S]{0,140}return false;/.test(restoreBlock)
+        && !/clearEmailSocialSession|setEmailSocialMarker\(false\)|rollbackEmailSocialMarker/.test(
           restoreBlock.slice(restoreBlock.lastIndexOf('} catch'))
         ));
     t('an explicit disconnect still washes the early claim (no logout resurrection)',
@@ -268,7 +357,7 @@ export default async function run() {
     t('explicit disconnect also logs the email session out',
       /clearEmailSocialSession\(\)/.test(ctx));
     t('cold start prefers the email restore over the WalletConnect restore when marked',
-      /hasEmailSocialMarker\(\)\) void restoreEmailSocial\(\);\s*else void restoreWcSession\(\{ announce: false \}\)/.test(ctx.replace(/\n\s*/g, ' ')));
+      /if \(hasEmailSocialMarker\(\)\) resumeEmailThenWc\(false\);\s*else resumeWc\(false\);/.test(ctx.replace(/\n\s*/g, ' ')));
     t('another wallet mode attaching retires the email boot marker',
       /mode && mode !== 'email'\) void clearEmailSocialSession\(\)/.test(ctx.replace(/\n\s*/g, ' ')));
     t('both modal flags are exposed so the sheet can withdraw under a modal',

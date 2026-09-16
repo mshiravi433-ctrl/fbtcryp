@@ -832,6 +832,17 @@ console.log('▸ probing the WalletConnect pairing surface (QR + deep links, end
   report('WalletConnect pairing surface', runWcPairingSurface());
 }
 
+/* ------------------------------ 0c-9. wallet health ------------------------- */
+/* The report that makes the invisible links visible: project config, allowed
+   origins, relay socket and embedded-wallet frame, each with every network
+   edge held still. A diagnostic that reports the wrong thing is worse than
+   none, so its failure paths are pinned here too. */
+console.log('▸ probing the wallet health report (the «which link failed?» tool)…');
+{
+  const { default: runWalletHealth } = await import('./wallet-health-probe.mjs');
+  report('wallet health', await runWalletHealth());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered
