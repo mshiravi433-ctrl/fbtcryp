@@ -218,14 +218,55 @@ export async function openWalletLink(url, {
     }
   }
 
-  const launchUrl = native || fallback;
-  if (!launchUrl || !view) return false;
-
   /* Never accept AppKit's `_self`/`_top` here: replacing this document destroys
      the pending connect() promise before the wallet publishes its approval. */
   const asked = String(target || '_blank');
   const safeTarget = asked === '_self' || asked === '_top' || asked === '' ? '_blank' : asked;
   const open = openWindow ?? view.open?.bind(view);
+
+  // ── ANDROID CHROME: intent:// with package is the documented launch path ──────
+  // Plain `trust://wc?uri=…` via window.open('_blank') is treated as a popup on
+  // some OEM Chrome builds and can be dropped; `intent://wc?uri=…#Intent;…;end`
+  // is what Chrome's own docs describe for app launching and it carries
+  // S.browser_fallback_url so "not installed" routes to the universal link /
+  // Play Store instead of a blank intent error. Only for real Android views
+  // with a known package and a valid pairingUri (the wc:* topic+symKey).
+  if (isAndroidView(view) && walletPackage && isPairingUri(pairingUri) && wallet) {
+    const schemeRaw = String(wallet.native || native || '').split('://')[0] || '';
+    const scheme = schemeRaw.split(':')[0].trim().toLowerCase();
+    if (scheme) {
+      const intentUrl =
+        `intent://wc?uri=${encodeURIComponent(pairingUri)}` +
+        `#Intent;scheme=${encodeURIComponent(scheme)};package=${encodeURIComponent(walletPackage)};` +
+        (fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : '') +
+        'end';
+      if (open) {
+        try {
+          if (open(intentUrl, safeTarget, features)) return true;
+        } catch {
+          /* anchor below is the second try for the same intent */
+        }
+      }
+      if (typeof view.document?.createElement === 'function') {
+        try {
+          const a = view.document.createElement('a');
+          a.href = intentUrl;
+          a.target = '_blank';
+          a.rel = 'noreferrer noopener';
+          a.style.display = 'none';
+          view.document.body?.appendChild(a);
+          a.click();
+          a.remove();
+          return true;
+        } catch {
+          /* fall through to the plain native link */
+        }
+      }
+    }
+  }
+
+  const launchUrl = native || fallback;
+  if (!launchUrl || !view) return false;
   if (open) {
     try {
       if (open(launchUrl, safeTarget, features)) return true;
