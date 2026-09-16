@@ -219,14 +219,19 @@ export const swapFeeRecipient = () =>
 const isAddr = (a) => typeof a === 'string' && ADDR_RE.test(a);
 
 /** Checksum a token address with ethers when available; falls back to the
- *  raw string (LI.FI accepts well-formed addresses regardless of case, and a
- *  failed checksum must never take quoting down). */
+ *  LOWERCASE form, never the raw string: LI.FI resolves an all-lowercase
+ *  address fine, but a DISPLAY-cased string with an invalid EIP-55 checksum
+ *  returns 1003 «Could not find token» (live-probed 2026-09-15 against
+ *  chain 534352) — an ethereum address our own screen then reports as
+ *  «مسیری بین این دو توکن وجود ندارد» on a chain that routes fine.
+ *  A failed checksum must never take quoting down, and it must never hand
+ *  upstream a spelling upstream cannot read. */
 async function checksummed(addr) {
   try {
     const { getAddress } = await import('ethers');
     return getAddress(addr);
   } catch {
-    return addr;
+    return String(addr).toLowerCase();
   }
 }
 
