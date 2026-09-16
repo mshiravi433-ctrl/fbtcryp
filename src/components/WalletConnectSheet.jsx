@@ -268,12 +268,6 @@ export default function WalletConnectSheet({ open, onClose }) {
     return walletHandOffChannel() === 'telegram' ? links.universal : links.native;
   };
 
-  /**
-   * Keep the direct native anchor for a normal browser so browser user
-   * activation cannot expire inside an async callback. Telegram and the APK
-   * need platform APIs, therefore those two channels prevent the anchor and
-   * call the shared delivery layer with native + universal + raw URI together.
-   */
   const openWalletApp = (e, key) => {
     const promoted = MOBILE_WALLETS.find((entry) => entry.key === key);
     const links = linksForWallet(key);
@@ -283,8 +277,12 @@ export default function WalletConnectSheet({ open, onClose }) {
     }
     setOpenedWallet(key);
     haptic?.('light');
-    const channel = walletHandOffChannel();
-    if (channel === 'web-native') return; /* direct custom-scheme anchor */
+    // Every tap goes through the shared opener: on Android Chrome it tries
+    // intent:// with package (Chrome docs), on Telegram it uses the HTTPS
+    // fallback, in the APK the bridge sends raw wc:. The anchor href stays as
+    // a non-JS fallback but the JS path is authoritative so the relay socket
+    // stays alive (target _blank, not _self) and the intent package routing
+    // works on OEM Chrome builds where a bare trust:// is dropped as popup.
     e.preventDefault();
     void openWalletLink(links.native, {
       target: '_blank',
