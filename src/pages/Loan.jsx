@@ -45,6 +45,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
+import WalletConnectSheet from '../components/WalletConnectSheet';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -1436,6 +1437,7 @@ export default function Loan() {
   const [loading, setLoading] = useState(true);
   const [readAt, setReadAt] = useState(null);
   const [exec, setExec] = useState(null);
+  const [walletOpen, setWalletOpen] = useState(false);
   const [machineView, setMachineView] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -1530,11 +1532,33 @@ export default function Loan() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const connect = useCallback(() => {
+  /*
+   * ─── THE CONNECT BUTTON USED TO DO NOTHING ─────────────────────────────
+   * Reported: «در صفحه وام وقتی روی اتصال کیف پول میزنی اتفاقی نمیافتد».
+   *
+   * `connect` called `connectInjected()` directly, which needs `window.ethereum`
+   * — a desktop browser with a wallet extension. On a phone, in Telegram, or
+   * anywhere without an injected provider it threw NO_INJECTED_WALLET, returned
+   * false, and the page showed nothing: the button visibly did nothing.
+   *
+   * Every other page (Swap, Wallet, dYdX, FuturesOnchain…) opens the
+   * WalletConnectSheet instead, which offers injected + WalletConnect QR +
+   * email/social. This page does the same now — with one fast path kept: when
+   * an injected provider IS present the tap connects it immediately (that is
+   * also the path the loan-execution probe drives), and only otherwise does
+   * the sheet open with the alternatives.
+   */
+  const connect = useCallback(async () => {
     haptic?.('light');
-    if (typeof connectInjected === 'function') connectInjected();
-    else notify('loan.connectWalletFirst', 'error');
-  }, [connectInjected, haptic, notify]);
+    const hasInjected = typeof window !== 'undefined' && Boolean(window.ethereum);
+    if (hasInjected && typeof connectInjected === 'function') {
+      const ok = await connectInjected();
+      if (ok) return;
+    }
+    /* No injected provider, or the injected attempt failed: offer the
+       WalletConnect / email alternatives instead of failing silently. */
+    setWalletOpen(true);
+  }, [connectInjected, haptic]);
 
   const switchToChain = useCallback(async () => {
     haptic?.('light');
@@ -1948,6 +1972,8 @@ export default function Loan() {
         onRetry={retryExecution}
         t={t}
       />
+
+      <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
     </PageTransition>
   );
 }

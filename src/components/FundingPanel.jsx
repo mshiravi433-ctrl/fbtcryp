@@ -5,6 +5,7 @@ import { riseIn } from './PageTransition';
 import SegIndicator from './SegIndicator';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { bestVenue, fundingCost, getPerpMarkets } from '../lib/perp';
+import '../styles/funding-panel.css';
 
 /**
  * LIVE FUNDING RATES, PER VENUE.
@@ -127,9 +128,9 @@ export default function FundingPanel() {
   }
 
   return (
-    <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-      <p className="section-label" style={{ marginBottom: 6 }}>{t('perp.fundingTitle')}</p>
-      <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.8 }}>
+    <motion.section className="card fnd-panel" variants={riseIn} initial="hidden" animate="show">
+      <p className="section-label">{t('perp.fundingTitle')}</p>
+      <p className="fnd-intro">
         {t('perp.fundingIntro')}
       </p>
 
@@ -148,7 +149,7 @@ export default function FundingPanel() {
 
       {/* --------------------------- who is crowded --------------------------- */}
       {asset.crowding && (
-        <p className="notice" style={{ marginTop: 10 }}>
+        <p className="notice">
           {t(`perp.crowd.${asset.crowding}`, {
             symbol: asset.symbol,
             apr: pct(asset.avgFundingApr, 1)
@@ -157,53 +158,59 @@ export default function FundingPanel() {
       )}
 
       {/* ------------------------------ the table ----------------------------- */}
-      <table className="perp-liq" style={{ marginTop: 12 }}>
-        <thead>
-          <tr>
-            <th>{t('perp.fundVenue')}</th>
-            <th style={{ textAlign: 'end' }}>{t('perp.fundApr')}</th>
-            <th style={{ textAlign: 'end' }}>{t('perp.fundOi')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {asset.venues.map((v) => {
-            const isBest = cheapest && v.venue === cheapest.venue;
-            return (
-              <tr key={v.venue}>
-                <td>
-                  <span style={{ fontWeight: isBest ? 700 : 500 }}>{v.venue}</span>
-                  <span className="set-row-sub" style={{ display: 'block' }}>
-                    {t(`perp.custody.${v.custody}`)} · {t('perp.fundEvery', { hours: v.intervalHours })}
-                  </span>
-                </td>
-                {/*
-                  Coloured by whether it costs THIS user money, not by sign.
-                  A long and a short reading the same row are looking at
-                  opposite outcomes, and painting positive-is-red for both
-                  would be wrong for one of them every time.
-                */}
-                <td
-                  className="mono"
-                  style={{
-                    textAlign: 'end',
-                    color:
-                      v.fundingApr == null
-                        ? 'var(--text-3)'
-                        : (side === 'long' ? v.fundingApr > 0 : v.fundingApr < 0)
-                          ? 'var(--down)'
-                          : 'var(--up)'
-                  }}
-                >
-                  {pct(v.fundingApr, 1)}
-                </td>
-                <td className="mono" style={{ textAlign: 'end', fontSize: 11.5 }}>
-                  ${fmtCompact(v.openInterestUsd)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="fnd-table-wrap">
+        <table className="fnd-table">
+          <thead>
+            <tr>
+              <th>{t('perp.fundVenue')}</th>
+              <th className="fnd-num">{t('perp.fundApr')}</th>
+              <th className="fnd-num">{t('perp.fundOi')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {asset.venues.map((v) => {
+              const isBest = cheapest && v.venue === cheapest.venue;
+              return (
+                <tr key={v.venue} className={isBest ? 'fnd-best' : ''}>
+                  <td>
+                    <span className="fnd-venue-name">
+                      {v.venue}
+                      {isBest && (
+                        <span className="fnd-best-badge">{t('perp.cheapest')}</span>
+                      )}
+                    </span>
+                    <span className="fnd-venue-sub">
+                      {t(`perp.custody.${v.custody}`)} · {t('perp.fundEvery', { hours: v.intervalHours })}
+                    </span>
+                  </td>
+                  {/*
+                    Coloured by whether it costs THIS user money, not by sign.
+                    A long and a short reading the same row are looking at
+                    opposite outcomes, and painting positive-is-red for both
+                    would be wrong for one of them every time.
+                  */}
+                  <td
+                    className="fnd-num fnd-apr"
+                    style={{
+                      color:
+                        v.fundingApr == null
+                          ? 'var(--text-3)'
+                          : (side === 'long' ? v.fundingApr > 0 : v.fundingApr < 0)
+                            ? 'var(--down)'
+                            : 'var(--up)'
+                    }}
+                  >
+                    {pct(v.fundingApr, 1)}
+                  </td>
+                  <td className="fnd-num fnd-oi">
+                    ${fmtCompact(v.openInterestUsd)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {/*
         The spread. This is the sentence that justifies the panel: the same
@@ -211,92 +218,98 @@ export default function FundingPanel() {
         another, and the difference is invisible unless somebody lines them up.
       */}
       {asset.fundingSpread != null && asset.fundingSpread > 0 && (
-        <p className="faint" style={{ fontSize: 11.4, marginTop: 8, lineHeight: 1.7 }}>
+        <p className="fnd-spread">
           {t('perp.fundSpread', { spread: asset.fundingSpread.toFixed(1), symbol: asset.symbol })}
         </p>
       )}
 
       {/* --------------------------- cost calculator -------------------------- */}
-      <p className="section-label" style={{ margin: '16px 0 8px' }}>{t('perp.costTitle')}</p>
+      <p className="section-label fnd-cost-title">{t('perp.costTitle')}</p>
 
-      {/*
-        `isolation: isolate` + SegIndicator is the app-wide convention for a
-        segmented control — the shared layout animation slides the pill
-        between tabs. Omitting it here made this the only segmented control in
-        the app that snapped instead of sliding; the wiring audit caught it.
-      */}
-      <div className="segmented" style={{ marginBottom: 9 }}>
-        {SIDES.map((s) => (
-          <button
-            key={s}
-            className={side === s ? 'active' : ''}
-            onClick={() => setSide(s)}
-            style={{ isolation: 'isolate' }}
-          >
-            {side === s && <SegIndicator id="perpside" />}
-            {t(`perp.side.${s}`)}
-          </button>
-        ))}
-      </div>
+      <div className="fnd-pickers">
+        {/*
+          `isolation: isolate` + SegIndicator is the app-wide convention for a
+          segmented control — the shared layout animation slides the pill
+          between tabs. Omitting it here made this the only segmented control in
+          the app that snapped instead of sliding; the wiring audit caught it.
+        */}
+        <div className="segmented">
+          {SIDES.map((s) => (
+            <button
+              key={s}
+              className={side === s ? 'active' : ''}
+              onClick={() => setSide(s)}
+              style={{ isolation: 'isolate' }}
+            >
+              {side === s && <SegIndicator id="perpside" />}
+              {t(`perp.side.${s}`)}
+            </button>
+          ))}
+        </div>
 
-      <div className="tag-scroll">
-        {SIZES.map((s) => (
-          <button
-            key={s}
-            className={`tag ${collateral === s ? 'active' : ''}`}
-            onClick={() => setCollateral(s)}
-          >
-            ${s}
-          </button>
-        ))}
-      </div>
-      <div className="tag-scroll" style={{ marginTop: 6 }}>
-        {LEVERAGES.map((x) => (
-          <button
-            key={x}
-            className={`tag ${leverage === x ? 'active' : ''}`}
-            onClick={() => setLeverage(x)}
-          >
-            {x}×
-          </button>
-        ))}
+        <div className="tag-scroll">
+          {SIZES.map((s) => (
+            <button
+              key={s}
+              className={`tag ${collateral === s ? 'active' : ''}`}
+              onClick={() => setCollateral(s)}
+            >
+              ${s}
+            </button>
+          ))}
+        </div>
+        <div className="tag-scroll">
+          {LEVERAGES.map((x) => (
+            <button
+              key={x}
+              className={`tag ${leverage === x ? 'active' : ''}`}
+              onClick={() => setLeverage(x)}
+            >
+              {x}×
+            </button>
+          ))}
+        </div>
       </div>
 
       {cost && cheapest ? (
-        <div style={{ marginTop: 12 }}>
-          <div className="row-between">
-            <span className="faint">{t('perp.costNotional')}</span>
-            <span className="mono" style={{ fontSize: 12.5 }}>{fmtUsd(cost.notional)}</span>
+        <>
+          <div className="fnd-cost">
+            <div className="fnd-cost-row">
+              <span className="fnd-cost-label">{t('perp.costNotional')}</span>
+              <span className="fnd-cost-value">{fmtUsd(cost.notional)}</span>
+            </div>
+            <div className="fnd-cost-row">
+              <span className="fnd-cost-label">{t('perp.costMonth', { venue: cheapest.venue })}</span>
+              {/*
+                Negative cost means funding is paid TO the position. Real, common,
+                and not clamped: a screen that only ever shows an outflow would be
+                describing a market that does not exist.
+              */}
+              <span
+                className="fnd-cost-value is-big"
+                style={{ color: cost.cost > 0 ? 'var(--down)' : 'var(--up)' }}
+              >
+                {cost.cost > 0 ? '−' : '+'}{fmtUsd(Math.abs(cost.cost))}
+              </span>
+            </div>
           </div>
-          <div className="row-between" style={{ marginTop: 5 }}>
-            <span className="faint">{t('perp.costMonth', { venue: cheapest.venue })}</span>
-            {/*
-              Negative cost means funding is paid TO the position. Real, common,
-              and not clamped: a screen that only ever shows an outflow would be
-              describing a market that does not exist.
-            */}
-            <span
-              className="mono"
-              style={{ fontSize: 12.5, color: cost.cost > 0 ? 'var(--down)' : 'var(--up)' }}
-            >
-              {cost.cost > 0 ? '−' : '+'}{fmtUsd(Math.abs(cost.cost))}
-            </span>
-          </div>
-          <p className="faint" style={{ fontSize: 11.4, marginTop: 8, lineHeight: 1.7 }}>
+          <p className="fnd-cost-explain">
             {t('perp.costExplain', {
               pct: Math.abs(cost.pctOfCollateral).toFixed(1),
               lev: leverage
             })}
           </p>
-        </div>
+        </>
       ) : (
-        <p className="faint" style={{ fontSize: 11.5, marginTop: 10 }}>{t('perp.costNoRate')}</p>
+        <p className="fnd-cost-empty">{t('perp.costNoRate')}</p>
       )}
 
-      <p className="notice" style={{ marginTop: 12 }}>{t('perp.fundingNotice')}</p>
-      <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7 }}>
-        {t('perp.fundingCount', { used: data.used, considered: data.considered })}
-      </p>
+      <div className="fnd-foot">
+        <p className="notice">{t('perp.fundingNotice')}</p>
+        <p className="fnd-count">
+          {t('perp.fundingCount', { used: data.used, considered: data.considered })}
+        </p>
+      </div>
     </motion.section>
   );
 }

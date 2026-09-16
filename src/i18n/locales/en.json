@@ -1689,6 +1689,7 @@
     "fundApr": "Per year",
     "fundOi": "Open interest",
     "fundEvery": "settles every {{hours}}h",
+    "cheapest": "Cheapest",
     "fundSpread": "The gap between the cheapest and dearest venue for {{symbol}} is {{spread}} percentage points a year, on an identical position.",
     "fundingUnavailable": "Live funding rates are unavailable right now. We do not show a saved copy here: funding flips sign within a day, and a stale rate could tell you a position pays you when it is costing you.",
     "fundingNotice": "We earn nothing from any venue on this page — no referral, no revenue share. That is why the ranking can be trusted: nothing on it was bought. Rates change constantly; check the venue before you open a position.",
