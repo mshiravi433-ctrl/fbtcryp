@@ -284,13 +284,12 @@ export default function InsuranceShell() {
                 <h3>{t('insurance.shell.alerts')}</h3>
               </div>
               <div className="ins-sheet-head-actions">
-                <button
-                  type="button"
-                  className="ins-btn ghost small ins-sheet-close-text"
-                  onClick={() => setSheet(false)}
-                >
-                  {t('insurance.common.close')}
-                </button>
+                {/*
+                  One close control, not two: the header used to carry both a
+                  «بستن» text button and an ✕ icon doing the same thing. The
+                  icon stays (it matches the wallet and confirm dialogs); the
+                  text button is gone.
+                */}
                 <button
                   type="button"
                   className="ins-sheet-close"

@@ -314,18 +314,22 @@ export default function Perp() {
       */}
       <FundingPanel />
 
-      {/* ---------- why we don't run the engine ---------- */}
-      <motion.section className="card perp-honest" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span className="perp-honest-icon" aria-hidden="true">
-            <IconShield width={20} height={20} />
-          </span>
-          <div>
-            <div className="perp-honest-title">{t('perp.honestTitle')}</div>
-            <p className="muted perp-honest-body">{t('perp.honestBody')}</p>
-          </div>
-        </div>
-      </motion.section>
+      {/*
+        ─── WHY WE DON'T RUN THE ENGINE, FOLDED ────────────────────────────
+        Asked for explicitly («چرا فانوس بازار پیشگام موتور فیوچرز خودش را
+        ندارد را در باکس بازشونده بزار»): the honesty note is policy
+        explanation, not a market number, so it belongs in the same
+        collapsible InfoBox the warnings use — title always visible, body one
+        tap away — instead of a full card pushing the market data apart.
+      */}
+      <InfoBox
+        title={t('perp.honestTitle')}
+        tone="info"
+        id="perp-honest"
+        icon={<IconShield width={16} height={16} />}
+      >
+        <p>{t('perp.honestBody')}</p>
+      </InfoBox>
 
       {/*
         ─── HOW PERPETUALS ACTUALLY WORK ──────────────────────────────────

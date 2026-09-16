@@ -1,0 +1,240 @@
+/* ==========================================================================
+   FUNDING PANEL — MODERN SKIN (`fnd-*`)
+   Requested: «در جدول نگه داشتن چقدر خرج دارد جدول را مدرن‌تر کن با فاصله
+   درست» — the funding comparison table was a bare grid (7px rows, no frame,
+   no row separation) and the cheapest venue was only a bolder word.
+
+   Scope rules:
+   • Imported by FundingPanel.jsx itself, so BOTH hosts (Perp overview and
+     DerivativesDashboard) get the same skin — the panel must never depend on
+     perp-modern.css, which only one of them loads.
+   • Presentational only. Every rate, ranking rule and i18n key is untouched;
+     this file restyles the same honest comparison.
+   • Logical properties throughout — the app is Persian-first and RTL.
+   ========================================================================== */
+
+/* The panel is a vertical rhythm: intro → picker → table → calculator. */
+.fnd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 20px;
+  padding: 18px 16px 16px;
+}
+.fnd-panel > * { margin-block-start: 0; margin-block-end: 0; }
+.fnd-intro {
+  font-size: 12.2px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
+
+/* ─────────────────────────── COMPARISON TABLE ─────────────────────────── */
+/*
+ * A real framed table: rounded container, padded cells, hairline row
+ * separators, zebra striping and a hover wash. The cheapest-venue row for the
+ * chosen side carries an accent tint plus a pill badge — it used to differ by
+ * font-weight alone, which nobody could see.
+ */
+.fnd-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.fnd-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+.fnd-table th {
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: start;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--rgb-2) 8%, transparent);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.fnd-table th.fnd-num,
+.fnd-table td.fnd-num {
+  text-align: end;
+}
+.fnd-table td {
+  padding: 12px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.fnd-table tbody tr:last-child td { border-bottom: none; }
+.fnd-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--bg-raised) 45%, transparent);
+}
+.fnd-table tbody tr {
+  transition: background 140ms ease;
+}
+.fnd-table tbody tr:hover {
+  background: color-mix(in srgb, var(--rgb-1) 7%, transparent);
+}
+
+.fnd-venue-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.fnd-venue-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.fnd-apr {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fnd-oi {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The cheapest row: accent tint that survives zebra + hover, and a badge. */
+.fnd-table tbody tr.fnd-best,
+.fnd-table tbody tr.fnd-best:nth-child(even) {
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+.fnd-table tbody tr.fnd-best:hover {
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+}
+.fnd-best-badge {
+  display: inline-grid;
+  place-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--up) 38%, transparent);
+  white-space: nowrap;
+}
+
+.fnd-spread {
+  font-size: 11.4px;
+  line-height: 1.8;
+  color: var(--text-3);
+  margin: 0;
+}
+
+/* ─────────────────────────── COST CALCULATOR ──────────────────────────── */
+.fnd-cost-title {
+  margin-top: 4px;
+}
+.fnd-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The result: a framed box with real rows, not loose lines. */
+.fnd-cost {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--rgb-1) 6%, transparent),
+      transparent 55%
+    ),
+    var(--bg-panel);
+}
+.fnd-cost-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.fnd-cost-row + .fnd-cost-row {
+  border-top: 1px solid var(--line);
+}
+.fnd-cost-label {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+  min-width: 0;
+}
+.fnd-cost-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.fnd-cost-value.is-big {
+  font-size: 16px;
+}
+.fnd-cost-explain {
+  font-size: 11.4px;
+  line-height: 1.8;
+  color: var(--text-3);
+  margin: 0;
+}
+.fnd-cost-empty {
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-3);
+  margin: 0;
+}
+
+.fnd-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fnd-count {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--text-3);
+  margin: 0;
+}
+
+/* ─────────────────────────── LIGHT THEME ──────────────────────────────── */
+/* Variables already flip; only the tint strengths need calming on white. */
+:root[data-theme='light'] .fnd-table th {
+  background: color-mix(in srgb, var(--rgb-2) 6%, transparent);
+}
+:root[data-theme='light'] .fnd-table tbody tr.fnd-best,
+:root[data-theme='light'] .fnd-table tbody tr.fnd-best:nth-child(even) {
+  background: color-mix(in srgb, var(--up) 6%, transparent);
+}
+:root[data-theme='light'] .fnd-cost {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--rgb-1) 5%, transparent),
+      transparent 60%
+    ),
+    var(--bg-panel);
+}
+
+/* Reduced motion: the row hover fade is decoration, not signal. */
+@media (prefers-reduced-motion: reduce) {
+  .fnd-table tbody tr { transition: none; }
+}
