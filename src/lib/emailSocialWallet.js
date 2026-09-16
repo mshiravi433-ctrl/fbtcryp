@@ -352,9 +352,40 @@ export async function getEmailSocialAppKit(projectId, metadata) {
    * already have concluded there is nothing to restore. Only when OUR marker
    * is present (an attempt was started, and no other wallet has since
    * retired it) and the SDK's own copy is gone.
+   *
+   * If the instance ALREADY exists but the SDK marker was missing until we
+   * just rearmed it, that instance's frame was born dead — its constructor
+   * saw no marker and never created the secure-site iframe. A later
+   * `setItem` does not resurrect it; only a new constructor does. So a
+   * 'rearmed' result on an existing instance tears it down and recreates it,
+   * restoring the frame before the caller waits on subscribeAccount (the
+   * 30s restore window). Without this, a single slow-boot transient that
+   * deleted the SDK key would make every later restore wait 30s for an
+   * event an absent iframe can never emit, then rollback the boot marker and
+   * lose the session permanently — the observed email_restore_failed ×2.
    */
-  rearmSdkLoginMarker();
+  const rearm = rearmSdkLoginMarker();
   if (!emailAppKit) {
+    const [{ createAppKit }, { EthersAdapter }] = await Promise.all([
+      import('@reown/appkit'),
+      import('@reown/appkit-adapter-ethers')
+    ]);
+    emailAppKit = createAppKit({
+      ...emailSocialOptions(projectId, metadata),
+      adapters: [new EthersAdapter()]
+    });
+  } else if (rearm === 'rearmed') {
+    // The existing instance was constructed without a frame; recreate.
+    try { await emailAppKit.disconnect?.(); } catch { /* best effort */ }
+    try { emailAppKit.close?.(); } catch { /* best effort */ }
+    // disconnect's deleteAuthLoginCache removes the key we just restored.
+    try {
+      const target = typeof localStorage !== 'undefined' ? localStorage : null;
+      if (target && target.getItem(SDK_LOGIN_USED_KEY) !== SDK_LOGIN_USED_VALUE) {
+        target.setItem(SDK_LOGIN_USED_KEY, SDK_LOGIN_USED_VALUE);
+      }
+    } catch { /* storage unavailable */ }
+    emailAppKit = null;
     const [{ createAppKit }, { EthersAdapter }] = await Promise.all([
       import('@reown/appkit'),
       import('@reown/appkit-adapter-ethers')

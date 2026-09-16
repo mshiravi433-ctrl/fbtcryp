@@ -543,26 +543,34 @@ export function WalletProvider({ children }) {
   // Attach the embedded EIP-1193 provider to the same signer state as other wallets.
   const attachEmailProvider = useCallback(async (modal, acct) => {
     const eip = modal?.getWalletProvider?.();
-    if (!eip || !acct) return false;
-    const { BrowserProvider } = await loadEthers();
-    const provider = new BrowserProvider(eip, 'any');
-    const signer = await provider.getSigner();
-    const net = await provider.getNetwork();
-    const cid = Number(net.chainId);
-    const honest = EVM_CHAINS[cid] ? cid : DEFAULT_CHAIN;
-    detachInjectedListeners();
-    eip1193Ref.current = eip;
-    signerRef.current = signer;
-    setMode('email');
-    setInjectedInfo(null);
-    setAddress(acct);
-    setChainId(honest);
-    setLocked(false);
+    if (!eip || !acct) {
+      wcEvent(!eip ? 'email_attach_no_provider' : 'email_attach_no_acct');
+      return false;
+    }
+    try {
+      const { BrowserProvider } = await loadEthers();
+      const provider = new BrowserProvider(eip, 'any');
+      const signer = await provider.getSigner();
+      const net = await provider.getNetwork();
+      const cid = Number(net.chainId);
+      const honest = EVM_CHAINS[cid] ? cid : DEFAULT_CHAIN;
+      detachInjectedListeners();
+      eip1193Ref.current = eip;
+      signerRef.current = signer;
+      setMode('email');
+      setInjectedInfo(null);
+      setAddress(acct);
+      setChainId(honest);
+      setLocked(false);
 
-    setEmailSocialMarker(true);
-    attachInjectedListeners(eip);
-    await refreshBalance(acct, honest);
-    return true;
+      setEmailSocialMarker(true);
+      attachInjectedListeners(eip);
+      await refreshBalance(acct, honest);
+      return true;
+    } catch {
+      wcEvent('email_attach_failed');
+      return false;
+    }
   }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
   const connectEmailSocial = useCallback(async () => {
@@ -627,24 +635,34 @@ export function WalletProvider({ children }) {
     emailRestoreRef.current = true;
     try {
       const modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
-      let acct = modal.getIsConnectedState?.() ? modal.getAddress?.('eip155') : null;
+      let acct = null;
+      try { acct = modal.getIsConnectedState?.() ? modal.getAddress?.('eip155') : null; } catch { acct = null; }
       if (!acct) {
         acct = await new Promise((resolve) => {
           let off = null;
-          const timer = setTimeout(() => {
+          let pollTimer = null;
+          const finish = (val) => {
+            clearTimeout(timer);
+            clearInterval(pollTimer);
             try { off?.(); } catch { /* noop */ }
-            resolve(null);
-          }, EMAIL_RESTORE_WINDOW_MS);
+            resolve(val);
+          };
+          const timer = setTimeout(() => finish(null), EMAIL_RESTORE_WINDOW_MS);
+          pollTimer = setInterval(() => {
+            try {
+              if (modal.getIsConnectedState?.()) {
+                const a = modal.getAddress?.('eip155');
+                if (a) finish(a);
+              }
+            } catch { /* poll is best effort */ }
+          }, 600);
           try {
             off = modal.subscribeAccount?.((a) => {
               if (!a?.isConnected || !a?.address) return;
-              clearTimeout(timer);
-              try { off?.(); } catch { /* noop */ }
-              resolve(a.address);
+              finish(a.address);
             });
           } catch {
-            clearTimeout(timer);
-            resolve(null);
+            // subscribe failed — polling still covers
           }
         });
       }
@@ -659,12 +677,14 @@ export function WalletProvider({ children }) {
          * rule and already exists: the marker is handed back only when AppKit
          * itself says nothing is connected, and kept when it cannot answer.
          */
-        const cleared = rollbackEmailSocialMarker(modal);
+        let cleared = false;
+        try { cleared = rollbackEmailSocialMarker(modal); } catch { cleared = false; }
         wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
         return false;
       }
       const attached = await attachEmailProvider(modal, acct);
       if (attached) wcEvent('email_session_restored');
+      else wcEvent('email_attach_restore_failed');
       return attached;
     } catch {
       wcEvent('email_restore_failed');
