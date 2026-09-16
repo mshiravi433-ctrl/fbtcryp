@@ -290,7 +290,17 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   const kyberLive = aggregatorSupports(chainId);
   const ooLive = openOceanSupports(chainId);
   const lifiLive = lifiSupports(chainId) && Boolean(fromAddress);
-  if (aggregatorFeeEnabled(chainId) && (kyberLive || ooLive)) {
+  /*
+   * Do not gate the source fan-out on Kyber/OpenOcean. LI.FI is an
+   * independent, fee-enforced route for the two L2s the UI supports (and is
+   * deliberately the only viable source when both older aggregators are
+   * unavailable). The old condition made that fallback accidental: a build
+   * with an unavailable/disabled OpenOcean adapter skipped LI.FI entirely and
+   * fell through to the direct-router branch, which has no router on Scroll
+   * or zkSync and surfaced the Persian NO_ROUTE message.
+   */
+  const anyFeeSource = kyberLive || ooLive || lifiLive;
+  if (aggregatorFeeEnabled(chainId) && anyFeeSource) {
     try {
       const feeReceiver = feeRecipientFor(chainId);
       const common = {
