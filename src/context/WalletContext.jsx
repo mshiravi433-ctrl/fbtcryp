@@ -1723,12 +1723,13 @@ export function WalletProvider({ children }) {
     // ── ORPHANED STORAGE HYGIENE: the report that arrived carried 5 appkit keys with 0 sessions.
     // A stale WALLETCONNECT_DEEPLINK_CHOICE or @appkit/recent_wallet makes the NEXT connect
     // skip the modal and open a wallet app with a dead pairing — so an idle cold start that
-    // has nowhere to restore can clean the residue it can prove is dead. Email's own
-    // @appkit-wallet marker is NOT here (managed by emailSocialWallet) and a present local
-    // vault is never cleaned — only a truly disconnected, session-less state.
+    // has nowhere to restore can clean the residue it can prove is dead. The check is
+    // deliberately vault-agnostic: an in-app vault does not use @appkit/* keys, so
+    // stale AppKit debris still blocks the next WC attempt even when a vault exists.
+    // Email's @appkit-wallet marker lives under a different prefix and is never purged here.
     try {
       const facts = storageFacts();
-      if (facts.orphanKeys && !hasEmailSocialMarker() && !loadVault() && !addressRef.current) {
+      if (facts.orphanKeys && !addressRef.current) {
         const purged = purgeWcStorage();
         if (purged) wcEvent('orphan_storage_purged', Number(purged));
       }
