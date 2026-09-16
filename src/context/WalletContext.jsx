@@ -15,6 +15,24 @@ import {
   WC_RELAY_URLS,
   isRelayClassError
 } from '../lib/wcTimeout';
+/*
+ * THE RELAY PREFLIGHT — the measurement that was missing.
+ * `EthereumProvider.init()` does not open a relay socket (measured in
+ * @walletconnect/core@2.25.0: `Relayer.init()` calls `transportOpen()`
+ * UN-awaited, and `transportOpen()` returns immediately while the client has no
+ * topics), so the old `relay_ok` trace event described a provider object, not
+ * the relay — and the failover below only fired when init() REJECTED, which a
+ * blocked relay never does. lib/wcRelayProbe.js measures the socket for real,
+ * hands back the try order that measurement justifies, and reads the SDK's own
+ * `relayer.connected` afterwards.
+ */
+import {
+  RELAY_PREFLIGHT_TIMEOUT_MS,
+  clearRelayStateCache,
+  getRelayState,
+  isRelayBlocked,
+  readRelaySocket
+} from '../lib/wcRelayProbe';
 import { purgeWcStorage } from '../lib/wcStorage';
 import {
   appKitCustomWallets,
@@ -257,6 +275,18 @@ export function WalletProvider({ children }) {
      EITHER modal owns the screen (two stacked blurred backdrops composited
      into the «grey box flickering» report on the Android WebView). */
   const [emailModalActive, setEmailModalActive] = useState(false);
+  /*
+   * THE MEASURED RELAY STATE — the fact the connect sheet was missing.
+   *
+   * One object from lib/wcRelayProbe.js: `{ verdict, hosts, openUrls, order }`,
+   * measured on THIS device and network. It exists because the sheet used to
+   * offer WalletConnect pairing as «recommended» on a network where the relay's
+   * WebSocket is filtered — a route that cannot work, presented as the best one,
+   * discovered only after a tap and a stalled SDK attempt. `wcRelayBlocked` is
+   * the derived question the UI asks: is pairing possible here right now?
+   */
+  const [wcRelay, setWcRelay] = useState(null);
+  const wcRelayBlocked = Boolean(wcRelay && isRelayBlocked(wcRelay.verdict));
   /* The in-flight provider, so Cancel can tear down the attempt that owns the
      URI (wcRef is only assigned on SUCCESS). */
   const wcPairingRef = useRef(null);
@@ -987,16 +1017,27 @@ export function WalletProvider({ children }) {
    * about which relay a revived session talks to — the same byte-identical
    * init contract buildWcInitConfig() already guarantees.
    */
-  const initWcProvider = useCallback(async (EthereumProvider, baseConfig) => {
+  const initWcProvider = useCallback(async (EthereumProvider, baseConfig, relayOrder) => {
+    /*
+     * `relayOrder` is the MEASURED order from the preflight (lib/wcRelayProbe.js):
+     * the hostname whose socket actually opened comes first. It defaults to the
+     * configured list, and it is always a permutation of it — an unmeasured host
+     * still gets its turn, it just does not get to be first when another one has
+     * already proven itself. Before this, the order was static and the failover
+     * below could only fire when init() REJECTED — which a filtered relay never
+     * does (see the module header of lib/wcRelayProbe.js), so a network that
+     * blocked the primary and allowed the fallback never reached the fallback.
+     */
+    const urls = (Array.isArray(relayOrder) && relayOrder.length ? relayOrder : WC_RELAY_URLS).map(String);
     let lastError = null;
-    for (let i = 0; i < WC_RELAY_URLS.length; i += 1) {
-      const isLast = i === WC_RELAY_URLS.length - 1;
+    for (let i = 0; i < urls.length; i += 1) {
+      const isLast = i === urls.length - 1;
       const budget = isLast ? WC_CONNECT_TIMEOUT_MS : WC_PRIMARY_RELAY_TIMEOUT_MS;
       wcEvent(i ? 'relay_fallback_try' : 'relay_try', Number(i));
       let orphaned = true;
       try {
         const attempt = Promise.resolve(
-          EthereumProvider.init({ ...baseConfig, relayUrl: WC_RELAY_URLS[i] })
+          EthereumProvider.init({ ...baseConfig, relayUrl: urls[i] })
         );
         attempt.then((ghost) => {
           if (orphaned) {
@@ -1006,7 +1047,28 @@ export function WalletProvider({ children }) {
         // eslint-disable-next-line no-await-in-loop -- sequential failover is the point
         const wcInstance = await withTimeout(attempt, budget, 'WC_INIT_TIMEOUT');
         orphaned = false;
-        wcEvent(i ? 'relay_fallback_ok' : 'relay_ok', Number(i));
+        /*
+         * ─── WHAT THIS EVENT USED TO CLAIM, AND WHAT IT MEANS NOW ──────────
+         * This was `relay_ok` — the trace line that made a dead relay look
+         * healthy. The support report that exposed it carried both halves:
+         * `relay_ok` 202ms after `relay_try`, while the same hostname's socket
+         * took 1423ms to fail and never opened. The SDK settles it
+         * (@walletconnect/core@2.25.0, `Relayer.init()`): `transportOpen()` is
+         * NOT awaited, and it returns at once while the client has no topics —
+         * which is the normal state right after this flow purges storage.
+         *
+         * So init() resolving says "a provider was built", and that is the name
+         * it now has. The relay's own answer is read one line later from the
+         * SDK's `relayer.connected` (socket.readyState === 1) and traced as
+         * `relay_socket_open` / `relay_socket_unopened`. The second is NOT a
+         * failure — on a clean slate the SDK has nothing to subscribe to yet —
+         * but it is the truth, and a truth that stops the next fix from being
+         * aimed at the wrong hop.
+         */
+        wcEvent(i ? 'provider_ready_fallback' : 'provider_ready', Number(i));
+        const socket = readRelaySocket(wcInstance);
+        if (socket.connected) wcEvent('relay_socket_open', Number(i));
+        else wcEvent('relay_socket_unopened');
         return wcInstance;
       } catch (e) {
         lastError = e;
@@ -1163,12 +1225,16 @@ export function WalletProvider({ children }) {
     };
   }, []);
 
-  const connectWalletConnect = useCallback(async () => {
+  const connectWalletConnect = useCallback(async ({ force = false } = {}) => {
     // Prevent double-init: EthereumProvider.init() creates a new session every
     // time it runs, and rapid double-taps spawned two modals / two pairing URIs.
     if (wcInitingRef.current) return false;
     setError(null);
     setConnecting(true);
+    /* Wall clock for the attempt, so the failure the trace records carries how
+       long it took: a relay that refuses in 1.5s and one that swallows packets
+       for 20s are the same event name and two completely different networks. */
+    const startedAt = Date.now();
     wcInitingRef.current = true;
     /* Hold the refresh guard for the WHOLE pairing attempt: a refresh while
        the wallet's approval screen is up would strand the pairing, and a WebView
@@ -1222,6 +1288,60 @@ export function WalletProvider({ children }) {
         wcEvent('storage_purged', Number(purged));
       }
       /*
+       * ─── RELAY PREFLIGHT: ASK THE SOCKET BEFORE PROMISING A PAIRING ───────
+       *
+       * Measured on a real report from https://fbtswap.ir (2026-09-16): both
+       * relay hostnames answer HTTPS (199ms / 132ms) and BOTH refuse the
+       * WebSocket upgrade (SOCKET_ERROR, closeCode 1006) — verdict WS_REFUSED,
+       * i.e. the network filters the upgrade itself, so no pairing can ever be
+       * published. The app's own trace for the same session said
+       * `relay_try(0) → relay_ok(0)` in 202ms and then `connect_failed` 1.7s
+       * later, with no reason attached: it believed the relay was fine, opened
+       * the pairing surface, and died inside the SDK's first real socket
+       * attempt. Every user-visible fix aimed at init() was aimed upstream of
+       * that moment (see lib/wcRelayProbe.js for the SDK lines that prove it).
+       *
+       * So the socket is measured here, once, with the SAME instrument the
+       * health panel prints:
+       *
+       *   • BLOCKED (and not forced) → fail in milliseconds with the honest
+       *     WC_RELAY_UNREACHABLE, and the sheet steers to the three routes that
+       *     need no relay. The user's explicit "try anyway" re-measures with
+       *     `force` and runs the real attempt — a probe is evidence, not a law.
+       *   • OPEN → the host that opened becomes the first `relayUrl` handed to
+       *     init(), which is what finally makes the relay failover real.
+       *   • NO_WEBSOCKET / NO_MEASUREMENT → nothing was measured, so nothing is
+       *     refused; the attempt runs on the configured order.
+       */
+      let relay = null;
+      try {
+        relay = await getRelayState({
+          projectId: WC_PROJECT_ID,
+          timeoutMs: RELAY_PREFLIGHT_TIMEOUT_MS,
+          force
+        });
+      } catch { relay = null; }
+      if (relay) {
+        setWcRelay(relay);
+        /* One literal per verdict: the trace audit (test/wc-connect-probe.mjs)
+           requires every event name to be a literal in this source, so a
+           verdict can never ride into the log as data. The count that rides
+           along goes through a lowercase local for the same reason — the audit
+           only accepts `Number(<identifier>)`. */
+        const opened = Array.isArray(relay.openUrls) ? relay.openUrls.length : 0;
+        if (relay.verdict === 'OPEN') wcEvent('relay_preflight_open', Number(opened));
+        else if (relay.verdict === 'WS_REFUSED') wcEvent('relay_preflight_ws_refused');
+        else if (relay.verdict === 'UNREACHABLE') wcEvent('relay_preflight_unreachable');
+        else if (relay.verdict === 'TIMEOUT') wcEvent('relay_preflight_timeout');
+        else wcEvent('relay_preflight_unmeasured');
+      }
+      if (relay && !force && isRelayBlocked(relay.verdict)) {
+        wcEvent('connect_skipped_relay');
+        setError('WC_RELAY_UNREACHABLE');
+        return false;
+      }
+      const relayOrder = Array.isArray(relay?.order) && relay.order.length ? relay.order : WC_RELAY_URLS;
+      /*
        * INIT — WITH THE MODAL, AND HONESTLY WITHOUT IT IF IT CANNOT LOAD.
        *
        * `showQrModal: true` makes EthereumProvider `await import(
@@ -1236,12 +1356,12 @@ export function WalletProvider({ children }) {
        * a different surface would only hide them.
        */
       try {
-        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(true));
+        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(true), relayOrder);
         wcEvent('init');
       } catch (modalErr) {
         if (!isAppKitModalError(modalErr)) throw modalErr;
         wcEvent('appkit_modal_unavailable');
-        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false));
+        wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false), relayOrder);
         wcEvent('init_without_modal');
       }
       /*
@@ -1440,7 +1560,20 @@ export function WalletProvider({ children }) {
        *  - "expired": the pairing sat unapproved past its TTL.
        */
       const msg = String(e?.message || '');
-      wcEvent('connect_failed');
+      /*
+       * WHY THE REASON IS IN THE EVENT NAME.
+       *
+       * This line used to be a bare `wcEvent('connect_failed')` — so the report
+       * that exposed the dead relay carried the single most important fact in
+       * the whole flow («the pairing died») with nothing about WHY, and the next
+       * investigation started from zero again. The trace contract
+       * (lib/wcTrace.js + its audit in test/wc-connect-probe.mjs) forbids string
+       * payloads, because a relay-controlled string in a support screenshot is a
+       * leak vector. The classification below already exists for `setError`, so
+       * each branch now emits its OWN literal name plus the elapsed
+       * milliseconds — evidence without ever accepting a foreign string.
+       */
+      const elapsed = Math.max(0, Math.round(Date.now() - startedAt));
       /*
        * Our own bounded wait fired: the SDK's internal retry loop is still
        * spinning on a relay it cannot reach, but the USER is not left
@@ -1469,8 +1602,10 @@ export function WalletProvider({ children }) {
          */
         msg === 'WC_USER_CANCELLED'
       ) {
+        wcEvent('connect_failed_cancel', Number(elapsed));
         setError('USER_REJECTED');
       } else if (/origin not allowed|unauthorized|project id/i.test(msg)) {
+        wcEvent('connect_failed_origin', Number(elapsed));
         setError('WC_ORIGIN_BLOCKED');
       } else if (
         /*
@@ -1482,14 +1617,24 @@ export function WalletProvider({ children }) {
          */
         msg === 'WC_PAIRING_EXPIRED' || /proposal expired|expired/i.test(msg)
       ) {
+        wcEvent('connect_failed_expired', Number(elapsed));
         setError('WC_EXPIRED');
       } else if (
         msg === 'WC_CONNECT_TIMEOUT' ||
         msg === 'WC_INIT_TIMEOUT' ||
         /websocket|socket stalled|network|failed to publish|relay|timeout|no internet connection/i.test(msg)
       ) {
+        wcEvent('connect_failed_relay', Number(elapsed));
         setError('WC_RELAY_UNREACHABLE');
+        /*
+         * THE CACHE IS WRONG, OR THE NETWORK JUST CHANGED. Either way the next
+         * attempt must MEASURE again instead of being served a verdict that a
+         * live failure just contradicted — including the OPEN verdict that let
+         * this attempt run at all.
+         */
+        clearRelayStateCache();
       } else {
+        wcEvent('connect_failed_unknown', Number(elapsed));
         setError('CONNECT_FAILED');
       }
       /*
@@ -1631,7 +1776,34 @@ export function WalletProvider({ children }) {
        * that is never opened. The explicit Connect button is what asks for
        * the modal.
        */
-      wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false));
+      /*
+       * THE SAME PREFLIGHT, AND WHY IT IS CHEAPER HERE THAN IT LOOKS.
+       *
+       * A revive needs the relay exactly as much as a pairing does: `getSigner()`
+       * below round-trips it, and on a filtered network that costs the full
+       * WC_RESTORE_TIMEOUT before this path gives up quietly — every resume, for
+       * a user who cannot be restored. The measurement is the cached one whenever
+       * it is fresh (no `force`), so a returning user pays for at most one probe,
+       * and only when a session is actually on disk (the storage probe above is
+       * still the gate that keeps non-WalletConnect visitors off the network).
+       *
+       * A measured block ends the attempt here instead of inside the SDK, and
+       * `wcRelay` reaches the sheet, so the connect screen the user opens next
+       * already knows pairing cannot work on this network.
+       */
+      let relay = null;
+      try {
+        relay = await getRelayState({ projectId: WC_PROJECT_ID, timeoutMs: RELAY_PREFLIGHT_TIMEOUT_MS });
+      } catch { relay = null; }
+      if (relay) {
+        setWcRelay(relay);
+        if (isRelayBlocked(relay.verdict)) {
+          wcEvent('restore_skipped_relay');
+          return false;
+        }
+      }
+      const relayOrder = Array.isArray(relay?.order) && relay.order.length ? relay.order : WC_RELAY_URLS;
+      wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false), relayOrder);
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
       /* init() loads persisted sessions internally; if the wallet already
@@ -2162,6 +2334,17 @@ export function WalletProvider({ children }) {
        */
       wcPairUri,
       wcModalActive,
+      /*
+       * THE MEASURED RELAY, FOR THE SCREEN THAT OFFERS THE ROUTE.
+       * `wcRelay` is the whole preflight state (verdict + per-host facts + the
+       * try order it produced); `wcRelayBlocked` is the one question the sheet
+       * asks before presenting WalletConnect pairing as an option. Keeping the
+       * decision in the context (and not re-probing in the component) is what
+       * makes the connect flow and the UI read the SAME measurement — the
+       * health panel prints it too, so the three surfaces cannot disagree.
+       */
+      wcRelay,
+      wcRelayBlocked,
       /* The WalletConnect project id, exposed so the sheet can build the same
          explorer logo URLs the modal uses (lib/wcWallets.js `walletLogo`)
          without a second copy of the id living in a component. */
@@ -2210,6 +2393,8 @@ export function WalletProvider({ children }) {
       emailModalActive,
       wcPairUri,
       wcModalActive,
+      wcRelay,
+      wcRelayBlocked,
       cancelWcPairing,
       restoreWcSession,
       attachLocal,

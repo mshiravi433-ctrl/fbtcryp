@@ -194,10 +194,19 @@ const SHIP_NODE_OPTIONS = '--max-old-space-size=3072';
  * point this at anything near that.
  */
 const BUILD_NODE_OPTIONS = process.env.FBT_TEST_BUILD_HEAP || SHIP_NODE_OPTIONS;
+/*
+ * `npxShip` honours the same escape hatch. It used to hardcode
+ * SHIP_NODE_OPTIONS, so on a 4 GB box the two builds it runs — the shipped
+ * static bundle and the jsdom IIFE bundle, both of which happen while this
+ * runner is already holding ~1 GB — were killed by the kernel (`status: 137`,
+ * every assertion before them already green) with no way to lower the child
+ * heap. The default is unchanged; only the documented override now reaches the
+ * child that needs it.
+ */
 const npxShip = (args) => {
   const env = { ...process.env };
   delete env.NODE_ENV;
-  env.NODE_OPTIONS = [env.NODE_OPTIONS, SHIP_NODE_OPTIONS].filter(Boolean).join(' ');
+  env.NODE_OPTIONS = [env.NODE_OPTIONS, BUILD_NODE_OPTIONS].filter(Boolean).join(' ');
   return execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'], env });
 };
 
@@ -841,6 +850,17 @@ console.log('▸ probing the wallet health report (the «which link failed?» to
 {
   const { default: runWalletHealth } = await import('./wallet-health-probe.mjs');
   report('wallet health', await runWalletHealth());
+}
+
+/* ------------------------------ 0c-10. relay preflight ---------------------- */
+/* The measurement that was missing: `EthereumProvider.init()` never opens a
+   relay socket (measured in @walletconnect/core@2.25.0), so a filtered relay
+   used to read as a healthy one, the hostname failover never fired, and the
+   connect sheet kept recommending the one route that could not work. */
+console.log('▸ probing the WalletConnect relay preflight (measure before promising a pairing)…');
+{
+  const { default: runRelayPreflight } = await import('./wc-relay-preflight-probe.mjs');
+  report('WalletConnect relay preflight', await runRelayPreflight());
 }
 
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */

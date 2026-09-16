@@ -203,6 +203,20 @@ export default function WalletConnectSheet({ open, onClose }) {
    * single-flight (wcInitingRef) — this state exists to manage VISIBILITY,
    * not to gate the flow.
    */
+  /*
+   * THE MEASURED RELAY, ONE PROPERTY READ AWAY.
+   *
+   * `wallet.wcRelay` is the preflight the connect flow itself runs (see
+   * lib/wcRelayProbe.js for the SDK evidence that made it necessary: the relay
+   * socket is not touched until deep inside `wc.connect()`, so nothing before
+   * that point can tell a filtered network from a healthy one). When it says the
+   * relay is blocked on THIS network, the row below stops claiming to be
+   * «recommended», the banner says why, and the tap becomes an explicit
+   * `force` — a re-measurement plus a real attempt, because a probe is evidence
+   * and not a law. On a healthy network nothing here changes.
+   */
+  const relayBlocked = Boolean(wallet.wcRelayBlocked);
+
   const startWalletConnect = () => {
     if (wallet.connecting) return;
     setErr(null);
@@ -210,7 +224,7 @@ export default function WalletConnectSheet({ open, onClose }) {
     setCopiedUri(false);
     setView('pair');
     wallet
-      .connectWalletConnect()
+      .connectWalletConnect({ force: relayBlocked })
       .then((ok) => {
         if (ok) close();
         else setView('choose');
@@ -387,10 +401,27 @@ export default function WalletConnectSheet({ open, onClose }) {
           <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.connectTitle')}</h2>
           <p className="muted" style={{ marginBottom: 14 }}>{t('wallet.connectSubtitle')}</p>
 
+          {/*
+            THE HONEST ORDER OF OPTIONS.
+            On a network where the relay's WebSocket is filtered, WalletConnect
+            pairing is the ONE route here that cannot work — and it used to be
+            the first row, wearing a «recommended» pill, with the reason buried
+            behind a tap and a stalled SDK attempt. The measurement is already in
+            hand (the connect flow's own preflight), so the sheet says so before
+            the tap and moves the recommendation to a route that needs no relay.
+            Nothing is removed: the WalletConnect row stays, labelled for what it
+            is, and its tap re-measures and tries for real.
+          */}
+          {relayBlocked && (
+            <p className="notice notice-danger" style={{ marginBottom: 10 }}>
+              {t('wallet.wcRelayBlockedHint')}
+            </p>
+          )}
+
           <div className="stack" style={{ gap: 9 }}>
             <motion.button
               className="wallet-option"
-              data-featured="true"
+              data-featured={relayBlocked ? undefined : 'true'}
               whileTap={{ scale: 0.98 }}
               onClick={startWalletConnect}
               disabled={wallet.connecting}
@@ -400,17 +431,29 @@ export default function WalletConnectSheet({ open, onClose }) {
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.wc')}</span>
-                <span className="set-row-sub">{t('wallet.wcDesc')}</span>
+                <span className="set-row-sub">
+                  {relayBlocked ? t('wallet.wcRelayTryAnyway') : t('wallet.wcDesc')}
+                </span>
               </span>
-              <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
+              {relayBlocked ? (
+                <span className="pill pill-down" style={{ flexShrink: 0 }}>
+                  {t('wallet.wcRelayBlockedPill')}
+                </span>
+              ) : (
+                <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
+              )}
             </motion.button>
 
             {/* Email & Social (Reown AppKit embedded wallet): no wallet app
                 to install, the provisioned wallet attaches through the same
                 EIP-1193 path an injected wallet uses — see
-                lib/emailSocialWallet.js for why it is its own instance. */}
+                lib/emailSocialWallet.js for why it is its own instance. Its
+                transport is the secure frame, NOT the relay, which is why it
+                carries the recommendation the moment the relay is measured
+                blocked. */}
             <motion.button
               className="wallet-option"
+              data-featured={relayBlocked ? 'true' : undefined}
               whileTap={{ scale: 0.98 }}
               onClick={startEmailSocial}
               disabled={wallet.connecting}
@@ -422,6 +465,9 @@ export default function WalletConnectSheet({ open, onClose }) {
                 <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.emailSocial')}</span>
                 <span className="set-row-sub">{t('wallet.emailSocialDesc')}</span>
               </span>
+              {relayBlocked && (
+                <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
+              )}
             </motion.button>
 
             {/*

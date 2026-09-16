@@ -206,8 +206,10 @@ export default function runWcPairingSurface() {
     t('…a relay/project failure is rethrown, never disguised as a modal failure',
       code.indexOf('if (!isAppKitModalError(modalErr)) throw modalErr')
         < code.indexOf('buildWcInitConfig(false)'));
+    /* …and it goes through the same measured relay order as connect() — the
+       third argument is the preflight's order, not a static hostname list. */
     t('a silent session restore does NOT build a modal it will never open',
-      /initWcProvider\(EthereumProvider, buildWcInitConfig\(false\)\)/.test(code));
+      /initWcProvider\(EthereumProvider, buildWcInitConfig\(false\), relayOrder\)/.test(code));
     t('the sheet is told which surface owns the pairing',
       /setWcModalActive\(Boolean\(wc\?\.modal\)\)/.test(code)
       && /finally \{[\s\S]{0,260}setWcModalActive\(false\)/.test(code));
