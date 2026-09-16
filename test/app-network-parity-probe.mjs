@@ -211,11 +211,28 @@ check('classify: every source rejected by our own fee gate → QUOTE_FAILED, not
   }) === 'QUOTE_FAILED');
 check('classify: a genuine no-route answer is still NO_ROUTE',
   classifyQuoteFailure({ failures: [err('NO_ROUTE')], answered: 2 }) === 'NO_ROUTE');
-check('classify: a mixed failure set does not masquerade as a fee problem',
+/* ── 2026-09-15, corrected ordering ──────────────────────────────────────────
+ * A fee-gate rejection DOMINATES the verdict, it is not just one vote among
+ * equals: FEE_RECIPIENT_MISMATCH on one source can only have happened because
+ * that source produced a priced route which OUR gate then threw away — the
+ * pair routed, full stop. Reporting NO_ROUTE tells the user the pair is
+ * unroutable and sends them hunting token pairs, when nothing about the pair
+ * is wrong. The pinned `.every` behaviour below did exactly that whenever a
+ * fee rejection raced a concurrent dead-OpenOcean failure — the permanent
+ * condition on the LI.FI-primary chains (zkSync/Scroll/Mantle) whose only other
+ * source is OpenOcean. Now the honest answer is QUOTE_FAILED (retryable), and
+ * «مسیری بین این دو توکن وجود ندارد» is reserved for the case where every
+ * source that spoke genuinely could not route the pair. */
+check('classify: a fee-gate rejection dominates a mixed failure set',
   classifyQuoteFailure({
     failures: [err('FEE_RECIPIENT_MISMATCH'), err('NO_ROUTE')],
     answered: 2
-  }) === 'NO_ROUTE');
+  }) === 'QUOTE_FAILED');
+check('classify: a server-side fee rejection (HTTP 502 + code) is not misread as a network outage',
+  classifyQuoteFailure({
+    failures: [err('FEE_NOT_APPLIED', { network: true })],
+    answered: 0
+  }) === 'QUOTE_FAILED');
 
 /* The five networks the report named must all still be LI.FI-routable. */
 const { lifiSupports } = await import('../src/lib/lifi.js');

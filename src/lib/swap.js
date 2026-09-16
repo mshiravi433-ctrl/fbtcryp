@@ -144,9 +144,6 @@ export const isStableSymbol = (s) => STABLES.has(String(s ?? '').toUpperCase());
 const FEE_CONFIGURATION_CODES = new Set(['FEE_NOT_APPLIED', 'FEE_RECIPIENT_MISMATCH']);
 
 export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
-  if (answered === 0 && failures.length > 0 && failures.every((f) => f?.network === true)) {
-    return 'QUOTE_NETWORK';
-  }
   /*
    * A fee-gate rejection must never be reported as «مسیری بین این دو توکن
    * وجود ندارد». That sentence is a claim about the pair, and it sends the
@@ -158,12 +155,25 @@ export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
    *
    * `QUOTE_FAILED` is retriable in the UI and is honest: we could not produce
    * a price.
+   *
+   * `.some`, and first — a single fee-gate rejection means a route EXISTED
+   * and our own verification killed it, no matter what the other sources
+   * did. Under `.every` a concurrent dead-OpenOcean failure (a permanent
+   * condition on the zkSync/Scroll/Mantle-day chains, where OpenOcean's edge
+   * 403s our server) flipped the verdict back to NO_ROUTE whenever LI.FI was
+   * simultaneously rejected by the fee gate: exactly the chain+condition
+   * combination the misstatement is most damaging on.
+   *
+   * This check also runs BEFORE the all-network branch: our proxy answers a
+   * server-side fee rejection as HTTP 502 with the code in the body, which
+   * the LI.FI client marks `network` — the code, not the status line, is the
+   * honest verdict for it.
    */
-  if (
-    failures.length > 0 &&
-    failures.every((f) => FEE_CONFIGURATION_CODES.has(String(f?.message ?? '')))
-  ) {
+  if (failures.some((f) => FEE_CONFIGURATION_CODES.has(String(f?.message ?? '')))) {
     return 'QUOTE_FAILED';
+  }
+  if (answered === 0 && failures.length > 0 && failures.every((f) => f?.network === true)) {
+    return 'QUOTE_NETWORK';
   }
   return 'NO_ROUTE';
 }
