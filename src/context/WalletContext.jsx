@@ -28,6 +28,7 @@ import {
   clearEmailSocialSession,
   getEmailSocialAppKit,
   hasEmailSocialMarker,
+  rollbackEmailSocialMarker,
   setEmailSocialMarker
 } from '../lib/emailSocialWallet';
 import { openWalletLink } from '../lib/browser';
@@ -518,9 +519,11 @@ export function WalletProvider({ children }) {
     setAddress(acct);
     setChainId(honest);
     setLocked(false);
-    /* The boot marker is written HERE, only after the account is proven —
-       never at button-tap time. A marker without a working session would
-       make every later cold start pay for a restore that cannot succeed. */
+    /* The marker was already claimed when this attempt STARTED (see
+       connectEmailSocial) — a redirect-shaped flow cannot wait for this line.
+       Writing it here as well is what re-confirms a proven account after any
+       rollback an earlier failed attempt performed, so the order of these two
+       writes is load-bearing and this one must stay. */
     setEmailSocialMarker(true);
     attachInjectedListeners(eip);
     await refreshBalance(acct, honest);
@@ -534,6 +537,30 @@ export function WalletProvider({ children }) {
    *  - closing the modal before any connection is a plain cancel (resolve
    *    false, no error state — mirroring the injected path's USER_REJECTED
    *    is wrong here: the user may have opened it just to look).
+   *
+   * ─── WHY THE BOOT MARKER IS CLAIMED HERE, BEFORE ANYTHING ELSE ───────────
+   * The email/social flow is redirect-shaped on mobile (and on any browser
+   * that hands the OTP / OAuth step to a top-level navigation): the confirming
+   * tap takes the browser away from fbtswap.ir and the return is a FRESH
+   * document. That document owns none of the subscribeAccount/subscribeState
+   * closures registered below — they died with the page that opened the modal
+   * — while AppKit's auth session is warm and its account is right there. If
+   * the only thing that ever marked this surface as ours was the write at the
+   * END of attachEmailProvider(), the returning page had no reason to look:
+   * the cold-start gate in the mount effect is `hasEmailSocialMarker()`, so it
+   * went to restoreWcSession() instead and the wallet stayed invisible. The
+   * user's workaround — tapping «ایمیل و ورود با سوشال» a second time, which
+   * found the warm session and attached without opening the modal — was the
+   * proof: the session was healthy, our model simply never asked.
+   *
+   * So the marker is claimed BEFORE the async work starts, and every attempt
+   * that ends with nothing to restore hands it back
+   * (rollbackEmailSocialMarker — honest rollback, see lib/emailSocialWallet.js).
+   * The self-clearing boundaries around this are unchanged and are what make
+   * claiming early safe: restoreEmailSocial() forgets the marker when its 8s
+   * window closes with no account, disconnect() and the [mode] effect wash it
+   * for other wallets, and a successful attach re-writes it from
+   * attachEmailProvider() regardless of what an earlier failed tap did to it.
    */
   const connectEmailSocial = useCallback(async () => {
     if (connecting) return false;
@@ -542,10 +569,19 @@ export function WalletProvider({ children }) {
     /* Same contract as the other paths: refresh/reload stays frozen while
        an auth modal can legitimately be mid-flow. */
     const connectGuard = holdRefreshGuard('email-connect');
+    /* Declared before the try so the rollback below can still see the
+       instance when the failure happened after AppKit was built. */
+    let modal = null;
     try {
       if (eip1193Ref.current || wcRef.current) disconnectRef.current?.();
 
-      const modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
+      /* Claim the marker FIRST — after the one-wallet teardown above (that
+         teardown clears it synchronously, so claiming before it would be
+         erased) and before the first await (this page may never reach a
+         later line). See the block comment on this function. */
+      setEmailSocialMarker(true);
+
+      modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
       if (!modal) throw new Error('APPKIT_UNAVAILABLE');
       /* The features re-assertion (lib/emailSocialWallet.js) already ran in
          getEmailSocialAppKit() — the shared-singleton truce documented in
@@ -553,7 +589,23 @@ export function WalletProvider({ children }) {
          here. */
 
       const warm = modal.getIsConnectedState?.() && modal.getAddress?.('eip155');
-      if (warm) return await attachEmailProvider(modal, warm);
+      if (warm) {
+        /* Same settle shape as before: a false (nothing to attach) is a quiet
+           false, a THROWN attach still names itself as CONNECT_FAILED. */
+        const attached = await attachEmailProvider(modal, warm).then(
+          (ok) => Boolean(ok),
+          () => {
+            setError('CONNECT_FAILED');
+            return false;
+          }
+        );
+        /* A warm session we failed to attach still has a marker worth keeping
+           (rollbackEmailSocialMarker only clears when AppKit says it is
+           disconnected); returning false here is what tells the sheet to stay
+           open so the user can retry without a modal. */
+        if (!attached) rollbackEmailSocialMarker(modal);
+        return attached;
+      }
 
       setEmailModalActive(true);
       return await new Promise((resolve) => {
@@ -563,6 +615,10 @@ export function WalletProvider({ children }) {
         const settle = (ok) => {
           if (settled) return;
           settled = true;
+          /* A flow that ends without an attached wallet — cancel, or an
+             attach that threw mid-flight — hands the claimed marker back
+             unless AppKit itself is holding the session. */
+          if (!ok) rollbackEmailSocialMarker(modal);
           setEmailModalActive(false);
           try { unsubAccount?.(); } catch { /* noop */ }
           try { unsubState?.(); } catch { /* noop */ }
@@ -571,6 +627,9 @@ export function WalletProvider({ children }) {
         try {
           unsubAccount = modal.subscribeAccount?.((acct) => {
             if (!acct?.isConnected || !acct?.address) return;
+            /* settle() owns the rollback: a resolve of false (no provider,
+               no account) and a throw (ethers chunk, RPC timeout) both end
+               in settle(false), and the session's own state decides there. */
             void attachEmailProvider(modal, acct.address).then(settle, () => {
               setError('CONNECT_FAILED');
               settle(false);
@@ -589,6 +648,9 @@ export function WalletProvider({ children }) {
         }
       });
     } catch {
+      /* Even a failure to BUILD the instance must not leave the claim
+         standing: AppKit cannot exist, so it cannot be connected either. */
+      rollbackEmailSocialMarker(modal);
       setError('CONNECT_FAILED');
       return false;
     } finally {
@@ -600,12 +662,15 @@ export function WalletProvider({ children }) {
   /**
    * Silent cold-start restore for a returning email/social user — the
    * counterpart of restoreWcSession, gated on OUR marker instead of a
-   * `wc@2:` session key. Bounded (AppKit rehydrates its auth session
-   * asynchronously through its own frame handshake) and fail-quiet: the
-   * definitive "no account came back" case forgets the marker so dead
-   * restores don't loop, while a thrown error (offline, blocked chunk)
-   * keeps it so the next cold start can retry — restoreWcSession's exact
-   * treatment of a relay hiccup.
+   * `wc@2:` session key. THIS is also the path a redirect-shaped login comes
+   * home through: the browser returns to a fresh document with AppKit's
+   * session warm and our model empty, and connectEmailSocial()'s up-front
+   * claim is the only reason this function is consulted at all. Bounded
+   * (AppKit rehydrates its auth session asynchronously through its own frame
+   * handshake) and fail-quiet: the definitive "no account came back" case
+   * forgets the marker so dead restores don't loop, while a thrown error
+   * (offline, blocked chunk) keeps it so the next cold start can retry —
+   * restoreWcSession's exact treatment of a relay hiccup.
    */
   const restoreEmailSocial = useCallback(async () => {
     if (typeof window === 'undefined' || address) return false;
@@ -1625,7 +1690,9 @@ export function WalletProvider({ children }) {
     }
     const onVisible = () => {
       /* The email restore is cold-start only: no wallet app to bounce back
-         from, so the foreground moment teaches nothing new. */
+         from, so the foreground moment teaches nothing new. A REDIRECT back
+         from AppKit is not that moment — it is a fresh document, so the mount
+         path above is what claims it. */
       if (document.visibilityState === 'visible' && !addressRef.current && !hasEmailSocialMarker()) {
         void restoreWcSession({ announce: true });
       }
@@ -1899,8 +1966,9 @@ export function WalletProvider({ children }) {
    * Attaching any OTHER wallet mode retires the email/social boot marker.
    * Otherwise the next cold start would resurrect the email wallet and
    * overwrite the very connection the user just chose. 'email' itself is
-   * excluded — its marker is written inside attachEmailProvider(), during
-   * the same mode transition this effect watches.
+   * excluded — its marker is the one this transition is claiming (written at
+   * the start of connectEmailSocial(), re-written inside
+   * attachEmailProvider()), so clearing it here would erase the very fix.
    */
   useEffect(() => {
     if (mode && mode !== 'email') void clearEmailSocialSession().catch(() => {});

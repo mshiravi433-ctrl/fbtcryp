@@ -7,10 +7,10 @@
 
 | قطعه | نقش |
 |---|---|
-| `src/lib/emailSocialWallet.js` | گزینه‌ها، ساختن lazy نمونهٔ AppKit، آتش‌بسِ features مشترک، مارکرِ بوت |
+| `src/lib/emailSocialWallet.js` | گزینه‌ها، ساختن lazy نمونهٔ AppKit، آتش‌بسِ features مشترک، مارکرِ بوت + `rollbackEmailSocialMarker` |
 | `src/context/WalletContext.jsx` | `connectEmailSocial` / `restoreEmailSocial` / `attachEmailProvider` + فلگ `emailModalActive` |
 | `src/components/WalletConnectSheet.jsx` | ردیفِ «ایمیل و ورود با سوشال» بین WalletConnect و کیف‌های تزریقی |
-| `test/email-social-probe.mjs` | ۲۶ ادعا روی خودِ بستهٔ واقعی (`@reown/appkit@1.8.19`) |
+| `test/email-social-probe.mjs` | ۳۹ ادعا روی خودِ بستهٔ واقعی (`@reown/appkit@1.8.19`) |
 
 قانونِ طلاییِ زندگیِ مشترک با سطحِ WalletConnect: مودال `<w3m-modal>` بین دو
 نمونه **مشترک** است؛ سطح جفت‌شدنی پیش از open خودش features مشترک را مسطح
@@ -39,11 +39,40 @@
 - امضا/تراکنش از همان ChainController انتخاب‌شدهٔ کاربر می‌شود؛ شبکه‌ها از
   registry مشترک `src/lib/chains.js` ساخته می‌شوند (بدون لیستِ دوباره‌نویسی‌شده).
 
+### زمانِ نوشتنِ مارکر: مالِ «قبل از مودال» است، نه مالِ «بعد از attach»
+
+فلوهای ایمیل/سوشال روی موبایل (و هر مرورگری که مرحلهٔ OTP/OAuth را به یک
+ناوبریِ تمام‌صفحه می‌دهد) **ریدایرکت‌محور**اند: تأیید، مرورگر را از سایت بیرون
+می‌برد و برگشتنش یک سندِ تازه است — آن سند هیچ‌کدام از `subscribeAccount` /
+`subscribeState`های صفحهٔ قبل را ندارد، درحالی‌که نشستِ AppKit گرم و حساب
+آماده است. اگر مارکر فقط داخل `attachEmailProvider()` نوشته می‌شد، صفحهٔ
+بازگشتی دلیلی برای نگاه‌کردن به این سطح نداشت و کیف پول «نامرئی» می‌ماند؛
+علامتِ بالینی‌اش همان «یک بار دیگر بزن، وصل می‌شود» بود (دوباره‌زدن، نشستِ گرم
+را بدون باز شدن مودال attach می‌کرد).
+
+بنابراین `connectEmailSocial()` مارکر را **در همان ابتدا** claim می‌کند —
+بعد از teardownِ تک‌کیفِ خودش (که هم‌زمان مارکر را پاک می‌کند، پس قبلاً
+نوشتن آن بی‌اثر می‌ماند) و **پیش از** `getEmailSocialAppKit()` و
+`modal.open()`. `attachEmailProvider()` هم نوشتنِ خودش را نگه می‌دارد: همان
+خط، claimِ یک اتصالِ اثبات‌شده را بعد از هر rollback قبلی نو می‌کند.
+
+قیمتِ claim زودهنگام، پس‌دادنِ آن است — و این مرزها دست‌نخورده‌اند:
+
+| مرز | رفتار |
+|---|---|
+| `rollbackEmailSocialMarker(modal)` | هر پایانِ بی‌اتصال (لغو مودال، خطای `modal.open()`، attach خطادده/بازگشتِ false) مارکر را پس می‌دهد — **مگر** خودِ AppKit هنوز حسابِ متصل داشته باشد؛ آنجا مارکر واقعیت است و باید بماند تا cold-start بعدی درستش کند |
+| `restoreEmailSocial()` | اگر تا ۸ ثانیه حسابی نبیند، مارکر را پاک می‌کند (لوپِ مرده نمی‌شود)؛ ولی اگر خودش **خطا** بدهد (آفلاین، چانکِ مسدود) مارکر می‌ماند تا بوت بعدی دوباره تلاش کند |
+| `disconnect()` | نشستِ ایمیل را logout و مارکر را پاک می‌کند (خروج، احیا نمی‌شود) |
+| افکت `[mode]` | اتصالِ هر کیفِ دیگر (`injected`/`wc`/vault) مارکر ایمیل را می‌شوید |
+
+هیچ‌کدام از این‌ها ریسکِ «ریکاوریِ بی‌تجربه» ندارد: بدترین حالتِ یک claimِ بی‌نتیجه،
+یک بیلدِ lazy و یک تایمرِ ۸ ثانیه‌ای است که خودش را پاک می‌کند — نه یک حلقه.
+
 ## آزمون
 
 ```bash
 npm test            # شامل email-social-probe به‌عنوان آخرین سوئیت
-node test/run.mjs   # خروجی: «email & social login — 26 assertions, 0 failures»
+node test/run.mjs   # خروجی: «email & social login — 39 assertions, 0 failures»
 ```
 
 نکته: در محیط‌های بدون شبکه به `api.web3modal.org` پیامِ fallback به مقادیر
