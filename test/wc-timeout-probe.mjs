@@ -89,15 +89,20 @@ export default async function run() {
   t('the timeout window is generous enough for a slow-but-working relay (not just fast networks)',
     WC_CONNECT_TIMEOUT_MS >= 15_000 && WC_CONNECT_TIMEOUT_MS <= 30_000);
 
-  /* ---- 6. relay failover: the ".com is blocked" answer ----
-     The official fallback for "the default relay endpoint is blocked" is
-     relayUrl: wss://relay.walletconnect.org (docs.reown.com FAQ). The app
-     used to hard-depend on the default relay alone, which is exactly the
-     WC_RELAY_UNREACHABLE report on filtered networks. */
-  t('two relay hostnames are configured, the SDK default first',
+  /* ---- 6. relay failover: the "the relay is blocked" answer ----
+     TWO hostnames, in the SDK's own order. `@walletconnect/core@2.25.0`
+     declares RELAYER_DEFAULT_RELAY_URL = "wss://relay.walletconnect.org"
+     (dist/types/constants/relayer.d.ts — the only wss:// literal in that
+     bundle), and docs.reown.com/advanced/faq answers "the default relay
+     endpoint is blocked" with that same relayUrl. The app used to force
+     `relay.walletconnect.com` FIRST — overriding the SDK default and paying
+     an 8s fuse on the override before reaching the host every other SDK
+     client uses by default, which is exactly the WC_RELAY_UNREACHABLE report
+     on filtered networks. */
+  t('two relay hostnames are configured, the SDK’s own default first',
     Array.isArray(WC_RELAY_URLS) && WC_RELAY_URLS.length === 2
-      && WC_RELAY_URLS[0] === 'wss://relay.walletconnect.com'
-      && WC_RELAY_URLS[1] === 'wss://relay.walletconnect.org');
+      && WC_RELAY_URLS[0] === 'wss://relay.walletconnect.org'
+      && WC_RELAY_URLS[1] === 'wss://relay.walletconnect.com');
   t('every relay URL is a secure websocket URL',
     WC_RELAY_URLS.every((u) => /^wss:\/\/[a-z0-9.-]+$/.test(u)));
   t('the relay hostnames are actually distinct (a fallback that equals the primary is no fallback)',

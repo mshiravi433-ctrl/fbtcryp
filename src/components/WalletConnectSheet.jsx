@@ -513,7 +513,23 @@ export default function WalletConnectSheet({ open, onClose }) {
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcOriginBlocked')}</p>
           )}
           {wallet.error === 'WC_RELAY_UNREACHABLE' && (
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcRelayUnreachable')}</p>
+            <>
+              <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcRelayUnreachable')}</p>
+              {/*
+                Naming the failure is not the same as naming the way out, and
+                this is the screen where the user is stuck. The three routes
+                below are the ones this app offers that do NOT touch the relay
+                at all — the in-app wallet (create/import, keys on device), an
+                injected wallet opened from the wallet app's own built-in
+                browser, and email/social (transported by the secure frame, not
+                the relay). Same sentence the health panel prints under a
+                non-OPEN relay verdict, so the two surfaces can never tell the
+                user two different stories.
+              */}
+              <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                {t('wallet.healthRelayFreeRoutes')}
+              </p>
+            </>
           )}
           {wallet.error === 'WC_EXPIRED' && (
             <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcExpired')}</p>

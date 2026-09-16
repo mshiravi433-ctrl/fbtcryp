@@ -185,14 +185,24 @@ function createLocalEip1193Adapter({ signer, account, chainId, getReadProvider }
  * instead of an endless spinner.
  *
  * ─── THE SECOND LAYER: RELAY FAILOVER ─────────────────────────────────────
- * Naming the failure is not fixing it. WalletConnect operates a second
- * relay hostname (`relay.walletconnect.org`) officially documented as the
- * answer to \"the default relay endpoint is blocked\" (docs.reown.com FAQ).
- * `initWcProvider()` below walks WC_RELAY_URLS: primary gets an 8s fuse,
- * the fallback gets the full budget. On an SNI/DNS-filtered network (the
- * shape Iranian ISP blocking actually takes) pairing now SUCCEEDS via the
- * fallback instead of only failing politely — and a network that blocks
- * both hostnames still lands on the same named error, sooner than before.
+ * Naming the failure is not fixing it. WalletConnect fronts its relay with
+ * TWO hostnames, and the one this app used to force first
+ * (`relay.walletconnect.com`) is the HISTORICAL one: the installed
+ * `@walletconnect/core@2.25.0` declares
+ * `RELAYER_DEFAULT_RELAY_URL = "wss://relay.walletconnect.org"`, and
+ * docs.reown.com/advanced/faq answers \"the default relay endpoint is blocked\"
+ * with `relayUrl: 'wss://relay.walletconnect.org'` — i.e. the second entry
+ * in the old list was the host the SDK would have picked by itself, while
+ * the app paid an 8s fuse on its own override first.
+ *
+ * `initWcProvider()` below still walks WC_RELAY_URLS — now in the SDK's own
+ * order, default first, historical hostname second — with a short fuse on
+ * every entry but the last. On an SNI/DNS-filtered network (the shape
+ * Iranian ISP blocking actually takes) pairing succeeds through the entry
+ * that answers instead of only failing politely; a network that blocks both
+ * still lands on the same named error, sooner than before. Every hostname in
+ * the list is also probed by lib/walletHealth.js, so a ❌ in the report is
+ * never one hostname standing in for the whole relay.
  */
 
 export function WalletProvider({ children }) {
@@ -959,12 +969,12 @@ export function WalletProvider({ children }) {
    * opens during SignClient → Core start, i.e. inside init().)
    *
    * ─── WHAT IT DOES ───────────────────────────────────────────────────────
-   * Walks WC_RELAY_URLS (lib/wcTimeout.js documents why the list exists):
-   * the PRIMARY relay gets WC_PRIMARY_RELAY_TIMEOUT_MS (8s), the FALLBACK
-   * gets WC_CONNECT_TIMEOUT_MS (20s). Fallback only retries relay-class
-   * failures — a user cancel or an origin/project rejection is rethrown
-   * at once (relay-switching cannot fix those; isRelayClassError() keeps
-   * them out).
+   * Walks WC_RELAY_URLS (lib/wcTimeout.js documents why the list exists and
+   * why its order is the SDK's own): every entry but the last gets
+   * WC_PRIMARY_RELAY_TIMEOUT_MS (8s), the last gets WC_CONNECT_TIMEOUT_MS
+   * (20s). Failover only retries relay-class failures — a user cancel or an
+   * origin/project rejection is rethrown at once (relay-switching cannot fix
+   * those; isRelayClassError() keeps them out).
    *
    * ─── ORPHAN CLEANUP ─────────────────────────────────────────────────────
    * withTimeout abandons — it cannot cancel — the in-flight init(). If that

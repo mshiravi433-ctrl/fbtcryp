@@ -56,6 +56,15 @@ GET https://api.web3modal.org/projects/v1/origins?projectId=8e36eccabebf5a4567f4
 Email خاموش / دامنه مجاز نیست» **رد می‌شوند** و علت باید در خودِ کد باشد؛
 همان سه علتی که در بخش ۲ آمد و اصلاح شد.
 
+> **تصحیح بعدی (همین امروز):** دوباره از API زنده خوانده شد و همان پاسخ آمد
+> (`social_login.isEnabled = true` با هشت نام، از جمله `email`). اما پنلِ سلامت
+> روی گوشیِ کاربر `email=false socials=0` چاپ می‌کرد — **غلطِ خودِ ابزار** بود:
+> ماژول `features.social_login` را می‌خواند درحالی‌که `features` یک **آرایه** است
+> و قاعدهٔ خودِ SDK `.find(f => f.id === 'social_login')` است. این خطا و خطای
+> «رله = یک میزبان» با هم در
+> [`WALLET-HEALTH-INSTRUMENT-FIX-FA.md`](./WALLET-HEALTH-INSTRUMENT-FIX-FA.md)
+> اندازه‌گیری، اثبات و اصلاح شده‌اند.
+
 ---
 
 ## ۲) علت‌های واقعیِ سمتِ کد — و اصلاحشان
@@ -192,14 +201,24 @@ page-load دیر است. مقدارِ نوشته‌شده همان `'true'` خو
 2. `GET api.web3modal.org/projects/v1/origins?projectId=…` → فهرستِ دامنه‌های
    مجاز. (قاعدهٔ اندازه‌گیری‌شدهٔ SDK: فهرستِ **خالی** یعنی همه مجازند و
    `localhost` همیشه مجاز است — پس فقط یک لیستِ ناتهیِ بی‌نسبت می‌تواند بلاک کند.)
-3. سوکتِ `wss://relay.walletconnect.com` → OPEN / SOCKET_ERROR / CLOSED_xxxx /
-   TIMEOUT (امضای فیلترینگ).
+3. سوکتِ **هر دو** میزبانِ رله (`relay.walletconnect.org` پیش‌فرضِ SDK، و
+   `relay.walletconnect.com` میزبانِ تاریخی) + درِ HTTPS هر کدام → هر میزبان
+   جداگانه: `open` با زمانش / `SOCKET_ERROR` (و `closeCode` وقتی مرورگر کدی
+   داده باشد) / `CLOSED_xxxx` / `TIMEOUT`، و در انتها یک **حکم** از قاعدهٔ
+   `relayVerdict()`: `OPEN` / `WS_REFUSED` / `UNREACHABLE` / `TIMEOUT` /
+   `NO_WEBSOCKET` / `NO_MEASUREMENT`.
 4. `https://secure.walletconnect.org/sdk` → فریمِ کیفِ سوشال.
 
 به‌علاوه: وضعیتِ دو مارکر (`fbt_email_social_connected` و کلیدِ SDK) و تعدادِ
 نشست‌های `wc@2:` روی همان دستگاه، و آخرین رویدادهای trace.
 کد: `src/lib/walletHealth.js` + `src/components/WalletHealthPanel.jsx`؛
-تست: `test/wallet-health-probe.mjs` (۳۶ ادعا، همهٔ لبه‌های شبکه‌ای شبیه‌سازی‌شده).
+تست: `test/wallet-health-probe.mjs` (۶۲ ادعا، همهٔ لبه‌های شبکه‌ای شبیه‌سازی‌شده).
+
+> **دو خطای همین ابزار که بعداً با گزارشِ کاربر پیدا شد:** خواندنِ
+> `features.social_login` روی یک **آرایه** (⇒ همیشه `email=false socials=0`) و
+> چاپِ نتیجهٔ **یک** میزبانِ رله زیر برچسبِ «رلهٔ WalletConnect». هر دو در
+> [`WALLET-HEALTH-INSTRUMENT-FIX-FA.md`](./WALLET-HEALTH-INSTRUMENT-FIX-FA.md)
+> با سورسِ نصب‌شدهٔ SDK و پاسخِ زندهٔ API اثبات و اصلاح شده‌اند.
 
 ---
 
@@ -225,10 +244,10 @@ wc-wallets             37/37
 wc-deeplink            37/37
 wc-uri-hygiene         32/32
 wc-pairing-surface     64/64
-wallet-health          36/36
+wallet-health          62/62   (پس از اصلاحِ ابزار: payloadِ آرایه‌ای + هر دو میزبانِ رله)
 email-social           49/49
                        ─────
-                       393 assertion, 0 failure
+                       419 assertion, 0 failure
 ```
 
 > آن‌چه در این محیط **قابلِ اندازه‌گیری نبود**: جفت‌شدنِ زنده روی رله، اسکنِ
