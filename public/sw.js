@@ -105,8 +105,19 @@
  * cache evicts it on the site and on an in-place APK update alike. (The
  * «بررسی سلامت اتصال» panel ships in the same bundle, so a stale shell would
  * also hide the report that measures the remaining last mile.)
+ *
+ * v15 -> v16: the health panel's own two measurement bugs are fixed — it read
+ * `features.social_login` while the endpoint returns `features` as an ARRAY
+ * (so it printed `email=false socials=0` for a project the dashboard has fully
+ * enabled), and it reported ONE relay hostname (`relay.walletconnect.com`,
+ * which is neither the SDK default nor the documented workaround) under a label
+ * naming the whole relay. The relay try-order moved to the SDK's own default
+ * (`relay.walletconnect.org` first) in the same bundle. A device pinned to the
+ * v15 shell keeps printing the two wrong numbers and keeps paying the 8s fuse
+ * on the historical hostname — it would report the OLD instrument's verdict
+ * about the NEW code, which is the one thing a diagnostic must never do.
  */
-const SHELL = 'fbt-shell-v15';
+const SHELL = 'fbt-shell-v16';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

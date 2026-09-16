@@ -12,10 +12,57 @@ import { IconCheck, IconCopy } from './Icons';
  * lib/walletHealth.js for what each probe measures and why those exact
  * endpoints.
  *
+ * ─── TWO THINGS THIS PANEL USED TO GET WRONG ────────────────────────────────
+ * Both are "the instrument lied", which is worse than no instrument, because
+ * the numbers get quoted as if they were the network:
+ *
+ *   1. «تنظیمات پروژه — email=false socials=0» was printed for a project whose
+ *      live answer enables email and seven socials: the module read
+ *      `features.social_login` while the endpoint returns `features` as an
+ *      ARRAY (the SDK's own reader is `.find(f => f.id === 'social_login')`).
+ *   2. «رلهٔ WalletConnect — SOCKET_ERROR» was ONE hostname
+ *      (`relay.walletconnect.com`), reported under a label that names the whole
+ *      relay — while the SDK's default is `relay.walletconnect.org`, which is
+ *      also the hostname Reown documents for exactly this situation.
+ *
+ * So the panel now prints the CONFIG ANSWER (email + the socials list + which
+ * payload shape it read) and EVERY relay hostname with its own verdict, its
+ * own timing, and — when no host answers — the routes that do not need a relay
+ * at all. The relay verdict is a code from a pure rule (relayVerdict() in
+ * lib/walletHealth.js), never prose invented here.
+ *
  * The collector is imported LAZILY on first run: this sheet is in the
  * first-paint graph, and a report most sessions never ask for must not drag
  * anything into it.
  */
+
+/** Verdict code (from relayVerdict(), or OPEN) -> the sentence that goes with it. */
+const RELAY_VERDICT_KEYS = {
+  OPEN: 'wallet.healthRelayVerdictOpen',
+  WS_REFUSED: 'wallet.healthRelayWsRefused',
+  UNREACHABLE: 'wallet.healthRelayUnreachable',
+  TIMEOUT: 'wallet.healthRelayTimeout',
+  NO_WEBSOCKET: 'wallet.healthRelayNoSocket',
+  NO_MEASUREMENT: 'wallet.healthRelayNoMeasurement'
+};
+
+/** Short host name for the row (the scheme is noise in a support screenshot). */
+const hostName = (url) => String(url || '').replace(/^wss:\/\//, '');
+
+/**
+ * One relay hostname, in measured words:
+ *   open            -> «سوکت باز شد (۳۱۲ میلیثانیه)»
+ *   HTTPS only      -> «HTTPS رسید ولی سوکت باز نشد…» (host alive, upgrade refused)
+ *   nothing at all  -> the raw error string and how long it took
+ */
+function relayHostLabel(host, t) {
+  const socket = host?.socket || {};
+  const https = host?.https || {};
+  if (socket.ok) return t('wallet.healthRelayOpen', { ms: socket.ms ?? 0 });
+  if (https.ok) return t('wallet.healthRelayHttpsOnly', { ms: https.ms ?? 0 });
+  return t('wallet.healthRelayNoAnswer', { error: socket.error || 'FAILED', ms: socket.ms ?? 0 });
+}
+
 export default function WalletHealthPanel({ projectId }) {
   const { t } = useTranslation();
   const [report, setReport] = useState(null);
@@ -56,6 +103,10 @@ export default function WalletHealthPanel({ projectId }) {
   );
 
   const features = report?.projectConfig?.features;
+  const relays = Array.isArray(report?.relays) ? report.relays : [];
+  const verdict = report?.relayVerdict;
+  const verdictKey = RELAY_VERDICT_KEYS[verdict];
+  const relayHasPath = verdict === 'OPEN';
 
   return (
     <details className="notice" style={{ marginTop: 12 }}>
@@ -80,14 +131,52 @@ export default function WalletHealthPanel({ projectId }) {
                 error: report.projectConfig?.error,
                 status: report.projectConfig?.status
               }, features
+                /* The dashboard's own answer, printed as it is — including the
+                   socials LIST, because «socials=0» and «socials=7» are the
+                   difference between a dashboard setting and a bug hunt. */
                 ? `email=${String(features.email)} socials=${(features.socials || []).length}`
+                  + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`
                 : 'OK')}
               {row(t('wallet.healthOrigins'), { ok: report.allowedOrigins?.ok }, (
                 Array.isArray(report.allowedOrigins?.list)
                   ? `${report.allowedOrigins.list.length}`
                   : 'list?'
               ))}
-              {row(t('wallet.healthRelay'), report.relay)}
+              {row(t('wallet.healthRelay'), report.relay, report.relay?.ok
+                ? `${hostName(report.relay?.url)} · ${report.relay?.ms ?? 0}ms`
+                : undefined)}
+              {relays.length > 0 && (
+                <p className="muted" style={{ fontSize: 11, margin: '6px 0 2px', fontWeight: 600 }}>
+                  {t('wallet.healthRelayHosts')}
+                </p>
+              )}
+              {relays.map((host) => (
+                <p
+                  key={host.url || 'relay'}
+                  className="muted"
+                  style={{ fontSize: 11, margin: '2px 0', marginInlineStart: 14 }}
+                >
+                  <span style={{ marginInlineEnd: 6 }}>{host?.socket?.ok ? '✅' : '❌'}</span>
+                  <span className="mono">{hostName(host?.url)}</span>
+                  {' — '}
+                  {relayHostLabel(host, t)}
+                </p>
+              ))}
+              {verdictKey && (
+                <p
+                  className={relayHasPath ? 'notice' : 'notice notice-danger'}
+                  style={{ fontSize: 11.5, marginTop: 8 }}
+                >
+                  {t(verdictKey)}
+                </p>
+              )}
+              {verdictKey && !relayHasPath && verdict !== 'NO_MEASUREMENT' && (
+                /* The whole point of naming the failure: what to do instead.
+                   None of these three routes touches the relay. */
+                <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                  {t('wallet.healthRelayFreeRoutes')}
+                </p>
+              )}
               {row(t('wallet.healthSecureSite'), report.secureSite)}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
                 {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys}`}

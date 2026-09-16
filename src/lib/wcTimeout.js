@@ -47,28 +47,42 @@ export const WC_PAIRING_TTL_MS = 300_000;
  * RELAY ENDPOINTS, IN TRY ORDER.
  * ---------------------------------------------------------------------------
  * `EthereumProvider.init()` was called without a `relayUrl`, so every
- * pairing went to the SDK default `wss://relay.walletconnect.com` ONLY. On
- * networks whose operator filters THAT hostname (the Iranian ISP case the
- * WC_RELAY_UNREACHABLE message names) the socket can never open — even
- * though WalletConnect operates a SECOND relay hostname for exactly this
- * situation: the official docs answer \"the default relay endpoint is
- * blocked\" with `relayUrl: 'wss://relay.walletconnect.org'`
- * (docs.reown.com/advanced/faq).
+ * pairing went to ONE hardcoded hostname. That hostname was
+ * `wss://relay.walletconnect.com` — which is neither the SDK's default nor
+ * the hostname Reown documents for exactly this situation. Measured in the
+ * installed SDK: `@walletconnect/core@2.25.0`,
+ * `dist/types/constants/relayer.d.ts` declares
+ * `RELAYER_DEFAULT_RELAY_URL = "wss://relay.walletconnect.org"` — it is the
+ * only `wss://` literal in that bundle, and `Core` falls back to it whenever
+ * it is given no `relayUrl`. docs.reown.com/advanced/faq answers
+ * "the default relay endpoint is blocked" with
+ * `relayUrl: 'wss://relay.walletconnect.org'`.
  *
- * The connect/restore flows therefore walk this list with
- * `initWcProvider()` in WalletContext.jsx: the primary gets a short fuse
- * (below), the fallback gets the full WC_CONNECT_TIMEOUT_MS. Filtering that
- * blocks one hostname (SNI/DNS based — the common shape) is answered in
- * ~8s with a working socket instead of a ~28s failure; a network that
- * blocks BOTH still gets the same named error, just sooner than the SDK's
- * own multi-retry stall (60-90s+) ever answered.
+ * So the ORDER below is the SDK's own default first. The app was overriding
+ * it with the historical hostname and paying an 8s fuse on that override
+ * before reaching the host the SDK would have picked by itself — on a network
+ * where only the historical hostname is filtered, that fuse is the whole
+ * difference between "connected" and "the relay is unreachable".
+ *
+ * The connect/restore flows walk this list with `initWcProvider()` in
+ * WalletContext.jsx: the first entry gets a short fuse
+ * (`WC_PRIMARY_RELAY_TIMEOUT_MS`, below), the last the full
+ * WC_CONNECT_TIMEOUT_MS. Filtering that blocks one hostname (SNI/DNS based —
+ * the common shape) is answered in ~8s with a working socket instead of a
+ * ~28s failure; a network that blocks BOTH still gets the same named error,
+ * just sooner than the SDK's own multi-retry stall (60-90s+) ever answered.
  *
  * Both hostnames front the same WalletConnect relay pool — pairing state is
- * not partitioned by which hostname carried it.
+ * not partitioned by which hostname carried it, and the pairing URI itself
+ * carries no relay hostname at all (`relay:{protocol:"irn"}`), so the wallet
+ * on the other side is free to use whichever hostname IT can reach.
+ *
+ * The health panel probes EVERY hostname in this list (lib/walletHealth.js):
+ * one blocked hostname is not "the relay is blocked".
  */
 export const WC_RELAY_URLS = [
-  'wss://relay.walletconnect.com',
-  'wss://relay.walletconnect.org'
+  'wss://relay.walletconnect.org',
+  'wss://relay.walletconnect.com'
 ];
 
 /**
