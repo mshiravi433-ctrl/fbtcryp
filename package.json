@@ -264,7 +264,8 @@
     "test:insurance-production": "node test/insurance/insurance-production-probe.mjs",
     "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs",
     "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs",
-    "test:farm:public": "vitest run --config test/vitest.public.config.mjs"
+    "test:farm:public": "vitest run --config test/vitest.public.config.mjs",
+    "test:wallet-connection": "vitest run test/wallet-connection-regression.test.js && node test/wc-relay-preflight-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
@@ -305,7 +306,8 @@
     "recharts": "^3.10.1",
     "telegraf": "^4.16.3",
     "web-push": "^3.6.7",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@walletconnect/relay-auth": "1.1.0"
   },
   "devDependencies": {
     "@capacitor/android": "^6.2.1",

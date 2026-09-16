@@ -41,6 +41,7 @@ import {
   repairPairingUri
 } from '../lib/wcWallets';
 import { installWalletOpenBridge } from '../lib/wcDeepLink';
+import { waitForEmailConnection } from '../lib/emailConnection.js';
 import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
 import {
   EMAIL_RESTORE_WINDOW_MS,
@@ -538,15 +539,7 @@ export function WalletProvider({ children }) {
     }
   }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
-  /* ---------------------- email & social (Reown AppKit) ------------------ */
-
-  /**
-   * Attach AppKit's embedded wallet (email/social) to the SAME state the
-   * injected path fills: the EIP-1193 provider in eip1193Ref, an ethers
-   * signer, mode 'email'. Everything downstream — swap signing, the send
-   * sheet, balances, the Intent AI execution path — already speaks that
-   * language, so no consumer branch-cases on 'email'.
-   */
+  // Attach the embedded EIP-1193 provider to the same signer state as other wallets.
   const attachEmailProvider = useCallback(async (modal, acct) => {
     const eip = modal?.getWalletProvider?.();
     if (!eip || !acct) return false;
@@ -564,79 +557,33 @@ export function WalletProvider({ children }) {
     setAddress(acct);
     setChainId(honest);
     setLocked(false);
-    /* The marker was already claimed when this attempt STARTED (see
-       connectEmailSocial) — a redirect-shaped flow cannot wait for this line.
-       Writing it here as well is what re-confirms a proven account after any
-       rollback an earlier failed attempt performed, so the order of these two
-       writes is load-bearing and this one must stay. */
+
     setEmailSocialMarker(true);
     attachInjectedListeners(eip);
     await refreshBalance(acct, honest);
     return true;
   }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
-  /**
-   * Email & Social connect. Owns the whole UX contract:
-   *  - one attached wallet at a time (the rule the other three paths follow);
-   *  - an already-warm session attaches without re-opening the modal;
-   *  - closing the modal before any connection is a plain cancel (resolve
-   *    false, no error state — mirroring the injected path's USER_REJECTED
-   *    is wrong here: the user may have opened it just to look).
-   *
-   * ─── WHY THE BOOT MARKER IS CLAIMED HERE, BEFORE ANYTHING ELSE ───────────
-   * The email/social flow is redirect-shaped on mobile (and on any browser
-   * that hands the OTP / OAuth step to a top-level navigation): the confirming
-   * tap takes the browser away from fbtswap.ir and the return is a FRESH
-   * document. That document owns none of the subscribeAccount/subscribeState
-   * closures registered below — they died with the page that opened the modal
-   * — while AppKit's auth session is warm and its account is right there. If
-   * the only thing that ever marked this surface as ours was the write at the
-   * END of attachEmailProvider(), the returning page had no reason to look:
-   * the cold-start gate in the mount effect is `hasEmailSocialMarker()`, so it
-   * went to restoreWcSession() instead and the wallet stayed invisible. The
-   * user's workaround — tapping «ایمیل و ورود با سوشال» a second time, which
-   * found the warm session and attached without opening the modal — was the
-   * proof: the session was healthy, our model simply never asked.
-   *
-   * So the marker is claimed BEFORE the async work starts, and every attempt
-   * that ends with nothing to restore hands it back
-   * (rollbackEmailSocialMarker — honest rollback, see lib/emailSocialWallet.js).
-   * The self-clearing boundaries around this are unchanged and are what make
-   * claiming early safe: restoreEmailSocial() forgets the marker when its 8s
-   * window closes with no account, disconnect() and the [mode] effect wash it
-   * for other wallets, and a successful attach re-writes it from
-   * attachEmailProvider() regardless of what an earlier failed tap did to it.
-   */
   const connectEmailSocial = useCallback(async () => {
     if (connecting) return false;
     setError(null);
     setConnecting(true);
-    /* Same contract as the other paths: refresh/reload stays frozen while
-       an auth modal can legitimately be mid-flow. */
+
     const connectGuard = holdRefreshGuard('email-connect');
-    /* Declared before the try so the rollback below can still see the
-       instance when the failure happened after AppKit was built. */
+
     let modal = null;
     try {
       if (eip1193Ref.current || wcRef.current) disconnectRef.current?.();
 
-      /* Claim the marker FIRST — after the one-wallet teardown above (that
-         teardown clears it synchronously, so claiming before it would be
-         erased) and before the first await (this page may never reach a
-         later line). See the block comment on this function. */
+      // Claim before OAuth can navigate away; roll back only without a live session.
       setEmailSocialMarker(true);
 
       modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
       if (!modal) throw new Error('APPKIT_UNAVAILABLE');
-      /* The features re-assertion (lib/emailSocialWallet.js) already ran in
-         getEmailSocialAppKit() — the shared-singleton truce documented in
-         applyAppKitWalletLinks() — so the modal description is deterministic
-         here. */
 
       const warm = modal.getIsConnectedState?.() && modal.getAddress?.('eip155');
       if (warm) {
-        /* Same settle shape as before: a false (nothing to attach) is a quiet
-           false, a THROWN attach still names itself as CONNECT_FAILED. */
+
         const attached = await attachEmailProvider(modal, warm).then(
           (ok) => Boolean(ok),
           () => {
@@ -644,79 +591,29 @@ export function WalletProvider({ children }) {
             return false;
           }
         );
-        /* A warm session we failed to attach still has a marker worth keeping
-           (rollbackEmailSocialMarker only clears when AppKit says it is
-           disconnected); returning false here is what tells the sheet to stay
-           open so the user can retry without a modal. */
+
         if (!attached) rollbackEmailSocialMarker(modal);
         return attached;
       }
 
       setEmailModalActive(true);
-      return await new Promise((resolve) => {
-        let settled = false;
-        let unsubAccount = null;
-        let unsubState = null;
-        const settle = (ok) => {
-          if (settled) return;
-          settled = true;
-          /* A flow that ends without an attached wallet — cancel, or an
-             attach that threw mid-flight — hands the claimed marker back
-             unless AppKit itself is holding the session. */
-          if (!ok) rollbackEmailSocialMarker(modal);
-          setEmailModalActive(false);
-          try { unsubAccount?.(); } catch { /* noop */ }
-          try { unsubState?.(); } catch { /* noop */ }
-          resolve(ok);
-        };
-        try {
-          unsubAccount = modal.subscribeAccount?.((acct) => {
-            if (!acct?.isConnected || !acct?.address) return;
-            /* settle() owns the rollback: a resolve of false (no provider,
-               no account) and a throw (ethers chunk, RPC timeout) both end
-               in settle(false), and the session's own state decides there. */
-            void attachEmailProvider(modal, acct.address).then(settle, () => {
-              setError('CONNECT_FAILED');
-              settle(false);
-            });
-          });
-        } catch { /* subscription is best-effort; the close-watch still settles */ }
-        try {
-          unsubState = modal.subscribeState?.((s) => {
-            if (s && s.open === false) settle(false);
-          });
-        } catch { /* then only a connection can settle it */ }
-        try {
-          modal.open();
-        } catch {
-          settle(false);
-        }
+      const attached = await waitForEmailConnection(modal, (acct) => attachEmailProvider(modal, acct), {
+        onError: () => setError('CONNECT_FAILED')
       });
+      if (!attached) rollbackEmailSocialMarker(modal);
+      return attached;
     } catch {
-      /* Even a failure to BUILD the instance must not leave the claim
-         standing: AppKit cannot exist, so it cannot be connected either. */
+
       rollbackEmailSocialMarker(modal);
       setError('CONNECT_FAILED');
       return false;
     } finally {
+      setEmailModalActive(false);
       setConnecting(false);
       connectGuard.release();
     }
   }, [connecting, attachEmailProvider]);
 
-  /**
-   * Silent cold-start restore for a returning email/social user — the
-   * counterpart of restoreWcSession, gated on OUR marker instead of a
-   * `wc@2:` session key. THIS is also the path a redirect-shaped login comes
-   * home through: the browser returns to a fresh document with AppKit's
-   * session warm and our model empty, and connectEmailSocial()'s up-front
-   * claim is the only reason this function is consulted at all. Bounded
-   * (AppKit rehydrates its auth session asynchronously through its own frame
-   * handshake) and fail-quiet: the definitive "no account came back" case
-   * forgets the marker so dead restores don't loop, while a thrown error
-   * (offline, blocked chunk) keeps it so the next cold start can retry —
-   * restoreWcSession's exact treatment of a relay hiccup.
-   */
   const restoreEmailSocial = useCallback(async () => {
     if (typeof window === 'undefined' || addressRef.current) return false;
     if (!hasEmailSocialMarker()) return false;
@@ -986,48 +883,9 @@ export function WalletProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Initialise an EthereumProvider against the first reachable relay.
-   *
-   * ─── WHY THIS EXISTS ────────────────────────────────────────────────────
-   * `EthereumProvider.init()` opens the relay WebSocket itself — and it was
-   * the one WalletConnect await with NO outer bound: `wc.connect()` had
-   * withTimeout, init() did not, so on a network blocking
-   * relay.walletconnect.com the "bounded" connect could still stall at
-   * 60-90s inside the SDK's own retry loop before our timer ever started.
-   * (Verified in this codebase's own incident history: the relay socket
-   * opens during SignClient → Core start, i.e. inside init().)
-   *
-   * ─── WHAT IT DOES ───────────────────────────────────────────────────────
-   * Walks WC_RELAY_URLS (lib/wcTimeout.js documents why the list exists and
-   * why its order is the SDK's own): every entry but the last gets
-   * WC_PRIMARY_RELAY_TIMEOUT_MS (8s), the last gets WC_CONNECT_TIMEOUT_MS
-   * (20s). Failover only retries relay-class failures — a user cancel or an
-   * origin/project rejection is rethrown at once (relay-switching cannot fix
-   * those; isRelayClassError() keeps them out).
-   *
-   * ─── ORPHAN CLEANUP ─────────────────────────────────────────────────────
-   * withTimeout abandons — it cannot cancel — the in-flight init(). If that
-   * abandoned promise resolves LATER (the network recovered mid-attempt),
-   * a live provider with a zombie socket would be left that no ref points
-   * at: the exact state this context keeps exorcising. Any attempt we did
-   * not await to completion is disconnected the moment it settles.
-   *
-   * Shared by connect() AND restore() so the two paths can never disagree
-   * about which relay a revived session talks to — the same byte-identical
-   * init contract buildWcInitConfig() already guarantees.
-   */
+  // Bounded SDK initialization with relay fallback and late-provider cleanup.
   const initWcProvider = useCallback(async (EthereumProvider, baseConfig, relayOrder) => {
-    /*
-     * `relayOrder` is the MEASURED order from the preflight (lib/wcRelayProbe.js):
-     * the hostname whose socket actually opened comes first. It defaults to the
-     * configured list, and it is always a permutation of it — an unmeasured host
-     * still gets its turn, it just does not get to be first when another one has
-     * already proven itself. Before this, the order was static and the failover
-     * below could only fire when init() REJECTED — which a filtered relay never
-     * does (see the module header of lib/wcRelayProbe.js), so a network that
-     * blocked the primary and allowed the fallback never reached the fallback.
-     */
+
     const urls = (Array.isArray(relayOrder) && relayOrder.length ? relayOrder : WC_RELAY_URLS).map(String);
     let lastError = null;
     for (let i = 0; i < urls.length; i += 1) {
@@ -1041,30 +899,13 @@ export function WalletProvider({ children }) {
         );
         attempt.then((ghost) => {
           if (orphaned) {
-            try { ghost?.disconnect?.(); } catch { /* zombie nothing-op */ }
+            try { ghost?.disconnect?.(); } catch {  }
           }
-        }, () => { /* a late REJECTION needs no cleanup — nothing opened */ });
+        }, () => {  });
         // eslint-disable-next-line no-await-in-loop -- sequential failover is the point
         const wcInstance = await withTimeout(attempt, budget, 'WC_INIT_TIMEOUT');
         orphaned = false;
-        /*
-         * ─── WHAT THIS EVENT USED TO CLAIM, AND WHAT IT MEANS NOW ──────────
-         * This was `relay_ok` — the trace line that made a dead relay look
-         * healthy. The support report that exposed it carried both halves:
-         * `relay_ok` 202ms after `relay_try`, while the same hostname's socket
-         * took 1423ms to fail and never opened. The SDK settles it
-         * (@walletconnect/core@2.25.0, `Relayer.init()`): `transportOpen()` is
-         * NOT awaited, and it returns at once while the client has no topics —
-         * which is the normal state right after this flow purges storage.
-         *
-         * So init() resolving says "a provider was built", and that is the name
-         * it now has. The relay's own answer is read one line later from the
-         * SDK's `relayer.connected` (socket.readyState === 1) and traced as
-         * `relay_socket_open` / `relay_socket_unopened`. The second is NOT a
-         * failure — on a clean slate the SDK has nothing to subscribe to yet —
-         * but it is the truth, and a truth that stops the next fix from being
-         * aimed at the wrong hop.
-         */
+
         wcEvent(i ? 'provider_ready_fallback' : 'provider_ready', Number(i));
         const socket = readRelaySocket(wcInstance);
         if (socket.connected) wcEvent('relay_socket_open', Number(i));
@@ -1077,7 +918,7 @@ export function WalletProvider({ children }) {
         throw e;
       }
     }
-    throw lastError; /* unreachable (the last attempt always throws), but explicit */
+    throw lastError;
   }, []);
 
   /**
@@ -1287,32 +1128,8 @@ export function WalletProvider({ children }) {
         const purged = purgeWcStorage();
         wcEvent('storage_purged', Number(purged));
       }
-      /*
-       * ─── RELAY PREFLIGHT: ASK THE SOCKET BEFORE PROMISING A PAIRING ───────
-       *
-       * Measured on a real report from https://fbtswap.ir (2026-09-16): both
-       * relay hostnames answer HTTPS (199ms / 132ms) and BOTH refuse the
-       * WebSocket upgrade (SOCKET_ERROR, closeCode 1006) — verdict WS_REFUSED,
-       * i.e. the network filters the upgrade itself, so no pairing can ever be
-       * published. The app's own trace for the same session said
-       * `relay_try(0) → relay_ok(0)` in 202ms and then `connect_failed` 1.7s
-       * later, with no reason attached: it believed the relay was fine, opened
-       * the pairing surface, and died inside the SDK's first real socket
-       * attempt. Every user-visible fix aimed at init() was aimed upstream of
-       * that moment (see lib/wcRelayProbe.js for the SDK lines that prove it).
-       *
-       * So the socket is measured here, once, with the SAME instrument the
-       * health panel prints:
-       *
-       *   • BLOCKED (and not forced) → fail in milliseconds with the honest
-       *     WC_RELAY_UNREACHABLE, and the sheet steers to the three routes that
-       *     need no relay. The user's explicit "try anyway" re-measures with
-       *     `force` and runs the real attempt — a probe is evidence, not a law.
-       *   • OPEN → the host that opened becomes the first `relayUrl` handed to
-       *     init(), which is what finally makes the relay failover real.
-       *   • NO_WEBSOCKET / NO_MEASUREMENT → nothing was measured, so nothing is
-       *     refused; the attempt runs on the configured order.
-       */
+
+      // Advisory only: a browser diagnostic must never prevent the actual SDK attempt.
       let relay = null;
       try {
         relay = await getRelayState({
@@ -1335,11 +1152,7 @@ export function WalletProvider({ children }) {
         else if (relay.verdict === 'TIMEOUT') wcEvent('relay_preflight_timeout');
         else wcEvent('relay_preflight_unmeasured');
       }
-      if (relay && !force && isRelayBlocked(relay.verdict)) {
-        wcEvent('connect_skipped_relay');
-        setError('WC_RELAY_UNREACHABLE');
-        return false;
-      }
+
       const relayOrder = Array.isArray(relay?.order) && relay.order.length ? relay.order : WC_RELAY_URLS;
       /*
        * INIT — WITH THE MODAL, AND HONESTLY WITHOUT IT IF IT CANNOT LOAD.
@@ -1776,31 +1589,15 @@ export function WalletProvider({ children }) {
        * that is never opened. The explicit Connect button is what asks for
        * the modal.
        */
-      /*
-       * THE SAME PREFLIGHT, AND WHY IT IS CHEAPER HERE THAN IT LOOKS.
-       *
-       * A revive needs the relay exactly as much as a pairing does: `getSigner()`
-       * below round-trips it, and on a filtered network that costs the full
-       * WC_RESTORE_TIMEOUT before this path gives up quietly — every resume, for
-       * a user who cannot be restored. The measurement is the cached one whenever
-       * it is fresh (no `force`), so a returning user pays for at most one probe,
-       * and only when a session is actually on disk (the storage probe above is
-       * still the gate that keeps non-WalletConnect visitors off the network).
-       *
-       * A measured block ends the attempt here instead of inside the SDK, and
-       * `wcRelay` reaches the sheet, so the connect screen the user opens next
-       * already knows pairing cannot work on this network.
-       */
+
+      // Advisory only: a browser diagnostic must never prevent the actual SDK attempt.
       let relay = null;
       try {
         relay = await getRelayState({ projectId: WC_PROJECT_ID, timeoutMs: RELAY_PREFLIGHT_TIMEOUT_MS });
       } catch { relay = null; }
       if (relay) {
         setWcRelay(relay);
-        if (isRelayBlocked(relay.verdict)) {
-          wcEvent('restore_skipped_relay');
-          return false;
-        }
+
       }
       const relayOrder = Array.isArray(relay?.order) && relay.order.length ? relay.order : WC_RELAY_URLS;
       wc = await initWcProvider(EthereumProvider, buildWcInitConfig(false), relayOrder);
@@ -2303,7 +2100,6 @@ export function WalletProvider({ children }) {
 
   // Injected listeners are attached in connectInjected() via attachInjectedListeners()
   // and removed in disconnect() via detachInjectedListeners(). No duplicate effect here.
-
 
   const value = useMemo(
     () => ({

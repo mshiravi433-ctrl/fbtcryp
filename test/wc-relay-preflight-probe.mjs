@@ -1,40 +1,4 @@
-/**
- * RELAY PREFLIGHT PROBE
- * ---------------------------------------------------------------------------
- * The report that started this: a support JSON from https://fbtswap.ir
- * (2026-09-16) whose two halves contradicted each other.
- *
- *   its own trace:  relay_try(0) → relay_ok(0)   202ms
- *   its own health: both relay hostnames SOCKET_ERROR (1423ms / 2031ms),
- *                   both answering HTTPS (199ms / 132ms), verdict WS_REFUSED
- *
- * `relay_ok` was emitted when `EthereumProvider.init()` resolved. The installed
- * SDK says what that is worth — @walletconnect/core@2.25.0, dist/index.js,
- * `Relayer.init()` ends with `this.transportOpen().catch(…)` (NOT awaited), and
- * `transportOpen()`'s first line returns early while
- * `!this.subscriber.hasAnyTopics` — the normal state right after the connect
- * flow purges storage. So init() had not touched the relay at all, the failover
- * (which only fires when init() REJECTS) could never reach the second hostname,
- * and `connect_failed` — emitted 1.7s later, from the first real socket attempt
- * inside `wc.connect()` — carried no reason at all.
- *
- * This probe pins the replacement, with every network edge held still:
- *
- *   1. probeRelaySet(): per-host facts, the verdict, and the MEASURED TRY ORDER
- *      (a permutation, open socket first) that makes failover real.
- *   2. getRelayState(): the cached, single-flighted preflight — TTL, `force`,
- *      and the rule that a FAILED probe is never served as a measurement.
- *   3. isRelayBlocked(): the two verdicts that are not measurements of a block
- *      (NO_WEBSOCKET / NO_MEASUREMENT) must never refuse a connection.
- *   4. readRelaySocket(): the SDK's own `relayer.connected` read, not an
- *      inference — including the readyState that distinguishes "connecting"
- *      from "never attempted".
- *   5. The wiring: the connect flow measures BEFORE it inits, refuses (fast)
- *      on a measured block unless forced, hands the measured order to init,
- *      names the failure in the trace, and drops the cache after a relay-class
- *      failure; the sheet reads the same measurement and offers the relay-free
- *      routes; the strings exist in the three complete locales.
- */
+/** Relay measurements are advisory; browser socket errors do not identify their cause. */
 import { readFileSync } from 'node:fs';
 import {
   RELAY_BLOCKED_VERDICTS,
@@ -274,10 +238,8 @@ export default async function run() {
     t('the preflight runs BEFORE init() — the measurement precedes the promise',
       ctx.indexOf('await getRelayState({') > ctx.indexOf('const connectWalletConnect')
         && ctx.indexOf('await getRelayState({') < ctx.indexOf('await initWcProvider('));
-    t('a measured block ends the attempt at once, with the honest relay error',
-      /if \(relay && !force && isRelayBlocked\(relay\.verdict\)\) \{[\s\S]{0,160}setError\('WC_RELAY_UNREACHABLE'\);\s*return false;/.test(ctx));
-    t('…and it is traced as its own event (a skipped attempt is not a silent one)',
-      /isRelayBlocked\(relay\.verdict\)\) \{[\s\S]{0,80}wcEvent\('connect_skipped_relay'\)/.test(ctx));
+    t('a failed diagnostic never skips the real SDK connection',
+      !ctx.includes("wcEvent('connect_skipped_relay')"));
     t('an explicit `force` re-measures instead of trusting the verdict',
       /connectWalletConnect = useCallback\(async \(\{ force = false \} = \{\}\)/.test(ctx)
         && /force\n?\s*\}\);/.test(ctx.slice(ctx.indexOf('await getRelayState({'), ctx.indexOf('await getRelayState({') + 220)));
@@ -303,14 +265,8 @@ export default async function run() {
       /wcEvent\('connect_failed_relay', Number\(elapsed\)\);[\s\S]{0,320}clearRelayStateCache\(\);/.test(ctx));
     /* Scoped to the restore block: `buildWcInitConfig(false), relayOrder` also
        appears earlier in the file, as connect()'s retry without the modal. */
-    t('a restore on a measured-blocked network is skipped, not stalled for 20s',
-      (() => {
-        const start = ctx.indexOf('const restoreWcSession');
-        const block = ctx.slice(start);
-        return /restore_skipped_relay/.test(block)
-          && block.indexOf('restore_skipped_relay') < block.indexOf('buildWcInitConfig(false), relayOrder)')
-          && /isRelayBlocked\(relay\.verdict\)\) \{[\s\S]{0,80}restore_skipped_relay[\s\S]{0,40}return false;/.test(block);
-      })());
+    t('a failed diagnostic never skips SDK session restoration',
+      !ctx.includes("wcEvent('restore_skipped_relay')"));
     t('the measurement reaches the UI through the context (one story, three surfaces)',
       /wcRelay,\s*wcRelayBlocked,/.test(ctx)
         && /const wcRelayBlocked = Boolean\(wcRelay && isRelayBlocked\(wcRelay\.verdict\)\)/.test(ctx));
@@ -350,10 +306,8 @@ export default async function run() {
       /export \{[\s\S]{0,120}probeRelay,[\s\S]{0,120}\} from '\.\/wcRelayProbe\.js'/.test(health));
     t('…and its collector calls the SAME probeRelaySet the connect flow calls',
       /probeRelaySet\(\{ urls: hosts, projectId, timeoutMs, WebSocketImpl, fetchImpl \}\)/.test(strip(health)));
-    t('the probe opens the URL shape the SDK opens (the project id rides along)',
-      /const target = projectId \? `\$\{url\}\/\?projectId=\$\{encodeURIComponent\(projectId\)\}` : url/.test(
-        readFileSync('src/lib/wcRelayProbe.js', 'utf8')
-      ));
+    t('the probe includes signed auth rather than a projectId-only handshake',
+      readFileSync('src/lib/wcRelayProbe.js', 'utf8').includes("target.searchParams.set('auth', auth)"));
   }
 
   return rows;
