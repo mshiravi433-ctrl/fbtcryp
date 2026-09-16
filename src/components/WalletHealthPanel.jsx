@@ -2,39 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconCheck, IconCopy } from './Icons';
 
-/**
- * WALLET HEALTH PANEL — the evidence, on the device where it failed.
- *
- * This lives inside the connect sheet (choose view), not behind a developer
- * route, because the person who needs it is the person holding the phone on
- * the network that is blocking something: they can run it in one tap, copy
- * the JSON, and the failing hop stops being a matter of opinion. See
- * lib/walletHealth.js for what each probe measures and why those exact
- * endpoints.
- *
- * ─── TWO THINGS THIS PANEL USED TO GET WRONG ────────────────────────────────
- * Both are "the instrument lied", which is worse than no instrument, because
- * the numbers get quoted as if they were the network:
- *
- *   1. «تنظیمات پروژه — email=false socials=0» was printed for a project whose
- *      live answer enables email and seven socials: the module read
- *      `features.social_login` while the endpoint returns `features` as an
- *      ARRAY (the SDK's own reader is `.find(f => f.id === 'social_login')`).
- *   2. «رلهٔ WalletConnect — SOCKET_ERROR» was ONE hostname
- *      (`relay.walletconnect.com`), reported under a label that names the whole
- *      relay — while the SDK's default is `relay.walletconnect.org`, which is
- *      also the hostname Reown documents for exactly this situation.
- *
- * So the panel now prints the CONFIG ANSWER (email + the socials list + which
- * payload shape it read) and EVERY relay hostname with its own verdict, its
- * own timing, and — when no host answers — the routes that do not need a relay
- * at all. The relay verdict is a code from a pure rule (relayVerdict() in
- * lib/walletHealth.js), never prose invented here.
- *
- * The collector is imported LAZILY on first run: this sheet is in the
- * first-paint graph, and a report most sessions never ask for must not drag
- * anything into it.
- */
+/** Relay measurements are advisory; browser socket errors do not identify their cause. */
 
 /** Verdict code (from relayVerdict(), or OPEN) -> the sentence that goes with it. */
 const RELAY_VERDICT_KEYS = {

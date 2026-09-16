@@ -307,7 +307,7 @@ export default async function run() {
     t('the marker is claimed inside connectEmailSocial, before the flow can be cut off',
       claim > -1
         && claim < connectBlock.indexOf('getEmailSocialAppKit(')
-        && claim < connectBlock.indexOf('modal.open()')
+        && claim < connectBlock.indexOf('waitForEmailConnection(')
         && claim < connectBlock.indexOf('setEmailModalActive(true)'));
     t('the claim comes AFTER the one-wallet teardown (which clears the marker synchronously)',
       connectBlock.indexOf('disconnectRef.current?.()') < claim);
@@ -318,9 +318,8 @@ export default async function run() {
        is pinned by what it is attached to. */
     t('a warm session that refuses to attach hands the claim back',
       /if \(!attached\) rollbackEmailSocialMarker\(modal\);[\s\S]{0,40}return attached;/.test(connectBlock));
-    t('a cancel settles through the same rollback (settle owns it, both attach outcomes)',
-      /const settle = \(ok\) => \{[\s\S]{0,120}if \(!ok\) rollbackEmailSocialMarker\(modal\);/.test(connectBlock)
-        && /\.then\(settle, \(\) => \{[\s\S]{0,80}settle\(false\);/.test(connectBlock));
+    t('cancel and attach failure roll back after the shared lifecycle settles',
+      /await waitForEmailConnection\(modal,[\s\S]{0,220}if \(!attached\) rollbackEmailSocialMarker\(modal\);/.test(connectBlock));
     t('a flow that never even reached an instance rolls back in its catch',
       /catch\s*\{\s*rollbackEmailSocialMarker\(modal\);/.test(connectBlock));
     t('the rollback goes through the honest helper, never a blind clear',
