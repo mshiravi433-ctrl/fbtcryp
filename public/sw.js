@@ -94,8 +94,19 @@
  * returning page restores — so an install pinned to v13 keeps reproducing the
  * bug byte for byte. Renaming the cache evicts it on the site and on an
  * in-place APK update alike.
+ *
+ * v14 -> v15: the email/social session RESTORE was honest-ified (SDK login
+ * marker re-armed before createAppKit, 30s window instead of 8s, timeout no
+ * longer deletes the boot marker) and a returning page is now re-consulted on
+ * pageshow/bfcache as well as on foreground. All of that lives in the shell
+ * bundle, and a device pinned to the v14 shell keeps the exact restore path
+ * that turned one slow boot into a permanent «کیف پول ساخته نشد» — the shell
+ * cache is what decides which of the two a returning user runs. Renaming the
+ * cache evicts it on the site and on an in-place APK update alike. (The
+ * «بررسی سلامت اتصال» panel ships in the same bundle, so a stale shell would
+ * also hide the report that measures the remaining last mile.)
  */
-const SHELL = 'fbt-shell-v14';
+const SHELL = 'fbt-shell-v15';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
