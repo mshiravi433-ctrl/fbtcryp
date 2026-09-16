@@ -76,14 +76,27 @@ export default async function run() {
       && WC_PAIRING_TTL_MS > WC_CONNECT_TIMEOUT_MS);
   t('…and a slow approval is reported as expired, never as an unreachable relay',
     /msg === 'WC_PAIRING_EXPIRED'[\s\S]{0,200}setError\('WC_EXPIRED'\)/.test(wallet));
+  /* The helper now takes the MEASURED relay order as its third argument (see
+     §6 below and lib/wcRelayProbe.js), so both call sites carry it — the
+     assertions follow the contract instead of the old two-argument shape. */
   t('EthereumProvider.init() is bounded too — via the shared initWcProvider failover helper',
     /const initWcProvider = useCallback/.test(walletCode)
-      && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig(true))'));
+      && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig(true), relayOrder)'));
   t('restoreWcSession goes through the same bounded failover init as connect()',
     walletCode.indexOf('const restoreWcSession') > -1
-      && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig(false))'));
+      && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig(false), relayOrder)'));
+  /* Anchored on the connect catch BLOCK itself, not on a 4000-character window
+     that a longer explanatory comment silently breaks: the abandoned instance
+     must be disconnected on the way out of a failed attempt. */
   t('a timed-out connect attempt disconnects the abandoned instance (no zombie socket/modal)',
-    /catch \(e\) \{[\s\S]{0,4000}wc\?\.disconnect\?\.\(\)/.test(wallet));
+    (() => {
+      /* `const elapsed = …` exists ONLY in the WalletConnect catch block (the
+         injected-wallet catch has its own `const msg` line), so it is the anchor
+         that cannot drift onto the wrong handler. */
+      const start = wallet.indexOf('const elapsed = Math.max(0, Math.round(Date.now() - startedAt));');
+      const block = wallet.slice(start, wallet.indexOf('connectGuard.release()', start));
+      return start > 0 && /wc\?\.disconnect\?\.\(\)/.test(block);
+    })());
   t('the timeout classifies as the actionable WC_RELAY_UNREACHABLE error, not a bare CONNECT_FAILED',
     /WC_CONNECT_TIMEOUT[\s\S]{0,120}\|\|[\s\S]{0,200}WC_RELAY_UNREACHABLE|msg === 'WC_CONNECT_TIMEOUT'/.test(wallet));
   t('the timeout window is generous enough for a slow-but-working relay (not just fast networks)',
@@ -107,8 +120,25 @@ export default async function run() {
     WC_RELAY_URLS.every((u) => /^wss:\/\/[a-z0-9.-]+$/.test(u)));
   t('the relay hostnames are actually distinct (a fallback that equals the primary is no fallback)',
     new Set(WC_RELAY_URLS).size === WC_RELAY_URLS.length);
+  /*
+   * THE RELAY URL IS THE MEASURED ONE, NOT A STATIC INDEX.
+   *
+   * `initWcProvider()` used to walk `WC_RELAY_URLS[i]` in file order and only
+   * reached the next entry when init() REJECTED. Measured in
+   * @walletconnect/core@2.25.0 (`Relayer.init()` calls `transportOpen()`
+   * un-awaited, and `transportOpen()` returns at once while the client has no
+   * topics), a filtered relay does NOT make init() reject — so the fallback was
+   * unreachable on exactly the networks it was written for. The loop now walks
+   * the preflight's measured order (open socket first), defaulting to the
+   * configured list.
+   */
   t('WalletContext hands the relayUrl to EthereumProvider',
-    walletCode.includes('relayUrl: WC_RELAY_URLS[i]'));
+    walletCode.includes('relayUrl: urls[i]'));
+  t('…and the hostname list it walks is the MEASURED order, defaulting to the configured one',
+    /const initWcProvider = useCallback\(async \(EthereumProvider, baseConfig, relayOrder\)/.test(walletCode)
+      && /const urls = \(Array\.isArray\(relayOrder\) && relayOrder\.length \? relayOrder : WC_RELAY_URLS\)/.test(walletCode));
+  t('both init call sites pass the measured order (connect and restore cannot drift apart)',
+    (walletCode.match(/buildWcInitConfig\((?:true|false)\), relayOrder\)/g) || []).length >= 3);
   t('an abandoned init attempt is disconnected when it settles late (no zombie provider)',
     walletCode.includes('ghost?.disconnect?.()'));
   t('the primary relay gets a short fuse so failover happens in seconds, not minutes',

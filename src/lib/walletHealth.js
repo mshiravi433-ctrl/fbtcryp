@@ -73,6 +73,7 @@
  */
 
 import { WC_RELAY_URLS } from './wcTimeout.js';
+import { probeReachable, probeRelaySet } from './wcRelayProbe.js';
 
 /** The SDK's public API host (appkit-common `W3M_API_URL`). */
 export const W3M_API_URL = 'https://api.web3modal.org';
@@ -184,144 +185,21 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
   }
 }
 
-/**
- * Reachability without a readable body (neither the frame nor the relay sends
- * CORS headers): `no-cors` RESOLVES with an opaque response when the request
- * reached the server, and rejects when the network refused — which is the
- * distinction the report needs.
+/*
+ * ─── THE RELAY INSTRUMENT LIVES IN lib/wcRelayProbe.js ──────────────────────
+ * probeRelay / probeRelayHttps / relayVerdict moved there (re-exported below so
+ * this module's public API is unchanged) because the CONNECT FLOW needs the
+ * very same measurement the panel prints: two instruments for one hop is how a
+ * panel says «WS_REFUSED» while the app keeps promising a pairing. That module's
+ * header carries the SDK evidence for why the preflight exists at all.
  */
-async function probeReachable(url, { fetchImpl, timeoutMs }) {
-  const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
-  if (!call) return { ok: false, error: 'NO_FETCH' };
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = setTimeout(() => { try { controller?.abort(); } catch { /* noop */ } }, timeoutMs);
-  const started = Date.now();
-  try {
-    await call(url, { signal: controller?.signal, mode: 'no-cors', cache: 'no-store' });
-    return { ok: true, ms: Date.now() - started };
-  } catch (error) {
-    return {
-      ok: false,
-      ms: Date.now() - started,
-      error: String(error?.name === 'AbortError' ? 'TIMEOUT' : (error?.message || error))
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+export {
+  probeReachable,
+  probeRelay,
+  probeRelayHttps,
+  relayVerdict
+} from './wcRelayProbe.js';
 
-/**
- * Open the relay socket and report what happened.
- *
- * A page cannot `no-cors` fetch a WebSocket, so this is a bare socket with the
- * project id: `open` proves routing to the relay, a fast `close`/`error` proves
- * the host is refused or the project id rejected, and a timeout proves the
- * network is dropping it silently — which is exactly how a filtered connection
- * behaves.
- *
- * Two facts ride along because they are the difference between the possible
- * verdicts, and neither can be reconstructed after the fact:
- *
- *   • `ms` — how long the failure took. A reset in 40ms is a refusal; a stall
- *     that ends at the timeout is a filter that swallows packets. Two very
- *     different phone calls for the user.
- *   • `closeCode` — what the socket published. Browsers report `1006` for ANY
- *     failed handshake, so 1006 is kept as `SOCKET_ERROR` + `closeCode: 1006`
- *     (never dressed up as "the host refused you"), while a real close code
- *     from the relay (e.g. 3000, project/origin rejected) is reported as
- *     `CLOSED_<code>` and IS distinguishable.
- *
- * `graceMs` lets a following `close` event land before the error is reported,
- * because in browsers `error` arrives first and the close code arrives with the
- * second event.
- */
-export function probeRelay(url, { WebSocketImpl, projectId = '', timeoutMs = 8_000, graceMs = 250 } = {}) {
-  const WS = WebSocketImpl ?? (typeof WebSocket !== 'undefined' ? WebSocket : null);
-  if (!WS) return Promise.resolve({ url, ok: false, error: 'NO_WEBSOCKET', ms: 0 });
-  const started = Date.now();
-  return new Promise((resolve) => {
-    let settled = false;
-    let socket = null;
-    let graceTimer = null;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      clearTimeout(graceTimer);
-      try { socket?.close?.(); } catch { /* noop */ }
-      resolve({ url, ms: Date.now() - started, ...result });
-    };
-    const timer = setTimeout(() => finish({ ok: false, error: 'TIMEOUT', state: 'timeout' }), timeoutMs);
-    try {
-      const target = projectId ? `${url}/?projectId=${encodeURIComponent(projectId)}` : url;
-      socket = new WS(target);
-    } catch (error) {
-      finish({ ok: false, error: String(error?.message || error) });
-      return;
-    }
-    socket.onopen = () => finish({ ok: true, state: 'open' });
-    socket.onerror = () => {
-      /* Report the error itself, but give the close event its beat first — the
-         code (if the relay published one) is worth waiting 250ms for. */
-      if (settled) return;
-      graceTimer = setTimeout(
-        () => finish({ ok: false, error: 'SOCKET_ERROR', state: 'error' }),
-        graceMs
-      );
-    };
-    socket.onclose = (event) => {
-      const code = Number.isFinite(event?.code) ? Number(event.code) : null;
-      if (code !== null && code !== 1006) {
-        finish({ ok: false, error: `CLOSED_${code}`, closeCode: code, state: 'closed' });
-        return;
-      }
-      finish({ ok: false, error: 'SOCKET_ERROR', closeCode: code, state: 'error' });
-    };
-  });
-}
-
-/**
- * The relay's HTTPS door, asked separately from its WebSocket door.
- *
- * This is the measurement that separates the two shapes of "the relay does not
- * work here": an HTTPS request to the same host that RESOLVES proves DNS, TCP
- * and TLS are all fine and only the upgrade was refused (DPI on the WebSocket
- * handshake, or an edge rule) — while an HTTPS request that REJECTS too means
- * the hostname itself is filtered, poisoned or unroutable.
- */
-export function probeRelayHttps(url, { fetchImpl, timeoutMs = 8_000 } = {}) {
-  const target = String(url || '').replace(/^wss:/, 'https:');
-  return probeReachable(target, { fetchImpl, timeoutMs });
-}
-
-/**
- * The verdict over every probed relay host, from measured facts only.
- *
- *   OPEN          at least one socket opened — pairing has a path.
- *   WS_REFUSED    no socket opened, but a relay host answered over HTTPS:
- *                 the host is alive and the WebSocket upgrade is what fails.
- *   UNREACHABLE   no socket opened and no host answered over HTTPS: the
- *                 hostname/route is filtered (DNS, SNI or a dead network).
- *   NO_WEBSOCKET  this host has no WebSocket at all (nothing was measured).
- *
- * Kept as a pure function taking the probe results, so the panel's sentence
- * and the connect flow's decision come from the same rule.
- */
-export function relayVerdict(hosts = []) {
-  const list = Array.isArray(hosts) ? hosts : [];
-  const openUrls = list.filter((host) => host?.socket?.ok).map((host) => host.url);
-  const httpsUrls = list.filter((host) => host?.https?.ok).map((host) => host.url);
-  let verdict = 'UNREACHABLE';
-  if (list.length === 0) verdict = 'NO_MEASUREMENT';
-  else if (openUrls.length > 0) verdict = 'OPEN';
-  else if (list.every((host) => !host?.socket || host.socket.error === 'NO_WEBSOCKET')) verdict = 'NO_WEBSOCKET';
-  else if (httpsUrls.length > 0) verdict = 'WS_REFUSED';
-  /* No host answered on either door AND every socket ended at the timer: the
-     network is swallowing packets instead of refusing them — the filtered-link
-     signature, and a different conversation from "your DNS is wrong". */
-  else if (list.every((host) => host?.socket?.error === 'TIMEOUT')) verdict = 'TIMEOUT';
-  return { verdict, openUrls, httpsUrls };
-}
 
 /** Storage facts as booleans and counts — never values. */
 export function storageFacts(storage) {
@@ -392,19 +270,18 @@ export async function collectWalletHealth({
   /* Every host is asked BOTH questions at once. A sequential walk would make a
      blocked primary delay the fallback's answer by its own timeout, and the
      report would then describe the network as it looked during the first
-     socket rather than as it is. */
-  const [config, origins, secureSite, relayHosts] = await Promise.all([
+     socket rather than as it is. `probeRelaySet` is the SAME function the
+     connect preflight calls, so the panel's verdict and the connect flow's
+     decision cannot drift apart. */
+  const [config, origins, secureSite, relay] = await Promise.all([
     probeJson(configProbeUrl(projectId), { fetchImpl, timeoutMs }),
     probeJson(originsProbeUrl(projectId), { fetchImpl, timeoutMs }),
     probeReachable(SECURE_SITE_URL, { fetchImpl, timeoutMs }),
-    Promise.all(hosts.map(async (url) => ({
-      url,
-      socket: await probeRelay(url, { WebSocketImpl, projectId, timeoutMs }),
-      https: await probeRelayHttps(url, { fetchImpl, timeoutMs })
-    })))
+    probeRelaySet({ urls: hosts, projectId, timeoutMs, WebSocketImpl, fetchImpl })
   ]);
+  const relayHosts = relay.hosts;
   const list = Array.isArray(origins?.body?.allowedOrigins) ? origins.body.allowedOrigins : null;
-  const verdict = relayVerdict(relayHosts);
+  const verdict = { verdict: relay.verdict, openUrls: relay.openUrls, httpsUrls: relay.httpsUrls };
   const reachable = relayHosts.find((host) => host.socket?.ok);
   return {
     at: new Date().toISOString(),
