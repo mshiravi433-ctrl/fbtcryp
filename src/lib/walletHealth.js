@@ -74,6 +74,7 @@
 
 import { WC_RELAY_URLS } from './wcTimeout.js';
 import { probeReachable, probeRelaySet } from './wcRelayProbe.js';
+import { isConnectionArtifactKey } from './wcStorage.js';
 
 /** The SDK's public API host (appkit-common `W3M_API_URL`). */
 export const W3M_API_URL = 'https://api.web3modal.org';
@@ -217,7 +218,17 @@ export function storageFacts(storage) {
           if (Array.isArray(parsed) && parsed.length > 0) facts.wcSessionKeys += 1;
         } catch { /* unreadable entry — not counted */ }
       }
-      if (key.startsWith('@appkit/')) facts.appkitConnectionKeys += 1;
+      // Count only true connection artifacts, not every @appkit/ cache entry.
+      // Uses the same hygiene rule as purgeWcStorage so the diagnostic and the
+      // cleanup can never disagree about what counts as a "connection key".
+      if (isConnectionArtifactKey(key)) {
+        // wc@2: keys already counted above for wcSessionKeys, but they are also
+        // connection artifacts — for appkitConnectionKeys we only want the
+        // @appkit/ + deeplink keys, so exclude wc@2:
+        if (key.startsWith('@appkit/') || key === 'WALLETCONNECT_DEEPLINK_CHOICE') {
+          facts.appkitConnectionKeys += 1;
+        }
+      }
     }
   } catch { /* storage unavailable: the false/0 defaults are the honest answer */ }
   return facts;
