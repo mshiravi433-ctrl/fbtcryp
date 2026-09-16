@@ -1723,13 +1723,15 @@ export function WalletProvider({ children }) {
     // ── ORPHANED STORAGE HYGIENE: the report that arrived carried 5 appkit keys with 0 sessions.
     // A stale WALLETCONNECT_DEEPLINK_CHOICE or @appkit/recent_wallet makes the NEXT connect
     // skip the modal and open a wallet app with a dead pairing — so an idle cold start that
-    // has nowhere to restore can clean the residue it can prove is dead. The check is
-    // deliberately vault-agnostic: an in-app vault does not use @appkit/* keys, so
-    // stale AppKit debris still blocks the next WC attempt even when a vault exists.
-    // Email's @appkit-wallet marker lives under a different prefix and is never purged here.
+    // has nowhere to restore can clean the residue it can prove is dead. Vault-agnostic
+    // (fbt:vault never uses @appkit/* keys) but email-guarded: when fbt_email_social_connected
+    // stands, those @appkit/* keys belong to the email AppKit instance that just booted
+    // (getEmailSocialAppKit) and must not be churned — purge would delete them and the
+    // restore would recreate them, pinning the count at 4 forever (observed 5→4→4).
+    // @appkit-wallet/* is a separate prefix and is never purged here in any case.
     try {
       const facts = storageFacts();
-      if (facts.orphanKeys && !addressRef.current) {
+      if (facts.orphanKeys && !hasEmailSocialMarker() && !addressRef.current) {
         const purged = purgeWcStorage();
         if (purged) wcEvent('orphan_storage_purged', Number(purged));
       }
