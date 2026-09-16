@@ -34,6 +34,7 @@ import {
   readRelaySocket
 } from '../lib/wcRelayProbe';
 import { purgeWcStorage } from '../lib/wcStorage';
+import { storageFacts } from '../lib/walletHealth.js';
 import {
   appKitCustomWallets,
   legacyModalWallets,
@@ -1718,6 +1719,20 @@ export function WalletProvider({ children }) {
         resumeWc(announce);
       });
     };
+
+    // ── ORPHANED STORAGE HYGIENE: the report that arrived carried 5 appkit keys with 0 sessions.
+    // A stale WALLETCONNECT_DEEPLINK_CHOICE or @appkit/recent_wallet makes the NEXT connect
+    // skip the modal and open a wallet app with a dead pairing — so an idle cold start that
+    // has nowhere to restore can clean the residue it can prove is dead. Email's own
+    // @appkit-wallet marker is NOT here (managed by emailSocialWallet) and a present local
+    // vault is never cleaned — only a truly disconnected, session-less state.
+    try {
+      const facts = storageFacts();
+      if (facts.orphanKeys && !hasEmailSocialMarker() && !loadVault() && !addressRef.current) {
+        const purged = purgeWcStorage();
+        if (purged) wcEvent('orphan_storage_purged', Number(purged));
+      }
+    } catch { /* storage check is advisory */ }
 
     if (!loadVault()) {
       if (hasEmailSocialMarker()) resumeEmailThenWc(false);

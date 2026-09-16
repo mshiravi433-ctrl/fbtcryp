@@ -107,9 +107,14 @@ export default function WalletHealthPanel({ projectId }) {
                 : 'OK')}
               {row(t('wallet.healthOrigins'), { ok: report.allowedOrigins?.ok }, (
                 Array.isArray(report.allowedOrigins?.list)
-                  ? `${report.allowedOrigins.list.length}`
+                  ? `${report.allowedOrigins.list.length}${report.allowedOrigins?.originAllowed === true ? ' · ✅ origin allowed' : report.allowedOrigins?.originAllowed === false ? ' · ❌ origin NOT allowed' : ''} (${(report.allowedOrigins.list || []).join(', ')})`
                   : 'list?'
               ))}
+              {report.allowedOrigins?.originAllowed === false && (
+                <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '4px 0' }}>
+                  {t('wallet.healthOriginBlocked', { origin: report.origin })}
+                </p>
+              )}
               {row(t('wallet.healthRelay'), report.relay, report.relay?.ok
                 ? `${hostName(report.relay?.url)} · ${report.relay?.ms ?? 0}ms`
                 : undefined)}
@@ -147,8 +152,28 @@ export default function WalletHealthPanel({ projectId }) {
               )}
               {row(t('wallet.healthSecureSite'), report.secureSite)}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys}`}
+                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''}`}
               </p>
+              {report.storage?.orphanKeys && (
+                <p className="notice" style={{ fontSize: 11.5, margin: '4px 0' }}>
+                  {t('wallet.healthOrphanHint')}
+                  <button
+                    className="btn btn-ghost"
+                    style={{ marginInlineStart: 8, padding: '4px 8px', fontSize: 11 }}
+                    onClick={async () => {
+                      try {
+                        const { purgeWcStorage } = await import('../lib/wcStorage.js');
+                        const n = purgeWcStorage();
+                        // eslint-disable-next-line no-alert
+                        alert(`${t('wallet.healthOrphanCleared', { count: n })}`);
+                        run();
+                      } catch {}
+                    }}
+                  >
+                    {t('wallet.healthOrphanClear')}
+                  </button>
+                </p>
+              )}
               <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={copy}>
                 {copied ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
                 <span style={{ marginInlineStart: 6 }}>
