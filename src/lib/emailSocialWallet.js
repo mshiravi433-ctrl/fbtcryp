@@ -75,6 +75,97 @@ import { EVM_CHAINS, DEFAULT_CHAIN } from './chains.js';
 export const EMAIL_SOCIAL_FLAG_KEY = 'fbt_email_social_connected';
 
 /**
+ * ─── THE SDK'S OWN LOGIN MARKER, AND WHY THIS MODULE ALSO HAS TO CARRY IT ──
+ *
+ * `@reown/appkit-wallet@1.8.19` decides whether it may even LOOK for a warm
+ * embedded-wallet session from a single localStorage key it writes itself:
+ *
+ *   W3mFrameProvider constructor (measured, dist/esm/src/W3mFrameProvider.js):
+ *
+ *     if (this.getLoginEmailUsed()) { this.createFrame(); }
+ *     getLoginEmailUsed() => Boolean(W3mFrameStorage.get(EMAIL_LOGIN_USED_KEY))
+ *
+ * `W3mFrameStorage` is the DAPP's localStorage with the `@appkit-wallet/`
+ * prefix, and `setLoginSuccess()` writes that key with the literal `'true'`
+ * — but only at the very END of a successful connection (`connect()` /
+ * `connectSocial()` after the iframe answers). Two measured consequences:
+ *
+ *   1. IF THE KEY IS MISSING, THE IFRAME IS NEVER CREATED. `isConnected()`
+ *      short-circuits to `{ isConnected: false }` without asking anybody, and
+ *      AppKit's own `syncAuthConnector()` then marks the AUTH connector
+ *      disconnected and REMOVES the stored namespace. A returning page in
+ *      that state can never see the (perfectly healthy) session inside the
+ *      secure site: the wallet stays invisible until the user taps the email
+ *      button again — the exact «ایمیل تأیید شد، برگشتیم، والت نبود» report.
+ *
+ *   2. THE SDK DELETES THE KEY ON ANY TRANSIENT FAILURE. `isConnected()`'s
+ *      catch — and the not-connected branch — call `deleteAuthLoginCache()`,
+ *      which removes `EMAIL_LOGIN_USED_KEY`, `EMAIL`, `LAST_USED_CHAIN_KEY`
+ *      and `SOCIAL_USERNAME`. A blocked or slow `secure.walletconnect.org`
+ *      (its `appEvent()` waits on the iframe and gives itself 20s) therefore
+ *      DESTROYS the dApp's own record of the login. Our marker is the durable
+ *      copy of the same fact, so it can hand the key back before the instance
+ *      is built; if the session really is gone the iframe answers
+ *      `isConnected: false` and the SDK deletes it again — self-correcting,
+ *      never a loop.
+ *
+ * Writing this key is the ONLY way to make the SDK consult a session our
+ * marker says exists; it adds no authority of its own (the session still has
+ * to exist inside the wallet frame) and stores no address.
+ */
+export const SDK_LOGIN_USED_KEY = '@appkit-wallet/EMAIL_LOGIN_USED_KEY';
+export const SDK_LOGIN_USED_VALUE = 'true';
+
+/**
+ * How long a returning cold start waits for AppKit to rehydrate the embedded
+ * wallet before it stops looking.
+ *
+ * IT MUST BE LONGER THAN THE SDK'S OWN BOUND, MEASURED: every frame request
+ * awaits `w3mFrame.frameLoadPromise`, and `appEvent()` arms a 20_000 ms
+ * `iframeReadyTimeout` before declaring `iframe_load_failed` (and then only
+ * for events it does not consider safe). The previous bound here was 8s — a
+ * value SMALLER than the SDK's own timeout for the same operation, so a
+ * correct-but-slow return (cold WebView, throttled CDN) could never win the
+ * race, and the losing branch then ERASED the boot marker: one slow boot
+ * turned a healthy session into a permanent one, which is why the documented
+ * user workaround was «یک بار دیگر بزن».
+ */
+export const EMAIL_RESTORE_WINDOW_MS = 30_000;
+
+/** Read the SDK's own login marker (`'true'` after a successful login). */
+export function readSdkLoginMarker(storage) {
+  const target =
+    storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!target) return '';
+  try {
+    return String(target.getItem(SDK_LOGIN_USED_KEY) || '');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Hand the SDK's login marker back when OUR marker says a login was attempted
+ * but the SDK's own record is missing (see the block comment above).
+ *
+ * @returns {'present'|'rearmed'|'not_marked'|'unavailable'} what happened —
+ *   a value the trace can record, never a boolean that hides the reason.
+ */
+export function rearmSdkLoginMarker(storage) {
+  const target =
+    storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!target) return 'unavailable';
+  if (!hasEmailSocialMarker(target)) return 'not_marked';
+  if (readSdkLoginMarker(target)) return 'present';
+  try {
+    target.setItem(SDK_LOGIN_USED_KEY, SDK_LOGIN_USED_VALUE);
+    return 'rearmed';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
  * The social OAuth providers AppKit 1.8.19 knows how to render. Order is
  * display order inside the modal's social row.
  */
@@ -252,6 +343,17 @@ let emailAppKit = null;
  * own opens, and a later email open must not inherit that flattening.
  */
 export async function getEmailSocialAppKit(projectId, metadata) {
+  /*
+   * THE RE-ARM MUST HAPPEN BEFORE createAppKit(), NOT AFTER.
+   * `W3mFrameProvider` reads the SDK's login marker in its CONSTRUCTOR to
+   * decide whether to create the secure-site iframe at all, and AppKit builds
+   * that provider from the OPTIONS while `createAppKit()` runs. Handing the
+   * key back afterwards would be one page-load too late — the instance would
+   * already have concluded there is nothing to restore. Only when OUR marker
+   * is present (an attempt was started, and no other wallet has since
+   * retired it) and the SDK's own copy is gone.
+   */
+  rearmSdkLoginMarker();
   if (!emailAppKit) {
     const [{ createAppKit }, { EthersAdapter }] = await Promise.all([
       import('@reown/appkit'),

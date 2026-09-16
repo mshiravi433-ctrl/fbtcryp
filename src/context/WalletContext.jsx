@@ -25,6 +25,7 @@ import {
 import { installWalletOpenBridge } from '../lib/wcDeepLink';
 import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
 import {
+  EMAIL_RESTORE_WINDOW_MS,
   clearEmailSocialSession,
   getEmailSocialAppKit,
   hasEmailSocialMarker,
@@ -215,6 +216,10 @@ export function WalletProvider({ children }) {
   // EIP-6963 discovered injected providers. Map<uuid, { info, provider }>
   const eip6963Ref = useRef(new Map());
   const wcInitingRef = useRef(false);
+  /* Single-flight for the email/social restore: the cold start, a bfcache
+     `pageshow` return and a foreground resume can all ask for the same
+     restore within a second of each other (see restoreEmailSocial). */
+  const emailRestoreRef = useRef(false);
   const wcListenersRef = useRef(null);
   const injectedListenersRef = useRef(null);
   /*
@@ -673,8 +678,15 @@ export function WalletProvider({ children }) {
    * restoreWcSession's exact treatment of a relay hiccup.
    */
   const restoreEmailSocial = useCallback(async () => {
-    if (typeof window === 'undefined' || address) return false;
+    if (typeof window === 'undefined' || addressRef.current) return false;
     if (!hasEmailSocialMarker()) return false;
+    /* ONE RESTORE AT A TIME. Three callers can now ask for this within the
+       same second — the cold start, a bfcache `pageshow` return, and a
+       foreground resume — and each would build/consult the same singleton
+       instance and arm its own window. Failing the second caller quietly is
+       correct: the first one is already doing exactly what it asked for. */
+    if (emailRestoreRef.current) return false;
+    emailRestoreRef.current = true;
     try {
       const modal = await getEmailSocialAppKit(WC_PROJECT_ID, wcPublicMetadata());
       let acct = modal.getIsConnectedState?.() ? modal.getAddress?.('eip155') : null;
@@ -684,7 +696,7 @@ export function WalletProvider({ children }) {
           const timer = setTimeout(() => {
             try { off?.(); } catch { /* noop */ }
             resolve(null);
-          }, 8_000);
+          }, EMAIL_RESTORE_WINDOW_MS);
           try {
             off = modal.subscribeAccount?.((a) => {
               if (!a?.isConnected || !a?.address) return;
@@ -699,16 +711,30 @@ export function WalletProvider({ children }) {
         });
       }
       if (!acct) {
-        /* The auth session is definitively gone (expired, logged out from
-           another surface) — forget the marker rather than loop. */
-        await clearEmailSocialSession({ disconnect: false }).catch(() => {});
+        /*
+         * A TIMEOUT IS NOT AN ANSWER — the previous code treated one as
+         * "definitively gone" and called clearEmailSocialSession(), which
+         * deleted the boot marker. That turned a SLOW boot (the SDK gives its
+         * own iframe 20s; this window used to be 8s) into a PERMANENT loss:
+         * every later cold start saw no marker and never consulted the — still
+         * valid — session again. rollbackEmailSocialMarker() is the honest
+         * rule and already exists: the marker is handed back only when AppKit
+         * itself says nothing is connected, and kept when it cannot answer.
+         */
+        const cleared = rollbackEmailSocialMarker(modal);
+        wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
         return false;
       }
-      return await attachEmailProvider(modal, acct);
+      const attached = await attachEmailProvider(modal, acct);
+      if (attached) wcEvent('email_session_restored');
+      return attached;
     } catch {
+      wcEvent('email_restore_failed');
       return false; /* offline/blocked chunk: marker survives for the next cold start */
+    } finally {
+      emailRestoreRef.current = false;
     }
-  }, [address, attachEmailProvider]);
+  }, [attachEmailProvider]);
 
   /* --------------------------- WalletConnect v2 -------------------------- */
 
@@ -1679,29 +1705,93 @@ export function WalletProvider({ children }) {
        would overwrite the vault. The stored WC session is left on disk, and
        the commit guard inside restoreWcSession() backstops the foreground
        path. */
-    if (!loadVault()) {
-      /* Email/social and WalletConnect restores are mutually gated: a user
-         whose LAST connection was email restores THAT one, and the wc
-         session — if any — stays on disk for an explicit WalletConnect tap.
-         Without this gate the two restores race on cold start and the
-         traffic-light winner overwrites the user's wallet of choice. */
-      if (hasEmailSocialMarker()) void restoreEmailSocial();
-      else void restoreWcSession({ announce: false });
-    }
-    const onVisible = () => {
-      /* The email restore is cold-start only: no wallet app to bounce back
-         from, so the foreground moment teaches nothing new. A REDIRECT back
-         from AppKit is not that moment — it is a fresh document, so the mount
-         path above is what claims it. */
-      if (document.visibilityState === 'visible' && !addressRef.current && !hasEmailSocialMarker()) {
-        void restoreWcSession({ announce: true });
+    /* The WalletConnect half of a return, in ONE place: a wedged instance (it
+       exists without an account, which is what a page frozen mid-pairing
+       leaves behind) is released first, then the persisted session is probed. */
+    const resumeWc = (announce) => {
+      if (wcRef.current && !wcInitingRef.current) {
+        void releaseWc(false).then(() => restoreWcSession({ announce }));
+        return;
       }
+      void restoreWcSession({ announce });
+    };
+
+    /*
+     * The email half, + THE ONE WAY IT IS ALLOWED TO HAND OVER.
+     *
+     * Email/social and WalletConnect restores stay mutually gated: a user
+     * whose LAST connection was email must not have an older wc session
+     * restored ON TOP of it, so nothing else runs while the marker stands.
+     *
+     * But the marker must not be able to STARVE WalletConnect either. There is
+     * exactly one case where AppKit has spoken: rollbackEmailSocialMarker()
+     * found no session and DELETED the marker. Then the claim is dead, the
+     * stored `wc@2:` session — if one exists — is the user's real wallet, and
+     * this pass probes it. A marker still standing means AppKit could not
+     * answer (its frame is blocked or slow, so the session inside may yet be
+     * live): no other wallet may preempt that, and the next foreground return
+     * asks again — which is the difference between «one slow boot» and «the
+     * wallet is gone forever».
+     */
+    const resumeEmailThenWc = (announce) => {
+      void restoreEmailSocial().then((ok) => {
+        if (ok || addressRef.current || hasEmailSocialMarker()) return;
+        resumeWc(announce);
+      });
+    };
+
+    if (!loadVault()) {
+      if (hasEmailSocialMarker()) resumeEmailThenWc(false);
+      else resumeWc(false);
+    }
+    /*
+     * ─── COMING BACK TO A PAGE THAT WAS NEVER UNLOADED ─────────────────────
+     *
+     * The mount path above only runs for a FRESH document. Every mobile return
+     * in this app's two flows can instead resume the SAME document:
+     *
+     *   • the APK's WebView never reloads when the user leaves for Trust and
+     *     comes back — `visibilitychange` is the only signal it gets;
+     *   • iOS Safari (and Chrome's back/forward cache) RESTORE a frozen page
+     *     on return, which fires `pageshow` with `persisted === true` and no
+     *     mount at all — so the email redirect return and the wallet bounce
+     *     could both land on a page whose effects never re-ran;
+     *   • while frozen, the relay socket the pairing was waiting on is closed
+     *     by the browser, so "the promise will settle by itself" is not a
+     *     property the page can rely on.
+     *
+     * Two narrow rules, both idempotent and both silent on failure:
+     *   1. an email marker with no attached account means a login was started
+     *      (possibly one page ago, in a storage that survives) — ask AppKit
+     *      again, bounded by EMAIL_RESTORE_WINDOW_MS and single-flighted;
+     *   2. a WalletConnect instance that exists WITHOUT an account is a wedged
+     *      attempt (frozen mid-pairing). Its socket died with the freeze, so
+     *      it is released and the persisted session is probed afresh — the
+     *      session key on disk is what the wallet's approval actually wrote.
+     */
+    const onReturn = (announce) => {
+      if (addressRef.current) return;
+      if (hasEmailSocialMarker()) {
+        resumeEmailThenWc(announce);
+        return;
+      }
+      resumeWc(announce);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') onReturn(true);
+    };
+    const onPageShow = (event) => {
+      /* The initial load fires this too (persisted === false) — the mount path
+         above already owns that one. */
+      if (event?.persisted) onReturn(false);
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
