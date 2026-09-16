@@ -51,14 +51,54 @@ export const APPKIT_CONNECTION_KEYS = [
 ];
 
 /**
+ * Cache / non-connection keys that must survive a disconnect. Purge must keep
+ * these — they are expensive to refetch and never describe a live session.
+ */
+const APPKIT_CACHE_KEYS = new Set([
+  '@appkit/portfolio_cache',
+  '@appkit/native_balance_cache',
+  '@appkit/ens_cache',
+  '@appkit/identity_cache',
+  '@appkit/history_transactions_cache',
+  '@appkit/token_price_cache',
+  '@appkit/ton_wallets_cache',
+  '@appkit/latest_version',
+  '@appkit/recent_emails'
+]);
+
+/**
  * Is this key one of the connection-artifact keys we own?
  * Exported so diagnostics can report what WOULD be purged without touching it.
+ *
+ * Covers:
+ *  - every `wc@2:` key (SignClient sessions, pairings, keychain)
+ *  - the single `WALLETCONNECT_DEEPLINK_CHOICE` key
+ *  - the static AppKit connection keys above
+ *  - dynamic per-namespace connector ids: `@appkit/<ns>:connected_connector_id`
+ *    (e.g. `@appkit/eip155:connected_connector_id`) — these were missing and
+ *    left a stale connector after disconnect, so the next `init()` resurrected
+ *    the old session and skipped the modal
+ *  - any other `@appkit/` key that is not a known cache (future-proof for new
+ *    AppKit connection keys like `@appkit/disconnected_connector_ids`,
+ *    `@appkit/solana_wallet`, `@appkit/connected_social` etc.)
  */
 export function isConnectionArtifactKey(key) {
   if (!key) return false;
   if (key.startsWith(WC_STORAGE_PREFIX)) return true;
   if (key === WC_DEEPLINK_CHOICE_KEY) return true;
-  return APPKIT_CONNECTION_KEYS.includes(key);
+  if (APPKIT_CONNECTION_KEYS.includes(key)) return true;
+  // Dynamic per-namespace connector ids: @appkit/eip155:connected_connector_id etc.
+  if (/^@appkit\/[^:]+:connected_connector_id$/.test(key)) return true;
+  if (key.startsWith('@appkit/')) {
+    if (APPKIT_CACHE_KEYS.has(key)) return false;
+    if (key.endsWith('_cache')) return false;
+    // Any other @appkit/ key is a connection artifact (recent, status, namespaces, etc.)
+    // Future AppKit versions may add new keys — treat them as purgeable unless explicitly cache.
+    return true;
+  }
+  // Email/social wallet also uses @appkit-wallet/ prefix for its SDK login marker;
+  // that marker is managed by emailSocialWallet.js, not here, so we never purge it here.
+  return false;
 }
 
 /**

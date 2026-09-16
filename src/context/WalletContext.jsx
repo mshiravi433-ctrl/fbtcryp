@@ -1805,6 +1805,7 @@ export function WalletProvider({ children }) {
         const purged = purgeWcStorage();
         wcEvent('storage_purged', Number(purged));
       } catch { /* storage unavailable — nothing to purge */ }
+      try { clearRelayStateCache(); } catch { /* noop */ }
     }
   }, []);
 
@@ -1943,6 +1944,7 @@ export function WalletProvider({ children }) {
         .catch(() => { /* fire-and-forget; the purge below is synchronous */ });
     }
     try { purgeWcStorage(); } catch { /* storage unavailable */ }
+    try { clearRelayStateCache(); } catch { /* noop */ }
     /* An email/social session ends in the same pass: forget the boot marker
        and tell AppKit (bounded — see lib/emailSocialWallet.js). Without it,
        tomorrow's cold start would resurrect the very logout the user just
