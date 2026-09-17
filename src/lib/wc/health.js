@@ -17,6 +17,7 @@
  */
 
 import { HEALTH_SDK_VERSION, SECURE_SITE_URL, W3M_API_URL, WC_PROJECT_ID } from './config.js';
+import { handoffFacts } from './handoff.js';
 import { measureRelay, probeReachable } from './relay.js';
 import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY, emailOptions } from './embedded.js';
 import { isConnectionKey } from './storage.js';
@@ -334,6 +335,7 @@ export async function collectWalletHealth({
   trace
 } = {}) {
   const currentOrigin = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
+  const channel = handoffFacts();
   try {
     const [config, origins, secureSite, relay] = await Promise.all([
       probeJson(configProbeUrl(projectId), { fetchImpl, timeoutMs }),
@@ -370,6 +372,10 @@ export async function collectWalletHealth({
       relays: relay.hosts,
       relayVerdict: relay.verdict,
       secureSite,
+      /* The hop the pairing leaves from. «The wallet opens but does not
+         connect» has four causes and they live on four different hops, so the
+         report names the channel instead of making the reader infer it. */
+      handoff: channel,
       storage: storageFacts(storage),
       trace: typeof trace === 'function' ? trace() : null
     };

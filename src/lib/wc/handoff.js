@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * Everything upstream of this file produces one string: the URL that hands a
  * pairing to a wallet app. Everything that has ever gone wrong in this flow
- * went wrong HERE, in one of three ways:
+ * went wrong HERE, in one of four ways:
  *
  *   1. the wrong target — the SDK's `window.open(url, '_self')` replaces this
  *      document, so the WalletConnect client, its relay socket and the pending
@@ -14,9 +14,14 @@
  *   3. the wrong channel — a custom scheme handed to a WebView that can route
  *      no scheme at all (Telegram), or a plain `trust://` handed to an OEM
  *      Chrome that wants a package-scoped intent.
+ *   4. the wrong tab — 2026-09-17, the «I never get back to fbtswap.ir»
+ *      report. Chrome DOES launch the wallet from a `_blank` custom scheme,
+ *      but it leaves the new tab behind with the unroutable URL in its address
+ *      bar. Back out of the wallet and the phone returns to that dead tab, not
+ *      to the dApp. Nothing was broken except the tab we forgot to clean up.
  *
- * So there is one opener, it is channel-aware, and it never navigates this
- * document.
+ * So there is one opener, it is channel-aware, it never navigates this
+ * document, and it closes the tab it had to open.
  */
 
 import {
@@ -45,6 +50,54 @@ export function isAndroidView(view) {
   return /Android/i.test(ua);
 }
 
+/** Is this an iOS browser? Custom schemes there need no intent wrapper. */
+export function isIOSView(view) {
+  const ua = String(
+    view?.navigator?.userAgent ??
+      (typeof navigator !== 'undefined' ? navigator.userAgent : '') ??
+      ''
+  );
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
+/**
+ * An embedded WebView rather than a real browser.
+ *
+ * Android's WebView puts `; wv` in the UA; Telegram's Mini App WebView is a
+ * plain WebView with the Telegram bridge injected on top. Neither is allowed
+ * the in-place intent route: if the host does not intercept `intent://` the
+ * navigation commits and the dApp document is gone.
+ */
+export function isWebViewEmbed(view) {
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win) return false;
+  const ua = String(win?.navigator?.userAgent ?? '');
+  if (/; wv\b/i.test(ua)) return true;
+  return Boolean(
+    win?.Telegram ||
+      win?.TelegramWebviewProxy ||
+      win?.TelegramWebviewProxyProto
+  );
+}
+
+/**
+ * Does this browser speak Chrome's `intent://` scheme?
+ *
+ * Only Chromium-based Android browsers implement it. Firefox on Android does
+ * not, and handing it an `intent://` URL is a plain navigation to a scheme it
+ * cannot render. The list is a UA allowlist on purpose: guessing "Android, so
+ * intent must work" is how a dApp loses its own document on the one browser
+ * that disagrees.
+ */
+export function isIntentCapableBrowser(view) {
+  if (!isAndroidView(view)) return false;
+  if (isWebViewEmbed(view)) return false;
+  const ua = String(view?.navigator?.userAgent ?? '');
+  return /chrome|chromium|crios|samsungbrowser|ucbrowser|opr|edg|miuibrowser|huaweibrowser|vivaldi|heyTapBrowser|oppobrowser/i.test(
+    ua
+  );
+}
+
 /**
  * Which channel a wallet hand-off travels through.
  *
@@ -52,8 +105,9 @@ export function isAndroidView(view) {
  *                  that fires a package-scoped ACTION_VIEW with the raw `wc:`
  *                  URI, which is the most reliable route on Android.
  *   `telegram`   — the Mini App WebView. It can route no custom scheme, so it
- *                  gets the universal HTTPS link (and it decodes a deep link
- *                  once in transit, hence the double-encode below).
+ *                  gets the native link first (Telegram's client forwards the
+ *                  scheme to the OS) and the universal HTTPS link as the way
+ *                  out when it does not.
  *   `web`        — a real browser. Native custom scheme, with the
  *                  Chrome-documented `intent://` form first on Android.
  */
@@ -62,6 +116,58 @@ export function handOffChannel(view) {
   if (win?.Capacitor?.isNativePlatform?.()) return 'native-app';
   if (win?.Telegram?.WebApp?.openLink) return 'telegram';
   return 'web';
+}
+
+/**
+ * Everything the health report can say about the hop the user is standing on.
+ *
+ * «It opens the wallet but does not connect» has four different causes and
+ * they live in different hops. Naming the channel, the WebView and whether the
+ * Java bridge exists turns the next report into a diagnosis instead of a
+ * description.
+ */
+export function handoffFacts(view) {
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  const ua = String(win?.navigator?.userAgent ?? '');
+  return {
+    channel: handOffChannel(win),
+    android: isAndroidView(win),
+    ios: isIOSView(win),
+    webview: isWebViewEmbed(win),
+    telegram: Boolean(
+      win?.Telegram || win?.TelegramWebviewProxy || win?.TelegramWebviewProxyProto
+    ),
+    intentCapable: isIntentCapableBrowser(win),
+    javaBridge: Boolean(win?.FBTWalletLink?.openWallet),
+    /* Shape only — never the browser's own UA string (the report carries it). */
+    uaLooksLikeChrome: /chrome|chromium|crios/i.test(ua)
+  };
+}
+
+/* ── the hand-off announcement ──────────────────────────────────────────────
+ * The moment a pairing leaves this document, the connect bound stops being a
+ * network wait and becomes a human one: the session grants the user the
+ * in-wallet budget (see TIMEOUT.connectInWallet). Both the AppKit bridge and
+ * our own sheet go through this module, so one subscription covers every route
+ * the pairing can take out of the page.
+ */
+const handoffListeners = new Set();
+
+/** @param {(detail:{url:string, wallet:object|null, route:string}) => void} fn */
+export function onWalletHandoff(fn) {
+  if (typeof fn !== 'function') return () => {};
+  handoffListeners.add(fn);
+  return () => handoffListeners.delete(fn);
+}
+
+function announceHandoff(detail) {
+  for (const fn of handoffListeners) {
+    try {
+      fn(detail);
+    } catch {
+      /* a listener must never stop the hand-off it was told about */
+    }
+  }
 }
 
 /** A custom scheme that is not http(s) — i.e. a wallet app link. */
@@ -158,12 +264,73 @@ function rebuildWithPayload(url, encodedPayload) {
   return `${text.slice(0, match.index + match[1].length)}${encodedPayload}`;
 }
 
-function tryOpen(win, url, openWindow) {
+/**
+ * Open one URL in a new context and REMEMBER THE TAB IT CREATED.
+ *
+ * ─── THE `noopener` BUG ────────────────────────────────────────────────────
+ * This used to pass `'noreferrer noopener'`, and a `window.open` with
+ * `noopener` returns null BY SPECIFICATION. `Boolean(null)` is false, so every
+ * attempt reported failure and the code fell through to the next route — the
+ * intent form was tried, declared dead, and the raw `trust://` link was opened
+ * instead. That is the shape of the report: the wallet opened (the second
+ * route worked) but on the one URL that leaves a dead tab behind.
+ *
+ * `noreferrer` stays: a wallet hand-off has no business carrying our origin
+ * to a third party. `noopener` goes, because a handle is the only way to clean
+ * up after ourselves.
+ */
+function tryOpen(win, url, openWindow, opened = null) {
   const open = openWindow ?? win.open?.bind(win);
+  /*
+   * `noopener` is kept for http(s) destinations and dropped for everything
+   * else, and the two halves of that sentence are the same reason:
+   *   • an https page is a real page on someone else's origin — without
+   *     `noopener` it can navigate this tab (`window.opener.location`), which
+   *     is exactly the reverse-tabnabbing `noopener` exists for;
+   *   • a custom scheme is NOT a page, and `noopener` there costs us the
+   *     handle we need to close the dead tab behind us.
+   */
+  const page = isHttps(url);
+  const features = page ? 'noreferrer noopener' : 'noreferrer';
   try {
-    return Boolean(open?.(url, '_blank', 'noreferrer noopener'));
+    const child = open?.(url, '_blank', features);
+    if (child && typeof child.close === 'function' && !page) opened?.push(child);
+    return Boolean(child);
   } catch {
     return false;
+  }
+}
+
+/**
+ * Close the tab a hand-off opened, once the wallet has had time to take over.
+ *
+ * Chrome launches the app and leaves the new tab sitting on the unroutable
+ * `trust://wc?uri=…` URL. Pressing Back out of the wallet returns the phone to
+ * that tab, and the user's conclusion is «it never comes back to fbtswap.ir».
+ * Closing it hands focus back to the dApp, which is still waiting on the very
+ * pairing the wallet is deciding about.
+ *
+ * ONLY a plain custom-scheme route is cleaned up:
+ *   • an `intent://` route is intercepted by Chrome itself — nothing is left
+ *     behind when it resolves, and when it does NOT resolve the tab is showing
+ *     `S.browser_fallback_url`, which is the «install this wallet» page the
+ *     user needs;
+ *   • an https route is a destination, never a launch.
+ */
+function scheduleClose(win, children, ms = TIMEOUT.handoffClose) {
+  if (!children || children.length === 0) return;
+  try {
+    win.setTimeout?.(() => {
+      for (const child of children.splice(0, children.length)) {
+        try {
+          child?.close?.();
+        } catch {
+          /* the tab already went away — that is the point */
+        }
+      }
+    }, ms);
+  } catch {
+    /* no timers: the tab simply outlives us, which is survivable */
   }
 }
 
@@ -203,16 +370,29 @@ async function openHttpsFallback(url, { view, openWindow } = {}) {
   if (tryAnchor(win, url)) return true;
   // Try Capacitor Browser plugin (Custom Tabs) — safe, keeps dApp alive
   try {
-    const plugin = await (async () => {
+    /* Assigned, never RETURNED from an async function: `@capacitor/core`
+       registers plugins as a Proxy that throws on any property that is not
+       implemented on the current platform, and resolving a promise with a
+       thenable reads `.then` off it — so the old `return mod.Browser` inside an
+       async IIFE threw `"Browser.then() is not implemented on web"` straight
+       out of the hand-off. */
+    let plugin = null;
+    try {
+      const mod = await import('@capacitor/browser');
+      plugin = mod?.Browser ?? null;
+    } catch { plugin = null; }
+    if (plugin && typeof plugin.open === 'function') {
       try {
-        const mod = await import('@capacitor/browser');
-        return mod.Browser ?? null;
-      } catch { return null; }
-    })();
-    if (plugin) {
-      try {
+        /* An async IIFE, not `Promise.resolve(plugin.open(…))`: inside a plain
+           browser the Capacitor plugin is an un-implemented proxy that THROWS
+           — and on a proxy, even reading `.then` throws — so the call has to
+           become a rejection before anything can await it. Without this, one
+           popup-blocked hand-off took the whole connect flow down with an
+           unhandled CapacitorException instead of quietly trying the next
+           route. */
         await withTimeout(
-          Promise.resolve(plugin.open({ url, toolbarColor: '#0a0c12', presentationStyle: 'popover' })),
+          (async () =>
+            plugin.open({ url, toolbarColor: '#0a0c12', presentationStyle: 'popover' }))(),
           TIMEOUT.teardown,
           'FALLBACK_TIMEOUT'
         );
@@ -231,8 +411,41 @@ async function openHttpsFallback(url, { view, openWindow } = {}) {
 }
 
 /**
+ * The ordered routes for one channel, first try last.
+ *
+ * The synchronous pass can only fire the FIRST route: it is the only one still
+ * inside the user's gesture, and a gesture is the one thing a popup blocker
+ * cannot be argued with.
+ */
+function routesFor({ channel, win, url, raw, wallet, fallbackUrl, urlForChannel }) {
+  const universal = fallbackUrl || (isHttps(url) ? url : '');
+  /*
+   * `intent://` is only offered on a real Android browser. On iOS it is a
+   * scheme Safari cannot render, and inside a WebView nothing intercepts it,
+   * so the navigation would commit and take this document with it.
+   */
+  const intent =
+    channel === 'web' && isAndroidView(win) && isIntentCapableBrowser(win)
+      ? androidIntentLink(wallet, raw, universal)
+      : '';
+  const list = [];
+
+  if (channel === 'native-app') {
+    list.push({ route: 'java-bridge', url: raw });
+  }
+  if (intent) list.push({ route: 'intent', url: intent });
+  list.push({ route: 'native', url: urlForChannel });
+  list.push({ route: 'universal', url: universal });
+  return list.filter((entry) => Boolean(entry.url));
+}
+
+/**
  * Synchronous version — runs entirely within the user gesture, no await.
- * Returns true if a route was attempted (intent, native, or anchor).
+ * Fires the channel's first route only: it is the one route a popup blocker
+ * cannot refuse, and firing three because the first was slow is worse than
+ * firing none.
+ *
+ * @returns {{ok:boolean, route:string}}
  */
 export function openWalletLinkSync(url, options = {}) {
   const {
@@ -244,38 +457,115 @@ export function openWalletLinkSync(url, options = {}) {
     openWindow
   } = options;
   const win = view ?? (typeof window !== 'undefined' ? window : null);
-  if (!win || !url) return false;
+  if (!win || !url) return { ok: false, route: 'none' };
   const raw = pairingUri || pairingUriFromLink(url) || '';
   const channel = handOffChannel(win);
 
-  if (channel === 'native-app') {
+  /* Telegram-Android decodes once in transit: encode the payload twice. */
+  const urlForChannel =
+    channel === 'telegram' && isAndroidView(win) && raw
+      ? rebuildWithPayload(url, encodeURIComponent(raw))
+      : url;
+
+  const [first] = routesFor({
+    channel,
+    win,
+    url,
+    raw,
+    wallet,
+    walletPackage,
+    fallbackUrl,
+    urlForChannel
+  });
+  if (!first) return { ok: false, route: 'none' };
+
+  if (first.route === 'java-bridge') {
     if (raw && walletPackage && win.FBTWalletLink?.openWallet) {
       try {
-        if (win.FBTWalletLink.openWallet(raw, walletPackage)) return true;
+        if (win.FBTWalletLink.openWallet(raw, walletPackage)) {
+          announceHandoff({ url: first.url, wallet, route: first.route });
+          return { ok: true, route: first.route };
+        }
       } catch { /* fall through */ }
     }
-    return false;
+    return { ok: false, route: first.route };
   }
 
-  if (channel === 'telegram') {
-    const payload = isAndroidView(win) && raw ? encodeURIComponent(raw) : null;
-    const native = payload ? rebuildWithPayload(url, payload) : url;
-    if (tryOpen(win, native, openWindow)) return true;
-    if (tryAnchor(win, native)) return true;
-    return false;
-  }
+  const opened = [];
+  const fired = tryOpen(win, first.url, openWindow, opened) || tryAnchor(win, first.url);
+  /* iOS Safari prompts before it switches apps, and closing the tab it opened
+     would dismiss that prompt, so only Android gets the cleanup. */
+  if (first.route === 'native' && isAndroidView(win)) scheduleClose(win, opened);
+  if (fired) announceHandoff({ url: first.url, wallet, route: first.route });
+  return { ok: fired, route: first.route };
+}
 
-  // web — intent first, then native, then anchor
-  if (isAndroidView(win) && wallet && raw) {
-    const intent = androidIntentLink(wallet, raw, fallbackUrl);
-    if (intent) {
-      if (tryOpen(win, intent, openWindow)) return true;
-      if (tryAnchor(win, intent)) return true;
+/**
+ * Hand one pairing to a wallet app without ever navigating this document.
+ *
+ * @returns {Promise<{ok:boolean, route:string}>} whether a route was attempted,
+ *   and which one, so the trace can name the hop a failure happened on.
+ */
+export async function openWalletHandoff(url, options = {}) {
+  const {
+    pairingUri = '',
+    wallet = null,
+    walletPackage = wallet?.androidPackage || '',
+    fallbackUrl = '',
+    view,
+    openWindow
+  } = options;
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win || !url) return { ok: false, route: 'none' };
+
+  const sync = openWalletLinkSync(url, {
+    pairingUri,
+    wallet,
+    walletPackage,
+    fallbackUrl,
+    view: win,
+    openWindow
+  });
+  if (sync.ok) return sync;
+
+  const raw = pairingUri || pairingUriFromLink(url) || '';
+  const channel = handOffChannel(win);
+  const opened = [];
+
+  for (const entry of routesFor({
+    channel,
+    win,
+    url,
+    raw,
+    wallet,
+    walletPackage,
+    fallbackUrl,
+    urlForChannel: url
+  })) {
+    if (entry.route === 'java-bridge') continue; // already refused above
+    if (isHttps(entry.url)) {
+      if (channel === 'telegram') {
+        try {
+          win.Telegram?.WebApp?.openLink?.(entry.url, { try_instant_view: false });
+          announceHandoff({ url: entry.url, wallet, route: entry.route });
+          return { ok: true, route: entry.route };
+        } catch { /* fall through */ }
+      }
+      const okHttps = await openHttpsFallback(entry.url, { view: win, openWindow });
+      if (okHttps) {
+        announceHandoff({ url: entry.url, wallet, route: entry.route });
+        return { ok: true, route: entry.route };
+      }
+      continue;
+    }
+    if (tryOpen(win, entry.url, openWindow, opened) || tryAnchor(win, entry.url)) {
+      if (entry.route === 'native' && isAndroidView(win)) scheduleClose(win, opened);
+      announceHandoff({ url: entry.url, wallet, route: entry.route });
+      return { ok: true, route: entry.route };
     }
   }
-  if (tryOpen(win, url, openWindow)) return true;
-  if (tryAnchor(win, url)) return true;
-  return false;
+
+  return { ok: false, route: 'none' };
 }
 
 /**
@@ -283,35 +573,8 @@ export function openWalletLinkSync(url, options = {}) {
  * @returns {Promise<boolean>} whether a route was actually attempted.
  */
 export async function openWalletLink(url, options = {}) {
-  const win = options.view ?? (typeof window !== 'undefined' ? window : null);
-  if (!win || !url) return false;
-
-  // Sync attempt first — preserves user gesture
-  if (openWalletLinkSync(url, options)) return true;
-
-  const raw = options.pairingUri || pairingUriFromLink(url) || '';
-  const channel = handOffChannel(win);
-
-  if (channel === 'native-app') {
-    if (raw && options.walletPackage && win.FBTWalletLink?.openWallet) {
-      try {
-        if (win.FBTWalletLink.openWallet(raw, options.walletPackage)) return true;
-      } catch { /* fall through */ }
-    }
-    return openHttpsFallback(options.fallbackUrl || (isHttps(url) ? url : ''), { view: win, openWindow: options.openWindow });
-  }
-
-  if (channel === 'telegram') {
-    try {
-      win.Telegram?.WebApp?.openLink?.(options.fallbackUrl || (isHttps(url) ? url : url));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // web — only https fallback remains, never location.assign
-  return openHttpsFallback(options.fallbackUrl, { view: win, openWindow: options.openWindow });
+  const result = await openWalletHandoff(url, options);
+  return result.ok;
 }
 
 /**
@@ -333,10 +596,10 @@ export function installWalletOpenBridge({ win, openWallet } = {}) {
     }
     if (decision.action !== 'open') return original.call(target, url, name, features);
     try {
-      // Synchronous open first — this is the critical path for popup-blocker
-      const syncOk = (() => {
+      /* Synchronous open first — this is the critical path for the popup
+         blocker, and the only one still inside the user's gesture. */
+      const sync = (() => {
         try {
-          // Build options for sync open
           return openWalletLinkSync(decision.url, {
             pairingUri: decision.pairingUri || '',
             wallet: decision.wallet ?? null,
@@ -345,34 +608,22 @@ export function installWalletOpenBridge({ win, openWallet } = {}) {
             view: target,
             openWindow: original.bind(target)
           });
-        } catch { return false; }
+        } catch { return { ok: false, route: 'none' }; }
       })();
-      if (!syncOk) {
-        // Async path for fallback (https) — still never _self
-        openWallet(decision.url, {
-          pairingUri: decision.pairingUri || '',
-          wallet: decision.wallet ?? null,
-          walletPackage: decision.wallet?.androidPackage || '',
-          fallbackUrl: decision.fallbackUrl || '',
-          rewritten: decision.rewritten,
-          repaired: Boolean(decision.repaired),
-          openWindow: original.bind(target)
-        });
-      } else {
-        // Even when sync succeeded, still call openWallet for tracing, but it will no-op or trace success
-        try {
-          openWallet(decision.url, {
-            pairingUri: decision.pairingUri || '',
-            wallet: decision.wallet ?? null,
-            walletPackage: decision.wallet?.androidPackage || '',
-            fallbackUrl: decision.fallbackUrl || '',
-            rewritten: decision.rewritten,
-            repaired: Boolean(decision.repaired),
-            openWindow: original.bind(target),
-            _syncAlreadySucceeded: true
-          });
-        } catch { /* tracing only */ }
-      }
+      const shared = {
+        pairingUri: decision.pairingUri || '',
+        wallet: decision.wallet ?? null,
+        walletPackage: decision.wallet?.androidPackage || '',
+        fallbackUrl: decision.fallbackUrl || '',
+        rewritten: decision.rewritten,
+        repaired: Boolean(decision.repaired),
+        openWindow: original.bind(target),
+        _syncAlreadySucceeded: sync.ok,
+        _syncRoute: sync.route
+      };
+      /* Either way the caller hears about it: the route it took is the hop the
+         next report will be about. */
+      openWallet(decision.url, shared);
       return null;
     } catch {
       return original.call(target, decision.url, name, features);

@@ -76,6 +76,22 @@ function projectSourceNote(features, t) {
 }
 
 /**
+ * The hop a pairing leaves from, in measured words.
+ *
+ * «The wallet opens but does not connect» has four causes on four different
+ * hops: a WebView that can route no scheme, a browser that ignores a bare
+ * custom scheme, a package-scoped intent that never got built, or a payload
+ * that arrived one encoding level off. Printing the channel turns that report
+ * from a description into a diagnosis.
+ */
+function handoffDetail(handoff) {
+  if (!handoff?.channel) return undefined;
+  return `channel=${handoff.channel} · android=${handoff.android} · ios=${handoff.ios}`
+    + ` · webview=${handoff.webview} · telegram=${handoff.telegram}`
+    + ` · intent=${handoff.intentCapable} · bridge=${handoff.javaBridge}`;
+}
+
+/**
  * One relay host, in measured words:
  *   open        → «socket open (312ms)»
  *   HTTPS only  → «HTTPS responded but the socket test failed» (a filtered or
@@ -218,6 +234,11 @@ export default function WalletHealthPanel({ projectId }) {
                 </p>
               )}
               {row(t('wallet.healthSecureSite'), report.secureSite)}
+              {row(
+                t('wallet.healthHandoff'),
+                { ok: Boolean(report.handoff?.channel) },
+                handoffDetail(report.handoff)
+              )}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
                 {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''}`}
               </p>

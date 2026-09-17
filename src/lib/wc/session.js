@@ -26,13 +26,57 @@
 import { PAIRING_TTL_MS, RELAY_URLS, TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
 import { chainFromSession } from './chain.js';
 import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
-import { installWalletOpenBridge, openWalletLink, openWalletLinkSync } from './handoff.js';
+import { installWalletOpenBridge, onWalletHandoff, openWalletHandoff } from './handoff.js';
 import { measureRelay, clearRelayCache } from './relay.js';
 import { hasStoredSession, purgeConnectionKeys } from './storage.js';
-import { cancelSwitch, classifyConnectError, isModalError, isRelayError, withTimeout } from './timing.js';
+import {
+  classifyConnectError,
+  isModalError,
+  isRelayError,
+  pauseBound,
+  withTimeout
+} from './timing.js';
 import { wcEvent } from './trace.js';
 import { looksLikePairingUri, repairPairingUri } from './uri.js';
 import { legacyModalWallets } from './wallets.js';
+
+/** The trace name for each hand-off route — the hop a pairing left from. */
+const HANDOFF_EVENT = Object.freeze({
+  'java-bridge': 'handoff_java_bridge',
+  intent: 'handoff_intent',
+  native: 'handoff_native',
+  universal: 'handoff_universal'
+});
+
+/**
+ * Stop the connect clock while this document is not on screen.
+ *
+ * A phone switches apps to show the wallet: the tab goes hidden, and while it
+ * is hidden the user is not waiting for us — we are waiting for them. The old
+ * flat timer burned its whole budget in that window and tore the provider down
+ * from under an approval that was one tap away.
+ *
+ * @returns {() => void} the unsubscribe.
+ */
+function pauseOnHidden(bound, view) {
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  const doc = win?.document;
+  if (!doc || typeof doc.addEventListener !== 'function') return () => {};
+  const onVisibility = () => {
+    try {
+      if (doc.visibilityState === 'hidden') {
+        if (bound.pause()) wcEvent('connect_paused');
+      } else if (bound.resume()) {
+        wcEvent('connect_resumed');
+      }
+    } catch {
+      /* a clock that cannot be paused is still a clock */
+    }
+  };
+  if (doc.visibilityState === 'hidden') onVisibility();
+  doc.addEventListener('visibilitychange', onVisibility);
+  return () => doc.removeEventListener('visibilitychange', onVisibility);
+}
 
 /**
  * @param {object} options
@@ -63,6 +107,8 @@ export function createWcSession({
   let uninstallBridge = null;
   /** Settle-switch for the in-flight connect, so Cancel has immediate effect. */
   let settleConnect = null;
+  /** Tear-down for the connect clock's listeners, for ANY exit path. */
+  let stopConnectWatchers = null;
 
   function on(type, fn) {
     if (typeof fn !== 'function') return () => {};
@@ -348,34 +394,64 @@ export function createWcSession({
       }
       detach = attach(instance);
 
+      /* THE CLOCK, ARMED BEFORE THE PAIRING CAN LEAVE THE PAGE.
+         ───────────────────────────────────────────────────────────────────
+         The flat 20s fuse this used to run is shorter than one mobile round
+         trip: tap → app switch → unlock → read → approve → publish. On the
+         2026-09-17 20:36Z report the wallet row was tapped 4.5s after init and
+         the attempt was destroyed 20s later, while the user was standing in
+         Trust Wallet reading the approval — and the failure was then reported
+         as «the relay is unreachable». See timing.js#pauseBound. */
+      const bound = pauseBound(TIMEOUT.connect, 'WC_CONNECT_TIMEOUT', {
+        hardCapMs: TIMEOUT.connectHardCap
+      });
+      settleConnect = (code = 'WC_USER_CANCELLED') => bound.cancel(code);
+      const stopVisibilityPause = pauseOnHidden(
+        bound,
+        typeof window !== 'undefined' ? window : null
+      );
+
+      /* A HAND-OFF IS NOT A NETWORK WAIT. From the moment the pairing leaves
+         for a wallet app the clock belongs to the user: they may still have to
+         unlock, read and decide. Grant the in-wallet budget, and name the
+         route, so the next report says which hop the pairing left from. */
+      const stopHandoffWatch = onWalletHandoff(({ route }) => {
+        wcEvent(HANDOFF_EVENT[route] ?? 'handoff_other', 1);
+        if (bound.extend(TIMEOUT.connectInWallet)) wcEvent('connect_extended');
+      });
+      stopConnectWatchers = () => {
+        bound.stop();
+        stopVisibilityPause();
+        stopHandoffWatch();
+      };
+
       /* LAST METRE: own the URL the modal hands to the phone, so the hand-off
          never navigates this document (which would take the relay socket and
          the pending connect() promise with it).
-         
-         CRITICAL FIX: The bridge must attempt synchronous open FIRST to preserve
-         the user gesture (popup-blocker). The previous async-only path caused
-         window.open to be called outside the gesture, getting blocked, then
-         falling back to location.assign which destroyed fbtswap.ir and sent
-         the user to https://uniswap.org/app/wc?uri=... — exactly the reported bug.
-      */
+
+         CRITICAL: the synchronous open happens first, inside the user's
+         gesture — an async open is what a popup blocker refuses, and the old
+         fallback to location.assign destroyed fbtswap.ir and sent the user to
+         https://uniswap.org/app/wc?uri=… — the exact bug this replaced. */
       uninstallBridge = installWalletOpenBridge({
         openWallet: (url, opts) => {
-          if (opts?._syncAlreadySucceeded) {
-            if (opts?.repaired) wcEvent('deeplink_uri_repaired');
-            wcEvent(opts?.rewritten ? 'deeplink_rewritten_sync' : 'deeplink_opened_sync');
-            return;
-          }
           if (opts?.repaired) wcEvent('deeplink_uri_repaired');
-          wcEvent(opts?.rewritten ? 'deeplink_rewritten' : 'deeplink_opened');
-          // Try sync again (in case bridge's sync missed)
-          try {
-            if (openWalletLinkSync(url, opts)) {
-              wcEvent('deeplink_opened_sync_fallback');
-              return;
-            }
-          } catch { /* fall through to async */ }
-          openWalletLink(url, opts).then(
-            (ok) => { if (!ok) wcEvent('deeplink_open_failed'); },
+          wcEvent(
+            opts?._syncAlreadySucceeded
+              ? opts?.rewritten
+                ? 'deeplink_rewritten_sync'
+                : 'deeplink_opened_sync'
+              : opts?.rewritten
+                ? 'deeplink_rewritten'
+                : 'deeplink_opened'
+          );
+          if (opts?._syncAlreadySucceeded) return;
+          /* The gesture is gone, but the https fallback is a destination
+             rather than a launch, so it is still worth trying. */
+          openWalletHandoff(url, opts).then(
+            (result) => {
+              if (!result.ok) wcEvent('deeplink_open_failed');
+            },
             () => wcEvent('deeplink_open_failed')
           );
         }
@@ -394,14 +470,12 @@ export function createWcSession({
         wcEvent('stale_session_dropped');
       }
 
-      const cancel = cancelSwitch('WC_USER_CANCELLED');
-      const bound = cancelSwitch('WC_CONNECT_TIMEOUT');
-      const boundTimer = setTimeout(() => bound.cancel(), TIMEOUT.connect);
-      settleConnect = cancel.cancel;
       try {
-        await Promise.race([instance.connect(), cancel.promise, bound.promise]);
+        await Promise.race([instance.connect(), bound.promise]);
       } finally {
-        clearTimeout(boundTimer);
+        bound.stop();
+        stopVisibilityPause();
+        stopHandoffWatch();
         settleConnect = null;
         setLivePairingUri(null);
         emit('uri', { uri: null });
@@ -423,11 +497,18 @@ export function createWcSession({
             ? 'connect_failed_origin'
             : code === 'WC_EXPIRED'
               ? 'connect_failed_expired'
-              : code === 'WC_RELAY_UNREACHABLE'
-                ? 'connect_failed_relay'
-                : 'connect_failed_unknown',
+              : code === 'WC_TIMEOUT'
+                ? 'connect_failed_timeout'
+                : code === 'WC_RELAY_UNREACHABLE'
+                  ? 'connect_failed_relay'
+                  : 'connect_failed_unknown',
         elapsed
       );
+      /* Only a REAL relay failure invalidates the measurement. Our own bound
+         says nothing about the network — the relay issued the URI the wallet
+         was opened with — so forgetting the (open) measurement on a timeout
+         would make the next attempt re-probe and report a network it already
+         proved healthy. */
       if (code === 'WC_RELAY_UNREACHABLE') clearRelayCache();
       /* Never leave a half-connected instance behind: on OUR timeout the SDK's
          socket is still retrying in the background, and that zombie is what
@@ -438,6 +519,8 @@ export function createWcSession({
     } finally {
       busy = false;
       settleConnect = null;
+      try { stopConnectWatchers?.(); } catch { /* noop */ }
+      stopConnectWatchers = null;
       try { uninstallBridge?.(); } catch { /* noop */ }
       uninstallBridge = null;
       setLivePairingUri(null);

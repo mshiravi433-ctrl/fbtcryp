@@ -188,6 +188,46 @@ export function emailOptions({ projectId, metadata }) {
 let instance = null;
 
 /**
+ * Wait for the instance to finish booting BEFORE anything is opened on it.
+ *
+ * ─── THE «GREEN TICK, THEN NOTHING» REPORT ─────────────────────────────────
+ * `createAppKit()` returns synchronously and starts `initialize()` in the
+ * background (`this.readyPromise = this.initialize(options)`), and `open()` is
+ * never gated on it. Everything the email box needs is created AT THE END of
+ * that async boot:
+ *
+ *   initialize() → fetchRemoteFeatures() → createAuthProvider() →
+ *   W3mFrameProviderSingleton.getInstance(…) → the secure.walletconnect.org
+ *   iframe.
+ *
+ * Open the modal first and the email field renders — it is drawn from the
+ * `features` we re-assert — while the provider that would have answered it does
+ * not exist yet. The submit resolves into nothing, the OTP step never appears,
+ * and the user's report is «I press continue and nothing happens».
+ *
+ * Bounded, and a timeout still opens the modal: a blocked Explorer API must
+ * never turn into a dead Connect button.
+ */
+async function awaitReady(modal, ms = TIMEOUT.emailOpen) {
+  const ready = modal?.readyPromise;
+  if (!ready || typeof ready.then !== 'function') return 'not_promised';
+  let timer = null;
+  try {
+    await Promise.race([
+      Promise.resolve(ready).catch(() => {}),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, Math.min(ms, 8_000));
+      })
+    ]);
+    return 'ready';
+  } catch {
+    return 'error';
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Lazily create and return the AppKit instance.
  *
  * BOTH the root client and the ethers adapter are dynamic imports, so this
@@ -221,6 +261,8 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
       import('@reown/appkit-adapter-ethers')
     ]);
     instance = createAppKit({ ...emailOptions({ projectId, metadata }), adapters: [new EthersAdapter()] });
+    const boot = await awaitReady(instance);
+    wcEvent(boot === 'ready' ? 'email_appkit_ready' : 'email_appkit_ready_pending');
   }
   reassertFeatures(instance);
   return instance;
@@ -409,6 +451,15 @@ export async function open({ projectId, metadata } = {}) {
   }
   const account = await awaitAccount(modal, { timeoutMs: TIMEOUT.emailOpen, closeGraceMs: TIMEOUT.emailCloseGrace + 2000 });
   if (!account) {
+    /* Two very different stories end at the same line, so the trace has to
+       tell them apart: «AppKit says nothing is connected» (the OTP/iframe
+       never happened) versus «AppKit says connected but never produced an
+       address» (the frame answered, the account did not arrive). */
+    wcEvent(
+      modal?.getIsConnectedState?.()
+        ? 'email_wait_no_address'
+        : 'email_wait_timeout'
+    );
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
   }
