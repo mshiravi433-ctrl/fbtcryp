@@ -682,9 +682,29 @@ export function WalletProvider({ children }) {
         wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
         return false;
       }
-      const attached = await attachEmailProvider(modal, acct);
+      // The secure iframe's provider can lag the address event by 500–1500ms on a
+      // slow WebView (observed on restore: isConnected true + address present,
+      // but getWalletProvider() still null). A single attach attempt that hits
+      // that window reports email_attach_no_provider and leaves the marker
+      // orphaned until the next foreground retry — exactly the «ایمیل تأیید شد،
+      // برگشتیم، والت نبود» report. Retry the attach with the same poll that
+      // waitForEmailConnection uses for its close grace.
+      let attached = await attachEmailProvider(modal, acct);
+      if (!attached) {
+        for (let attempt = 0; attempt < 6 && !attached; attempt += 1) {
+          // eslint-disable-next-line no-await-in-loop -- sequential attach retry is the point
+          await new Promise((r) => setTimeout(r, 500));
+          let freshAcct = acct;
+          try {
+            if (modal.getIsConnectedState?.()) freshAcct = modal.getAddress?.('eip155') || acct;
+            else break;
+          } catch { /* keep original acct */ }
+          // eslint-disable-next-line no-await-in-loop
+          attached = await attachEmailProvider(modal, freshAcct);
+        }
+        if (!attached) wcEvent('email_attach_restore_failed');
+      }
       if (attached) wcEvent('email_session_restored');
-      else wcEvent('email_attach_restore_failed');
       return attached;
     } catch {
       wcEvent('email_restore_failed');
