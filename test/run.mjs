@@ -818,6 +818,18 @@ console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لین
   report('wallet deep-link delivery', await runWcDeepLink());
 }
 
+/* ------------------------------ 0c-6b. AppKit pairing-state reconcile ------- */
+/* The «wallet opens, home screen, no approval prompt» report: in
+   manualWCControl mode nothing resets AppKit's ConnectionController.state.wcUri
+   between attempts, so a tap could hand a wallet a DEAD pairing topic while the
+   fresh pairing sat unused (which is why the QR always worked). Measured
+   against the real @reown/appkit-controllers singleton. */
+console.log('▸ probing AppKit pairing-state reconcile (the «والت باز می‌شود ولی چیزی برای تأیید نمی‌آید» fix)…');
+{
+  const { default: runWcReconcile } = await import('./wc-appkit-reconcile-probe.mjs');
+  report('AppKit pairing-state reconcile', await runWcReconcile());
+}
+
 /* ------------------------------ 0c-7. pairing-URI hygiene ------------------- */
 /* The «Invalid Url: wc:…&amp;…» report: HTML-escaped URI parameters cannot pair.
    Repair them first, then complete a bare `wc:` URI into the tapped wallet's

@@ -1,9 +1,33 @@
-/** Own one modal attempt; closing during provider attachment is not cancellation. */
+/**
+ * Own one modal attempt; closing during provider attachment is not cancellation.
+ *
+ * SETTLE CONTRACT (mirrored by test/wallet-connection-regression.test.js):
+ *   • attach() resolves TRUE  → settle(true), unsubscribe.
+ *   • attach() REJECTS        → onError() + settle(false) immediately. A thrown
+ *     attach is a real failure (provider missing for good, ethers chunk dead) —
+ *     retrying it for the full 30s open window with no feedback is the
+ *     «popup says connected but our page shows no wallet» report exactly: the
+ *     user waits out the silence and gives up before anything settles.
+ *   • attach() resolves FALSE → TRANSIENT (getWalletProvider() null on the
+ *     first tick of a slow WebView). Keep listening; the next subscribeAccount
+ *     event or close-poll retries. Bounded by MAX_ATTACH_ATTEMPTS so an
+ *     always-false provider still settles instead of spinning silently.
+ *   • after settle, stale account/state callbacks are ignored and unsubscribed.
+ */
+/**
+ * A provider that answers false forever must still settle: 8 attempts across
+ * the subscribeAccount events and the close-poll is generous for the measured
+ * transient (one missed tick on a cold WebView) without resurrecting the
+ * silent 30s hang this module's own regression test timed out on.
+ */
+export const MAX_ATTACH_ATTEMPTS = 8;
+
 export function waitForEmailConnection(modal, attach, { onError = () => {}, openTimeoutMs = 30_000 } = {}) {
   return new Promise((resolve) => {
     let settled = false;
     let opened = false;
     let attaching = false;
+    let attempts = 0;
     let openTimer;
     let closeTimer;
     const subscriptions = [];
@@ -23,19 +47,23 @@ export function waitForEmailConnection(modal, attach, { onError = () => {}, open
       Promise.resolve()
         .then(() => attach(acct.address))
         .then((ok) => {
-          if (ok) settle(true);
-          else {
-            // Provider not yet ready (getWalletProvider() null on first tick on
-            // slow WebView). Don't settle false — let the close poll / next
-            // subscribeAccount event retry. This is the "popup says connected
-            // but our page shows no wallet" path: the modal is open:false but
-            // the embedded provider needs one more tick.
-            attaching = false;
+          if (ok) {
+            settle(true);
+            return;
           }
-        }, () => {
+          /* Provider not yet ready (getWalletProvider() null on first tick on
+             slow WebView). Retry on the next account event / close poll — but
+             only a bounded number of times, then settle honestly. */
           attaching = false;
-          // transient attach error — keep polling, outer openTimeout will fail
-          // eventually if nothing ever succeeds
+          attempts += 1;
+          if (attempts >= MAX_ATTACH_ATTEMPTS) fail();
+        }, () => {
+          /* A REJECTED attach is not transient noise: the provider was there
+             and failed to produce a signer. Settle now — the old behaviour
+             (retrying until the 30s fuse) left the user on a silent page with
+             no error and no wallet, which reads exactly like a dead button. */
+          attaching = false;
+          fail();
         });
     };
     const checkAccount = () => {

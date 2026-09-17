@@ -187,3 +187,54 @@ No env vars, no dashboard toggle, no new dependency. Live diagnostics still show
 5. If Trust is not installed, `intent://`'s `S.browser_fallback_url` routes to `https://link.trustwallet.com/wc?uri=…` which then shows Play Store — not `fbtswap.ir` "lost".
 
 Raw `collectWalletHealth` JSON remains copyable from the panel for any remaining report.
+
+---
+
+## Round 2 — 2026-09-17 (the same report, deeper): «نه لینک نه ایمیل، دوتاش خرابه»
+
+**Input**: the health JSON at `00:11Z` (`projectConfig ok`, `originAllowed true`, `relay OPEN` on both hosts, `secureSite ok`, `ourMarker:true`, `sdkLoginMarker:false`, `wcSessionKeys:0`, `appkitConnectionKeys:5`, **`trace:[]`**) plus the two live complaints. Everything the dashboard controls remains green — the bug is not there. This round was verified against the **actual shipped SDK sources** (`@reown/appkit@1.8.19`, `appkit-controllers`, `appkit-scaffold-ui`, `appkit-wallet`, `@walletconnect/ethereum-provider@2.25.0` — read from the published tarballs, not from memory).
+
+### F1. The email popup showed wallet rows that can never connect (fixed)
+
+- `w3m-connect-view.walletListTemplate()` renders the wallet surface whenever top-level `enableWallets` is on; AppKit's default is TRUE (`OptionsController.setEnableWallets(options.enableWallets !== false)`). The email instance never set it → the «Continue with a wallet» row + wallet list appeared inside the email popup.
+- Every tap there is a **silent no-op, by SDK code**: `ConnectionControllerUtil.onConnectMobile()` is `if (wallet?.mobile_link && wcUri)` — and the email instance has `enableWalletConnect:false`, pairs nothing, so `state.wcUri` is undefined forever.
+- **Fix**: `emailSocialOptions()` now sets `enableWallets:false`; `reassertEmailFeatures()` re-asserts it (the flag lives on the shared OptionsController singleton) together with `manualWCControl:false`.
+
+### F2. `manualWCControl` hijacked the email modal's view (fixed)
+
+- `ModalController.open()` checks `OptionsController.state.manualWCControl` **before** the requested `view` and routes mobile devices to `RouterController.reset('AllWallets')`. The flag is shared state, last instance wins. With it standing, the email modal's `open({view:'Connect'})` landed on the searchable wallet list instead of the email box.
+- **Fix**: pre-open assertions in BOTH directions — email asserts `manualWCControl:false, enableWallets:false`; `applyAppKitWalletLinks()` now asserts `manualWCControl:true, enableWallets:true` (both updateOptions and the controllers-singleton fallback) before any WC open.
+
+### F3. An email attach failure hung for 30s with zero feedback (fixed; regression test was RED on HEAD)
+
+- `waitForEmailConnection` treated a THROWN attach like a transient miss: kept "retrying" until the 30s open fuse, emitting nothing. The user's report — popup connects, tap continue, wallet page shows nothing — is exactly this silence. `npx vitest run test/wallet-connection-regression.test.js` failed on HEAD (timeout).
+- **Fix**: a rejected attach now settles false immediately (`onError` + trace-able `CONNECT_FAILED`); only a false-returning attach (provider null on a slow WebView's first tick) retries, bounded by `MAX_ATTACH_ATTEMPTS = 8`. All 8 regression tests pass again.
+
+### F4. A tap could hand a wallet a DEAD pairing (fixed — measured against the real controllers)
+
+- In `manualWCControl` mode NOTHING resets `ConnectionController.state.wcUri` between attempts: `EthereumProvider.disconnect()` only tears down a **session** (a cancelled/expired pairing emits no provider `disconnect`), and `AppKit.close()` only finalizes. The stale topic survives until the next `display_uri`.
+- `w3m-connecting-wc-mobile` fires `onConnect` from its CONSTRUCTOR whenever `this.uri` is truthy — reading that stale state — so the next attempt's first tap could open the wallet on the dead pairing: **app opens to its home screen, no proposal**, while the fresh pairing sat unused. This is the exact asymmetry in the report: the QR (rendered from OUR `display_uri`) always works; the tap (built from AppKit's state) can carry a dead topic.
+- **Fix**: `wcAppKitPatch` now carries the live pairing URI (`setLivePairingUri`, fed from `onPairUri`) and reconciles `ConnectionController.setUri(liveUri)` inside the wrapped `onConnectMobile` before the SDK builds any link; `resetAppKitPairingState()` runs in `connectWalletConnect`'s finally so nothing survives an attempt. `test/wc-appkit-reconcile-probe.mjs` reproduces the stale state against the real `@reown/appkit-controllers` singleton and asserts the reconcile (13 checks).
+
+### F5. Why the report looked like "nothing ran at all" (`trace: []`)
+
+- `ourMarker:true` + `sdkLoginMarker:false` + `trace:[]` + 0 WC sessions is the signature of a cold start whose restore path emitted nothing: the most consistent explanation on the reporting device is a **local vault present** (the mount effect skips both restores when `loadVault()` exists, silently) and/or an email attempt whose only failure mode was the F3 silence (no event on the hang, none on success either).
+- **Fixes (observability)**: `restore_skipped_vault` is now emitted when a vault skips a pending email restore; `email_connected` is emitted when an email wallet actually attaches. The next health JSON will say which of these worlds we are in instead of an empty trace.
+
+### F6. Cosmetic-but-real: an attached email wallet was labelled generically
+
+- `providerLabel()` had no `case 'email'` — a connected embedded wallet fell through to the generic `wallet.onchain` label. Fixed (`wallet.emailSocial`, key exists in fa/en/locales).
+
+### What was checked and found CORRECT (no change)
+
+- Project id constant + dashboard flags + origin allowlist + both relay hosts + secure site: all proven green by the report itself and re-read from the SDK's own request builders.
+- The WC→Reown pin (`@reown/appkit@1.8.19` matching ethereum-provider 2.25.0's own dependency): still correct — one copy of every `@reown/*` singleton in the tree; the F1/F2 conflicts were **state** conflicts on the shared singletons, not duplicate-instance conflicts, and are now asserted away pre-open in both directions.
+- Deep-link bytes: `walletLink()` single-encodes the repaired URI exactly once; the intent builder (`intent://wc?uri=…#Intent;scheme=…;package=…`) carries the same payload the QR carries; Trust's live explorer record still advertises `trust://` + `https://link.trustwallet.com` — the registry side is unchanged.
+
+### Verification
+
+- `npx vitest run test/wallet-connection-regression.test.js` → 8/8 (was 7/8 + timeout).
+- `node test/email-social-probe.mjs` → pass (now also asserts `enableWallets:false` + the two-way manualWCControl/enableWallets truce).
+- `node test/wc-appkit-reconcile-probe.mjs` → 13/13 (new; reproduces F4 on the real SDK).
+- `node test/wc-connect-probe.mjs`, `wc-deeplink-probe`, `wc-uri-hygiene-probe`, `wc-wallets-probe`, `wc-storage-probe`, `wc-chain-probe`, `wc-timeout-probe`, `wallet-health-probe`, `walletconnect-wiring` → pass.
+- `vite build` → clean.

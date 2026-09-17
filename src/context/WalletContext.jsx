@@ -43,7 +43,7 @@ import {
 } from '../lib/wcWallets';
 import { installWalletOpenBridge } from '../lib/wcDeepLink';
 import { waitForEmailConnection } from '../lib/emailConnection.js';
-import { installAppKitLinkModePatch } from '../lib/wcAppKitPatch';
+import { installAppKitLinkModePatch, resetAppKitPairingState, setLivePairingUri } from '../lib/wcAppKitPatch';
 import {
   EMAIL_RESTORE_WINDOW_MS,
   clearEmailSocialSession,
@@ -566,6 +566,11 @@ export function WalletProvider({ children }) {
       setEmailSocialMarker(true);
       attachInjectedListeners(eip);
       await refreshBalance(acct, honest);
+      /* SUCCESS WAS INVISIBLE. attachEmailProvider emitted events only on its
+         failure paths, so a working email login produced an EMPTY trace — and
+         a later support report read as "nothing ran at all". One literal
+         event names the outcome; the address stays out of the trace. */
+      wcEvent('email_connected');
       return true;
     } catch {
       wcEvent('email_attach_failed');
@@ -881,7 +886,17 @@ export function WalletProvider({ children }) {
          auth connection that the pending wc.connect() can never settle on,
          and the user would sit under a spinning pairing that thinks it is
          still waiting for a wallet app. The twin assertion lives in
-         reassertEmailFeatures() and runs before the email modal opens. */
+         reassertEmailFeatures() and runs before the email modal opens.
+
+         `manualWCControl` and `enableWallets` are part of the same truce:
+         the email surface asserts false for both (its open() would otherwise
+         be hijacked to AllWallets, and its wallet rows would be dead ends);
+         THIS surface needs manualWCControl true — ModalController.open()
+         routes mobile devices to the wallet list from it — and the wallet
+         rows ON. Without the re-assertion, whichever surface booted last
+         decided what the other one rendered. */
+      manualWCControl: true,
+      enableWallets: true,
       features: { email: false, socials: false }
     };
     /* Explorer rows often omit link_mode. Fill that fallback and record the
@@ -913,6 +928,8 @@ export function WalletProvider({ children }) {
       C?.setCustomWallets?.(options.customWallets);
       C?.setPreferUniversalLinks?.(options.experimental_preferUniversalLinks);
       C?.setMetadata?.(options.metadata);
+      C?.setManualWCControl?.(options.manualWCControl);
+      C?.setEnableWallets?.(options.enableWallets);
       /* Same features truce on the singleton fallback path — without it, a
          controllers-only write still inherits the email surface's flags. */
       C?.setFeatures?.(options.features);
@@ -1327,6 +1344,12 @@ export function WalletProvider({ children }) {
         if (!looksLikePairingUri(raw)) return;
         const uri = repairPairingUri(raw);
         setWcPairUri(uri);
+        /* The hand-off authority: wcAppKitPatch reconciles AppKit's own
+           `ConnectionController.state.wcUri` — which nothing resets between
+           attempts in manualWCControl mode — to THIS uri before any tap is
+           turned into a deep link, so a wallet is never opened on a dead
+           previous pairing (the "wallet opens, no prompt" report). */
+        setLivePairingUri(uri);
         /* The relay has now proven itself: hand the remaining wait to the
            human, bounded by the pairing's own lifetime. */
         armBound(WC_PAIRING_TTL_MS, 'WC_PAIRING_EXPIRED');
@@ -1516,6 +1539,18 @@ export function WalletProvider({ children }) {
       setConnecting(false);
       wcInitingRef.current = false;
       connectGuard.release();
+      /*
+       * FORGET THE PAIRING EVERYWHERE, INCLUDING IN APPKIT'S STATE.
+       * In manualWCControl mode nothing in the SDK resets
+       * `ConnectionController.state.wcUri` when a pairing dies without a
+       * session (EthereumProvider.disconnect() only acts on a session), so a
+       * stale URI would otherwise survive until the next display_uri and the
+       * first tap of the NEXT attempt could open a wallet on the dead
+       * pairing. resetAppKitPairingState() clears our live-URI record and
+       * calls ConnectionController.resetUri() — both best-effort, never
+       * throwing, and irrelevant once a new pairing publishes its own URI.
+       */
+      void resetAppKitPairingState();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachWcListeners, buildWcInitConfig, initWcProvider, repairSignClientMetadata, applyAppKitWalletLinks, detachInjectedListeners, refreshBalance]);
@@ -1780,6 +1815,17 @@ export function WalletProvider({ children }) {
     if (!loadVault()) {
       if (hasEmailSocialMarker()) resumeEmailThenWc(false);
       else resumeWc(false);
+    } else if (hasEmailSocialMarker()) {
+      /*
+       * THE EMPTY-TRACE REPORT, NAMED. A local vault wins the cold start by
+       * design — but when an email marker ALSO stands, the skip used to be
+       * completely silent: no restore ran, no event was recorded, and the
+       * next health report arrived with `trace: []` + `ourMarker: true` +
+       * `sdkLoginMarker: false`, which reads exactly like "the app did
+       * nothing at all". One literal event makes that state visible in the
+       * very next diagnostic, without changing the vault-first rule.
+       */
+      wcEvent('restore_skipped_vault');
     }
     /*
      * ─── COMING BACK TO A PAGE THAT WAS NEVER UNLOADED ─────────────────────

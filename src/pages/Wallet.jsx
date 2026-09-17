@@ -85,6 +85,10 @@ function providerLabel(wallet, t) {
   if (!wallet.address || wallet.locked) return t('wallet.notConnected');
   switch (wallet.mode) {
     case 'wc': return 'WalletConnect';
+    /* The Reown AppKit embedded wallet (email/social login) attaches through
+       the same EIP-1193 path — label it as what it is instead of falling
+       through to the generic "onchain" default. */
+    case 'email': return t('wallet.emailSocial');
     case 'injected': {
       /* The EIP-6963 info of the provider we actually attached (exposed as
          wallet.injectedInfo). Fall back to the legacy window.ethereum flags
