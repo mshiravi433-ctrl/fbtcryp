@@ -1,3 +1,12 @@
+# ۲۰۲۶-۰۹-۱۷ — انتقال کامل WalletConnect به پروژهٔ جدید
+
+- شناسهٔ عمومی WalletConnect/Reown در مسیر واقعی وب، APK و توسعه از پروژهٔ قبلی به **`5997d5aee8bb42f43ddec4b1a5f94eb1`** منتقل شد. منبع همچنان فقط ثابت `WC_PROJECT_ID` در `WalletContext.jsx` است؛ هیچ env قدیمی نمی‌تواند روی آن override کند.
+- همهٔ probeهای WalletConnect که با Project ID واقعی init/config/relay می‌سازند به همان شناسه منتقل شدند تا تست و باندل دیگر دو پروژهٔ متفاوت را نسنجند.
+- `metadata.url` عمداً `https://fbtswap.ir` می‌ماند؛ `https://localhost` فقط origin واقعی Capacitor است و باید همراه `https://fbtswap.ir` و App ID یعنی `ir.fbtswap.app` در Allowed Domains/App IDs پروژهٔ جدید ثبت شود.
+- وضعیت داشبورد از روی کد قابل تغییر یا تضمین نیست. بعد از تنظیم allowlist باید وب و APK دوباره build/deploy شوند، نشست‌های قدیمی WalletConnect از کیف پول پاک شوند و اتصال تازه ساخته شود.
+
+---
+
 # ۲۰۲۶-۰۹-۱۶ (۳) — گزارشِ پنلِ سلامت، خودِ ابزار را لو داد: دو اندازه‌گیریِ غلط اصلاح شد
 
 > گزارش کاربر از پنلِ «بررسی سلامت اتصال» روی گوشیِ خودش:

@@ -25,9 +25,9 @@ Trust Wallet rates a WalletConnect session via WalletConnect Verify:
    `metadata.url`. Inside the APK this used to disagree (`https://localhost`
    vs `fbtswap.ir`) until the repair above; verify on a device that the
    approval sheet now says **fbtswap.ir**.
-2. **Reown project registration** — dashboard project
-   `8e36eccabebf5a4567f4e974fafd6b20` currently has the identities required by
-   both distributions:
+2. **Reown project registration** — runtime project
+   `5997d5aee8bb42f43ddec4b1a5f94eb1` must have the identities required by
+   both distributions (this dashboard-only state cannot be guaranteed by code):
    - verified web origins: **`https://fbtswap.ir`** and
      **`https://localhost`** (the latter is the Capacitor WebView origin);
    - verified Android application/bundle ID: **`ir.fbtswap.app`**.

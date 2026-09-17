@@ -71,10 +71,10 @@ import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
  *
  * Same rule as publicAppUrl(): production identity lives in source, where a
  * change is reviewable and deploys atomically with the code that uses it.
- * Registered at dashboard.reown.com for https://fbtswap.ir,
+ * Dashboard requirement for this project: register https://fbtswap.ir,
  * https://localhost and the Android app ID ir.fbtswap.app.
  */
-const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
+const WC_PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
 
 const WC_APP_NAME = 'FBT Swap';
 const WC_APP_DESCRIPTION = 'Non-custodial decentralized exchange';

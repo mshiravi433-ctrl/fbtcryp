@@ -148,7 +148,7 @@ Domains** در داشبورد Reown. آن بخش قدمِ ۴ از چک‌لیس�
    الان `fbt-shell-v8` است، یعنی باندلِ فعلی سایت هنوز `_self` دارد.)
 2. **APK جدید** — نسخهٔ روی گوشی با کد قدیمی ساخته شده.
 3. **رفرش سخت / حالت ناشناس** — کش shell v9 پوستهٔ قدیمی را بیرون می‌کند.
-4. **داشبورد Reown** (`dashboard.reown.com` → پروژهٔ `8e36ecca…6b20`):
+4. **داشبورد Reown** (`dashboard.reown.com` → پروژهٔ `5997d5ae…94eb1`):
    Allowed Domains شامل `https://fbtswap.ir` **و** `https://localhost`، و
    App IDs شامل `ir.fbtswap.app`. این تنها جایی است که دامنهٔ `.ir` واقعاً
    وارد بازی می‌شود. تغییرات allowlist تا ~۱۵ دقیقه روی رله زمان می‌برد.

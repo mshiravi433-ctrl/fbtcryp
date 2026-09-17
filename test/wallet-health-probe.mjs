@@ -48,7 +48,7 @@ import {
   uriRoundTrips
 } from '../src/lib/walletHealth.js';
 
-const PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
+const PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
 
 /**
  * THE LIVE ANSWER, COPIED VERBATIM (2026-09-16, this project id):

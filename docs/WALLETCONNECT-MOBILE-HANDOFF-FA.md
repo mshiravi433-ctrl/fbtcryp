@@ -87,7 +87,7 @@ QR کار می‌کرد؛ بنابراین Project ID، ساخت pairing URI، �
 
 نسخهٔ فعلی عمداً `VITE_WALLETCONNECT_PROJECT_ID` را نمی‌خواند. منبع واحد پروژه در `WalletContext.jsx` است:
 
-`8e36eccabebf5a4567f4e974fafd6b20`
+`5997d5aee8bb42f43ddec4b1a5f94eb1`
 
 پس Project ID قرارگرفته در Vercel علت موفقیت یا شکست این build نیست. QR با همین ID داخل source موفق بوده است. این تصمیم برای جلوگیری از اختلاف ID سایت و APK گرفته شده؛ اگر روزی ID عوض شود باید منبع واحد کد و تنظیمات Dashboard با هم عوض شوند.
 
