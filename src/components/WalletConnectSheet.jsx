@@ -5,6 +5,7 @@ import Sheet from './Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { openWalletLink, walletHandOffChannel } from '../lib/browser';
+import { wcEvent } from '../lib/wcTrace';
 import { MOBILE_WALLETS, repairPairingUri, walletDeepLinks, walletLogo } from '../lib/wcWallets';
 import { publicAppUrl } from '../lib/nativeShell';
 import {
@@ -284,6 +285,7 @@ export default function WalletConnectSheet({ open, onClose }) {
     // stays alive (target _blank, not _self) and the intent package routing
     // works on OEM Chrome builds where a bare trust:// is dropped as popup.
     e.preventDefault();
+    try { wcEvent('sheet_wallet_tap', 0); } catch {}
     void openWalletLink(links.native, {
       target: '_blank',
       wallet: promoted,
@@ -291,8 +293,12 @@ export default function WalletConnectSheet({ open, onClose }) {
       pairingUri: pairUri,
       fallbackUrl: links.universal
     }).then((ok) => {
+      try { wcEvent(ok ? 'sheet_wallet_opened' : 'sheet_wallet_open_failed'); } catch {}
       if (!ok) setOpenedWallet(null);
-    }, () => setOpenedWallet(null));
+    }, () => {
+      try { wcEvent('sheet_wallet_open_failed'); } catch {}
+      setOpenedWallet(null);
+    });
   };
 
   const copyUri = async () => {

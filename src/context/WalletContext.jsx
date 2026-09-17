@@ -1843,6 +1843,7 @@ export function WalletProvider({ children }) {
         const purged = purgeWcStorage();
         wcEvent('storage_purged', Number(purged));
       } catch { /* storage unavailable — nothing to purge */ }
+      try { setTimeout(() => { try { purgeWcStorage(); } catch {} }, 700); } catch {}
       try { clearRelayStateCache(); } catch { /* noop */ }
     }
   }, []);
@@ -1982,6 +1983,12 @@ export function WalletProvider({ children }) {
         .catch(() => { /* fire-and-forget; the purge below is synchronous */ });
     }
     try { purgeWcStorage(); } catch { /* storage unavailable */ }
+    // The SDK's wc.disconnect() writes its storage ASYNCHRONOUSLY; a late
+    // write can resurrect @appkit/* keys after the synchronous purge above,
+    // leaving 2 orphan keys that the health panel then reports as orphan:true
+    // until the next cold-start purge. A delayed second purge catches that
+    // window without blocking the UI (observed 2 keys after local_disconnect).
+    try { setTimeout(() => { try { purgeWcStorage(); } catch {} }, 700); } catch {}
     try { clearRelayStateCache(); } catch { /* noop */ }
     /* An email/social session ends in the same pass: forget the boot marker
        and tell AppKit (bounded — see lib/emailSocialWallet.js). Without it,
