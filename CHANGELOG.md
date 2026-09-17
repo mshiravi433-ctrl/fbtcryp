@@ -1,3 +1,46 @@
+# ۲۰۲۶-۰۹-۱۷ (۲) — والت‌کانکت از نو: یک ستک، یک دایرکتوری، یک تست
+
+> درخواست: «تمامی کدهای مربوط به والت‌کانکت را پاک کن … و دوباره از اول بنویس؛
+> همه در مورد والت‌کانکت خرابه.»
+
+**حذف:** ۱۱ ماژولِ پراکنده (`wcWallets`, `wcDeepLink`, `wcRelayProbe`,
+`wcStorage`, `wcTimeout`, `wcTrace`, `wcChain`, `wcAppKitPatch`,
+`emailSocialWallet`, `emailConnection`, `walletHealth`) و ۱۴ فایلِ تستِ قدیمی
+(`test/wc-*.mjs`, `email-social-probe`, `wallet-health-probe`,
+`walletconnect-wiring`, `wallet-connection-regression`). شناسهٔ پروژه
+(`5997d5aee8bb42f43ddec4b1a5f94eb1`) **بدون تغییر** ماند.
+
+**افزوده:** `src/lib/wc/` — سیزده ماژولِ بدون React که کلِ جریان را در بر
+می‌گیرند و تنها از `src/lib/wc/index.js` صادر می‌شوند:
+
+- `session.js` — چرخهٔ کامل (init → pair → restore → cancel → disconnect) با
+  تک‌پروازی، failoverِ رله، و این که **هر** راهِ خروج گوش‌دهنده‌ها را برمی‌دارد
+  و URI را پاک می‌کند (زامبیِ بعد از تایم‌اوت همان چیزی بود که اتصالِ بعدی را
+  می‌شکست).
+- `handoff.js` — مترِ آخر: کانال (APK / تلگرام / مرورگر) را تشخیص می‌دهد و
+  **هیچ‌وقت این سند را جابه‌جا نمی‌کند**؛ `window.open(url, '_self')`ِ خودِ SDK
+  همان خطی بود که سوکتِ رله و promise یِ `connect()` را با هم می‌کشت.
+- `embedded.js` — ایمیل/سوشال: انتظار برای هر سه واقعیتِ آماده‌بودن
+  (connected + آدرس + provider) با یک پنجره، و این که تایم‌اوت دیگر به‌معنای
+  «قطعاً نشستی نیست» گرفته نشود (یک بوتِ کُند = از دست رفتنِ همیشگی).
+- `relay.js` + `timing.js` — اندازه‌گیریِ سوکت پیش از وعدهٔ جفت‌سازی، و طبقه‌بندیِ
+  هر شکست به یک کدِ قابل‌نمایش به‌جای `CONNECT_FAILED`ِ بی‌نام.
+- `appkit.js` — آتش‌بسِ singletonِ مشترک: هر سطح، گزینه‌های خودش را پیش از
+  بازشدن دوباره اعلام می‌کند (`manualWCControl`, `enableWallets`, `features`).
+
+**ساده شده:** `WalletContext.jsx` از ۲۳۲۷ خط به ~۹۰۰ خط؛ فقط مالکِ state و
+تبدیلِ هر ترانسپورت به یک شکل یکسان است. شیت از ۹۴۲ خط به ~۷۰۰ خط، با همان
+viewها و همان کلیدهای ترجمه. یک پنلِ سلامت، یک ردیابِ رویداد.
+
+**تست:** یک فایل به‌جای چهارده — `test/walletconnect-stack-probe.mjs`
+(۱۷۱ ادعا، زیر یک ثانیه، فقط مرزِ خارجی جعل می‌شود) به‌علاوهٔ مانتِ واقعیِ شیت در
+jsdom (`test/wallet-connect-sheet-probe.jsx`). پلِ جاوا (`FBTWalletLink`) نگه
+داشته شد و به `handoff.js` وصل گردید.
+
+جزئیاتِ معماری: `docs/WALLET-CONNECT-STACK-FA.md`.
+
+---
+
 # ۲۰۲۶-۰۹-۱۷ — انتقال کامل WalletConnect به پروژهٔ جدید
 
 - شناسهٔ عمومی WalletConnect/Reown در مسیر واقعی وب، APK و توسعه از پروژهٔ قبلی به **`5997d5aee8bb42f43ddec4b1a5f94eb1`** منتقل شد. منبع همچنان فقط ثابت `WC_PROJECT_ID` در `WalletContext.jsx` است؛ هیچ env قدیمی نمی‌تواند روی آن override کند.

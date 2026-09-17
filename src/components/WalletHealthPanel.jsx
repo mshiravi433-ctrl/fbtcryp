@@ -1,10 +1,25 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { collectWalletHealth, purgeConnectionKeys, wcTraceSnapshot } from '../lib/wc';
 import { IconCheck, IconCopy } from './Icons';
 
-/** Relay measurements are advisory; browser socket errors do not identify their cause. */
+/**
+ * CONNECTION HEALTH CHECK
+ * ---------------------------------------------------------------------------
+ * The four links a wallet report is always about are ones the UI cannot show:
+ * whether the dashboard knows this project, whether its allowlist covers this
+ * origin, whether the relay's WebSocket opens on THIS network, and whether the
+ * embedded-wallet frame can be reached. This measures all four on the device
+ * and network where the user is and prints copyable JSON, so the next report
+ * arrives with the failing hop named instead of described.
+ *
+ * RELAY MEASUREMENTS ARE ADVISORY: a browser socket error cannot distinguish
+ * "blocked" from "wrong project", so the verdict is never presented as a
+ * verdict on the connection itself — the panel says what it measured and what
+ * to try instead.
+ */
 
-/** Verdict code (from relayVerdict(), or OPEN) -> the sentence that goes with it. */
+/** Verdict code → the sentence that goes with it. */
 const RELAY_VERDICT_KEYS = {
   OPEN: 'wallet.healthRelayVerdictOpen',
   WS_REFUSED: 'wallet.healthRelayWsRefused',
@@ -14,18 +29,19 @@ const RELAY_VERDICT_KEYS = {
   NO_MEASUREMENT: 'wallet.healthRelayNoMeasurement'
 };
 
-/** Short host name for the row (the scheme is noise in a support screenshot). */
-const hostName = (url) => String(url || '').replace(/^wss:\/\//, '');
+/** Short host name for the row — the scheme is noise in a support screenshot. */
+const hostName = (url) => String(url ?? '').replace(/^wss:\/\//, '');
 
 /**
- * One relay hostname, in measured words:
- *   open            -> «سوکت باز شد (۳۱۲ میلیثانیه)»
- *   HTTPS only      -> «HTTPS رسید ولی سوکت باز نشد…» (host alive, upgrade refused)
- *   nothing at all  -> the raw error string and how long it took
+ * One relay host, in measured words:
+ *   open        → «socket open (312ms)»
+ *   HTTPS only  → «HTTPS responded but the socket test failed» (a filtered or
+ *                 proxied network: this is the shape ISP blocking takes)
+ *   nothing     → the raw error and how long it took
  */
 function relayHostLabel(host, t) {
-  const socket = host?.socket || {};
-  const https = host?.https || {};
+  const socket = host?.socket ?? {};
+  const https = host?.https ?? {};
   if (socket.ok) return t('wallet.healthRelayOpen', { ms: socket.ms ?? 0 });
   if (https.ok) return t('wallet.healthRelayHttpsOnly', { ms: https.ms ?? 0 });
   return t('wallet.healthRelayNoAnswer', { error: socket.error || 'FAILED', ms: socket.ms ?? 0 });
@@ -41,8 +57,6 @@ export default function WalletHealthPanel({ projectId }) {
     if (busy) return;
     setBusy(true);
     try {
-      const { collectWalletHealth } = await import('../lib/walletHealth.js');
-      const { wcTraceSnapshot } = await import('../lib/wcTrace.js');
       setReport(await collectWalletHealth({ projectId, trace: wcTraceSnapshot }));
     } catch (error) {
       setReport({ error: String(error?.message || error) });
@@ -65,7 +79,7 @@ export default function WalletHealthPanel({ projectId }) {
       <strong>{label}</strong>
       {' — '}
       {probe?.ok
-        ? (detail || 'OK')
+        ? detail || 'OK'
         : `${probe?.error || 'FAILED'}${probe?.status ? ` (${probe.status})` : ''}`}
     </p>
   );
@@ -81,9 +95,7 @@ export default function WalletHealthPanel({ projectId }) {
       <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 12.5 }}>
         {t('wallet.healthTitle')}
       </summary>
-      <p className="muted" style={{ fontSize: 11.5, margin: '8px 0' }}>
-        {t('wallet.healthHint')}
-      </p>
+      <p className="muted" style={{ fontSize: 11.5, margin: '8px 0' }}>{t('wallet.healthHint')}</p>
       <button className="btn btn-ghost" onClick={run} disabled={busy}>
         {busy ? t('wallet.healthRunning') : t('wallet.healthRun')}
       </button>
@@ -94,30 +106,40 @@ export default function WalletHealthPanel({ projectId }) {
             <p className="mono" style={{ fontSize: 10.5 }}>{report.error}</p>
           ) : (
             <>
-              {row(t('wallet.healthProject'), {
-                ok: report.projectConfig?.ok,
-                error: report.projectConfig?.error,
-                status: report.projectConfig?.status
-              }, features
-                /* The dashboard's own answer, printed as it is — including the
-                   socials LIST, because «socials=0» and «socials=7» are the
-                   difference between a dashboard setting and a bug hunt. */
-                ? `email=${String(features.email)} socials=${(features.socials || []).length}`
-                  + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`
-                : 'OK')}
-              {row(t('wallet.healthOrigins'), { ok: report.allowedOrigins?.ok }, (
+              {row(
+                t('wallet.healthProject'),
+                {
+                  ok: report.projectConfig?.ok,
+                  error: report.projectConfig?.error,
+                  status: report.projectConfig?.status
+                },
+                features
+                  /* The dashboard's own answer, printed as it is — including the
+                     socials LIST, because «socials=0» and «socials=7» are the
+                     difference between a dashboard setting and a bug hunt. */
+                  ? `email=${String(features.email)} socials=${(features.socials || []).length}`
+                    + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`
+                  : 'OK'
+              )}
+              {row(
+                t('wallet.healthOrigins'),
+                { ok: report.allowedOrigins?.ok },
                 Array.isArray(report.allowedOrigins?.list)
-                  ? `${report.allowedOrigins.list.length}${report.allowedOrigins?.originAllowed === true ? ' · ✅ origin allowed' : report.allowedOrigins?.originAllowed === false ? ' · ❌ origin NOT allowed' : ''} (${(report.allowedOrigins.list || []).join(', ')})`
+                  ? `${report.allowedOrigins.list.length}`
+                    + `${report.allowedOrigins?.originAllowed === true ? ' · ✅ origin allowed' : report.allowedOrigins?.originAllowed === false ? ' · ❌ origin NOT allowed' : ''}`
+                    + ` (${report.allowedOrigins.list.join(', ')})`
                   : 'list?'
-              ))}
+              )}
               {report.allowedOrigins?.originAllowed === false && (
                 <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '4px 0' }}>
                   {t('wallet.healthOriginBlocked', { origin: report.origin })}
                 </p>
               )}
-              {row(t('wallet.healthRelay'), report.relay, report.relay?.ok
-                ? `${hostName(report.relay?.url)} · ${report.relay?.ms ?? 0}ms`
-                : undefined)}
+              {row(
+                t('wallet.healthRelay'),
+                report.relay,
+                report.relay?.ok ? `${hostName(report.relay?.url)} · ${report.relay?.ms ?? 0}ms` : undefined
+              )}
               {relays.length > 0 && (
                 <p className="muted" style={{ fontSize: 11, margin: '6px 0 2px', fontWeight: 600 }}>
                   {t('wallet.healthRelayHosts')}
@@ -144,8 +166,8 @@ export default function WalletHealthPanel({ projectId }) {
                 </p>
               )}
               {verdictKey && !relayHasPath && verdict !== 'NO_MEASUREMENT' && (
-                /* The whole point of naming the failure: what to do instead.
-                   None of these three routes touches the relay. */
+                /* The point of naming the failure is naming the way out: none
+                   of these routes touches the relay. */
                 <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
                   {t('wallet.healthRelayFreeRoutes')}
                 </p>
@@ -160,14 +182,12 @@ export default function WalletHealthPanel({ projectId }) {
                   <button
                     className="btn btn-ghost"
                     style={{ marginInlineStart: 8, padding: '4px 8px', fontSize: 11 }}
-                    onClick={async () => {
+                    onClick={() => {
                       try {
-                        const { purgeWcStorage } = await import('../lib/wcStorage.js');
-                        const n = purgeWcStorage();
                         // eslint-disable-next-line no-alert
-                        alert(`${t('wallet.healthOrphanCleared', { count: n })}`);
+                        alert(t('wallet.healthOrphanCleared', { count: purgeConnectionKeys() }));
                         run();
-                      } catch {}
+                      } catch { /* storage unavailable — nothing to clear */ }
                     }}
                   >
                     {t('wallet.healthOrphanClear')}

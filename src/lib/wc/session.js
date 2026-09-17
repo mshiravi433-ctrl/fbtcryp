@@ -1,0 +1,565 @@
+/**
+ * THE WALLETCONNECT SESSION
+ * ---------------------------------------------------------------------------
+ * One object owns the whole WalletConnect v2 lifecycle: init, pair, restore,
+ * cancel, disconnect. It is framework-free — no React, no DOM state — so the
+ * flow can be read top to bottom and tested without mounting anything.
+ *
+ * ─── WHAT IT PROMISES ──────────────────────────────────────────────────────
+ *   • ONE ATTEMPT AT A TIME. `EthereumProvider.init()` creates a new session
+ *     every time it runs; two concurrent inits are two modals and two pairing
+ *     URIs, and the user taps the dead one.
+ *   • EVERY WAIT IS BOUNDED. Nothing here can spin. The SDK's own socket keeps
+ *     retrying on its schedule and is simply abandoned — but the user gets
+ *     their screen back with a named reason.
+ *   • NO ZOMBIES. Whatever path an attempt leaves by — success, cancel,
+ *     timeout, throw — the provider's listeners come off, the pairing URI is
+ *     cleared and AppKit's pairing state is reset. A URI left in state after an
+ *     attempt settles is how a wallet gets opened on a pairing that is gone.
+ *   • THE URI COMES FROM THE SDK. `display_uri` is the one event WalletConnect
+ *     guarantees, and it carries the pairing URI as a plain string. The UI
+ *     renders a QR of exactly those bytes; it never reconstructs them.
+ *
+ * Consumers subscribe (`on`) rather than poll. Nothing here throws into React.
+ */
+
+import { PAIRING_TTL_MS, RELAY_URLS, TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
+import { chainFromSession } from './chain.js';
+import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
+import { installWalletOpenBridge, openWalletLink } from './handoff.js';
+import { measureRelay, clearRelayCache } from './relay.js';
+import { hasStoredSession, purgeConnectionKeys } from './storage.js';
+import { cancelSwitch, classifyConnectError, isModalError, isRelayError, withTimeout } from './timing.js';
+import { wcEvent } from './trace.js';
+import { looksLikePairingUri, repairPairingUri } from './uri.js';
+import { legacyModalWallets } from './wallets.js';
+
+/**
+ * @param {object} options
+ * @param {string} [options.projectId]
+ * @param {object} [options.metadata]
+ * @param {number[]} options.chains        required chains (the default network)
+ * @param {number[]} options.optionalChains every other supported chain
+ * @param {(chainId:number)=>boolean} [options.supportsChain]
+ */
+export function createWcSession({
+  projectId = WC_PROJECT_ID,
+  metadata = wcMetadata(),
+  chains = [],
+  optionalChains = [],
+  methods = ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+  supportsChain = () => true,
+  defaultChain = chains[0]
+} = {}) {
+  const listeners = new Map();
+
+  /** The live EthereumProvider, or null. */
+  let provider = null;
+  /** Single-flight: an init and a tap can never race into two SignClients. */
+  let busy = false;
+  /** Tear-down for the provider's listeners, so a stale instance cannot wipe live state. */
+  let detach = null;
+  /** The window.open bridge, installed for one pairing attempt only. */
+  let uninstallBridge = null;
+  /** Settle-switch for the in-flight connect, so Cancel has immediate effect. */
+  let settleConnect = null;
+
+  function on(type, fn) {
+    if (typeof fn !== 'function') return () => {};
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => listeners.get(type)?.delete(fn);
+  }
+
+  function emit(type, payload) {
+    for (const fn of listeners.get(type) ?? []) {
+      try {
+        fn(payload);
+      } catch {
+        /* one bad subscriber must not stop the flow */
+      }
+    }
+  }
+
+  /** The init config, identical for connect AND restore: a session restored
+   *  with different metadata than it was created with is exactly the identity
+   *  drift wallets re-verify against. */
+  function initConfig(withModal) {
+    return {
+      projectId,
+      chains,
+      optionalChains,
+      showQrModal: withModal,
+      optionalMethods: methods,
+      qrModalOptions: {
+        themeMode: 'dark',
+        enableExplorer: true,
+        explorerExcludedWalletIds: 'ALL',
+        /* 'NONE' on purpose: this is one of the few qrModalOptions that
+           convertWCMToAppKitOptions() forwards (as `featuredWalletIds`). Leaving
+           the five explorer ids here meant the promoted wallets were rendered
+           from the explorer API — so on a network that filters
+           api.web3modal.org they vanished, and our local copy was filtered out
+           as a duplicate. Clearing it makes wallets.js the single source,
+           reachable or not. */
+        explorerRecommendedWalletIds: 'NONE',
+        mobileWallets: legacyModalWallets()
+      },
+      metadata
+    };
+  }
+
+  /**
+   * Bounded init with relay failover.
+   *
+   * Walk the measured host order: a short fuse on every entry but the last, the
+   * full budget on the last. On a network that filters one hostname the entry
+   * that answers wins; a network that blocks both fails within seconds instead
+   * of inside the SDK's own five-attempt backoff.
+   */
+  async function initProvider({ modal, relayOrder }) {
+    const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+    const urls = Array.isArray(relayOrder) && relayOrder.length ? relayOrder : RELAY_URLS;
+    let lastError = null;
+    for (let i = 0; i < urls.length; i += 1) {
+      const isLast = i === urls.length - 1;
+      const budget = isLast ? TIMEOUT.initLast : TIMEOUT.initFirst;
+      wcEvent(i ? 'relay_fallback_try' : 'relay_try', i);
+      let orphaned = true;
+      try {
+        const pending = Promise.resolve(
+          EthereumProvider.init({ ...initConfig(modal), relayUrl: urls[i] })
+        );
+        /* Our bound fired but the SDK is still working: the instance that
+           eventually resolves is abandoned, so close it. */
+        pending.then((ghost) => {
+          if (orphaned) ghost?.disconnect?.().catch?.(() => {});
+        }, () => {});
+        // eslint-disable-next-line no-await-in-loop -- sequential failover is the point
+        const instance = await withTimeout(pending, budget, 'WC_INIT_TIMEOUT');
+        orphaned = false;
+        wcEvent(i ? 'provider_ready_fallback' : 'provider_ready', i);
+        return instance;
+      } catch (error) {
+        lastError = error;
+        wcEvent(i ? 'relay_fallback_failed' : 'relay_failed', i);
+        if (!isLast && isRelayError(error)) continue;
+        throw error;
+      }
+    }
+    throw lastError ?? new Error('WC_INIT_FAILED');
+  }
+
+  /**
+   * Point the live sign client back at the public origin.
+   *
+   * The SDK runs our metadata through `populateAppMetadata()`, which OVERWRITES
+   * `metadata.url` with `window.location.origin` whenever the two hosts differ.
+   * Inside the APK that origin is `https://localhost`; a wallet — a separate
+   * app — cannot fetch it, so MetaMask rejects with "Invalid URL" and Trust
+   * fails the pairing and shows its red "domain flagged unsafe" screen.
+   *
+   * The object the engine serialises the proposal from is
+   * `wc.signer.client.metadata` (UniversalProvider.createClient does
+   * `this.client = SignClient.init(…)`); the extra branches are defensive, so an
+   * SDK upgrade that moves the metadata cannot silently resurrect a dApp that
+   * introduces itself to every wallet as https://localhost.
+   */
+  function repairMetadata(instance) {
+    const { url, icons } = metadata;
+    try {
+      const signClient = instance?.signer?.client ?? instance?.signer;
+      const targets = [signClient?.metadata, instance?.signer?.metadata, instance?.rpc?.metadata].filter(
+        Boolean
+      );
+      for (const target of targets) {
+        target.url = url;
+        target.icons = [...icons];
+      }
+      return Boolean(targets.length) && signClient?.metadata?.url === url;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Attach listeners exactly once per instance, instance-scoped.
+   *
+   * Every handler checks `provider === instance` before touching anything, so a
+   * STALE provider — one we replaced during a reconnect, or an init from a
+   * previous restore racing a fresh connect — can never wipe the live
+   * connection. The "Trust Wallet disconnects itself a few minutes later" class
+   * of bug lives precisely in handlers that skip that check.
+   *
+   * accountsChanged is deliberately non-destructive here: some wallets emit an
+   * empty array spuriously while they re-derive accounts (Trust does this
+   * around chain moves). On WalletConnect, session_delete / session_expire are
+   * the authoritative end of a session — not a transient [].
+   */
+  function attach(instance) {
+    const isLive = () => provider === instance;
+    const onDisconnect = () => {
+      if (!isLive()) return;
+      wcEvent('disconnect');
+      emit('closed', { reason: 'disconnect' });
+    };
+    const onAccountsChanged = (accounts) => {
+      if (!isLive() || !accounts?.[0]) return;
+      emit('accounts', { address: accounts[0] });
+    };
+    const onChainChanged = (cid) => {
+      if (!isLive()) return;
+      const next = Number(String(cid).startsWith('eip155:') ? cid.slice(7) : cid);
+      if (!Number.isInteger(next) || next <= 0) return;
+      wcEvent('chain_changed', next);
+      emit('chain', { chainId: next });
+    };
+    const onSessionDelete = () => {
+      if (!isLive()) return;
+      wcEvent('session_delete');
+      emit('closed', { reason: 'session_delete' });
+    };
+    const onSessionExpire = () => {
+      if (!isLive()) return;
+      wcEvent('session_expire');
+      emit('closed', { reason: 'session_expire' });
+    };
+    const onDisplayUri = (uri) => {
+      const text = repairPairingUri(typeof uri === 'string' ? uri : uri?.uri);
+      if (!looksLikePairingUri(text)) return;
+      setLivePairingUri(text);
+      wcEvent('display_uri');
+      emit('uri', { uri: text });
+    };
+
+    instance.on?.('disconnect', onDisconnect);
+    instance.on?.('accountsChanged', onAccountsChanged);
+    instance.on?.('chainChanged', onChainChanged);
+    instance.on?.('session_delete', onSessionDelete);
+    instance.signer?.client?.on?.('session_expire', onSessionExpire);
+    instance.signer?.client?.on?.('display_uri', onDisplayUri);
+
+    return () => {
+      try { instance.removeListener?.('disconnect', onDisconnect); } catch { /* noop */ }
+      try { instance.removeListener?.('accountsChanged', onAccountsChanged); } catch { /* noop */ }
+      try { instance.removeListener?.('chainChanged', onChainChanged); } catch { /* noop */ }
+      try { instance.removeListener?.('session_delete', onSessionDelete); } catch { /* noop */ }
+      try { instance.signer?.client?.off?.('session_expire', onSessionExpire); } catch { /* noop */ }
+      try { instance.signer?.client?.off?.('display_uri', onDisplayUri); } catch { /* noop */ }
+    };
+  }
+
+  /**
+   * Tear down an instance without touching any subscriber's state.
+   *
+   * Any in-flight connect() is settled here too: an attempt is over the moment
+   * its provider is torn down, and letting it wait out the full bound would
+   * keep the UI's spinner (and the single-flight guard) held for up to 20
+   * seconds after the user has already moved on.
+   */
+  async function release({ purge = false } = {}) {
+    settleConnect?.();
+    settleConnect = null;
+    try { uninstallBridge?.(); } catch { /* noop */ }
+    uninstallBridge = null;
+    try { detach?.(); } catch { /* noop */ }
+    detach = null;
+    const dying = provider;
+    provider = null;
+    if (purge) purgeConnectionKeys();
+    if (dying) {
+      try {
+        await withTimeout(Promise.resolve(dying.disconnect()).catch(() => {}), TIMEOUT.teardown, 'WC_TEARDOWN');
+      } catch {
+        /* a dead relay must never stall the next attempt */
+      }
+    }
+  }
+
+  /**
+   * Start a new pairing.
+   *
+   * @returns {Promise<{ok:true, provider, address, chainId, session}
+   *                 | {ok:false, code:string}>}
+   */
+  async function connect({ force = false } = {}) {
+    if (busy) return { ok: false, code: 'WC_BUSY' };
+    if (provider) return { ok: false, code: 'WC_BUSY' };
+    busy = true;
+    const startedAt = Date.now();
+    let instance = null;
+
+    try {
+      /* AN EXPLICIT CONNECT IS A CLEAN SLATE. The SDK's storage writes are
+         asynchronous, so relying on disconnect() to have finished clearing the
+         persisted session, the deep-link choice and the recent-wallet keys is a
+         race that periodically loses — and when it loses, init() resurrects the
+         old session and AppKit refuses to open the modal. Purging
+         synchronously, here, is what makes the next attempt exactly like the
+         first. */
+      const purged = purgeConnectionKeys();
+      if (purged) wcEvent('storage_purged', purged);
+
+      /* ADVISORY: a browser diagnostic must never prevent the real attempt. */
+      let relay = null;
+      try {
+        relay = await measureRelay({ projectId, force });
+      } catch {
+        relay = null;
+      }
+      if (relay) {
+        emit('relay', relay);
+        wcEvent(
+          relay.verdict === 'OPEN'
+            ? 'relay_preflight_open'
+            : relay.verdict === 'WS_REFUSED'
+              ? 'relay_preflight_ws_refused'
+              : relay.verdict === 'UNREACHABLE'
+                ? 'relay_preflight_unreachable'
+                : relay.verdict === 'TIMEOUT'
+                  ? 'relay_preflight_timeout'
+                  : 'relay_preflight_unmeasured',
+          relay.openUrls?.length ?? 0
+        );
+      }
+
+      /* INIT WITH THE MODAL, AND HONESTLY WITHOUT IT IF THE CHUNK CANNOT LOAD.
+         A surface failure must not cost the user the connection: the attempt is
+         retried without the modal and our own pairing sheet takes over from
+         `display_uri`. Anything else init throws is a relay/project failure and
+         is rethrown untouched — retrying those with a different surface would
+         only hide them. */
+      try {
+        instance = await initProvider({ modal: true, relayOrder: relay?.order });
+        wcEvent('init');
+      } catch (error) {
+        if (!isModalError(error)) throw error;
+        wcEvent('appkit_modal_unavailable');
+        instance = await initProvider({ modal: false, relayOrder: relay?.order });
+        wcEvent('init_without_modal');
+      }
+
+      provider = instance;
+      emit('modal', { active: Boolean(instance?.modal) });
+      wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+      if (instance?.modal) {
+        const applied = await applyWalletSurface({ modal: instance.modal, projectId, metadata });
+        wcEvent(applied ? 'appkit_links_applied' : 'appkit_links_failed');
+      }
+      detach = attach(instance);
+
+      /* LAST METRE: own the URL the modal hands to the phone, so the hand-off
+         never navigates this document (which would take the relay socket and
+         the pending connect() promise with it). */
+      uninstallBridge = installWalletOpenBridge({
+        openWallet: (url, opts) => {
+          if (opts?.repaired) wcEvent('deeplink_uri_repaired');
+          wcEvent(opts?.rewritten ? 'deeplink_rewritten' : 'deeplink_opened');
+          openWalletLink(url, opts).then(
+            (ok) => { if (!ok) wcEvent('deeplink_open_failed'); },
+            () => wcEvent('deeplink_open_failed')
+          );
+        }
+      });
+
+      /* init() also loads a persisted session when one is on disk. The purge
+         should have removed it, but a concurrent tab can race one back in — and
+         an explicit Connect means a NEW pairing, so a resurrected session must
+         be dropped before it can make AppKit skip the modal. */
+      if (instance.session) {
+        await withTimeout(
+          Promise.resolve(instance.disconnect()).catch(() => {}),
+          TIMEOUT.teardown,
+          'WC_PRESESSION_TEARDOWN'
+        ).catch(() => {});
+        wcEvent('stale_session_dropped');
+      }
+
+      const cancel = cancelSwitch('WC_USER_CANCELLED');
+      const bound = cancelSwitch('WC_CONNECT_TIMEOUT');
+      const boundTimer = setTimeout(() => bound.cancel(), TIMEOUT.connect);
+      settleConnect = cancel.cancel;
+      try {
+        await Promise.race([instance.connect(), cancel.promise, bound.promise]);
+      } finally {
+        clearTimeout(boundTimer);
+        settleConnect = null;
+        setLivePairingUri(null);
+        emit('uri', { uri: null });
+      }
+      wcEvent('session_settled');
+
+      const chainId = honestChain(instance);
+      syncChain(instance, chainId);
+      const address = instance.accounts?.[0] ?? null;
+      wcEvent('connected');
+      return { ok: true, provider: instance, address, chainId };
+    } catch (error) {
+      const code = classifyConnectError(error);
+      const elapsed = Math.max(0, Math.round(Date.now() - startedAt));
+      wcEvent(
+        code === 'USER_REJECTED'
+          ? 'connect_failed_cancel'
+          : code === 'WC_ORIGIN_BLOCKED'
+            ? 'connect_failed_origin'
+            : code === 'WC_EXPIRED'
+              ? 'connect_failed_expired'
+              : code === 'WC_RELAY_UNREACHABLE'
+                ? 'connect_failed_relay'
+                : 'connect_failed_unknown',
+        elapsed
+      );
+      if (code === 'WC_RELAY_UNREACHABLE') clearRelayCache();
+      /* Never leave a half-connected instance behind: on OUR timeout the SDK's
+         socket is still retrying in the background, and that zombie is what
+         made a later Connect look broken for reasons nobody could see. */
+      await release({ purge: false });
+      await resetPairingState();
+      return { ok: false, code };
+    } finally {
+      busy = false;
+      settleConnect = null;
+      try { uninstallBridge?.(); } catch { /* noop */ }
+      uninstallBridge = null;
+      setLivePairingUri(null);
+      emit('uri', { uri: null });
+      emit('modal', { active: false });
+      void resetPairingState();
+    }
+  }
+
+  /**
+   * Re-attach a persisted session WITHOUT a new pairing.
+   *
+   * ─── THE BUG THIS FIXES ────────────────────────────────────────────────
+   * init() only ever ran from the Connect button, so anything that restarted
+   * the WebView — a refresh, Android resuming the app, a hard reload — left the
+   * session in localStorage while the app showed "not connected". Returning to
+   * the app looked EXACTLY like "Trust Wallet disconnected me by itself". The
+   * disconnect was never sent by the wallet; the app never picked the session
+   * back up.
+   *
+   * Opportunistic by design: it fails quiet, because the explicit Connect
+   * button is the real path and a resume must never stall behind a relay probe.
+   */
+  async function restore() {
+    if (busy || provider) return { ok: false, code: 'WC_BUSY' };
+    if (!hasStoredSession()) return { ok: false, code: 'WC_NO_SESSION' };
+    busy = true;
+    let instance = null;
+    try {
+      let relay = null;
+      try {
+        relay = await measureRelay({ projectId });
+      } catch {
+        relay = null;
+      }
+      if (relay) emit('relay', relay);
+
+      /* NO MODAL ON A SILENT RESTORE: this path runs on first paint for
+         returning users, and building the AppKit instance there would be weight
+         on a surface that is never opened. */
+      instance = await initProvider({ modal: false, relayOrder: relay?.order });
+      provider = instance;
+      wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+
+      if (!instance.session) {
+        wcEvent('restore_none');
+        await release({ purge: false });
+        return { ok: false, code: 'WC_NO_SESSION' };
+      }
+
+      detach = attach(instance);
+      const chainId = honestChain(instance);
+      syncChain(instance, chainId);
+      const address = instance.accounts?.[0] ?? null;
+      wcEvent('session_restored');
+      return { ok: true, provider: instance, address, chainId, restored: true };
+    } catch (error) {
+      /* A relay hiccup here must never surface as a connect error. But an
+         abandoned instance must not linger: a provider never published, plus a
+         zombie socket left alive underneath, is exactly the state that made a
+         LATER explicit Connect look broken. */
+      await release({ purge: false });
+      wcEvent('restore_failed');
+      return { ok: false, code: classifyConnectError(error) };
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Settle an in-flight pairing NOW.
+   *
+   * The SDK's `abortPairingAttempt()` is a deprecated no-op, so the switch is
+   * ours: settling it releases the single-flight, and the very next tap can
+   * start a fresh pairing instead of being silently swallowed for 20 seconds.
+   * Safe to call when nothing is pairing.
+   */
+  async function cancel() {
+    emit('uri', { uri: null });
+    settleConnect?.();
+    if (!provider && !busy) return false;
+    wcEvent('pair_cancelled');
+    await release({ purge: true });
+    await resetPairingState();
+    return true;
+  }
+
+  /** End the session and forget everything that described it. */
+  async function disconnect() {
+    await resetPairingState();
+    await release({ purge: true });
+    wcEvent('disconnected');
+    return true;
+  }
+
+  /**
+   * The chain the wallet actually approved — see chain.js for why the provider's
+   * own answer cannot be trusted right after connect().
+   */
+  function honestChain(instance) {
+    const fromSession = chainFromSession(instance);
+    if (fromSession != null && supportsChain(fromSession)) return fromSession;
+    return defaultChain ?? fromSession ?? null;
+  }
+
+  /**
+   * Align the SDK's internal chain id with the honest one.
+   *
+   * `chainId` is what tags every RPC request with `eip155:<id>`; leaving it at
+   * the required-chain default sends calls to a namespace the session does not
+   * have, which the wallet rejects.
+   */
+  function syncChain(instance, chainId) {
+    if (instance.chainId === chainId) return;
+    try {
+      instance.chainId = chainId;
+      instance.persist?.();
+      wcEvent('chain_synced', Number(chainId));
+    } catch {
+      /* the SDK shape changed — the caller's state is still honest */
+    }
+  }
+
+  return {
+    on,
+    connect,
+    restore,
+    cancel,
+    disconnect,
+    get provider() {
+      return provider;
+    },
+    get busy() {
+      return busy;
+    },
+    get session() {
+      return provider?.session ?? null;
+    },
+    hasStoredSession,
+    pairingTtlMs: PAIRING_TTL_MS,
+    /* Test/inspection hook. */
+    _initConfig: initConfig
+  };
+}

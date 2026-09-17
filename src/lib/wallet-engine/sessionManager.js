@@ -7,7 +7,7 @@
  * disconnect.
  *
  * It models the session the wallet signed (`session.namespaces.*`), which is
- * the honest source of truth — the same lesson `src/lib/wcChain.js` encodes
+ * the honest source of truth — the same lesson `src/lib/wc/chain.js` encodes
  * for chain id. A session whose namespace lists only `eip155:1` is recorded as
  * an Ethereum-only session even if the provider later claims chain 56.
  *

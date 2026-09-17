@@ -741,138 +741,17 @@ console.log('▸ probing FBT Intent AI — later-phase 31–100 (in-process work
   if (Array.isArray(laterRows)) report('intent-ai later-phase', laterRows);
 }
 
-/* ------------------------------ 0b. WalletConnect wiring -------------------- */
-/* Static analysis of WalletContext.jsx for the two historical bugs (localhost
-   origin, icon 404) and the project-id single-source-of-truth rule. */
-console.log('▸ checking WalletConnect wiring (no bundler, no DOM)…');
+/* ------------------------------ 0b. WalletConnect stack ---------------------- */
+/* The whole wallet-connect stack (src/lib/wc/), against the real source with
+   only the external boundary faked: sockets, fetch, storage, window and the
+   AppKit modal object. One suite, because the flow is one object graph — the
+   old per-file probes (uri hygiene, deep links, storage, chain, relay, wallets,
+   appkit reconcile, health) locked the same contract in ten places and drifted
+   apart whenever one of them moved. */
+console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, storage, embedded wallet)…');
 {
-  const { default: runWcWiring } = await import('./walletconnect-wiring.mjs');
-  report('WalletConnect wiring', runWcWiring());
-}
-
-/* ------------------------------ 0c. WalletConnect behavior ------------------ */
-/* Structural tests of the connect/disconnect guards in WalletContext.jsx. */
-console.log('▸ checking WalletConnect behavior guards…');
-{
-  const { default: runWcConnect } = await import('./wc-connect-probe.mjs');
-  report('WalletConnect behavior', runWcConnect());
-}
-
-/* ------------------------------ 0c-2. WC "spins forever" regression --------- */
-/* Runtime probe (not a grep): proves a blocked-relay connect attempt is
-   bounded by a real timeout instead of spinning for 60-90+ seconds. */
-console.log('▸ probing the WalletConnect connect timeout (the "spins forever" fix)…');
-{
-  const { default: runWcTimeout } = await import('./wc-timeout-probe.mjs');
-  report('WalletConnect connect timeout', await runWcTimeout());
-}
-
-/* ------------------------------ 0c-2b. bot help center --------------------- */
-/* The Telegram bot's /help is now a topic-based help center. Three ways it can
-   fail silently or dangerously: a message Telegram refuses (length, bad HTML,
-   oversized callback_data), copy that re-introduces the "virtual credits" lie,
-   and a matcher that answers the wrong topic to a typed question about money. */
-console.log('▸ probing the Telegram bot help center (sendable, honest, no guessing)…');
-{
-  const { default: botHelpRows } = await import('./bot-help-probe.mjs');
-  report('telegram bot help center', botHelpRows);
-}
-
-/* ------------------------------ 0c-3. WC storage hygiene ------------------- */
-/* Runtime probe: purgeWcStorage removes exactly the SDK/AppKit connection
-   artifacts — the stale deep-link choice and persisted session that made the
-   next connect skip the modal and open a wallet app with a dead pairing. */
-console.log('▸ probing WalletConnect storage hygiene (stale deep-link/session cleanup)…');
-{
-  const { default: runWcStorage } = await import('./wc-storage-probe.mjs');
-  report('WalletConnect storage hygiene', runWcStorage());
-}
-
-/* ------------------------------ 0c-4. WC chain resolution ------------------ */
-/* Runtime probe: the connected chain must come from the session the wallet
-   approved, not the SDK's required-chain default — the difference between
-   showing the user's real tokens and hiding them on the wrong network. */
-console.log('▸ probing WalletConnect chain resolution (Trust-on-Ethereum reports 56)…');
-{
-  const { default: runWcChain } = await import('./wc-chain-probe.mjs');
-  report('WalletConnect chain resolution', runWcChain());
-}
-
-/* ------------------------------ 0c-5. mobile wallet deep links ------------- */
-/* Runtime + wiring probe: every promoted wallet has a native deep link, an
-   HTTPS fallback and (on Android) an exact package. The pairing payload must
-   reach the wallet; merely opening its home screen is not success. */
-console.log('▸ probing mobile wallet deep links (Trust Wallet "Invalid URL")…');
-{
-  const { default: runWcWallets } = await import('./wc-wallets-probe.mjs');
-  report('mobile wallet deep links', runWcWallets());
-}
-
-/* ------------------------------ 0c-6. deep-link delivery ------------------- */
-/* Last-mile delivery, measured against the real SDK: AppKit stays native-first;
-   the bridge preserves native + HTTPS + raw wc URI; Android uses package-scoped
-   ACTION_VIEW and Telegram alone selects the universal fallback. */
-console.log('▸ probing wallet deep-link delivery (the «ارور دیپ لینک» fix)…');
-{
-  const { default: runWcDeepLink } = await import('./wc-deeplink-probe.mjs');
-  report('wallet deep-link delivery', await runWcDeepLink());
-}
-
-/* ------------------------------ 0c-6b. AppKit pairing-state reconcile ------- */
-/* The «wallet opens, home screen, no approval prompt» report: in
-   manualWCControl mode nothing resets AppKit's ConnectionController.state.wcUri
-   between attempts, so a tap could hand a wallet a DEAD pairing topic while the
-   fresh pairing sat unused (which is why the QR always worked). Measured
-   against the real @reown/appkit-controllers singleton. */
-console.log('▸ probing AppKit pairing-state reconcile (the «والت باز می‌شود ولی چیزی برای تأیید نمی‌آید» fix)…');
-{
-  const { default: runWcReconcile } = await import('./wc-appkit-reconcile-probe.mjs');
-  report('AppKit pairing-state reconcile', await runWcReconcile());
-}
-
-/* ------------------------------ 0c-7. pairing-URI hygiene ------------------- */
-/* The «Invalid Url: wc:…&amp;…» report: HTML-escaped URI parameters cannot pair.
-   Repair them first, then complete a bare `wc:` URI into the tapped wallet's
-   native hand-off with an explicit HTTPS fallback. */
-console.log('▸ probing pairing-URI hygiene (the «Invalid Url: wc:…&amp;…» report)…');
-{
-  const { default: runWcUriHygiene } = await import('./wc-uri-hygiene-probe.mjs');
-  report('pairing-URI hygiene', await runWcUriHygiene());
-}
-
-/* ------------------------------ 0c-8. the pairing surface ------------------ */
-/* The «invalid deep link» + «the QR does not work» report, measured on the
-   bytes we actually hand the phone: the sheet's QR is re-decoded with a
-   second library (jsQR) and must come back as the pairing URI byte for byte;
-   every promoted wallet's native and fallback links must decode to that same
-   URI at exactly one encoding level; and the wiring must take the URI from the
-   SDK's own display_uri event before connect(). */
-console.log('▸ probing the WalletConnect pairing surface (QR + deep links, end to end)…');
-{
-  const { default: runWcPairingSurface } = await import('./wc-pairing-surface-probe.mjs');
-  report('WalletConnect pairing surface', runWcPairingSurface());
-}
-
-/* ------------------------------ 0c-9. wallet health ------------------------- */
-/* The report that makes the invisible links visible: project config, allowed
-   origins, relay socket and embedded-wallet frame, each with every network
-   edge held still. A diagnostic that reports the wrong thing is worse than
-   none, so its failure paths are pinned here too. */
-console.log('▸ probing the wallet health report (the «which link failed?» tool)…');
-{
-  const { default: runWalletHealth } = await import('./wallet-health-probe.mjs');
-  report('wallet health', await runWalletHealth());
-}
-
-/* ------------------------------ 0c-10. relay preflight ---------------------- */
-/* The measurement that was missing: `EthereumProvider.init()` never opens a
-   relay socket (measured in @walletconnect/core@2.25.0), so a filtered relay
-   used to read as a healthy one, the hostname failover never fired, and the
-   connect sheet kept recommending the one route that could not work. */
-console.log('▸ probing the WalletConnect relay preflight (measure before promising a pairing)…');
-{
-  const { default: runRelayPreflight } = await import('./wc-relay-preflight-probe.mjs');
-  report('WalletConnect relay preflight', await runRelayPreflight());
+  const { default: runWcStack } = await import('./walletconnect-stack-probe.mjs');
+  report('WalletConnect stack', await runWcStack());
 }
 
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
@@ -1010,6 +889,16 @@ npx(['vite', 'build', '-c', 'test/vite.units.mjs', '--logLevel', 'error']);
 installDom();
 const { default: runUnits } = await import('./.out/units/units.js');
 report('units (tokens · payout · faq · news)', await runUnits());
+
+/* ---------------------- 1b. the connect sheet, mounted -------------------- */
+/* Pure logic cannot catch a surface that fails to render. The sheet is where
+   every wallet report starts, so it is mounted for real: all four transports,
+   the QR encoder and the health panel in one DOM. */
+console.log('\n▸ building the connect-sheet mount suite…');
+npx(['vite', 'build', '-c', 'test/vite.wcsheet.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runWcSheet } = await import('./.out/wcsheet/wallet-connect-sheet-probe.js');
+report('connect sheet (mounted)', await runWcSheet(document.getElementById('r')));
 
 /* ------------------------------- 1. boot -------------------------------- */
 /* The repository intentionally does not track dist/. Build the shipped static
@@ -1719,7 +1608,7 @@ console.log('\n▸ probing the signed solver commitment API…');
    ownership, the honest live/unavailable split, the read-side fail-closed pass
    and — the point of the suite — write routes that refuse withdrawFunds,
    executeWithoutUser and automatic execution for an AUTHENTICATED caller. */
-console.log('\n\u25b8 probing the authenticated ecosystem registry\u2026');
+console.log('\n▸ probing the authenticated ecosystem registry\u2026');
 {
   const registryRows = (await import('./ecosystem-registry-probe.mjs')).default;
   report('ecosystem registry', registryRows);
@@ -2337,19 +2226,6 @@ for (const [suite, file] of [
     if (tail) console.log(tail);
     report(suite, [[`${suite} FAILED (see output)`, false]]);
   }
-}
-
-/* ------------------------------ LAST. email & social login ----------------
-   The Reown AppKit embedded wallet (email/social) and its isolation contract:
-   a second AppKit instance is only safe when every surface re-asserts its own
-   features before opening the shared modal — measured on the real package.
-   RUNS LAST ON PURPOSE: creating the real instance needs jsdom globals that
-   must stay installed until the process exits (the probe documents why), so
-   no other suite may run after a live window exists. */
-console.log('▸ probing email & social login (Reown AppKit embedded wallet)…');
-{
-  const { default: runEmailSocial } = await import('./email-social-probe.mjs');
-  report('email & social login', await runEmailSocial());
 }
 
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
