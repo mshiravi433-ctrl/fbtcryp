@@ -146,91 +146,16 @@ function openDecision({ wallet, pairingUri, original, repaired }) {
   };
 }
 
-/**
- * Open an https URL in a Custom Tab (or a normal tab outside the APK).
- *
- * Bounded, like every other wait here: a plugin that never answers must not
- * leave a wallet tap hanging.
- */
-async function openHttpsFallback(url) {
-  if (!url || !isHttps(url)) return false;
-  try {
-    const { openUrl } = await import('../browser.js');
-    return Boolean(await withTimeout(Promise.resolve(openUrl(url)), TIMEOUT.teardown, 'FALLBACK_TIMEOUT'));
-  } catch {
-    return false;
-  }
+function isHttps(url) {
+  return /^https:\/\//i.test(String(url ?? '').trim());
 }
 
-/**
- * Hand one pairing to a wallet app without ever navigating this document.
- *
- * @returns {Promise<boolean>} whether a route was actually attempted.
- */
-export async function openWalletLink(url, options = {}) {
-  const {
-    pairingUri = '',
-    wallet = null,
-    walletPackage = wallet?.androidPackage || '',
-    fallbackUrl = '',
-    view,
-    openWindow
-  } = options;
-  const win = view ?? (typeof window !== 'undefined' ? window : null);
-  if (!win || !url) return false;
-
-  const raw = pairingUri || pairingUriFromLink(url) || '';
-  const channel = handOffChannel(win);
-
-  if (channel === 'native-app') {
-    /* Package-scoped ACTION_VIEW with the raw `wc:` URI. No redirector, no
-       browser, no lost payload — and the `<queries>` block in
-       AndroidManifest.xml is what lets resolveActivity() see the wallet. */
-    if (raw && walletPackage && win.FBTWalletLink?.openWallet) {
-      try {
-        if (win.FBTWalletLink.openWallet(raw, walletPackage)) return true;
-      } catch {
-        /* fall through to the Custom Tab */
-      }
-    }
-    return openHttpsFallback(fallbackUrl || (isHttps(url) ? url : ''));
-  }
-
-  if (channel === 'telegram') {
-    /* Telegram's client decodes a deep link once while handing it to the OS, so
-       the payload is encoded twice there — measured, and the reason a single
-       encode leaves the wallet holding `wc%3A…`. */
-    const payload = isAndroidView(win) && raw ? encodeURIComponent(raw) : null;
-    const native = payload ? rebuildWithPayload(url, payload) : url;
-    try {
-      /* `_blank` is the whole point: `_self` would destroy this document. */
-      if (win.open?.(native, '_blank', 'noreferrer noopener')) return true;
-    } catch {
-      /* popup blocked — the universal fallback below is the last resort */
-    }
-    try {
-      win.Telegram?.WebApp?.openLink?.(fallbackUrl || (isHttps(url) ? url : native));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /* ── web ────────────────────────────────────────────────────────────────
-     1. Android Chrome: the package-scoped intent form first. It is the only
-        route that survives a second app registering the same scheme, and its
-        fallback URL returns the user to the wallet's universal link (→ Play
-        Store) instead of a dead "cannot open" page.
-     2. the plain native scheme, in a new browsing context;
-     3. a synthetic anchor click — the shape least likely to be treated as a
-        popup when an OEM or a CSP is involved. */
-  if (isAndroidView(win) && wallet && raw) {
-    const intent = androidIntentLink(wallet, raw, fallbackUrl);
-    if (intent && (tryOpen(win, intent, openWindow) || tryAnchor(win, intent))) return true;
-  }
-  if (tryOpen(win, url, openWindow)) return true;
-  if (tryAnchor(win, url)) return true;
-  return openHttpsFallback(fallbackUrl);
+/** Rewrite a link's `uri=` parameter to a differently-encoded payload. */
+function rebuildWithPayload(url, encodedPayload) {
+  const text = String(url ?? '');
+  const match = /([?&]uri=)([\s\S]*)$/i.exec(text);
+  if (!match) return text;
+  return `${text.slice(0, match.index + match[1].length)}${encodedPayload}`;
 }
 
 function tryOpen(win, url, openWindow) {
@@ -265,28 +190,133 @@ function tryAnchor(win, url) {
   }
 }
 
-function isHttps(url) {
-  return /^https:\/\//i.test(String(url ?? '').trim());
+/**
+ * Open an https URL in a Custom Tab (or a normal tab outside the APK).
+ * NEVER does same-tab navigation for wallet links.
+ */
+async function openHttpsFallback(url, { view, openWindow } = {}) {
+  if (!url || !isHttps(url)) return false;
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win) return false;
+  // Try _blank first
+  if (tryOpen(win, url, openWindow)) return true;
+  if (tryAnchor(win, url)) return true;
+  // Try Capacitor Browser plugin (Custom Tabs) — safe, keeps dApp alive
+  try {
+    const plugin = await (async () => {
+      try {
+        const mod = await import('@capacitor/browser');
+        return mod.Browser ?? null;
+      } catch { return null; }
+    })();
+    if (plugin) {
+      try {
+        await withTimeout(
+          Promise.resolve(plugin.open({ url, toolbarColor: '#0a0c12', presentationStyle: 'popover' })),
+          TIMEOUT.teardown,
+          'FALLBACK_TIMEOUT'
+        );
+        return true;
+      } catch { /* fall through */ }
+    }
+    const tg = win.Telegram?.WebApp;
+    if (tg?.openLink) {
+      try { tg.openLink(url, { try_instant_view: false }); return true; } catch { /* noop */ }
+    }
+    // No location.assign — returning false preserves fbtswap.ir
+    return false;
+  } catch {
+    return false;
+  }
 }
 
-/** Rewrite a link's `uri=` parameter to a differently-encoded payload. */
-function rebuildWithPayload(url, encodedPayload) {
-  const text = String(url ?? '');
-  const match = /([?&]uri=)([\s\S]*)$/i.exec(text);
-  if (!match) return text;
-  return `${text.slice(0, match.index + match[1].length)}${encodedPayload}`;
+/**
+ * Synchronous version — runs entirely within the user gesture, no await.
+ * Returns true if a route was attempted (intent, native, or anchor).
+ */
+export function openWalletLinkSync(url, options = {}) {
+  const {
+    pairingUri = '',
+    wallet = null,
+    walletPackage = wallet?.androidPackage || '',
+    fallbackUrl = '',
+    view,
+    openWindow
+  } = options;
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win || !url) return false;
+  const raw = pairingUri || pairingUriFromLink(url) || '';
+  const channel = handOffChannel(win);
+
+  if (channel === 'native-app') {
+    if (raw && walletPackage && win.FBTWalletLink?.openWallet) {
+      try {
+        if (win.FBTWalletLink.openWallet(raw, walletPackage)) return true;
+      } catch { /* fall through */ }
+    }
+    return false;
+  }
+
+  if (channel === 'telegram') {
+    const payload = isAndroidView(win) && raw ? encodeURIComponent(raw) : null;
+    const native = payload ? rebuildWithPayload(url, payload) : url;
+    if (tryOpen(win, native, openWindow)) return true;
+    if (tryAnchor(win, native)) return true;
+    return false;
+  }
+
+  // web — intent first, then native, then anchor
+  if (isAndroidView(win) && wallet && raw) {
+    const intent = androidIntentLink(wallet, raw, fallbackUrl);
+    if (intent) {
+      if (tryOpen(win, intent, openWindow)) return true;
+      if (tryAnchor(win, intent)) return true;
+    }
+  }
+  if (tryOpen(win, url, openWindow)) return true;
+  if (tryAnchor(win, url)) return true;
+  return false;
+}
+
+/**
+ * Hand one pairing to a wallet app without ever navigating this document.
+ * @returns {Promise<boolean>} whether a route was actually attempted.
+ */
+export async function openWalletLink(url, options = {}) {
+  const win = options.view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win || !url) return false;
+
+  // Sync attempt first — preserves user gesture
+  if (openWalletLinkSync(url, options)) return true;
+
+  const raw = options.pairingUri || pairingUriFromLink(url) || '';
+  const channel = handOffChannel(win);
+
+  if (channel === 'native-app') {
+    if (raw && options.walletPackage && win.FBTWalletLink?.openWallet) {
+      try {
+        if (win.FBTWalletLink.openWallet(raw, options.walletPackage)) return true;
+      } catch { /* fall through */ }
+    }
+    return openHttpsFallback(options.fallbackUrl || (isHttps(url) ? url : ''), { view: win, openWindow: options.openWindow });
+  }
+
+  if (channel === 'telegram') {
+    try {
+      win.Telegram?.WebApp?.openLink?.(options.fallbackUrl || (isHttps(url) ? url : url));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // web — only https fallback remains, never location.assign
+  return openHttpsFallback(options.fallbackUrl, { view: win, openWindow: options.openWindow });
 }
 
 /**
  * Wrap `window.open` for the duration of one pairing attempt.
- *
- * FAIL-OPEN BY CONSTRUCTION: an unsupported URL, a throwing delivery channel
- * and a missing browser API all fall back to the original `window.open` call,
- * so installing this can never cost a user a link that used to work.
- *
- * The one thing it enforces: the target is never `_self` or `_top`. A
- * hand-off that replaces this document takes the relay socket and the pending
- * connect() promise with it.
+ * FAIL-OPEN BY CONSTRUCTION.
  */
 export function installWalletOpenBridge({ win, openWallet } = {}) {
   const target = win ?? (typeof window !== 'undefined' ? window : null);
@@ -303,16 +333,46 @@ export function installWalletOpenBridge({ win, openWallet } = {}) {
     }
     if (decision.action !== 'open') return original.call(target, url, name, features);
     try {
-      openWallet(decision.url, {
-        pairingUri: decision.pairingUri || '',
-        wallet: decision.wallet ?? null,
-        walletPackage: decision.wallet?.androidPackage || '',
-        fallbackUrl: decision.fallbackUrl || '',
-        rewritten: decision.rewritten,
-        repaired: Boolean(decision.repaired),
-        /* Recursion guard: the fallback must use the REAL opener. */
-        openWindow: original.bind(target)
-      });
+      // Synchronous open first — this is the critical path for popup-blocker
+      const syncOk = (() => {
+        try {
+          // Build options for sync open
+          return openWalletLinkSync(decision.url, {
+            pairingUri: decision.pairingUri || '',
+            wallet: decision.wallet ?? null,
+            walletPackage: decision.wallet?.androidPackage || '',
+            fallbackUrl: decision.fallbackUrl || '',
+            view: target,
+            openWindow: original.bind(target)
+          });
+        } catch { return false; }
+      })();
+      if (!syncOk) {
+        // Async path for fallback (https) — still never _self
+        openWallet(decision.url, {
+          pairingUri: decision.pairingUri || '',
+          wallet: decision.wallet ?? null,
+          walletPackage: decision.wallet?.androidPackage || '',
+          fallbackUrl: decision.fallbackUrl || '',
+          rewritten: decision.rewritten,
+          repaired: Boolean(decision.repaired),
+          openWindow: original.bind(target)
+        });
+      } else {
+        // Even when sync succeeded, still call openWallet for tracing, but it will no-op or trace success
+        try {
+          openWallet(decision.url, {
+            pairingUri: decision.pairingUri || '',
+            wallet: decision.wallet ?? null,
+            walletPackage: decision.wallet?.androidPackage || '',
+            fallbackUrl: decision.fallbackUrl || '',
+            rewritten: decision.rewritten,
+            repaired: Boolean(decision.repaired),
+            openWindow: original.bind(target),
+            _syncAlreadySucceeded: true
+          });
+        } catch { /* tracing only */ }
+      }
       return null;
     } catch {
       return original.call(target, decision.url, name, features);

@@ -17,6 +17,7 @@ import {
   MOBILE_WALLETS,
   handOffChannel,
   openWalletLink,
+  openWalletLinkSync,
   repairPairingUri,
   walletLinks,
   walletLogo,
@@ -200,17 +201,31 @@ export default function WalletConnectSheet({ open, onClose }) {
     setErr(null);
     setOpenedWallet(null);
     setCopiedUri(false);
-    setView('pair');
+    // Do NOT set view='pair' immediately — that caused the flicker of
+    // "4 wallets + اتصال then Reown modal". The AppKit modal is the primary
+    // surface; our pair view is only the fallback when the modal chunk fails.
+    // So we stay on 'choose' until we know the modal didn't appear.
     wallet
       .connectWalletConnect({ force: relayBlocked })
       .then((ok) => {
         if (ok) close();
-        /* On failure the choose view names the error (origin blocked, relay
-           unreachable, expired, cancelled) — never a silent dead end. */
-        else setView('choose');
+        else {
+          // If we have a pairing URI but no AppKit modal, show our fallback
+          if (wallet.wcPairUri && !wallet.wcModalActive) setView('pair');
+          else setView('choose');
+        }
       })
       .catch(() => setView('choose'));
   };
+
+  // When a pairing URI arrives and the AppKit modal is NOT active, switch to
+  // our fallback pair view (QR + wallet buttons). This covers the
+  // init_without_modal path where the SDK modal chunk failed to load.
+  useEffect(() => {
+    if (wallet.wcPairUri && !wallet.wcModalActive && view === 'choose' && wallet.connecting) {
+      setView('pair');
+    }
+  }, [wallet.wcPairUri, wallet.wcModalActive, view, wallet.connecting]);
 
   /*
    * EMAIL & SOCIAL — the same settle contract as every other row: the sheet
@@ -245,14 +260,25 @@ export default function WalletConnectSheet({ open, onClose }) {
       event.preventDefault();
       return;
     }
-    /* The JS path is authoritative so `target: '_blank'` is guaranteed (this
-       document and its relay socket must survive) and so the Android
-       package-scoped intent can be tried at all. The anchor's href is the
-       no-JavaScript fallback. */
     event.preventDefault();
     setOpenedWallet(walletEntry.key);
     haptic?.('light');
     wcEvent('sheet_wallet_tap');
+
+    // Synchronous attempt FIRST — preserves user gesture for popup-blocker
+    const syncOk = openWalletLinkSync(links.native, {
+      wallet: walletEntry,
+      walletPackage: walletEntry.androidPackage,
+      pairingUri: pairUri,
+      fallbackUrl: links.universal
+    });
+
+    if (syncOk) {
+      wcEvent('sheet_wallet_opened_sync');
+      return;
+    }
+
+    // Async fallback (https only, never _self)
     openWalletLink(links.native, {
       wallet: walletEntry,
       walletPackage: walletEntry.androidPackage,

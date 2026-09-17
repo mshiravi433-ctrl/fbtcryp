@@ -256,17 +256,15 @@ export function reassertFeatures(modal) {
 /**
  * Wait for the embedded wallet to exist AND be usable.
  *
- * ─── WHY IT POLLS INSTEAD OF ONLY SUBSCRIBING ──────────────────────────────
- * On a slow mobile WebView the three facts arrive in any order and up to a
- * second apart: `isConnected` flips, `getAddress()` answers, and
- * `getWalletProvider()` is still null. A flow that treats the first two as
- * finished then tries to attach once reports "no provider" and leaves the
- * marker orphaned — exactly the «email confirmed, we came back, no wallet»
- * report. Polling for all three together is the honest test, and it makes the
- * caller's attach a one-liner that cannot hit that window.
- *
- * @returns {Promise<{address:string, provider:object}|null>} null on timeout,
- *   on a definite close, or when the user dismissed the modal.
+ * FIX 2026-09-17: The "green tick but no wallet" report. The previous version
+ * required address AND provider atomically, and gave only 3s grace after modal
+ * close. On slow Android WebViews the provider arrives 1-2s after the address,
+ * and the modal closes quickly after OTP, so the check timed out and rollback
+ * cleared the marker. Now:
+ *  - provider getter tries multiple signatures (with/without namespace)
+ *  - poll continues after modal close for extended grace
+ *  - on timeout, returns address even if provider is temporarily null, so
+ *    caller can retry attachExternal with backoff
  */
 export async function awaitAccount(modal, {
   timeoutMs = TIMEOUT.emailOpen,
@@ -274,25 +272,53 @@ export async function awaitAccount(modal, {
   pollMs = 300
 } = {}) {
   if (!modal) return null;
-  const read = () => {
+
+  const tryGetProvider = () => {
     try {
-      if (!modal.getIsConnectedState?.()) return null;
-      const address = modal.getAddress?.('eip155');
-      const provider = modal.getWalletProvider?.();
-      if (!address || !provider) return null;
-      return { address, provider };
+      let p = modal.getWalletProvider?.();
+      if (p) return p;
+      p = modal.getWalletProvider?.('eip155');
+      if (p) return p;
+      p = modal.getProvider?.('eip155');
+      if (p) return p;
+      p = modal.getProvider?.();
+      if (p) return p;
+      return null;
+    } catch { return null; }
+  };
+
+  const tryGetAddress = () => {
+    try {
+      let a = modal.getAddress?.('eip155');
+      if (a) return a;
+      a = modal.getAddress?.();
+      if (a) return a;
+      return null;
+    } catch { return null; }
+  };
+
+  const read = (allowProviderNull = false) => {
+    try {
+      const isConnected = modal.getIsConnectedState?.();
+      if (!isConnected) return null;
+      const address = tryGetAddress();
+      if (!address) return null;
+      const provider = tryGetProvider();
+      if (!provider && !allowProviderNull) return null;
+      return { address, provider: provider || null };
     } catch {
       return null;
     }
   };
 
-  const ready = read();
+  const ready = read(false);
   if (ready) return ready;
 
   return new Promise((resolve) => {
     let settled = false;
     let opened = false;
     let closeTimer = null;
+    let postClosePoll = null;
     const subscriptions = [];
 
     const finish = (value) => {
@@ -301,18 +327,26 @@ export async function awaitAccount(modal, {
       clearTimeout(outer);
       clearInterval(poll);
       clearTimeout(closeTimer);
+      clearInterval(postClosePoll);
       for (const off of subscriptions) {
         try { off?.(); } catch { /* cleanup */ }
       }
       resolve(value);
     };
-    const check = () => {
-      const hit = read();
+
+    const checkStrict = () => {
+      const hit = read(false);
       if (hit) finish(hit);
+      return hit;
     };
 
-    const outer = setTimeout(() => finish(null), timeoutMs);
-    const poll = setInterval(check, pollMs);
+    const outer = setTimeout(() => {
+      const last = read(true);
+      if (last?.address) finish(last);
+      else finish(null);
+    }, timeoutMs);
+
+    const poll = setInterval(() => checkStrict(), pollMs);
 
     const subscribe = (off) => {
       if (settled) off?.();
@@ -320,7 +354,7 @@ export async function awaitAccount(modal, {
     };
 
     try {
-      subscribe(modal.subscribeAccount?.(() => check(), 'eip155'));
+      subscribe(modal.subscribeAccount?.(() => checkStrict(), 'eip155'));
       subscribe(
         modal.subscribeState?.((state) => {
           if (settled) return;
@@ -328,12 +362,25 @@ export async function awaitAccount(modal, {
             opened = true;
             return;
           }
-          /* The modal CLOSED: either the user dismissed it (definitive) or the
-             login completed and the frame's answer is still in flight. Wait out
-             the grace, then stop. */
           if (state?.open === false && opened) {
             clearTimeout(closeTimer);
-            closeTimer = setTimeout(() => finish(read()), closeGraceMs);
+            closeTimer = setTimeout(() => {
+              const hit = read(false);
+              if (hit) finish(hit);
+              else {
+                let extraAttempts = 0;
+                const maxExtra = Math.ceil((closeGraceMs * 2.5) / pollMs);
+                postClosePoll = setInterval(() => {
+                  extraAttempts += 1;
+                  const h = read(false);
+                  if (h) finish(h);
+                  else if (extraAttempts >= maxExtra) {
+                    const lastResort = read(true);
+                    finish(lastResort);
+                  }
+                }, pollMs);
+              }
+            }, closeGraceMs);
           }
         })
       );
@@ -360,10 +407,24 @@ export async function open({ projectId, metadata } = {}) {
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
   }
-  const account = await awaitAccount(modal, { timeoutMs: TIMEOUT.emailOpen });
+  const account = await awaitAccount(modal, { timeoutMs: TIMEOUT.emailOpen, closeGraceMs: TIMEOUT.emailCloseGrace + 2000 });
   if (!account) {
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
+  }
+  // If provider is still null but address exists, let caller retry attach — don't fail yet
+  if (!account.provider && account.address) {
+    // Wait a bit more for provider
+    await sleep(800);
+    try {
+      const p = modal.getWalletProvider?.() || modal.getWalletProvider?.('eip155') || modal.getProvider?.('eip155') || null;
+      if (p) account.provider = p;
+    } catch {}
+  }
+  if (!account.provider) {
+    // Still no provider — keep marker, but report pending so next cold start retries
+    wcEvent('email_connected_no_provider');
+    return { ok: true, ...account, provider: null, code: 'NO_PROVIDER_YET' };
   }
   wcEvent('email_connected');
   return { ok: true, ...account };
@@ -385,11 +446,6 @@ export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_W
   }
   const account = await awaitAccount(modal, { timeoutMs, closeGraceMs: 0 });
   if (!account) {
-    /* A TIMEOUT IS NOT AN ANSWER. Treating one as "definitively gone" used to
-       delete the marker, which turned a slow boot into a PERMANENT loss: every
-       later cold start saw no marker and never consulted the still-valid
-       session again. Hand it back only when AppKit itself says nothing is
-       connected, and keep it when it cannot answer. */
     const cleared = await rollback(modal);
     wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
     return { ok: false, code: cleared ? 'NO_SESSION' : 'PENDING' };
@@ -400,21 +456,19 @@ export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_W
 
 /**
  * Give the boot marker back when an attempt ended with nothing to restore.
- *
- * HONEST, NOT BLIND — and that distinction is the point. AppKit's own answer
- * decides: if the instance still reports a connected account the session is
- * real even though THIS attempt failed (a chunk that refused to load, a
- * transient RPC timeout — cases where the next cold start is exactly the
- * recovery the marker exists for), so the marker stays.
- *
- * @returns {Promise<boolean>} whether it cleared the marker.
+ * Now more conservative: if SDK says connected, keep marker even if address
+ * is temporarily missing.
  */
 export async function rollback(modal) {
   let connected = false;
   try {
-    connected = Boolean(modal?.getIsConnectedState?.() && modal?.getAddress?.('eip155'));
+    connected = Boolean(modal?.getIsConnectedState?.());
+    if (!connected) {
+      // Fallback: check address as secondary signal
+      connected = Boolean(modal?.getAddress?.('eip155') || modal?.getAddress?.());
+    }
   } catch {
-    connected = false; /* an SDK that cannot answer is not an answer */
+    connected = false;
   }
   if (connected) return false;
   setMarker(false);

@@ -164,15 +164,20 @@ export default async function run() {
 
     /* The window.open bridge is the thing that stops the SDK's `_self`. */
     const calls = [];
-    const win = { open: (...args) => { calls.push(args); return true; } };
+    const win = { open: (...args) => { calls.push(args); return true; }, document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } } };
     const original = win.open;
     const off = installWalletOpenBridge({ win, openWallet: (url, opts) => calls.push([url, opts]) });
     win.open('https://example.com/', '_blank');
     t('an unrelated URL still reaches the real window.open', calls.length === 1 && calls[0][0] === 'https://example.com/');
     win.open(native, '_self');
-    t('a hand-off is intercepted instead of navigating this document', calls.length === 2);
-    t('the intercepted hand-off carries package and fallback',
-      calls[1][1]?.walletPackage === 'com.wallet.crypto.trustapp' && Boolean(calls[1][1]?.fallbackUrl));
+    // New bridge does sync open via original (_blank) plus openWallet callback for tracing.
+    // So after intercept, we should have at least 2 more calls, no _self, and package info in callback.
+    const afterIntercept = calls.slice(1);
+    const hasBlankOpen = afterIntercept.some((c) => Array.isArray(c) && c[1] === '_blank' && typeof c[0] === 'string' && c[0].includes('wc?uri='));
+    const hasNoSelf = afterIntercept.every((c) => !(Array.isArray(c) && (c[1] === '_self' || c[1] === '_top')));
+    const hasPackageInfo = afterIntercept.some((c) => c[1]?.walletPackage === 'com.wallet.crypto.trustapp' && Boolean(c[1]?.fallbackUrl));
+    t('a hand-off is intercepted instead of navigating this document', hasBlankOpen && hasNoSelf);
+    t('the intercepted hand-off carries package and fallback', hasPackageInfo);
     off();
     t('uninstalling restores the original opener', win.open === original);
     t('installing without an opener is a harmless no-op',
