@@ -46,7 +46,7 @@ import {
   setEmailSocialMarker
 } from '../src/lib/emailSocialWallet.js';
 
-const PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
+const PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
 const APPKIT_SOCIAL_UNION = ['google', 'github', 'apple', 'facebook', 'x', 'discord', 'farcaster'];
 
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');

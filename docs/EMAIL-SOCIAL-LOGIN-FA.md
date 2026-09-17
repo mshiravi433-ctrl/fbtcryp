@@ -19,7 +19,7 @@
 می‌کند و سطح ایمیل پیش از open خودش آن‌ها را برمی‌گرداند. کسی حق ندارد
 نمونهٔ دوم را بیرون از این دو قانون open کند.
 
-## چک‌لیست Reown Dashboard (cloud.reown.com → پروژهٔ 8e36eccabebf5a4567f4e974fafd6b20)
+## چک‌لیست Reown Dashboard (cloud.reown.com → پروژهٔ 5997d5aee8bb42f43ddec4b1a5f94eb1)
 
 ۱. **Email & Social** را در بخشِ features روشن کن (نیاز نسخهٔ AppKit ≥ 4.2 قبلاً با 1.8.19 برآورده است).
 ۲. سوشال‌های دلخواه (google، x، apple، …) را فعال کن.

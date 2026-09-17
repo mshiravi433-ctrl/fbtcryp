@@ -12765,7 +12765,7 @@ export default function run() {
     const verifyDoc = existsSync('docs/WALLETCONNECT-VERIFY-FA.md') ? read('docs/WALLETCONNECT-VERIFY-FA.md') : '';
     t('the WalletConnect verification runbook exists for the owner', verifyDoc.length > 200);
     t('the runbook names the project id and the dashboard-only steps',
-      verifyDoc.includes('8e36eccabebf5a4567f4e974fafd6b20') && verifyDoc.includes('dashboard.reown.com')
+      verifyDoc.includes('5997d5aee8bb42f43ddec4b1a5f94eb1') && verifyDoc.includes('dashboard.reown.com')
         && verifyDoc.includes('Allowed Domains') && verifyDoc.includes('ir.fbtswap.app'));
     t('the runbook documents the code-side repair (localhost identity bug)',
       verifyDoc.includes('wc.signer.metadata') && verifyDoc.includes('https://localhost'));

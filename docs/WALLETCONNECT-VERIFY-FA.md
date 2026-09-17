@@ -2,7 +2,7 @@
 
 > «Security risk / The domain is flagged unsafe by multiple security providers,
 > leave immediately to protect your assets»
-> به‌روزرسانی: ۲۰۲۶-۰۸-۲۰ · پروژه WalletConnect: `8e36eccabebf5a4567f4e974fafd6b20`
+> به‌روزرسانی: ۲۰۲۶-۰۹-۱۷ · پروژه WalletConnect: `5997d5aee8bb42f43ddec4b1a5f94eb1`
 
 ---
 
@@ -41,20 +41,23 @@ overwrite می‌کند — مقدار `https://localhost` (در APK) یا آد�
 flag شدن پیدا نشد. پس مشکل از لیست سیاه نبود — از هویت نادرست dapp بود که
 اسکنرها آن را خطرناک تشخیص می‌دادند.
 
-## ۲) وضعیت داشبورد پروژهٔ جدید
+## ۲) تنظیم لازم در داشبورد پروژهٔ جدید
 
 این بخش خارج از کد است و در **https://dashboard.reown.com**، قسمت
-**Allowed Domains / App IDs** مدیریت می‌شود. برای پروژهٔ
-`8e36eccabebf5a4567f4e974fafd6b20` وضعیت اعلام‌شده در ۲۰۲۶-۰۸-۲۰:
+**Allowed Domains / App IDs** مدیریت می‌شود. پروژه در ۲۰۲۶-۰۹-۱۷ به
+`5997d5aee8bb42f43ddec4b1a5f94eb1` منتقل شد. داخل همین پروژه باید هر سه مورد
+زیر را ثبت و تأیید کنید؛ وجودشان از روی سورس قابل تضمین نیست:
 
-1. دامنهٔ وب **`https://fbtswap.ir`** ثبت/تأیید شده است.
-2. origin اپ Capacitor یعنی **`https://localhost`** ثبت/تأیید شده است.
-3. شناسهٔ اپ اندروید **`ir.fbtswap.app`** ثبت/تأیید شده است.
+1. دامنهٔ وب **`https://fbtswap.ir`**
+2. origin اپ Capacitor یعنی **`https://localhost`**
+3. شناسهٔ اپ اندروید **`ir.fbtswap.app`**
 
 این سه مقدار را کنار هم نگه دارید: رله درخواست وب را از دامنهٔ واقعی و درخواست
 APK را از origin داخلی WebView می‌بیند، ولی metadata نمایشی هر دو مسیر عمداً
-`https://fbtswap.ir` است. اعمال تغییرات allowlist در رله ممکن است تا ۱۵ دقیقه
-طول بکشد.
+`https://fbtswap.ir` است. `http://localhost:5173` فقط برای تست مرورگری محلی
+است و در صورت نیاز باید جداگانه به allowlist توسعه اضافه شود؛ جای
+`https://localhost` مربوط به APK را نمی‌گیرد. اعمال تغییرات allowlist در رله
+ممکن است تا ۱۵ دقیقه طول بکشد.
 
 **Dashboard API Secret خصوصی است.** این پروژه در کد فعلی هیچ endpoint سروری
 از Dashboard API را مصرف نمی‌کند، پس Secret نباید در سورس، فایل env عمومی،

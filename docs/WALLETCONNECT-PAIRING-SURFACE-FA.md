@@ -8,7 +8,7 @@
 
 > وضعیت: کد در همین شاخه عوض شد. تست‌ها: `272/272` در گروه WalletConnect.
 > بیلد پروداکشن: موفق (`vite build`، کلیدهای جدید pairing داخل باندل دیده شد).
-> پروژهٔ والت‌کانکت: `8e36eccabebf5a4567f4e974fafd6b20`
+> پروژهٔ والت‌کانکت: `5997d5aee8bb42f43ddec4b1a5f94eb1`
 
 ---
 
@@ -20,7 +20,7 @@
 
 | درخواست | جواب |
 |---|---|
-| `explorer-api.walletconnect.com/v3/wallets?projectId=8e36ecca…6b20` | لیست کامل کیف پول‌ها (Trust، MetaMask، …) |
+| `explorer-api.walletconnect.com/v3/wallets?projectId=5997d5ae…94eb1` | لیست کامل کیف پول‌ها (Trust، MetaMask، …) |
 | همان درخواست با یک آی‌دی الکی (`deadbeef…`) | `{"error":"Project id is not valid"}` |
 
 یعنی API والت‌کانکت آی‌دی ما را می‌شناسد و آی‌دی نامعتبر را رد می‌کند.
@@ -39,7 +39,7 @@
 
 ### ج) دو شناسه‌ای که فرستادی
 
-* `8e36eccabebf5a4567f4e974fafd6b20` — همین **پروژهٔ WalletConnect** است که
+* `5997d5aee8bb42f43ddec4b1a5f94eb1` — همین **پروژهٔ WalletConnect** است که
   باندل مرورگر/APK لازم دارد. در `src/context/WalletContext.jsx` ثابت است.
 * `1d722c2b-605b-4fe8-984c-e842c628d0f8` (App kit) و
   `2dfa57bc-736f-44cd-be3b-82986e516943` (Dashboard API) — این‌ها
@@ -137,7 +137,7 @@ SDK برای دادنِ pairing URI به مودال نیازی ندارد: خو�
 3. **نشست‌های قدیمی را پاک کن**: در Trust و MetaMask، بخش
    Connected sites / WalletConnect sessions، هر اتصال fbtswap/lawpoetics را
    حذف کن.
-4. **داشبورد Reown** (`dashboard.reown.com` → پروژهٔ `8e36ecca…6b20`):
+4. **داشبورد Reown** (`dashboard.reown.com` → پروژهٔ `5997d5ae…94eb1`):
    Allowed Domains شامل `https://fbtswap.ir` **و** `https://localhost`
    (origin داخلی WebView اندروید) باشد، و App IDs شامل `ir.fbtswap.app`.
    تغییرات allowlist تا ~۱۵ دقیقه روی رله زمان می‌برد.

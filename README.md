@@ -298,7 +298,7 @@ app's server in any of them:
 | **In-app wallet** | 12-word seed generated on-device, AES-GCM encrypted | Small amounts only — see the warning below. |
 
 The official FBT Reown/WalletConnect project ID is
-**`8e36eccabebf5a4567f4e974fafd6b20`**. It is public by design and is pinned as
+**`5997d5aee8bb42f43ddec4b1a5f94eb1`**. It is public by design and is pinned as
 the single `WC_PROJECT_ID` constant in `src/context/WalletContext.jsx`; the web,
 local and APK builds therefore cannot silently select different projects.
 `VITE_WALLETCONNECT_PROJECT_ID` is retired and is deliberately ignored.

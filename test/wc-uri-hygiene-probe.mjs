@@ -91,7 +91,7 @@ const TRUST_WALLET_OBJECT = {
 function measurePairingUri() {
   const script = `
 import { Core } from '@walletconnect/core';
-const core = new Core({ projectId: '8e36eccabebf5a4567f4e974fafd6b20', relayUrl: 'wss://relay.walletconnect.com' });
+const core = new Core({ projectId: '5997d5aee8bb42f43ddec4b1a5f94eb1', relayUrl: 'wss://relay.walletconnect.com' });
 for (const m of ['connect', 'transportOpen', 'subscribe', 'publish', 'restartTransport', 'transportClose']) {
   if (typeof core.relayer[m] === 'function') core.relayer[m] = async () => (m === 'subscribe' ? 'topic' : undefined);
 }
