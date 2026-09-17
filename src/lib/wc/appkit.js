@@ -34,6 +34,7 @@ import {
 
 /** The exact wrapper installed on the controllers singleton, so re-applying is a no-op. */
 let installed = null;
+let corePatched = false;
 
 /**
  * The pairing URI of the LIVE attempt.
@@ -86,35 +87,115 @@ export async function resetPairingState() {
 }
 
 /**
+ * Patch CoreHelperUtil to NEVER use _self — the root cause of the dApp
+ * disappearing and landing on https://uniswap.org/app/wc?uri=... after back.
+ * _self replaces this document, killing the relay socket and the pending
+ * connect() promise. _blank preserves the dApp.
+ */
+async function patchCoreHelper() {
+  if (corePatched) return true;
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const core = controllers?.CoreHelperUtil;
+    if (!core) return false;
+    // Force _blank for all wallet opens
+    const origOpenHref = core.openHref;
+    if (typeof origOpenHref === 'function' && !core.__fbtPatched) {
+      core.openHref = function patchedOpenHref(href, target, features) {
+        try {
+          // Always _blank for wallet hand-offs
+          return origOpenHref.call(this, href, '_blank', features || 'noreferrer noopener');
+        } catch {
+          try { window?.open?.(href, '_blank', 'noreferrer noopener'); } catch {}
+          return null;
+        }
+      };
+      core.__fbtPatched = true;
+    }
+    const origGetTarget = core.getOpenTargetForPlatform;
+    if (typeof origGetTarget === 'function' && !core.__fbtTargetPatched) {
+      core.getOpenTargetForPlatform = function patchedGetTarget() {
+        return '_blank';
+      };
+      core.__fbtTargetPatched = true;
+    }
+    corePatched = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Wrap `ConnectionControllerUtil.onConnectMobile` — the one place AppKit knows
  * which wallet row the user tapped.
  *
- * Two narrow jobs, no mutation of AppKit's wallet object, URI, encoding or
- * target:
- *
+ * Three jobs:
  *   1. remember the wallet, so a bare `wc:` open can be completed into that
  *      wallet's native link instead of being handed to a WebView;
  *   2. reconcile AppKit's pairing state with the LIVE pairing before the SDK
  *      builds the hand-off link — see `resetPairingState`.
+ *   3. attempt a synchronous open via our own handoff logic FIRST, so the
+ *      user gesture is preserved and popup-blocker does not kill it.
+ *      If sync fails, fall back to the original (which is now patched to _blank).
  */
 export async function installConnectPatch() {
   try {
+    await patchCoreHelper();
     const controllers = await import('@reown/appkit-controllers');
     const util = controllers?.ConnectionControllerUtil;
+    const connCtrl = controllers?.ConnectionController;
     if (!util || typeof util.onConnectMobile !== 'function') return false;
     if (installed && util.onConnectMobile === installed) return true;
 
     const original = util.onConnectMobile;
+
+    // Import sync opener statically for the wrapper closure
+    let syncOpener = null;
+    try {
+      const handoff = await import('./handoff.js');
+      syncOpener = handoff.openWalletLinkSync;
+    } catch { syncOpener = null; }
+
     const wrapper = function onConnectMobile(wallet, wcPayUrl) {
       rememberTappedWallet(wallet);
       try {
-        const stateUri = controllers.ConnectionController?.state?.wcUri;
+        const stateUri = connCtrl?.state?.wcUri;
         if (livePairingUri && stateUri !== livePairingUri) {
-          controllers.ConnectionController.setUri(livePairingUri);
+          connCtrl.setUri(livePairingUri);
         }
       } catch {
         /* the state shape changed — the original call still runs below */
       }
+
+      // Try synchronous open with our own logic FIRST
+      try {
+        const uri = connCtrl?.state?.wcUri || livePairingUri || '';
+        const known = walletForObject(wallet);
+        if (uri && known && syncOpener) {
+          const links = walletLinks(known, uri);
+          if (links.native) {
+            const ok = syncOpener(links.native, {
+              pairingUri: uri,
+              wallet: known,
+              walletPackage: known.androidPackage || '',
+              fallbackUrl: links.universal || '',
+              view: typeof window !== 'undefined' ? window : null
+            });
+            if (ok) {
+              // Still set the wcLinking/recentWallet state so AppKit UI shows "Continue"
+              try {
+                connCtrl.setWcLinking?.({ name: wallet.name, href: links.native });
+                connCtrl.setRecentWallet?.(wallet);
+              } catch {}
+              return;
+            }
+          }
+        }
+      } catch {
+        /* sync open failed — fall through to original */
+      }
+
       return original.call(util, withLinkMode(wallet), wcPayUrl);
     };
     util.onConnectMobile = wrapper;

@@ -522,24 +522,81 @@ export function WalletProvider({ children }) {
     setConnecting(true);
     const connectGuard = holdRefreshGuard('email-connect');
     try {
-      /* One wallet at a time: anything already attached is retired first. */
       if (eip1193Ref.current || wcRef.current?.provider) disconnectRef.current();
       setEmailModalActive(true);
-      const result = await openEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+      let result = await openEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+
+      // If provider is missing but address exists, retry a few times — slow WebViews
+      if (result.ok && !result.provider && result.address) {
+        wcEvent('email_retry_provider');
+        for (let i = 0; i < 5; i += 1) {
+          await new Promise((r) => setTimeout(r, 600));
+          try {
+            const { getAppKit } = await import('../lib/wc/embedded.js');
+            const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+            const p = modal.getWalletProvider?.() || modal.getWalletProvider?.('eip155') || modal.getProvider?.('eip155') || null;
+            if (p) { result = { ...result, provider: p }; break; }
+          } catch { /* retry */ }
+        }
+      }
+
       if (!result.ok) {
+        // Special case: we have address but no provider yet — keep marker so next cold start retries
+        if (result.address) {
+          setEmailMarker(true);
+          wcEvent('email_address_without_provider');
+          // Try to attach with whatever we have, or at least set address
+          if (result.provider) {
+            const attached = await attachExternal({
+              eip: result.provider,
+              address: result.address,
+              chainId: null,
+              mode: 'email'
+            });
+            if (attached) return true;
+          }
+          // Even without provider, set address so UI shows connected, and restore will pick up provider later
+          setMode('email');
+          setAddress(result.address);
+          setChainId(DEFAULT_CHAIN);
+          setLocked(false);
+          return true;
+        }
         setError(result.code === 'CONNECT_FAILED' ? 'CONNECT_FAILED' : result.code);
         return false;
       }
-      const attached = await attachExternal({
+
+      // Normal path with provider
+      let attached = await attachExternal({
         eip: result.provider,
         address: result.address,
         chainId: null,
         mode: 'email'
       });
-      if (attached) setEmailMarker(true);
-      else setError('CONNECT_FAILED');
+
+      // Retry attach once if first fails (provider may need a tick)
+      if (!attached && result.provider && result.address) {
+        await new Promise((r) => setTimeout(r, 800));
+        attached = await attachExternal({
+          eip: result.provider,
+          address: result.address,
+          chainId: null,
+          mode: 'email'
+        });
+      }
+
+      if (attached) {
+        setEmailMarker(true);
+        wcEvent('email_connected_final');
+      } else {
+        // Keep marker even on attach fail — next restore may succeed
+        if (result.address) setEmailMarker(true);
+        setError('CONNECT_FAILED');
+        wcEvent('email_attach_failed_final');
+      }
       return attached;
-    } catch {
+    } catch (e) {
+      wcEvent('email_connect_exception');
       setError('CONNECT_FAILED');
       return false;
     } finally {

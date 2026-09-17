@@ -26,7 +26,7 @@
 import { PAIRING_TTL_MS, RELAY_URLS, TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
 import { chainFromSession } from './chain.js';
 import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
-import { installWalletOpenBridge, openWalletLink } from './handoff.js';
+import { installWalletOpenBridge, openWalletLink, openWalletLinkSync } from './handoff.js';
 import { measureRelay, clearRelayCache } from './relay.js';
 import { hasStoredSession, purgeConnectionKeys } from './storage.js';
 import { cancelSwitch, classifyConnectError, isModalError, isRelayError, withTimeout } from './timing.js';
@@ -350,11 +350,30 @@ export function createWcSession({
 
       /* LAST METRE: own the URL the modal hands to the phone, so the hand-off
          never navigates this document (which would take the relay socket and
-         the pending connect() promise with it). */
+         the pending connect() promise with it).
+         
+         CRITICAL FIX: The bridge must attempt synchronous open FIRST to preserve
+         the user gesture (popup-blocker). The previous async-only path caused
+         window.open to be called outside the gesture, getting blocked, then
+         falling back to location.assign which destroyed fbtswap.ir and sent
+         the user to https://uniswap.org/app/wc?uri=... — exactly the reported bug.
+      */
       uninstallBridge = installWalletOpenBridge({
         openWallet: (url, opts) => {
+          if (opts?._syncAlreadySucceeded) {
+            if (opts?.repaired) wcEvent('deeplink_uri_repaired');
+            wcEvent(opts?.rewritten ? 'deeplink_rewritten_sync' : 'deeplink_opened_sync');
+            return;
+          }
           if (opts?.repaired) wcEvent('deeplink_uri_repaired');
           wcEvent(opts?.rewritten ? 'deeplink_rewritten' : 'deeplink_opened');
+          // Try sync again (in case bridge's sync missed)
+          try {
+            if (openWalletLinkSync(url, opts)) {
+              wcEvent('deeplink_opened_sync_fallback');
+              return;
+            }
+          } catch { /* fall through to async */ }
           openWalletLink(url, opts).then(
             (ok) => { if (!ok) wcEvent('deeplink_open_failed'); },
             () => wcEvent('deeplink_open_failed')

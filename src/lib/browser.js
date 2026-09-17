@@ -71,10 +71,21 @@ export function isSafeUrl(raw) {
  * normal tab on the web — in that order, so the page the user lands on is always
  * rendered by a browser they can trust rather than by a frame we drew.
  *
+ * @param {string} url
+ * @param {object} [opts]
+ * @param {string} [opts.toolbarColor]
+ * @param {boolean} [opts.allowSameTabFallback=true] - if false, never do
+ *   location.assign. For wallet pairing links, same-tab navigation destroys
+ *   fbtswap.ir and lands on https://uniswap.org/app/wc?uri=... — the exact
+ *   bug reported. Wallet links must set this false.
  * @returns {Promise<boolean>} false when the URL was rejected as unsafe.
  */
-export async function openUrl(url, { toolbarColor = '#0a0c12' } = {}) {
+export async function openUrl(url, { toolbarColor = '#0a0c12', allowSameTabFallback = true } = {}) {
   if (!isSafeUrl(url)) return false;
+
+  // Wallet pairing URLs must never trigger same-tab navigation, even if popup blocked
+  const isWalletPairing = /[?&]uri=wc%3A/i.test(String(url)) || /\/wc\?uri=/i.test(String(url));
+  const allowFallback = allowSameTabFallback && !isWalletPairing;
 
   // Inside Telegram, its own opener keeps the Mini App alive underneath.
   const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null;
@@ -94,10 +105,9 @@ export async function openUrl(url, { toolbarColor = '#0a0c12' } = {}) {
   }
 
   if (typeof window !== 'undefined') {
-    // noopener is not optional: without it the opened page gets a handle to
-    // our window object via window.opener and can navigate us somewhere else.
     const opened = window.open(url, '_blank', 'noopener,noreferrer');
     if (opened) return true;
+    if (!allowFallback) return false;
     /*
      * `window.open` returned null: a pop-up blocker refused it. That happens
      * easily here because this function awaits a dynamic import first, and
@@ -106,6 +116,7 @@ export async function openUrl(url, { toolbarColor = '#0a0c12' } = {}) {
      * the user taps "Continue to provider" and the app appears dead. Falling
      * back to a same-tab navigation is always permitted; checkout pages we
      * hand off to carry a finalUrl that brings the user back afterwards.
+     * EXCEPTION: wallet pairing links must NOT fallback to same-tab — see above.
      */
     try {
       window.location.assign(url);

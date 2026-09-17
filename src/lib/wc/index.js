@@ -74,7 +74,8 @@ export {
   handOffChannel,
   installWalletOpenBridge,
   isAndroidView,
-  openWalletLink
+  openWalletLink,
+  openWalletLinkSync
 } from './handoff.js';
 
 export {
