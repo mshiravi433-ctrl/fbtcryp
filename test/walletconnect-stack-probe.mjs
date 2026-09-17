@@ -48,6 +48,7 @@ import {
   withTimeout
 } from '../src/lib/wc/index.js';
 import { createWcSession } from '../src/lib/wc/session.js';
+import { TIMEOUT } from '../src/lib/wc/config.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
 import { awaitAccount, emailOptions, rearmSdkLoginMarker, rollback as rollbackEmailMarker } from '../src/lib/wc/embedded.js';
 import { wcEvent, wcTraceReset, wcTraceSnapshot } from '../src/lib/wc/trace.js';
@@ -314,6 +315,7 @@ export default async function run() {
 
   /* ══════════════════ 6. relay measurement (fake sockets) ═════════════════ */
   {
+    t('relayProbe exceeds the largest measured real-device handshake', TIMEOUT.relayProbe > 4_344);
     const openSocket = class {
       constructor(url) { this.url = url; setTimeout(() => this.onopen?.(), 5); }
       close() {}
@@ -569,8 +571,18 @@ export default async function run() {
       summarizeProjectConfig({ features: { social_login: { isEnabled: true, config: ['email'] } } }).email === true);
     t('an unknown shape says so instead of claiming email is off',
       summarizeProjectConfig({}).shape === 'none');
-    t('a withheld list is null, never an empty one',
-      summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true }] }).config === null);
+    const fallback = summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true, config: null }] });
+    t('a dashboard list is identified as dashboard-sourced', fromArray.source === 'dashboard' && fromArray.configKind === 'list');
+    t('null config uses the local AppKit settings',
+      fallback.source === 'local' && fallback.configKind === 'null' && fallback.email === true
+        && fallback.socials.length > 0 && fallback.requested.email === true);
+    const absent = summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true }] });
+    t('an absent config is distinct from null and turns the feature off',
+      absent.source === 'off' && absent.configKind === 'absent' && absent.email === false);
+    t('a withheld list is null, never an empty one', fallback.config === null);
+    t('an unknown shape is still reported without pretending it is a list',
+      summarizeProjectConfig({ features: 42 }).shape === 'none'
+        && summarizeProjectConfig({ features: 42 }).configKind === 'absent');
 
     const openSocket = class {
       constructor() { setTimeout(() => this.onopen?.(), 3); }

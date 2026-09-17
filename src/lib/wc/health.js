@@ -18,7 +18,7 @@
 
 import { HEALTH_SDK_VERSION, SECURE_SITE_URL, W3M_API_URL, WC_PROJECT_ID } from './config.js';
 import { measureRelay, probeReachable } from './relay.js';
-import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY } from './embedded.js';
+import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY, emailOptions } from './embedded.js';
 import { isConnectionKey } from './storage.js';
 import { TIMEOUT } from './config.js';
 
@@ -55,7 +55,7 @@ function apiUrl(path, projectId, sdkVersion) {
  * reported as null rather than as an empty list, so "the dashboard withheld the
  * list" can never be mistaken for "every social is off".
  */
-export function summarizeProjectConfig(payload) {
+export function summarizeProjectConfig(payload, { userAgent } = {}) {
   const features = payload?.features;
   let shape = 'none';
   let feature = null;
@@ -66,13 +66,34 @@ export function summarizeProjectConfig(payload) {
     shape = 'object';
     feature = features.social_login ?? null;
   }
-  const config = Array.isArray(feature?.config) ? feature.config : null;
+
+  // Keep this in lockstep with the values actually passed to createAppKit.
+  const requested = emailOptions({ projectId: '', metadata: {} }).features;
+  const raw = feature && Object.prototype.hasOwnProperty.call(feature, 'config')
+    ? feature.config : undefined;
+  const configKind = Array.isArray(raw) ? 'list' : raw === null ? 'null' : 'absent';
+  const config = Array.isArray(raw) ? [...raw] : null;
+  const source = configKind === 'list' ? 'dashboard' : configKind === 'null' ? 'local' : 'off';
+  const enabled = source === 'local' ? true : source === 'dashboard' ? Boolean(feature?.isEnabled) : false;
+  const selected = source === 'dashboard' && enabled
+    ? config
+    : source === 'local' ? requested.socials.concat(requested.email ? ['email'] : []) : [];
+  const ua = String(userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : ''));
+  const telegram = /Telegram/i.test(ua);
+  const ios = /iPhone|iPad|iPod/i.test(ua);
+  const android = /Android/i.test(ua);
+  const mac = /Macintosh|Mac OS/i.test(ua) && !ios;
+  const socials = selected.filter((name) => name !== 'email').filter((name) => {
+    if (telegram && ios && name === 'google') return false;
+    if (telegram && mac && name === 'x') return false;
+    if (android && (name === 'facebook' || name === 'x')) return false;
+    if (!telegram && (ios || android) && name === 'facebook') return false;
+    return true;
+  });
   return {
-    email: Boolean(feature?.isEnabled) && Boolean(config?.includes('email')),
-    socials: config ? config.filter((name) => name !== 'email') : [],
-    enabled: Boolean(feature?.isEnabled),
-    config: config ? [...config] : null,
-    shape
+    shape, enabled, configKind, config, source,
+    email: enabled && selected.includes('email'), socials,
+    requested: { email: Boolean(requested.email), socials: [...requested.socials] }
   };
 }
 
