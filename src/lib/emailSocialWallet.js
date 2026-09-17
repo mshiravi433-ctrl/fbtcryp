@@ -242,6 +242,24 @@ export function emailSocialOptions(projectId, metadata) {
       socials: [...SOCIAL_PROVIDERS],
       emailShowWallets: false
     },
+    /* THE WALLET SURFACE BELONGS TO THE WALLETCONNECT MODAL — measured in
+       @reown/appkit-scaffold-ui@1.8.19, w3m-connect-view.walletListTemplate():
+
+             const isEnableWallets = this.enableWallets;   // OptionsController
+             if (!isEnableWallets) return null;
+
+       `enableWallets` is a TOP-LEVEL createAppKit option (appkit-base-client:
+       `OptionsController.setEnableWallets(options.enableWallets !== false)` —
+       DEFAULT TRUE). Without it this modal renders the "Continue with a
+       wallet" row and, on mobile, ModalController.open()'s
+       `RouterController.reset('AllWallets')` list — rows that CANNOT connect
+       here: `ConnectionControllerUtil.onConnectMobile()` is
+       `if (wallet?.mobile_link && wcUri)` and this instance never pairs, so
+       `wcUri` is undefined and every tap is a SILENT no-op. That dead-end list
+       is precisely the «پاپ‌آپ ایمیل گزینهٔ دریافت کیف پول دارد ولی بعدش هیچ
+       کیفی وصل نمی‌شود» report. Email and social rows are independent of this
+       flag (emailTemplate/socialListTemplate) and stay on. */
+    enableWallets: false,
     enableInjected: false,
     enableCoinbase: false,
     enableEIP6963: false,
@@ -251,14 +269,32 @@ export function emailSocialOptions(projectId, metadata) {
 
 /**
  * The pre-open re-assertION the shared-singleton contract requires (see the
- * header). updateOptions shallow-merges, so passing `features` replaces the
- * object wholesale — a complete, deterministic description of this surface.
- * Returns true when the assertion actually ran (falsy modal → false, so the
- * caller can trace it instead of believing it happened).
+ * header). updateOptions shallow-merges (`Object.assign(state, options)` in
+ * OptionsController.setOptions), so passing `features` replaces the object
+ * wholesale — a complete, deterministic description of this surface. Returns
+ * true when the assertion actually ran (falsy modal → false, so the caller
+ * can trace it instead of believing it happened).
+ *
+ * `manualWCControl` and `enableWallets` are re-asserted here too, because
+ * BOTH are shared-singleton state the WalletConnect surface flips:
+ *
+ *   • manualWCControl:true (set by the ethereum-provider's AppKit) hijacks
+ *     this modal's open() — ModalController.open() checks it BEFORE the
+ *     requested view and routes MOBILE devices to `AllWallets` regardless of
+ *     the `{ view: 'Connect' }` we asked for. That is the report of the email
+ *     popup opening on a wallet list instead of the email box.
+ *   • enableWallets:true (AppKit's default) renders the wallet rows this
+ *     instance can never connect (see emailSocialOptions — onConnectMobile
+ *     needs wcUri, which only a WalletConnect pairing creates).
+ *
+ * Both belong to THIS surface while its modal is open; applyAppKitWalletLinks()
+ * asserts the WC values back before any WalletConnect open.
  */
 export function reassertEmailFeatures(modal) {
   if (!modal || typeof modal.updateOptions !== 'function') return false;
   modal.updateOptions({
+    manualWCControl: false,
+    enableWallets: false,
     features: {
       email: true,
       socials: [...SOCIAL_PROVIDERS],
@@ -267,6 +303,7 @@ export function reassertEmailFeatures(modal) {
   });
   return true;
 }
+
 
 /** Read the boot marker (fake-storage friendly, like lib/wcStorage.js). */
 export function hasEmailSocialMarker(storage) {

@@ -104,6 +104,14 @@ export default async function run() {
       && options.enableCoinbase === false
       && options.enableEIP6963 === false
       && options.enableWalletConnect === false);
+  /* THE DEAD-END WALLET LIST. enableWallets defaults TRUE in AppKit 1.8.19
+     (`options.enableWallets !== false` in appkit-base-client); with it on,
+     the email modal renders the "Continue with a wallet" rows whose taps are
+     silent no-ops here — ConnectionControllerUtil.onConnectMobile() needs
+     state.wcUri and this instance never pairs. w3m-connect-view
+     .walletListTemplate() returns null when it is off. */
+  t('the wallet surface is OFF in the email instance (its rows can never connect here)',
+    options.enableWallets === false);
   t('manualWCControl is never set — connections here belong to AppKit',
     !('manualWCControl' in options));
   t('the default network leads and the project id + metadata pass through',
@@ -241,6 +249,16 @@ export default async function run() {
         && OptionsController.state.features?.email === true
         && OptionsController.state.features?.emailShowWallets === false
         && (OptionsController.state.features?.socials || []).length === SOCIAL_PROVIDERS.length);
+    /* THE OTHER HALF OF THE TRUCE: manualWCControl:true (set by the
+       ethereum-provider's AppKit) hijacks ModalController.open() BEFORE the
+       requested view — on mobile it routes to AllWallets regardless of the
+       { view: 'Connect' } this surface asks for — and enableWallets:true
+       renders the dead wallet rows. Both must be forced back here. */
+    OptionsController.setOptions({ manualWCControl: true, enableWallets: true });
+    t('re-asserting flips the shared manualWCControl/enableWallets back off for this surface',
+      reassertEmailFeatures(modal) === true
+        && OptionsController.state.manualWCControl === false
+        && OptionsController.state.enableWallets === false);
     t('re-asserting is honest about a missing instance',
       reassertEmailFeatures(null) === false);
     /* Leave no feature residue for probes that run afterwards in-process. */
