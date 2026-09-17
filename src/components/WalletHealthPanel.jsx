@@ -114,11 +114,12 @@ export default function WalletHealthPanel({ projectId }) {
                   status: report.projectConfig?.status
                 },
                 features
-                  /* The dashboard's own answer, printed as it is — including the
-                     socials LIST, because «socials=0» and «socials=7» are the
-                     difference between a dashboard setting and a bug hunt. */
-                  ? `email=${String(features.email)} socials=${(features.socials || []).length}`
-                    + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`
+                  ? (features.source === 'local'
+                    ? 'از تنظیمات محلی برنامه (داشبورد لیستی نفرستاده)'
+                    : features.source === 'off'
+                      ? 'خاموش: پیکربندی social_login غایب است'
+                      : `از داشبورد: email=${String(features.email)} socials=${(features.socials || []).length}`
+                        + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`)
                   : 'OK'
               )}
               {row(

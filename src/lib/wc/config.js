@@ -63,7 +63,9 @@ export const W3M_API_URL = 'https://api.web3modal.org';
  * short fuse on every host would cut a healthy but slow pairing.
  */
 export const TIMEOUT = Object.freeze({
-  relayProbe: 5_000,
+  /* 2026-09-17: Samsung Internet 30 / Android 10 measured .org at 4344ms;
+     5s was too close to the edge, so leave handshake headroom. */
+  relayProbe: 8_000,
   relayCacheTtl: 90_000,
   initFirst: 8_000,
   initLast: 20_000,
