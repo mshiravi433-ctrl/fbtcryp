@@ -18,7 +18,7 @@
 
 import { HEALTH_SDK_VERSION, SECURE_SITE_URL, W3M_API_URL, WC_PROJECT_ID } from './config.js';
 import { measureRelay, probeReachable } from './relay.js';
-import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY } from './embedded.js';
+import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY, emailOptions } from './embedded.js';
 import { isConnectionKey } from './storage.js';
 import { TIMEOUT } from './config.js';
 
@@ -41,38 +41,181 @@ function apiUrl(path, projectId, sdkVersion) {
 }
 
 /**
- * Read the dashboard's answer the way the SDK does.
+ * The `features` object THIS APP hands `createAppKit()`.
  *
- * `ConfigUtil`'s email rule is
- * `Boolean(apiConfig.isEnabled) && apiConfig.config.includes('email')`, and its
- * socials rule is the same list minus that literal. The live endpoint answers
- * with `features: [ {id, isEnabled, config}, … ]` — an ARRAY — so reading
- * `features.social_login` as an object reports `email=false` for a project whose
- * live answer has it enabled. Both shapes are read, and `shape` is reported so a
- * future payload change shows up as `shape:"none"` instead of as "email is off".
- *
- * `config: null` is a real answer too (the SDK falls back to defaults) and is
- * reported as null rather than as an empty list, so "the dashboard withheld the
- * list" can never be mistaken for "every social is off".
+ * Read from `emailOptions()` — the one place that decides what we ask the SDK
+ * for — instead of a copy written here, so the panel can never drift behind the
+ * settings it is describing. Cached because both values are constants.
  */
-export function summarizeProjectConfig(payload) {
+let localRequest = null;
+function localFeatureRequest() {
+  if (!localRequest) {
+    const features = emailOptions({ projectId: '', metadata: null }).features ?? {};
+    localRequest = {
+      email: features.email === true,
+      socials: Array.isArray(features.socials) ? [...features.socials] : []
+    };
+  }
+  return { email: localRequest.email, socials: [...localRequest.socials] };
+}
+
+/**
+ * The four platform facts AppKit's social filter reads.
+ *
+ * Mirrors `CoreHelperUtil` (`@reown/appkit-controllers`) exactly, including the
+ * two details that are easy to guess wrong: `isMobile()` ALSO trusts a
+ * `(pointer:coarse)` matchMedia, and `isMac()` is NOT gated on `isMobile()` —
+ * it is `ua.includes('macintosh') && !ua.includes('safari')`, so a Telegram
+ * desktop build matches it. Everything is injectable so a report that arrived
+ * from a device can be replayed here.
+ */
+export function platformFlags(env = {}) {
+  const raw = String(env.userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '') ?? '');
+  const ua = raw.toLowerCase();
+  const coarse = env.pointerCoarse
+    ?? (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? Boolean(window.matchMedia('(pointer:coarse)')?.matches)
+      : false);
+  const inTelegram = env.telegram
+    ?? (typeof window !== 'undefined'
+      && Boolean(window.TelegramWebviewProxy || window.Telegram || window.TelegramWebviewProxyProto));
+  /* The SDK's own pattern, run against the ORIGINAL case — it is not
+     case-insensitive, and lowercasing the UA first would silently drop
+     `webOS` and `Opera Mini` from the match. */
+  const mobile = Boolean(coarse) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|Opera Mini/u.test(raw);
+  return {
+    mobile,
+    android: mobile && ua.includes('android'),
+    ios: mobile && (ua.includes('iphone') || ua.includes('ipad')),
+    mac: ua.includes('macintosh') && !ua.includes('safari'),
+    telegram: Boolean(inTelegram)
+  };
+}
+
+/**
+ * `OptionsUtil.filterSocialsByPlatform()` — the same rules in the same order.
+ *
+ * `OptionsController.setRemoteFeatures()` runs it over whatever
+ * `ConfigUtil.processFeature()` produced, so the list a device actually renders
+ * is NOT the list the dashboard (or we) supplied: Telegram-iOS loses `google`,
+ * Telegram-Mac loses `x`, Telegram-Android loses `facebook` and `x`, and every
+ * mobile browser loses `facebook`.
+ */
+export function filterSocialsByPlatform(socials, flags = platformFlags()) {
+  if (!Array.isArray(socials) || socials.length === 0) return [];
+  let out = socials;
+  if (flags.telegram) {
+    if (flags.ios) out = out.filter((name) => name !== 'google');
+    if (flags.mac) out = out.filter((name) => name !== 'x');
+    if (flags.android) out = out.filter((name) => name !== 'facebook' && name !== 'x');
+  }
+  if (flags.mobile) out = out.filter((name) => name !== 'facebook');
+  return [...out];
+}
+
+/**
+ * Read the dashboard's answer the way the SDK does, and NAME THE SOURCE.
+ *
+ * ─── WHY THE OLD ANSWER WAS A CONFIDENT WRONG NUMBER ────────────────────────
+ * A real report (Samsung Internet 30 / Android 10) carried
+ * `{ id:'social_login', isEnabled:true, config:null }`, and this function said
+ * `email=false socials=0`. It had modelled one of the SDK's three branches.
+ * `ConfigUtil.processFeature()` in `@reown/appkit@1.8.19` is:
+ *
+ *   if (isBasic && !isAvailableOnBasic) return false;        // we send no `basic`
+ *   const apiConfig = this.getApiConfig('social_login', apiProjectConfig);
+ *   if (apiConfig?.config === null) return this.processFallbackFeature(…, localValue);
+ *   if (!apiConfig?.config)         return false;
+ *   return this.processApiFeature(…, apiConfig);
+ *
+ * So `config: null` never reaches the dashboard's `isEnabled`: AppKit falls back
+ * to OUR OWN `features` — `email: true` and our seven socials. `config` ABSENT
+ * is the opposite answer (`return false`), and the two used to share one
+ * `config: null` in the output. And in every branch the list that finally lands
+ * in `remoteFeatures.socials` is passed through the platform filter above, so
+ * even the correct list is not the rendered one.
+ *
+ * Two more shapes, from the same source, and one dashboard answer:
+ *   • `features` missing/null → `fetchRemoteFeatures()` sets
+ *     `shouldUseApiConfig = false`, so the dashboard is never read → local.
+ *   • `features` not an array → `getApiConfig()` is `apiProjectConfig?.find(…)`,
+ *     which throws on anything without `.find`; the catch in
+ *     `fetchRemoteFeatures()` then returns `DEFAULT_REMOTE_FEATURES` (email on,
+ *     the SDK's own seven socials — the same set as `SOCIAL_PROVIDERS`).
+ *   • `isEnabled: false` with a real list → off, and off because the DASHBOARD
+ *     said so, which is a different sentence from "the list was withheld".
+ *
+ * Read-only: nothing in the connect path consumes this.
+ *
+ * @param {object} [payload] the JSON of `GET /appkit/v1/config`
+ * @param {object} [env] platform overrides for `platformFlags()`
+ * @returns {{shape:'array'|'object'|'none', enabled:boolean,
+ *   configKind:'list'|'null'|'absent', config:string[]|null,
+ *   source:'dashboard'|'local'|'default'|'off', email:boolean, socials:string[],
+ *   requested:{email:boolean,socials:string[]}, platform:object}}
+ */
+export function summarizeProjectConfig(payload, env) {
+  const requested = localFeatureRequest();
+  const platform = platformFlags(env);
+
   const features = payload?.features;
   let shape = 'none';
-  let feature = null;
+  let entry = null;
   if (Array.isArray(features)) {
     shape = 'array';
-    feature = features.find((entry) => entry?.id === 'social_login') ?? null;
+    entry = features.find((item) => item?.id === 'social_login') ?? null;
   } else if (features && typeof features === 'object') {
     shape = 'object';
-    feature = features.social_login ?? null;
+    entry = features.social_login ?? null;
   }
-  const config = Array.isArray(feature?.config) ? feature.config : null;
+
+  /* `null` and `undefined` are the SDK's two opposite answers, so they are
+     never merged: only a real list is a list. */
+  const raw = entry && typeof entry === 'object' ? entry.config : undefined;
+  const configKind = Array.isArray(raw) ? 'list' : (raw === null ? 'null' : 'absent');
+  const config = Array.isArray(raw) ? [...raw] : null;
+
+  let source;
+  let email;
+  let socials;
+  if (shape !== 'array') {
+    /* No array to `.find` in: either the dashboard was not consulted at all
+       ('none') or AppKit threw reading it and used its own defaults ('object').
+       Both end up with email on and the seven built-in providers. */
+    source = shape === 'object' ? 'default' : 'local';
+    email = requested.email;
+    socials = requested.socials;
+  } else if (configKind === 'null') {
+    /* `processFallbackFeature()` → our own `features`. `isEnabled` is NOT read. */
+    source = 'local';
+    email = requested.email;
+    socials = requested.socials;
+  } else if (configKind === 'list') {
+    /* `processApi()`: `isEnabled && config.includes('email')`, and the same
+       list minus that literal — but an EMPTY list or `isEnabled:false` is
+       `false`, i.e. nothing. */
+    source = 'dashboard';
+    email = Boolean(entry.isEnabled) && raw.includes('email');
+    socials = Boolean(entry.isEnabled) && raw.length > 0 ? raw.filter((name) => name !== 'email') : [];
+  } else {
+    /* `if (!apiConfig?.config) return false;` — a truthy non-list would make
+       the SDK call `.includes` on something that is not a list, which this
+       endpoint has never sent; OFF is the honest reading of "unreadable". */
+    source = 'off';
+    email = false;
+    socials = [];
+  }
+
   return {
-    email: Boolean(feature?.isEnabled) && Boolean(config?.includes('email')),
-    socials: config ? config.filter((name) => name !== 'email') : [],
-    enabled: Boolean(feature?.isEnabled),
-    config: config ? [...config] : null,
-    shape
+    shape,
+    enabled: Boolean(entry?.isEnabled),
+    configKind,
+    config,
+    source,
+    email,
+    socials: filterSocialsByPlatform(socials, platform),
+    requested,
+    platform
   };
 }
 

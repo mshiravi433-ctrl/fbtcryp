@@ -120,8 +120,10 @@ export {
 export {
   collectWalletHealth,
   configProbeUrl,
+  filterSocialsByPlatform,
   isOriginAllowed,
   originsProbeUrl,
+  platformFlags,
   storageFacts,
   summarizeProjectConfig
 } from './health.js';

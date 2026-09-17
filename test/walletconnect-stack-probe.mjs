@@ -20,6 +20,7 @@ import {
   classifyConnectError,
   collectWalletHealth,
   decideWalletOpen,
+  filterSocialsByPlatform,
   handOffChannel,
   hasStoredSession,
   installWalletOpenBridge,
@@ -34,6 +35,7 @@ import {
   openWalletLink,
   pairingUriFromLink,
   parseChainId,
+  platformFlags,
   purgeConnectionKeys,
   repairPairingInLink,
   repairPairingUri,
@@ -49,7 +51,13 @@ import {
 } from '../src/lib/wc/index.js';
 import { createWcSession } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
-import { awaitAccount, emailOptions, rearmSdkLoginMarker, rollback as rollbackEmailMarker } from '../src/lib/wc/embedded.js';
+import {
+  SOCIAL_PROVIDERS,
+  awaitAccount,
+  emailOptions,
+  rearmSdkLoginMarker,
+  rollback as rollbackEmailMarker
+} from '../src/lib/wc/embedded.js';
 import { wcEvent, wcTraceReset, wcTraceSnapshot } from '../src/lib/wc/trace.js';
 
 /* A realistic v2 pairing URI: the punctuation is what encoding must preserve. */
@@ -559,18 +567,119 @@ export default async function run() {
       isOriginAllowed('https://evil.example', ['fbtswap.ir']) === false);
     t('no list means no answer, not a refusal', isOriginAllowed('https://fbtswap.ir', null) === null);
 
-    const arrayPayload = { features: [{ id: 'social_login', isEnabled: true, config: ['email', 'google', 'x'] }] };
-    const fromArray = summarizeProjectConfig(arrayPayload);
+    /* ─── what the project row means ─────────────────────────────────────────
+       The report that made this section grow: Samsung Internet 30 / Android 10
+       answered `{ id:'social_login', isEnabled:true, config:null }` and the
+       panel printed «email=false socials=0». `ConfigUtil.processFeature()` says
+       the opposite — `if (apiConfig?.config === null) return
+       processFallbackFeature(…)`, i.e. AppKit never looks at the dashboard and
+       uses the `features` we hand `createAppKit()`. Each path is held here. */
+    const ANDROID = {
+      userAgent: 'Mozilla/5.0 (Linux; Android 10; SM-A505F) AppleWebKit/537.36'
+        + ' (KHTML, like Gecko) SamsungBrowser/30.0 Chrome/122.0.0.0 Mobile Safari/537.36',
+      pointerCoarse: true
+    };
+    const DESKTOP = {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        + ' (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+    };
+    const listPayload = (config, isEnabled = true) => ({
+      features: [{ id: 'social_login', isEnabled, config }]
+    });
+    /* The settings themselves are the reference for every "local" answer. */
+    const asked = emailOptions({ projectId: 'pid', metadata: null }).features;
+
+    const arrayPayload = listPayload(['email', 'google', 'x']);
+    const fromArray = summarizeProjectConfig(arrayPayload, DESKTOP);
     t('the array payload shape is read the way the SDK reads it', fromArray.shape === 'array');
+    t('a real list is the dashboard answer',
+      fromArray.source === 'dashboard' && fromArray.configKind === 'list');
     t('email is on when the list carries it', fromArray.email === true);
     t('socials are the list minus email',
       fromArray.socials.length === 2 && !fromArray.socials.includes('email'));
-    t('the object shape is still read, not mis-read as off',
-      summarizeProjectConfig({ features: { social_login: { isEnabled: true, config: ['email'] } } }).email === true);
+    t('the raw list is reported as it arrived',
+      fromArray.config.length === 3 && fromArray.config[0] === 'email');
+    t('a list the dashboard switched off is off — not our local list', (() => {
+      const off = summarizeProjectConfig(listPayload(['email', 'google'], false), DESKTOP);
+      return off.source === 'dashboard' && off.email === false && off.socials.length === 0;
+    })());
+    t('an empty dashboard list is off, not the seven local providers', (() => {
+      const empty = summarizeProjectConfig(listPayload([]), DESKTOP);
+      return empty.source === 'dashboard' && empty.email === false && empty.socials.length === 0;
+    })());
+
+    /* config === null → `processFallbackFeature()` → OUR features. */
+    const withheld = summarizeProjectConfig(listPayload(null), DESKTOP);
+    t('a withheld list is null, never an empty one',
+      withheld.config === null && withheld.configKind === 'null');
+    t('a withheld list is not the dashboard answer', withheld.source === 'local');
+    t('a withheld list leaves email on — isEnabled is never read',
+      withheld.email === true && withheld.email === (asked.email === true));
+    t('a withheld list falls back to our own provider list',
+      withheld.socials.length === SOCIAL_PROVIDERS.length
+        && withheld.socials.every((name) => SOCIAL_PROVIDERS.includes(name)));
+    t('the reported source survives an isEnabled:false answer',
+      summarizeProjectConfig(listPayload(null, false), DESKTOP).email === true);
+
+    /* config ABSENT → `if (!apiConfig?.config) return false;` — the opposite. */
+    const absent = summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true }] }, DESKTOP);
+    t('a missing config field is absent, not null',
+      absent.configKind === 'absent' && absent.config === null);
+    t('a missing config field is OFF — the opposite of null',
+      absent.source === 'off' && absent.email === false && absent.socials.length === 0);
+    t('no social_login entry at all is OFF too',
+      summarizeProjectConfig({ features: [] }, DESKTOP).source === 'off');
+    t('a config that is neither a list nor null is OFF, not a guess',
+      summarizeProjectConfig(listPayload('email,google'), DESKTOP).source === 'off');
+
+    /* Shapes the SDK's `apiProjectConfig?.find(…)` cannot read. */
     t('an unknown shape says so instead of claiming email is off',
       summarizeProjectConfig({}).shape === 'none');
-    t('a withheld list is null, never an empty one',
-      summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true }] }).config === null);
+    t('no features array means the dashboard is never consulted', (() => {
+      const none = summarizeProjectConfig({}, DESKTOP);
+      return none.source === 'local' && none.email === true
+        && none.socials.length === SOCIAL_PROVIDERS.length;
+    })());
+    t('an object payload is read as AppKit reading its own defaults, not as off', (() => {
+      const object = summarizeProjectConfig(
+        { features: { social_login: { isEnabled: true, config: ['email'] } } }, DESKTOP);
+      return object.shape === 'object' && object.source === 'default' && object.email === true;
+    })());
+
+    /* The local value is READ from the settings, so the panel cannot drift. */
+    t('the requested row is the object we actually hand createAppKit',
+      withheld.requested.email === (asked.email === true)
+        && withheld.requested.socials.join(',') === [...asked.socials].join(','));
+
+    /* ─── the platform filter is part of the number ───────────────────────── */
+    t('a coarse pointer counts as mobile (CoreHelperUtil.isMobile)',
+      platformFlags({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', pointerCoarse: true }).mobile === true);
+    t('Chrome on macOS is NOT mac for the SDK — its UA says Safari',
+      platformFlags(DESKTOP).mac === false && platformFlags(DESKTOP).mobile === false);
+    t('a macOS UA without Safari is mac, without being mobile',
+      platformFlags({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' }).mac === true);
+
+    const phone = summarizeProjectConfig(listPayload(null), ANDROID);
+    t('the phone that sent the report keeps email on', phone.email === true);
+    t('a mobile browser never renders facebook',
+      phone.socials.length === SOCIAL_PROVIDERS.length - 1 && !phone.socials.includes('facebook'));
+    t('Telegram on Android also drops x', (() => {
+      const list = summarizeProjectConfig(listPayload(null), { ...ANDROID, telegram: true }).socials;
+      return !list.includes('facebook') && !list.includes('x') && list.includes('google');
+    })());
+    t('Telegram on iOS drops google', (() => {
+      const list = filterSocialsByPlatform([...SOCIAL_PROVIDERS], platformFlags({
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        telegram: true
+      }));
+      return !list.includes('google') && list.includes('facebook') === false && list.includes('x');
+    })());
+    t('Telegram on macOS drops x', !filterSocialsByPlatform(
+      [...SOCIAL_PROVIDERS], platformFlags({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15', telegram: true })
+    ).includes('x'));
+    t('a desktop browser keeps every provider we ask for',
+      summarizeProjectConfig(listPayload(null), DESKTOP).socials.length === SOCIAL_PROVIDERS.length);
+    t('the filter leaves an empty list empty', filterSocialsByPlatform([], platformFlags(ANDROID)).length === 0);
 
     const openSocket = class {
       constructor() { setTimeout(() => this.onopen?.(), 3); }
@@ -588,6 +697,9 @@ export default async function run() {
       trace: () => []
     });
     t('the report carries the project answer', report.projectConfig?.ok === true);
+    t('the report names where the project number came from',
+      report.projectConfig?.features?.source === 'dashboard'
+        && report.projectConfig?.features?.email === true);
     t('the report carries the allowlist verdict', report.allowedOrigins?.originAllowed === true);
     t('the report measures every relay host', Array.isArray(report.relays) && report.relays.length === 2);
     t('the report names a relay verdict', typeof report.relayVerdict === 'string');
@@ -654,6 +766,14 @@ export default async function run() {
       const files = ['config', 'trace', 'timing', 'uri', 'chain', 'wallets', 'handoff', 'storage', 'relay', 'session', 'embedded', 'health'];
       return files.every((f) => !/from 'react/.test(readFileSync(`src/lib/wc/${f}.js`, 'utf8')));
     })());
+    /* «email=false socials=0» was a confident wrong number: it never said that
+       AppKit had not read the dashboard at all. The row has to name the source. */
+    t('the panel prints where the project number came from',
+      /projectSourceNote/.test(panel)
+        && ['Dashboard', 'Local', 'Default', 'Off'].every((k) => panel.includes(`healthProjectSource${k}`)));
+    t('the local value is read from the settings module, never copied into the report',
+      /emailOptions\(/.test(readFileSync('src/lib/wc/health.js', 'utf8'))
+        && !/SOCIAL_PROVIDERS|emailOptions/.test(panel));
   }
 
   return rows;
