@@ -29,8 +29,51 @@ const RELAY_VERDICT_KEYS = {
   NO_MEASUREMENT: 'wallet.healthRelayNoMeasurement'
 };
 
+/** Where the project number came from → the sentence that goes with it. */
+const PROJECT_SOURCE_KEYS = {
+  dashboard: 'wallet.healthProjectSourceDashboard',
+  local: 'wallet.healthProjectSourceLocal',
+  default: 'wallet.healthProjectSourceDefault',
+  off: 'wallet.healthProjectSourceOff'
+};
+
 /** Short host name for the row — the scheme is noise in a support screenshot. */
 const hostName = (url) => String(url ?? '').replace(/^wss:\/\//, '');
+
+/**
+ * The project row's numbers, printed as measured.
+ *
+ * The socials LIST is printed too, because «socials=0» and «socials=7» are the
+ * difference between a dashboard setting and a bug hunt.
+ */
+function projectDetail(features) {
+  if (!features) return 'OK';
+  const socials = Array.isArray(features.socials) ? features.socials : [];
+  return `email=${String(features.email)} · socials=${socials.length}`
+    + `${socials.length ? ` (${socials.join(', ')})` : ''}`;
+}
+
+/**
+ * …and the sentence those numbers are useless without.
+ *
+ * `email=false socials=0` is what sent a support thread hunting a dashboard
+ * switch nobody had flipped: when the answer carries `config: null`, AppKit
+ * never reads the dashboard at all and uses the `features` WE hand
+ * `createAppKit()`. So the row names the source, and names whatever AppKit's
+ * own platform filter took away — a provider hidden on this device is not a
+ * provider the dashboard disabled.
+ */
+function projectSourceNote(features, t) {
+  const key = PROJECT_SOURCE_KEYS[features?.source];
+  const parts = key ? [t(key)] : [];
+  const requested = Array.isArray(features?.requested?.socials) ? features.requested.socials : [];
+  const shown = Array.isArray(features?.socials) ? features.socials : [];
+  const hidden = requested.filter((name) => !shown.includes(name));
+  if (hidden.length > 0) {
+    parts.push(t('wallet.healthProjectPlatformFiltered', { removed: hidden.join(', ') }));
+  }
+  return parts.join(' · ');
+}
 
 /**
  * One relay host, in measured words:
@@ -113,13 +156,15 @@ export default function WalletHealthPanel({ projectId }) {
                   error: report.projectConfig?.error,
                   status: report.projectConfig?.status
                 },
-                features
-                  /* The dashboard's own answer, printed as it is — including the
-                     socials LIST, because «socials=0» and «socials=7» are the
-                     difference between a dashboard setting and a bug hunt. */
-                  ? `email=${String(features.email)} socials=${(features.socials || []).length}`
-                    + `${features.socials?.length ? ` (${features.socials.join(', ')})` : ''}`
-                  : 'OK'
+                projectDetail(features)
+              )}
+              {report.projectConfig?.ok && features && (
+                <p
+                  className="muted"
+                  style={{ fontSize: 11, margin: '2px 0', marginInlineStart: 14 }}
+                >
+                  {projectSourceNote(features, t)}
+                </p>
               )}
               {row(
                 t('wallet.healthOrigins'),

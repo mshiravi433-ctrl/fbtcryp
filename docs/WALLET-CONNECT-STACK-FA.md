@@ -121,9 +121,13 @@ npm run test:wallet-connection      # یک فایل، کلِ ستک
 npm test                            # شاملِ همان + مانتی‌کردنِ واقعیِ شیت در jsdom
 ```
 
-- `test/walletconnect-stack-probe.mjs` — ۱۷۱ ادعا روی خودِ سورس، با جعلِ تنها
+- `test/walletconnect-stack-probe.mjs` — ۱۹۸ ادعا روی خودِ سورس، با جعلِ تنها
   مرزِ خارجی (سوکت، fetch، localStorage، window، شیءِ modalِ AppKit). بدون شبکه،
   بدون مرورگر، در کسری از ثانیه.
+- `test/wallet-health-panel.test.jsx` — پنلِ سلامت واقعاً در jsdom رندر می‌شود و
+  عددِ ردیفِ پروژه از `summarizeProjectConfig()` واقعی می‌آید (فقط شبکه جعل
+  می‌شود): جملهٔ «منبعِ عدد» و نامِ سوشالی که فیلترِ پلتفرم برداشته، روی DOM
+  سنجیده می‌شوند نه روی سورس.
 - `test/wallet-connect-sheet-probe.jsx` — شیت واقعاً مانت می‌شود (چهار ترانسپورت،
   QR، پنلِ سلامت) تا سطحی که رندر نشود، ساکت نماند.
 
@@ -142,3 +146,45 @@ npm test                            # شاملِ همان + مانتی‌کرد�
 هویتی که به والت معرفی می‌شود همیشه `publicAppUrl()` است، هرگز
 `window.location.origin` — داخل APK آن origin برابر `https://localhost` است و
 یک اپِ دیگر اصلاً نمی‌تواند آن را fetch کند.
+
+---
+
+## ۸. عددِ ردیفِ «تنظیمات پروژه» از کجا می‌آید
+
+پنلِ سلامت یک عدد می‌گوید («ایمیل روشن/خاموش، چند سوشال») و آن عدد باید **رفتارِ
+خودِ SDK** باشد، نه خوانشِ ما از JSON. مرجعِ قطعی، سورسِ نصب‌شده است
+(`@reown/appkit@1.8.19` → `ConfigUtil.processFeature()`):
+
+```js
+if (isBasic && !isAvailableOnBasic) return false;      // ما `basic` نمی‌فرستیم
+const apiConfig = this.getApiConfig('social_login', apiProjectConfig);   // ← `.find` روی آرایه
+if (apiConfig?.config === null) return this.processFallbackFeature(…, localValue);
+if (!apiConfig?.config)         return false;
+return this.processApiFeature(…, apiConfig);           // isEnabled && includes('email')
+```
+
+پس `GET /appkit/v1/config` چهار پاسخِ ممکن دارد و هر کدام عددِ دیگری می‌سازد:
+
+| پاسخِ داشبورد | `configKind` | `source` | آنچه SDK عملاً استفاده می‌کند |
+|---|---|---|---|
+| `config: ['email','google',…]` | `list` | `dashboard` | `isEnabled && config.includes('email')`؛ socials = همان لیست منهای `email` (لیستِ خالی یا `isEnabled:false` ⇒ هیچ‌کدام) |
+| `config: null` | `null` | `local` | **مقدارِ محلیِ ما** — `features` در `emailOptions()`: ایمیل روشن، هفت سوشال. `isEnabled` اصلاً خوانده نمی‌شود |
+| `config` غایب | `absent` | `off` | `false` — ایمیل و سوشال هر دو خاموش |
+| `features` آرایه نیست | — | `local` / `default` | اگر `features` نباشد، `shouldUseApiConfig` همان `false` است و داشبورد خوانده نمی‌شود؛ اگر شیء باشد، `.find` پرتاب می‌کند و `fetchRemoteFeatures` به `DEFAULT_REMOTE_FEATURES`ِ خودش برمی‌گردد |
+
+`config: null` و `config`ِ غایب **ضدِ هم‌اند** (روشن از تنظیماتِ محلی / خاموش)، پس
+در خروجی یکی نیستند: `configKind` همان تفکیک است و `config` فقط وقتی لیستِ خام را
+نگه می‌دارد که واقعاً لیست باشد.
+
+و در هر چهار حالت، فهرستی که نهایتاً در `remoteFeatures.socials` می‌نشیند از
+`OptionsUtil.filterSocialsByPlatform()` رد می‌شود
+(`OptionsController.setRemoteFeatures`) — تلگرامِ iOS ‏`google` را حذف می‌کند،
+تلگرامِ macOS ‏`x` را، تلگرامِ اندروید `facebook` و `x` را، و **هر مرورگرِ
+موبایلی** `facebook` را. یعنی روی یک گوشیِ اندرویدی، هفت سوشالِ محلی شش تا رندر
+می‌شود و آن شش‌تا «داشبورد یکی را خاموش کرده» نیست. (`state.features?.pay` هم در
+همان تابع ایمیل و سوشال را خاموش می‌کند؛ ما `pay` نمی‌فرستیم، پس بی‌اثر است.)
+
+پنل به‌جای چاپِ یک عددِ بی‌منبع، `source` را می‌گوید و نامِ هر سوشالی را که فیلترِ
+پلتفرم برداشته. مقدارِ محلی از `emailOptions()` **خوانده** می‌شود (نه یک کپیِ دستی
+در `health.js`) تا پنل هرگز از تنظیمات جا نماند. `summarizeProjectConfig()` فقط
+خواندنی است و هیچ‌جای مسیرِ اتصال صدا زده نمی‌شود.

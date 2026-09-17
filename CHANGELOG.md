@@ -1,3 +1,42 @@
+# ۲۰۲۶-۰۹-۱۷ (۳) — پنلِ سلامت: «email=false socials=0» روی گوشی‌ای که ایمیلش روشن بود
+
+> گزارشِ واقعیِ دستگاه (Samsung Internet 30 / اندروید ۱۰):
+> `"features": { "email": false, "socials": [], "enabled": true, "config": null,
+> "shape": "array" }` — با یک ✅ کنارش. همان `config: null` یعنی AppKit **اصلاً**
+> به داشبورد نگاه نمی‌کند؛ یک عددِ غلطِ مطمئن، دربارهٔ تنها چیزی که داشبورد
+> کنترلش می‌کند.
+
+- `summarizeProjectConfig()` فقط مسیرِ `processApiFeature()` را مدل کرده بود. منطقِ
+  نصب‌شده (`@reown/appkit@1.8.19` → `ConfigUtil.processFeature()`) سه شاخه دارد و
+  شاخهٔ `apiConfig?.config === null` به `processFallbackFeature()` می‌رود، یعنی
+  مقدارِ **محلیِ** ما (`features` در `emailOptions()`): ایمیل روشن و هفت سوشال.
+- `null` و «غایب» دیگر یکی نیستند: `configKind: 'list' | 'null' | 'absent'`. اولی
+  فهرستِ داشبورد است، دومی تنظیماتِ محلیِ ما، سومی `return false` (خاموش). `config`
+  فقط وقتی لیستِ خام را نگه می‌دارد که واقعاً لیست باشد.
+- فیلترِ پلتفرم هم بخشی از عدد است (`OptionsUtil.filterSocialsByPlatform()`، که
+  `OptionsController.setRemoteFeatures` روی خروجیِ `processFeature` اجرا می‌کند):
+  هر مرورگرِ موبایلی `facebook` را حذف می‌کند، تلگرامِ اندروید `facebook` و `x` را،
+  تلگرامِ iOS ‏`google` را و تلگرامِ macOS ‏`x` را. پس روی همان گوشی، هفت سوشالِ
+  محلی شش تا رندر می‌شود.
+- خروجیِ تازه `source: 'dashboard' | 'local' | 'default' | 'off'` و `requested` و
+  `platform` دارد؛ مقدارِ محلی از `emailOptions()` **خوانده** می‌شود، نه یک کپیِ
+  دستی در `health.js`، تا پنل هرگز از تنظیمات جا نماند.
+- `WalletHealthPanel.jsx` به‌جای `email=false socials=0` منبعِ عدد را می‌گوید
+  («از تنظیماتِ محلیِ برنامه — داشبورد فهرستی نفرستاده (config برابر null است)، پس
+  AppKit اصلاً آن را نمی‌خواند») و وقتی `config` غایب است دلیلِ خاموشی را. رشته‌های
+  تازه در `fa`/`en`/`ar` (بقیهٔ localeها به انگلیسی fallback می‌کنند).
+- **تست:** `test/walletconnect-stack-probe.mjs` از ۱۷۱ به ۱۹۸ ادعا — هر چهار مسیر
+  (لیست / `config: null` / غایب / shape ناشناخته) + فیلترِ پلتفرم + این که مقدارِ
+  محلی از تنظیمات خوانده می‌شود؛ به‌علاوهٔ `test/wallet-health-panel.test.jsx` که
+  خودِ پنل را در jsdom رندر می‌کند و جملهٔ منبع را روی DOM می‌سنجد. هر دو زیرِ
+  `npm run test:wallet-connection`.
+- این تابع فقط خواندنی است و در مسیرِ اتصال استفاده نمی‌شود؛ هیچ رفتارِ زمانِ
+  اجراییِ دیگری تغییر نکرد.
+
+جزئیات: بخشِ ۸ در `docs/WALLET-CONNECT-STACK-FA.md`.
+
+---
+
 # ۲۰۲۶-۰۹-۱۷ (۲) — والت‌کانکت از نو: یک ستک، یک دایرکتوری، یک تست
 
 > درخواست: «تمامی کدهای مربوط به والت‌کانکت را پاک کن … و دوباره از اول بنویس؛
