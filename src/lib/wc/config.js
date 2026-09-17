@@ -63,7 +63,14 @@ export const W3M_API_URL = 'https://api.web3modal.org';
  * short fuse on every host would cut a healthy but slow pairing.
  */
 export const TIMEOUT = Object.freeze({
-  relayProbe: 5_000,
+  /*
+   * 8s. Measured on a real phone — 2026-09-17, Samsung Internet 30 / Android 10,
+   * mobile data: wss://relay.walletconnect.org opened in 4344ms while HTTPS to
+   * the same host answered in 220ms, i.e. the wss handshake, not the network.
+   * 5s left that healthy socket at 87% of the budget, so a small hiccup read as
+   * «relay blocked». Do not lower it back to 5s: that edge is why it moved.
+   */
+  relayProbe: 8_000,
   relayCacheTtl: 90_000,
   initFirst: 8_000,
   initLast: 20_000,
