@@ -228,18 +228,20 @@ export async function openWalletLink(url, {
   // Plain `trust://wc?uri=…` via window.open('_blank') is treated as a popup on
   // some OEM Chrome builds and can be dropped; `intent://wc?uri=…#Intent;…;end`
   // is what Chrome's own docs describe for app launching and it carries
-  // S.browser_fallback_url so "not installed" routes to the universal link /
-  // Play Store instead of a blank intent error. Only for real Android views
-  // with a known package and a valid pairingUri (the wc:* topic+symKey).
+  // S.browser_fallback_url so "not installed" routes to Play Store instead of a
+  // blank intent error or a stale universal redirect (link.trustwallet.com now
+  // renders a static "Open in Trust Wallet" page that never auto-redirects).
+  // Only for real Android views with a known package and a valid pairingUri.
   if (isAndroidView(view) && walletPackage && isPairingUri(pairingUri) && wallet) {
     const schemeRaw = String(wallet.native || native || '').split('://')[0] || '';
     const scheme = schemeRaw.split(':')[0].trim().toLowerCase();
     if (scheme) {
+      const playStoreFallback = `https://play.google.com/store/apps/details?id=${encodeURIComponent(walletPackage)}`;
+      const fallbackForIntent = walletPackage ? playStoreFallback : fallback;
       const intentUrl =
         `intent://wc?uri=${encodeURIComponent(pairingUri)}` +
         `#Intent;scheme=${encodeURIComponent(scheme)};package=${encodeURIComponent(walletPackage)};` +
-        (fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : '') +
-        'end';
+        `S.browser_fallback_url=${encodeURIComponent(fallbackForIntent)};end`;
       if (open) {
         try {
           if (open(intentUrl, safeTarget, features)) return true;
