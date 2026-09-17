@@ -36,6 +36,7 @@ export {
   classifyConnectError,
   isModalError,
   isRelayError,
+  pauseBound,
   sleep,
   withTimeout
 } from './timing.js';
@@ -72,8 +73,14 @@ export {
 export {
   decideWalletOpen,
   handOffChannel,
+  handoffFacts,
   installWalletOpenBridge,
   isAndroidView,
+  isIntentCapableBrowser,
+  isIOSView,
+  isWebViewEmbed,
+  onWalletHandoff,
+  openWalletHandoff,
   openWalletLink,
   openWalletLinkSync
 } from './handoff.js';

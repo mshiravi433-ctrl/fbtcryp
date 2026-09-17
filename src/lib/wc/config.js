@@ -74,7 +74,42 @@ export const TIMEOUT = Object.freeze({
   relayCacheTtl: 90_000,
   initFirst: 8_000,
   initLast: 20_000,
-  connect: 20_000,
+
+  /*
+   * ── THE CONNECT BOUND ─────────────────────────────────────────────────
+   * Measured on the report of 2026-09-17 20:36 UTC: the wallet row was tapped
+   * 4.5s after `init`, and the attempt was killed 20s after that — while the
+   * user was standing in Trust Wallet reading the approval screen. The whole
+   * mobile round trip (app switch → unlock → read → approve → relay publish)
+   * does not fit in 20 seconds, so EVERY deep-link pairing was settled as a
+   * failure, the provider was torn down underneath it, and the failure was
+   * then classified as «the relay is unreachable» — the sentence that sent
+   * this investigation looking for VPNs for four days.
+   *
+   * Three numbers, and the difference between them is the fix:
+   *   connect         — the budget while THIS DOCUMENT is on screen. The user
+   *                     is looking at our sheet, so waiting is cheap.
+   *   connectInWallet — granted the moment a pairing is handed to a wallet
+   *                     app. From then on the clock belongs to the user, not
+   *                     to the network.
+   *   connectHardCap  — never waits past the pairing URI's own expiry. A
+   *                     pairing that can no longer be approved has to fail
+   *                     with a reason instead of spinning.
+   *
+   * And the clock PAUSES while the document is hidden (see pauseBound in
+   * timing.js): a user reading an approval in another app must not burn the
+   * dApp's patience while they decide.
+   */
+  connect: 75_000,
+  connectInWallet: 240_000,
+  connectHardCap: 300_000,
+  /*
+   * How long a tab opened for a custom scheme is allowed to live before it is
+   * closed. Chrome leaves that tab behind with the dead `trust://wc?uri=…`
+   * URL in its address bar, and it is what the user sees when they press Back
+   * out of the wallet — «I never get back to fbtswap.ir». See handoff.js.
+   */
+  handoffClose: 2_500,
   teardown: 4_000,
   emailOpen: 30_000,
   emailRestore: 30_000,

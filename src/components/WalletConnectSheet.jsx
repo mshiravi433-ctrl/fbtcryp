@@ -16,8 +16,7 @@ import {
 import {
   MOBILE_WALLETS,
   handOffChannel,
-  openWalletLink,
-  openWalletLinkSync,
+  openWalletHandoff,
   repairPairingUri,
   walletLinks,
   walletLogo,
@@ -132,6 +131,8 @@ export default function WalletConnectSheet({ open, onClose }) {
   const [err, setErr] = useState(null);
 
   const [openedWallet, setOpenedWallet] = useState(null);
+  /** Which route the last hand-off took — 'intent' | 'native' | 'universal'. */
+  const [handoffRoute, setHandoffRoute] = useState(null);
   const [copiedUri, setCopiedUri] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [pairQr, setPairQr] = useState(null);
@@ -171,6 +172,7 @@ export default function WalletConnectSheet({ open, onClose }) {
        and a button still saying "copied" would both be lying about an attempt
        that is over. */
     setOpenedWallet(null);
+    setHandoffRoute(null);
     setCopiedUri(false);
     setCopiedUrl(false);
   }, []);
@@ -200,6 +202,7 @@ export default function WalletConnectSheet({ open, onClose }) {
     if (wallet.connecting) return;
     setErr(null);
     setOpenedWallet(null);
+    setHandoffRoute(null);
     setCopiedUri(false);
     // Do NOT set view='pair' immediately — that caused the flicker of
     // "4 wallets + اتصال then Reown modal". The AppKit modal is the primary
@@ -254,6 +257,15 @@ export default function WalletConnectSheet({ open, onClose }) {
     return telegramChannel ? links.universal : links.native;
   };
 
+  /*
+   * THE TAP THAT LEAVES THE PAGE.
+   *
+   * `openWalletHandoff` fires the channel's first route SYNCHRONOUSLY — inside
+   * the gesture, where a popup blocker cannot refuse it — and only then walks
+   * the fallbacks. It also closes the tab Android leaves behind, which is why
+   * Back now comes home to fbtswap.ir instead of to a dead `trust://wc?uri=…`
+   * page. See src/lib/wc/handoff.js.
+   */
   const openWalletApp = (event, walletEntry) => {
     const links = linksForWallet(walletEntry);
     if (!links || !pairUri) {
@@ -265,29 +277,19 @@ export default function WalletConnectSheet({ open, onClose }) {
     haptic?.('light');
     wcEvent('sheet_wallet_tap');
 
-    // Synchronous attempt FIRST — preserves user gesture for popup-blocker
-    const syncOk = openWalletLinkSync(links.native, {
-      wallet: walletEntry,
-      walletPackage: walletEntry.androidPackage,
-      pairingUri: pairUri,
-      fallbackUrl: links.universal
-    });
-
-    if (syncOk) {
-      wcEvent('sheet_wallet_opened_sync');
-      return;
-    }
-
-    // Async fallback (https only, never _self)
-    openWalletLink(links.native, {
+    openWalletHandoff(links.native, {
       wallet: walletEntry,
       walletPackage: walletEntry.androidPackage,
       pairingUri: pairUri,
       fallbackUrl: links.universal
     }).then(
-      (ok) => {
-        wcEvent(ok ? 'sheet_wallet_opened' : 'sheet_wallet_open_failed');
-        if (!ok) setOpenedWallet(null);
+      (result) => {
+        setHandoffRoute(result.route);
+        if (result.ok) wcEvent('sheet_wallet_opened');
+        else {
+          wcEvent('sheet_wallet_open_failed');
+          setOpenedWallet(null);
+        }
       },
       () => {
         wcEvent('sheet_wallet_open_failed');
@@ -559,6 +561,12 @@ export default function WalletConnectSheet({ open, onClose }) {
           {wallet.error === 'WC_EXPIRED' && (
             <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcExpired')}</p>
           )}
+          {/* «The relay is unreachable» used to be printed for a timeout, which
+              is how a mobile round trip that simply did not finish became a
+              network investigation. A timeout is its own sentence now. */}
+          {wallet.error === 'WC_TIMEOUT' && (
+            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcTimeout')}</p>
+          )}
           {wallet.error === 'CONNECT_FAILED' && (
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
           )}
@@ -590,6 +598,7 @@ export default function WalletConnectSheet({ open, onClose }) {
                   target="_blank"
                   rel="noreferrer noopener"
                   aria-disabled={!pairUri}
+                  data-route={openedWallet === entry.key ? handoffRoute || 'pending' : undefined}
                   onClick={(event) => openWalletApp(event, entry)}
                   style={!pairUri ? { opacity: 0.55, pointerEvents: 'none' } : undefined}
                 >
@@ -616,6 +625,17 @@ export default function WalletConnectSheet({ open, onClose }) {
               );
             })}
           </div>
+
+          {openedWallet && pairUri && (
+            /* Two sentences the tap needs, in the order they become true:
+               what we are waiting for, and what to do when nothing opened. */
+            <div className="notice" style={{ marginTop: 10 }}>
+              <p style={{ fontSize: 12, marginBottom: 4 }}>{t('wallet.pairWaiting')}</p>
+              <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>
+                {t('wallet.pairNoOpen')}
+              </p>
+            </div>
+          )}
 
           {!pairUri && (
             <p className="notice" style={{ marginTop: 12 }}>{t('wallet.pairPreparing')}</p>

@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   MOBILE_WALLETS,
+  PAIRING_TTL_MS,
   TIMEOUT,
   androidIntentLink,
   appKitCustomWallets,
@@ -23,6 +24,7 @@ import {
   decideWalletOpen,
   filterSocialsByPlatform,
   handOffChannel,
+  handoffFacts,
   hasStoredSession,
   installWalletOpenBridge,
   isConnectionKey,
@@ -31,8 +33,11 @@ import {
   isPairingUri,
   isRelayBlocked,
   isRelayError,
+  pauseBound,
+  sleep,
   linkBase,
   looksLikePairingUri,
+  openWalletHandoff,
   openWalletLink,
   pairingUriFromLink,
   parseChainId,
@@ -323,8 +328,16 @@ export default async function run() {
       classifyConnectError({ message: 'proposal expired' }) === 'WC_EXPIRED');
     t('a stalled socket is the relay',
       classifyConnectError({ message: 'Socket stalled when trying to connect' }) === 'WC_RELAY_UNREACHABLE');
-    t('our own bound is the relay',
-      classifyConnectError({ message: 'WC_CONNECT_TIMEOUT' }) === 'WC_RELAY_UNREACHABLE');
+    /* «the relay is unreachable» used to be printed for OUR OWN timeout — the
+       2026-09-17 report shows why that matters: the relay had just issued the
+       URI the wallet was opened with, so the sentence sent the user hunting a
+       VPN while the real story was «nobody approved in time». */
+    t('our own connect bound is named as a timeout, not as the network',
+      classifyConnectError({ message: 'WC_CONNECT_TIMEOUT' }) === 'WC_TIMEOUT');
+    t('a pairing that outlived its own expiry is named as one',
+      classifyConnectError({ message: 'WC_PAIRING_EXPIRY_REACHED' }) === 'WC_TIMEOUT');
+    t('an init timeout really is the socket — nothing else happens in init()',
+      classifyConnectError({ message: 'WC_INIT_TIMEOUT' }) === 'WC_RELAY_UNREACHABLE');
     t('anything else is a plain failure', classifyConnectError({ message: 'nope' }) === 'CONNECT_FAILED');
     t('a relay error justifies a second host', isRelayError(new Error('websocket closed')));
     t('a user cancellation does NOT', !isRelayError(new Error('User rejected')));
@@ -756,7 +769,164 @@ export default async function run() {
     t('the buffer can be emptied', wcTraceSnapshot().length === 0);
   }
 
-  /* ══════════════════ 13. wiring guards (source, not behaviour) ══════════ */
+  /* ══════════════════ 13. the connect clock ══════════════════════════════
+     «The wallet opens, I approve, and nothing happens.» On 2026-09-17 20:36Z
+     the wallet row was tapped 4.5s after init and the attempt was destroyed
+     20s later — a flat fuse shorter than one mobile round trip — while the
+     user stood in Trust Wallet reading the approval. The provider was then
+     torn down from under the approval that was one tap away. */
+  {
+    const paused = pauseBound(60, 'WC_CONNECT_TIMEOUT', { hardCapMs: 1_000 });
+    let pausedMsg = null;
+    paused.promise.catch((e) => { pausedMsg = e.message; });
+    paused.pause();
+    await sleep(130);
+    t('the clock stops while the user is inside the wallet', pausedMsg === null);
+    paused.resume();
+    await sleep(140);
+    t('…and finishes the budget it had left when it resumes',
+      pausedMsg === 'WC_CONNECT_TIMEOUT');
+
+    const hard = pauseBound(10_000, 'WC_CONNECT_TIMEOUT', {
+      hardCapMs: 40,
+      hardCode: 'WC_PAIRING_EXPIRY_REACHED'
+    });
+    let hardMsg = null;
+    hard.promise.catch((e) => { hardMsg = e.message; });
+    hard.pause();
+    await sleep(90);
+    t('the hard cap still fires while paused — an attempt can never hang',
+      hardMsg === 'WC_PAIRING_EXPIRY_REACHED');
+
+    const granted = pauseBound(50, 'WC_CONNECT_TIMEOUT', { hardCapMs: 1_000 });
+    let grantedMsg = null;
+    granted.promise.catch((e) => { grantedMsg = e.message; });
+    granted.extend(400); // the pairing left for a wallet app
+    await sleep(130);
+    t('a hand-off extends the budget past the visible bound', grantedMsg === null);
+    granted.cancel();
+    await sleep(0);
+    t('cancel settles a paused attempt immediately', grantedMsg === 'WC_USER_CANCELLED');
+
+    t('the in-wallet budget is longer than one mobile round trip',
+      TIMEOUT.connectInWallet > 60_000);
+    t('the hard cap never outlives the pairing URI',
+      TIMEOUT.connectHardCap <= PAIRING_TTL_MS);
+    t('the old 20s fuse is gone', TIMEOUT.connect > 20_000);
+  }
+
+  /* ══════════════════ 14. the tab the hand-off leaves behind ═════════════
+     «When I press Back I never get to fbtswap.ir — I land on
+     trust://wc?uri=…». Chrome launched the wallet from a `_blank` custom
+     scheme and left the tab it opened sitting on the unroutable URL. */
+  {
+    const trust = walletByKey('trust');
+    const native = walletLink(trust.native, URI);
+    const universal = walletLink(trust.universal, URI);
+
+    /* `noopener` makes window.open return null BY SPECIFICATION, so every
+       attempt reported failure and the intent route was quietly skipped for
+       the raw custom scheme — the one URL that leaves a dead tab behind. */
+    const closed = [];
+    const child = { close: () => closed.push(1) };
+    const chrome = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151 Mobile' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
+    };
+    const opened = [];
+    chrome.open = (url, name, features) => { opened.push([url, name, features]); return child; };
+
+    const chromeResult = await openWalletHandoff(native, {
+      wallet: trust,
+      pairingUri: URI,
+      fallbackUrl: universal,
+      view: chrome
+    });
+    t('Android Chrome hands the pairing to the package-scoped intent',
+      chromeResult.ok && chromeResult.route === 'intent');
+    t('window.open keeps the handle, so the route is not declared dead',
+      opened[0][2] === 'noreferrer' && !String(opened[0][2]).includes('noopener'));
+    await sleep(30);
+    /* Chrome intercepts intent:// itself: nothing is left behind when it
+       resolves, and when it does not the tab is showing the install page the
+       user needs. Closing it would hide that page. */
+    t('the intent route leaves no tab to clean up', closed.length === 0);
+    /* An https destination keeps `noopener`: it is a real page on someone
+       else's origin and must not be able to navigate this tab back. */
+    const httpsSeen = [];
+    const httpsWin = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151 Mobile' },
+      document: null,
+      setTimeout: (fn) => setTimeout(fn, 1)
+    };
+    /* A handle only for the https route: the fake window has no document, so
+       the custom-scheme routes cannot fire and the walk reaches the fallback. */
+    httpsWin.open = (url, name, features) => {
+      httpsSeen.push([url, features]);
+      return String(url).startsWith('https://') ? {} : null;
+    };
+    const httpsResult = await openWalletHandoff(native, {
+      wallet: trust,
+      pairingUri: URI,
+      fallbackUrl: universal,
+      view: httpsWin
+    });
+    const httpsCall = httpsSeen.find(([url]) => String(url).startsWith('https://'));
+    t('an https destination is opened with noopener',
+      httpsResult.route === 'universal' && String(httpsCall?.[1]).includes('noopener'));
+
+    /* A wallet with no known Android package falls back to its own scheme — and
+       THAT is the tab that used to be left sitting on `trust://wc?uri=…`. */
+    const other = { key: 'other', name: 'Other Wallet', native: 'other://', universal: 'https://other.example/' };
+    const closedNative = [];
+    const openedNative = [];
+    const chromeNative = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151 Mobile' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
+    };
+    chromeNative.open = (url) => { openedNative.push(url); return { close: () => closedNative.push(1) }; };
+    const nativeResult = await openWalletHandoff(walletLink(other.native, URI), {
+      pairingUri: URI,
+      fallbackUrl: walletLink(other.universal, URI),
+      view: chromeNative
+    });
+    t('a wallet with no package falls back to its own scheme',
+      nativeResult.ok && nativeResult.route === 'native' && openedNative[0].startsWith('other://'));
+    await sleep(30);
+    t('the dead custom-scheme tab is closed behind it', closedNative.length === 1);
+
+    /* A WebView must never be handed an intent URL: nothing there intercepts
+       `intent://`, so the navigation would commit and take the dApp with it. */
+    const webviewOpened = [];
+    const webview = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; wv) Chrome/151 Mobile' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      setTimeout: (fn) => setTimeout(fn, 1)
+    };
+    webview.open = (url) => { webviewOpened.push(url); return null; };
+    const webviewResult = await openWalletHandoff(native, {
+      wallet: trust,
+      pairingUri: URI,
+      fallbackUrl: universal,
+      view: webview
+    });
+    t('a WebView is never handed an intent URL',
+      webviewOpened.every((url) => !url.startsWith('intent://')));
+    t('a WebView falls back to the wallet\'s own scheme', webviewResult.route === 'native');
+
+    /* The next report has to be able to say which hop it is standing on. */
+    const facts = handoffFacts(chrome);
+    t('the health report names the channel and whether intents work',
+      facts.channel === 'web' && facts.android === true && facts.intentCapable === true && facts.webview === false);
+    t('a WebView is reported as one, and as unable to take an intent',
+      handoffFacts(webview).webview === true && handoffFacts(webview).intentCapable === false);
+    t('the APK channel carries the Java bridge fact',
+      handoffFacts({ navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' }, FBTWalletLink: { openWallet: () => true }, Capacitor: { isNativePlatform: () => true } }).javaBridge === true);
+  }
+
+  /* ══════════════════ 15. wiring guards (source, not behaviour) ══════════ */
   {
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     const ctx = strip(readFileSync('src/context/WalletContext.jsx', 'utf8'));
