@@ -265,7 +265,7 @@
     "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs",
     "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs",
     "test:farm:public": "vitest run --config test/vitest.public.config.mjs",
-    "test:wallet-connection": "vitest run test/wallet-connection-regression.test.js && node test/wc-relay-preflight-probe.mjs"
+    "test:wallet-connection": "node test/walletconnect-stack-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
