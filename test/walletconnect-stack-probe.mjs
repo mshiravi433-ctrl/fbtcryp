@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   MOBILE_WALLETS,
+  TIMEOUT,
   androidIntentLink,
   appKitCustomWallets,
   cancelSwitch,
@@ -63,6 +64,13 @@ import { wcEvent, wcTraceReset, wcTraceSnapshot } from '../src/lib/wc/trace.js';
 /* A realistic v2 pairing URI: the punctuation is what encoding must preserve. */
 const URI = 'wc:7f6e4f2c1c9b4a4f9e2f1a0b3c4d5e6f@2?relay-protocol=irn&symKey=9f8e7d6c5b4a';
 const FULL_URI = `wc:${'a'.repeat(64)}@2?expiryTimestamp=1780000000&relay-protocol=irn&symKey=${'b'.repeat(64)}`;
+
+/* The slowest relay handshake measured on a REAL device — 2026-09-17, Samsung
+   Internet 30 / Android 10, mobile data: `wss://relay.walletconnect.org` opened
+   in 4344ms while plain HTTPS to the SAME host answered in 220ms, i.e. the cost
+   is the wss handshake and not the network. TIMEOUT.relayProbe exists to be
+   larger than this number; the assertion in §6 keeps it that way. */
+const MEASURED_RELAY_OPEN_MS = 4_344;
 
 export default async function run() {
   const rows = [];
@@ -386,6 +394,16 @@ export default async function run() {
     });
     t('every host is measured, not just the first', measured.hosts.length === 2);
     t('a measurement produces a verdict and an order', measured.verdict === 'OPEN' && measured.order.length === 2);
+
+    /* The budget is a MEASURED number, and this is the measurement it has to
+       beat: 4344ms for a healthy socket on a real phone. Under the old 5s that
+       socket burned 87% of the budget, and a small hiccup turned a working
+       relay into the verdict TIMEOUT → «رله روی این شبکه بسته است». So the
+       probe budget must clear the measured handshake WITH headroom: if someone
+       later lowers it because "8 seconds sounds like a lot", this fails and
+       says why, instead of the field finding out. */
+    t('the probe budget clears the slowest measured relay handshake with real headroom',
+      TIMEOUT.relayProbe > MEASURED_RELAY_OPEN_MS && TIMEOUT.relayProbe >= MEASURED_RELAY_OPEN_MS * 1.5);
   }
 
   /* ══════════════════ 7. chain resolution (Trust-on-Ethereum reporting 56) ═ */
