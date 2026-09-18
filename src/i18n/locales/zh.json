@@ -139,6 +139,8 @@
     "connectFailed": "连接失败或被拒绝。",
     "emailProviderPending": "邮箱登录已成功，但钱包未能在此页面完成加载。请重试或重新打开应用——你的连接并未丢失。",
     "emailProviderPendingHint": "连接会在后台继续尝试——你可以留在此页面。",
+    "emailSigningDenied": "您拒绝了签名确认，因此钱包尚未连接。系统不会自动再次询问。",
+    "emailSigningDeniedHint": "点击下方按钮再次签名 — 仅在您主动点击时，绝不会自动进行。",
     "healthUsage": "项目用量限制（邮箱）",
     "healthUsageBlocked": "项目已超出 Reown 限额——AppKit 本身会禁用邮箱输入框。请在 Reown 控制台升级套餐。",
     "wcOriginBlocked": "WalletConnect 拒绝了此应用的来源。请在 Reown 控制台确认 Allowed Domains 包含 https://fbtswap.ir 和 https://localhost，且 App IDs 包含 ir.fbtswap.app。",

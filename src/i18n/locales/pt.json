@@ -139,6 +139,8 @@
     "connectFailed": "A ligação falhou ou foi recusada.",
     "emailProviderPending": "O login por e-mail foi concluído, mas a carteira não terminou de carregar nesta página. Tente novamente ou reabra o aplicativo — sua conexão não foi perdida.",
     "emailProviderPendingHint": "A conexão continua tentando em segundo plano — você pode ficar nesta página.",
+    "emailSigningDenied": "Você recusou a confirmação de assinatura, então a carteira ainda não está conectada. Nada será solicitado novamente automaticamente.",
+    "emailSigningDeniedHint": "Toque no botão abaixo para assinar de novo — somente no seu toque, nunca automaticamente.",
     "healthUsage": "Limites de uso do projeto (e-mail)",
     "healthUsageBlocked": "O projeto excedeu o limite da Reown — o próprio AppKit desativa a caixa de e-mail. Faça upgrade do plano no painel da Reown.",
     "wcOriginBlocked": "O WalletConnect recusou a origem desta app. No painel Reown, confirme que Allowed Domains inclui https://fbtswap.ir e https://localhost, e que App IDs inclui ir.fbtswap.app.",

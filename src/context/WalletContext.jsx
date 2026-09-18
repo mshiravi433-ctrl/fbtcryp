@@ -15,9 +15,11 @@ import {
   openEmbeddedWallet,
   probeSigning,
   purgeConnectionKeys,
+  resetSigningState,
   restoreEmbeddedWallet,
   sdkSessionFacts,
   setEmailMarker,
+  signingDeniedByUser,
   storageFacts,
   wcEvent,
   wcEventDetail,
@@ -621,6 +623,17 @@ export function WalletProvider({ children }) {
       const delays = [1200, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000, 10000, 12000];
       const step = async () => {
         if (keeper.cancelled || emailKeeperRef.current !== keeper) return;
+        if (signingDeniedByUser()) {
+          /* ─── THE USER SAID NO (the 2026-09-18 sign-loop report) ─────────
+             «فرقی نمیکند اپرو را بزنی یا کنسل را باز دوباره میاره» — the old
+             keeper re-fired the signature request on every tick, so the
+             ApproveTransaction page came back no matter what the user chose.
+             A rejection is a VERDICT: the keeper stands down and only the
+             pending notice's button (a real user gesture) may ask again. */
+          wcEvent('email_keeper_stood_down');
+          stopEmailAttachKeeper();
+          return;
+        }
         try {
           if (addressRef.current) {
             /* Another path (the user's own retry, a foreground resume) already
@@ -635,7 +648,10 @@ export function WalletProvider({ children }) {
           if (address && snapshot.provider) {
             /* A LONGER bound than the inline probes: this one owns no spinner,
                and the frame it is asking is by definition slow to answer (a
-               suspended WebView, a session being rehydrated). */
+               suspended WebView, a session being rehydrated).
+               NON-INTERACTIVE BY CONTRACT: this is a background driver — it
+               gates on the frame's own `eth_accounts` grant and can never put
+               a signature dialog in front of the user. */
             const probe = await probeSigning(snapshot.provider, address, { timeoutMs: 15_000 });
             if (probe.ok) {
               const attached = await attachExternal({
@@ -702,11 +718,21 @@ export function WalletProvider({ children }) {
         return false;
       }
       if (snapshot.provider) {
-        const probe = await probeSigning(snapshot.provider, snapshot.address, { timeoutMs: 10_000 });
+        /* THE RETRY BUTTON IS A USER GESTURE — the one context allowed to ask
+           for a signature after a rejection (`force`), because a tap on
+           «تلاش دوباره» IS the user asking to be asked. A rejection here sets
+           the denial again and lands in a calm state (EMAIL_SIGNING_DENIED),
+           never in another automatic loop. */
+        const probe = await probeSigning(snapshot.provider, snapshot.address, {
+          timeoutMs: 10_000,
+          interactive: true,
+          force: true
+        });
         if (probe.ok) {
+          const attachAddress = probe.address || snapshot.address;
           const attached = await attachExternal({
             eip: snapshot.provider,
-            address: snapshot.address,
+            address: attachAddress,
             chainId: null,
             mode: 'email'
           });
@@ -716,6 +742,13 @@ export function WalletProvider({ children }) {
             wcEvent('email_retry_attach_ok');
             return true;
           }
+        } else if (probe.denied) {
+          /* The user cancelled the signature dialog — again, by choice. Show
+             the calm denial notice; NO keeper (an automatic retry would be
+             the loop this button exists to escape). */
+          wcEvent('email_sign_denied');
+          setError('EMAIL_SIGNING_DENIED');
+          return false;
         } else {
           wcEventDetail('email_sign_probe_failed', { m: probe.error });
         }
@@ -912,7 +945,12 @@ export function WalletProvider({ children }) {
         try {
           const snapshot = await embeddedAccountSnapshot();
           if (snapshot.address && snapshot.provider) {
-            const probe = await probeSigning(snapshot.provider, snapshot.address, { timeoutMs: 6_000 });
+            /* THE TAP IS A USER GESTURE, and the probe is SILENT: it gates on
+               the frame's own grant and never opens a signature dialog —
+               `force` only lets it answer through a standing denial (the user
+               is HERE, choosing to connect; a silent grant attach is the
+               least intrusive thing this tap can do). */
+            const probe = await probeSigning(snapshot.provider, snapshot.address, { timeoutMs: 6_000, force: true });
             if (probe.ok) {
               const attached = await attachExternal({
                 eip: snapshot.provider,
@@ -972,42 +1010,60 @@ export function WalletProvider({ children }) {
       }
 
       /*
-       * ─── «متصل» MEANS «CAN SIGN» (the «connected but it would not sign»
-       * half of the 2026-09-18 Telegram report) ────────────────────────────
-       * The attach used to declare success when an address appeared, and the
-       * fallback signer then claimed signing capability it had never
-       * verified — the app showed «connected» and the first personal_sign of
-       * a real swap died on the frame's «Action not allowed». So every attach
-       * attempt is GATED on a real signing probe (eth_accounts + one
-       * personal_sign of a fixed safe message — the frame's actual signing
-       * path). A provider that cannot sign is not attached as success: the
-       * state surfaces as EMAIL_PROVIDER_PENDING, which is «متصل ولی آمادهٔ
-       * امضا نیست» — with the retry button and the frame's own answer,
-       * sanitized, in the trace as `email_sign_probe_failed` with `m`. No
-       * fallback ever presents itself as signing-capable.
+       * ─── «متصل» MEANS «THE FRAME GRANTED THIS SESSION'S ACCOUNT» ──────────
+       * (the «connected but it would not sign» report, 2026-09-17, plus the
+       * sign-loop report, 2026-09-18) The attach used to declare success when
+       * an address appeared anywhere — and the first personal_sign of a real
+       * swap died on the frame's «Action not allowed». The gate is now the
+       * FRAME'S OWN eth_accounts grant — an answer only a session usable by
+       * this origin can give. ON TOP of the grant, this fresh-login path asks
+       * for ONE verified signature (interactive: true — the login itself was
+       * the user gesture). The rest of the flow (retries, keeper, restore) is
+       * silent by contract: background `personal_sign` is what opened the
+       * ApproveTransaction page over and over. A provider that has not
+       * granted the account is NOT attached as success: the state surfaces as
+       * EMAIL_PROVIDER_PENDING — with the retry button, and the frame's own
+       * sanitized answer in the trace as `email_sign_probe_failed`/`m`. A
+       * user cancellation surfaces as EMAIL_SIGNING_DENIED — and nothing asks
+       * again by itself.
        */
       let attached = false;
       if (result.provider && result.address) {
+        /* THE ONE SIGNATURE CONFIRMATION A LOGIN ASKS FOR. A completed login
+           is a user gesture (the OTP / the social approval), so the
+           interactive probe — the frame's real signing path, verified — is
+           honest here: exactly one «FBT Swap requests a signature» page, and
+           a cancellation stands everything down instead of looping. The
+           denial memory from a PREVIOUS session's rejection is cleared first:
+           this login is a new consent. */
+        resetSigningState();
         /* Bounded shorter than the default: this probe is one of FOUR in the
            flow (first attempt + three retries), and the keeper is already
            scheduled to take over — a slow frame must not keep the user on a
            spinner for minutes. */
-        const probe = await probeSigning(result.provider, result.address, { timeoutMs: 8_000 });
+        const probe = await probeSigning(result.provider, result.address, { timeoutMs: 8_000, interactive: true });
         if (probe.ok) {
           attached = await attachExternal({
             eip: result.provider,
-            address: result.address,
+            address: probe.address || result.address,
             chainId: null,
             mode: 'email'
           });
+        } else if (probe.denied) {
+          wcEvent('email_sign_denied');
         } else {
           wcEventDetail('email_sign_probe_failed', { m: probe.error });
         }
       }
 
       /* Retry attach up to 3 times with backoff (the provider may need a
-         tick after OTP) — and every retry is probe-gated the same way. */
+         tick after OTP) — and every retry is probe-gated the same way.
+         NON-INTERACTIVE: retries are automatic; they gate on the frame's
+         grant and never open a signature dialog. A standing denial (the user
+         cancelled above) ends the whole flow — retrying what the user just
+         refused is the loop this fix removes. */
       for (let attempt = 0; attempt < 3 && !attached && result.provider && result.address; attempt += 1) {
+        if (signingDeniedByUser()) break;
         await new Promise((r) => setTimeout(r, 800 + attempt * 400));
         try {
           // Re-fetch provider in case it became usable
@@ -1040,6 +1096,13 @@ export function WalletProvider({ children }) {
         stopEmailAttachKeeper();
         setEmailMarker(true);
         wcEvent('email_connected_final');
+      } else if (signingDeniedByUser()) {
+        /* The user cancelled the signature confirmation. NO keeper, NO
+           pending loop — the retry button (a real gesture) owns the next
+           ask. This is the report's «کنسل را بزنی باز دوباره میاره», ended. */
+        setEmailMarker(true);
+        setError('EMAIL_SIGNING_DENIED');
+        wcEvent('email_connect_denied');
       } else {
         // Even if attach failed, keep marker so next cold start / foreground return retries.
         // The fallback in attachExternal should have made this rare — if we are here,
@@ -1082,6 +1145,13 @@ export function WalletProvider({ children }) {
   const restoreEmailSocial = useCallback(async () => {
     if (addressRef.current) return false;
     if (emailRestoreRef.current) return false;
+    if (signingDeniedByUser()) {
+      /* A boot-time/foreground restore never re-asks a signature the user
+         already refused (the 2026-09-18 sign-loop report): the restore probe
+         is non-interactive, but a denial stands for the WHOLE flow — the
+         pending notice's button owns the next ask. */
+      return false;
+    }
     /*
      * ─── THE GATE IS THE EVIDENCE, NOT OUR MARKER ALONE ────────────────────
      * The 2026-09-18 Telegram report ended in exactly this shape: the login
@@ -1261,8 +1331,10 @@ export function WalletProvider({ children }) {
     wcEvent('local_disconnect');
     /* An explicit disconnect ends every claim this page holds — including the
        background keeper's «this session is owed» (it would otherwise re-attach
-       the wallet the user just disconnected). */
+       the wallet the user just disconnected), and the denial memory (a «no»
+       from a session that no longer exists must not follow the next one). */
     stopEmailAttachKeeper();
+    resetSigningState();
     /* WalletConnect first: tell the peer the session is over (bounded — a dead
        relay must never stall the UI) and purge the storage artifacts, then
        retire the email/social session, then the injected listeners. */

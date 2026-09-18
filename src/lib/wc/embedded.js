@@ -882,33 +882,39 @@ async function isProviderUsable(provider) {
 }
 
 /**
- * THE SIGNING PROBE — «متصل» must mean «can sign».
+ * THE SIGNING PROBE — «متصل» must mean «the frame granted this account, and
+ * (once, from a user gesture) it signed for us».
  *
- * ─── THE REPORT THIS ANSWERS ───────────────────────────────────────────────
- * «یکبار وصل شد که اصلاً امضا نمیکرد» — connected once, and it would not sign
- * at all. The attach used to declare success when an address appeared, and
- * the fallback signer (`_isFallback`) then claimed signing capability it had
- * never verified: the app showed «connected», and the first `personal_sign`
- * of a real swap died on the frame's own «Action not allowed» — the state the
- * trace has to be able to name as `email_sign_probe_failed` with a sanitized
- * `m` instead of discovering mid-transaction.
+ * ─── THE REPORTS THIS ANSWERS ──────────────────────────────────────────────
+ * 1. «یکبار وصل شد که اصلاً امضا نمیکرد» — connected once, and it would not
+ *    sign at all. The attach used to declare success when an address appeared
+ *    ANYWHERE (shared state, storage), and the first `personal_sign` of a real
+ *    swap died on the frame's own «Action not allowed». The gate is therefore
+ *    the FRAME'S OWN `eth_accounts` grant — an answer only a session usable by
+ *    this origin can give — never a re-echo of stored state.
  *
- * The probe is the REAL signing path, not a stand-in: `eth_accounts` (on the
- * frame's SAFE list, so asking can never trip the «Action not allowed» guard
- * or abort a pending RPC) and one `personal_sign` of a fixed, meaningless,
- * non-hex message. `personal_sign` is on the frame's NOT_SAFE list precisely
- * because it reaches the key — which is the question being asked. The frame
- * signs it the way it signs a swap's transaction; the cost is one extra frame
- * round trip at attach time.
+ * 2. «فرقی نمیکند اپرو را بزنی یا کنسل را باز دوباره میاره» (2026-09-18) —
+ *    approve or cancel, the ApproveTransaction page came back forever. The old
+ *    probe fired `personal_sign` from every attach attempt AND from a 12-attempt
+ *    background keeper, and on the frame's contract each request opens that
+ *    page (`open({ view: 'ApproveTransaction' })`) while the modal's close
+ *    aborts every other pending request (`rejectRpcRequests()`). The probe is
+ *    now TWO-MODE and SINGLE-FLIGHT — see the block comment above
+ *    `recoverProbeSigner` for the full contract: background drivers get a
+ *    silent `eth_accounts` gate (`via: 'accounts'` / `NOT_READY`), a signature
+ *    is requested only from a user gesture, a rejection stands every automatic
+ *    driver down (`signingDeniedByUser()`), and an approve always lands.
  *
  * @param {object} provider an EIP-1193 object (the frame provider).
  * @param {string} [address] the address the caller expects to sign — a
  *   non-empty answer that does NOT carry it is a different wallet, not a
  *   ready one.
  * @param {object} [options] `{ timeoutMs }` backstop (default 20s — the
- *   frame's own iframe-ready bound, so a hung frame cannot hang the attach).
- * @returns {Promise<{ok:true}|{ok:false,error:string}>} `error` is sanitized
- *   (no URIs, no addresses) and ready for the trace's `m` key.
+ *   frame's own iframe-ready bound, so a hung frame cannot hang the attach);
+ *   `interactive` / `force` — see above.
+ * @returns {Promise<{ok:true,via:string,address?:string}|{ok:false,error:string,denied?:boolean}>}
+ *   `error` is sanitized (no URIs, no addresses) and ready for the trace's
+ *   `m` key; `denied: true` names a USER rejection (never re-ask it).
  */
 export const SIGN_PROBE_MESSAGE = 'fbtswap-login-probe';
 
@@ -939,78 +945,149 @@ function loadEthersLazy() {
 }
 
 /**
- * The address a signature over the probe message belongs to, or null when the
- * signature cannot be verified (bad shape, ethers unavailable, or a signature
- * that recovers to nothing). Never throws.
+ * The address a signature over the probe message belongs to — WITH the reason
+ * when it cannot be named (`no_ethers` | `throw` | `shape`), because the
+ * 2026-09-18 sign-loop report proved the difference matters: «cannot verify»
+ * used to masquerade as `NO_ACCOUNTS`, and a user's APPROVE was then treated
+ * as «nothing signable» and re-asked forever. Never throws.
  */
 async function recoverProbeSigner(signature) {
   try {
     const ethers = await loadEthersLazy();
     const verify = ethers?.verifyMessage;
-    if (typeof verify !== 'function') return null;
-    const recovered = verify(SIGN_PROBE_MESSAGE, signature);
-    return typeof recovered === 'string' && recovered.startsWith('0x') ? recovered : null;
+    if (typeof verify !== 'function') return { status: 'no_ethers', address: null };
+    try {
+      const recovered = verify(SIGN_PROBE_MESSAGE, signature);
+      if (typeof recovered === 'string' && recovered.startsWith('0x')) {
+        return { status: 'ok', address: recovered };
+      }
+      return { status: 'shape', address: null };
+    } catch {
+      return { status: 'throw', address: null };
+    }
   } catch {
-    return null;
+    return { status: 'throw', address: null };
   }
+}
+
+/* ─── THE USER'S NO IS AN ANSWER, NOT A RETRY TRIGGER (2026-09-18) ───────────
+ * The report: «فرقی نمیکند اپرو را بزنی یا کنسل را باز دوباره میاره» — approve
+ * or cancel, the «FBT Swap requests a signature» page came back, forever.
+ *
+ * The mechanism, verified in @reown/appkit@1.8.19: the auth frame's provider
+ * opens the modal on the ApproveTransaction view for EVERY `personal_sign`
+ * (`handleUnsafeRPCRequest` → `open({ view: 'ApproveTransaction' })`), and
+ * closing that modal runs `rejectRpcRequests()` — aborting every OTHER pending
+ * request. This app fired `personal_sign` from FOUR concurrent drivers (the
+ * connect flow's first probe + three retries, the restore probe, the retry
+ * button, and a 12-attempt background keeper): each driver's failure
+ * rescheduled the next attempt, each new request reopened the page and
+ * aborted the one before it — an approve raced `rejectRpcRequests()` and a
+ * failed verification and usually lost. The user could never finish.
+ *
+ * The contract now:
+ *
+ *   • NON-INTERACTIVE (the default — keeper, restore, retries, fast attach):
+ *     `eth_accounts` only. It is on the frame's SAFE list: silent, allowed,
+ *     and the frame's own grant of the session's account. An empty answer is
+ *     `NOT_READY` — a state, never a signature request. A background driver
+ *     can no longer put a dialog in front of the user, so there is nothing
+ *     that can loop.
+ *
+ *   • INTERACTIVE (`interactive: true` — user-gesture contexts only: the
+ *     fresh-login gate and the retry button): after the grant, ONE bounded
+ *     `personal_sign` whose answer is verified. This is the single
+ *     «FBT Swap requests a signature» page a login shows.
+ *
+ *   • A REJECTION IS TERMINATE: `USER_REJECTED` sets a module-wide denial
+ *     that every automatic driver honours (they stand down; see
+ *     `signingDeniedByUser()`). Only an explicit user gesture (`force: true`
+ *     from the retry button) may ask again. A cancel can no longer bring the
+ *     page back by itself — that is the report's «کنسل را بزنی باز میاره»,
+ *     fixed at the root.
+ *
+ *   • SINGLE-FLIGHT: concurrent probes on one provider share one execution,
+ *     so two drivers can no longer abort each other's request (the paired
+ *     «Request was aborted» entries in the report's trace).
+ *
+ *   • AN APPROVE ALWAYS LANDS: a well-formed, user-approved signature whose
+ *     signer ethers cannot name still attaches when the frame's own grant
+ *     names the expected address (two independent witnesses — and the
+ *     alternative was the loop). A signature that recovers to a DIFFERENT
+ *     key attaches that key ONLY when the SDK's own session record names it
+ *     too (`via: 'signature_resynced'` — the AUTH record can hold a stale
+ *     account from a previous login next to the current one).
+ */
+
+/* ─── module state: the denial memory and the single-flight slot ─────────── */
+let signingDeniedFlag = false;
+let inflightProbe = null;
+
+/**
+ * True when the user rejected the interactive sign probe and nothing since
+ * has cleared it. EVERY automatic driver (keeper, restore, connect retries)
+ * must honour this by standing down — re-asking a rejected signature is the
+ * loop the 2026-09-18 report describes.
+ */
+export function signingDeniedByUser() {
+  return signingDeniedFlag;
 }
 
 /**
- * ─── THE EMPTY `eth_accounts` ANSWER (the fbtswap.ir report, 2026-09-18) ────
- * «ورود ایمیل انجام شد، اما کیف پول در این صفحه آماده نشد» — the login is
- * complete (the app's own AUTH record carries two accounts and the frame
- * session is stored), the wait HAS an address and a provider, and then every
- * attach dies on `NO_ACCOUNTS` from the probe's first RPC.
- *
- * The secure frame answers an EMPTY account list, not an error, in the window
- * where its session is being rehydrated for the chain the dapp asks about —
- * `eth_accounts` is a lookup in the frame's per-chain map, and an empty map is
- * a valid answer for a session that exists. The old probe read that empty
- * answer as «no wallet» and stopped there: the one question that matters —
- * «can this provider SIGN for the address the login produced?» — was never
- * asked, and the user got a page telling them to try again.
- *
- * So when the accounts list is empty AND the caller knows the address the
- * login produced, the probe asks the REAL question: one `personal_sign` for
- * that address. That call is the frame's actual signing path (it is on the
- * NOT_SAFE list precisely because it reaches the key), and the answer is
- * VERIFIED — the signature must recover to exactly that address — so an empty
- * account list can never turn into a false «connected». A provider that cannot
- * sign, or signs for somebody else, still fails; the error keeps naming which
- * of the two it was.
- *
- * @returns {Promise<{ok:boolean, error?:string}>} — `NO_ACCOUNTS` survives as
- *   the diagnosis for «empty list and nothing signable» (the previous
- *   behaviour), `SIGNER_MISMATCH` is new and means the signature was real but
- *   belonged to a different key.
+ * Clear the denial memory (and the single-flight slot). Called where the
+ * consent context genuinely resets: an explicit disconnect, and a fresh
+ * login. A user gesture does NOT need it — `force: true` covers that without
+ * telling automatic drivers to start asking again.
  */
-async function directSignProbe(provider, address, bounded) {
-  const hex = probeMessageHex();
-  let sig;
-  try {
-    sig = await bounded(provider.request({ method: 'personal_sign', params: [hex, address] }));
-  } catch (e) {
-    /* The frame's own refusal («Action not allowed», an aborted request) is the
-       honest answer here — the same string the old probe surfaced when
-       `eth_accounts` threw. */
-    const m = String(e?.error?.message || e?.message || e || '').slice(0, 120);
-    return { ok: false, error: m || 'NO_ACCOUNTS' };
-  }
-  if (sig?.__probeTimeout) return { ok: false, error: 'PROBE_TIMEOUT' };
-  if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) {
-    /* Nothing signable came back: the empty account list was telling the
-       truth, and `NO_ACCOUNTS` stays the name of it. */
-    return { ok: false, error: 'NO_ACCOUNTS' };
-  }
-  const recovered = await recoverProbeSigner(sig);
-  if (!recovered) return { ok: false, error: 'NO_ACCOUNTS' };
-  if (recovered.toLowerCase() !== String(address).toLowerCase()) {
-    return { ok: false, error: 'SIGNER_MISMATCH' };
-  }
-  return { ok: true, via: 'personal_sign' };
+export function resetSigningState() {
+  signingDeniedFlag = false;
+  inflightProbe = null;
 }
 
-export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {}) {
+/**
+ * SINGLE-FLIGHT wrapper: concurrent probes on the same provider (+ expected
+ * address) share one execution. Two drivers asking at once is exactly what
+ * produced the paired «Request was aborted» entries in the report's trace —
+ * the frame aborts the older pending request when a newer one arrives.
+ * Results are NOT cached: every new call after the previous settled runs
+ * fresh (the state can change between ticks).
+ */
+export async function probeSigning(provider, address, options = {}) {
+  const key = `${options.interactive ? 'i' : 's'}:${address ? String(address).toLowerCase() : ''}`;
+  if (inflightProbe && inflightProbe.key === key) return inflightProbe.promise;
+  const promise = (async () => {
+    try {
+      return await probeSigningRun(provider, address, options);
+    } finally {
+      if (inflightProbe && inflightProbe.promise === promise) inflightProbe = null;
+    }
+  })();
+  inflightProbe = { key, promise };
+  return promise;
+}
+
+/**
+ * ─── «متصل» MEANS «THE FRAME GRANTED THIS SESSION'S ACCOUNT» ───────────────
+ * (and, on an interactive probe, «and it signed for us»).
+ *
+ * @param {object} provider an EIP-1193 object (the frame provider).
+ * @param {string} [address] the address the login produced — a grant that
+ *   does NOT carry it is a different wallet, not a ready one.
+ * @param {object} [options]
+ *   `timeoutMs` backstop (default 20s — the frame's own iframe-ready bound).
+ *   `interactive` ONE user-facing signature confirmation — only from a
+ *     user-gesture context. Default FALSE: background drivers never open the
+ *     ApproveTransaction view (see the block comment above `recoverProbeSigner`).
+ *   `force` an explicit user gesture asking again AFTER a rejection (the
+ *     retry button). Without it a standing denial short-circuits to
+ *     `USER_REJECTED` without touching the frame.
+ * @returns {Promise<{ok:true,via:string,address?:string}|{ok:false,error:string,denied?:boolean}>}
+ *   `via`: 'accounts' (silent grant) | 'signature' | 'signature_resynced'
+ *   (`address` carries the adopted key) | 'signature_unverified'.
+ *   `error` is sanitized (no URIs, no addresses) and trace-ready.
+ *   `denied: true` names a USER rejection — callers must not re-ask.
+ */
+async function probeSigningRun(provider, address, { timeoutMs = 20_000, interactive = false, force = false } = {}) {
   if (!provider?.request) return { ok: false, error: 'NO_PROVIDER' };
   /* A backstop that CLEARS ITSELF when the request settles: a plain
      Promise.race against a timer leaves the timer dangling (and a timer that
@@ -1023,37 +1100,96 @@ export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {
       (e) => { clearTimeout(timer); reject(e); }
     );
   });
+  /* THE DENIAL GATE. `force` is a real tap on a real button — the user is
+     allowed to change their mind; an automatic retry is not. */
+  if (signingDeniedFlag && !force) {
+    lastProbeError = 'USER_REJECTED';
+    return { ok: false, error: 'USER_REJECTED', denied: true };
+  }
   try {
     const accs = await bounded(provider.request({ method: 'eth_accounts' }));
     if (accs?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
-    if (!Array.isArray(accs) || accs.length === 0) {
-      /* See `directSignProbe`: an empty list is a state, not a verdict. */
-      if (address) {
-        const direct = await directSignProbe(provider, address, bounded);
-        if (direct.ok) { lastProbeError = null; return { ok: true, via: direct.via }; }
-        lastProbeError = direct.error;
-        return { ok: false, error: direct.error };
-      }
-      lastProbeError = 'NO_ACCOUNTS';
-      return { ok: false, error: 'NO_ACCOUNTS' };
+    const granted = Array.isArray(accs)
+      ? accs.filter((a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a))
+      : [];
+    if (granted.length === 0) {
+      /* The frame's session is being rehydrated (or holds nothing for this
+         chain). A STATE, not a verdict — and NEVER a `personal_sign` from
+         here: on the frame's contract that opens the ApproveTransaction
+         view, and this path runs from background drivers. The silent,
+         allowed witness is the grant itself; waiting for it is the keeper's
+         job. */
+      lastProbeError = 'NOT_READY';
+      return { ok: false, error: 'NOT_READY' };
     }
-    const signer = String(accs[0] || '');
-    if (address && signer && signer.toLowerCase() !== String(address).toLowerCase()) {
+    const signer = granted[0];
+    if (address && signer.toLowerCase() !== String(address).toLowerCase()) {
       /* A different wallet than the login produced: attaching it would point
          the app at an account nobody claimed. Named, not silently probed. */
       lastProbeError = 'ACCOUNT_MISMATCH';
       return { ok: false, error: 'ACCOUNT_MISMATCH' };
     }
+    if (!interactive) {
+      /* The frame GRANTED the session's account — its own answer, on the
+         SAFE list, silent. This is the strongest non-interactive witness
+         that the session exists AND is usable by this origin, which is what
+         «متصل» has to mean before any attach. */
+      signingDeniedFlag = false;
+      lastProbeError = null;
+      return { ok: true, via: 'accounts' };
+    }
+    /* INTERACTIVE — the ONE signature confirmation, from a user gesture. */
     const sig = await bounded(provider.request({ method: 'personal_sign', params: [probeMessageHex(), signer] }));
     if (sig?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
     if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) {
       lastProbeError = 'BAD_SIGNATURE';
       return { ok: false, error: 'BAD_SIGNATURE' };
     }
+    const rec = await recoverProbeSigner(sig);
+    if (rec.status === 'ok' && rec.address) {
+      if (rec.address.toLowerCase() === signer.toLowerCase()) {
+        signingDeniedFlag = false;
+        lastProbeError = null;
+        return { ok: true, via: 'signature' };
+      }
+      /* The signature belongs to ANOTHER key. The AUTH record can carry a
+         stale account from a previous login next to the current one (the
+         report's `authAccounts: 2`): when the SDK's own session record names
+         the signing key too, the EXPECTATION was stale — adopt the key the
+         frame actually controls, or every later real sign fails. Two
+         witnesses (the signature + the SDK record), never one. */
+      try {
+        const snap = await embeddedAccountSnapshot();
+        if (snap.address && snap.address.toLowerCase() === rec.address.toLowerCase()) {
+          signingDeniedFlag = false;
+          lastProbeError = null;
+          return { ok: true, via: 'signature_resynced', address: rec.address };
+        }
+      } catch { /* fall through to the mismatch verdict */ }
+      lastProbeError = 'SIGNER_MISMATCH';
+      return { ok: false, error: 'SIGNER_MISMATCH' };
+    }
+    /* A well-formed signature the user APPROVED whose signer ethers cannot
+       name (`no_ethers` | `throw` | `shape`). Refusing here is what turned
+       the report's approve into another lap: the frame signed OUR message,
+       and its own grant names the expected address — two independent
+       witnesses. Attach, and say exactly how (`via`). */
+    signingDeniedFlag = false;
     lastProbeError = null;
-    return { ok: true };
+    return { ok: true, via: 'signature_unverified' };
   } catch (e) {
     const m = String(e?.error?.message || e?.message || e || '').slice(0, 120);
+    if (/reject|denied|cancel/i.test(m)) {
+      /* THE USER SAID NO. Remember it: the keeper, the restore and the
+         connect retries all stand down (`signingDeniedByUser()`), so the
+         ApproveTransaction page cannot come back on its own. Only the retry
+         button (`force: true`) may ask again. */
+      signingDeniedFlag = true;
+      lastProbeError = 'USER_REJECTED';
+      return { ok: false, error: 'USER_REJECTED', denied: true };
+    }
+    /* «Request was aborted» and the frame's own refusals keep their honest
+       names — an abort is a race, not a user decision. */
     lastProbeError = m || 'SIGN_PROBE_FAILED';
     return { ok: false, error: m || 'SIGN_PROBE_FAILED' };
   }
@@ -1857,6 +1993,7 @@ export async function rollback(modal) {
  */
 export async function forget({ timeoutMs = TIMEOUT.teardown } = {}) {
   setMarker(false);
+  resetSigningState();
   const modal = instance;
   if (modal && typeof modal.disconnect === 'function') {
     try {

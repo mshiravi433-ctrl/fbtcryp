@@ -149,11 +149,13 @@ export {
   openSurfaceDetail,
   probeSigning,
   rearmSdkLoginMarker,
+  resetSigningState,
   restore as restoreEmbeddedWallet,
   rollback as rollbackEmailMarker,
   sdkLoginMarkerPresent,
   sdkSessionFacts,
   setMarker as setEmailMarker,
+  signingDeniedByUser,
   switchEmbeddedNetwork
 } from './embedded.js';
 
