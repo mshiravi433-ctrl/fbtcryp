@@ -63,6 +63,7 @@ import { createWcSession } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
 import {
   EMAIL_FRAME_CHAIN_IDS,
+  SIGN_PROBE_MESSAGE,
   SOCIAL_PROVIDERS,
   authConnectorProvider,
   awaitAccount,
@@ -70,6 +71,7 @@ import {
   classifyEmailMarker,
   clearFrameChainResidue,
   emailOptions,
+  embeddedAccountSnapshot,
   isEmailFrameChain,
   openSurfaceDetail,
   probeSigning,
@@ -1596,6 +1598,74 @@ export default async function run() {
     t('no provider is a probe failure, not a crash',
       (await probeSigning(null, ADDR)).ok === false && (await probeSigning(null, ADDR)).error === 'NO_PROVIDER');
 
+    /* ── the frame's EMPTY account list (the «کیف پول آماده نشد» report) ─────
+       The secure frame answers `eth_accounts` with `[]` while its session is
+       being rehydrated for the chain the dapp asks about — an empty list, not
+       an error. The old probe stopped at that answer; the new one asks the
+       question that matters (`can this provider SIGN for the login address?`)
+       and VERIFIES the signature, so an empty list can never become a false
+       «connected». Real signatures, real recovery, no mocks of the crypto. */
+    {
+      const { Wallet } = await import('ethers');
+      const login = Wallet.createRandom();
+      const other = Wallet.createRandom();
+      const goodSig = await login.signMessage(SIGN_PROBE_MESSAGE);
+      const otherSig = await other.signMessage(SIGN_PROBE_MESSAGE);
+      const frameLike = (sig) => ({ request: async ({ method }) => (method === 'eth_accounts' ? [] : sig) });
+
+      const signed = await probeSigning(frameLike(goodSig), login.address);
+      t('an empty eth_accounts answer from a provider that SIGNS for the login address is signing-ready',
+        signed.ok === true && signed.via === 'personal_sign');
+      t('a valid signature that belongs to ANOTHER key is refused (SIGNER_MISMATCH)',
+        (await probeSigning(frameLike(otherSig), login.address)).error === 'SIGNER_MISMATCH');
+      t('an empty account list with nothing signable keeps the NO_ACCOUNTS diagnosis',
+        (await probeSigning(frameLike('0xnope'), login.address)).error === 'NO_ACCOUNTS');
+      t('the direct sign never runs without a claimed address',
+        (await probeSigning(frameLike(goodSig), undefined)).error === 'NO_ACCOUNTS');
+      const refused = await probeSigning({
+        request: async ({ method }) => {
+          if (method === 'eth_accounts') return [];
+          throw new Error('Action not allowed');
+        }
+      }, login.address);
+      t('a frame that REFUSES the direct sign keeps its own message (not a false success)',
+        refused.ok === false && /not allowed/i.test(refused.error));
+    }
+
+    /* ── the fast attach retry reads the account the app already has ── */
+    {
+      const { ChainController, ConnectionController } = await import('@reown/appkit-controllers');
+      const SNAP_ADDR = '0x1111111111111111111111111111111111111111';
+      const snapProvider = { request: async () => [SNAP_ADDR] };
+
+      const fromInstance = await embeddedAccountSnapshot({
+        modal: { getAddress: () => SNAP_ADDR, getWalletProvider: () => snapProvider }
+      });
+      t('the snapshot reads the instance’s own address + provider, and names the source',
+        fromInstance.address === SNAP_ADDR && fromInstance.provider === snapProvider
+          && fromInstance.source === 'instance');
+
+      const prevCaip = ChainController.state.activeCaipAddress;
+      ChainController.state.activeCaipAddress = `eip155:56:${SNAP_ADDR}`;
+      ConnectionController.setConnections([], 'eip155');
+      const fromShared = await embeddedAccountSnapshot({ modal: null });
+      t('with no instance it falls back to the shared CAIP address (parsed, not raw)',
+        fromShared.address === SNAP_ADDR && fromShared.source === 'shared');
+
+      ChainController.state.activeCaipAddress = undefined;
+      ConnectionController.setConnections(
+        [{ connectorId: 'AUTH', accounts: [{ address: SNAP_ADDR }] }], 'eip155');
+      const fromAuthRecord = await embeddedAccountSnapshot({ modal: null });
+      t('…and to the AUTH record’s own account when that is the only witness',
+        fromAuthRecord.address === SNAP_ADDR);
+
+      ConnectionController.setConnections([], 'eip155');
+      ChainController.state.activeCaipAddress = prevCaip;
+      const fromNothing = await embeddedAccountSnapshot({ modal: null });
+      t('with no witness at all the snapshot reports nothing instead of guessing',
+        fromNothing.address === null && fromNothing.provider === null && fromNothing.source === 'none');
+    }
+
     /* ── the wait is event-driven: the SDK's own subscription, not a tick ── */
     let lateConnected = false;
     let accountCb = null;
@@ -1677,10 +1747,13 @@ export default async function run() {
     /* «متصل» means «can sign»: every email attach is probe-gated, and a
        failed probe names itself (sanitized) in the trace instead of
        discovering itself mid-swap. */
+    /* The two call shapes keep their identity (the provider + the address that
+       login produced), and the bounded timeout is optional — the flow's four
+       probes pass one so a slow frame cannot hold the spinner for minutes. */
     t('every email attach is gated on a real signing probe',
-      /probeSigning\(result\.provider, result\.address\)/.test(ctx)
-        && /probeSigning\(freshProvider, result\.address\)/.test(ctx)
-        && /probeSigning\(result\.provider, result\.address\)/.test(ctx)
+      /probeSigning\(result\.provider, result\.address(, \{[^)]*\})?\)/.test(ctx)
+        && /probeSigning\(freshProvider, result\.address(, \{[^)]*\})?\)/.test(ctx)
+        && /probeSigning\(result\.provider, result\.address(, \{[^)]*\})?\)/.test(ctx)
         && /email_sign_probe_failed/.test(ctx));
     /* The refused switch: the exact code reaches the UI (context + the
        Swap surface), and each refusal has a sentence — including the
@@ -1694,10 +1767,37 @@ export default async function run() {
       /wallet\.switchChainResult/.test(swapSrc)
         && /emailChainSignOnly/.test(swapSrc)
         && /emailChainSwitchFailed/.test(swapSrc));
+    /* ── the pending attach is retried in the BACKGROUND, and the button
+       retries the ATTACH (the 2026-09-18 «کیف پول آماده نشد» report: the old
+       button re-ran the whole login and re-opened the modal) ── */
+    t('the pending notice retries the attach, not the whole login',
+      /wallet\.retryEmailAttach/.test(sheet));
+    t('the pending notice says the retry continues by itself',
+      /emailProviderPendingHint/.test(sheet));
+    t('the context runs a bounded background keeper for a pending attach',
+      /startEmailAttachKeeper/.test(ctx) && /email_keeper_attached/.test(ctx)
+        && /email_keeper_exhausted/.test(ctx));
+    t('the pending attach is handed to the keeper right where it is declared',
+      /email_attach_failed_pending[\s\S]{0,400}startEmailAttachKeeper\(result\.address\)/.test(ctx)
+        && /email_sign_probe_failed[\s\S]{0,400}startEmailAttachKeeper\(result\.address\)/.test(ctx));
+    t('the keeper is stopped by the exits that end the claim (disconnect, mode, unmount)',
+      /disconnect[\s\S]{0,200}stopEmailAttachKeeper\(\)/.test(ctx)
+        && /mode !== 'email'[\s\S]{0,200}stopEmailAttachKeeper\(\)/.test(ctx)
+        && /useEffect\(\(\) => \(\) => stopEmailAttachKeeper\(\)/.test(ctx));
+    t('the fast retry attaches with no modal and no second login',
+      /embeddedAccountSnapshot/.test(ctx) && /email_retry_attach_ok/.test(ctx)
+        && /retryEmailAttach/.test(ctx));
+    /* An owed session must be ATTACHED before any modal is opened: the tap is
+       not a login when the storage already describes a session. */
+    t('an owed session is attached before the login modal is opened',
+      /email_fast_attach/.test(ctx)
+        && /hasEmailMarker\(\) \|\| sdkSessionFacts\(\)\.anyEvidence[\s\S]{0,900}openEmbeddedWallet/.test(ctx));
+
     /* The two new functions live in the one public surface. */
     const indexSrc = readFileSync('src/lib/wc/index.js', 'utf8');
-    t('sdkSessionFacts and probeSigning are exported from the stack surface',
-      /sdkSessionFacts/.test(indexSrc) && /probeSigning/.test(indexSrc));
+    t('sdkSessionFacts, probeSigning and embeddedAccountSnapshot are exported from the stack surface',
+      /sdkSessionFacts/.test(indexSrc) && /probeSigning/.test(indexSrc)
+        && /embeddedAccountSnapshot/.test(indexSrc));
     t('no component reaches past the stack into a deleted module',
       !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)/.test(ctx + sheet + panel));
     t('the deleted modules are really gone', (() => {

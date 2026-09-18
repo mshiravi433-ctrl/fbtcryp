@@ -573,16 +573,27 @@ export default function WalletConnectSheet({ open, onClose }) {
           {/* The login itself succeeded — the embedded wallet session exists —
               but its signer never surfaced in this page. Naming THAT beats a
               generic «connection failed»: nothing was lost, retrying (or just
-              reopening the app) attaches it. */}
+              reopening the app) attaches it.
+              «تلاش دوباره» retries the ATTACH, not the login: it re-probes the
+              account the app already has and attaches it, so the user is never
+              sent back to a wallet-connection surface for a wallet that is
+              already connected. `connectEmailSocial` stays as the fallback for
+              an older provider (or a session the app no longer knows). */}
           {wallet.error === 'EMAIL_PROVIDER_PENDING' && (
             <>
               <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>
+              <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                {t('wallet.emailProviderPendingHint', {
+                  defaultValue: 'اتصال در پسزمینه ادامه دارد — همین صفحه کافی است.'
+                })}
+              </p>
               <button
                 className="btn btn-primary"
                 style={{ marginTop: 10, width: '100%' }}
                 disabled={wallet.connecting}
                 onClick={() => {
-                  wallet.connectEmailSocial().then((ok) => ok && close());
+                  const retry = wallet.retryEmailAttach || wallet.connectEmailSocial;
+                  retry().then((ok) => ok && close());
                 }}
               >
                 {t('wallet.retryAttach', { defaultValue: 'تلاش دوباره' })}

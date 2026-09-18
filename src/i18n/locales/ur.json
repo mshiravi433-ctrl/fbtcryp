@@ -141,6 +141,7 @@
     "noProvider": "براؤزر میں کوئی والٹ نہیں ملا۔ ٹیلیگرام کے اندرونی براؤزر میں والٹ نہیں ہوتا — WalletConnect یا ایپ والٹ استعمال کریں۔",
     "connectFailed": "کنکشن ناکام یا مسترد۔",
     "emailProviderPending": "ای میل لاگ ان کامیاب رہا، لیکن اس صفحے پر والٹ مکمل لوڈ نہیں ہوا۔ دوبارہ کوشش کریں یا ایپ دوبارہ کھولیں — آپ کا کنکشن ضائع نہیں ہوا۔",
+    "emailProviderPendingHint": "کنکشن پس منظر میں کوشش جاری رکھتا ہے — آپ اسی صفحے پر رہ سکتے ہیں۔",
     "healthUsage": "پروجیکٹ استعمال کی حدیں (ای میل)",
     "healthUsageBlocked": "پروجیکٹ اپنی Reown حد سے آگے ہے — AppKit خود ای میل باکس غیر فعال کر دیتا ہے۔ Reown ڈیش بورڈ میں پلان اپ گریڈ کریں۔",
     "wcOriginBlocked": "WalletConnect نے اس ایپ کا origin مسترد کیا۔ Reown ڈیش بورڈ میں یقینی بنائیں کہ Allowed Domains میں https://fbtswap.ir اور https://localhost، اور App IDs میں ir.fbtswap.app شامل ہوں۔",

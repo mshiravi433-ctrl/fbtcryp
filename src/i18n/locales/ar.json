@@ -309,6 +309,7 @@
     "noProvider": "لم يتم العثور على محفظة. هذا المتصفح لا يحتوي على إضافة محفظة — على الهاتف، افتح التطبيق من داخل متصفح محفظتك، أو اتصل عبر WalletConnect.",
     "connectFailed": "فشل الاتصال أو تم رفضه.",
     "emailProviderPending": "تم تسجيل الدخول بالبريد الإلكتروني، لكن لم تكتمل تهيئة المحفظة في هذه الصفحة. حاول مرة أخرى أو أعد فتح التطبيق — اتصالك لم يُفقَد.",
+    "emailProviderPendingHint": "يستمر الاتصال في المحاولة في الخلفية — يمكنك البقاء في هذه الصفحة.",
     "healthUsage": "حدود استخدام المشروع (البريد)",
     "healthUsageBlocked": "تجاوز المشروع حد Reown، ويقوم AppKit نفسه بتعطيل صندوق البريد. قم بترقية الخطة في لوحة تحكم Reown.",
     "wcOriginBlocked": "رفض WalletConnect عنوان هذا التطبيق (origin غير مسموح). في لوحة Reown تأكد من أن Allowed Domains تتضمن https://fbtswap.ir و https://localhost، وأن App IDs تتضمن ir.fbtswap.app.",

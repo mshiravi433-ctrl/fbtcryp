@@ -139,6 +139,7 @@ export {
   clearFrameChainResidue,
   clearStaleEmailState,
   emailOptions,
+  embeddedAccountSnapshot,
   forget as forgetEmbeddedWallet,
   getAppKit,
   hasMarker as hasEmailMarker,
