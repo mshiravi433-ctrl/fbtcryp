@@ -164,20 +164,31 @@ const Rewards = lazyRetry(() => import('./pages/Rewards'));
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
  *
- * `minHeight: 55vh` is not decoration — it holds the scroll height roughly
- * where the real page will be. Without it the document collapses to spinner
- * height for a frame or two and the bottom nav, which is fixed but whose
- * position the browser recomputes against the document, visibly hops.
+ * This used to be a lone centred spinner in 55vh of nothing. On a slow first
+ * visit — the reported case: laptop, wallet extensions loading, «تا صفحه لود
+ * بشه نصفش نیست انگار باگ داره» — that reads as a BROKEN page, because a
+ * user cannot tell "the page is coming" from "the page is half missing". A
+ * page-SHAPED skeleton (title bar, cards, chips) reads as the page itself
+ * materialising, and it commits immediately: no delayed-appearance dance is
+ * needed, because blocks that flash in for 80ms look like progressive
+ * rendering, not a glitch — which a flashing spinner did.
  *
- * The spinner is delayed by 250ms via CSS (`.spinner-delayed`). A chunk that
- * arrives in 80ms would otherwise flash a spinner for 80ms, and a flash is
- * perceived as a glitch, whereas a brief pause with nothing happening is not
- * perceived at all.
+ * `minHeight: 55vh` is not decoration — it holds the scroll height roughly
+ * where the real page will be. Without it the document collapses for a frame
+ * or two and the bottom nav, which is fixed but whose position the browser
+ * recomputes against the document, visibly hops.
  */
 function Loader() {
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '55vh' }}>
-      <div className="spinner spinner-delayed" />
+    <div className="skel-page" aria-busy="true">
+      <div className="skel skel-title" />
+      <div className="skel skel-card" />
+      <div className="skel-row">
+        <div className="skel skel-chip" />
+        <div className="skel skel-chip" />
+        <div className="skel skel-chip" />
+      </div>
+      <div className="skel skel-card" />
     </div>
   );
 }

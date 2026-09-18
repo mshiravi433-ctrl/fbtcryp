@@ -6,6 +6,7 @@ import InfoBox from '../components/InfoBox';
 import ModernSelect from './ModernSelect';
 import { fmtQty } from '../lib/format';
 import { toBaseUnits } from '../lib/bridge';
+import { bridgeErrorFromException, bridgeErrorText } from '../lib/bridgeErrors';
 import {
   TRON_ORIGINS,
   TRON_USDT,
@@ -134,7 +135,11 @@ export default function TronPanel() {
       }));
     } catch (e) {
       setRes(null);
-      setErr(e.code || 'QUOTE_FAILED');
+      /* Keep the server's prose as evidence rather than discarding it. */
+      setErr({
+        code: e.code || 'QUOTE_FAILED',
+        detail: typeof e?.detail === 'string' && e.detail.trim() ? e.detail.slice(0, 220) : null
+      });
     } finally {
       setQuoting(false);
     }
@@ -185,7 +190,13 @@ export default function TronPanel() {
       setTxHash(sent.hash);
       haptic?.('success');
     } catch (e) {
-      setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
+      /*
+       * This used to paste the wallet's raw English (`shortMessage` /
+       * `message`) straight onto a translated screen. Now a machine code
+       * becomes its sentence, and wallet prose becomes evidence on a second
+       * ltr line instead of the headline.
+       */
+      setTxErr(bridgeErrorFromException(e, t));
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -254,11 +265,23 @@ export default function TronPanel() {
         )}
 
         {quoting && <p className="faint" style={{ marginTop: 10 }}>{t('bridge.quoting')}</p>}
-        {err && !quoting && (
-          <p className="notice notice-danger" style={{ marginTop: 10 }}>
-            {t(`bridge.err.${err}`, { defaultValue: t('bridge.err.QUOTE_FAILED') })}
-          </p>
-        )}
+        {err && !quoting && (() => {
+          /* Each quote failure code now has its own sentence; unmapped codes
+             keep the code inside a generic line instead of collapsing into
+             «no route found». */
+          const { text, detail } = bridgeErrorText(err?.code ?? err, t, { fallbackKey: 'bridge.err.QUOTE_FAILED' });
+          const rawDetail = err?.detail || detail;
+          return (
+            <p className="notice notice-danger" style={{ marginTop: 10 }}>
+              {text}
+              {rawDetail && (
+                <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
+                  {rawDetail}
+                </span>
+              )}
+            </p>
+          );
+        })()}
 
         {summary && !quoting && (
           <div className="brg-quote">
@@ -311,7 +334,16 @@ export default function TronPanel() {
           </button>
         )}
 
-        {txErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{txErr}</p>}
+        {txErr && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {txErr?.text || txErr}
+            {txErr?.detail && (
+              <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
+                {txErr.detail}
+              </span>
+            )}
+          </p>
+        )}
         {txHash && (
           <div className="notice" style={{ marginTop: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{t('bridge.sentTitle')}</div>

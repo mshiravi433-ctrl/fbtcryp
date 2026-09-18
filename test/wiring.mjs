@@ -8765,7 +8765,7 @@ export default function run() {
      */
     t('...and the cooldown cannot swallow the first real alert',
       /prev\.at != null && now - prev\.at < cooldownMs/.test(paCode) &&
-      /next\[coin\.id\] = \{ base: price \};/.test(paCode));
+      /next\[coin\.id\] = \{ base: price, src, seen: now \};/.test(paCode));
     /* Number(null) is 0 and 0 is finite, so the positivity test must lead. */
     t('...and a null price cannot become a zero baseline',
       /!Number\.isFinite\(price\) \|\| price <= 0/.test(paCode));
@@ -8774,6 +8774,22 @@ export default function run() {
     /* Wording must be translated by the caller, never decided in the lib. */
     t('...and the library never writes user-facing copy itself',
       !/'[A-Z][a-z]+ (is|moved|went)/.test(paCode));
+    /*
+     * The «BTC grew 40% when it grew 0.4%» round: the arithmetic was right and
+     * the INPUTS were not — a baseline recorded from the deterministic offline
+     * snapshot (BTC seed 67,450) was compared against a live price. The lib
+     * must now know where a row came from, refuse to baseline offline rows,
+     * re-arm on a source flip or a legacy no-src baseline, expire baselines it
+     * has not refreshed, and treat a huge short-window move as a data fault.
+     */
+    t('an offline row is never recorded, never compared (provenance guard)',
+      /provenanceOf\(coin\)/.test(paCode) && /if \(src === 'offline'\) continue;/.test(paCode));
+    t('...and a provenance flip (or legacy no-src baseline) re-arms silently',
+      /if \(prev && prev\.src !== src\)/.test(paCode));
+    t('...and a stale baseline re-arms instead of alerting',
+      /now - prev\.seen > staleBaselineMs/.test(paCode));
+    t('...and a huge short-window move is treated as a data fault, not news',
+      /shortWindowMaxPct/.test(paCode) && /SHORT_WINDOW_MAX_PCT = 35/.test(paCode));
 
     const market = code(read('src/pages/Market.jsx'));
     t('Market runs the check on data it already polls',

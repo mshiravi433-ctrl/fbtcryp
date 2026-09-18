@@ -225,18 +225,28 @@ body {
 .rgb-orb.b { width: 55vw; height: 55vw; background: var(--rgb-3); bottom: -16vw; right: -14vw; animation: drift-b 42s ease-in-out infinite; }
 .rgb-orb.c { width: 48vw; height: 48vw; background: var(--rgb-2); top: 34%; left: 24%; animation: drift-c 52s ease-in-out infinite; }
 
+/*
+ * Drift keyframes translate ONLY — the scale() they used to carry has been
+ * removed. A scale change on a `blur(70px)` element re-rasterises the blurred
+ * texture every frame on the main thread (the blur must be re-rendered at the
+ * new size), which on a laptop GPU was the single biggest cost of an idle
+ * screen and the direct cause of the reported «تا صفحه لود بشه نصفش نیست»
+ * jank. Pure translate3d is a compositor-only texture move; the orbs now
+ * drift at their baked size. The size variety the scale() provided comes
+ * from the per-orb widths above instead.
+ */
 @keyframes drift-a {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(18vw, 14vh, 0) scale(1.18); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(18vw, 14vh, 0); }
 }
 @keyframes drift-b {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
-  50% { transform: translate3d(-16vw, -12vh, 0) scale(0.9); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-16vw, -12vh, 0); }
 }
 @keyframes drift-c {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(0.95); }
-  33% { transform: translate3d(-14vw, 10vh, 0) scale(1.2); }
-  66% { transform: translate3d(12vw, -14vh, 0) scale(1); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  33% { transform: translate3d(-14vw, 10vh, 0); }
+  66% { transform: translate3d(12vw, -14vh, 0); }
 }
 
 /* fine scanline / grid texture over the orbs */
@@ -1662,6 +1672,26 @@ select option {
 }
 @keyframes skel-shine { to { background-position: -200% 0; } }
 
+/*
+ * Page-shaped Suspense fallback (App.jsx `Loader`).
+ *
+ * The blocks are deliberately vague — a title-ish bar, two card-ish slabs, a
+ * chip row — so they can stand in for ANY of the ~45 lazy routes without
+ * promising a specific layout. The shine is background-position only, so the
+ * animation never touches layout or transform of real content.
+ */
+.skel-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 55vh;
+  padding: 26px 18px 34px;
+}
+.skel-page .skel-title { height: 22px; width: 42%; }
+.skel-page .skel-card { height: 130px; border-radius: 16px; }
+.skel-page .skel-row { display: flex; gap: 10px; }
+.skel-page .skel-chip { height: 34px; flex: 1; border-radius: 10px; }
+
 .spinner {
   width: 18px;
   height: 18px;
@@ -1682,6 +1712,10 @@ select option {
  * `animation-fill-mode: backwards` applies the 0% keyframe (opacity 0) during
  * the delay, which is what actually keeps it hidden rather than merely
  * un-animated.
+ *
+ * NOTE: the route-chunk Suspense fallback no longer uses this (it is a
+ * page-shaped skeleton now, see `.skel-page`); it is kept for any future
+ * delayed-spinner need.
  */
 .spinner-delayed {
   animation:

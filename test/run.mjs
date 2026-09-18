@@ -1598,6 +1598,29 @@ console.log('\n▸ auditing wiring (keys · routes · dead files)…');
 }
 
 /*
+ * Bridge + notification validation — the two reported honesty bugs:
+ * «بیت کویین ۴۰ درصد رشد کرد که در واقعیت ۴ دهم» (a price alert manufactured
+ * from an offline-snapshot↔live mix) and «گاهی استرینگ هست» / «نبود موجودی»
+ * (machine codes and wallet prose pasted onto translated screens). Runs the
+ * REAL priceAlerts guards (esbuild-bundled, since it imports './notify'
+ * extensionless) and the REAL bridgeErrors door over the en/fa/ar
+ * dictionaries: every thrown code has a key, known codes never render as
+ * codes, unmapped codes keep the code inside a translated generic, prose
+ * becomes evidence instead of the headline, and offline/stale/ceiling
+ * baselines re-arm silently while genuine moves still alert.
+ *
+ * Cheap and pure (no server, no bundler beyond one esbuild pass), so it sits
+ * with the wiring audit BEFORE the HTTP suites — on a box where a later
+ * suite's environment-specific crash kills the runner, this class of bug
+ * still gets its signal.
+ */
+console.log('\n▸ probing bridge error localisation + price-alert validation…');
+{
+  const bridgeNotifyRows = (await import('./bridge-notify-validation-probe.mjs')).default;
+  report('bridge + notification validation', bridgeNotifyRows);
+}
+
+/*
  * The /intent AI surface in BOTH themes. wiring.mjs pins the stylesheet text
  * that fixes «در تم روشن استایل هوش مصنوعی بخصوص باکس‌ها خیلی زشته»; this probe
  * resolves the real cascade in jsdom and MEASURES the contrast, because the

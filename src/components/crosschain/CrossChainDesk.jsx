@@ -4,6 +4,7 @@ import { useWallet } from '../../context/WalletContext';
 import { fmtUsd } from '../../lib/format';
 import { notifyTrade } from '../../lib/notify';
 import { requestSoftRefresh } from '../../lib/refresh';
+import { bridgeErrorText } from '../../lib/bridgeErrors';
 import {
   crossChainService,
   fromBaseUnits,
@@ -582,7 +583,10 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
               autoCorrect="off"
             />
             {destination && !destinationCheck.ok && (
-              <em className="xcc-error">{t(`crossChain.err.${destinationCheck.code}`, { defaultValue: destinationCheck.code })}</em>
+              /* defaultValue printed the raw code whenever a key was missing
+                 (PROVIDER_BAD_RESPONSE did exactly that). bridgeErrorText
+                 resolves the key, and only ever falls back to a SENTENCE. */
+              <em className="xcc-error">{bridgeErrorText(destinationCheck.code, t).text}</em>
             )}
             {!destination && !crossFamily && senderAddress && (
               <em className="xcc-note">
@@ -632,7 +636,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
         {quoting && <div className="xcc-skeleton"><div className="skel" /><div className="skel" /><div className="skel" /></div>}
 
         {quoteError && !quoting && (
-          <p className="xcc-error">{t(`crossChain.err.${quoteError}`, { defaultValue: quoteError })}</p>
+          <p className="xcc-error">{bridgeErrorText(quoteError, t, { fallbackKey: 'bridge.err.QUOTE_FAILED' }).text}</p>
         )}
 
         {quote && !quoting && (
@@ -696,7 +700,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
         </button>
 
         {execError && (
-          <p className="xcc-error">{t(`crossChain.err.${execError}`, { defaultValue: execError })}</p>
+          <p className="xcc-error">{bridgeErrorText(execError, t).text}</p>
         )}
       </section>
 

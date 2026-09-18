@@ -1668,16 +1668,18 @@ export default function Swap() {
         ))}
       </div>
 
-      {/* The exact outcome of a refused switch — the email wallet is the
-          signer, not the route, so «unsupported» is a named limitation with a
-          way out, not a silent dead tag (the 2026-09-18 report). */}
-      {wallet.switchChainResult && (
-        <p className="notice" style={{ marginTop: 8, marginBottom: 0 }}>
-          {wallet.switchChainResult.code === 'unsupported_chain'
-            ? t('swap.emailChainSignOnly', { chain: wallet.switchChainResult.chain })
-            : t('swap.emailChainSwitchFailed', { chain: wallet.switchChainResult.chain })}
-        </p>
-      )}
+          {/* The exact outcome of a refused switch — the email wallet is the
+              signer, not the route, so «unsupported» is a named limitation with a
+              way out, not a silent dead tag (the 2026-09-18 report).
+              The keys live under `wallet.` — the `swap.` prefix this used to
+              call resolved to nothing, so the user saw the raw key. */}
+          {wallet.switchChainResult && (
+            <p className="notice" style={{ marginTop: 8, marginBottom: 0 }}>
+              {wallet.switchChainResult.code === 'unsupported_chain'
+                ? t('wallet.emailChainSignOnly', { chain: wallet.switchChainResult.chain })
+                : t('wallet.emailChainSwitchFailed', { chain: wallet.switchChainResult.chain })}
+            </p>
+          )}
 
       {/* ─── TICKET: no motion.section, no backdrop-filter animation on native ─── */}
       <section className={`swap-ticket ${isNative ? 'swap-ticket-native' : ''}`}>
