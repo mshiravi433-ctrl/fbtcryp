@@ -22,8 +22,19 @@ import {
   walletLogo,
   wcEvent
 } from '../lib/wc';
-import { IconCheck, IconCopy, IconKey, IconLink, IconLock, IconPlus, IconWallet } from './Icons';
+import {
+  IconCheck,
+  IconChevronRight,
+  IconCopy,
+  IconKey,
+  IconLink,
+  IconLock,
+  IconPlus,
+  IconShield,
+  IconWallet
+} from './Icons';
 import WalletHealthPanel from './WalletHealthPanel';
+import '../styles/wallet-connect.css';
 
 /**
  * EIP-6963 multi-provider discovery. Subscribe on mount, unsub on unmount.
@@ -371,151 +382,195 @@ export default function WalletConnectSheet({ open, onClose }) {
   );
 
   return (
-    <Sheet open={open && !wallet.wcModalActive} onClose={close}>
+    <Sheet open={open && !wallet.wcModalActive} onClose={close} className="wc-sheet">
       {/* ------------------------------ choose ------------------------------ */}
       {view === 'choose' && (
+        /*
+         * THE SURFACE THIS ROUND REBUILT.
+         *
+         * Everything here is presentation; the behaviour is unchanged and the
+         * logic above is untouched. The three things that actually changed:
+         *
+         *   1. GROUPED OPTIONS with a heading each — «کیف پول بیرونی» and
+         *      «کیف پول درون‌برنامه‌ای» — because a flat list of six rows with
+         *      the same shape gave no clue that the last three are a different
+         *      kind of thing (a wallet this app holds, not one you already own).
+         *   2. A REAL ICON PER ROW. An injected wallet announces its own brand
+         *      icon through EIP-6963 and that is what is drawn; nothing here
+         *      guesses a logo from a flag, so a wallet that announces is
+         *      recognised and one that does not gets a deliberate tile instead
+         *      of a wrong brand.
+         *   3. THE RESUME STATE, ON SCREEN. While a lease is being re-attached
+         *      (lib/wc/lease.js) this sheet says «در حال اتصال مجدد…» instead
+         *      of offering a Connect button for a wallet that is already on its
+         *      way back — which is how a working resume used to become a second
+         *      approval screen.
+         *
+         * Every offset in the new classes is logical (padding-inline,
+         * margin-inline-start) and every colour is a token, so the layout is
+         * correct in Persian (RTL) and in both themes by construction.
+         */
         <>
-          <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.connectTitle')}</h2>
-          <p className="muted" style={{ marginBottom: 14 }}>{t('wallet.connectSubtitle')}</p>
+          <div className="wc-head">
+            <span className="wc-head-mark" aria-hidden="true"><IconWallet width={22} height={22} /></span>
+            <div className="wc-head-text">
+              <h2 className="wc-title">{t('wallet.connectTitle')}</h2>
+              <p className="wc-sub">{t('wallet.connectSubtitle')}</p>
+            </div>
+          </div>
+
+          {wallet.restoring && (
+            <div className="wc-restoring" role="status">
+              <span className="wc-spinner" aria-hidden="true" />
+              <span>{t('wallet.reconnectingShort')}</span>
+            </div>
+          )}
 
           {relayBlocked && (
-            <p className="notice notice-danger" style={{ marginBottom: 10 }}>
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>
               {t('wallet.wcRelayBlockedHint')}
             </p>
           )}
 
-          <div className="stack" style={{ gap: 9 }}>
-            <motion.button
-              className="wallet-option"
-              data-featured={relayBlocked ? undefined : 'true'}
-              whileTap={{ scale: 0.98 }}
-              onClick={startWalletConnect}
-              disabled={wallet.connecting}
-            >
-              <span className="wallet-badge"><IconLink width={21} height={21} /></span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.wc')}</span>
-                <span className="set-row-sub">
-                  {relayBlocked ? t('wallet.wcRelayTryAnyway') : t('wallet.wcDesc')}
-                </span>
-              </span>
-              {relayBlocked ? (
-                <span className="pill pill-down" style={{ flexShrink: 0 }}>
-                  {t('wallet.wcRelayBlockedPill')}
-                </span>
-              ) : (
-                <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
-              )}
-            </motion.button>
-
-            {/* Injected wallets: one row per EIP-6963 announcement, falling back
-                to a single window.ethereum row for legacy dapp browsers. */}
-            {injected.length > 0
-              ? injected.map((p) => (
-                  <motion.button
-                    key={p.info.uuid}
-                    className="wallet-option"
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => wallet.connectInjected(p.info.rdns).then((ok) => ok && close())}
-                    disabled={wallet.connecting}
-                  >
-                    <span
-                      className="wallet-badge"
-                      style={p.info.icon
-                        ? {
-                            backgroundImage: `url(${p.info.icon})`,
-                            backgroundSize: '22px',
-                            backgroundRepeat: 'no-repeat',
-                            backgroundPosition: 'center',
-                            fontSize: 0
-                          }
-                        : undefined}
-                    >
-                      {!p.info.icon && <IconWallet width={21} height={21} />}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                        {providerName(p.info, t)}
-                      </span>
-                      <span className="set-row-sub">{t('wallet.injectedDesc')}</span>
-                    </span>
-                  </motion.button>
-                ))
-              : typeof window !== 'undefined' && window.ethereum
-                ? (
-                  <motion.button
-                    className="wallet-option"
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => wallet.connectInjected().then((ok) => ok && close())}
-                    disabled={wallet.connecting}
-                  >
-                    <span className="wallet-badge"><IconWallet width={21} height={21} /></span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                        {window.ethereum.isMetaMask
-                          ? 'MetaMask'
-                          : window.ethereum.isTrust
-                            ? 'Trust Wallet'
-                            : t('wallet.injected')}
-                      </span>
-                      <span className="set-row-sub">{t('wallet.injectedDesc')}</span>
-                    </span>
-                  </motion.button>
-                )
-                : null}
-
-            {hasVault() ? (
-              <motion.button className="wallet-option" whileTap={{ scale: 0.98 }} onClick={() => setView('unlock')}>
-                <span className="wallet-badge"><IconLock width={21} height={21} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                    {t('wallet.unlockLocal')}
+          {/* ------------------- what you already have ------------------- */}
+          <div className="wc-group">
+            <div className="wc-group-head">
+              <span className="wc-group-label">{t('wallet.connectSectionExternal')}</span>
+              <span className="wc-group-note">{t('wallet.connectExternalNote')}</span>
+            </div>
+            <div className="wc-list">
+              <motion.button
+                className="wc-card"
+                data-featured={relayBlocked ? undefined : 'true'}
+                whileTap={{ scale: 0.985 }}
+                onClick={startWalletConnect}
+                disabled={wallet.connecting}
+              >
+                <span className="wc-mark" aria-hidden="true"><IconLink width={21} height={21} /></span>
+                <span className="wc-card-body">
+                  <span className="wc-card-title">
+                    {t('wallet.wc')}
+                    {relayBlocked
+                      ? <span className="wc-tag wc-tag-blocked">{t('wallet.wcRelayBlockedPill')}</span>
+                      : <span className="wc-tag">{t('wallet.recommended')}</span>}
                   </span>
-                  <span className="set-row-sub">{t('wallet.unlockLocalDesc')}</span>
+                  <span className="wc-card-sub">
+                    {relayBlocked ? t('wallet.wcRelayTryAnyway') : t('wallet.wcDesc')}
+                  </span>
                 </span>
+                <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
               </motion.button>
-            ) : (
-              <>
-                <motion.button
-                  className="wallet-option"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={startCreate}
-                  disabled={busy}
-                >
-                  <span className="wallet-badge"><IconPlus width={21} height={21} /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                      {t('wallet.createLocal')}
-                    </span>
-                    <span className="set-row-sub">{t('wallet.createLocalDesc')}</span>
-                  </span>
-                </motion.button>
 
-                <motion.button
-                  className="wallet-option"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setView('import')}
-                >
-                  <span className="wallet-badge"><IconKey width={21} height={21} /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                      {t('wallet.importLocal')}
-                    </span>
-                    <span className="set-row-sub">{t('wallet.importLocalDesc')}</span>
-                  </span>
-                </motion.button>
-              </>
-            )}
+              {/* Injected wallets: one row per EIP-6963 announcement, with the
+                  wallet's OWN icon, falling back to a single window.ethereum row
+                  for legacy dapp browsers. */}
+              {injected.length > 0
+                ? injected.map((p) => (
+                    <motion.button
+                      key={p.info.uuid}
+                      className="wc-card"
+                      whileTap={{ scale: 0.985 }}
+                      onClick={() => wallet.connectInjected(p.info.rdns).then((ok) => ok && close())}
+                      disabled={wallet.connecting}
+                    >
+                      <span className="wc-mark" aria-hidden="true">
+                        {p.info.icon
+                          ? <img src={p.info.icon} alt="" loading="lazy" />
+                          : <IconWallet width={21} height={21} />}
+                      </span>
+                      <span className="wc-card-body">
+                        <span className="wc-card-title">
+                          {providerName(p.info, t)}
+                          <span className="wc-tag">{t('wallet.injectedTag')}</span>
+                        </span>
+                        <span className="wc-card-sub">{t('wallet.injectedDesc')}</span>
+                      </span>
+                      <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
+                    </motion.button>
+                  ))
+                : typeof window !== 'undefined' && window.ethereum
+                  ? (
+                    <motion.button
+                      className="wc-card"
+                      whileTap={{ scale: 0.985 }}
+                      onClick={() => wallet.connectInjected().then((ok) => ok && close())}
+                      disabled={wallet.connecting}
+                    >
+                      <span className="wc-mark" aria-hidden="true"><IconWallet width={21} height={21} /></span>
+                      <span className="wc-card-body">
+                        <span className="wc-card-title">
+                          {window.ethereum.isMetaMask
+                            ? 'MetaMask'
+                            : window.ethereum.isTrust
+                              ? 'Trust Wallet'
+                              : t('wallet.injected')}
+                          <span className="wc-tag">{t('wallet.injectedTag')}</span>
+                        </span>
+                        <span className="wc-card-sub">{t('wallet.injectedDesc')}</span>
+                      </span>
+                      <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
+                    </motion.button>
+                  )
+                  : null}
+            </div>
           </div>
 
-          <p className="notice notice-danger" style={{ marginTop: 14 }}>{t('wallet.localRisk')}</p>
+          {/* -------------- or a wallet this app holds for you ------------- */}
+          <div className="wc-group">
+            <div className="wc-group-head">
+              <span className="wc-group-label">{t('wallet.connectSectionLocal')}</span>
+              <span className="wc-group-note">{t('wallet.connectLocalNote')}</span>
+            </div>
+            <div className="wc-list">
+              {hasVault() ? (
+                <motion.button className="wc-card" whileTap={{ scale: 0.985 }} onClick={() => setView('unlock')}>
+                  <span className="wc-mark" aria-hidden="true"><IconLock width={21} height={21} /></span>
+                  <span className="wc-card-body">
+                    <span className="wc-card-title">{t('wallet.unlockLocal')}</span>
+                    <span className="wc-card-sub">{t('wallet.unlockLocalDesc')}</span>
+                  </span>
+                  <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
+                </motion.button>
+              ) : (
+                <>
+                  <motion.button
+                    className="wc-card"
+                    whileTap={{ scale: 0.985 }}
+                    onClick={startCreate}
+                    disabled={busy}
+                  >
+                    <span className="wc-mark" aria-hidden="true"><IconPlus width={21} height={21} /></span>
+                    <span className="wc-card-body">
+                      <span className="wc-card-title">{t('wallet.createLocal')}</span>
+                      <span className="wc-card-sub">{t('wallet.createLocalDesc')}</span>
+                    </span>
+                    <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
+                  </motion.button>
 
+                  <motion.button
+                    className="wc-card"
+                    whileTap={{ scale: 0.985 }}
+                    onClick={() => setView('import')}
+                  >
+                    <span className="wc-mark" aria-hidden="true"><IconKey width={21} height={21} /></span>
+                    <span className="wc-card-body">
+                      <span className="wc-card-title">{t('wallet.importLocal')}</span>
+                      <span className="wc-card-sub">{t('wallet.importLocalDesc')}</span>
+                    </span>
+                    <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
+                  </motion.button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ---------------------------- failures ---------------------------- */}
           {wallet.error === 'WC_ORIGIN_BLOCKED' && (
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcOriginBlocked')}</p>
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('wallet.wcOriginBlocked')}</p>
           )}
           {wallet.error === 'WC_RELAY_UNREACHABLE' && (
             <>
-              <p className="notice notice-danger" style={{ marginTop: 10 }}>
+              <p className="notice notice-danger" style={{ marginTop: 12 }}>
                 {t('wallet.wcRelayUnreachable')}
               </p>
               {/* Naming the failure is not the same as naming the way out. These
@@ -528,17 +583,35 @@ export default function WalletConnectSheet({ open, onClose }) {
             </>
           )}
           {wallet.error === 'WC_EXPIRED' && (
-            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcExpired')}</p>
+            <p className="notice" style={{ marginTop: 12 }}>{t('wallet.wcExpired')}</p>
           )}
           {/* «The relay is unreachable» used to be printed for a timeout, which
               is how a mobile round trip that simply did not finish became a
               network investigation. A timeout is its own sentence now. */}
           {wallet.error === 'WC_TIMEOUT' && (
-            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcTimeout')}</p>
+            <p className="notice" style={{ marginTop: 12 }}>{t('wallet.wcTimeout')}</p>
           )}
           {wallet.error === 'CONNECT_FAILED' && (
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('wallet.connectFailed')}</p>
           )}
+          {/* The lease lapsed: the app stopped re-attaching by itself, and this
+              is the sentence that says so — with the one action that fixes it. */}
+          {wallet.error === 'SESSION_EXPIRED' && (
+            <p className="notice" style={{ marginTop: 12 }}>{t('wallet.sessionLapsed')}</p>
+          )}
+          {/* The session the wallet signed is gone from this device — a fresh
+              connect is the only way forward, and saying so beats a spinner. */}
+          {wallet.error === 'SESSION_MISSING' && (
+            <p className="notice" style={{ marginTop: 12 }}>{t('wallet.sessionGone')}</p>
+          )}
+
+          {/* The custody promise and the one honest trade-off of the vault,
+              in the same shape, so neither reads as fine print. */}
+          <div className="wc-foot">
+            <IconShield width={14} height={14} aria-hidden="true" />
+            <span>{t('wallet.custodyNotice')}</span>
+          </div>
+          <p className="wc-foot wc-foot-risk">{t('wallet.localRisk')}</p>
 
           {/* The evidence, one tap away, where the failure happened. */}
           <WalletHealthPanel projectId={wallet.wcProjectId} />
@@ -548,8 +621,13 @@ export default function WalletConnectSheet({ open, onClose }) {
       {/* ------------------------------- pair ------------------------------- */}
       {view === 'pair' && (
         <>
-          <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.pairTitle')}</h2>
-          <p className="muted" style={{ marginBottom: 12 }}>{t('wallet.pairSubtitle')}</p>
+          <div className="wc-head">
+            <span className="wc-head-mark" aria-hidden="true"><IconLink width={22} height={22} /></span>
+            <div className="wc-head-text">
+              <h2 className="wc-title">{t('wallet.pairTitle')}</h2>
+              <p className="wc-sub">{t('wallet.pairSubtitle')}</p>
+            </div>
+          </div>
 
           {/* One row per promoted wallet, as a REAL LINK: `target="_blank"` keeps
               this document and its relay socket alive, and the href is the
@@ -561,8 +639,8 @@ export default function WalletConnectSheet({ open, onClose }) {
               return (
                 <motion.a
                   key={entry.key}
-                  className="wallet-option"
-                  whileTap={{ scale: 0.98 }}
+                  className="wc-card"
+                  whileTap={{ scale: 0.985 }}
                   href={href || undefined}
                   target="_blank"
                   rel="noreferrer noopener"
@@ -571,25 +649,34 @@ export default function WalletConnectSheet({ open, onClose }) {
                   onClick={(event) => openWalletApp(event, entry)}
                   style={!pairUri ? { opacity: 0.55, pointerEvents: 'none' } : undefined}
                 >
-                  <span className="wallet-badge">
-                    <IconLink width={20} height={20} />
+                  {/*
+                    ONE TILE, ONE MEANING. This used to draw a generic link glyph
+                    and then layer the wallet's real logo ON TOP of it, so a
+                    loaded logo covered a shape it had nothing to do with and a
+                    slow one showed a link icon for MetaMask. The brand logo (from
+                    the same Explorer CDN AppKit reads) is now the tile's only
+                    content, and the link glyph is the fallback for the case the
+                    image never arrives.
+                  */}
+                  <span className="wc-mark" aria-hidden="true">
                     {logo ? (
                       <img
                         src={logo}
                         alt=""
-                        width={40}
-                        height={40}
                         loading="lazy"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
-                    ) : null}
+                    ) : (
+                      <IconLink width={20} height={20} />
+                    )}
                   </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{entry.name}</span>
-                    <span className="set-row-sub">
+                  <span className="wc-card-body">
+                    <span className="wc-card-title">{entry.name}</span>
+                    <span className="wc-card-sub">
                       {openedWallet === entry.key ? t('wallet.pairOpened') : t('wallet.pairOpenIn')}
                     </span>
                   </span>
+                  <IconChevronRight width={16} height={16} className="wc-chev" aria-hidden="true" />
                 </motion.a>
               );
             })}
@@ -614,15 +701,7 @@ export default function WalletConnectSheet({ open, onClose }) {
             <>
               <p className="muted" style={{ marginTop: 14, marginBottom: 8 }}>{t('wallet.pairScanHint')}</p>
               {pairQr ? (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    padding: 12,
-                    borderRadius: 14,
-                    background: '#fff'
-                  }}
-                >
+                <div className="wc-qr">
                   <svg
                     viewBox={`${-QR_QUIET_MODULES} ${-QR_QUIET_MODULES} ${pairQr.count + QR_QUIET_MODULES * 2} ${pairQr.count + QR_QUIET_MODULES * 2}`}
                     shapeRendering="crispEdges"
@@ -689,29 +768,33 @@ export default function WalletConnectSheet({ open, onClose }) {
       {/* ------------------------------ backup ------------------------------ */}
       {view === 'backup' && (
         <>
-          <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.backupTitle')}</h2>
-          <p className="notice notice-danger" style={{ marginBottom: 10 }}>{t('wallet.backupWarning')}</p>
+          <div className="wc-head">
+            <span className="wc-head-mark" aria-hidden="true"><IconShield width={22} height={22} /></span>
+            <div className="wc-head-text">
+              <h2 className="wc-title">{t('wallet.backupTitle')}</h2>
+              {/* The two warnings keep their own sentences instead of being
+                  folded into a subtitle: this is the one screen where nobody
+                  should have to read twice. */}
+              <p className="wc-sub">{t('wallet.backupWarning')}</p>
+            </div>
+          </div>
           <p className="notice notice-danger" style={{ marginBottom: 12 }}>{t('wallet.lossWarning')}</p>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 7,
-              padding: 12,
-              borderRadius: 14,
-              background: 'rgba(255,255,255,.04)',
-              border: '1px solid var(--line-strong)'
-            }}
-          >
+          {/*
+            A literal `rgba(255,255,255,.04)` for the group and `rgba(0,0,0,.4)`
+            for each word is invisible-as-a-group and muddy-as-a-chip on a light
+            page. Both are tokens now, so the seed grid reads the same way in
+            either theme — which matters more here than anywhere else in the app,
+            because these are the twelve words.
+          */}
+          <div className="wc-seed-grid">
             {mnemonic.split(' ').map((word, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="mono"
-                style={{ fontSize: 11.5, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,.4)' }}
+                className="mono wc-seed-word"
               >
                 <span style={{ color: 'var(--text-3)', marginInlineEnd: 5 }}>{i + 1}</span>
                 {word}
@@ -739,10 +822,17 @@ export default function WalletConnectSheet({ open, onClose }) {
       {/* --------------------------- set password --------------------------- */}
       {(view === 'confirm' || view === 'import') && (
         <>
-          <h2 className="h2" style={{ marginBottom: 4 }}>
-            {view === 'import' ? t('wallet.importTitle') : t('wallet.setPassword')}
-          </h2>
-          <p className="muted" style={{ marginBottom: 12 }}>{t('wallet.passwordDesc')}</p>
+          <div className="wc-head">
+            <span className="wc-head-mark" aria-hidden="true">
+              {view === 'import' ? <IconKey width={22} height={22} /> : <IconLock width={22} height={22} />}
+            </span>
+            <div className="wc-head-text">
+              <h2 className="wc-title">
+                {view === 'import' ? t('wallet.importTitle') : t('wallet.setPassword')}
+              </h2>
+              <p className="wc-sub">{t('wallet.passwordDesc')}</p>
+            </div>
+          </div>
 
           {view === 'import' && (
             <>
@@ -752,18 +842,7 @@ export default function WalletConnectSheet({ open, onClose }) {
                 onChange={(e) => setImportPhrase(e.target.value)}
                 rows={3}
                 placeholder="word1 word2 word3 …"
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-raised)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 12,
-                  color: 'var(--text-1)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 13,
-                  padding: 12,
-                  resize: 'vertical',
-                  marginBottom: 10
-                }}
+                className="wc-phrase"
               />
             </>
           )}
@@ -818,8 +897,13 @@ export default function WalletConnectSheet({ open, onClose }) {
       {/* ------------------------------ unlock ------------------------------ */}
       {view === 'unlock' && (
         <>
-          <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.unlockTitle')}</h2>
-          <p className="muted" style={{ marginBottom: 12 }}>{t('wallet.unlockDesc')}</p>
+          <div className="wc-head">
+            <span className="wc-head-mark" aria-hidden="true"><IconLock width={22} height={22} /></span>
+            <div className="wc-head-text">
+              <h2 className="wc-title">{t('wallet.unlockTitle')}</h2>
+              <p className="wc-sub">{t('wallet.unlockDesc')}</p>
+            </div>
+          </div>
 
           <label className="field-label">{t('wallet.password')}</label>
           <input

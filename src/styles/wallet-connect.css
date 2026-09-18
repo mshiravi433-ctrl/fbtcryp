@@ -1,0 +1,407 @@
+/*
+ * THE CONNECT-WALLET POPUP
+ * ---------------------------------------------------------------------------
+ * Requested: «در ظاهر پاپ‌آپ برای وصل شدن کیف پول باید ایکون‌ها و باکس مدرن‌تر
+ * شود و خیلی مدرن و زیبا شود در تم تیره و روشن درست با فاصله و زبان درست».
+ *
+ * So this file owns that one surface, and it is written against the app's TOKENS
+ * (--bg-panel, --line, --text-*, --rgb-*) rather than against literal colours —
+ * which is what makes it work in both themes without a second set of rules for
+ * light mode beyond the handful of deliberate overrides at the bottom. The old
+ * markup mixed inline `rgba(255,255,255,.04)` and `rgba(0,0,0,.4)` into the JSX,
+ * and those two are exactly the values that turn into invisible mush on a white
+ * page.
+ *
+ * Spacing is a strict 4pt rhythm (--wc-gap), and every horizontal offset is
+ * LOGICAL (padding-inline, margin-inline-start, inset-inline). Persian and Urdu
+ * read right-to-left and the sheet is the first thing a new user sees; a layout
+ * that only looks right in English is a broken layout, not an untranslated one.
+ * --------------------------------------------------------------------------- */
+
+.wc-sheet {
+  /* One knob for the whole surface, so the rhythm cannot drift rule by rule. */
+  --wc-gap: 12px;
+  --wc-radius: 18px;
+  --wc-card-bg: rgba(255, 255, 255, 0.045);
+  --wc-card-bg-hover: rgba(255, 255, 255, 0.075);
+  --wc-mark-bg: linear-gradient(140deg, rgba(0, 229, 255, 0.18), rgba(124, 77, 255, 0.20));
+  /* The three pill inks. The neon spectrum reads beautifully on black and
+     vanishes on white, so light mode mixes the same hues toward ink instead of
+     swapping in unrelated colours. */
+  --wc-ok-ink: color-mix(in srgb, var(--rgb-4) 88%, var(--text-1));
+  --wc-ok-bg: color-mix(in srgb, var(--rgb-4) 15%, transparent);
+  --wc-ok-edge: color-mix(in srgb, var(--rgb-4) 30%, transparent);
+  --wc-warn-ink: color-mix(in srgb, var(--rgb-5) 90%, var(--text-1));
+  --wc-warn-bg: color-mix(in srgb, var(--rgb-5) 15%, transparent);
+  --wc-warn-edge: color-mix(in srgb, var(--rgb-5) 32%, transparent);
+  --wc-bad-ink: color-mix(in srgb, var(--down) 90%, var(--text-1));
+  --wc-bad-bg: color-mix(in srgb, var(--down) 14%, transparent);
+  --wc-bad-edge: color-mix(in srgb, var(--down) 30%, transparent);
+}
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+.wc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--wc-gap);
+  margin-bottom: 4px;
+}
+
+.wc-head-mark {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--rgb-1) 70%, transparent);
+}
+
+.wc-head-text { min-width: 0; }
+
+.wc-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.wc-sub {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+/* ── the resume banner: a live lease being re-attached ───────────────────── */
+.wc-restoring {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: var(--wc-gap);
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 32%, var(--line));
+  background: color-mix(in srgb, var(--rgb-1) 10%, transparent);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.wc-spinner {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--rgb-1) 30%, transparent);
+  border-top-color: var(--rgb-1);
+  animation: wc-spin 0.85s linear infinite;
+}
+
+@keyframes wc-spin { to { transform: rotate(360deg); } }
+
+:root[data-reduce-motion='true'] .wc-spinner { animation: none; }
+
+/* ── grouped lists ───────────────────────────────────────────────────────── */
+.wc-group { margin-top: 16px; }
+
+.wc-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-inline: 2px;
+}
+
+.wc-group-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.wc-group-note {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.wc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* ── a wallet row ────────────────────────────────────────────────────────── */
+.wc-card {
+  display: flex;
+  align-items: center;
+  gap: var(--wc-gap);
+  width: 100%;
+  min-height: 68px;
+  padding: 13px 14px;
+  border-radius: var(--wc-radius);
+  border: 1px solid var(--line);
+  background: var(--wc-card-bg);
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.18s, background 0.18s, transform 0.12s;
+}
+
+/* An <a> row (the pairing view) must not inherit link colour or underline. */
+a.wc-card,
+.wc-card:link,
+.wc-card:visited { color: var(--text-1); text-decoration: none; }
+
+.wc-card:active { transform: scale(0.985); }
+
+.wc-card[data-featured='true'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 46%, var(--line));
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--rgb-1) 12%, transparent),
+    color-mix(in srgb, var(--rgb-2) 10%, transparent)
+  );
+}
+
+.wc-card[aria-disabled='true'] { opacity: 0.55; }
+
+.wc-card:disabled { opacity: 0.6; cursor: default; }
+
+@media (hover: hover) and (pointer: fine) {
+  .wc-card:hover {
+    background: var(--wc-card-bg-hover);
+    border-color: var(--line-strong);
+  }
+  .wc-card[data-featured='true']:hover {
+    border-color: color-mix(in srgb, var(--rgb-1) 70%, transparent);
+  }
+}
+
+/* The icon tile. A real brand icon (EIP-6963, or a wallet's own logo) is
+   layered over the gradient so a wallet that ships one is recognisable at a
+   glance, and one that ships none still gets a deliberate-looking tile. */
+.wc-mark {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--text-1);
+  background: var(--wc-mark-bg);
+  border: 1px solid var(--line);
+}
+
+.wc-mark > img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 9px;
+}
+
+.wc-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wc-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.wc-card-sub {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  /* Two lines maximum: a description must not turn a wallet list into an essay
+     — and long Persian strings are the reason this is a clamp, not a truncate. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wc-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding-inline: 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--wc-ok-ink);
+  background: var(--wc-ok-bg);
+  border: 1px solid var(--wc-ok-edge);
+}
+
+.wc-tag-warn {
+  color: var(--wc-warn-ink);
+  background: var(--wc-warn-bg);
+  border-color: var(--wc-warn-edge);
+}
+
+.wc-tag-blocked {
+  color: var(--wc-bad-ink);
+  background: var(--wc-bad-bg);
+  border-color: var(--wc-bad-edge);
+}
+
+/* «next» points the other way in Persian — an inline style cannot do that. */
+.wc-chev { flex-shrink: 0; color: var(--text-3); }
+[dir='rtl'] .wc-chev { transform: scaleX(-1); }
+
+/* ── footer: the custody line, on its own ────────────────────────────────── */
+.wc-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text-3) 6%, transparent);
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.wc-foot svg { flex-shrink: 0; margin-top: 2px; color: color-mix(in srgb, var(--wc-ok-ink) 80%, var(--text-3)); }
+
+.wc-foot-risk {
+  color: var(--text-2);
+  border-color: color-mix(in srgb, var(--rgb-5) 26%, var(--line));
+  background: color-mix(in srgb, var(--rgb-5) 8%, transparent);
+}
+
+/* ── the QR card ─────────────────────────────────────────────────────────── */
+.wc-qr {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  border-radius: var(--wc-radius);
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 14px 40px -22px rgba(0, 0, 0, 0.6);
+}
+
+.wc-qr svg { display: block; }
+
+/* ── light theme overrides ───────────────────────────────────────────────────
+   Two values are genuinely different on white: a 4.5% white wash is invisible
+   (so cards need an ink-based tint topped with real white), and the glass mark
+   needs a touch more contrast against the page. Everything else is a token. */
+:root[data-theme='light'] .wc-sheet {
+  --wc-card-bg: #ffffff;
+  --wc-card-bg-hover: #ffffff;
+  --wc-mark-bg: linear-gradient(140deg, rgba(0, 145, 200, 0.12), rgba(97, 58, 214, 0.12));
+}
+
+:root[data-theme='light'] .wc-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+:root[data-theme='light'] .wc-card[data-featured='true'] {
+  background: linear-gradient(100deg, rgba(0, 145, 200, 0.10), rgba(97, 58, 214, 0.08));
+}
+
+:root[data-theme='light'] .wc-sheet {
+  --wc-ok-ink: color-mix(in srgb, var(--rgb-4) 34%, #05140f);
+  --wc-ok-bg: color-mix(in srgb, var(--rgb-4) 16%, transparent);
+  --wc-ok-edge: color-mix(in srgb, var(--rgb-4) 40%, transparent);
+  --wc-warn-ink: color-mix(in srgb, var(--rgb-5) 30%, #1a1204);
+  --wc-warn-bg: color-mix(in srgb, var(--rgb-5) 18%, transparent);
+  --wc-warn-edge: color-mix(in srgb, var(--rgb-5) 42%, transparent);
+  --wc-bad-ink: color-mix(in srgb, var(--down) 88%, #1a0208);
+  --wc-bad-bg: color-mix(in srgb, var(--down) 10%, transparent);
+  --wc-bad-edge: color-mix(in srgb, var(--down) 26%, transparent);
+}
+
+:root[data-theme='light'] .wc-head-mark {
+  /* White on neon cyan is a 1.2:1 pair. Deepened endpoints keep the same
+     two-hue identity while the glyph stays readable. */
+  background: linear-gradient(140deg, #0a7ea4, #4c2fbf);
+}
+
+:root[data-theme='light'] .wc-restoring {
+  color: #0b3b52;
+}
+
+:root[data-theme='light'] .wc-foot {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+:root[data-theme='light'] .wc-qr {
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 14px 40px -26px rgba(15, 23, 42, 0.4);
+}
+
+/* ── small phones ────────────────────────────────────────────────────────────
+   A 68px row with a 44px tile is comfortable; on a 320px screen the padding
+   comes in a step so the text column is not squeezed into three characters per
+   line. Layout only — nothing is hidden. */
+@media (max-width: 360px) {
+  .wc-sheet { --wc-gap: 10px; }
+  .wc-card { padding: 12px; min-height: 64px; }
+  .wc-mark { width: 40px; height: 40px; border-radius: 12px; }
+  .wc-head-mark { width: 42px; height: 42px; border-radius: 13px; }
+}
+
+/* ── the seed grid and the phrase box ────────────────────────────────────────
+   Both used to carry literal `rgba(255,255,255,.04)` / `rgba(0,0,0,.4)` inline
+   styles. On a light page that is an invisible group with unreadable chips
+   around twelve words the user was just told to write down. */
+.wc-seed-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+}
+
+.wc-seed-word {
+  font-size: 11.5px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .wc-seed-word {
+  background: #ffffff;
+}
+
+.wc-phrase {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 12px;
+  resize: vertical;
+  margin-bottom: 10px;
+}
