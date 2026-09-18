@@ -39,6 +39,7 @@
 
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../chains.js';
 import { TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
+import { purgeConnectionKeys } from './storage.js';
 import { sleep } from './timing.js';
 import { wcEvent } from './trace.js';
 
@@ -188,6 +189,46 @@ export function emailOptions({ projectId, metadata }) {
 let instance = null;
 
 /**
+ * Does the SHARED controllers state still describe an embedded-wallet (AUTH)
+ * connection?
+ *
+ * The singletons are process-wide, so this reads the same map
+ * `w3m-email-login-widget` reads — and its render does
+ * `?disabled=${hasAnyConnection('AUTH')}` on the email input. An entry left
+ * there by an attempt whose teardown lost its race is what made the email box
+ * open already disabled («the popup opens and email does nothing»).
+ */
+async function sharedAuthConnection() {
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    return Boolean(controllers?.ConnectionController?.hasAnyConnection?.('AUTH'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Retire the current page's instance, bounded.
+ *
+ * Purging storage cleans what the NEXT boot reads; it cannot reach the
+ * IN-MEMORY ConnectionController map of an instance that is already alive. When
+ * a fresh login finds that map still describing an AUTH wallet, the instance is
+ * disconnected (4s bound — a hung frame must not own the tap) and dropped, so
+ * the replacement boots against state nothing stale describes.
+ */
+async function retireInstance(modal) {
+  if (!modal) return;
+  try {
+    await Promise.race([
+      Promise.resolve(modal.disconnect?.()).catch(() => {}),
+      sleep(TIMEOUT.teardown)
+    ]);
+  } catch {
+    /* the recreate below does not depend on the disconnect succeeding */
+  }
+}
+
+/**
  * Wait for the instance to finish booting BEFORE anything is opened on it.
  *
  * ─── THE «GREEN TICK, THEN NOTHING» REPORT ─────────────────────────────────
@@ -240,12 +281,32 @@ async function awaitReady(modal, ms = TIMEOUT.emailOpen) {
  * frame, a later `setItem` does not resurrect it — only a new constructor does.
  * Without that recreate, a single slow-boot transient would make every later
  * restore wait the full window for an event an absent iframe can never emit.
+ *
+ * ─── `fresh` — THE CLEAN SLATE A NEW LOGIN ASKS FOR ─────────────────────────
+ * `open()` passes it when NO login is claimed (`fresh: !hasMarker()`): the user
+ * is starting over, so nothing a PREVIOUS session left behind may survive into
+ * this boot. Three residues, three different layers, all handled:
+ *
+ *   1. localStorage — `purgeConnectionKeys()` (synchronously, before any boot
+ *      can read it) removes `@appkit/connections`, `@appkit/connection_status`
+ *      and friends — the keys whose survival made the SDK believe a
+ *      DISCONNECTED email wallet was still attached, auto-reattach it, and open
+ *      the «login» as a phantom account with a balance.
+ *   2. the in-memory ConnectionController map — invisible to any purge; when it
+ *      still holds an AUTH entry the email input renders disabled. Detected via
+ *      `sharedAuthConnection()` and answered by retiring the instance.
+ *   3. the instance itself — recreated when anything above was dirty, so the
+ *      new boot (`syncConnections`, `syncAuthConnector`) reads only clean state.
+ *
+ * When a login IS claimed (a restore or a claim in progress) nothing here
+ * purges: those keys then describe a wallet the user is owed.
+ *
+ * @returns {Promise<object>} the AppKit instance.
  */
-export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetadata() } = {}) {
+export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetadata(), fresh = false } = {}) {
   const rearm = rearmSdkLoginMarker();
   if (rearm === 'rearmed' && instance) {
-    try { await instance.disconnect?.(); } catch { /* best effort */ }
-    try { instance.close?.(); } catch { /* best effort */ }
+    await retireInstance(instance);
     /* disconnect()'s deleteAuthLoginCache removes the key we just restored. */
     try {
       const target = store();
@@ -254,6 +315,16 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
       }
     } catch { /* storage unavailable */ }
     instance = null;
+  }
+  if (fresh) {
+    const purged = purgeConnectionKeys();
+    if (purged) wcEvent('email_open_purged', purged);
+    const dirty = purged > 0 || instance?.getIsConnectedState?.() === true || (await sharedAuthConnection());
+    if (dirty && instance) {
+      wcEvent('email_open_dirty_instance');
+      await retireInstance(instance);
+      instance = null;
+    }
   }
   if (!instance) {
     const [{ createAppKit }, { EthersAdapter }] = await Promise.all([
@@ -433,18 +504,61 @@ export async function awaitAccount(modal, {
 }
 
 /**
+ * The embedded wallet's own EIP-1193 provider, straight from the shared auth
+ * connector — not from `ProviderController.state.providers`.
+ *
+ * ─── WHY ────────────────────────────────────────────────────────────────────
+ * `getWalletProvider()` reads a different store than the one the login itself
+ * populates: the address becomes visible (`ChainController.activeCaipAddress`)
+ * the moment the frame answers, while `syncProvider()` fills
+ * `providers['eip155']` a beat later — and on a slow Android WebView that beat
+ * has outlived every retry, leaving the report «green tick, then nothing
+ * works». The auth connector's `provider` IS the `W3mFrameProvider` — a real
+ * EIP-1193 object (`request()` → frame RPC) and exactly what the ethers
+ * adapter drives — so when the controller store lags, this is not a stand-in,
+ * it is the same provider an earlier tick would have returned.
+ */
+export async function authConnectorProvider(namespace = 'eip155') {
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const connector = controllers?.ConnectorController?.getAuthConnector?.(namespace);
+    return connector?.provider ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Open the login modal and wait for the wallet.
  *
  * The marker is claimed BEFORE the modal opens, because on mobile the flow can
  * be cut off by the redirect before anything happens in this document.
+ *
+ * TWO GUARDS AROUND THE OPEN ITSELF:
+ *
+ *   • `fresh: !hasMarker()` — when no login is claimed, the boot gets a clean
+ *     slate (see getAppKit). A previous session's leftovers — a persisted AUTH
+ *     connection, a 'connected' status — are what turned «login with email»
+ *     into «a popup showing the balance of the wallet you had disconnected».
+ *
+ *   • a bounded `modal.open()` — AppKit awaits `ApiController.prefetch()`
+ *     (explorer API fan-out) before the Connect view exists; on a slow network
+ *     one stalled call held the whole flow and the user stared at nothing for a
+ *     full minute. The bound releases the flow to KEEP WAITING for the account
+ *     (the modal may still appear); it only refuses to let a hung prefetch own
+ *     the spinner forever.
  */
 export async function open({ projectId, metadata } = {}) {
-  const modal = await getAppKit({ projectId, metadata });
+  const fresh = !hasMarker();
+  const modal = await getAppKit({ projectId, metadata, fresh });
   setMarker(true);
   reassertFeatures(modal);
-  try {
-    await modal.open({ view: 'Connect' });
-  } catch {
+  let openError = null;
+  const opening = Promise.resolve(modal.open({ view: 'Connect' })).catch((error) => {
+    openError = error;
+  });
+  await Promise.race([opening, sleep(TIMEOUT.emailModalOpen)]);
+  if (openError) {
     wcEvent('email_open_failed');
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
@@ -468,9 +582,19 @@ export async function open({ projectId, metadata } = {}) {
     // Wait a bit more for provider
     await sleep(800);
     try {
-      const p = modal.getWalletProvider?.() || modal.getWalletProvider?.('eip155') || modal.getProvider?.('eip155') || null;
+      const p = modal.getWalletProvider?.()
+        || modal.getWalletProvider?.('eip155')
+        || modal.getProvider?.('eip155')
+        || (await authConnectorProvider());
       if (p) account.provider = p;
     } catch {}
+  }
+  if (!account.provider) {
+    // Last chance: the auth connector's own frame provider (see its doc comment)
+    try {
+      const p = await authConnectorProvider();
+      if (p) account.provider = p;
+    } catch { /* reported below */ }
   }
   if (!account.provider) {
     // Still no provider — keep marker, but report pending so next cold start retries
@@ -501,6 +625,17 @@ export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_W
     wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
     return { ok: false, code: cleared ? 'NO_SESSION' : 'PENDING' };
   }
+  /* Same lag as open(): the address can beat `providers['eip155']` onto the
+     screen by seconds on a slow WebView. The auth connector's frame provider is
+     the same object either store would hand back, so a restore that has an
+     account but no store entry is still a usable wallet — ask the connector
+     before declaring the attach impossible. */
+  if (account && !account.provider && account.address) {
+    try {
+      const p = await authConnectorProvider();
+      if (p) account.provider = p;
+    } catch { /* attach will report the miss */ }
+  }
   wcEvent('email_session_restored');
   return { ok: true, ...account, restored: true };
 }
@@ -527,21 +662,31 @@ export async function rollback(modal) {
 }
 
 /**
- * Forget the session: clear our marker, and if an instance exists in this page
- * lifetime ask it to disconnect too (bounded — a hung auth frame must never
- * stall a mode switch).
+ * Forget the session: clear our marker, ask an existing instance to disconnect
+ * too (bounded — a hung auth frame must never stall a mode switch), and then
+ * PURGE the AppKit connection keys.
+ *
+ * The purge is not redundant with the disconnect: AppKit's own teardown writes
+ * its tombstones and clears `@appkit/connections` only when the frame RPC
+ * finishes, and `forget()` does not wait for it to. Without the purge, a
+ * disconnect whose sign-out lost that race left the SDK still describing the
+ * logged-out wallet as connected — the exact residue that made the next email
+ * login open as a phantom account (address, balance, disabled input) instead of
+ * the email form.
  */
 export async function forget({ timeoutMs = TIMEOUT.teardown } = {}) {
   setMarker(false);
   const modal = instance;
-  if (!modal || typeof modal.disconnect !== 'function') return true;
-  try {
-    await Promise.race([
-      Promise.resolve(modal.disconnect()).catch(() => {}),
-      sleep(timeoutMs)
-    ]);
-  } catch {
-    /* logout is best-effort; the marker above is the state we own */
+  if (modal && typeof modal.disconnect === 'function') {
+    try {
+      await Promise.race([
+        Promise.resolve(modal.disconnect()).catch(() => {}),
+        sleep(timeoutMs)
+      ]);
+    } catch {
+      /* logout is best-effort; the marker above is the state we own */
+    }
   }
+  purgeConnectionKeys();
   return true;
 }

@@ -112,6 +112,7 @@ export {
   EMAIL_MARKER_KEY,
   EMAIL_RESTORE_WINDOW_MS,
   SOCIAL_PROVIDERS,
+  authConnectorProvider,
   awaitAccount,
   buildNetworks,
   emailOptions,
@@ -133,5 +134,6 @@ export {
   originsProbeUrl,
   platformFlags,
   storageFacts,
-  summarizeProjectConfig
+  summarizeProjectConfig,
+  usageProbeUrl
 } from './health.js';

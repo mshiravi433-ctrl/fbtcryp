@@ -570,6 +570,13 @@ export default function WalletConnectSheet({ open, onClose }) {
           {wallet.error === 'CONNECT_FAILED' && (
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
           )}
+          {/* The login itself succeeded — the embedded wallet session exists —
+              but its signer never surfaced in this page. Naming THAT beats a
+              generic «connection failed»: nothing was lost, retrying (or just
+              reopening the app) attaches it. */}
+          {wallet.error === 'EMAIL_PROVIDER_PENDING' && (
+            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>
+          )}
 
           {/* The evidence, one tap away, where the failure happened. */}
           <WalletHealthPanel projectId={wallet.wcProjectId} />

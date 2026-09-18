@@ -234,13 +234,23 @@ export default function WalletHealthPanel({ projectId }) {
                 </p>
               )}
               {row(t('wallet.healthSecureSite'), report.secureSite)}
+              {report.usage?.ok != null && row(
+                t('wallet.healthUsage'),
+                { ok: Boolean(report.usage.ok) },
+                `tier=${report.usage.tier ?? '?'} · mau>${report.usage.isAboveMauLimit ? 'YES' : 'no'} · rpc>${report.usage.isAboveRpcLimit ? 'YES' : 'no'}`
+              )}
+              {report.usage?.emailDisabledByUsageLimit && (
+                <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '4px 0' }}>
+                  {t('wallet.healthUsageBlocked')}
+                </p>
+              )}
               {row(
                 t('wallet.healthHandoff'),
                 { ok: Boolean(report.handoff?.channel) },
                 handoffDetail(report.handoff)
               )}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''}`}
+                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''} · status=${report.storage?.connectionStatus ?? '—'} · stored=${(report.storage?.storedConnectors ?? []).join(',') || '—'}`}
               </p>
               {report.storage?.orphanKeys && (
                 <p className="notice" style={{ fontSize: 11.5, margin: '4px 0' }}>
