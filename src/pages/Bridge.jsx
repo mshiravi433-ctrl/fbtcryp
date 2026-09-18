@@ -6,6 +6,7 @@ import PageTransition, { riseIn } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { fmtUsd } from '../lib/format';
+import { bridgeErrorFromException, bridgeErrorText } from '../lib/bridgeErrors';
 import {
   BRIDGE_CHAINS,
   fromBaseUnits,
@@ -422,7 +423,12 @@ export default function Bridge() {
     } catch (e) {
       if (seq.current !== mine) return;
       setQuote(null);
-      setQuoteErr(e.code || 'QUOTE_FAILED');
+      /* Keep the server's prose (0x validation text, upstream bodies) — it
+         rides along as an evidence line rather than being discarded. */
+      setQuoteErr({
+        code: e.code || 'QUOTE_FAILED',
+        detail: typeof e?.detail === 'string' && e.detail.trim() ? e.detail.slice(0, 220) : null
+      });
     } finally {
       if (seq.current === mine) setQuoting(false);
     }
@@ -553,7 +559,13 @@ export default function Bridge() {
         });
       }
     } catch (e) {
-      setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
+      /*
+       * Wallet prose (a `shortMessage`, a node's revert text) used to land
+       * here RAW — English sentences on a Persian screen. Through
+       * bridgeErrorFromException a code stays a translated sentence and prose
+       * becomes evidence on a second ltr line instead of the headline.
+       */
+      setTxErr(bridgeErrorFromException(e, t));
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -604,7 +616,22 @@ export default function Bridge() {
         setChangedQuote(null);
         return;
       }
-      setTxErr(t(`bridge.err.${result.code}`, { defaultValue: result.detail || result.code }));
+      /*
+       * `defaultValue: result.detail || result.code` printed the raw RPC
+       * message or the machine code itself whenever `bridge.err` had no key
+       * for it — which was for most codes. The whole map now exists: the code
+       * picks the sentence, unknown codes fall back to a translated generic
+       * that KEEPS the code for support, and raw upstream prose becomes an
+       * evidence line, never the headline.
+       */
+      {
+        const mapped = bridgeErrorText(result.code, t);
+        const rawDetail = typeof result.detail === 'string' ? result.detail.trim() : '';
+        const proseDetail = rawDetail && !/^[A-Z][A-Z0-9_]{2,40}$/.test(rawDetail.toUpperCase())
+          ? rawDetail.slice(0, 220)
+          : null;
+        setTxErr({ text: mapped.text, detail: mapped.detail || proseDetail });
+      }
       haptic?.('error');
       return;
     }
@@ -841,11 +868,24 @@ export default function Bridge() {
           </InfoBox>
         </div>
 
-        {quoteErr && !quoting && (
-          <p className="notice notice-danger" style={{ marginTop: 10 }}>
-            {t(`bridge.err.${quoteErr}`, { defaultValue: t('bridge.err.QUOTE_FAILED') })}
-          </p>
-        )}
+        {quoteErr && !quoting && (() => {
+          /* Unknown quote codes used to collapse into «no route found» — a
+             sentence that invites changing the amount even when the real
+             reason was a rate-limited provider. Each code now has its own
+             words; anything unmapped keeps the code inside a generic line. */
+          const { text, detail } = bridgeErrorText(quoteErr?.code ?? quoteErr, t, { fallbackKey: 'bridge.err.QUOTE_FAILED' });
+          const rawDetail = quoteErr?.detail || detail;
+          return (
+            <p className="notice notice-danger" style={{ marginTop: 10 }}>
+              {text}
+              {rawDetail && (
+                <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
+                  {rawDetail}
+                </span>
+              )}
+            </p>
+          );
+        })()}
 
         {/* Empty state: connected, but no amount yet, so nothing to quote. */}
         {!quoting && !quoteErr && !summary && wallet.isConnected && (
@@ -1026,7 +1066,16 @@ export default function Bridge() {
           </button>
         )}
 
-        {txErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{txErr}</p>}
+        {txErr && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {txErr?.text || txErr}
+            {txErr?.detail && (
+              <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
+                {txErr.detail}
+              </span>
+            )}
+          </p>
+        )}
 
         {txHash && (
           <div className="notice" style={{ marginTop: 10 }}>

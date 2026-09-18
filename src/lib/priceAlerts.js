@@ -16,6 +16,38 @@
  * shape as the dead Solana RPC setting, except here it silently promises to
  * warn someone about their money.
  *
+ * ─── THE OFFLINE SNAPSHOT MUST NEVER PRODUCE AN ALERT ──────────────────────
+ * Reported: «بیت کویین ۴۰ درصد رشد کرد که در واقعیت ۴ دهم رشد کرده». The
+ * arithmetic here was always correct — the INPUTS were not. `getMarkets()`
+ * falls back to a deterministic offline snapshot (`lib/offlineData.js`) when
+ * both the backend and CoinGecko are unreachable, and BTC's seeded price
+ * there is 67,450. A baseline recorded from that snapshot and a price from
+ * the live market (or the reverse) differ by the gap between the two feeds —
+ * which is exactly the shape of the report: a confident «+۴۰٪» notification
+ * about a market that moved four tenths of a percent.
+ *
+ * Three guards, each closing one way to manufacture a number:
+ *
+ *   1. PROVENANCE. A row marked `offline` / `dataProvenance === 'offline'` is
+ *      never recorded as a baseline and never compared against one. When the
+ *      source changes (live → offline, offline → live, or a legacy baseline
+ *      with no recorded source), the baseline is re-recorded silently. One
+ *      missed real alert is the honest price of never sending a fake one.
+ *
+ *   2. FRESHNESS. A baseline not seen for more than `STALE_BASELINE_MS` is
+ *      re-recorded without alerting. «از آخرین بررسی» is only a useful
+ *      sentence while "last check" is recent; after that the number is
+ *      technically true and practically a lie, because the reader compares it
+ *      against today's move.
+ *
+ *   3. THE SHORT-WINDOW CEILING. An implied move larger than
+ *      `SHORT_WINDOW_MAX_PCT` between two sightings less than `SHORT_WINDOW_MS`
+ *      apart is, for a top-250 coin, a data fault (a mispriced row, a decimal
+ *      shift, a feed swap) far more often than a real market event. The alert
+ *      is skipped and the baseline re-armed at the new price — a missed
+ *      meme-coin pump costs one notification; a fake «BTC +40%» costs the
+ *      user's trust in every notification after it.
+ *
  * ─── WHY A PERCENTAGE MOVE AND NOT A TARGET PRICE ───────────────────────────
  * A target price ("tell me when BTC hits 70,000") is the Orders screen's job
  * and it already does it properly, with persistence and trailing stops. This
@@ -63,6 +95,41 @@ export const ALERT_THRESHOLD_PCT = 5;
  */
 export const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * A baseline not refreshed within this window is re-recorded without
+ * alerting. See the header: "since you last checked" stops being a useful
+ * sentence once the check is days old, because the reader compares the
+ * number against today's move.
+ */
+export const STALE_BASELINE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The short-window plausibility ceiling.
+ *
+ * Within SHORT_WINDOW_MS, an implied move larger than this is treated as a
+ * data fault and silently re-armed, never announced. The value sits above
+ * anything a top-50 coin has legitimately printed between two 30-second
+ * polls of the same feed, and below the offline-gap / decimal-shift class of
+ * fault — the reported «۴۰٪» lands squarely inside it.
+ */
+export const SHORT_WINDOW_MAX_PCT = 35;
+export const SHORT_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The data source of a market row, normalised to 'live' | 'offline'.
+ *
+ * `getMarkets()` stamps every row with `dataProvenance` ('live' | 'offline')
+ * and the offline snapshot additionally sets `offline: true` — both are read.
+ * A row that carries no provenance at all (a test fixture, a hand-built list)
+ * counts as live so the feature keeps working outside production; the guard
+ * that matters is that an OFFLINE row is never mistaken for a live one.
+ */
+function provenanceOf(coin) {
+  if (coin?.offline === true) return 'offline';
+  if (coin?.dataProvenance === 'offline') return 'offline';
+  return 'live';
+}
+
 function readStore() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -108,7 +175,10 @@ export function evaluatePriceAlerts({
   store = readStore(),
   now = Date.now(),
   threshold = ALERT_THRESHOLD_PCT,
-  cooldownMs = ALERT_COOLDOWN_MS
+  cooldownMs = ALERT_COOLDOWN_MS,
+  staleBaselineMs = STALE_BASELINE_MS,
+  shortWindowMaxPct = SHORT_WINDOW_MAX_PCT,
+  shortWindowMs = SHORT_WINDOW_MS
 } = {}) {
   const next = { ...store };
   const alerts = [];
@@ -116,6 +186,16 @@ export function evaluatePriceAlerts({
 
   for (const coin of coins) {
     if (!coin || !starred.has(coin.id)) continue;
+
+    const src = provenanceOf(coin);
+
+    /*
+     * GUARD 1a — an offline/deterministic price is not a fact about the
+     * market. It is neither a baseline nor an alert input. Recording it would
+     * arm the exact bug this fixes: the NEXT live poll then "moved" by the
+     * gap between the snapshot and the real market.
+     */
+    if (src === 'offline') continue;
 
     const price = Number(coin.price);
     /*
@@ -126,20 +206,66 @@ export function evaluatePriceAlerts({
     if (!Number.isFinite(price) || price <= 0) continue;
 
     const prev = next[coin.id];
+
+    /*
+     * GUARD 1b — source continuity. A baseline recorded from a different
+     * provenance than the row in hand measures the distance between two
+     * FEEDS, not between two prices. The legacy `{base, at}` shape this store
+     * used before provenance was tracked has no `src`, and `undefined !== 'live'`
+     * — so every pre-upgrade baseline is re-armed exactly once rather than
+     * trusted on faith. Safe direction: one missed real alert beats one
+     * manufactured «+۴۰٪».
+     */
+    if (prev && prev.src !== src) {
+      next[coin.id] = { base: price, src, seen: now };
+      continue;
+    }
+
     if (!prev || !Number.isFinite(prev.base) || prev.base <= 0) {
       /*
-       * First sighting: record, never alert. Alerting here would fire for
-       * every favourite the first time the feature is switched on.
+       * First sighting (or a corrupted baseline): record, never alert.
+       * Alerting here would fire for every favourite the first time the
+       * feature is switched on.
        *
        * `at` is deliberately left UNSET. It records when we last ALERTED,
        * not when we last saw the coin — see the cooldown note below.
+       * `seen` IS set: it is the freshness clock for GUARD 2.
        */
-      next[coin.id] = { base: price };
+      next[coin.id] = { base: price, src, seen: now };
+      continue;
+    }
+
+    /*
+     * GUARD 2 — freshness. A baseline nothing has refreshed for days
+     * produces "since you last checked" numbers the reader will compare
+     * against today's chart and disbelieve. Re-arm silently instead.
+     */
+    if (prev.seen != null && Number.isFinite(prev.seen) && now - prev.seen > staleBaselineMs) {
+      next[coin.id] = { base: price, src, seen: now };
       continue;
     }
 
     const changePct = ((price - prev.base) / prev.base) * 100;
-    if (Math.abs(changePct) < threshold) continue;
+    if (Math.abs(changePct) < threshold) {
+      /* Not a qualifying move — but the sighting still refreshes `seen`, so
+         the freshness clock measures the LAST TIME WE SAW THE PRICE, not the
+         last alert. */
+      next[coin.id] = { ...prev, src, seen: now };
+      continue;
+    }
+
+    /*
+     * GUARD 3 — the short-window ceiling. A move this large this fast is a
+     * data fault until proven otherwise: the offline-gap class of bug lands
+     * here, as does a decimal shift or a mispriced row. Re-arm at the new
+     * price and say nothing — the next poll decides whether the price is
+     * real, and if it holds, moves from THERE are honest again.
+     */
+    if (prev.seen != null && Number.isFinite(prev.seen)
+        && now - prev.seen <= shortWindowMs && Math.abs(changePct) > shortWindowMaxPct) {
+      next[coin.id] = { base: price, src, seen: now };
+      continue;
+    }
 
     /*
      * Moved enough — but respect the cooldown.
@@ -155,7 +281,10 @@ export function evaluatePriceAlerts({
      * So `at` is now absent until we actually alert, and an absent `at`
      * means "never alerted, nothing to wait for".
      */
-    if (prev.at != null && now - prev.at < cooldownMs) continue;
+    if (prev.at != null && now - prev.at < cooldownMs) {
+      next[coin.id] = { ...prev, src, seen: now };
+      continue;
+    }
 
     alerts.push({
       id: coin.id,
@@ -168,7 +297,7 @@ export function evaluatePriceAlerts({
 
     /* Re-baseline to the price we alerted at, so the NEXT alert measures the
        next move rather than repeating this one. */
-    next[coin.id] = { base: price, at: now };
+    next[coin.id] = { base: price, src, seen: now, at: now };
   }
 
   /*
