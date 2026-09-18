@@ -19,7 +19,8 @@
 import { HEALTH_SDK_VERSION, SECURE_SITE_URL, W3M_API_URL, WC_PROJECT_ID } from './config.js';
 import { handoffFacts } from './handoff.js';
 import { measureRelay, probeReachable } from './relay.js';
-import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY, emailOptions } from './embedded.js';
+import { EMAIL_MARKER_KEY, SDK_LOGIN_KEY, emailOptions, isEmailFrameChain } from './embedded.js';
+import { readSharedConnectionFacts } from './appkit.js';
 import { isConnectionKey } from './storage.js';
 import { TIMEOUT } from './config.js';
 
@@ -274,6 +275,8 @@ export function isOriginAllowed(currentOrigin, list) {
    'AUTH' or 'io.metamask', never an address, topic or URI. */
 const CONNECTION_STATUS_KEY = '@appkit/connection_status';
 const CONNECTIONS_KEY = '@appkit/connections';
+/** The persisted chain `ChainController.initialize()` adopts before anything. */
+const ACTIVE_CAIP_NETWORK_KEY = '@appkit/active_caip_network_id';
 
 /**
  * Storage facts as booleans and counts — key names, never secrets.
@@ -295,7 +298,19 @@ export function storageFacts(storage) {
     appkitConnectionKeys: 0,
     orphanKeys: false,
     connectionStatus: null,
-    storedConnectors: []
+    storedConnectors: [],
+    /* ─── THE THIRD REPORT'S MISSING ROWS (2026-09-18, Telegram WebView) ────
+       `appkit-keys=4` answered «four keys survived» without saying which, and
+       nothing in the report could say WHAT CHAIN the email surface would boot
+       on — the one fact the «Action not allowed» failure is decided by. Key
+       names are SDK constants (never values, never an address) and the chain
+       ids are validated CAIP chain ids, so both survive the copy-paste
+       contract. */
+    appkitConnectionKeyNames: [],
+    activeCaipNetworkId: null,
+    frameLastUsedChain: null,
+    frameChainSupported: null,
+    emailMarkerStale: false
   };
   if (!target) return facts;
   try {
@@ -333,8 +348,29 @@ export function storageFacts(storage) {
          session and is never counted or purged. */
       if (isConnectionKey(key, target) && (key.startsWith('@appkit/') || key === 'WALLETCONNECT_DEEPLINK_CHOICE')) {
         facts.appkitConnectionKeys += 1;
+        if (facts.appkitConnectionKeyNames.length < 8) facts.appkitConnectionKeyNames.push(key);
+      }
+      /* The frame's own chain residue — read by `eth_chainId` and by
+         `connect()`'s default chain. A value outside the frame's network list
+         is the residue that turns a later login into «action not valid». */
+      if (key.includes('LAST_USED_CHAIN')) {
+        const raw = String(target.getItem(key) ?? '').trim();
+        const id = raw.includes(':') ? raw.split(':').pop() : raw;
+        if (/^\d{1,12}$/.test(id)) facts.frameLastUsedChain = id;
       }
     }
+    const activeChain = String(target.getItem(ACTIVE_CAIP_NETWORK_KEY) || '');
+    if (/^[a-z0-9-]+:\d{1,12}$/.test(activeChain)) {
+      facts.activeCaipNetworkId = activeChain;
+      facts.frameChainSupported = isEmailFrameChain(Number(activeChain.split(':').pop()));
+    }
+    /* `ourMarker && !sdkMarker && nothing connected` — the state that used to
+       disable the clean-slate path (and cost a 30s restore on every boot)
+       because nothing could tell it from a session the user is owed. */
+    facts.emailMarkerStale = facts.ourMarker
+      && !facts.sdkLoginMarker
+      && facts.connectionStatus !== 'connected'
+      && facts.storedConnectors.length === 0;
     /* Orphan = stale WalletConnect debris that would break the NEXT attempt.
        When the email marker stands those @appkit/* keys belong to the embedded
        wallet's own instance — purging them churns the count forever (observed
@@ -377,6 +413,20 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
  * would describe the network as it looked during the first socket rather than as
  * it is.
  */
+/**
+ * `readSharedConnectionFacts()` without the ability to fail the report.
+ * The facts themselves carry `available: false` when the controllers chunk is
+ * unreachable, which is the honest answer — an exception here would replace
+ * every measured row with an error string.
+ */
+async function sharedFactsSafe() {
+  try {
+    return await readSharedConnectionFacts();
+  } catch {
+    return { available: false };
+  }
+}
+
 export async function collectWalletHealth({
   projectId = WC_PROJECT_ID,
   origin,
@@ -444,6 +494,18 @@ export async function collectWalletHealth({
           && (Boolean(usage.body?.planLimits?.isAboveMauLimit) || Boolean(usage.body?.planLimits?.isAboveRpcLimit))
       },
       storage: storageFacts(storage),
+      /* ─── THE IN-MEMORY HALF (2026-09-18 report, third round) ──────────────
+         A storage purge cannot see the shared controllers, and the one fact
+         they decide that no storage row can show is whether the email input
+         renders DISABLED: `w3m-email-login-widget` computes `disabled` from
+         `ConnectionController.hasAnyConnection('AUTH')`, which is true for an
+         entry that carries no account at all (a ghost left by an attempt whose
+         teardown lost its race). The report therefore names the entries, the
+         accounts they carry, and the routing flags — so «the box opened and
+         the input could not be typed into» is evidence in the JSON rather than
+         a sentence in a support thread. Best-effort: an unreachable chunk must
+         not cost the whole report. */
+      shared: await sharedFactsSafe(),
       trace: typeof trace === 'function' ? trace() : null
     };
   } catch (error) {

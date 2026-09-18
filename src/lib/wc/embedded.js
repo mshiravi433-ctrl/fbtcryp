@@ -39,7 +39,9 @@
 
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../chains.js';
 import {
+  assertEmailNetwork,
   assertEmailRouting,
+  clearPhantomAuthConnection,
   readSharedConnectionFacts,
   resetSharedConnectionState
 } from './appkit.js';
@@ -144,50 +146,139 @@ export function sdkLoginMarkerPresent(storage) {
 }
 
 /**
- * AppKit network definitions for the EMAIL surface.
+ * Drop the frame's own chain residue when it names a chain the frame cannot
+ * serve — on EVERY email path, not just the fresh one.
  *
- * ─── WHY FILTERED ─────────────────────────────────────────────────────────
- * The secure iframe (`W3mFrame.networks`) hard-codes a small allow-list
- * (1,10,56,137,324,100,8453,42220,43114…); a chain outside that list still
- * gets a rpcUrl from our registry, but the frame's own `getSmartAccountEnabled`
- * and some RPC guards have been observed to answer «Action not allowed» /
- * «action not valid» when the active CAIP is unknown. The report that says
- * «action not valid» arrived from a Telegram WebView where the last-used
- * chain in storage was a custom one (Sonic/Mantle/Berachain etc.), so the
- * frame was asked to serve a network it never advertised.
+ * ─── WHY «EVERY PATH» (hypothesis that turned out to be the bug) ────────────
+ * This cleanup used to live inside `open()`'s `if (fresh)` block, and `fresh`
+ * is `!hasMarker()`. A standing marker — `ourMarker: true`, exactly the state
+ * the device report shows — therefore kept `@appkit-wallet/LAST_USED_CHAIN_KEY`
+ * (= the chain the frame itself last served, written by `setLastUsedChainId()`
+ * and read back by `getLastUsedChainId()` for `eth_chainId` and for `connect()`
+ * when no chain is given). One abandoned attempt on a custom chain was enough
+ * to make every later login ask the frame for that chain again.
  *
- * The swap engine still supports 17 chains; the EMAIL wallet is just the
- * *signer*, not the *route*. It can sign a BSC tx that swaps on Sonic via
- * LI.FI — the signer chain does not have to equal the swap chain. So we
- * restrict the AppKit network list to chains that are both in our registry
- * AND known to be in the frame / Blockchain API allow-list, with DEFAULT_CHAIN
- * (BSC) always first. If a user later switches to an unsupported chain via
- * `wallet_switchEthereumChain`, that switch is still allowed through the
- * generic EIP-1193 path — we just don't *start* the embedded wallet on it.
+ * The frame's last-used chain is not session state — the session token lives in
+ * `@appkit-wallet/SESSION_TOKEN_KEY` — so a residue that points outside the
+ * frame's own network list is never something to keep. A supported value is
+ * left alone: it is the user's genuine last choice, within the list the frame
+ * can honour.
+ *
+ * @returns {{removed: string[], kept: number}} key NAMES only (never values) —
+ *   the trace records the count, and a support reader can say which key was
+ *   dropped without any chain or address leaking.
  */
-const EMAIL_SUPPORTED_CHAIN_IDS = new Set([
+export function clearFrameChainResidue(storage) {
+  const target = store(storage);
+  const removed = [];
+  let kept = 0;
+  if (!target) return { removed, kept };
+  try {
+    const names = [];
+    const total = Number(target.length) || 0;
+    for (let i = 0; i < total; i += 1) {
+      const key = target.key(i) || '';
+      if (key.includes('LAST_USED_CHAIN')) names.push(key);
+    }
+    for (const key of names) {
+      const value = String(target.getItem(key) ?? '').trim();
+      if (!value) {
+        target.removeItem(key);
+        removed.push(key);
+        continue;
+      }
+      /* Values arrive as either a bare id (`56`) or a CAIP id (`eip155:56`). */
+      const chainId = Number(value.includes(':') ? value.split(':').pop() : value);
+      if (!Number.isFinite(chainId) || !isEmailFrameChain(chainId)) {
+        target.removeItem(key);
+        removed.push(key);
+      } else {
+        kept += 1;
+      }
+    }
+  } catch {
+    /* storage unavailable — nothing was removed, nothing else to do */
+  }
+  return { removed, kept };
+}
+
+/**
+ * THE CHAINS THE SECURE FRAME ACTUALLY SERVES — the frame's own list.
+ *
+ * `W3mFrame#networks` (@reown/appkit-wallet 1.8.19) hard-codes these CAIP ids
+ * and the frame's RPC/routing guards only answer for them:
+ *
+ *   eip155 1, 5, 11155111, 10, 420, 42161, 421613, 137, 80001, 42220,
+ *          1313161554, 1313161555, 56, 97, 43114, 43113, 324, 280, 100,
+ *          8453, 84531, 84532, 7777777, 999  (+ 3 solana ids we do not serve)
+ *
+ * This constant is the list as the SDK ships it, copied rather than probed for
+ * one reason: the copy is what the NEXT upgrade has to be diffed against, and
+ * an upgrade that changes it changes where an email wallet can live.
+ *
+ * The old code kept a second, hand-extended list that claimed Sonic/Mantle/
+ * Linea/Scroll were "known to work via the Blockchain API". They are not on
+ * the frame's list, and handing the frame a network it never advertised is
+ * exactly the «Action not allowed» / «action not valid» the reports describe.
+ * One list, the frame's.
+ */
+const FRAME_NETWORK_IDS = new Set([
   1, 5, 11155111, 10, 420, 42161, 421613, 137, 80001, 42220, 1313161554, 1313161555,
-  56, 97, 43114, 43113, 324, 280, 100, 8453, 84531, 84532, 7777777, 999,
-  // plus our own chains that are known to work via Blockchain API even if not in hard-coded list
-  56, 1, 137, 10, 42161, 8453, 43114, 100, 324, 59144, 534352, 1101, 5000, 146, 5000,
-  169, 34443, 57073, 1868, 2741, 30, 10143
+  56, 97, 43114, 43113, 324, 280, 100, 8453, 84531, 84532, 7777777, 999
 ]);
 
+/**
+ * Our registry ∩ the frame's list — the chains an email wallet may live on.
+ * For this app's 16-chain registry that is 1, 10, 56, 137, 324, 8453, 42161,
+ * 43114 (DEFAULT_CHAIN = 56 among them).
+ */
+export const EMAIL_FRAME_CHAIN_IDS = Object.freeze(
+  Object.keys(EVM_CHAINS)
+    .map(Number)
+    .filter((id) => FRAME_NETWORK_IDS.has(id))
+);
+
+/** Is this chain one the secure frame can actually be asked to serve? */
+export function isEmailFrameChain(id) {
+  const chainId = Number(id);
+  return Number.isFinite(chainId) && EMAIL_FRAME_CHAIN_IDS.includes(chainId);
+}
+
+/**
+ * AppKit network definitions for the EMAIL surface.
+ *
+ * ─── ORDER IS THE FIX, NOT THE LENGTH ──────────────────────────────────────
+ * The swap engine supports 16 chains and the WalletConnect surface boots its
+ * AppKit instance from that full list — the two surfaces share the controllers
+ * SINGLETONS, so shrinking the list here would shrink it for WalletConnect too
+ * (a surface that works and must keep working). It also would not help: the
+ * frame's chain comes from the ACTIVE network, not from the list's length.
+ *
+ * What matters is the ACTIVE one, and how it is chosen:
+ *
+ *   • `ChainController.initialize()` adopts a chain from storage when it is in
+ *     this list — so an unsupported chain must never be the storage pick
+ *     (`assertEmailNetwork()` prunes it before the boot), and
+ *   • when there is no valid pick, the SDK falls back to the FIRST entry of the
+ *     namespace's list (`getCaipNetwork()` → `requestedCaipNetworks[0]`) — so
+ *     the frame-supported chains go FIRST, DEFAULT_CHAIN among them, and every
+ *     chain the frame cannot serve goes after them.
+ *
+ * The email wallet is the *signer*, not the *route*: it can sign a BSC tx that
+ * swaps on Sonic via LI.FI, so a wallet pinned to a frame chain is not a
+ * limitation on what the app can trade. `switchEmbeddedNetwork()` refuses the
+ * unsupported moves explicitly instead of letting the frame answer for itself.
+ */
 export function buildNetworks() {
   const allIds = [DEFAULT_CHAIN, ...Object.keys(EVM_CHAINS).map(Number).filter((id) => id !== DEFAULT_CHAIN)];
-  // Keep DEFAULT_CHAIN always, plus any id that is in our registry and either
-  // in the known-supported set OR is a major chain we have RPC for.
-  // We still allow all, but we put supported ones first so default is safe.
-  const supported = [];
+  const frameFirst = [];
   const rest = [];
   for (const id of allIds) {
     if (!EVM_CHAINS[id]) continue;
-    if (EMAIL_SUPPORTED_CHAIN_IDS.has(id) || id === DEFAULT_CHAIN) supported.push(id);
+    if (isEmailFrameChain(id) || id === DEFAULT_CHAIN) frameFirst.push(id);
     else rest.push(id);
   }
-  // For email we only expose supported to avoid «action not valid» on boot.
-  // The full list is still available via wallet_switchEthereumChain.
-  const ids = [...supported, ...rest].slice(0, 16); // cap to avoid huge prefetch
+  const ids = [...frameFirst, ...rest].slice(0, 16); // cap to avoid huge prefetch
   // Ensure DEFAULT_CHAIN is first
   const ordered = [DEFAULT_CHAIN, ...ids.filter((i) => i !== DEFAULT_CHAIN)];
   return ordered
@@ -260,25 +351,6 @@ let instance = null;
 let retired = false;
 
 /**
- * Does the SHARED controllers state still describe an embedded-wallet (AUTH)
- * connection?
- *
- * The singletons are process-wide, so this reads the same map
- * `w3m-email-login-widget` reads — and its render does
- * `?disabled=${hasAnyConnection('AUTH')}` on the email input. An entry left
- * there by an attempt whose teardown lost its race is what made the email box
- * open already disabled («the popup opens and email does nothing»).
- */
-async function sharedAuthConnection() {
-  try {
-    const controllers = await import('@reown/appkit-controllers');
-    return Boolean(controllers?.ConnectionController?.hasAnyConnection?.('AUTH'));
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Retire the current page's instance, bounded.
  *
  * Purging storage cleans what the NEXT boot reads; it cannot reach the
@@ -299,6 +371,99 @@ async function retireInstance(modal) {
   } catch {
     /* the recreate below does not depend on the disconnect succeeding */
   }
+}
+
+/**
+ * WHOSE CLAIM IS THE STANDING MARKER? — `'none' | 'owed' | 'stale'`.
+ *
+ * ─── THE STATE THE DEVICE REPORT SHOWS ─────────────────────────────────────
+ *   ourMarker: true · sdkLoginMarker: false · storedConnectors: [] ·
+ *   connectionStatus: 'disconnected' · wcSessionKeys: 0
+ *
+ * `ourMarker` is claimed when an attempt STARTS (email OTP is redirect-shaped,
+ * so the claim must outlive the document). It is released by `rollback()` when
+ * AppKit says nothing is connected — but the marker survives any path that
+ * never reaches rollback: a WebView that kills the document mid-OTP, a
+ * `restore()` whose 30s window expires while the frame is suspended, a login
+ * that produced an address but no usable provider (the EMAIL_PROVIDER_PENDING
+ * state). The SDK's own marker is gone by then, because
+ * `W3mFrameProvider.isConnected()` DELETES it (`deleteAuthLoginCache()`) the
+ * moment the frame reports «not connected» or throws.
+ *
+ * The old code could not tell that state from a session the user is owed, so:
+ *   • every cold start spent the full 30s restore window waiting for a frame
+ *     that had already said «no», and
+ *   • while that window (or the marker) stood, WalletConnect's restore was
+ *     gated OFF («a marker means a frame session may be live»), so a returning
+ *     user got neither wallet.
+ *
+ * The distinction, and it is the whole point: our marker claims an ATTEMPT, the
+ * SDK's marker is the only evidence a frame session still HOLDS one. When the
+ * SDK's is gone and nothing is connected — no address on the instance, no AUTH
+ * connection in the shared map — the standing claim is stale, and forgetting it
+ * is the honest move (and the only way the next tap gets the clean-slate path
+ * it needs: purge + shared reset + a fresh boot).
+ *
+ * @returns {Promise<'none'|'owed'|'stale'>}
+ */
+export async function classifyEmailMarker({ modal = instance, storage } = {}) {
+  const target = store(storage);
+  if (!hasMarker(target)) return 'none';
+  try {
+    if (modal?.getIsConnectedState?.() === true) return 'owed';
+  } catch { /* an instance that cannot answer does not vote */ }
+  if (sdkLoginMarkerPresent(target)) return 'owed';
+  /*
+   * THE GHOST IN THE SHARED MAP (the «email box opens and does nothing» half
+   * of the 2026-09-18 reports).
+   *
+   * `hasAnyConnection('AUTH')` is what renders the email input DISABLED, and
+   * it checks the connector ID and nothing else. A live AUTH connection can
+   * never exist without accounts (the adapter writes them with the
+   * connection), so an entry with no accounts is residue — an attempt whose
+   * teardown lost its race. Counting that as «a session is owed» left the
+   * marker standing, the clean-slate path skipped, and the ghost in the map:
+   * the user tapped email, the box opened, the input was disabled, and the
+   * trace stayed empty because nothing was ever submitted.
+   *
+   * So the ghost does not vote. Only a connection that carries an account is
+   * a session worth protecting — and when the facts cannot be read at all
+   * (the controllers chunk unreachable), the answer stays the conservative
+   * one: an unreadable map is not evidence of residue.
+   */
+  const shared = await readSharedConnectionFacts();
+  if (!shared.available) return 'owed';
+  if (shared.authAccounts > 0) return 'owed';
+  return 'stale';
+}
+
+/**
+ * Forget a stale claim completely, in the order that matters.
+ *
+ * Storage first (the keys the NEXT boot reads), then the in-memory shared
+ * controllers (invisible to any purge — a leftover `activeCaipAddress` is what
+ * made an email login open on a phantom account), then the instance itself, and
+ * finally the frame's chain residue. The marker LAST is deliberate: everything
+ * above is what "forgetting" means, and a crash in the middle leaves a marker
+ * that still describes the mess — which is exactly what makes it re-cleaned on
+ * the next boot.
+ *
+ * @returns {Promise<{purged:number, sharedReset:boolean, chainResidue:number}>}
+ */
+export async function clearStaleEmailState({ modal = instance } = {}) {
+  let purged = 0;
+  try {
+    purged = purgeConnectionKeys();
+  } catch { /* storage unavailable — the in-memory half below still runs */ }
+  let sharedReset = false;
+  try {
+    sharedReset = Boolean(await resetSharedConnectionState());
+  } catch { /* same */ }
+  if (modal) await retireInstance(modal);
+  if (modal && instance === modal) instance = null;
+  const residue = clearFrameChainResidue();
+  setMarker(false);
+  return { purged, sharedReset, chainResidue: residue.removed.length };
 }
 
 /**
@@ -372,9 +537,12 @@ async function awaitReady(modal, ms = TIMEOUT.emailOpen) {
  *      connect→disconnect cycle they keep describing the dead wallet — and the
  *      email modal opens on ITS Account view with ITS balance. Reset via
  *      `resetSharedConnectionState()` BEFORE anything opens.
- *   3. the in-memory ConnectionController map — invisible to any purge; when it
- *      still holds an AUTH entry the email input renders disabled. Detected via
- *      `sharedAuthConnection()` and answered by retiring the instance.
+ *   3. the in-memory ConnectionController map — invisible to any purge; an AUTH
+ *      entry WITHOUT accounts renders the email input disabled (it is what
+ *      `hasAnyConnection('AUTH')` reads) and is removed outright by
+ *      `clearPhantomAuthConnection()` before anything renders; an entry that
+ *      carries accounts is a real one and is answered by retiring the
+ *      instance.
  *   4. the instance itself — recreated when anything above was dirty, so the
  *      new boot (`syncConnections`, `syncAuthConnector`) reads only clean state.
  *
@@ -405,6 +573,43 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
   const routing = await assertEmailRouting();
   if (routing === 'fixed') wcEvent('email_routing_fixed');
   else if (routing === 'unavailable') wcEvent('email_routing_unavailable');
+
+  /*
+   * THE NETWORK, BEFORE THE PROVIDER EXISTS.
+   *
+   * `createAppKit()` builds the auth provider during `initialize()` and the
+   * provider captures `chainId: this.getCaipNetwork(namespace)?.caipNetworkId`
+   * AT CONSTRUCTION — the iframe URL is built from it. So this has to run
+   * before the instance is created (and again before every open, because a
+   * WalletConnect init landing in between can still adopt a chain of its own).
+   * See appkit.js#assertEmailNetwork for what is pruned and why a live address
+   * makes it refuse.
+   */
+  const networkFix = await assertEmailNetwork({
+    networks: buildNetworks(),
+    supportedChainIds: EMAIL_FRAME_CHAIN_IDS,
+    defaultChainId: DEFAULT_CHAIN
+  });
+  if (networkFix === 'fixed') wcEvent('email_network_fixed');
+  else if (networkFix === 'blocked') wcEvent('email_network_blocked');
+  else if (networkFix === 'unavailable') wcEvent('email_network_unavailable');
+
+  /*
+   * THE GHOST IN THE SHARED MAP — on EVERY path, before anything opens.
+   *
+   * `w3m-email-login-widget` renders the email input's `disabled` attribute
+   * from `ConnectionController.hasAnyConnection('AUTH')`, which checks the
+   * connector ID and nothing else. An AUTH entry whose account list is empty
+   * is residue from an attempt that lost its teardown — and while it sits
+   * there the box opens with the input disabled and the tap does NOTHING AT
+   * ALL (no request, no error, an empty trace: exactly the shape of the
+   * 2026-09-18 device report). It is not reachable by any storage purge, so
+   * it is removed through the official setter before the surface renders —
+   * and it is removed on the marker-owed path too, where the storage policy
+   * deliberately leaves everything alone: a ghost is not a session.
+   */
+  const phantoms = await clearPhantomAuthConnection();
+  if (phantoms > 0) wcEvent('email_phantom_auth_cleared', phantoms);
 
   const rearm = rearmSdkLoginMarker();
   if (rearm === 'rearmed' && instance) {
@@ -446,7 +651,9 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
     const dirty = purged > 0
       || sharedDirty
       || instance?.getIsConnectedState?.() === true
-      || (await sharedAuthConnection());
+      /* Same map `hasAnyConnection('AUTH')` reads — the ghosts are already
+         gone by now (cleared above), so what remains here is a real entry. */
+      || shared.authConnection;
     if (dirty && instance) {
       wcEvent('email_open_dirty_instance');
       await retireInstance(instance);
@@ -530,16 +737,37 @@ async function tryGetProviderAsync(modal) {
  * The frame can have a provider object while still returning that error
  * for every RPC until its internal isConnected flips.
  */
+/**
+ * The last message the frame answered `eth_accounts` with — the one fact a
+ * failed wait has and the trace did not.
+ *
+ * «Email login finished but the wallet never became ready» is a sentence with
+ * no cause in it, and the reports that carried it had `email_wait_timeout` and
+ * nothing else. The probe below already asks the frame the SAFEST possible
+ * question (`eth_accounts` is on the frame's SAFE_RPC_METHODS list, so asking
+ * it can never trigger the «Action not allowed» path or abort a pending RPC) —
+ * whatever it answers with is exactly the diagnosis, so it is kept for the
+ * trace instead of being thrown away by a boolean.
+ */
+let lastProbeError = null;
+
+/** @returns {string|null} sanitized already (see wcEventDetail's 'm' contract). */
+export function lastProviderProbeError() {
+  return lastProbeError;
+}
+
 async function isProviderUsable(provider) {
   if (!provider?.request) return false;
   try {
     const accs = await provider.request({ method: 'eth_accounts' });
     // empty array is still usable — it means connected but no account yet, but
     // for email it should have one. We treat any non-throwing answer as usable.
+    lastProbeError = null;
     return true;
   } catch (e) {
-    const m = String(e?.message || '').toLowerCase();
-    if (m.includes('not allowed') || m.includes('not valid') || m.includes('action')) {
+    const m = String(e?.message || '');
+    lastProbeError = m.slice(0, 120) || null;
+    if (/not allowed|not valid|action/i.test(m)) {
       return false;
     }
     // Other errors (e.g. network) still mean provider exists, so usable
@@ -757,7 +985,7 @@ export async function authConnectorProvider(namespace = 'eip155') {
  * @returns {Promise<Record<string, boolean|string>>} the detail for
  *   wcEventDetail — see trace.js for what survives.
  */
-export async function openSurfaceDetail(modal) {
+export async function openSurfaceDetail(modal, openState = 'pending') {
   const shared = await readSharedConnectionFacts();
   let providerReady = false;
   let modalConnected = false;
@@ -781,7 +1009,11 @@ export async function openSurfaceDetail(modal) {
     auth: shared.authConnection,
     cid: shared.connectorId || 'none',
     na: shared.noAdapters,
-    prov: providerReady
+    prov: providerReady,
+    /* Did `modal.open()` itself ever settle? 'pending' here — with a modal that
+       never opened — is the difference between «AppKit is slow» and «the tap
+       never reached AppKit», which no other fact in the report separates. */
+    op: openState
   };
 }
 
@@ -806,27 +1038,31 @@ export async function openSurfaceDetail(modal) {
  *     the spinner forever.
  */
 export async function open({ projectId, metadata } = {}) {
-  const fresh = !hasMarker();
-  // On fresh, clear last-used chain that could be an unsupported custom chain
-  // (Sonic, Mantle, Berachain...) — that chain caused «action not valid» /
-  // «Action not allowed» because the frame's internal allow-list doesn't know it.
-  if (fresh) {
-    try {
-      const target = store();
-      if (target) {
-        // Keys the frame uses
-        target.removeItem('@appkit-wallet/LAST_USED_CHAIN_KEY');
-        target.removeItem('LAST_USED_CHAIN_KEY');
-        // Some SDK versions store it under this exact name
-        // Best-effort: also clear any key containing LAST_USED_CHAIN
-        for (let i = target.length - 1; i >= 0; i -= 1) {
-          const k = target.key(i) || '';
-          if (k.includes('LAST_USED_CHAIN')) {
-            try { target.removeItem(k); } catch {}
-          }
-        }
-      }
-    } catch {}
+  /*
+   * ─── A STALE CLAIM IS NOT A LOGIN (device report, 2026-09-18) ────────────
+   * `fresh` used to be `!hasMarker()` — so a marker left behind by an attempt
+   * nobody can honour (ourMarker true, the SDK's marker gone, nothing
+   * connected — see `classifyEmailMarker`) disabled the very clean slate the
+   * next attempt needs: no purge, no shared reset, no chain-residue cleanup,
+   * and the frame's last-used custom chain still in storage. The state
+   * self-corrected only if the user let a 30s restore window expire first.
+   * Now the marker is CLASSIFIED before it is trusted, and a stale one is
+   * cleared (storage + shared controllers + instance + chain residue) so this
+   * tap really does start from nothing.
+   */
+  const markerState = await classifyEmailMarker();
+  if (markerState === 'stale') {
+    const cleared = await clearStaleEmailState();
+    wcEvent('email_marker_stale', cleared.purged);
+  }
+  const fresh = !hasMarker() || markerState === 'stale';
+
+  /* On EVERY path — not just fresh: the frame reads its last-used chain back
+     for `eth_chainId` and for `connect()`'s default, and a residue pointing at
+     a chain the frame cannot serve is what asks it for «action not valid». */
+  const residue = clearFrameChainResidue();
+  if (residue.removed.length > 0) {
+    wcEventDetail('email_chain_residue', { n: residue.removed.length, kept: residue.kept });
   }
 
   const modal = await getAppKit({ projectId, metadata, fresh });
@@ -844,20 +1080,41 @@ export async function open({ projectId, metadata } = {}) {
    * moment the routing matters, so the flags are re-asserted at the only
    * moment they matter. Cheap, idempotent, in-memory.
    */
+  /* The same late-landing race the routing flags have: a WalletConnect init
+     that outlived its bound can adopt one of ITS chains between `getAppKit`
+     and here — and the frame stamps every RPC with the active one. */
+  const lateNetworkFix = await assertEmailNetwork({
+    networks: buildNetworks(),
+    supportedChainIds: EMAIL_FRAME_CHAIN_IDS,
+    defaultChainId: DEFAULT_CHAIN
+  });
+  if (lateNetworkFix === 'fixed') wcEvent('email_network_fixed');
+  else if (lateNetworkFix === 'blocked') wcEvent('email_network_blocked');
   await assertEmailRouting();
   let openError = null;
-  const opening = Promise.resolve(modal.open({ view: 'Connect' })).catch((error) => {
-    openError = error;
-  });
+  /* The open is wrapped so a SYNCHRONOUS throw from `modal.open()` reaches the
+     trace too: `Promise.resolve(modal.open(...))` evaluates the call first, so
+     a throw used to escape `open()` entirely and be reported by the caller as
+     a bare `email_connect_exception` with no message. */
+  let openState = 'pending';
+  const opening = (async () => {
+    try {
+      await modal.open({ view: 'Connect' });
+      openState = 'settled';
+    } catch (error) {
+      openError = error;
+      openState = 'failed';
+    }
+  })();
   await Promise.race([opening, sleep(TIMEOUT.emailModalOpen)]);
   /* THE SURFACE SNAPSHOT — taken whether open() resolved, threw or outran the
      bound, because «what was on the screen» is the one fact every previous
      report had to guess at. The second sample one second later catches the
      SDK's own late routing (a reconnect handler flipping the view to Account
      after the Connect view was already set). */
-  wcEventDetail('email_open_surface', await openSurfaceDetail(modal));
+  wcEventDetail('email_open_surface', await openSurfaceDetail(modal, openState));
   setTimeout(() => {
-    Promise.resolve(openSurfaceDetail(modal)).then(
+    Promise.resolve(openSurfaceDetail(modal, openState)).then(
       (detail) => wcEventDetail('email_open_surface_settled', detail),
       () => {}
     );
@@ -875,11 +1132,14 @@ export async function open({ projectId, metadata } = {}) {
     /* Two very different stories end at the same line, so the trace has to
        tell them apart: «AppKit says nothing is connected» (the OTP/iframe
        never happened) versus «AppKit says connected but never produced an
-       address» (the frame answered, the account did not arrive). */
-    wcEvent(
-      modal?.getIsConnectedState?.()
-        ? 'email_wait_no_address'
-        : 'email_wait_timeout'
+       address» (the frame answered, the account did not arrive). And the third
+       fact both were missing: WHAT the frame answered the last time it was
+       asked anything (see `lastProviderProbeError`) — «Action not allowed»,
+       «Please try again after N seconds», an iframe timeout, or nothing. */
+    const probe = lastProviderProbeError();
+    wcEventDetail(
+      modal?.getIsConnectedState?.() ? 'email_wait_no_address' : 'email_wait_timeout',
+      probe ? { m: probe } : { prov: false }
     );
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
@@ -920,8 +1180,12 @@ export async function open({ projectId, metadata } = {}) {
         if (p) account.provider = p;
         else {
           // Provider exists but not usable yet — keep it, but mark as pending
-          // The fallback attach in WalletContext will still show connected
-          wcEvent('email_provider_not_usable_yet');
+          // The fallback attach in WalletContext will still show connected.
+          // WHY it is not usable rides along: this is the exact state that
+          // reaches the user as «EMAIL_PROVIDER_PENDING», so the next report
+          // must carry the frame's own answer, not just the fact of a stall.
+          const probe = lastProviderProbeError();
+          wcEventDetail('email_provider_not_usable_yet', probe ? { m: probe } : { prov: false });
         }
       }
     } catch {}
@@ -929,7 +1193,8 @@ export async function open({ projectId, metadata } = {}) {
 
   if (!account.provider) {
     // Still no provider — keep marker, but report pending so next cold start retries
-    wcEvent('email_connected_no_provider');
+    const probe = lastProviderProbeError();
+    wcEventDetail('email_connected_no_provider', probe ? { m: probe } : { prov: false });
     return { ok: true, ...account, provider: null, code: 'NO_PROVIDER_YET' };
   }
   wcEvent('email_connected');
@@ -942,6 +1207,28 @@ export async function open({ projectId, metadata } = {}) {
  */
 export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_WINDOW_MS } = {}) {
   if (!hasMarker()) return { ok: false, code: 'NOT_MARKED' };
+  /*
+   * ─── THE 30 SECONDS A STALE MARKER COST EVERY COLD START ────────────────
+   * A marker nobody can honour used to be indistinguishable from a session the
+   * user is owed, so a returning user spent the whole restore window waiting
+   * for a frame that had already answered «not connected» — with the app
+   * showing «no wallet» and, because WalletContext gates the WalletConnect
+   * restore on this marker, the stored WalletConnect session never resumed
+   * either. `classifyEmailMarker` separates the two claims; a stale one is
+   * FORGOTTEN here (and the caller's marker check then lets WalletConnect
+   * restore on the same boot), instead of being waited on.
+   */
+  const markerState = await classifyEmailMarker();
+  if (markerState === 'stale') {
+    const cleared = await clearStaleEmailState();
+    wcEvent('email_restore_stale_cleared', cleared.purged);
+    return { ok: false, code: 'STALE_CLEARED' };
+  }
+  /* Even a genuine restore must not ask for a chain the frame cannot serve. */
+  const residue = clearFrameChainResidue();
+  if (residue.removed.length > 0) {
+    wcEventDetail('email_chain_residue', { n: residue.removed.length, kept: residue.kept });
+  }
   let modal;
   try {
     modal = await getAppKit({ projectId, metadata });
@@ -993,6 +1280,56 @@ export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_W
   }
   wcEvent('email_session_restored');
   return { ok: true, ...account, restored: true };
+}
+
+/**
+ * Move the embedded wallet to another chain — THE WAY THE FRAME ALLOWS.
+ *
+ * ─── WHY NOT `wallet_switchEthereumChain` ───────────────────────────────────
+ * A raw EIP-1193 switch is the one request the secure frame is guaranteed to
+ * refuse. `checkIfRequestExists()` accepts only the methods on the frame's
+ * SAFE/NOT_SAFE lists, and `wallet_switchEthereumChain` is on NEITHER — so
+ * AppKit answers by OPENING THE MODAL, showing «Action not allowed» and calling
+ * `provider.rejectRpcRequests()`, which aborts every pending RPC (including a
+ * login that is mid-flight). It is the exact error string the reports carry,
+ * and the generic EIP-1193 path in WalletContext would produce it every time a
+ * page asked the email wallet to move.
+ *
+ * AppKit's own `switchNetwork()` goes through the adapter → the auth connector
+ * → `W3mFrameProvider.switchNetwork()` → APP_SWITCH_NETWORK, which the frame
+ * implements. Chains outside the frame's list are refused HERE, before any
+ * request is sent: the email wallet is the signer, not the route, and a
+ * refused move must never poison the session (see the module header).
+ *
+ * @returns {Promise<'ok'|'unsupported_chain'|'no_instance'|'not_in_list'|'failed'>}
+ */
+export async function switchEmbeddedNetwork(chainId) {
+  /* The chain verdict is a POLICY check, so it comes first: it must not depend
+     on whether an instance happens to exist (a refusal has to be the same
+     answer before and after the boot), and a chain outside the frame's list
+     must never reach the frame at all. */
+  const target = Number(chainId);
+  if (!EVM_CHAINS[target]) return 'unsupported_chain';
+  if (!isEmailFrameChain(target)) {
+    wcEvent('email_switch_unsupported');
+    return 'unsupported_chain';
+  }
+  const modal = instance;
+  if (!modal) return 'no_instance';
+  let network = null;
+  try {
+    const list = modal.getCaipNetworks?.('eip155') ?? [];
+    network = list.find((entry) => Number(entry?.id) === target) ?? null;
+  } catch { /* an instance that cannot list networks cannot switch either */ }
+  if (!network) return 'not_in_list';
+  try {
+    await modal.switchNetwork(network);
+    wcEvent('email_switch_network');
+    return 'ok';
+  } catch {
+    wcEvent('email_switch_network_failed');
+    return 'failed';
+  }
 }
 
 /**
