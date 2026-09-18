@@ -221,6 +221,111 @@ export function withLinkMode(wallet) {
 }
 
 /**
+ * Read the SHARED controllers' connection facts — the exact state every
+ * `<w3m-modal>` renders from, no matter which instance opened it.
+ *
+ * WHY THIS EXISTS: the 2026-09-18 report answered every storage question
+ * (`storedConnectors: []`, `connectionStatus: 'disconnected'`) yet the email
+ * modal still opened on the Account view with a balance. What the report
+ * CANNOT see is the in-memory half of the same state —
+ * `ChainController.state.activeCaipAddress` is what `getIsConnectedState()`
+ * returns, `noAdapters` decides whether the email widget renders at all, and
+ * neither is persisted anywhere. This reader turns that half into traceable
+ * booleans (and whitelisted tokens), so the NEXT report names the surface the
+ * modal actually opened on instead of leaving it to inference.
+ *
+ * Nothing raw leaves this function: the address is reduced to a boolean, the
+ * connector id to a token the trace whitelist already knows.
+ */
+export async function readSharedConnectionFacts() {
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const C = controllers ?? {};
+    const address = C.ChainController?.state?.activeCaipAddress;
+    return {
+      available: true,
+      /* getIsConnectedState() is literally Boolean(activeCaipAddress). */
+      isConnected: Boolean(address),
+      connectorId: C.ConnectorController?.getConnectorId?.('eip155') || null,
+      authConnection: Boolean(C.ConnectionController?.hasAnyConnection?.('AUTH')),
+      view: C.RouterController?.state?.view || null,
+      noAdapters: Boolean(C.ChainController?.state?.noAdapters),
+      modalOpen: Boolean(C.ModalController?.state?.open)
+    };
+  } catch {
+    /* the controllers chunk is unavailable (offline first paint): report the
+       absence rather than a confident zero. */
+    return {
+      available: false,
+      isConnected: false,
+      connectorId: null,
+      authConnection: false,
+      view: null,
+      noAdapters: false,
+      modalOpen: false
+    };
+  }
+}
+
+/**
+ * Tear the SHARED controller state down the way AppKit's own disconnect does.
+ *
+ * ─── WHY THIS IS NEEDED AT ALL ─────────────────────────────────────────────
+ * The WalletConnect surface's modal is created by
+ * `@walletconnect/ethereum-provider` with ZERO adapters, and the only code in
+ * the SDK that clears the shared `ChainController` when a wallet dies is
+ * `listenAdapter`'s `adapter.on('disconnect') → onDisconnectNamespace` — a
+ * listener that never exists for an adapter-less instance. So after a
+ * WalletConnect connect→disconnect cycle the shared singletons keep
+ * describing the dead wallet forever:
+ *
+ *   • `activeCaipAddress` — `getIsConnectedState()` stays true, and the modal
+ *     the EMAIL surface opens renders the dead wallet's Account view
+ *     (address, balance) instead of the email form — the exact report.
+ *   • `ConnectorController.activeConnectorIds.eip155` — a stale id the next
+ *     boot's `syncNamespaceConnection` tries to reconnect as.
+ *   • `noAdapters` — one-way in the SDK (only ever set true, never reset), so
+ *     the adapter-less WC instance leaves it true for the page; the connect
+ *     view then hides the email/social widgets (`isEmailEnabled =
+ *     remoteFeatures.email && !noAdapters`) and `ModalController.open` routes
+ *     mobile to AllWallets.
+ *
+ * Guarded and best-effort on purpose: a controller shape change must never
+ * break the login, only make the next trace say so.
+ *
+ * @returns {Promise<boolean>} whether the controllers were reachable.
+ */
+export async function resetSharedConnectionState() {
+  let touched = false;
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const C = controllers ?? {};
+    /* WC pairing residue: dead URI, wallet-deep-link, 'connecting' status. */
+    try { C.ConnectionController?.resetWcConnection?.(); touched = true; } catch { /* best-effort */ }
+    /* The account itself: address, balance, profile, connector id (it calls
+       removeConnectorId itself), back to 'disconnected'. */
+    try { C.ChainController?.resetAccount?.('eip155'); touched = true; } catch { /* best-effort */ }
+    /* Belt and braces: resetAccount clears it, but a shape change in either
+       direction must not leave a stale id behind. */
+    try { C.ConnectorController?.removeConnectorId?.('eip155'); touched = true; } catch { /* best-effort */ }
+    /* In-memory connection list — what `hasAnyConnection('AUTH')` reads to
+       disable the email input. Cleared through the official setter so valtio
+       notifies the widgets. */
+    try { C.ConnectionController?.setConnections?.([], 'eip155'); touched = true; } catch { /* best-effort */ }
+    /* `noAdapters` has no setter — the SDK only ever sets it true. Direct
+       write to the valtio proxy is the only way back to the email-capable
+       surface this page started with. */
+    try {
+      if (C.ChainController?.state) C.ChainController.state.noAdapters = false;
+      touched = true;
+    } catch { /* best-effort */ }
+    return touched;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Re-assert the WalletConnect surface's options on the shared singleton.
  *
  * `enableWallets: true` + `manualWCControl: true` belong to THIS surface: the
