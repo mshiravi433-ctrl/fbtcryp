@@ -14,6 +14,7 @@ import {
   openEmbeddedWallet,
   purgeConnectionKeys,
   restoreEmbeddedWallet,
+  sdkLoginMarkerPresent,
   setEmailMarker,
   storageFacts,
   wcEvent,
@@ -151,6 +152,11 @@ export function WalletProvider({ children }) {
   addressRef.current = address;
   const chainIdRef = useRef(null);
   chainIdRef.current = chainId;
+  /* The connection mode, mirrored for the same reason: `connectEmailSocial`
+     must know whether an email wallet is ALREADY attached at tap time, not at
+     render time of the callback it was captured in. */
+  const modeRef = useRef(null);
+  modeRef.current = mode;
   const disconnectRef = useRef(() => {});
 
   const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
@@ -523,6 +529,35 @@ export function WalletProvider({ children }) {
     const connectGuard = holdRefreshGuard('email-connect');
     try {
       if (eip1193Ref.current || wcRef.current?.provider) disconnectRef.current();
+      /*
+       * AWAITED, NOT FIRED-AND-FORGOTTEN — the stale-marker race (report
+       * 2026-09-18: `ourMarker:true`, `sdkLoginMarker:false`).
+       *
+       * Every other cleanup of the embedded wallet runs as `void
+       * forgetEmbeddedWallet()` — the `[mode]` effect, `disconnect()` — which
+       * means the marker can still be standing when the user's NEXT tap reads
+       * it. `openEmbeddedWallet` treats a standing marker as «a login is
+       * claimed» and skips the whole clean-slate path (no purge, no shared
+       * reset, no dirty-retire) — so one abandoned attempt could poison every
+       * later one. Awaiting the bounded forget (4s cap inside) converts the
+       * tap itself into the barrier: by the time `open()` reads the marker it
+       * is honestly gone.
+       *
+       * TWO guards, because the marker alone cannot tell stale from owed:
+       *   • mode 'email' — an email wallet IS attached; its marker describes
+       *     a session the user is owed. Never forgotten on a re-tap.
+       *   • the SDK's own login marker still standing — the frame may hold a
+       *     live session one provider-poll away from attaching (the
+       *     EMAIL_PROVIDER_PENDING retry). Forgetting it would log the user
+       *     out from under themselves. When it is GONE (the reported state:
+       *     the frame answered «not connected» and deleted its record), our
+       *     marker is a claim nobody can honour — forget it.
+       */
+      if (modeRef.current !== 'email' && !sdkLoginMarkerPresent()) {
+        try {
+          await forgetEmbeddedWallet();
+        } catch { /* bounded best-effort: the fresh path still purges */ }
+      }
       setEmailModalActive(true);
       let result = await openEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
 

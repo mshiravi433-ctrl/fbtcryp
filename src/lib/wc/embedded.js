@@ -38,10 +38,11 @@
  */
 
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../chains.js';
+import { readSharedConnectionFacts, resetSharedConnectionState } from './appkit.js';
 import { TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
 import { purgeConnectionKeys } from './storage.js';
 import { sleep } from './timing.js';
-import { wcEvent } from './trace.js';
+import { wcEvent, wcEventDetail } from './trace.js';
 
 export const EMAIL_MARKER_KEY = 'fbt_email_social_connected';
 export const SDK_LOGIN_KEY = '@appkit-wallet/EMAIL_LOGIN_USED_KEY';
@@ -117,6 +118,28 @@ export function rearmSdkLoginMarker(storage) {
 }
 
 /**
+ * Does the SDK's own login marker stand? A PURE read — unlike
+ * `rearmSdkLoginMarker()` this never writes, so it can gate a decision.
+ *
+ * The distinction it supports: our marker claims a login was ATTEMPTED, the
+ * SDK's says the frame still HOLDS one. When the SDK's is gone (its
+ * `isConnected()` catch deletes it, or the frame answered «not connected»),
+ * our marker is describing a session nobody is owed — forgetting it is the
+ * honest move. When the SDK's stands, a live frame session may be one
+ * provider-poll away from attaching, and must not be logged out from under
+ * the user.
+ */
+export function sdkLoginMarkerPresent(storage) {
+  const target = store(storage);
+  if (!target) return false;
+  try {
+    return String(target.getItem(SDK_LOGIN_KEY) || '') === SDK_LOGIN_VALUE;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * AppKit network definitions built FROM OUR OWN REGISTRY, so the embedded
  * wallet sees exactly the chains the rest of the app supports — including the
  * geo-friendly RPC order each chain curates. DEFAULT_CHAIN leads: AppKit treats
@@ -188,6 +211,11 @@ export function emailOptions({ projectId, metadata }) {
  *  re-describe the same singletons. */
 let instance = null;
 
+/** Set when an instance was retired, so the next createAppKit() can trace the
+ *  recreate as a distinct event — the report should be able to say «the
+ *  instance was rebuilt», not just «it became ready». */
+let retired = false;
+
 /**
  * Does the SHARED controllers state still describe an embedded-wallet (AUTH)
  * connection?
@@ -218,6 +246,8 @@ async function sharedAuthConnection() {
  */
 async function retireInstance(modal) {
   if (!modal) return;
+  retired = true;
+  wcEvent('email_instance_retired');
   try {
     await Promise.race([
       Promise.resolve(modal.disconnect?.()).catch(() => {}),
@@ -285,17 +315,24 @@ async function awaitReady(modal, ms = TIMEOUT.emailOpen) {
  * ─── `fresh` — THE CLEAN SLATE A NEW LOGIN ASKS FOR ─────────────────────────
  * `open()` passes it when NO login is claimed (`fresh: !hasMarker()`): the user
  * is starting over, so nothing a PREVIOUS session left behind may survive into
- * this boot. Three residues, three different layers, all handled:
+ * this boot. Four residues, four different layers, all handled:
  *
  *   1. localStorage — `purgeConnectionKeys()` (synchronously, before any boot
  *      can read it) removes `@appkit/connections`, `@appkit/connection_status`
  *      and friends — the keys whose survival made the SDK believe a
  *      DISCONNECTED email wallet was still attached, auto-reattach it, and open
  *      the «login» as a phantom account with a balance.
- *   2. the in-memory ConnectionController map — invisible to any purge; when it
+ *   2. the SHARED controllers' in-memory state — `ChainController`'s address/
+ *      balance, the connector id, the `noAdapters` flag. The WalletConnect
+ *      surface's adapter-less modal can never clear these on disconnect (its
+ *      teardown listener never exists), so after a WalletConnect
+ *      connect→disconnect cycle they keep describing the dead wallet — and the
+ *      email modal opens on ITS Account view with ITS balance. Reset via
+ *      `resetSharedConnectionState()` BEFORE anything opens.
+ *   3. the in-memory ConnectionController map — invisible to any purge; when it
  *      still holds an AUTH entry the email input renders disabled. Detected via
  *      `sharedAuthConnection()` and answered by retiring the instance.
- *   3. the instance itself — recreated when anything above was dirty, so the
+ *   4. the instance itself — recreated when anything above was dirty, so the
  *      new boot (`syncConnections`, `syncAuthConnector`) reads only clean state.
  *
  * When a login IS claimed (a restore or a claim in progress) nothing here
@@ -319,7 +356,32 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
   if (fresh) {
     const purged = purgeConnectionKeys();
     if (purged) wcEvent('email_open_purged', purged);
-    const dirty = purged > 0 || instance?.getIsConnectedState?.() === true || (await sharedAuthConnection());
+    /* ─── THE IN-MEMORY HALF OF THE PHANTOM (2026-09-18 report) ───────────
+     * The storage purge above answered every question the last report asked
+     * and the modal STILL opened on a balance. What survived was the shared
+     * controllers' in-memory state: the WalletConnect surface's modal is
+     * created by ethereum-provider with ZERO adapters, so the SDK's own
+     * disconnect handler (an ADAPTER listener) never runs for it, and
+     * `ChainController.state.activeCaipAddress` — exactly what
+     * `getIsConnectedState()` returns — keeps describing the wallet the user
+     * disconnected, along with its balance and a `noAdapters` flag the SDK
+     * only ever sets true. See appkit.js#resetSharedConnectionState.
+     *
+     * The reset runs BEFORE anything opens, deliberately: `w3m-modal` closes
+     * itself when `activeCaipAddress` turns empty while it is open, so
+     * clearing mid-open would slam the email form shut. */
+    const shared = await readSharedConnectionFacts();
+    const sharedDirty = shared.available
+      && (shared.isConnected || Boolean(shared.connectorId) || shared.authConnection || shared.noAdapters);
+    let sharedReset = false;
+    if (sharedDirty) {
+      sharedReset = await resetSharedConnectionState();
+      wcEvent('email_shared_reset', sharedReset);
+    }
+    const dirty = purged > 0
+      || sharedDirty
+      || instance?.getIsConnectedState?.() === true
+      || (await sharedAuthConnection());
     if (dirty && instance) {
       wcEvent('email_open_dirty_instance');
       await retireInstance(instance);
@@ -331,6 +393,8 @@ export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetada
       import('@reown/appkit'),
       import('@reown/appkit-adapter-ethers')
     ]);
+    if (retired) wcEvent('email_instance_recreated');
+    retired = false;
     instance = createAppKit({ ...emailOptions({ projectId, metadata }), adapters: [new EthersAdapter()] });
     const boot = await awaitReady(instance);
     wcEvent(boot === 'ready' ? 'email_appkit_ready' : 'email_appkit_ready_pending');
@@ -529,6 +593,54 @@ export async function authConnectorProvider(namespace = 'eip155') {
 }
 
 /**
+ * The facts that say WHAT THE MODAL ACTUALLY OPENED ON.
+ *
+ * ─── WHY THIS EXISTS (the 2026-09-18 report) ───────────────────────────────
+ * The report was taken mid-attempt with exactly ONE trace event
+ * (`email_appkit_ready`) — nothing in it could say whether the modal had
+ * opened on the email form, the Account view of a wallet nobody logged into,
+ * or a wallet list. Every storage question had already been answered clean,
+ * so the only suspects left (shared in-memory state) were precisely the ones
+ * no event recorded. This snapshot closes that gap: it is taken the moment
+ * `modal.open()` settles and again one second later, when late routing (the
+ * SDK's own connect/reconnect handlers) has had its say.
+ *
+ * Every value is trace-safe by construction: booleans, plus tokens the trace
+ * whitelist knows (view names, connector ids). The address is never recorded
+ * — only that one exists.
+ *
+ * @returns {Promise<Record<string, boolean|string>>} the detail for
+ *   wcEventDetail — see trace.js for what survives.
+ */
+export async function openSurfaceDetail(modal) {
+  const shared = await readSharedConnectionFacts();
+  let providerReady = false;
+  let modalConnected = false;
+  let modalHasAddress = false;
+  try {
+    providerReady = Boolean(
+      modal?.getWalletProvider?.('eip155') ?? modal?.getWalletProvider?.() ?? modal?.getProvider?.('eip155')
+    );
+  } catch { /* a modal that cannot answer says false */ }
+  try {
+    modalConnected = Boolean(modal?.getIsConnectedState?.());
+  } catch { /* same */ }
+  try {
+    modalHasAddress = Boolean(modal?.getAddress?.('eip155') ?? modal?.getAddress?.());
+  } catch { /* same */ }
+  return {
+    view: shared.view || 'none',
+    modal: shared.modalOpen,
+    conn: modalConnected,
+    addr: modalHasAddress,
+    auth: shared.authConnection,
+    cid: shared.connectorId || 'none',
+    na: shared.noAdapters,
+    prov: providerReady
+  };
+}
+
+/**
  * Open the login modal and wait for the wallet.
  *
  * The marker is claimed BEFORE the modal opens, because on mobile the flow can
@@ -558,6 +670,18 @@ export async function open({ projectId, metadata } = {}) {
     openError = error;
   });
   await Promise.race([opening, sleep(TIMEOUT.emailModalOpen)]);
+  /* THE SURFACE SNAPSHOT — taken whether open() resolved, threw or outran the
+     bound, because «what was on the screen» is the one fact every previous
+     report had to guess at. The second sample one second later catches the
+     SDK's own late routing (a reconnect handler flipping the view to Account
+     after the Connect view was already set). */
+  wcEventDetail('email_open_surface', await openSurfaceDetail(modal));
+  setTimeout(() => {
+    Promise.resolve(openSurfaceDetail(modal)).then(
+      (detail) => wcEventDetail('email_open_surface_settled', detail),
+      () => {}
+    );
+  }, 1000);
   if (openError) {
     wcEvent('email_open_failed');
     await rollback(modal);

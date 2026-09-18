@@ -34,6 +34,8 @@ import {
   isRelayBlocked,
   isRelayError,
   pauseBound,
+  readSharedConnectionFacts,
+  resetSharedConnectionState,
   sleep,
   linkBase,
   looksLikePairingUri,
@@ -62,10 +64,12 @@ import {
   authConnectorProvider,
   awaitAccount,
   emailOptions,
+  openSurfaceDetail,
   rearmSdkLoginMarker,
-  rollback as rollbackEmailMarker
+  rollback as rollbackEmailMarker,
+  sdkLoginMarkerPresent
 } from '../src/lib/wc/embedded.js';
-import { wcEvent, wcTraceReset, wcTraceSnapshot } from '../src/lib/wc/trace.js';
+import { wcEvent, wcEventDetail, wcTraceReset, wcTraceSnapshot } from '../src/lib/wc/trace.js';
 
 /* A realistic v2 pairing URI: the punctuation is what encoding must preserve. */
 const URI = 'wc:7f6e4f2c1c9b4a4f9e2f1a0b3c4d5e6f@2?relay-protocol=irn&symKey=9f8e7d6c5b4a';
@@ -587,6 +591,31 @@ export default async function run() {
     t('re-arming twice reports present, not rearmed', rearmSdkLoginMarker(fake) === 'present');
     t('without our marker nothing is written',
       rearmSdkLoginMarker({ getItem: () => null, setItem() {} }) === 'not_marked');
+
+    /* The pure read that gates the awaited forget in connectEmailSocial: our
+       marker says a login was ATTEMPTED, the SDK's says the frame still
+       HOLDS one. The 2026-09-18 report had ours standing and theirs deleted
+       — the exact state where the honest move is to forget, not to hope. */
+    const owedStore = new Map([
+      ['fbt_email_social_connected', '1'],
+      ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']
+    ]);
+    t('a standing SDK marker is reported (a live frame session may be owed)',
+      sdkLoginMarkerPresent({
+        getItem: (k) => (owedStore.has(k) ? owedStore.get(k) : null)
+      }) === true);
+    t('the reported-state (ours standing, theirs deleted) is reported as not owed',
+      sdkLoginMarkerPresent({ getItem: (k) => (k === 'fbt_email_social_connected' ? '1' : null) }) === false);
+    t('the read never writes (unlike the re-arm, it can gate decisions)',
+      (() => {
+        const writes = [];
+        sdkLoginMarkerPresent({
+          getItem: () => null,
+          setItem: (k) => writes.push(k),
+          removeItem: (k) => writes.push(k)
+        });
+        return writes.length === 0;
+      })());
     t('a rollback keeps the marker when the SDK still reports a session',
       (await rollbackEmailMarker({ getIsConnectedState: () => true, getAddress: () => '0xabc' })) === false);
     t('a rollback clears it only on a definitive no', (await rollbackEmailMarker(null)) === true);
@@ -820,6 +849,37 @@ export default async function run() {
     t('no string payload ever enters the trace',
       snap.every((entry) => !Object.values(entry).some((v) => typeof v === 'string' && v.includes('symKey'))));
     t('the snapshot is a copy', wcTraceSnapshot() !== snap);
+
+    /* Detail events (2026-09-18): the surface snapshot answers «what did the
+       modal actually open on» with NAMED facts — but only from a closed
+       vocabulary, so the paste-into-support contract survives the upgrade. */
+    wcEventDetail('email_open_surface', {
+      view: 'Account', conn: true, addr: true, auth: false,
+      cid: 'walletConnect', na: false, prov: false, modal: true
+    });
+    wcEventDetail('email_open_surface', {
+      /* The leak vectors: a CAIP address in the view slot, a pairing URI in
+         the connector slot, a hostile key, a non-scalar value. */
+      view: 'eip155:1:0xdeadbeefdeadbeefdeadbeef',
+      cid: 'wc:9f8e7d6c5b4a@2?relay-protocol=irn&symKey=SECRET',
+      'not a key!': 'Account',
+      junk: { leak: 'deadbeef' },
+      addr: true
+    });
+    const detailSnap = wcTraceSnapshot();
+    t('a whitelisted detail event records its facts',
+      detailSnap[detailSnap.length - 2].d?.view === 'Account'
+        && detailSnap[detailSnap.length - 2].d?.cid === 'walletConnect'
+        && detailSnap[detailSnap.length - 2].d?.conn === true);
+    t('an unsafe string is coerced to a token, never recorded',
+      detailSnap[detailSnap.length - 1].d?.view === 'other'
+        && detailSnap[detailSnap.length - 1].d?.cid === 'other');
+    t('a hostile key and a non-scalar value are dropped',
+      !('junk' in (detailSnap[detailSnap.length - 1].d ?? {}))
+        && !Object.keys(detailSnap[detailSnap.length - 1].d ?? {}).some((k) => k.includes(' ')));
+    t('no detail payload ever leaks a secret or an address',
+      !JSON.stringify(detailSnap).includes('SECRET')
+        && !JSON.stringify(detailSnap).toLowerCase().includes('deadbeef'));
     wcTraceReset();
     t('the buffer can be emptied', wcTraceSnapshot().length === 0);
   }
@@ -981,7 +1041,68 @@ export default async function run() {
       handoffFacts({ navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' }, FBTWalletLink: { openWallet: () => true }, Capacitor: { isNativePlatform: () => true } }).javaBridge === true);
   }
 
-  /* ══════════════════ 15. wiring guards (source, not behaviour) ══════════ */
+  /* ══════════════════ 15. the wc→email hand-over: shared singletons ═══════
+     The 2026-09-18 report: after a WalletConnect connect→disconnect cycle,
+     tapping «email & social» opened the ACCOUNT view of the dead wallet —
+     address, balance, no email form — while every STORAGE fact in the report
+     read clean. What survived was the shared controllers' IN-MEMORY state:
+     the WalletConnect surface's modal is created by ethereum-provider with
+     ZERO adapters, and the SDK's only code that clears ChainController on a
+     wallet's death is an ADAPTER listener — one that never exists for an
+     adapter-less instance. `getIsConnectedState()` is literally
+     Boolean(ChainController.state.activeCaipAddress), so the residue answers
+     «connected» to every question the email surface asks. */
+  {
+    const controllers = await import('@reown/appkit-controllers');
+    const { ChainController, ConnectorController, ConnectionController, RouterController } = controllers;
+
+    /* Build the residue a WalletConnect cycle leaves behind — never a real
+       address, this is a probe. */
+    ChainController.state.activeCaipAddress = 'eip155:56:0xdeadbeefdeadbeefdeadbeefdeadbeef';
+    ChainController.state.noAdapters = true;
+    ConnectorController.setConnectorId('walletConnect', 'eip155');
+    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [] }], 'eip155');
+    RouterController.state.view = 'Account';
+
+    const factsDirty = await readSharedConnectionFacts();
+    t('the shared facts see the residue the storage report cannot',
+      factsDirty.available === true && factsDirty.isConnected === true
+        && factsDirty.connectorId === 'walletConnect'
+        && factsDirty.authConnection === true
+        && factsDirty.noAdapters === true);
+
+    /* The snapshot the trace will carry — the whole point is that the NEXT
+       report can say which view the modal opened on. */
+    const surface = await openSurfaceDetail({
+      getIsConnectedState: () => true,
+      getAddress: () => '0xdeadbeefdeadbeefdeadbeefdeadbeefdead'
+    });
+    t('the open-surface snapshot reads what the modal would render',
+      surface.view === 'Account' && surface.conn === true
+        && surface.addr === true && surface.na === true && surface.cid === 'walletConnect');
+    t('the snapshot never carries the address itself',
+      !JSON.stringify(surface).toLowerCase().includes('deadbeef'));
+
+    t('the reset runs against the real controllers',
+      (await resetSharedConnectionState()) === true);
+    const factsClean = await readSharedConnectionFacts();
+    t('the phantom address is gone — getIsConnectedState() now answers false',
+      factsClean.isConnected === false);
+    t('the stale connector id is gone (no reconnect-as-WC on the next boot)',
+      factsClean.connectorId === null);
+    t('the AUTH entry that disabled the email input is gone',
+      factsClean.authConnection === false);
+    t('noAdapters is back to false — the email widget can render again',
+      factsClean.noAdapters === false);
+    t('a second reset on clean state is a harmless no-op',
+      (await resetSharedConnectionState()) === true
+        && (await readSharedConnectionFacts()).isConnected === false);
+
+    /* Leave the shared page state clean for whatever runs next. */
+    RouterController.state.view = 'Connect';
+  }
+
+  /* ══════════════════ 16. wiring guards (source, not behaviour) ══════════ */
   {
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     const ctx = strip(readFileSync('src/context/WalletContext.jsx', 'utf8'));
@@ -990,6 +1111,12 @@ export default async function run() {
 
     t('the context reads the stack from one module, not from scattered files',
       /from '\.\.\/lib\/wc'/.test(ctx));
+    /* The stale-marker race fix (2026-09-18): an explicit email tap must
+       AWAIT the bounded forget — a fire-and-forget one loses to the very
+       next read of the marker — and only when no frame session is owed. */
+    t('an email tap awaits the bounded forget, and only when nothing is owed',
+      /modeRef\.current !== 'email' && !sdkLoginMarkerPresent\(\)/.test(ctx)
+        && /await forgetEmbeddedWallet\(\)/.test(ctx));
     t('no component reaches past the stack into a deleted module',
       !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)/.test(ctx + sheet + panel));
     t('the deleted modules are really gone', (() => {

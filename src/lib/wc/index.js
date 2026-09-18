@@ -29,7 +29,7 @@ export {
   wcMetadata
 } from './config.js';
 
-export { wcEvent, wcTraceReset, wcTraceSnapshot } from './trace.js';
+export { wcEvent, wcEventDetail, wcTraceReset, wcTraceSnapshot } from './trace.js';
 
 export {
   cancelSwitch,
@@ -104,7 +104,13 @@ export {
   relayVerdict
 } from './relay.js';
 
-export { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
+export {
+  applyWalletSurface,
+  readSharedConnectionFacts,
+  resetPairingState,
+  resetSharedConnectionState,
+  setLivePairingUri
+} from './appkit.js';
 
 export { createWcSession } from './session.js';
 
@@ -120,9 +126,11 @@ export {
   getAppKit,
   hasMarker as hasEmailMarker,
   open as openEmbeddedWallet,
+  openSurfaceDetail,
   rearmSdkLoginMarker,
   restore as restoreEmbeddedWallet,
   rollback as rollbackEmailMarker,
+  sdkLoginMarkerPresent,
   setMarker as setEmailMarker
 } from './embedded.js';
 
