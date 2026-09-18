@@ -48,9 +48,6 @@ export const RELAY_URLS = Object.freeze([
   'wss://relay.walletconnect.com'
 ]);
 
-/** The embedded-wallet frame (`DEFAULT_SDK_URL` in @reown/appkit-wallet). */
-export const SECURE_SITE_URL = 'https://secure.walletconnect.org/sdk';
-
 /** The AppKit/Explorer API host (appkit-common `W3M_API_URL`). */
 export const W3M_API_URL = 'https://api.web3modal.org';
 
@@ -112,36 +109,12 @@ export const TIMEOUT = Object.freeze({
   handoffClose: 2_500,
   teardown: 4_000,
   /*
-   * 30s. KEPT AS THE RESTORE WINDOW AND THE OLD OPEN BUDGET — but the open
-   * wait itself is now event-driven and capped by `connectHardCap` (the 2026-
-   * 09-18 Telegram report: a 30s one-shot fuse against an OTP that takes
-   * 30–120s on a phone, after which nobody was listening for the login that
-   * arrived a minute later). See awaitAccount in embedded.js.
+   * The five email/embedded-wallet bounds that used to live here
+   * (`emailOpen`, `emailModalOpen`, `emailRestore`, `emailCloseGrace`,
+   * `emailLateGrace`) went with the surface they measured — the email/social
+   * login was retired on 2026-09-18. Nothing outside that surface ever read
+   * them, and a bound nobody waits on is a number that can only drift.
    */
-  emailOpen: 30_000,
-  /*
-   * The bound on `modal.open()` itself — NOT on the login.
-   *
-   * In AppKit 1.8.19 `open()` awaits `ApiController.prefetch()` (a fan of
-   * explorer API calls) BEFORE it resets the router to the Connect view. On a
-   * slow mobile network one stalled call used to hold the whole flow — the
-   * trace showed `email_wait_timeout` a full minute after the tap while the
-   * user stared at nothing. The bound releases the flow to keep WAITING for
-   * the account (the modal may still appear); it only refuses to let a hung
-   * prefetch own the spinner forever.
-   */
-  emailModalOpen: 20_000,
-  emailRestore: 30_000,
-  emailCloseGrace: 3_000,
-  /*
-   * The grace AFTER the login modal closes without an account: a slow WebView
-   * answers a beat after the close (the provider lands 1–2s after the
-   * address), and the event-driven wait in awaitAccount gives that beat room
-   * before the verdict — instead of the old 3s, because the login that
-   * finishes LATE (OTP typed while the modal was dismissed on a flaky
-   * WebView) is exactly the one this grace exists to catch.
-   */
-  emailLateGrace: 8_000,
   healthProbe: 8_000
 });
 

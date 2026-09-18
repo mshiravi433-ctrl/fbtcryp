@@ -1668,17 +1668,6 @@ export default function Swap() {
         ))}
       </div>
 
-      {/* The exact outcome of a refused switch — the email wallet is the
-          signer, not the route, so «unsupported» is a named limitation with a
-          way out, not a silent dead tag (the 2026-09-18 report). */}
-      {wallet.switchChainResult && (
-        <p className="notice" style={{ marginTop: 8, marginBottom: 0 }}>
-          {wallet.switchChainResult.code === 'unsupported_chain'
-            ? t('swap.emailChainSignOnly', { chain: wallet.switchChainResult.chain })
-            : t('swap.emailChainSwitchFailed', { chain: wallet.switchChainResult.chain })}
-        </p>
-      )}
-
       {/* ─── TICKET: no motion.section, no backdrop-filter animation on native ─── */}
       <section className={`swap-ticket ${isNative ? 'swap-ticket-native' : ''}`}>
         <div className="lab-aurora" aria-hidden="true" />
