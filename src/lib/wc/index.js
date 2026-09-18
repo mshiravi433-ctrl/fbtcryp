@@ -29,7 +29,16 @@ export {
   wcMetadata
 } from './config.js';
 
-export { wcEvent, wcEventDetail, wcTraceReset, wcTraceSnapshot } from './trace.js';
+export {
+  TRACE_STORAGE_KEY,
+  reviveEntry,
+  wcEvent,
+  wcEventDetail,
+  wcTraceHydrate,
+  wcTracePersist,
+  wcTraceReset,
+  wcTraceSnapshot
+} from './trace.js';
 
 export {
   cancelSwitch,
@@ -106,7 +115,9 @@ export {
 
 export {
   applyWalletSurface,
+  assertEmailNetwork,
   assertEmailRouting,
+  clearPhantomAuthConnection,
   readSharedConnectionFacts,
   resetPairingState,
   resetSharedConnectionState,
@@ -116,23 +127,30 @@ export {
 export { createWcSession } from './session.js';
 
 export {
+  EMAIL_FRAME_CHAIN_IDS,
   EMAIL_MARKER_KEY,
   EMAIL_RESTORE_WINDOW_MS,
   SOCIAL_PROVIDERS,
   authConnectorProvider,
   awaitAccount,
   buildNetworks,
+  classifyEmailMarker,
+  clearFrameChainResidue,
+  clearStaleEmailState,
   emailOptions,
   forget as forgetEmbeddedWallet,
   getAppKit,
   hasMarker as hasEmailMarker,
+  isEmailFrameChain,
+  lastProviderProbeError,
   open as openEmbeddedWallet,
   openSurfaceDetail,
   rearmSdkLoginMarker,
   restore as restoreEmbeddedWallet,
   rollback as rollbackEmailMarker,
   sdkLoginMarkerPresent,
-  setMarker as setEmailMarker
+  setMarker as setEmailMarker,
+  switchEmbeddedNetwork
 } from './embedded.js';
 
 export {

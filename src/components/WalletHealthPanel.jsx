@@ -250,8 +250,22 @@ export default function WalletHealthPanel({ projectId }) {
                 handoffDetail(report.handoff)
               )}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''} · status=${report.storage?.connectionStatus ?? '—'} · stored=${(report.storage?.storedConnectors ?? []).join(',') || '—'}`}
+                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker}${report.storage?.emailMarkerStale ? ' (stale)' : ''} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''} · status=${report.storage?.connectionStatus ?? '—'} · stored=${(report.storage?.storedConnectors ?? []).join(',') || '—'}`}
               </p>
+              {/* Which keys survived, and which chain the email surface would
+                  boot on — the two facts the previous report could not name. */}
+              {(report.storage?.appkitConnectionKeyNames?.length || report.storage?.activeCaipNetworkId) && (
+                <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>
+                  {`keys=${(report.storage?.appkitConnectionKeyNames ?? []).join(',') || '—'} · active=${report.storage?.activeCaipNetworkId ?? '—'} · frame-chain=${report.storage?.frameChainSupported == null ? '—' : (report.storage.frameChainSupported ? 'ok' : 'UNSUPPORTED')} · frame-last-chain=${report.storage?.frameLastUsedChain ?? '—'}`}
+                </p>
+              )}
+              {/* The in-memory half the storage rows cannot show: which of
+                  these facts is why the email input renders disabled. */}
+              {report.shared && (
+                <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>
+                  {`shared: conn=${report.shared.isConnected ? 'yes' : 'no'} · connector=${report.shared.connectorId ?? '—'} · authConn=${report.shared.authConnection ? 'yes' : 'no'}${report.shared.authConnection ? `(acct=${report.shared.authAccounts ?? '?'}${(report.shared.authAccounts ?? 0) === 0 ? ' GHOST' : ''})` : ''} · noAdapters=${report.shared.noAdapters ? 'true' : 'false'} · view=${report.shared.view ?? '—'} · modal=${report.shared.modalOpen ? 'open' : 'closed'}`}
+                </p>
+              )}
               {report.storage?.orphanKeys && (
                 <p className="notice" style={{ fontSize: 11.5, margin: '4px 0' }}>
                   {t('wallet.healthOrphanHint')}

@@ -831,6 +831,11 @@ export function WalletProvider({ children }) {
     emailRestoreRef.current = true;
     try {
       const result = await restoreEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+      /* A STALE marker was already forgotten by the stack (storage + shared
+         controllers + instance). The marker check at the top of `resume()`
+         therefore lets the WalletConnect restore run on this same boot instead
+         of leaving the user with neither wallet. */
+      if (result.code === 'STALE_CLEARED') wcEvent('email_restore_stale');
       if (!result.ok) return false;
       if (addressRef.current) return false;
       return await attachExternal({
@@ -1020,6 +1025,23 @@ export function WalletProvider({ children }) {
         }
         setChainId(targetId);
         return true;
+      }
+      /*
+       * THE EMBEDDED WALLET NEVER SEES `wallet_switchEthereumChain`.
+       *
+       * The secure frame's guard accepts only the methods on its SAFE/NOT_SAFE
+       * lists, and `wallet_switchEthereumChain` is on NEITHER: AppKit answers
+       * such a request by OPENING the modal, showing «Action not allowed» and
+       * calling `provider.rejectRpcRequests()` — which aborts every pending
+       * RPC, a login included. That is the error string the device reports
+       * carry. The frame DOES implement a switch, through the adapter
+       * (`APP_SWITCH_NETWORK`), so the email mode goes that way and a chain
+       * the frame cannot serve is refused locally instead of being asked for.
+       */
+      if (mode === 'email') {
+        const { switchEmbeddedNetwork } = await import('../lib/wc');
+        const result = await switchEmbeddedNetwork(targetId);
+        return result === 'ok';
       }
       try {
         await eip.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hexId }] });

@@ -305,6 +305,100 @@ export async function assertEmailRouting() {
 }
 
 /**
+ * THE EMAIL SURFACE'S CLAIM ON THE ACTIVE NETWORK.
+ *
+ * ─── WHY THE FLAGS ABOVE ARE NOT ENOUGH (the «Action not allowed» reports) ──
+ * `assertEmailRouting()` decides WHICH VIEW opens; this decides WHICH CHAIN the
+ * secure frame boots on — and the frame only serves a hard-coded list of 24
+ * eip155 networks (`W3mFrame#networks` in @reown/appkit-wallet 1.8.19). The app
+ * ships 16 chains, 8 of which are NOT on that list (Unichain 130, Monad 143,
+ * Sonic 146, Robinhood 4663, Mantle 5000, Linea 59144, Berachain 80094, Scroll
+ * 534352). Two pieces of that chain state are read by the SDK and neither can
+ * be trusted to name a supported chain:
+ *
+ *   • `@appkit/active_caip_network_id` — `ChainController.initialize()` reads it
+ *     FIRST and adopts it whenever it matches a network in the list, so an
+ *     email boot after a WalletConnect session that ended on Sonic starts the
+ *     frame on Sonic.
+ *   • `ChainController.state.activeCaipNetwork` (and the per-namespace
+ *     `networkState.caipNetwork`) — what `getActiveCaipNetwork()` returns, i.e.
+ *     the `chainId`+`rpcUrl` EVERY frame RPC carries (`request()` sets both from
+ *     it) and the `chainId` the iframe URL is built with.
+ *
+ * A frame asked to serve a network it never advertised is the reported
+ * «Action not allowed» / «action not valid», so the email surface pins the
+ * active network to one it can actually serve, exactly the way it pins the
+ * routing flags.
+ *
+ * ─── WHAT IT REFUSES TO DO ──────────────────────────────────────────────────
+ * Never touches anything while an address is attached: a live wallet sits on
+ * the chain the user chose, and yanking `activeCaipNetwork` out from under it
+ * would desynchronise the signer from the UI. That is reported as `'blocked'`
+ * (and traced) instead of being "fixed" behind the user's back.
+ *
+ * @param {object} options
+ * @param {Array<{id:number|string}>} options.networks — the chain objects the
+ *   email instance advertises (embedded.js#buildNetworks), so the pin uses the
+ *   exact object AppKit itself would have used.
+ * @param {Iterable<number>} options.supportedChainIds — the frame's own list,
+ *   intersect our registry (embedded.js#EMAIL_FRAME_CHAIN_IDS).
+ * @param {number} [options.defaultChainId] — the chain to pin to.
+ * @returns {Promise<'fixed'|'clean'|'blocked'|'unavailable'>} what happened,
+ *   for the trace — never a boolean that hides which one.
+ */
+export async function assertEmailNetwork({ networks = [], supportedChainIds = [], defaultChainId } = {}) {
+  const supported = new Set(
+    [...supportedChainIds].map(Number).filter((id) => Number.isFinite(id))
+  );
+  if (supported.size === 0) return 'unavailable';
+  const preferred = supported.has(Number(defaultChainId))
+    ? Number(defaultChainId)
+    : Number([...supported][0]);
+  const byId = new Map();
+  for (const network of Array.isArray(networks) ? networks : []) {
+    const id = Number(network?.id);
+    if (Number.isFinite(id)) byId.set(id, network);
+  }
+  const fallback = byId.get(preferred) ?? byId.get(Number([...supported].find((id) => byId.has(id))));
+
+  let fixed = false;
+
+  /* 1. The persisted pick — read by initialize() BEFORE anything else. */
+  try {
+    const storage = typeof localStorage !== 'undefined' ? localStorage : null;
+    if (storage) {
+      const raw = String(storage.getItem('@appkit/active_caip_network_id') || '');
+      if (raw) {
+        const id = Number(raw.split(':').pop());
+        if (Number.isFinite(id) && !supported.has(id)) {
+          storage.removeItem('@appkit/active_caip_network_id');
+          fixed = true;
+        }
+      }
+    }
+  } catch { /* storage unavailable — the in-memory half below still runs */ }
+
+  /* 2. The in-memory half — what the frame's RPCs are stamped with. */
+  try {
+    const controllers = (await import('@reown/appkit-controllers')) ?? {};
+    const C = controllers.ChainController;
+    const state = C?.state;
+    if (!state) return fixed ? 'fixed' : 'clean';
+    const namespaced = C?.getNetworkData?.('eip155')?.caipNetwork;
+    const active = state.activeCaipNetwork;
+    const candidates = [namespaced, active].filter((network) => network && Number.isFinite(Number(network.id)));
+    const unsupported = candidates.find((network) => !supported.has(Number(network.id)));
+    if (!unsupported) return fixed ? 'fixed' : 'clean';
+    if (state.activeCaipAddress) return 'blocked';
+    if (!fallback) return fixed ? 'fixed' : 'unavailable';
+    C.setActiveCaipNetwork(fallback);
+    return 'fixed';
+  } catch {
+    return fixed ? 'fixed' : 'unavailable';
+  }
+}
+
+/**
  * Read the SHARED controllers' connection facts — the exact state every
  * `<w3m-modal>` renders from, no matter which instance opened it.
  *
@@ -326,12 +420,39 @@ export async function readSharedConnectionFacts() {
     const controllers = await import('@reown/appkit-controllers');
     const C = controllers ?? {};
     const address = C.ChainController?.state?.activeCaipAddress;
+    /*
+     * ─── WHY `authConnection` IS NOT ENOUGH (the disabled email input) ──────
+     * `hasAnyConnection('AUTH')` checks the connector ID and nothing else, and
+     * that boolean is EXACTLY what `w3m-email-login-widget` renders the email
+     * input's `disabled` attribute from. A live AUTH connection always carries
+     * its accounts (the adapter writes them together with the connection), so
+     * an entry with an AUTH id and an EMPTY account list is residue from an
+     * attempt whose teardown lost its race — and while it sits in the shared
+     * map, the email box opens with the input disabled and the tap does
+     * nothing at all. The two facts are therefore reported separately instead
+     * of collapsed into one boolean that cannot tell a wallet from a ghost.
+     */
+    const connections = C.ConnectionController?.state?.connections;
+    let authEntries = 0;
+    let authAccounts = 0;
+    if (connections && typeof connections.values === 'function') {
+      for (const list of connections.values()) {
+        if (!Array.isArray(list)) continue;
+        for (const entry of list) {
+          if (entry?.connectorId !== 'AUTH') continue;
+          authEntries += 1;
+          authAccounts += Array.isArray(entry?.accounts) ? entry.accounts.length : 0;
+        }
+      }
+    }
     return {
       available: true,
       /* getIsConnectedState() is literally Boolean(activeCaipAddress). */
       isConnected: Boolean(address),
       connectorId: C.ConnectorController?.getConnectorId?.('eip155') || null,
-      authConnection: Boolean(C.ConnectionController?.hasAnyConnection?.('AUTH')),
+      authConnection: authEntries > 0,
+      authEntries,
+      authAccounts,
       view: C.RouterController?.state?.view || null,
       noAdapters: Boolean(C.ChainController?.state?.noAdapters),
       modalOpen: Boolean(C.ModalController?.state?.open)
@@ -344,10 +465,55 @@ export async function readSharedConnectionFacts() {
       isConnected: false,
       connectorId: null,
       authConnection: false,
+      authEntries: 0,
+      authAccounts: 0,
       view: null,
       noAdapters: false,
       modalOpen: false
     };
+  }
+}
+
+/**
+ * Delete the AUTH entries that carry no account — the ones that disable the
+ * email input without being a wallet.
+ *
+ * `ConnectionController.setConnections(list, namespace)` REPLACES that
+ * namespace's list, so the removal goes through the official setter and valtio
+ * notifies the widgets: the email box that was rendered disabled re-enables
+ * itself the moment the ghost is gone. Nothing else is touched — no account
+ * reset, no connector id, no storage — because this runs on paths where a
+ * session may genuinely be owed and only the input's `disabled` binding is
+ * wrong. A live address is a hard stop: it means a wallet owns the map, and
+ * resolving that belongs to `resetSharedConnectionState()`, not here.
+ *
+ * @returns {Promise<number>} how many ghost entries were removed.
+ */
+export async function clearPhantomAuthConnection() {
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const C = controllers ?? {};
+    if (C.ChainController?.state?.activeCaipAddress) return 0;
+    const connections = C.ConnectionController?.state?.connections;
+    if (!connections || typeof connections.entries !== 'function') return 0;
+    let removed = 0;
+    for (const [namespace, list] of connections.entries()) {
+      if (!Array.isArray(list)) continue;
+      const kept = list.filter((entry) => {
+        const phantom = entry?.connectorId === 'AUTH'
+          && (!Array.isArray(entry?.accounts) || entry.accounts.length === 0);
+        if (phantom) removed += 1;
+        return !phantom;
+      });
+      if (kept.length !== list.length) {
+        try {
+          C.ConnectionController.setConnections(kept, namespace);
+        } catch { /* best-effort: the guest list stays, the login still opens */ }
+      }
+    }
+    return removed;
+  } catch {
+    return 0;
   }
 }
 
