@@ -912,6 +912,104 @@ async function isProviderUsable(provider) {
  */
 export const SIGN_PROBE_MESSAGE = 'fbtswap-login-probe';
 
+/** The probe message as hex — `personal_sign` takes hex, not text. */
+function probeMessageHex() {
+  try {
+    return '0x' + Array.from(new TextEncoder().encode(SIGN_PROBE_MESSAGE))
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '0x';
+  }
+}
+
+/**
+ * Ethers, lazily — ONLY the signature recovery below needs it.
+ *
+ * The probe has to be able to answer «did THIS address sign this message?»
+ * without asking the provider (the provider is the thing under suspicion). One
+ * dynamic import, cached, and a failure is not fatal: `null` means «cannot
+ * verify», which the caller treats as NOT signing-ready — never as success.
+ */
+let ethersPromise = null;
+function loadEthersLazy() {
+  if (!ethersPromise) {
+    ethersPromise = import('ethers').catch(() => null);
+  }
+  return ethersPromise;
+}
+
+/**
+ * The address a signature over the probe message belongs to, or null when the
+ * signature cannot be verified (bad shape, ethers unavailable, or a signature
+ * that recovers to nothing). Never throws.
+ */
+async function recoverProbeSigner(signature) {
+  try {
+    const ethers = await loadEthersLazy();
+    const verify = ethers?.verifyMessage;
+    if (typeof verify !== 'function') return null;
+    const recovered = verify(SIGN_PROBE_MESSAGE, signature);
+    return typeof recovered === 'string' && recovered.startsWith('0x') ? recovered : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ─── THE EMPTY `eth_accounts` ANSWER (the fbtswap.ir report, 2026-09-18) ────
+ * «ورود ایمیل انجام شد، اما کیف پول در این صفحه آماده نشد» — the login is
+ * complete (the app's own AUTH record carries two accounts and the frame
+ * session is stored), the wait HAS an address and a provider, and then every
+ * attach dies on `NO_ACCOUNTS` from the probe's first RPC.
+ *
+ * The secure frame answers an EMPTY account list, not an error, in the window
+ * where its session is being rehydrated for the chain the dapp asks about —
+ * `eth_accounts` is a lookup in the frame's per-chain map, and an empty map is
+ * a valid answer for a session that exists. The old probe read that empty
+ * answer as «no wallet» and stopped there: the one question that matters —
+ * «can this provider SIGN for the address the login produced?» — was never
+ * asked, and the user got a page telling them to try again.
+ *
+ * So when the accounts list is empty AND the caller knows the address the
+ * login produced, the probe asks the REAL question: one `personal_sign` for
+ * that address. That call is the frame's actual signing path (it is on the
+ * NOT_SAFE list precisely because it reaches the key), and the answer is
+ * VERIFIED — the signature must recover to exactly that address — so an empty
+ * account list can never turn into a false «connected». A provider that cannot
+ * sign, or signs for somebody else, still fails; the error keeps naming which
+ * of the two it was.
+ *
+ * @returns {Promise<{ok:boolean, error?:string}>} — `NO_ACCOUNTS` survives as
+ *   the diagnosis for «empty list and nothing signable» (the previous
+ *   behaviour), `SIGNER_MISMATCH` is new and means the signature was real but
+ *   belonged to a different key.
+ */
+async function directSignProbe(provider, address, bounded) {
+  const hex = probeMessageHex();
+  let sig;
+  try {
+    sig = await bounded(provider.request({ method: 'personal_sign', params: [hex, address] }));
+  } catch (e) {
+    /* The frame's own refusal («Action not allowed», an aborted request) is the
+       honest answer here — the same string the old probe surfaced when
+       `eth_accounts` threw. */
+    const m = String(e?.error?.message || e?.message || e || '').slice(0, 120);
+    return { ok: false, error: m || 'NO_ACCOUNTS' };
+  }
+  if (sig?.__probeTimeout) return { ok: false, error: 'PROBE_TIMEOUT' };
+  if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) {
+    /* Nothing signable came back: the empty account list was telling the
+       truth, and `NO_ACCOUNTS` stays the name of it. */
+    return { ok: false, error: 'NO_ACCOUNTS' };
+  }
+  const recovered = await recoverProbeSigner(sig);
+  if (!recovered) return { ok: false, error: 'NO_ACCOUNTS' };
+  if (recovered.toLowerCase() !== String(address).toLowerCase()) {
+    return { ok: false, error: 'SIGNER_MISMATCH' };
+  }
+  return { ok: true, via: 'personal_sign' };
+}
+
 export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {}) {
   if (!provider?.request) return { ok: false, error: 'NO_PROVIDER' };
   /* A backstop that CLEARS ITSELF when the request settles: a plain
@@ -929,6 +1027,13 @@ export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {
     const accs = await bounded(provider.request({ method: 'eth_accounts' }));
     if (accs?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
     if (!Array.isArray(accs) || accs.length === 0) {
+      /* See `directSignProbe`: an empty list is a state, not a verdict. */
+      if (address) {
+        const direct = await directSignProbe(provider, address, bounded);
+        if (direct.ok) { lastProbeError = null; return { ok: true, via: direct.via }; }
+        lastProbeError = direct.error;
+        return { ok: false, error: direct.error };
+      }
       lastProbeError = 'NO_ACCOUNTS';
       return { ok: false, error: 'NO_ACCOUNTS' };
     }
@@ -939,14 +1044,7 @@ export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {
       lastProbeError = 'ACCOUNT_MISMATCH';
       return { ok: false, error: 'ACCOUNT_MISMATCH' };
     }
-    let hex;
-    try {
-      hex = '0x' + Array.from(new TextEncoder().encode(SIGN_PROBE_MESSAGE))
-        .map((b) => b.toString(16).padStart(2, '0')).join('');
-    } catch {
-      hex = '0x';
-    }
-    const sig = await bounded(provider.request({ method: 'personal_sign', params: [hex, signer] }));
+    const sig = await bounded(provider.request({ method: 'personal_sign', params: [probeMessageHex(), signer] }));
     if (sig?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
     if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) {
       lastProbeError = 'BAD_SIGNATURE';
@@ -1202,6 +1300,96 @@ export async function authConnectorProvider(namespace = 'eip155') {
   } catch {
     return null;
   }
+}
+
+/** The address inside a CAIP-10 account (`eip155:56:0x…`), or null. */
+function addressFromCaip(value) {
+  if (typeof value !== 'string') return null;
+  const candidate = value.includes(':') ? value.split(':').pop() : value;
+  return /^0x[0-9a-fA-F]{40}$/.test(candidate) ? candidate : null;
+}
+
+/**
+ * THE ACCOUNT THE APP ALREADY HAS — read in one tick, never waited on.
+ *
+ * ─── WHY THIS EXISTS (the 2026-09-18 «کیف پول آماده نشد» report) ────────────
+ * After a login that produced an address but whose provider would not sign
+ * yet, the only offered way forward was «تلاش دوباره» — and that button ran the
+ * whole connect flow again (`connectEmailSocial`), which re-opened the modal
+ * on a session that already exists: the user was shown a wallet-connection
+ * surface for a wallet they had already connected, and the attach was never
+ * retried on its own.
+ *
+ * The facts needed to retry the ATTACH alone are all already in memory: the
+ * address is in the shared controllers (the AUTH connection's accounts, or
+ * `activeCaipAddress`) and the provider is one of the two getters every other
+ * path already tries. Re-reading them is cheap, synchronous where the SDK
+ * allows it, and it can never open a modal — which is exactly what the retry
+ * path and the background keeper need.
+ *
+ * PURE: it reads and returns; nothing is written, no modal is touched.
+ *
+ * @param {object} [options] `{ modal }` — the instance to read from
+ *   (defaults to the page's own).
+ * @returns {Promise<{address:string|null, provider:object|null, source:string}>}
+ *   `source` is a trace-safe token: `instance` | `shared` | `auth` | `none`.
+ */
+export async function embeddedAccountSnapshot({ modal = instance } = {}) {
+  const snapshot = { address: null, provider: null, source: 'none' };
+  try {
+    const addr = modal?.getAddress?.('eip155') ?? modal?.getAddress?.() ?? null;
+    if (addressFromCaip(addr)) {
+      snapshot.address = addressFromCaip(addr);
+      snapshot.source = 'instance';
+    }
+  } catch { /* an instance that cannot answer is not a source */ }
+  try {
+    const p = tryGetProviderSync(modal);
+    if (p) snapshot.provider = p;
+  } catch { /* same */ }
+  if (!snapshot.provider) {
+    try {
+      const p = await authConnectorProvider();
+      if (p) snapshot.provider = p;
+    } catch { /* same */ }
+  }
+  if (snapshot.address && snapshot.provider) return snapshot;
+  try {
+    const controllers = await import('@reown/appkit-controllers');
+    const C = controllers ?? {};
+    if (!snapshot.address) {
+      const caip = addressFromCaip(C.ChainController?.state?.activeCaipAddress);
+      if (caip) {
+        snapshot.address = caip;
+        if (snapshot.source === 'none') snapshot.source = 'shared';
+      }
+    }
+    if (!snapshot.address) {
+      const connections = C.ConnectionController?.state?.connections;
+      if (connections && typeof connections.values === 'function') {
+        for (const list of connections.values()) {
+          if (!Array.isArray(list)) continue;
+          for (const entry of list) {
+            if (entry?.connectorId !== 'AUTH' || !Array.isArray(entry.accounts)) continue;
+            for (const account of entry.accounts) {
+              const addr = addressFromCaip(account?.address ?? account);
+              if (addr) { snapshot.address = addr; snapshot.source = 'shared'; break; }
+            }
+            if (snapshot.address) break;
+          }
+          if (snapshot.address) break;
+        }
+      }
+    }
+    if (!snapshot.provider) {
+      const connector = C.ConnectorController?.getAuthConnector?.('eip155');
+      if (connector?.provider) {
+        snapshot.provider = connector.provider;
+        if (snapshot.source === 'none') snapshot.source = 'auth';
+      }
+    }
+  } catch { /* the controllers chunk is unavailable: report what we have */ }
+  return snapshot;
 }
 
 /**

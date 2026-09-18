@@ -138,6 +138,7 @@
     "backupTitle": "Cadangkan frasa pemulihan",
     "connectFailed": "Koneksi gagal atau ditolak.",
     "emailProviderPending": "Login email berhasil, tetapi dompet tidak selesai dimuat di halaman ini. Coba lagi atau buka kembali aplikasi — koneksi Anda tidak hilang.",
+    "emailProviderPendingHint": "Koneksi terus mencoba di latar belakang — Anda bisa tetap di halaman ini.",
     "healthUsage": "Batas penggunaan proyek (email)",
     "healthUsageBlocked": "Proyek melebihi batas Reown — AppKit sendiri menonaktifkan kotak email. Upgrade paket di dasbor Reown.",
     "wcOriginBlocked": "WalletConnect menolak origin aplikasi ini. Di dasbor Reown, pastikan Allowed Domains berisi https://fbtswap.ir dan https://localhost, serta App IDs berisi ir.fbtswap.app.",

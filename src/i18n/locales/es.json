@@ -138,6 +138,7 @@
     "backupTitle": "Guarda tu frase semilla",
     "connectFailed": "La conexión falló o fue rechazada.",
     "emailProviderPending": "El inicio de sesión con correo se completó, pero la cartera no terminó de cargarse en esta página. Inténtalo de nuevo o reabre la aplicación; tu conexión no se ha perdido.",
+    "emailProviderPendingHint": "La conexión sigue intentándolo en segundo plano: puedes quedarte en esta página.",
     "healthUsage": "Límites de uso del proyecto (email)",
     "healthUsageBlocked": "El proyecto superó su límite de Reown: el propio AppKit deshabilita el cuadro de correo. Mejora el plan en el panel de Reown.",
     "wcOriginBlocked": "WalletConnect rechazó el origen de esta app. En el panel de Reown, confirma que Allowed Domains incluya https://fbtswap.ir y https://localhost, y que App IDs incluya ir.fbtswap.app.",

@@ -9,6 +9,7 @@ import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
 import {
   WC_PROJECT_ID,
   createWcSession,
+  embeddedAccountSnapshot,
   forgetEmbeddedWallet,
   hasEmailMarker,
   openEmbeddedWallet,
@@ -136,6 +137,17 @@ export function WalletProvider({ children }) {
   /** Single-flight for the email/social restore: a cold start, a bfcache
    *  `pageshow` return and a foreground resume can all ask within a second. */
   const emailRestoreRef = useRef(false);
+  /**
+   * The background keeper for an attach that came up short.
+   *
+   * See `startEmailAttachKeeper`: `EMAIL_PROVIDER_PENDING` used to be a dead
+   * end whose only exit was «تلاش دوباره» — which re-ran the whole connect
+   * flow and re-opened the modal on a session that already existed. The keeper
+   * keeps probing the SAME session in the background and attaches the moment
+   * the frame can sign, so the common case (a frame that needs a few more
+   * seconds) resolves without the user doing anything.
+   */
+  const emailKeeperRef = useRef(null);
 
   /* Pairing surface: the URI the SDK issued for the in-flight attempt (null
      when there is none), and which surface currently owns the screen. A URI
@@ -551,6 +563,177 @@ export function WalletProvider({ children }) {
     [attachInjectedListeners, detachInjectedListeners, refreshBalance]
   );
 
+  /* ------------------ the email attach keeper (background) --------------- */
+
+  /*
+   * ─── «کیف پول در این صفحه آماده نشد» IS NOT A DEAD END ANY MORE ─────────
+   *
+   * The 2026-09-18 report: the frame session exists, the address is known, and
+   * the provider answers `eth_accounts` with an empty list — the attach probe
+   * fails, `EMAIL_PROVIDER_PENDING` is shown, and the ONLY offered exit is
+   * «تلاش دوباره». That button re-ran `connectEmailSocial()`, i.e. the whole
+   * connect flow: the modal re-opened (on a session that is already connected)
+   * and the user saw a wallet-connection surface instead of their wallet.
+   *
+   * Two things were missing, and this block is both of them:
+   *
+   *   1. A FAST retry that only re-runs the ATTACH — probe + `attachExternal`
+   *      on the account the app already has (`embeddedAccountSnapshot`). No
+   *      modal, no fresh login, no new claim.
+   *
+   *   2. A KEEPER: when even that is too early, the same attempt keeps being
+   *      made in the background on a bounded backoff. The frame's empty answer
+   *      is a STATE that resolves on its own (its session is rehydrated for the
+   *      chain the dapp asks about); the moment it can sign, the wallet is
+   *      attached, the error is cleared, and the user learns about it through
+   *      the header rather than through a page telling them to try again.
+   *
+   * The keeper is single-flight, self-cancelling, and every exit is traced
+   * (`email_keeper_attached` / `email_keeper_exhausted`), so a report can still
+   * say how far it got. It never opens a modal and never writes storage beyond
+   * the marker a successful attach earns.
+   */
+
+  /** Stop the keeper without waiting for its next tick. Safe when idle. */
+  const stopEmailAttachKeeper = useCallback(() => {
+    const keeper = emailKeeperRef.current;
+    if (!keeper) return;
+    keeper.cancelled = true;
+    if (keeper.timer) clearTimeout(keeper.timer);
+    emailKeeperRef.current = null;
+  }, []);
+
+  /**
+   * Keep trying to attach an email session the app already knows about.
+   *
+   * @param {string|null} seedAddress the address the connect flow produced (a
+   *   hint: every attempt re-reads the truth through `embeddedAccountSnapshot`,
+   *   because the frame can answer late with a different/complete account).
+   */
+  const startEmailAttachKeeper = useCallback(
+    (seedAddress) => {
+      stopEmailAttachKeeper();
+      const keeper = { cancelled: false, timer: null, attempts: 0, address: seedAddress || null };
+      emailKeeperRef.current = keeper;
+      /* Backoff, bounded: ≈60s of patience in 12 attempts. Long enough for a
+         suspended WebView to come back and let the frame finish, short enough
+         that a genuinely broken session is not retried forever. */
+      const delays = [1200, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000, 10000, 12000];
+      const step = async () => {
+        if (keeper.cancelled || emailKeeperRef.current !== keeper) return;
+        try {
+          if (addressRef.current) {
+            /* Another path (the user's own retry, a foreground resume) already
+               attached it — the keeper has nothing left to do. */
+            stopEmailAttachKeeper();
+            return;
+          }
+          keeper.attempts += 1;
+          const snapshot = await embeddedAccountSnapshot();
+          const address = snapshot.address || keeper.address;
+          if (address) keeper.address = address;
+          if (address && snapshot.provider) {
+            /* A LONGER bound than the inline probes: this one owns no spinner,
+               and the frame it is asking is by definition slow to answer (a
+               suspended WebView, a session being rehydrated). */
+            const probe = await probeSigning(snapshot.provider, address, { timeoutMs: 15_000 });
+            if (probe.ok) {
+              const attached = await attachExternal({
+                eip: snapshot.provider,
+                address,
+                chainId: null,
+                mode: 'email'
+              });
+              if (attached) {
+                stopEmailAttachKeeper();
+                setEmailMarker(true);
+                setError(null);
+                wcEvent('email_keeper_attached');
+                try { useAppStore.getState().notify('walletSessionRestored', 'success'); } catch { /* optional */ }
+                return;
+              }
+            } else {
+              wcEventDetail('email_keeper_probe_failed', { m: probe.error });
+            }
+          }
+        } catch {
+          /* one attempt lost — the next one is already scheduled below */
+        }
+        if (keeper.cancelled || emailKeeperRef.current !== keeper) return;
+        if (keeper.attempts >= delays.length) {
+          wcEvent('email_keeper_exhausted');
+          stopEmailAttachKeeper();
+          return;
+        }
+        const delay = delays[Math.min(keeper.attempts - 1, delays.length - 1)];
+        keeper.timer = setTimeout(() => { void step(); }, delay);
+      };
+      /* First attempt immediately: the failure that started the keeper is
+         usually a few hundred milliseconds old by now. */
+      void step();
+    },
+    [attachExternal, stopEmailAttachKeeper]
+  );
+
+  /**
+   * «تلاش دوباره» — retry the ATTACH, not the login.
+   *
+   * This is what the pending notice's button calls now. It reads the account
+   * the app already has, probes it, and attaches — without opening the modal
+   * (the old behaviour re-ran `connectEmailSocial()` and showed the user a
+   * wallet-connection surface for a wallet that is already connected). When
+   * even this is too early, the keeper takes over instead of leaving the user
+   * at a dead end.
+   */
+  const retryEmailAttach = useCallback(async () => {
+    if (connecting) return false;
+    setError(null);
+    setConnecting(true);
+    const connectGuard = holdRefreshGuard('email-retry-attach');
+    try {
+      const snapshot = await embeddedAccountSnapshot();
+      wcEventDetail('email_retry_attach', { addr: Boolean(snapshot.address), prov: Boolean(snapshot.provider) });
+      if (!snapshot.address) {
+        /* Nothing to attach to — the frame has not produced an account for
+           this surface. The keeper still watches for one arriving late. */
+        wcEvent('email_retry_attach_no_address');
+        startEmailAttachKeeper(null);
+        setError('EMAIL_PROVIDER_PENDING');
+        return false;
+      }
+      if (snapshot.provider) {
+        const probe = await probeSigning(snapshot.provider, snapshot.address, { timeoutMs: 10_000 });
+        if (probe.ok) {
+          const attached = await attachExternal({
+            eip: snapshot.provider,
+            address: snapshot.address,
+            chainId: null,
+            mode: 'email'
+          });
+          if (attached) {
+            setEmailMarker(true);
+            setError(null);
+            wcEvent('email_retry_attach_ok');
+            return true;
+          }
+        } else {
+          wcEventDetail('email_sign_probe_failed', { m: probe.error });
+        }
+      }
+      wcEvent('email_retry_attach_pending');
+      startEmailAttachKeeper(snapshot.address);
+      setError('EMAIL_PROVIDER_PENDING');
+      return false;
+    } catch {
+      wcEvent('email_retry_attach_failed');
+      setError('EMAIL_PROVIDER_PENDING');
+      return false;
+    } finally {
+      setConnecting(false);
+      connectGuard.release();
+    }
+  }, [attachExternal, connecting, startEmailAttachKeeper]);
+
   /* --------------------------- WalletConnect v2 -------------------------- */
 
   /**
@@ -671,6 +854,9 @@ export function WalletProvider({ children }) {
     setError(null);
     setConnecting(true);
     const connectGuard = holdRefreshGuard('email-connect');
+    /* A new explicit attempt owns the flow: any keeper left over from a
+       previous pending verdict must not attach a session under it. */
+    stopEmailAttachKeeper();
     try {
       if (eip1193Ref.current || wcRef.current?.provider) disconnectRef.current();
       /*
@@ -704,6 +890,46 @@ export function WalletProvider({ children }) {
         try {
           await forgetEmbeddedWallet();
         } catch { /* bounded best-effort: the fresh path still purges */ }
+      }
+      /*
+       * ─── ATTACH BEFORE ASKING (the «باز هم صفحهٔ وصل کردن کیف پول» half of
+       * the 2026-09-18 report) ─────────────────────────────────────────────
+       *
+       * When the storage already describes a session this page is owed, the
+       * tap does not need a login: it needs the ATTACH. Opening the modal for
+       * that case is what put a wallet-connection surface in front of a user
+       * whose wallet was already connected — the green tick, then «connect
+       * your wallet» again.
+       *
+       * So the attach is attempted first, from the account the app already
+       * has, with a short bound (6s — a user IS waiting, unlike the keeper).
+       * It can only SUCCEED on a session the storage already claims (the same
+       * gate the marker logic above uses), so a genuine fresh login still
+       * goes to the modal exactly as before — this path only short-circuits
+       * the case where a working wallet is one probe away.
+       */
+      if (modeRef.current !== 'email' && (hasEmailMarker() || sdkSessionFacts().anyEvidence)) {
+        try {
+          const snapshot = await embeddedAccountSnapshot();
+          if (snapshot.address && snapshot.provider) {
+            const probe = await probeSigning(snapshot.provider, snapshot.address, { timeoutMs: 6_000 });
+            if (probe.ok) {
+              const attached = await attachExternal({
+                eip: snapshot.provider,
+                address: snapshot.address,
+                chainId: null,
+                mode: 'email'
+              });
+              if (attached) {
+                setEmailMarker(true);
+                wcEvent('email_fast_attach');
+                return true;
+              }
+            } else {
+              wcEventDetail('email_sign_probe_failed', { m: probe.error });
+            }
+          }
+        } catch { /* fall through to the modal: the normal flow owns this */ }
       }
       setEmailModalActive(true);
       let result = await openEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
@@ -762,7 +988,11 @@ export function WalletProvider({ children }) {
        */
       let attached = false;
       if (result.provider && result.address) {
-        const probe = await probeSigning(result.provider, result.address);
+        /* Bounded shorter than the default: this probe is one of FOUR in the
+           flow (first attempt + three retries), and the keeper is already
+           scheduled to take over — a slow frame must not keep the user on a
+           spinner for minutes. */
+        const probe = await probeSigning(result.provider, result.address, { timeoutMs: 8_000 });
         if (probe.ok) {
           attached = await attachExternal({
             eip: result.provider,
@@ -792,7 +1022,7 @@ export function WalletProvider({ children }) {
               || freshProvider;
           } catch {}
           if (!freshProvider) continue;
-          const probe = await probeSigning(freshProvider, result.address);
+          const probe = await probeSigning(freshProvider, result.address, { timeoutMs: 8_000 });
           if (probe.ok) {
             attached = await attachExternal({
               eip: freshProvider,
@@ -807,6 +1037,7 @@ export function WalletProvider({ children }) {
       }
 
       if (attached) {
+        stopEmailAttachKeeper();
         setEmailMarker(true);
         wcEvent('email_connected_final');
       } else {
@@ -818,6 +1049,11 @@ export function WalletProvider({ children }) {
           setEmailMarker(true);
           setError('EMAIL_PROVIDER_PENDING');
           wcEvent('email_attach_failed_pending');
+          /* …and the retry the message promises happens on its own: the keeper
+             keeps probing THIS session in the background, so «تلاش دوباره» is
+             no longer something the user has to do by hand (nor a button that
+             re-opens the modal — see `retryEmailAttach`). */
+          startEmailAttachKeeper(result.address);
         } else {
           setError('CONNECT_FAILED');
           wcEvent('email_attach_failed_final');
@@ -833,7 +1069,7 @@ export function WalletProvider({ children }) {
       setConnecting(false);
       connectGuard.release();
     }
-  }, [attachExternal, connecting]);
+  }, [attachExternal, connecting, startEmailAttachKeeper, stopEmailAttachKeeper]);
 
   /**
    * Rehydrate a returning embedded wallet.
@@ -880,6 +1116,10 @@ export function WalletProvider({ children }) {
       if (!probe.ok) {
         wcEventDetail('email_sign_probe_failed', { m: probe.error });
         setError('EMAIL_PROVIDER_PENDING');
+        /* The same promise the explicit tap makes: the session is owed, so the
+           keeper keeps trying to attach it rather than waiting for the user to
+           come back and press a button. */
+        startEmailAttachKeeper(result.address);
         return false;
       }
       return await attachExternal({
@@ -895,7 +1135,7 @@ export function WalletProvider({ children }) {
     } finally {
       emailRestoreRef.current = false;
     }
-  }, [attachExternal]);
+  }, [attachExternal, startEmailAttachKeeper]);
 
   /* ------------------------------ local vault ---------------------------- */
 
@@ -1019,6 +1259,10 @@ export function WalletProvider({ children }) {
 
   const disconnect = useCallback(() => {
     wcEvent('local_disconnect');
+    /* An explicit disconnect ends every claim this page holds — including the
+       background keeper's «this session is owed» (it would otherwise re-attach
+       the wallet the user just disconnected). */
+    stopEmailAttachKeeper();
     /* WalletConnect first: tell the peer the session is over (bounded — a dead
        relay must never stall the UI) and purge the storage artifacts, then
        retire the email/social session, then the injected listeners. */
@@ -1044,7 +1288,7 @@ export function WalletProvider({ children }) {
     setError(null);
     setWcPairUri(null);
     setSwitchChainResult(null);
-  }, [detachInjectedListeners]);
+  }, [detachInjectedListeners, stopEmailAttachKeeper]);
 
   disconnectRef.current = disconnect;
 
@@ -1282,7 +1526,15 @@ export function WalletProvider({ children }) {
    */
   useEffect(() => {
     if (mode && mode !== 'email') void forgetEmbeddedWallet().catch(() => {});
-  }, [mode]);
+    /* Switching away from the embedded wallet ends the keeper too: it exists to
+       attach THAT session, and a keeper that outlived its claim would attach an
+       email wallet under a connection the user just replaced. */
+    if (mode && mode !== 'email') stopEmailAttachKeeper();
+  }, [mode, stopEmailAttachKeeper]);
+
+  /* Leaving the page ends the keeper. The claim (the marker) survives for the
+     next boot — the attempts do not. */
+  useEffect(() => () => stopEmailAttachKeeper(), [stopEmailAttachKeeper]);
 
   /* The "connect your wallet" quest, fired where it actually happens: watching
      `address` covers all four modes, including the auto-attach path a returning
@@ -1336,6 +1588,10 @@ export function WalletProvider({ children }) {
       /* Email & social login — the secure embedded wallet. Same attach contract
          as every other transport, mode 'email'. */
       connectEmailSocial,
+      /* «تلاش دوباره» on the pending notice: retries the ATTACH on the account
+         the app already has (no modal, no second login), and hands over to the
+         background keeper when the frame is still not ready. */
+      retryEmailAttach,
       emailModalActive,
       /* The exact outcome of a refused network switch (see the state above):
          the UI renders the matching sentence instead of «failed». */
@@ -1392,6 +1648,7 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       connectEmailSocial,
+      retryEmailAttach,
       emailModalActive,
       switchChainResult,
       wcPairUri,

@@ -343,6 +343,7 @@
     "noProvider": "No wallet detected. This browser has no wallet extension — on a phone, open the app from inside your wallet's own browser, or connect with WalletConnect.",
     "connectFailed": "Connection failed or was rejected.",
     "emailProviderPending": "Email login succeeded, but the wallet didn't finish loading in this page. Try again or reopen the app — your connection isn't lost.",
+    "emailProviderPendingHint": "The connection keeps retrying in the background — you can stay on this page.",
     "retryAttach": "Try again",
     "healthUsage": "Project usage limits (email)",
     "healthUsageBlocked": "The project is over its Reown limit — AppKit itself disables the email box. Upgrade the plan in the Reown dashboard (cloud.reown.com).",

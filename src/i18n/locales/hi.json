@@ -138,6 +138,7 @@
     "backupTitle": "अपना सीड फ़्रेज़ बैकअप करें",
     "connectFailed": "कनेक्शन विफल या अस्वीकृत।",
     "emailProviderPending": "ईमेल लॉगिन सफल रहा, लेकिन इस पेज पर वॉलेट पूरी तरह लोड नहीं हुआ। फिर से कोशिश करें या ऐप दोबारा खोलें — आपका कनेक्शन खोया नहीं है।",
+    "emailProviderPendingHint": "कनेक्शन पृष्ठभूमि में प्रयास करता रहता है — आप इस पेज पर बने रह सकते हैं।",
     "healthUsage": "प्रोजेक्ट उपयोग सीमा (ईमेल)",
     "healthUsageBlocked": "प्रोजेक्ट अपनी Reown सीमा से आगे निकल गया है — AppKit स्वयं ईमेल बॉक्स अक्षम कर देता है। Reown डैशबोर्ड में प्लान अपग्रेड करें।",
     "wcOriginBlocked": "WalletConnect ने इस ऐप का origin अस्वीकार किया। Reown डैशबोर्ड में जाँचें कि Allowed Domains में https://fbtswap.ir और https://localhost तथा App IDs में ir.fbtswap.app शामिल हों।",
