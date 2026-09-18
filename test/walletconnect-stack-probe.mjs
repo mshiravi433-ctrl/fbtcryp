@@ -76,9 +76,11 @@ import {
   openSurfaceDetail,
   probeSigning,
   rearmSdkLoginMarker,
+  resetSigningState,
   rollback as rollbackEmailMarker,
   sdkLoginMarkerPresent,
   sdkSessionFacts,
+  signingDeniedByUser,
   switchEmbeddedNetwork
 } from '../src/lib/wc/embedded.js';
 import { assertEmailNetwork } from '../src/lib/wc/appkit.js';
@@ -1559,77 +1561,171 @@ export default async function run() {
     if (origLocal === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = origLocal;
 
-    /* ── the signing probe: «متصل» means «can sign» ── */
+    /* ── the signing probe: «متصل» means «the frame granted this account» ──
+       THE 2026-09-18 SIGN-LOOP REPORT: «فرقی نمیکند اپرو را بزنی یا کنسل را
+       باز دوباره میاره». The old probe fired `personal_sign` from every
+       attach attempt AND a 12-attempt keeper; on the frame's contract each
+       request opens the ApproveTransaction view and the modal's close aborts
+       every other pending request — an endless dialog driven by the app's
+       own retries. Locked here: background probes NEVER sign, a rejection is
+       terminal for automatic drivers, concurrent probes are single-flighted,
+       and an approve always lands. */
     const ADDR = '0x1111111111111111111111111111111111111111';
-    const SIG = `0x${'ab'.repeat(65)}`;
-    t('a provider that signs the probe message is signing-ready',
-      (await probeSigning({
-        request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : SIG)
-      }, ADDR)).ok === true);
     {
-      const r = await probeSigning({
-        request: async ({ method }) => {
+      resetSigningState();
+      const SIG = `0x${'ab'.repeat(65)}`; /* well-formed, but recovers to nothing */
+
+      const counting = (accountsFn, signFn) => {
+        const calls = [];
+        return {
+          calls,
+          provider: {
+            request: async ({ method }) => {
+              calls.push(method);
+              if (method === 'eth_accounts') return accountsFn();
+              return signFn ? signFn() : SIG;
+            }
+          }
+        };
+      };
+
+      /* — the default (background) probe: SILENT, grant-gated — */
+      {
+        const { provider, calls } = counting(() => [ADDR]);
+        const r = await probeSigning(provider, ADDR);
+        t('a provider that GRANTS the expected account is ready — via the frame’s own grant',
+          r.ok === true && r.via === 'accounts');
+        t('the background probe NEVER requests a signature (no ApproveTransaction page, ever)',
+          !calls.includes('personal_sign'));
+      }
+      {
+        const { provider, calls } = counting(() => []);
+        const r = await probeSigning(provider, ADDR);
+        t('an empty account list is NOT_READY — a state, never a signature request',
+          r.ok === false && r.error === 'NOT_READY' && !calls.includes('personal_sign'));
+      }
+      {
+        const r = await probeSigning({ request: async ({ method }) => {
           if (method === 'eth_accounts') return [ADDR];
           throw new Error('Action not allowed');
-        }
-      }, ADDR);
-      t('a provider that throws «Action not allowed» is not (and the message is kept, sanitized)',
-        r.ok === false && /not allowed/i.test(r.error));
-    }
-    {
-      const r = await probeSigning({ request: async () => [] }, ADDR);
-      t('a provider with no accounts is not signing-ready',
-        r.ok === false && r.error === 'NO_ACCOUNTS');
-    }
-    {
-      const r = await probeSigning({ request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : SIG) },
-        '0x2222222222222222222222222222222222222222');
-      t('a provider that answers with a DIFFERENT wallet is not silently adopted',
-        r.ok === false && r.error === 'ACCOUNT_MISMATCH');
-    }
-    {
-      const t0 = Date.now();
-      const r = await probeSigning({
-        request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : new Promise(() => {}))
-      }, ADDR, { timeoutMs: 300 });
-      t('a provider that never answers is bounded, not a hang',
-        r.ok === false && r.error === 'PROBE_TIMEOUT' && Date.now() - t0 < 2_000);
-    }
-    t('no provider is a probe failure, not a crash',
-      (await probeSigning(null, ADDR)).ok === false && (await probeSigning(null, ADDR)).error === 'NO_PROVIDER');
+        } }, ADDR, { interactive: true });
+        t('an interactive probe over a REFUSING frame keeps the frame’s own message',
+          r.ok === false && /not allowed/i.test(r.error));
+      }
+      {
+        const r = await probeSigning({ request: async () => [ADDR] },
+          '0x2222222222222222222222222222222222222222');
+        t('a provider that answers with a DIFFERENT wallet is not silently adopted',
+          r.ok === false && r.error === 'ACCOUNT_MISMATCH');
+      }
+      {
+        const t0 = Date.now();
+        const r = await probeSigning({
+          request: async ({ method }) => (method === 'eth_accounts' ? new Promise(() => {}) : SIG)
+        }, ADDR, { timeoutMs: 300 });
+        t('a provider that never answers is bounded, not a hang',
+          r.ok === false && r.error === 'PROBE_TIMEOUT' && Date.now() - t0 < 2_000);
+      }
+      t('no provider is a probe failure, not a crash',
+        (await probeSigning(null, ADDR)).ok === false && (await probeSigning(null, ADDR)).error === 'NO_PROVIDER');
 
-    /* ── the frame's EMPTY account list (the «کیف پول آماده نشد» report) ─────
-       The secure frame answers `eth_accounts` with `[]` while its session is
-       being rehydrated for the chain the dapp asks about — an empty list, not
-       an error. The old probe stopped at that answer; the new one asks the
-       question that matters (`can this provider SIGN for the login address?`)
-       and VERIFIES the signature, so an empty list can never become a false
-       «connected». Real signatures, real recovery, no mocks of the crypto. */
-    {
-      const { Wallet } = await import('ethers');
-      const login = Wallet.createRandom();
-      const other = Wallet.createRandom();
-      const goodSig = await login.signMessage(SIGN_PROBE_MESSAGE);
-      const otherSig = await other.signMessage(SIGN_PROBE_MESSAGE);
-      const frameLike = (sig) => ({ request: async ({ method }) => (method === 'eth_accounts' ? [] : sig) });
+      /* — the interactive probe: ONE real signature, verified — */
+      {
+        const { Wallet } = await import('ethers');
+        const login = Wallet.createRandom();
+        const other = Wallet.createRandom();
+        const goodSig = await login.signMessage(SIGN_PROBE_MESSAGE);
+        const otherSig = await other.signMessage(SIGN_PROBE_MESSAGE);
 
-      const signed = await probeSigning(frameLike(goodSig), login.address);
-      t('an empty eth_accounts answer from a provider that SIGNS for the login address is signing-ready',
-        signed.ok === true && signed.via === 'personal_sign');
-      t('a valid signature that belongs to ANOTHER key is refused (SIGNER_MISMATCH)',
-        (await probeSigning(frameLike(otherSig), login.address)).error === 'SIGNER_MISMATCH');
-      t('an empty account list with nothing signable keeps the NO_ACCOUNTS diagnosis',
-        (await probeSigning(frameLike('0xnope'), login.address)).error === 'NO_ACCOUNTS');
-      t('the direct sign never runs without a claimed address',
-        (await probeSigning(frameLike(goodSig), undefined)).error === 'NO_ACCOUNTS');
-      const refused = await probeSigning({
-        request: async ({ method }) => {
-          if (method === 'eth_accounts') return [];
-          throw new Error('Action not allowed');
+        {
+          const { provider, calls } = counting(() => [login.address], () => goodSig);
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('the interactive probe asks for ONE signature and verifies the recovered signer',
+            r.ok === true && r.via === 'signature'
+            && calls.filter((m) => m === 'personal_sign').length === 1);
         }
-      }, login.address);
-      t('a frame that REFUSES the direct sign keeps its own message (not a false success)',
-        refused.ok === false && /not allowed/i.test(refused.error));
+        {
+          /* THE REPORT'S LOOP, STAGED: the user cancels. */
+          const { provider } = counting(() => [login.address], () => { throw new Error('User rejected'); });
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('a user rejection is USER_REJECTED and named as a denial',
+            r.ok === false && r.error === 'USER_REJECTED' && r.denied === true);
+          t('the denial is remembered module-wide', signingDeniedByUser() === true);
+          const r2 = await probeSigning({ request: async () => { throw new Error('must not reach the frame'); } }, login.address);
+          t('after a rejection an AUTOMATIC probe short-circuits without touching the frame',
+            r2.ok === false && r2.error === 'USER_REJECTED' && r2.denied === true);
+        }
+        {
+          /* …and only a REAL GESTURE may ask again (`force`). */
+          const { provider, calls } = counting(() => [login.address], () => goodSig);
+          const r = await probeSigning(provider, login.address, { interactive: true, force: true });
+          t('an explicit user gesture (force) may ask again after a rejection — and an approval clears the denial',
+            r.ok === true && r.via === 'signature' && signingDeniedByUser() === false
+            && calls.filter((m) => m === 'personal_sign').length === 1);
+        }
+        {
+          /* AN APPROVE ALWAYS LANDS: a well-formed, user-approved signature
+             whose signer ethers cannot name still attaches when the frame's
+             own grant names the expected address — the old code called this
+             NO_ACCOUNTS and re-asked forever. */
+          const { provider, calls } = counting(() => [login.address], () => SIG);
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('a user-approved signature that cannot be verified attaches on grant + signature (named, not silent)',
+            r.ok === true && r.via === 'signature_unverified'
+            && calls.filter((m) => m === 'personal_sign').length === 1);
+        }
+        {
+          /* THE RESYNC (authAccounts: 2): the signature recovers to a second,
+             CURRENT session account — adopt it only when the SDK's own record
+             names it too. */
+          const { ChainController, ConnectionController } = await import('@reown/appkit-controllers');
+          const prevCaip = ChainController.state.activeCaipAddress;
+          ConnectionController.setConnections([], 'eip155');
+          ChainController.state.activeCaipAddress = `eip155:56:${other.address}`;
+          const { provider } = counting(() => [login.address], () => otherSig);
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('a signature from the session’s OTHER recorded account is adopted (signature_resynced), not looped',
+            r.ok === true && r.via === 'signature_resynced' && r.address === other.address);
+          ChainController.state.activeCaipAddress = prevCaip;
+          ConnectionController.setConnections([], 'eip155');
+          resetSigningState();
+        }
+        {
+          /* …but a signature from an unknown key stays refused. */
+          const stranger = Wallet.createRandom();
+          const { provider } = counting(() => [login.address], () => stranger.signMessage(SIGN_PROBE_MESSAGE));
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('a valid signature that belongs to NO recorded key is refused (SIGNER_MISMATCH)',
+            r.ok === false && r.error === 'SIGNER_MISMATCH');
+        }
+        {
+          const { provider, calls } = counting(() => [], () => goodSig);
+          const r = await probeSigning(provider, login.address, { interactive: true });
+          t('even the interactive probe never asks without the frame’s grant',
+            r.ok === false && r.error === 'NOT_READY' && !calls.includes('personal_sign'));
+        }
+        resetSigningState();
+      }
+
+      /* — single-flight: concurrent probes share one execution — */
+      {
+        let ethCalls = 0;
+        const slowProvider = {
+          request: async ({ method }) => {
+            if (method !== 'eth_accounts') return SIG;
+            ethCalls += 1;
+            await new Promise((r) => setTimeout(r, 60));
+            return [ADDR];
+          }
+        };
+        const [a, b] = await Promise.all([
+          probeSigning(slowProvider, ADDR),
+          probeSigning(slowProvider, ADDR)
+        ]);
+        t('concurrent probes on one provider are single-flighted (one eth_accounts, one verdict)',
+          a.ok === true && b.ok === true && ethCalls === 1);
+      }
+      resetSigningState();
     }
 
     /* ── the fast attach retry reads the account the app already has ── */
@@ -1755,6 +1851,41 @@ export default async function run() {
         && /probeSigning\(freshProvider, result\.address(, \{[^)]*\})?\)/.test(ctx)
         && /probeSigning\(result\.provider, result\.address(, \{[^)]*\})?\)/.test(ctx)
         && /email_sign_probe_failed/.test(ctx));
+    /* THE SIGN-LOOP FIX (2026-09-18): «فرقی نمیکند اپرو را بزنی یا کنسل را
+       باز دوباره میاره» — the ApproveTransaction page came back forever
+       because background drivers (keeper/restore/retries) fired real
+       `personal_sign` requests, each new one aborting the last. Locked here:
+       exactly TWO user-gesture probes exist, automatic drivers honour a
+       rejection, and the denial memory resets where consent resets. */
+    t('exactly two user-gesture probes exist (fresh-login gate + retry button), the retry one forced',
+      (ctx.match(/interactive: true/g) || []).length === 2
+        && /interactive: true,\s*\n\s*force: true|interactive: true, force: true/.test(ctx));
+    t('a rejection stands every automatic driver down (keeper, restore, connect flow)',
+      /signingDeniedByUser\(\)/.test(ctx)
+        && /email_keeper_stood_down/.test(ctx)
+        && /email_sign_denied/.test(ctx)
+        && /EMAIL_SIGNING_DENIED/.test(ctx));
+    {
+      const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
+      t('the denial memory resets where consent resets (disconnect + fresh login)',
+        /stopEmailAttachKeeper\(\);\s*resetSigningState\(\);/.test(ctx)
+          && /resetSigningState\(\);/.test(embeddedSrc)
+          && /signingDeniedByUser|resetSigningState/.test(readFileSync('src/lib/wc/index.js', 'utf8')));
+    }
+    t('the sheet answers a denial with a calm notice and a gesture-owned retry',
+      /EMAIL_SIGNING_DENIED/.test(sheet) && /emailSigningDenied/.test(sheet));
+    {
+      const codes = ['ar', 'en', 'es', 'fa', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh'];
+      const missing = codes.filter((code) => {
+        try {
+          const data = JSON.parse(readFileSync(`src/i18n/locales/${code}.json`, 'utf8'));
+          return !data?.wallet?.emailSigningDenied || !data?.wallet?.emailSigningDeniedHint;
+        } catch {
+          return true;
+        }
+      });
+      t('the denial notice is translated in all 12 locales', missing.length === 0);
+    }
     /* The refused switch: the exact code reaches the UI (context + the
        Swap surface), and each refusal has a sentence — including the
        «signing chain ≠ swap chain» one and the «reconnect email» one. */

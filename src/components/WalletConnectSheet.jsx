@@ -579,6 +579,31 @@ export default function WalletConnectSheet({ open, onClose }) {
               sent back to a wallet-connection surface for a wallet that is
               already connected. `connectEmailSocial` stays as the fallback for
               an older provider (or a session the app no longer knows). */}
+          {/* The user cancelled the signature confirmation. This state asks
+              NO automatic question — the loop where approve or cancel brought
+              the «requests a signature» page back forever is gone; only this
+              button (a real gesture) may ask again. */}
+          {wallet.error === 'EMAIL_SIGNING_DENIED' && (
+            <>
+              <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailSigningDenied')}</p>
+              <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                {t('wallet.emailSigningDeniedHint', {
+                  defaultValue: 'برای استفاده از کیف پول باید پیام امضا را تأیید کنید.'
+                })}
+              </p>
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 10, width: '100%' }}
+                disabled={wallet.connecting}
+                onClick={() => {
+                  const retry = wallet.retryEmailAttach || wallet.connectEmailSocial;
+                  retry().then((ok) => ok && close());
+                }}
+              >
+                {t('wallet.retryAttach', { defaultValue: 'تلاش دوباره' })}
+              </button>
+            </>
+          )}
           {wallet.error === 'EMAIL_PROVIDER_PENDING' && (
             <>
               <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>

@@ -344,6 +344,8 @@
     "connectFailed": "Connection failed or was rejected.",
     "emailProviderPending": "Email login succeeded, but the wallet didn't finish loading in this page. Try again or reopen the app — your connection isn't lost.",
     "emailProviderPendingHint": "The connection keeps retrying in the background — you can stay on this page.",
+    "emailSigningDenied": "You declined the signature confirmation, so the wallet is not attached yet. Nothing will ask again automatically.",
+    "emailSigningDeniedHint": "Press the button below to sign once more — only on your tap, never automatically.",
     "retryAttach": "Try again",
     "healthUsage": "Project usage limits (email)",
     "healthUsageBlocked": "The project is over its Reown limit — AppKit itself disables the email box. Upgrade the plan in the Reown dashboard (cloud.reown.com).",

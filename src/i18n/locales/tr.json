@@ -139,6 +139,8 @@
     "connectFailed": "Bağlantı başarısız oldu veya reddedildi.",
     "emailProviderPending": "E-posta girişi tamamlandı, ancak cüzdan bu sayfada yüklenmedi. Tekrar deneyin veya uygulamayı yeniden açın — bağlantınız kaybolmadı.",
     "emailProviderPendingHint": "Bağlantı arka planda denemeye devam ediyor — bu sayfada kalabilirsiniz.",
+    "emailSigningDenied": "İmza onayını reddettiniz, bu yüzden cüzdan henüz bağlanmadı. Otomatik olarak tekrar istenmeyecek.",
+    "emailSigningDeniedHint": "Tekrar imzalamak için aşağıdaki düğmeye basın — yalnızca sizin dokunuşunuzla, asla otomatik olarak.",
     "healthUsage": "Proje kullanım limitleri (e-posta)",
     "healthUsageBlocked": "Proje Reown limitini aştı — AppKit e-posta kutusunu kendisi devre dışı bırakır. Reown panosundan planı yükseltin.",
     "wcOriginBlocked": "WalletConnect bu uygulamanın origin değerini reddetti. Reown panelinde Allowed Domains alanında https://fbtswap.ir ve https://localhost, App IDs alanında ir.fbtswap.app bulunduğunu doğrulayın.",
