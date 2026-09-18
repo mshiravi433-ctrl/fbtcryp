@@ -59,6 +59,7 @@ import { createWcSession } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
 import {
   SOCIAL_PROVIDERS,
+  authConnectorProvider,
   awaitAccount,
   emailOptions,
   rearmSdkLoginMarker,
@@ -455,10 +456,42 @@ export default async function run() {
     t('recent emails are NOT connection state', !isConnectionKey('@appkit/recent_emails'));
     t('an unrelated key is NOT connection state', !isConnectionKey('fbt:vault'));
 
+    /* ── the «disconnect, then a phantom with a balance» keys (AppKit 1.8.19) ──
+       The static six-key list predated these; a purge that missed them left the
+       SDK believing a logged-out email wallet was still attached, and the next
+       login opened as that phantom — address, balance, an input disabled by
+       `hasAnyConnection('AUTH')` — instead of the email form. */
+    t('@appkit/connections (disables the email input when left) is connection state',
+      isConnectionKey('@appkit/connections'));
+    t('@appkit/connected_namespaces is connection state', isConnectionKey('@appkit/connected_namespaces'));
+    t('@appkit/active_namespace is connection state', isConnectionKey('@appkit/active_namespace'));
+    t('@appkit/social_provider is connection state', isConnectionKey('@appkit/social_provider'));
+    t('@appkit/connected_social is connection state', isConnectionKey('@appkit/connected_social'));
+    t('@appkit/disconnected_connector_ids is connection state', isConnectionKey('@appkit/disconnected_connector_ids'));
+    t('@appkit/connection_status says nothing until its value is read',
+      isConnectionKey('@appkit/connection_status') === false);
+    const statusStore = {
+      getItem: (k) => (k === '@appkit/connection_status' ? 'connected' : null)
+    };
+    t("a 'connected' status IS connection state (the phantom to kill)",
+      isConnectionKey('@appkit/connection_status', statusStore) === true);
+    const cleanStore = {
+      getItem: (k) => (k === '@appkit/connection_status' ? 'disconnected' : null)
+    };
+    t("a 'disconnected' status is not (every clean boot writes it)",
+      isConnectionKey('@appkit/connection_status', cleanStore) === false);
+    t('the version-check key is bookkeeping, not connection state',
+      !isConnectionKey('@appkit/latest_version'));
+    t('the account-type preference is not connection state',
+      !isConnectionKey('@appkit/preferred_account_types'));
+
     const store = new Map([
       ['wc@2:client:0.3//session', JSON.stringify([{ topic: 'x' }])],
       ['WALLETCONNECT_DEEPLINK_CHOICE', 'trust'],
       ['@appkit/recent_wallet', 'trust'],
+      ['@appkit/connections', '{"eip155":[{"connectorId":"AUTH"}]}'],
+      ['@appkit/connection_status', 'connected'],
+      ['@appkit/latest_version', '1.8.20'],
       ['@appkit/portfolio_cache', '{}'],
       ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']
     ]);
@@ -471,9 +504,14 @@ export default async function run() {
     };
 
     t('a session on disk is found before any socket is opened', hasStoredSession(fake));
-    t('the purge removes exactly the connection keys', purgeConnectionKeys(fake) === 3);
+    t('the purge removes exactly the connection keys — including the 1.8.19 ones',
+      purgeConnectionKeys(fake) === 5);
+    t('the persisted AUTH connection is gone (the email input can render enabled)',
+      !store.has('@appkit/connections'));
+    t('the phantom connected-status is gone', !store.has('@appkit/connection_status'));
     t('the embedded wallet session survives the purge', store.has('@appkit-wallet/EMAIL_LOGIN_USED_KEY'));
     t('the cache survives the purge', store.has('@appkit/portfolio_cache'));
+    t('the version-check key survives the purge', store.has('@appkit/latest_version'));
     t('an empty store has no session', !hasStoredSession({ length: 0, key: () => null, getItem: () => null }));
 
     const facts = storageFacts({
@@ -485,6 +523,21 @@ export default async function run() {
     t('AppKit keys without a session are reported orphan', facts.orphanKeys === true);
     t('the embedded-wallet prefix is never counted as an AppKit connection key',
       facts.appkitConnectionKeys === 1);
+
+    /* The two facts added with the 1.8.19 orphan fix: the report must name a
+       stale 'connected' status and a persisted AUTH connection, because those
+       are the exact residues that broke the next email login. */
+    const phantomFacts = storageFacts({
+      length: 2,
+      key: (i) => ['@appkit/connection_status', '@appkit/connections'][i],
+      getItem: (k) => (k === '@appkit/connection_status'
+        ? 'connected'
+        : '{"eip155":[{"connectorId":"AUTH","accounts":[{"address":"0xabc"}]}]}')
+    });
+    t("a stale 'connected' status is named by the report", phantomFacts.connectionStatus === 'connected');
+    t('a persisted AUTH connection is named by the report',
+      phantomFacts.storedConnectors.includes('AUTH'));
+    t('the phantom status is counted as a connection key', phantomFacts.appkitConnectionKeys === 2);
   }
 
   /* ══════════════════ 9. the embeddes wallet's contract ═══════════════════ */
@@ -500,6 +553,8 @@ export default async function run() {
     t('manualWCControl is never set (it would hijack open() to AllWallets)',
       !('manualWCControl' in options));
     t('our own registry leads the network list', options.networks[0].id === 56);
+    t('the auth connector exposes its frame provider (the lag-proof EIP-1193 fallback)',
+      typeof authConnectorProvider === 'function');
 
     /* A provider that answers "not ready" for a few ticks must still resolve —
        the «email confirmed, we came back, no wallet» report. */

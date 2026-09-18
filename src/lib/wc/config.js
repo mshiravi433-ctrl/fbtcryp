@@ -112,6 +112,18 @@ export const TIMEOUT = Object.freeze({
   handoffClose: 2_500,
   teardown: 4_000,
   emailOpen: 30_000,
+  /*
+   * The bound on `modal.open()` itself — NOT on the login.
+   *
+   * In AppKit 1.8.19 `open()` awaits `ApiController.prefetch()` (a fan of
+   * explorer API calls) BEFORE it resets the router to the Connect view. On a
+   * slow mobile network one stalled call used to hold the whole flow — the
+   * trace showed `email_wait_timeout` a full minute after the tap while the
+   * user stared at nothing. The bound releases the flow to keep WAITING for
+   * the account (the modal may still appear); it only refuses to let a hung
+   * prefetch own the spinner forever.
+   */
+  emailModalOpen: 20_000,
   emailRestore: 30_000,
   emailCloseGrace: 3_000,
   healthProbe: 8_000

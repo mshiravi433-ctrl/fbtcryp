@@ -529,39 +529,21 @@ export function WalletProvider({ children }) {
       // If provider is missing but address exists, retry a few times — slow WebViews
       if (result.ok && !result.provider && result.address) {
         wcEvent('email_retry_provider');
-        for (let i = 0; i < 5; i += 1) {
+        const { getAppKit, authConnectorProvider } = await import('../lib/wc/embedded.js');
+        for (let i = 0; i < 6; i += 1) {
           await new Promise((r) => setTimeout(r, 600));
           try {
-            const { getAppKit } = await import('../lib/wc/embedded.js');
             const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
-            const p = modal.getWalletProvider?.() || modal.getWalletProvider?.('eip155') || modal.getProvider?.('eip155') || null;
-            if (p) { result = { ...result, provider: p }; break; }
+            const p = modal.getWalletProvider?.()
+              || modal.getWalletProvider?.('eip155')
+              || modal.getProvider?.('eip155')
+              || (await authConnectorProvider());
+            if (p) { result = { ...result, provider: p, code: undefined }; break; }
           } catch { /* retry */ }
         }
       }
 
       if (!result.ok) {
-        // Special case: we have address but no provider yet — keep marker so next cold start retries
-        if (result.address) {
-          setEmailMarker(true);
-          wcEvent('email_address_without_provider');
-          // Try to attach with whatever we have, or at least set address
-          if (result.provider) {
-            const attached = await attachExternal({
-              eip: result.provider,
-              address: result.address,
-              chainId: null,
-              mode: 'email'
-            });
-            if (attached) return true;
-          }
-          // Even without provider, set address so UI shows connected, and restore will pick up provider later
-          setMode('email');
-          setAddress(result.address);
-          setChainId(DEFAULT_CHAIN);
-          setLocked(false);
-          return true;
-        }
         setError(result.code === 'CONNECT_FAILED' ? 'CONNECT_FAILED' : result.code);
         return false;
       }
@@ -589,10 +571,24 @@ export function WalletProvider({ children }) {
         setEmailMarker(true);
         wcEvent('email_connected_final');
       } else {
-        // Keep marker even on attach fail — next restore may succeed
-        if (result.address) setEmailMarker(true);
-        setError('CONNECT_FAILED');
-        wcEvent('email_attach_failed_final');
+        /*
+         * NO FAKE CONNECTED STATE. An earlier revision wrote the address into
+         * the visible wallet state even with NO provider, so the header
+         * cheerfully showed a wallet — balance fetched over public RPC — that
+         * could not sign a single byte. The user read that as «email login
+         * opens a popup that only shows my balance». The session IS real (the
+         * frame holds it), so the marker stays for the next cold start or
+         * foreground return to attach it properly — but this page says so
+         * instead of lying.
+         */
+        if (result.address) {
+          setEmailMarker(true);
+          setError('EMAIL_PROVIDER_PENDING');
+          wcEvent('email_attach_failed_pending');
+        } else {
+          setError('CONNECT_FAILED');
+          wcEvent('email_attach_failed_final');
+        }
       }
       return attached;
     } catch (e) {

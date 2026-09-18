@@ -33,6 +33,20 @@ export function originsProbeUrl(projectId, sdkVersion = HEALTH_SDK_VERSION) {
   return apiUrl('/projects/v1/origins', projectId, sdkVersion);
 }
 
+/**
+ * `GET /appkit/v1/project-limits` — mirrors `ApiController.fetchUsage()`.
+ *
+ * The answer GATES THE EMAIL BOX ITSELF: `w3m-email-login-widget` renders its
+ * input `?disabled={...|| hasExceededUsageLimit}`, and that flag is
+ * `tier === 'starter' && (isAboveMauLimit || isAboveRpcLimit)`. No relay probe
+ * or origin check can explain a login box that refuses to be typed into — this
+ * endpoint can. The earlier reports never asked it, which is why «email is
+ * broken entirely» had no named cause.
+ */
+export function usageProbeUrl(projectId, sdkVersion = HEALTH_SDK_VERSION) {
+  return apiUrl('/appkit/v1/project-limits', projectId, sdkVersion);
+}
+
 function apiUrl(path, projectId, sdkVersion) {
   const url = new URL(`${W3M_API_URL}${path}`);
   url.searchParams.set('projectId', String(projectId || ''));
@@ -253,7 +267,25 @@ export function isOriginAllowed(currentOrigin, list) {
   });
 }
 
-/** Storage facts as booleans and counts — never values. */
+/* The keys this report reads VALUES from, beyond key names. Both hold
+   connection state only: `@appkit/connection_status` is
+   'connected'|'disconnected', and `@appkit/connections` maps namespace →
+   connection lists whose only field read here is `connectorId` — an id like
+   'AUTH' or 'io.metamask', never an address, topic or URI. */
+const CONNECTION_STATUS_KEY = '@appkit/connection_status';
+const CONNECTIONS_KEY = '@appkit/connections';
+
+/**
+ * Storage facts as booleans and counts — key names, never secrets.
+ *
+ * Two facts were added when «email broken after disconnect» turned out to be
+ * AppKit 1.8.19 state the purge never covered:
+ *   • `connectionStatus` — the value `listenAdapter()` reads FIRST on every
+ *     boot; a stale 'connected' opens the next one in `connecting`.
+ *   • `storedConnectors` — the connector ids inside `@appkit/connections`. A
+ *     non-empty AUTH entry here is what `hasAnyConnection('AUTH')` reads to
+ *     DISABLE the email input, so the report must name it.
+ */
 export function storageFacts(storage) {
   const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   const facts = {
@@ -261,12 +293,32 @@ export function storageFacts(storage) {
     ourMarker: false,
     wcSessionKeys: 0,
     appkitConnectionKeys: 0,
-    orphanKeys: false
+    orphanKeys: false,
+    connectionStatus: null,
+    storedConnectors: []
   };
   if (!target) return facts;
   try {
     facts.sdkLoginMarker = String(target.getItem(SDK_LOGIN_KEY) || '') === 'true';
     facts.ourMarker = target.getItem(EMAIL_MARKER_KEY) === '1';
+    const status = target.getItem(CONNECTION_STATUS_KEY);
+    facts.connectionStatus = status === 'connected' || status === 'disconnected' ? status : null;
+    try {
+      const raw = target.getItem(CONNECTIONS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object') {
+        const ids = new Set();
+        for (const list of Object.values(parsed)) {
+          if (Array.isArray(list)) {
+            for (const entry of list) {
+              const id = String(entry?.connectorId ?? '').trim();
+              if (id) ids.add(id);
+            }
+          }
+        }
+        facts.storedConnectors = [...ids];
+      }
+    } catch { /* unreadable — the empty list is the honest answer */ }
     for (let i = 0; i < target.length; i += 1) {
       const key = target.key(i) || '';
       if (key.startsWith('wc@2:') && key.endsWith('//session')) {
@@ -275,11 +327,11 @@ export function storageFacts(storage) {
           if (Array.isArray(parsed) && parsed.length > 0) facts.wcSessionKeys += 1;
         } catch { /* unreadable entry — not counted */ }
       }
-      /* Same predicate the purge uses, so the diagnostic and the cleanup can
-         never disagree about what "connection state" means. wc@2: keys are
-         counted above; @appkit-wallet/* is the embedded wallet's session and is
-         never counted or purged. */
-      if (isConnectionKey(key) && (key.startsWith('@appkit/') || key === 'WALLETCONNECT_DEEPLINK_CHOICE')) {
+      /* Same predicate the purge uses (now value-aware), so the diagnostic and
+         the cleanup can never disagree about what "connection state" means.
+         wc@2: keys are counted above; @appkit-wallet/* is the embedded wallet's
+         session and is never counted or purged. */
+      if (isConnectionKey(key, target) && (key.startsWith('@appkit/') || key === 'WALLETCONNECT_DEEPLINK_CHOICE')) {
         facts.appkitConnectionKeys += 1;
       }
     }
@@ -337,11 +389,12 @@ export async function collectWalletHealth({
   const currentOrigin = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const channel = handoffFacts();
   try {
-    const [config, origins, secureSite, relay] = await Promise.all([
+    const [config, origins, secureSite, relay, usage] = await Promise.all([
       probeJson(configProbeUrl(projectId), { fetchImpl, timeoutMs }),
       probeJson(originsProbeUrl(projectId), { fetchImpl, timeoutMs }),
       probeReachable(SECURE_SITE_URL, { fetchImpl, timeoutMs }),
-      measureRelay({ projectId, timeoutMs, force: true, fetchImpl, WebSocketImpl })
+      measureRelay({ projectId, timeoutMs, force: true, fetchImpl, WebSocketImpl }),
+      probeJson(usageProbeUrl(projectId), { fetchImpl, timeoutMs })
     ]);
     const list = Array.isArray(origins?.body?.allowedOrigins) ? origins.body.allowedOrigins : null;
     const reachable = relay.hosts.find((host) => host.socket?.ok);
@@ -376,6 +429,20 @@ export async function collectWalletHealth({
          connect» has four causes and they live on four different hops, so the
          report names the channel instead of making the reader infer it. */
       handoff: channel,
+      /* The limiter that can disable the email input outright — named in the
+         report the same way the SDK computes it (starter tier above either
+         limit). */
+      usage: {
+        ok: usage.ok,
+        status: usage.status ?? null,
+        error: usage.error ?? null,
+        tier: usage.body?.planLimits?.tier ?? null,
+        isAboveMauLimit: Boolean(usage.body?.planLimits?.isAboveMauLimit),
+        isAboveRpcLimit: Boolean(usage.body?.planLimits?.isAboveRpcLimit),
+        emailDisabledByUsageLimit:
+          usage.body?.planLimits?.tier === 'starter'
+          && (Boolean(usage.body?.planLimits?.isAboveMauLimit) || Boolean(usage.body?.planLimits?.isAboveRpcLimit))
+      },
       storage: storageFacts(storage),
       trace: typeof trace === 'function' ? trace() : null
     };
