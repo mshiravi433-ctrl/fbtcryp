@@ -105,11 +105,18 @@ async function encodeQr(text) {
  * the in-app vault is presented with its real trade-offs rather than as the
  * friendly default.
  *
- * THREE SURFACES, NEVER AT ONCE: while an AppKit modal owns the screen — the
- * pairing modal (`wallet.wcModalActive`) or the email/social login
- * (`wallet.emailModalActive`) — this sheet withdraws. Two stacked modals means
- * two blurred backdrops and two body-scroll locks, which on the Android WebView
+ * TWO SURFACES, NEVER AT ONCE: while the AppKit pairing modal owns the screen
+ * (`wallet.wcModalActive`) this sheet withdraws. Two stacked modals means two
+ * blurred backdrops and two body-scroll locks, which on the Android WebView
  * composites into the "grey box flickering like a fluorescent tube" report.
+ *
+ * The row that used to sit between WalletConnect and the injected wallets —
+ * «ایمیل و ورود با سوشال», the AppKit embedded wallet — was removed on
+ * 2026-09-18 at the owner's request. It needed a SECOND AppKit instance sharing
+ * the controllers and the one `<w3m-modal>` with WalletConnect, so an email tap
+ * could open the wallet grid instead of the login form and a WalletConnect
+ * cycle could leave the shared state describing a dead wallet. One surface, one
+ * instance: WalletConnect, the injected wallets, and the in-app vault.
  */
 export default function WalletConnectSheet({ open, onClose }) {
   const { t } = useTranslation();
@@ -193,8 +200,9 @@ export default function WalletConnectSheet({ open, onClose }) {
    * is the ONE route here that cannot work — and it used to be the first row
    * wearing a «recommended» pill, with the reason buried behind a tap and a
    * stalled SDK attempt. The measurement is already in hand (the connect flow's
-   * own preflight), so the sheet says so before the tap and moves the
-   * recommendation to a route that needs no relay.
+   * own preflight), so the sheet says so before the tap: the row wears the
+   * measurement instead of the recommendation, and the two routes that need no
+   * relay at all — an injected wallet and the in-app vault — sit right below it.
    */
   const relayBlocked = Boolean(wallet.wcRelayBlocked);
 
@@ -229,23 +237,6 @@ export default function WalletConnectSheet({ open, onClose }) {
       setView('pair');
     }
   }, [wallet.wcPairUri, wallet.wcModalActive, view, wallet.connecting]);
-
-  /*
-   * EMAIL & SOCIAL — the same settle contract as every other row: the sheet
-   * stays mounted under AppKit's modal (withdrawing via
-   * `wallet.emailModalActive`), a dismissal resolves false and leaves the user
-   * back here, and a connection closes the sheet. `wallet.connecting` keeps
-   * every other row inert while it is up, so the two AppKit surfaces can never
-   * both be open — they physically share the one <w3m-modal> element.
-   */
-  const startEmailSocial = () => {
-    if (wallet.connecting) return;
-    setErr(null);
-    wallet
-      .connectEmailSocial()
-      .then((ok) => (ok ? close() : setView('choose')))
-      .catch(() => setView('choose'));
-  };
 
   /* Hand-off: native custom schemes are primary on the mobile web; Telegram's
      client can only carry https, so its anchor gets the universal form. */
@@ -380,7 +371,7 @@ export default function WalletConnectSheet({ open, onClose }) {
   );
 
   return (
-    <Sheet open={open && !wallet.wcModalActive && !wallet.emailModalActive} onClose={close}>
+    <Sheet open={open && !wallet.wcModalActive} onClose={close}>
       {/* ------------------------------ choose ------------------------------ */}
       {view === 'choose' && (
         <>
@@ -413,28 +404,6 @@ export default function WalletConnectSheet({ open, onClose }) {
                   {t('wallet.wcRelayBlockedPill')}
                 </span>
               ) : (
-                <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
-              )}
-            </motion.button>
-
-            {/* Email & social: no wallet app to install, and its transport is
-                the secure frame rather than the relay — which is why it carries
-                the recommendation the moment the relay is measured blocked. */}
-            <motion.button
-              className="wallet-option"
-              data-featured={relayBlocked ? 'true' : undefined}
-              whileTap={{ scale: 0.98 }}
-              onClick={startEmailSocial}
-              disabled={wallet.connecting}
-            >
-              <span className="wallet-badge"><IconKey width={21} height={21} /></span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                  {t('wallet.emailSocial')}
-                </span>
-                <span className="set-row-sub">{t('wallet.emailSocialDesc')}</span>
-              </span>
-              {relayBlocked && (
                 <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
               )}
             </motion.button>
@@ -569,61 +538,6 @@ export default function WalletConnectSheet({ open, onClose }) {
           )}
           {wallet.error === 'CONNECT_FAILED' && (
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
-          )}
-          {/* The login itself succeeded — the embedded wallet session exists —
-              but its signer never surfaced in this page. Naming THAT beats a
-              generic «connection failed»: nothing was lost, retrying (or just
-              reopening the app) attaches it.
-              «تلاش دوباره» retries the ATTACH, not the login: it re-probes the
-              account the app already has and attaches it, so the user is never
-              sent back to a wallet-connection surface for a wallet that is
-              already connected. `connectEmailSocial` stays as the fallback for
-              an older provider (or a session the app no longer knows). */}
-          {/* The user cancelled the signature confirmation. This state asks
-              NO automatic question — the loop where approve or cancel brought
-              the «requests a signature» page back forever is gone; only this
-              button (a real gesture) may ask again. */}
-          {wallet.error === 'EMAIL_SIGNING_DENIED' && (
-            <>
-              <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailSigningDenied')}</p>
-              <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {t('wallet.emailSigningDeniedHint', {
-                  defaultValue: 'برای استفاده از کیف پول باید پیام امضا را تأیید کنید.'
-                })}
-              </p>
-              <button
-                className="btn btn-primary"
-                style={{ marginTop: 10, width: '100%' }}
-                disabled={wallet.connecting}
-                onClick={() => {
-                  const retry = wallet.retryEmailAttach || wallet.connectEmailSocial;
-                  retry().then((ok) => ok && close());
-                }}
-              >
-                {t('wallet.retryAttach', { defaultValue: 'تلاش دوباره' })}
-              </button>
-            </>
-          )}
-          {wallet.error === 'EMAIL_PROVIDER_PENDING' && (
-            <>
-              <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>
-              <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {t('wallet.emailProviderPendingHint', {
-                  defaultValue: 'اتصال در پسزمینه ادامه دارد — همین صفحه کافی است.'
-                })}
-              </p>
-              <button
-                className="btn btn-primary"
-                style={{ marginTop: 10, width: '100%' }}
-                disabled={wallet.connecting}
-                onClick={() => {
-                  const retry = wallet.retryEmailAttach || wallet.connectEmailSocial;
-                  retry().then((ok) => ok && close());
-                }}
-              >
-                {t('wallet.retryAttach', { defaultValue: 'تلاش دوباره' })}
-              </button>
-            </>
           )}
 
           {/* The evidence, one tap away, where the failure happened. */}

@@ -76,10 +76,99 @@ const APPKIT_NEUTRAL_KEYS = Object.freeze([
 ]);
 
 /**
+ * THE RETIRED EMBEDDED WALLET (email & social login) — 2026-09-18.
+ * ---------------------------------------------------------------------------
+ * This app used to offer a second connection surface: a Reown AppKit
+ * "embedded wallet" provisioned behind an email OTP or a social (Google /
+ * Apple / X / …) login. It needed its own `createAppKit()` instance, and that
+ * instance shares AppKit's controllers SINGLETONS and the one `<w3m-modal>`
+ * element with the WalletConnect modal — which is how an email tap ended up
+ * opening the WalletConnect wallet grid, and how a WalletConnect cycle left
+ * the shared state describing a dead wallet (docs/EMAIL-SOCIAL-LOGIN-FA.md and
+ * the 2026-09-17/18 reports are the full history).
+ *
+ * The surface is gone: the connect sheet offers WalletConnect, the injected
+ * wallets and the in-app vault, and nothing creates a second AppKit instance
+ * any more. What remains here is the CLEANUP, because a user who logged in
+ * before the removal still carries its keys, and one of them is read by the
+ * SDK in a CONSTRUCTOR: `W3mFrameProvider` sees
+ * `@appkit-wallet/EMAIL_LOGIN_USED_KEY` and creates the
+ * secure.walletconnect.org iframe whether this page wants it or not.
+ *
+ * So the keys are named explicitly, purged on boot (WalletContext) and
+ * reported by the health panel — an old login must leave no machinery behind.
+ */
+
+/** The SDK's own namespace for the embedded wallet's frame session. */
+export const EMBEDDED_WALLET_PREFIX = '@appkit-wallet/';
+
+/** Our old boot marker, claiming "an email/social login was attempted". */
+export const LEGACY_EMBEDDED_MARKER_KEY = 'fbt_email_social_connected';
+
+/**
+ * Every key the retired surface wrote, by name or by prefix.
+ *
+ * The three `@appkit/` entries are connection state for a login mode this app
+ * no longer has: which social provider answered, that one is connected, and
+ * the email addresses AppKit offered for autocomplete.
+ */
+const LEGACY_EMBEDDED_KEYS = Object.freeze([
+  LEGACY_EMBEDDED_MARKER_KEY,
+  '@appkit/social_provider',
+  '@appkit/connected_social',
+  '@appkit/recent_emails'
+]);
+
+/**
+ * The retired surface's keys that are actually on disk — names only.
+ *
+ * @returns {string[]} key names, never values: one of them is a session blob.
+ */
+export function listEmbeddedWalletKeys(storage) {
+  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  const found = [];
+  if (!target) return found;
+  try {
+    for (let i = 0; i < target.length; i += 1) {
+      const key = target.key(i) || '';
+      if (key.startsWith(EMBEDDED_WALLET_PREFIX) || LEGACY_EMBEDDED_KEYS.includes(key)) {
+        found.push(key);
+      }
+    }
+  } catch {
+    /* storage unavailable: an empty list is the honest answer */
+  }
+  return found;
+}
+
+/**
+ * Delete them, on boot and on demand.
+ *
+ * @returns {number} how many keys were removed.
+ */
+export function purgeEmbeddedWalletKeys(storage) {
+  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!target) return 0;
+  let purged = 0;
+  try {
+    for (const key of listEmbeddedWalletKeys(target)) {
+      target.removeItem(key);
+      purged += 1;
+    }
+  } catch {
+    /* storage unavailable — nothing was purged, nothing else to do */
+  }
+  return purged;
+}
+
+/**
  * Does this key hold connection state whose loss is recoverable?
  *
- * `@appkit-wallet/*` is NEVER included: that is the embedded wallet's own auth
- * session. Purging it would log a real user out of a wallet they logged into.
+ * `@appkit-wallet/*` IS included now: it was the embedded (email/social)
+ * wallet's own auth session, and that surface was retired on 2026-09-18 — see
+ * THE RETIRED EMBEDDED WALLET below. What is left on disk is debris from a
+ * login this build can no longer open, and its only power is to make the SDK
+ * recreate the secure frame on a page that has nothing to put in it.
  *
  * `@appkit/connection_status` is VALUE-AWARE when a storage is given: AppKit
  * rewrites it to 'disconnected' on every clean boot, and a 'disconnected' value
@@ -93,7 +182,7 @@ export function isConnectionKey(key, storage) {
   if (!k) return false;
   if (k.startsWith(WC_PREFIX)) return true;
   if (k === DEEPLINK_CHOICE_KEY) return true;
-  if (k.startsWith('@appkit-wallet/')) return false;
+  if (k.startsWith(EMBEDDED_WALLET_PREFIX)) return true;
   if (!k.startsWith('@appkit/')) return false;
   if (CACHE_MARKERS.some((marker) => k.includes(marker))) return false;
   if (APPKIT_NEUTRAL_KEYS.includes(k)) return false;
