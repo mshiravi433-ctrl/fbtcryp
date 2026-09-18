@@ -221,6 +221,90 @@ export function withLinkMode(wallet) {
 }
 
 /**
+ * The routing flags, forced back to what the EMAIL surface needs — in-memory
+ * only, never storage.
+ *
+ * ─── THE «EMAIL TAP OPENS THE WALLET LIST» REPORT (2026-09-18) ──────────────
+ * Reproduced against the shipped singletons: the WalletConnect surface's
+ * AppKit instance is created by `@walletconnect/ethereum-provider` through
+ * `@reown/appkit/core` with ZERO adapters, and its `initialize()` writes two
+ * flags into the shared controllers that the SDK then NEVER resets:
+ *
+ *   • `ChainController.state.noAdapters` — `ChainController.initialize([])`
+ *     sets it true and the SDK has no setter back to false (a later
+ *     adapter-bearing `initialize()` only ever sets it true, never false);
+ *   • `OptionsController.state.manualWCControl` — set true by the WC
+ *     instance's `initializeUniversalAdapter()`.
+ *
+ * `ModalController.open({ view: 'Connect' })` reads both BEFORE it honours
+ * the requested view:
+ *
+ *     else if (manualWCControl || (noAdapters && !caipAddress))
+ *         → 'AllWallets' on mobile, 'ConnectingWalletConnectBasic' on desktop
+ *
+ * So after ANY WalletConnect use on the page, an email tap whose boot marker
+ * still stands (the `fresh=false` path, which skips the full
+ * `resetSharedConnectionState()` on purpose — that reset purges state a live
+ * frame session is owed) opens the searchable wallet grid instead of the
+ * email form. The grid is dead on this surface: its rows need a `wcUri`
+ * only a pairing creates, and the email instance pairs nothing — hence «the
+ * WalletConnect popup appears and nothing connects», while a marker-less tap
+ * (fresh, fully reset) works. That asymmetry is exactly the «sometimes it
+ * connects» half of the report.
+ *
+ * Clearing the flags is safe in every direction:
+ *   • they describe the last instance that initialised, not a session —
+ *     this surface ALWAYS carries the ethers adapter, so `noAdapters:false`
+ *     is the truth for it;
+ *   • the WC surface is unaffected: its modal routing keys on
+ *     `manualWCControl:true` (re-asserted by `applyWalletSurface` before each
+ *     WC open), and the next WC `initialize([])` sets `noAdapters` back
+ *     where it belongs for that surface;
+ *   • nothing here touches `activeCaipAddress`, the connection list or any
+ *     storage key — a live frame session the marker describes is left
+ *     exactly as it is.
+ *
+ * Best-effort and never throws: a controllers chunk that cannot load (the
+ * offline first paint) returns 'unavailable' so the caller can trace it, and
+ * the flow continues — the pre-open `reassertFeatures()` still re-asserts
+ * the OptionsController half through the instance itself.
+ *
+ * @returns {Promise<'fixed'|'clean'|'unavailable'>} what happened, for the
+ *   trace — never a boolean that hides which one.
+ */
+export async function assertEmailRouting() {
+  let C;
+  try {
+    C = (await import('@reown/appkit-controllers')) ?? {};
+  } catch {
+    return 'unavailable';
+  }
+  let fixed = false;
+  try {
+    /* The one-way latch the SDK never releases — see the doc comment. */
+    if (C.ChainController?.state?.noAdapters === true) {
+      C.ChainController.state.noAdapters = false;
+      fixed = true;
+    }
+  } catch { /* a shape change must never break the login */ }
+  try {
+    if (C.OptionsController?.state?.manualWCControl === true) {
+      C.OptionsController.state.manualWCControl = false;
+      fixed = true;
+    }
+  } catch { /* same */ }
+  try {
+    /* Belt and braces for `reassertFeatures()`: even when its updateOptions
+       path is unavailable, the email popup must not grow the wallet list. */
+    if (C.OptionsController?.state?.enableWallets === true) {
+      C.OptionsController.state.enableWallets = false;
+      fixed = true;
+    }
+  } catch { /* same */ }
+  return fixed ? 'fixed' : 'clean';
+}
+
+/**
  * Read the SHARED controllers' connection facts — the exact state every
  * `<w3m-modal>` renders from, no matter which instance opened it.
  *

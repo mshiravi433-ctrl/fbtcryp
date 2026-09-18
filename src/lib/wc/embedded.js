@@ -38,7 +38,11 @@
  */
 
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../chains.js';
-import { readSharedConnectionFacts, resetSharedConnectionState } from './appkit.js';
+import {
+  assertEmailRouting,
+  readSharedConnectionFacts,
+  resetSharedConnectionState
+} from './appkit.js';
 import { TIMEOUT, WC_PROJECT_ID, wcMetadata } from './config.js';
 import { purgeConnectionKeys } from './storage.js';
 import { sleep } from './timing.js';
@@ -341,6 +345,28 @@ async function awaitReady(modal, ms = TIMEOUT.emailOpen) {
  * @returns {Promise<object>} the AppKit instance.
  */
 export async function getAppKit({ projectId = WC_PROJECT_ID, metadata = wcMetadata(), fresh = false } = {}) {
+  /*
+   * THE ROUTING FLAGS, ON EVERY PATH — fresh or not.
+   *
+   * The `fresh` block below does the full shared-state reset (storage purge
+   * plus `resetSharedConnectionState()`), and that is the ONLY place
+   * `noAdapters` was ever cleared. But `fresh` is gated on the boot marker
+   * being ABSENT — and a standing marker is precisely the state where a live
+   * (or abandoned) login is owed, so the reset is skipped on purpose. That
+   * skip is correct for STORAGE (the keys describe a session the user is
+   * owed) and wrong for the ROUTING FLAGS (in-memory state that describes
+   * the last instance to initialise, i.e. the adapter-less WalletConnect
+   * one). `assertEmailRouting()` separates the two: it forces
+   * noAdapters/manualWCControl/enableWallets back on every call, purges
+   * nothing, and the fresh block's storage policy is left untouched.
+   *
+   * See appkit.js#assertEmailRouting for the reproduced failure this
+   * repairs — the email tap that opened the WalletConnect wallet grid.
+   */
+  const routing = await assertEmailRouting();
+  if (routing === 'fixed') wcEvent('email_routing_fixed');
+  else if (routing === 'unavailable') wcEvent('email_routing_unavailable');
+
   const rearm = rearmSdkLoginMarker();
   if (rearm === 'rearmed' && instance) {
     await retireInstance(instance);
@@ -665,6 +691,19 @@ export async function open({ projectId, metadata } = {}) {
   const modal = await getAppKit({ projectId, metadata, fresh });
   setMarker(true);
   reassertFeatures(modal);
+  /*
+   * THE PRE-OPEN RE-ASSERT.
+   *
+   * `getAppKit` already forced the routing flags, but between that call and
+   * this `open()` a WalletConnect init can still LAND: an init that outran
+   * its bound keeps running in the background (the ghost handler only
+   * disconnects the result), and its `initialize()` writes
+   * noAdapters/manualWCControl when it settles — which is exactly the state
+   * that would route THIS open to the wallet grid. The open is the only
+   * moment the routing matters, so the flags are re-asserted at the only
+   * moment they matter. Cheap, idempotent, in-memory.
+   */
+  await assertEmailRouting();
   let openError = null;
   const opening = Promise.resolve(modal.open({ view: 'Connect' })).catch((error) => {
     openError = error;
