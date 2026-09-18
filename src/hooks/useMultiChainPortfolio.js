@@ -127,7 +127,15 @@ export function useMultiChainPortfolio(wallet) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(0);
+  /* Has a cycle EVER completed? This is the flag the UI needs to tell «not read
+     yet» (a skeleton is honest) from «being refreshed right now» (the number on
+     screen is the last good one and must stay there). `loading` alone cannot
+     say that: it is true for most of the app's life, because a market refresh
+     re-runs this hook every 30 seconds. */
+  const [loaded, setLoaded] = useState(false);
   const seq = useRef(0);
+  /** The last successful read per chain — see the merge in load(). */
+  const goodRef = useRef({});
 
   const load = useCallback(async () => {
     if (!address || !getReadProvider) {
@@ -140,6 +148,9 @@ export function useMultiChainPortfolio(wallet) {
        * memoised aggregate below — stable for a disconnected wallet.
        */
       setChains((prev) => (prev && Object.keys(prev).length ? {} : prev));
+      goodRef.current = {};
+      setLoaded(false);
+      setUpdatedAt(0);
       setLoading(false);
       return;
     }
@@ -151,13 +162,35 @@ export function useMultiChainPortfolio(wallet) {
     for (const cid of EVM_CHAIN_ORDER) {
       if (seq.current !== mine) return; // cancelled
       // eslint-disable-next-line no-await-in-loop
-      next[cid] = await fetchChainHoldings({
+      const result = await fetchChainHoldings({
         chainId: cid, address, getReadProvider, priceMap
       });
+      /*
+       * ─── A FAILED CHAIN KEEPS ITS LAST GOOD READ ────────────────────────
+       * One public RPC timing out used to replace a whole chain's rows with
+       * zeros, which moved the portfolio total DOWN — and if the retry a few
+       * seconds later succeeded, back up again. The user saw their net worth
+       * drop and recover on its own, and the wallet hero (which shows a
+       * placeholder while `totalValue === 0`) paid for it with a flicker to
+       * «…» — the reported «عدد موجودی به سه نقطه تبدیل می‌شود».
+       *
+       * Keeping the previous read is the honest choice: the balance we already
+       * verified did not become zero, and `stale` says it was not re-read this
+       * round. A FIRST failure (nothing to keep) still reports the chain as
+       * failed, which is what drives the coverage badge.
+       */
+      const previous = goodRef.current[cid];
+      if (result.error && previous) {
+        next[cid] = { ...previous, stale: true, error: result.error };
+      } else {
+        next[cid] = result;
+        if (!result.error) goodRef.current[cid] = result;
+      }
     }
     if (seq.current !== mine) return;
     setChains(next);
     setLoading(false);
+    setLoaded(true);
     setUpdatedAt(Date.now());
   }, [address, getReadProvider, priceMap]);
 
@@ -198,7 +231,11 @@ export function useMultiChainPortfolio(wallet) {
       pricedCount,
       totalCount,
       allRows,
-      partial: failures.length > 0 || pricedCount < totalCount,
+      /* `partial` now also covers a chain whose rows are the previous read:
+         the total is still the best number we have, but the coverage badge is
+         not allowed to call it fresh. */
+      partial: failures.length > 0 || pricedCount < totalCount || byChain.some((c) => c.stale),
+      staleChains: byChain.filter((c) => c.stale).map((c) => c.chainShort),
       failures
     };
   }, [chains]);
@@ -232,15 +269,20 @@ export function useMultiChainPortfolio(wallet) {
     pricedCount: aggregated.pricedCount,
     totalCount: aggregated.totalCount,
     partial: aggregated.partial,
+    staleChains: aggregated.staleChains,
     failedChains: aggregated.failures,
     activeChainId,
     loading: loading || marketsLoading,
+    /* THE FLAG THE HERO NEEDS. `loading` cycles every 30 seconds; `loaded`
+       flips once and stays. A number already on screen is never replaced by a
+       placeholder again — only the FIRST paint shows one. */
+    loaded,
     error,
     updatedAt,
     refresh: load
   }), [
     aggregated.chains, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
-    aggregated.totalCount, aggregated.partial, aggregated.failures,
-    activeChainId, loading, marketsLoading, error, updatedAt, load
+    aggregated.totalCount, aggregated.partial, aggregated.staleChains, aggregated.failures,
+    activeChainId, loading, marketsLoading, loaded, error, updatedAt, load
   ]);
 }

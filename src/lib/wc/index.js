@@ -16,6 +16,7 @@
  *   relay.js     measuring the relay before promising a pairing
  *   appkit.js    the shared AppKit singleton surface
  *   session.js   the WalletConnect v2 lifecycle
+ *   lease.js     «this device has a wallet until <time>» — what a refresh reads
  *   health.js    the diagnostic report
  *
  * `embedded.js` — the email/social "embedded wallet" — is gone: that surface
@@ -130,6 +131,22 @@ export {
 } from './appkit.js';
 
 export { createWcSession } from './session.js';
+
+export {
+  WALLET_LEASE_DEFAULT_MINUTES,
+  WALLET_LEASE_KEY,
+  WALLET_LEASE_MODES,
+  WALLET_RESTORE_BACKOFF,
+  WALLET_SESSION_CHOICES,
+  clearWalletLease,
+  isLeaseAddress,
+  readWalletLease,
+  walletLeaseMinutes,
+  walletLeaseRemainingMinutes,
+  walletRestoreDelay,
+  walletRestorePlan,
+  writeWalletLease
+} from './lease.js';
 
 export {
   collectWalletHealth,

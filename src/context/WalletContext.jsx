@@ -8,13 +8,21 @@ import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
 import {
   WC_PROJECT_ID,
+  clearWalletLease,
   createWcSession,
+  hasStoredSession,
   purgeConnectionKeys,
   purgeEmbeddedWalletKeys,
+  readWalletLease,
   storageFacts,
+  walletLeaseMinutes,
+  walletLeaseRemainingMinutes,
+  walletRestoreDelay,
+  walletRestorePlan,
   wcEvent,
   wcEventDetail,
-  wcMetadata
+  wcMetadata,
+  writeWalletLease
 } from '../lib/wc';
 
 /**
@@ -42,6 +50,24 @@ import {
  * anywhere in this codebase. Transactions are built client-side and signed by
  * whichever wallet the user chose.
  *
+ * ─── A CONNECTION SURVIVES THE DOCUMENT ────────────────────────────────────
+ * React state dies with the tab, and an injected provider dies with it too, so
+ * «connected» used to mean «connected until the next refresh» — the reported
+ * bug («پس از رفرش کیف پول متصل دیسکانکت می‌شه»). What carries the connection
+ * across a reload is a SESSION LEASE (src/lib/wc/lease.js): a small localStorage
+ * record naming the transport, the address and an expiry, rolled while the app
+ * is in use and read by the cold start, which then re-attaches
+ *
+ *   • WalletConnect  — by resuming the stored `wc@2:` session,
+ *   • injected       — by a SILENT `eth_accounts` re-attach (never a prompt),
+ *   • local vault    — by the existing synchronous attach,
+ *
+ * with a bounded retry ladder behind all three and a `restoring` flag the UI
+ * shows instead of «وصل نیست». How long the window lasts is the user's answer in
+ * Settings → Security (`walletSessionMinutes`, 60 by default, 0 = until they
+ * disconnect). An explicit disconnect clears the lease FIRST, so «قطع اتصال»
+ * means it on the next document as well as this one.
+ *
  * ─── SHAPE OF THIS FILE ────────────────────────────────────────────────────
  * The mechanics live in src/lib/wc/ and are framework-free. This component owns
  * React state and nothing else: it subscribes to the WalletConnect session,
@@ -56,6 +82,9 @@ const WalletContext = createContext(null);
 const loadEthers = () => import('ethers');
 
 const toHexChainId = (value) => `0x${Number(value || DEFAULT_CHAIN).toString(16)}`;
+
+/** Only the three transports can hold a lease; anything else is WalletConnect. */
+const leaseModeOf = (value) => (value === 'injected' || value === 'local' ? value : 'wc');
 
 /** A low core count or little memory means a public RPC needs more rope. */
 const SLOW_DEVICE = (() => {
@@ -125,6 +154,27 @@ export function WalletProvider({ children }) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
   const [locked, setLocked] = useState(false);
+  /*
+   * THE SESSION LEASE — «this device has a wallet until <time>».
+   *
+   * `lease` is the render-time view of the record in localStorage (mode,
+   * address, expiry) and `restoring` is the sentence the UI needs while the
+   * app is re-attaching it after a reload: without that flag a user watching a
+   * silent re-attach sees «وصل نیست» and taps Connect again — which is how a
+   * working background resume turns into a second approval screen.
+   * See src/lib/wc/lease.js for the whole design.
+   */
+  const [lease, setLease] = useState(() => readWalletLease());
+  const leaseRef = useRef(lease);
+  leaseRef.current = lease;
+  const [restoring, setRestoring] = useState(false);
+  /** One re-attach timer at a time, plus how many attempts it has made. */
+  const restoreTimerRef = useRef(null);
+  const restoreAttemptRef = useRef(0);
+  /** Last time the lease was rolled forward, so a busy tab writes rarely. */
+  const leaseTouchedRef = useRef(0);
+  /** Which address `nativeBalance` describes — see refreshBalance(). */
+  const balanceAddressRef = useRef(null);
 
   /* Kept in refs so a signer or provider never lands in React state (and thus
      never in a devtools snapshot or a serialized store). */
@@ -152,7 +202,11 @@ export function WalletProvider({ children }) {
   addressRef.current = address;
   const chainIdRef = useRef(null);
   chainIdRef.current = chainId;
+  const modeRef = useRef(null);
+  modeRef.current = mode;
   const disconnectRef = useRef(() => {});
+  /** The user's «how long should the wallet stay connected» answer. */
+  const walletSessionMinutes = useSettingsStore((s) => s.walletSessionMinutes);
 
   const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
 
@@ -225,20 +279,120 @@ export function WalletProvider({ children }) {
     [buildReadProviders]
   );
 
+  /**
+   * Read the native balance.
+   *
+   * ─── THE LAST GOOD VALUE IS KEPT (2026-09-18 report) ─────────────────────
+   * This used to `setNativeBalance(null)` on ANY throw. A public RPC that
+   * answered slowly, a rate limit, a moment of bad signal — each one replaced a
+   * correct number the user was reading with an empty state, and the interval
+   * below runs every 30 seconds, so the wallet's balance flickered between a
+   * real figure and nothing while nothing was actually wrong. A failed read is
+   * not evidence of a zero balance, and it is certainly not evidence that the
+   * number we already had is wrong.
+   *
+   * So the last value survives a failed refresh and is only ever replaced by a
+   * NEWER, successful read of the SAME address. A different address (the user
+   * switched wallets) clears it first, because showing wallet A's balance under
+   * wallet B's address is a money-screen error rather than a stale one.
+   */
   const refreshBalance = useCallback(
     async (addr = address, cid = chainId ?? DEFAULT_CHAIN) => {
       if (!addr) return;
+      const key = String(addr).toLowerCase();
+      if (balanceAddressRef.current && balanceAddressRef.current !== key) setNativeBalance(null);
       try {
         const { formatEther } = await loadEthers();
         const provider = await getReadProvider(cid);
         const wei = await provider.getBalance(addr);
+        balanceAddressRef.current = key;
         setNativeBalance(Number(formatEther(wei)));
       } catch {
-        setNativeBalance(null);
+        /* Keep the last known number: see the note above. */
       }
     },
     [address, chainId, getReadProvider]
   );
+
+  /* ----------------------------- session lease ---------------------------- */
+  /*
+   * ONE RECORD, THREE TRANSPORTS.
+   *
+   * Everything below is the answer to «پس از رفرش کیف پول متصل دیسکانکت می‌شه»:
+   * a small localStorage record saying which transport carries the connection,
+   * on which address, and until when — written when a wallet attaches, rolled
+   * while the app is in use, and read by the cold start to re-attach silently.
+   * See src/lib/wc/lease.js for the record itself and the restore policy.
+   */
+
+  /** Write the lease for an attach that just succeeded. */
+  const grantLease = useCallback(({ address: acct, chainId: cid, mode: leaseMode, rdns = null }) => {
+    if (!acct) return null;
+    const minutes = walletLeaseMinutes(useSettingsStore.getState().walletSessionMinutes);
+    const record = writeWalletLease({
+      address: acct,
+      chainId: cid,
+      mode: leaseModeOf(leaseMode),
+      rdns,
+      minutes
+    });
+    if (!record) {
+      /* Storage blocked (private mode / partitioned WebView): the connection
+         still works for this document — only the resume across a reload is
+         lost, and the trace says so instead of pretending it was saved. */
+      wcEvent('lease_write_failed');
+      return null;
+    }
+    const stored = readWalletLease() ?? record;
+    leaseRef.current = stored;
+    setLease(stored);
+    leaseTouchedRef.current = Date.now();
+    restoreAttemptRef.current = 0;
+    wcEvent('lease_granted', minutes);
+    return record;
+  }, []);
+
+  /**
+   * Roll the lease forward while the app is open and a wallet is attached.
+   *
+   * A connection IN USE must not lapse under the user's hands, so every visit,
+   * refresh and minute of use restarts the window. It is also what repairs a
+   * connection made before this feature existed: no lease on disk plus a
+   * connected address writes one on the first touch.
+   */
+  const rollLease = useCallback(
+    ({ force = false } = {}) => {
+      const current = leaseRef.current;
+      const acct = addressRef.current || current?.address || null;
+      if (!acct) return null;
+      if (current && !current.alive) return null;
+      const now = Date.now();
+      const since = leaseTouchedRef.current || current?.issuedAt || 0;
+      if (!force && current && now - since < 60_000) return current;
+      return grantLease({
+        address: acct,
+        chainId: chainIdRef.current ?? current?.chainId ?? null,
+        mode: current?.mode ?? modeRef.current ?? 'wc',
+        rdns: current?.rdns ?? null
+      });
+    },
+    [grantLease]
+  );
+
+  /** Forget the lease and cancel every scheduled re-attach. */
+  const dropLease = useCallback(() => {
+    if (restoreTimerRef.current) {
+      clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
+    restoreAttemptRef.current = 0;
+    leaseTouchedRef.current = 0;
+    const had = Boolean(leaseRef.current);
+    leaseRef.current = null;
+    setLease(null);
+    clearWalletLease();
+    if (had) wcEvent('lease_cleared');
+  }, []);
 
   /* ------------------------------- injected ------------------------------ */
 
@@ -340,6 +494,19 @@ export function WalletProvider({ children }) {
         setChainId(Number(net.chainId));
         setLocked(false);
         attachInjectedListeners(target);
+        /* THE LINE THAT MAKES AN INJECTED WALLET SURVIVE A RELOAD.
+           Nothing about an injected provider can be persisted — the provider
+           object belongs to the extension and dies with the document — so what
+           survives is the DECISION: this address, this rdns, until <time>. The
+           cold start re-reads it and re-attaches silently (see
+           restoreInjected), which is why MetaMask no longer disappears when the
+           page is refreshed. */
+        grantLease({
+          address: accounts[0],
+          chainId: Number(net.chainId),
+          mode: 'injected',
+          rdns: matchedInfo?.rdns ?? rdns ?? null
+        });
         await refreshBalance(accounts[0], Number(net.chainId));
         return true;
       } catch (e) {
@@ -351,6 +518,98 @@ export function WalletProvider({ children }) {
       } finally {
         setConnecting(false);
         connectGuard.release();
+      }
+    },
+    [attachInjectedListeners, detachInjectedListeners, grantLease, refreshBalance]
+  );
+
+  /**
+   * SILENTLY re-attach the injected wallet the lease remembers.
+   *
+   * ─── WHY `eth_accounts` AND NEVER `eth_requestAccounts` ──────────────────
+   * `eth_accounts` answers with the accounts this origin is ALREADY permitted
+   * to see, and opens nothing: for a wallet that has approved us it returns the
+   * address, and for one that has not it returns `[]`. `eth_requestAccounts`
+   * would open the wallet on every page load — a prompt the user did not ask
+   * for, and for a locked wallet a permanent one.
+   *
+   * A wallet that answers `[]` (locked, or the permission was revoked) leaves
+   * the lease alone and the scheduled retry ladder keeps trying, so unlocking
+   * the wallet is enough to bring the connection back — no Connect tap needed.
+   */
+  const restoreInjected = useCallback(
+    async (rdns, expected) => {
+      const announced = eip6963Ref.current;
+      let target = null;
+      let matchedInfo = null;
+      if (rdns) {
+        for (const { info, provider } of announced.values()) {
+          if (info.rdns === rdns) {
+            target = provider;
+            matchedInfo = info;
+            break;
+          }
+        }
+        /* A named wallet that has not announced itself yet is ABSENT, not
+           replaced by window.ethereum: attaching Trust because MetaMask was
+           slower to announce would connect the wrong wallet on the strength of
+           a record that names the other one. */
+        if (!target) {
+          wcEvent('lease_injected_absent', announced.size);
+          return false;
+        }
+      } else if (typeof window !== 'undefined' && window.ethereum) {
+        target = window.ethereum;
+      }
+      if (!target) {
+        wcEvent('lease_injected_absent', 0);
+        return false;
+      }
+
+      let accounts = [];
+      try {
+        accounts = await target.request?.({ method: 'eth_accounts' });
+      } catch {
+        accounts = [];
+      }
+      const acct = Array.isArray(accounts) ? accounts[0] : null;
+      if (!acct) {
+        wcEvent('lease_injected_locked');
+        return false;
+      }
+      if (expected && String(acct).toLowerCase() !== String(expected).toLowerCase()) {
+        /* The wallet is on a different account than the lease recorded. The
+           WALLET is the authority on which account is active — the lease only
+           ever remembers — so the new account is honoured. */
+        wcEvent('lease_injected_account_changed');
+      }
+
+      try {
+        const { BrowserProvider } = await loadEthers();
+        const provider = new BrowserProvider(target, 'any');
+        let cid = leaseRef.current?.chainId ?? DEFAULT_CHAIN;
+        try {
+          const net = await provider.getNetwork();
+          const n = Number(net?.chainId);
+          if (EVM_CHAINS[n]) cid = n;
+        } catch { /* the leased chain stands */ }
+        const signer = await provider.getSigner();
+        detachInjectedListeners();
+        eip1193Ref.current = target;
+        signerRef.current = signer;
+        setMode('injected');
+        setInjectedInfo(matchedInfo);
+        setAddress(acct);
+        setChainId(cid);
+        setLocked(false);
+        setError(null);
+        attachInjectedListeners(target);
+        void refreshBalance(acct, cid);
+        wcEvent('lease_injected_restored');
+        return true;
+      } catch (err) {
+        wcEventDetail('lease_injected_attach_err', { m: String(err?.message || err || '') });
+        return false;
       }
     },
     [attachInjectedListeners, detachInjectedListeners, refreshBalance]
@@ -382,7 +641,7 @@ export function WalletProvider({ children }) {
    * user's next swap.
    */
   const attachExternal = useCallback(
-    async ({ eip, address: acct, chainId: cid, mode: nextMode }) => {
+    async ({ eip, address: acct, chainId: cid, mode: nextMode, rdns = null }) => {
       if (!eip || !acct) {
         wcEvent('wc_attach_no_provider');
         return false;
@@ -449,6 +708,11 @@ export function WalletProvider({ children }) {
         setChainId(netChain);
         setLocked(false);
         attachInjectedListeners(eip, { destructive: false });
+        /* Same record as the injected path: which transport, which address,
+           until when. Written HERE — the one place every external provider is
+           adapted — so a WalletConnect connect, a WalletConnect RESUME and an
+           adopted legacy session all leave the same evidence behind. */
+        grantLease({ address: finalAddr, chainId: netChain, mode: nextMode, rdns });
         void refreshBalance(finalAddr, netChain);
         wcEvent('wc_attach_ok');
         return true;
@@ -461,7 +725,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [attachInjectedListeners, detachInjectedListeners, refreshBalance]
+    [attachInjectedListeners, detachInjectedListeners, grantLease, refreshBalance]
   );
 
   /* --------------------------- WalletConnect v2 -------------------------- */
@@ -605,9 +869,15 @@ export function WalletProvider({ children }) {
     setLocked(true);
     signerRef.current = null;
     eip1193Ref.current = null;
+    /* The vault lives on disk, so this attach is already durable; the lease is
+       what makes the REST of the app agree — the wallet page can say «connected
+       until <time>» instead of re-deriving it, and an expired lease is what
+       eventually stops the silent auto-attach on a device someone else picks up
+       (the vault itself is still there, still locked). */
+    grantLease({ address: vault.address, chainId: cid, mode: 'local' });
     refreshBalance(vault.address, cid);
     return true;
-  }, [refreshBalance, localTargetChain]);
+  }, [grantLease, refreshBalance, localTargetChain]);
 
   /**
    * Attach the memory-only signer returned while a new vault was encrypted —
@@ -639,6 +909,7 @@ export function WalletProvider({ children }) {
         setChainId(cid);
         setLocked(false);
         setError(null);
+        grantLease({ address: signerAddress, chainId: cid, mode: 'local' });
         void refreshBalance(signerAddress, cid);
         return true;
       } catch {
@@ -646,7 +917,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, refreshBalance, localTargetChain]
+    [getReadProvider, grantLease, refreshBalance, localTargetChain]
   );
 
   const unlockLocal = useCallback(
@@ -670,6 +941,7 @@ export function WalletProvider({ children }) {
         setAddress(signer.address);
         setChainId(cid);
         setLocked(false);
+        grantLease({ address: signer.address, chainId: cid, mode: 'local' });
         void refreshBalance(signer.address, cid);
         return true;
       } catch (e) {
@@ -677,7 +949,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, refreshBalance, localTargetChain]
+    [getReadProvider, grantLease, refreshBalance, localTargetChain]
   );
 
   /** Drop the in-memory signer but keep the encrypted vault on disk. */
@@ -695,10 +967,164 @@ export function WalletProvider({ children }) {
     disconnectRef.current();
   }, []);
 
+  /* ---------------------- resume across a reload ------------------------- */
+  /*
+   * THE COLD START, AS ONE FUNCTION.
+   *
+   * `attemptWalletRestore()` reads the lease, asks lib/wc/lease.js what the
+   * situation calls for, and performs exactly that — silently, with no prompt,
+   * for all three transports. `scheduleWalletRestore()` is the part that was
+   * missing before: a bounded retry ladder, so ONE slow relay handshake on a
+   * phone that is still loading the rest of the app is no longer the end of the
+   * connection. Both are idempotent: whenever an address is already attached
+   * they do nothing.
+   */
+  const attemptWalletRestore = useCallback(async () => {
+    if (addressRef.current) {
+      setRestoring(false);
+      return true;
+    }
+    /* The FRESH read wins over the in-memory snapshot: `alive` is computed when
+       the record is read, and a document that sat hidden past the window must
+       not be judged by a flag set the last time it was visible. */
+    const current = readWalletLease() ?? leaseRef.current;
+    const hasVault = Boolean(loadVault());
+    const plan = walletRestorePlan({
+      lease: current,
+      hasVault,
+      hasStoredSession: hasStoredSession()
+    });
+
+    if (plan.expired) {
+      /*
+       * THE WINDOW THE USER CHOSE HAS CLOSED.
+       *
+       * Nothing re-attaches on its own any more, and the stored session goes
+       * with it: an expired lease plus a live `wc@2:` session is exactly the
+       * state that makes the NEXT Connect look dead (init() resurrects the
+       * session and the modal refuses to open — see storage.js). Reconnecting
+       * is one tap and asks the wallet for a fresh approval, which is the
+       * honest price of a window that lapsed.
+       */
+      const purged = hasStoredSession() ? purgeConnectionKeys() : 0;
+      clearWalletLease();
+      leaseRef.current = null;
+      setLease(null);
+      setRestoring(false);
+      /* Named, not silent. «It disconnected by itself» is what an unexplained
+         end of a connection looks like; this says which setting ended it. */
+      setError('SESSION_EXPIRED');
+      wcEvent('lease_expired', purged);
+      return false;
+    }
+
+    if (plan.action === 'none') {
+      if (plan.stale) wcEvent('lease_vault_missing');
+      setRestoring(false);
+      return false;
+    }
+
+    if (plan.action === 'local') {
+      /* The vault auto-attach effect owns this path (it is synchronous, so it
+         has already run by the time this is called). Report honestly. */
+      setRestoring(false);
+      return Boolean(addressRef.current);
+    }
+
+    /*
+     * A WALLETCONNECT LEASE WITH NO `wc@2:` SESSION BEHIND IT.
+     *
+     * This is not a slow handshake, it is an impossible one: the wallet revoked
+     * the session, or this browser's storage was cleared while the lease in
+     * another key survived. Running the retry ladder here would spend a hundred
+     * seconds showing «در حال اتصال مجدد…» for a resume that can never succeed,
+     * so the lease is dropped now and the user is told the one true thing:
+     * connect once more.
+     */
+    if (plan.action === 'wc' && !hasStoredSession()) {
+      dropLease();
+      setRestoring(false);
+      setError('SESSION_MISSING');
+      wcEvent('lease_session_missing');
+      return false;
+    }
+
+    setRestoring(true);
+    try {
+      const ok = plan.action === 'injected'
+        ? await restoreInjected(current?.rdns ?? null, current?.address ?? null)
+        : await restoreWcSession({ announce: false });
+      if (ok) {
+        /* attachExternal() already wrote the lease for the wc path; this covers
+           the adopted (pre-lease) install and re-anchors the window. */
+        rollLease({ force: true });
+        wcEvent('lease_restore_ok');
+        return true;
+      }
+      wcEvent('lease_restore_failed');
+      return false;
+    } finally {
+      setRestoring(false);
+    }
+  }, [restoreInjected, restoreWcSession, rollLease, dropLease]);
+
+  const scheduleWalletRestore = useCallback(() => {
+    if (restoreTimerRef.current) return;
+    const current = leaseRef.current ?? readWalletLease();
+    if (!current?.alive || addressRef.current) return;
+    const delay = walletRestoreDelay(restoreAttemptRef.current);
+    restoreAttemptRef.current += 1;
+    wcEvent('lease_retry_scheduled', Math.round(delay / 1000));
+    try {
+      restoreTimerRef.current = setTimeout(() => {
+        restoreTimerRef.current = null;
+        /* A hidden document is not where a relay handshake belongs; the next
+           visibility change restarts the ladder instead of burning it off
+           screen. */
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          restoreAttemptRef.current = 0;
+          return;
+        }
+        attemptWalletRestore().then(
+          (ok) => {
+            if (!ok && !addressRef.current && (leaseRef.current?.alive ?? false)) scheduleWalletRestore();
+          },
+          () => scheduleWalletRestore()
+        );
+      }, delay);
+    } catch {
+      /* no timers: the visibility/focus path still retries */
+    }
+  }, [attemptWalletRestore]);
+
+  /**
+   * Try NOW (a tap on «تلاش دوباره», a soft refresh, a visibility change) and
+   * fall back to the ladder when it fails.
+   */
+  const reconnectWallet = useCallback(async () => {
+    if (restoreTimerRef.current) {
+      clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
+    restoreAttemptRef.current = 0;
+    const ok = await attemptWalletRestore();
+    if (!ok) scheduleWalletRestore();
+    return ok;
+  }, [attemptWalletRestore, scheduleWalletRestore]);
+
   /* ------------------------------ disconnect ----------------------------- */
 
   const disconnect = useCallback(() => {
     wcEvent('local_disconnect');
+    /* THE LEASE GOES FIRST, AND IT IS THE POINT OF THE WHOLE MODULE.
+       Every other teardown below is synchronous-but-eventual: the SDK writes
+       its storage asynchronously, the delayed purge catches that window. The
+       lease is the one record the COLD START reads, so if it survived even a
+       moment of the teardown a refresh right here would happily re-attach the
+       wallet the user just disconnected. Clearing it first makes «قطع اتصال»
+       mean it, on this document and on the next one. */
+    dropLease();
+    balanceAddressRef.current = null;
     /* WalletConnect first: tell the peer the session is over (bounded — a dead
        relay must never stall the UI) and purge the storage artifacts, then the
        injected listeners. */
@@ -722,7 +1148,7 @@ export function WalletProvider({ children }) {
     setLocked(false);
     setError(null);
     setWcPairUri(null);
-  }, [detachInjectedListeners]);
+  }, [detachInjectedListeners, dropLease]);
 
   disconnectRef.current = disconnect;
 
@@ -824,22 +1250,64 @@ export function WalletProvider({ children }) {
     } catch { /* the check is advisory */ }
 
     /*
-     * ONE RESTORE, NO GATE.
+     * ONE RESUME, DRIVEN BY THE LEASE.
      *
-     * The stored `wc@2:` session is the only external wallet this app can come
-     * back to, so nothing has to be sequenced behind another surface's marker
-     * any more — and nothing can starve WalletConnect either, which is what
-     * the old email-first gate did whenever a marker survived a failed login.
+     * `walletRestorePlan()` decides — from the record on disk, not from a
+     * guess — whether the cold start re-attaches a WalletConnect session, an
+     * injected wallet, the in-app vault, or nothing at all, and it is the same
+     * function the retry ladder consults. Reads only: the plan NEVER attaches
+     * anything by itself.
      */
-    const resume = (announce) => {
-      if (addressRef.current) return;
-      void restoreWcSession({ announce });
+    const storedLease = readWalletLease();
+    leaseRef.current = storedLease;
+    setLease(storedLease);
+
+    const resume = () => {
+      if (addressRef.current) {
+        /* An address is still attached. If the window the user chose ended
+           while the app was away, the connection ends here — deliberately, and
+           by name — instead of sitting on screen as a wallet that no longer has
+           a lease behind it. */
+        const held = readWalletLease() ?? leaseRef.current;
+        if (held && !held.alive) {
+          wcEvent('lease_lapsed_while_open');
+          disconnectRef.current();
+          setError('SESSION_EXPIRED');
+          return;
+        }
+        /* Otherwise roll the window instead of re-attaching. */
+        rollLease({ force: true });
+        return;
+      }
+      void attemptWalletRestore().then(
+        (ok) => { if (!ok) scheduleWalletRestore(); },
+        () => scheduleWalletRestore()
+      );
     };
 
     /* A LOCAL VAULT WINS ON COLD START: restore is async while the vault
        auto-attach is synchronous, so without this skip the slower resume would
        overwrite the vault. The stored session is left on disk either way. */
-    if (!loadVault()) resume(false);
+    const vault = loadVault();
+    const plan = walletRestorePlan({
+      lease: storedLease,
+      hasVault: Boolean(vault),
+      hasStoredSession: hasStoredSession()
+    });
+    /*
+     * Exactly two cases start a resume here:
+     *
+     *   • the lease LAPSED — `attemptWalletRestore()` is what clears the record
+     *     and purges the session it described, so even the expired path goes
+     *     through it (and it attaches nothing);
+     *   • there is no vault and the plan says WalletConnect or an injected
+     *     wallet — a vault always wins the cold start (above).
+     *
+     * 'local' needs no call: the vault effect below attaches synchronously.
+     * 'none' means there is nothing to do, and saying so with no call is the
+     * whole point of the plan.
+     */
+    if (plan.expired || (!vault && (plan.action === 'wc' || plan.action === 'injected'))) resume();
 
     /*
      * COMING BACK TO A PAGE THAT WAS NEVER UNLOADED.
@@ -855,12 +1323,12 @@ export function WalletProvider({ children }) {
      *     the page can rely on.
      */
     const onVisible = () => {
-      if (document.visibilityState === 'visible') resume(true);
+      if (document.visibilityState === 'visible') resume();
     };
     const onPageShow = (event) => {
       /* The initial load fires this too (persisted === false) — the mount path
          above already owns that one. */
-      if (event?.persisted) resume(false);
+      if (event?.persisted) resume();
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
@@ -878,6 +1346,18 @@ export function WalletProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * A vault that is present but whose lease is missing gets one written now.
+   *
+   * This is the upgrade path: an install that connected before the lease
+   * existed has an address attached and no record, so nothing would roll and
+   * the wallet would look like a first-time connection on the next reload. The
+   * effect is a no-op for every other state.
+   */
+  useEffect(() => {
+    if (address && !leaseRef.current) rollLease({ force: true });
+  }, [address, rollLease]);
+
   /* The "connect your wallet" quest, fired where it actually happens: watching
      `address` covers all four modes, including the auto-attach path a returning
      user takes without pressing anything. `completeQuest` is idempotent. */
@@ -894,19 +1374,50 @@ export function WalletProvider({ children }) {
   useEffect(() => {
     if (!address) return undefined;
     const id = setInterval(() => {
-      if (document.visibilityState === 'visible') refreshBalance();
+      if (document.visibilityState !== 'visible') return;
+      refreshBalance();
+      /* IN USE MEANS CONNECTED. Every tick of this interval is evidence that
+         the user is still here, so the lease rolls forward with the same
+         cadence the balance does — throttled inside rollLease() to one write a
+         minute, which is the difference between a durable record and a
+         localStorage write per second. */
+      rollLease();
     }, 30000);
     return () => clearInterval(id);
-  }, [address, refreshBalance]);
+  }, [address, refreshBalance, rollLease]);
+
+  /*
+   * The user changed «how long should the wallet stay connected».
+   *
+   * The lease carries its own expiry, so the setting only takes effect for an
+   * ALREADY connected wallet when the record is re-issued — which is exactly
+   * what this does: pick 15 minutes and the current connection now expires in
+   * 15; pick «تا قطع دستی» and it stops expiring at all.
+   */
+  useEffect(() => {
+    if (!addressRef.current) return;
+    if (!leaseRef.current) return;
+    rollLease({ force: true });
+  }, [walletSessionMinutes, rollLease]);
 
   /* Soft refresh: the header button re-reads the native balance through the
      same refreshBalance the interval uses. Nothing is remounted and, crucially,
      the WalletConnect session is not touched. If no wallet is attached, try the
      session restore once instead. */
   useEffect(() => {
-    const off = onSoftRefresh(() =>
-      addressRef.current ? refreshBalance() : restoreWcSession({ announce: true })
-    );
+    const off = onSoftRefresh(() => {
+      if (addressRef.current) {
+        refreshBalance();
+        /* A refresh is a user action: roll the window and renew nothing else.
+           The WalletConnect session is NOT touched — that is the contract of a
+           soft refresh (see lib/refresh.js). */
+        rollLease({ force: true });
+        return;
+      }
+      /* Nothing attached: the same plan-driven resume the cold start uses, with
+         the retry ladder behind it — never a bare one-shot attempt. */
+      void attemptWalletRestore().then((ok) => { if (!ok) scheduleWalletRestore(); });
+    });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -927,6 +1438,17 @@ export function WalletProvider({ children }) {
       hasLocalVault: Boolean(loadVault()),
       connectInjected,
       connectWalletConnect,
+      /* The session lease — see lib/wc/lease.js.
+         `restoring` is true while the app is re-attaching a connection it
+         already had, which is the state the UI must show instead of «not
+         connected» (otherwise a working silent resume looks like a lost
+         wallet). `lease` is the record itself, `leaseMinutesLeft` the number
+         the wallet page prints, and `reconnectWallet` the manual retry the
+         banner offers. */
+      restoring,
+      lease,
+      leaseMinutesLeft: walletLeaseRemainingMinutes(lease),
+      reconnectWallet,
       /* The pairing surface: the URI the SDK issued for the in-flight attempt
          (null when there is none), which surface owns the screen, and the
          control that ends the attempt. The sheet renders the QR and the wallet
@@ -978,6 +1500,10 @@ export function WalletProvider({ children }) {
       locked,
       connectInjected,
       connectWalletConnect,
+      restoring,
+      lease,
+      walletSessionMinutes,
+      reconnectWallet,
       wcPairUri,
       wcModalActive,
       wcRelay,

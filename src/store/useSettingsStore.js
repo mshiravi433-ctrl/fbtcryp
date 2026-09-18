@@ -53,6 +53,22 @@ export const useSettingsStore = create(
       twoFactorEnabled: false,
       twoFactorSecret: null, // TOTP secret, stored encrypted by the caller
       autoLockMinutes: 5,
+      /*
+       * HOW LONG THE WALLET STAYS CONNECTED (requested: «با توجه به تنظیمات که
+       * چند دقیقه گذاشته مثل ۶۰ دقیقه کیف پول وصل باشد و با رفرش دیکانکت نشه»).
+       *
+       * Minutes. While the app is open and a wallet is attached the lease this
+       * value feeds ROLLS FORWARD — a connection in active use must not lapse
+       * under the user's hands. Once the app is closed the clock keeps running,
+       * so this is also the number that says how long a returning user is
+       * re-attached silently before the wallet has to be approved again.
+       *
+       * 0 is «تا قطع دستی»: never expires by itself. The picker offers
+       * 15 / 30 / 60 / 180 / 0 (see WALLET_SESSION_CHOICES in lib/wc/lease.js);
+       * an out-of-range or corrupted value is clamped by the setter below, so a
+       * bad sync can never turn a 60-minute window into a permanent one.
+       */
+      walletSessionMinutes: 60,
       hideBalances: false,
       txConfirmations: true,
       expertMode: false,
@@ -148,6 +164,17 @@ export const useSettingsStore = create(
       setAutoLock(minutes) {
         set({ autoLockMinutes: Math.max(0, Math.min(120, Number(minutes) || 0)) });
       },
+      /**
+       * How long a wallet connection survives a reload. 0 = until disconnect.
+       *
+       * A wallet, not a preference: the value is read by WalletContext the
+       * moment a lease is written or rolled, so a change here applies to the
+       * connection that is already up (WalletContext re-issues the lease).
+       */
+      setWalletSessionMinutes(minutes) {
+        const n = Number(minutes);
+        set({ walletSessionMinutes: Number.isFinite(n) && n > 0 ? Math.min(24 * 60, Math.round(n)) : 0 });
+      },
       enableBiometric(credentialId) {
         set({ biometricEnabled: true, biometricCredentialId: credentialId });
       },
@@ -213,13 +240,14 @@ export const useSettingsStore = create(
           reduceMotion: s.reduceMotion,
           hideBalances: s.hideBalances,
           autoLockMinutes: s.autoLockMinutes,
+          walletSessionMinutes: s.walletSessionMinutes,
           defaultSlippage: s.defaultSlippage,
           defaultDeadlineMin: s.defaultDeadlineMin
         };
       },
 
       applyRemote(remote = {}) {
-        const allowed = ['theme', 'accent', 'username', 'reduceMotion', 'hideBalances', 'autoLockMinutes', 'defaultSlippage', 'defaultDeadlineMin'];
+        const allowed = ['theme', 'accent', 'username', 'reduceMotion', 'hideBalances', 'autoLockMinutes', 'walletSessionMinutes', 'defaultSlippage', 'defaultDeadlineMin'];
         const patch = {};
         allowed.forEach((k) => {
           if (remote[k] !== undefined) patch[k] = remote[k];
