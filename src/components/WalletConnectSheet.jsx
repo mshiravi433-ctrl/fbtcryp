@@ -575,7 +575,19 @@ export default function WalletConnectSheet({ open, onClose }) {
               generic «connection failed»: nothing was lost, retrying (or just
               reopening the app) attaches it. */}
           {wallet.error === 'EMAIL_PROVIDER_PENDING' && (
-            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>
+            <>
+              <p className="notice" style={{ marginTop: 10 }}>{t('wallet.emailProviderPending')}</p>
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 10, width: '100%' }}
+                disabled={wallet.connecting}
+                onClick={() => {
+                  wallet.connectEmailSocial().then((ok) => ok && close());
+                }}
+              >
+                {t('wallet.retryAttach', { defaultValue: 'تلاش دوباره' })}
+              </button>
+            </>
           )}
 
           {/* The evidence, one tap away, where the failure happened. */}

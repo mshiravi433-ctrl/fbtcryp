@@ -343,6 +343,7 @@
     "noProvider": "کیف پولی پیدا نشد. این مرورگر افزونهٔ کیف پول ندارد — روی گوشی، اپ را از داخل مرورگر خودِ کیف پولت باز کن، یا با WalletConnect وصل شو.",
     "connectFailed": "اتصال ناموفق بود یا رد شد.",
     "emailProviderPending": "ورود ایمیل انجام شد، اما کیف پول در این صفحه آماده نشد. یک بار دیگر تلاش کنید یا برنامه را ببندید و باز کنید؛ اتصال شما از دست نرفته است.",
+    "retryAttach": "تلاش دوباره",
     "healthUsage": "سقف استفادهٔ پروژه (ایمیل)",
     "healthUsageBlocked": "پروژه از سقف مجاز Reown گذشته و خودِ AppKit کادر ایمیل را غیرفعال می‌کند. باید در داشبورد Reown (cloud.reown.com) پلن را ارتقا دهید.",
     "wcOriginBlocked": "والت‌کانکت origin این اپ را رد کرد. در داشبورد Reown مطمئن شو Allowed Domains شامل https://fbtswap.ir و https://localhost و App IDs شامل ir.fbtswap.app باشد.",

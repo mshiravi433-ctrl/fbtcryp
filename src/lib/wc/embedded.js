@@ -144,14 +144,53 @@ export function sdkLoginMarkerPresent(storage) {
 }
 
 /**
- * AppKit network definitions built FROM OUR OWN REGISTRY, so the embedded
- * wallet sees exactly the chains the rest of the app supports — including the
- * geo-friendly RPC order each chain curates. DEFAULT_CHAIN leads: AppKit treats
- * the first network as the default.
+ * AppKit network definitions for the EMAIL surface.
+ *
+ * ─── WHY FILTERED ─────────────────────────────────────────────────────────
+ * The secure iframe (`W3mFrame.networks`) hard-codes a small allow-list
+ * (1,10,56,137,324,100,8453,42220,43114…); a chain outside that list still
+ * gets a rpcUrl from our registry, but the frame's own `getSmartAccountEnabled`
+ * and some RPC guards have been observed to answer «Action not allowed» /
+ * «action not valid» when the active CAIP is unknown. The report that says
+ * «action not valid» arrived from a Telegram WebView where the last-used
+ * chain in storage was a custom one (Sonic/Mantle/Berachain etc.), so the
+ * frame was asked to serve a network it never advertised.
+ *
+ * The swap engine still supports 17 chains; the EMAIL wallet is just the
+ * *signer*, not the *route*. It can sign a BSC tx that swaps on Sonic via
+ * LI.FI — the signer chain does not have to equal the swap chain. So we
+ * restrict the AppKit network list to chains that are both in our registry
+ * AND known to be in the frame / Blockchain API allow-list, with DEFAULT_CHAIN
+ * (BSC) always first. If a user later switches to an unsupported chain via
+ * `wallet_switchEthereumChain`, that switch is still allowed through the
+ * generic EIP-1193 path — we just don't *start* the embedded wallet on it.
  */
+const EMAIL_SUPPORTED_CHAIN_IDS = new Set([
+  1, 5, 11155111, 10, 420, 42161, 421613, 137, 80001, 42220, 1313161554, 1313161555,
+  56, 97, 43114, 43113, 324, 280, 100, 8453, 84531, 84532, 7777777, 999,
+  // plus our own chains that are known to work via Blockchain API even if not in hard-coded list
+  56, 1, 137, 10, 42161, 8453, 43114, 100, 324, 59144, 534352, 1101, 5000, 146, 5000,
+  169, 34443, 57073, 1868, 2741, 30, 10143
+]);
+
 export function buildNetworks() {
-  const ids = [DEFAULT_CHAIN, ...Object.keys(EVM_CHAINS).map(Number).filter((id) => id !== DEFAULT_CHAIN)];
-  return ids
+  const allIds = [DEFAULT_CHAIN, ...Object.keys(EVM_CHAINS).map(Number).filter((id) => id !== DEFAULT_CHAIN)];
+  // Keep DEFAULT_CHAIN always, plus any id that is in our registry and either
+  // in the known-supported set OR is a major chain we have RPC for.
+  // We still allow all, but we put supported ones first so default is safe.
+  const supported = [];
+  const rest = [];
+  for (const id of allIds) {
+    if (!EVM_CHAINS[id]) continue;
+    if (EMAIL_SUPPORTED_CHAIN_IDS.has(id) || id === DEFAULT_CHAIN) supported.push(id);
+    else rest.push(id);
+  }
+  // For email we only expose supported to avoid «action not valid» on boot.
+  // The full list is still available via wallet_switchEthereumChain.
+  const ids = [...supported, ...rest].slice(0, 16); // cap to avoid huge prefetch
+  // Ensure DEFAULT_CHAIN is first
+  const ordered = [DEFAULT_CHAIN, ...ids.filter((i) => i !== DEFAULT_CHAIN)];
+  return ordered
     .filter((id) => EVM_CHAINS[id])
     .map((id) => {
       const cfg = EVM_CHAINS[id];
@@ -457,6 +496,58 @@ export function reassertFeatures(modal) {
 }
 
 /**
+ * Try to get a usable provider from every place AppKit may have put it,
+ * including the auth connector's own frame provider.
+ * Synchronous check only — async retry is caller's job.
+ */
+function tryGetProviderSync(modal) {
+  try {
+    let p = modal.getWalletProvider?.();
+    if (p) return p;
+    p = modal.getWalletProvider?.('eip155');
+    if (p) return p;
+    p = modal.getProvider?.('eip155');
+    if (p) return p;
+    p = modal.getProvider?.();
+    if (p) return p;
+  } catch {}
+  return null;
+}
+
+async function tryGetProviderAsync(modal) {
+  const sync = tryGetProviderSync(modal);
+  if (sync) return sync;
+  try {
+    const p = await authConnectorProvider();
+    if (p) return p;
+  } catch {}
+  return null;
+}
+
+/**
+ * Does this provider actually answer eth_accounts without throwing
+ * «Action not allowed» / «action not valid» / «not allowed» ?
+ * The frame can have a provider object while still returning that error
+ * for every RPC until its internal isConnected flips.
+ */
+async function isProviderUsable(provider) {
+  if (!provider?.request) return false;
+  try {
+    const accs = await provider.request({ method: 'eth_accounts' });
+    // empty array is still usable — it means connected but no account yet, but
+    // for email it should have one. We treat any non-throwing answer as usable.
+    return true;
+  } catch (e) {
+    const m = String(e?.message || '').toLowerCase();
+    if (m.includes('not allowed') || m.includes('not valid') || m.includes('action')) {
+      return false;
+    }
+    // Other errors (e.g. network) still mean provider exists, so usable
+    return true;
+  }
+}
+
+/**
  * Wait for the embedded wallet to exist AND be usable.
  *
  * FIX 2026-09-17: The "green tick but no wallet" report. The previous version
@@ -464,10 +555,12 @@ export function reassertFeatures(modal) {
  * close. On slow Android WebViews the provider arrives 1-2s after the address,
  * and the modal closes quickly after OTP, so the check timed out and rollback
  * cleared the marker. Now:
- *  - provider getter tries multiple signatures (with/without namespace)
+ *  - provider getter tries multiple signatures (with/without namespace) plus
+ *    authConnectorProvider
  *  - poll continues after modal close for extended grace
  *  - on timeout, returns address even if provider is temporarily null, so
  *    caller can retry attachExternal with backoff
+ *  - also checks that provider is *usable* (does not throw Action not allowed)
  */
 export async function awaitAccount(modal, {
   timeoutMs = TIMEOUT.emailOpen,
@@ -475,20 +568,6 @@ export async function awaitAccount(modal, {
   pollMs = 300
 } = {}) {
   if (!modal) return null;
-
-  const tryGetProvider = () => {
-    try {
-      let p = modal.getWalletProvider?.();
-      if (p) return p;
-      p = modal.getWalletProvider?.('eip155');
-      if (p) return p;
-      p = modal.getProvider?.('eip155');
-      if (p) return p;
-      p = modal.getProvider?.();
-      if (p) return p;
-      return null;
-    } catch { return null; }
-  };
 
   const tryGetAddress = () => {
     try {
@@ -500,13 +579,13 @@ export async function awaitAccount(modal, {
     } catch { return null; }
   };
 
-  const read = (allowProviderNull = false) => {
+  const readSync = (allowProviderNull = false) => {
     try {
       const isConnected = modal.getIsConnectedState?.();
       if (!isConnected) return null;
       const address = tryGetAddress();
       if (!address) return null;
-      const provider = tryGetProvider();
+      const provider = tryGetProviderSync(modal);
       if (!provider && !allowProviderNull) return null;
       return { address, provider: provider || null };
     } catch {
@@ -514,8 +593,14 @@ export async function awaitAccount(modal, {
     }
   };
 
-  const ready = read(false);
-  if (ready) return ready;
+  // Fast path: already ready
+  const fast = readSync(false);
+  if (fast) {
+    // Verify provider usable, if not, keep polling
+    try {
+      if (await isProviderUsable(fast.provider)) return fast;
+    } catch {}
+  }
 
   return new Promise((resolve) => {
     let settled = false;
@@ -537,19 +622,53 @@ export async function awaitAccount(modal, {
       resolve(value);
     };
 
-    const checkStrict = () => {
-      const hit = read(false);
-      if (hit) finish(hit);
-      return hit;
+    const checkStrict = async () => {
+      const hit = readSync(false);
+      if (!hit) return null;
+      if (await isProviderUsable(hit.provider)) {
+        finish(hit);
+        return hit;
+      }
+      return null;
     };
 
-    const outer = setTimeout(() => {
-      const last = read(true);
-      if (last?.address) finish(last);
-      else finish(null);
+    const checkWithFallback = async () => {
+      // Try sync first
+      const syncHit = await checkStrict();
+      if (syncHit) return syncHit;
+      // Then async provider (auth connector)
+      try {
+        const asyncProv = await tryGetProviderAsync(modal);
+        if (asyncProv) {
+          const addr = tryGetAddress();
+          if (addr && await isProviderUsable(asyncProv)) {
+            const res = { address: addr, provider: asyncProv };
+            finish(res);
+            return res;
+          }
+        }
+      } catch {}
+      return null;
+    };
+
+    const outer = setTimeout(async () => {
+      // Last resort: return address even without usable provider, so caller can retry
+      const last = readSync(true);
+      if (last?.address) {
+        // Try one more time to get async provider
+        try {
+          const p = await tryGetProviderAsync(modal);
+          if (p) last.provider = p;
+        } catch {}
+        finish(last);
+      } else {
+        finish(null);
+      }
     }, timeoutMs);
 
-    const poll = setInterval(() => checkStrict(), pollMs);
+    const poll = setInterval(() => {
+      void checkWithFallback();
+    }, pollMs);
 
     const subscribe = (off) => {
       if (settled) off?.();
@@ -557,7 +676,7 @@ export async function awaitAccount(modal, {
     };
 
     try {
-      subscribe(modal.subscribeAccount?.(() => checkStrict(), 'eip155'));
+      subscribe(modal.subscribeAccount?.(() => { void checkWithFallback(); }, 'eip155'));
       subscribe(
         modal.subscribeState?.((state) => {
           if (settled) return;
@@ -568,21 +687,21 @@ export async function awaitAccount(modal, {
           if (state?.open === false && opened) {
             clearTimeout(closeTimer);
             closeTimer = setTimeout(() => {
-              const hit = read(false);
-              if (hit) finish(hit);
-              else {
+              void checkWithFallback().then((hit) => {
+                if (hit) return;
                 let extraAttempts = 0;
                 const maxExtra = Math.ceil((closeGraceMs * 2.5) / pollMs);
                 postClosePoll = setInterval(() => {
                   extraAttempts += 1;
-                  const h = read(false);
-                  if (h) finish(h);
-                  else if (extraAttempts >= maxExtra) {
-                    const lastResort = read(true);
-                    finish(lastResort);
-                  }
+                  void checkWithFallback().then((h) => {
+                    if (h) return;
+                    if (extraAttempts >= maxExtra) {
+                      const lastResort = readSync(true);
+                      finish(lastResort);
+                    }
+                  });
                 }, pollMs);
-              }
+              });
             }, closeGraceMs);
           }
         })
@@ -688,6 +807,28 @@ export async function openSurfaceDetail(modal) {
  */
 export async function open({ projectId, metadata } = {}) {
   const fresh = !hasMarker();
+  // On fresh, clear last-used chain that could be an unsupported custom chain
+  // (Sonic, Mantle, Berachain...) — that chain caused «action not valid» /
+  // «Action not allowed» because the frame's internal allow-list doesn't know it.
+  if (fresh) {
+    try {
+      const target = store();
+      if (target) {
+        // Keys the frame uses
+        target.removeItem('@appkit-wallet/LAST_USED_CHAIN_KEY');
+        target.removeItem('LAST_USED_CHAIN_KEY');
+        // Some SDK versions store it under this exact name
+        // Best-effort: also clear any key containing LAST_USED_CHAIN
+        for (let i = target.length - 1; i >= 0; i -= 1) {
+          const k = target.key(i) || '';
+          if (k.includes('LAST_USED_CHAIN')) {
+            try { target.removeItem(k); } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
   const modal = await getAppKit({ projectId, metadata, fresh });
   setMarker(true);
   reassertFeatures(modal);
@@ -723,6 +864,9 @@ export async function open({ projectId, metadata } = {}) {
   }, 1000);
   if (openError) {
     wcEvent('email_open_failed');
+    try {
+      wcEventDetail('email_open_err', { m: String(openError?.message || openError).slice(0, 120) });
+    } catch {}
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
   }
@@ -740,25 +884,49 @@ export async function open({ projectId, metadata } = {}) {
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
   }
-  // If provider is still null but address exists, let caller retry attach — don't fail yet
+
+  // ── Provider recovery: try every getter with retries, verify usability ──
+  const ensureProvider = async (acc) => {
+    if (acc.provider) {
+      try {
+        if (await isProviderUsable(acc.provider)) return acc.provider;
+      } catch {}
+    }
+    // Retry 8 times, 500ms apart, trying all getters
+    for (let i = 0; i < 8; i += 1) {
+      await sleep(500);
+      try {
+        const p = await tryGetProviderAsync(modal);
+        if (p && await isProviderUsable(p)) return p;
+      } catch {}
+    }
+    return acc.provider || null;
+  };
+
   if (!account.provider && account.address) {
-    // Wait a bit more for provider
-    await sleep(800);
+    wcEvent('email_retry_provider_after_account');
     try {
-      const p = modal.getWalletProvider?.()
-        || modal.getWalletProvider?.('eip155')
-        || modal.getProvider?.('eip155')
-        || (await authConnectorProvider());
+      const p = await ensureProvider(account);
       if (p) account.provider = p;
     } catch {}
   }
-  if (!account.provider) {
-    // Last chance: the auth connector's own frame provider (see its doc comment)
+
+  if (account.provider) {
+    // One more usability check before declaring success
     try {
-      const p = await authConnectorProvider();
-      if (p) account.provider = p;
-    } catch { /* reported below */ }
+      const usable = await isProviderUsable(account.provider);
+      if (!usable) {
+        const p = await ensureProvider(account);
+        if (p) account.provider = p;
+        else {
+          // Provider exists but not usable yet — keep it, but mark as pending
+          // The fallback attach in WalletContext will still show connected
+          wcEvent('email_provider_not_usable_yet');
+        }
+      }
+    } catch {}
   }
+
   if (!account.provider) {
     // Still no provider — keep marker, but report pending so next cold start retries
     wcEvent('email_connected_no_provider');
@@ -788,15 +956,39 @@ export async function restore({ projectId, metadata, timeoutMs = EMAIL_RESTORE_W
     wcEvent(cleared ? 'email_restore_none' : 'email_restore_pending');
     return { ok: false, code: cleared ? 'NO_SESSION' : 'PENDING' };
   }
-  /* Same lag as open(): the address can beat `providers['eip155']` onto the
-     screen by seconds on a slow WebView. The auth connector's frame provider is
-     the same object either store would hand back, so a restore that has an
-     account but no store entry is still a usable wallet — ask the connector
-     before declaring the attach impossible. */
-  if (account && !account.provider && account.address) {
+  // Ensure provider even if account has one that is not yet usable
+  if (account && account.address) {
     try {
-      const p = await authConnectorProvider();
-      if (p) account.provider = p;
+      // Try to get a usable provider if current one is missing or not usable
+      let needProvider = !account.provider;
+      if (!needProvider) {
+        try {
+          const usable = await isProviderUsable(account.provider);
+          needProvider = !usable;
+        } catch { needProvider = true; }
+      }
+      if (needProvider) {
+        // Try async getter with retries (shorter for restore)
+        for (let i = 0; i < 4; i += 1) {
+          try {
+            const p = await tryGetProviderAsync(modal);
+            if (p) {
+              if (await isProviderUsable(p)) {
+                account.provider = p;
+                break;
+              }
+            }
+          } catch {}
+          await sleep(400);
+        }
+        // Final fallback: auth connector directly
+        if (!account.provider) {
+          try {
+            const p = await authConnectorProvider();
+            if (p) account.provider = p;
+          } catch {}
+        }
+      }
     } catch { /* attach will report the miss */ }
   }
   wcEvent('email_session_restored');
