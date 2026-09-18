@@ -73,6 +73,9 @@
     "pointsEarned": "Poin didapat",
     "walletSessionRestored": "Sesi dompet dipulihkan",
     "walletSessionExpired": "Sesi dompet berakhir",
+    "emailSwitchUnsupported": "Bingkai aman dompet email tidak melayani jaringan ini, jadi penandatanganan tetap di jaringan saat ini. Anda tetap bisa bertukar di jaringan terpilih lewat jalur lintas-rantai — jaringan tanda tangan tidak harus sama dengan jaringan tukar.",
+    "emailSwitchReconnect": "Dompet email tidak aktif di halaman ini. Hubungkan kembali dengan email Anda untuk melanjutkan.",
+    "emailSwitchFailed": "Gagal mengganti jaringan dompet email. Coba lagi.",
     "refreshFailed": "Penyegaran gagal — coba lagi"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "Jangan tutup layar ini.",
     "success": "Tukar berhasil",
     "notConnected": "Dompet belum terhubung",
+    "emailChainSignOnly": "Dompet email tetap di jaringan tanda tangannya — bingkai aman tidak melayani jaringan ini. Anda tetap bisa bertukar di jaringan {{chain}} lewat jalur lintas-rantai.",
+    "emailChainSwitchFailed": "Dompet email tidak dapat dipindahkan ke jaringan {{chain}}. Hubungkan kembali dompet email Anda.",
     "insufficient": "Saldo tidak cukup",
     "flip": "Tukar kedua token",
     "searchToken": "Cari nama, simbol, atau tempel alamat kontrak…",

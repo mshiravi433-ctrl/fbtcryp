@@ -72,9 +72,11 @@ import {
   emailOptions,
   isEmailFrameChain,
   openSurfaceDetail,
+  probeSigning,
   rearmSdkLoginMarker,
   rollback as rollbackEmailMarker,
   sdkLoginMarkerPresent,
+  sdkSessionFacts,
   switchEmbeddedNetwork
 } from '../src/lib/wc/embedded.js';
 import { assertEmailNetwork } from '../src/lib/wc/appkit.js';
@@ -1437,6 +1439,213 @@ export default async function run() {
       /if \(mode === 'email'\)[\s\S]{0,600}switchEmbeddedNetwork\(targetId\)/.test(ctxSource));
   }
 
+  /* ══════════════════ 15d. the login that arrives late (2026-09-18, Telegram
+     Android WebView) ═══════════════════════════════════════════════════════
+     The report: the OTP finished AFTER the 30s wait gave up (`email_wait_timeout`
+     30.2s after the open, then a healthy frame session in the final storage —
+     sdkLoginMarker, connection_status 'connected', AUTH record, authAccounts 2).
+     From that moment on nothing in the app knew a session was owed: the marker
+     was cleared, the app showed «not connected», signing and switching did not
+     exist, and the next cold start's orphan hygiene would have PURGED the live
+     session's keys (a silent logout). The locks:
+
+       • `sdkSessionFacts()` — one reader for the SDK's own witnesses
+         (login marker / 'connected' status / AUTH record), shared by every
+         gate so they cannot disagree about what «a session exists» means;
+       • `classifyEmailMarker` weighs those witnesses and the OPEN MODAL
+         (a login in progress) before calling a claim stale, and a stale
+         verdict now costs one bounded 2s re-measurement — never more, never
+         less evidence;
+       • `rollback()` releases the marker only on a definitive no (no
+         in-memory connection, modal closed, no SDK witness);
+       • `probeSigning()` — «متصل» means «can sign»: eth_accounts + one real
+         personal_sign, bounded, sanitized;
+       • `awaitAccount` is event-driven: an account that arrives via the SDK's
+         own subscription is seen at once, not on the next poll tick. */
+  {
+    const fakeStore = (backing = new Map()) => ({
+      backing,
+      get length() { return backing.size; },
+      key: (i) => [...backing.keys()][i] ?? null,
+      getItem: (k) => (backing.has(k) ? backing.get(k) : null),
+      setItem: (k, v) => backing.set(k, String(v)),
+      removeItem: (k) => backing.delete(k)
+    });
+    const { ChainController, ConnectionController, ModalController } = await import('@reown/appkit-controllers');
+    ConnectionController.setConnections([], 'eip155');
+    ChainController.state.activeCaipAddress = undefined;
+
+    /* ── the four witnesses, one reader ── */
+    const writes = [];
+    const witnessBacking = new Map();
+    const spy = {
+      length: 0,
+      key: () => null,
+      getItem: (k) => (witnessBacking.has(k) ? witnessBacking.get(k) : null),
+      setItem: (k, v) => { writes.push(`set:${k}`); witnessBacking.set(k, String(v)); },
+      removeItem: (k) => { writes.push(`rm:${k}`); witnessBacking.delete(k); }
+    };
+    t('empty storage is no evidence',
+      (() => {
+        const f = sdkSessionFacts(spy);
+        return f.anyEvidence === false && f.loginMarker === false
+          && f.statusConnected === false && f.authStored === false
+          && f.authAccounts === 0;
+      })());
+    t('the reader never writes (it can gate a decision)', writes.length === 0);
+    witnessBacking.set('@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true');
+    t('the frame login marker is evidence',
+      sdkSessionFacts(spy).loginMarker === true && sdkSessionFacts(spy).anyEvidence === true);
+    witnessBacking.delete('@appkit-wallet/EMAIL_LOGIN_USED_KEY');
+    witnessBacking.set('@appkit/connection_status', 'connected');
+    t('a persisted «connected» status is evidence',
+      sdkSessionFacts(spy).statusConnected === true && sdkSessionFacts(spy).anyEvidence === true);
+    witnessBacking.set('@appkit/connections',
+      JSON.stringify({ eip155: [{ connectorId: 'AUTH', accounts: [{ address: '0xabc' }, { address: '0xdef' }] }] }));
+    t('an AUTH record is evidence, and its accounts are counted',
+      (() => {
+        const f = sdkSessionFacts(spy);
+        return f.authStored === true && f.authAccounts === 2 && f.anyEvidence === true;
+      })());
+    t('and it still never wrote anything', writes.length === 0);
+
+    /* ── the classifier weighs the witnesses, and the open modal ── */
+    const markerStore = fakeStore();
+    markerStore.setItem('fbt_email_social_connected', '1');
+    t('a standing marker with a «connected» status is OWED, not stale',
+      (await classifyEmailMarker({
+        storage: fakeStore(new Map([
+          ['fbt_email_social_connected', '1'],
+          ['@appkit/connection_status', 'connected']
+        ]))
+      })) === 'owed');
+    t('a standing marker with an AUTH record is OWED, not stale',
+      (await classifyEmailMarker({
+        storage: fakeStore(new Map([
+          ['fbt_email_social_connected', '1'],
+          ['@appkit/connections', JSON.stringify({ eip155: [{ connectorId: 'AUTH', accounts: [{ address: '0xabc' }] }] })]
+        ]))
+      })) === 'owed');
+    /* The report's hit: a visibility-triggered restore 22s into a first
+       attempt found the marker standing and the box still on screen — the
+       old classifier called it stale and purged four keys. An open modal is
+       an attempt in progress and must vote «owed». */
+    ModalController.state.open = true;
+    t('an open modal (a login in progress) is OWED — never stale under it',
+      (await classifyEmailMarker({ storage: markerStore })) === 'owed');
+    ModalController.state.open = false;
+    t('no witness, modal closed: the claim is stale after the one re-measurement',
+      (await classifyEmailMarker({ storage: markerStore })) === 'stale');
+
+    /* ── the marker falls only on a definitive no ── */
+    const backing = new Map([
+      ['fbt_email_social_connected', '1'],
+      ['@appkit/connection_status', 'connected']
+    ]);
+    const origLocal = globalThis.localStorage;
+    globalThis.localStorage = fakeStore(backing);
+    t('a rollback keeps the marker while the SDK holds a session',
+      (await rollbackEmailMarker(null)) === false && backing.has('fbt_email_social_connected'));
+    backing.delete('@appkit/connection_status');
+    ModalController.state.open = true;
+    const keptUnderModal = await rollbackEmailMarker(null);
+    ModalController.state.open = false;
+    t('a rollback keeps the marker under an open modal',
+      keptUnderModal === false && backing.has('fbt_email_social_connected'));
+    t('a rollback releases it on a definitive no',
+      (await rollbackEmailMarker(null)) === true && !backing.has('fbt_email_social_connected'));
+    if (origLocal === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = origLocal;
+
+    /* ── the signing probe: «متصل» means «can sign» ── */
+    const ADDR = '0x1111111111111111111111111111111111111111';
+    const SIG = `0x${'ab'.repeat(65)}`;
+    t('a provider that signs the probe message is signing-ready',
+      (await probeSigning({
+        request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : SIG)
+      }, ADDR)).ok === true);
+    {
+      const r = await probeSigning({
+        request: async ({ method }) => {
+          if (method === 'eth_accounts') return [ADDR];
+          throw new Error('Action not allowed');
+        }
+      }, ADDR);
+      t('a provider that throws «Action not allowed» is not (and the message is kept, sanitized)',
+        r.ok === false && /not allowed/i.test(r.error));
+    }
+    {
+      const r = await probeSigning({ request: async () => [] }, ADDR);
+      t('a provider with no accounts is not signing-ready',
+        r.ok === false && r.error === 'NO_ACCOUNTS');
+    }
+    {
+      const r = await probeSigning({ request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : SIG) },
+        '0x2222222222222222222222222222222222222222');
+      t('a provider that answers with a DIFFERENT wallet is not silently adopted',
+        r.ok === false && r.error === 'ACCOUNT_MISMATCH');
+    }
+    {
+      const t0 = Date.now();
+      const r = await probeSigning({
+        request: async ({ method }) => (method === 'eth_accounts' ? [ADDR] : new Promise(() => {}))
+      }, ADDR, { timeoutMs: 300 });
+      t('a provider that never answers is bounded, not a hang',
+        r.ok === false && r.error === 'PROBE_TIMEOUT' && Date.now() - t0 < 2_000);
+    }
+    t('no provider is a probe failure, not a crash',
+      (await probeSigning(null, ADDR)).ok === false && (await probeSigning(null, ADDR)).error === 'NO_PROVIDER');
+
+    /* ── the wait is event-driven: the SDK's own subscription, not a tick ── */
+    let lateConnected = false;
+    let accountCb = null;
+    const lateModal = {
+      getIsConnectedState: () => lateConnected,
+      getAddress: () => (lateConnected ? ADDR : undefined),
+      getWalletProvider: () => (lateConnected ? { request: async () => [ADDR] } : null),
+      subscribeAccount: (cb) => { accountCb = cb; return () => {}; },
+      subscribeState: () => () => {},
+      subscribeCaipNetworkChange: () => () => {}
+    };
+    const lateStarted = Date.now();
+    const lateTimer = setTimeout(() => { lateConnected = true; accountCb?.(); }, 300);
+    const late = await awaitAccount(lateModal, { timeoutMs: 4_000, pollMs: 2_000, closeGraceMs: 0 });
+    clearTimeout(lateTimer);
+    t('an account that arrives 300ms in is seen by the event, not the next poll (2s away)',
+      late?.address === ADDR && Date.now() - lateStarted < 1_000);
+
+    let stateCb = null;
+    const closedModal = {
+      getIsConnectedState: () => false,
+      getAddress: () => undefined,
+      getWalletProvider: () => null,
+      subscribeAccount: () => () => {},
+      subscribeState: (cb) => { stateCb = cb; return () => {}; },
+      subscribeCaipNetworkChange: () => () => {}
+    };
+    const closedPromise = awaitAccount(closedModal, { timeoutMs: 10_000, pollMs: 200, closeGraceMs: 100 });
+    stateCb?.({ open: true });
+    const closeTimer = setTimeout(() => stateCb?.({ open: false }), 60);
+    const closedAt = Date.now();
+    const closed = await closedPromise;
+    clearTimeout(closeTimer);
+    t('a dismissed modal without an account resolves null, bounded by the grace (not the 10s backstop)',
+      closed === null && Date.now() - closedAt < 3_000);
+
+    /* ── wiring: the open() wait is the hard cap, and the claim is re-armed ── */
+    const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
+    t('the open wait is event-driven under the five-minute hard cap, not a 30s one-shot',
+      /timeoutMs: TIMEOUT\.connectHardCap/.test(embeddedSrc)
+        && /closeGraceMs: TIMEOUT\.emailLateGrace/.test(embeddedSrc));
+    t('a session the SDK still holds re-arms the claim BEFORE the clean-slate path',
+      /email_marker_reclaimed/.test(embeddedSrc)
+        && /if \(!hasMarker\(\)\) \{[\s\S]{0,220}sdkSessionFacts\(\)/.test(embeddedSrc));
+    t('the wait subscribes to the account, the state, the chain change AND the controller address',
+      /subscribeAccount\?\.\(onArrival, 'eip155'\)/.test(embeddedSrc)
+        && /subscribeCaipNetworkChange\?\.\(onArrival\)/.test(embeddedSrc)
+        && /subscribeKey\?\.\('activeCaipAddress', onArrival\)/.test(embeddedSrc));
+  }
+
   /* ══════════════════ 16. wiring guards (source, not behaviour) ══════════ */
   {
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
@@ -1448,10 +1657,47 @@ export default async function run() {
       /from '\.\.\/lib\/wc'/.test(ctx));
     /* The stale-marker race fix (2026-09-18): an explicit email tap must
        AWAIT the bounded forget — a fire-and-forget one loses to the very
-       next read of the marker — and only when no frame session is owed. */
+       next read of the marker — and only when no frame session is owed.
+       The Telegram report widened «owed» from the SDK's login marker alone
+       to the SDK's full session evidence: a session whose login finished
+       after our wait gave up is owed even when that marker is gone. */
     t('an email tap awaits the bounded forget, and only when nothing is owed',
-      /modeRef\.current !== 'email' && !sdkLoginMarkerPresent\(\)/.test(ctx)
+      /modeRef\.current !== 'email' && !sdkSessionFacts\(\)\.anyEvidence/.test(ctx)
         && /await forgetEmbeddedWallet\(\)/.test(ctx));
+    /* The silent-logout lock: the orphan purge must ask the SDK's own
+       witnesses first, and keep the keys — named in the trace — when they
+       describe a session the user is owed. */
+    t('the orphan purge is locked against a live SDK session',
+      /email_orphan_kept/.test(ctx) && /orphan_storage_purged/.test(ctx));
+    /* The resume gate: a session can be owed when our marker is gone — the
+       email restore runs on the SDK evidence, and re-arms the marker. */
+    t('the email restore is gated on the SDK evidence, not the marker alone',
+      /hasEmailMarker\(\) \|\| sdkSessionFacts\(\)\.anyEvidence/.test(ctx)
+        && /email_late_attach/.test(ctx));
+    /* «متصل» means «can sign»: every email attach is probe-gated, and a
+       failed probe names itself (sanitized) in the trace instead of
+       discovering itself mid-swap. */
+    t('every email attach is gated on a real signing probe',
+      /probeSigning\(result\.provider, result\.address\)/.test(ctx)
+        && /probeSigning\(freshProvider, result\.address\)/.test(ctx)
+        && /probeSigning\(result\.provider, result\.address\)/.test(ctx)
+        && /email_sign_probe_failed/.test(ctx));
+    /* The refused switch: the exact code reaches the UI (context + the
+       Swap surface), and each refusal has a sentence — including the
+       «signing chain ≠ swap chain» one and the «reconnect email» one. */
+    t('a refused network switch reaches the UI with its exact code',
+      /setSwitchChainResult\(\{ code: result/.test(ctx)
+        && /emailSwitchUnsupported/.test(ctx)
+        && /emailSwitchReconnect/.test(ctx));
+    const swapSrc = strip(readFileSync('src/pages/Swap.jsx', 'utf8'));
+    t('the swap surface names the refused chain (and the way out)',
+      /wallet\.switchChainResult/.test(swapSrc)
+        && /emailChainSignOnly/.test(swapSrc)
+        && /emailChainSwitchFailed/.test(swapSrc));
+    /* The two new functions live in the one public surface. */
+    const indexSrc = readFileSync('src/lib/wc/index.js', 'utf8');
+    t('sdkSessionFacts and probeSigning are exported from the stack surface',
+      /sdkSessionFacts/.test(indexSrc) && /probeSigning/.test(indexSrc));
     t('no component reaches past the stack into a deleted module',
       !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)/.test(ctx + sheet + panel));
     t('the deleted modules are really gone', (() => {

@@ -73,6 +73,9 @@
     "pointsEarned": "Pontos ganhos",
     "walletSessionRestored": "Sessão da carteira restaurada",
     "walletSessionExpired": "A sessão da carteira terminou",
+    "emailSwitchUnsupported": "O quadro seguro da carteira de e-mail não atende esta rede; a assinatura fica na rede atual. Você ainda pode negociar na rede selecionada pela rota entre cadeias — a rede de assinatura não precisa ser a da negociação.",
+    "emailSwitchReconnect": "A carteira de e-mail não está ativa nesta página. Reconecte com seu e-mail para continuar.",
+    "emailSwitchFailed": "A troca de rede da carteira de e-mail não foi concluída. Tente novamente.",
     "refreshFailed": "Falha ao atualizar — tente novamente"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "Não feche este ecrã.",
     "success": "Troca concluída",
     "notConnected": "Carteira não ligada",
+    "emailChainSignOnly": "A carteira de e-mail permanece na rede de assinatura — o quadro seguro não atende esta rede. Você ainda pode trocar na rede {{chain}} pela rota entre cadeias.",
+    "emailChainSwitchFailed": "Não foi possível mover a carteira de e-mail para a rede {{chain}}. Reconecte sua carteira de e-mail.",
     "insufficient": "Saldo insuficiente",
     "flip": "Inverter os dois tokens",
     "searchToken": "Pesquise nome, símbolo ou cole um endereço…",

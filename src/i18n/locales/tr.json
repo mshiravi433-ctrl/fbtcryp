@@ -73,6 +73,9 @@
     "pointsEarned": "Puan kazanıldı",
     "walletSessionRestored": "Cüzdan oturumu geri yüklendi",
     "walletSessionExpired": "Cüzdan oturumu sona erdi",
+    "emailSwitchUnsupported": "E-posta cüzdanının güvenli çerçevesi bu ağa hizmet vermiyor; imza mevcut ağda kalır. Seçilen ağda işlem yapmaya zincirler arası yolla devam edebilirsiniz — imza ağı, işlem ağıyla aynı olmak zorunda değil.",
+    "emailSwitchReconnect": "E-posta cüzdanı bu sayfada aktif değil. Devam etmek için e-postanla yeniden bağlan.",
+    "emailSwitchFailed": "E-posta cüzdanı ağı değiştirilemedi. Tekrar deneyin.",
     "refreshFailed": "Yenileme başarısız — tekrar deneyin"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "Bu ekranı kapatmayın.",
     "success": "Takas tamamlandı",
     "notConnected": "Cüzdan bağlı değil",
+    "emailChainSignOnly": "E-posta cüzdanı imzalama ağında kalır — güvenli çerçeve bu ağa hizmet vermez. {{chain}} ağındaki takası zincirler arası yolla yapmaya devam edebilirsiniz.",
+    "emailChainSwitchFailed": "E-posta cüzdanı {{chain}} ağına taşınamadı. E-posta cüzdanını yeniden bağla.",
     "insufficient": "Yetersiz bakiye",
     "flip": "İki tokeni değiştir",
     "searchToken": "Ad, sembol arayın veya sözleşme adresi yapıştırın…",

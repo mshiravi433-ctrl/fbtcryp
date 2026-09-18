@@ -130,6 +130,7 @@ export {
   EMAIL_FRAME_CHAIN_IDS,
   EMAIL_MARKER_KEY,
   EMAIL_RESTORE_WINDOW_MS,
+  SIGN_PROBE_MESSAGE,
   SOCIAL_PROVIDERS,
   authConnectorProvider,
   awaitAccount,
@@ -145,10 +146,12 @@ export {
   lastProviderProbeError,
   open as openEmbeddedWallet,
   openSurfaceDetail,
+  probeSigning,
   rearmSdkLoginMarker,
   restore as restoreEmbeddedWallet,
   rollback as rollbackEmailMarker,
   sdkLoginMarkerPresent,
+  sdkSessionFacts,
   setMarker as setEmailMarker,
   switchEmbeddedNetwork
 } from './embedded.js';

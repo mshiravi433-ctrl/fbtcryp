@@ -12,9 +12,10 @@ import {
   forgetEmbeddedWallet,
   hasEmailMarker,
   openEmbeddedWallet,
+  probeSigning,
   purgeConnectionKeys,
   restoreEmbeddedWallet,
-  sdkLoginMarkerPresent,
+  sdkSessionFacts,
   setEmailMarker,
   storageFacts,
   wcEvent,
@@ -143,6 +144,17 @@ export function WalletProvider({ children }) {
   const [wcPairUri, setWcPairUri] = useState(null);
   const [wcModalActive, setWcModalActive] = useState(false);
   const [emailModalActive, setEmailModalActive] = useState(false);
+  /*
+   * The EXACT outcome of the last network switch, when it was not a success:
+   * `{ code: 'unsupported_chain' | 'no_instance' | 'not_in_list' | 'failed',
+   * targetId, chain }`. A switchChain that answers only `false` cannot tell
+   * «this chain is outside the frame's list — signing stays where it is»
+   * from «the email instance is dead — reconnect» (the 2026-09-18 report's
+   * «اجازهٔ تغییر شبکه نمیداد»), and the UI renders the matching sentence
+   * from this one object. Cleared by the next successful switch or by a
+   * disconnect.
+   */
+  const [switchChainResult, setSwitchChainResult] = useState(null);
   /** The measured relay state — see src/lib/wc/relay.js. */
   const [wcRelay, setWcRelay] = useState(null);
   const wcRelayBlocked = Boolean(wcRelay && ['WS_REFUSED', 'UNREACHABLE', 'TIMEOUT'].includes(wcRelay.verdict));
@@ -678,14 +690,17 @@ export function WalletProvider({ children }) {
        * TWO guards, because the marker alone cannot tell stale from owed:
        *   • mode 'email' — an email wallet IS attached; its marker describes
        *     a session the user is owed. Never forgotten on a re-tap.
-       *   • the SDK's own login marker still standing — the frame may hold a
-       *     live session one provider-poll away from attaching (the
-       *     EMAIL_PROVIDER_PENDING retry). Forgetting it would log the user
-       *     out from under themselves. When it is GONE (the reported state:
-       *     the frame answered «not connected» and deleted its record), our
-       *     marker is a claim nobody can honour — forget it.
+       *   • the SDK's storage still describes a session (login marker OR
+       *     'connected' status OR an AUTH record — `sdkSessionFacts()`).
+       *     The frame may hold a live session one provider-poll away from
+       *     attaching (the EMAIL_PROVIDER_PENDING retry), and after the
+       *     2026-09-18 Telegram report — where the login finished AFTER our
+       *     wait gave up — the SDK's keys are the only witness left that a
+       *     session is owed. Forgetting it would log the user out from under
+       *     themselves. When the storage says nothing is held, our marker is
+       *     a claim nobody can honour — forget it.
        */
-      if (modeRef.current !== 'email' && !sdkLoginMarkerPresent()) {
+      if (modeRef.current !== 'email' && !sdkSessionFacts().anyEvidence) {
         try {
           await forgetEmbeddedWallet();
         } catch { /* bounded best-effort: the fresh path still purges */ }
@@ -730,18 +745,38 @@ export function WalletProvider({ children }) {
         return false;
       }
 
-      // Normal path with provider — now with fallback attach that never throws away address
+      /*
+       * ─── «متصل» MEANS «CAN SIGN» (the «connected but it would not sign»
+       * half of the 2026-09-18 Telegram report) ────────────────────────────
+       * The attach used to declare success when an address appeared, and the
+       * fallback signer then claimed signing capability it had never
+       * verified — the app showed «connected» and the first personal_sign of
+       * a real swap died on the frame's «Action not allowed». So every attach
+       * attempt is GATED on a real signing probe (eth_accounts + one
+       * personal_sign of a fixed safe message — the frame's actual signing
+       * path). A provider that cannot sign is not attached as success: the
+       * state surfaces as EMAIL_PROVIDER_PENDING, which is «متصل ولی آمادهٔ
+       * امضا نیست» — with the retry button and the frame's own answer,
+       * sanitized, in the trace as `email_sign_probe_failed` with `m`. No
+       * fallback ever presents itself as signing-capable.
+       */
       let attached = false;
-      if (result.provider) {
-        attached = await attachExternal({
-          eip: result.provider,
-          address: result.address,
-          chainId: null,
-          mode: 'email'
-        });
+      if (result.provider && result.address) {
+        const probe = await probeSigning(result.provider, result.address);
+        if (probe.ok) {
+          attached = await attachExternal({
+            eip: result.provider,
+            address: result.address,
+            chainId: null,
+            mode: 'email'
+          });
+        } else {
+          wcEventDetail('email_sign_probe_failed', { m: probe.error });
+        }
       }
 
-      // Retry attach up to 3 times with backoff (provider may need a tick after OTP)
+      /* Retry attach up to 3 times with backoff (the provider may need a
+         tick after OTP) — and every retry is probe-gated the same way. */
       for (let attempt = 0; attempt < 3 && !attached && result.provider && result.address; attempt += 1) {
         await new Promise((r) => setTimeout(r, 800 + attempt * 400));
         try {
@@ -756,33 +791,17 @@ export function WalletProvider({ children }) {
               || (await authConnectorProvider())
               || freshProvider;
           } catch {}
-          attached = await attachExternal({
-            eip: freshProvider,
-            address: result.address,
-            chainId: null,
-            mode: 'email'
-          });
-        } catch {}
-      }
-
-      // Last resort: if we have address but provider still not attachable, try minimal attach
-      // (attachExternal's fallback already does this, but we also try direct)
-      if (!attached && result.address) {
-        try {
-          // Try to get any provider again
-          const { getAppKit, authConnectorProvider } = await import('../lib/wc/embedded.js');
-          const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
-          const p = modal.getWalletProvider?.()
-            || modal.getProvider?.('eip155')
-            || (await authConnectorProvider())
-            || result.provider;
-          if (p) {
+          if (!freshProvider) continue;
+          const probe = await probeSigning(freshProvider, result.address);
+          if (probe.ok) {
             attached = await attachExternal({
-              eip: p,
+              eip: freshProvider,
               address: result.address,
               chainId: null,
               mode: 'email'
             });
+          } else {
+            wcEventDetail('email_sign_probe_failed', { m: probe.error, n: attempt + 1 });
           }
         } catch {}
       }
@@ -826,10 +845,27 @@ export function WalletProvider({ children }) {
    */
   const restoreEmailSocial = useCallback(async () => {
     if (addressRef.current) return false;
-    if (!hasEmailMarker()) return false;
     if (emailRestoreRef.current) return false;
+    /*
+     * ─── THE GATE IS THE EVIDENCE, NOT OUR MARKER ALONE ────────────────────
+     * The 2026-09-18 Telegram report ended in exactly this shape: the login
+     * finished AFTER the wait gave up, `rollback()` cleared our marker, and
+     * from then on this gate (`!hasEmailMarker()`) said «nothing to restore»
+     * while the SDK's storage described a perfectly healthy session — no
+     * attach, no signer, and the next cold start's orphan hygiene purged the
+     * live session's keys (a silent logout). The SDK's own witnesses
+     * (`sdkSessionFacts()`) are the gate now: when our marker is gone but the
+     * storage says a session is held, the claim is RE-ARMED and the restore
+     * attaches it — `email_late_attach` in the trace.
+     */
+    const sdkFacts = sdkSessionFacts();
+    if (!hasEmailMarker() && !sdkFacts.anyEvidence) return false;
     emailRestoreRef.current = true;
     try {
+      if (!hasEmailMarker()) {
+        setEmailMarker(true);
+        wcEventDetail('email_late_attach', { ev: sdkFacts.anyEvidence });
+      }
       const result = await restoreEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
       /* A STALE marker was already forgotten by the stack (storage + shared
          controllers + instance). The marker check at the top of `resume()`
@@ -838,6 +874,14 @@ export function WalletProvider({ children }) {
       if (result.code === 'STALE_CLEARED') wcEvent('email_restore_stale');
       if (!result.ok) return false;
       if (addressRef.current) return false;
+      /* Same contract as the explicit tap: «متصل» means «can sign», so the
+         rehydrated session is probe-gated before it is declared attached. */
+      const probe = await probeSigning(result.provider, result.address);
+      if (!probe.ok) {
+        wcEventDetail('email_sign_probe_failed', { m: probe.error });
+        setError('EMAIL_PROVIDER_PENDING');
+        return false;
+      }
       return await attachExternal({
         eip: result.provider,
         address: result.address,
@@ -999,6 +1043,7 @@ export function WalletProvider({ children }) {
     setLocked(false);
     setError(null);
     setWcPairUri(null);
+    setSwitchChainResult(null);
   }, [detachInjectedListeners]);
 
   disconnectRef.current = disconnect;
@@ -1041,7 +1086,38 @@ export function WalletProvider({ children }) {
       if (mode === 'email') {
         const { switchEmbeddedNetwork } = await import('../lib/wc');
         const result = await switchEmbeddedNetwork(targetId);
-        return result === 'ok';
+        if (result === 'ok') {
+          /* The provider's chainChanged lands the event; set the chain now so
+             the UI never waits on a notification that may lag the frame. */
+          setChainId(targetId);
+          setSwitchChainResult(null);
+          return true;
+        }
+        /*
+         * ─── THE SILENT FALSE THAT HID A REAL LIMITATION ───────────────────
+         * `return result === 'ok'` swallowed the distinction between «the
+         * frame cannot serve this chain at all» (8 of this app's 16 chains
+         * are outside the frame's hard-coded list) and «the email instance
+         * is not alive on this page» — both read as `false` to every caller,
+         * so «اجازهٔ تغییر شبکه نمیداد» had no sentence to show the user.
+         * The exact code goes to the UI (`switchChainResult`) and a readable
+         * toast names the way out:
+         *   • unsupported_chain — the wallet is the SIGNER, not the route:
+         *     it stays on a chain the frame serves, and the swap may still
+         *     happen on the selected chain (the two do not have to match);
+         *   • no_instance / not_in_list — the email session is not alive here
+         *     at all, so the honest answer is «reconnect email», not silence;
+         *   • failed — the frame refused a chain it serves; retry is the move.
+         */
+        setSwitchChainResult({ code: result, targetId: Number(targetId), chain: cfg?.name || String(targetId) });
+        if (result === 'unsupported_chain') {
+          try { useAppStore.getState().notify('emailSwitchUnsupported', 'info', { chain: cfg?.name || String(targetId) }); } catch { /* toasts are optional */ }
+        } else if (result === 'no_instance' || result === 'not_in_list') {
+          try { useAppStore.getState().notify('emailSwitchReconnect', 'error'); } catch { /* toasts are optional */ }
+        } else {
+          try { useAppStore.getState().notify('emailSwitchFailed', 'error'); } catch { /* toasts are optional */ }
+        }
+        return false;
       }
       try {
         await eip.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hexId }] });
@@ -1097,8 +1173,26 @@ export function WalletProvider({ children }) {
     try {
       const facts = storageFacts();
       if (facts.orphanKeys && !hasEmailMarker() && !addressRef.current) {
-        const purged = purgeConnectionKeys();
-        if (purged) wcEvent('orphan_storage_purged', Number(purged));
+        /*
+         * ─── THE PURGE THAT USED TO BE A SILENT LOGOUT ─────────────────────
+         * The 2026-09-18 Telegram report sat in exactly this branch:
+         * `orphanKeys: true` with `ourMarker: false` — the marker had been
+         * cleared by a failed wait while the frame's session was alive, and
+         * the @appkit/* keys the report called «orphans» WERE the live
+         * session (connection_status 'connected', an AUTH record, the login
+         * marker). Purging them did not clean residue; it destroyed a session
+         * the user was owed, on every cold start after it. The purge now
+         * first asks the SDK's own witnesses: when they say a session is
+         * held, the keys are kept (`email_orphan_kept`) — and the restore
+         * gate below is what attaches that session instead.
+         */
+        const sdkFacts = sdkSessionFacts();
+        if (sdkFacts.anyEvidence) {
+          wcEvent('email_orphan_kept');
+        } else {
+          const purged = purgeConnectionKeys();
+          if (purged) wcEvent('orphan_storage_purged', Number(purged));
+        }
       }
     } catch { /* the check is advisory */ }
 
@@ -1128,7 +1222,12 @@ export function WalletProvider({ children }) {
     };
     const resume = (announce) => {
       if (addressRef.current) return;
-      if (hasEmailMarker()) resumeEmailThenWc(announce);
+      /* A session can be owed even when our marker is gone — the login that
+         finished after the wait gave up leaves only the SDK's own witnesses.
+         Gating the email restore on them (restoreEmailSocial re-arms the
+         marker and attaches) is what makes «بوت بعدی خودش وصل شود» true
+         instead of a WalletConnect probe over empty storage. */
+      if (hasEmailMarker() || sdkSessionFacts().anyEvidence) resumeEmailThenWc(announce);
       else resumeWc(announce);
     };
 
@@ -1136,7 +1235,7 @@ export function WalletProvider({ children }) {
        auto-attach is synchronous, so without this skip the slower resume would
        overwrite the vault. The stored session is left on disk either way. */
     if (!loadVault()) resume(false);
-    else if (hasEmailMarker()) wcEvent('restore_skipped_vault');
+    else if (hasEmailMarker() || sdkSessionFacts().anyEvidence) wcEvent('restore_skipped_vault');
 
     /*
      * COMING BACK TO A PAGE THAT WAS NEVER UNLOADED.
@@ -1238,6 +1337,9 @@ export function WalletProvider({ children }) {
          as every other transport, mode 'email'. */
       connectEmailSocial,
       emailModalActive,
+      /* The exact outcome of a refused network switch (see the state above):
+         the UI renders the matching sentence instead of «failed». */
+      switchChainResult,
       /* The pairing surface: the URI the SDK issued for the in-flight attempt
          (null when there is none), which surface owns the screen, and the
          control that ends the attempt. The sheet renders the QR and the wallet
@@ -1291,6 +1393,7 @@ export function WalletProvider({ children }) {
       connectWalletConnect,
       connectEmailSocial,
       emailModalActive,
+      switchChainResult,
       wcPairUri,
       wcModalActive,
       wcRelay,

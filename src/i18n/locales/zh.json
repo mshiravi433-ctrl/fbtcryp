@@ -73,6 +73,9 @@
     "pointsEarned": "获得积分",
     "walletSessionRestored": "钱包会话已恢复",
     "walletSessionExpired": "钱包会话已结束",
+    "emailSwitchUnsupported": "邮箱钱包的安全框架不提供此网络，因此签名保留在当前网络。你仍可通过跨链路线在所选网络交易 — 签名网络不必与交易网络相同。",
+    "emailSwitchReconnect": "邮箱钱包在此页面未激活。请使用邮箱重新连接以继续。",
+    "emailSwitchFailed": "切换邮箱钱包网络未成功。请重试。",
     "refreshFailed": "刷新失败 — 请重试"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "请勿关闭此页面。",
     "success": "兑换成功",
     "notConnected": "钱包未连接",
+    "emailChainSignOnly": "邮箱钱包保留在其签名网络上 — 安全框架不提供此网络。你仍可通过跨链路线在 {{chain}} 网络交易。",
+    "emailChainSwitchFailed": "无法将邮箱钱包切换到 {{chain}} 网络。请重新连接邮箱钱包。",
     "insufficient": "余额不足",
     "flip": "交换两种代币",
     "searchToken": "搜索名称、代号或粘贴合约地址…",
