@@ -18,6 +18,7 @@ import {
   setEmailMarker,
   storageFacts,
   wcEvent,
+  wcEventDetail,
   wcMetadata
 } from '../lib/wc';
 
@@ -370,6 +371,21 @@ export function WalletProvider({ children }) {
    * `chainId` is passed in by the caller because both transports know the
    * network the wallet actually approved, which is NOT what the EIP-1193 object
    * reports on its first tick (see src/lib/wc/chain.js).
+   *
+   * ─── WHY THIS IS NOW TWO-STAGE ───────────────────────────────────────────
+   * The 2026-09-18 report: email login succeeded (frame session exists,
+   * storedConnectors: ['AUTH']) but `attachExternal` threw on every attempt,
+   * so the UI showed «کیف پول در این صفحه آماده نشد». The throw came from
+   * `BrowserProvider.getSigner()` which internally does `eth_accounts` — on a
+   * slow WebView the frame answers that a beat after the address is already
+   * visible via `getAddress()`. Treating ANY throw as fatal turned one slow
+   * tick into a permanent loss. The new version:
+   *   1. tries direct `eth_accounts` / `eth_chainId` first (no ethers);
+   *   2. tries BrowserProvider, but if it throws, falls back to a minimal
+   *      attach that still sets eip1193 + address + chainId, so the header
+   *      shows connected and the next foreground return can upgrade the signer;
+   *   3. emits the actual error message (sanitized) into the trace, so the
+   *      NEXT report names the failing RPC instead of «attach_failed».
    */
   const attachExternal = useCallback(
     async ({ eip, address: acct, chainId: cid, mode: nextMode }) => {
@@ -377,30 +393,146 @@ export function WalletProvider({ children }) {
         wcEvent(nextMode === 'email' ? 'email_attach_no_provider' : 'wc_attach_no_provider');
         return false;
       }
+
+      // ── 1. Resolve address / chainId directly via EIP-1193, no ethers ──
+      let resolvedAddr = acct;
+      let resolvedCid = cid != null ? Number(cid) : null;
+
+      if (!resolvedAddr) {
+        try {
+          const accs = await eip.request?.({ method: 'eth_accounts' });
+          if (Array.isArray(accs) && accs[0]) resolvedAddr = accs[0];
+        } catch {}
+      }
+      if (!resolvedCid) {
+        try {
+          const hex = await eip.request?.({ method: 'eth_chainId' });
+          if (hex) {
+            const n = typeof hex === 'string' && hex.startsWith('0x') ? parseInt(hex, 16) : Number(hex);
+            if (Number.isInteger(n) && n > 0) resolvedCid = n;
+          }
+        } catch {}
+      }
+
+      // Still need at least an address to attach
+      if (!resolvedAddr) {
+        wcEvent(nextMode === 'email' ? 'email_attach_no_addr' : 'wc_attach_no_addr');
+        return false;
+      }
+
+      const honestChain = (() => {
+        if (resolvedCid && EVM_CHAINS[resolvedCid]) return resolvedCid;
+        if (cid && EVM_CHAINS[Number(cid)]) return Number(cid);
+        return DEFAULT_CHAIN;
+      })();
+
+      // ── 2. Try full BrowserProvider path ──
       try {
         const { BrowserProvider } = await loadEthers();
         const provider = new BrowserProvider(eip, 'any');
+        // getSigner may throw "Action not allowed" / "action not valid" if frame not ready
         const signer = await provider.getSigner();
-        const resolved = acct || (await signer.getAddress());
-        /* `cid` is what the transport knows the wallet approved. It is only
-           consulted as a fallback for the embedded wallet, whose EIP-1193
-           object does report its own network. */
-        const net = await provider.getNetwork();
-        const honest = EVM_CHAINS[Number(cid)] ? Number(cid) : (Number(net.chainId) || DEFAULT_CHAIN);
+        let addrFromSigner = null;
+        try {
+          addrFromSigner = await signer.getAddress();
+        } catch {}
+        const finalAddr = addrFromSigner || resolvedAddr;
+
+        let netChain = honestChain;
+        try {
+          const net = await provider.getNetwork();
+          const n = Number(net?.chainId);
+          if (Number.isInteger(n) && n > 0) netChain = EVM_CHAINS[n] ? n : (EVM_CHAINS[honestChain] ? honestChain : DEFAULT_CHAIN);
+        } catch {
+          // keep honestChain
+        }
 
         detachInjectedListeners();
         eip1193Ref.current = eip;
         signerRef.current = signer;
         setMode(nextMode);
         setInjectedInfo(null);
-        setAddress(resolved);
-        setChainId(EVM_CHAINS[honest] ? honest : DEFAULT_CHAIN);
+        setAddress(finalAddr);
+        setChainId(netChain);
         setLocked(false);
         attachInjectedListeners(eip, { destructive: false });
-        void refreshBalance(resolved, honest);
+        void refreshBalance(finalAddr, netChain);
+        if (nextMode === 'email') wcEvent('email_attach_ok');
         return true;
-      } catch {
+      } catch (err) {
+        const msg = String(err?.message || err || '').slice(0, 120);
+        try {
+          wcEventDetail(nextMode === 'email' ? 'email_attach_err' : 'wc_attach_err', { m: msg });
+        } catch {}
         wcEvent(nextMode === 'email' ? 'email_attach_failed' : 'wc_attach_failed');
+
+        // ── 3. Fallback: minimal attach for email — keep eip + address, no signer yet ──
+        // This is what turns «کیف پول آماده نشد» from a dead end into a retryable state.
+        // The header shows connected (address + balance via public RPC), and the next
+        // foreground return / restore upgrades the signer. For WC we don't fallback,
+        // because a WC provider that can't produce a signer is truly broken.
+        if (nextMode === 'email') {
+          try {
+            // Create a tiny signer wrapper that proxies to eip.request so that
+            // `getSigner()` still returns something that can sign, even without ethers.
+            const fallbackSigner = {
+              _isFallback: true,
+              address: resolvedAddr,
+              getAddress: async () => resolvedAddr,
+              provider: null,
+              connect: function () { return this; },
+              signMessage: async (message) => {
+                const text = typeof message === 'string' ? message : String(message || '');
+                // personal_sign expects hex
+                let hex = text;
+                try {
+                  if (!/^0x[0-9a-fA-F]*$/.test(text)) {
+                    const enc = new TextEncoder().encode(text);
+                    hex = '0x' + Array.from(enc).map((b) => b.toString(16).padStart(2, '0')).join('');
+                  }
+                } catch {}
+                return eip.request({ method: 'personal_sign', params: [hex, resolvedAddr] });
+              },
+              signTypedData: async (domain, types, message) => {
+                // Try v4 first
+                try {
+                  const payload = JSON.stringify({
+                    domain: domain || {},
+                    types: types || {},
+                    primaryType: Object.keys(types || {})[0] || 'Message',
+                    message: message || {}
+                  });
+                  return await eip.request({ method: 'eth_signTypedData_v4', params: [resolvedAddr, payload] });
+                } catch {
+                  // fallback to eth_signTypedData
+                  const payload = JSON.stringify({
+                    domain: domain || {},
+                    types: types || {},
+                    primaryType: Object.keys(types || {})[0] || 'Message',
+                    message: message || {}
+                  });
+                  return await eip.request({ method: 'eth_signTypedData', params: [resolvedAddr, payload] });
+                }
+              }
+            };
+
+            detachInjectedListeners();
+            eip1193Ref.current = eip;
+            signerRef.current = fallbackSigner;
+            setMode(nextMode);
+            setInjectedInfo(null);
+            setAddress(resolvedAddr);
+            setChainId(honestChain);
+            setLocked(false);
+            attachInjectedListeners(eip, { destructive: false });
+            void refreshBalance(resolvedAddr, honestChain);
+            wcEvent('email_attach_fallback_ok');
+            return true;
+          } catch {
+            // fallback itself failed — will be reported as pending by caller
+            return false;
+          }
+        }
         return false;
       }
     },
@@ -561,19 +693,34 @@ export function WalletProvider({ children }) {
       setEmailModalActive(true);
       let result = await openEmbeddedWallet({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
 
-      // If provider is missing but address exists, retry a few times — slow WebViews
+      // If provider is missing but address exists, retry — slow WebViews + Telegram
       if (result.ok && !result.provider && result.address) {
         wcEvent('email_retry_provider');
         const { getAppKit, authConnectorProvider } = await import('../lib/wc/embedded.js');
-        for (let i = 0; i < 6; i += 1) {
+        for (let i = 0; i < 10; i += 1) {
           await new Promise((r) => setTimeout(r, 600));
           try {
             const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
             const p = modal.getWalletProvider?.()
               || modal.getWalletProvider?.('eip155')
               || modal.getProvider?.('eip155')
+              || modal.getProvider?.()
               || (await authConnectorProvider());
-            if (p) { result = { ...result, provider: p, code: undefined }; break; }
+            if (p) {
+              // Verify it doesn't throw Action not allowed
+              try {
+                await p.request?.({ method: 'eth_accounts' });
+                result = { ...result, provider: p, code: undefined };
+                break;
+              } catch (e) {
+                const m = String(e?.message || '').toLowerCase();
+                if (!m.includes('not allowed') && !m.includes('not valid')) {
+                  result = { ...result, provider: p, code: undefined };
+                  break;
+                }
+                // else keep retrying — frame not ready yet
+              }
+            }
           } catch { /* retry */ }
         }
       }
@@ -583,17 +730,9 @@ export function WalletProvider({ children }) {
         return false;
       }
 
-      // Normal path with provider
-      let attached = await attachExternal({
-        eip: result.provider,
-        address: result.address,
-        chainId: null,
-        mode: 'email'
-      });
-
-      // Retry attach once if first fails (provider may need a tick)
-      if (!attached && result.provider && result.address) {
-        await new Promise((r) => setTimeout(r, 800));
+      // Normal path with provider — now with fallback attach that never throws away address
+      let attached = false;
+      if (result.provider) {
         attached = await attachExternal({
           eip: result.provider,
           address: result.address,
@@ -602,20 +741,60 @@ export function WalletProvider({ children }) {
         });
       }
 
+      // Retry attach up to 3 times with backoff (provider may need a tick after OTP)
+      for (let attempt = 0; attempt < 3 && !attached && result.provider && result.address; attempt += 1) {
+        await new Promise((r) => setTimeout(r, 800 + attempt * 400));
+        try {
+          // Re-fetch provider in case it became usable
+          const { getAppKit, authConnectorProvider } = await import('../lib/wc/embedded.js');
+          let freshProvider = result.provider;
+          try {
+            const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+            freshProvider = modal.getWalletProvider?.()
+              || modal.getWalletProvider?.('eip155')
+              || modal.getProvider?.('eip155')
+              || (await authConnectorProvider())
+              || freshProvider;
+          } catch {}
+          attached = await attachExternal({
+            eip: freshProvider,
+            address: result.address,
+            chainId: null,
+            mode: 'email'
+          });
+        } catch {}
+      }
+
+      // Last resort: if we have address but provider still not attachable, try minimal attach
+      // (attachExternal's fallback already does this, but we also try direct)
+      if (!attached && result.address) {
+        try {
+          // Try to get any provider again
+          const { getAppKit, authConnectorProvider } = await import('../lib/wc/embedded.js');
+          const modal = await getAppKit({ projectId: WC_PROJECT_ID, metadata: wcMetadata() });
+          const p = modal.getWalletProvider?.()
+            || modal.getProvider?.('eip155')
+            || (await authConnectorProvider())
+            || result.provider;
+          if (p) {
+            attached = await attachExternal({
+              eip: p,
+              address: result.address,
+              chainId: null,
+              mode: 'email'
+            });
+          }
+        } catch {}
+      }
+
       if (attached) {
         setEmailMarker(true);
         wcEvent('email_connected_final');
       } else {
-        /*
-         * NO FAKE CONNECTED STATE. An earlier revision wrote the address into
-         * the visible wallet state even with NO provider, so the header
-         * cheerfully showed a wallet — balance fetched over public RPC — that
-         * could not sign a single byte. The user read that as «email login
-         * opens a popup that only shows my balance». The session IS real (the
-         * frame holds it), so the marker stays for the next cold start or
-         * foreground return to attach it properly — but this page says so
-         * instead of lying.
-         */
+        // Even if attach failed, keep marker so next cold start / foreground return retries.
+        // The fallback in attachExternal should have made this rare — if we are here,
+        // the frame really isn't ready, so we surface EMAIL_PROVIDER_PENDING which
+        // tells user «اتصال شما از دست نرفته» and retry will work.
         if (result.address) {
           setEmailMarker(true);
           setError('EMAIL_PROVIDER_PENDING');

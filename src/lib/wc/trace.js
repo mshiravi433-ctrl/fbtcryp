@@ -72,6 +72,13 @@ export function wcEvent(event, extra) {
  *   against DETAIL_KEY; boolean and finite-number values pass through; string
  *   values must be SAFE_DETAIL_TOKENS or are coerced to 'other'; every other
  *   type is dropped. At most 8 facts survive.
+ *
+ * ─── EXTENSION FOR ERROR MESSAGES (2026-09-18) ───────────────────────────
+ * The email flow can fail with «Action not allowed» / «action not valid» from
+ * the secure iframe. That string is not a view name, so the old whitelist
+ * coerced it to 'other' and the next report could not name the failing RPC.
+ * Key 'm' (and 'msg'/'err') is now allowed to carry a short, sanitized free-form
+ * message (no wc: URI, no 0x address) so the diagnostic can say which RPC failed.
  */
 export function wcEventDetail(event, detail) {
   const entry = { at: Date.now(), event: String(event).slice(0, 48) };
@@ -84,8 +91,21 @@ export function wcEventDetail(event, detail) {
         safe[key] = value;
         kept += 1;
       } else if (typeof value === 'string') {
-        safe[key] = SAFE_DETAIL_TOKENS.has(value) ? value.slice(0, 32) : 'other';
-        kept += 1;
+        if (key === 'm' || key === 'msg' || key === 'err') {
+          // Sanitized free-form: strip anything that looks like a secret
+          let s = String(value).slice(0, 120);
+          // Remove potential wc: URIs, long hex addresses
+          s = s.replace(/wc:[^\s]+/gi, '[wc]');
+          s = s.replace(/0x[0-9a-fA-F]{20,}/g, '[addr]');
+          // Only keep if not empty
+          if (s.trim()) {
+            safe[key] = s;
+            kept += 1;
+          }
+        } else {
+          safe[key] = SAFE_DETAIL_TOKENS.has(value) ? value.slice(0, 32) : 'other';
+          kept += 1;
+        }
       }
     }
     if (kept > 0) entry.d = safe;
