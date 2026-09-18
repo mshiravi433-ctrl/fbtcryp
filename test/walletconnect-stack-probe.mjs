@@ -19,6 +19,7 @@ import {
   appKitCustomWallets,
   cancelSwitch,
   chainFromSession,
+  assertEmailRouting,
   classifyConnectError,
   collectWalletHealth,
   decideWalletOpen,
@@ -1100,6 +1101,94 @@ export default async function run() {
 
     /* Leave the shared page state clean for whatever runs next. */
     RouterController.state.view = 'Connect';
+  }
+
+  /* ══════════════════ 15b. the email tap that opened the wallet grid ══════
+     The second 2026-09-18 report: «the email option connects sometimes, and
+     when it doesn't, the WalletConnect wallet list opens and nothing attaches
+     to the app». Reproduced against the shipped singletons: the WalletConnect
+     surface boots its AppKit instance adapter-less, and its initialize() sets
+     ChainController.state.noAdapters = true — a flag the SDK has no code to
+     set back to false. ModalController.open() reads it BEFORE the requested
+     view: manualWCControl || (noAdapters && !caipAddress) → the wallet grid.
+     `assertEmailRouting()` is the email surface's claim on those flags: it
+     must clear exactly them, nothing else. */
+  {
+    const controllers = await import('@reown/appkit-controllers');
+    const { ChainController, OptionsController, ConnectionController } = controllers;
+
+    /* The residue the adapter-less WalletConnect surface leaves behind. */
+    ChainController.state.noAdapters = true;
+    OptionsController.state.manualWCControl = true;
+    OptionsController.state.enableWallets = true;
+
+    /* …next to state the assertion must NOT touch: a live address and a
+       connection the user is owed, plus a storage key a frame session holds.
+       (Plain node has no localStorage; a stand-in backs the «storage is not
+       touched» check for the duration of this section.) */
+    const backing = new Map([['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']]);
+    globalThis.localStorage = {
+      getItem: (k) => (backing.has(k) ? backing.get(k) : null),
+      setItem: (k, v) => backing.set(k, String(v)),
+      removeItem: (k) => backing.delete(k)
+    };
+
+    const owedAddress = 'eip155:56:0x1111111111111111111111111111111111111111';
+    ChainController.state.activeCaipAddress = owedAddress;
+    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [{ address: '0x1111111111111111111111111111111111111111' }] }], 'eip155');
+
+    t('a dirty routing state is reported as fixed, not as clean',
+      (await assertEmailRouting()) === 'fixed');
+    t('the one-way noAdapters latch is released (the email widget can render)',
+      ChainController.state.noAdapters === false);
+    t('the WC surface claim on open() routing is released',
+      OptionsController.state.manualWCControl === false);
+    t('the email popup does not inherit the wallet list',
+      OptionsController.state.enableWallets === false);
+    t('a live address is NOT touched by the routing assertion',
+      ChainController.state.activeCaipAddress === owedAddress);
+    t('the owed connection is NOT touched by the routing assertion',
+      (await readSharedConnectionFacts()).authConnection === true);
+    t('storage is NOT touched (a frame session is owed, not purged)',
+      backing.get('@appkit-wallet/EMAIL_LOGIN_USED_KEY') === 'true');
+
+    t('a second assertion on clean state is a no-op that says so',
+      (await assertEmailRouting()) === 'clean');
+    t('clean state stays clean after a no-op',
+      ChainController.state.noAdapters === false
+        && OptionsController.state.manualWCControl === false
+        && OptionsController.state.enableWallets === false);
+
+    /* The email surface's instance re-asserts the same flags through
+       updateOptions — the two paths must agree on the direction. */
+    const embedded = await import('../src/lib/wc/embedded.js');
+    t('the instance-level re-assert lands on the same flags, in the same direction',
+      embedded.reassertFeatures({
+        updateOptions: (patch) => {
+          /* the same Object.assign the SDK's setOptions performs */
+          Object.assign(OptionsController.state, patch);
+          return true;
+        }
+      }) === true
+        && OptionsController.state.manualWCControl === false
+        && OptionsController.state.enableWallets === false);
+
+    /* Wiring: the assertion runs on the email path — the fresh=false boot
+       (the one that skips the full reset on purpose) and again at open(),
+       because a late WC init can land between the two. */
+    const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
+    t('getAppKit asserts the routing before any other decision',
+      /const routing = await assertEmailRouting\(\);/.test(embeddedSrc));
+    t('the open re-asserts right before the modal is opened',
+      /await assertEmailRouting\(\);\s*\n\s*let openError = null;/.test(embeddedSrc));
+    t('a fixed routing is traced so the next report can say it happened',
+      /email_routing_fixed/.test(embeddedSrc));
+
+    /* Clean up the owed state for whatever runs next. */
+    ConnectionController.setConnections([], 'eip155');
+    ChainController.state.activeCaipAddress = undefined;
+    backing.delete('@appkit-wallet/EMAIL_LOGIN_USED_KEY');
+    delete globalThis.localStorage;
   }
 
   /* ══════════════════ 16. wiring guards (source, not behaviour) ══════════ */

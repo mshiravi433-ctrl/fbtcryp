@@ -106,6 +106,7 @@ export {
 
 export {
   applyWalletSurface,
+  assertEmailRouting,
   readSharedConnectionFacts,
   resetPairingState,
   resetSharedConnectionState,

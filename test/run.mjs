@@ -754,6 +754,21 @@ console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, stor
   report('WalletConnect stack', await runWcStack());
 }
 
+/* --------------------- 0b₂. email routing (the wallet-grid hijack) -------- */
+/* The 2026-09-18 «email tap opens the WalletConnect wallet list» report,
+   locked end to end against the REAL shipped singletons (jsdom + the actual
+   @reown/appkit 1.8.19): the adapter-less WC surface latches
+   ChainController.state.noAdapters, ModalController.open() routes on it
+   before the requested view, and assertEmailRouting() is what releases it —
+   on the email surface only, with the WC surface's own flags untouched. The
+   probe installs its own DOM (the runner's installDom runs later) and
+   restores the fetch boundary it stubs. */
+console.log('▸ probing email routing against the real AppKit singletons (noAdapters latch)…');
+{
+  const { default: runEmailRouting } = await import('./email-routing-probe.mjs');
+  report('email routing (the wallet-grid hijack)', await runEmailRouting());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered
