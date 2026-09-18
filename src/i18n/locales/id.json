@@ -73,9 +73,6 @@
     "pointsEarned": "Poin didapat",
     "walletSessionRestored": "Sesi dompet dipulihkan",
     "walletSessionExpired": "Sesi dompet berakhir",
-    "emailSwitchUnsupported": "Bingkai aman dompet email tidak melayani jaringan ini, jadi penandatanganan tetap di jaringan saat ini. Anda tetap bisa bertukar di jaringan terpilih lewat jalur lintas-rantai — jaringan tanda tangan tidak harus sama dengan jaringan tukar.",
-    "emailSwitchReconnect": "Dompet email tidak aktif di halaman ini. Hubungkan kembali dengan email Anda untuk melanjutkan.",
-    "emailSwitchFailed": "Gagal mengganti jaringan dompet email. Coba lagi.",
     "refreshFailed": "Penyegaran gagal — coba lagi"
   },
   "wallet": {
@@ -137,12 +134,6 @@
     "unlockLocalDesc": "Masukkan kata sandi untuk menandatangani",
     "backupTitle": "Cadangkan frasa pemulihan",
     "connectFailed": "Koneksi gagal atau ditolak.",
-    "emailProviderPending": "Login email berhasil, tetapi dompet tidak selesai dimuat di halaman ini. Coba lagi atau buka kembali aplikasi — koneksi Anda tidak hilang.",
-    "emailProviderPendingHint": "Koneksi terus mencoba di latar belakang — Anda bisa tetap di halaman ini.",
-    "emailSigningDenied": "Anda menolak konfirmasi tanda tangan, jadi dompet belum terhubung. Tidak ada yang akan diminta lagi secara otomatis.",
-    "emailSigningDeniedHint": "Tekan tombol di bawah untuk menandatangani lagi — hanya atas sentuhan Anda, tidak pernah otomatis.",
-    "healthUsage": "Batas penggunaan proyek (email)",
-    "healthUsageBlocked": "Proyek melebihi batas Reown — AppKit sendiri menonaktifkan kotak email. Upgrade paket di dasbor Reown.",
     "wcOriginBlocked": "WalletConnect menolak origin aplikasi ini. Di dasbor Reown, pastikan Allowed Domains berisi https://fbtswap.ir dan https://localhost, serta App IDs berisi ir.fbtswap.app.",
     "wcRelayUnreachable": "Tidak dapat menjangkau relay WalletConnect — sebagian jaringan dan operator memblokirnya. Jika memakai VPN, VPN harus mencakup seluruh perangkat, karena aplikasi dompet juga harus menjangkau relay, bukan hanya browser. Tanpa VPN, kamu juga bisa membuka situs ini di browser bawaan dompet (Trust atau MetaMask → tab Browser) — jalur itu sama sekali tidak butuh relay.",
     "wcExpired": "Permintaan koneksi kedaluwarsa sebelum dompet menyetujuinya. Buka daftar dompet dan coba lagi.",

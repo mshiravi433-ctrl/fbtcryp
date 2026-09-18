@@ -9,7 +9,7 @@
  * names the report it came from, because a stack this size accumulates guard
  * tests nobody can justify any more.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 import {
   MOBILE_WALLETS,
@@ -19,12 +19,9 @@ import {
   appKitCustomWallets,
   cancelSwitch,
   chainFromSession,
-  clearPhantomAuthConnection,
-  assertEmailRouting,
   classifyConnectError,
   collectWalletHealth,
   decideWalletOpen,
-  filterSocialsByPlatform,
   handOffChannel,
   handoffFacts,
   hasStoredSession,
@@ -35,9 +32,8 @@ import {
   isPairingUri,
   isRelayBlocked,
   isRelayError,
+  listEmbeddedWalletKeys,
   pauseBound,
-  readSharedConnectionFacts,
-  resetSharedConnectionState,
   sleep,
   linkBase,
   looksLikePairingUri,
@@ -45,12 +41,11 @@ import {
   openWalletLink,
   pairingUriFromLink,
   parseChainId,
-  platformFlags,
   purgeConnectionKeys,
+  purgeEmbeddedWalletKeys,
   repairPairingInLink,
   repairPairingUri,
   storageFacts,
-  summarizeProjectConfig,
   uriRoundTrips,
   walletByKey,
   walletForUrl,
@@ -61,29 +56,6 @@ import {
 } from '../src/lib/wc/index.js';
 import { createWcSession } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
-import {
-  EMAIL_FRAME_CHAIN_IDS,
-  SIGN_PROBE_MESSAGE,
-  SOCIAL_PROVIDERS,
-  authConnectorProvider,
-  awaitAccount,
-  buildNetworks,
-  classifyEmailMarker,
-  clearFrameChainResidue,
-  emailOptions,
-  embeddedAccountSnapshot,
-  isEmailFrameChain,
-  openSurfaceDetail,
-  probeSigning,
-  rearmSdkLoginMarker,
-  resetSigningState,
-  rollback as rollbackEmailMarker,
-  sdkLoginMarkerPresent,
-  sdkSessionFacts,
-  signingDeniedByUser,
-  switchEmbeddedNetwork
-} from '../src/lib/wc/embedded.js';
-import { assertEmailNetwork } from '../src/lib/wc/appkit.js';
 import {
   TRACE_STORAGE_KEY,
   reviveEntry,
@@ -106,6 +78,17 @@ const FULL_URI = `wc:${'a'.repeat(64)}@2?expiryTimestamp=1780000000&relay-protoc
    is the wss handshake and not the network. TIMEOUT.relayProbe exists to be
    larger than this number; the assertion in §6 keeps it that way. */
 const MEASURED_RELAY_OPEN_MS = 4_344;
+
+/** A Storage-shaped view over a Map — the boundary every purge probe fakes. */
+function fakeStorage(store) {
+  return {
+    get length() { return store.size; },
+    key: (i) => Array.from(store.keys())[i] ?? null,
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    removeItem: (k) => store.delete(k),
+    setItem: (k, v) => store.set(k, v)
+  };
+}
 
 export default async function run() {
   const rows = [];
@@ -479,18 +462,22 @@ export default async function run() {
     t('the SDK namespace is connection state', isConnectionKey('wc@2:client:0.3//session'));
     t('the deep-link choice is connection state', isConnectionKey('WALLETCONNECT_DEEPLINK_CHOICE'));
     t('a dynamic connector id is connection state', isConnectionKey('@appkit/abc123:connected_connector_id'));
-    t('the embedded wallet session is NOT (purging it logs a real user out)',
-      !isConnectionKey('@appkit-wallet/EMAIL_LOGIN_USED_KEY'));
+    /* The embedded (email/social) wallet was retired on 2026-09-18, and its
+       session key flipped side with it: it is no longer a live user's login but
+       debris that makes the SDK build a secure frame nobody can use. */
+    t('the retired embedded wallet session IS purged with the rest',
+      isConnectionKey('@appkit-wallet/EMAIL_LOGIN_USED_KEY'));
     t('an AppKit cache is NOT connection state', !isConnectionKey('@appkit/portfolio_cache'));
-    t('recent emails are NOT connection state', !isConnectionKey('@appkit/recent_emails'));
+    t('recent emails are NOT connection state (the boot purge names them itself)',
+      !isConnectionKey('@appkit/recent_emails'));
     t('an unrelated key is NOT connection state', !isConnectionKey('fbt:vault'));
 
     /* ── the «disconnect, then a phantom with a balance» keys (AppKit 1.8.19) ──
        The static six-key list predated these; a purge that missed them left the
-       SDK believing a logged-out email wallet was still attached, and the next
-       login opened as that phantom — address, balance, an input disabled by
-       `hasAnyConnection('AUTH')` — instead of the email form. */
-    t('@appkit/connections (disables the email input when left) is connection state',
+       SDK believing a logged-out wallet was still attached, and the next
+       connect opened as that phantom — address, balance, and a modal that
+       refuses to offer a login. */
+    t('@appkit/connections (the persisted connection list) is connection state',
       isConnectionKey('@appkit/connections'));
     t('@appkit/connected_namespaces is connection state', isConnectionKey('@appkit/connected_namespaces'));
     t('@appkit/active_namespace is connection state', isConnectionKey('@appkit/active_namespace'));
@@ -534,28 +521,29 @@ export default async function run() {
 
     t('a session on disk is found before any socket is opened', hasStoredSession(fake));
     t('the purge removes exactly the connection keys — including the 1.8.19 ones',
-      purgeConnectionKeys(fake) === 5);
-    t('the persisted AUTH connection is gone (the email input can render enabled)',
-      !store.has('@appkit/connections'));
+      purgeConnectionKeys(fake) === 6);
+    t('the persisted AUTH connection is gone', !store.has('@appkit/connections'));
     t('the phantom connected-status is gone', !store.has('@appkit/connection_status'));
-    t('the embedded wallet session survives the purge', store.has('@appkit-wallet/EMAIL_LOGIN_USED_KEY'));
+    t('the retired embedded wallet session goes with them',
+      !store.has('@appkit-wallet/EMAIL_LOGIN_USED_KEY'));
     t('the cache survives the purge', store.has('@appkit/portfolio_cache'));
     t('the version-check key survives the purge', store.has('@appkit/latest_version'));
     t('an empty store has no session', !hasStoredSession({ length: 0, key: () => null, getItem: () => null }));
 
-    const facts = storageFacts({
-      length: 2,
-      key: (i) => ['@appkit/recent_wallet', '@appkit-wallet/EMAIL_LOGIN_USED_KEY'][i],
-      getItem: (k) => (k === '@appkit-wallet/EMAIL_LOGIN_USED_KEY' ? 'true' : 'trust')
-    });
-    t('the SDK login marker is reported', facts.sdkLoginMarker === true);
+    const facts = storageFacts(fakeStorage(new Map([
+      ['@appkit/recent_wallet', 'trust'],
+      ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']
+    ])));
     t('AppKit keys without a session are reported orphan', facts.orphanKeys === true);
-    t('the embedded-wallet prefix is never counted as an AppKit connection key',
-      facts.appkitConnectionKeys === 1);
+    t('the embedded-wallet prefix is counted as legacy, not as an AppKit key',
+      facts.appkitConnectionKeys === 1 && facts.legacyEmbeddedKeys === 1);
+    t('the retired surface reports no marker rows any more',
+      facts.sdkLoginMarker === undefined && facts.ourMarker === undefined
+        && facts.emailMarkerStale === undefined);
 
     /* The two facts added with the 1.8.19 orphan fix: the report must name a
        stale 'connected' status and a persisted AUTH connection, because those
-       are the exact residues that broke the next email login. */
+       are the exact residues that broke the next login. */
     const phantomFacts = storageFacts({
       length: 2,
       key: (i) => ['@appkit/connection_status', '@appkit/connections'][i],
@@ -569,81 +557,107 @@ export default async function run() {
     t('the phantom status is counted as a connection key', phantomFacts.appkitConnectionKeys === 2);
   }
 
-  /* ══════════════════ 9. the embeddes wallet's contract ═══════════════════ */
+  /* ══════════════════ 9. the retired email/social surface ══════════════════ */
   {
-    const options = emailOptions({ projectId: 'pid', metadata: { name: 'x' } });
-    t('the email surface never offers wallet rows (they cannot connect there)',
-      options.enableWallets === false && options.features.emailShowWallets === false);
-    t('the email surface takes no other connection route',
-      options.enableInjected === false && options.enableCoinbase === false
-      && options.enableEIP6963 === false && options.enableWalletConnect === false);
-    t('the email surface offers email and socials',
-      options.features.email === true && options.features.socials.length > 0);
-    t('manualWCControl is never set (it would hijack open() to AllWallets)',
-      !('manualWCControl' in options));
-    t('our own registry leads the network list', options.networks[0].id === 56);
-    t('the auth connector exposes its frame provider (the lag-proof EIP-1193 fallback)',
-      typeof authConnectorProvider === 'function');
+    /*
+     * The embedded wallet (email OTP + social login) was REMOVED on 2026-09-18
+     * at the owner's request: «ورود با سوشال … داره به ورود با والت‌کانکت هم
+     * آسیب می‌زد». The mechanism behind that report is structural — the surface
+     * needed a SECOND `createAppKit()` instance, and both instances share
+     * AppKit's controllers singletons and the one `<w3m-modal>` element, so
+     * whichever booted last decided what the other rendered: an email tap
+     * opened the WalletConnect wallet grid (its rows need a `wcUri` only a
+     * pairing creates), and a WalletConnect cycle left `activeCaipAddress`
+     * describing a dead wallet.
+     *
+     * These locks are the removal itself. Each one names a way the surface
+     * could come back: a module, an instance, a row, a mode, a string, or the
+     * keys it left on a user's device.
+     */
+    /* Comments are stripped: the removal is documented in the very files that
+       must not DO it any more, and a doc comment naming `createAppKit()` is not
+       a second instance. */
+    const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const indexSrc = strip(readFileSync('src/lib/wc/index.js', 'utf8'));
+    const ctxSrc = readFileSync('src/context/WalletContext.jsx', 'utf8');
+    const sheetSrc = readFileSync('src/components/WalletConnectSheet.jsx', 'utf8');
 
-    /* A provider that answers "not ready" for a few ticks must still resolve —
-       the «email confirmed, we came back, no wallet» report. */
-    let ticks = 0;
-    const slowModal = {
-      getIsConnectedState: () => ticks >= 2,
-      getAddress: () => (ticks >= 2 ? '0xabc' : undefined),
-      getWalletProvider: () => (ticks >= 3 ? { request() {} } : null),
-      subscribeAccount: () => () => {},
-      subscribeState: () => () => {},
-      open: async () => {}
-    };
-    const ticker = setInterval(() => { ticks += 1; }, 20);
-    const account = await awaitAccount(slowModal, { timeoutMs: 2000, pollMs: 20, closeGraceMs: 0 });
-    clearInterval(ticker);
-    t('an account is only reported once the provider is real too', account?.address === '0xabc');
-    t('the provider is handed over with the address', Boolean(account?.provider));
+    t('the embedded-wallet module is gone from the stack', !existsSync('src/lib/wc/embedded.js'));
+    t('...and nothing in the stack imports it', (() => {
+      const files = readdirSync('src/lib/wc').filter((f) => f.endsWith('.js')).map((f) => `src/lib/wc/${f}`);
+      return files.every((f) => !/from '\.\/embedded\.js'|wc\/embedded/.test(readFileSync(f, 'utf8')));
+    })());
+    t('the public surface exports no embedded-wallet symbol',
+      !/embedded\.js|SOCIAL_PROVIDERS|emailOptions|probeSigning|sdkSessionFacts/.test(indexSrc));
 
-    t('a modal that never answers resolves null instead of hanging',
-      (await awaitAccount({ getIsConnectedState: () => false }, { timeoutMs: 60, pollMs: 20, closeGraceMs: 0 })) === null);
+    /* THE STRUCTURAL LOCK: one AppKit instance per page, and it is the SDK's.
+       A second `createAppKit()` is what made the two surfaces fight; nothing in
+       this app may create one any more. */
+    t('no source file creates its own AppKit instance', (() => {
+      const files = readdirSync('src/lib/wc').filter((f) => f.endsWith('.js')).map((f) => `src/lib/wc/${f}`);
+      return [...files, 'src/context/WalletContext.jsx', 'src/components/WalletConnectSheet.jsx']
+        .every((f) => !/createAppKit\s*\(/.test(strip(readFileSync(f, 'utf8'))));
+    })());
+    t('the WalletConnect surface still hard-disables auth wallets',
+      /features: \{ email: false, socials: false \}/.test(strip(readFileSync('src/lib/wc/appkit.js', 'utf8'))));
+    t('the email-only controller surgery went with the surface', (() => {
+      const appkit = readFileSync('src/lib/wc/appkit.js', 'utf8');
+      return !/assertEmailRouting|assertEmailNetwork|clearPhantomAuthConnection|resetSharedConnectionState/
+        .test(appkit);
+    })());
 
-    const store = new Map([['fbt_email_social_connected', '1']]);
-    const fake = {
-      getItem: (k) => (store.has(k) ? store.get(k) : null),
-      setItem: (k, v) => store.set(k, v),
-      removeItem: (k) => store.delete(k)
-    };
-    t('the SDK login marker is re-armed when ours stands and theirs is gone',
-      rearmSdkLoginMarker(fake) === 'rearmed');
-    t('re-arming twice reports present, not rearmed', rearmSdkLoginMarker(fake) === 'present');
-    t('without our marker nothing is written',
-      rearmSdkLoginMarker({ getItem: () => null, setItem() {} }) === 'not_marked');
+    t('the connect sheet offers no email or social row',
+      !/connectEmailSocial|emailSocial|EMAIL_PROVIDER_PENDING|EMAIL_SIGNING_DENIED/.test(sheetSrc));
+    t('the sheet withdraws for ONE modal only',
+      /open && !wallet\.wcModalActive\}/.test(sheetSrc) && !/emailModalActive/.test(sheetSrc));
+    t('the context has no email mode, no keeper and no restore',
+      !/connectEmailSocial|restoreEmailSocial|EmailAttachKeeper|emailModalActive|mode === 'email'/.test(ctxSrc));
+    t('the boot purge of the retired keys is wired', /purgeEmbeddedWalletKeys\(\)/.test(ctxSrc));
+    t('the wallet page and the security card label no email mode', (() => {
+      const wallet = readFileSync('src/pages/Wallet.jsx', 'utf8');
+      const card = readFileSync('src/components/SecurityCenterCard.jsx', 'utf8');
+      return !/case 'email'/.test(wallet) && !/mode === 'email'/.test(card);
+    })());
+    t('the locales carry no email/social login strings', (() => {
+      const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
+      const fa = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8'));
+      return [en, fa].every((l) => l.wallet.emailSocial === undefined
+        && l.wallet.emailSocialDesc === undefined
+        && l.wallet.mode.email === undefined
+        && l.wallet.healthSecureSite === undefined
+        && l.wallet.emailProviderPending === undefined);
+    })());
 
-    /* The pure read that gates the awaited forget in connectEmailSocial: our
-       marker says a login was ATTEMPTED, the SDK's says the frame still
-       HOLDS one. The 2026-09-18 report had ours standing and theirs deleted
-       — the exact state where the honest move is to forget, not to hope. */
-    const owedStore = new Map([
+    /* What the removal must NOT do is leave the old surface's machinery on a
+       returning user's device: `W3mFrameProvider` reads
+       `@appkit-wallet/EMAIL_LOGIN_USED_KEY` in its CONSTRUCTOR and creates the
+       secure.walletconnect.org iframe whether this page has a surface for it or
+       not. So the keys are named, listed and purged — and nothing else is. */
+    const legacyStore = new Map([
       ['fbt_email_social_connected', '1'],
-      ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']
+      ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true'],
+      ['@appkit/social_provider', 'google'],
+      ['@appkit/recent_emails', '["user@example.com"]'],
+      ['fbt:vault', '{"address":"0xabc"}'],
+      ['wc@2:client:0.3//session', '[{"topic":"x"}]'],
+      ['@appkit/portfolio_cache', '{}']
     ]);
-    t('a standing SDK marker is reported (a live frame session may be owed)',
-      sdkLoginMarkerPresent({
-        getItem: (k) => (owedStore.has(k) ? owedStore.get(k) : null)
-      }) === true);
-    t('the reported-state (ours standing, theirs deleted) is reported as not owed',
-      sdkLoginMarkerPresent({ getItem: (k) => (k === 'fbt_email_social_connected' ? '1' : null) }) === false);
-    t('the read never writes (unlike the re-arm, it can gate decisions)',
-      (() => {
-        const writes = [];
-        sdkLoginMarkerPresent({
-          getItem: () => null,
-          setItem: (k) => writes.push(k),
-          removeItem: (k) => writes.push(k)
-        });
-        return writes.length === 0;
-      })());
-    t('a rollback keeps the marker when the SDK still reports a session',
-      (await rollbackEmailMarker({ getIsConnectedState: () => true, getAddress: () => '0xabc' })) === false);
-    t('a rollback clears it only on a definitive no', (await rollbackEmailMarker(null)) === true);
+    const legacy = fakeStorage(legacyStore);
+    t('the retired keys are listed — and only they are',
+      listEmbeddedWalletKeys(legacy).sort().join(',') === [
+        '@appkit-wallet/EMAIL_LOGIN_USED_KEY',
+        '@appkit/recent_emails',
+        '@appkit/social_provider',
+        'fbt_email_social_connected'
+      ].sort().join(','));
+    t('the purge removes exactly those four', purgeEmbeddedWalletKeys(legacy) === 4);
+    t('the vault, the WalletConnect session and the cache survive it',
+      legacyStore.has('fbt:vault') && legacyStore.has('wc@2:client:0.3//session')
+        && legacyStore.has('@appkit/portfolio_cache'));
+    t('the purge is idempotent — a second boot reports nothing to do',
+      purgeEmbeddedWalletKeys(legacy) === 0 && listEmbeddedWalletKeys(legacy).length === 0);
+    t('a device that never used the surface reports zero',
+      listEmbeddedWalletKeys(fakeStorage(new Map([['fbt:vault', '{}']]))).length === 0);
   }
 
   /* ══════════════════ 10. the session object's contract ═══════════════════ */
@@ -712,120 +726,14 @@ export default async function run() {
       isOriginAllowed('https://evil.example', ['fbtswap.ir']) === false);
     t('no list means no answer, not a refusal', isOriginAllowed('https://fbtswap.ir', null) === null);
 
-    /* ─── what the project row means ─────────────────────────────────────────
-       The report that made this section grow: Samsung Internet 30 / Android 10
-       answered `{ id:'social_login', isEnabled:true, config:null }` and the
-       panel printed «email=false socials=0». `ConfigUtil.processFeature()` says
-       the opposite — `if (apiConfig?.config === null) return
-       processFallbackFeature(…)`, i.e. AppKit never looks at the dashboard and
-       uses the `features` we hand `createAppKit()`. Each path is held here. */
-    const ANDROID = {
-      userAgent: 'Mozilla/5.0 (Linux; Android 10; SM-A505F) AppleWebKit/537.36'
-        + ' (KHTML, like Gecko) SamsungBrowser/30.0 Chrome/122.0.0.0 Mobile Safari/537.36',
-      pointerCoarse: true
-    };
-    const DESKTOP = {
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        + ' (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
-    };
-    const listPayload = (config, isEnabled = true) => ({
-      features: [{ id: 'social_login', isEnabled, config }]
-    });
-    /* The settings themselves are the reference for every "local" answer. */
-    const asked = emailOptions({ projectId: 'pid', metadata: null }).features;
-
-    const arrayPayload = listPayload(['email', 'google', 'x']);
-    const fromArray = summarizeProjectConfig(arrayPayload, DESKTOP);
-    t('the array payload shape is read the way the SDK reads it', fromArray.shape === 'array');
-    t('a real list is the dashboard answer',
-      fromArray.source === 'dashboard' && fromArray.configKind === 'list');
-    t('email is on when the list carries it', fromArray.email === true);
-    t('socials are the list minus email',
-      fromArray.socials.length === 2 && !fromArray.socials.includes('email'));
-    t('the raw list is reported as it arrived',
-      fromArray.config.length === 3 && fromArray.config[0] === 'email');
-    t('a list the dashboard switched off is off — not our local list', (() => {
-      const off = summarizeProjectConfig(listPayload(['email', 'google'], false), DESKTOP);
-      return off.source === 'dashboard' && off.email === false && off.socials.length === 0;
-    })());
-    t('an empty dashboard list is off, not the seven local providers', (() => {
-      const empty = summarizeProjectConfig(listPayload([]), DESKTOP);
-      return empty.source === 'dashboard' && empty.email === false && empty.socials.length === 0;
-    })());
-
-    /* config === null → `processFallbackFeature()` → OUR features. */
-    const withheld = summarizeProjectConfig(listPayload(null), DESKTOP);
-    t('a withheld list is null, never an empty one',
-      withheld.config === null && withheld.configKind === 'null');
-    t('a withheld list is not the dashboard answer', withheld.source === 'local');
-    t('a withheld list leaves email on — isEnabled is never read',
-      withheld.email === true && withheld.email === (asked.email === true));
-    t('a withheld list falls back to our own provider list',
-      withheld.socials.length === SOCIAL_PROVIDERS.length
-        && withheld.socials.every((name) => SOCIAL_PROVIDERS.includes(name)));
-    t('the reported source survives an isEnabled:false answer',
-      summarizeProjectConfig(listPayload(null, false), DESKTOP).email === true);
-
-    /* config ABSENT → `if (!apiConfig?.config) return false;` — the opposite. */
-    const absent = summarizeProjectConfig({ features: [{ id: 'social_login', isEnabled: true }] }, DESKTOP);
-    t('a missing config field is absent, not null',
-      absent.configKind === 'absent' && absent.config === null);
-    t('a missing config field is OFF — the opposite of null',
-      absent.source === 'off' && absent.email === false && absent.socials.length === 0);
-    t('no social_login entry at all is OFF too',
-      summarizeProjectConfig({ features: [] }, DESKTOP).source === 'off');
-    t('a config that is neither a list nor null is OFF, not a guess',
-      summarizeProjectConfig(listPayload('email,google'), DESKTOP).source === 'off');
-
-    /* Shapes the SDK's `apiProjectConfig?.find(…)` cannot read. */
-    t('an unknown shape says so instead of claiming email is off',
-      summarizeProjectConfig({}).shape === 'none');
-    t('no features array means the dashboard is never consulted', (() => {
-      const none = summarizeProjectConfig({}, DESKTOP);
-      return none.source === 'local' && none.email === true
-        && none.socials.length === SOCIAL_PROVIDERS.length;
-    })());
-    t('an object payload is read as AppKit reading its own defaults, not as off', (() => {
-      const object = summarizeProjectConfig(
-        { features: { social_login: { isEnabled: true, config: ['email'] } } }, DESKTOP);
-      return object.shape === 'object' && object.source === 'default' && object.email === true;
-    })());
-
-    /* The local value is READ from the settings, so the panel cannot drift. */
-    t('the requested row is the object we actually hand createAppKit',
-      withheld.requested.email === (asked.email === true)
-        && withheld.requested.socials.join(',') === [...asked.socials].join(','));
-
-    /* ─── the platform filter is part of the number ───────────────────────── */
-    t('a coarse pointer counts as mobile (CoreHelperUtil.isMobile)',
-      platformFlags({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', pointerCoarse: true }).mobile === true);
-    t('Chrome on macOS is NOT mac for the SDK — its UA says Safari',
-      platformFlags(DESKTOP).mac === false && platformFlags(DESKTOP).mobile === false);
-    t('a macOS UA without Safari is mac, without being mobile',
-      platformFlags({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' }).mac === true);
-
-    const phone = summarizeProjectConfig(listPayload(null), ANDROID);
-    t('the phone that sent the report keeps email on', phone.email === true);
-    t('a mobile browser never renders facebook',
-      phone.socials.length === SOCIAL_PROVIDERS.length - 1 && !phone.socials.includes('facebook'));
-    t('Telegram on Android also drops x', (() => {
-      const list = summarizeProjectConfig(listPayload(null), { ...ANDROID, telegram: true }).socials;
-      return !list.includes('facebook') && !list.includes('x') && list.includes('google');
-    })());
-    t('Telegram on iOS drops google', (() => {
-      const list = filterSocialsByPlatform([...SOCIAL_PROVIDERS], platformFlags({
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-        telegram: true
-      }));
-      return !list.includes('google') && list.includes('facebook') === false && list.includes('x');
-    })());
-    t('Telegram on macOS drops x', !filterSocialsByPlatform(
-      [...SOCIAL_PROVIDERS], platformFlags({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15', telegram: true })
-    ).includes('x'));
-    t('a desktop browser keeps every provider we ask for',
-      summarizeProjectConfig(listPayload(null), DESKTOP).socials.length === SOCIAL_PROVIDERS.length);
-    t('the filter leaves an empty list empty', filterSocialsByPlatform([], platformFlags(ANDROID)).length === 0);
-
+    /* ─── what the project row means now ────────────────────────────────────
+       ONE question: does the dashboard know this project at all. The feature
+       summary that used to sit under it (email on/off, and which social
+       providers AppKit's platform filter would hide on this device) described a
+       login this app no longer offers, and `summarizeProjectConfig()` /
+       `filterSocialsByPlatform()` / `platformFlags()` went with it — a
+       diagnostic that prints «socials=7» for an app with no social login sends
+       the next support thread hunting a switch nobody can flip. */
     const openSocket = class {
       constructor() { setTimeout(() => this.onopen?.(), 3); }
       close() {}
@@ -833,23 +741,29 @@ export default async function run() {
     const report = await collectWalletHealth({
       projectId: 'pid',
       origin: 'https://fbtswap.ir',
-      storage: { length: 0, key: () => null, getItem: () => null },
+      storage: fakeStorage(new Map()),
       fetchImpl: async (url) => (String(url).includes('/origins')
         ? { ok: true, status: 200, json: async () => ({ allowedOrigins: ['fbtswap.ir'] }) }
-        : { ok: true, status: 200, json: async () => arrayPayload }),
+        : { ok: true, status: 200, json: async () => ({ features: [] }) }),
       WebSocketImpl: openSocket,
       timeoutMs: 300,
       trace: () => []
     });
     t('the report carries the project answer', report.projectConfig?.ok === true);
-    t('the report names where the project number came from',
-      report.projectConfig?.features?.source === 'dashboard'
-        && report.projectConfig?.features?.email === true);
     t('the report carries the allowlist verdict', report.allowedOrigins?.originAllowed === true);
     t('the report measures every relay host', Array.isArray(report.relays) && report.relays.length === 2);
     t('the report names a relay verdict', typeof report.relayVerdict === 'string');
-    t('the report checks the embedded-wallet frame', Boolean(report.secureSite));
+    t('the report names the hand-off channel', Boolean(report.handoff?.channel));
     t('the report carries storage facts', Boolean(report.storage));
+    /* The three probes that only existed for the embedded wallet: the secure
+       frame, the usage limits that gate AppKit's email input, and the feature
+       summary of a login this app does not offer. */
+    t('the report no longer probes the retired surface',
+      report.secureSite === undefined && report.usage === undefined
+        && report.projectConfig?.features === undefined);
+    t('the report still carries the in-memory controller facts',
+      report.shared && typeof report.shared.isConnected === 'boolean'
+        && report.shared.authConnection === undefined);
     t('the report never throws on a dead network', (await collectWalletHealth({
       projectId: 'pid',
       fetchImpl: async () => { throw new Error('offline'); },
@@ -1066,882 +980,50 @@ export default async function run() {
       handoffFacts({ navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' }, FBTWalletLink: { openWallet: () => true }, Capacitor: { isNativePlatform: () => true } }).javaBridge === true);
   }
 
-  /* ══════════════════ 15. the wc→email hand-over: shared singletons ═══════
-     The 2026-09-18 report: after a WalletConnect connect→disconnect cycle,
-     tapping «email & social» opened the ACCOUNT view of the dead wallet —
-     address, balance, no email form — while every STORAGE fact in the report
-     read clean. What survived was the shared controllers' IN-MEMORY state:
-     the WalletConnect surface's modal is created by ethereum-provider with
-     ZERO adapters, and the SDK's only code that clears ChainController on a
-     wallet's death is an ADAPTER listener — one that never exists for an
-     adapter-less instance. `getIsConnectedState()` is literally
-     Boolean(ChainController.state.activeCaipAddress), so the residue answers
-     «connected» to every question the email surface asks. */
-  {
-    const controllers = await import('@reown/appkit-controllers');
-    const { ChainController, ConnectorController, ConnectionController, RouterController } = controllers;
-
-    /* Build the residue a WalletConnect cycle leaves behind — never a real
-       address, this is a probe. */
-    ChainController.state.activeCaipAddress = 'eip155:56:0xdeadbeefdeadbeefdeadbeefdeadbeef';
-    ChainController.state.noAdapters = true;
-    ConnectorController.setConnectorId('walletConnect', 'eip155');
-    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [] }], 'eip155');
-    RouterController.state.view = 'Account';
-
-    const factsDirty = await readSharedConnectionFacts();
-    t('the shared facts see the residue the storage report cannot',
-      factsDirty.available === true && factsDirty.isConnected === true
-        && factsDirty.connectorId === 'walletConnect'
-        && factsDirty.authConnection === true
-        && factsDirty.noAdapters === true);
-
-    /* The snapshot the trace will carry — the whole point is that the NEXT
-       report can say which view the modal opened on. */
-    const surface = await openSurfaceDetail({
-      getIsConnectedState: () => true,
-      getAddress: () => '0xdeadbeefdeadbeefdeadbeefdeadbeefdead'
-    });
-    t('the open-surface snapshot reads what the modal would render',
-      surface.view === 'Account' && surface.conn === true
-        && surface.addr === true && surface.na === true && surface.cid === 'walletConnect');
-    t('the snapshot never carries the address itself',
-      !JSON.stringify(surface).toLowerCase().includes('deadbeef'));
-
-    t('the reset runs against the real controllers',
-      (await resetSharedConnectionState()) === true);
-    const factsClean = await readSharedConnectionFacts();
-    t('the phantom address is gone — getIsConnectedState() now answers false',
-      factsClean.isConnected === false);
-    t('the stale connector id is gone (no reconnect-as-WC on the next boot)',
-      factsClean.connectorId === null);
-    t('the AUTH entry that disabled the email input is gone',
-      factsClean.authConnection === false);
-    t('noAdapters is back to false — the email widget can render again',
-      factsClean.noAdapters === false);
-    t('a second reset on clean state is a harmless no-op',
-      (await resetSharedConnectionState()) === true
-        && (await readSharedConnectionFacts()).isConnected === false);
-
-    /* Leave the shared page state clean for whatever runs next. */
-    RouterController.state.view = 'Connect';
-  }
-
-  /* ══════════════════ 15b. the email tap that opened the wallet grid ══════
-     The second 2026-09-18 report: «the email option connects sometimes, and
-     when it doesn't, the WalletConnect wallet list opens and nothing attaches
-     to the app». Reproduced against the shipped singletons: the WalletConnect
-     surface boots its AppKit instance adapter-less, and its initialize() sets
-     ChainController.state.noAdapters = true — a flag the SDK has no code to
-     set back to false. ModalController.open() reads it BEFORE the requested
-     view: manualWCControl || (noAdapters && !caipAddress) → the wallet grid.
-     `assertEmailRouting()` is the email surface's claim on those flags: it
-     must clear exactly them, nothing else. */
-  {
-    const controllers = await import('@reown/appkit-controllers');
-    const { ChainController, OptionsController, ConnectionController } = controllers;
-
-    /* The residue the adapter-less WalletConnect surface leaves behind. */
-    ChainController.state.noAdapters = true;
-    OptionsController.state.manualWCControl = true;
-    OptionsController.state.enableWallets = true;
-
-    /* …next to state the assertion must NOT touch: a live address and a
-       connection the user is owed, plus a storage key a frame session holds.
-       (Plain node has no localStorage; a stand-in backs the «storage is not
-       touched» check for the duration of this section.) */
-    const backing = new Map([['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']]);
-    globalThis.localStorage = {
-      getItem: (k) => (backing.has(k) ? backing.get(k) : null),
-      setItem: (k, v) => backing.set(k, String(v)),
-      removeItem: (k) => backing.delete(k)
-    };
-
-    const owedAddress = 'eip155:56:0x1111111111111111111111111111111111111111';
-    ChainController.state.activeCaipAddress = owedAddress;
-    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [{ address: '0x1111111111111111111111111111111111111111' }] }], 'eip155');
-
-    t('a dirty routing state is reported as fixed, not as clean',
-      (await assertEmailRouting()) === 'fixed');
-    t('the one-way noAdapters latch is released (the email widget can render)',
-      ChainController.state.noAdapters === false);
-    t('the WC surface claim on open() routing is released',
-      OptionsController.state.manualWCControl === false);
-    t('the email popup does not inherit the wallet list',
-      OptionsController.state.enableWallets === false);
-    t('a live address is NOT touched by the routing assertion',
-      ChainController.state.activeCaipAddress === owedAddress);
-    t('the owed connection is NOT touched by the routing assertion',
-      (await readSharedConnectionFacts()).authConnection === true);
-    t('storage is NOT touched (a frame session is owed, not purged)',
-      backing.get('@appkit-wallet/EMAIL_LOGIN_USED_KEY') === 'true');
-
-    t('a second assertion on clean state is a no-op that says so',
-      (await assertEmailRouting()) === 'clean');
-    t('clean state stays clean after a no-op',
-      ChainController.state.noAdapters === false
-        && OptionsController.state.manualWCControl === false
-        && OptionsController.state.enableWallets === false);
-
-    /* The email surface's instance re-asserts the same flags through
-       updateOptions — the two paths must agree on the direction. */
-    const embedded = await import('../src/lib/wc/embedded.js');
-    t('the instance-level re-assert lands on the same flags, in the same direction',
-      embedded.reassertFeatures({
-        updateOptions: (patch) => {
-          /* the same Object.assign the SDK's setOptions performs */
-          Object.assign(OptionsController.state, patch);
-          return true;
-        }
-      }) === true
-        && OptionsController.state.manualWCControl === false
-        && OptionsController.state.enableWallets === false);
-
-    /* Wiring: the assertion runs on the email path — the fresh=false boot
-       (the one that skips the full reset on purpose) and again at open(),
-       because a late WC init can land between the two. */
-    const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
-    t('getAppKit asserts the routing before any other decision',
-      /const routing = await assertEmailRouting\(\);/.test(embeddedSrc));
-    t('the open re-asserts right before the modal is opened',
-      /await assertEmailRouting\(\);\s*\n\s*let openError = null;/.test(embeddedSrc));
-    t('a fixed routing is traced so the next report can say it happened',
-      /email_routing_fixed/.test(embeddedSrc));
-
-    /* Clean up the owed state for whatever runs next. */
-    ConnectionController.setConnections([], 'eip155');
-    ChainController.state.activeCaipAddress = undefined;
-    backing.delete('@appkit-wallet/EMAIL_LOGIN_USED_KEY');
-    delete globalThis.localStorage;
-  }
-
-  /* ══════════════════ 15c. the email tap on a real phone ═════════════════
-     The third 2026-09-18 report (Telegram Android WebView): email/social still
-     fails while WalletConnect is healthy, and the snapshot carries the
-     signature of a marker nobody can honour — ourMarker=true,
-     sdkLoginMarker=false, storedConnectors=[], status=disconnected — with ONE
-     event in the trace (`email_appkit_ready`). Four defects, four locks:
-
-       • `fresh = !hasMarker()` meant a stale claim disabled the clean-slate
-         path (no purge, no shared reset, no chain cleanup) AND every cold
-         start spent the full 30s restore window on it, while WalletContext
-         kept the WalletConnect restore gated off;
-       • the frame's `LAST_USED_CHAIN_KEY` (its own record of the last chain it
-         served) was only cleared on the fresh path, and the ACTIVE CAIP
-         network can be adopted from storage — 8 of this app's 16 chains are
-         NOT on the frame's hard-coded list, which is what makes the frame
-         answer «Action not allowed» / «action not valid»;
-       • a raw `wallet_switchEthereumChain` on the embedded wallet is on
-         NEITHER of the frame's method lists: AppKit opens the modal, shows
-         «Action not allowed» and aborts every pending RPC;
-       • the trace was memory-only, i.e. gone exactly when a mobile WebView
-         reloads — the reason every report so far ended at «no evidence». */
-  {
-    const { ChainController, ConnectionController } = await import('@reown/appkit-controllers');
-    /* Whatever ran before may have left a connection; this section's verdicts
-       depend on an empty shared map. */
-    ConnectionController.setConnections([], 'eip155');
-    ChainController.state.activeCaipAddress = undefined;
-
-    const fakeStore = () => {
-      const backing = new Map();
-      return {
-        backing,
-        get length() {
-          return backing.size;
-        },
-        key: (i) => [...backing.keys()][i] ?? null,
-        getItem: (k) => (backing.has(k) ? backing.get(k) : null),
-        setItem: (k, v) => backing.set(k, String(v)),
-        removeItem: (k) => backing.delete(k)
-      };
-    };
-
-    /* ── the frame's network list is the truth the surface orders by ── */
-    const networks = buildNetworks();
-    const ids = networks.map((n) => Number(n.id));
-    t('the email surface starts on a chain the frame can serve (DEFAULT_CHAIN first)',
-      ids[0] === DEFAULT_CHAIN && isEmailFrameChain(ids[0]));
-    t('every frame-supported chain comes before every chain the frame cannot serve',
-      ids.every((id, i) => i === 0 || isEmailFrameChain(ids[i - 1]) || !isEmailFrameChain(id)));
-    t('no chain is dropped — the WalletConnect surface boots from the same list',
-      ids.length === Object.keys(EVM_CHAINS).length);
-    t('the supported list is our registry ∩ the frame\'s own list',
-      EMAIL_FRAME_CHAIN_IDS.every((id) => Boolean(EVM_CHAINS[id]))
-        && EMAIL_FRAME_CHAIN_IDS.every((id) => ids.includes(id))
-        && !isEmailFrameChain(146) && !isEmailFrameChain(5000) && !isEmailFrameChain(80094));
-
-    /* ── chain residue: normalized everywhere, never on the fresh path only ── */
-    const residueStore = fakeStore();
-    residueStore.setItem('@appkit-wallet/LAST_USED_CHAIN_KEY', '146');
-    const dropped = clearFrameChainResidue(residueStore);
-    t('the frame\'s last-used chain is dropped when the frame cannot serve it',
-      dropped.removed.includes('@appkit-wallet/LAST_USED_CHAIN_KEY')
-        && residueStore.getItem('@appkit-wallet/LAST_USED_CHAIN_KEY') === null);
-    residueStore.setItem('@appkit-wallet/LAST_USED_CHAIN_KEY', 'eip155:56');
-    t('a supported last-used chain is the user\'s own choice and survives',
-      clearFrameChainResidue(residueStore).removed.length === 0
-        && residueStore.getItem('@appkit-wallet/LAST_USED_CHAIN_KEY') === 'eip155:56');
-
-    /* ── the marker verdict: a stale claim is not a session ── */
-    const markerStore = fakeStore();
-    t('no marker is not a claim', (await classifyEmailMarker({ storage: markerStore })) === 'none');
-    markerStore.setItem('fbt_email_social_connected', '1');
-    t('our marker with the frame\'s marker gone and nothing connected is STALE',
-      (await classifyEmailMarker({ storage: markerStore })) === 'stale');
-    markerStore.setItem('@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true');
-    t('the frame\'s own marker means a session may be owed — never forgotten',
-      (await classifyEmailMarker({ storage: markerStore })) === 'owed');
-    markerStore.removeItem('@appkit-wallet/EMAIL_LOGIN_USED_KEY');
-    t('a connected instance is owed its session, marker or not',
-      (await classifyEmailMarker({
-        storage: markerStore,
-        modal: { getIsConnectedState: () => true }
-      })) === 'owed');
-
-    /* ── the active network: pruned in storage, pinned in memory ── */
-    const networkStore = fakeStore();
-    networkStore.setItem('@appkit/active_caip_network_id', 'eip155:146');
-    globalThis.localStorage = networkStore;
-    const networkArgs = {
-      networks,
-      supportedChainIds: EMAIL_FRAME_CHAIN_IDS,
-      defaultChainId: DEFAULT_CHAIN
-    };
-    t('an unsupported chain picked in storage is pruned before the boot reads it',
-      (await assertEmailNetwork(networkArgs)) === 'fixed'
-        && networkStore.getItem('@appkit/active_caip_network_id') === null);
-    ChainController.state.activeCaipNetwork = { id: 146, caipNetworkId: 'eip155:146', chainNamespace: 'eip155' };
-    t('an unsupported ACTIVE network is pinned to the default the frame serves',
-      (await assertEmailNetwork(networkArgs)) === 'fixed'
-        && Number(ChainController.state.activeCaipNetwork?.id) === DEFAULT_CHAIN);
-    t('a supported active network is left exactly as it is',
-      (await assertEmailNetwork(networkArgs)) === 'clean'
-        && Number(ChainController.state.activeCaipNetwork?.id) === DEFAULT_CHAIN);
-    ChainController.state.activeCaipNetwork = { id: 5000, caipNetworkId: 'eip155:5000', chainNamespace: 'eip155' };
-    ChainController.state.activeCaipAddress = 'eip155:5000:0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-    t('a live address is never yanked onto another chain — it is reported blocked',
-      (await assertEmailNetwork(networkArgs)) === 'blocked'
-        && Number(ChainController.state.activeCaipNetwork?.id) === 5000);
-    ChainController.state.activeCaipNetwork = undefined;
-    ChainController.state.activeCaipAddress = undefined;
-    delete globalThis.localStorage;
-
-    /* ── the switch the frame actually implements ── */
-    t('the email wallet refuses a chain the frame cannot serve before asking for it',
-      (await switchEmbeddedNetwork(146)) === 'unsupported_chain');
-    t('with no instance there is nothing to switch (and no request is sent)',
-      (await switchEmbeddedNetwork(56)) === 'no_instance');
-
-    /* ── the trace now survives the reload that used to erase it ── */
-    wcTraceReset();
-    const mirror = fakeStore();
-    wcEvent('email_marker_stale', 4);
-    wcEventDetail('email_open_surface', { view: 'Connect', op: 'pending', conn: false });
-    t('the mirror is written as the events happen', wcTracePersist(mirror) === true
-      && String(mirror.getItem(TRACE_STORAGE_KEY)).includes('email_marker_stale'));
-    t('a live buffer is never overwritten by what storage still holds',
-      wcTraceHydrate(mirror) === 0);
-    wcTraceReset(mirror);
-    t('resetting the buffer resets the mirror too', mirror.getItem(TRACE_STORAGE_KEY) === null);
-    mirror.setItem(TRACE_STORAGE_KEY, JSON.stringify([
-      { at: 1, event: 'email_open_err', d: { m: 'wc:topic@2?symKey=SECRET', view: 'eip155:1:0xdeadbeefdeadbeefdeadbeef', junk: { leak: 1 } } }
-    ]));
-    const revived = wcTraceHydrate(mirror);
-    t('a hostile mirror is re-validated, never trusted',
-      revived === 1
-        && wcTraceSnapshot()[0].d?.view === 'other'
-        && wcTraceSnapshot()[0].d?.m === '[wc]'
-        && !JSON.stringify(wcTraceSnapshot()).includes('SECRET'));
-    t('a non-event in the mirror is refused outright',
-      reviveEntry({ event: '' }) === null && reviveEntry(null) === null && reviveEntry({ at: 1, event: 'ok' })?.event === 'ok');
-    wcTraceReset(mirror);
-
-    /* ── the health report can now NAME the two facts it never had ── */
-    const factsStore = fakeStore();
-    factsStore.setItem('fbt_email_social_connected', '1');
-    factsStore.setItem('@appkit/connection_status', 'disconnected');
-    factsStore.setItem('@appkit/active_caip_network_id', 'eip155:146');
-    factsStore.setItem('@appkit/recent_wallet', '{"name":"probe"}');
-    factsStore.setItem('@appkit-wallet/LAST_USED_CHAIN_KEY', '146');
-    const facts = storageFacts(factsStore);
-    t('the report names the AppKit keys that survived, not just how many',
-      facts.appkitConnectionKeys > 0 && facts.appkitConnectionKeyNames.includes('@appkit/recent_wallet'));
-    t('the report names the chain the email surface would boot on, and whether the frame serves it',
-      facts.activeCaipNetworkId === 'eip155:146' && facts.frameChainSupported === false);
-    t('the report names the frame\'s own last-used chain',
-      facts.frameLastUsedChain === '146');
-    t('the report says «stale» instead of leaving it to inference',
-      facts.emailMarkerStale === true && facts.ourMarker === true && facts.sdkLoginMarker === false);
-
-    /* ── the ghost that disables the email input ───────────────────────────
-       `hasAnyConnection('AUTH')` is the email input's `disabled` binding, and
-       it checks the connector ID alone. An AUTH entry with an EMPTY account
-       list is residue — the state in which the box opens, the input cannot be
-       typed into, and nothing at all reaches the trace. It must not count as
-       a session, and it must be removed before the surface renders. */
-    const ghostStore = fakeStore();
-    ghostStore.setItem('fbt_email_social_connected', '1');
-
-    ConnectionController.setConnections([], 'eip155');
-    ChainController.state.activeCaipAddress = undefined;
-    ConnectionController.setConnections(
-      [{ connectorId: 'AUTH', accounts: [] }, { connectorId: 'walletConnect', accounts: [{ address: '0xabc' }] }],
-      'eip155'
-    );
-    const ghostFacts = await readSharedConnectionFacts();
-    t('the report distinguishes an AUTH entry from an AUTH wallet',
-      ghostFacts.authConnection === true && ghostFacts.authEntries === 1 && ghostFacts.authAccounts === 0
-        && ghostFacts.connectorId === null && ghostFacts.isConnected === false);
-    t('a ghost does not vote «owed» — the standing marker is stale, not a session',
-      (await classifyEmailMarker({ storage: ghostStore })) === 'stale');
-    t('the ghost is removed through the official setter, and only the ghost',
-      (await clearPhantomAuthConnection()) === 1
-        && ConnectionController.hasAnyConnection('AUTH') === false
-        && ConnectionController.hasAnyConnection('walletConnect') === true);
-
-    ConnectionController.setConnections([], 'eip155');
-    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [] }], 'eip155');
-    ChainController.state.activeCaipAddress = 'eip155:56:0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-    t('a wallet that owns the map is never robbed of its entry (that reset is elsewhere)',
-      (await clearPhantomAuthConnection()) === 0 && ConnectionController.hasAnyConnection('AUTH') === true);
-    ChainController.state.activeCaipAddress = undefined;
-
-    ConnectionController.setConnections([{ connectorId: 'AUTH', accounts: [{ address: '0xabc' }] }], 'eip155');
-    t('a real AUTH wallet is a session: left alone, and «owed»',
-      (await clearPhantomAuthConnection()) === 0
-        && (await readSharedConnectionFacts()).authAccounts === 1
-        && (await classifyEmailMarker({ storage: ghostStore })) === 'owed');
-    ConnectionController.setConnections([], 'eip155');
-    ChainController.state.activeCaipAddress = undefined;
-
-    /* ── wiring: the fixes run where they must ── */
-    const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
-    t('the open classifies the marker before it trusts it',
-      /const markerState = await classifyEmailMarker\(\);/.test(embeddedSrc)
-        && /email_marker_stale/.test(embeddedSrc));
-    t('a stale claim is forgotten, not restored (and the caller can resume WC)',
-      /STALE_CLEARED/.test(embeddedSrc) && /email_restore_stale_cleared/.test(embeddedSrc));
-    t('the network is pinned before the provider exists and again before the open',
-      (embeddedSrc.match(/assertEmailNetwork\(/g) ?? []).length >= 2 && /email_network_fixed/.test(embeddedSrc));
-    t('the chain residue is normalized on every path, not only the fresh one',
-      /clearFrameChainResidue\(\)/.test(embeddedSrc)
-        && !/if \(fresh\) \{[\s\S]{0,200}@appkit-wallet\/LAST_USED_CHAIN_KEY/.test(embeddedSrc));
-    t('the open records whether it settled and what the frame answered last',
-      /op: openState/.test(embeddedSrc) && /lastProviderProbeError/.test(embeddedSrc));
-    t('the ghost is cleared on every boot, before anything renders',
-      /const phantoms = await clearPhantomAuthConnection\(\);/.test(embeddedSrc)
-        && /email_phantom_auth_cleared/.test(embeddedSrc));
-    t('a ghost is not a session: the classifier weighs accounts, not the id alone',
-      /if \(shared\.authAccounts > 0\) return 'owed';/.test(embeddedSrc));
-    const healthSrc = readFileSync('src/lib/wc/health.js', 'utf8');
-    t('the health report carries the in-memory half too',
-      /shared: await sharedFactsSafe\(\)/.test(healthSrc)
-        && /authAccounts/.test(readFileSync('src/lib/wc/appkit.js', 'utf8')));
-    const ctxSource = readFileSync('src/context/WalletContext.jsx', 'utf8');
-    t('the embedded wallet never receives a raw wallet_switchEthereumChain',
-      /if \(mode === 'email'\)[\s\S]{0,600}switchEmbeddedNetwork\(targetId\)/.test(ctxSource));
-  }
-
-  /* ══════════════════ 15d. the login that arrives late (2026-09-18, Telegram
-     Android WebView) ═══════════════════════════════════════════════════════
-     The report: the OTP finished AFTER the 30s wait gave up (`email_wait_timeout`
-     30.2s after the open, then a healthy frame session in the final storage —
-     sdkLoginMarker, connection_status 'connected', AUTH record, authAccounts 2).
-     From that moment on nothing in the app knew a session was owed: the marker
-     was cleared, the app showed «not connected», signing and switching did not
-     exist, and the next cold start's orphan hygiene would have PURGED the live
-     session's keys (a silent logout). The locks:
-
-       • `sdkSessionFacts()` — one reader for the SDK's own witnesses
-         (login marker / 'connected' status / AUTH record), shared by every
-         gate so they cannot disagree about what «a session exists» means;
-       • `classifyEmailMarker` weighs those witnesses and the OPEN MODAL
-         (a login in progress) before calling a claim stale, and a stale
-         verdict now costs one bounded 2s re-measurement — never more, never
-         less evidence;
-       • `rollback()` releases the marker only on a definitive no (no
-         in-memory connection, modal closed, no SDK witness);
-       • `probeSigning()` — «متصل» means «can sign»: eth_accounts + one real
-         personal_sign, bounded, sanitized;
-       • `awaitAccount` is event-driven: an account that arrives via the SDK's
-         own subscription is seen at once, not on the next poll tick. */
-  {
-    const fakeStore = (backing = new Map()) => ({
-      backing,
-      get length() { return backing.size; },
-      key: (i) => [...backing.keys()][i] ?? null,
-      getItem: (k) => (backing.has(k) ? backing.get(k) : null),
-      setItem: (k, v) => backing.set(k, String(v)),
-      removeItem: (k) => backing.delete(k)
-    });
-    const { ChainController, ConnectionController, ModalController } = await import('@reown/appkit-controllers');
-    ConnectionController.setConnections([], 'eip155');
-    ChainController.state.activeCaipAddress = undefined;
-
-    /* ── the four witnesses, one reader ── */
-    const writes = [];
-    const witnessBacking = new Map();
-    const spy = {
-      length: 0,
-      key: () => null,
-      getItem: (k) => (witnessBacking.has(k) ? witnessBacking.get(k) : null),
-      setItem: (k, v) => { writes.push(`set:${k}`); witnessBacking.set(k, String(v)); },
-      removeItem: (k) => { writes.push(`rm:${k}`); witnessBacking.delete(k); }
-    };
-    t('empty storage is no evidence',
-      (() => {
-        const f = sdkSessionFacts(spy);
-        return f.anyEvidence === false && f.loginMarker === false
-          && f.statusConnected === false && f.authStored === false
-          && f.authAccounts === 0;
-      })());
-    t('the reader never writes (it can gate a decision)', writes.length === 0);
-    witnessBacking.set('@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true');
-    t('the frame login marker is evidence',
-      sdkSessionFacts(spy).loginMarker === true && sdkSessionFacts(spy).anyEvidence === true);
-    witnessBacking.delete('@appkit-wallet/EMAIL_LOGIN_USED_KEY');
-    witnessBacking.set('@appkit/connection_status', 'connected');
-    t('a persisted «connected» status is evidence',
-      sdkSessionFacts(spy).statusConnected === true && sdkSessionFacts(spy).anyEvidence === true);
-    witnessBacking.set('@appkit/connections',
-      JSON.stringify({ eip155: [{ connectorId: 'AUTH', accounts: [{ address: '0xabc' }, { address: '0xdef' }] }] }));
-    t('an AUTH record is evidence, and its accounts are counted',
-      (() => {
-        const f = sdkSessionFacts(spy);
-        return f.authStored === true && f.authAccounts === 2 && f.anyEvidence === true;
-      })());
-    t('and it still never wrote anything', writes.length === 0);
-
-    /* ── the classifier weighs the witnesses, and the open modal ── */
-    const markerStore = fakeStore();
-    markerStore.setItem('fbt_email_social_connected', '1');
-    t('a standing marker with a «connected» status is OWED, not stale',
-      (await classifyEmailMarker({
-        storage: fakeStore(new Map([
-          ['fbt_email_social_connected', '1'],
-          ['@appkit/connection_status', 'connected']
-        ]))
-      })) === 'owed');
-    t('a standing marker with an AUTH record is OWED, not stale',
-      (await classifyEmailMarker({
-        storage: fakeStore(new Map([
-          ['fbt_email_social_connected', '1'],
-          ['@appkit/connections', JSON.stringify({ eip155: [{ connectorId: 'AUTH', accounts: [{ address: '0xabc' }] }] })]
-        ]))
-      })) === 'owed');
-    /* The report's hit: a visibility-triggered restore 22s into a first
-       attempt found the marker standing and the box still on screen — the
-       old classifier called it stale and purged four keys. An open modal is
-       an attempt in progress and must vote «owed». */
-    ModalController.state.open = true;
-    t('an open modal (a login in progress) is OWED — never stale under it',
-      (await classifyEmailMarker({ storage: markerStore })) === 'owed');
-    ModalController.state.open = false;
-    t('no witness, modal closed: the claim is stale after the one re-measurement',
-      (await classifyEmailMarker({ storage: markerStore })) === 'stale');
-
-    /* ── the marker falls only on a definitive no ── */
-    const backing = new Map([
-      ['fbt_email_social_connected', '1'],
-      ['@appkit/connection_status', 'connected']
-    ]);
-    const origLocal = globalThis.localStorage;
-    globalThis.localStorage = fakeStore(backing);
-    t('a rollback keeps the marker while the SDK holds a session',
-      (await rollbackEmailMarker(null)) === false && backing.has('fbt_email_social_connected'));
-    backing.delete('@appkit/connection_status');
-    ModalController.state.open = true;
-    const keptUnderModal = await rollbackEmailMarker(null);
-    ModalController.state.open = false;
-    t('a rollback keeps the marker under an open modal',
-      keptUnderModal === false && backing.has('fbt_email_social_connected'));
-    t('a rollback releases it on a definitive no',
-      (await rollbackEmailMarker(null)) === true && !backing.has('fbt_email_social_connected'));
-    if (origLocal === undefined) delete globalThis.localStorage;
-    else globalThis.localStorage = origLocal;
-
-    /* ── the signing probe: «متصل» means «the frame granted this account» ──
-       THE 2026-09-18 SIGN-LOOP REPORT: «فرقی نمیکند اپرو را بزنی یا کنسل را
-       باز دوباره میاره». The old probe fired `personal_sign` from every
-       attach attempt AND a 12-attempt keeper; on the frame's contract each
-       request opens the ApproveTransaction view and the modal's close aborts
-       every other pending request — an endless dialog driven by the app's
-       own retries. Locked here: background probes NEVER sign, a rejection is
-       terminal for automatic drivers, concurrent probes are single-flighted,
-       and an approve always lands. */
-    const ADDR = '0x1111111111111111111111111111111111111111';
-    {
-      resetSigningState();
-      const SIG = `0x${'ab'.repeat(65)}`; /* well-formed, but recovers to nothing */
-
-      const counting = (accountsFn, signFn) => {
-        const calls = [];
-        return {
-          calls,
-          provider: {
-            request: async ({ method }) => {
-              calls.push(method);
-              if (method === 'eth_accounts') return accountsFn();
-              return signFn ? signFn() : SIG;
-            }
-          }
-        };
-      };
-
-      /* — the default (background) probe: SILENT, grant-gated — */
-      {
-        const { provider, calls } = counting(() => [ADDR]);
-        const r = await probeSigning(provider, ADDR);
-        t('a provider that GRANTS the expected account is ready — via the frame’s own grant',
-          r.ok === true && r.via === 'accounts');
-        t('the background probe NEVER requests a signature (no ApproveTransaction page, ever)',
-          !calls.includes('personal_sign'));
-      }
-      {
-        const { provider, calls } = counting(() => []);
-        const r = await probeSigning(provider, ADDR);
-        t('an empty account list is NOT_READY — a state, never a signature request',
-          r.ok === false && r.error === 'NOT_READY' && !calls.includes('personal_sign'));
-      }
-      {
-        const r = await probeSigning({ request: async ({ method }) => {
-          if (method === 'eth_accounts') return [ADDR];
-          throw new Error('Action not allowed');
-        } }, ADDR, { interactive: true });
-        t('an interactive probe over a REFUSING frame keeps the frame’s own message',
-          r.ok === false && /not allowed/i.test(r.error));
-      }
-      {
-        const r = await probeSigning({ request: async () => [ADDR] },
-          '0x2222222222222222222222222222222222222222');
-        t('a provider that answers with a DIFFERENT wallet is not silently adopted',
-          r.ok === false && r.error === 'ACCOUNT_MISMATCH');
-      }
-      {
-        const t0 = Date.now();
-        const r = await probeSigning({
-          request: async ({ method }) => (method === 'eth_accounts' ? new Promise(() => {}) : SIG)
-        }, ADDR, { timeoutMs: 300 });
-        t('a provider that never answers is bounded, not a hang',
-          r.ok === false && r.error === 'PROBE_TIMEOUT' && Date.now() - t0 < 2_000);
-      }
-      t('no provider is a probe failure, not a crash',
-        (await probeSigning(null, ADDR)).ok === false && (await probeSigning(null, ADDR)).error === 'NO_PROVIDER');
-
-      /* — the interactive probe: ONE real signature, verified — */
-      {
-        const { Wallet } = await import('ethers');
-        const login = Wallet.createRandom();
-        const other = Wallet.createRandom();
-        const goodSig = await login.signMessage(SIGN_PROBE_MESSAGE);
-        const otherSig = await other.signMessage(SIGN_PROBE_MESSAGE);
-
-        {
-          const { provider, calls } = counting(() => [login.address], () => goodSig);
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('the interactive probe asks for ONE signature and verifies the recovered signer',
-            r.ok === true && r.via === 'signature'
-            && calls.filter((m) => m === 'personal_sign').length === 1);
-        }
-        {
-          /* THE REPORT'S LOOP, STAGED: the user cancels. */
-          const { provider } = counting(() => [login.address], () => { throw new Error('User rejected'); });
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('a user rejection is USER_REJECTED and named as a denial',
-            r.ok === false && r.error === 'USER_REJECTED' && r.denied === true);
-          t('the denial is remembered module-wide', signingDeniedByUser() === true);
-          const r2 = await probeSigning({ request: async () => { throw new Error('must not reach the frame'); } }, login.address);
-          t('after a rejection an AUTOMATIC probe short-circuits without touching the frame',
-            r2.ok === false && r2.error === 'USER_REJECTED' && r2.denied === true);
-        }
-        {
-          /* …and only a REAL GESTURE may ask again (`force`). */
-          const { provider, calls } = counting(() => [login.address], () => goodSig);
-          const r = await probeSigning(provider, login.address, { interactive: true, force: true });
-          t('an explicit user gesture (force) may ask again after a rejection — and an approval clears the denial',
-            r.ok === true && r.via === 'signature' && signingDeniedByUser() === false
-            && calls.filter((m) => m === 'personal_sign').length === 1);
-        }
-        {
-          /* AN APPROVE ALWAYS LANDS: a well-formed, user-approved signature
-             whose signer ethers cannot name still attaches when the frame's
-             own grant names the expected address — the old code called this
-             NO_ACCOUNTS and re-asked forever. */
-          const { provider, calls } = counting(() => [login.address], () => SIG);
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('a user-approved signature that cannot be verified attaches on grant + signature (named, not silent)',
-            r.ok === true && r.via === 'signature_unverified'
-            && calls.filter((m) => m === 'personal_sign').length === 1);
-        }
-        {
-          /* THE RESYNC (authAccounts: 2): the signature recovers to a second,
-             CURRENT session account — adopt it only when the SDK's own record
-             names it too. */
-          const { ChainController, ConnectionController } = await import('@reown/appkit-controllers');
-          const prevCaip = ChainController.state.activeCaipAddress;
-          ConnectionController.setConnections([], 'eip155');
-          ChainController.state.activeCaipAddress = `eip155:56:${other.address}`;
-          const { provider } = counting(() => [login.address], () => otherSig);
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('a signature from the session’s OTHER recorded account is adopted (signature_resynced), not looped',
-            r.ok === true && r.via === 'signature_resynced' && r.address === other.address);
-          ChainController.state.activeCaipAddress = prevCaip;
-          ConnectionController.setConnections([], 'eip155');
-          resetSigningState();
-        }
-        {
-          /* …but a signature from an unknown key stays refused. */
-          const stranger = Wallet.createRandom();
-          const { provider } = counting(() => [login.address], () => stranger.signMessage(SIGN_PROBE_MESSAGE));
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('a valid signature that belongs to NO recorded key is refused (SIGNER_MISMATCH)',
-            r.ok === false && r.error === 'SIGNER_MISMATCH');
-        }
-        {
-          const { provider, calls } = counting(() => [], () => goodSig);
-          const r = await probeSigning(provider, login.address, { interactive: true });
-          t('even the interactive probe never asks without the frame’s grant',
-            r.ok === false && r.error === 'NOT_READY' && !calls.includes('personal_sign'));
-        }
-        resetSigningState();
-      }
-
-      /* — single-flight: concurrent probes share one execution — */
-      {
-        let ethCalls = 0;
-        const slowProvider = {
-          request: async ({ method }) => {
-            if (method !== 'eth_accounts') return SIG;
-            ethCalls += 1;
-            await new Promise((r) => setTimeout(r, 60));
-            return [ADDR];
-          }
-        };
-        const [a, b] = await Promise.all([
-          probeSigning(slowProvider, ADDR),
-          probeSigning(slowProvider, ADDR)
-        ]);
-        t('concurrent probes on one provider are single-flighted (one eth_accounts, one verdict)',
-          a.ok === true && b.ok === true && ethCalls === 1);
-      }
-      resetSigningState();
-    }
-
-    /* ── the fast attach retry reads the account the app already has ── */
-    {
-      const { ChainController, ConnectionController } = await import('@reown/appkit-controllers');
-      const SNAP_ADDR = '0x1111111111111111111111111111111111111111';
-      const snapProvider = { request: async () => [SNAP_ADDR] };
-
-      const fromInstance = await embeddedAccountSnapshot({
-        modal: { getAddress: () => SNAP_ADDR, getWalletProvider: () => snapProvider }
-      });
-      t('the snapshot reads the instance’s own address + provider, and names the source',
-        fromInstance.address === SNAP_ADDR && fromInstance.provider === snapProvider
-          && fromInstance.source === 'instance');
-
-      const prevCaip = ChainController.state.activeCaipAddress;
-      ChainController.state.activeCaipAddress = `eip155:56:${SNAP_ADDR}`;
-      ConnectionController.setConnections([], 'eip155');
-      const fromShared = await embeddedAccountSnapshot({ modal: null });
-      t('with no instance it falls back to the shared CAIP address (parsed, not raw)',
-        fromShared.address === SNAP_ADDR && fromShared.source === 'shared');
-
-      ChainController.state.activeCaipAddress = undefined;
-      ConnectionController.setConnections(
-        [{ connectorId: 'AUTH', accounts: [{ address: SNAP_ADDR }] }], 'eip155');
-      const fromAuthRecord = await embeddedAccountSnapshot({ modal: null });
-      t('…and to the AUTH record’s own account when that is the only witness',
-        fromAuthRecord.address === SNAP_ADDR);
-
-      ConnectionController.setConnections([], 'eip155');
-      ChainController.state.activeCaipAddress = prevCaip;
-      const fromNothing = await embeddedAccountSnapshot({ modal: null });
-      t('with no witness at all the snapshot reports nothing instead of guessing',
-        fromNothing.address === null && fromNothing.provider === null && fromNothing.source === 'none');
-    }
-
-    /* ── the wait is event-driven: the SDK's own subscription, not a tick ── */
-    let lateConnected = false;
-    let accountCb = null;
-    const lateModal = {
-      getIsConnectedState: () => lateConnected,
-      getAddress: () => (lateConnected ? ADDR : undefined),
-      getWalletProvider: () => (lateConnected ? { request: async () => [ADDR] } : null),
-      subscribeAccount: (cb) => { accountCb = cb; return () => {}; },
-      subscribeState: () => () => {},
-      subscribeCaipNetworkChange: () => () => {}
-    };
-    const lateStarted = Date.now();
-    const lateTimer = setTimeout(() => { lateConnected = true; accountCb?.(); }, 300);
-    const late = await awaitAccount(lateModal, { timeoutMs: 4_000, pollMs: 2_000, closeGraceMs: 0 });
-    clearTimeout(lateTimer);
-    t('an account that arrives 300ms in is seen by the event, not the next poll (2s away)',
-      late?.address === ADDR && Date.now() - lateStarted < 1_000);
-
-    let stateCb = null;
-    const closedModal = {
-      getIsConnectedState: () => false,
-      getAddress: () => undefined,
-      getWalletProvider: () => null,
-      subscribeAccount: () => () => {},
-      subscribeState: (cb) => { stateCb = cb; return () => {}; },
-      subscribeCaipNetworkChange: () => () => {}
-    };
-    const closedPromise = awaitAccount(closedModal, { timeoutMs: 10_000, pollMs: 200, closeGraceMs: 100 });
-    stateCb?.({ open: true });
-    const closeTimer = setTimeout(() => stateCb?.({ open: false }), 60);
-    const closedAt = Date.now();
-    const closed = await closedPromise;
-    clearTimeout(closeTimer);
-    t('a dismissed modal without an account resolves null, bounded by the grace (not the 10s backstop)',
-      closed === null && Date.now() - closedAt < 3_000);
-
-    /* ── wiring: the open() wait is the hard cap, and the claim is re-armed ── */
-    const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
-    t('the open wait is event-driven under the five-minute hard cap, not a 30s one-shot',
-      /timeoutMs: TIMEOUT\.connectHardCap/.test(embeddedSrc)
-        && /closeGraceMs: TIMEOUT\.emailLateGrace/.test(embeddedSrc));
-    t('a session the SDK still holds re-arms the claim BEFORE the clean-slate path',
-      /email_marker_reclaimed/.test(embeddedSrc)
-        && /if \(!hasMarker\(\)\) \{[\s\S]{0,220}sdkSessionFacts\(\)/.test(embeddedSrc));
-    t('the wait subscribes to the account, the state, the chain change AND the controller address',
-      /subscribeAccount\?\.\(onArrival, 'eip155'\)/.test(embeddedSrc)
-        && /subscribeCaipNetworkChange\?\.\(onArrival\)/.test(embeddedSrc)
-        && /subscribeKey\?\.\('activeCaipAddress', onArrival\)/.test(embeddedSrc));
-  }
-
-  /* ══════════════════ 16. wiring guards (source, not behaviour) ══════════ */
+  /* ══════════════════ 15. wiring guards (source, not behaviour) ══════════ */
   {
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     const ctx = strip(readFileSync('src/context/WalletContext.jsx', 'utf8'));
     const sheet = strip(readFileSync('src/components/WalletConnectSheet.jsx', 'utf8'));
     const panel = strip(readFileSync('src/components/WalletHealthPanel.jsx', 'utf8'));
+    const health = strip(readFileSync('src/lib/wc/health.js', 'utf8'));
 
     t('the context reads the stack from one module, not from scattered files',
       /from '\.\.\/lib\/wc'/.test(ctx));
-    /* The stale-marker race fix (2026-09-18): an explicit email tap must
-       AWAIT the bounded forget — a fire-and-forget one loses to the very
-       next read of the marker — and only when no frame session is owed.
-       The Telegram report widened «owed» from the SDK's login marker alone
-       to the SDK's full session evidence: a session whose login finished
-       after our wait gave up is owed even when that marker is gone. */
-    t('an email tap awaits the bounded forget, and only when nothing is owed',
-      /modeRef\.current !== 'email' && !sdkSessionFacts\(\)\.anyEvidence/.test(ctx)
-        && /await forgetEmbeddedWallet\(\)/.test(ctx));
-    /* The silent-logout lock: the orphan purge must ask the SDK's own
-       witnesses first, and keep the keys — named in the trace — when they
-       describe a session the user is owed. */
-    t('the orphan purge is locked against a live SDK session',
-      /email_orphan_kept/.test(ctx) && /orphan_storage_purged/.test(ctx));
-    /* The resume gate: a session can be owed when our marker is gone — the
-       email restore runs on the SDK evidence, and re-arms the marker. */
-    t('the email restore is gated on the SDK evidence, not the marker alone',
-      /hasEmailMarker\(\) \|\| sdkSessionFacts\(\)\.anyEvidence/.test(ctx)
-        && /email_late_attach/.test(ctx));
-    /* «متصل» means «can sign»: every email attach is probe-gated, and a
-       failed probe names itself (sanitized) in the trace instead of
-       discovering itself mid-swap. */
-    /* The two call shapes keep their identity (the provider + the address that
-       login produced), and the bounded timeout is optional — the flow's four
-       probes pass one so a slow frame cannot hold the spinner for minutes. */
-    t('every email attach is gated on a real signing probe',
-      /probeSigning\(result\.provider, result\.address(, \{[^)]*\})?\)/.test(ctx)
-        && /probeSigning\(freshProvider, result\.address(, \{[^)]*\})?\)/.test(ctx)
-        && /probeSigning\(result\.provider, result\.address(, \{[^)]*\})?\)/.test(ctx)
-        && /email_sign_probe_failed/.test(ctx));
-    /* THE SIGN-LOOP FIX (2026-09-18): «فرقی نمیکند اپرو را بزنی یا کنسل را
-       باز دوباره میاره» — the ApproveTransaction page came back forever
-       because background drivers (keeper/restore/retries) fired real
-       `personal_sign` requests, each new one aborting the last. Locked here:
-       exactly TWO user-gesture probes exist, automatic drivers honour a
-       rejection, and the denial memory resets where consent resets. */
-    t('exactly two user-gesture probes exist (fresh-login gate + retry button), the retry one forced',
-      (ctx.match(/interactive: true/g) || []).length === 2
-        && /interactive: true,\s*\n\s*force: true|interactive: true, force: true/.test(ctx));
-    t('a rejection stands every automatic driver down (keeper, restore, connect flow)',
-      /signingDeniedByUser\(\)/.test(ctx)
-        && /email_keeper_stood_down/.test(ctx)
-        && /email_sign_denied/.test(ctx)
-        && /EMAIL_SIGNING_DENIED/.test(ctx));
-    {
-      const embeddedSrc = readFileSync('src/lib/wc/embedded.js', 'utf8');
-      t('the denial memory resets where consent resets (disconnect + fresh login)',
-        /stopEmailAttachKeeper\(\);\s*resetSigningState\(\);/.test(ctx)
-          && /resetSigningState\(\);/.test(embeddedSrc)
-          && /signingDeniedByUser|resetSigningState/.test(readFileSync('src/lib/wc/index.js', 'utf8')));
-    }
-    t('the sheet answers a denial with a calm notice and a gesture-owned retry',
-      /EMAIL_SIGNING_DENIED/.test(sheet) && /emailSigningDenied/.test(sheet));
-    {
-      const codes = ['ar', 'en', 'es', 'fa', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh'];
-      const missing = codes.filter((code) => {
-        try {
-          const data = JSON.parse(readFileSync(`src/i18n/locales/${code}.json`, 'utf8'));
-          return !data?.wallet?.emailSigningDenied || !data?.wallet?.emailSigningDeniedHint;
-        } catch {
-          return true;
-        }
-      });
-      t('the denial notice is translated in all 12 locales', missing.length === 0);
-    }
-    /* The refused switch: the exact code reaches the UI (context + the
-       Swap surface), and each refusal has a sentence — including the
-       «signing chain ≠ swap chain» one and the «reconnect email» one. */
-    t('a refused network switch reaches the UI with its exact code',
-      /setSwitchChainResult\(\{ code: result/.test(ctx)
-        && /emailSwitchUnsupported/.test(ctx)
-        && /emailSwitchReconnect/.test(ctx));
-    const swapSrc = strip(readFileSync('src/pages/Swap.jsx', 'utf8'));
-    t('the swap surface names the refused chain (and the way out)',
-      /wallet\.switchChainResult/.test(swapSrc)
-        && /emailChainSignOnly/.test(swapSrc)
-        && /emailChainSwitchFailed/.test(swapSrc));
-    /* ── the pending attach is retried in the BACKGROUND, and the button
-       retries the ATTACH (the 2026-09-18 «کیف پول آماده نشد» report: the old
-       button re-ran the whole login and re-opened the modal) ── */
-    t('the pending notice retries the attach, not the whole login',
-      /wallet\.retryEmailAttach/.test(sheet));
-    t('the pending notice says the retry continues by itself',
-      /emailProviderPendingHint/.test(sheet));
-    t('the context runs a bounded background keeper for a pending attach',
-      /startEmailAttachKeeper/.test(ctx) && /email_keeper_attached/.test(ctx)
-        && /email_keeper_exhausted/.test(ctx));
-    t('the pending attach is handed to the keeper right where it is declared',
-      /email_attach_failed_pending[\s\S]{0,400}startEmailAttachKeeper\(result\.address\)/.test(ctx)
-        && /email_sign_probe_failed[\s\S]{0,400}startEmailAttachKeeper\(result\.address\)/.test(ctx));
-    t('the keeper is stopped by the exits that end the claim (disconnect, mode, unmount)',
-      /disconnect[\s\S]{0,200}stopEmailAttachKeeper\(\)/.test(ctx)
-        && /mode !== 'email'[\s\S]{0,200}stopEmailAttachKeeper\(\)/.test(ctx)
-        && /useEffect\(\(\) => \(\) => stopEmailAttachKeeper\(\)/.test(ctx));
-    t('the fast retry attaches with no modal and no second login',
-      /embeddedAccountSnapshot/.test(ctx) && /email_retry_attach_ok/.test(ctx)
-        && /retryEmailAttach/.test(ctx));
-    /* An owed session must be ATTACHED before any modal is opened: the tap is
-       not a login when the storage already describes a session. */
-    t('an owed session is attached before the login modal is opened',
-      /email_fast_attach/.test(ctx)
-        && /hasEmailMarker\(\) \|\| sdkSessionFacts\(\)\.anyEvidence[\s\S]{0,900}openEmbeddedWallet/.test(ctx));
 
-    /* The two new functions live in the one public surface. */
-    const indexSrc = readFileSync('src/lib/wc/index.js', 'utf8');
-    t('sdkSessionFacts, probeSigning and embeddedAccountSnapshot are exported from the stack surface',
-      /sdkSessionFacts/.test(indexSrc) && /probeSigning/.test(indexSrc)
-        && /embeddedAccountSnapshot/.test(indexSrc));
+    /* The boot hygiene, in the order it has to run: the retired surface's keys
+       first (one of them makes the SDK build a frame in a CONSTRUCTOR), then
+       the orphan check that counts what is left. */
+    t('the retired keys are purged before the orphan hygiene counts anything',
+      ctx.indexOf('purgeEmbeddedWalletKeys()') > -1
+        && ctx.indexOf('purgeEmbeddedWalletKeys()') < ctx.indexOf('storageFacts()'));
+    t('both purges name themselves in the trace',
+      /embedded_legacy_purged/.test(ctx) && /orphan_storage_purged/.test(ctx));
+    t('the orphan purge has no session-evidence gate left to consult',
+      !/sdkSessionFacts|hasEmailMarker|email_orphan_kept/.test(ctx));
+
+    /* ONE restore, no sequencing: the stored `wc@2:` session used to wait for an
+       email restore that could starve it whenever a marker survived a failed
+       login. */
+    t('the only resume path is the WalletConnect session',
+      /restoreWcSession\(\{ announce \}\)/.test(ctx) && !/resumeEmailThenWc/.test(ctx));
+    t('a local vault still wins the cold start', /if \(!loadVault\(\)\) resume\(false\);/.test(ctx));
+
+    /* The transports that are left, and the one attach path they share. */
+    t('the sheet offers WalletConnect, the injected wallets and the vault',
+      /connectWalletConnect/.test(sheet) && /connectInjected/.test(sheet) && /hasVault\(\)/.test(sheet));
+    t('every external attach goes through the one adapter, with no email branch',
+      (ctx.match(/attachExternal\(\{/g) || []).length === 2 && !/nextMode === 'email'/.test(ctx));
+    t('a failed attach says so instead of degrading into a proxy signer',
+      /wc_attach_failed/.test(ctx) && !/_isFallback/.test(ctx));
+
     t('no component reaches past the stack into a deleted module',
-      !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)/.test(ctx + sheet + panel));
+      !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)|lib\/wc\/embedded/.test(ctx + sheet + panel));
     t('the deleted modules are really gone', (() => {
       const files = ['wcWallets', 'wcDeepLink', 'wcStorage', 'wcTimeout', 'wcTrace', 'wcRelayProbe',
-        'wcChain', 'wcAppKitPatch', 'emailSocialWallet', 'emailConnection', 'walletHealth'];
-      return files.every((f) => {
-        try {
-          readFileSync(`src/lib/${f}.js`);
-          return false;
-        } catch {
-          return true;
-        }
-      });
+        'wcChain', 'wcAppKitPatch', 'emailSocialWallet', 'emailConnection', 'walletHealth',
+        'wc/embedded'];
+      return files.every((f) => !existsSync(`src/lib/${f}.js`));
     })());
     t('the wallet-facing URL is never the runtime origin',
       !/url:\s*window\.location\.origin/.test(ctx));
@@ -1950,17 +1032,18 @@ export default async function run() {
     t('the sheet never opens a wallet with _self or _top',
       !/open\([^)]*'_(self|top)'/.test(sheet));
     t('the stack does not import React', (() => {
-      const files = ['config', 'trace', 'timing', 'uri', 'chain', 'wallets', 'handoff', 'storage', 'relay', 'session', 'embedded', 'health'];
-      return files.every((f) => !/from 'react/.test(readFileSync(`src/lib/wc/${f}.js`, 'utf8')));
+      const files = readdirSync('src/lib/wc').filter((f) => f.endsWith('.js'));
+      return files.every((f) => !/from 'react/.test(readFileSync(`src/lib/wc/${f}`, 'utf8')));
     })());
-    /* «email=false socials=0» was a confident wrong number: it never said that
-       AppKit had not read the dashboard at all. The row has to name the source. */
-    t('the panel prints where the project number came from',
-      /projectSourceNote/.test(panel)
-        && ['Dashboard', 'Local', 'Default', 'Off'].every((k) => panel.includes(`healthProjectSource${k}`)));
-    t('the local value is read from the settings module, never copied into the report',
-      /emailOptions\(/.test(readFileSync('src/lib/wc/health.js', 'utf8'))
-        && !/SOCIAL_PROVIDERS|emailOptions/.test(panel));
+
+    /* The panel prints the hops that are left, and nothing about the login that
+       is gone: no feature summary, no frame probe, no usage limits. */
+    t('the panel reads no settings from the removed surface',
+      !/emailOptions|SOCIAL_PROVIDERS|projectSourceNote|secureSite|report\.usage/.test(panel + health));
+    t('the panel keeps the three rows a WalletConnect report needs',
+      /healthProject/.test(panel) && /healthOrigins/.test(panel) && /healthRelay/.test(panel));
+    t('the panel names the retired keys when a device still carries them',
+      /legacyEmbeddedKeys/.test(panel) && /legacyEmbeddedKeys/.test(health));
   }
 
   return rows;

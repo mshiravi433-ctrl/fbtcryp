@@ -30,7 +30,7 @@ const MAX = 40;
  * memory-only buffer, read minutes later, after the WebView had been through a
  * reload/back-navigation, i.e. after the evidence was gone. A trace that only
  * exists while the page does cannot answer «what happened when I pressed
- * email» on the device where the answer matters.
+ * connect» on the device where the answer matters.
  *
  * So the buffer is mirrored into `sessionStorage` (same tab: survives a
  * reload and a back-navigation; dies with the tab) and, when a WebView refuses
@@ -71,12 +71,8 @@ const SAFE_DETAIL_TOKENS = new Set([
   'none', 'other',
   /* Outcome tokens for the bounded operations whose RESULT (not just their
      failure) the next report has to be able to read — e.g. whether
-     `modal.open()` ever settled, or which chain the email surface was pinned
-     to. See `openSurfaceDetail()` in embedded.js. */
+     `modal.open()` ever settled, or how a wait ended. */
   'settled', 'pending', 'failed', 'unsupported',
-  /* The secure frame's own state: `ready` (it answered FRAME_READY),
-     `loading` (its document exists but never became ready — the WebView case
-     every previous report could not distinguish from «no account»). */
   'ready', 'loading'
 ]);
 

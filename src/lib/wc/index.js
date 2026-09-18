@@ -16,14 +16,19 @@
  *   relay.js     measuring the relay before promising a pairing
  *   appkit.js    the shared AppKit singleton surface
  *   session.js   the WalletConnect v2 lifecycle
- *   embedded.js  email & social (the secure embedded wallet)
  *   health.js    the diagnostic report
+ *
+ * `embedded.js` — the email/social "embedded wallet" — is gone: that surface
+ * was retired on 2026-09-18 because it needed a SECOND AppKit instance sharing
+ * the controllers (and the one `<w3m-modal>`) with WalletConnect, which is how
+ * an email tap came to open the wallet grid and how a WalletConnect cycle left
+ * the shared state describing a dead wallet. storage.js keeps the purge of the
+ * keys it left behind.
  */
 
 export {
   PAIRING_TTL_MS,
   RELAY_URLS,
-  SECURE_SITE_URL,
   TIMEOUT,
   WC_PROJECT_ID,
   wcMetadata
@@ -97,11 +102,15 @@ export {
 export {
   APPKIT_CONNECTION_KEYS,
   DEEPLINK_CHOICE_KEY,
+  EMBEDDED_WALLET_PREFIX,
+  LEGACY_EMBEDDED_MARKER_KEY,
   WC_PREFIX,
   hasStoredSession,
   isConnectionKey,
   listConnectionKeys,
-  purgeConnectionKeys
+  listEmbeddedWalletKeys,
+  purgeConnectionKeys,
+  purgeEmbeddedWalletKeys
 } from './storage.js';
 
 export {
@@ -115,58 +124,17 @@ export {
 
 export {
   applyWalletSurface,
-  assertEmailNetwork,
-  assertEmailRouting,
-  clearPhantomAuthConnection,
   readSharedConnectionFacts,
   resetPairingState,
-  resetSharedConnectionState,
   setLivePairingUri
 } from './appkit.js';
 
 export { createWcSession } from './session.js';
 
 export {
-  EMAIL_FRAME_CHAIN_IDS,
-  EMAIL_MARKER_KEY,
-  EMAIL_RESTORE_WINDOW_MS,
-  SIGN_PROBE_MESSAGE,
-  SOCIAL_PROVIDERS,
-  authConnectorProvider,
-  awaitAccount,
-  buildNetworks,
-  classifyEmailMarker,
-  clearFrameChainResidue,
-  clearStaleEmailState,
-  emailOptions,
-  embeddedAccountSnapshot,
-  forget as forgetEmbeddedWallet,
-  getAppKit,
-  hasMarker as hasEmailMarker,
-  isEmailFrameChain,
-  lastProviderProbeError,
-  open as openEmbeddedWallet,
-  openSurfaceDetail,
-  probeSigning,
-  rearmSdkLoginMarker,
-  resetSigningState,
-  restore as restoreEmbeddedWallet,
-  rollback as rollbackEmailMarker,
-  sdkLoginMarkerPresent,
-  sdkSessionFacts,
-  setMarker as setEmailMarker,
-  signingDeniedByUser,
-  switchEmbeddedNetwork
-} from './embedded.js';
-
-export {
   collectWalletHealth,
   configProbeUrl,
-  filterSocialsByPlatform,
   isOriginAllowed,
   originsProbeUrl,
-  platformFlags,
-  storageFacts,
-  summarizeProjectConfig,
-  usageProbeUrl
+  storageFacts
 } from './health.js';

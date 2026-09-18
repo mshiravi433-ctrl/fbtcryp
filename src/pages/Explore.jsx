@@ -517,7 +517,7 @@ function WalletSection({ goSecurity }) {
     <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
       <motion.section className="docs-card" data-open="true" variants={riseIn} style={{ padding: 15 }}>
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-          <span className="pill pill-up" style={{ fontSize: 10 }}>{wallet.mode === 'local' ? t('wallet.mode.local') : wallet.mode === 'wc' ? 'WalletConnect' : wallet.mode === 'email' ? t('wallet.mode.email') : t('explore.injected')}</span>
+          <span className="pill pill-up" style={{ fontSize: 10 }}>{wallet.mode === 'local' ? t('wallet.mode.local') : wallet.mode === 'wc' ? 'WalletConnect' : t('explore.injected')}</span>
           {wallet.locked && <span className="pill" style={{ fontSize: 10 }}>🔒 {t('wallet.lock')}</span>}
           {!wallet.chainOk && <span className="pill pill-down" style={{ fontSize: 10 }}>{t('explore.wrongNetworkNote')}</span>}
           <span style={{ flex: 1 }} />

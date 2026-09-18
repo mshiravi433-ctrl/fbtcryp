@@ -748,26 +748,18 @@ console.log('▸ probing FBT Intent AI — later-phase 31–100 (in-process work
    old per-file probes (uri hygiene, deep links, storage, chain, relay, wallets,
    appkit reconcile, health) locked the same contract in ten places and drifted
    apart whenever one of them moved. */
-console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, storage, embedded wallet)…');
+console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, storage)…');
 {
   const { default: runWcStack } = await import('./walletconnect-stack-probe.mjs');
   report('WalletConnect stack', await runWcStack());
 }
 
-/* --------------------- 0b₂. email routing (the wallet-grid hijack) -------- */
-/* The 2026-09-18 «email tap opens the WalletConnect wallet list» report,
-   locked end to end against the REAL shipped singletons (jsdom + the actual
-   @reown/appkit 1.8.19): the adapter-less WC surface latches
-   ChainController.state.noAdapters, ModalController.open() routes on it
-   before the requested view, and assertEmailRouting() is what releases it —
-   on the email surface only, with the WC surface's own flags untouched. The
-   probe installs its own DOM (the runner's installDom runs later) and
-   restores the fetch boundary it stubs. */
-console.log('▸ probing email routing against the real AppKit singletons (noAdapters latch)…');
-{
-  const { default: runEmailRouting } = await import('./email-routing-probe.mjs');
-  report('email routing (the wallet-grid hijack)', await runEmailRouting());
-}
+/* 0b₂ WAS the email-routing probe — the «email tap opens the WalletConnect
+   wallet list» hijack, locked against the real AppKit singletons. It went with
+   the surface it diagnosed: the email/social embedded wallet was removed on
+   2026-09-18, so there is no second AppKit instance left to fight the
+   WalletConnect one over `noAdapters` / `manualWCControl`. The removal itself
+   is locked in §9 of the stack probe above. */
 
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was

@@ -37,7 +37,12 @@ export async function run(container) {
 
   out.push(['the sheet renders', rows.length >= 3]);
   out.push(['WalletConnect is offered', /WalletConnect/.test(text)]);
-  out.push(['email & social is offered', /Email/.test(text)]);
+  /* The email/social embedded-wallet row was REMOVED on 2026-09-18: it needed a
+     second AppKit instance sharing the controllers and the one <w3m-modal> with
+     WalletConnect, which is how an email tap came to open the wallet grid
+     instead of the login form. Its absence is asserted as firmly as the
+     presence of the routes that stayed. */
+  out.push(['the retired email/social row is gone', !/Email|Social|Google|Apple/i.test(text)]);
   out.push(['the in-app vault is offered', text.length > 0 && buttons.length >= 3]);
   out.push(['the self-custody warning is on screen', /keys|seed|recovery/i.test(text)]);
   out.push(['the health check is one tap away', Boolean(surface.querySelector('details'))]);

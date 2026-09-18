@@ -6,17 +6,22 @@ import { IconCheck, IconCopy } from './Icons';
 /**
  * CONNECTION HEALTH CHECK
  * ---------------------------------------------------------------------------
- * The four links a wallet report is always about are ones the UI cannot show:
+ * The three links a wallet report is always about are ones the UI cannot show:
  * whether the dashboard knows this project, whether its allowlist covers this
- * origin, whether the relay's WebSocket opens on THIS network, and whether the
- * embedded-wallet frame can be reached. This measures all four on the device
- * and network where the user is and prints copyable JSON, so the next report
- * arrives with the failing hop named instead of described.
+ * origin, and whether the relay's WebSocket opens on THIS network. This
+ * measures all three on the device and network where the user is and prints
+ * copyable JSON, so the next report arrives with the failing hop named instead
+ * of described.
  *
  * RELAY MEASUREMENTS ARE ADVISORY: a browser socket error cannot distinguish
  * "blocked" from "wrong project", so the verdict is never presented as a
  * verdict on the connection itself — the panel says what it measured and what
  * to try instead.
+ *
+ * Two rows this panel used to carry are gone with the email/social login they
+ * diagnosed (retired 2026-09-18): the reachability of the embedded-wallet frame
+ * at secure.walletconnect.org, and the project usage limits AppKit reads to
+ * disable its email input.
  */
 
 /** Verdict code → the sentence that goes with it. */
@@ -29,51 +34,8 @@ const RELAY_VERDICT_KEYS = {
   NO_MEASUREMENT: 'wallet.healthRelayNoMeasurement'
 };
 
-/** Where the project number came from → the sentence that goes with it. */
-const PROJECT_SOURCE_KEYS = {
-  dashboard: 'wallet.healthProjectSourceDashboard',
-  local: 'wallet.healthProjectSourceLocal',
-  default: 'wallet.healthProjectSourceDefault',
-  off: 'wallet.healthProjectSourceOff'
-};
-
 /** Short host name for the row — the scheme is noise in a support screenshot. */
 const hostName = (url) => String(url ?? '').replace(/^wss:\/\//, '');
-
-/**
- * The project row's numbers, printed as measured.
- *
- * The socials LIST is printed too, because «socials=0» and «socials=7» are the
- * difference between a dashboard setting and a bug hunt.
- */
-function projectDetail(features) {
-  if (!features) return 'OK';
-  const socials = Array.isArray(features.socials) ? features.socials : [];
-  return `email=${String(features.email)} · socials=${socials.length}`
-    + `${socials.length ? ` (${socials.join(', ')})` : ''}`;
-}
-
-/**
- * …and the sentence those numbers are useless without.
- *
- * `email=false socials=0` is what sent a support thread hunting a dashboard
- * switch nobody had flipped: when the answer carries `config: null`, AppKit
- * never reads the dashboard at all and uses the `features` WE hand
- * `createAppKit()`. So the row names the source, and names whatever AppKit's
- * own platform filter took away — a provider hidden on this device is not a
- * provider the dashboard disabled.
- */
-function projectSourceNote(features, t) {
-  const key = PROJECT_SOURCE_KEYS[features?.source];
-  const parts = key ? [t(key)] : [];
-  const requested = Array.isArray(features?.requested?.socials) ? features.requested.socials : [];
-  const shown = Array.isArray(features?.socials) ? features.socials : [];
-  const hidden = requested.filter((name) => !shown.includes(name));
-  if (hidden.length > 0) {
-    parts.push(t('wallet.healthProjectPlatformFiltered', { removed: hidden.join(', ') }));
-  }
-  return parts.join(' · ');
-}
 
 /**
  * The hop a pairing leaves from, in measured words.
@@ -143,7 +105,6 @@ export default function WalletHealthPanel({ projectId }) {
     </p>
   );
 
-  const features = report?.projectConfig?.features;
   const relays = Array.isArray(report?.relays) ? report.relays : [];
   const verdict = report?.relayVerdict;
   const verdictKey = RELAY_VERDICT_KEYS[verdict];
@@ -172,15 +133,7 @@ export default function WalletHealthPanel({ projectId }) {
                   error: report.projectConfig?.error,
                   status: report.projectConfig?.status
                 },
-                projectDetail(features)
-              )}
-              {report.projectConfig?.ok && features && (
-                <p
-                  className="muted"
-                  style={{ fontSize: 11, margin: '2px 0', marginInlineStart: 14 }}
-                >
-                  {projectSourceNote(features, t)}
-                </p>
+                report?.projectId ? `id=${report.projectId}` : undefined
               )}
               {row(
                 t('wallet.healthOrigins'),
@@ -233,37 +186,27 @@ export default function WalletHealthPanel({ projectId }) {
                   {t('wallet.healthRelayFreeRoutes')}
                 </p>
               )}
-              {row(t('wallet.healthSecureSite'), report.secureSite)}
-              {report.usage?.ok != null && row(
-                t('wallet.healthUsage'),
-                { ok: Boolean(report.usage.ok) },
-                `tier=${report.usage.tier ?? '?'} · mau>${report.usage.isAboveMauLimit ? 'YES' : 'no'} · rpc>${report.usage.isAboveRpcLimit ? 'YES' : 'no'}`
-              )}
-              {report.usage?.emailDisabledByUsageLimit && (
-                <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '4px 0' }}>
-                  {t('wallet.healthUsageBlocked')}
-                </p>
-              )}
               {row(
                 t('wallet.healthHandoff'),
                 { ok: Boolean(report.handoff?.channel) },
                 handoffDetail(report.handoff)
               )}
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0' }}>
-                {`origin=${report.origin} · sdk-login=${report.storage?.sdkLoginMarker} · fbt-marker=${report.storage?.ourMarker}${report.storage?.emailMarkerStale ? ' (stale)' : ''} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''} · status=${report.storage?.connectionStatus ?? '—'} · stored=${(report.storage?.storedConnectors ?? []).join(',') || '—'}`}
+                {`origin=${report.origin} · wc-sessions=${report.storage?.wcSessionKeys} · appkit-keys=${report.storage?.appkitConnectionKeys}${report.storage?.orphanKeys ? ' · ⚠️ orphan' : ''} · status=${report.storage?.connectionStatus ?? '—'} · stored=${(report.storage?.storedConnectors ?? []).join(',') || '—'}${report.storage?.legacyEmbeddedKeys ? ` · ⚠️ legacy-email-keys=${report.storage.legacyEmbeddedKeys}` : ''}`}
               </p>
-              {/* Which keys survived, and which chain the email surface would
-                  boot on — the two facts the previous report could not name. */}
+              {/* Which keys survived, and which chain the SDK would boot on —
+                  the two facts a count alone cannot name. */}
               {(report.storage?.appkitConnectionKeyNames?.length || report.storage?.activeCaipNetworkId) && (
                 <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>
-                  {`keys=${(report.storage?.appkitConnectionKeyNames ?? []).join(',') || '—'} · active=${report.storage?.activeCaipNetworkId ?? '—'} · frame-chain=${report.storage?.frameChainSupported == null ? '—' : (report.storage.frameChainSupported ? 'ok' : 'UNSUPPORTED')} · frame-last-chain=${report.storage?.frameLastUsedChain ?? '—'}`}
+                  {`keys=${(report.storage?.appkitConnectionKeyNames ?? []).join(',') || '—'} · active=${report.storage?.activeCaipNetworkId ?? '—'}`}
                 </p>
               )}
-              {/* The in-memory half the storage rows cannot show: which of
-                  these facts is why the email input renders disabled. */}
+              {/* The in-memory half the storage rows cannot show: what the
+                  shared AppKit controllers say, which is what the modal opens
+                  on — no storage key records it. */}
               {report.shared && (
                 <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>
-                  {`shared: conn=${report.shared.isConnected ? 'yes' : 'no'} · connector=${report.shared.connectorId ?? '—'} · authConn=${report.shared.authConnection ? 'yes' : 'no'}${report.shared.authConnection ? `(acct=${report.shared.authAccounts ?? '?'}${(report.shared.authAccounts ?? 0) === 0 ? ' GHOST' : ''})` : ''} · noAdapters=${report.shared.noAdapters ? 'true' : 'false'} · view=${report.shared.view ?? '—'} · modal=${report.shared.modalOpen ? 'open' : 'closed'}`}
+                  {`shared: conn=${report.shared.isConnected ? 'yes' : 'no'} · connector=${report.shared.connectorId ?? '—'} · noAdapters=${report.shared.noAdapters ? 'true' : 'false'} · view=${report.shared.view ?? '—'} · modal=${report.shared.modalOpen ? 'open' : 'closed'}`}
                 </p>
               )}
               {report.storage?.orphanKeys && (
