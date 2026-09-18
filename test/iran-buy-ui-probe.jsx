@@ -228,7 +228,10 @@ export async function run(container) {
       await sleep(120);
     });
     /* The sheet portals to document.body, so its options are found there. */
-    const metamaskOption = [...document.querySelectorAll('.wallet-option')].find((button) => button.textContent.includes('MetaMask'));
+    /* The connect sheet's rows are `.wc-card` since the 2026-09-18 restyle; the
+       old `.wallet-option` is kept in the selector so this probe keeps working
+       if a row ever renders with either class. */
+    const metamaskOption = [...document.querySelectorAll('.wc-card, .wallet-option')].find((button) => button.textContent.includes('MetaMask'));
     await act(async () => {
       metamaskOption?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
       await sleep(400);

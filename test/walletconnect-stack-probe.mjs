@@ -46,6 +46,13 @@ import {
   repairPairingInLink,
   repairPairingUri,
   storageFacts,
+  WALLET_LEASE_KEY,
+  WALLET_RESTORE_BACKOFF,
+  clearWalletLease,
+  readWalletLease,
+  walletRestoreDelay,
+  walletRestorePlan,
+  writeWalletLease,
   uriRoundTrips,
   walletByKey,
   walletForUrl,
@@ -980,6 +987,97 @@ export default async function run() {
       handoffFacts({ navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14)' }, FBTWalletLink: { openWallet: () => true }, Capacitor: { isNativePlatform: () => true } }).javaBridge === true);
   }
 
+  /* ══════════════════ 14b. the session lease ═════════════════════════════ */
+  {
+    const store = () => {
+      const map = new Map();
+      return {
+        get length() { return map.size; },
+        key: (i) => [...map.keys()][i] ?? null,
+        getItem: (k) => (map.has(k) ? map.get(k) : null),
+        setItem: (k, v) => map.set(k, String(v)),
+        removeItem: (k) => map.delete(k),
+        _map: map
+      };
+    };
+
+    /* A fresh install: the default window is 60 minutes and it is ALIVE. */
+    const s1 = store();
+    const rec = writeWalletLease({ address: '0xAbCd000000000000000000000000000000001234', chainId: 56, mode: 'wc', minutes: 60, at: 1_000_000, storage: s1 });
+    const live = readWalletLease({ storage: s1, at: 1_000_000 + 59 * 60_000 });
+    t('a 60-minute lease is alive one minute before it lapses', rec?.expiresAt === 1_000_000 + 60 * 60_000 && live?.alive === true);
+    t('the lease stores no secret — address, mode, chain and a clock',
+      JSON.stringify({ ...live }).length < 400 && !/wc:|topic|secret|key/i.test(JSON.stringify(live)));
+
+    /* It LAPSES on the clock the user chose. */
+    const gone = readWalletLease({ storage: s1, at: 1_000_000 + 61 * 60_000 });
+    t('the lease lapses exactly when the window ends', gone?.alive === false && gone?.remainingMs === 0);
+
+    /* «تا قطع دستی»: minutes 0 means no expiry at all. */
+    const s2 = store();
+    writeWalletLease({ address: '0xAbCd000000000000000000000000000000001234', mode: 'injected', rdns: 'io.metamask', minutes: 0, at: 1_000_000, storage: s2 });
+    const forever = readWalletLease({ storage: s2, at: 1_000_000 + 400 * 24 * 60 * 60_000 });
+    t('«until I disconnect» never lapses', forever?.alive === true && forever?.expiresAt === 0);
+
+    /* Rolling: the record is rewritten, the address is kept. */
+    const rolled = writeWalletLease({ address: '0xAbCd000000000000000000000000000000001234', mode: 'wc', chainId: 1, minutes: 15, at: 2_000_000, storage: s1 });
+    t('rolling the lease moves the expiry and keeps the record honest',
+      rolled.expiresAt === 2_000_000 + 15 * 60_000 && readWalletLease({ storage: s1, at: 2_000_000 }).chainId === 1);
+
+    t('an explicit disconnect removes the record', clearWalletLease(s1) === true && readWalletLease({ storage: s1, at: 2_000_000 }) === null);
+
+    /* Storage that refuses (private mode) is not a crash. */
+    const hostile = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); }, key() { return null; }, length: 0 };
+    t('a blocked storage degrades to no lease instead of throwing',
+      writeWalletLease({ address: '0xAbCd000000000000000000000000000000001234', mode: 'wc', storage: hostile }) === null
+        && readWalletLease({ storage: hostile }) === null);
+
+    /* Garbage on disk is rejected rather than acted on: acting on it would
+       re-attach a wallet from bytes nobody validated. */
+    const junk = store();
+    junk.setItem(WALLET_LEASE_KEY, JSON.stringify({ v: 1, mode: 'wc', address: 'not-an-address' }));
+    junk.setItem('other', '1');
+    t('a malformed lease is ignored', readWalletLease({ storage: junk }) === null);
+
+    /* ── the restore policy, which is where the counter-intuitive branch is ── */
+    const leaseOf = (mode, alive) => ({ mode, address: '0xabc', alive, expiresAt: alive ? Date.now() + 60_000 : Date.now() - 1 });
+    t('a live WalletConnect lease resumes WalletConnect',
+      walletRestorePlan({ lease: leaseOf('wc', true) }).action === 'wc');
+    t('a live injected lease resumes the injected wallet',
+      walletRestorePlan({ lease: leaseOf('injected', true) }).action === 'injected');
+    t('a live local lease leaves the attach to the vault path',
+      walletRestorePlan({ lease: leaseOf('local', true), hasVault: true }).action === 'local');
+    t('a local lease with no vault on disk restores nothing',
+      walletRestorePlan({ lease: leaseOf('local', true), hasVault: false }).action === 'none');
+    /* The branch a future edit would "simplify" straight back into the bug: an
+       EXPIRED lease is the one state that must purge the stored session, so the
+       next Connect is a clean first attempt. */
+    t('an EXPIRED lease purges the session it described',
+      walletRestorePlan({ lease: leaseOf('wc', false), hasStoredSession: true }).expired === true
+        && walletRestorePlan({ lease: leaseOf('wc', false), hasStoredSession: true }).action === 'none');
+    /* ...while a session with NO lease at all is an install from before this
+       feature: it is adopted once rather than disconnected by the update. */
+    t('a pre-lease install is adopted, not disconnected',
+      walletRestorePlan({ lease: null, hasStoredSession: true }).action === 'wc'
+        && walletRestorePlan({ lease: null, hasStoredSession: true }).adopt === true);
+    t('nothing on disk means nothing to do',
+      walletRestorePlan({}).action === 'none');
+    t('the retry ladder is bounded and ends on a clock a user can wait for',
+      walletRestoreDelay(0) < walletRestoreDelay(1) && walletRestoreDelay(99) === walletRestoreDelay(WALLET_RESTORE_BACKOFF.length - 1));
+
+    /* The wiring: every attach path writes a lease and the cold start reads it. */
+    const ctxSrc = readFileSync('src/context/WalletContext.jsx', 'utf8');
+    t('every transport records a lease when it attaches',
+      (ctxSrc.match(/grantLease\(/g) || []).length >= 4);
+    t('the lease is rolled while the app is in use',
+      /rollLease\(\{ force: true \}\)/.test(ctxSrc) && /rollLease\(\)/.test(ctxSrc));
+    t('the settings value is the lease duration', /walletSessionMinutes/.test(ctxSrc));
+    /* A resume that CANNOT succeed must not spend 100 seconds pretending to
+       retry: a `wc` lease whose `wc@2:` session is gone fails fast and says so. */
+    t('an impossible WalletConnect resume fails fast instead of burning the ladder',
+      /plan\.action === 'wc' && !hasStoredSession\(\)/.test(ctxSrc) && /lease_session_missing/.test(ctxSrc));
+  }
+
   /* ══════════════════ 15. wiring guards (source, not behaviour) ══════════ */
   {
     const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
@@ -1002,12 +1100,47 @@ export default async function run() {
     t('the orphan purge has no session-evidence gate left to consult',
       !/sdkSessionFacts|hasEmailMarker|email_orphan_kept/.test(ctx));
 
-    /* ONE restore, no sequencing: the stored `wc@2:` session used to wait for an
-       email restore that could starve it whenever a marker survived a failed
-       login. */
-    t('the only resume path is the WalletConnect session',
-      /restoreWcSession\(\{ announce \}\)/.test(ctx) && !/resumeEmailThenWc/.test(ctx));
-    t('a local vault still wins the cold start', /if \(!loadVault\(\)\) resume\(false\);/.test(ctx));
+    /* ONE resume, THREE transports, no sequencing.
+       The stored `wc@2:` session used to wait behind an email restore that
+       could starve it whenever a marker survived a failed login; since
+       2026-09-18 it is planned from the session LEASE instead, and the plan
+       covers the injected wallet and the in-app vault too — which is what makes
+       a refresh stop looking like a disconnect. */
+    t('the resume is plan-driven, not a single WalletConnect attempt',
+      /walletRestorePlan\(/.test(ctx) && /restoreWcSession\(\{ announce: false \}\)/.test(ctx)
+        && !/resumeEmailThenWc/.test(ctx));
+    t('a local vault still wins the cold start',
+      /!vault && \(plan\.action === 'wc' \|\| plan\.action === 'injected'\)/.test(ctx));
+    t('a failed resume is retried on a bounded ladder, not abandoned',
+      /scheduleWalletRestore/.test(ctx) && /walletRestoreDelay\(/.test(ctx));
+    t('an injected wallet is re-attached silently — never with a prompt',
+      /restoreInjected/.test(ctx) && /method: 'eth_accounts'/.test(ctx)
+        && !/restoreInjected[\s\S]{0,400}eth_requestAccounts/.test(ctx));
+    t('an explicit disconnect drops the lease first', (() => {
+      const at = ctx.indexOf('const disconnect = useCallback');
+      const body = ctx.slice(at, at + 900);
+      return body.indexOf('dropLease()') > -1 && body.indexOf('dropLease()') < body.indexOf('wcRef.current?.disconnect()');
+    })());
+    /* The balance contract, asserted on CODE (this probe strips comments):
+       the failure branch of refreshBalance must not blank the number the user
+       is reading. It did, once — and it ran on a 30-second interval. */
+    t('the balance keeps its last good value across a failed read', (() => {
+      const at = ctx.indexOf('const refreshBalance = useCallback');
+      if (at < 0) return false;
+      const body = ctx.slice(at, at + 1400);
+      const catchAt = body.indexOf('} catch {');
+      if (catchAt < 0) return false;
+      const catchBody = body.slice(catchAt, catchAt + 220);
+      return !/setNativeBalance\(null\)/.test(catchBody);
+    })());
+
+    /* Every way the lease can end is explained where it ends. An unexplained
+       return to «not connected» is the exact report this feature answers. */
+    const locale = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
+    t('a lapsed or missing session is explained on the sheet',
+      /wallet\.sessionLapsed/.test(sheet) && /wallet\.sessionGone/.test(sheet));
+    t('both sentences exist in English, the fallback every locale reads',
+      Boolean(locale.wallet.sessionLapsed) && Boolean(locale.wallet.sessionGone));
 
     /* The transports that are left, and the one attach path they share. */
     t('the sheet offers WalletConnect, the injected wallets and the vault',

@@ -34,7 +34,7 @@ import { buildIntelligence } from '../lib/portfolioIntel';
 import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
 import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
-import { IconCopy, IconGlobe, IconChevronRight } from '../components/Icons';
+import { IconCopy, IconGlobe, IconChevronRight, IconShield } from '../components/Icons';
 import { WalletMesh } from '../components/WalletArt';
 import '../styles/wallet-modern.css';
 import '../styles/wallet.css';
@@ -113,7 +113,7 @@ function changeLabel(ch, currency) {
 
 function WalHero({
   wallet, currency, portfolio, intel, chips, hideBalances, t,
-  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, children
+  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, onRetry, children
 }) {
   const connected = Boolean(wallet.address) && !wallet.locked;
   const [switching, setSwitching] = useState(false);
@@ -167,13 +167,41 @@ function WalHero({
           <div className="wal-hero-value">
             <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.portfolioTotal')} · {currency.code}</div>
             <div className="wal-hero-total">
-              {portfolio.loading && portfolio.totalValue === 0 ? (
-                <span style={{ opacity: 0.5 }}>…</span>
+              {/*
+                THE NUMBER NEVER BECOMES «…» AGAIN.
+
+                This is the reported bug verbatim: «هر چند ثانیه یکبار عدد
+                موجودی کیف پول به سه نقطه تبدیل می‌شود». The old condition was
+                `portfolio.loading && portfolio.totalValue === 0`, and
+                `loading` is true for the whole of every refresh — a market
+                tick re-runs the multi-chain read every 30 seconds, and a chain
+                whose RPC timed out could zero the total it contributed. So the
+                placeholder appeared and disappeared over a balance that was
+                never wrong.
+
+                Now the placeholder exists for exactly one state — NOTHING HAS
+                BEEN READ YET (`portfolio.loaded === false`) — and it is a
+                skeleton rather than a bare ellipsis. Once a number has been
+                shown it stays on screen through every refresh, and when a read
+                succeeds AnimatedNumber tweens to the NEW figure and flashes
+                green/red. That is the whole requested behaviour: «باید روی
+                موجودی بمونه و اگر بروز شد عدد جدید را نشان بدهد».
+              */}
+              {!portfolio.loaded ? (
+                <span className="wal-total-skeleton" aria-hidden="true" />
               ) : (
                 <AnimatedNumber value={portfolio.totalValue} format={(v) => fmtCurrencyValue(v, currency) || '—'} />
               )}
             </div>
             <div className="row" style={{ gap: 8, marginTop: 6, fontSize: 11 }}>
+              {/* Refreshing is shown as a quiet, non-destructive cue beside the
+                  number — never in place of it. */}
+              {portfolio.loaded && portfolio.loading && (
+                <span className="wal-reval">
+                  <span className="wal-reval-dot" aria-hidden="true" />
+                  {t('wallet.updating')}
+                </span>
+              )}
               {portfolio.partial && portfolio.pricedCount > 0 && (
                 <span className="wal-note">
                   {t('wallet.coverageShort', { priced: portfolio.pricedCount, total: portfolio.totalCount })}
@@ -216,6 +244,25 @@ function WalHero({
             </div>
           </div>
 
+          {/*
+            HOW LONG THIS CONNECTION LASTS — the user's own setting, on screen.
+            A number here is a promise the app can keep (the lease in
+            lib/wc/lease.js), and «تا قطع دستی» is the honest label for the
+            never-expires option. A refresh inside this window re-attaches
+            silently; after it, the wallet is asked again — which is exactly
+            what the setting says.
+          */}
+          {wallet.lease && (
+            <p className="wal-lease" role="status">
+              <IconShield width={13} height={13} aria-hidden="true" />
+              <span>
+                {wallet.leaseMinutesLeft == null
+                  ? t('wallet.leaseUntilDisconnect')
+                  : t('wallet.leaseMinutesLeft', { n: wallet.leaseMinutesLeft })}
+              </span>
+            </p>
+          )}
+
           {/* One equal-sized action row + Optimize (proposal only) */}
           <WalletActionRow
             onSend={() => children?.onSend?.()}
@@ -232,7 +279,18 @@ function WalHero({
 
           {/* Utility / wallet management row */}
           <div className="wal-utils">
-            <button className="wal-util" onClick={onRefresh}>{portfolio.loading ? '…' : t('common.refresh')}</button>
+            {/* A spinning icon carries "working" without replacing the label:
+                «…» where a word belongs reads as missing text, and it flickered
+                every time the 30-second portfolio cycle started. */}
+            <button className="wal-util" onClick={onRefresh} aria-busy={portfolio.loading ? 'true' : 'false'}>
+              <IconRefresh
+                width={15}
+                height={15}
+                className={portfolio.loading ? 'wal-spin' : undefined}
+                aria-hidden="true"
+              />
+              <span>{t('common.refresh')}</span>
+            </button>
             <button className="wal-util" onClick={() => onExplorer(wallet.address)} title={t('swap.viewOnExplorer')} aria-label={t('swap.viewOnExplorer')}><IconGlobe width={15} height={15} /></button>
             {wallet.mode === 'local' && !wallet.locked && (
               <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
@@ -294,15 +352,48 @@ function WalHero({
         </div>
       ) : (
         <div className="wal-empty" style={{ position: 'relative', textAlign: 'center', padding: '6px 0 2px' }}>
-          <div style={{ width: 68, height: 68, borderRadius: 19, margin: '0 auto 13px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 26, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
-            </svg>
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.emptyTitle')}</div>
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
-          <button className="btn btn-primary" style={{ marginTop: 15, minHeight: 44, borderRadius: 14, padding: '0 24px' }} onClick={onConnect}>{t('wallet.connect')}</button>
-          <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
+          {/*
+            RECONNECTING vs NOT CONNECTED.
+
+            These two states look identical from React state alone — no address
+            either way — and drawing the "connect your wallet" call to action
+            during the first one is how a working background resume gets read as
+            «حسابم قطع شد»: the user taps Connect and approves a second wallet
+            session while the first one was already attaching itself. The lease
+            is what tells them apart (see lib/wc/lease.js), so while one is live
+            the hero says what is actually happening — and offers the manual
+            retry for the case where the wallet app is the thing that is slow.
+          */}
+          {wallet.restoring ? (
+            <>
+              <div className="wal-reconnect-ring" aria-hidden="true">
+                <span className="wal-reconnect-dot" />
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.reconnectingTitle')}</div>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>
+                {t('wallet.reconnectingBody')}
+              </p>
+              <button
+                className="btn btn-ghost"
+                style={{ marginTop: 14, minHeight: 42, borderRadius: 14 }}
+                onClick={onRetry}
+              >
+                {t('wallet.reconnectNow')}
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ width: 68, height: 68, borderRadius: 19, margin: '0 auto 13px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 26, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
+                </svg>
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.emptyTitle')}</div>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
+              <button className="btn btn-primary" style={{ marginTop: 15, minHeight: 44, borderRadius: 14, padding: '0 24px' }} onClick={onConnect}>{t('wallet.connect')}</button>
+              <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
+            </>
+          )}
         </div>
       )}
     </section>
@@ -822,6 +913,10 @@ export default function Wallet() {
             onExplorer={handleExplorer}
             switchChain={wallet.switchChain}
             haptic={haptic}
+            /* The manual retry the «reconnecting» hero offers — the same
+               plan-driven attempt the cold start runs, exposed for the one
+               case a ladder cannot cover: a wallet app the user just opened. */
+            onRetry={() => wallet.reconnectWallet?.()}
           >
             {heroApi}
           </WalHero>

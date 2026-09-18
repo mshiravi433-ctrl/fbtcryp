@@ -38,6 +38,11 @@ import {
   verifyTotp
 } from '../lib/security';
 import { langMeta } from '../i18n/languages';
+/* The session-duration choices live WITH the lease they configure, so the
+   picker and the record can never disagree about what 0 means. Imported from
+   lease.js directly — that module imports nothing, while the barrel beside it
+   pulls the WalletConnect SDK in. */
+import { WALLET_SESSION_CHOICES } from '../lib/wc/lease.js';
 import { currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
@@ -1315,6 +1320,35 @@ export default function Settings() {
         />
       </Field>
 
+      {/*
+        ─── HOW LONG THE WALLET STAYS CONNECTED ────────────────────────────
+        Requested in the same breath as the disconnect bug: «با توجه به
+        تنظیمات که چند دقیقه گذاشته مثل ۶۰ دقیقه کیف پول وصل باشد و با رفرش
+        دیکانکت نشه». The number is the lease duration (lib/wc/lease.js): while
+        the app is open the window rolls forward, and a reload inside it
+        re-attaches silently for all three transports. «∞» is the honest label
+        for the never-expires option — 0 in the store, «تا قطع دستی» in words.
+      */}
+      <Field
+        label={t('settings.walletSession')}
+        hint={s.walletSessionMinutes === 0
+          ? t('settings.sessionUntilDisconnect')
+          : t('settings.walletSessionHint', { n: s.walletSessionMinutes })}
+        note={t('settings.walletSessionNote')}
+      >
+        <OptionGrid
+          cols={3}
+          ariaLabel={t('settings.walletSession')}
+          value={s.walletSessionMinutes}
+          onChange={(v) => { haptic?.('select'); s.setWalletSessionMinutes(v); }}
+          options={WALLET_SESSION_CHOICES.map((m) => ({
+            value: m,
+            label: m === 0 ? '∞' : String(m),
+            sub: m === 0 ? t('settings.sessionUntilDisconnect') : t('settings.minutesShort', 'min')
+          }))}
+        />
+      </Field>
+
       {bioErr && <p className="set-note is-danger">{t(`settings.bioErr.${bioErr}`)}</p>}
 
       {/*
@@ -1998,7 +2032,8 @@ export default function Settings() {
       chips: [
         <Chip key="2fa" icon={IconLock} tone={s.twoFactorEnabled ? 'good' : undefined}>2FA</Chip>,
         <Chip key="bio" icon={IconFingerprint} tone={s.biometricEnabled ? 'good' : undefined}>{t('settings.biometric')}</Chip>,
-        <Chip key="lock" icon={IconClock}>{s.autoLockMinutes === 0 ? t('settings.never') : `${s.autoLockMinutes}m`}</Chip>
+        <Chip key="lock" icon={IconClock}>{s.autoLockMinutes === 0 ? t('settings.never') : `${s.autoLockMinutes}m`}</Chip>,
+        <Chip key="wsess" icon={IconWallet}>{s.walletSessionMinutes === 0 ? '∞' : `${s.walletSessionMinutes}m`}</Chip>
       ]
     },
     {
