@@ -133,11 +133,14 @@ An unexplained return to «not connected» *is* the reported bug.
 | `src/i18n/locales/{en,fa,ar}.json` | the new sentences, in the three complete locales |
 | `test/walletconnect-stack-probe.mjs` | lease suite + retargeted wiring guards |
 | `test/wallet-connect-sheet-probe.jsx` | structural assertions for the restyle |
+| `test/wallet-session-lease.test.jsx` | **new** — mounts the real `WalletProvider` twice, as a reload does |
 
 ## Verification
 
 ```
 node test/walletconnect-stack-probe.mjs         → All 251 wallet-connect checks passed
+npx vitest run test/wallet-session-lease.test.jsx
+                                                → passed 5/5  (the real provider, a real reload)
 npx vite build -c test/vite.wcsheet.mjs && \
   node test/run-one-probe.mjs ./.out/wcsheet/wallet-connect-sheet-probe.js
                                                 → passed 17/17
