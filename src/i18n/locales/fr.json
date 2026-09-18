@@ -73,6 +73,9 @@
     "pointsEarned": "Points gagnés",
     "walletSessionRestored": "Session de portefeuille restaurée",
     "walletSessionExpired": "La session du portefeuille a expiré",
+    "emailSwitchUnsupported": "Le cadre sécurisé du portefeuille e-mail ne sert pas ce réseau ; la signature reste sur le réseau actuel. Vous pouvez toujours trader sur le réseau choisi via la voie inter-chaînes — le réseau de signature n'a pas à être celui du trade.",
+    "emailSwitchReconnect": "Le portefeuille e-mail n'est pas actif sur cette page. Reconnectez-vous avec votre e-mail pour continuer.",
+    "emailSwitchFailed": "Le changement de réseau du portefeuille e-mail n'a pas abouti. Réessayez.",
     "refreshFailed": "Échec de l'actualisation — réessayez"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "Ne fermez pas cet écran.",
     "success": "Échange effectué",
     "notConnected": "Portefeuille non connecté",
+    "emailChainSignOnly": "Le portefeuille e-mail reste sur son réseau de signature — le cadre sécurisé ne sert pas ce réseau. Vous pouvez toujours échanger sur le réseau {{chain}} via la voie inter-chaînes.",
+    "emailChainSwitchFailed": "Le portefeuille e-mail n'a pas pu être déplacé sur le réseau {{chain}}. Reconnectez votre portefeuille e-mail.",
     "insufficient": "Solde insuffisant",
     "flip": "Inverser les deux tokens",
     "searchToken": "Rechercher un nom, un symbole ou coller une adresse…",

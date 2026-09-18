@@ -73,6 +73,9 @@
     "pointsEarned": "Puntos ganados",
     "walletSessionRestored": "Sesión de billetera restaurada",
     "walletSessionExpired": "La sesión de la billetera ha terminado",
+    "emailSwitchUnsupported": "El marco seguro de la billetera de correo no sirve esta red, así que la firma se queda en la actual. Puedes seguir operando en la red elegida por la ruta intercadena — la red de firma no tiene que ser la de la operación.",
+    "emailSwitchReconnect": "La billetera de correo no está activa en esta página. Vuelve a conectarte con tu correo para continuar.",
+    "emailSwitchFailed": "El cambio de red de la billetera de correo no se realizó. Inténtalo de nuevo.",
     "refreshFailed": "Error al actualizar — inténtalo de nuevo"
   },
   "wallet": {
@@ -289,6 +292,8 @@
     "dontClose": "No cierres esta pantalla.",
     "success": "Intercambio completado",
     "notConnected": "Cartera no conectada",
+    "emailChainSignOnly": "La billetera de correo se queda en su red de firma: el marco seguro no sirve esta red. Puedes seguir intercambiando en la red {{chain}} por la ruta intercadena.",
+    "emailChainSwitchFailed": "No se pudo mover la billetera de correo a la red {{chain}}. Vuelve a conectar tu billetera de correo.",
     "insufficient": "Saldo insuficiente",
     "flip": "Invertir los dos tokens",
     "searchToken": "Busca por nombre, símbolo o pega una dirección…",

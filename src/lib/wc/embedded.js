@@ -146,6 +146,72 @@ export function sdkLoginMarkerPresent(storage) {
 }
 
 /**
+ * THE EVIDENCE A FRAME SESSION IS ALIVE — read from the SDK's own storage.
+ *
+ * ─── WHY ONE FUNCTION, FOUR WITNESSES ──────────────────────────────────────
+ * Every gate in the app used to key off OUR marker (`fbt_email_social_connected`),
+ * but the marker is a claim about an ATTEMPT, and it is the one piece of state
+ * a failed flow can leave lying (the 2026-09-18 Telegram report: the login
+ * finished AFTER the 30s wait gave up, `rollback()` cleared the marker, and
+ * from then on nothing in the app knew a session was owed — no attach, no
+ * signer, and the next cold start's orphan hygiene PURGED the live session's
+ * keys, a silent logout).
+ *
+ * The SDK's storage never lies about a live session, and it is read by
+ * `restoreEmailSocial`, the orphan purge, `classifyEmailMarker` and `rollback`
+ * through this one reader, so the four gates can never disagree about what
+ * «a session exists» means:
+ *
+ *   • `loginMarker`     — `@appkit-wallet/EMAIL_LOGIN_USED_KEY`. `W3mFrameProvider`
+ *     writes it in `setLoginSuccess()` and is built from it in its constructor;
+ *     it is the only reason the secure iframe exists at all.
+ *   • `statusConnected` — `@appkit/connection_status === 'connected'`, the value
+ *     `listenAdapter()` rewrites on every connect/disconnect.
+ *   • `authStored`      — an `AUTH` record inside `@appkit/connections`, the map
+ *     `syncConnections()` reads to re-attach on boot.
+ *   • `authAccounts`    — how many accounts that record carries (a ghost entry
+ *     from PR #353 carries none; a real session carries one or two).
+ *
+ * PURE: it never writes, so it can gate a decision (unlike
+ * `rearmSdkLoginMarker()`).
+ *
+ * @returns {{available:boolean, loginMarker:boolean, statusConnected:boolean,
+ *            authStored:boolean, authAccounts:number, anyEvidence:boolean}}
+ */
+export function sdkSessionFacts(storage) {
+  const target = store(storage);
+  const facts = {
+    available: Boolean(target),
+    loginMarker: false,
+    statusConnected: false,
+    authStored: false,
+    authAccounts: 0,
+    anyEvidence: false
+  };
+  if (!target) return facts;
+  try {
+    facts.loginMarker = sdkLoginMarkerPresent(target);
+    facts.statusConnected = String(target.getItem('@appkit/connection_status') || '') === 'connected';
+    const raw = target.getItem('@appkit/connections');
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object') {
+      for (const list of Object.values(parsed)) {
+        if (!Array.isArray(list)) continue;
+        for (const entry of list) {
+          if (entry?.connectorId !== 'AUTH') continue;
+          facts.authStored = true;
+          facts.authAccounts += Array.isArray(entry?.accounts) ? entry.accounts.length : 0;
+        }
+      }
+    }
+  } catch {
+    /* unreadable storage — the evidence read so far is the honest answer */
+  }
+  facts.anyEvidence = facts.loginMarker || facts.statusConnected || facts.authStored;
+  return facts;
+}
+
+/**
  * Drop the frame's own chain residue when it names a chain the frame cannot
  * serve — on EVERY email path, not just the fresh one.
  *
@@ -373,6 +439,30 @@ async function retireInstance(modal) {
   }
 }
 
+/** How long the «no evidence yet» state gets before it is called stale.
+ *  A single bounded re-measurement, not a window: the SDK rehydrates
+ *  asynchronously, and one slow tick must not cost the user their session. */
+const STALE_RECHECK_MS = 2_000;
+
+/**
+ * The votes one evidence read can cast — the shape `classifyEmailMarker`
+ * re-measures, so the first pass and the re-check weigh the SAME facts.
+ */
+async function markerEvidence({ modal, storage }) {
+  const target = store(storage);
+  let inMemory = false;
+  try {
+    inMemory = modal?.getIsConnectedState?.() === true;
+  } catch { /* an instance that cannot answer does not vote */ }
+  const sdk = sdkSessionFacts(target);
+  let shared = await readSharedConnectionFacts();
+  let modalOpen = false;
+  try {
+    modalOpen = Boolean((await import('@reown/appkit-controllers'))?.ModalController?.state?.open);
+  } catch { /* no controllers — a closed modal is the conservative vote */ }
+  return { inMemory, sdk, shared, modalOpen };
+}
+
 /**
  * WHOSE CLAIM IS THE STANDING MARKER? — `'none' | 'owed' | 'stale'`.
  *
@@ -397,43 +487,59 @@ async function retireInstance(modal) {
  *     gated OFF («a marker means a frame session may be live»), so a returning
  *     user got neither wallet.
  *
- * The distinction, and it is the whole point: our marker claims an ATTEMPT, the
- * SDK's marker is the only evidence a frame session still HOLDS one. When the
- * SDK's is gone and nothing is connected — no address on the instance, no AUTH
- * connection in the shared map — the standing claim is stale, and forgetting it
- * is the honest move (and the only way the next tap gets the clean-slate path
- * it needs: purge + shared reset + a fresh boot).
+ * THE DISTINCTION, WEIGHTED IN THE ORDER THE EVIDENCE IS HONEST:
+ *
+ *   1. the in-memory instance is connected → owed (no storage can beat this);
+ *   2. the SDK's OWN storage says a session is held → owed. This is the vote
+ *      the report's `email_restore_stale_cleared` was missing: a login that
+ *      finishes AFTER our wait, or a boot that rehydrates a beat later, writes
+ *      `connection_status`/`@appkit/connections`/the login key — and any of
+ *      them standing means the frame HOLDS a session, whatever our marker says;
+ *   3. a shared connection that CARRIES an account → owed (see the ghost note
+ *      below — an entry with no accounts is residue, not a session);
+ *   4. THE MODAL IS OPEN → owed. A login is redirect-shaped and can be
+ *      mid-flight while the app is being asked to clean: the box on screen
+ *      with the OTP form is an attempt in progress, and the one thing a
+ *      «stale» verdict must never do is purge the storage and retire the
+ *      instance under an open login (the report's `email_restore_stale` hit
+ *      exactly that window — a visibility-triggered restore 22s into a first
+ *      attempt, four keys gone, the attempt with them);
+ *   5. nothing votes, and nothing is still booting → the claim is stale.
+ *      Before the verdict, ONE bounded re-measurement (`STALE_RECHECK_MS`):
+ *      the SDK rehydrates asynchronously, and a verdict is the most
+ *      destructive thing this function does, so it earns one extra look at
+ *      the evidence. A stale verdict then still means: forget it.
+ *
+ * ─── THE GHOST IN THE SHARED MAP (the «email box opens and does nothing» half
+ * of the 2026-09-18 reports) ────────────────────────────────────────────────
+ * `hasAnyConnection('AUTH')` is what renders the email input DISABLED, and it
+ * checks the connector ID and nothing else. A live AUTH connection can never
+ * exist without accounts (the adapter writes them with the connection), so an
+ * entry with no accounts is residue — an attempt whose teardown lost its
+ * race. So the ghost does not vote: only a connection that carries an account
+ * is a session worth protecting — and when the facts cannot be read at all
+ * (the controllers chunk unreachable), the answer stays the conservative one:
+ * an unreadable map is not evidence of residue.
  *
  * @returns {Promise<'none'|'owed'|'stale'>}
  */
 export async function classifyEmailMarker({ modal = instance, storage } = {}) {
   const target = store(storage);
   if (!hasMarker(target)) return 'none';
-  try {
-    if (modal?.getIsConnectedState?.() === true) return 'owed';
-  } catch { /* an instance that cannot answer does not vote */ }
-  if (sdkLoginMarkerPresent(target)) return 'owed';
-  /*
-   * THE GHOST IN THE SHARED MAP (the «email box opens and does nothing» half
-   * of the 2026-09-18 reports).
-   *
-   * `hasAnyConnection('AUTH')` is what renders the email input DISABLED, and
-   * it checks the connector ID and nothing else. A live AUTH connection can
-   * never exist without accounts (the adapter writes them with the
-   * connection), so an entry with no accounts is residue — an attempt whose
-   * teardown lost its race. Counting that as «a session is owed» left the
-   * marker standing, the clean-slate path skipped, and the ghost in the map:
-   * the user tapped email, the box opened, the input was disabled, and the
-   * trace stayed empty because nothing was ever submitted.
-   *
-   * So the ghost does not vote. Only a connection that carries an account is
-   * a session worth protecting — and when the facts cannot be read at all
-   * (the controllers chunk unreachable), the answer stays the conservative
-   * one: an unreadable map is not evidence of residue.
-   */
-  const shared = await readSharedConnectionFacts();
-  if (!shared.available) return 'owed';
-  if (shared.authAccounts > 0) return 'owed';
+  const weigh = ({ inMemory, sdk, shared, modalOpen }) => {
+    if (inMemory) return 'owed';
+    if (sdk.anyEvidence) return 'owed';
+    if (!shared.available) return 'owed';
+    if (shared.authAccounts > 0) return 'owed';
+    if (modalOpen) return 'owed';
+    return null;
+  };
+  let verdict = weigh(await markerEvidence({ modal, storage }));
+  if (verdict) return verdict;
+  /* The one re-measurement a destructive verdict is owed (see the doc). */
+  await sleep(STALE_RECHECK_MS);
+  verdict = weigh(await markerEvidence({ modal, storage }));
+  if (verdict) return verdict;
   return 'stale';
 }
 
@@ -776,19 +882,121 @@ async function isProviderUsable(provider) {
 }
 
 /**
+ * THE SIGNING PROBE — «متصل» must mean «can sign».
+ *
+ * ─── THE REPORT THIS ANSWERS ───────────────────────────────────────────────
+ * «یکبار وصل شد که اصلاً امضا نمیکرد» — connected once, and it would not sign
+ * at all. The attach used to declare success when an address appeared, and
+ * the fallback signer (`_isFallback`) then claimed signing capability it had
+ * never verified: the app showed «connected», and the first `personal_sign`
+ * of a real swap died on the frame's own «Action not allowed» — the state the
+ * trace has to be able to name as `email_sign_probe_failed` with a sanitized
+ * `m` instead of discovering mid-transaction.
+ *
+ * The probe is the REAL signing path, not a stand-in: `eth_accounts` (on the
+ * frame's SAFE list, so asking can never trip the «Action not allowed» guard
+ * or abort a pending RPC) and one `personal_sign` of a fixed, meaningless,
+ * non-hex message. `personal_sign` is on the frame's NOT_SAFE list precisely
+ * because it reaches the key — which is the question being asked. The frame
+ * signs it the way it signs a swap's transaction; the cost is one extra frame
+ * round trip at attach time.
+ *
+ * @param {object} provider an EIP-1193 object (the frame provider).
+ * @param {string} [address] the address the caller expects to sign — a
+ *   non-empty answer that does NOT carry it is a different wallet, not a
+ *   ready one.
+ * @param {object} [options] `{ timeoutMs }` backstop (default 20s — the
+ *   frame's own iframe-ready bound, so a hung frame cannot hang the attach).
+ * @returns {Promise<{ok:true}|{ok:false,error:string}>} `error` is sanitized
+ *   (no URIs, no addresses) and ready for the trace's `m` key.
+ */
+export const SIGN_PROBE_MESSAGE = 'fbtswap-login-probe';
+
+export async function probeSigning(provider, address, { timeoutMs = 20_000 } = {}) {
+  if (!provider?.request) return { ok: false, error: 'NO_PROVIDER' };
+  /* A backstop that CLEARS ITSELF when the request settles: a plain
+     Promise.race against a timer leaves the timer dangling (and a timer that
+     is the ONLY thing that can settle the wait is a hang in node and a
+     leaked handle in the page). */
+  const bounded = (p) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve({ __probeTimeout: true }), timeoutMs);
+    Promise.resolve(p).then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+  try {
+    const accs = await bounded(provider.request({ method: 'eth_accounts' }));
+    if (accs?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
+    if (!Array.isArray(accs) || accs.length === 0) {
+      lastProbeError = 'NO_ACCOUNTS';
+      return { ok: false, error: 'NO_ACCOUNTS' };
+    }
+    const signer = String(accs[0] || '');
+    if (address && signer && signer.toLowerCase() !== String(address).toLowerCase()) {
+      /* A different wallet than the login produced: attaching it would point
+         the app at an account nobody claimed. Named, not silently probed. */
+      lastProbeError = 'ACCOUNT_MISMATCH';
+      return { ok: false, error: 'ACCOUNT_MISMATCH' };
+    }
+    let hex;
+    try {
+      hex = '0x' + Array.from(new TextEncoder().encode(SIGN_PROBE_MESSAGE))
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      hex = '0x';
+    }
+    const sig = await bounded(provider.request({ method: 'personal_sign', params: [hex, signer] }));
+    if (sig?.__probeTimeout) { lastProbeError = 'PROBE_TIMEOUT'; return { ok: false, error: 'PROBE_TIMEOUT' }; }
+    if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) {
+      lastProbeError = 'BAD_SIGNATURE';
+      return { ok: false, error: 'BAD_SIGNATURE' };
+    }
+    lastProbeError = null;
+    return { ok: true };
+  } catch (e) {
+    const m = String(e?.error?.message || e?.message || e || '').slice(0, 120);
+    lastProbeError = m || 'SIGN_PROBE_FAILED';
+    return { ok: false, error: m || 'SIGN_PROBE_FAILED' };
+  }
+}
+
+/**
  * Wait for the embedded wallet to exist AND be usable.
  *
- * FIX 2026-09-17: The "green tick but no wallet" report. The previous version
- * required address AND provider atomically, and gave only 3s grace after modal
- * close. On slow Android WebViews the provider arrives 1-2s after the address,
- * and the modal closes quickly after OTP, so the check timed out and rollback
- * cleared the marker. Now:
- *  - provider getter tries multiple signatures (with/without namespace) plus
- *    authConnectorProvider
- *  - poll continues after modal close for extended grace
- *  - on timeout, returns address even if provider is temporarily null, so
- *    caller can retry attachExternal with backoff
- *  - also checks that provider is *usable* (does not throw Action not allowed)
+ * ─── EVENT-DRIVEN, NOT A ONE-SHOT WINDOW (the 2026-09-18 Telegram report) ───
+ * The old version was a single flat fuse (30s) that, once spent, left NOBODY
+ * LISTENING: an OTP that legitimately takes 30–120s on a phone (type email →
+ * wait for the code → type the code in a WebView) finished AFTER the wait had
+ * given up, the promise settled null, `rollback()` cleared the marker, and the
+ * app never attached a perfectly healthy frame session — «وصل شده ولی به کیف
+ * پول روی اپ ما وصل نشد».
+ *
+ * Now the wait is built from the signals the SDK actually emits, with polling
+ * only as the net underneath:
+ *
+ *   • `modal.subscribeAccount(cb, 'eip155')`   — an account arrived;
+ *   • `modal.subscribeState(cb)`                — the modal opened/closed
+ *     (`PublicStateController` → open/loading/status);
+ *   • `modal.subscribeCaipNetworkChange(cb)`    — the frame settled a chain;
+ *   • `ChainController.subscribeKey('activeCaipAddress', cb)` — the earliest
+ *     «an address exists» fact (it lands before the provider syncs), without
+ *     any polling at all;
+ *   • a `pollMs` interval — the net for a modal that cannot subscribe.
+ *
+ * While the modal is OPEN, a login is in progress and the wait simply keeps
+ * listening: there is no «30 seconds and done» any more. After the modal
+ * CLOSES without an account, `closeGraceMs` of grace (a slow WebView answers
+ * a beat after the close), then a few extra polls, then the verdict. The
+ * caller's `timeoutMs` is the backstop fuse (the connect flow passes
+ * `TIMEOUT.connectHardCap` — five minutes is a ceiling, not an expectation).
+ *
+ * FIX 2026-09-17 (kept): the provider getter tries multiple signatures (with/
+ * without namespace) plus the auth connector, and on the backstop it returns
+ * the address even if the provider is temporarily null, so the caller can
+ * retry attach with backoff. A provider that answers «Action not allowed» for
+ * everything is still not usable — the frame can hand out a provider object
+ * while its internal isConnected has not flipped.
  */
 export async function awaitAccount(modal, {
   timeoutMs = TIMEOUT.emailOpen,
@@ -833,6 +1041,7 @@ export async function awaitAccount(modal, {
   return new Promise((resolve) => {
     let settled = false;
     let opened = false;
+    let closeArmed = false;
     let closeTimer = null;
     let postClosePoll = null;
     const subscriptions = [];
@@ -861,6 +1070,7 @@ export async function awaitAccount(modal, {
     };
 
     const checkWithFallback = async () => {
+      if (settled) return null;
       // Try sync first
       const syncHit = await checkStrict();
       if (syncHit) return syncHit;
@@ -879,8 +1089,36 @@ export async function awaitAccount(modal, {
       return null;
     };
 
+    /* After the modal CLOSED with no account: one grace, one last check, then
+       a handful of extra polls for the «address landed, provider a beat
+       later» WebView case — and the verdict. Fixed small by design: the event
+       subscriptions above already catch a late login, so the polling here only
+       has to cover one beat of provider lag, not re-implement the wait. */
+    const armPostClose = () => {
+      if (closeArmed || settled) return;
+      closeArmed = true;
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => {
+        if (settled) return;
+        void checkWithFallback().then((hit) => {
+          if (hit || settled) return;
+          let extraAttempts = 0;
+          const maxExtra = 5;
+          postClosePoll = setInterval(() => {
+            extraAttempts += 1;
+            void checkWithFallback().then((h) => {
+              if (h) return;
+              if (extraAttempts >= maxExtra) {
+                finish(readSync(true));
+              }
+            });
+          }, pollMs);
+        });
+      }, closeGraceMs);
+    };
+
     const outer = setTimeout(async () => {
-      // Last resort: return address even without usable provider, so caller can retry
+      // Backstop: return address even without usable provider, so caller can retry
       const last = readSync(true);
       if (last?.address) {
         // Try one more time to get async provider
@@ -900,43 +1138,44 @@ export async function awaitAccount(modal, {
 
     const subscribe = (off) => {
       if (settled) off?.();
-      else subscriptions.push(off);
+      else if (typeof off === 'function') subscriptions.push(off);
+    };
+
+    const onArrival = () => {
+      if (!settled) void checkWithFallback();
     };
 
     try {
-      subscribe(modal.subscribeAccount?.(() => { void checkWithFallback(); }, 'eip155'));
+      subscribe(modal.subscribeAccount?.(onArrival, 'eip155'));
       subscribe(
         modal.subscribeState?.((state) => {
           if (settled) return;
           if (state?.open) {
+            /* A login in progress: the wait stays, whatever the fuse says. */
             opened = true;
             return;
           }
-          if (state?.open === false && opened) {
-            clearTimeout(closeTimer);
-            closeTimer = setTimeout(() => {
-              void checkWithFallback().then((hit) => {
-                if (hit) return;
-                let extraAttempts = 0;
-                const maxExtra = Math.ceil((closeGraceMs * 2.5) / pollMs);
-                postClosePoll = setInterval(() => {
-                  extraAttempts += 1;
-                  void checkWithFallback().then((h) => {
-                    if (h) return;
-                    if (extraAttempts >= maxExtra) {
-                      const lastResort = readSync(true);
-                      finish(lastResort);
-                    }
-                  });
-                }, pollMs);
-              });
-            }, closeGraceMs);
-          }
+          if (state?.open === false && opened) armPostClose();
         })
       );
+      subscribe(modal.subscribeCaipNetworkChange?.(onArrival));
     } catch {
       /* a modal that cannot subscribe can still be polled */
     }
+
+    /* The controller's address is the earliest «an account exists» fact, and
+       it notifies valtio subscribers — the login does not wait for a poll
+       tick to be seen. The import is lazy and failure-tolerant: a page that
+       cannot load the controllers chunk still has the polling net. */
+    void import('@reown/appkit-controllers')
+      .then((controllers) => {
+        if (settled) return;
+        try {
+          const off = controllers?.ChainController?.subscribeKey?.('activeCaipAddress', onArrival);
+          if (typeof off === 'function') subscribe(off);
+        } catch { /* the polling net below still covers it */ }
+      })
+      .catch(() => {});
   });
 }
 
@@ -1039,6 +1278,23 @@ export async function openSurfaceDetail(modal, openState = 'pending') {
  */
 export async function open({ projectId, metadata } = {}) {
   /*
+   * ─── A SESSION WE LOST THE CLAIM TO (the 2026-09-18 Telegram report) ────
+   * `rollback()` cleared our marker after the 30s wait gave up, and the user
+   * finished the OTP a minute later — from then on this tap would take the
+   * `fresh` path and PURGE the live session's keys before the frame had a
+   * chance to answer. The SDK's storage is the only witness left that a
+   * session is owed, so the claim is re-armed from it BEFORE the marker is
+   * classified: a tap on top of a live session is a restore, not a fresh
+   * login, and the clean-slate path must not run.
+   */
+  if (!hasMarker()) {
+    const facts = sdkSessionFacts();
+    if (facts.anyEvidence) {
+      setMarker(true);
+      wcEventDetail('email_marker_reclaimed', { ev: facts.anyEvidence });
+    }
+  }
+  /*
    * ─── A STALE CLAIM IS NOT A LOGIN (device report, 2026-09-18) ────────────
    * `fresh` used to be `!hasMarker()` — so a marker left behind by an attempt
    * nobody can honour (ourMarker true, the SDK's marker gone, nothing
@@ -1127,7 +1383,22 @@ export async function open({ projectId, metadata } = {}) {
     await rollback(modal);
     return { ok: false, code: 'CONNECT_FAILED' };
   }
-  const account = await awaitAccount(modal, { timeoutMs: TIMEOUT.emailOpen, closeGraceMs: TIMEOUT.emailCloseGrace + 2000 });
+  /*
+   * ─── THE WAIT THAT USED TO BE THE ENEMY ──────────────────────────────────
+   * `TIMEOUT.emailOpen` (30s) was the whole budget: OTP on a phone is
+   * type-email → wait-for-code → type-code, 30–120s, and a login that
+   * finished after the fuse had a perfectly healthy frame session and a
+   * promise that had already given up — nothing attached it, and `rollback()`
+   * below cleared the marker too. Now the wait is EVENT-DRIVEN (it listens
+   * on the SDK's own account/state/chain signals, not a countdown): while
+   * the modal is open it simply keeps listening, `connectHardCap` (5 min) is
+   * the backstop fuse, and a closed modal gets the late-attach grace instead
+   * of an immediate verdict.
+   */
+  const account = await awaitAccount(modal, {
+    timeoutMs: TIMEOUT.connectHardCap,
+    closeGraceMs: TIMEOUT.emailLateGrace
+  });
   if (!account) {
     /* Two very different stories end at the same line, so the trace has to
        tell them apart: «AppKit says nothing is connected» (the OTP/iframe
@@ -1334,8 +1605,24 @@ export async function switchEmbeddedNetwork(chainId) {
 
 /**
  * Give the boot marker back when an attempt ended with nothing to restore.
- * Now more conservative: if SDK says connected, keep marker even if address
- * is temporarily missing.
+ *
+ * ─── THE MARKER ONLY FALLS ON A DEFINITIVE NO ──────────────────────────────
+ * Clearing it is what turned the 2026-09-18 report's late login into a dead
+ * end: the 30s wait gave up, `rollback()` cleared the marker while the OTP
+ * was still in flight, and from then on the app had no listener and no claim.
+ * The marker therefore survives whenever ANY evidence says a session may
+ * still arrive or already exists:
+ *
+ *   • the instance reports a connection (address in the controllers);
+ *   • the MODAL IS OPEN — a login is in progress under our feet, and the box
+ *     on screen is the strongest evidence there is;
+ *   • the SDK's own storage says a session is held (`sdkSessionFacts`) — the
+ *     frame holds the session even when the in-memory controllers lag behind
+ *     it (rehydration is async), and forgetting the marker would orphan it.
+ *
+ * Only when all three say «nothing» is the marker released, and only then.
+ *
+ * @returns {Promise<boolean>} true when the marker was released.
  */
 export async function rollback(modal) {
   let connected = false;
@@ -1349,6 +1636,20 @@ export async function rollback(modal) {
     connected = false;
   }
   if (connected) return false;
+  let modalOpen = false;
+  try {
+    modalOpen = Boolean((await import('@reown/appkit-controllers'))?.ModalController?.state?.open);
+  } catch {
+    modalOpen = false;
+  }
+  if (modalOpen) {
+    wcEvent('email_rollback_kept_modal_open');
+    return false;
+  }
+  if (sdkSessionFacts().anyEvidence) {
+    wcEvent('email_rollback_kept_sdk_session');
+    return false;
+  }
   setMarker(false);
   return true;
 }
