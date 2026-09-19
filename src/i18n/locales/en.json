@@ -5494,7 +5494,9 @@
       "BAD_ORIGIN_ADDRESS": "The sending address could not be read. Reconnect the wallet.",
       "DESTINATION_ADDRESS_REQUIRED": "Enter the destination address — this route cannot default it.",
       "CROSSCHAIN_NOT_CONFIGURED": "The cross-chain service is not configured on this deployment.",
-      "GENERIC": "Something went wrong ({{code}}). Nothing was sent."
+      "GENERIC": "Something went wrong ({{code}}). Nothing was sent.",
+      "UNSAFE_BRIDGE_REQUEST": "The bridge request has invalid or conflicting contract details. Nothing was signed. Refresh the quote; if it repeats, stop and contact support.",
+      "BRIDGE_ACCOUNT_CHANGED": "Your wallet account changed. Reconnect the intended account and get a fresh quote."
     },
     "optionsTitle": "Bridge options",
     "slippageNote": "Slippage tolerance is {{pct}}%, taken from your Settings so it matches the swap screen. Raise it only if quotes keep failing — a bridge takes minutes and cannot be cheaply retried, so a loose tolerance costs more here than it does on a swap.",
@@ -5543,6 +5545,19 @@
       "affiliateNote": "The flat fee and our share are quoted by deBridge on every request — these numbers are theirs, not our estimate.",
       "tokensTitle": "Only the three assets above",
       "tokensBody": "Only SOL and the canonical Solana USDC/USDT mints are offered. A symbol search would let a cloned mint borrow a real token's name, so the list is fixed and address-verified."
+    },
+    "safety": {
+      "title": "Review before opening your wallet",
+      "network": "{{network}} · {{provider}}",
+      "explain": "Approval and bridging are separate transactions. Approval calls the token contract and permits the spender to use only this amount; it is not a payment to that token address. If an allowance already exists, the wallet may skip approval.",
+      "token": "Token contract — approval transaction target",
+      "spender": "Spender — receives the spending permission",
+      "contract": "Bridge contract — bridge transaction target",
+      "recipient": "Your receiving address on the destination network",
+      "warning": "If your wallet shows “Poisoning alert”, “Scam” or an unexpected address/amount, reject the request. These details explain address roles; they do not certify a contract as safe or override the wallet’s security checks. Never send tokens manually to the token contract.",
+      "continue": "Continue to wallet",
+      "bscTokenNote": "On BNB Chain, USDT at 0x55d398…97955 is the Binance-pegged token contract listed by BscScan as Binance-Peg BSC-USD, not the bridge deposit address. A familiar token address does not prove the spender or transaction is safe.",
+      "explorer": "View token on BscScan"
     }
   },
   "autopilot": {
@@ -5747,8 +5762,8 @@
   "thor": {
     "whatTitle": "What a native swap is, and how it differs from bridging",
     "what1": "This swaps REAL Bitcoin for REAL Ethereum. Not wrapped BTC, not a token that represents Bitcoin somewhere else — actual coins settled on their own chains by THORChain, a network with no company behind it and no account to open.",
-    "what2": "It is not the same as the Tokens tab. That one moves ERC-20 tokens between EVM chains and your wallet signs it. Here you send coins yourself, from whatever wallet holds them, to an address the network gives you.",
-    "what3": "We show you the price, the address and the exact memo. We deliberately do not send it for you: we hold no Bitcoin keys and never will, and a swap like this is completed by your own wallet.",
+    "what2": "This tab provides a quote only. It does not sign or send a THORChain deposit. An ordinary wallet Send screen is not a substitute for a THORChain swap.",
+    "what3": "External service: its own quote, fees and wallet support apply. This page does not forward your quote or send funds.",
     "from": "You send",
     "to": "You receive",
     "amount": "Amount",
@@ -5762,7 +5777,7 @@
     "inboundAddress": "Send to this address",
     "memo": "With exactly this memo",
     "sendWarning": "Send only the asset you selected, only to this address, and only before the quote expires. This address changes between quotes — never reuse an old one.",
-    "memoWarning": "The memo is the instruction. Paste it exactly, with no spaces added and nothing missing. A wallet that cannot attach a memo cannot be used for this, and a swap sent without one — or with a broken one — cannot be recovered by anyone.",
+    "memoWarning": "If you cannot confirm how the wallet constructs the THORChain deposit and on-chain memo, do not send. A wrong or missing instruction can cause loss of funds; this site cannot recover them.",
     "noFeeNote": "We earn nothing on this particular swap. Bitcoin-family chains cap the memo at 80 bytes and our fee identifier does not fit, so the fee is left off rather than the swap being refused. You pay less; we simply do not take a cut here.",
     "err": {
       "QUOTE_FAILED": "No price available for this pair right now. The pool may be too thin for this amount, or that chain may be paused — THORChain halts chains from time to time and resumes them on its own.",
@@ -5773,9 +5788,48 @@
       "DEST_INVALID": "That receiving address could not be read. Check it character by character, or paste it again.",
       "CHAIN_HALTED": "THORChain has paused this network for the moment. It usually reopens on its own within a few minutes — nothing is wrong with your details.",
       "AMOUNT_TOO_SMALL": "This amount is too small to cover the network fees for this route. Try a larger amount.",
-      "NO_POOL": "THORChain does not have a pool for one of these assets."
+      "NO_POOL": "THORChain does not have a pool for one of these assets.",
+      "POOLS_FAILED": "Native swap pools could not be loaded. Please try again later."
     },
-    "expectsFormat": "This network expects an address like {{format}}"
+    "expectsFormat": "This network expects an address like {{format}}",
+    "guide": {
+      "title": "How to complete a native swap — step by step",
+      "manual": "This tab provides a quote only. It does not sign or send a THORChain deposit. An ordinary wallet Send screen is not a substitute for a THORChain swap.",
+      "walletTitle": "Choose a compatible wallet / swap interface",
+      "wallet": "Use a THORChain-integrated swap interface such as THORSwap and a wallet it currently supports for {{source}}. For EVM, this can be MetaMask via the interface’s supported connection; for Bitcoin, use a wallet explicitly listed for native BTC swaps. WalletConnect alone does not add memo or Bitcoin support. Never enter a recovery phrase on a website.",
+      "receiveTitle": "Your receiving address",
+      "receive": "In the wallet where you want to receive funds, select Receive on {{target}}. Paste that public address into “Your receiving address” here. It is yours, not THORChain’s deposit address. Use a self-custody address; exchange deposits or destinations requiring a tag/memo are not supported by this form.",
+      "routeTitle": "Where the deposit address and memo belong",
+      "utxo": "For {{source}}, the deposit address is the vault output and the memo must be an on-chain OP_RETURN output in the same transaction — not a note, label or ordinary memo box. The sender/change outputs also have protocol rules. Use the native Swap flow of a compatible interface to construct them. Do not use ordinary Send in Trust Wallet, an exchange withdrawal or a wallet that only offers a personal note.",
+      "evm": "For {{source}}, a compatible interface must call the THORChain router’s depositWithExpiry function with the vault, asset, amount and memo. For tokens it also handles approval. The router and vault are not your receiving address. Do not send directly to either through MetaMask/Trust Wallet’s ordinary Send screen, or paste the memo as arbitrary hex data.",
+      "cosmos": "For {{source}}, an advanced compatible sender puts the inbound address in To/Recipient and the exact instruction in the on-chain Memo field of the same transfer. A private note is not a memo. Prefer a THORChain-integrated swap interface; if the on-chain memo is unavailable, stop.",
+      "other": "This source network needs its own THORChain deposit format. No generic Send instructions are safe here. Use an interface that explicitly supports native {{source}} swaps and let it construct the deposit; otherwise do not send.",
+      "reviewTitle": "Review a fresh quote and sign",
+      "review": "In the chosen interface, select the same pair and {{asset}} amount, enter your receiving address, and request a new quote. Review fees, network, amount, recipient and minimum received before signing there. Do not combine this page’s memo/address with another quote. Do not use saved addresses, screenshots or expired quotes.",
+      "trackTitle": "Track the actual transfer",
+      "track": "After signing, keep the transaction hash and follow the swap status in the interface you used. A source-chain confirmation does not mean the destination has arrived. Do not send again just because it is taking time.",
+      "noSend": "If you cannot confirm how the wallet constructs the THORChain deposit and on-chain memo, do not send. A wrong or missing instruction can cause loss of funds; this site cannot recover them.",
+      "openSwap": "Open THORSwap",
+      "external": "External service: its own quote, fees and wallet support apply. This page does not forward your quote or send funds.",
+      "docs": "Official deposit documentation",
+      "detailsTitle": "Advanced deposit details — not an ordinary transfer",
+      "recipientHelp": "This is your payout address on {{target}}. Do not send the source asset here.",
+      "inboundHelp": "Temporary THORChain vault on {{source}}, not your receiving wallet. Use only through the source network’s correct deposit procedure.",
+      "routerTitle": "Router contract — not a payment address",
+      "routerHelp": "A compatible interface calls this contract’s depositWithExpiry function. Pasting this address into Send is not a swap.",
+      "memoHelp": "The exact on-chain swap instruction containing the payout destination. It is not an address or a destination tag; do not edit it.",
+      "copyInbound": "Copy vault address",
+      "copyMemo": "Copy memo",
+      "expires": "Deposit details expire at {{time}} (local time). Never reuse them.",
+      "refresh": "Get a fresh quote",
+      "state": {
+        "destination": "Enter a valid receiving address to unlock deposit details.",
+        "stale": "Details changed. Get a fresh quote.",
+        "expired": "Quote expired or too close to expiry. Deposit details are hidden; request a fresh quote.",
+        "incomplete": "No usable deposit details returned. Do not send.",
+        "mismatch": "The memo does not match your receiving address. Do not send; request a fresh quote."
+      }
+    }
   },
   "tap": {
     "title": "Tap to pay, in person",

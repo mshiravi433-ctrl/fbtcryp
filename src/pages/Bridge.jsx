@@ -1,3 +1,5 @@
+import BridgeSigningReview from '../components/BridgeSigningReview';
+import { validateBridgeRequest, assertBridgeSigner, assertBridgeContracts } from '../lib/bridgeSafety';
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -161,9 +163,8 @@ export default function Bridge() {
   /*
    * ─── TWO DIFFERENT OPERATIONS, TWO TABS ─────────────────────────────────
    * `tokens` is the LI.FI path: ERC-20 between EVM chains, signed by a
-   * connected wallet. `native` is THORChain: real BTC for real ETH, executed
-   * by sending coins with a memo from whatever wallet holds them — no connect
-   * step, and possibly no EVM wallet at all.
+   * connected wallet. `native` is a THORChain quote plus chain-specific
+   * deposit guidance; this panel does not sign the native swap.
    *
    * Folding both into one form would mean half the fields vanishing depending
    * on the pair. Two tabs is honest about them being different acts.
@@ -207,6 +208,8 @@ export default function Bridge() {
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteErr, setQuoteErr] = useState(null);
+  const [quoteFormKey, setQuoteFormKey] = useState(null);
+  const [dlnFormKey, setDlnFormKey] = useState(null);
 
   const [busy, setBusy] = useState(false);
   const [txHash, setTxHash] = useState(null);
@@ -220,6 +223,20 @@ export default function Bridge() {
   const [routes, setRoutes] = useState([]);
   const [execStep, setExecStep] = useState(null);
   const [changedQuote, setChangedQuote] = useState(null);
+  const [signingReview, setSigningReview] = useState(null);
+  const signingDecision = useRef(null);
+  const confirmSigning = (details) => new Promise((resolve) => {
+    signingDecision.current?.(false);
+    signingDecision.current = resolve;
+    setSigningReview(details);
+  });
+  const finishSigningReview = (accepted) => {
+    signingDecision.current?.(accepted);
+    signingDecision.current = null;
+    setSigningReview(null);
+  };
+  useEffect(() => () => { signingDecision.current?.(false); }, []);
+
   const [tracked, setTracked] = useState(null);
   const [historyKey, setHistoryKey] = useState(0);
   const stopTrackRef = useRef(null);
@@ -358,6 +375,8 @@ export default function Bridge() {
   const [toAddress, setToAddress] = useState('');
   const toAddressValid = toAddress === '' || /^0x[a-fA-F0-9]{40}$/.test(toAddress.trim());
 
+  const formKey = JSON.stringify([fromChain, toChain, tokenSymbol, amount, wallet.address, toAddress, slippage]);
+
   const fetchQuote = useCallback(async () => {
     const mine = ++seq.current;
     setQuoteErr(null);
@@ -420,6 +439,7 @@ export default function Bridge() {
       });
       if (seq.current !== mine) return;
       setQuote(q);
+      setQuoteFormKey(formKey);
     } catch (e) {
       if (seq.current !== mine) return;
       setQuote(null);
@@ -453,11 +473,12 @@ export default function Bridge() {
       });
       if (seq.current !== mine) return;
       setDln(d);
+      setDlnFormKey(formKey);
     } catch {
       if (seq.current === mine) setDln(null);
     }
   }, [wallet.isConnected, wallet.address, fromChain, toChain, fromToken, toToken, amount,
-      slippage, toAddress, toAddressValid]);
+      slippage, toAddress, toAddressValid, formKey]);
 
   useEffect(() => {
     clearTimeout(timerRef.current);
@@ -523,22 +544,36 @@ export default function Bridge() {
       const { Contract } = await import('ethers');
       const { ERC20_ABI } = await import('../lib/chains');
       const erc20 = new Contract(fromToken.address, ERC20_ABI, signer);
-      const spender = dln?.allowanceTarget || order.tx.to;
+      // Only the freshly built order can choose the spender, never a stale price quote.
+      const spender = order.tx.allowanceTarget || order.tx.to;
+      const recipient = toAddress.trim() && toAddressValid ? toAddress.trim() : wallet.address;
+      if (!validateBridgeRequest({ token: fromToken.address, spender, transaction: order.tx,
+        chainId: fromChain, sender: wallet.address, recipient })) throw new Error('UNSAFE_BRIDGE_REQUEST');
+      await assertBridgeSigner(signer, fromChain, wallet.address);
+      await assertBridgeContracts(signer.provider, [order.tx.to, spender]);
+      if (!await confirmSigning({ token: fromToken.address, spender, contract: order.tx.to,
+        recipient, chainId: fromChain, provider: 'deBridge', amount: raw,
+        decimals: fromToken.decimals, symbol: fromToken.symbol })) throw new Error('USER_REJECTED');
+      await assertBridgeSigner(signer, fromChain, wallet.address);
       const need = BigInt(raw);
       const current = await erc20.allowance(wallet.address, spender);
 
       if (current < need) {
         /* Some ERC-20s reject a non-zero to non-zero change; zero it first. */
         if (current > 0n) {
-          const reset = await erc20.approve(spender, 0n);
+          await assertBridgeSigner(signer, fromChain, wallet.address);
+          const reset = await erc20.approve(spender, 0n, { chainId: Number(fromChain) });
           await reset.wait();
         }
-        const approval = await erc20.approve(spender, need);
+        await assertBridgeSigner(signer, fromChain, wallet.address);
+        const approval = await erc20.approve(spender, need, { chainId: Number(fromChain) });
         await approval.wait();
       }
 
+      await assertBridgeSigner(signer, fromChain, wallet.address);
       const sent = await signer.sendTransaction({
         to: order.tx.to,
+        chainId: Number(fromChain),
         data: order.tx.data,
         /*
          * The fixed protocol fee travels in `value`, in native coin. Dropping
@@ -573,6 +608,11 @@ export default function Bridge() {
   };
 
   const run = async () => {
+    if (busy || quoting) return;
+    if (!toAddressValid) { setTxErr(bridgeErrorText('BAD_ADDRESS', t)); return; }
+    if ((provider === 'dln' ? dlnFormKey : quoteFormKey) !== formKey) {
+      setTxErr(bridgeErrorText('QUOTE_EXPIRED', t)); return;
+    }
     if (provider === 'dln') return runDln();
 
     if (!quote) return;
@@ -599,6 +639,7 @@ export default function Bridge() {
       destination: toAddress.trim() && toAddressValid ? toAddress.trim() : '',
       slippage: Number(slippage) / 100,
       source: 'bridge',
+      confirmSigning,
       onStep: (step) => setExecStep(step),
       /* The rate moved between display and signature: stop, show the new
          number and require a second, explicit yes. */
@@ -690,6 +731,7 @@ export default function Bridge() {
             role="tab"
             aria-selected={mode === k}
             className={mode === k ? 'active' : ''}
+            disabled={busy}
             onClick={() => setMode(k)}
             style={{ isolation: 'isolate' }}
           >
@@ -1057,7 +1099,8 @@ export default function Bridge() {
              * whenever the other provider had no path — which is precisely
              * when the second route is most valuable.
              */
-            disabled={busy || (provider === 'dln' ? !dln?.toAmount : !quote?.transactionRequest)}
+            disabled={busy || quoting || !toAddressValid || !toBaseUnits(amount, fromToken?.decimals)
+              || (provider === 'dln' ? !dln?.toAmount || dlnFormKey !== formKey : !quote?.transactionRequest || quoteFormKey !== formKey)}
             onClick={run}
           >
             {busy
@@ -1183,6 +1226,7 @@ export default function Bridge() {
         It stays tone="danger": "we cannot recover your transfer" is the one
         sentence here that must never look decorative.
       */}
+      <BridgeSigningReview review={signingReview} onDecision={finishSigningReview} />
       <InfoBox title={t('bridge.trustTitle')} tone="danger" id="bridge-trust">
         <p>{t('bridge.trustBody')}</p>
       </InfoBox>

@@ -61,8 +61,8 @@ export const BRIDGE_CHAINS = [
  * what you put in, minus visible fees — which makes a bad quote impossible to
  * hide. It is also the overwhelming majority of real bridge volume.
  *
- * Every address below is the CANONICAL issuer's contract on that chain, not a
- * bridged wrapper, except where noted. A wrong address here sends funds
+ * These are token contracts, NOT deposit recipients. BNB Chain's USDT/USDC
+ * entries are Binance-pegged assets, not native issuer deployments. A wrong address here sends funds
  * nowhere recoverable, so these are the same constants already used and
  * exercised by the swap screen in lib/chains.js.
  */

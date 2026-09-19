@@ -1,0 +1,14 @@
+/* Shared theme tokens: no dark-only surfaces. Addresses stay LTR in RTL UI. */
+.bridge-safety, .thor-guide { color: var(--text-1); line-height: 1.8; font-size: 13px; }
+.bridge-safety-amount { font-size: 22px; font-weight: 750; text-align: center; }
+.bridge-addresses { margin: 14px 0; display: grid; gap: 10px; }
+.bridge-addresses > div { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-panel); min-width: 0; }
+.bridge-addresses dt { font-weight: 650; margin-bottom: 5px; }
+.bridge-addresses dd { margin: 0; overflow-wrap: anywhere; text-align: start; font-family: monospace; font-size: 12px; unicode-bidi: isolate; }
+.bridge-safety-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.bridge-safety-actions > button { flex: 1 1 130px; }
+.thor-guide ol { padding-inline-start: 24px; margin: 12px 0; }
+.thor-guide li { padding-inline-start: 6px; margin-block: 12px; }
+.thor-guide li::marker { color: var(--text-1); font-weight: 750; }
+.thor-guide .btn { margin-top: 6px; }
+.thor-quote-validity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; margin-top: 12px; }
