@@ -9,6 +9,8 @@ import android.webkit.WebView;
 
 import java.util.regex.Pattern;
 
+import org.json.JSONObject;
+
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -70,12 +72,98 @@ public class MainActivity extends BridgeActivity {
   private static final int GLASS_DARK = 0x8C00030F;  // 55% of #00030F
   private static final int GLASS_LIGHT = 0x8CF4F5FA; // 55% of #F4F5FA
 
+  /*
+   * ─── THE WALLET'S ANSWER, ON ITS WAY TO THE WEB LAYER ─────────────────────
+   *
+   * A Solana wallet approves a deeplink request by sending the user back to
+   * `redirect_link`. Inside the APK that link is `ir.fbtswap.app://solconnect…`
+   * (registered in AndroidManifest), so Android delivers it to THIS activity —
+   * and until now nothing carried it any further. The WebView, still sitting
+   * on «منتظر تأیید…», never learned that the wallet had answered, so an
+   * approved connection died in the gap between the intent and the page.
+   *
+   * The URL is delivered twice on purpose:
+   *
+   *   • PUSHED into the running WebView as `window.FBTDeepLink(url)`, which is
+   *     the normal case (launchMode="singleTask" keeps the WebView alive behind
+   *     the wallet), and
+   *   • KEPT for `FBTDeepLinkBridge.consume()`, which is the cold-start case: if
+   *     the app was killed, the page is still booting when this arrives and a
+   *     one-shot push would land in a document with no listener yet. The web
+   *     layer drains that inbox on boot and matches by URL, so a double
+   *     delivery is harmless.
+   */
+  private String pendingDeepLink = null;
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     applySystemBarTheme(false);
     getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_YES);
     wireNativeBridges();
+    captureDeepLink(getIntent());
+  }
+
+  /*
+   * The app was already running when the wallet redirected back. This is the
+   * normal path for a connection: the WebView is untouched behind the wallet
+   * and only needs to be told.
+   */
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
+    captureDeepLink(intent);
+  }
+
+  /** The scheme the manifest registered for wallet returns. */
+  private String deepLinkScheme() {
+    try {
+      return getString(R.string.custom_url_scheme);
+    } catch (Exception e) {
+      return "ir.fbtswap.app";
+    }
+  }
+
+  /**
+   * Accept only OUR scheme and only a URL of a sane length.
+   *
+   * An intent filter already narrows this to the scheme, but an intent can
+   * also be delivered by an explicit component name from another app, so the
+   * check is done here as well: this is a signing application, not a generic
+   * URL forwarder, and whatever passes is handed to JavaScript.
+   */
+  private static final int MAX_DEEPLINK_LENGTH = 4096;
+
+  private void captureDeepLink(Intent intent) {
+    if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
+    Uri data = intent.getData();
+    if (data == null) return;
+    String scheme = data.getScheme();
+    if (scheme == null || !scheme.equalsIgnoreCase(deepLinkScheme())) return;
+    String url = data.toString();
+    if (url.length() > MAX_DEEPLINK_LENGTH) return;
+    deliverDeepLink(url);
+  }
+
+  private synchronized void deliverDeepLink(String url) {
+    if (url == null || url.isEmpty()) return;
+    pendingDeepLink = url;
+    Bridge bridge = getBridge();
+    WebView webView = bridge == null ? null : bridge.getWebView();
+    if (webView == null) return; // consume() will hand it over on boot
+    final String js = "window.FBTDeepLink&&window.FBTDeepLink(" + JSONObject.quote(url) + ");";
+    webView.post(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          webView.evaluateJavascript(js, null);
+        } catch (Exception e) {
+          /* The inbox above is the fallback — never crash the app over a
+             notification the page can also poll for. */
+        }
+      }
+    });
   }
 
   /*
@@ -123,6 +211,25 @@ public class MainActivity extends BridgeActivity {
      * content can neither launch arbitrary packages nor arbitrary URI schemes.
      */
     webView.addJavascriptInterface(new WalletLink(this), "FBTWalletLink");
+    webView.addJavascriptInterface(new DeepLinkInbox(), "FBTDeepLinkBridge");
+  }
+
+  /**
+   * The cold-start half of the deep link path: the web layer asks for any
+   * wallet return that arrived before it was listening.
+   *
+   * `consume()` hands each URL over exactly once — the page processes it and
+   * never sees it again, so a refresh cannot replay a connect.
+   */
+  private final class DeepLinkInbox {
+    @JavascriptInterface
+    public String consume() {
+      synchronized (MainActivity.this) {
+        String url = pendingDeepLink;
+        pendingDeepLink = null;
+        return url;
+      }
+    }
   }
 
   /*

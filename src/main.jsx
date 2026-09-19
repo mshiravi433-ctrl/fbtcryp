@@ -3,8 +3,24 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import { clearHardReloadFlag } from './lib/refresh.js';
+import { installDeeplinkReturnListeners } from './lib/solana/deeplink.js';
 import './i18n';
 import './index.css';
+
+/*
+ * ─── THE WALLET'S ANSWER, CAUGHT BEFORE REACT MOUNTS ────────────────────────
+ *
+ * When a Solana wallet approves a deeplink request it sends the user back with
+ * the answer in the URL (`?phantom_encryption_public_key=…&nonce=…&data=…`), or
+ * — inside the APK — as a deep link that native code forwards into this page.
+ * Both arrive as a document that is already loading, so the listener has to be
+ * installed here, before the first render: a connect that completes only after
+ * React is up is a connect that silently loses the first frame's answer, and
+ * the user is left looking at a wallet they connected.
+ *
+ * It is a no-op on every page load that is not a wallet return.
+ */
+installDeeplinkReturnListeners();
 
 /*
  * Payment-gateway return hop.

@@ -35,6 +35,7 @@ import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
+import SolanaConnectSheet from '../components/SolanaConnectSheet';
 import { POINT_VALUES } from '../lib/ranks';
 
 /**
@@ -97,6 +98,7 @@ export default function SolanaSwap({ embedded = false }) {
    */
   const navigate = useNavigate();
   const [address, setAddress] = useState(() => solanaAddress());
+  const [solSheetOpen, setSolSheetOpen] = useState(false);
   const [walletBalances, setWalletBalances] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
 
@@ -788,7 +790,16 @@ export default function SolanaSwap({ embedded = false }) {
               <span className="sol-net-dot" aria-hidden="true" />
               {devnet ? 'Devnet' : 'Mainnet'}
             </span>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/wallet?tab=solana')}>
+            {/* Nothing connected: ask the wallet for approval RIGHT HERE — the
+                deeplink request is the only route that produces a confirmation
+                screen on a phone, and sending the user to another page first
+                was half of the reported problem. Once connected, the button
+                goes back to being a link to the wallet page. */}
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => (address ? navigate('/wallet?tab=solana') : setSolSheetOpen(true))}
+              data-testid="solana-swap-connect"
+            >
               {address ? t('solana.manageWallet') : t('wallet.connect')}
             </button>
           </div>
@@ -957,6 +968,12 @@ export default function SolanaSwap({ embedded = false }) {
 
       {/* --------------------- swap history --------------------- */}
       <SwapHistoryPanel network="solana" />
+
+      <SolanaConnectSheet
+        open={solSheetOpen}
+        onClose={() => setSolSheetOpen(false)}
+        onConnected={(addr) => setAddress(addr || solanaAddress())}
+      />
 
       {/* --------------------- import any mint (memecoins) --------------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">

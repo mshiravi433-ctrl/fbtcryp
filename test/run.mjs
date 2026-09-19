@@ -32,6 +32,12 @@ import './launch-probe.mjs';
    and the status door that ships only when every part is READY. No mainnet
    calls. */
 import './launch-solana-probe.mjs';
+/* Solana deeplink connect — the reported bug («فقط وارد کیف پول فانتوم میشه و
+   هیچ صفحه تاییدی … نمیشود»): the connect request the wallet answers, with a
+   SIMULATED wallet (a key pair that decrypts what we sent and seals a reply).
+   Locks the round trip, the user-rejection path, the APK's native hand-over,
+   the double delivery it guarantees, and the lease. No wallet, no network. */
+import './solana-deeplink-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the
