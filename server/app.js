@@ -28,7 +28,7 @@ import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
-import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
+import { fetchThorPools, fetchThorTxStatus, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
@@ -5065,6 +5065,26 @@ app.get('/api/thor/quote', async (req, res) => {
     if (out.error) return res.status(400).json(out);
     /* Never cached: the response carries an inbound address and an expiry,
        and their own warning says "Do not cache this response." */
+    res.set('cache-control', 'no-store');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/*
+ * The swap's own status, from THORNode — the same read-only proxy shape as
+ * pools/quote. Never cached: the answer changes as the transfer moves, and a
+ * cached "delivered" is a lie told with perfect confidence.
+ *
+ * NOT_FOUND is a 404 on purpose: a seconds-old hash has not been observed
+ * yet, and the client renders that as "waiting", not as failure. Only a
+ * malformed hash (400) or a dead upstream (502) is an error.
+ */
+app.get('/api/thor/tx/:hash', async (req, res) => {
+  try {
+    const out = await fetchThorTxStatus(req.params.hash);
+    if (out.error) return res.status(out.error === 'BAD_HASH' ? 400 : 404).json(out);
     res.set('cache-control', 'no-store');
     return res.json(out);
   } catch (err) {

@@ -7,8 +7,217 @@
 .bridge-addresses dd { margin: 0; overflow-wrap: anywhere; text-align: start; font-family: monospace; font-size: 12px; unicode-bidi: isolate; }
 .bridge-safety-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .bridge-safety-actions > button { flex: 1 1 130px; }
-.thor-guide ol { padding-inline-start: 24px; margin: 12px 0; }
-.thor-guide li { padding-inline-start: 6px; margin-block: 12px; }
-.thor-guide li::marker { color: var(--text-1); font-weight: 750; }
-.thor-guide .btn { margin-top: 6px; }
+
+/* ==========================================================================
+   THE NATIVE BRIDGE GUIDE — modern skin + its own rhythm
+   --------------------------------------------------------------------------
+   ─── THE SPACING BUG THIS FIXES ─────────────────────────────────────────────
+   Reported: «فاصله باکس را از باکس بالایی و پایینی درست کن». The guide used to
+   sit WELDED to the box above it: the InfoBox inside a plain `.thor-guide`
+   wrapper is that wrapper's `:first-child`, so the component's own
+   `.infobox:first-child { margin-top: 0 }` rule zeroed its margin — and the
+   `.infobox + .infobox` sibling rule never fired either, because between the
+   two boxes there is a wrapping div. Result: 0px above, while the ticket
+   below carried 10px — asymmetric AND stuck. The wrapper now owns the margin,
+   12px top and bottom, which is the page's card rhythm; inner margins stay 0
+   so nothing double-stacks.
+   ========================================================================== */
+.thor-guide { margin: 12px 0; }
+.thor-guide .infobox { margin-top: 0; }
+
+.thor-guide .infobox {
+  border-radius: 16px;
+  border-color: rgba(0, 229, 255, 0.17);
+  /*
+   * A lit top corner rather than a flat wash: the same two-stop idea the
+   * app's other "premium" surfaces use (`.card-rgb`'s conic ring, the bridge
+   * ticket) — one cyan glint high, settled low, so the box reads as an
+   * object with a light source instead of a bordered rectangle.
+   */
+  background:
+    radial-gradient(130% 80% at 88% -12%, rgba(0, 229, 255, 0.075), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  box-shadow:
+    0 18px 46px -30px rgba(0, 229, 255, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.thor-guide .infobox.is-open { border-color: rgba(0, 229, 255, 0.3); }
+
+.thor-guide .infobox-head { padding: 13px 14px; }
+
+/* The head glyph gets a chip of its own — the guide is the marquee element of
+   this tab, and a bare 7px dot undersells it. Same accent language as the
+   step badges below: cyan-to-violet tint, hairline border. */
+.thor-guide .infobox-icon {
+  width: 27px;
+  height: 27px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(140deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.13));
+  border: 1px solid rgba(0, 229, 255, 0.26);
+}
+.thor-guide .infobox-title { font-size: 13.3px; }
+
+.thor-guide-intro { margin: 0 0 13px; font-size: 12.4px; color: var(--text-2); }
+
+/* ── The sign-here chip (EVM sources only) ─────────────────────────────── */
+.thor-guide-signhere {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 157, 0.24);
+  background: linear-gradient(180deg, rgba(0, 255, 157, 0.085), rgba(0, 255, 157, 0.028));
+  font-size: 12.4px;
+  line-height: 1.8;
+  color: var(--text-1);
+}
+.thor-guide-signhere svg { color: var(--rgb-4); flex-shrink: 0; margin-top: 4px; }
+
+/* ── The step timeline ──────────────────────────────────────────────────── */
+.thor-steps { list-style: none; margin: 0; padding: 0; }
+.thor-step { position: relative; display: grid; grid-template-columns: 36px 1fr; gap: 12px; }
+.thor-step + .thor-step { padding-top: 14px; }
+
+/* The rail: a 2px cyan line from each badge down to the next one. It lives
+   on the FOLLOWING step (drawn upward into the gap) so the last step has no
+   dangling line under it. */
+.thor-step + .thor-step::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  height: 16px;
+  width: 2px;
+  inset-inline-start: 17px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.42), rgba(0, 229, 255, 0.08));
+}
+
+.thor-step-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--rgb-1);
+  background: linear-gradient(160deg, rgba(0, 229, 255, 0.15), rgba(124, 77, 255, 0.09));
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.thor-step-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.thor-step-num { font-size: 10.5px; letter-spacing: 0.07em; color: var(--rgb-1); opacity: 0.92; }
+.thor-step-text { margin: 4px 0 0; font-size: 12.2px; line-height: 1.85; color: var(--text-2); text-wrap: pretty; }
+
+/* ── The warning strip: a shape, not a paragraph ────────────────────────── */
+.thor-guide-danger {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 15px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 59, 107, 0.26);
+  background: linear-gradient(180deg, rgba(255, 59, 107, 0.09), rgba(255, 59, 107, 0.032));
+  font-size: 12.2px;
+  line-height: 1.8;
+}
+.thor-guide-danger svg { color: var(--down); flex-shrink: 0; margin-top: 4px; }
+
+/* ── Exits as buttons, and the fine print under them ────────────────────── */
+.thor-guide-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.thor-guide-actions .btn { flex: 1 1 150px; justify-content: center; }
+.thor-guide-foot { margin: 10px 0 0; font-size: 11.4px; color: var(--text-3); }
+
+/* ── Light theme: same geometry, inked tints (cyan on white is invisible) ── */
+:root[data-theme='light'] .thor-guide .infobox {
+  background:
+    radial-gradient(130% 80% at 88% -12%, rgba(0, 150, 199, 0.07), transparent 62%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.012), rgba(15, 23, 42, 0.038));
+  border-color: rgba(0, 150, 199, 0.24);
+  box-shadow: 0 18px 44px -32px rgba(2, 132, 199, 0.4), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme='light'] .thor-guide .infobox.is-open { border-color: rgba(0, 150, 199, 0.38); }
+:root[data-theme='light'] .thor-guide .infobox-icon {
+  background: linear-gradient(140deg, rgba(0, 150, 199, 0.12), rgba(124, 77, 255, 0.08));
+  border-color: rgba(0, 150, 199, 0.28);
+  color: #0087b3;
+}
+:root[data-theme='light'] .thor-step-badge {
+  background: linear-gradient(160deg, rgba(0, 150, 199, 0.12), rgba(124, 77, 255, 0.07));
+  border-color: rgba(0, 150, 199, 0.26);
+  color: #0087b3;
+  box-shadow: none;
+}
+:root[data-theme='light'] .thor-step-num { color: #0087b3; }
+:root[data-theme='light'] .thor-step + .thor-step::before {
+  background: linear-gradient(180deg, rgba(0, 150, 199, 0.4), rgba(0, 150, 199, 0.08));
+}
+:root[data-theme='light'] .thor-guide-signhere {
+  border-color: rgba(4, 160, 110, 0.28);
+  background: linear-gradient(180deg, rgba(4, 160, 110, 0.07), rgba(4, 160, 110, 0.022));
+}
+:root[data-theme='light'] .thor-guide-signhere svg { color: #0a9c6c; }
+
+/* ── The sign-here card, under a ready quote (ThorPanel) ─────────────────── */
+.thor-sign {
+  margin-top: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background:
+    radial-gradient(120% 80% at 12% -14%, rgba(0, 229, 255, 0.085), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 18px 46px -30px rgba(0, 229, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.thor-sign-head { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 13.5px; color: var(--text-1); }
+.thor-sign-head .thor-step-badge { width: 32px; height: 32px; border-radius: 11px; }
+.thor-sign-body { margin: 9px 0 0; font-size: 12.3px; line-height: 1.85; color: var(--text-2); }
+.thor-sign-alt { margin: 9px 0 0; font-size: 11.6px; color: var(--text-3); }
+
+:root[data-theme='light'] .thor-sign {
+  border-color: rgba(0, 150, 199, 0.3);
+  background:
+    radial-gradient(120% 80% at 12% -14%, rgba(0, 150, 199, 0.08), transparent 58%),
+    linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+/* ── The THORChain transfer tracker (after an in-site signature) ─────────── */
+.thor-track { margin-top: 12px; padding: 12px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg-panel); }
+.thor-track-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-weight: 700; font-size: 12.8px; color: var(--text-1); }
+.thor-track-hash { font-family: var(--font-mono); font-size: 11px; color: var(--rgb-1); unicode-bidi: isolate; text-decoration: none; overflow-wrap: anywhere; }
+.thor-track-stages { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.thor-track-stage { display: flex; align-items: center; gap: 9px; font-size: 12.2px; color: var(--text-3); }
+.thor-track-stage .stage-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid var(--line-strong);
+  background: transparent;
+}
+.thor-track-stage.done { color: var(--text-1); }
+.thor-track-stage.done .stage-dot { border-color: var(--rgb-4); background: var(--rgb-4); box-shadow: 0 0 8px rgba(0, 255, 157, 0.5); }
+.thor-track-stage.active { color: var(--text-1); }
+.thor-track-stage.active .stage-dot { border-color: var(--rgb-1); animation: thor-stage-pulse 1.3s ease-in-out infinite; }
+.thor-track-note { margin: 10px 0 0; font-size: 11.6px; line-height: 1.75; color: var(--text-3); }
+.thor-track-done { margin-top: 10px; }
+
+@keyframes thor-stage-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(0, 229, 255, 0); }
+}
+
+:root[data-theme='light'] .thor-track { background: #ffffff; }
+:root[data-theme='light'] .thor-track-stage.done .stage-dot { box-shadow: 0 0 6px rgba(4, 160, 110, 0.35); }
+:root[data-theme='light'] .thor-track-hash { color: #0087b3; }
+
+/* ── Quote validity row (kept from the first skin) ───────────────────────── */
 .thor-quote-validity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; margin-top: 12px; }
