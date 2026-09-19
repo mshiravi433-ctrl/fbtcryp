@@ -56,9 +56,12 @@ import {
   uriRoundTrips,
   walletByKey,
   walletForUrl,
+  walletIdentityFacts,
+  walletIdentityUrl,
   walletLink,
   walletLinks,
   walletLogo,
+  wcMetadata,
   withTimeout
 } from '../src/lib/wc/index.js';
 import { createWcSession } from '../src/lib/wc/session.js';
@@ -823,6 +826,65 @@ export default async function run() {
     })());
     t('redirect.native is only ever set inside the packaged app',
       meta?.redirect?.native === undefined || meta.redirect.native === 'ir.fbtswap.app://');
+  }
+
+  /* ══════ 10b. the identity the wallet is handed (Verify API mismatch) ═════
+   * The report: «والت می‌گوید این dApp به نظر می‌رسد کلاهبرداری باشد و باید
+   * خارج شوی». WalletConnect's Verify API attests the origin that opened the
+   * socket, so a page that declares a DIFFERENT domain is reported to the
+   * wallet as INVALID — the domain-mismatch screen every wallet renders as a
+   * phishing warning. These lock the rule: a real https page declares itself,
+   * and only a page no wallet could reach falls back to the canonical name. */
+  {
+    const canonical = 'https://fbtswap.ir';
+    const page = (origin, extra = {}) => ({ location: { origin }, ...extra });
+
+    t('on the canonical site the wallet is told the canonical origin',
+      walletIdentityUrl(page('https://fbtswap.ir')) === canonical);
+    t('a subdomain declares itself, not its parent',
+      walletIdentityUrl(page('https://www.fbtswap.ir')) === 'https://www.fbtswap.ir');
+    /* Both of these used to be told `https://fbtswap.ir` while the attestation
+       carried the real host — which IS the mismatch wallets warn about. */
+    t('a preview deployment declares its own origin',
+      walletIdentityUrl(page('https://fbt-swap-git-main.vercel.app')) === 'https://fbt-swap-git-main.vercel.app');
+    t('a sandbox preview declares its own origin',
+      walletIdentityUrl(page('https://5173-abc123.e2b.app')) === 'https://5173-abc123.e2b.app');
+    t('the packaged app declares the public origin, never the WebView origin',
+      walletIdentityUrl(page('https://localhost', { Capacitor: { isNativePlatform: () => true } })) === canonical);
+    t('a dev server declares the public origin (a wallet cannot fetch localhost)',
+      walletIdentityUrl(page('http://localhost:5173')) === canonical);
+    t('a cleartext page declares the public origin',
+      walletIdentityUrl(page('http://fbtswap.ir')) === canonical);
+    t('no input ever yields a localhost identity',
+      ['http://localhost:5173', 'https://localhost', 'http://127.0.0.1:3000']
+        .every((origin) => !/localhost|127\.0\.0\.1/.test(walletIdentityUrl(page(origin)))));
+    t('a missing window falls back to the public origin',
+      walletIdentityUrl({}) === canonical && walletIdentityUrl(null) === canonical);
+
+    const previewMeta = wcMetadata(page('https://5173-abc123.e2b.app'));
+    t('the declared icon is on the declared origin, so a wallet can fetch it',
+      previewMeta.icons[0] === 'https://5173-abc123.e2b.app/icon-512.png');
+    t('the redirect target is the same origin that was declared',
+      previewMeta.redirect.universal === previewMeta.url);
+    t('a browser page never advertises the APK scheme',
+      previewMeta.redirect.native === undefined);
+    t('the packaged app advertises its scheme and its public origin',
+      (() => {
+        const m = wcMetadata(page('https://localhost', { Capacitor: { isNativePlatform: () => true } }));
+        return m.redirect.native === 'ir.fbtswap.app://' && m.url === canonical;
+      })());
+
+    /* ─── the report's own evidence ───────────────────────────────────────── */
+    const aligned = walletIdentityFacts(page('https://fbtswap.ir'));
+    t('aligned facts name the same origin twice',
+      aligned.declared === aligned.pageOrigin && aligned.matchesPage === true);
+    const fallback = walletIdentityFacts(page('http://localhost:5173'));
+    t('a dev page reports the fallback honestly as a mismatch',
+      fallback.declared === canonical && fallback.pageOrigin === 'http://localhost:5173'
+        && fallback.matchesPage === false);
+    const packaged = walletIdentityFacts(page('https://localhost', { Capacitor: { isNativePlatform: () => true } }));
+    t('packaged facts carry the flag the report renders',
+      packaged.packaged === true && packaged.declared === canonical);
   }
 
   /* ══════════════════ 11. the health report ═══════════════════════════════ */

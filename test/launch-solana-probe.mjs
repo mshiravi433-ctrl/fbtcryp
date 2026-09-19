@@ -667,6 +667,25 @@ t('solana probe: no RPC endpoint is baked into the shipped modules', !JSON.strin
   const hasRpc = (s) => s.includes('api.mainnet-beta') || s.includes('api.devnet');
   t('solana probe: plan/verify/status carry no RPC defaults',
     !hasRpc(src('launchlab.js')) && !hasRpc(src('verify.js')) && !hasRpc(src('raydium.js')) && !hasRpc(src('status.js')));
+
+  /*
+   * Static rule: THE WALLET SENDS FIRST. A dApp that asks the wallet to sign
+   * and then broadcasts the transaction itself is the shape wallet security
+   * scanners (Blowfish, read by Phantom/Backpack/Solflare/Trust) treat as
+   * drainer behaviour — and it is one of the causes of the red «این dApp به
+   * نظر می‌رسد کلاهبرداری باشد» screen. `signSendConfirm` must therefore
+   * reach signAndSendTransaction on BOTH transports (MWA feature and injected
+   * provider) before it reaches the sign-only fallback.
+   */
+  const signingSrc = src('signing.js');
+  const mwaSend = signingSrc.indexOf('if (signAndSend?.signAndSendTransaction)');
+  const injectedSend = signingSrc.indexOf("if (typeof provider.signAndSendTransaction === 'function')");
+  const signOnlyFallback = signingSrc.indexOf("if (typeof provider.signTransaction !== 'function') throw new Error('CANNOT_SIGN')");
+  t('solana probe: the wallet sends first on both transports',
+    mwaSend > -1 && injectedSend > -1 && signOnlyFallback > -1
+      && mwaSend < signOnlyFallback && injectedSend < signOnlyFallback);
+  t('solana probe: a user rejection is never retried through a second prompt',
+    (signingSrc.match(/asRejected\(err\)\) throw new Error\('REJECTED'\)/g) || []).length >= 3);
 }
 
 console.log('\n✓ launch-solana-probe: all assertions passed (mock provider, no mainnet calls)\n');
