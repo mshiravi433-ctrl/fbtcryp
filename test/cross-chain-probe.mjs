@@ -483,7 +483,7 @@ t('the desk re-quotes when the wallet switches network', /wallet\.chainId/.test(
 t('the desk asks for a Solana address when the destination is Solana', /isSolanaChain\(toChain\)/.test(desk));
 
 t('the execution pipeline validates the allowance before signing', /allowance\(/.test(client) && /approve\(/.test(client));
-t('...approves the exact amount, never infinite', /approve\(spender, need\)/.test(client) && !/MaxUint256/.test(client));
+t('...approves the exact amount, never infinite', /approve\(spender, need, \{ chainId: Number\(fromChain\) \}\)/.test(client) && !/MaxUint256/.test(client));
 t('...validates the balance first', /INSUFFICIENT_BALANCE/.test(client));
 t('...refuses to sign on the wrong network', /WRONG_NETWORK/.test(client));
 t('...re-quotes immediately before signing', /QUOTE_CHANGED/.test(client) && /getQuote\(/.test(client));

@@ -44,6 +44,8 @@
 
 /** Error codes the bridge surfaces spell themselves (`bridge.err.*`). */
 const BRIDGE_CODES = new Set([
+  'UNSAFE_BRIDGE_REQUEST',
+  'BRIDGE_ACCOUNT_CHANGED',
   'QUOTE_FAILED',
   'SAME_CHAIN',
   'UNSUPPORTED_CHAIN',

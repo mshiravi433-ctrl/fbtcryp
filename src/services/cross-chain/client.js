@@ -1,3 +1,4 @@
+import { validateBridgeRequest, assertBridgeSigner, assertBridgeContracts } from '../../lib/bridgeSafety.js';
 /**
  * CrossChainService — the client half of the shared engine.
  * ---------------------------------------------------------------------------
@@ -292,6 +293,32 @@ export async function execute(route, ctx = {}) {
         return { ok: false, code: 'WRONG_NETWORK', detail: String(network.chainId) };
       }
 
+      const spender = fresh.approvalAddress;
+      const native = isNativeToken(fresh.fromToken);
+      // Bind the refreshed request to the user's intent, not just its quote id.
+      const equal = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+      if (!equal(fresh.fromToken, route.fromToken) || !equal(fresh.toToken, route.toToken)
+          || String(fresh.fromAmount) !== String(route.fromAmount)
+          || Number(fresh.fromChain) !== Number(fromChain) || Number(fresh.toChain) !== Number(toChain)
+          || (fresh.fromAddress && !equal(fresh.fromAddress, senderAddress))
+          || (fresh.toAddress && !equal(fresh.toAddress, destination))
+          || !validateBridgeRequest({ token: fresh.fromToken, spender,
+            transaction: fresh.transactionRequest, chainId: fromChain,
+            sender: senderAddress, recipient: destination, native })) {
+        return { ok: false, code: 'UNSAFE_BRIDGE_REQUEST' };
+      }
+      await assertBridgeSigner(signer, fromChain, senderAddress);
+      await assertBridgeContracts(signer.provider, [fresh.transactionRequest.to, native ? null : spender]);
+      if (ctx.confirmSigning && !await ctx.confirmSigning({
+        token: native ? null : fresh.fromToken, spender: native ? null : spender,
+        contract: fresh.transactionRequest.to, recipient: destination,
+        chainId: fromChain, provider: fresh.toolName || fresh.provider,
+        amount: fresh.fromAmount, decimals: fresh.fromTokenDetail?.decimals ?? 18,
+        symbol: fresh.fromTokenDetail?.symbol ?? ''
+      })) return { ok: false, code: 'USER_REJECTED' };
+      if (isQuoteExpired(fresh)) return { ok: false, code: 'QUOTE_EXPIRED' };
+      await assertBridgeSigner(signer, fromChain, senderAddress);
+
       step('validate-balance');
       const need = BigInt(fresh.fromAmount);
       if (isNativeToken(fresh.fromToken)) {
@@ -315,26 +342,31 @@ export async function execute(route, ctx = {}) {
         if (nativeBalance === 0n) return { ok: false, code: 'INSUFFICIENT_GAS' };
 
         step('validate-allowance');
-        const spender = fresh.approvalAddress || fresh.transactionRequest.to;
         const current = await erc20.allowance(senderAddress, spender);
         if (current < need) {
           step('approve', { spender });
           /* Some ERC-20s (USDT on Ethereum, famously) reject a non-zero to
              non-zero allowance change. Zero it first. */
           if (current > 0n) {
-            const reset = await erc20.approve(spender, 0n);
+            await assertBridgeSigner(signer, fromChain, senderAddress);
+            const reset = await erc20.approve(spender, 0n, { chainId: Number(fromChain) });
             await reset.wait();
           }
           /* Exact amount, never infinite — the same rule lib/swap.js documents. */
-          const approval = await erc20.approve(spender, need);
+          if (isQuoteExpired(fresh)) return { ok: false, code: 'QUOTE_EXPIRED' };
+          await assertBridgeSigner(signer, fromChain, senderAddress);
+          const approval = await erc20.approve(spender, need, { chainId: Number(fromChain) });
           await approval.wait();
         }
       }
 
       step('sign');
       const tx = fresh.transactionRequest;
+      if (isQuoteExpired(fresh)) return { ok: false, code: 'QUOTE_EXPIRED' };
+      await assertBridgeSigner(signer, fromChain, senderAddress);
       const sent = await signer.sendTransaction({
         to: tx.to,
+        chainId: Number(fromChain),
         data: tx.data,
         value: tx.value ?? undefined,
         /* The provider's gas estimate is passed through rather than
@@ -347,6 +379,7 @@ export async function execute(route, ctx = {}) {
     }
   } catch (err) {
     const message = String(err?.shortMessage || err?.message || err);
+    if (['WRONG_NETWORK', 'BRIDGE_ACCOUNT_CHANGED', 'UNSAFE_BRIDGE_REQUEST'].includes(message)) return { ok: false, code: message };
     if (/user rejected|user denied|rejected the request/i.test(message)) {
       return { ok: false, code: 'USER_REJECTED' };
     }
