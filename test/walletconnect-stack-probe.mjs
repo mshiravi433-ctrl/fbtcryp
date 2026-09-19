@@ -74,6 +74,20 @@ import {
   wcTraceSnapshot
 } from '../src/lib/wc/trace.js';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../src/lib/chains.js';
+import {
+  SIGN_ERRORS,
+  classifySignError,
+  guardEip1193,
+  preflightSignRequest,
+  sessionCoverage
+} from '../src/lib/wc/signing.js';
+import {
+  buildSnapshot,
+  clearPortfolioSnapshot,
+  readPortfolioSnapshot,
+  slimChain,
+  writePortfolioSnapshot
+} from '../src/lib/portfolioSnapshot.js';
 
 /* A realistic v2 pairing URI: the punctuation is what encoding must preserve. */
 const URI = 'wc:7f6e4f2c1c9b4a4f9e2f1a0b3c4d5e6f@2?relay-protocol=irn&symKey=9f8e7d6c5b4a';
@@ -215,12 +229,29 @@ export default async function run() {
     const native = walletLink(trust.native, URI);
     const universal = walletLink(trust.universal, URI);
 
-    /* web + Android: the package-scoped intent is tried first. */
+    /*
+     * web + Android: the package-scoped intent is tried first — and it now
+     * navigates THIS DOCUMENT instead of opening a tab.
+     *
+     * Chrome resolves `intent://` itself. When the wallet is installed the
+     * navigation never commits: the app opens and fbtswap.ir stays exactly
+     * where the user left it, socket and pending connect() intact. When the
+     * app is missing, the navigation commits to `S.browser_fallback_url`,
+     * which is the install page — the one screen that helps.
+     *
+     * Opening that URL in a tab instead is what left the dead
+     * `trust://wc?uri=…` page the user landed on when they pressed Back.
+     */
     const android = { navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151' } };
     const seen = [];
+    const navigated = [];
     android.document = {
       createElement: () => ({ style: {}, click() {}, remove() {} }),
       body: { appendChild() {} }
+    };
+    android.location = {
+      set href(value) { navigated.push(value); },
+      get href() { return navigated[navigated.length - 1] ?? ''; }
     };
     android.open = (url) => { seen.push(url); return true; };
     const okAndroid = await openWalletLink(native, {
@@ -230,7 +261,79 @@ export default async function run() {
       fallbackUrl: universal,
       view: android
     });
-    t('Android Chrome opens the package-scoped intent first', okAndroid && seen[0].startsWith('intent://'));
+    t('Android Chrome opens the package-scoped intent first', okAndroid && String(navigated[0]).startsWith('intent://'));
+    t('the intent is navigated IN PLACE, so the dApp document survives', navigated.length === 1);
+    t('the in-place intent opens no tab at all', seen.length === 0);
+    t('the intent is scoped to the wallet package', String(navigated[0]).includes('package=com.wallet.crypto.trustapp'));
+    t('the intent carries the pairing payload', String(navigated[0]).includes(encodeURIComponent(URI)));
+    t('the intent names a fallback for the not-installed case', String(navigated[0]).includes('S.browser_fallback_url='));
+
+    /* An intent with NO fallback must never be navigated in place: Chrome would
+       commit to its own error page and take the dApp with it. */
+    const noFallback = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      location: { set href(v) { bareNavigated.push(v); }, get href() { return ''; } },
+      setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
+    };
+    const bareNavigated = [];
+    const bareSeen = [];
+    noFallback.open = (url) => { bareSeen.push(url); return { close() {} }; };
+    const bareWallet = { ...trust, androidPackage: trust.androidPackage, universal: '' };
+    await openWalletLink(native, {
+      wallet: bareWallet,
+      walletPackage: trust.androidPackage,
+      pairingUri: URI,
+      fallbackUrl: '',
+      view: noFallback
+    });
+    t('an intent with no fallback is never navigated in place', bareNavigated.length === 0);
+    t('an intent with no fallback still reaches the wallet by tab', bareSeen.length > 0);
+
+    /* An Android browser that does NOT speak intent:// (Firefox) must never be
+       navigated in place: it would render the scheme as an error page and take
+       the document with it. It gets the tab, and the tab is cleaned up. */
+    const firefox = {
+      navigator: { userAgent: 'Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      location: { set href(v) { firefoxNavigated.push(v); }, get href() { return ''; } },
+      setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
+    };
+    const firefoxNavigated = [];
+    const firefoxSeen = [];
+    const firefoxChild = { close() { firefoxSeen.push('closed'); } };
+    firefox.open = (url) => { firefoxSeen.push(url); return firefoxChild; };
+    const okFirefox = await openWalletLink(native, {
+      wallet: trust,
+      walletPackage: trust.androidPackage,
+      pairingUri: URI,
+      fallbackUrl: universal,
+      view: firefox
+    });
+    t('a browser without intent:// is NOT navigated in place',
+      okFirefox && firefoxNavigated.length === 0 && !firefoxSeen.includes('intent://'));
+    t('a browser without intent:// still opens the wallet scheme in a tab',
+      firefoxSeen[0] === native);
+
+    /* An embedded WebView cannot route an intent either. */
+    const webview = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; wv) Chrome/151' },
+      document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      location: { set href(v) { navigated.push(v); }, get href() { return ''; } },
+      setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
+    };
+    const webviewNavigated = [];
+    const webviewSeen = [];
+    webview.open = (url) => { webviewSeen.push(url); return { close() {} }; };
+    await openWalletLink(native, {
+      wallet: trust,
+      walletPackage: trust.androidPackage,
+      pairingUri: URI,
+      fallbackUrl: universal,
+      view: webview
+    });
+    t('a WebView is never navigated to an intent it cannot route',
+      webviewSeen.every((u) => !String(u).startsWith('intent://')));
 
     /* web, non-Android: the native scheme, in a new context. */
     const plain = { navigator: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari' }, document: null };
@@ -890,9 +993,14 @@ export default async function run() {
        the raw custom scheme — the one URL that leaves a dead tab behind. */
     const closed = [];
     const child = { close: () => closed.push(1) };
+    const chromeNavigated = [];
     const chrome = {
       navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/151 Mobile' },
       document: { createElement: () => ({ style: {}, click() {}, remove() {} }), body: { appendChild() {} } },
+      location: {
+        set href(value) { chromeNavigated.push(value); },
+        get href() { return chromeNavigated[chromeNavigated.length - 1] ?? ''; }
+      },
       setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5))
     };
     const opened = [];
@@ -906,8 +1014,9 @@ export default async function run() {
     });
     t('Android Chrome hands the pairing to the package-scoped intent',
       chromeResult.ok && chromeResult.route === 'intent');
-    t('window.open keeps the handle, so the route is not declared dead',
-      opened[0][2] === 'noreferrer' && !String(opened[0][2]).includes('noopener'));
+    /* The intent is resolved by the browser, in place: there is no tab, so
+       there is no handle and nothing to declare dead. */
+    t('the intent route opens no tab and needs no handle', opened.length === 0);
     await sleep(30);
     /* Chrome intercepts intent:// itself: nothing is left behind when it
        resolves, and when it does not the tab is showing the install page the
@@ -1076,6 +1185,308 @@ export default async function run() {
        retry: a `wc` lease whose `wc@2:` session is gone fails fast and says so. */
     t('an impossible WalletConnect resume fails fast instead of burning the ladder',
       /plan\.action === 'wc' && !hasStoredSession\(\)/.test(ctxSrc) && /lease_session_missing/.test(ctxSrc));
+  }
+
+  /* ════════════════ 15. the signing boundary («هیج صفحه امضایی نیامد») ═════
+   *
+   * The report: a deposit was asked for, the wallet app opened, NO signature
+   * screen appeared, and the app answered «شبکه در دسترس نیست» — a sentence
+   * about the internet, for a request the session could never have carried.
+   *
+   * What is locked here is that each way a signature can be undeliverable is
+   * named for what it is, that the two automatic fixes are tried once each
+   * before the user is told anything, and that a wait is bounded on a clock
+   * that measures the user rather than the network.
+   */
+  {
+    const session = {
+      namespaces: {
+        eip155: {
+          chains: ['eip155:56', 'eip155:8453'],
+          methods: ['eth_sendTransaction', 'personal_sign'],
+          accounts: ['eip155:56:0xabc0000000000000000000000000000000000001']
+        }
+      }
+    };
+    const ADDR = '0xabc0000000000000000000000000000000000001';
+
+    const coverage = sessionCoverage(session);
+    t('the session coverage names the approved methods',
+      coverage.methods.has('eth_sendTransaction'));
+    t('the session coverage names the approved accounts',
+      coverage.accounts.has('eip155:56:' + ADDR));
+    t('an approved chain with no account for it is NOT silently treated as covered',
+      !coverage.accounts.has('eip155:8453:' + ADDR) && coverage.chains.has('eip155:8453'));
+
+    t('no session at all is named as one',
+      preflightSignRequest({ method: 'eth_sendTransaction', chainId: 56, address: ADDR })
+        .code === SIGN_ERRORS.SESSION_GONE);
+    t('a closed relay socket is named as one, and it is fixable', (() => {
+      const out = preflightSignRequest({
+        session, method: 'eth_sendTransaction', chainId: 56, address: ADDR, relayConnected: false
+      });
+      return out.code === SIGN_ERRORS.RELAY_DOWN && out.fix === 'reopen';
+    })());
+    t('a method the wallet never approved is named as one',
+      preflightSignRequest({ session, method: 'eth_signTypedData_v4', chainId: 56, address: ADDR })
+        .code === SIGN_ERRORS.METHOD_UNAPPROVED);
+    t('a chain the session approves but has no account for is FIXABLE by switching', (() => {
+      const out = preflightSignRequest({
+        session, method: 'eth_sendTransaction', chainId: 8453, address: ADDR
+      });
+      return out.code === SIGN_ERRORS.CHAIN_UNAPPROVED && out.fix === 'switch';
+    })());
+    t('a chain the session never approved is named as one, with no fix', (() => {
+      const out = preflightSignRequest({
+        session, method: 'eth_sendTransaction', chainId: 42161, address: ADDR
+      });
+      return out.code === SIGN_ERRORS.CHAIN_NOT_APPROVED && !out.fix;
+    })());
+    t('a request the session covers passes',
+      preflightSignRequest({ session, method: 'eth_sendTransaction', chainId: 56, address: ADDR }).ok === true);
+    t('a namespace it cannot read FAILS OPEN — never a refusal it invented',
+      preflightSignRequest({ session: { namespaces: {} }, method: 'eth_sendTransaction', chainId: 56, address: ADDR }).ok === true);
+    t('no account in the session is named, not guessed',
+      preflightSignRequest({ session, method: 'eth_sendTransaction', chainId: 56, address: null })
+        .code === SIGN_ERRORS.NO_ACCOUNT);
+
+    /* ── classification: every one of these used to arrive as «the network» ── */
+    t('a session that no longer exists is not the network',
+      classifySignError(new Error("No matching key. session topic doesn't exist: abc"))
+        === SIGN_ERRORS.SESSION_GONE);
+    t('an unanswered request is not the network',
+      classifySignError(new Error('WALLET_NO_RESPONSE')) === SIGN_ERRORS.NO_RESPONSE);
+    t('a dead socket is not «your internet is weak»',
+      classifySignError(new Error('websocket closed abnormally')) === SIGN_ERRORS.RELAY_DOWN);
+    t('an unapproved method is named as one',
+      classifySignError(new Error('Unauthorized method: eth_signTypedData_v4'))
+        === SIGN_ERRORS.METHOD_UNAPPROVED);
+    t('a user rejection is left alone — the caller owns 4001',
+      classifySignError({ message: 'User rejected the request', code: 4001 }) === null);
+    t('an unknown error is left alone rather than guessed at',
+      classifySignError(new Error('something else entirely')) === null);
+
+    /* ── the wrapper itself ──────────────────────────────────────────────── */
+    const makeProvider = ({ relay = 'connected', accounts = [ADDR], chainId = 56 } = {}) => {
+      const calls = [];
+      const relayerState = { connected: relay === 'connected', connecting: relay === 'connecting', transportOpen: null };
+      const provider = {
+        chainId,
+        accounts,
+        session,
+        calls,
+        relayerState,
+        request: async ({ method, params }) => {
+          calls.push({ method, params });
+          if (method === 'eth_sendTransaction') return '0xdeadbeef';
+          if (method === 'wallet_switchEthereumChain') {
+            /* The wallet moves, and the session's account follows it. */
+            provider.accounts = accounts.map((a) => a);
+            provider.chainId = Number(params?.[0]?.chainId ? params[0].chainId : chainId);
+            return null;
+          }
+          if (method === 'eth_chainId') return `0x${Number(chainId).toString(16)}`;
+          return null;
+        }
+      };
+      provider.signer = {
+        client: {
+          core: {
+            relayer: {
+              get connected() { return relayerState.connected; },
+              get connecting() { return relayerState.connecting; },
+              transportOpen: async () => { relayerState.connected = true; return true; }
+            }
+          }
+        }
+      };
+      return provider;
+    };
+
+    {
+      const provider = makeProvider();
+      const guarded = guardEip1193(provider, { timeoutMs: 200, hardCapMs: 400, doc: null });
+      const hash = await guarded.request({ method: 'eth_sendTransaction', params: [{ to: ADDR }] });
+      t('a covered signature goes through untouched', hash === '0xdeadbeef');
+      t('the request reached the wallet exactly once', provider.calls.length === 1);
+      t('the wrapper still exposes the session', guarded.session === session);
+      t('the wrapper still exposes the accounts', guarded.accounts === provider.accounts);
+      t('the wrapper mirrors data properties LIVE, not as a snapshot', (() => {
+        provider.chainId = 8453;
+        return guarded.chainId === 8453;
+      })());
+      t('and a write through the wrapper reaches the provider', (() => {
+        guarded.chainId = 137;
+        return provider.chainId === 137;
+      })());
+      t('the wrapper forwards an unrelated method', (await guarded.request({ method: 'eth_chainId' })) === '0x38');
+    }
+
+    {
+      /* The «no signature screen ever appeared» case: the request is never
+         published, and the failure says why instead of blaming the internet. */
+      const provider = makeProvider();
+      const guarded = guardEip1193(provider, { timeoutMs: 200, hardCapMs: 400, doc: null });
+      let thrown = null;
+      try {
+        await guarded.request({ method: 'eth_signTypedData_v4', params: [] });
+      } catch (error) {
+        thrown = error;
+      }
+      t('an undeliverable request is refused before it is published', provider.calls.length === 0);
+      t('the refusal carries a machine code, not a network guess',
+        thrown?.code === SIGN_ERRORS.METHOD_UNAPPROVED && thrown?.signError === true);
+    }
+
+    {
+      /* FIX 1 — a closed socket is re-opened before the user hears anything. */
+      const provider = makeProvider({ relay: 'closed' });
+      const guarded = guardEip1193(provider, { timeoutMs: 400, hardCapMs: 800, doc: null });
+      const hash = await guarded.request({ method: 'eth_sendTransaction', params: [{ to: ADDR }] });
+      t('a closed relay is re-opened instead of failing the signature', hash === '0xdeadbeef');
+      t('the socket is asked to come back exactly once', provider.calls.length === 1);
+    }
+
+    {
+      /* FIX 2 — an approved chain with no account for it is switched to, and
+         the deposit the user asked for is then actually sent. */
+      const provider = makeProvider({ chainId: 8453 });
+      const guarded = guardEip1193(provider, { timeoutMs: 400, hardCapMs: 800, doc: null });
+      /* The account is on 56 while the deposit wants 8453: the chain IS
+         approved, so the wallet is asked to move before we give up. */
+      provider.accounts = [`eip155:56:${ADDR}`];
+      const hash = await guarded.request({ method: 'eth_sendTransaction', params: [{ to: ADDR }] });
+      t('a chain the session approved is switched to, not refused',
+        provider.calls.some((c) => c.method === 'wallet_switchEthereumChain'));
+      t('the deposit is then sent — the wallet is on the network it named', hash === '0xdeadbeef');
+    }
+
+    {
+      /* A switch the user declines is not a switch: the request stays refused,
+         and the refusal is the named one rather than a network guess. */
+      const provider = makeProvider({ chainId: 8453 });
+      const inner = provider.request;
+      provider.request = async ({ method, params }) => {
+        if (method === 'wallet_switchEthereumChain') {
+          const error = new Error('User rejected the request');
+          error.code = 4001;
+          throw error;
+        }
+        return inner({ method, params });
+      };
+      const guarded = guardEip1193(provider, { timeoutMs: 400, hardCapMs: 800, doc: null });
+      provider.accounts = [`eip155:56:${ADDR}`];
+      let thrown = null;
+      try {
+        await guarded.request({ method: 'eth_sendTransaction', params: [{ to: ADDR }] });
+      } catch (error) {
+        thrown = error;
+      }
+      t('a declined switch leaves the request refused',
+        thrown?.code === SIGN_ERRORS.CHAIN_UNAPPROVED);
+      t('and nothing is published into a session that cannot carry it',
+        !provider.calls.some((c) => c.method === 'eth_sendTransaction'));
+    }
+
+    {
+      /* The bound: a request the wallet never answers must end, and end named. */
+      const provider = makeProvider();
+      provider.request = () => new Promise(() => {});
+      const guarded = guardEip1193(provider, { timeoutMs: 30, hardCapMs: 120, doc: null });
+      let thrown = null;
+      try {
+        await guarded.request({ method: 'eth_sendTransaction', params: [] });
+      } catch (error) {
+        thrown = error;
+      }
+      t('an unanswered signature ends instead of hanging', thrown?.code === SIGN_ERRORS.NO_RESPONSE);
+    }
+
+    {
+      /* The nudge: once the request is published, the wallet app is the thing
+         the user has to be looking at. */
+      const provider = makeProvider();
+      const nudges = [];
+      const guarded = guardEip1193(provider, {
+        timeoutMs: 200, hardCapMs: 400, doc: null,
+        onSignatureRequest: (info) => nudges.push(info)
+      });
+      await guarded.request({ method: 'personal_sign', params: ['0x', ADDR] });
+      t('the wallet is nudged once the request is on its way', nudges.length === 1);
+      t('the nudge names the method, chain and account',
+        nudges[0]?.method === 'personal_sign' && nudges[0]?.chainId === 56 && nudges[0]?.address === ADDR);
+      /* A non-signing read must never drag the phone into another app. */
+      await guarded.request({ method: 'eth_chainId' });
+      t('a plain read never nudges the wallet', nudges.length === 1);
+    }
+  }
+
+  /* ════════════════ 15b. the portfolio snapshot («موجودی خیلی طول میکشه») ══
+   *
+   * The last verified read for an address, on the device, so a reload paints
+   * the user's numbers in the first frame instead of after sixteen chains have
+   * answered. What is locked: it is scoped to one address, it is slimmer than
+   * the live read, it refuses to be shown once it is old, and a blocked
+   * storage costs nothing but the convenience.
+   */
+  {
+    const ADDR = '0xabc0000000000000000000000000000000000001';
+    const OTHER = '0xdef0000000000000000000000000000000000002';
+    const memory = () => {
+      const map = new Map();
+      return {
+        getItem: (k) => (map.has(k) ? map.get(k) : null),
+        setItem: (k, v) => { map.set(k, String(v)); },
+        removeItem: (k) => { map.delete(k); }
+      };
+    };
+
+    const chain = {
+      chainId: 56,
+      nativeAmount: 1.5,
+      rows: [
+        { key: '56:native', symbol: 'BNB', amount: 1.5, native: true, coingeckoId: 'binancecoin', decimals: 18, chainId: 56 },
+        { key: '56:USDT', symbol: 'USDT', amount: 250, coingeckoId: 'tether', decimals: 18, chainId: 56 },
+        /* Zero balances are noise in a cache whose only job is the first paint. */
+        { key: '56:OLD', symbol: 'OLD', amount: 0, chainId: 56 }
+      ]
+    };
+
+    const slim = slimChain(chain);
+    t('a zero balance is dropped from the snapshot', slim.rows.length === 2);
+    t('the slimmer row keeps what the first paint needs',
+      slim.rows[0].symbol === 'BNB' && slim.rows[0].amount === 1.5 && slim.rows[0].coingeckoId === 'binancecoin');
+    t('the native amount survives', slim.nativeAmount === 1.5);
+
+    const store = memory();
+    t('writing for an address succeeds',
+      writePortfolioSnapshot({ address: ADDR, chains: [chain], at: 1_700_000_000_000, storage: store }) === true);
+    const read = readPortfolioSnapshot(ADDR, { storage: store, at: 1_700_000_000_000 + 60_000 });
+    t('the same address reads it back', read?.chains?.[0]?.chainId === 56);
+    t('the rows come back with their amounts', read?.chains?.[0]?.rows?.[0]?.symbol === 'BNB');
+    t('another address reads nothing at all',
+      readPortfolioSnapshot(OTHER, { storage: store, at: 1_700_000_000_000 + 60_000 }) === null);
+    t('a week-old snapshot is not shown',
+      readPortfolioSnapshot(ADDR, { storage: store, at: 1_700_000_000_000 + 8 * 24 * 3600_000 }) === null);
+    t('clearing leaves nothing behind', (() => {
+      clearPortfolioSnapshot(store);
+      return readPortfolioSnapshot(ADDR, { storage: store, at: 1_700_000_000_000 + 60_000 }) === null;
+    })());
+    t('a corrupt record is ignored rather than acted on', (() => {
+      const broken = memory();
+      broken.setItem('fbt-portfolio-snapshot-v1', '{not json');
+      return readPortfolioSnapshot(ADDR, { storage: broken, at: Date.now() }) === null;
+    })());
+    t('a blocked storage is survivable — the snapshot is optional', (() => {
+      const blocked = {
+        getItem() { throw new Error('blocked'); },
+        setItem() { throw new Error('blocked'); },
+        removeItem() { throw new Error('blocked'); }
+      };
+      return writePortfolioSnapshot({ address: ADDR, chains: [chain], storage: blocked }) === false &&
+        readPortfolioSnapshot(ADDR, { storage: blocked }) === null;
+    })());
+    t('a snapshot for a non-address is refused', buildSnapshot({ address: 'not-an-address', chains: [chain] }) === null);
   }
 
   /* ══════════════════ 15. wiring guards (source, not behaviour) ══════════ */

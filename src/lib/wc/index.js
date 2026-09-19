@@ -17,6 +17,7 @@
  *   appkit.js    the shared AppKit singleton surface
  *   session.js   the WalletConnect v2 lifecycle
  *   lease.js     «this device has a wallet until <time>» — what a refresh reads
+ *   signing.js   the signing boundary: preflight, bound, honest classification
  *   health.js    the diagnostic report
  *
  * `embedded.js` — the email/social "embedded wallet" — is gone: that surface
@@ -76,6 +77,7 @@ export {
   forgetTappedWallet,
   lastTappedWallet,
   linkBase,
+  rememberedMobileWallet,
   rememberTappedWallet,
   walletByKey,
   walletForObject,
@@ -86,6 +88,8 @@ export {
 } from './wallets.js';
 
 export {
+  bringWalletToFront,
+  closeHandoffTabs,
   decideWalletOpen,
   handOffChannel,
   handoffFacts,
@@ -97,7 +101,8 @@ export {
   onWalletHandoff,
   openWalletHandoff,
   openWalletLink,
-  openWalletLinkSync
+  openWalletLinkSync,
+  walletForegroundLinks
 } from './handoff.js';
 
 export {
@@ -155,3 +160,13 @@ export {
   originsProbeUrl,
   storageFacts
 } from './health.js';
+
+export {
+  SIGN_ERRORS,
+  SIGN_METHODS,
+  classifySignError,
+  guardEip1193,
+  isSigningMethod,
+  preflightSignRequest,
+  sessionCoverage
+} from './signing.js';

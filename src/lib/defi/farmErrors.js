@@ -51,6 +51,20 @@ const ERROR_KEY_MAP = {
   RPC_ERROR: 'farm.errors.rpc',
   PROVIDER_BUSY: 'farm.errors.rpc',
   TIMEOUT: 'farm.errors.timeout',
+  /* ── THE SIGNING BOUNDARY (src/lib/wc/signing.js) ──────────────────────────
+   * A failure here is a fact about the WALLET SESSION, not about the network.
+   * Mapping them is the whole point: «وارد تراست والت شد اما هیج صفحه امضایی
+   * نیامد فقط زد ضعیفه نتورک» was the same code (`EXECUTION_NETWORK_UNREADABLE`)
+   * being shown for a request the wallet had never been given the chance to
+   * display. Each of these says what is actually true and what to do next.
+   */
+  WALLET_SESSION_GONE: 'farm.errors.walletSessionGone',
+  WALLET_NO_ACCOUNT: 'farm.errors.walletSessionGone',
+  WALLET_RELAY_DOWN: 'farm.errors.walletRelayDown',
+  WALLET_METHOD_UNAPPROVED: 'farm.errors.walletMethod',
+  WALLET_CHAIN_UNAPPROVED: 'farm.errors.walletChain',
+  WALLET_CHAIN_NOT_APPROVED: 'farm.errors.walletChain',
+  WALLET_NO_RESPONSE: 'farm.errors.walletNoResponse',
   TRANSACTION_DROPPED: 'farm.errors.dropped',
   INDEXER_DELAY: 'farm.errors.indexer'
 };

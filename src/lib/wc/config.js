@@ -108,6 +108,18 @@ export const TIMEOUT = Object.freeze({
    */
   handoffClose: 2_500,
   teardown: 4_000,
+  /* ── THE SIGNING BOUND ──────────────────────────────────────────────────
+   * A signature is a HUMAN wait, not a network wait: the user reads a prompt
+   * in another app, unlocks, decides. `signInWallet` is the budget while they
+   * are doing that, and the clock PAUSES while this document is hidden (see
+   * pauseBound in timing.js), so a slow decision is never punished.
+   * `signHardCap` is the absolute ceiling for a tab nobody came back to.
+   * `signRelayReopen` is how long we give a closed relay socket to come back
+   * before we tell the user the truth instead of waiting on a dead socket.
+   */
+  signInWallet: 180_000,
+  signHardCap: 600_000,
+  signRelayReopen: 6_000,
   /*
    * The five email/embedded-wallet bounds that used to live here
    * (`emailOpen`, `emailModalOpen`, `emailRestore`, `emailCloseGrace`,
