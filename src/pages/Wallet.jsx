@@ -22,7 +22,7 @@ import TokenDetailSheet from '../components/TokenDetailSheet';
 import Portfolio from '../pages/Portfolio';
 import { explorerAddr } from '../lib/chains';
 import { solanaAddress } from '../lib/solanaWallet';
-import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../lib/chains';
+import { EVM_CHAINS, TOKENS } from '../lib/chains';
 import { currencyOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -34,6 +34,7 @@ import { buildIntelligence } from '../lib/portfolioIntel';
 import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
 import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
+import NetworkSelect from '../components/NetworkSelect';
 import { IconCopy, IconGlobe, IconChevronRight, IconShield } from '../components/Icons';
 import { WalletMesh } from '../components/WalletArt';
 import '../styles/wallet-modern.css';
@@ -113,11 +114,37 @@ function changeLabel(ch, currency) {
 
 function WalHero({
   wallet, currency, portfolio, intel, chips, hideBalances, t,
-  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, onRetry, children
+  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, onRetry,
+  /* The portfolio view filter: which network's holdings the page is showing.
+     It is NOT the wallet's active chain — «همه شبکه‌ها» is a view, and so is
+     looking at Base while the wallet sits on BSC. */
+  selectedChain = 'all', onSelectChain, children
 }) {
   const connected = Boolean(wallet.address) && !wallet.locked;
   const [switching, setSwitching] = useState(false);
   const [switchErr, setSwitchErr] = useState(null);
+
+  /* Per-network figures for the picker's rows. Built from the portfolio the
+     hero already renders, so the dropdown and the breakdown below it can never
+     disagree about what is on a chain; `hideBalances` is respected here too —
+     a hidden portfolio must not leak a total through a dropdown. */
+  const { chainMeta, allMeta } = useMemo(() => {
+    const meta = {};
+    for (const chain of portfolio?.chains ?? []) {
+      meta[chain.chainId] = {
+        amount: hideBalances ? '' : (fmtCurrencyValue(chain.totalValue, currency) ?? ''),
+        assets: chain.rows?.length ?? 0
+      };
+    }
+    const assets = portfolio?.totalCount ?? 0;
+    return {
+      chainMeta: meta,
+      allMeta: hideBalances
+        ? (assets ? `${assets} ${t('wallet.assetsUnit')}` : '')
+        : [fmtCurrencyValue(portfolio?.totalValue, currency), assets ? `${assets} ${t('wallet.assetsUnit')}` : '']
+          .filter(Boolean).join(' · ')
+    };
+  }, [portfolio?.chains, portfolio?.totalCount, portfolio?.totalValue, currency, hideBalances, t]);
 
   const handleSwitch = useCallback(async (targetId) => {
     if (switching) return;
@@ -211,6 +238,12 @@ function WalHero({
                 <span className="faint">
                   {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(portfolio.updatedAt)}
                 </span>
+              )}
+              {/* The number came off the device, not off the network yet
+                  (a reload, or a session still re-attaching). Saying so is the
+                  difference between «fast» and «stale lying to me». */}
+              {portfolio.fromSnapshot && (
+                <span className="faint">{t('wallet.fromLastRead')}</span>
               )}
             </div>
 
@@ -309,41 +342,55 @@ function WalHero({
             </div>
           )}
 
-          {/* Network quick-switch */}
-          <div className="wal-net-picker" role="tablist" aria-label={t('wallet.network')}>
-            <button className="wal-net-chip" title={t('wallet.allNetworks')}>
-              <IconGlobe width={12} height={12} />
-              <span>{t('wallet.allNetworks')}</span>
-            </button>
-            {/*
-              EVERY network, not the first six.
+          {/*
+            THE NETWORK PICKER — one dropdown, every network.
 
-              This used to be `EVM_CHAIN_ORDER.slice(0, 6)` — a leftover from
-              when the registry held seven chains. Six of the sixteen networks
-              were therefore unreachable from the wallet screen, so a user
-              holding MON / ZK / SCR / MNT / HOOD saw «شبکه‌های جدید اضافه
-              نشده» and was right: the registry had grown and this list had
-              not. The picker is a wrapping flex row (`.wal-net-picker`), so
-              the extra chips cost a line or two of height and nothing else —
-              no hidden scroll, no "show more" tap.
-            */}
-            {EVM_CHAIN_ORDER.map((cid) => {
-              const cfg = EVM_CHAINS[cid];
-              const isActive = wallet.chainId === cid;
-              return (
-                <button
-                  key={cid}
-                  className={`wal-net-chip ${isActive ? 'active' : ''}`}
-                  onClick={() => handleSwitch(cid)}
-                  style={{ '--chip-color': cfg.color }}
-                  title={cfg.name}
-                >
-                  <span className="wal-net-dot" style={{ background: cfg.color }} />
-                  <span>{cfg.short}</span>
-                </button>
-              );
-            })}
-          </div>
+            For two releases this was a wrapping row of sixteen chips: a 7px
+            coloured dot and a three-letter abbreviation each (SCR, HOOD,
+            LINEA…), four ragged lines deep on a phone, with «همه شبکه‌ها» as
+            a button that did nothing at all. Readable to nobody who does not
+            already know the short codes, and impossible to scan.
+
+            `NetworkSelect` is the replacement: the selected network's real
+            logo and its full name on one 52px control, and a searchable
+            listbox behind it — «همه شبکه‌ها» pinned first, each row carrying
+            its own artwork, the count of assets the portfolio actually found
+            there, and a badge on the chain the wallet is connected to. The
+            icons are vendored SVG (src/lib/assetIconData.js), so it looks the
+            same on a phone that cannot reach a CDN, in dark and light.
+
+            Behaviour kept from the chips: choosing a real network also asks
+            the wallet to switch to it, and a refusal is still shown as a
+            named error below.
+          */}
+          <NetworkSelect
+            value={selectedChain}
+            onChange={onSelectChain}
+            activeChainId={wallet.chainId}
+            chainMeta={chainMeta}
+            allMeta={allMeta}
+            label={t('wallet.network')}
+            allLabel={t('wallet.allNetworks')}
+            assetsLabel={t('wallet.assetsUnit')}
+            activeLabel={t('wallet.active.title')}
+            searchLabel={t('wallet.netSearch')}
+            testId="wallet-network-select"
+          />
+          {/*
+            A view filter is not a network switch. «همه شبکه‌ها» and any chain
+            the wallet is not on are legitimate ways to LOOK at the portfolio;
+            the wallet itself stays where the user put it until they ask.
+          */}
+          {selectedChain !== 'all' && Number(selectedChain) !== Number(wallet.chainId) && (
+            <button
+              type="button"
+              className="wal-net-switch"
+              onClick={() => handleSwitch(Number(selectedChain))}
+              disabled={switching}
+            >
+              {switching ? t('wallet.switching') : t('wallet.switchTo', { net: EVM_CHAINS[selectedChain]?.name ?? '' })}
+            </button>
+          )}
           {switchErr && (
             <div className="wal-note wal-note-err">
               {t(`wallet.switchErr.${switchErr}`)}
@@ -913,6 +960,8 @@ export default function Wallet() {
             onExplorer={handleExplorer}
             switchChain={wallet.switchChain}
             haptic={haptic}
+            selectedChain={selectedChain}
+            onSelectChain={handleSelectChain}
             /* The manual retry the «reconnecting» hero offers — the same
                plan-driven attempt the cold start runs, exposed for the one
                case a ladder cannot cover: a wallet app the user just opened. */

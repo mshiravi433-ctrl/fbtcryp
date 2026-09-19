@@ -294,7 +294,11 @@ function tryOpen(win, url, openWindow, opened = null) {
   const features = page ? 'noreferrer noopener' : 'noreferrer';
   try {
     const child = open?.(url, '_blank', features);
-    if (child && typeof child.close === 'function' && !page) opened?.push(child);
+    if (child && typeof child.close === 'function' && !page) {
+      opened?.push(child);
+      handoffChildren.add(child);
+      installReturnSweep(win);
+    }
     return Boolean(child);
   } catch {
     return false;
@@ -319,6 +323,7 @@ function tryOpen(win, url, openWindow, opened = null) {
  */
 function scheduleClose(win, children, ms = TIMEOUT.handoffClose) {
   if (!children || children.length === 0) return;
+  installReturnSweep(win);
   try {
     win.setTimeout?.(() => {
       for (const child of children.splice(0, children.length)) {
@@ -327,11 +332,67 @@ function scheduleClose(win, children, ms = TIMEOUT.handoffClose) {
         } catch {
           /* the tab already went away — that is the point */
         }
+        handoffChildren.delete(child);
       }
     }, ms);
   } catch {
     /* no timers: the tab simply outlives us, which is survivable */
   }
+}
+
+/* ── the tabs a hand-off left behind ─────────────────────────────────────────
+ * Every child window a hand-off opens is remembered here, because a tab opened
+ * for a custom scheme does not go anywhere: Chrome launches the app and leaves
+ * the tab sitting on `trust://wc?uri=…`, a URL it cannot render. Back out of
+ * the wallet and that is the tab the phone returns to — «به جای اپ ما … وارد
+ * لینک trust://wc?uri=… میشه» is the report, verbatim.
+ *
+ * So the sweep runs on three triggers, not one:
+ *   • shortly after the open (the wallet has had time to take over);
+ *   • when this document becomes VISIBLE again — the user came back, and the
+ *     first thing they must not see is the tab we forgot;
+ *   • on demand (a settled attempt, a closed sheet).
+ */
+const handoffChildren = new Set();
+let returnSweepInstalled = false;
+
+function installReturnSweep(win) {
+  const doc = win?.document;
+  if (!doc || typeof doc.addEventListener !== 'function' || returnSweepInstalled) return;
+  returnSweepInstalled = true;
+  doc.addEventListener('visibilitychange', () => {
+    if (doc.visibilityState !== 'visible') return;
+    /* A beat of grace: on iOS the app-switch prompt is still on top of a tab
+       that is technically visible, and closing it would dismiss the very
+       hand-off the user is about to confirm. */
+    try {
+      win.setTimeout?.(() => closeHandoffTabs(), 400);
+    } catch {
+      closeHandoffTabs();
+    }
+  });
+}
+
+/**
+ * Close every tab a hand-off opened and forget them.
+ *
+ * Safe to call at any time and as often as you like: a child that already went
+ * away is exactly the outcome we wanted.
+ *
+ * @returns {number} how many were closed.
+ */
+export function closeHandoffTabs() {
+  let closed = 0;
+  for (const child of [...handoffChildren]) {
+    handoffChildren.delete(child);
+    try {
+      child?.close?.();
+      closed += 1;
+    } catch {
+      /* Cross-origin tabs refuse `close()` — nothing else to do with them. */
+    }
+  }
+  return closed;
 }
 
 /**
@@ -431,12 +492,62 @@ function routesFor({ channel, win, url, raw, wallet, fallbackUrl, urlForChannel 
   const list = [];
 
   if (channel === 'native-app') {
-    list.push({ route: 'java-bridge', url: raw });
+    list.push({ route: 'java-bridge', url: raw, mode: 'bridge' });
   }
-  if (intent) list.push({ route: 'intent', url: intent });
-  list.push({ route: 'native', url: urlForChannel });
-  list.push({ route: 'universal', url: universal });
+  /*
+   * `mode: 'place'` — NAVIGATE THIS DOCUMENT TO THE INTENT.
+   *
+   * This is the one route that does not open a tab, and on Android it is the
+   * only one that cannot leave a dead `trust://wc?uri=…` tab behind: Chrome
+   * resolves an `intent://` URL itself. When the wallet is installed the
+   * navigation never commits — the app is launched and fbtswap.ir stays
+   * exactly where the user left it, with its relay socket and its pending
+   * connect() promise still alive. When the app is NOT installed the
+   * navigation does commit, and it commits to `S.browser_fallback_url`, which
+   * is the one screen that helps («install Trust Wallet»).
+   *
+   * Opening the same URL with `window.open(_blank)` instead is what produced
+   * the double-approval loop: the pairing was handed to a tab, the real dApp
+   * tab went to the background (where a phone is free to freeze or discard
+   * it), and the approval the user tapped landed on a page that no longer
+   * existed. Coming back to the dead tab and pressing «Continue» started the
+   * whole trip again — second approval, and this time the dApp was in front.
+   */
+  if (intent) {
+    /*
+     * In place ONLY when the intent carries a real fallback.
+     *
+     * `S.browser_fallback_url` is what the browser loads when the intent does
+     * not resolve. With it, the one way this navigation can commit is the
+     * «install this wallet» page — a correct ending. WITHOUT it, Chrome
+     * commits to its own «cannot open this URL» error page, and the dApp is
+     * gone for a hand-off that never happened. So no fallback means no
+     * in-place route: it is opened as a popup instead, and swept like any
+     * other tab.
+     */
+    const hasFallback = /S\.browser_fallback_url=[^;]/.test(intent);
+    list.push({ route: 'intent', url: intent, mode: hasFallback ? 'place' : 'popup' });
+  }
+  list.push({ route: 'native', url: urlForChannel, mode: 'popup' });
+  list.push({ route: 'universal', url: universal, mode: 'popup' });
   return list.filter((entry) => Boolean(entry.url));
+}
+
+/**
+ * Navigate THIS document, in place.
+ *
+ * Used for exactly one thing — an `intent://` URL on a Chromium Android
+ * browser, where the navigation is resolved by the browser and (when it
+ * resolves) never commits. Every other route goes through `tryOpen`/`tryAnchor`
+ * and never touches this document.
+ */
+function navigateInPlace(win, url) {
+  try {
+    win.location.href = url;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -492,10 +603,13 @@ export function openWalletLinkSync(url, options = {}) {
   }
 
   const opened = [];
-  const fired = tryOpen(win, first.url, openWindow, opened) || tryAnchor(win, first.url);
+  const fired = first.mode === 'place'
+    ? navigateInPlace(win, first.url)
+    : (tryOpen(win, first.url, openWindow, opened) || tryAnchor(win, first.url));
   /* iOS Safari prompts before it switches apps, and closing the tab it opened
-     would dismiss that prompt, so only Android gets the cleanup. */
-  if (first.route === 'native' && isAndroidView(win)) scheduleClose(win, opened);
+     would dismiss that prompt, so only Android gets the immediate cleanup.
+     Every platform gets the return sweep (see closeHandoffTabs). */
+  if (fired && first.mode === 'popup' && isAndroidView(win)) scheduleClose(win, opened);
   if (fired) announceHandoff({ url: first.url, wallet, route: first.route });
   return { ok: fired, route: first.route };
 }
@@ -558,13 +672,82 @@ export async function openWalletHandoff(url, options = {}) {
       }
       continue;
     }
-    if (tryOpen(win, entry.url, openWindow, opened) || tryAnchor(win, entry.url)) {
-      if (entry.route === 'native' && isAndroidView(win)) scheduleClose(win, opened);
+    if (entry.mode === 'place'
+      ? navigateInPlace(win, entry.url)
+      : (tryOpen(win, entry.url, openWindow, opened) || tryAnchor(win, entry.url))) {
+      if (entry.mode === 'popup' && isAndroidView(win)) scheduleClose(win, opened);
       announceHandoff({ url: entry.url, wallet, route: entry.route });
       return { ok: true, route: entry.route };
     }
   }
 
+  return { ok: false, route: 'none' };
+}
+
+/**
+ * BRING AN ALREADY-CONNECTED WALLET BACK TO THE FRONT.
+ * ---------------------------------------------------------------------------
+ * A signing request over WalletConnect is published to the relay — and then
+ * nothing else happens. On a phone the wallet is a different app, in the
+ * background, and the user is standing in the browser looking at a page that
+ * has no idea it is waiting for them. «وارد تراست والت شد اما هیج صفحه امضایی
+ * نیامد» is that gap: the request went out, the app was opened by something
+ * else, and the prompt was never the thing on screen.
+ *
+ * So once the request is published, the wallet the session belongs to is
+ * opened — with NO pairing payload this time, because the session already
+ * exists. That is what makes it a nudge rather than a hand-off: no new pairing,
+ * no second approval, and the pending request is sitting on the wallet's screen
+ * when the user arrives.
+ *
+ * Conservative by construction:
+ *   • only on a phone browser — a desktop QR session must never be yanked at;
+ *   • only for a wallet we can name from the registry;
+ *   • the same channel-aware routing and the same tab sweep as a pairing.
+ */
+export function walletForegroundLinks(wallet) {
+  const scheme = urlScheme(wallet?.native);
+  if (!scheme) return { native: '', intent: '', universal: '' };
+  return {
+    scheme,
+    native: linkBase(wallet.native),
+    universal: wallet?.universal ? linkBase(wallet.universal) : '',
+    /* An `intent://` with no host: enough to launch the app, and package
+       -scoped so no other app that registered the scheme can take it. */
+    intent: wallet?.androidPackage
+      ? `intent://#Intent;scheme=${scheme};package=${wallet.androidPackage};end`
+      : ''
+  };
+}
+
+/**
+ * @returns {Promise<{ok:boolean, route:string}>} whether a route was attempted.
+ */
+export async function bringWalletToFront(wallet, { view, openWindow } = {}) {
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  if (!win || !wallet) return { ok: false, route: 'none' };
+  const links = walletForegroundLinks(wallet);
+  const channel = handOffChannel(win);
+  const routes = [];
+  if (channel === 'web' && links.intent && isAndroidView(win) && isIntentCapableBrowser(win)) {
+    routes.push({ route: 'foreground-intent', url: links.intent, mode: 'place' });
+  }
+  if (links.native) routes.push({ route: 'foreground-native', url: links.native, mode: 'popup' });
+  if (links.universal && channel === 'telegram') {
+    routes.push({ route: 'foreground-universal', url: links.universal, mode: 'popup' });
+  }
+
+  const opened = [];
+  for (const entry of routes) {
+    if (entry.mode === 'place') {
+      if (navigateInPlace(win, entry.url)) return { ok: true, route: entry.route };
+      continue;
+    }
+    if (tryOpen(win, entry.url, openWindow, opened) || tryAnchor(win, entry.url)) {
+      if (isAndroidView(win)) scheduleClose(win, opened);
+      return { ok: true, route: entry.route };
+    }
+  }
   return { ok: false, route: 'none' };
 }
 

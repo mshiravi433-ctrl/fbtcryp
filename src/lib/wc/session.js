@@ -550,18 +550,27 @@ export function createWcSession({
     busy = true;
     let instance = null;
     try {
-      let relay = null;
-      try {
-        relay = await measureRelay({ projectId });
-      } catch {
-        relay = null;
-      }
-      if (relay) emit('relay', relay);
+      /*
+       * NO RELAY PROBE ON A SILENT RESTORE.
+       *
+       * A cold start's first job is the session, and `measureRelay()` is up to
+       * eight seconds of socket handshakes before `init()` is even allowed to
+       * start — a delay that lands squarely on the one thing the user is
+       * watching («پس از رفرش کیف پول متصل دیسکانکت می‌شه» is a report about a
+       * page that looked disconnected for the whole of it).
+       *
+       * The measurement is an ORDERING hint and nothing more: `initProvider()`
+       * already walks every configured host with a short fuse on each and the
+       * full budget on the last, so an unmeasured network costs a few extra
+       * seconds on a host that would have failed anyway — and the health panel
+       * still measures for real when the user opens it.
+       */
+      emit('relay', null);
 
       /* NO MODAL ON A SILENT RESTORE: this path runs on first paint for
          returning users, and building the AppKit instance there would be weight
          on a surface that is never opened. */
-      instance = await initProvider({ modal: false, relayOrder: relay?.order });
+      instance = await initProvider({ modal: false, relayOrder: null });
       provider = instance;
       wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
 

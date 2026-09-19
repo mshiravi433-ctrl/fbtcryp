@@ -2,18 +2,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAppStore } from '../store/useAppStore';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
+import { clearPortfolioSnapshot } from '../lib/portfolioSnapshot';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { isIOS as isIOSDevice } from '../lib/platform';
 import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
 import {
   WC_PROJECT_ID,
+  bringWalletToFront,
   clearWalletLease,
   createWcSession,
+  guardEip1193,
   hasStoredSession,
   purgeConnectionKeys,
   purgeEmbeddedWalletKeys,
   readWalletLease,
+  rememberedMobileWallet,
   storageFacts,
   walletLeaseMinutes,
   walletLeaseRemainingMinutes,
@@ -171,6 +175,17 @@ export function WalletProvider({ children }) {
   /** One re-attach timer at a time, plus how many attempts it has made. */
   const restoreTimerRef = useRef(null);
   const restoreAttemptRef = useRef(0);
+  /**
+   * A terminal answer about the session the lease describes.
+   *
+   * Two facts stop the ladder for good: the window the user chose lapsed, and
+   * the WalletConnect session is gone from this device. Both are explained on
+   * the connect sheet, and neither is «وصل نیست» — but neither justifies
+   * promising a re-attach that cannot happen either, so `restoring` comes down
+   * for them and only for them (see settleRestoring). Cleared by the next
+   * successful attach and by a fresh Connect.
+   */
+  const restoreBlockedRef = useRef(null);
   /** Last time the lease was rolled forward, so a busy tab writes rarely. */
   const leaseTouchedRef = useRef(0);
   /** Which address `nativeBalance` describes — see refreshBalance(). */
@@ -348,6 +363,10 @@ export function WalletProvider({ children }) {
     setLease(stored);
     leaseTouchedRef.current = Date.now();
     restoreAttemptRef.current = 0;
+    /* A wallet is attached: whatever we last said about a missing session is
+       no longer true, and the ladder may start again from the first rung. */
+    restoreBlockedRef.current = null;
+    setRestoring(false);
     wcEvent('lease_granted', minutes);
     return record;
   }, []);
@@ -615,6 +634,48 @@ export function WalletProvider({ children }) {
     [attachInjectedListeners, detachInjectedListeners, refreshBalance]
   );
 
+  /* ─────────── the signing boundary (see lib/wc/signing.js) ───────────────
+   *
+   * Every signature and every transaction this app asks a remote wallet for
+   * goes through one wrapper: it preflights the request against the session
+   * (method, chain, account, relay socket), bounds the wait on a clock that
+   * pauses while the user is in the wallet, and names the failure honestly
+   * instead of reporting «شبکه در دسترس نیست» for a request the wallet never
+   * received.
+   */
+  const nudgeRef = useRef(0);
+
+  /**
+   * Bring the wallet the session belongs to back to the front, once, right
+   * after a request is published.
+   *
+   * Phone browsers only: a desktop session paired over a QR must never have an
+   * app launched at it, and inside a wallet's own browser the injected
+   * transport is in use anyway (this runs for WalletConnect sessions only).
+   */
+  const nudgeWalletApp = useCallback(({ method }) => {
+    try {
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
+      if (!/Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''))) return;
+      const wallet = rememberedMobileWallet();
+      if (!wallet) return;
+      const now = Date.now();
+      /* One nudge per request burst: an approval flow can publish two requests
+         (permit, then deposit) and the second must not yank the phone back out
+         of the wallet mid-signature. */
+      if (now - nudgeRef.current < 4000) return;
+      nudgeRef.current = now;
+      window.setTimeout?.(() => {
+        void bringWalletToFront(wallet);
+        try {
+          wcEventDetail('sign_wallet_nudged', { m: String(method || '') });
+        } catch { /* the trace ring is not load-bearing */ }
+      }, 120);
+    } catch {
+      /* A nudge that fails is not a failed signature. */
+    }
+  }, []);
+
   /* --------------------- one adapter for every transport ------------------ */
 
   /**
@@ -682,7 +743,30 @@ export function WalletProvider({ children }) {
       // ── 2. The ethers path: signer first, then the network it reports ──
       try {
         const { BrowserProvider } = await loadEthers();
-        const provider = new BrowserProvider(eip, 'any');
+        /*
+         * THE GUARDED PROVIDER.
+         *
+         * `guardEip1193` is installed for the remote transport only, and it is
+         * handed to ethers — so every signer the app builds from here inherits
+         * it: the farm panels' `signer.sendTransaction`, the send sheet, the
+         * insurance flow, Intent AI's execution path. One boundary instead of a
+         * guard remembered at each call site.
+         *
+         * Local and injected wallets are deliberately NOT wrapped: their
+         * failures are already local and legible, and a local vault signs
+         * without ever leaving the page.
+         */
+        const guarded = nextMode === 'wc'
+          ? guardEip1193(eip, {
+              onSignatureRequest: nudgeWalletApp,
+              onTrace: (name, detail) => {
+                try {
+                  wcEventDetail(name, detail);
+                } catch { /* never load-bearing */ }
+              }
+            })
+          : eip;
+        const provider = new BrowserProvider(guarded, 'any');
         const signer = await provider.getSigner();
         let addrFromSigner = null;
         try {
@@ -700,7 +784,7 @@ export function WalletProvider({ children }) {
         }
 
         detachInjectedListeners();
-        eip1193Ref.current = eip;
+        eip1193Ref.current = guarded;
         signerRef.current = signer;
         setMode(nextMode);
         setInjectedInfo(null);
@@ -725,7 +809,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [attachInjectedListeners, detachInjectedListeners, grantLease, refreshBalance]
+    [attachInjectedListeners, detachInjectedListeners, grantLease, refreshBalance, nudgeWalletApp]
   );
 
   /* --------------------------- WalletConnect v2 -------------------------- */
@@ -773,6 +857,7 @@ export function WalletProvider({ children }) {
     async ({ force = false } = {}) => {
       if (connecting) return false;
       setError(null);
+      restoreBlockedRef.current = null;
       setConnecting(true);
       const connectGuard = holdRefreshGuard('wc-connect');
       try {
@@ -964,6 +1049,12 @@ export function WalletProvider({ children }) {
    */
   const forgetLocalWallet = useCallback(() => {
     clearVault();
+    /* The portfolio snapshot is keyed by address and is a display cache, but
+       «forget this wallet» is the one action that means the device should stop
+       remembering anything about it — including the numbers it last showed. */
+    try {
+      clearPortfolioSnapshot();
+    } catch { /* storage unavailable: nothing was cached anyway */ }
     disconnectRef.current();
   }, []);
 
@@ -979,6 +1070,38 @@ export function WalletProvider({ children }) {
    * connection. Both are idempotent: whenever an address is already attached
    * they do nothing.
    */
+  /**
+   * Decide what «restoring» means now that an attempt has ended.
+   *
+   * ─── WHY A FUNCTION AND NOT `setRestoring(false)` ────────────────────────
+   * The old code cleared the flag on every exit path, including between two
+   * rungs of the retry ladder. On a phone whose relay handshake loses the race,
+   * that produced exactly the reported symptom: «در حال اتصال مجدد…» for a
+   * few seconds, then «وصل نیست» — while the app was, in fact, still trying,
+   * and would try again sixty seconds later. A user who refreshed and waited a
+   * minute concluded the connection had been dropped.
+   *
+   * So the flag now means one thing: THE APP STILL OWES THE USER A WALLET.
+   * A live lease with nothing attached is a promise, not an absence — the flag
+   * stays up until the wallet is back, the window the user chose lapses, or a
+   * terminal fact says the session itself is gone. The ladder is background
+   * work; the sentence on screen does not blink with it.
+   */
+  const settleRestoring = useCallback(() => {
+    if (addressRef.current) {
+      setRestoring(false);
+      return false;
+    }
+    if (restoreBlockedRef.current) {
+      setRestoring(false);
+      return false;
+    }
+    const lease = readWalletLease() ?? leaseRef.current;
+    const keep = Boolean(lease?.alive);
+    setRestoring(keep);
+    return keep;
+  }, []);
+
   const attemptWalletRestore = useCallback(async () => {
     if (addressRef.current) {
       setRestoring(false);
@@ -1010,6 +1133,7 @@ export function WalletProvider({ children }) {
       clearWalletLease();
       leaseRef.current = null;
       setLease(null);
+      restoreBlockedRef.current = 'expired';
       setRestoring(false);
       /* Named, not silent. «It disconnected by itself» is what an unexplained
          end of a connection looks like; this says which setting ended it. */
@@ -1020,7 +1144,7 @@ export function WalletProvider({ children }) {
 
     if (plan.action === 'none') {
       if (plan.stale) wcEvent('lease_vault_missing');
-      setRestoring(false);
+      settleRestoring();
       return false;
     }
 
@@ -1043,6 +1167,7 @@ export function WalletProvider({ children }) {
      */
     if (plan.action === 'wc' && !hasStoredSession()) {
       dropLease();
+      restoreBlockedRef.current = 'missing';
       setRestoring(false);
       setError('SESSION_MISSING');
       wcEvent('lease_session_missing');
@@ -1064,9 +1189,12 @@ export function WalletProvider({ children }) {
       wcEvent('lease_restore_failed');
       return false;
     } finally {
-      setRestoring(false);
+      /* NOT `setRestoring(false)`: a failed rung is not a failed resume. While
+         the lease is alive the app owes the user this wallet, and the ladder
+         behind it is background work — see settleRestoring(). */
+      settleRestoring();
     }
-  }, [restoreInjected, restoreWcSession, rollLease, dropLease]);
+  }, [restoreInjected, restoreWcSession, rollLease, dropLease, settleRestoring]);
 
   const scheduleWalletRestore = useCallback(() => {
     if (restoreTimerRef.current) return;
@@ -1107,6 +1235,10 @@ export function WalletProvider({ children }) {
       restoreTimerRef.current = null;
     }
     restoreAttemptRef.current = 0;
+    /* «تلاش دوباره» is a new decision: an earlier terminal answer (a lapsed
+       window, a session the device no longer has) must not silently refuse the
+       tap that was made precisely because the user wants to try again. */
+    restoreBlockedRef.current = null;
     const ok = await attemptWalletRestore();
     if (!ok) scheduleWalletRestore();
     return ok;
@@ -1148,6 +1280,8 @@ export function WalletProvider({ children }) {
     setLocked(false);
     setError(null);
     setWcPairUri(null);
+    restoreBlockedRef.current = null;
+    setRestoring(false);
   }, [detachInjectedListeners, dropLease]);
 
   disconnectRef.current = disconnect;
@@ -1261,6 +1395,17 @@ export function WalletProvider({ children }) {
     const storedLease = readWalletLease();
     leaseRef.current = storedLease;
     setLease(storedLease);
+    /*
+     * THE FIRST FRAME ALREADY OWES THE USER A WALLET.
+     *
+     * `restoring` used to go up only once the resume call was in flight, so a
+     * returning user's first frame was the «وصل نیست» hero — and a reload is
+     * exactly the moment that sentence reads as «the connection was dropped».
+     * A live lease is a promise the app made; the hero says so from the start,
+     * and `settleRestoring()` takes it down when the promise is kept or a
+     * terminal fact breaks it.
+     */
+    if (storedLease?.alive && !addressRef.current && !loadVault()) setRestoring(true);
 
     const resume = () => {
       if (addressRef.current) {

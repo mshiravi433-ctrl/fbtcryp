@@ -1,3 +1,4 @@
+import { DEEPLINK_CHOICE_KEY } from './storage.js';
 import { repairPairingUri } from './uri.js';
 
 /**
@@ -251,6 +252,45 @@ export function lastTappedWallet() {
 
 export function forgetTappedWallet() {
   tappedWallet = null;
+}
+
+/**
+ * WHICH WALLET THE SESSION ON THIS DEVICE BELONGS TO.
+ *
+ * A signing nudge needs to know where to knock, and there is no in-memory
+ * answer after a reload: the pairing is long gone by then. Two records on disk
+ * say it — AppKit's `@appkit/recent_wallet` (the wallet object the user tapped,
+ * kept for exactly this purpose) and the SDK's own
+ * `WALLETCONNECT_DEEPLINK_CHOICE` (the `{ name, href }` it wrote when it last
+ * handed a URI to an app).
+ *
+ * Both are matched against the REGISTRY, never trusted as-is: a stored string
+ * is a hint, and opening `window.open(href)` on the strength of a localStorage
+ * value is how a dApp comes to launch an arbitrary scheme. An entry that names
+ * no promoted wallet resolves to null, and a nudge that cannot name a wallet
+ * simply does not happen.
+ */
+export function rememberedMobileWallet({ storage } = {}) {
+  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!target) return null;
+  const read = (key) => {
+    try {
+      const raw = target.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const fromAppKit = read('@appkit/recent_wallet');
+  const byAppKit = walletForObject(fromAppKit);
+  if (byAppKit) return byAppKit;
+
+  const choice = read(DEEPLINK_CHOICE_KEY);
+  const byHref = walletForUrl(choice?.href);
+  if (byHref) return byHref;
+  const named = walletForObject({ name: choice?.name });
+  if (named) return named;
+  return null;
 }
 
 /**

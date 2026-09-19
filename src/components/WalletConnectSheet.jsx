@@ -15,6 +15,7 @@ import {
 } from '../lib/localWallet';
 import {
   MOBILE_WALLETS,
+  closeHandoffTabs,
   handOffChannel,
   openWalletHandoff,
   repairPairingUri,
@@ -151,6 +152,18 @@ export default function WalletConnectSheet({ open, onClose }) {
   const [openedWallet, setOpenedWallet] = useState(null);
   /** Which route the last hand-off took — 'intent' | 'native' | 'universal'. */
   const [handoffRoute, setHandoffRoute] = useState(null);
+  /**
+   * Has the user come BACK to this document since a hand-off?
+   *
+   * This is the «وارد لینک trust://wc?uri=… میشه» report from the other side.
+   * A mobile hand-off is a trip: the wallet opens, the user decides, and the
+   * phone returns — to our tab if we kept it in front, to a tab Chrome left
+   * behind if we did not. Either way, coming back with a pairing still pending
+   * is the one moment the app can act: the pairing the wallet needs is STILL
+   * THIS ONE, so the honest offer is «باز کردن دوباره» — the same URI, no new
+   * pairing, no second approval from scratch.
+   */
+  const [returned, setReturned] = useState(false);
   const [copiedUri, setCopiedUri] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [pairQr, setPairQr] = useState(null);
@@ -191,6 +204,7 @@ export default function WalletConnectSheet({ open, onClose }) {
        that is over. */
     setOpenedWallet(null);
     setHandoffRoute(null);
+    setReturned(false);
     setCopiedUri(false);
     setCopiedUrl(false);
   }, []);
@@ -299,6 +313,61 @@ export default function WalletConnectSheet({ open, onClose }) {
       }
     );
   };
+
+  /**
+   * Open the wallet AGAIN — on the pairing that is already on screen.
+   *
+   * Not a retry in the sense of «start over»: `pairUri` is the live pairing the
+   * SDK published and is still waiting for. Re-firing the same URI costs the
+   * user one more trip into an app that is about to say «already connected» —
+   * or, if the first approval never landed, one approval instead of two.
+   */
+  const reopenWalletApp = (event) => {
+    const entry = MOBILE_WALLETS.find((w) => w.key === openedWallet) ?? null;
+    if (!entry || !pairUri) {
+      event?.preventDefault?.();
+      return;
+    }
+    event?.preventDefault?.();
+    haptic?.('light');
+    setReturned(false);
+    wcEvent('sheet_wallet_reopen');
+    const links = walletLinks(entry, pairUri);
+    openWalletHandoff(links.native, {
+      wallet: entry,
+      walletPackage: entry.androidPackage,
+      pairingUri: pairUri,
+      fallbackUrl: links.universal
+    }).then(
+      (result) => {
+        setHandoffRoute(result.route);
+        wcEvent(result.ok ? 'sheet_wallet_reopened' : 'sheet_wallet_reopen_failed');
+      },
+      () => wcEvent('sheet_wallet_reopen_failed')
+    );
+  };
+
+  /* ── coming back ──────────────────────────────────────────────────────────
+   * Two jobs the moment this document is visible again with a pairing pending:
+   * remember it (so the sheet can offer the way back into the wallet), and
+   * sweep away any tab a previous hand-off left behind — that tab is what the
+   * user was standing on when they concluded «it never comes back».
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      closeHandoffTabs();
+      if (pairUri) setReturned(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [pairUri]);
+
+  /* A settled pairing no longer has a «come back» state to describe. */
+  useEffect(() => {
+    if (!pairUri) setReturned(false);
+  }, [pairUri]);
 
   const copyUri = async () => {
     if (!pairUri) return;
@@ -683,13 +752,42 @@ export default function WalletConnectSheet({ open, onClose }) {
           </div>
 
           {openedWallet && pairUri && (
-            /* Two sentences the tap needs, in the order they become true:
-               what we are waiting for, and what to do when nothing opened. */
-            <div className="notice" style={{ marginTop: 10 }}>
-              <p style={{ fontSize: 12, marginBottom: 4 }}>{t('wallet.pairWaiting')}</p>
-              <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>
-                {t('wallet.pairNoOpen')}
-              </p>
+            /*
+             * THE WAITING CARD.
+             *
+             * Two sentences used to live here («در انتظار…», «اگر باز نشد…»)
+             * and neither was an action. The report they failed to answer is
+             * the one this replaces: the user approves in the wallet, comes
+             * back — to us, or to the tab Chrome left behind — and there is
+             * nothing on screen that puts them back in front of the wallet on
+             * the pairing that is still waiting. So they press the wallet's own
+             * «Continue» instead, approve a second time, and only then does the
+             * connection land.
+             *
+             * The card now carries the way back: ONE button, the same pairing
+             * URI, named as what it is (a re-open, not a fresh pairing).
+             */
+            <div className="wc-wait" role="status">
+              <span className="wc-wait-dot" aria-hidden="true" />
+              <div className="wc-wait-body">
+                <p className="wc-wait-title">
+                  {t('wallet.pairWaitingIn', { wallet: MOBILE_WALLETS.find((w) => w.key === openedWallet)?.name ?? '' })}
+                </p>
+                <p className="wc-wait-sub">
+                  {returned
+                    ? t('wallet.pairBackHint')
+                    : t('wallet.pairWaiting')}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="wc-wait-btn"
+                onClick={reopenWalletApp}
+                data-route={handoffRoute || undefined}
+              >
+                {t('wallet.pairReopen', { wallet: MOBILE_WALLETS.find((w) => w.key === openedWallet)?.name ?? '' })}
+              </button>
+              <p className="wc-wait-foot">{t('wallet.pairNoOpen')}</p>
             </div>
           )}
 
