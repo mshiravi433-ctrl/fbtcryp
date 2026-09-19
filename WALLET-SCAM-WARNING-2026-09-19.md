@@ -67,6 +67,11 @@ So a blocklist entry does **not** explain the warning. What does:
 
 ## The four things that must happen outside this repository
 
+**Live status:** merged to `main` as `da44ace` (PR #364) · Vercel Production
+deployment successful for that ref · the APK workflow rebuilt the app ·
+`https://fbtswap.ir/.well-known/walletconnect.txt` is still a 404, so every
+wallet currently sees this domain as UNVERIFIED.
+
 1. **Deploy this branch**, then confirm on a phone: WalletConnect sheet →
    «Connection health check» → the identity row shows the same origin twice.
 2. **Register and verify the domain in Reown** — <https://dashboard.reown.com> →
