@@ -115,6 +115,28 @@ export function backpackBrowseLink(url) {
 // invite too, and importing this module for it would pull in the Solana stack.
 export { publicAppUrl } from './nativeShell';
 
+/*
+ * THE THIRD WAY A SOLANA WALLET CAN BE CONNECTED HERE.
+ *
+ * ─── WHAT WAS WRONG ─────────────────────────────────────────────────────────
+ * On a phone this app offered two things and neither could connect:
+ *
+ *   • an injected provider — extensions do not exist on mobile, so there is
+ *     nothing to inject unless the page is opened inside the wallet's own
+ *     browser, and then the connection belongs to THAT browser, not to the
+ *     app the user started from;
+ *   • the «browse» link — the one the report is about. It asks the wallet to
+ *     open our page, and on many builds the wallet simply opens on its home
+ *     screen. Nothing anywhere asks the user to approve a connection to us.
+ *
+ * The missing piece was the connect REQUEST (`phantom.app/ul/v1/connect`),
+ * which is the only wallet approval that can reach this app on a phone: the
+ * wallet shows its own confirmation screen and hands the answer back here.
+ * `./solana/deeplink.js` owns that flow; this module only has to know that a
+ * deeplink session is a third source of an address, and route signing to it.
+ */
+import { clearDeeplinkSession, deeplinkSession, deeplinkSessionAddress } from './solana/deeplink.js';
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * ─── MOBILE WALLET ADAPTER: A ROUTE THAT DID NOT EXIST WHEN THIS WAS WRITTEN
@@ -247,7 +269,13 @@ function emitSolanaWalletChange(address) {
 /** Human name for the connected wallet, for the UI. */
 export function solanaWalletName() {
   const p = getSolanaProvider();
-  if (!p) return null;
+  if (!p) {
+    /* A deeplink session knows exactly which wallet answered — the report
+       that started this asked for that name on screen, not «Solana wallet». */
+    const session = deeplinkSession();
+    if (!session) return null;
+    return { phantom: 'Phantom', solflare: 'Solflare', backpack: 'Backpack' }[session.walletId] ?? 'Solana wallet';
+  }
   if (p.isPhantom) return 'Phantom';
   if (p.isSolflare) return 'Solflare';
   if (p.isBackpack) return 'Backpack';
@@ -356,6 +384,10 @@ export async function disconnectSolana() {
      showing a connected address the user just asked to remove. */
   mwaAddress = null;
   mwaAccount = null;
+  /* The deeplink session is cleared first for the same reason the MWA address
+     is: it is remembered state that would otherwise keep `solanaAddress()`
+     answering with an address the user has just removed. */
+  clearDeeplinkSession();
   try {
     await getSolanaProvider()?.disconnect?.();
   } catch {
@@ -378,7 +410,16 @@ export async function disconnectSolana() {
  */
 export function solanaAddress() {
   const p = getSolanaProvider();
-  return p?.publicKey?.toString?.() ?? mwaAddress ?? null;
+  return (
+    p?.publicKey?.toString?.() ??
+    mwaAddress ??
+    /* A deeplink session — the only connection that exists inside the APK and
+       on a phone whose wallet was never opened in our page. Without this the
+       app would show «وصل نیست» while the user was looking at an approved
+       connection in their wallet. */
+    deeplinkSessionAddress() ??
+    null
+  );
 }
 
 /**
@@ -487,6 +528,24 @@ export async function signSolanaTransaction(base64Tx) {
     }
   }
 
+  /*
+   * THE DEEPLINK SESSION — the signer that exists on a phone.
+   *
+   * `signTransaction` here is a round trip: the wallet app opens, the user
+   * approves on the wallet's own screen, and the signed transaction comes
+   * back encrypted to the session. That is the whole point — the app never
+   * holds a key, and no signature happens without the user seeing it in their
+   * wallet.
+   */
+  if (!provider && !mwa && deeplinkSession()) {
+    const { deeplinkSignTransaction } = await import('./solana/deeplink.js');
+    const res = await deeplinkSignTransaction(base64Tx);
+    if (res.ok && res.transaction) return res.transaction;
+    if (res.code === 'REJECTED') throw new Error('REJECTED');
+    if (res.code === 'NO_SIGNATURE') throw new Error('NO_SIGNATURE');
+    throw new Error('SIGN_FAILED');
+  }
+
   if (!provider) throw new Error('NO_WALLET');
   if (typeof provider.signTransaction !== 'function') throw new Error('CANNOT_SIGN');
 
@@ -579,6 +638,20 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
       if (/insufficient|simulation failed|0x1/i.test(String(err?.message))) throw new Error('INSUFFICIENT_BALANCE');
       throw new Error('SEND_FAILED');
     }
+  }
+
+  /*
+   * The same round trip as signSolanaTransaction, with the wallet doing the
+   * broadcast (its own send, its own signature) — see the header of that
+   * function for why the wallet must be the sender.
+   */
+  if (!provider && !mwa && deeplinkSession()) {
+    const { deeplinkSignAndSendTransaction } = await import('./solana/deeplink.js');
+    const res = await deeplinkSignAndSendTransaction(base64Tx);
+    if (res.ok && res.signature) return res.signature;
+    if (res.code === 'REJECTED') throw new Error('REJECTED');
+    if (res.code === 'NO_SIGNATURE') throw new Error('NO_SIGNATURE');
+    throw new Error('SEND_FAILED');
   }
 
   if (!provider) throw new Error('NO_WALLET');

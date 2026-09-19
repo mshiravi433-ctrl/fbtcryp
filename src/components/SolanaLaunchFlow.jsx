@@ -18,6 +18,7 @@
  *     is wiped once its job is done.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import SolanaConnectSheet from './SolanaConnectSheet';
 import { useTranslation } from 'react-i18next';
 /*
  * `Buffer` is a Node global; a browser does not have one. The PDA derivation
@@ -1014,9 +1015,21 @@ function SolConnectCard({ wallet }) {
   const { t } = useTranslation();
   const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
   const inWalletBrowser = solanaWalletAvailable();
+  /*
+   * The launch wizard asks the wallet for approval HERE, through the same
+   * sheet the wallet page uses. It used to call the wallet layer's connect()
+   * directly, which on a phone could only ever fail — there is nothing
+   * injected to connect to — and the browser fallback that replaced it opened
+   * the wallet with no approval step anywhere (the reported bug).
+   */
+  const [sheetOpen, setSheetOpen] = useState(false);
   return (
     <div className="launch-wallet-cta-wrap">
-      <button type="button" className="launch-wallet-cta" onClick={wallet.connect} disabled={wallet.busy}>
+      <SolanaConnectSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+      />
+      <button type="button" className="launch-wallet-cta" onClick={() => setSheetOpen(true)} disabled={wallet.busy}>
         <span className="launch-wallet-cta-ico" aria-hidden>
           {wallet.busy ? <span className="spinner spinner-sm" /> : <IconWallet width={20} height={20} />}
         </span>

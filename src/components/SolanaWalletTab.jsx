@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import InfoBox from './InfoBox';
+import SolanaConnectSheet from './SolanaConnectSheet';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import {
@@ -30,6 +31,7 @@ import {
   backpackBrowseLink,
   publicAppUrl
 } from '../lib/solanaWallet';
+import { consumeDeeplinkResult } from '../lib/solana/deeplink.js';
 
 export default function SolanaWalletTab() {
   const { t } = useTranslation();
@@ -37,11 +39,11 @@ export default function SolanaWalletTab() {
   const evm = useWallet();
 
   const [address, setAddress] = useState(() => solanaAddress());
-  const [connecting, setConnecting] = useState(false);
   const [walletErr, setWalletErr] = useState(null);
   const [balance, setBalance] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [mwaReady, setMwaReady] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   /* Register the official mobile adapter where it can work (Android Chrome).
      A failure here is deliberately quiet: injected providers already work. */
@@ -81,6 +83,23 @@ export default function SolanaWalletTab() {
   }, [address, refreshBalance]);
 
   /*
+   * ─── THE WALLET CAME BACK: SAY SO ─────────────────────────────────────────
+   * A deeplink connection completes as a PAGE LOAD, so the sheet that started
+   * it is gone by the time the answer lands. What is left in its place is a
+   * stored result (lib/solana/deeplink.js), and this is the one place that
+   * turns it into the confirmation the user is owed: the sheet reopens on the
+   * "wallet connected" state with the address the wallet returned.
+   *
+   * Without it the connection would work and the user would never be told —
+   * which, from the outside, looks exactly like the bug that was reported.
+   */
+  useEffect(() => {
+    const res = consumeDeeplinkResult();
+    if (!res || res.op !== 'connect') return;
+    setSheetOpen(true);
+  }, []);
+
+  /*
    * ─── THE BALANCE FOLLOWS THE NETWORK SWITCH ───────────────────────────────
    * «سولانا مین‌نت یا آزمایشی کار بده وقتی روی آن باشد».
    *
@@ -101,19 +120,19 @@ export default function SolanaWalletTab() {
     return () => window.removeEventListener('fbt:solana-network', onNetwork);
   }, [address, refreshBalance]);
 
-  const connect = useCallback(async () => {
+  /*
+   * ─── ONE BUTTON, AND IT OPENS OUR OWN APPROVAL SURFACE ────────────────────
+   * This used to call connectSolana() directly, which on a phone does nothing
+   * at all: there is no injected provider to connect to, so the button either
+   * disabled itself or sent the user into a wallet's browser with no approval
+   * step of ours anywhere. The sheet now owns that decision — it shows what is
+   * being asked, which route is available on this device, and the state of the
+   * request while the wallet holds it.
+   */
+  const connect = useCallback(() => {
+    haptic?.('light');
     setWalletErr(null);
-    setConnecting(true);
-    try {
-      const addr = await connectSolana();
-      setAddress(addr);
-      haptic?.('success');
-    } catch (err) {
-      setWalletErr(err?.message || 'CONNECT_FAILED');
-      haptic?.('error');
-    } finally {
-      setConnecting(false);
-    }
+    setSheetOpen(true);
   }, [haptic]);
 
   const disconnect = useCallback(async () => {
@@ -121,6 +140,7 @@ export default function SolanaWalletTab() {
     setAddress(null);
     setBalance(null);
     setWalletErr(null);
+    setSheetOpen(false);
   }, []);
 
   const openExternal = (url) => {
@@ -150,12 +170,8 @@ export default function SolanaWalletTab() {
               {t('wallet.disconnect')}
             </button>
           ) : (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={connect}
-              disabled={connecting || (!hasWallet && !mwaReady)}
-            >
-              {connecting ? t('wallet.connecting') : t('wallet.connect')}
+            <button className="btn btn-primary btn-sm" onClick={connect} data-testid="solana-connect">
+              {t('wallet.connect')}
             </button>
           )}
         </div>
@@ -169,30 +185,39 @@ export default function SolanaWalletTab() {
           </div>
         )}
 
-        {!hasWallet && !mwaReady && (
+        {!address && !hasWallet && !mwaReady && (
           <p className="notice" style={{ marginTop: 11 }}>
             {canInject ? t('solana.noWallet') : t('solana.openInWallet')}
           </p>
         )}
 
-        {/* The three real ways a Solana wallet connects here. */}
-        <div style={{ marginTop: 12 }}>
-          <p className="field-label">{t('solana.walletLinksTitle')}</p>
-          <div className="row" style={{ gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
-              Phantom
-            </button>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
-              Solflare
-            </button>
-            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(backpackBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
-              Backpack
-            </button>
+        {/*
+          ─── THE SECOND, SLOWER WAY IN ────────────────────────────────────────
+          Opening this page inside the wallet's own browser still works, and on
+          iOS it is the only route a deeplink request cannot take (Apple does
+          not let one app hand a result back to another). It is now the
+          FALLBACK rather than the first thing the user is offered: the button
+          above asks the wallet for approval, which is what was missing.
+        */}
+        {!address && (
+          <div style={{ marginTop: 12 }}>
+            <p className="field-label">{t('solana.walletLinksTitle')}</p>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
+                Phantom
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
+                Solflare
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(backpackBrowseLink(publicAppUrl('/#/wallet?tab=solana')))}>
+                Backpack
+              </button>
+            </div>
+            <p className="faint" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.7 }}>
+              {t('solana.openInWalletHint')}
+            </p>
           </div>
-          <p className="faint" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.7 }}>
-            {t('solana.openInWalletHint')}
-          </p>
-        </div>
+        )}
 
         {walletErr && (
           <p className="notice notice-danger" style={{ marginTop: 11 }}>
@@ -261,6 +286,16 @@ export default function SolanaWalletTab() {
           {t('solana.notSolana')}
         </p>
       </InfoBox>
+
+      {/* The approval surface itself — the screen that was missing. */}
+      <SolanaConnectSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onConnected={(addr) => {
+          setAddress(addr || solanaAddress());
+          setWalletErr(null);
+        }}
+      />
     </div>
   );
 }
