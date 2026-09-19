@@ -149,6 +149,20 @@ export default function WalletHealthPanel({ projectId }) {
                   {t('wallet.healthOriginBlocked', { origin: report.origin })}
                 </p>
               )}
+              {/*
+                * The identity the wallet is handed, against the origin the
+                * wallet can already see in its own prompt. A mismatch is what
+                * wallets render as «domain mismatch / this dApp may be a scam»,
+                * so it is stated here in both origins rather than as a label.
+                */}
+              {report.identity && row(
+                t('wallet.healthIdentity'),
+                { ok: report.identity.matchesPage === true },
+                `${report.identity.declared}`
+                  + ` · ${report.identity.matchesPage
+                    ? `✅ ${t('wallet.healthIdentityAligned')}`
+                    : `❌ ${t('wallet.healthIdentityMismatch', { page: report.identity.pageOrigin || '—' })}`}`
+              )}
               {row(
                 t('wallet.healthRelay'),
                 report.relay,

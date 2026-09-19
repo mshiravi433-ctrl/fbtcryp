@@ -21,10 +21,18 @@
  * generated keypairs standing in for the wallet.
  *
  * BROADCAST + CONFIRMATION
- * Broadcast goes through the app's own Connection (the Settings-aware RPC,
- * mainnet or devnet — never assumed), and a signature is only reported after
- * getSignatureStatuses settles it (reusing confirmSolanaSignature from the
- * wallet stack). "Sent" without confirmation is reported as exactly that.
+ * The WALLET broadcasts whenever it can: `signAndSendTransaction` on the
+ * injected provider, or the `solana:signAndSendTransaction` feature on Mobile
+ * Wallet Adapter. That is not a style choice — a dApp that asks a wallet to
+ * sign and then broadcasts the transaction itself is the shape wallet security
+ * scanners (Blowfish, which Phantom, Backpack, Solflare and Trust all consult)
+ * treat as drainer behaviour, and it is one of the causes of the red «این dApp
+ * به نظر می‌رسد کلاهبرداری باشد» screen. Signing-only is kept as the fallback
+ * for a wallet that refuses to send a partially signed create leg; then the
+ * broadcast goes through the app's own Settings-aware Connection and a
+ * signature is only reported after getSignatureStatuses settles it (reusing
+ * confirmSolanaSignature from the wallet stack). "Sent" without confirmation
+ * is reported as exactly that.
  *
  * LEGACY transactions (not V0): the payload is small (<1KB), every wallet —
  * including MWA — signs legacy, and there is no lookup-table dependency to
@@ -142,16 +150,21 @@ export async function signSendConfirm({ connection, tx, cluster = 'mainnet-beta'
       throw new Error('CANNOT_SIGN');
     }
     try {
-      // Prefer sign-only: broadcast stays on our connection so confirmation
-      // polling and the RPC choice are uniform across wallet types.
-      if (signOnly?.signTransaction) {
-        const out = await signOnly.signTransaction({
-          account,
-          transaction: tx.serialize({ requireAllSignatures: false }),
-          chain
-        });
-        signedBytes = out instanceof Uint8Array ? out : null;
-      } else {
+      /*
+       * ── THE WALLET'S OWN SEND PATH FIRST ────────────────────────────────
+       * This used to prefer sign-only "so confirmation polling and the RPC
+       * choice stay uniform across wallet types". Both of those are already
+       * `finishFromSignature()`'s job — it polls by SIGNATURE, wherever the
+       * transaction was broadcast — so the preference bought nothing and cost
+       * the one thing that cannot be bought back: a dApp that asks a wallet to
+       * sign a transaction and then broadcasts it itself is the exact shape
+       * Blowfish's heuristics look for, and the shape behind «این dApp به نظر
+       * می‌رسد کلاهبرداری باشد» on Phantom/Backpack/Trust. Their own published
+       * advice for that warning is to let the wallet send. So: the wallet
+       * sends when it can, and signing-only remains the route for a wallet
+       * that cannot.
+       */
+      if (signAndSend?.signAndSendTransaction) {
         const results = await signAndSend.signAndSendTransaction({
           account,
           transaction: tx.serialize({ requireAllSignatures: false }),
@@ -162,6 +175,13 @@ export async function signSendConfirm({ connection, tx, cluster = 'mainnet-beta'
         if (!(sigBytes instanceof Uint8Array) || !sigBytes.length) throw new Error('NO_SIGNATURE');
         return finishFromSignature({ connection, signature: base58FromBytes(sigBytes), timeoutMs });
       }
+      if (!signOnly?.signTransaction) throw new Error('CANNOT_SIGN');
+      const out = await signOnly.signTransaction({
+        account,
+        transaction: tx.serialize({ requireAllSignatures: false }),
+        chain
+      });
+      signedBytes = out instanceof Uint8Array ? out : null;
     } catch (err) {
       if (asRejected(err)) throw new Error('REJECTED');
       if (['CANNOT_SIGN', 'NO_SIGNATURE'].includes(err?.message)) throw err;
@@ -173,19 +193,38 @@ export async function signSendConfirm({ connection, tx, cluster = 'mainnet-beta'
     if (typeof provider.signTransaction !== 'function' && typeof provider.signAndSendTransaction !== 'function') {
       throw new Error('CANNOT_SIGN');
     }
-    try {
-      if (typeof provider.signTransaction === 'function') {
-        // The partially-signed legacy tx: Phantom/Solflare/Backpack add the
-        // fee-payer signature and preserve the mint keypair's — the standard
-        // multi-signer flow, the same call the swap path uses.
-        const signed = await provider.signTransaction(tx);
-        signedBytes = signed.serialize();
-      } else {
+    /*
+     * ── THE WALLET SENDS IT; WE ONLY WATCH ──────────────────────────────
+     * The create leg is partially signed by the on-device mint keypair, and
+     * every one of Phantom, Solflare, Backpack and Trust adds the fee-payer
+     * signature and broadcasts a transaction in that state — it is the
+     * standard multi-signer flow, the same call the swap path uses.
+     *
+     * Signing here and broadcasting from our own Connection instead is the
+     * pattern wallet security scanners flag as drainer behaviour (see the MWA
+     * branch above), so it is now the FALLBACK: taken only when the wallet's
+     * send path refuses this particular transaction, which is the one case
+     * where signing-only is the difference between a launch and a dead end.
+     */
+    if (typeof provider.signAndSendTransaction === 'function') {
+      try {
         const res = await provider.signAndSendTransaction(tx);
         const sig = typeof res === 'string' ? res : res?.signature;
         if (!sig) throw new Error('NO_SIGNATURE');
         return finishFromSignature({ connection, signature: sig, timeoutMs });
+      } catch (err) {
+        // A refusal is the user's answer and is never retried through a second
+        // prompt; a NO_SIGNATURE we produced ourselves is a bug, not a signal.
+        if (asRejected(err)) throw new Error('REJECTED');
+        if (['CANNOT_SIGN', 'NO_SIGNATURE'].includes(err?.message)) throw err;
+        // Anything else: the wallet would not SEND this transaction. Fall
+        // through to signing only rather than failing a launch it can finish.
       }
+    }
+    if (typeof provider.signTransaction !== 'function') throw new Error('CANNOT_SIGN');
+    try {
+      const signed = await provider.signTransaction(tx);
+      signedBytes = signed.serialize();
     } catch (err) {
       if (asRejected(err)) throw new Error('REJECTED');
       if (['CANNOT_SIGN', 'NO_SIGNATURE'].includes(err?.message)) throw err;

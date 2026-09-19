@@ -33,6 +33,8 @@ export {
   RELAY_URLS,
   TIMEOUT,
   WC_PROJECT_ID,
+  walletIdentityFacts,
+  walletIdentityUrl,
   wcMetadata
 } from './config.js';
 

@@ -25,7 +25,13 @@
  * be held still in a test.
  */
 
-import { HEALTH_SDK_VERSION, TIMEOUT, W3M_API_URL, WC_PROJECT_ID } from './config.js';
+import {
+  HEALTH_SDK_VERSION,
+  TIMEOUT,
+  W3M_API_URL,
+  WC_PROJECT_ID,
+  walletIdentityFacts
+} from './config.js';
 import { handoffFacts } from './handoff.js';
 import { measureRelay } from './relay.js';
 import { readSharedConnectionFacts } from './appkit.js';
@@ -254,6 +260,15 @@ export async function collectWalletHealth({
       /* `relay` stays the single answer the panel's first row reads; `relays`
          carries every host's own facts, so a ❌ is never one hostname
          pretending to be the whole relay. */
+      /* ── THE ORIGIN THE WALLET WILL BE TOLD ────────────────────────────────
+         A session proposal carries an identity, not a link, and the wallet
+         cross-checks it against the origin WalletConnect's Verify API attested.
+         When the two disagree the verdict is INVALID, which every wallet
+         renders as a domain mismatch — the red «this dApp may be a scam» screen
+         with a continue-anyway button. This block is that comparison, taken on
+         the device that is actually connected: `declared` is what we will say,
+         `pageOrigin` is what the attestation will say. */
+      identity: walletIdentityFacts(),
       relay: reachable ? reachable.socket : (relay.hosts[0]?.socket ?? { ok: false, error: 'NO_RELAY_URLS' }),
       relays: relay.hosts,
       relayVerdict: relay.verdict,
