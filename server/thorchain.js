@@ -317,6 +317,36 @@ export async function thorQuote({ from, to, amount, destination, streaming }) {
   return { ...data, feeApplied: Boolean(affiliate), affiliateBps: affiliate ? AFFILIATE_BPS : 0 };
 }
 
+/**
+ * The real status of a THORChain swap, from the network itself.
+ *
+ * ─── WHY THIS ENDPOINT EXISTS ───────────────────────────────────────────────
+ * The native tab can now build the router deposit and let the user sign it
+ * on this site (src/lib/thorEvmDeposit.js). "Signed and broadcast" is only
+ * the FIRST of the things that have to happen: the deposit has to be
+ * observed, finalised, swapped and paid out on the destination chain. A
+ * source explorer link says none of that — it cannot, it does not know
+ * THORChain exists. THORNode's /thorchain/tx/status/{hash} does, and proxying
+ * it keeps the multi-node failover above working for this call too.
+ *
+ * ─── WHY 404 IS DATA, NOT AN ERROR ──────────────────────────────────────────
+ * A hash that is seconds old has not been observed by any node yet. THORNode
+ * answers 404 {"error":"not found"} for it, and the correct client reading is
+ * "still waiting", never "failed" — telling a user their transfer died
+ * because a node had not seen a 12-second-old transaction is how people get
+ * talked into double-sending.
+ */
+const TX_HASH_RE = /^[a-fA-F0-9]{64}$/;
+
+export async function fetchThorTxStatus(hash) {
+  if (!TX_HASH_RE.test(String(hash ?? ''))) return { error: 'BAD_HASH' };
+  const data = await getJson(`/thorchain/tx/status/${String(hash)}`);
+  /* Transport OK but the node does not know the hash yet — see the comment
+     above for why this is a normal, transient answer. */
+  if (!data || data.error) return { error: 'NOT_FOUND' };
+  return data;
+}
+
 /** Config sanity, for the Developers page and for debugging from a phone. */
 export function thorStatus() {
   return {

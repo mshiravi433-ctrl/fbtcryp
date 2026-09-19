@@ -5775,7 +5775,7 @@
   "thor": {
     "whatTitle": "What a native swap is, and how it differs from bridging",
     "what1": "This swaps REAL Bitcoin for REAL Ethereum. Not wrapped BTC, not a token that represents Bitcoin somewhere else — actual coins settled on their own chains by THORChain, a network with no company behind it and no account to open.",
-    "what2": "This tab provides a quote only. It does not sign or send a THORChain deposit. An ordinary wallet Send screen is not a substitute for a THORChain swap.",
+    "what2": "For EVM sources (Ethereum, BSC, Avalanche, Base) this tab also builds the deposit and sends it for your signature right here — no external interface, nothing to copy. For other chains it stays quote-only, and an ordinary wallet Send screen is never a substitute for a THORChain swap.",
     "what3": "External service: its own quote, fees and wallet support apply. This page does not forward your quote or send funds.",
     "from": "You send",
     "to": "You receive",
@@ -5807,7 +5807,7 @@
     "expectsFormat": "This network expects an address like {{format}}",
     "guide": {
       "title": "How to complete a native swap — step by step",
-      "manual": "This tab provides a quote only. It does not sign or send a THORChain deposit. An ordinary wallet Send screen is not a substitute for a THORChain swap.",
+      "manual": "For EVM sources you can sign the deposit on this page — look for «Sign the deposit on this page» under your quote. The steps below are the manual path: the only way for Bitcoin-family and Cosmos sources, and still valid for EVM if you prefer a different wallet.",
       "walletTitle": "Choose a compatible wallet / swap interface",
       "wallet": "Use a THORChain-integrated swap interface such as THORSwap and a wallet it currently supports for {{source}}. For EVM, this can be MetaMask via the interface’s supported connection; for Bitcoin, use a wallet explicitly listed for native BTC swaps. WalletConnect alone does not add memo or Bitcoin support. Never enter a recovery phrase on a website.",
       "receiveTitle": "Your receiving address",
@@ -5841,6 +5841,43 @@
         "expired": "Quote expired or too close to expiry. Deposit details are hidden; request a fresh quote.",
         "incomplete": "No usable deposit details returned. Do not send.",
         "mismatch": "The memo does not match your receiving address. Do not send; request a fresh quote."
+      },
+      "signHere": "Good news: {{source}} is an EVM network, so once the quote is ready you can sign the deposit right here on this page — no external interface and nothing to copy. Look for «Sign the deposit on this page» under your quote."
+    },
+    "sign": {
+      "title": "Sign the deposit on this page",
+      "body": "Your {{asset}} leaves your connected wallet on {{source}}. The vault, memo and expiry from this quote are applied to the THORChain router call automatically — you review once, your wallet signs, nothing to copy anywhere.",
+      "cta": "Sign with my wallet",
+      "connectFirst": "Connect your wallet to sign the deposit here.",
+      "manualAlt": "Prefer to send from a different wallet? «Advanced deposit details» below still shows the vault address and memo for the manual path.",
+      "manualIntro": "This is the manual path — for sending from a wallet other than the one connected here. On EVM networks, signing on this page above is safer: nothing to copy, nothing to paste wrong.",
+      "step": {
+        "network": "Switching to the right network…",
+        "allowance": "Approving the token…",
+        "deposit": "Waiting for your signature…"
+      },
+      "trackTitle": "Transfer status",
+      "trackNote": "A source confirmation is not arrival. THORChain observes, swaps and pays out — this can take several minutes. Do not send again while it is in progress.",
+      "track": {
+        "seen": "Seen on the source chain",
+        "confirmed": "Confirmed and finalised",
+        "swapped": "Swapped on THORChain",
+        "delivered": "Paid out to your receiving address"
+      },
+      "done": "Delivered — the swap is complete. For another swap, take a fresh quote.",
+      "err": {
+        "NOT_EVM_SOURCE": "This network cannot be signed from this page. Use the manual path below.",
+        "NO_SIGNER": "Your wallet could not produce a signer. Reconnect it and try again.",
+        "WRONG_NETWORK": "The wallet refused to switch to the source network. Switch it manually and try again.",
+        "EXPIRING": "The quote is too close to its expiry to sign safely. Tap «Get a fresh quote» and try again.",
+        "USER_REJECTED": "You cancelled the signature. Nothing was sent.",
+        "UNSAFE_DEPOSIT": "The deposit failed our safety checks and was not sent. Nothing was signed; please report this.",
+        "MEMO_MISMATCH": "The quote's instruction does not pay your receiving address. Get a fresh quote and check the address.",
+        "BAD_AMOUNT": "The amount could not be converted for this asset. Check it and try again.",
+        "BAD_QUOTE": "The quote is incomplete. Get a fresh one and try again.",
+        "BAD_TOKEN": "The token contract did not answer on this network.",
+        "BAD_DEPOSIT_TARGET": "The quote returned unusable deposit addresses and was not sent.",
+        "GENERIC": "The deposit could not be sent. Nothing was signed."
       }
     }
   },

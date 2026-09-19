@@ -296,6 +296,39 @@ export const IconDoc = (p) => (
 );
 
 /*
+ * Route, pen, and alert-triangle — added for the native bridge guide's step
+ * timeline (ThorDepositGuide) and the in-site THORChain signing card
+ * (ThorPanel). Same vocabulary as the rest of the set: line art, 1.75 stroke,
+ * currentColor, so theme switching and the accent tints just work.
+ */
+
+/** A path from A to B — the «کجا آدرس و memo را بگذاریم» step. */
+export const IconRoute = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="6" cy="19" r="2.6" />
+    <circle cx="18" cy="5" r="2.6" />
+    <path d="M8.6 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.4" />
+  </svg>
+);
+
+/** Signature — the «امضای واریز در همین صفحه» chip and sign card. */
+export const IconPen = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+/** Warning strip — the guide's "do not send if unsure" line. */
+export const IconAlertTriangle = (p) => (
+  <svg {...base} {...p}>
+    <path d="m21.73 18.5-8-13.9a2 2 0 0 0-3.46 0l-8 13.9A2 2 0 0 0 4 21.5h16a2 2 0 0 0 1.73-3Z" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+  </svg>
+);
+
+/*
  * The X (formerly Twitter) logo.
  *
  * NOT IconX — that is a close/dismiss cross used on sheets. Reusing it here

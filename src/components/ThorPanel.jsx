@@ -1,16 +1,24 @@
 import ThorDepositGuide from './ThorDepositGuide';
+import BridgeSigningReview from './BridgeSigningReview';
 import { thorDepositState, thorRequestKey } from '../lib/thorDeposit';
+import {
+  executeThorEvmDeposit,
+  normalizeThorTxStatus,
+  thorEvmChainId
+} from '../lib/thorEvmDeposit';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn } from './PageTransition';
 import InfoBox from './InfoBox';
+import { IconPen } from './Icons';
 import {
   assetChain,
   assetLabel,
   fromThorUnits,
   getThorPools,
   getThorQuote,
+  getThorTxStatus,
   toThorUnits
 } from '../lib/thorswap';
 import {
@@ -20,18 +28,37 @@ import {
   shouldSendDestination
 } from '../lib/thorAddress';
 import { copyText } from '../lib/share';
+import { explorerTx } from '../lib/chains';
 import ModernSelect from './ModernSelect';
 import { useAppStore } from '../store/useAppStore';
+import { useTelegram } from '../context/TelegramContext';
+import { useWallet } from '../context/WalletContext';
+import { POINT_VALUES } from '../lib/ranks';
 
-/** Quote-only THORChain panel. Wallet signing requires chain-specific transaction
- * construction (router deposits / OP_RETURN), not a generic Send operation.
- * See ThorDepositGuide for the supported external completion path.
+/**
+ * THORChain panel — quote for every chain, SIGN HERE for EVM sources.
+ *
+ * ─── WHAT CHANGED, AND THE DEEP ANSWER IT CAME FROM ─────────────────────────
+ * Asked: «نمیشه در خود سایت ما انجام شود به جای گذاشتن memo و ادرس در تورچین
+ * در خود سایت باشد و مشتری امضا کند فقط». For an EVM source the deposit IS
+ * an ordinary contract call on a chain the connected wallet already signs for
+ * — so the router's depositWithExpiry is built here, with THIS quote's vault,
+ * memo and expiry, and the user signs on this page. No THORSwap, no
+ * copy-pasted address, no memo in a note field. The construction and every
+ * safety re-check live in src/lib/thorEvmDeposit.js.
+ *
+ * What CANNOT be signed here: Bitcoin-family and Cosmos sources. Those
+ * deposits are UTXO spends with OP_RETURN outputs / Cosmos SDK messages —
+ * shapes an EVM wallet cannot produce — and for them the manual guide
+ * (ThorDepositGuide) remains the honest path, exactly as before.
  */
 const DEBOUNCE_MS = 550;
 
 export default function ThorPanel({ initialFrom, initialTo } = {}) {
   const { t, i18n } = useTranslation();
   const notify = useAppStore((s) => s.notify);
+  const { haptic } = useTelegram();
+  const wallet = useWallet();
 
   const [pools, setPools] = useState(null);
   const [poolsErr, setPoolsErr] = useState(false);
@@ -55,6 +82,89 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
   const request = { from, to, amount, destination };
   const depositState = thorDepositState(quote, request, now);
   const currentQuote = quote?.requestKey === thorRequestKey(request);
+
+  /*
+   * ─── CAN THIS SWAP BE SIGNED ON THIS PAGE? ──────────────────────────────
+   * Three conditions, all cheap, all checked on every render:
+   *   1. the SOURCE is one of THORChain's EVM chains (the connected wallet
+   *      can sign there);
+   *   2. the quote is READY — a destination is set, the memo pays exactly
+   *      that address, and the expiry is comfortably in the future
+   *      (thorDepositState already refuses 'stale'/'expired'/'mismatch');
+   *   3. THORChain returned a router for this source. No router means the
+   *      network wants a direct vault transfer — not a shape we can build
+   *      safely, so the manual path stays.
+   */
+  const signChainId = thorEvmChainId(from);
+  const canSignHere = Boolean(signChainId) && Boolean(quote?.router) && depositState === 'ready';
+
+  /*
+   * The in-site signing flow. `signReview` is the BridgeSigningReview sheet —
+   * the same review the LI.FI/deBridge paths show, opened before the FIRST
+   * of up to three signatures (reset-approve, approve, deposit) and resolved
+   * by the user's choice.
+   */
+  const [signing, setSigning] = useState(false);
+  const [signStep, setSignStep] = useState(null);
+  const [signErr, setSignErr] = useState(null);
+  const [signReview, setSignReview] = useState(null);
+  const signDecision = useRef(null);
+  useEffect(() => () => { signDecision.current?.(false); }, []);
+
+  /* The broadcast deposit + its live status through THORChain. Kept at panel
+     level (not inside the sign card) so editing the form after signing does
+     not throw the tracker away — "where is my money" must survive a change
+     of subject. */
+  const [depositTx, setDepositTx] = useState(null);
+  const [thorStatus, setThorStatus] = useState(null);
+
+  const finishSignReview = (accepted) => {
+    signDecision.current?.(accepted);
+    signDecision.current = null;
+    setSignReview(null);
+  };
+
+  const runSign = async () => {
+    if (signing || !canSignHere) return;
+    setSigning(true);
+    setSignErr(null);
+    haptic?.('medium');
+    try {
+      const res = await executeThorEvmDeposit({
+        wallet,
+        quote,
+        from,
+        to,
+        amount,
+        destination,
+        confirmSigning: (details) => new Promise((resolve) => {
+          /* A second review while one is open must settle the first, not
+             leave a dead promise — the same guard Bridge.jsx applies. */
+          signDecision.current?.(false);
+          signDecision.current = resolve;
+          setSignReview(details);
+        }),
+        onStep: (s) => setSignStep(s)
+      });
+      setDepositTx({ hash: res.hash, chainId: res.chainId });
+      setThorStatus(null);
+      haptic?.('success');
+      /* A broadcast THORChain deposit is real rewarded activity, same rule
+         as the LI.FI/deBridge paths: wallet + chain + txHash as evidence. */
+      if (res.hash) {
+        const rewards = useAppStore.getState();
+        rewards.awardPoints?.('bridge', POINT_VALUES.bridge, {
+          network: 'thor', chainId: res.chainId, txHash: res.hash
+        });
+      }
+    } catch (e) {
+      setSignErr(String(e?.message || e).split('\n')[0].slice(0, 80) || 'GENERIC');
+      haptic?.('error');
+    } finally {
+      setSigning(false);
+      setSignStep(null);
+    }
+  };
 
 
   useEffect(() => {
@@ -150,7 +260,44 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
     return () => { clearTimeout(id); ++seq.current; };
   }, [from, to, amount, destination, refreshKey]);
 
-  if (poolsErr) return <p className="notice notice-danger">{t('thor.err.POOLS_FAILED')}</p>;
+  /*
+   * Track the deposit through THORChain itself. 404s (the node has not
+   * observed a seconds-old hash yet) and transient upstream failures are
+   * "still waiting", never an error — the note under the stages says exactly
+   * that, because the alternative reading is how people get talked into
+   * double-sending. Polling stops the moment the transfer is delivered.
+   */
+  useEffect(() => {
+    if (!depositTx || thorStatus?.delivered) return undefined;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const s = await getThorTxStatus(depositTx.hash);
+        if (alive) setThorStatus(normalizeThorTxStatus(s));
+      } catch { /* keep the last known state */ }
+    };
+    tick();
+    const id = setInterval(tick, 12000);
+    return () => { alive = false; clearInterval(id); };
+  }, [depositTx, thorStatus?.delivered]);
+
+  /*
+   * Pools down ≠ tab down. The explainer and the step guide are STATIC —
+   * they cost no API and are exactly what a user stranded by an upstream
+   * outage should still be able to read. Collapsing the whole tab into one
+   * red sentence threw away the one part that still worked.
+   */
+  if (poolsErr) return (
+    <motion.section variants={riseIn} initial="hidden" animate="show">
+      <InfoBox title={t('thor.whatTitle')} tone="info" id="thor-what">
+        <p>{t('thor.what1')}</p>
+        <p>{t('thor.what2')}</p>
+        <p>{t('thor.what3')}</p>
+      </InfoBox>
+      <ThorDepositGuide from={from} to={to} signable={Boolean(signChainId)} />
+      <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('thor.err.POOLS_FAILED')}</p>
+    </motion.section>
+  );
 
   const out = quote?.expected_amount_out ? fromThorUnits(quote.expected_amount_out) : null;
 
@@ -168,13 +315,13 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
         <p>{t('thor.what3')}</p>
       </InfoBox>
 
-      <ThorDepositGuide from={from} to={to} />
+      <ThorDepositGuide from={from} to={to} signable={Boolean(signChainId)} />
 
       {!pools ? (
-        <div className="skel" style={{ height: 180, marginTop: 10 }} />
+        <div className="skel" style={{ height: 180, marginTop: 12 }} />
       ) : (
         <>
-          <div className="card" style={{ marginTop: 10 }}>
+          <div className="card" style={{ marginTop: 12 }}>
             <div className="field-label">{t('thor.from')}</div>
             <ModernSelect
               value={from}
@@ -257,16 +404,16 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
             <p className="notice" style={{ marginTop: 10 }}>{t('thor.destinationNote')}</p>
           </div>
 
-          {quoting && <div className="skel" style={{ height: 90, marginTop: 10 }} />}
+          {quoting && <div className="skel" style={{ height: 90, marginTop: 12 }} />}
 
           {quoteErr && !quoting && (
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>
               {t(`thor.err.${quoteErr}`, { defaultValue: t('thor.err.QUOTE_FAILED') })}
             </p>
           )}
 
           {quote && currentQuote && !quoting && out != null && (
-            <motion.div className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
+            <motion.div className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
               <div className="row-between">
                 <span className="faint">{t('thor.youReceive')}</span>
                 <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
@@ -296,8 +443,75 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
                   : t(`thor.guide.state.${depositState}`)}</span>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefreshKey((n) => n + 1)}>{t('thor.guide.refresh')}</button>
               </div>
+
+              {/*
+                ─── THE ANSWER TO «نمیشه در خود سایت ما انجام شود» ──────────
+                For EVM sources this IS the swap: one review sheet, one (or
+                three, with the token approval) signatures in the user's own
+                wallet, and the router deposit THORChain quoted is built with
+                the quote's own vault, memo and expiry. Hidden once a deposit
+                has been broadcast — the tracker below takes over, and a
+                second tap on a spent quote is not a feature.
+
+                `|| signing` keeps the card mounted while a signature is in
+                flight, even if the one-second clock crosses the expiry margin
+                mid-flow: a button that disappears under the user's thumb
+                mid-sign reads as a failure it was not.
+              */}
+              {(canSignHere || signing) && !depositTx && (
+                <motion.div
+                  className="thor-sign"
+                  variants={riseIn}
+                  initial="hidden"
+                  animate="show"
+                  aria-label={t('thor.sign.title')}
+                >
+                  <div className="thor-sign-head">
+                    <span className="thor-step-badge" aria-hidden="true">
+                      <IconPen width={16} height={16} />
+                    </span>
+                    {t('thor.sign.title')}
+                  </div>
+                  <p className="thor-sign-body">
+                    {t('thor.sign.body', { source: assetChain(from), asset: assetLabel(from) })}
+                  </p>
+
+                  {!wallet.isConnected || !wallet.address ? (
+                    <p className="notice" style={{ marginTop: 10 }}>{t('thor.sign.connectFirst')}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginTop: 10, width: '100%' }}
+                      disabled={signing}
+                      onClick={runSign}
+                    >
+                      {signing
+                        ? t(`thor.sign.step.${signStep || 'network'}`)
+                        : t('thor.sign.cta', { amount, asset: assetLabel(from) })}
+                    </button>
+                  )}
+
+                  <p className="thor-sign-alt">{t('thor.sign.manualAlt')}</p>
+
+                  {signErr && !signing && (
+                    <p className="notice notice-danger" style={{ marginTop: 10 }}>
+                      {t(`thor.sign.err.${signErr}`, { defaultValue: t('thor.sign.err.GENERIC') })}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+
               {depositState === 'ready' && (
                 <InfoBox title={t('thor.guide.detailsTitle')} id="thor-deposit-details" tone="warn">
+                  {/* The manual path is the ONLY path for non-EVM sources; for
+                      EVM it is the alternative — sending from a different
+                      wallet than the one connected here. */}
+                  {canSignHere && (
+                    <p className="faint" style={{ fontSize: 12, marginBottom: 9 }}>
+                      {t('thor.sign.manualIntro')}
+                    </p>
+                  )}
                   <p className="notice notice-danger">{t('thor.sendWarning')}</p>
                   <dl className="bridge-addresses">
                     <div><dt>{t('thor.guide.receiveTitle')}</dt><dd dir="ltr">{destination}</dd><p>{t('thor.guide.recipientHelp', { target: assetChain(to) })}</p></div>
@@ -328,8 +542,56 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
               )}
             </motion.div>
           )}
+
+          {/*
+            The real progress of a deposit signed HERE, from THORChain itself —
+            the same honesty the LI.FI tracker gives the tokens tab: a source
+            hash is the first of four things that have to happen, and a
+            tracker that stops at "sent" is a tracker that lies by omission.
+
+            Lives OUTSIDE the quote card so editing the form after signing
+            cannot make it vanish.
+          */}
+          {depositTx && (
+            <motion.div className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+              <div className="thor-track">
+                <div className="thor-track-title">
+                  <span>{t('thor.sign.trackTitle')}</span>
+                  <a
+                    className="thor-track-hash"
+                    dir="ltr"
+                    href={explorerTx(depositTx.chainId, depositTx.hash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {depositTx.hash.slice(0, 10)}…{depositTx.hash.slice(-8)} ↗
+                  </a>
+                </div>
+                <ul className="thor-track-stages">
+                  {(thorStatus ?? normalizeThorTxStatus(null)).stages.map((s) => (
+                    <li
+                      key={s.key}
+                      className={`thor-track-stage ${s.completed ? 'done' : (thorStatus?.pending ?? 'seen') === s.label ? 'active' : ''}`}
+                    >
+                      <span className="stage-dot" aria-hidden="true" />
+                      {t(`thor.sign.track.${s.label}`)}
+                    </li>
+                  ))}
+                </ul>
+                {thorStatus?.delivered ? (
+                  <p className="notice thor-track-done" style={{ marginTop: 10 }}>{t('thor.sign.done')}</p>
+                ) : (
+                  <p className="thor-track-note">{t('thor.sign.trackNote')}</p>
+                )}
+              </div>
+            </motion.div>
+          )}
         </>
       )}
+
+      {/* The one review sheet before any signature — same component, same
+          wording, same poisoning alert as the other money paths on this page. */}
+      <BridgeSigningReview review={signReview} onDecision={finishSignReview} />
     </motion.section>
   );
 }

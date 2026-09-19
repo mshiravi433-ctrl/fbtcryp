@@ -68,6 +68,15 @@ async function getJson(path, { timeout = 20000 } = {}) {
 /** Tradeable pools, deepest first. Halted chains are already filtered out. */
 export const getThorPools = () => getJson('/thor/pools');
 
+/**
+ * The swap's own progress through THORChain (observed → finalised → swapped →
+ * paid out), for the tracker shown after an in-site signature. A 404 body
+ * from the server (hash not observed yet) arrives HERE as a thrown error
+ * with `error: 'NOT_FOUND'` — the caller treats that as "still waiting",
+ * which is what it is.
+ */
+export const getThorTxStatus = (hash) => getJson(`/thor/tx/${encodeURIComponent(hash)}`, { timeout: 15000 });
+
 /** Is the integration configured, and which chains currently pay us? */
 export const getThorStatus = () => getJson('/thor/status');
 
