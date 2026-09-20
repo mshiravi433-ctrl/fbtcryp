@@ -219,17 +219,6 @@ export const DEEPLINK_WALLETS = Object.freeze([
   })
 ]);
 
-/** The https host a wallet's own deep-link handler answers on. */
-export function deeplinkWalletHost(id) {
-  const base = deeplinkWallet(id)?.base;
-  if (!base) return null;
-  try {
-    return new URL(base).host;
-  } catch {
-    return null;
-  }
-}
-
 /** The store page for a wallet that is not installed — the intent's fallback. */
 export function deeplinkInstallUrl(id) {
   return deeplinkWallet(id)?.install ?? null;
