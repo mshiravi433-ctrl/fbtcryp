@@ -34,12 +34,15 @@
  * reasoning that keeps @solana/web3.js out of the entry chunk.
  */
 import { isNativeShell, publicAppUrl } from '../nativeShell.js';
+import { inspectSolanaTransaction } from './signGuard.js';
 import {
   DEEPLINK_WALLETS,
+  androidIntentRequestUrl,
   base58Decode,
   base58Encode,
   base64ToBytes,
   connectRequestUrl,
+  deeplinkInstallUrl,
   deeplinkWallet,
   bytesToBase64,
   isDeeplinkReturn,
@@ -353,57 +356,177 @@ function currentReturnTo() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Open a wallet request URL.
+ * An Android BROWSER (not a WebView) that speaks Chrome's `intent://` scheme.
  *
- * Two channels, two correct answers:
- *
- *   • INSIDE THE APK a Custom Tab is the only option that keeps the WebView —
- *     and therefore this pending request — alive while the wallet is in front.
- *     Navigating the WebView itself to phantom.app would load the wallet's web
- *     page INSIDE our app (Capacitor routes https to its own WebView), which is
- *     both wrong and unrecoverable.
- *   • IN A BROWSER the navigation is in-place on purpose. The wallet's answer
- *     comes back as a page load of the SAME tab, so the user ends up on our
- *     page again with nothing left behind — no orphan tab, no second window
- *     holding half a flow. Telegram cannot navigate its Mini App, so there the
- *     wallet's own opener is used.
+ * Mirrors `isIntentCapableBrowser` in lib/wc/handoff.js — duplicated rather
+ * than imported because that module pulls in the whole WalletConnect wallet
+ * table for one UA test, and this path must stay loadable in the Solana-only
+ * chunk. The allowlist is a UA allowlist on purpose: Firefox on Android and
+ * any embedded WebView have nothing that intercepts `intent://`, and handing
+ * one to them is a navigation to a scheme they cannot render.
  */
-async function openRequest(url) {
-  if (typeof window === 'undefined') return false;
-  if (isNativeShell()) {
-    try {
-      const { openUrl } = await import('../browser.js');
-      const ok = await openUrl(url, { allowSameTabFallback: false });
-      if (ok) return true;
-    } catch {
-      /* fall through to the app link below */
+function intentCapableView(view) {
+  const ua = String(view?.navigator?.userAgent ?? '');
+  if (!/Android/i.test(ua)) return false;
+  /* Android's own WebView marks itself `; wv`; Telegram's Mini App injects its
+     bridge on top of a plain one. Neither resolves `intent://`. */
+  if (/; wv\b/i.test(ua)) return false;
+  if (view?.Telegram || view?.TelegramWebviewProxy || view?.TelegramWebviewProxyProto) return false;
+  return /chrome|chromium|crios|samsungbrowser|ucbrowser|opr|edg|miuibrowser|huaweibrowser|vivaldi|heyTapBrowser|oppobrowser/i.test(ua);
+}
+
+/**
+ * The ordered routes one wallet request can travel by, first try first.
+ *
+ * ─── THE BUG THIS TABLE EXISTS TO FIX ───────────────────────────────────────
+ * The report: «میره داخل اپ فانتوم ولی هیچ صفحه‌ای برای تأیید اتصال نمی‌آره».
+ * Phantom's connect request IS its query string, so every route that drops or
+ * re-renders the URL produces exactly that: the wallet in front of the user,
+ * nothing to approve. Two routes in this app did:
+ *
+ *   • the APK opened the universal link in a CHROME CUSTOM TAB. Custom Tabs
+ *     render http/https themselves and never hand them to another app (custom
+ *     schemes only), so phantom.app was loaded as a web page inside our own
+ *     app — and the "open in Phantom" tap that followed arrived at the wallet
+ *     without the request.
+ *   • a browser navigated the page ITSELF to the universal link. The wallet
+ *     got it, but the document holding the pending request did not survive to
+ *     see the answer — which is why a signature came back to an app that had
+ *     already given up on it.
+ *
+ * So the order is: an EXPLICIT hand-off first (native bridge / `intent://`,
+ * both of which name the package and keep this page alive), and the universal
+ * link only where nothing else can carry it (iOS, desktop, Firefox).
+ *
+ * Pure — takes the view — so the table is assertable in Node.
+ */
+export function deeplinkOpenRoutes({ walletId, url, view }) {
+  const win = view ?? (typeof window !== 'undefined' ? window : null);
+  const wallet = deeplinkWallet(walletId);
+  const list = [];
+
+  /*
+   * The view's own answer, not `isNativeShell()`'s read of the global window.
+   * They agree in a browser; reading the argument is what makes this table
+   * assertable in Node, where there is no window to be native.
+   */
+  const native = win?.Capacitor?.isNativePlatform?.() === true;
+
+  if (native) {
+    /* 1. The native ACTION_VIEW bridge. `setPackage` + the wallet's own
+          App Link filter means Android delivers the URL, query and all, to
+          the wallet's handler — the one route inside an APK that does. */
+    if (wallet?.androidPackage) {
+      list.push({ route: 'native-intent', url, packageName: wallet.androidPackage, mode: 'bridge' });
     }
-    /* Last resort inside the APK: hand the URL to Android directly. A custom
-       scheme or an app link is routed by the OS; an https URL is not, so this
-       is only worth trying for the wallet hosts themselves. */
-    try {
-      window.open(url, '_system');
-      return true;
-    } catch {
-      return false;
-    }
+    /* 2. A Custom Tab. Cannot deliver an App Link, but it is a real browser
+          with a visible address bar, so it is still better than nothing —
+          and on an APK old enough to have no bridge it is all there is. */
+    list.push({ route: 'custom-tab', url, mode: 'tab' });
+    /* 3. Hand the URL to Android and let the OS route it. */
+    list.push({ route: 'system', url, mode: 'system' });
+    return list;
   }
 
-  const tg = window.Telegram?.WebApp;
-  if (tg?.openLink) {
-    try {
-      tg.openLink(url, { try_instant_view: false });
-      return true;
-    } catch {
-      /* fall through */
+  /* A browser that resolves `intent://`: the wallet is opened WITHOUT this
+     document navigating, so the pending request survives the round trip. The
+     fallback URL is the store page — the one thing worth navigating to when
+     the wallet is not installed. */
+  if (wallet?.androidPackage && intentCapableView(win)) {
+    const intent = androidIntentRequestUrl({
+      walletId,
+      url,
+      fallbackUrl: deeplinkInstallUrl(walletId)
+    });
+    if (intent) list.push({ route: 'intent', url: intent, mode: 'place' });
+  }
+
+  /* Telegram cannot navigate its Mini App, so its own opener goes first. */
+  if (win?.Telegram?.WebApp?.openLink) {
+    list.push({ route: 'telegram', url, mode: 'external' });
+  }
+
+  /* The universal link itself: correct on iOS (Safari offers the app switch)
+     and on any browser the routes above did not cover. */
+  list.push({ route: 'universal', url, mode: 'place' });
+  return list;
+}
+
+/** Fire one route. Synchronous work happens before the first await so the
+    user's gesture is still the reason the wallet opened. */
+async function runRoute(route, win) {
+  switch (route.route) {
+    case 'native-intent': {
+      const bridge = win?.FBTSolanaLink;
+      if (!bridge?.openWalletLink) return false;
+      try {
+        return bridge.openWalletLink(route.url, route.packageName) === true;
+      } catch {
+        return false;
+      }
+    }
+    case 'intent':
+    case 'universal':
+      try {
+        win.location.assign(route.url);
+        return true;
+      } catch {
+        return false;
+      }
+    case 'telegram':
+      try {
+        win.Telegram.WebApp.openLink(route.url, { try_instant_view: false });
+        return true;
+      } catch {
+        return false;
+      }
+    case 'system':
+      try {
+        win.open(route.url, '_system');
+        return true;
+      } catch {
+        return false;
+      }
+    case 'custom-tab': {
+      try {
+        const { openUrl } = await import('../browser.js');
+        return (await openUrl(route.url, { allowSameTabFallback: false })) === true;
+      } catch {
+        return false;
+      }
+    }
+    default:
+      return false;
+  }
+}
+
+/**
+ * Open a wallet request URL, trying each route in order until one takes it.
+ *
+ * A route that "takes" the request is one where the URL provably reached
+ * something that can act on it: the native bridge answers `true` only when
+ * Android resolved the intent, and a navigation only counts when it did not
+ * throw. Everything else falls through, so an APK without the new bridge and a
+ * phone without the wallet still end up somewhere honest rather than silently
+ * doing nothing.
+ *
+ * @returns {Promise<{ok:boolean, route:string|null, navigatedAway:boolean}>}
+ *   `navigatedAway` answers «why does signing fail on a phone»: it is true
+ *   only for the route that sends THIS document to the wallet's URL. There the
+ *   pending promise cannot be resolved by this page, because this page is on
+ *   its way out — so the caller is told, instead of spinning for fifteen
+ *   minutes on an answer that will land in a brand-new document.
+ */
+async function openRequest(url, walletId = null) {
+  if (typeof window === 'undefined') return { ok: false, route: null, navigatedAway: false };
+  const routes = deeplinkOpenRoutes({ walletId, url, view: window });
+  for (const route of routes) {
+    /* eslint-disable-next-line no-await-in-loop — the order IS the behaviour */
+    if (await runRoute(route, window)) {
+      return { ok: true, route: route.route, navigatedAway: route.route === 'universal' };
     }
   }
-  try {
-    window.location.assign(url);
-    return true;
-  } catch {
-    return false;
-  }
+  return { ok: false, route: null, navigatedAway: false };
 }
 
 /** Close the Custom Tab we opened, once the wallet has answered. */
@@ -618,8 +741,13 @@ export async function completeDeeplinkReturn(rawUrl) {
       : await applySignAnswer(pending, read.params);
 
   dropPending(pending.id);
-  saveResult(pending.id, { ...result, walletId: pending.walletId, op: pending.op });
-  publishResult({ ...result, walletId: pending.walletId });
+  /* `warnings` rides along with the stored answer: a signature that arrives as
+     a page load is read by a document that never saw the request, and the
+     reason Phantom showed a risk dialog is the one thing that document still
+     needs in order to explain itself. */
+  const stored = { ...result, walletId: pending.walletId, op: pending.op, warnings: pending.warnings ?? [] };
+  saveResult(pending.id, stored);
+  publishResult(stored);
 
   if (result.ok) {
     if (result.op === 'connect') {
@@ -690,12 +818,17 @@ export async function startDeeplinkConnect(walletId, { returnTo } = {}) {
 
   emit({ status: 'waiting', walletId, address: null, code: null, requestId: id });
 
-  const opened = await openRequest(url);
-  if (!opened) {
+  const opened = await openRequest(url, walletId);
+  if (!opened.ok) {
     emit({ status: 'error', walletId, code: 'OPEN_FAILED', requestId: id });
     return { ok: false, code: 'OPEN_FAILED', id };
   }
-  return { ok: true, id, walletId };
+  /* `route` is what the health report and the waiting card can name when a
+     user writes «it opened the wallet and nothing happened»: which of the
+     four channels actually carried the request, and whether this page is
+     still here to hear the answer. */
+  emit({ status: 'waiting', walletId, requestId: id, code: null, route: opened.route });
+  return { ok: true, id, walletId, route: opened.route, navigatedAway: opened.navigatedAway };
 }
 
 /**
@@ -709,8 +842,9 @@ export async function reopenDeeplinkRequest(id) {
   const pending = findPending(id ?? null);
   if (!pending?.url) return { ok: false, code: 'NO_PENDING' };
   emit({ status: 'waiting', walletId: pending.walletId, requestId: pending.id, code: null });
-  const opened = await openRequest(pending.url);
-  return opened ? { ok: true, id: pending.id } : { ok: false, code: 'OPEN_FAILED', id: pending.id };
+  const opened = await openRequest(pending.url, pending.walletId);
+  if (!opened.ok) return { ok: false, code: 'OPEN_FAILED', id: pending.id };
+  return { ok: true, id: pending.id, route: opened.route, inWallet: opened.navigatedAway };
 }
 
 /** Give up on the waiting request (the user closed the sheet or cancelled). */
@@ -783,10 +917,18 @@ export function awaitDeeplinkRequest(id) {
  * deeplink session and it is stated in the UI. Nothing here can sign on its
  * own: the session token only lets us ASK, and the wallet's own screen decides.
  */
-async function signViaDeeplink(op, payloadBase58) {
+async function signViaDeeplink(op, payloadBase58, rawTx = null) {
   const session = deeplinkSession();
   if (!session) return { ok: false, code: 'NO_SESSION' };
   const id = randomRequestId();
+  /*
+   * Read the transaction BEFORE the wallet is opened, not after it has already
+   * frightened the user. Phantom's «this dApp could be malicious» screen is
+   * its simulation warning, and for the two shapes below the wallet is right
+   * to be cautious — so the reason is decided here and travels with the
+   * request (see lib/solana/signGuard.js).
+   */
+  const guard = rawTx ? inspectSolanaTransaction(rawTx) : null;
   /* One nonce per request, shared with the wallet's encrypted answer — the
      value is generated here and never reused (see deeplinkUri.randomNonce). */
   const nonce = randomNonce();
@@ -801,6 +943,7 @@ async function signViaDeeplink(op, payloadBase58) {
   });
   if (!url) return { ok: false, code: 'UNKNOWN_WALLET' };
 
+  const warnings = guard?.warnings ?? [];
   savePending({
     id,
     op,
@@ -809,17 +952,43 @@ async function signViaDeeplink(op, payloadBase58) {
     dappPublicKey: session.dappPublicKey,
     dappSecretKey: session.dappSecretKey,
     walletEncryptionPublicKey: session.walletEncryptionPublicKey,
+    warnings,
     returnTo: currentReturnTo(),
     createdAt: Date.now()
   });
-  emit({ status: 'waiting', walletId: session.walletId, requestId: id, code: null, signing: true });
+  emit({
+    status: 'waiting',
+    walletId: session.walletId,
+    requestId: id,
+    code: null,
+    signing: true,
+    warnings
+  });
 
-  const opened = await openRequest(url);
-  if (!opened) {
+  const opened = await openRequest(url, session.walletId);
+  if (!opened.ok) {
     dropPending(id);
-    return { ok: false, code: 'OPEN_FAILED' };
+    return { ok: false, code: 'OPEN_FAILED', warnings };
   }
-  return awaitDeeplinkRequest(id);
+
+  /*
+   * THE HONEST ANSWER ON A NAVIGATING ROUTE.
+   *
+   * iOS Safari, Firefox on Android and any browser without `intent://` can only
+   * be given the request by sending this very document to the wallet's URL.
+   * The signature then comes back as a NEW PAGE LOAD of `redirect_link`, into a
+   * fresh document with no memory of this promise — which is exactly how a
+   * phone user came to read a successful signature as a failure. The answer is
+   * not lost (it is stored under its request id and published as the last
+   * result, and `consumeDeeplinkResult()` reads it on the next boot); what is
+   * impossible is resolving a promise in a document that no longer exists. So
+   * the caller is told, named, instead of hanging on the poll below.
+   */
+  if (opened.navigatedAway) {
+    return { ok: false, code: 'IN_WALLET', id, warnings, route: opened.route };
+  }
+  const result = await awaitDeeplinkRequest(id);
+  return warnings.length ? { ...result, warnings } : result;
 }
 
 /**
@@ -830,12 +999,12 @@ async function signViaDeeplink(op, payloadBase58) {
  * one this project already committed to on the EVM side.
  */
 export async function deeplinkSignAndSendTransaction(base64Tx) {
-  return signViaDeeplink('signAndSendTransaction', base58Encode(base64ToBytes(base64Tx)));
+  return signViaDeeplink('signAndSendTransaction', base58Encode(base64ToBytes(base64Tx)), base64Tx);
 }
 
 /** Wallet signs only; the caller (Jupiter) lands the transaction itself. */
 export async function deeplinkSignTransaction(base64Tx) {
-  return signViaDeeplink('signTransaction', base58Encode(base64ToBytes(base64Tx)));
+  return signViaDeeplink('signTransaction', base58Encode(base64ToBytes(base64Tx)), base64Tx);
 }
 
 /** Wallet signs an arbitrary message. */

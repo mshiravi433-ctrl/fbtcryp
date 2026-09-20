@@ -5118,7 +5118,8 @@
       "BALANCE_UNAVAILABLE": "Could not verify this wallet’s Solana balance. Nothing was sent; retry when the RPC is available.",
       "SEND_FAILED": "The wallet could not submit the transaction. Nothing is shown as successful; check your balance and try again.",
       "NO_SIGNATURE": "The wallet returned no transaction signature.",
-      "UNSUPPORTED_TRANSACTION": "This wallet does not support the transaction version returned by the route."
+      "UNSUPPORTED_TRANSACTION": "This wallet does not support the transaction version returned by the route.",
+      "IN_WALLET": "The wallet opened — approve it there. The result appears on this page as soon as you are back."
     },
     "twoWalletsTitle": "Two wallets, side by side",
     "twoWalletsBody": "EVM and Solana are separate networks with separate wallet standards, so the app keeps a separate connection for each. They do not conflict and you do not have to disconnect one to use the other — MetaMask or Trust stays connected for BNB, Ethereum and the rest, while Phantom or Solflare handles Solana. Both can be connected at the same time.",
@@ -5217,6 +5218,19 @@
         "CONNECT_FAILED": "The connection could not be completed.",
         "NO_WALLET": "No Solana wallet answered the request.",
         "CANNOT_SIGN": "This wallet cannot sign Solana transactions."
+      },
+      "warnTitle": "Why Phantom shows a warning",
+      "warnNewDomain": "«This domain is new or has not been reviewed yet» — Phantom shows this automatically for any domain it has not seen before, and it goes away by itself once the domain has been reviewed. No code can switch it off.",
+      "warnSimulation": "«This dApp could be malicious» is Phantom’s transaction-simulation warning, not a verdict on the domain: it means Phantom could not predict what the transaction will do. We check for that before the wallet opens and say so — a transaction that needs more than one signature is the usual cause.",
+      "warnNever": "We will never ask you to dismiss a wallet warning or to «continue anyway». If the warning stays, do not sign — tell support instead."
+    },
+    "signNotice": {
+      "ok": "Signed in your wallet.",
+      "fail": "The wallet did not complete this request ({{code}}).",
+      "view": "View the transaction on Solscan",
+      "warn": {
+        "MULTI_SIGNER": "This transaction needs more than one signature, which is why Phantom cannot simulate it and shows a risk warning.",
+        "TX_OVERSIZE": "This transaction is larger than Solana’s 1232-byte limit; it has to be smaller or split into several."
       }
     }
   },

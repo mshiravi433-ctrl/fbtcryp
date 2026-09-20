@@ -134,6 +134,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   delete window.Capacitor;
+  delete window.FBTSolanaLink;
   deeplink.resetDeeplink();
   vi.useRealTimers();
 });
@@ -206,6 +207,86 @@ describe('connecting a Solana wallet on a phone', () => {
     expect(solanaAddress()).toBe(ADDRESS);
     /* …and the tab this started from shows it without a reload. */
     expect(screen.getAllByText(shortAddress(ADDRESS)).length).toBeGreaterThan(0);
+  });
+
+  /*
+   * THE DELIVERY, WHICH IS WHERE THE BUG ACTUALLY WAS.
+   *
+   * A Chrome Custom Tab renders http/https itself and never hands an App Link
+   * to another app, so `https://phantom.app/ul/v1/connect?…` opened as a web
+   * page inside our own APK: Phantom in front of the user, nothing in it to
+   * approve. The native bridge fires an ACTION_VIEW at the wallet's package
+   * instead, which is the one route inside an APK that arrives with the query
+   * string — i.e. with the request — intact.
+   */
+  it('hands the request to Android itself, not to a Custom Tab', async () => {
+    const openWalletLink = vi.fn(() => true);
+    window.FBTSolanaLink = { openWalletLink };
+
+    await openSheetThroughWalletTab();
+    fireEvent.click(screen.getByTestId('sol-connect-phantom'));
+    await waitFor(() => expect(openWalletLink).toHaveBeenCalledTimes(1));
+
+    const [url, packageName] = openWalletLink.mock.calls[0];
+    const parsed = new URL(url);
+    expect(parsed.host).toBe('phantom.app');
+    expect(parsed.pathname).toBe('/ul/v1/connect');
+    expect(packageName).toBe('app.phantom');
+    /* The Custom Tab is the fallback for an APK without the bridge, and must
+       not be used when the bridge answered. */
+    expect(Browser.open).not.toHaveBeenCalled();
+
+    delete window.FBTSolanaLink;
+  });
+
+  it('falls back to the Custom Tab on an APK that has no bridge', async () => {
+    await openSheetThroughWalletTab();
+    fireEvent.click(screen.getByTestId('sol-connect-phantom'));
+    await waitFor(() => expect(Browser.open).toHaveBeenCalledTimes(1));
+    expect(new URL(lastOpenedUrl()).host).toBe('phantom.app');
+  });
+
+  /*
+   * «سایت ما را فانتوم مخرب شناخته» — answered on the screen the user is
+   * standing on, and never with "continue anyway".
+   */
+  it('explains the warnings Phantom shows, before the wallet is opened', async () => {
+    await openSheetThroughWalletTab();
+    /* Collapsed like every other explainer on this sheet, and it opens. */
+    fireEvent.click(screen.getByText(en.solana.connect.warnTitle));
+    expect(screen.getByText(en.solana.connect.warnNewDomain)).toBeTruthy();
+    expect(screen.getByText(en.solana.connect.warnSimulation)).toBeTruthy();
+    expect(screen.getByText(en.solana.connect.warnNever)).toBeTruthy();
+    expect(Browser.open).not.toHaveBeenCalled();
+  });
+
+  /*
+   * A signature that arrives as a PAGE LOAD — the route iOS and any Android
+   * browser without `intent://` are forced onto. Nothing used to read it, so
+   * the user came back to a screen that had forgotten what they had approved,
+   * which reads exactly like «it errored».
+   */
+  it('tells the user about a signature that came back as a page load', async () => {
+    localStorage.setItem(
+      'fbt:solana:result:last',
+      JSON.stringify({
+        ok: true,
+        op: 'signAndSendTransaction',
+        walletId: 'phantom',
+        signature: '5xy3' + 'A'.repeat(60),
+        warnings: ['MULTI_SIGNER'],
+        at: Date.now()
+      })
+    );
+
+    render(<SolanaWalletTab />);
+    await screen.findByTestId('solana-sign-notice');
+    expect(screen.getByTestId('solana-sign-notice').textContent).toContain(en.solana.signNotice.ok);
+    /* …including WHY the wallet showed a risk dialog for it. */
+    expect(screen.getByTestId('solana-sign-notice').textContent)
+      .toContain(en.solana.signNotice.warn.MULTI_SIGNER);
+    /* It is read once: a refresh must not repeat it. */
+    expect(localStorage.getItem('fbt:solana:result:last')).toBeNull();
   });
 
   it('names a refusal instead of leaving a vague failure', async () => {

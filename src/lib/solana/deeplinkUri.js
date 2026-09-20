@@ -157,7 +157,37 @@ export function randomRequestId() {
   return base58Encode(bytes);
 }
 
-/** The wallets whose mobile apps answer these deeplinks. */
+/**
+ * The wallets whose mobile apps answer these deeplinks.
+ *
+ * ─── WHY EACH ROW CARRIES AN ANDROID PACKAGE ────────────────────────────────
+ * `base` is a UNIVERSAL LINK (https). A universal link only reaches the wallet
+ * app when something resolves it as an Android App Link / iOS Universal Link —
+ * and two of the surfaces this app runs on deliberately do not:
+ *
+ *   • A Chrome CUSTOM TAB (what `@capacitor/browser` opens inside our APK)
+ *     renders http/https in the tab and never hands them to another app. It
+ *     supports custom schemes only. So inside the APK the request was loaded
+ *     as a web page on phantom.app instead of being delivered to Phantom.
+ *   • A WebView that navigates to the URL commits the navigation and loads the
+ *     wallet's web page inside OUR app.
+ *
+ * Either way the user ends up looking at Phantom — its web page, or the app
+ * after they tapped "open in app" and lost the query string on the way — with
+ * no approval dialog, which is precisely the report this path exists for:
+ * «میره داخل اپ فانتوم اما هیچ صفحه‌ای برای تأیید نمی‌آره».
+ *
+ * The package name is what makes the delivery EXPLICIT instead of a hope:
+ * Android's `intent://` form and the native `ACTION_VIEW` bridge both scope the
+ * request to one package, so the full URL (query string included — the request
+ * IS the query string) lands in the wallet's own handler.
+ *
+ * Verified against each store listing, not guessed:
+ *   Phantom  `app.phantom`          · Solflare `com.solflare.mobile`
+ *   Backpack `app.backpack.mobile`
+ * A wrong package fails CLOSED (the intent resolves to nothing and the next
+ * route is tried), never open — nothing here can launch an arbitrary app.
+ */
 export const DEEPLINK_WALLETS = Object.freeze([
   Object.freeze({
     id: 'phantom',
@@ -167,21 +197,78 @@ export const DEEPLINK_WALLETS = Object.freeze([
     base: 'https://phantom.app/ul/v1',
     /* The wallet's own «open this page in me» link, kept for the desktop and
        iOS paths where a real connect deeplink cannot complete. */
-    browse: 'https://phantom.app/ul/browse/'
+    browse: 'https://phantom.app/ul/browse/',
+    androidPackage: 'app.phantom',
+    install: 'https://play.google.com/store/apps/details?id=app.phantom'
   }),
   Object.freeze({
     id: 'solflare',
     label: 'Solflare',
     base: 'https://solflare.com/ul/v1',
-    browse: 'https://solflare.com/ul/v1/browse/'
+    browse: 'https://solflare.com/ul/v1/browse/',
+    androidPackage: 'com.solflare.mobile',
+    install: 'https://play.google.com/store/apps/details?id=com.solflare.mobile'
   }),
   Object.freeze({
     id: 'backpack',
     label: 'Backpack',
     base: 'https://backpack.app/ul/v1',
-    browse: 'https://backpack.app/ul/v1/browse/'
+    browse: 'https://backpack.app/ul/v1/browse/',
+    androidPackage: 'app.backpack.mobile',
+    install: 'https://play.google.com/store/apps/details?id=app.backpack.mobile'
   })
 ]);
+
+/** The store page for a wallet that is not installed — the intent's fallback. */
+export function deeplinkInstallUrl(id) {
+  return deeplinkWallet(id)?.install ?? null;
+}
+
+/**
+ * Wrap one request URL in Chrome's `intent://` form, scoped to the wallet.
+ *
+ *   intent://phantom.app/ul/v1/connect?…#Intent;scheme=https;package=app.phantom;S.browser_fallback_url=…;end
+ *
+ * ─── WHY THIS IS THE FORM THAT WORKS ON ANDROID ─────────────────────────────
+ * An `intent://` URL is resolved BY THE BROWSER, before any navigation commits:
+ *
+ *   • wallet installed → Android fires ACTION_VIEW at exactly that package with
+ *     the FULL https URL as data. Phantom's handler parses `/ul/v1/connect` and
+ *     draws its own approval screen. Our page never navigated, so the pending
+ *     request — and the swap that is waiting on the signature — is still alive
+ *     when the answer comes back.
+ *   • wallet NOT installed → the browser commits to `S.browser_fallback_url`,
+ *     the store page. One tap from installing it, instead of a dead end.
+ *
+ * A plain `location.assign('https://phantom.app/ul/v1/connect?…')` also works
+ * in a real browser, but it takes the page with it: the document holding the
+ * promise is gone, which is how a signature came back to an app that had
+ * already forgotten it was waiting. So the intent is tried first and the
+ * universal link stays as the fallback for browsers that cannot resolve it
+ * (Firefox on Android has no `intent://`; a WebView has nothing to intercept
+ * it and would navigate itself away).
+ *
+ * @returns {string|null} null when the URL is not an https request for a wallet
+ *   we know — the caller must then use the universal link unchanged.
+ */
+export function androidIntentRequestUrl({ walletId, url, fallbackUrl = null }) {
+  const wallet = deeplinkWallet(walletId);
+  if (!wallet?.androidPackage) return null;
+  let parsed = null;
+  try {
+    parsed = new URL(String(url ?? ''));
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:') return null;
+  /* Everything the wallet needs lives in the query, so it is carried verbatim:
+     re-encoding here would double-encode values that are already encoded. */
+  const target = `${parsed.host}${parsed.pathname}${parsed.search}`;
+  const parts = [`intent://${target}#Intent`, 'scheme=https', `package=${wallet.androidPackage}`];
+  if (fallbackUrl) parts.push(`S.browser_fallback_url=${encodeURIComponent(String(fallbackUrl))}`);
+  parts.push('end');
+  return parts.join(';');
+}
 
 export function deeplinkWallet(id) {
   return DEEPLINK_WALLETS.find((w) => w.id === id) ?? null;

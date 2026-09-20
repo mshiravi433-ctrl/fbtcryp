@@ -60,8 +60,25 @@ const locationStub = {
   assign: (url) => opened.push(String(url))
 };
 
+/*
+ * The four views this flow has to get right, as UA strings.
+ *
+ * They are not decoration: which one the app is standing in decides HOW the
+ * wallet request is delivered, and two of the four used to deliver it in a way
+ * that reached the wallet with nothing to approve — the bug this probe exists
+ * for. Desktop is the default so the assertions below read in the order the
+ * flow happens; the phone views are switched in where they are the point.
+ */
+const UA_DESKTOP = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+const UA_ANDROID_CHROME = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+const UA_ANDROID_WEBVIEW = 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+const UA_ANDROID_FIREFOX = 'Mozilla/5.0 (Android 14; Mobile; rv:127.0) Gecko/127.0 Firefox/127.0';
+const UA_IPHONE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const setUa = (ua) => { globalThis.window.navigator.userAgent = ua; };
+
 globalThis.window = {
   location: locationStub,
+  navigator: { userAgent: UA_DESKTOP },
   dispatchEvent: (event) => {
     events.push(event);
     return true;
@@ -260,20 +277,52 @@ let connectRid = null;
 /* -------------------------------------------------------------------------- */
 /* 3. signing — a round trip per transaction, still approved in the wallet     */
 /* -------------------------------------------------------------------------- */
+/*
+ * A legacy-shaped compiled transaction with ONE required signature, so the
+ * sign guard reads it as a transaction Phantom can simulate. Bytes 0..2 are
+ * the message header: numRequiredSignatures, then the two read-only counts.
+ */
+function legacyTx(sizeBytes, requiredSignatures = 1) {
+  const bytes = new Uint8Array(Math.max(sizeBytes, 64));
+  bytes[0] = requiredSignatures;
+  bytes[1] = 0;
+  bytes[2] = requiredSignatures;
+  return Buffer.from(bytes).toString('base64');
+}
+
+/* 3a. ANDROID CHROME — the request goes to the wallet and THIS PAGE STAYS. */
 {
-  const txBytes = nacl.randomBytes(96);
-  const base64Tx = Buffer.from(txBytes).toString('base64');
+  setUa(UA_ANDROID_CHROME);
+  const base64Tx = legacyTx(400);
   const pendingSign = deeplink.deeplinkSignAndSendTransaction(base64Tx);
 
   /* Give the async flow a turn to build and open the request. */
   await new Promise((r) => setTimeout(r, 30));
 
-  const params = requestParams(opened[opened.length - 1]);
+  const raw = opened[opened.length - 1];
+  ok('on Android the signing request is handed over as a package-scoped intent',
+    raw.startsWith('intent://phantom.app/ul/v1/signAndSendTransaction?')
+    && raw.includes('package=app.phantom')
+    && raw.includes('scheme=https')
+    && raw.endsWith(';end'));
+  ok('the intent carries the store page as its fallback, so an in-place '
+    + 'navigation can only ever commit somewhere useful',
+    raw.includes('S.browser_fallback_url=')
+    && decodeURIComponent(raw).includes('play.google.com/store/apps/details?id=app.phantom'));
+
+  const params = requestParams(raw);
   ok('the signing request goes to signAndSendTransaction', params.path === '/ul/v1/signAndSendTransaction');
+  /* The wire form is base58 of the raw bytes — asserted by decoding it back,
+     not by re-encoding something else and hoping the lengths look plausible. */
+  const txOnTheWire = base58Decode(params.get('transaction'));
   ok('the transaction travels base58 as the wallet expects',
-    base58Encode(base64DecodeForTest(params.get('transaction'))).length > 0
+    txOnTheWire?.length === 400
+    && txOnTheWire[0] === 1
     && params.get('nonce').length > 20
     && params.get('session') === SESSION);
+  ok('a single-signer transaction is not flagged as one Phantom cannot simulate',
+    deeplink.deeplinkState().warnings?.length === 0
+    || deeplink.deeplinkState().warnings === undefined);
 
   const signature = base58Encode(nacl.randomBytes(64));
   const answer = answerUrl({
@@ -287,13 +336,77 @@ let connectRid = null;
   const result = await pendingSign;
   ok('the wallet\'s signature reaches the caller that asked for it',
     applied.ok === true && result.ok === true && result.signature === signature);
+  setUa(UA_DESKTOP);
 }
 
-function base64DecodeForTest(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
+/*
+ * 3b. A VIEW THAT CAN ONLY BE GIVEN THE REQUEST BY NAVIGATING AWAY.
+ *
+ * iOS has no `intent://`, and Apple does not allow the inter-app channel MWA
+ * needs, so Safari's only route is `location.assign` to the wallet's URL. The
+ * signature then comes back into a NEW document — so the promise here can
+ * never resolve, and the old code left the swap spinning until its fifteen
+ * minute bound expired and reported a failure over a signature that had
+ * succeeded. `IN_WALLET` is the honest answer, and the stored result is what
+ * the reloaded page reads.
+ */
+{
+  setUa(UA_IPHONE_SAFARI);
+  deeplink.consumeDeeplinkResult();
+  const base64Tx = legacyTx(400);
+  const pendingSign = deeplink.deeplinkSignAndSendTransaction(base64Tx);
+  await new Promise((r) => setTimeout(r, 30));
+
+  const raw = opened[opened.length - 1];
+  ok('iOS gets the universal link, not a scheme Safari cannot render',
+    raw.startsWith('https://phantom.app/ul/v1/signAndSendTransaction?'));
+
+  const params = requestParams(raw);
+  const result = await pendingSign;
+  ok('a route that navigates this page away is NAMED instead of hanging',
+    result.ok === false && result.code === 'IN_WALLET');
+  ok('and it is not reported as a failure the user has to act on',
+    result.code !== 'SIGN_FAILED' && result.code !== 'TIMEOUT');
+
+  /* The wallet still answers, into the next page load. */
+  const signature = base58Encode(nacl.randomBytes(64));
+  await deeplink.completeDeeplinkReturn(answerUrl({
+    redirectLink: params.get('redirect_link'),
+    wallet,
+    dappPublicKey: params.get('dapp_encryption_public_key'),
+    nonceB58: params.get('nonce'),
+    payload: { signature }
+  }));
+  const stored = deeplink.consumeDeeplinkResult();
+  ok('the signature is kept for the document that comes back',
+    stored?.ok === true && stored.signature === signature && stored.op === 'signAndSendTransaction');
+  setUa(UA_DESKTOP);
+}
+
+/*
+ * 3c. WHY PHANTOM SHOWS A RISK DIALOG AT SIGNING TIME.
+ *
+ * «This dApp could be malicious» is Phantom's SIMULATION warning, and it is
+ * a property of the transaction: one it cannot predict the outcome of. The two
+ * shapes that cause it are decided here, before the wallet is opened, so the
+ * user is told the reason instead of meeting a frightening dialog with no
+ * explanation. Phantom's own published remedies are exactly these two rules.
+ */
+{
+  deeplink.consumeDeeelinkResultSafe?.();
+  const multi = legacyTx(400, 2);
+  deeplink.deeplinkSignTransaction(multi);
+  await new Promise((r) => setTimeout(r, 30));
+  ok('a transaction that needs a second signature is named before the wallet opens',
+    deeplink.deeplinkState().warnings?.includes('MULTI_SIGNER') === true);
+  deeplink.cancelDeeplinkRequest(null);
+
+  const huge = legacyTx(1400);
+  deeplink.deeplinkSignTransaction(huge);
+  await new Promise((r) => setTimeout(r, 30));
+  ok('a transaction over Solana\'s 1232-byte limit is named too',
+    deeplink.deeplinkState().warnings?.includes('TX_OVERSIZE') === true);
+  deeplink.cancelDeeplinkRequest(null);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -388,6 +501,48 @@ function base64DecodeForTest(b64) {
   ok('a lapsed session is not reported as connected', deeplink.deeplinkSession() === null);
   ok('and the app does not claim an address it no longer holds', solanaAddress() === null);
   deeplink.resetDeeplink();
+}
+
+/* -------------------------------------------------------------------------- */
+/* 7. the route table — how the request reaches the wallet, per view           */
+/* -------------------------------------------------------------------------- */
+/*
+ * The reported bug was not in the request; the request was always correct. It
+ * was in the DELIVERY: two of these views used to hand a universal link to
+ * something that renders http/https itself instead of passing it to the wallet
+ * app, and the wallet duly opened with nothing in it to approve.
+ */
+{
+  const routesFor = (ua, extra = {}) =>
+    deeplink.deeplinkOpenRoutes({
+      walletId: 'phantom',
+      url: 'https://phantom.app/ul/v1/connect?app_url=https%3A%2F%2Ffbtswap.ir%2F',
+      view: { navigator: { userAgent: ua }, ...extra }
+    }).map((r) => r.route);
+
+  ok('Android Chrome opens the wallet WITHOUT navigating this page',
+    routesFor(UA_ANDROID_CHROME)[0] === 'intent');
+  ok('an Android WebView gets no intent route — nothing there intercepts it',
+    !routesFor(UA_ANDROID_WEBVIEW).includes('intent'));
+  ok('Firefox on Android gets no intent route either',
+    !routesFor(UA_ANDROID_FIREFOX).includes('intent'));
+  ok('iOS falls back to the universal link',
+    routesFor(UA_IPHONE_SAFARI).join(',') === 'universal');
+  ok('a browser that cannot carry the request still ends at the universal link',
+    routesFor(UA_ANDROID_WEBVIEW).at(-1) === 'universal');
+
+  /* Inside the APK the FIRST route must be the native ACTION_VIEW bridge: a
+     Custom Tab cannot deliver an App Link, which is what made Phantom open
+     with no approval screen in it. */
+  const native = deeplink.deeplinkOpenRoutes({
+    walletId: 'solflare',
+    url: 'https://solflare.com/ul/v1/connect?x=1',
+    view: { navigator: { userAgent: UA_ANDROID_WEBVIEW }, Capacitor: { isNativePlatform: () => true } }
+  });
+  ok('inside the APK the request goes to Android, package-scoped, first',
+    native[0].route === 'native-intent' && native[0].packageName === 'com.solflare.mobile');
+  ok('and a Custom Tab is only ever the fallback behind it',
+    native[1].route === 'custom-tab');
 }
 
 /*

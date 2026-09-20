@@ -141,6 +141,11 @@
         <package android:name="com.uniswap.mobile" />
         <package android:name="io.safepal.wallet" />
         <package android:name="me.rainbow" />
+        <!-- Solana: the packages the SolanaLink bridge hands a connect/sign
+             deep link to (Phantom, Solflare, Backpack). -->
+        <package android:name="app.phantom" />
+        <package android:name="com.solflare.mobile" />
+        <package android:name="app.backpack.mobile" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
