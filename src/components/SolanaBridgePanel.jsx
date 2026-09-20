@@ -11,7 +11,7 @@ import {
   DLN_SOLANA, dlnHexToBase64, fixFeeNative,
   getDlnQuote, getDlnTx
 } from '../lib/dln';
-import { solanaAddress, signAndSendSolana } from '../lib/solanaWallet';
+import { solanaAddress, signAndSendSolana, getSolanaBalance } from '../lib/solanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { IconPhone } from './Icons';
@@ -48,6 +48,38 @@ import AssetIcon from './AssetIcon';
  * is empty at runtime. `symbol` rides along for the picker's network mark.
  */
 const DLN_DST_CHAINS = BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
+
+/*
+ * ─── ONE ERROR NAME, AND IT MUST BE ONE THE SCREEN CAN TRANSLATE ─────────
+ * The reported failure mode was: «انگار ارتباط برقرار نیست و می‌زند تراکنش
+ * ارسال نشد». Every failure of execute() used to collapse into the single
+ * sentence «تراکنش ارسال نشد…» — a user rejecting the prompt, a wallet short
+ * of the SOL rent, and our API being unreachable all looked identical, and
+ * "identical" read as "broken". This mapping keeps the real reason.
+ *
+ * Inputs have three shapes: an Error whose message IS the code (our own
+ * throws and the wallet layer's: REJECTED, CANNOT_SIGN, INSUFFICIENT_BALANCE,
+ * …), a fetch rejection carrying the server's `{ error }` payload on `.code`,
+ * and a browser TypeError whose message is prose («Failed to fetch») that
+ * must never be rendered as a raw key.
+ */
+function panelErrorCode(err, fallback = 'SEND_FAILED') {
+  const code = String(err?.code || err?.shortMessage || err?.message || '');
+  if (/failed to fetch|networkerror|load failed|abort/i.test(code)) return 'QUOTE_NETWORK';
+  if (/^[A-Z][A-Z0-9_]{2,}$/.test(code)) return code;
+  return fallback;
+}
+
+/*
+ * Codes `solana.err.*` has no bridge-accurate copy for — both are produced by
+ * the pre-flight funding check below, so their notice lives next to the
+ * bridge's own strings instead of borrowing the swap's wording («سواپ» on a
+ * bridge screen reads as the wrong app answering).
+ */
+const PANEL_ERR_KEY = {
+  SOL_UNDERFUNDED: 'bridge.solana.insufficientBalance',
+  SOL_GAS: 'bridge.solana.insufficientGas'
+};
 
 export default function SolanaBridgePanel() {
   useHideBalances();
@@ -120,7 +152,9 @@ export default function SolanaBridgePanel() {
     } catch (e) {
       if (seq.current !== mine) return;
       setQuote(null);
-      setQuoteErr(e?.code || 'QUOTE_FAILED');
+      /* The reason is kept (network down, provider refused), not the single
+         generic «مسیری یافت نشد» for every failure shape. */
+      setQuoteErr(panelErrorCode(e, 'QUOTE_FAILED'));
     } finally {
       if (seq.current === mine) setQuoting(false);
     }
@@ -145,7 +179,16 @@ export default function SolanaBridgePanel() {
     if (!srcToken?.native) return null;
     const fee = Number(fixedFeeNative);
     const fromUsd = Number(quote?.fromAmountUsd);
-    const srcUnits = Number(amount) / 10 ** (srcToken.decimals ?? 9);
+    /*
+     * ─── THE «1500000000.0٪» BUG ─────────────────────────────────────────
+     * `amount` is what the user TYPED — already whole SOL. The conversion to
+     * base units happens in `toBaseUnits` on the REQUEST side; this field was
+     * dividing by 10**decimals a SECOND time, so a 0.1 SOL transfer came out
+     * as 1e-10 "SOL", the implied SOL price returned 1,000,000,000× too high,
+     * and the warning read «کارمزد ثابت SOL حدود 1500000000.0٪». There is no
+     * unit conversion on the typed amount at all.
+     */
+    const srcUnits = Number(amount);
     if (!Number.isFinite(fee) || fee <= 0) return null;
     if (!Number.isFinite(fromUsd) || fromUsd <= 0) return null;
     if (!Number.isFinite(srcUnits) || srcUnits <= 0) return null;
@@ -164,6 +207,30 @@ export default function SolanaBridgePanel() {
       const raw = toBaseUnits(amount, srcToken.decimals);
       if (!raw) throw new Error('BAD_AMOUNT');
       if (!toAddressValid) throw new Error('NO_RECIPIENT');
+
+      /*
+       * ─── CAN THIS WALLET FUND THE ORDER AT ALL? ASK BEFORE THE PROMPT ────
+       * DLN collects its fixed fee in SOL ON TOP of the transfer: for a
+       * native SOL source that is amount + fee out of the same coin, and for
+       * USDC/USDT it is the fee alone out of the SOL balance. Either way a
+       * wallet that cannot cover it used to be sent onward, where the wallet's
+       * own simulation failed and the screen reported the one-size-fits-all
+       * «تراکنش ارسال نشد» — which read exactly like a broken connection.
+       *
+       * The balance read failing must NOT block the send: our RPC can be
+       * throttled while the wallet's own provider is fine, and the wallet
+       * simulates the transaction regardless. So only the two definitive
+       * shortfalls throw; anything else falls through to the normal path.
+       */
+      try {
+        const feeLamports = /^\d+$/.test(String(quote?.fixFee ?? '')) ? BigInt(String(quote.fixFee)) : 0n;
+        const owned = BigInt(Math.round(Number(await getSolanaBalance(address)) * 1e9));
+        if (owned < (srcToken.native ? BigInt(raw) : 0n) + feeLamports) {
+          throw new Error(srcToken.native ? 'SOL_UNDERFUNDED' : 'SOL_GAS');
+        }
+      } catch (preflight) {
+        if (preflight?.message === 'SOL_UNDERFUNDED' || preflight?.message === 'SOL_GAS') throw preflight;
+      }
 
       const order = await getDlnTx({
         srcChainId: DLN_SOLANA.chainId,
@@ -193,7 +260,9 @@ export default function SolanaBridgePanel() {
         network: 'solana', chainId: 'solana', txHash: sig
       });
     } catch (e) {
-      setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
+      /* The ACTUAL reason (rejected, short on SOL, service down) — not the
+         generic sentence that made every failure look like a lost connection. */
+      setTxErr(panelErrorCode(e));
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -214,7 +283,13 @@ export default function SolanaBridgePanel() {
         <p>{t('bridge.solana.whatBody')}</p>
       </InfoBox>
 
-      <motion.section className="card">
+      {/*
+        * marginTop matches the gap the bottom InfoBox owns (`.infobox` keeps
+        * its own 12px top margin): the explainer box above used to sit flush
+        * against this card — 0px on top, 12px below — and the two surfaces
+        * read as welded together («فاصله باکس را با فاصله پایینی درست کن»).
+        */}
+      <motion.section className="card" style={{ marginTop: 12 }}>
         {/*
           ─── SAME TICKET GRAMMAR AS THE EVM TAB ─────────────────────────────
           Two legs, ModernSelect pickers with real artwork, the amount on its
@@ -395,8 +470,18 @@ export default function SolanaBridgePanel() {
         {!quoting && !quote?.toAmount && !quoteErr && address && amount && (
           <p className="faint" style={{ marginTop: 10, fontSize: 11.5 }}>{t('bridge.solana.noRoute')}</p>
         )}
-        {quoteErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('bridge.solana.quoteFailed')}</p>}
-        {txErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('bridge.solana.sendFailed')}</p>}
+        {quoteErr && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {t(`solana.err.${quoteErr}`, t('bridge.solana.quoteFailed'))}
+          </p>
+        )}
+        {txErr && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {PANEL_ERR_KEY[txErr]
+              ? t(PANEL_ERR_KEY[txErr])
+              : t(`solana.err.${txErr}`, t('bridge.solana.sendFailed'))}
+          </p>
+        )}
         {ready && txHash && (
           <a
             className="faint"

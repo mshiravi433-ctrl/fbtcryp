@@ -5218,11 +5218,7 @@
         "CONNECT_FAILED": "The connection could not be completed.",
         "NO_WALLET": "No Solana wallet answered the request.",
         "CANNOT_SIGN": "This wallet cannot sign Solana transactions."
-      },
-      "warnTitle": "Why Phantom shows a warning",
-      "warnNewDomain": "«This domain is new or has not been reviewed yet» — Phantom shows this automatically for any domain it has not seen before, and it goes away by itself once the domain has been reviewed. No code can switch it off.",
-      "warnSimulation": "«This dApp could be malicious» is Phantom’s transaction-simulation warning, not a verdict on the domain: it means Phantom could not predict what the transaction will do. We check for that before the wallet opens and say so — a transaction that needs more than one signature is the usual cause.",
-      "warnNever": "We will never ask you to dismiss a wallet warning or to «continue anyway». If the warning stays, do not sign — tell support instead."
+      }
     },
     "signNotice": {
       "ok": "Signed in your wallet.",
@@ -5623,6 +5619,8 @@
       "noRoute": "No route for this amount right now. Try a different amount or network.",
       "quoteFailed": "No route could be found. Try again in a moment or with a different pair.",
       "sendFailed": "The transaction was not sent. Nothing left your wallet.",
+      "insufficientBalance": "Not enough SOL for this amount plus its flat fee. Lower the amount, or top the wallet up with a little SOL first. Nothing has been sent.",
+      "insufficientGas": "This wallet holds no SOL for the flat fee and network costs, which come on top of the token amount. Add a little SOL and try again. Nothing has been sent.",
       "affiliateNote": "The flat fee and our share are quoted by deBridge on every request — these numbers are theirs, not our estimate.",
       "tokensTitle": "Only the three assets above",
       "tokensBody": "Only SOL and the canonical Solana USDC/USDT mints are offered. A symbol search would let a cloned mint borrow a real token's name, so the list is fixed and address-verified."
