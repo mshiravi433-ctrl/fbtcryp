@@ -220,7 +220,14 @@ export function affiliateFeeFrom(estimation) {
  */
 function dlnFixedFee(body, solOrigin) {
   if (!solOrigin) return body?.fixFee ?? null;
-  return body?.fixFee ?? String(body?.estimatedTransactionFee?.total ?? null) ?? null;
+  /*
+   * `String(x ?? null)` on a missing total used to produce the LITERAL string
+   * "null" — truthy, so the client received a fee that was neither null nor
+   * a number and the null-guard that exists precisely for "we cannot price
+   * this" never fired. Only a real value survives.
+   */
+  const total = body?.fixFee ?? body?.estimatedTransactionFee?.total;
+  return total == null ? null : String(total);
 }
 
 /**

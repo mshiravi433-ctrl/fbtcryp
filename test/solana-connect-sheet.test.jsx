@@ -247,17 +247,17 @@ describe('connecting a Solana wallet on a phone', () => {
   });
 
   /*
-   * «سایت ما را فانتوم مخرب شناخته» — answered on the screen the user is
-   * standing on, and never with "continue anyway".
+   * «در کیف پول سولنا یک هشدار در مورد ارور ها و هشدار هست ان را پاک کن در
+   * باکس بازشونده» — the collapsible box explaining Phantom's warnings was
+   * REMOVED on request. This is the regression pin: the sheet must not grow
+   * it back, and its locale keys are gone, not merely hidden.
    */
-  it('explains the warnings Phantom shows, before the wallet is opened', async () => {
+  it('shows no Phantom-warnings box in the approval sheet', async () => {
     await openSheetThroughWalletTab();
-    /* Collapsed like every other explainer on this sheet, and it opens. */
-    fireEvent.click(screen.getByText(en.solana.connect.warnTitle));
-    expect(screen.getByText(en.solana.connect.warnNewDomain)).toBeTruthy();
-    expect(screen.getByText(en.solana.connect.warnSimulation)).toBeTruthy();
-    expect(screen.getByText(en.solana.connect.warnNever)).toBeTruthy();
-    expect(Browser.open).not.toHaveBeenCalled();
+    /* No warn-toned collapsible section anywhere in the sheet. */
+    expect(document.querySelector('.infobox-warn')).toBeNull();
+    expect(screen.queryByText(/Phantom shows a warning/i)).toBeNull();
+    expect(screen.queryByText(/could be malicious/i)).toBeNull();
   });
 
   /*

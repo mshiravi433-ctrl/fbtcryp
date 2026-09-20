@@ -313,32 +313,6 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
               </p>
             </div>
 
-            {/*
-              ─── «WHY DOES PHANTOM CALL US A RISK?» ───────────────────────────
-              Asked directly: «سایت ما را فانتوم مخرب شناخته، ریسک تراکنش
-              می‌ذاره». The honest answer is on screen rather than in a support
-              thread, because three different warnings get described with that
-              one sentence and only some of them are ours to fix:
-
-                • «this domain is new» — automatic for a domain Phantom has not
-                  reviewed yet, and it clears on its own. No code can switch it
-                  off, and pretending otherwise is how a dapp starts telling
-                  users to ignore its wallet's warnings.
-                • «identity could not be verified» — a missing
-                  /.well-known/assetlinks.json (see scripts/assetlinks.mjs).
-                • «this dApp could be malicious» — Phantom's TRANSACTION
-                  SIMULATION warning, i.e. a property of the transaction, not
-                  of the domain. lib/solana/signGuard.js decides that one
-                  before the wallet is opened and says so out loud.
-
-              What this box never says is "continue anyway".
-            */}
-            <InfoBox title={t('solana.connect.warnTitle')} tone="warn" id="solana-connect-warn">
-              <p>{t('solana.connect.warnNewDomain')}</p>
-              <p style={{ marginTop: 7 }}>{t('solana.connect.warnSimulation')}</p>
-              <p style={{ marginTop: 7 }}>{t('solana.connect.warnNever')}</p>
-            </InfoBox>
-
             {!caps.canInject && !caps.mwa && !caps.injected && (
               <InfoBox title={t('solana.connect.whyTitle')} tone="info" id="solana-connect-why">
                 <p>{t('solana.connect.whyBody')}</p>
