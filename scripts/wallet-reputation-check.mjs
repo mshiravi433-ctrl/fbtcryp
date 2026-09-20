@@ -173,7 +173,18 @@ async function checkSafeBrowsing() {
 async function checkWalletFetchedUrls() {
   for (const [name, path, why] of [
     ['dApp icon (wallet prompt)', '/icon-512.png', 'a wallet that cannot fetch it shows a blank entry'],
-    ['Reown verification file', '/.well-known/walletconnect.txt', 'without it the domain stays UNVERIFIED in every wallet prompt']
+    ['Reown verification file', '/.well-known/walletconnect.txt', 'without it the domain stays UNVERIFIED in every wallet prompt'],
+    /*
+     * The two Phantom fetches that decide what its dialogs say.
+     *
+     * `redirect_link` is not only where the answer goes: Phantom reads the ORIGIN
+     * of it to draw the connect dialog (title, icon, favicon) and to place the
+     * app in its trusted-app list. An origin that answers slowly, 404s, or
+     * serves a page with no Open Graph tags produces an approval screen with no
+     * name on it — which reads to a user exactly like a drainer.
+     */
+    ['Phantom connect-dialog metadata', '/?sol=1', 'Phantom fetches the redirect_link origin to draw the approval dialog'],
+    ['Android asset links (MWA identity)', '/.well-known/assetlinks.json', 'without it Phantom shows «this app\'s identity could not be verified» — run: npm run assetlinks']
   ]) {
     const url = `https://${DOMAIN}${path}`;
     try {

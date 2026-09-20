@@ -212,6 +212,22 @@ public class MainActivity extends BridgeActivity {
      */
     webView.addJavascriptInterface(new WalletLink(this), "FBTWalletLink");
     webView.addJavascriptInterface(new DeepLinkInbox(), "FBTDeepLinkBridge");
+    /*
+     * The Solana half of the same problem, and the reason a Phantom connect
+     * request never produced an approval screen inside this app.
+     *
+     * Phantom's request IS its query string —
+     * `https://phantom.app/ul/v1/connect?app_url=…&dapp_encryption_public_key=…`
+     * — and a Chrome Custom Tab (what @capacitor/browser opens) renders
+     * http/https itself instead of handing an App Link to another app. So the
+     * page was loaded inside our own WebView-backed tab and the wallet, when
+     * the user did reach it, arrived with nothing to approve.
+     *
+     * This bridge fires an EXPLICIT ACTION_VIEW at the wallet's own package,
+     * which is the one route inside an APK that delivers the URL intact and
+     * leaves the WebView — with its pending request — alive underneath.
+     */
+    webView.addJavascriptInterface(new SolanaLink(this), "FBTSolanaLink");
   }
 
   /**
@@ -330,6 +346,106 @@ public class MainActivity extends BridgeActivity {
       if ("io.safepal.wallet".equals(packageName)) return "safepalwallet";
       if ("me.rainbow".equals(packageName)) return "rainbow";
       return null;
+    }
+  }
+
+  /**
+   * Solana wallet deep links — connect and sign requests, delivered to the
+   * wallet app itself.
+   *
+   * ─── WHAT IT ACCEPTS ───────────────────────────────────────────────────────
+   * An https URL on one of three known hosts, under `/ul/`, paired with the
+   * package that host belongs to. Both halves have to agree, and neither is
+   * trusted on its own: JavaScript cannot use this to launch an arbitrary
+   * package, nor to point a known wallet at an arbitrary URL. The request can
+   * be long (a base58 transaction, or an arbitrary message, rides in the
+   * query), so the bound is 64 KB rather than the 4 KB a WalletConnect pairing
+   * URI needs — still far below Phantom's own documented 500 KB Android
+   * deep-link limit, and far above any transaction Solana itself would accept.
+   *
+   * ─── WHY IT RETURNS A BOOLEAN ──────────────────────────────────────────────
+   * The web layer keeps a list of routes and falls through to the next one
+   * (a Custom Tab, then Android's own routing) when this says no. Reporting a
+   * hand-off that did not happen would leave the user looking at a wallet that
+   * was never asked anything — the exact bug this class exists to end.
+   */
+  private static final class SolanaLink {
+    private static final int MAX_REQUEST_LENGTH = 65536;
+
+    private final MainActivity activity;
+
+    SolanaLink(MainActivity activity) {
+      this.activity = activity;
+    }
+
+    @JavascriptInterface
+    public boolean openWalletLink(final String url, final String packageName) {
+      if (url == null || url.length() > MAX_REQUEST_LENGTH) return false;
+      if (packageName == null || !packageName.equals(packageForHost(hostOf(url)))) return false;
+
+      Uri uri;
+      try {
+        uri = Uri.parse(url);
+      } catch (Exception e) {
+        return false;
+      }
+      if (!isWalletRequest(uri)) return false;
+
+      /* Package-scoped first: this is the delivery that reaches the wallet's
+         own handler rather than a browser or a chooser. */
+      if (launch(uri, packageName)) return true;
+      /* Not installed under that package, or a build that filters it: the URL
+         is still host-scoped and validated above, so let Android route it. */
+      return launch(uri, null);
+    }
+
+    private static String hostOf(String url) {
+      try {
+        return Uri.parse(url).getHost();
+      } catch (Exception e) {
+        return null;
+      }
+    }
+
+    /** Host and package are a pair, exactly like WalletLink's scheme table. */
+    private static String packageForHost(String host) {
+      if (host == null) return null;
+      String h = host.toLowerCase(java.util.Locale.ROOT);
+      if ("phantom.app".equals(h)) return "app.phantom";
+      if ("solflare.com".equals(h)) return "com.solflare.mobile";
+      if ("backpack.app".equals(h)) return "app.backpack.mobile";
+      return null;
+    }
+
+    /** https, one of the three wallet hosts, and a `/ul/` deep-link path. */
+    private boolean isWalletRequest(Uri uri) {
+      if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) return false;
+      if (packageForHost(uri.getHost()) == null) return false;
+      String path = uri.getPath();
+      return path != null && path.startsWith("/ul/");
+    }
+
+    /*
+     * startActivity rather than resolveActivity-then-start.
+     *
+     * `resolveActivity` answers from the CALLER'S package visibility, and on
+     * Android 11+ another app is invisible unless it was declared in
+     * <queries> — so it returns null for a wallet that is installed, and a
+     * "can I open this?" check would report no for the one case that matters.
+     * Firing the intent and catching the failure is both correct and the
+     * documented approach.
+     */
+    private boolean launch(Uri uri, String packageName) {
+      Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+      intent.addCategory(Intent.CATEGORY_BROWSABLE);
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      if (packageName != null) intent.setPackage(packageName);
+      try {
+        activity.startActivity(intent);
+        return true;
+      } catch (Exception e) {
+        return false;
+      }
     }
   }
 }

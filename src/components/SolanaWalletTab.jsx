@@ -44,6 +44,7 @@ export default function SolanaWalletTab() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [mwaReady, setMwaReady] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [signNotice, setSignNotice] = useState(null);
 
   /* Register the official mobile adapter where it can work (Android Chrome).
      A failure here is deliberately quiet: injected providers already work. */
@@ -95,8 +96,22 @@ export default function SolanaWalletTab() {
    */
   useEffect(() => {
     const res = consumeDeeplinkResult();
-    if (!res || res.op !== 'connect') return;
-    setSheetOpen(true);
+    if (!res) return;
+    if (res.op === 'connect') {
+      setSheetOpen(true);
+      return;
+    }
+    /*
+     * … AND THE SIGNATURE THAT CAME BACK THE SAME WAY.
+     *
+     * On the routes that had to navigate this page to the wallet (iOS, and an
+     * Android browser without `intent://`), a signing answer arrives as a page
+     * load too — into a document with no memory of the swap that asked for it.
+     * The signature is not lost, but until now nothing read it, so the user
+     * came back to a screen that had simply forgotten what they had just
+     * approved. «Nothing happened / it errored» was that silence.
+     */
+    setSignNotice(res);
   }, []);
 
   /*
@@ -231,6 +246,42 @@ export default function SolanaWalletTab() {
         )}
       </section>
 
+      {/* ─── a signature that arrived as a page load ─────────────────── */}
+      {signNotice && (
+        <section className="card" data-testid="solana-sign-notice">
+          <p
+            className={`notice ${signNotice.ok ? '' : 'notice-danger'}`}
+            style={{ margin: 0 }}
+          >
+            {t(signNotice.ok ? 'solana.signNotice.ok' : 'solana.signNotice.fail', {
+              code: signNotice.code || ''
+            })}
+          </p>
+          {(signNotice.warnings ?? []).map((w) => (
+            <p className="faint" key={w} style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>
+              {t(`solana.signNotice.warn.${w}`, w)}
+            </p>
+          ))}
+          {signNotice.signature && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 10, width: '100%' }}
+              onClick={() => openExternal(`https://solscan.io/tx/${encodeURIComponent(signNotice.signature)}`)}
+            >
+              {t('solana.signNotice.view')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 6, width: '100%' }}
+            onClick={() => setSignNotice(null)}
+          >
+            {t('common.close')}
+          </button>
+        </section>
+      )}
       {/* ─── which wallet is connected right now ───────────────────────── */}
       <section className="card">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.twoWalletsTitle')}</p>
