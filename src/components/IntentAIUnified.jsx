@@ -45,6 +45,14 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+/* Upgrade 13 — speech in, in every language the app ships. Pure helpers live in
+   intent-ai/os/conversation/dictation.js so they are testable without a mic. */
+import {
+  speechSupport,
+  speechRecognitionLangFor,
+  normalizeTranscript,
+  dictatedDraft
+} from '../lib/intent-ai/os/conversation/dictation.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
@@ -3786,6 +3794,100 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (input.trim()) void sendMessage(input);
   }, [input, sendMessage]);
 
+  /*
+   * ─── UPGRADE 13 — VOICE INPUT ON THE SURFACE PEOPLE ACTUALLY USE ────────
+   * Dictation lived on the old panel; `/intent` had no microphone at all, so
+   * «حرف زدن را بفهمد» was unmet on the live surface regardless of how good the
+   * parser got. Three rules shape the implementation:
+   *
+   *   1. the transcript lands in the composer UN sent — a mis-heard «۵۰۰» that
+   *      auto-submits becomes a real order, which is the one failure a mic
+   *      button must never have
+   *   2. the recognition locale comes from the browser's own advertised list
+   *      when it has one, because an unsupported tag is silence, not noise
+   *   3. where the browser has no speech engine, the button is absent — not
+   *      present, not disabled, not promising something it cannot do
+   */
+  const speechRef = useRef(null);
+  const [dictating, setDictating] = useState(false);
+  const [dictationNote, setDictationNote] = useState(null);
+  const speech = useMemo(() => {
+    try {
+      /* The Web Speech API exposes no supported-locale list in Chromium, so
+         `availableLocales` stays null and the preference order in
+         `speechRecognitionLangFor` decides. A browser that DOES expose one is
+         honoured the moment it exists, which is why the parameter is threaded. */
+      const win = typeof window !== 'undefined' ? window : null;
+      const availableLocales = win?.speechSynthesis?.getVoices?.().map?.((v) => v.lang).filter(Boolean) || null;
+      const support = speechSupport(win, { locale, availableLocales });
+      const pick = speechRecognitionLangFor(locale, { availableLocales });
+      return { supported: support.supported, reason: support.reason || null, lang: pick.lang, exact: pick.exact };
+    } catch {
+      return { supported: false, reason: 'PROBE_FAILED', lang: 'en-US', exact: false };
+    }
+  }, [locale]);
+
+  const stopDictation = useCallback(() => {
+    try { speechRef.current?.stop?.(); } catch { /* already stopped */ }
+    speechRef.current = null;
+    setDictating(false);
+  }, []);
+
+  const toggleDictation = useCallback(() => {
+    if (!speech.supported) return;
+    if (dictating) { stopDictation(); return; }
+    const Ctor = speechSupport(typeof window !== 'undefined' ? window : null).ctor;
+    if (!Ctor) return;
+    let rec = null;
+    try {
+      rec = new Ctor();
+      rec.lang = speech.lang;
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = (event) => {
+        const result = event?.results?.[event?.resultIndex ?? 0] || event?.results?.[0];
+        const alt = result?.[0];
+        const cleaned = normalizeTranscript(alt?.transcript || '', {
+          lang: locale,
+          confidence: Number.isFinite(Number(alt?.confidence)) ? Number(alt.confidence) : null,
+          isFinal: Boolean(result?.isFinal)
+        });
+        if (cleaned.empty) return;
+        setInput((prev) => dictatedDraft(prev, cleaned).value);
+        /* An interim partial is a draft in progress, not a doubtful transcript:
+           the «read this before you send» note is only earned on a final result. */
+        setDictationNote(result?.isFinal && cleaned.needsConfirmation
+          ? (String(locale).startsWith('fa')
+            ? 'دقت تشخیص پایین بود — قبل از ارسال یک بار متن را بخوان.'
+            : 'Low recognition confidence — read the text before sending.')
+          : null);
+        if (result?.isFinal) setDictating(false);
+      };
+      rec.onerror = (event) => {
+        const code = String(event?.error || 'error');
+        setDictationNote(code === 'not-allowed' || code === 'service-not-allowed'
+          ? (String(locale).startsWith('fa') ? 'دسترسی میکروفن داده نشد.' : 'Microphone permission was not granted.')
+          : (String(locale).startsWith('fa') ? 'تشخیص صدا جواب نداد؛ دوباره تلاش کن یا تایپ کن.' : 'Speech recognition failed — try again, or type it.'));
+        setDictating(false);
+        speechRef.current = null;
+      };
+      rec.onend = () => { setDictating(false); speechRef.current = null; };
+      speechRef.current = rec;
+      setDictationNote(null);
+      setDictating(true);
+      rec.start();
+    } catch {
+      setDictating(false);
+      speechRef.current = null;
+      setDictationNote(String(locale).startsWith('fa') ? 'میکروفن در این مرورگر کار نمی‌کند.' : 'The microphone could not be started in this browser.');
+    }
+  }, [dictating, locale, speech.lang, speech.supported, stopDictation]);
+
+  /* A microphone left open across a route change keeps listening into a page
+     nobody is looking at. Release it on unmount, always. */
+  useEffect(() => () => { try { speechRef.current?.abort?.(); } catch { /* gone */ } }, []);
+
   const connectWalletIfNeeded = useCallback(async () => {
     try {
       await connectSolana();
@@ -5321,11 +5423,35 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           >
             +
           </button>
+          {speech.supported ? (
+            <button
+              type="button"
+              className="iaos-mic"
+              data-listening={dictating ? 'true' : 'false'}
+              onClick={toggleDictation}
+              aria-pressed={dictating}
+              aria-label={t('intentAIOS.voiceInput', { defaultValue: dictating ? 'Stop dictation' : 'Speak your request' })}
+              title={`${t('intentAIOS.voiceInput', { defaultValue: 'Speak your request' })} · ${speech.lang}${speech.exact ? '' : ' (approx.)'}`}
+              data-lang={speech.lang}
+              data-testid="intent-ai-mic"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <path d="M12 19v3" />
+              </svg>
+              <span className="sr-only">{dictating
+                ? (locale.startsWith('fa') ? 'گوش می‌دهم' : 'Listening')
+                : (locale.startsWith('fa') ? 'حرف بزن' : 'Speak')}</span>
+            </button>
+          ) : null}
           <input
             className="iaos-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
+            placeholder={dictating
+              ? t('intentAIOS.listening', { defaultValue: locale.startsWith('fa') ? 'دارم گوش می‌دم…' : 'Listening…' })
+              : t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             enterKeyHint="send"
           />
@@ -5341,6 +5467,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </svg>
           </button>
         </form>
+        {dictationNote ? (
+          <p className="iaos-dictation-note" role="status" data-testid="intent-ai-dictation-note">
+            {dictationNote}
+          </p>
+        ) : null}
         </>
         )}
 

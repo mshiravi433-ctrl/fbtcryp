@@ -37,13 +37,44 @@ export const EVAL_QUESTIONS = Object.freeze([
   { id: 'g03', text: 'صبح بخیر', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g04', text: 'شب بخیر', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g05', text: 'خسته نباشی', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
-  { id: 'g06', text: 'چه خبر؟', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  /* g06 was `GREETING` until Upgrade 13, and that expectation encoded the
+     shallower product: «چه خبر؟» is not a hello, it is a request to be told
+     what is going on. It is now its own kind, still level 1 and still web-free
+     — the answer comes from data the app already has, so depth costs nothing. */
+  { id: 'g06', text: 'چه خبر؟', locale: 'fa', category: 'Greeting', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false, answerPath: 'BRIEF' } },
   { id: 'g07', text: 'درود بر شما', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g08', text: 'hi', locale: 'en', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g09', text: 'hello how are you', locale: 'en', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g10', text: 'good morning', locale: 'en', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g11', text: 'hey there', locale: 'en', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
   { id: 'g12', text: 'سلام سلام خوبی', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'g13', text: 'حالت چطوره', locale: 'fa', category: 'Greeting', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false, answerPath: 'CONVERSATION' } },
+  { id: 'g14', text: 'خبری نیس؟', locale: 'fa', category: 'Greeting', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+
+  /* ── Upgrade 13: the same pleasantry in the ten locales beyond fa/en ─────
+     Before this, every one of these fell through to QUESTION at level 3 with a
+     web search attached, and was answered in English. The corpus pins the
+     opposite: zero model calls, zero searches, and the greeting recognised. */
+  { id: 'k01', text: 'nasılsın', locale: 'tr', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k02', text: 'ne var ne yok', locale: 'tr', category: 'Multilingual Social', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+  { id: 'k03', text: 'как дела', locale: 'ru', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k04', text: 'что нового', locale: 'ru', category: 'Multilingual Social', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+  { id: 'k05', text: '你好吗', locale: 'zh', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k06', text: '有什么新闻', locale: 'zh', category: 'Multilingual Social', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+  { id: 'k07', text: 'आप कैसे हैं', locale: 'hi', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k08', text: 'کیسے ہو', locale: 'ur', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k09', text: 'كيف حالك', locale: 'ar', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k10', text: 'ايه الاخبار', locale: 'ar', category: 'Multilingual Social', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+  { id: 'k11', text: 'apa kabar', locale: 'id', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k12', text: 'ada berita?', locale: 'id', category: 'Multilingual Social', expect: { kind: 'WHATS_UP', maxLevel: 1, needsWeb: false } },
+  { id: 'k13', text: '¿qué tal?', locale: 'es', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k14', text: 'tudo bem?', locale: 'pt', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k15', text: 'comment ça va', locale: 'fr', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+  { id: 'k16', text: 'salam chetori', locale: 'fa', category: 'Multilingual Social', expect: { kind: 'GREETING', maxLevel: 1, needsWeb: false } },
+
+  /* The action guard, in the same breath as the politeness. */
+  { id: 'k17', text: 'سلام، ۵۰ دلار تتر بخر', locale: 'fa', category: 'Multilingual Social', expect: { kind: 'ACTION' } },
+  { id: 'k18', text: 'hi, buy 50 usdt', locale: 'en', category: 'Multilingual Social', expect: { kind: 'ACTION' } },
 
   /* ── Thanks (§24) — never repeat a full financial explanation ─────────── */
   { id: 't01', text: 'ممنون', locale: 'fa', category: 'Thanks', expect: { kind: 'THANKS', maxLevel: 1, needsWeb: false, cluster: 'THANKS' } },
@@ -266,6 +297,9 @@ function checkOne(question, { analyzer = planCollaboration, clusterer = clusterQ
   }
   if (expect.complexity && analysis.complexity !== expect.complexity) {
     failures.push(`complexity: expected ${expect.complexity}, got ${analysis.complexity}`);
+  }
+  if (expect.answerPath && analysis.answerPath !== expect.answerPath) {
+    failures.push(`answerPath: expected ${expect.answerPath}, got ${analysis.answerPath}`);
   }
   if (expect.cluster) {
     const c = clusterer(question.text);
