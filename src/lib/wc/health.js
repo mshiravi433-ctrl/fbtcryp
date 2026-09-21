@@ -26,9 +26,7 @@
  */
 
 import {
-  HEALTH_SDK_VERSION,
   TIMEOUT,
-  W3M_API_URL,
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
@@ -37,14 +35,19 @@ import {
 } from './config.js';
 import { handoffFacts } from './handoff.js';
 import { measureRelay } from './relay.js';
+/* Imported as well as re-exported: a re-export does not create a local binding,
+   and the report reads these two itself. */
+import { configProbeUrl, originsProbeUrl } from './apiUrls.js';
+import { classifyWalletConnectDiagnosis, diagnosisStatuses, sdkConfigFacts } from './diagnostics.js';
+import { wcFlowState } from './flowState.js';
 import { readSharedConnectionFacts } from './appkit.js';
 import { isConnectionKey, listEmbeddedWalletKeys } from './storage.js';
 import {
   VERIFY_ATTESTATION_TIMEOUT_MS,
-  VERIFY_SERVER,
   isOriginAllowed as isOriginOnAllowlist,
   predictVerifyVerdict,
-  probeVerifyAttestation
+  probeVerifyAttestation,
+  probeVerifyReachability
 } from './verify.js';
 
 /**
@@ -58,23 +61,13 @@ export function isOriginAllowed(currentOrigin, list) {
   return isOriginOnAllowlist(currentOrigin, list);
 }
 
-/** `GET /appkit/v1/config` — mirrors `ApiController.fetchProjectConfig()`. */
-export function configProbeUrl(projectId, sdkVersion = HEALTH_SDK_VERSION) {
-  return apiUrl('/appkit/v1/config', projectId, sdkVersion);
-}
-
-/** `GET /projects/v1/origins` — the list `checkAllowedOrigins()` reads. */
-export function originsProbeUrl(projectId, sdkVersion = HEALTH_SDK_VERSION) {
-  return apiUrl('/projects/v1/origins', projectId, sdkVersion);
-}
-
-function apiUrl(path, projectId, sdkVersion) {
-  const url = new URL(`${W3M_API_URL}${path}`);
-  url.searchParams.set('projectId', String(projectId || ''));
-  url.searchParams.set('st', 'appkit');
-  url.searchParams.set('sv', sdkVersion);
-  return url.toString();
-}
+/*
+ * The two Reown API URLs are re-exported from apiUrls.js, which is where they
+ * live now that the diagnostic engine (diagnostics.js) reads the same two
+ * endpoints and would otherwise need a second copy of the query string. The
+ * names and the answers are unchanged for every existing caller.
+ */
+export { configProbeUrl, originsProbeUrl } from './apiUrls.js';
 
 /* The keys this report reads VALUES from, beyond key names. Both hold
    connection state only: `@appkit/connection_status` is
@@ -186,36 +179,13 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
 /**
  * Head-only probe of the Verify Enclave.
  *
- * WalletConnect's Verify API is attestation-based: the Enclave at
- * `verify.walletconnect.org` reads `event.origin` from the `window.message`
- * the Verify Client posts and writes that origin to the Verify Server. There
- * is no `/.well-known/walletconnect.txt` to fetch from the dApp — that file
- * was part of the deprecated DNS-TXT era. The probe here is a connectivity
- * check on the Enclave HOST, so the report can separate «the enclave is
- * unreachable from this network» from «the enclave answered and said this
- * domain is not in the registry» — two failures that look identical in the
- * wallet and need opposite actions.
+ * The probe itself lives in verify.js, next to the host it measures and the
+ * attestation flow it belongs to, so the panel, the CLI diagnostic and any
+ * other reader share one answer. Kept as a local alias here so the report
+ * shape (`verifyEnclave`) is unchanged for existing readers.
  */
-async function probeVerifyEnclave({ fetchImpl, timeoutMs } = {}) {
-  const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
-  if (!call) return { ok: false, error: 'NO_FETCH' };
-  const url = `${VERIFY_SERVER}/`;
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = setTimeout(() => {
-    try { controller?.abort(); } catch { /* best effort */ }
-  }, timeoutMs ?? TIMEOUT.healthProbe);
-  try {
-    const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
-    return { ok: res.ok, status: res.status, url };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error),
-      url
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+function probeVerifyEnclave({ fetchImpl, timeoutMs } = {}) {
+  return probeVerifyReachability({ fetchImpl, timeoutMs: timeoutMs ?? TIMEOUT.healthProbe });
 }
 
 /**
@@ -261,6 +231,35 @@ export async function collectWalletHealth({
     ]);
     const list = Array.isArray(origins?.body?.allowedOrigins) ? origins.body.allowedOrigins : null;
     const reachable = relay.hosts.find((host) => host.socket?.ok);
+
+    /* Measured ONCE, then read by both the report and the verdict below. Two
+       calls to the same probe is how a panel ends up printing «still checking»
+       next to a verdict that was already decided from a different answer. */
+    const identity = walletIdentityFacts();
+    const metadata = wcMetadata();
+    const attestation = await probeVerifyAttestation({
+      win,
+      projectId,
+      origin: currentOrigin,
+      timeoutMs: VERIFY_ATTESTATION_TIMEOUT_MS,
+      now
+    });
+    const enclave = await probeVerifyEnclave({ fetchImpl, timeoutMs });
+    /* Read once, used by both the flow derivation and the report rows below. */
+    const storageNow = storageFacts(storage);
+    const sharedNow = await sharedFactsSafe();
+    const diagnosis = classifyWalletConnectDiagnosis({
+      sdkConfig: sdkConfigFacts({ projectId, metadata, declaredOrigins: WC_ALLOWED_ORIGINS }),
+      pageOrigin: currentOrigin,
+      declaredUrl: metadata.url,
+      packaged: identity.packaged,
+      registry: { ok: Boolean(origins?.ok), status: origins?.status ?? null, list },
+      projectConfig: { ok: Boolean(config?.ok), status: config?.status ?? null },
+      relay,
+      verify: { enclave, attestation },
+      projectId
+    });
+
     return {
       at: new Date().toISOString(),
       origin: currentOrigin,
@@ -293,15 +292,15 @@ export async function collectWalletHealth({
          with a continue-anyway button. This block is that comparison, taken on
          the device that is actually connected: `declared` is what we will say,
          `pageOrigin` is what the attestation will say. */
-      identity: walletIdentityFacts(),
+      identity,
       /* What the wallet will be told about us, including the verifyUrl the
          SDK ships in the session proposal. The dashboard registration row
          below names the entries the allowlist MUST contain — and is the
          support copy when it does not. */
       metadata: {
-        url: wcMetadata().url,
-        verifyUrl: wcMetadata().verifyUrl || null,
-        iconUrl: wcMetadata().icons?.[0] || null
+        url: metadata.url,
+        verifyUrl: metadata.verifyUrl || null,
+        iconUrl: metadata.icons?.[0] || null
       },
       /* The expected allowlist, read from the same source `walletIdentityUrl`
          reads from. Surfaced here so the support thread can paste it next to
@@ -332,16 +331,10 @@ export async function collectWalletHealth({
           originAllowed: isOriginAllowed(currentOrigin, list),
           emptyMeansAllowAllForAppKit: list !== null && list.length === 0
         },
-        attestation: await probeVerifyAttestation({
-          win,
-          projectId,
-          origin: currentOrigin,
-          timeoutMs: VERIFY_ATTESTATION_TIMEOUT_MS,
-          now
-        }),
+        attestation,
         predicted: predictVerifyVerdict({
           allowedOrigins: list,
-          declaredUrl: wcMetadata().url,
+          declaredUrl: metadata.url,
           pageOrigin: currentOrigin
         })
       },
@@ -351,19 +344,53 @@ export async function collectWalletHealth({
          There is intentionally NO file fetch here: the `walletconnect.txt`
          path is part of the deprecated DNS-TXT verification flow, and a
          404 there would be a false negative for the active attestation flow. */
-      verifyEnclave: await probeVerifyEnclave({ fetchImpl, timeoutMs }),
+      verifyEnclave: enclave,
       relay: reachable ? reachable.socket : (relay.hosts[0]?.socket ?? { ok: false, error: 'NO_RELAY_URLS' }),
       relays: relay.hosts,
       relayVerdict: relay.verdict,
+      /* ── THE ONE VERDICT ──────────────────────────────────────────────────
+         Eight named causes, one of which is OK. It is computed from the SAME
+         measurements printed above, by the same engine the CLI
+         (`npm run walletconnect:check`) and the test matrix use, so the panel
+         and a terminal can never disagree about what is wrong. */
+      diagnosis,
+      /* The two status lines, computed from the SAME verdict the CLI prints:
+         the panel must never disagree with `npm run walletconnect:check`. */
+      ...diagnosisStatuses(diagnosis, { ok: Boolean(origins?.ok), status: origins?.status ?? null, list }, currentOrigin),
+      registry: {
+        ok: Boolean(origins?.ok),
+        status: origins?.status ?? null,
+        error: origins?.error ?? null,
+        list,
+        originAllowed: isOriginAllowed(currentOrigin, list),
+        emptyMeansAllowAllForAppKit: list !== null && list.length === 0
+      },
+      /* ── WHICH MOMENT OF THE TRIP WE ARE IN ──────────────────────────────
+         Derived from the facts already measured above (an attached account, a
+         stored pairing, the shared controllers) — never from a second status
+         field that could disagree with them. */
+      flow: (() => {
+        /* The two sources the flow is derived from are read ONCE, before the
+           report is assembled, so the state cannot be computed from a different
+           answer than the rows below it print. */
+        const connectedNow = sharedNow?.isConnected === true || storageNow?.connectionStatus === 'connected';
+        return wcFlowState({
+          connected: connectedNow,
+          /* A stored session with nothing attached is a pairing that has not
+             been approved yet — the one case a reader would otherwise have to
+             infer from two separate rows. */
+          connecting: !connectedNow && (storageNow?.wcSessionKeys ?? 0) > 0
+        });
+      })(),
       /* The hop the pairing leaves from. «The wallet opens but does not
          connect» has four causes and they live on four different hops, so the
          report names the channel instead of making the reader infer it. */
       handoff: channel,
-      storage: storageFacts(storage),
+      storage: storageNow,
       /* The in-memory half a storage purge cannot see: the shared AppKit
          controllers every `<w3m-modal>` renders from. Best-effort — an
          unreachable chunk must not cost the whole report. */
-      shared: await sharedFactsSafe(),
+      shared: sharedNow,
       trace: typeof trace === 'function' ? trace() : null
     };
   } catch (error) {

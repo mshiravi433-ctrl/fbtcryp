@@ -760,6 +760,22 @@ console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, stor
   report('WalletConnect stack', await runWcStack());
 }
 
+/* 0b₃. The ONE verdict, and the Solana layer next to it.
+   `src/lib/wc/diagnostics.js` answers the question the report has been asking
+   since the first «Invalid domain»: WHICH of the eight things is wrong. The
+   probe drives it with faked sockets/fetch and asserts every code it can
+   produce, then runs the unified Solana layer (`src/lib/solana/walletLayer.js`)
+   against a stubbed window provider — detection, capabilities, the seven-method
+   API, and the honest UNSUPPORTED answers on transports that cannot do a thing.
+   It also locks the two facts that must never come back: a metadata url that
+   disagrees with the page origin, and a WalletConnect pairing handed to
+   same-tab navigation. No network, no wallet. */
+console.log('▸ probing the wallet diagnostics verdict and the Solana layer…');
+{
+  const { run: runDiagnostics } = await import('./wallet-diagnostics-probe.mjs');
+  report('wallet diagnostics + Solana layer', await runDiagnostics());
+}
+
 /* 0b₂ WAS the email-routing probe — the «email tap opens the WalletConnect
    wallet list» hijack, locked against the real AppKit singletons. It went with
    the surface it diagnosed: the email/social embedded wallet was removed on

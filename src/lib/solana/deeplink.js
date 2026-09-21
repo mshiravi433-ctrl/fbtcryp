@@ -59,6 +59,20 @@ const PENDING_KEY = 'fbt:solana:pending:v1';
 const RESULT_PREFIX = 'fbt:solana:result:';
 const EVENT = 'solana:deeplink';
 const WALLET_EVENT = 'solana:wallet-change';
+
+/*
+ * The deeplink flow has its own emit point (the address arrives from a wallet
+ * app, not from a provider), so the unified state bus has to be told here as
+ * well — otherwise a deeplink connection is invisible to Intent OS until the
+ * next EVM change. Lazy import: `walletState.js` reads this module back.
+ */
+function notifyUnifiedWalletState() {
+  try {
+    import('../walletState.js').then((mod) => mod.notifyWalletState('solana')).catch(() => {});
+  } catch {
+    /* never break the connection over a notification */
+  }
+}
 /** A request the user never came back from stops being "waiting" after this. */
 const PENDING_TTL_MS = 15 * 60 * 1000;
 /** The redirect that carries the wallet's answer, on both channels. */
@@ -363,6 +377,9 @@ function emitWalletChange(address) {
   } catch {
     /* no-op */
   }
+  /* The unified snapshot Intent OS reads, told on the same edge — a deeplink
+     connection goes through no provider, so nothing else would notify it. */
+  notifyUnifiedWalletState();
 }
 
 export function deeplinkState() {

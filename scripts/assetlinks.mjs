@@ -35,8 +35,23 @@
  *   node scripts/assetlinks.mjs --fingerprint=AA:BB:CC:…
  *   FBT_ANDROID_SHA256=AA:BB:… node scripts/assetlinks.mjs
  *
- *   # verify what is committed / deployed:
+ *   # verify what is committed:
  *   node scripts/assetlinks.mjs --check
+ *
+ *   # verify what is DEPLOYED (the file a wallet actually fetches):
+ *   node scripts/assetlinks.mjs --remote
+ *   node scripts/assetlinks.mjs --remote --origin=https://www.fbtswap.ir
+ *
+ *   # build hook — writes the file from CI/Vercel env, never fails a build:
+ *   node scripts/assetlinks.mjs --ensure       (FBT_ANDROID_SHA256 / FBT_ANDROID_SHA256_PLAY)
+ *
+ * ─── WHY --ensure EXISTS ────────────────────────────────────────────────────
+ * The file was correct only when somebody remembered to run the generator and
+ * commit the result, which is exactly the kind of step that is skipped. Vercel
+ * and the APK workflow both know the signing certificate (or can be given it),
+ * so the build now writes the REAL file when the fingerprint is available and
+ * says so when it is not. It never invents a value and it never fails a build —
+ * an unavailable secret must not turn into a red deployment.
  *
  * With Play App Signing, use the **app signing key** certificate from the Play
  * Console (Protected with Play → Manage Play app signing), not the upload key —
@@ -47,6 +62,13 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ASSETLINKS_SENTENCE,
+  assetLinksUrl,
+  checkDeployedAssetLinks,
+  normalizeFingerprint,
+  validateAssetLinks
+} from '../src/lib/solana/assetlinks.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'public/.well-known/assetlinks.json');
@@ -129,6 +151,80 @@ const document = (pkg, fingerprints) => [
   }
 ];
 
+/* ── --remote: is what is DEPLOYED the file a wallet will fetch? ─────────── */
+if (has('remote')) {
+  const origin = arg('origin') ?? process.env.FBT_ASSETLINKS_ORIGIN ?? 'https://fbtswap.ir';
+  const wanted = [
+    ...process.argv.filter((a) => a.startsWith('--fingerprint=')).map((a) => a.slice('--fingerprint='.length)),
+    ...(process.env.FBT_ANDROID_SHA256 ? process.env.FBT_ANDROID_SHA256.split(/[,\s]+/) : []),
+    ...(process.env.FBT_ANDROID_SHA256_PLAY ? process.env.FBT_ANDROID_SHA256_PLAY.split(/[,\s]+/) : [])
+  ].map(normalizeFingerprint).filter(Boolean);
+
+  const result = await checkDeployedAssetLinks({
+    origin,
+    packageName: packageName(),
+    fingerprints: wanted
+  });
+  console.log(`assetlinks.json @ ${result.url ?? assetLinksUrl(origin)}`);
+  console.log(`  package    ${packageName()}`);
+  console.log(`  fingerprint(s) checked ${wanted.length ? wanted.join(', ') : '—'}`);
+  console.log(`  result     ${result.code}${result.status ? ` (HTTP ${result.status})` : ''}`);
+  console.log(`  ${ASSETLINKS_SENTENCE[result.code] ?? ''}`);
+  for (const problem of result.problems ?? []) console.log(`  · ${problem}`);
+  if (!result.ok) {
+    console.error('');
+    console.error('  A wallet cannot verify this app identity until this passes.');
+    console.error('  With Play App Signing, the fingerprint to publish is the APP SIGNING key');
+    console.error('  from Play Console → Protected with Play → Play app signing, not the upload key.');
+  }
+  process.exit(result.ok ? 0 : 1);
+}
+
+/* ── --ensure: the build hook. Never fails, never invents a value. ───────── */
+if (has('ensure')) {
+  const wanted = [
+    ...process.argv.filter((a) => a.startsWith('--fingerprint=')).map((a) => a.slice('--fingerprint='.length)),
+    ...(process.env.FBT_ANDROID_SHA256 ? process.env.FBT_ANDROID_SHA256.split(/[,\s]+/) : []),
+    ...(process.env.FBT_ANDROID_SHA256_PLAY ? process.env.FBT_ANDROID_SHA256_PLAY.split(/[,\s]+/) : [])
+  ].map(normalizeFingerprint).filter(Boolean);
+
+  if (wanted.length === 0) {
+    console.log('· assetlinks.json: no signing fingerprint available in this environment — nothing written.');
+    console.log('  (A guessed fingerprint verifies nothing. Set FBT_ANDROID_SHA256 — Play App');
+    console.log('   Signing key if Play distributes the APK — to have the build generate it.)');
+    process.exit(0);
+  }
+  let document = [];
+  try {
+    document = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : [];
+    if (!Array.isArray(document)) document = [];
+  } catch {
+    document = [];
+  }
+  const pkg = packageName();
+  const statement = {
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: pkg,
+      sha256_cert_fingerprints: wanted
+    }
+  };
+  const merged = [
+    statement,
+    ...document.filter((entry) => entry?.target?.package_name !== pkg)
+  ];
+  const validation = validateAssetLinks(merged, { packageName: pkg, fingerprints: wanted });
+  if (!validation.ok) {
+    console.log(`· assetlinks.json: generated file did not validate (${validation.problems.join(', ')}) — NOT written.`);
+    process.exit(0);
+  }
+  mkdirSync(dirname(OUT), { recursive: true });
+  writeFileSync(OUT, `${JSON.stringify(merged, null, 2)}\n`);
+  console.log(`✓ assetlinks.json generated for ${pkg} (${wanted.length} fingerprint(s)) — deploy it.`);
+  process.exit(0);
+}
+
 /* ── --check: is what is on disk (and therefore on the domain) correct? ──── */
 if (has('check')) {
   if (!existsSync(OUT)) {
@@ -167,7 +263,9 @@ if (has('check')) {
   }
   console.log(`✓ ${OUT}`);
   console.log(`  package ${pkg} · ${entries[0].target.sha256_cert_fingerprints.length} fingerprint(s)`);
-  console.log('  Deploy it, then confirm: curl --fail https://fbtswap.ir/.well-known/assetlinks.json');
+  console.log('  Deploy it, then confirm the DEPLOYED copy (not this local one):');
+  console.log('    node scripts/assetlinks.mjs --remote');
+  console.log('    curl --fail https://fbtswap.ir/.well-known/assetlinks.json');
   process.exit(0);
 }
 

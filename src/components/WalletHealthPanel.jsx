@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collectWalletHealth, purgeConnectionKeys, reownDashboardUrl, wcTraceSnapshot } from '../lib/wc';
+import { collectSolanaHealth } from '../lib/solana/health';
 import { IconCheck, IconCopy } from './Icons';
 
 /**
@@ -56,6 +57,25 @@ const VERIFY_VERDICT_KEYS = {
   NO_BROWSER: 'wallet.healthVerifyNoBrowser'
 };
 
+/**
+ * The diagnostic verdict → the sentence that goes with it.
+ *
+ * Each of the eight codes is a different actor: ORIGIN_MISMATCH, METADATA_MISMATCH,
+ * PROJECT_ID_MISMATCH and SDK_CONFIGURATION_ERROR are OURS to fix; the other four
+ * need a dashboard click or a network change. Printing them as one word would
+ * re-create exactly the confusion this engine was written to end.
+ */
+const DIAGNOSIS_KEYS = {
+  OK: 'wallet.healthDiagnosisOk',
+  ORIGIN_MISMATCH: 'wallet.healthDiagnosisOriginMismatch',
+  DOMAIN_NOT_REGISTERED: 'wallet.healthDiagnosisDomainNotRegistered',
+  VERIFY_SERVICE_UNREACHABLE: 'wallet.healthDiagnosisVerifyUnreachable',
+  PROJECT_ID_MISMATCH: 'wallet.healthDiagnosisProjectId',
+  METADATA_MISMATCH: 'wallet.healthDiagnosisMetadata',
+  RELAY_UNREACHABLE: 'wallet.healthDiagnosisRelay',
+  SDK_CONFIGURATION_ERROR: 'wallet.healthDiagnosisSdkConfig'
+};
+
 /** Registry-derived cause → the sentence that says what to click. */
 const VERIFY_CAUSE_KEYS = {
   NO_DOMAIN_REGISTERED: 'wallet.healthVerifyCauseNoDomain',
@@ -109,6 +129,10 @@ function relayHostLabel(host, t) {
 export default function WalletHealthPanel({ projectId }) {
   const { t } = useTranslation();
   const [report, setReport] = useState(null);
+  /* The Solana half of the same report: measured by the same button, in the same
+     panel, so a support screenshot can never show one stack's health and hide
+     the other's. */
+  const [solana, setSolana] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -116,7 +140,12 @@ export default function WalletHealthPanel({ projectId }) {
     if (busy) return;
     setBusy(true);
     try {
-      setReport(await collectWalletHealth({ projectId, trace: wcTraceSnapshot }));
+      const [wc, sol] = await Promise.all([
+        collectWalletHealth({ projectId, trace: wcTraceSnapshot }),
+        collectSolanaHealth().catch((error) => ({ error: String(error?.message || error) }))
+      ]);
+      setReport(wc);
+      setSolana(sol);
     } catch (error) {
       setReport({ error: String(error?.message || error) });
     } finally {
@@ -126,7 +155,7 @@ export default function WalletHealthPanel({ projectId }) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard?.writeText(JSON.stringify(report, null, 2));
+      await navigator.clipboard?.writeText(JSON.stringify({ walletConnect: report, solana }, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch { /* the JSON is on screen anyway */ }
@@ -164,6 +193,56 @@ export default function WalletHealthPanel({ projectId }) {
             <p className="mono" style={{ fontSize: 10.5 }}>{report.error}</p>
           ) : (
             <>
+              {/* ── THE ONE VERDICT ────────────────────────────────────────
+                  * Eight named causes, one of which is OK, computed by the same
+                  * engine `npm run walletconnect:check` uses. The CODE / DASHBOARD
+                  * split is the point: «the wallet says unverified» is not a code
+                  * failure when the code is correct and the domain is not in the
+                  * project's registry, and the panel must not let that be read as
+                  * one.
+                  */}
+              {report.diagnosis && (
+                <>
+                  <p
+                    className={report.diagnosis.code === 'OK' ? 'notice' : 'notice notice-danger'}
+                    style={{ fontSize: 11.5, margin: '6px 0' }}
+                  >
+                    <strong>{t(DIAGNOSIS_KEYS[report.diagnosis.code] ?? 'wallet.healthDiagnosisSdkConfig')}</strong>
+                    {' — '}
+                    <span className="mono">{report.diagnosis.code}</span>
+                    {report.diagnosis.problems?.length
+                      ? ` · ${report.diagnosis.problems.join(', ')}`
+                      : ''}
+                  </p>
+                  <p className="muted mono" style={{ fontSize: 11, margin: '2px 0' }}>
+                    {`CODE STATUS: ${report.codeStatus ?? '—'} · DASHBOARD STATUS: ${report.dashboardStatus ?? 'UNKNOWN'}`}
+                  </p>
+                  {/*
+                    * THE CLICK, NAMED.
+                    *
+                    * «DASHBOARD STATUS: DOMAIN NOT REGISTERED» without the row
+                    * that says WHERE is a report a support thread still has to
+                    * translate. The origin is printed as measured — the page's
+                    * own origin, never the canonical constant — because that is
+                    * the string the dashboard has to contain.
+                    */}
+                  {(report.diagnosis.code === 'DOMAIN_NOT_REGISTERED' || report.dashboardStatus === 'DOMAIN NOT REGISTERED') && (
+                    <p className="notice" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                      {t('wallet.healthVerifyFix', {
+                        origin: report.origin || report.identity?.pageOrigin || '—',
+                        url: reownDashboardUrl(report.projectId)
+                      })}
+                    </p>
+                  )}
+                </>
+              )}
+              {/* Which moment of the connection trip we are in — derived from
+                  the measured rows below, never from a second status field. */}
+              {report.flow?.code && row(
+                t('wallet.healthFlow'),
+                { ok: report.flow.code !== 'FAILED' && report.flow.code !== 'REJECTED' },
+                report.flow.code
+              )}
               {row(
                 t('wallet.healthProject'),
                 {
@@ -380,6 +459,70 @@ export default function WalletHealthPanel({ projectId }) {
                     {t('wallet.healthOrphanClear')}
                   </button>
                 </p>
+              )}
+              {/* ── SOLANA ─────────────────────────────────────────────────
+                  * The other wallet stack, measured by the same button. Its
+                  * failure modes are completely different (an extension that is
+                  * not there, an MWA registration the device cannot use, a
+                  * deeplink the wallet never answered, an assetlinks.json that
+                  * is not deployed), so each one is its own row with its own
+                  * reason rather than one «wallet connection failed».
+                  */}
+              {solana && (
+                <>
+                  <p className="muted" style={{ fontSize: 11.5, margin: '10px 0 2px', fontWeight: 600 }}>
+                    {t('wallet.healthSolanaTitle')}
+                  </p>
+                  {solana.error ? (
+                    <p className="mono" style={{ fontSize: 10.5 }}>{solana.error}</p>
+                  ) : (
+                    <>
+                      {row(
+                        t('wallet.healthSolanaStandard'),
+                        { ok: solana.truthy?.walletStandard },
+                        `${solana.truthy?.walletStandard ? 'detected' : 'no Wallet Standard wallet registered'}`
+                          + ` · ${t('wallet.healthSolanaMwa')}: ${solana.truthy?.mwaSupported
+                            ? (solana.truthy?.mwaRegistered ? 'PASS (registered)' : 'SUPPORTED (not registered)')
+                            : 'UNSUPPORTED on this platform'}`
+                      )}
+                      {row(
+                        t('wallet.healthSolanaDeepLink'),
+                        { ok: Array.isArray(solana.deepLink?.wallets) && solana.deepLink.wallets.length > 0 },
+                        `${(solana.deepLink?.wallets ?? []).map((wallet) => wallet.id).join(', ')}`
+                          + ` · return=${solana.deepLink?.returnState ?? 'idle'}`
+                          + ` · bridge=${solana.deepLink?.returnChannels?.nativeBridge ? 'yes' : 'no'}`
+                      )}
+                      <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                        {`${t('wallet.healthSolanaDetection')}: `
+                          + `Phantom=${solana.detection?.phantom ? 'detected' : 'not detected'} · `
+                          + `Solflare=${solana.detection?.solflare ? 'detected' : 'not detected'} · `
+                          + `Backpack=${solana.detection?.backpack ? 'detected' : 'not detected'}`}
+                      </p>
+                      {row(
+                        t('wallet.healthSolanaAssetLinks'),
+                        { ok: solana.assetLinks?.ok, status: solana.assetLinks?.status || undefined, error: solana.assetLinks?.ok ? undefined : solana.assetLinks?.code },
+                        solana.assetLinks?.url
+                      )}
+                      <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                        {solana.assetLinks?.sentence ?? ''}
+                        {solana.assetLinks?.problems?.length ? ` · ${solana.assetLinks.problems.join(', ')}` : ''}
+                      </p>
+                      <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                        {`${t('wallet.healthSolanaPending')}: ${solana.deepLink?.pending
+                          ? `${solana.deepLink.pending.op} · ${solana.deepLink.pending.walletId ?? '—'}`
+                          : 'none'}`
+                          + ` · session=${solana.deepLink?.session ? `${solana.deepLink.session.walletId} · ${solana.deepLink.session.address}` : 'none'}`
+                          + ` · transport=${solana.transport ?? 'none'}`}
+                      </p>
+                      {row(
+                        t('wallet.healthSolanaSigning'),
+                        { ok: solana.signing?.ok },
+                        `${t('wallet.healthSolanaSupported')}: ${(solana.signing?.methods ?? []).join(', ') || 'none'}`
+                          + (solana.signing?.unsupported?.length ? ` · ${solana.signing.unsupported.join(' · ')}` : '')
+                      )}
+                    </>
+                  )}
+                </>
               )}
               <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={copy}>
                 {copied ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}

@@ -379,7 +379,17 @@ export async function run(container) {
        Phantom installed but not yet authorized for the site: the provider
        object exists (so Connect is enabled) while publicKey is null (so the
        page has nothing to return to yet). */
-    window.solana = { ...fakePhantom(FAKE_SOL), publicKey: null };
+    /* The wallet is installed but not authorized yet (publicKey null), and its
+       `connect()` is counted: the sheet must not call it before the user taps. */
+    let phantomConnects = 0;
+    window.solana = {
+      ...fakePhantom(FAKE_SOL),
+      publicKey: null,
+      connect: async () => {
+        phantomConnects += 1;
+        return { publicKey: { toString: () => FAKE_SOL } };
+      }
+    };
     await mountAt(hashAfterConnect.replace(/^#/, ''));
     await act(async () => { await sleep(600); });
     const solanaConnect = [...container.querySelectorAll('button.btn-primary.btn-sm')]
@@ -389,7 +399,27 @@ export async function run(container) {
       `${solanaConnect?.disabled}/${String(window.location.hash).slice(0, 40)}`);
     t('with no wallet authorized yet it stays on the wallet page (no premature return)',
       /#\/wallet\?/.test(String(window.location.hash)) && !/#\/perp/.test(String(window.location.hash)));
+    /*
+     * ─── ONE TAP OPENS *OUR* SURFACE, THE SECOND ONE CONNECTS ───────────────
+     *
+     * This step used to click «Connect wallet» and expect the order to be
+     * restored 500 ms later — i.e. it expected the wallet page to connect
+     * silently, with no approval step of ours anywhere. That is exactly the
+     * behaviour the Solana approval sheet was written to replace («هیچ صفحه
+     * تاییدی برای اتصال به کیف پول ما انجام نمی‌شود»): the button now opens OUR
+     * sheet, which says what the wallet will be asked for, and the connection is
+     * made from the sheet's own button. Both halves are asserted here, because a
+     * regression in either one is the reported bug coming back.
+     */
     act(() => { click(solanaConnect); });
+    await act(async () => { await sleep(150); });
+    const sheetApprove = document.querySelector('[data-testid="sol-connect-injected"]');
+    t('Connect opens OUR approval surface before any wallet is asked',
+      Boolean(sheetApprove) && /#\/wallet\?/.test(String(window.location.hash)));
+    t('…and it asks for nothing until the user taps again',
+      bff.prepares === 0 && phantomConnects === 0, `connects=${phantomConnects}`);
+
+    act(() => { click(sheetApprove); });
     await act(async () => { await sleep(500); });
     t('connecting the Solana wallet returns to the exact order automatically',
       /#\/perp\?tab=onchain/.test(String(window.location.hash)) && !/return=/.test(String(window.location.hash)),

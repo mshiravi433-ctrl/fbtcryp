@@ -22,15 +22,33 @@
  * notifications when the provider offers them, plus a light 2.5s re-read of
  * `solanaAddress()` as the catch-all. All three converge on the same setState,
  * so the address is idempotent and the hook stays quiet when nothing changed.
+ *
+ * ─── AND THE UNIFIED LAYER ON TOP ───────────────────────────────────────────
+ * Connecting is delegated to `createSolanaWalletLayer()` — the same object the
+ * Intent OS path and the health panel read. Two reasons it matters here:
+ *
+ *   · CAPABILITIES, MEASURED. `methods()` answers per method whether the
+ *     transport that is actually live can do it (Phantom's deep-link protocol
+ *     has no `signAllTransactions`; Wallet Standard defines no such feature). A
+ *     screen that offers a button the wallet cannot honour is a bug report
+ *     waiting to happen, and the honest answer is already computed for us.
+ *   · ONE SIGNING PATH. `signMessage` / `signTransaction` /
+ *     `signAndSendTransaction` go through the layer, so the injected, Wallet
+ *     Standard and deep-link routes are chosen in one place instead of at every
+ *     call site. The legacy exports still exist and still work — the layer
+ *     delegates to them — but new call sites should use this API.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  solanaAddress, connectSolana, disconnectSolana, getSolanaProvider,
+  solanaAddress, getSolanaProvider,
   solanaWalletName, solanaWalletAvailable, canInjectSolana
 } from '../lib/solanaWallet.js';
+import { createSolanaWalletLayer } from '../lib/solana/walletLayer.js';
 
-export function useSolanaWallet() {
+export function useSolanaWallet({ win } = {}) {
   const [address, setAddress] = useState(() => solanaAddress());
+  /* One layer per mount, and its identity follows the window it was given. */
+  const layer = useMemo(() => createSolanaWalletLayer({ win }), [win]);
 
   useEffect(() => {
     const sync = (next) => {
@@ -77,16 +95,38 @@ export function useSolanaWallet() {
     };
   }, []);
 
-  const connect = useCallback(async () => {
-    const a = await connectSolana();
-    setAddress(a || solanaAddress());
-    return a;
-  }, []);
+  const connect = useCallback(async (options = {}) => {
+    const res = await layer.connect(options);
+    const next = res?.address || solanaAddress() || null;
+    setAddress(next);
+    /* The failure CODE travels with the null, so a caller can tell «the user
+       rejected it» from «no wallet exists» without reading a wallet's own
+       prose — the layer already normalised it. */
+    return res?.ok ? next : (res ?? { ok: false, code: 'CONNECT_FAILED' });
+  }, [layer]);
 
   const disconnect = useCallback(async () => {
-    await disconnectSolana();
+    const res = await layer.disconnect();
     setAddress(null);
-  }, []);
+    return res;
+  }, [layer]);
+
+  /*
+   * The signing surface, exactly as wide as the live transport.
+   *
+   * `supported` is computed on every render rather than memoised from mount:
+   * a wallet can be connected (or replaced) while this component is mounted —
+   * `window.phantom` appears late, the user switches from a deeplink session to
+   * an extension — and a cached capability list would answer for the transport
+   * that was live when the screen opened.
+   */
+  const capabilities = layer.capabilities();
+  const supported = useMemo(
+    () => Object.fromEntries(
+      Object.entries(capabilities.methods ?? {}).map(([name, info]) => [name, info?.supported === true])
+    ),
+    [capabilities]
+  );
 
   return {
     address,
@@ -95,6 +135,19 @@ export function useSolanaWallet() {
     disconnect,
     walletName: solanaWalletName(),
     available: solanaWalletAvailable(),
-    canInject: canInjectSolana()
+    canInject: canInjectSolana(),
+    /* ── the unified layer ─────────────────────────────────────────────── */
+    transport: capabilities.transport ?? null,
+    walletId: capabilities.walletId ?? null,
+    capabilities,
+    supported,
+    methods: Object.keys(supported),
+    detect: layer.detect,
+    pendingRequest: layer.pendingRequest,
+    getPublicKey: layer.getPublicKey,
+    signMessage: supported.signMessage ? layer.signMessage : null,
+    signTransaction: supported.signTransaction ? layer.signTransaction : null,
+    signAllTransactions: supported.signAllTransactions ? layer.signAllTransactions : null,
+    signAndSendTransaction: supported.signAndSendTransaction ? layer.signAndSendTransaction : null
   };
 }

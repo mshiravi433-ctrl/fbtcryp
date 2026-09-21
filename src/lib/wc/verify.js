@@ -387,6 +387,46 @@ export function predictVerifyVerdict({ allowedOrigins, declaredUrl, pageOrigin, 
   return { ...facts, verdict: 'VALID', reason: 'OK', ok: true };
 }
 
+/**
+ * Is the Verify service reachable AT ALL from this device?
+ *
+ * The question the «unverified domain» label hides is which of two failures
+ * happened: the enclave answered and said «this origin is not in the registry»
+ * (a dashboard step), or the enclave never answered (a network step). They look
+ * identical in the wallet and need opposite actions, so they are measured
+ * separately.
+ *
+ * A HEAD to the enclave root, bounded, and never throwing. Deliberately NOT a
+ * fetch of any `walletconnect.txt`: that path belongs to the deprecated
+ * DNS-TXT flow, and a 404 there would be a false negative for the attestation
+ * flow that is actually in use.
+ *
+ * @returns {Promise<{ok:boolean, status?:number, url:string, error?:string}>}
+ */
+export async function probeVerifyReachability({ fetchImpl, timeoutMs = 8_000 } = {}) {
+  const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
+  const url = `${VERIFY_SERVER}/`;
+  if (!call) return { ok: false, error: 'NO_FETCH', url };
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => {
+    try {
+      controller?.abort();
+    } catch { /* best effort */ }
+  }, timeoutMs);
+  try {
+    const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
+    return { ok: Boolean(res?.ok), status: res?.status ?? null, url };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error),
+      url
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** One preconnect per window: warming twice warms nothing. */
 const warmed = new WeakSet();
 
