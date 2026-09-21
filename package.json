@@ -230,7 +230,7 @@
     "test:wave3": "node test/intent-ai/wave3-third-party-probe.mjs",
     "test:wave4": "node test/intent-ai/wave4-evidence-unfreeze-probe.mjs",
     "test:waves": "npm run test:wave0 && npm run test:wave1 && npm run test:wave2 && npm run test:wave3 && npm run test:wave4",
-    "build:full": "node scripts/vendor-velocity.mjs && . ./ci/farm-rollout.env.sh && node scripts/verify-farm-rollout.mjs && node scripts/assetlinks.mjs --ensure && NODE_OPTIONS=--max-old-space-size=3072 VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs && node scripts/verify-api-load.mjs",
+    "build:full": "node scripts/vendor-velocity.mjs && node scripts/vendor-kamino.mjs && . ./ci/farm-rollout.env.sh && node scripts/verify-farm-rollout.mjs && node scripts/assetlinks.mjs --ensure && NODE_OPTIONS=--max-old-space-size=3072 VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs && node scripts/verify-api-load.mjs",
     "build:farm-rollout": "node scripts/verify-farm-rollout.mjs && NODE_OPTIONS=--max-old-space-size=3072 vite build",
     "test:morpho-base-fork": "node test/morpho-base-fork-probe.mjs",
     "test:phases51-57": "npm run test:phase51 && npm run test:phase52 && npm run test:phase53 && npm run test:phase54 && npm run test:phase55 && npm run test:phase56 && npm run test:phase57",
