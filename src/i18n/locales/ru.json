@@ -1221,7 +1221,16 @@
       "PROTOCOL_UNAVAILABLE": "Протокол кредитования сейчас не отвечает. Повторите попытку.",
       "READ_ONLY_MODE": "Кредитование временно в режиме только для чтения, пока проверяются сетевые данные.",
       "IDEMPOTENCY_CONFLICT": "Это же действие уже выполняется.",
-      "NOT_A_RESERVE": "Этот актив не является рынком кредитования в этой сети."
+      "NOT_A_RESERVE": "Этот актив не является рынком кредитования в этой сети.",
+      "SOLANA_WALLET_REQUIRED": "Connect a Solana wallet before signing.",
+      "SOLANA_ASSET_REQUIRED": "Choose a Solana asset.",
+      "SOLANA_COLLATERAL_REQUIRED": "Supply collateral before borrowing.",
+      "SOLANA_POSITION_REQUIRED": "No Kamino position was found for this wallet.",
+      "SOLANA_SIGN_UNAVAILABLE": "This wallet cannot sign Solana transactions here.",
+      "SOLANA_SEND_FAILED": "The wallet did not broadcast the transaction.",
+      "KAMINO_MARKET_UNAVAILABLE": "The Kamino market is not available right now.",
+      "AMOUNT_REQUIRED": "Enter a valid amount.",
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
     },
     "ratesUpdated": "Ставки читаются из контрактов кредитования (Morpho/Aave) — обновляются автоматически.",
     "connectWallet": "Подключить кошелёк",
@@ -1316,7 +1325,17 @@
     "requestId": "Запрос",
     "stepsLabel": "простые шаги",
     "reserveStateHalted": "Протокол остановил этот резерв. Он показан, но не предлагается.",
-    "reserveStateLtv": "Максимальный LTV, который протокол сейчас принимает для этого актива."
+    "reserveStateLtv": "Максимальный LTV, который протокол сейчас принимает для этого актива.",
+    "solana": {
+      "title": "Solana lending",
+      "subtitle": "Supply and borrow through Kamino KLend. Your wallet signs every transaction.",
+      "marketReserve": "Kamino reserve",
+      "loading": "Reading the Kamino market…",
+      "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
+      "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
+      "viewTransaction": "View transaction",
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+    }
   },
   "intentAI": {
     "setup": {

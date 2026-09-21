@@ -10,10 +10,10 @@
  *   2. morpho         Morpho Blue Base (8453) USDC/cbBTC — same surface,
  *                     pinned market, collateral gate, share-projected debt,
  *                     oracle-derived health factor (morphoBlueBase.js).
- *   3. solana-lending a real adapter whose honest boundary is the pool
- *                     registry: empty registry → NO_POOL_REGISTERED; a
- *                     registered pool without a wired read client →
- *                     CLIENT_REQUIRED. Never a fabricated quote.
+ *   3. solana-lending keeps a strict external-pool registry seam while the
+ *                     production /loan path uses the pinned Kamino KLend
+ *                     client. The seam still returns NO_POOL_REGISTERED for
+ *                     unregistered external pools; never a fabricated quote.
  *
  * This probe runs under plain node, where the Vite-shaped on-chain modules
  * CANNOT load — which is itself the test: every adapter path must answer
@@ -87,8 +87,10 @@ t('Base carries aave-v3 + compound-v3 + morpho',
   (() => { const p = networkFor(8453)?.protocols || []; return ['aave-v3', 'compound-v3', 'morpho'].every((x) => p.includes(x)); })());
 t('Solana is enabled with the solana-lending protocol and ≥2 RPCs',
   isNetworkEnabled(900001) && (networkFor(900001)?.protocols || []).includes('solana-lending') && (networkFor(900001)?.rpcs || []).length >= 2);
-t('Linea and Sonic stay OFF — no adapter, no fake market',
-  !isNetworkEnabled(59144) && !isNetworkEnabled(146));
+t('Linea and Sonic are enabled with Aave V3 pool wiring',
+  isNetworkEnabled(59144) && isNetworkEnabled(146)
+    && (networkFor(59144)?.protocols || []).includes('aave-v3')
+    && (networkFor(146)?.protocols || []).includes('aave-v3'));
 
 /* ── 4. the §31 security gates are intact — the adapter sits BEHIND them ── */
 const POOL = '0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb';

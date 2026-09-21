@@ -42,7 +42,9 @@ export const AAVE_V3_POOLS = Object.freeze({
   137: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',    // Polygon
   8453: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',   // Base
   42161: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',  // Arbitrum
-  43114: '0x794a61358D6845594F94dc1DB02A252b5b4814aD'   // Avalanche
+  43114: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',  // Avalanche
+  59144: '0xc47b8C00b0f69a36fa203Ffeac0334874574a8Ac', // Linea
+  146: '0x5362dBb1e601abF3a4c14c22ffEdA64042E5eAA3'    // Sonic
 });
 
 /** Aave V3 uses a USD base currency with 8 decimals for account data. */
@@ -55,6 +57,8 @@ export const SECONDS_PER_YEAR = 31536000;
 export const VARIABLE_RATE_MODE = 2;
 /** No referral programme is claimed, so the code is the neutral 0. */
 export const AAVE_REFERRAL_CODE = 0;
+/** Solana's non-EVM lending market is handled by src/lib/solanaLending.js. */
+export const SOLANA_LENDING_CHAIN_ID = 900001;
 
 /**
  * Native coins cannot enter the Pool directly (they need the WETH gateway),
@@ -98,7 +102,9 @@ const RESERVE_SYMBOLS = Object.freeze({
   137: ['USDT', 'USDC', 'DAI', 'WETH'],
   8453: ['USDC', 'cbBTC'],
   42161: ['USDT', 'USDC', 'WBTC', 'ARB'],
-  43114: ['USDT', 'USDC', 'WETH']
+  43114: ['USDT', 'USDC', 'WETH'],
+  59144: ['USDC', 'USDT', 'WETH'],
+  146: ['USDC', 'wS', 'stS']
 });
 
 /** Loan-to-value shown before any wallet is connected, per asset class. */
@@ -165,13 +171,17 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 
 /** The lending venue for a chain, or null when the chain has no Aave market. */
 export function lendingVenue(chainId) {
-  const pool = AAVE_V3_POOLS[Number(chainId)];
+  const cid = Number(chainId);
+  if (cid === SOLANA_LENDING_CHAIN_ID) {
+    return { protocol: 'kamino-klend', chainId: cid, pool: null, chainName: 'Solana', nonEvm: true };
+  }
+  const pool = AAVE_V3_POOLS[cid];
   if (!isAddress(pool)) return null;
   return {
     protocol: 'aave-v3',
-    chainId: Number(chainId),
+    chainId: cid,
     pool,
-    chainName: EVM_CHAINS[Number(chainId)]?.name || `#${chainId}`
+    chainName: EVM_CHAINS[cid]?.name || `#${chainId}`
   };
 }
 
@@ -179,7 +189,7 @@ export function lendingVenue(chainId) {
 export const lendingSupported = (chainId) => lendingVenue(chainId) !== null;
 
 /** Every chain the loan screen can execute on, in the app's own order. */
-export const lendingChains = () => Object.keys(AAVE_V3_POOLS).map(Number);
+export const lendingChains = () => [...Object.keys(AAVE_V3_POOLS).map(Number), SOLANA_LENDING_CHAIN_ID];
 
 /**
  * The assets the loan screen may offer on a chain: listed as an Aave reserve
@@ -188,6 +198,8 @@ export const lendingChains = () => Object.keys(AAVE_V3_POOLS).map(Number);
  */
 export function lendingAssetsFor(chainId) {
   const cid = Number(chainId);
+  /* Solana reserves are decoded by the Kamino client, not the ERC-20 path. */
+  if (cid === SOLANA_LENDING_CHAIN_ID) return [];
   if (!lendingSupported(cid)) return [];
   const wanted = RESERVE_SYMBOLS[cid] || [];
   const registry = TOKENS[cid] || [];

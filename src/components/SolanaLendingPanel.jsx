@@ -1,0 +1,269 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSolanaWallet } from '../hooks/useSolanaWallet.js';
+import {
+  buildSolanaLendingTransactions,
+  readSolanaLendingMarket,
+  waitForSolanaLendingTransaction,
+  SOLANA_LENDING_EXPLORER,
+  SOLANA_LENDING_RPC,
+  toSolanaUnits
+} from '../lib/solanaLending.js';
+
+const card = {
+  borderRadius: 18,
+  border: '1px solid rgba(255,255,255,0.09)',
+  background: 'linear-gradient(150deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))',
+  boxShadow: '0 14px 32px rgba(0,0,0,0.16)',
+};
+
+const fmt = (value, digits = 2) => value == null || !Number.isFinite(Number(value))
+  ? '—'
+  : Number(value).toLocaleString(
+    typeof document !== 'undefined' ? document.documentElement.lang || undefined : undefined,
+    { maximumFractionDigits: digits }
+  );
+
+function DataBadge({ t, status }) {
+  return (
+    <span
+      data-testid="solana-loan-data-status"
+      data-status={status}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800,
+        color: status === 'live' ? '#86efac' : '#fbbf24',
+        background: status === 'live' ? 'rgba(74,222,128,0.12)' : 'rgba(251,191,36,0.12)',
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
+      {t(status === 'live' ? 'loan.status.live' : 'loan.status.unavailable')}
+    </span>
+  );
+}
+
+function Metric({ label, value, sub }) {
+  return (
+    <div style={{ minWidth: 0, padding: '10px 11px', borderRadius: 13, background: 'rgba(0,0,0,0.15)' }}>
+      <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 850, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      {sub ? <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div> : null}
+    </div>
+  );
+}
+
+function SolanaAssetCard({ asset, selected, onSelect, t }) {
+  const active = selected?.id === asset.id;
+  return (
+    <button
+      type="button"
+      data-testid={`solana-loan-asset-${asset.symbol.toLowerCase()}`}
+      onClick={() => onSelect(asset)}
+      style={{
+        ...card, width: '100%', textAlign: 'start', cursor: 'pointer',
+        padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12,
+        borderColor: active ? '#9945ff99' : 'rgba(255,255,255,0.09)',
+        background: active ? 'linear-gradient(135deg, rgba(153,69,255,0.20), rgba(20,184,166,0.08))' : card.background,
+      }}
+    >
+      <span style={{ width: 39, height: 39, borderRadius: 14, display: 'grid', placeItems: 'center', flexShrink: 0, color: '#fff', fontSize: 12, fontWeight: 900, fontFamily: 'var(--font-mono)', background: 'linear-gradient(135deg, #9945ff, #14b8a6)' }}>
+        {asset.symbol.slice(0, 4)}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800 }}>{asset.symbol}</span>
+        <span style={{ display: 'block', color: 'var(--text-3)', fontSize: 10.5, marginTop: 2 }}>{t('loan.solana.marketReserve')}</span>
+      </span>
+      <span style={{ textAlign: 'end', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ display: 'block', color: '#86efac', fontSize: 11, fontWeight: 800 }}>{asset.supplyApyPct == null ? '—' : `+${fmt(asset.supplyApyPct)}%`}</span>
+        <span style={{ display: 'block', color: '#fca5a5', fontSize: 10, marginTop: 2 }}>{asset.borrowApyPct == null ? '—' : `${fmt(asset.borrowApyPct)}%`}</span>
+      </span>
+    </button>
+  );
+}
+
+export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
+  const wallet = useSolanaWallet();
+  const [snapshot, setSnapshot] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [action, setAction] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [lastSignature, setLastSignature] = useState(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await readSolanaLendingMarket({ wallet: wallet.address, rpcUrl: SOLANA_LENDING_RPC });
+      if (!next.ok) throw new Error(next.code || 'PROTOCOL_UNAVAILABLE');
+      setSnapshot(next);
+      setSelected((current) => {
+        const list = next.assets || [];
+        return list.find((asset) => asset.id === current?.id)
+          || list.find((asset) => asset.symbol === preset?.symbol)
+          || list[0]
+          || null;
+      });
+    } catch (cause) {
+      setError(String(cause?.message || cause));
+      setSnapshot(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [wallet.address, preset?.symbol]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const assets = snapshot?.assets || [];
+  const currentPosition = selected ? snapshot?.positions?.[selected.id] : null;
+  const currentDecimals = Number(selected?.decimals || 0);
+  const maxForTab = tab === 'borrow'
+    ? null
+    : tab === 'positions' && currentPosition
+      ? (Number(currentPosition.borrowed) > 0 ? currentPosition.borrowed : currentPosition.supplied)
+      : null;
+
+  const connect = async () => {
+    setActionError(null);
+    const result = await wallet.connect({ returnTo: window.location.href });
+    if (result && typeof result === 'object' && result.ok === false) setActionError(result.code);
+  };
+
+  const runAction = async (nextAction, overrides = {}) => {
+    const actionAsset = overrides.asset || selected;
+    const actionAmount = overrides.value ?? amount;
+    setActionError(null);
+    setLastSignature(null);
+    if (!wallet.address) { setActionError('SOLANA_WALLET_REQUIRED'); return; }
+    if (!actionAsset) { setActionError('SOLANA_ASSET_REQUIRED'); return; }
+    if (!actionAmount || !toSolanaUnits(actionAmount, Number(actionAsset.decimals || 0))) { setActionError('AMOUNT_REQUIRED'); return; }
+    setAction(nextAction);
+    try {
+      const built = await buildSolanaLendingTransactions({ action: nextAction, asset: actionAsset, amount: actionAmount, wallet: wallet.address });
+      if (!built.ok) throw new Error(built.code);
+      if (typeof wallet.signAndSendTransaction !== 'function') throw new Error('SOLANA_SIGN_UNAVAILABLE');
+      let signature = null;
+      for (const tx of built.transactions) {
+        const sent = await wallet.signAndSendTransaction(tx.transaction, { versioned: false });
+        if (!sent?.ok || !sent.signature) throw new Error(sent?.code || 'SOLANA_SEND_FAILED');
+        const confirmed = await waitForSolanaLendingTransaction(sent.signature);
+        if (!confirmed.ok) throw new Error(confirmed.code || 'SOLANA_SEND_FAILED');
+        signature = sent.signature;
+      }
+      setLastSignature(signature);
+      setAmount('');
+      await refresh();
+    } catch (cause) {
+      setActionError(String(cause?.message || cause));
+    } finally {
+      setAction(null);
+    }
+  };
+
+  const tabs = [
+    ['supply', t('loan.tabSupply')],
+    ['borrow', t('loan.tabBorrow')],
+    ['positions', t('loan.tabPositions')]
+  ];
+
+  return (
+    <section data-testid="solana-lending-panel" dir="inherit">
+      <div style={{ ...card, padding: '16px', marginBottom: 12, background: 'linear-gradient(140deg, rgba(153,69,255,0.20), rgba(20,184,166,0.10) 70%, rgba(255,255,255,0.03))' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 15, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 900, background: 'linear-gradient(135deg, #9945ff, #14b8a6)' }}>SOL</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 900, fontSize: 17 }}>{t('loan.solana.title')}</div>
+            <div style={{ color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.65, marginTop: 3 }}>{t('loan.solana.subtitle')}</div>
+          </div>
+          <DataBadge t={t} status={snapshot?.dataStatus || 'unavailable'} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginTop: 14 }}>
+          <Metric label={t('loan.collateral')} value={snapshot?.account ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
+          <Metric label={t('loan.debt')} value={snapshot?.account ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
+          <Metric label={t('loan.borrowPower')} value={snapshot?.account ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
+        </div>
+        {!wallet.address ? (
+          <button type="button" className="btn btn-primary" data-testid="solana-loan-connect" onClick={connect} style={{ width: '100%', marginTop: 13 }}>{t('loan.connectWallet')}</button>
+        ) : (
+          <div style={{ marginTop: 12, padding: '8px 10px', borderRadius: 11, background: 'rgba(0,0,0,0.16)', fontSize: 10.5, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {wallet.walletName || 'Solana'} · {wallet.address.slice(0, 6)}…{wallet.address.slice(-5)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 5, padding: 4, borderRadius: 14, marginBottom: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        {tabs.map(([id, label]) => <button key={id} type="button" data-testid={`solana-loan-tab-${id}`} onClick={() => setTab(id)} style={{ flex: 1, border: 0, borderRadius: 10, padding: '9px 5px', background: tab === id ? 'rgba(153,69,255,0.20)' : 'transparent', color: tab === id ? 'var(--text-1)' : 'var(--text-3)', fontWeight: tab === id ? 800 : 500, fontSize: 11.5 }}>{label}</button>)}
+      </div>
+
+      {loading && <div style={{ ...card, padding: 18, textAlign: 'center', color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.loading')}</div>}
+      {!loading && error && (
+        <div data-testid="solana-loan-error" style={{ ...card, padding: 15, borderColor: 'rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.08)' }}>
+          <div style={{ fontWeight: 800, color: '#fca5a5', fontSize: 12.5 }}>{t('loan.unavailableTitle')}</div>
+          <p style={{ margin: '5px 0 11px', color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.7 }}>{t('loan.solana.unavailable')}</p>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={refresh} style={{ width: '100%' }}>{t('loan.retry')}</button>
+        </div>
+      )}
+
+      {!loading && !error && tab !== 'positions' && (
+        <>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+            {assets.map((asset) => <SolanaAssetCard key={asset.id} asset={asset} selected={selected} onSelect={setSelected} t={t} />)}
+          </div>
+          {selected && (
+            <div style={{ ...card, padding: 15 }}>
+              <div className="row-between" style={{ gap: 8, marginBottom: 10 }}>
+                <div style={{ fontWeight: 850 }}>{tab === 'borrow' ? t('loan.chooseBorrowAsset') : t('loan.chooseAsset')}</div>
+                <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{selected.symbol}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginBottom: 11 }}>
+                <Metric label={t('loan.supplyApyLine')} value={selected.supplyApyPct == null ? '—' : `${fmt(selected.supplyApyPct)}%`} />
+                <Metric label={t('loan.borrowApyLine')} value={selected.borrowApyPct == null ? '—' : `${fmt(selected.borrowApyPct)}%`} />
+                <Metric label={t('loan.maxLtv')} value={selected.loanToValuePct == null ? '—' : `${fmt(selected.loanToValuePct)}%`} />
+              </div>
+              <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-2)', marginBottom: 6 }}>{t('loan.amount')} · {selected.symbol}</label>
+              <div style={{ display: 'flex', gap: 7 }}>
+                <input data-testid="solana-loan-amount" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '11px 12px', background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.10)', color: 'var(--text-1)', fontFamily: 'var(--font-mono)' }} />
+                <button type="button" className="btn btn-primary" data-testid="solana-loan-action" disabled={Boolean(action)} onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')} style={{ minWidth: 112 }}>{action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}</button>
+              </div>
+              {snapshot?.account && tab === 'borrow' && <p style={{ color: 'var(--text-3)', fontSize: 10.5, margin: '8px 0 0' }}>{t('loan.maxBorrowHint', { max: `$${fmt(snapshot.account.availableBorrowsUsd)}` })}</p>}
+              {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11, lineHeight: 1.6, margin: '9px 0 0' }}>{t(`loan.error.${actionError}`, { defaultValue: t('loan.error.UNKNOWN') })}</p>}
+              {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ display: 'block', color: '#a78bfa', fontSize: 10.5, marginTop: 9, fontFamily: 'var(--font-mono)' }}>{t('loan.solana.viewTransaction')} · {lastSignature.slice(0, 10)}…</a>}
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && !error && tab === 'positions' && (
+        <div style={{ display: 'grid', gap: 9 }}>
+          {!wallet.address || !snapshot?.account?.ok ? <div style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.noPosition')}</div> : null}
+          {assets.map((asset) => {
+            const position = snapshot.positions?.[asset.id];
+            const supplied = Number(position?.supplied || 0);
+            const borrowed = Number(position?.borrowed || 0);
+            if (supplied <= 0 && borrowed <= 0) return null;
+            return (
+              <div key={asset.id} style={{ ...card, padding: 14 }}>
+                <div className="row-between" style={{ gap: 8 }}><strong>{asset.symbol}</strong><span style={{ color: '#a78bfa', fontSize: 10 }}>Kamino</span></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginTop: 10 }}>
+                  <Metric label={t('loan.supplied')} value={fmt(supplied, 6)} />
+                  <Metric label={t('loan.borrowed')} value={fmt(borrowed, 6)} />
+                </div>
+                <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
+                  {supplied > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(asset); setAmount(String(supplied)); runAction('withdraw', { asset, value: String(supplied) }); }} style={{ flex: 1 }}>{t('loan.withdraw')}</button>}
+                  {borrowed > 0 && <button type="button" className="btn btn-primary btn-sm" onClick={() => { setSelected(asset); setAmount(String(borrowed)); runAction('repay', { asset, value: String(borrowed) }); }} style={{ flex: 1 }}>{t('loan.repay')}</button>}
+                </div>
+              </div>
+            );
+          })}
+          {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11 }}>{t(`loan.error.${actionError}`, { defaultValue: t('loan.error.UNKNOWN') })}</p>}
+          {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', fontSize: 10.5 }}>{t('loan.solana.viewTransaction')}</a>}
+        </div>
+      )}
+
+      <div style={{ ...card, padding: '11px 13px', marginTop: 12, color: 'var(--text-3)', fontSize: 10.5, lineHeight: 1.75 }}>
+        {t('loan.solana.securityNote')}
+      </div>
+    </section>
+  );
+}

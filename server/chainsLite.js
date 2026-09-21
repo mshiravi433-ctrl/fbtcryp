@@ -201,6 +201,7 @@ export const TOKENS = {
   146: [
     T('S', 'Sonic', null, 18, 'sonic-3', { native: true }),
     T('USDC', 'USD Coin', '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', 6, 'usd-coin'),
-    T('wS', 'Wrapped Sonic', '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', 18, 'sonic-3')
+    T('wS', 'Wrapped Sonic', '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', 18, 'sonic-3'),
+    T('stS', 'Staked Sonic', '0xE5DA20F15420aD15DE0fa650600aFc998bbE3955', 18, 'sonic-3')
   ]
 };
