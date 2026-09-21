@@ -1,3 +1,58 @@
+# ۲۰۲۶-۰۹-۲۱ — «Unverified domain»: ریشه پیدا شد و قابل اندازه‌گیری شد
+
+گزارش: با وجود سه PR پیاپی (#364، #369، #372) که هویت و متادیتای Verify را
+درست کرده بودند، Trust Wallet همچنان «Unverified / Cannot verify» نشان می‌داد.
+
+**علت (اندازه‌گیری‌شده، نه حدس):** پروژه‌ای که کد امروز استفاده می‌کند
+(`WC_PROJECT_ID = 5997d5aee8bb42f43ddec4b1a5f94eb1`) **هیچ دامنه‌ای در رجیستری
+ندارد**، در حالی که دامنه‌ها روی پروژهٔ بازنشستهٔ `8e36eccabebf5a4567f4e974fafd6b20`
+ثبت شده‌اند:
+
+```
+GET api.web3modal.org/projects/v1/origins?projectId=8e36eccabebf5a4567f4e974fafd6b20
+  → {"allowedOrigins":["fbtswap.ir","https://fbtswap.ir","https://localhost"]}
+GET api.web3modal.org/projects/v1/origins?projectId=5997d5aee8bb42f43ddec4b1a5f94eb1
+  → {"allowedOrigins":[]}
+```
+
+کدِ SDK (`core/src/controllers/verify.ts` + `sign-client/.../engine.ts`) نشان
+می‌دهد حکم والت سه دروازه دارد: رسیدن JWT در ۵ ثانیه، `isVerified` سرور (که از
+همین رجیستری می‌آید)، و تطابق `metadata.url`. PRهای قبلی فقط دروازهٔ سوم را
+بسته بودند. مستندات امروز Reown هم Allowlist را قدمِ اول می‌داند — یعنی
+نتیجه‌گیریِ «نیازی به ثبت دامنه نیست» (برگرفته از یک بلاگ ۲۰۲۵) غلط بود و در
+مستندات همین ریپو تثبیت شده بود.
+
+**چه چیزی در کد تغییر کرد** (علت با کد حل نمی‌شد، اما دیده‌شدنش چرا):
+
+- `src/lib/wc/verify.js` — **جدید**: `probeVerifyAttestation()` همان iframe و
+  درخواستِ خودِ SDK را اجرا می‌کند و JWT سرور را می‌خواند (`isVerified`,
+  `isScam`, `origin`, `exp`)؛ اولین باری که این dApp می‌تواند پاسخ سرور را
+  ببیند. به‌علاوهٔ `predictVerifyVerdict()` (حکم از روی allowlist، بدون شبکه)
+  و `warmVerifyEnclave()` (گرم‌کردن اتصال پیش از بودجهٔ ۵ ثانیه‌ای).
+- `health.js` — گزارش سه‌گانه: `verify.registry`، `verify.attestation`،
+  `verify.predicted`. یک لیست خالی دیگر «allow all» معنا نمی‌دهد.
+- `WalletHealthPanel.jsx` — ردیف «گواهی Verify»، جملهٔ دقیقِ علت، و لینک و
+  مقدار آمادهٔ کپی برای داشبورد.
+- `session.js` — گرم‌کردن Enclave در شروع `connect()`؛ هرگز نمی‌تواند اتصال را
+  شکست بدهد.
+- `config.js` — اصلاح توضیحِ گمراه‌کنندهٔ «نیازی به ثبت دامنه نیست».
+- اسکریپت‌های `walletconnect-domain-verify.mjs` و
+  `walletconnect-reown-register.mjs` — حالا رجیستری را می‌خوانند و حکم را
+  می‌گویند؛ چک‌لیست اصلاح شد.
+- مستندات: `WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md` + بنر اصلاح روی سه
+  سندِ قبلی که می‌گفتند «در داشبورد کاری انجام ندهید».
+
+**تست:** `node test/walletconnect-stack-probe.mjs` → بخش ۱۶ با ۳۸ بررسی جدید برای
+هر سه دروازه (VERIFIED / UNVERIFIED / MISMATCH / THREAT / EXPIRED / ID_MISMATCH /
+NO_ATTESTATION / NO_BROWSER، رجیستری خالی، و گرم‌کردنِ یک‌باره).
+
+**رفعِ نهایی یک کلیک دستی است:**
+`dashboard.reown.com/project/5997d5aee8bb42f43ddec4b1a5f94eb1` → Configuration →
+Domain → `+ Domain` → `https://fbtswap.ir` → Allowlist (تا ۵ دقیقه انتشار؛ بعد
+نشست قدیمی را در والت پاک کنید و دوباره وصل شوید).
+
+---
+
 # ۲۰۲۶-۰۹-۲۰ — اتصال یک‌مرحله‌ای WalletConnect در وب و بازگشت قابل‌اعتماد APK
 
 گزارش: در وب، تأیید Trust Wallet کاربر را داخل مرورگر خودِ Trust به یک کپی دیگر

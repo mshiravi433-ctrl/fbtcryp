@@ -1,38 +1,40 @@
 #!/usr/bin/env node
 /**
- * REOWN CLOUD ALLOWLIST CHECKLIST — Verify API reality check.
+ * REOWN CLOUD CHECKLIST — the domain allowlist, in clipboard-ready form.
  * ---------------------------------------------------------------------------
  * History: this script used to also write `/.well-known/walletconnect.txt`
- * from a dashboard-generated code, because we believed the WalletConnect
- * Verify API worked that way. The 2025-08-27 Reown blog
- * (https://walletconnect.com/blog/protect-users-from-phishing-with-walletconnect-verify-api-for-web3-apps-and-wallets)
- * says otherwise: the Verify API "no longer requires manual domain listing
- * in the Cloud dashboard. Instead, it now automatically determines and
- * checks your app's domain when a wallet connects." There is no verification
- * code, no `walletconnect.txt`, and no DNS TXT — the Enclave reads origin
- * from `window.message` and matches it against `metadata.url`.
+ * from a dashboard-generated code, and then — after a 2025 blog post was read
+ * as «no dashboard step is required any more» — it was rewritten to say the
+ * allowlist no longer mattered. That conclusion is what kept «unverified
+ * domain» alive through three pull requests.
  *
- * What the dashboard still controls is the App IDs list, which is what
- * unlocks an Android packaged build (the WebView at `https://localhost`)
- * with the same project id. Without `ir.fbtswap.app` registered there, the
- * APK's sessions render as the project id was misused by a foreign app.
+ * Read from the SDK instead (`@walletconnect/core` → controllers/verify.ts →
+ * resolve()): a proposal is verified only when
  *
- * So this script prints, in clipboard-ready form:
- *   · the three origins the SDK can ever be served from
- *   · the Android app id the dashboard MUST register
- * and (with `--check`) does a HEAD on each origin to confirm the page is
- * reachable from the host running the script — which is the only deploy
- * signal the script can read from a CI machine.
+ *   1. an attestation JWT arrives from verify.walletconnect.org within 5s, AND
+ *   2. that JWT's `isVerified` is true — set server-side from THIS project's
+ *      domain registry (dashboard → Configuration → Domain → Allowlist), AND
+ *   3. `metadata.url` equals the attested origin.
  *
- * Nothing in this script registers anything in the dashboard: the App IDs
- * UI is a manual click on dashboard.reown.com. The script prints the exact
- * values, so the click takes seconds.
+ * Reown's current docs say the same in two steps (allowlist + metadata), and
+ * add that only the domain in the metadata counts as the true one, and that
+ * propagation takes up to five minutes.
+ *
+ * So step 1 below is a human click, and it is the step this app was missing:
+ * the domains were allowlisted on the RETIRED project id while the code had
+ * moved to the new one. See WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md.
+ *
+ * Nothing in this script can click it. What it does is print the exact values,
+ * and (with --check) read the registry back from the public API and name the
+ * gap — so the click takes seconds and the next report is a measurement.
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request as httpsRequest } from 'node:https';
+
+import { predictVerifyVerdict, reownDashboardUrl } from '../src/lib/wc/verify.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -56,8 +58,12 @@ const ORIGINS = [
     .matchAll(/'([^']+)'/g)
 ].map((m) => m[1]);
 
+/* The origin WalletConnect actually has to verify: the public site. The APK
+   WebView runs on https://localhost, which no wallet can verify — the spec
+   has no mobile attestation yet — so it is listed, not verified. */
+const VERIFIABLE_ORIGIN = 'https://fbtswap.ir';
 const ICON_PATH = '/icon-512.png';
-const DASHBOARD = `https://dashboard.reown.com/project/${PROJECT_ID}`;
+const DASHBOARD = reownDashboardUrl(PROJECT_ID);
 
 /* HEAD-only so a misconfigured dashboard never becomes a build failure: the
  * answer goes to the support thread, not to a deploy hook. */
@@ -74,29 +80,81 @@ function probe(url, timeoutMs = 8_000) {
   });
 }
 
+/** The registry Reown exposes publicly — the list `isVerified` is keyed off. */
+function readRegistry(projectId, timeoutMs = 8_000) {
+  return new Promise((resolve) => {
+    const url = `https://api.web3modal.org/projects/v1/origins?projectId=${projectId}&st=appkit&sv=html-appkit-1.8.19`;
+    const req = httpsRequest(url, { method: 'GET', timeout: timeoutMs }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          resolve({
+            ok: res.statusCode >= 200 && res.statusCode < 400,
+            status: res.statusCode,
+            list: Array.isArray(parsed?.allowedOrigins) ? parsed.allowedOrigins : null
+          });
+        } catch {
+          resolve({ ok: false, status: res.statusCode, list: null, error: 'UNREADABLE_BODY' });
+        }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', (err) => resolve({ ok: false, status: null, list: null, error: String(err?.message || err) }));
+    req.end();
+  });
+}
+
 const checklist = [
   {
-    title: '1.  Confirm the SDK ships `metadata.url` = each of these origins',
-    body: `walletIdentityUrl() in src/lib/wc/config.js returns one of these based on the running origin:\n\n${ORIGINS.map((o) => `    ${o}`).join('\n')}\n\nIf the served origin is NOT one of these, the Verify Enclave cannot attest it and the wallet shows the verdict UNKNOWN.`
+    title: '1.  Allowlist the domain on THIS project (the step that was missing)',
+    body: `${DASHBOARD}\n  → Configuration → Domain → “+ Domain” → ${VERIFIABLE_ORIGIN} → Allowlist\n\n` +
+      `Add the value with the scheme and WITHOUT a trailing slash:\n\n` +
+      `    ${VERIFIABLE_ORIGIN}        ← correct\n` +
+      `    fbtswap.ir/                 ← wrong (no scheme, trailing slash)\n\n` +
+      `Then (for the packaged app, which cannot be verified but must connect):\n\n` +
+      `    https://localhost\n\n` +
+      `Propagation takes up to 5 minutes. Until it lands, every wallet shows\n` +
+      `“Unverified / Cannot verify” no matter how correct the metadata is.`
   },
   {
-    title: '2.  Add the Android app id to App IDs (required for the APK)',
-    body: `Dashboard → your project → App IDs:\n\n    ${APP_ID}\n\nWithout this entry, every session originating from the packaged APK renders the same UNKNOWN verdict, regardless of how the Web origin is set up. The packaged WebView is served at https://localhost, which is on the SDK's allowed list above, but the App ID is what binds the same project id to the package.`
+    title: '2.  Confirm the SDK ships the same origin in its metadata',
+    body: `walletIdentityUrl() in src/lib/wc/config.js returns the page's own origin on\n` +
+      `a public https page, and the canonical origin inside the APK. On the site it\n` +
+      `is therefore:\n\n` +
+      `    ${VERIFIABLE_ORIGIN}\n\n` +
+      `If the metadata names a different host than the page runs on, the wallet\n` +
+      `renders “Domain mismatch” (INVALID) instead of a match.`
   },
   {
-    title: '3.  There is no file to upload — Verify API is attestation-only',
-    body: 'Since 2025-08-27 the Reown Cloud dashboard no longer asks for a verification code, a `walletconnect.txt` upload, or a DNS TXT record. Skip straight to step 4.'
+    title: '3.  There is no file to upload and no DNS TXT',
+    body: 'The `/.well-known/walletconnect.txt` proof-of-ownership flow is gone. The\n' +
+      'attestation is issued by the enclave iframe the SDK itself loads. Do not add\n' +
+      'a verification file, a DNS record, or a WALLETCONNECT_VERIFY_CODE env var —\n' +
+      'nothing reads them. (The allowlist in step 1 is a different mechanism and\n' +
+      'it IS required.)'
   },
   {
-    title: '4.  Test the deployment in a real browser, not on localhost',
-    body: `The Verify Enclave reads \`event.origin\` from a \`window.message\` posted by the Verify Client. APK WebViews and Node/CLI dApps never post that message, so a Trust Wallet connection opened from inside the APK WebView at \`https://localhost\` will always show UNKNOWN — that is a spec gap, not a bug.\n\nOpen https://fbtswap.ir in Chrome/Safari with Trust Wallet installed, tap the connection button, and confirm the prompt shows the verified domain.`
+    title: '4.  Add the Android app id to App IDs (required for the APK)',
+    body: `Dashboard → your project → App IDs:\n\n    ${APP_ID}\n\n` +
+      `Without it, every session from the packaged app renders as a foreign app\n` +
+      `using this project id.`
+  },
+  {
+    title: '5.  Test in a real browser, on the allowlisted origin',
+    body: `The enclave reads the origin of the page that opened it. A pairing started\n` +
+      `inside the APK WebView (https://localhost) or on a preview host can never be\n` +
+      `verified — that is a spec gap, not a bug.\n\n` +
+      `Open ${VERIFIABLE_ORIGIN} in Chrome/Safari with Trust Wallet installed, delete\n` +
+      `the old session in the wallet first, then connect and read the prompt.`
   }
 ];
 
 function print() {
   console.log('');
   console.log('══════════════════════════════════════════════════════════════════════');
-  console.log(' REOWN CLOUD ALLOWLIST CHECKLIST');
+  console.log(' REOWN CLOUD CHECKLIST');
   console.log(` Project ID   : ${PROJECT_ID}`);
   console.log(` Dashboard    : ${DASHBOARD}`);
   console.log('══════════════════════════════════════════════════════════════════════');
@@ -115,25 +173,50 @@ async function check() {
   console.log('══════════════════════════════════════════════════════════════════════');
   console.log('');
 
+  const registry = await readRegistry(PROJECT_ID);
+  console.log(`Registry  ${registry.ok ? `HTTP ${registry.status}` : registry.error || 'FAILED'}`);
+  if (!registry.ok) {
+    console.log('  ⚠️  the registry could not be read from this host (network or project id)');
+  } else if (!registry.list?.length) {
+    console.log('  ❌ EMPTY — this project has no allowlisted domain, so no wallet can');
+    console.log(`     verify it. Add ${VERIFIABLE_ORIGIN} per step 1 above.`);
+  } else {
+    for (const entry of registry.list) console.log(`  · ${entry}`);
+  }
+  console.log('');
+
+  if (Array.isArray(registry.list)) {
+    const verdict = predictVerifyVerdict({
+      allowedOrigins: registry.list,
+      declaredUrl: VERIFIABLE_ORIGIN,
+      pageOrigin: VERIFIABLE_ORIGIN
+    });
+    console.log(`Verdict for ${VERIFIABLE_ORIGIN}: ${verdict.verdict}${verdict.reason !== 'OK' ? ` (${verdict.reason})` : ''}`);
+    console.log(verdict.ok
+      ? '  ✅ a wallet connecting from that origin will show “Domain match”.'
+      : '  ❌ a wallet connecting from that origin will show “Unverified”.');
+    console.log('');
+  }
+
   for (const origin of ORIGINS) {
-    const [icon] = await Promise.all([probe(`${origin}${ICON_PATH}`)]);
-    const status = icon.ok ? '✓' : '✗';
-    console.log(`${status} ${origin.padEnd(28)} icon=${icon.ok ? icon.status : icon.error || 'FAILED'}`);
+    const icon = await probe(`${origin}${ICON_PATH}`);
+    console.log(`${icon.ok ? '✓' : '✗'} ${origin.padEnd(28)} icon=${icon.ok ? icon.status : icon.error || 'FAILED'}`);
   }
 
   console.log('');
-  console.log('A green icon probe means the page is reachable from this host. The');
-  console.log('Enclave then attests the origin it sees in `window.message` against');
-  console.log('`metadata.url`; if they match, the wallet renders VALID.');
+  console.log('A green icon probe means the page is reachable from this host. It says');
+  console.log('nothing about the registry — that is the row above it, and the row that');
+  console.log('decides what the wallet prints.');
   console.log('');
 }
 
 if (has('help')) {
   console.log('node scripts/walletconnect-reown-register.mjs          print checklist');
-  console.log('node scripts/walletconnect-reown-register.mjs --check  checklist + live probes');
+  console.log('node scripts/walletconnect-reown-register.mjs --check  checklist + registry + live probes');
   console.log('node scripts/walletconnect-reown-register.mjs --copy   print the clipboard-ready lines');
 } else if (has('copy')) {
-  for (const origin of ORIGINS) console.log(origin);
+  console.log(VERIFIABLE_ORIGIN);
+  for (const origin of ORIGINS) if (origin !== VERIFIABLE_ORIGIN) console.log(origin);
   console.log(`App ID: ${APP_ID}`);
 } else if (has('check')) {
   await check();

@@ -166,6 +166,19 @@ export {
 } from './health.js';
 
 export {
+  VERIFY_ATTESTATION_TIMEOUT_MS,
+  VERIFY_SERVER,
+  VERIFY_SERVER_V3,
+  attestationUrl,
+  decodeAttestation,
+  predictVerifyVerdict,
+  probeVerifyAttestation,
+  randomAttestationId,
+  reownDashboardUrl,
+  warmVerifyEnclave
+} from './verify.js';
+
+export {
   SIGN_ERRORS,
   SIGN_METHODS,
   classifySignError,

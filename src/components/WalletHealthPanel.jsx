@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { collectWalletHealth, purgeConnectionKeys, wcTraceSnapshot } from '../lib/wc';
+import { collectWalletHealth, purgeConnectionKeys, reownDashboardUrl, wcTraceSnapshot } from '../lib/wc';
 import { IconCheck, IconCopy } from './Icons';
 
 /**
@@ -36,6 +36,44 @@ const RELAY_VERDICT_KEYS = {
 
 /** Short host name for the row — the scheme is noise in a support screenshot. */
 const hostName = (url) => String(url ?? '').replace(/^wss:\/\//, '');
+
+/**
+ * Attestation verdict → the sentence that names the cause.
+ *
+ * Each of these is a different action: «not in the registry» is a dashboard
+ * click, «no attestation» is a network or a five-second budget, «mismatch» is
+ * our own metadata. The wallet shows one word («Unverified») for all three,
+ * which is why the panel has to spell them apart.
+ */
+const VERIFY_VERDICT_KEYS = {
+  VERIFIED: 'wallet.healthVerifyVerified',
+  UNVERIFIED: 'wallet.healthVerifyUnverified',
+  MISMATCH: 'wallet.healthVerifyMismatch',
+  THREAT: 'wallet.healthVerifyThreat',
+  EXPIRED: 'wallet.healthVerifyExpired',
+  ID_MISMATCH: 'wallet.healthVerifyIdMismatch',
+  NO_ATTESTATION: 'wallet.healthVerifyNoAttestation',
+  NO_BROWSER: 'wallet.healthVerifyNoBrowser'
+};
+
+/** Registry-derived cause → the sentence that says what to click. */
+const VERIFY_CAUSE_KEYS = {
+  NO_DOMAIN_REGISTERED: 'wallet.healthVerifyCauseNoDomain',
+  ORIGIN_NOT_REGISTERED: 'wallet.healthVerifyCauseNotRegistered'
+};
+
+/** The attestation, in the words the server used. */
+function verifyDetail(attestation) {
+  const att = attestation?.attested;
+  const ms = `${attestation?.ms ?? 0}ms`;
+  if (!att) return `${attestation?.verdict || '—'} · ${ms}`;
+  return [
+    `isVerified=${att.isVerified ? 'true' : 'false'}`,
+    `origin=${att.origin || '—'}`,
+    ...(att.isScam ? ['isScam=true'] : []),
+    ms
+  ].join(' · ');
+}
 
 /**
  * The hop a pairing leaves from, in measured words.
@@ -186,6 +224,70 @@ export default function WalletHealthPanel({ projectId }) {
                 t('wallet.healthVerifyEnclave'),
                 report.verifyEnclave || { ok: false, error: 'NOT_MEASURED' },
                 report.verifyEnclave?.url
+              )}
+              {/*
+                * The row that answers «why does the wallet say unverified».
+                *
+                * The attestation probe is the SDK's own request: a hidden
+                * iframe to verify.walletconnect.org/v3/attestation, and the
+                * JWT the server answers with. `isVerified` inside that JWT is
+                * the bit the wallet reads and we never could — so the four
+                * states (Domain match / Cannot verify / Mismatch / Security
+                * risk) stop being one label and become a named cause.
+                */}
+              {report.verify?.attestation && (
+                <>
+                  {row(
+                    t('wallet.healthVerifyAttestation'),
+                    report.verify.attestation,
+                    verifyDetail(report.verify.attestation)
+                  )}
+                  <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                    {t(VERIFY_VERDICT_KEYS[report.verify.attestation.verdict] ?? 'wallet.healthVerifyUnknown')}
+                  </p>
+                </>
+              )}
+              {/*
+                * The registry is the other half, and it is the half a human
+                * fixes: an empty allowlist is a project with no domain, and no
+                * amount of correct metadata makes a wallet say «verified»
+                * while the registry is empty.
+                */}
+              {report.verify?.registry && (
+                <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                  <strong>{t('wallet.healthRegistry')}:</strong>{' '}
+                  {`domains=${report.verify.registry.domains ?? '?'}`}
+                  {report.verify.registry.list?.length
+                    ? ` (${report.verify.registry.list.join(', ')})`
+                    : ` · ${t('wallet.healthRegistryEmpty')}`}
+                </p>
+              )}
+              {report.verify?.predicted?.verdict === 'UNVERIFIED' && (
+                <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                  {t(VERIFY_CAUSE_KEYS[report.verify.predicted.reason] ?? 'wallet.healthVerifyCauseUnknown', {
+                    origin: report.verify.predicted.pageOrigin || report.origin || '—'
+                  })}
+                </p>
+              )}
+              {report.verify?.predicted?.verdict === 'MISMATCH' && (
+                <p className="notice notice-danger" style={{ fontSize: 11.5, margin: '6px 0' }}>
+                  {t('wallet.healthVerifyCauseMismatch', {
+                    declared: report.verify.predicted.declared || '—',
+                    page: report.verify.predicted.pageOrigin || '—'
+                  })}
+                </p>
+              )}
+              {report.verify?.predicted?.verdict === 'UNVERIFIED' && (
+                /* The one action that actually ends the report: add the origin
+                   to the project's domain allowlist. Named with the URL and
+                   the value to paste, because a dashboard step described in
+                   prose is a step somebody re-guesses. */
+                <p className="muted" style={{ fontSize: 11.5, margin: '2px 0 6px' }}>
+                  {t('wallet.healthVerifyFix', {
+                    url: reownDashboardUrl(report.projectId),
+                    origin: report.verify.predicted.pageOrigin || report.origin || 'https://fbtswap.ir'
+                  })}
+                </p>
               )}
               {/*
                 * The identity the wallet is handed, against the origin the

@@ -28,6 +28,7 @@ import { chainFromSession } from './chain.js';
 import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
 import { installWalletOpenBridge, onWalletHandoff, openWalletHandoff } from './handoff.js';
 import { measureRelay, clearRelayCache } from './relay.js';
+import { warmVerifyEnclave } from './verify.js';
 import { hasStoredSession, purgeConnectionKeys } from './storage.js';
 import {
   classifyConnectError,
@@ -419,6 +420,24 @@ export function createWcSession({
          first. */
       const purged = purgeConnectionKeys();
       if (purged) wcEvent('storage_purged', purged);
+
+      /* THE ATTESTATION HAS A FIVE-SECOND BUDGET, AND IT STARTS LATE.
+         ─────────────────────────────────────────────────────────────────────
+         When this connect proposes, the SDK appends a hidden iframe to
+         `verify.walletconnect.org/v3/attestation` and waits five seconds for a
+         signed JWT. If nothing arrives, `register()` returns an empty string,
+         the wallet finds no attestation, and the user reads «Cannot verify» —
+         with no hint that the network, not the domain, is what failed.
+
+         On a filtered network the DNS + TLS handshake alone can eat most of
+         that window. Warming the connection here — while we still have to
+         measure the relay and init the provider — hands the enclave a
+         connection that is already open by the time the SDK asks for it.
+         Advisory: it can never fail the attempt. */
+      try {
+        const warmed = warmVerifyEnclave({ projectId });
+        if (warmed?.warmed) wcEvent('verify_warmed', warmed.reason);
+      } catch { /* a warm-up is an optimisation, never a gate */ }
 
       /* ADVISORY: a browser diagnostic must never prevent the real attempt. */
       let relay = null;

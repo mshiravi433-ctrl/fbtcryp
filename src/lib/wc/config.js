@@ -267,14 +267,29 @@ export function walletIdentityFacts(view) {
  * packaged app is the exception that still needs the canonical name.
  *
  * `verifyUrl` is the URL the Verify Enclave (hosted at
- * `verify.walletconnect.org`) expects to receive in the session payload — it
- * is the URL the wallet will resolve an attestation against. As of August
- * 2025, the Verify API no longer requires any manual domain registration in
- * the Reown Cloud dashboard: the enclave reads `event.origin` from the
- * `window.message` posted by the Verify Client, matches it against this
- * `url`, and renders VALID / INVALID / UNKNOWN. There is no
- * `/.well-known/walletconnect.txt` to ship, no code to set, no dashboard
- * step to complete — see WALLET-VERIFY-REALITY-2026-09-21.md.
+ * `verify.walletconnect.org`) includes in the verify context a wallet reads.
+ * It is INFORMATIVE, not the proof: nothing in the current SDK fetches it.
+ *
+ * ─── WHAT THE VERDICT IS ACTUALLY BUILT FROM (read from the SDK) ───────────
+ *   1. `Verify.register()` — a hidden iframe to
+ *      `verify.walletconnect.org/v3/attestation?projectId&origin&id`,
+ *      answered within FIVE seconds by a signed JWT carrying
+ *      `{ id, origin, isVerified, isScam, exp }`.
+ *   2. The wallet's `resolve()`: with no JWT, an expired one, or
+ *      `isVerified === false`, it returns nothing → validation UNKNOWN →
+ *      «Cannot verify / Unverified».
+ *   3. Only then: `validation = (jwt.origin === new URL(metadata.url).origin)
+ *      ? 'VALID' : 'INVALID'`.
+ *
+ * So a wallet says «Domain match» when BOTH are true: the attested origin is
+ * in this project's domain registry (Reown dashboard → Configuration →
+ * Domain → Allowlist — the step that makes `isVerified` true), and this `url`
+ * is that same origin. Setting `url` correctly is necessary and, on its own,
+ * not sufficient — see WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md.
+ *
+ * There is still no `/.well-known/walletconnect.txt` to ship and no DNS TXT
+ * to add: those belong to the deprecated proof-of-ownership flow. The
+ * dashboard allowlist is a different thing and it IS required.
  */
 export function wcMetadata(view) {
   const win = view ?? (typeof window !== 'undefined' ? window : null);

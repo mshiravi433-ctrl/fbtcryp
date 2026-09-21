@@ -64,7 +64,16 @@ import {
   wcMetadata,
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
-  withTimeout
+  withTimeout,
+  attestationUrl,
+  decodeAttestation,
+  predictVerifyVerdict,
+  probeVerifyAttestation,
+  randomAttestationId,
+  reownDashboardUrl,
+  VERIFY_SERVER,
+  VERIFY_SERVER_V3,
+  warmVerifyEnclave
 } from '../src/lib/wc/index.js';
 import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
@@ -1784,6 +1793,261 @@ export default async function run() {
       /healthProject/.test(panel) && /healthOrigins/.test(panel) && /healthRelay/.test(panel));
     t('the panel names the retired keys when a device still carries them',
       /legacyEmbeddedKeys/.test(panel) && /legacyEmbeddedKeys/.test(health));
+  }
+
+
+  /* ══════════════════ 16. Verify: why a wallet says «unverified» ═════════
+     The report of 2026-09-21 was «still unverified» after three PRs that all
+     changed `metadata.url`. The reason is that UNKNOWN is built from TWO
+     gates, and only one of them lives in our code:
+
+        1. an attestation JWT must arrive from verify.walletconnect.org inside
+           the SDK's 5s budget (network), and
+        2. that JWT's `isVerified` must be true — the server sets it from the
+           project's domain registry (dashboard), and
+        3. only then does `metadata.url` get compared with the attested origin.
+
+     Everything below locks the reading of the SDK's own code
+     (`core/src/controllers/verify.ts`, `sign-client/.../engine.ts`), so the
+     next person does not have to re-derive it from a blog post. */
+  {
+    const jwtFor = (payload) => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
+
+    /**
+     * A window that can host the enclave iframe and deliver its postMessage —
+     * the two browser edges the real Verify.register() uses.
+     */
+    function fakeVerifyWindow({ origin = 'https://fbtswap.ir' } = {}) {
+      const listeners = new Set();
+      const body = {
+        children: [],
+        appendChild(el) {
+          el.parentNode = body;
+          body.children.push(el);
+          return el;
+        },
+        removeChild(el) {
+          body.children = body.children.filter((c) => c !== el);
+          el.parentNode = null;
+          return el;
+        }
+      };
+      const document = {
+        body,
+        head: { children: [], appendChild(el) { this.children.push(el); return el; } },
+        createElement(tag) {
+          return {
+            tagName: String(tag).toUpperCase(),
+            style: {},
+            attrs: {},
+            handlers: {},
+            parentNode: null,
+            setAttribute(k, v) { this.attrs[k] = v; },
+            addEventListener(type, fn) { if (!this.handlers[type]) this.handlers[type] = []; this.handlers[type].push(fn); },
+            removeEventListener() {}
+          };
+        }
+      };
+      const win = {
+        location: { origin },
+        document,
+        addEventListener(type, fn) { if (type === 'message') listeners.add(fn); },
+        removeEventListener(type, fn) { if (type === 'message') listeners.delete(fn); }
+      };
+      return {
+        win,
+        body,
+        head: document.head,
+        /** Deliver a message the way a cross-origin iframe would. */
+        post(data) { for (const fn of [...listeners]) fn({ data, origin: VERIFY_SERVER }); },
+        /** Fire the iframe's own error event — what a blocked host looks like. */
+        fail() {
+          const el = body.children.find((c) => c.tagName === 'IFRAME');
+          for (const fn of el?.handlers?.error ?? []) fn();
+        }
+      };
+    }
+
+    /** Run a probe and deliver one attestation while it is waiting. */
+    async function probeWith(env, payload, opts = {}) {
+      const id = opts.id ?? '0xabc';
+      const pending = probeVerifyAttestation({
+        win: env.win,
+        projectId: 'pid',
+        origin: 'https://fbtswap.ir',
+        timeoutMs: 400,
+        ...opts,
+        /* The id has to be OURS: the probe ignores an attestation that
+           answers a different request, exactly as the SDK does. */
+        id
+      });
+      setTimeout(() => env.post(JSON.stringify({
+        type: 'verify_attestation',
+        attestation: payload === null ? null : jwtFor({ id, ...payload })
+      })), 5);
+      return pending;
+    }
+
+    const url = attestationUrl({
+      projectId: 'pid',
+      origin: 'https://fbtswap.ir',
+      id: '0xabc',
+      decryptedId: '0xdef'
+    });
+    t('the attestation URL is the one the SDK builds', url.startsWith(`${VERIFY_SERVER_V3}/attestation`)
+      && url.includes('projectId=pid') && url.includes('id=0xabc')
+      && url.includes('decryptedId=0xdef')
+      && url.includes(`origin=${encodeURIComponent('https://fbtswap.ir')}`));
+    t('the enclave host is the one the SDK trusts',
+      VERIFY_SERVER === 'https://verify.walletconnect.org' && VERIFY_SERVER_V3 === `${VERIFY_SERVER}/v3`);
+    t('a probe id is shaped like hashMessage output', /^0x[0-9a-f]{64}$/.test(randomAttestationId()));
+    t('an attestation is read without trusting it', (() => {
+      const read = decodeAttestation(jwtFor({ id: '0x1', origin: 'https://fbtswap.ir', isVerified: true, isScam: false, exp: 1_800_000_000 }));
+      return read?.id === '0x1' && read.isVerified === true && read.isScam === false
+        && read.origin === 'https://fbtswap.ir';
+    })());
+    t('exp is seconds, and the probe reads it as milliseconds',
+      decodeAttestation(jwtFor({ exp: 1_800_000_000 })).expiresAt === 1_800_000_000_000);
+    t('a junk attestation reads as nothing', decodeAttestation('not-a-jwt') === null);
+
+    /* ── the attestation round trip, cause by cause ─────────────────────── */
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: true, origin: 'https://fbtswap.ir' });
+      t('a verified origin is reported as verified', res.verdict === 'VERIFIED' && res.ok === true);
+      t('the verdict carries the server’s own words', res.attested?.isVerified === true && res.attested?.origin === 'https://fbtswap.ir');
+      t('the enclave iframe is removed once the answer arrives', env.body.children.length === 0);
+    }
+    {
+      /* THE 2026-09-21 REPORT: the attestation arrives, the server says
+         isVerified=false, and no amount of correct metadata changes it. */
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: false, origin: 'https://fbtswap.ir' });
+      t('an attested but unregistered domain is named as UNVERIFIED',
+        res.verdict === 'UNVERIFIED' && res.ok === false && res.attested?.isVerified === false);
+    }
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: true, origin: 'https://www.fbtswap.ir' });
+      t('an attestation for another host is a mismatch, not a success',
+        res.verdict === 'MISMATCH' && res.attested?.origin === 'https://www.fbtswap.ir');
+    }
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: true, isScam: true, origin: 'https://fbtswap.ir' });
+      t('a flagged domain is reported before anything else', res.verdict === 'THREAT' && res.attested?.isScam === true);
+    }
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: true, origin: 'https://fbtswap.ir', exp: 1 }, { now: () => 10_000 });
+      t('an expired attestation is named as such', res.verdict === 'EXPIRED');
+    }
+    {
+      /* Nothing within the SDK's budget. This is the filtered-network case,
+         and it must never be confused with «the domain is not registered». */
+      const env = fakeVerifyWindow();
+      const res = await probeVerifyAttestation({ win: env.win, projectId: 'pid', origin: 'https://fbtswap.ir', timeoutMs: 60 });
+      t('silence inside the budget is reported as NO_ATTESTATION', res.verdict === 'NO_ATTESTATION' && res.ok === false);
+    }
+    {
+      const env = fakeVerifyWindow();
+      const pending = probeVerifyAttestation({ win: env.win, projectId: 'pid', origin: 'https://fbtswap.ir', timeoutMs: 200 });
+      setTimeout(() => env.fail(), 5);
+      t('an iframe that fails to load is reported as NO_ATTESTATION',
+        (await pending).verdict === 'NO_ATTESTATION');
+    }
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeWith(env, { isVerified: true, origin: 'https://fbtswap.ir' }, { id: '0xabc' });
+      /* A message for ANOTHER request must not end the wait; it is named
+         separately, because it is a collision and not a missing domain. */
+      const pending = probeVerifyAttestation({ win: env.win, projectId: 'pid', origin: 'https://fbtswap.ir', timeoutMs: 120 });
+      setTimeout(() => env.post(JSON.stringify({ type: 'verify_attestation', attestation: jwtFor({ id: '0xother' }) })), 5);
+      const other = await pending;
+      t('an attestation for another request is named as ID_MISMATCH', other.verdict === 'ID_MISMATCH');
+      t('a probe is never ended by a foreign message', res.verdict === 'VERIFIED');
+    }
+    t('no document means no attestation is possible',
+      (await probeVerifyAttestation({ win: { location: { origin: 'https://fbtswap.ir' } }, projectId: 'pid' })).verdict === 'NO_BROWSER');
+    t('no window at all is reported, not thrown',
+      (await probeVerifyAttestation({ projectId: 'pid' })).verdict === 'NO_BROWSER');
+
+    /* ── the registry: the half a human has to click ────────────────────── */
+    t('an EMPTY allowlist is not «allow all» for Verify — it cannot verify anything', (() => {
+      const v = predictVerifyVerdict({ allowedOrigins: [], declaredUrl: 'https://fbtswap.ir', pageOrigin: 'https://fbtswap.ir' });
+      return v.verdict === 'UNVERIFIED' && v.reason === 'NO_DOMAIN_REGISTERED' && v.ok === false;
+    })());
+    t('an origin missing from a non-empty allowlist is unverified',
+      predictVerifyVerdict({ allowedOrigins: ['https://other.ir'], declaredUrl: 'https://fbtswap.ir', pageOrigin: 'https://fbtswap.ir' }).reason
+        === 'ORIGIN_NOT_REGISTERED');
+    t('a registered origin that metadata also declares is VALID',
+      predictVerifyVerdict({ allowedOrigins: ['fbtswap.ir'], declaredUrl: 'https://fbtswap.ir', pageOrigin: 'https://fbtswap.ir' }).verdict
+        === 'VALID');
+    t('metadata naming another host than the page is a mismatch, not a match',
+      predictVerifyVerdict({ allowedOrigins: ['fbtswap.ir', 'www.fbtswap.ir'], declaredUrl: 'https://fbtswap.ir', pageOrigin: 'https://www.fbtswap.ir' }).verdict
+        === 'MISMATCH');
+    t('an unreadable allowlist is reported as unknown, not as a refusal',
+      predictVerifyVerdict({ allowedOrigins: null, declaredUrl: 'https://fbtswap.ir', pageOrigin: 'https://fbtswap.ir' }).verdict === 'UNKNOWN');
+    /* AppKit's gate and Verify's registry read the same list and mean
+       different things by an empty one. Both answers must stay available. */
+    t('AppKit still reads an empty list as allow-all',
+      isOriginAllowed('https://fbtswap.ir', []) === true);
+    t('the dashboard link is the project the code ships',
+      reownDashboardUrl('5997d5aee8bb42f43ddec4b1a5f94eb1')
+        === 'https://dashboard.reown.com/project/5997d5aee8bb42f43ddec4b1a5f94eb1');
+
+    /* ── warm-up: the five-second budget is a network budget ─────────────── */
+    {
+      const env = fakeVerifyWindow();
+      const calls = [];
+      const first = warmVerifyEnclave({ win: env.win, fetchImpl: async (u) => { calls.push(u); return { ok: false }; } });
+      const second = warmVerifyEnclave({ win: env.win, fetchImpl: async (u) => { calls.push(u); return { ok: false }; } });
+      t('a warm-up opens the enclave connection once', first.warmed === true && calls.length === 1);
+      t('a second warm-up on the same window is a no-op', second.reason === 'ALREADY_WARM' && calls.length === 1);
+      t('the warm-up asks the host the SDK will ask', calls[0] === `${VERIFY_SERVER_V3}/public-key`);
+      t('a warm-up with no window reports it instead of throwing',
+        warmVerifyEnclave({}).warmed === false);
+    }
+
+    /* ── the report carries both halves ─────────────────────────────────── */
+    {
+      const env = fakeVerifyWindow();
+      const report = await collectWalletHealth({
+        projectId: 'pid',
+        origin: 'https://fbtswap.ir',
+        win: env.win,
+        storage: fakeStorage(new Map()),
+        fetchImpl: async (u) => (String(u).includes('/origins')
+          ? { ok: true, status: 200, json: async () => ({ allowedOrigins: [] }) }
+          : { ok: true, status: 200, json: async () => ({ features: [] }) }),
+        WebSocketImpl: class { constructor() { throw new Error('offline'); } },
+        timeoutMs: 200
+      });
+      t('the report names the registry state', report.verify?.registry?.domains === 0
+        && report.verify?.registry?.emptyMeansAllowAllForAppKit === true);
+      t('the report names the cause an empty registry produces',
+        report.verify?.predicted?.reason === 'NO_DOMAIN_REGISTERED');
+      t('the report measures the attestation, not just the host',
+        typeof report.verify?.attestation?.verdict === 'string');
+    }
+
+    /* ── wiring guards: the fix has to be reachable, not just correct ───── */
+    const verifySrc = readFileSync('src/lib/wc/verify.js', 'utf8');
+    const sessionSrc = readFileSync('src/lib/wc/session.js', 'utf8');
+    const panelSrc = readFileSync('src/components/WalletHealthPanel.jsx', 'utf8');
+    t('the connect path warms the enclave before the SDK needs it',
+      /warmVerifyEnclave\(\{ projectId \}\)/.test(sessionSrc));
+    t('the warm-up can never fail a connect attempt',
+      /try \{\s*\n\s*const warmed = warmVerifyEnclave/.test(sessionSrc)
+        && /a warm-up is an optimisation, never a gate/.test(sessionSrc));
+    t('the panel explains every verdict the SDK can produce',
+      ['VERIFIED', 'UNVERIFIED', 'MISMATCH', 'THREAT', 'EXPIRED', 'ID_MISMATCH', 'NO_ATTESTATION', 'NO_BROWSER']
+        .every((v) => verifySrc.includes(`'${v}'`) && panelSrc.includes(`wallet.healthVerify${v === 'VERIFIED' ? 'Verified' : v === 'UNVERIFIED' ? 'Unverified' : v === 'MISMATCH' ? 'Mismatch' : v === 'THREAT' ? 'Threat' : v === 'EXPIRED' ? 'Expired' : v === 'ID_MISMATCH' ? 'IdMismatch' : v === 'NO_ATTESTATION' ? 'NoAttestation' : 'NoBrowser'}`)));
+    t('the panel names the dashboard step when the registry is empty',
+      /healthVerifyFix/.test(panelSrc) && /reownDashboardUrl/.test(panelSrc));
+    t('the fix is documented where the wrong conclusion was documented',
+      existsSync('WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md')
+        && /NO_DOMAIN_REGISTERED|allowlist/i.test(readFileSync('WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md', 'utf8')));
   }
 
   return rows;
