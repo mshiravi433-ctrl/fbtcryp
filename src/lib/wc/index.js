@@ -32,6 +32,8 @@ export {
   PAIRING_TTL_MS,
   RELAY_URLS,
   TIMEOUT,
+  WC_ALLOWED_ORIGINS,
+  WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
   walletIdentityFacts,
   walletIdentityUrl,

@@ -279,7 +279,7 @@ export function createWcSession({
    * introduces itself to every wallet as https://localhost.
    */
   function repairMetadata(instance) {
-    const { url, icons } = metadata;
+    const { url, icons, verifyUrl } = metadata;
     try {
       const signClient = instance?.signer?.client ?? instance?.signer;
       const targets = [signClient?.metadata, instance?.signer?.metadata, instance?.rpc?.metadata].filter(
@@ -288,6 +288,13 @@ export function createWcSession({
       for (const target of targets) {
         target.url = url;
         target.icons = [...icons];
+        /* The verify URL must travel WITH the metadata: a page running on
+           https://www.fbtswap.ir sends `verifyUrl = https://fbtswap.ir`, and a
+           wallet reading the cached metadata after our repair sees the bare
+           origin the dashboard registered. Without this line the SDK leaves
+           the cached value behind and the prompt the wallet renders names a
+           host the dashboard does not know about. */
+        if (verifyUrl) target.verifyUrl = verifyUrl;
       }
       return Boolean(targets.length) && signClient?.metadata?.url === url;
     } catch {

@@ -29,7 +29,10 @@ import {
   HEALTH_SDK_VERSION,
   TIMEOUT,
   W3M_API_URL,
+  WC_ALLOWED_ORIGINS,
+  WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
+  wcMetadata,
   walletIdentityFacts
 } from './config.js';
 import { handoffFacts } from './handoff.js';
@@ -196,6 +199,40 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
 }
 
 /**
+ * Head-only probe of the Verify Enclave.
+ *
+ * WalletConnect's Verify API is attestation-based since August 2025: the
+ * Enclave at `verify.walletconnect.org` reads `event.origin` from the
+ * `window.message` the Verify Client posts and writes that origin to the
+ * Verify Server. There is no `/.well-known/walletconnect.txt` to fetch from
+ * the dApp — that file was part of the deprecated DNS-TXT era. The probe
+ * here is a connectivity check on the Enclave host itself, so the report
+ * can name "Verify Enclave unreachable" when the report's identity row
+ * claims an origin that the Enclave would never attest.
+ */
+async function probeVerifyEnclave({ fetchImpl, timeoutMs } = {}) {
+  const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
+  if (!call) return { ok: false, error: 'NO_FETCH' };
+  const url = 'https://verify.walletconnect.org/';
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => {
+    try { controller?.abort(); } catch { /* best effort */ }
+  }, timeoutMs ?? TIMEOUT.healthProbe);
+  try {
+    const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
+    return { ok: res.ok, status: res.status, url };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error),
+      url
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * `readSharedConnectionFacts()` without the ability to fail the report.
  * The facts themselves carry `available: false` when the controllers chunk is
  * unreachable, which is the honest answer — an exception here would replace
@@ -269,6 +306,29 @@ export async function collectWalletHealth({
          the device that is actually connected: `declared` is what we will say,
          `pageOrigin` is what the attestation will say. */
       identity: walletIdentityFacts(),
+      /* What the wallet will be told about us, including the verifyUrl the
+         SDK ships in the session proposal. The dashboard registration row
+         below names the entries the allowlist MUST contain — and is the
+         support copy when it does not. */
+      metadata: {
+        url: wcMetadata().url,
+        verifyUrl: wcMetadata().verifyUrl || null,
+        iconUrl: wcMetadata().icons?.[0] || null
+      },
+      /* The expected allowlist, read from the same source `walletIdentityUrl`
+         reads from. Surfaced here so the support thread can paste it next to
+         whatever the dashboard actually returns and read the difference. */
+      dashboardExpected: {
+        origins: WC_ALLOWED_ORIGINS,
+        appIds: [WC_ANDROID_APP_ID]
+      },
+      /* Reachability of the Verify Enclave. The Enclave is the actor that
+         decides whether a session proposal's origin attests VALID; if it is
+         unreachable the report should say so rather than blame the dashboard.
+         There is intentionally NO file fetch here: the `walletconnect.txt`
+         path is part of the deprecated DNS-TXT verification flow, and a
+         404 there would be a false negative for the active attestation flow. */
+      verifyEnclave: await probeVerifyEnclave({ fetchImpl, timeoutMs }),
       relay: reachable ? reachable.socket : (relay.hosts[0]?.socket ?? { ok: false, error: 'NO_RELAY_URLS' }),
       relays: relay.hosts,
       relayVerdict: relay.verdict,

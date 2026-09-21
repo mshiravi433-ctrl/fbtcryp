@@ -86,5 +86,12 @@ export function publicAppUrl(path = '/') {
   const allowed = /^https:\/\/(?:www\.)?fbtswap\.ir(?=\/|$)/i.test(configured)
     || (onE2b && /^https:\/\/[^/]+\.e2b\.app(?=\/|$)/i.test(configured));
   const base = allowed ? configured : 'https://fbtswap.ir';
-  return `${String(base).replace(/\/+$/, '')}${path}`;
+  const trimmed = String(base).replace(/\/+$/, '');
+  // A VITE_PUBLIC_URL pointing at the www subdomain is fine as a base: the
+  // address bar shows the real host, and `walletIdentityUrl` already names
+  // the page's own origin (not this canonical constant), so the Verify API
+  // sees both www and bare as the same dApp. We only normalise here so the
+  // deep links and share-link routes don't carry the trailing slash the env
+  // var sometimes ships with.
+  return `${trimmed}${path}`;
 }
