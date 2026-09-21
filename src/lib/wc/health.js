@@ -39,6 +39,24 @@ import { handoffFacts } from './handoff.js';
 import { measureRelay } from './relay.js';
 import { readSharedConnectionFacts } from './appkit.js';
 import { isConnectionKey, listEmbeddedWalletKeys } from './storage.js';
+import {
+  VERIFY_ATTESTATION_TIMEOUT_MS,
+  VERIFY_SERVER,
+  isOriginAllowed as isOriginOnAllowlist,
+  predictVerifyVerdict,
+  probeVerifyAttestation
+} from './verify.js';
+
+/**
+ * Is the current origin allowed, by the SDK's own rule?
+ *
+ * Re-exported from verify.js, where the rule lives next to the two other
+ * Verify facts it has to agree with (the registry prediction and the live
+ * attestation). The name and the answer are unchanged for callers.
+ */
+export function isOriginAllowed(currentOrigin, list) {
+  return isOriginOnAllowlist(currentOrigin, list);
+}
 
 /** `GET /appkit/v1/config` — mirrors `ApiController.fetchProjectConfig()`. */
 export function configProbeUrl(projectId, sdkVersion = HEALTH_SDK_VERSION) {
@@ -56,39 +74,6 @@ function apiUrl(path, projectId, sdkVersion) {
   url.searchParams.set('st', 'appkit');
   url.searchParams.set('sv', sdkVersion);
   return url.toString();
-}
-
-/**
- * Is the current origin allowed, by the SDK's own rule?
- *
- * Empty list → allow all (reported separately, so an empty list is never
- * mistaken for a block). Otherwise an exact match, a host match, or a
- * scheme-less domain that covers the host.
- */
-export function isOriginAllowed(currentOrigin, list) {
-  if (!Array.isArray(list)) return null;
-  if (list.length === 0) return true;
-  const origin = String(currentOrigin || '').trim();
-  if (!origin) return null;
-  let host = '';
-  try {
-    host = new URL(origin).host;
-  } catch {
-    host = origin;
-  }
-  return list.some((entry) => {
-    const e = String(entry ?? '').trim();
-    if (!e) return false;
-    if (e === origin || e === host) return true;
-    try {
-      if (new URL(e).host === host) return true;
-    } catch { /* not a URL — try the bare-domain forms below */ }
-    if (!e.includes('://')) {
-      if (e === host.replace(/^www\./, '')) return true;
-      if (host.endsWith(`.${e}`)) return true;
-    }
-    return false;
-  });
 }
 
 /* The keys this report reads VALUES from, beyond key names. Both hold
@@ -201,19 +186,20 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
 /**
  * Head-only probe of the Verify Enclave.
  *
- * WalletConnect's Verify API is attestation-based since August 2025: the
- * Enclave at `verify.walletconnect.org` reads `event.origin` from the
- * `window.message` the Verify Client posts and writes that origin to the
- * Verify Server. There is no `/.well-known/walletconnect.txt` to fetch from
- * the dApp — that file was part of the deprecated DNS-TXT era. The probe
- * here is a connectivity check on the Enclave host itself, so the report
- * can name "Verify Enclave unreachable" when the report's identity row
- * claims an origin that the Enclave would never attest.
+ * WalletConnect's Verify API is attestation-based: the Enclave at
+ * `verify.walletconnect.org` reads `event.origin` from the `window.message`
+ * the Verify Client posts and writes that origin to the Verify Server. There
+ * is no `/.well-known/walletconnect.txt` to fetch from the dApp — that file
+ * was part of the deprecated DNS-TXT era. The probe here is a connectivity
+ * check on the Enclave HOST, so the report can separate «the enclave is
+ * unreachable from this network» from «the enclave answered and said this
+ * domain is not in the registry» — two failures that look identical in the
+ * wallet and need opposite actions.
  */
 async function probeVerifyEnclave({ fetchImpl, timeoutMs } = {}) {
   const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
   if (!call) return { ok: false, error: 'NO_FETCH' };
-  const url = 'https://verify.walletconnect.org/';
+  const url = `${VERIFY_SERVER}/`;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => {
     try { controller?.abort(); } catch { /* best effort */ }
@@ -261,7 +247,9 @@ export async function collectWalletHealth({
   WebSocketImpl,
   storage,
   timeoutMs = TIMEOUT.healthProbe,
-  trace
+  trace,
+  win,
+  now
 } = {}) {
   const currentOrigin = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const channel = handoffFacts();
@@ -321,6 +309,41 @@ export async function collectWalletHealth({
       dashboardExpected: {
         origins: WC_ALLOWED_ORIGINS,
         appIds: [WC_ANDROID_APP_ID]
+      },
+      /* ── WHY THE WALLET SAYS «UNVERIFIED» ────────────────────────────────
+         Three facts, in the order the wallet's own verdict is built:
+           · `registry`   — the project's allowlist, i.e. the domain registry
+                            the Verify server checks `isVerified` against. An
+                            EMPTY list is not «allow all» for Verify: it is a
+                            project with no domain, and every wallet renders
+                            «Cannot verify» for it.
+           · `attestation`— the real thing: the enclave iframe the SDK itself
+                            loads, and the `isVerified` the server signed into
+                            the JWT. This is the answer the wallet reads.
+           · `predicted`  — the verdict those two imply, computed so the cause
+                            is still nameable when the enclave is unreachable
+                            and no attestation can be had at all. */
+      verify: {
+        registry: {
+          list,
+          domains: Array.isArray(list) ? list.length : null,
+          /* AppKit's own gate — kept, because «AppKit refuses to boot» and
+             «the wallet says unverified» are different reports. */
+          originAllowed: isOriginAllowed(currentOrigin, list),
+          emptyMeansAllowAllForAppKit: list !== null && list.length === 0
+        },
+        attestation: await probeVerifyAttestation({
+          win,
+          projectId,
+          origin: currentOrigin,
+          timeoutMs: VERIFY_ATTESTATION_TIMEOUT_MS,
+          now
+        }),
+        predicted: predictVerifyVerdict({
+          allowedOrigins: list,
+          declaredUrl: wcMetadata().url,
+          pageOrigin: currentOrigin
+        })
       },
       /* Reachability of the Verify Enclave. The Enclave is the actor that
          decides whether a session proposal's origin attests VALID; if it is

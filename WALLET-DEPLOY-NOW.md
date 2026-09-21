@@ -1,5 +1,9 @@
 # Deploy اکنون — Trust Wallet و Verify API در production
 
+> ⚠️ **اصلاح ۲۰۲۶-۰۹-۲۱ (همان روز):** نتیجه‌گیریِ این سند — «هیچ قدمی در داشبورد لازم نیست» — **غلط بود** و همین باعث شد «unverified domain» با وجود سه PR حل نشود.
+> کد SDK همچنان `isVerified` را از سرور می‌خواند و سرور آن را از **رجیستری دامنهٔ پروژه** (داشبورد → Configuration → Domain → Allowlist) برمی‌گرداند؛ و مستندات امروز Reown هم دو قدم را لازم می‌داند.
+> مدرک و رفعِ واقعی: [`WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md`](WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md)
+
 > شاخه: `arena/01a0c289-fbtcryp` · PR: [#372](https://github.com/mshiravi433-ctrl/fbtcryp/pull/372)
 
 ## خلاصهٔ یک‌خطی

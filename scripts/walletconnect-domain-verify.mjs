@@ -1,111 +1,117 @@
 #!/usr/bin/env node
 /**
- * PROBE WalletConnect Verify API readiness — domain-verify check, replaced.
+ * WALLETCONNECT VERIFY READINESS — the registry, measured.
  * ---------------------------------------------------------------------------
- * Historical context: this script used to write `/.well-known/walletconnect.txt`
- * from an env var because we believed the Reown dashboard issued a verification
- * code per project. The official blog post dated 2025-08-27
- * (https://walletconnect.com/blog/protect-users-from-phishing-with-walletconnect-verify-api-for-web3-apps-and-wallets)
- * says otherwise:
+ * History, because this script is the record of a wrong conclusion:
  *
- *   "WalletConnect's Verify API no longer requires manual domain listing in
- *    the Cloud dashboard. Instead, it now automatically determines and checks
- *    your app's domain when a wallet connects."
+ *  · Once it wrote `/.well-known/walletconnect.txt` from an env var, on the
+ *    belief that the Reown dashboard issued a verification code per project.
+ *    That flow is gone and is not coming back — no file, no DNS TXT.
+ *  · Then it was rewritten into a HEAD probe of `verify.walletconnect.org`,
+ *    on the belief (from a 2025 blog post) that «the Verify API no longer
+ *    requires manual domain listing in the Cloud dashboard». That belief was
+ *    the reason «unverified domain» survived three pull requests: the SDK
+ *    still reads `isVerified` from the server, and the server keys it off the
+ *    project's domain registry. See WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md.
  *
- * Two checks happen on every session proposal: a Domain Match (the attested
- * origin vs. `metadata.url`) and a Scam Check (the Data Lake feed). Both are
- * performed server-side by the Verify Enclave at `verify.walletconnect.org`,
- * which reads `event.origin` from a `window.message` posted by the Verify
- * Client. There is no file to fetch from the dApp, no env var to set, and
- * no code to ship — only the project's `metadata.url` must name the origin
- * the page is actually served from (handled by `walletIdentityUrl()` in
- * `src/lib/wc/config.js`), and the project id must be in the AppKit config.
+ * What this script measures now, with nothing but the public API:
  *
- * This script is therefore a sanity check: it asks the Enclave whether it is
- * reachable from this network, prints the result, and exits 0 either way. A
- * missing code path, a 404 on the Enclave, or a missing file does NOT block
- * a build — the build never depended on it.
+ *   1. Is the project known at all?        (403 = unknown/retired project id)
+ *   2. Which origins are in its registry?  (GET /projects/v1/origins)
+ *   3. What verdict do those facts imply?  (predictVerifyVerdict, from src)
  *
- * `--strict` flips the exit code so CI can choose to make it a gate, but the
- * script itself never fails a deploy.
+ * That third answer is the one a wallet renders, and it is exactly what was
+ * never measured: on 2026-09-21 the code's project returned an EMPTY registry
+ * while the retired project still carried `fbtswap.ir`.
+ *
+ * `--strict` fails the run when the verdict is not VALID, so CI can gate on it
+ * once the allowlist is done. The script never registers anything: the
+ * dashboard step is a human click, and this script's job is to print the exact
+ * value to click with.
  */
 
 import { WC_ALLOWED_ORIGINS, WC_PROJECT_ID, wcMetadata } from '../src/lib/wc/config.js';
-
-const FILE_LEGACY = 'public/.well-known/walletconnect.txt';
-const ENCLAVE_URL = 'https://verify.walletconnect.org/';
-const TIMEOUT_MS = 8000;
+import { originsProbeUrl, isOriginAllowed } from '../src/lib/wc/health.js';
+import { predictVerifyVerdict as predict, reownDashboardUrl, VERIFY_SERVER, VERIFY_SERVER_V3 } from '../src/lib/wc/verify.js';
 
 const args = process.argv.slice(2);
 const isStrict = args.includes('--strict');
-const wantsCheck = args.includes('--check') || args.length === 0;
+const originArg = args.find((a) => a.startsWith('--origin='));
+const ORIGIN = originArg ? originArg.slice('--origin='.length) : 'https://fbtswap.ir';
 
-async function probeEnclave() {
+const REASONS = {
+  NO_DOMAIN_REGISTERED: '❌ this project has NO domain in its registry — every wallet shows «Cannot verify»',
+  ORIGIN_NOT_REGISTERED: '❌ this origin is not in the project registry',
+  METADATA_MISMATCH: '❌ metadata.url is not the origin this page runs on (wallets show «Domain mismatch»)',
+  NO_LIST: '⚠️  the registry could not be read (network or project id)',
+  OK: '✅ Domain match'
+};
+
+async function readRegistry(projectId) {
+  const url = originsProbeUrl(projectId);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), 8_000);
   try {
-    const res = await fetch(ENCLAVE_URL, { method: 'HEAD', signal: controller.signal, cache: 'no-store' });
-    return { ok: res.ok, status: res.status, error: null };
+    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+    if (!res.ok) return { ok: false, status: res.status, list: null, url };
+    const body = await res.json();
+    return { ok: true, status: res.status, list: Array.isArray(body?.allowedOrigins) ? body.allowedOrigins : null, url };
   } catch (error) {
-    return {
-      ok: false,
-      status: null,
-      error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error)
-    };
+    return { ok: false, status: null, error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error), list: null, url };
   } finally {
     clearTimeout(timer);
   }
 }
 
-function describeMetadata() {
-  const md = wcMetadata();
-  return {
-    name: md.name,
-    url: md.url,
-    verifyUrl: md.verifyUrl,
-    icons: Array.isArray(md.icons) ? md.icons : []
-  };
-}
-
-async function main() {
-  console.log('WalletConnect Verify readiness probe');
-  console.log('----------------------------------');
-  console.log(`Project id:          ${WC_PROJECT_ID}`);
-  console.log(`Allowlist (project): ${WC_ALLOWED_ORIGINS.join(', ')}`);
-  console.log(`Metadata shipped to the wallet:`);
-  const md = describeMetadata();
-  console.log(`  name       = ${md.name}`);
-  console.log(`  url        = ${md.url}`);
-  console.log(`  verifyUrl  = ${md.verifyUrl}`);
-  console.log(`  icons[0]   = ${md.icons[0]}`);
-
-  const enclave = await probeEnclave();
-  console.log(`\nVerify Enclave (${ENCLAVE_URL}):`);
-  if (enclave.ok) {
-    console.log(`  ✅ reachable (HTTP ${enclave.status})`);
-  } else {
-    console.log(`  ⚠️  not reachable${enclave.status ? ` (HTTP ${enclave.status})` : ''}${enclave.error ? ` — ${enclave.error}` : ''}`);
-  }
-
-  // Legacy `walletconnect.txt` is gone — the file is not part of the Verify API.
-  // Mention it once so the deploy log explains the empty `public/.well-known/` dir.
-  console.log('\nNotes:');
-  console.log('  · `/.well-known/walletconnect.txt` is no longer part of the Verify API');
-  console.log('    (it was the DNS-TXT-era proof-of-ownership artefact). The Verify');
-  console.log('    Enclave attests origin via `window.message`; there is nothing to ship.');
-  console.log(`  · Any leftover ${FILE_LEGACY} from a previous build is harmless: Vite`);
-  console.log('    copies it but the verifier never reads it. Delete it if you want a');
-  console.log('    clean deploy artefact (`git rm` it).');
-
-  if (!wantsCheck) return;
-  if (isStrict && !enclave.ok) {
-    console.error('\n--strict set and Verify Enclave not reachable. Failing.');
-    process.exit(1);
-  }
-  process.exit(0);
-}
-
-main().catch((error) => {
-  console.error(error?.message || error);
-  process.exit(1);
+const metadata = wcMetadata();
+const registry = await readRegistry(WC_PROJECT_ID);
+const verdict = predict({
+  allowedOrigins: registry.list,
+  declaredUrl: metadata.url,
+  pageOrigin: ORIGIN
 });
+
+console.log('WalletConnect Verify readiness');
+console.log('------------------------------');
+console.log(`Project id        : ${WC_PROJECT_ID}`);
+console.log(`Dashboard         : ${reownDashboardUrl(WC_PROJECT_ID)}`);
+console.log(`Origin under test : ${ORIGIN}`);
+console.log(`Enclave           : ${VERIFY_SERVER_V3} (SDK host: ${VERIFY_SERVER})`);
+console.log('');
+console.log(`Registry (${registry.url})`);
+if (!registry.ok) {
+  console.log(`  ⚠️  unreadable${registry.status ? ` — HTTP ${registry.status}` : ''}${registry.error ? ` — ${registry.error}` : ''}`);
+} else if (!registry.list?.length) {
+  console.log('  ❌ EMPTY — no domain is allowlisted on this project.');
+} else {
+  for (const entry of registry.list) {
+    console.log(`  · ${entry}${isOriginAllowed(ORIGIN, registry.list) && (entry === ORIGIN || ORIGIN.endsWith(entry)) ? '   ← covers this origin' : ''}`);
+  }
+}
+console.log('');
+console.log('Metadata the wallet receives');
+console.log(`  url       = ${metadata.url}`);
+console.log(`  verifyUrl = ${metadata.verifyUrl || '—'}`);
+console.log(`  icons[0]  = ${metadata.icons?.[0] || '—'}`);
+console.log('');
+console.log(`Verdict: ${verdict.verdict}${verdict.verdict === 'VALID' ? '' : ` (${verdict.reason})`}`);
+console.log(`  ${REASONS[verdict.reason] ?? '—'}`);
+console.log('');
+console.log('Expected on this project (from src/lib/wc/config.js):');
+for (const origin of WC_ALLOWED_ORIGINS) console.log(`  · ${origin}`);
+console.log('');
+
+if (verdict.verdict !== 'VALID') {
+  console.log('Fix (a human click — no code can do it):');
+  console.log(`  1. ${reownDashboardUrl(WC_PROJECT_ID)}`);
+  console.log('  2. Configuration → Domain → “+ Domain”');
+  console.log(`  3. ${ORIGIN}  (with the scheme, no trailing slash) → Allowlist`);
+  console.log('  4. Wait up to 5 minutes, clear the old session in the wallet, reconnect.');
+  console.log('');
+}
+
+if (isStrict && verdict.verdict !== 'VALID') {
+  console.error('--strict set and the verdict is not VALID. Failing.');
+  process.exit(1);
+}
+process.exit(0);
