@@ -23,14 +23,13 @@
  * calldata this contract does not build. Verify the address against that
  * chain's own docs before passing it: a typo here is gas wasted at best.
  *
- * ⚠ READ THIS BEFORE SETTING VITE_FEE_ROUTER_ADDRESS ⚠
- * The client currently reads that env GLOBALLY, with no chain dimension:
- * setting it switches FEE_MODE to 'contract' for EVERY chain, and swaps on
- * chains where this contract is not deployed would target an address with no
- * code. Until per-chain gating lands (see
- * docs/REVENUE-RAIL-COMPLETION-FA.md §2.1), a FeeRouter deployment is for
- * proving the rail on ONE chain in a controlled build — do not point the
- * production web app at it blindly.
+ * ⚠ READ THIS BEFORE SETTING VITE_FEE_ROUTERS ⚠
+ * FeeRouter routing is PER CHAIN since §2.1 of
+ * docs/REVENUE-RAIL-COMPLETION-FA.md: set the deployment map as
+ *   VITE_FEE_ROUTERS={"56":"0x…","8453":"0x…"}
+ * Chains absent from the map keep their fee-carrying aggregator path —
+ * deploying on one chain no longer affects any other chain. The legacy
+ * single-address VITE_FEE_ROUTER_ADDRESS is still honoured, as BSC-only.
  *
  * SECURITY: DEPLOYER_PRIVATE_KEY is passed via env and never written to disk.
  * Use a throwaway deployer wallet holding only gas money. The deployer becomes
@@ -178,9 +177,9 @@ const address = await contract.getAddress();
 console.log('\n✓ Deployed at', address);
 console.log('  explorer:', `${net.explorer}/address/${address}`);
 console.log('\nNext steps:');
-console.log('  1. ⚠ VITE_FEE_ROUTER_ADDRESS is read GLOBALLY by the client today —');
-console.log('     setting it turns on contract mode for EVERY chain, not just this one.');
-console.log('     Read docs/REVENUE-RAIL-COMPLETION-FA.md §2.1 before setting it.');
+console.log('  1. Add THIS chain to the per-chain map (other chains are unaffected):');
+console.log(`     VITE_FEE_ROUTERS={"${net.chainId}":"${address}"}`);
+console.log('     (legacy VITE_FEE_ROUTER_ADDRESS still works, BSC-only)');
 console.log('  2. Verify the source on the block explorer so users can read it.');
 console.log('  3. Transfer ownership to a hardware wallet / multi-sig:');
 console.log('     contract.transferOwnership(<safe address>)');

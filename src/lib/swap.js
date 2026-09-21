@@ -21,10 +21,10 @@ import {
   ERC20_ABI,
   ROUTER_ABI,
   FEE_ROUTER_ABI,
-  FEE_ROUTER_ADDRESS,
   FEE_BPS,
   feeRecipientFor,
-  feeEnabled,
+  feeEnabledFor,
+  feeRouterFor,
   aggregatorFeeEnabled,
   buildPath
 } from './chains.js';
@@ -476,9 +476,10 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
       // platform fee. If the aggregator can't quote, we surface the error
       // instead of silently routing around our own revenue.
       //
-      // The only exception is an explicit FEE_MODE=contract deployment, which
-      // collects the fee through our own router below.
-      if (!feeEnabled()) {
+      // The only exception is a chain with our own FeeRouter deployed
+      // (VITE_FEE_ROUTERS), which collects the fee through the contract
+      // below — on THAT chain only, never globally (§2.1).
+      if (!feeEnabledFor(chainId)) {
         const code = err?.message === 'NO_ROUTE' || err?.message === 'QUOTE_NETWORK' ? err.message : 'QUOTE_FAILED';
         return {
           error: code,
@@ -506,7 +507,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 
   // The platform fee comes off the INPUT first, so quote the DEX on the
   // post-fee amount — otherwise the displayed output would be optimistic.
-  const platformFeeWei = feeEnabled() ? (amountInWei * BigInt(FEE_BPS)) / 10000n : 0n;
+  const platformFeeWei = feeEnabledFor(chainId) ? (amountInWei * BigInt(FEE_BPS)) / 10000n : 0n;
   const swapInWei = amountInWei - platformFeeWei;
 
   let amounts;
@@ -532,7 +533,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
     swapInWei,
     platformFeeWei,
     platformFee: Number(formatUnits(platformFeeWei, fromToken.decimals)),
-    feeBps: feeEnabled() ? FEE_BPS : 0,
+    feeBps: feeEnabledFor(chainId) ? FEE_BPS : 0,
     amountOutWei: outWei,
     minOutWei,
     amountOut,
@@ -556,7 +557,7 @@ export function spenderFor(chainId, quote = null) {
   /* LI.FI pulls ERC-20 inputs through its per-quote approval address (the
      diamond/router contract that then collects the fee and swaps). */
   if (quote?.source === 'lifi' && quote.approvalAddress) return quote.approvalAddress;
-  return feeEnabled() ? FEE_ROUTER_ADDRESS : EVM_CHAINS[chainId].router;
+  return feeEnabledFor(chainId) ? feeRouterFor(chainId) : EVM_CHAINS[chainId].router;
 }
 
 export async function getAllowance({ provider, chainId, token, owner, quote = null }) {
@@ -664,8 +665,8 @@ export async function executeSwap({
   const { path, amountInWei, minOutWei } = quote;
 
   // --- fee path: one atomic tx that pays the platform and swaps the rest ---
-  if (feeEnabled()) {
-    const fee = new Contract(FEE_ROUTER_ADDRESS, FEE_ROUTER_ABI, signer);
+  if (feeEnabledFor(chainId)) {
+    const fee = new Contract(feeRouterFor(chainId), FEE_ROUTER_ABI, signer);
     let feeTx;
     if (fromToken.native) {
       feeTx = await fee.swapExactETHForTokens(minOutWei, path, to, deadline, { value: amountInWei });
@@ -679,7 +680,7 @@ export async function executeSwap({
 
   // Direct PancakeSwap path. Only reachable when a FeeRouter is deployed
   // (which takes the fee on-chain) — never as a silent zero-fee fallback.
-  if (!feeEnabled()) throw new Error('FEE_ROUTE_UNAVAILABLE');
+  if (!feeEnabledFor(chainId)) throw new Error('FEE_ROUTE_UNAVAILABLE');
 
   const router = new Contract(cfg.router, ROUTER_ABI, signer);
   let tx;

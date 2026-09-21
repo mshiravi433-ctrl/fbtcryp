@@ -110,27 +110,32 @@
 
 ### لایه ۲ — مالکیت: FeeRouter v2 (ماه ۱ تا ۳، نیاز به ممیزی)
 
-#### ۲.۱ — اول: اصلاح باگِ امروز (پیش‌نیاز هر دیپلوی)
+#### ۲.۱ — اول: اصلاح باگِ امروز (پیش‌نیاز هر دیپلوی) — ✅ انجام شد ۲۰۲۶/۰۹/۲۱
 
-`feeEnabled()` در `src/lib/chains.js` **سراسری** است:
+`feeEnabled()` در `src/lib/chains.js` **سراسری** بود: ست‌کردن `VITE_FEE_ROUTER_ADDRESS` برای BSC،
+حالت contract را برای *همه* زنجیره‌ها روشن می‌کرد و سواپ ۱۵ زنجیره‌ی دیگر به آدرسی بدون کد
+می‌رفت. اصلاحِ پیاده‌شده:
+
+- **`VITE_FEE_ROUTERS`** — نقشهٔ per-chain به شکل `{"56":"0x…","8453":"0x…"}`؛ فقط زنجیره‌های
+  رجیستری اپ پذیرفته می‌شوند. متغیر قدیمی همچنان پذیرفته می‌شود اما فقط به‌عنوان ورودی BSC.
+- **`feeEnabledFor(chainId)` / `feeRouterFor(chainId)`** جایگزین `feeEnabled()` شدند و
+  **`aggregatorFeeEnabled(chainId)` حالا per-chain است** — زنجیره‌ای که router ندارد، مسیر
+  اگریگاتورِ دارای کارمزدش را نگه می‌دارد حتی وقتی زنجیره‌های دیگر contract دارند.
+- **fail-safe:** JSON خراب، آدرس غلط یا زنجیرهٔ ناشناخته نادیده گرفته می‌شوند (با دلیلِ
+  قابل‌گزارش) و حالت به aggregatorِ درآمددار برمی‌گردد — env خراب نباید سواپ را بشکند.
+- `FEE_MODE` به‌عنوان برچسب کلان باقی مانده («آیا اصلاً استقراری هست؟»)، تصمیم‌های واقعی
+  per-chain هستند.
+- **تست پذیرش:** `test/fee-mode-perchain-probe.mjs` (در `npm test`): ۸ تست واحد parser +
+  سناریوهای import-time (نقشهٔ فقط-BSC / legacy / env خراب) + رگرسیونِ سرتاسری: با نقشهٔ
+  فقط-BSC و شبکهٔ stub‌شده، **Base همچنان quote اگریگاتورِ دارای ۷۰bps می‌گیرد** و BSC بدون
+  نشت به مسیر contract می‌رود؛ spender تأییدها هم per-chain درست است.
+- wiring محافظت شد: `VITE_FEE_ROUTERS` در لیست «عمداً ست‌نشوده در بیلد استور» تا بدون
+  ممیزی/دیپلوی به APK راه پیدا نکند.
 
 ```js
-export const feeEnabled = () => FEE_MODE === 'contract' && isAddr(FEE_ROUTER_ADDRESS);
+// شکل صحیح پیکربندی از این به بعد:
+// VITE_FEE_ROUTERS={"56":"0x…","8453":"0x…"}
 ```
-
-و `executeSwap` در `src/lib/swap.js` (خط ~۵۹۷) بدون چک زنجیره به `FEE_ROUTER_ADDRESS`
-تراکنش می‌فرستد. یعنی **اگر برای BSC ست کنید، سواپ همهٔ زنجیره‌ها به آدرسی می‌رود که آنجا
-قراردادی ندارد.** این را قبل از هر چیزی per-chain کنید:
-
-```js
-// chains.js — نقشهٔ per-chain به‌جای یک رشتهٔ تنها
-// VITE_FEE_ROUTERS={"56":"0x…","8453":"0x…"}   (backward-compat:
-// VITE_FEE_ROUTER_ADDRESS همچنان فقط برای 56 خوانده شود)
-export function feeEnabledFor(chainId) { … }
-```
-
-و هر `feeEnabled()` در `swap.js` → `feeEnabledFor(chainId)`. تست پذیرش: با مپ
-`{"56": "0x…"}`، سواپ Base همچنان مسیر اگریگاتور با کارمزد را می‌گیرد.
 
 #### ۲.۲ — تصمیم طراحی: v2 چرا و چطور
 
@@ -218,7 +223,7 @@ DEPLOYER_PRIVATE_KEY=0x… RPC_URL=https://base-rpc.publicnode.com \
 | ۱.۱ | فایل `executionSources.js` — جدول منابع quote/اجرا/کارمزد هر ۱۷ زنجیره | ✅ انجام شد + تست واحد روی مپ |
 | ۱.۲ | تست قطع Kyber → اجرای OpenOcean با کارمزد در زنجیره‌های دو-منبعی | ✅ انجام شد (`test/execution-sources-probe.mjs`، در `npm test` ثبت شده) |
 | ۱.۳ | `LIFI_FEE_READY=true` و `ZEROX_FEE_BPS=70` در محیط پروداکشن | `.env` + تست quote (کار اپراتور) |
-| ۲.۱ | `feeEnabledFor(chainId)` جایگزین سراسری + تست رفتار Base با مپ فقط-BSC | پروب |
+| ۲.۱ | `feeEnabledFor(chainId)` جایگزین سراسری + تست رفتار Base با مپ فقط-BSC | ✅ انجام شد (`VITE_FEE_ROUTERS` + `test/fee-mode-perchain-probe.mjs`، در `npm test` ثبت شده) |
 | ۲.۲ | `contracts/FeeRouterV2.sol` + فارک‌تست با روتر واقعی کایبر روی Base fork | شواهد در `farm-fork-evidence/`-گونه |
 | ۲.۳ | ممیزی مستقل منتشرشده + دیپلوی کاناری BSC → Base | گزارش ممیز |
 | ۲.۴ | گزارش ماهانهٔ «سهم ریل ملکی از کارمزد» | از JSONL لایه ۰ |
@@ -246,3 +251,16 @@ DEPLOYER_PRIVATE_KEY=0x… RPC_URL=https://base-rpc.publicnode.com \
 | `test/execution-sources-probe.mjs` | **جدید** — پذیرش لایه ۱: table invariants + سه سناریوی قطع کایبر (سالم/کند/مرگ کامل) |
 | `test/run.mjs` | ثبت پروب در `npm test` (به‌صورت child process، چون fetch را stub می‌کند) |
 | این سند | لایه ۱ به «انجام‌شده» رفت + کشف «redundancy ساختاری از قبل کامل بود؛ مشکل leash زمانی بود» |
+
+### راند ۳ — لایه ۲.۱ (۲۰۲۶/۰۹/۲۱)
+
+| فایل | تغییر |
+|---|---|
+| `src/lib/chains.js` | `VITE_FEE_ROUTERS` (نقشهٔ per-chain) + `parseFeeRouters` (خالص، fail-safe، با دلایل رد) + `feeRouterFor`/`feeEnabledFor`؛ `aggregatorFeeEnabled` per-chain شد؛ legacy فقط BSC؛ حذف `feeEnabled()` سراسری |
+| `src/lib/swap.js` | هر ۷ نقطهٔ تصمیم کارمزد به `feeEnabledFor(chainId)` مهاجرت کرد (quote، fee math، spender/approval، اجرای قرارداد، گارد نهایی) |
+| `test/fee-mode-perchain-probe.mjs` | **جدید** — ۲۸ assertion: parser + import-time scenarios + رگرسیون سرتاسری Base/BSC |
+| `test/run.mjs` | ثبت پروب در `npm test` |
+| `test/wiring.mjs` | `VITE_FEE_ROUTERS` به لیست «عمداً ست‌نشوده در بیلد استور» |
+| `.env.example` | مستندسازی `VITE_FEE_ROUTERS` + هشدار BSC-only بودن شکل قدیمی |
+| `scripts/deploy-feerouter.mjs` | راهنمای گام بعد: افزودن زنجیره به نقشهٔ per-chain |
+| این سند | §۲.۱ → انجام‌شده |

@@ -404,31 +404,128 @@ export function feeRecipientFor(chainId) {
   return payoutAddress(chainId, FAMILY.EVM);
 }
 
-/**
- * Optional: your own deployed FeeRouter (contracts/FeeRouter.sol).
- * Only needed if you'd rather not depend on a third-party aggregator.
- */
-export const FEE_ROUTER_ADDRESS =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_ROUTER_ADDRESS) || null;
-
 const isAddr = (a) => Boolean(a) && /^0x[a-fA-F0-9]{40}$/.test(a);
 
+/*
+ * Build-time env, read the same way lib/payout.js reads it — plus a Node
+ * process.env fallback so probes and server-side tooling can configure the
+ * map without a Vite build. In the browser bundle only the Vite path exists.
+ */
+const feeEnv = (key) =>
+  (typeof import.meta !== 'undefined' && import.meta.env?.[key]) ||
+  (typeof process !== 'undefined' && process.env?.[key]) ||
+  '';
+
 /**
- * 'aggregator' (default) | 'contract' (self-deployed FeeRouter)
+ * Parse the per-chain FeeRouter deployment map.
+ *
+ * ─── WHY THIS SHAPE ────────────────────────────────────────────────────────
+ * A FeeRouter is ONE contract on ONE chain: its address is meaningless on
+ * every other chain. The old single `VITE_FEE_ROUTER_ADDRESS` was read
+ * GLOBALLY by `feeEnabled()`, so setting it for BSC silently pointed swaps on
+ * all 15 other chains at an address with no code there — the swap would fail
+ * at signing with an opaque revert. That failure mode is the reason this
+ * parser exists (docs/REVENUE-RAIL-COMPLETION-FA.md §2.1).
+ *
+ * Inputs:
+ *   mapRaw    VITE_FEE_ROUTERS — JSON, e.g. {"56":"0x…","8453":"0x…"}
+ *   legacyRaw VITE_FEE_ROUTER_ADDRESS — the old single-address form, honoured
+ *             as a BSC-ONLY entry for backward compatibility with existing
+ *             deployments (the deploy script's BSC preset is where it came
+ *             from). A per-chain entry overrides it.
+ *
+ * Rules, each fail-safe toward the AGGREGATOR (which still earns the fee —
+ * a broken env must cost nothing, not break swapping):
+ *   • malformed JSON  → ignored entirely (warn once)
+ *   • non-address value → that chain's entry is dropped (warn once)
+ *   • unknown chain id  → dropped: a router on a chain we don't serve is a
+ *     mistake, not a feature
+ *   • both inputs empty → {} — plain aggregator mode everywhere
+ *
+ * @returns {{routers: Record<number,string>, rejected: string[]}} — `rejected`
+ *   carries human-readable reasons so the probe can assert the fail-safes and
+ *   an operator's log shows WHAT was ignored, not just that something was.
+ */
+export function parseFeeRouters(mapRaw, legacyRaw) {
+  const routers = {};
+  const rejected = [];
+
+  if (legacyRaw && isAddr(String(legacyRaw).trim())) {
+    routers[56] = String(legacyRaw).trim();
+  } else if (legacyRaw) {
+    rejected.push(`legacy VITE_FEE_ROUTER_ADDRESS is not a valid address`);
+  }
+
+  if (mapRaw) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(mapRaw));
+    } catch {
+      rejected.push('VITE_FEE_ROUTERS is not valid JSON — ignored');
+      parsed = null;
+    }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [key, value] of Object.entries(parsed)) {
+        const chainId = Number(key);
+        const addr = String(value ?? '').trim();
+        if (!Number.isInteger(chainId) || chainId <= 0) {
+          rejected.push(`"${key}" is not a chain id`);
+          continue;
+        }
+        if (!EVM_CHAINS[chainId]) {
+          rejected.push(`chain ${chainId} is not in the app's registry`);
+          continue;
+        }
+        if (!isAddr(addr)) {
+          rejected.push(`chain ${chainId}: not a valid EVM address`);
+          continue;
+        }
+        routers[chainId] = addr;
+      }
+    } else if (parsed !== null && parsed !== undefined) {
+      rejected.push('VITE_FEE_ROUTERS must be a JSON object of chainId → address');
+    }
+  }
+
+  return { routers, rejected };
+}
+
+const FEE_ROUTERS = parseFeeRouters(feeEnv('VITE_FEE_ROUTERS'), feeEnv('VITE_FEE_ROUTER_ADDRESS')).routers;
+
+/** The deployed FeeRouter address FOR THIS CHAIN, or null. */
+export function feeRouterFor(chainId) {
+  return FEE_ROUTERS[Number(chainId)] || null;
+}
+
+/** True when swaps on THIS CHAIN go through our own deployed FeeRouter. */
+export function feeEnabledFor(chainId) {
+  return isAddr(feeRouterFor(chainId));
+}
+
+/**
+ * Legacy export kept for older callers: the BSC router when one is configured.
+ * New code must use feeRouterFor(chainId) — an address is per-chain or it is
+ * wrong.
+ */
+export const FEE_ROUTER_ADDRESS = FEE_ROUTERS[56] || null;
+
+/**
+ * 'aggregator' (default) | 'contract' (self-deployed FeeRouter on at least
+ * one chain). A coarse label for surfaces that only want to know WHETHER a
+ * contract deployment exists; per-chain decisions use feeEnabledFor().
  *
  * There is intentionally no 'none'. This is a commercial product: every swap
- * carries the 0.5% platform fee. Removing it would require editing this file.
+ * carries the platform fee. Removing it would require editing this file.
  */
-export const FEE_MODE =
-  isAddr(FEE_ROUTER_ADDRESS) ? 'contract' : 'aggregator';
+export const FEE_MODE = Object.keys(FEE_ROUTERS).length ? 'contract' : 'aggregator';
 
 export const feeRecipientValid = (chainId = 56) => isAddr(feeRecipientFor(chainId));
 
-/** True when swaps go through our own deployed FeeRouter contract. */
-export const feeEnabled = () => FEE_MODE === 'contract' && isAddr(FEE_ROUTER_ADDRESS);
-
-/** True when the aggregator collects the fee for us (no deployment needed). */
-export const aggregatorFeeEnabled = (chainId = 56) => FEE_MODE === 'aggregator' && feeRecipientValid(chainId);
+/** True when the aggregator collects the fee for us on THIS chain.
+ * Per-chain since §2.1: a chain WITHOUT a FeeRouter must keep its aggregator
+ * path even when OTHER chains have one — the old global FEE_MODE check
+ * disabled swapping on every other chain the moment one address was set. */
+export const aggregatorFeeEnabled = (chainId = 56) => !feeEnabledFor(chainId) && feeRecipientValid(chainId);
 
 /** Curated BEP-20 list. `native: true` means the chain's gas coin, not a contract. */
 export const TOKENS = {

@@ -2287,5 +2287,26 @@ try {
   ]);
 }
 
+/* ------------------------- Fee mode per-chain (§2.1) --------------------- */
+/* Locks down the per-chain FeeRouter map: a BSC-only deployment must never
+   disable the fee-carrying aggregator path on the other 15 chains. Runs as a
+   CHILD process: it spawns import-time env scenarios of its own. */
+console.log('▸ Fee mode per-chain (VITE_FEE_ROUTERS)…');
+try {
+  execFileSync(process.execPath, ['fee-mode-perchain-probe.mjs'], {
+    stdio: 'pipe',
+    cwd: new URL('.', import.meta.url).pathname
+  });
+  report('fee mode per-chain', [
+    ['per-chain fee routing — all assertions passed', true]
+  ]);
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+  report('fee mode per-chain', [
+    ['fee mode per-chain FAILED (see output)', false]
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);
