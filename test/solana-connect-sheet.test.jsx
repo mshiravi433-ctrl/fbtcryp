@@ -163,8 +163,15 @@ describe('connecting a Solana wallet on a phone', () => {
     fireEvent.click(screen.getByTestId('sol-connect-phantom'));
     await waitFor(() => expect(Browser.open).toHaveBeenCalledTimes(1));
 
+    /*
+     * phantom.com — the host the WALLET declares. Phantom's Android App Links
+     * (`/.well-known/assetlinks.json` → `app.phantom`) and its iOS Universal
+     * Links (`apple-app-site-association` → `/ul/*`) both live there;
+     * phantom.app 404s the first and 301s here, so a request addressed at it
+     * cannot be resolved to the app by Android or by an `intent://`.
+     */
     const url = new URL(lastOpenedUrl());
-    expect(url.host).toBe('phantom.app');
+    expect(url.host).toBe('phantom.com');
     expect(url.pathname).toBe('/ul/v1/connect');
     /* The request carries a key pair only this session knows — the wallet's
        answer is encrypted to it, which is why the answer can be trusted. */
@@ -229,7 +236,7 @@ describe('connecting a Solana wallet on a phone', () => {
 
     const [url, packageName] = openWalletLink.mock.calls[0];
     const parsed = new URL(url);
-    expect(parsed.host).toBe('phantom.app');
+    expect(parsed.host).toBe('phantom.com');
     expect(parsed.pathname).toBe('/ul/v1/connect');
     expect(packageName).toBe('app.phantom');
     /* The Custom Tab is the fallback for an APK without the bridge, and must
@@ -243,7 +250,7 @@ describe('connecting a Solana wallet on a phone', () => {
     await openSheetThroughWalletTab();
     fireEvent.click(screen.getByTestId('sol-connect-phantom'));
     await waitFor(() => expect(Browser.open).toHaveBeenCalledTimes(1));
-    expect(new URL(lastOpenedUrl()).host).toBe('phantom.app');
+    expect(new URL(lastOpenedUrl()).host).toBe('phantom.com');
   });
 
   /*
@@ -287,6 +294,69 @@ describe('connecting a Solana wallet on a phone', () => {
       .toContain(en.solana.signNotice.warn.MULTI_SIGNER);
     /* It is read once: a refresh must not repeat it. */
     expect(localStorage.getItem('fbt:solana:result:last')).toBeNull();
+  });
+
+  /*
+   * ─── THE TAP ITSELF, WHICH IS WHERE THE SECOND REPORT CAME FROM ───────────
+   * «اتفاقی نمی‌افتد یا خیلی طول می‌کشد که پاپ‌اپ تأیید کیف پول بیاید».
+   *
+   * Chrome launches an app for an `intent://` only when a USER GESTURE
+   * produced it («A JavaScript timer tried to open an application without a
+   * user gesture», developer.chrome.com/docs/android/intents), and iOS hands a
+   * Universal Link over only while the touch is fresh. A hand-off that waits
+   * for a `tweetnacl` chunk and a key pair is neither. So the pair is armed
+   * while the sheet is on screen and the click itself does no awaiting — this
+   * asserts the bridge is called BEFORE any microtask can run.
+   */
+  it('hands the request over inside the tap, not seconds later', async () => {
+    const openWalletLink = vi.fn(() => true);
+    window.FBTSolanaLink = { openWalletLink };
+
+    await openSheetThroughWalletTab();
+    /* The sheet arms the request when it opens (and again on pointerdown). */
+    await waitFor(() => expect(deeplink.deeplinkArmed()).toBe(true));
+
+    fireEvent.click(screen.getByTestId('sol-connect-phantom'));
+
+    /* NO await between the tap and the hand-off. */
+    expect(openWalletLink).toHaveBeenCalledTimes(1);
+    expect(Browser.open).not.toHaveBeenCalled();
+
+    delete window.FBTSolanaLink;
+  });
+
+  /*
+   * «I tapped and nothing happened» — the state that used to be invisible.
+   *
+   * If the document is still the visible one when the grace period ends and
+   * no answer has arrived, the wallet never came forward. The card that
+   * appears then is the whole point: two named routes that are still left,
+   * instead of a spinner that never ends.
+   */
+  it('says so when the wallet never came to the front, and offers a way out', async () => {
+    globalThis.__FBT_HANDOFF_GRACE_MS = 40;
+    const openWalletLink = vi.fn(() => true);
+    window.FBTSolanaLink = { openWalletLink };
+
+    await openSheetThroughWalletTab();
+    await waitFor(() => expect(deeplink.deeplinkArmed()).toBe(true));
+    fireEvent.click(screen.getByTestId('sol-connect-phantom'));
+
+    await screen.findByTestId('sol-connect-stuck');
+    expect(screen.getByTestId('sol-connect-stuck-reopen')).toBeTruthy();
+    expect(screen.getByTestId('sol-connect-stuck-install').textContent)
+      .toBe(t('solana.connect.stuckInstall', { name: 'Phantom' }));
+
+    /* The recovery route opens the WALLET'S OWN BROWSER on our page — the one
+       hand-off that still works when the connect request cannot be delivered,
+       because the provider is injected inside it. */
+    fireEvent.click(screen.getByTestId('sol-connect-stuck-browse'));
+    const [browseUrl, browsePackage] = openWalletLink.mock.calls.at(-1);
+    expect(browseUrl.startsWith('https://phantom.com/ul/browse/')).toBe(true);
+    expect(browsePackage).toBe('app.phantom');
+
+    delete globalThis.__FBT_HANDOFF_GRACE_MS;
+    delete window.FBTSolanaLink;
   });
 
   it('names a refusal instead of leaving a vague failure', async () => {

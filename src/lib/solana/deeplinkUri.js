@@ -17,16 +17,32 @@
  * app they started from.
  *
  * What was missing is the other half of Phantom's mobile API: the CONNECT
- * REQUEST. `https://phantom.app/ul/v1/connect` is an ordinary https URL that
- * any mobile browser (and any WebView) can open. The wallet treats it as a
- * connect request, shows its own native approval screen — «FBT Swap wants to
- * connect» — and, once the user approves, sends the account back to the
- * `redirect_link` we supplied, encrypted to a key pair only this session
- * knows.
+ * REQUEST. `https://phantom.com/ul/v1/connect` (phantom.app is the same URL on
+ * an alias host — see DEEPLINK_WALLETS) is an ordinary https URL that any
+ * mobile browser (and any WebView) can open. The wallet treats it as a connect
+ * request, shows its own native approval screen — «FBT Swap wants to connect» —
+ * and, once the user approves, sends the account back to the `redirect_link` we
+ * supplied, encrypted to a key pair only this session knows.
  *
  * That is the approval screen the report is about, and it is the only wallet
  * approval that can reach us on a phone: extensions do not exist there, and
  * MWA (Android Chrome only) cannot complete inside our own APK.
+ *
+ * ─── WHAT THE SECOND REPORT ADDED («اتفاقی نمی‌افتد / خیلی طول میکشد») ──────
+ * Two delivery facts, both of them about the HOST and the TIMING rather than
+ * about the request:
+ *
+ *   1. Only `phantom.com` is claimed by the wallet app (assetlinks.json lists
+ *      `app.phantom` there; phantom.app 404s and redirects). A request
+ *      addressed to a host the app never declared resolves to nothing — the
+ *      wallet is installed and no window opens.
+ *   2. Chrome refuses an `intent://` that did not come from a user gesture
+ *      («A JavaScript timer tried to open an application without a user
+ *      gesture»). Building a key pair takes a dynamic import of `tweetnacl`;
+ *      firing the hand-off after it is a timer, not a tap.
+ *
+ * Both are fixed here and in ./deeplink.js — see `DEEPLINK_WALLETS` for 1 and
+ * `openRequestNow` for 2.
  *
  * ─── SCOPE OF THIS FILE ─────────────────────────────────────────────────────
  * Pure functions only: base58, the request URLs, and the parser for the
@@ -37,8 +53,11 @@
  * ─── THE THREE WALLETS ──────────────────────────────────────────────────────
  * Solflare and Backpack implement the same deeplink protocol on their own
  * hosts, so the request shape is shared and only the base URL differs. Every
- * URL below was checked against the wallet's own published spec:
- * Phantom `docs.phantom.app/developer-powertools/deeplinks`,
+ * URL below was checked against the wallet's own published material AND
+ * against the wallet's own `.well-known` files, which is what decides whether
+ * a phone hands the link over or renders it: Phantom's docs moved (the old
+ * `docs.phantom.app/developer-powertools/deeplinks` page is gone; the protocol
+ * lives on phantom.com and is used by `@phantom/browser-sdk`),
  * Solflare `docs.solflare.com/.../deeplinks`, Backpack `backpack.app/.../ul`.
  */
 
@@ -192,12 +211,40 @@ export const DEEPLINK_WALLETS = Object.freeze([
   Object.freeze({
     id: 'phantom',
     label: 'Phantom',
-    /* https, not phantom:// — a universal link is the only form a plain
-       browser will route without an intent:// wrapper. */
-    base: 'https://phantom.app/ul/v1',
-    /* The wallet's own «open this page in me» link, kept for the desktop and
-       iOS paths where a real connect deeplink cannot complete. */
-    browse: 'https://phantom.app/ul/browse/',
+    /*
+     * ─── phantom.com, NOT phantom.app ─────────────────────────────────────
+     * Both hosts answer, but only ONE of them is claimed by the app, and the
+     * difference is exactly "does the wallet come to the front or not":
+     *
+     *   • `https://phantom.com/.well-known/assetlinks.json` — PRESENT. It
+     *     lists `app.phantom` (three signing certificates) with
+     *     `delegate_permission/common.handle_all_urls`, which is what makes
+     *     Android hand a phantom.com link to Phantom instead of to a browser.
+     *     `https://phantom.com/.well-known/apple-app-site-association` matches
+     *     `/ul/*` for the iOS app (`74UR4AUZ34.app.phantom`) — the same paths
+     *     this module builds.
+     *   • `https://phantom.app/.well-known/assetlinks.json` — 404, and the
+     *     host 301s to phantom.com. So a request addressed to phantom.app is
+     *     (a) redirected in a browser, which is fine, and (b) NOT claimed by
+     *     the wallet app, which is not: `ACTION_VIEW` with
+     *     `setPackage("app.phantom")` and an `intent://` wrapper are both
+     *     resolved against the URL they are GIVEN, and a URL on a host the
+     *     wallet never declared resolves to nothing — the wallet is installed
+     *     and nothing happens. That is the report this change answers:
+     *     «کیف پول روی گوشی نصب است اما اتفاقی نمی‌افتد».
+     *
+     * phantom.app therefore moves from "the address" to "an accepted alias":
+     * requests are BUILT on phantom.com, and the native side still accepts a
+     * phantom.app URL so an older build of this app, or a link a user pasted,
+     * cannot be turned into a dead end.
+     */
+    base: 'https://phantom.com/ul/v1',
+    /* The wallet's own «open this page in me» link — the recovery route when
+       the connect request could not be delivered at all. */
+    browse: 'https://phantom.com/ul/browse/',
+    /* Hosts this wallet's app declares. Used to validate a hand-off, so a
+       request can never be pointed at a host the wallet does not own. */
+    hosts: ['phantom.com', 'phantom.app'],
     androidPackage: 'app.phantom',
     install: 'https://play.google.com/store/apps/details?id=app.phantom'
   }),
@@ -206,6 +253,7 @@ export const DEEPLINK_WALLETS = Object.freeze([
     label: 'Solflare',
     base: 'https://solflare.com/ul/v1',
     browse: 'https://solflare.com/ul/v1/browse/',
+    hosts: ['solflare.com'],
     androidPackage: 'com.solflare.mobile',
     install: 'https://play.google.com/store/apps/details?id=com.solflare.mobile'
   }),
@@ -214,6 +262,7 @@ export const DEEPLINK_WALLETS = Object.freeze([
     label: 'Backpack',
     base: 'https://backpack.app/ul/v1',
     browse: 'https://backpack.app/ul/v1/browse/',
+    hosts: ['backpack.app'],
     androidPackage: 'app.backpack.mobile',
     install: 'https://play.google.com/store/apps/details?id=app.backpack.mobile'
   })
@@ -224,10 +273,42 @@ export function deeplinkInstallUrl(id) {
   return deeplinkWallet(id)?.install ?? null;
 }
 
+/** Every host a wallet's own app claims — the set a hand-off may name. */
+export function deeplinkWalletHosts(id) {
+  return deeplinkWallet(id)?.hosts ?? [];
+}
+
+/**
+ * «Open this page inside the wallet's own browser».
+ *
+ * Phantom's CURRENT mobile integration path (its browser SDK selects exactly
+ * this on a phone) and the recovery route here: the wallet opens, loads our
+ * page in its in-app browser, and the provider IS injected there — so the
+ * connection can be made even when the connect request could not be handed
+ * over. It is offered to the user, never fired silently in the middle of a
+ * flow, because the connection it produces lives in THAT browser.
+ *
+ * Shapes are per wallet and were checked against each published spec:
+ *   Phantom  `https://phantom.com/ul/browse/<url>?ref=<url>`
+ *   Solflare `https://solflare.com/ul/v1/browse/<url>?ref=<url>`
+ *   Backpack `https://backpack.app/ul/v1/browse/?url=<url>&ref=<url>`
+ *
+ * http is refused: handing a wallet a plaintext page to sign on is the one
+ * mistake that turns a wallet into a liability.
+ */
+export function browseRequestUrl(walletId, targetUrl) {
+  const wallet = deeplinkWallet(walletId);
+  const url = String(targetUrl ?? '');
+  if (!wallet?.browse || !/^https:\/\//.test(url)) return null;
+  const encoded = encodeURIComponent(url);
+  if (walletId === 'backpack') return `${wallet.browse}?url=${encoded}&ref=${encoded}`;
+  return `${wallet.browse}${encoded}?ref=${encoded}`;
+}
+
 /**
  * Wrap one request URL in Chrome's `intent://` form, scoped to the wallet.
  *
- *   intent://phantom.app/ul/v1/connect?…#Intent;scheme=https;package=app.phantom;S.browser_fallback_url=…;end
+ *   intent://phantom.com/ul/v1/connect?…#Intent;scheme=https;package=app.phantom;S.browser_fallback_url=…;end
  *
  * ─── WHY THIS IS THE FORM THAT WORKS ON ANDROID ─────────────────────────────
  * An `intent://` URL is resolved BY THE BROWSER, before any navigation commits:
@@ -237,16 +318,37 @@ export function deeplinkInstallUrl(id) {
  *     draws its own approval screen. Our page never navigated, so the pending
  *     request — and the swap that is waiting on the signature — is still alive
  *     when the answer comes back.
- *   • wallet NOT installed → the browser commits to `S.browser_fallback_url`,
- *     the store page. One tap from installing it, instead of a dead end.
+ *   • wallet NOT installed, or the app does not declare this host → the browser
+ *     commits to `S.browser_fallback_url` (see below).
  *
- * A plain `location.assign('https://phantom.app/ul/v1/connect?…')` also works
+ * ─── THE FALLBACK IS THE WALLET'S OWN BROWSER, NOT THE STORE ────────────────
+ * Two different failures produce that fallback and they need different landing
+ * pages:
+ *
+ *   • the wallet is NOT installed → the store page is right, and the browse
+ *     link resolves to the store page through the wallet's own site anyway;
+ *   • the wallet IS installed but this exact URL did not resolve — a host the
+ *     app does not declare, or a build that moved its handler. Sending that
+ *     user to the Play Store tells them to install an app they already have,
+ *     which is the second half of «اتفاقی نمی‌افتد». The own-browser link does
+ *     not have that failure mode: it is a plain https link on the wallet's
+ *     VERIFIED host, so the wallet opens and loads our page inside itself,
+ *     where the provider is injected and the connection can still be made.
+ *
+ * A plain `location.assign('https://phantom.com/ul/v1/connect?…')` also works
  * in a real browser, but it takes the page with it: the document holding the
  * promise is gone, which is how a signature came back to an app that had
  * already forgotten it was waiting. So the intent is tried first and the
  * universal link stays as the fallback for browsers that cannot resolve it
  * (Firefox on Android has no `intent://`; a WebView has nothing to intercept
  * it and would navigate itself away).
+ *
+ * Chrome refuses to fire an intent that was not triggered by a user gesture
+ * (developer.chrome.com/docs/android/intents — «A JavaScript timer tried to
+ * open an application without a user gesture»; when that happens the browser
+ * goes to the fallback URL instead). Which is why the CALLER must build this
+ * synchronously inside the tap, not after an `await` — see openRequestNow in
+ * ./deeplink.js.
  *
  * @returns {string|null} null when the URL is not an https request for a wallet
  *   we know — the caller must then use the universal link unchanged.

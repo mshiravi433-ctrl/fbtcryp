@@ -125,6 +125,59 @@ export const SPECULATIVE_VOCABULARY_PRESENT = false;
   };
 }
 
+/**
+ * SYNTHESISE THE WALLETCONNECT VERIFICATION FILE AT BUILD TIME.
+ * ---------------------------------------------------------------------------
+ * WalletConnect's Verify API reads `/.well-known/walletconnect.txt` on every
+ * origin in the allowlist and compares its bytes to the verification code
+ * the dashboard generated when the domain was added. Until the file is
+ * served with the right bytes, every wallet — Trust, MetaMask, Phantom,
+ * Coinbase — renders the connection request as UNVERIFIED.
+ *
+ * The Reown dashboard issues ONE code per project, and it only displays
+ * that code in the dashboard UI. Committing it to source is wrong (anyone
+ * who forks the repo gets the ability to claim the domain), and writing
+ * it via DNS TXT record is no longer supported by Reown as of 2026. So
+ * the file is synthesised from an env var at build time, and the
+ * placeholder ships in `public/.well-known/walletconnect.txt` so a build
+ * without the env var still produces a working artefact (just not a
+ * verified one).
+ *
+ * Two env vars are honoured, in order:
+ *   WALLETCONNECT_VERIFY_CODE   the verification code from dashboard.reown.com
+ *   WALLETCONNECT_VERIFY_FILE   the absolute path to a file containing it
+ * The file form is the GitHub-Actions-friendly variant: encode the code as
+ * a base64 single-line secret and let the workflow decode it on the runner.
+ *
+ * `validate=true` (the default) refuses the build if the value does not look
+ * like a Reown code. A guard here is the difference between "the next
+ * release ships a 200 KB blob because someone pasted the wrong secret" and
+ * a build that fails at the line that explains why.
+ *
+ * Belt-and-braces: the CI step `scripts/walletconnect-write-verify-file.mjs`
+ * does the same job before `vite build` runs (see `package.json#prebuild`).
+ * This plugin covers the case where a developer runs `vite build` directly
+ * — both write the file and both no-op on a missing env var, so neither
+ * one can shadow the other.
+ */
+/**
+ * NOTE: The previous `walletconnectVerifyFile()` plugin and its companion
+ * `scripts/walletconnect-write-verify-file.mjs` were removed in this commit.
+ *
+ * Background: WalletConnect's Verify API has not required manual domain
+ * listing in the Reown Cloud dashboard since August 2025. The
+ * `/.well-known/walletconnect.txt` mechanism that the plugin synthesised
+ * is from the deprecated DNS-TXT era — it never affected Trust Wallet's
+ * "unverified domain" verdict, which is now produced by the Verify
+ * Enclave inside `verify.walletconnect.org` reading `event.origin` from a
+ * `postMessage`. See WALLET-VERIFY-REALITY-2026-09-21.md for the full
+ * trail.
+ *
+ * What the dApp actually has to do is set `metadata.url` correctly (which
+ * is done in `src/lib/wc/config.js`) and run in a real browser so the
+ * enclave can read `window.message`. No file, no env var, no code.
+ */
+
 export default defineConfig({
   plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary()],
 

@@ -150,6 +150,44 @@ export default function WalletHealthPanel({ projectId }) {
                 </p>
               )}
               {/*
+                * The allowlist this app DECLARES as the right one. The row above
+                * shows what the dashboard actually returned; the gap between the
+                * two is the source of every "unverified domain" we have shipped.
+                */}
+              {Array.isArray(report.dashboardExpected?.origins) && (
+                <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                  <strong>{t('wallet.healthDashboardExpected')}:</strong>{' '}
+                  {report.dashboardExpected.origins.join(', ')}
+                  {Array.isArray(report.dashboardExpected?.appIds) && report.dashboardExpected.appIds.length > 0
+                    ? ` · App IDs: ${report.dashboardExpected.appIds.join(', ')}`
+                    : ''}
+                </p>
+              )}
+              {/*
+                * The metadata the SDK ships to the wallet, including the
+                * verifyUrl the wallet reads to confirm the verification file
+                * lives at the URL it expects.
+                */}
+              {report.metadata && (
+                <p className="muted" style={{ fontSize: 11, margin: '6px 0 2px' }}>
+                  <strong>{t('wallet.healthMetadata')}:</strong>{' '}
+                  {t('wallet.healthMetadataUrl')}={report.metadata.url || '—'}{' '}
+                  · {t('wallet.healthMetadataVerifyUrl')}={report.metadata.verifyUrl || '—'}{' '}
+                  · {t('wallet.healthMetadataIcon')}={report.metadata.iconUrl || '—'}
+                </p>
+              )}
+              {/*
+                * Reachability of the Verify Enclave. The Enclave is the actor
+                * that turns `window.message` into a VALID/INVALID verdict; if
+                * it cannot be reached from this device the report should say
+                * so instead of letting a downstream label blame the dashboard.
+                */}
+              {row(
+                t('wallet.healthVerifyEnclave'),
+                report.verifyEnclave || { ok: false, error: 'NOT_MEASURED' },
+                report.verifyEnclave?.url
+              )}
+              {/*
                 * The identity the wallet is handed, against the origin the
                 * wallet can already see in its own prompt. A mismatch is what
                 * wallets render as «domain mismatch / this dApp may be a scam»,

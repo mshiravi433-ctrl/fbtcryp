@@ -62,6 +62,8 @@ import {
   walletLinks,
   walletLogo,
   wcMetadata,
+  WC_ALLOWED_ORIGINS,
+  WC_ANDROID_APP_ID,
   withTimeout
 } from '../src/lib/wc/index.js';
 import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
@@ -390,6 +392,62 @@ export default async function run() {
       nativeLaunch >= 0 && protocolLaunch > nativeLaunch);
     t('the APK emits a real lifecycle resume signal to the pending pairing',
       /onResume\(\)[\s\S]*fbt:app-resume/.test(mainActivity));
+
+    /*
+     * ─── THE ONE JAVA MISTAKE THAT COSTS THE ENTIRE APK ──────────────────────
+     *
+     * The resume signal above was written as `protected void onResume()`,
+     * while Capacitor's `BridgeActivity` declares it `public` — and Java
+     * forbids an override from NARROWING visibility:
+     *
+     *     onResume() in MainActivity cannot override onResume() in BridgeActivity;
+     *     attempting to assign weaker access privileges; was public
+     *
+     * That is a COMPILE ERROR, so `assembleRelease` never produced a file
+     * again: the website kept deploying while every phone build died in
+     * Gradle, and no JavaScript test could see it. (`onCreate` and
+     * `onNewIntent` are narrower on purpose — their supertype declares them
+     * `protected`, so `protected` is correct there.)
+     *
+     * The table holds the supertype's real visibility. Where the Capacitor
+     * source is installed it is read back and the table is checked against it,
+     * so it cannot quietly rot into a comment that lies.
+     */
+    const superVisibility = {
+      onCreate: 'protected',
+      onNewIntent: 'protected',
+      onResume: 'public',
+      onStart: 'public',
+      onPause: 'public',
+      onStop: 'public',
+      onDestroy: 'public',
+      onSaveInstanceState: 'public'
+    };
+    const rank = { '': 0, private: -1, protected: 1, public: 2 };
+    const declaredIn = (src, name) => {
+      const m = new RegExp(
+        `(?:^|\\n)\\s*(?:(\\w+)\\s+)?void\\s+${name}\\s*\\(`, 'm'
+      ).exec(src);
+      return m ? (m[1] ?? '') : null;
+    };
+    const capacitorActivity = 'node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/BridgeActivity.java';
+    if (existsSync(capacitorActivity)) {
+      const superSrc = readFileSync(capacitorActivity, 'utf8');
+      const mismatched = Object.entries(superVisibility)
+        .filter(([name, vis]) => {
+          const found = declaredIn(superSrc, name);
+          return found !== null && found !== vis;
+        });
+      t('the lifecycle visibility table still matches Capacitor\'s own source',
+        mismatched.length === 0);
+    }
+    const tooNarrow = Object.entries(superVisibility)
+      .map(([name, vis]) => [name, declaredIn(mainActivity, name), vis])
+      .filter(([, ours, theirs]) => ours !== null && rank[ours] < rank[theirs]);
+    t('every MainActivity override is at least as visible as Capacitor\'s '
+      + '(a narrower one does not compile, and takes the APK down with it)'
+      + (tooNarrow.length ? ` — ${tooNarrow.map(([n, o, s]) => `${n}: ${o || 'package-private'} < ${s}`).join(', ')}` : ''),
+      tooNarrow.length === 0);
 
     /* window.open blocked (an OEM popup blocker) must not leave the tap dead:
        a synthetic anchor is still a navigation the gesture initiated. */
@@ -892,6 +950,22 @@ export default async function run() {
           && m.url === canonical;
       })());
 
+    /* ─── the verifyUrl the wallet reads ──────────────────────────────────
+     * Reown's Verify API uses metadata.verifyUrl to find the verification
+     * file: a wallet fetching /walletconnect.txt expects it on the URL the
+     * app told it about. The value must match the declared identity URL,
+     * because the same dashboard entry covers both — and a mismatch here
+     * silently flips the verdict to UNKNOWN.
+     */
+    t('the canonical site publishes the canonical verifyUrl',
+      wcMetadata(page('https://fbtswap.ir')).verifyUrl === canonical);
+    t('the www variant publishes its own verifyUrl, not the bare one',
+      wcMetadata(page('https://www.fbtswap.ir')).verifyUrl === 'https://www.fbtswap.ir');
+    t('the packaged app publishes the canonical verifyUrl, never localhost',
+      wcMetadata(page('https://localhost', { Capacitor: { isNativePlatform: () => true } })).verifyUrl === canonical);
+    t('a preview publishes its own verifyUrl',
+      wcMetadata(page('https://5173-abc123.e2b.app')).verifyUrl === 'https://5173-abc123.e2b.app');
+
     /* ─── the report's own evidence ───────────────────────────────────────── */
     const aligned = walletIdentityFacts(page('https://fbtswap.ir'));
     t('aligned facts name the same origin twice',
@@ -903,6 +977,48 @@ export default async function run() {
     const packaged = walletIdentityFacts(page('https://localhost', { Capacitor: { isNativePlatform: () => true } }));
     t('packaged facts carry the flag the report renders',
       packaged.packaged === true && packaged.declared === canonical);
+
+    /* ─── the allowlist that ships in source ─────────────────────────────
+     * The Reown dashboard allowlist MUST contain every origin a page might
+     * be served from, otherwise the corresponding WalletConnect session
+     * verdict flips to INVALID. The list is data, not an if-tree, so a new
+     * domain is one line and the test asserts the shape instead of
+     * trusting the constant.
+     */
+    t('the canonical bare domain is on the allowlist',
+      WC_ALLOWED_ORIGINS.includes('https://fbtswap.ir'));
+    t('the www variant is on the allowlist — Trust Wallet warns otherwise',
+      WC_ALLOWED_ORIGINS.includes('https://www.fbtswap.ir'));
+    t('the packaged APK WebView origin is on the allowlist',
+      WC_ALLOWED_ORIGINS.includes('https://localhost'));
+    t('no allowlist entry names a retired domain',
+      WC_ALLOWED_ORIGINS.every((o) => !/lawpoetics\.ir/i.test(o)));
+    t('the allowlist contains only https origins (no http, no scheme-less)',
+      WC_ALLOWED_ORIGINS.every((o) => /^https:\/\//i.test(o)));
+    t('the Android app id matches the package the APK ships with',
+      WC_ANDROID_APP_ID === 'ir.fbtswap.app');
+  }
+
+  /* ══════════════════ the Verify API has no file to ship ═════════════════
+   * The Verify API is attestation-based since August 2025: the Enclave at
+   * `verify.walletconnect.org` reads origin from `window.message`, not from
+   * a `/.well-known/walletconnect.txt` lookup. The old file artefacts are
+   * removed; if any build ever reintroduces one it would not affect the
+   * verdict (the Enclave does not fetch it), but it would still be honest
+   * to keep them out of source so the deploy log does not mislead the next
+   * reader.
+   */
+  {
+    const { existsSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const file = resolve(here, '..', 'public', '.well-known', 'walletconnect.txt');
+    t('no `.well-known/walletconnect.txt` artefact is committed',
+      !existsSync(file));
+    const writeScript = resolve(here, '..', 'scripts', 'walletconnect-write-verify-file.mjs');
+    t('no CI write script is committed alongside it',
+      !existsSync(writeScript));
   }
 
   /* ══════════════════ 11. the health report ═══════════════════════════════ */

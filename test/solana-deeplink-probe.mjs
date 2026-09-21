@@ -192,7 +192,18 @@ const ok = (name, condition) => {
     appUrl: 'https://fbtswap.ir'
   });
   const parsed = requestParams(phantom);
-  ok('the connect request goes to the wallet host over https', parsed.host === 'phantom.app' && parsed.path === '/ul/v1/connect');
+  ok('the connect request goes to the wallet host over https',
+    parsed.host === 'phantom.com' && parsed.path === '/ul/v1/connect');
+  /*
+   * phantom.com, NOT phantom.app — and this is a delivery fact, not a
+   * cosmetic one. Phantom's own `/.well-known/assetlinks.json` lives on
+   * phantom.com and lists `app.phantom`; phantom.app 404s it and 301s here.
+   * A request addressed at a host the wallet app never declared resolves to
+   * nothing when it is handed to Android (`intent://`, ACTION_VIEW+package),
+   * so the wallet — installed, unlocked, on the phone — never opens.
+   */
+  ok('and it is the host the wallet app actually claims',
+    DEEPLINK_WALLETS.find((w) => w.id === 'phantom').hosts.includes('phantom.com'));
   ok('the connect request carries the dapp key, our identity and the redirect',
     parsed.get('dapp_encryption_public_key') === 'PUBKEY'
     && parsed.get('app_url') === 'https://fbtswap.ir'
@@ -236,16 +247,104 @@ const ok = (name, condition) => {
 }
 
 /* -------------------------------------------------------------------------- */
+/* 1b. the tap that must not lose its gesture                                  */
+/* -------------------------------------------------------------------------- */
+/*
+ * «اتفاقی نمی‌افتد یا خیلی طول می‌کشد که صفحهٔ تأیید کیف پول بیاید».
+ *
+ * Both halves came out of one design mistake. A connect request needs a key
+ * pair; the key pair needs `tweetnacl`; and every one of those was awaited
+ * before the wallet was opened. Chrome's own rule
+ * (developer.chrome.com/docs/android/intents) is that an `intent://` is NOT
+ * launched when it «was initiated without a user gesture» — a timer fired at
+ * the wallet is not a tap, and the browser goes to the fallback URL instead.
+ * The hand-off therefore has to leave in the same task as the tap, which is
+ * only possible when the key pair was made BEFORE it.
+ */
+{
+  setUa(UA_ANDROID_CHROME);
+  ok('before anything is armed, a tap is named rather than silently ignored',
+    deeplink.startDeeplinkConnectSync('phantom').code === 'NOT_ARMED');
+  ok('and it leaves no half-built request behind',
+    deeplink.pendingDeeplinkRequest() === null);
+
+  ok('warming is what puts a tap-ready key pair in memory',
+    (await deeplink.warmDeeplinkRequest()) === true && deeplink.deeplinkArmed() === true);
+
+  /* THE PIN: nothing is awaited between the call and the wallet being opened. */
+  const before = opened.length;
+  const tapped = deeplink.startDeeplinkConnectSync('phantom');
+  ok('the wallet is opened in the SAME TASK as the tap',
+    tapped.ok === true && opened.length === before + 1);
+  ok('over the route Android Chrome accepts: the package-scoped intent',
+    tapped.route === 'intent'
+    && String(opened.at(-1)).startsWith('intent://phantom.com/ul/v1/connect?'));
+  ok('and the request is on record while the wallet holds it',
+    deeplink.pendingDeeplinkRequest()?.id === tapped.id
+    && deeplink.deeplinkState().status === 'waiting');
+  deeplink.cancelDeeplinkRequest(tapped.id);
+  setUa(UA_DESKTOP);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 1c. «I tapped and nothing happened» — said out loud                         */
+/* -------------------------------------------------------------------------- */
+/*
+ * Until this existed, two very different situations looked identical on the
+ * screen: the wallet is open in front of the user waiting to be approved, and
+ * the hand-off went nowhere and this page is exactly where they left it. Both
+ * said «منتظر تأیید…». The signal that separates them is free: when another
+ * app comes forward, this document stops being visible.
+ */
+{
+  setUa(UA_ANDROID_CHROME);
+  globalThis.__FBT_HANDOFF_GRACE_MS = 40; // a probe cannot sit for 2.5 s per case
+  await deeplink.warmDeeplinkRequest();
+
+  const silent = deeplink.startDeeplinkConnectSync('phantom');
+  ok('a fired hand-off starts out not-stuck', silent.ok === true && deeplink.deeplinkState().stuck === false);
+  await new Promise((r) => setTimeout(r, 150));
+  ok('a hand-off that never brought a wallet forward is reported as STUCK',
+    deeplink.deeplinkState().stuck === true && deeplink.deeplinkState().status === 'waiting');
+  deeplink.cancelDeeplinkRequest(silent.id);
+  ok('cancelling clears the recovery state', deeplink.deeplinkState().stuck === false);
+
+  /* The other half: the wallet DID come forward, so this document is hidden —
+     no card, the user is looking at their wallet. */
+  globalThis.document = { visibilityState: 'hidden' };
+  const forward = deeplink.startDeeplinkConnectSync('phantom');
+  await new Promise((r) => setTimeout(r, 150));
+  ok('a wallet that came to the front is NOT reported as stuck',
+    forward.ok === true && deeplink.deeplinkState().stuck === false);
+  deeplink.cancelDeeplinkRequest(forward.id);
+  delete globalThis.document;
+
+  /* The recovery route: our page, inside the wallet's own browser. */
+  const browse = deeplink.openDeeplinkBrowse('phantom');
+  ok('the recovery route opens the wallet\'s own browser on our page',
+    browse.ok === true
+    && String(opened.at(-1)).startsWith('intent://phantom.com/ul/browse/')
+    && browse.url.startsWith('https://phantom.com/ul/browse/'));
+  ok('the card can also send the user to the store',
+    deeplink.deeplinkInstallLink('phantom').includes('id=app.phantom'));
+
+  delete globalThis.__FBT_HANDOFF_GRACE_MS;
+  setUa(UA_DESKTOP);
+}
+
+/* -------------------------------------------------------------------------- */
 /* 2. connect — the approval screen's round trip                               */
 /* -------------------------------------------------------------------------- */
 const wallet = newWallet();
 let connectRid = null;
 {
+  const beforeConnect = opened.length;
   const started = await deeplink.startDeeplinkConnect('phantom');
-  ok('the connect request was built and opened', started.ok === true && opened.length === 1);
+  ok('the connect request was built and opened',
+    started.ok === true && opened.length === beforeConnect + 1);
 
-  const params = requestParams(opened[0]);
-  ok('the wallet was asked at a real Phantom endpoint', params.host === 'phantom.app');
+  const params = requestParams(opened.at(-1));
+  ok('the wallet was asked at a real Phantom endpoint', params.host === 'phantom.com');
   const redirect = params.get('redirect_link');
   ok('the redirect carries the state id back to us', redirect.includes('rid='));
   connectRid = redirect.match(/rid=([^&]+)/)[1];
@@ -301,14 +400,24 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
 
   const raw = opened[opened.length - 1];
   ok('on Android the signing request is handed over as a package-scoped intent',
-    raw.startsWith('intent://phantom.app/ul/v1/signAndSendTransaction?')
+    raw.startsWith('intent://phantom.com/ul/v1/signAndSendTransaction?')
     && raw.includes('package=app.phantom')
     && raw.includes('scheme=https')
     && raw.endsWith(';end'));
-  ok('the intent carries the store page as its fallback, so an in-place '
-    + 'navigation can only ever commit somewhere useful',
+  /*
+   * The fallback is the wallet's OWN BROWSER on our page, not the store.
+   *
+   * It is used when the intent does not resolve — which is both "the wallet is
+   * not installed" and "the wallet is installed but does not declare this
+   * URL". The store link answers the second case with «install the app you
+   * already have»; the browse link opens the wallet, which loads our page in
+   * itself, where the provider is injected and the connection can still be
+   * made.
+   */
+  ok('the intent falls back to the wallet\'s own browser on our page',
     raw.includes('S.browser_fallback_url=')
-    && decodeURIComponent(raw).includes('play.google.com/store/apps/details?id=app.phantom'));
+    && decodeURIComponent(raw).includes('https://phantom.com/ul/browse/')
+    && decodeURIComponent(raw).includes(encodeURIComponent('https://fbtswap.ir')));
 
   const params = requestParams(raw);
   ok('the signing request goes to signAndSendTransaction', params.path === '/ul/v1/signAndSendTransaction');
@@ -359,7 +468,7 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
 
   const raw = opened[opened.length - 1];
   ok('iOS gets the universal link, not a scheme Safari cannot render',
-    raw.startsWith('https://phantom.app/ul/v1/signAndSendTransaction?'));
+    raw.startsWith('https://phantom.com/ul/v1/signAndSendTransaction?'));
 
   const params = requestParams(raw);
   const result = await pendingSign;
@@ -530,6 +639,18 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
     routesFor(UA_IPHONE_SAFARI).join(',') === 'universal');
   ok('a browser that cannot carry the request still ends at the universal link',
     routesFor(UA_ANDROID_WEBVIEW).at(-1) === 'universal');
+
+  /*
+   * A REFUSED intent is not a catchable error: Chrome just commits to the
+   * fallback URL. So when the platform says the gesture is gone (a swap signed
+   * after an RPC round trip), the intent is not fired at all and the universal
+   * link carries the request instead — it survives in the URL, and the OS can
+   * still hand it to the wallet from a normal navigation.
+   */
+  ok('with the gesture provably gone, Android Chrome gets the universal link '
+    + 'rather than an intent Chrome would refuse',
+    !routesFor(UA_ANDROID_CHROME, { navigator: { userAgent: UA_ANDROID_CHROME, userActivation: { isActive: false } } })
+      .includes('intent'));
 
   /* Inside the APK the FIRST route must be the native ACTION_VIEW bridge: a
      Custom Tab cannot deliver an App Link, which is what made Phantom open

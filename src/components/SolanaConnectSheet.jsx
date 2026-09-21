@@ -43,14 +43,18 @@ import {
 import {
   cancelDeeplinkRequest,
   consumeDeeplinkResult,
+  deeplinkInstallLink,
   deeplinkSession,
   deeplinkState,
   deeplinkWalletOptions,
   installDeeplinkReturnListeners,
+  openDeeplinkBrowse,
   pendingDeeplinkRequest,
   reopenDeeplinkRequest,
   startDeeplinkConnect,
-  subscribeDeeplink
+  startDeeplinkConnectSync,
+  subscribeDeeplink,
+  warmDeeplinkRequest
 } from '../lib/solana/deeplink.js';
 import { IconCheck, IconExternal, IconShield, IconWallet } from './Icons';
 import '../styles/solana-connect.css';
@@ -68,6 +72,14 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [requestId, setRequestId] = useState(null);
+  /*
+   * «I tapped and nothing happened.» Set by the flow module when a hand-off was
+   * fired, the grace period passed, and this page is still the visible one —
+   * i.e. the wallet never came to the front. Without it the waiting card was
+   * the same screen for «approve it in Phantom» and for «nothing opened», and
+   * the user had no way to tell which one they were looking at.
+   */
+  const [stuck, setStuck] = useState(false);
 
   /* Read the device's capabilities once per open: they cannot change while
      the sheet is up, and re-reading on every render would re-run provider
@@ -93,16 +105,19 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
         setRequestId(state.requestId ?? null);
         setWalletId((cur) => state.walletId ?? cur);
         setError(null);
+        setStuck(state.stuck === true);
       } else if (state.status === 'connected') {
         setPhase('connected');
         setResult({ ok: true, address: state.address, walletId: state.walletId });
         setBusy(false);
+        setStuck(false);
         haptic?.('success');
         onConnected?.(state.address);
       } else if (state.status === 'error') {
         setPhase('error');
         setError(state.code || 'WALLET_ERROR');
         setBusy(false);
+        setStuck(false);
       }
     });
 
@@ -141,6 +156,20 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
     if (open && initialWallet) setWalletId(initialWallet);
   }, [open, initialWallet]);
 
+  /*
+   * ARM THE REQUEST BEFORE THE TAP.
+   *
+   * A connect request needs a fresh key pair, and building one costs a dynamic
+   * import of `tweetnacl`. Doing that at tap time is what made the wallet open
+   * seconds late — and, because Chrome only launches an app for an `intent://`
+   * produced by a user gesture, why it often did not open at all. The pair is
+   * therefore made here, while the user is still reading the sheet, and again
+   * on `pointerdown` over a wallet row (which fires before the click).
+   */
+  useEffect(() => {
+    if (open) warmDeeplinkRequest();
+  }, [open]);
+
   const finish = useCallback((value) => {
     setError(null);
     setPhase('choose');
@@ -167,31 +196,75 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
     }
   }, [haptic, onConnected]);
 
-  /** Ask the wallet app itself — the request that produces its approval screen. */
-  const connectByDeeplink = useCallback(async (id) => {
+  /**
+   * Ask the wallet app itself — the request that produces its approval screen.
+   *
+   * ─── WHY THIS HANDLER IS SYNCHRONOUS ────────────────────────────────────────
+   * `startDeeplinkConnectSync` does no awaiting: it takes a pre-armed key pair,
+   * builds the URL, stores the request and fires the hand-off inside this very
+   * click. That is the difference between the wallet opening and Chrome's rule
+   * refusing to launch it («a JavaScript timer tried to open an application
+   * without a user gesture»), and between an instant approval screen and one
+   * that arrives seconds after the tap. The only case it cannot serve is a tap
+   * that arrives before the key pair was armed — then the awaited version runs,
+   * which is slower but never fails for that reason.
+   */
+  const connectByDeeplink = useCallback((id) => {
     setBusy(true);
     setError(null);
+    setStuck(false);
     setWalletId(id);
     haptic?.('light');
-    const res = await startDeeplinkConnect(id);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.code || 'OPEN_FAILED');
-      setPhase('error');
+
+    const started = startDeeplinkConnectSync(id);
+    if (started.ok) {
+      setRequestId(started.id);
+      setPhase('waiting');
+      setBusy(false);
       return;
     }
-    setRequestId(res.id);
-    setPhase('waiting');
+    if (started.code !== 'NOT_ARMED') {
+      setError(started.code || 'OPEN_FAILED');
+      setPhase('error');
+      setBusy(false);
+      return;
+    }
+
+    /* Cold tap: no key pair was ready. Warm up once more and go. */
+    startDeeplinkConnect(id).then((res) => {
+      if (!res.ok) {
+        setError(res.code || 'OPEN_FAILED');
+        setPhase('error');
+      } else {
+        setRequestId(res.id);
+        setPhase('waiting');
+      }
+      setBusy(false);
+    });
   }, [haptic]);
 
-  const reopen = useCallback(async () => {
+  const reopen = useCallback(() => {
     haptic?.('light');
-    const res = await reopenDeeplinkRequest(requestId);
+    setStuck(false);
+    const res = reopenDeeplinkRequest(requestId);
     if (!res.ok) {
       setError(res.code || 'OPEN_FAILED');
       setPhase('error');
     }
   }, [haptic, requestId]);
+
+  /**
+   * The recovery route: our page, inside the wallet's own browser.
+   *
+   * Kept as an explicit button and explained on the card, because the
+   * connection it produces lives in that browser — it is a way to connect, not
+   * a way to be connected HERE, and pretending otherwise is how a user ends up
+   * approving something that never shows up.
+   */
+  const openInWalletBrowser = useCallback(() => {
+    haptic?.('light');
+    openDeeplinkBrowse(walletId || 'phantom');
+  }, [haptic, walletId]);
 
   const check = useCallback(() => {
     /*
@@ -296,6 +369,11 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
                     type="button"
                     className="wallet-option"
                     disabled={busy}
+                    /* `pointerdown` fires before `click`: by the time the click
+                       handler runs, the key pair the hand-off needs is already
+                       in memory (see warmDeeplinkRequest). */
+                    onPointerDown={() => warmDeeplinkRequest()}
+                    onTouchStart={() => warmDeeplinkRequest()}
                     onClick={() => connectByDeeplink(w.id)}
                     data-testid={`sol-connect-${w.id}`}
                   >
@@ -354,6 +432,67 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
                 {t('solana.connect.check')}
               </button>
             </div>
+
+            {/*
+              * «اتفاقی نمیافتد» — said out loud instead of left as a spinner.
+              *
+              * The flow module knows the difference between "the wallet is in
+              * front of you, waiting to be approved" and "the hand-off went
+              * nowhere and this page never lost focus", because the second one
+              * keeps this document visible through the whole grace period. When
+              * it is the second one, the user gets the three routes that are
+              * still left — try again, open our page inside the wallet's own
+              * browser, or install the wallet.
+              */}
+            {stuck && (
+              <div className="card card-tight" data-testid="sol-connect-stuck">
+                <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <span className="wallet-badge" aria-hidden="true">
+                    <IconExternal width={15} height={15} />
+                  </span>
+                  <span style={{ fontWeight: 700, fontSize: 12.8 }}>
+                    {t('solana.connect.stuckTitle', { name: walletLabel })}
+                  </span>
+                </div>
+                <p className="muted" style={{ fontSize: 12, margin: '8px 0 0', lineHeight: 1.8 }}>
+                  {t('solana.connect.stuckBody', { name: walletLabel })}
+                </p>
+                <div className="btn-row" style={{ marginTop: 9 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={reopen}
+                    data-testid="sol-connect-stuck-reopen"
+                  >
+                    {t('solana.connect.stuckReopen', { name: walletLabel })}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={openInWalletBrowser}
+                    data-testid="sol-connect-stuck-browse"
+                  >
+                    {t('solana.connect.stuckBrowse', { name: walletLabel })}
+                  </button>
+                </div>
+                <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.75 }}>
+                  {t('solana.connect.stuckBrowseNote', { name: walletLabel })}
+                </p>
+                {deeplinkInstallLink(walletId || 'phantom') && (
+                  <a
+                    className="faint"
+                    style={{ fontSize: 11 }}
+                    href={deeplinkInstallLink(walletId || 'phantom')}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="sol-connect-stuck-install"
+                  >
+                    {t('solana.connect.stuckInstall', { name: walletLabel })}
+                  </a>
+                )}
+              </div>
+            )}
+
             <button type="button" className="btn btn-ghost btn-sm" onClick={cancel}>
               {t('solana.connect.cancel')}
             </button>

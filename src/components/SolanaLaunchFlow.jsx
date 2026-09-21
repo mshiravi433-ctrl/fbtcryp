@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SolanaConnectSheet from './SolanaConnectSheet';
+import { warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 import { useTranslation } from 'react-i18next';
 /*
  * `Buffer` is a Node global; a browser does not have one. The PDA derivation
@@ -97,6 +98,9 @@ function useSolanaWallet() {
     const onChange = (e) => setAddress(e?.detail?.address || solanaAddress());
     window.addEventListener('solana:wallet-change', onChange);
     setAddress(solanaAddress());
+    /* Arm the connect request here, not at tap time: a hand-off that has to
+       come out of a user gesture cannot wait for a `tweetnacl` chunk. */
+    warmDeeplinkRequest();
     return () => window.removeEventListener('solana:wallet-change', onChange);
   }, []);
   const connect = useCallback(async () => {
