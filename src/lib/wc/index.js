@@ -35,7 +35,6 @@ export {
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
-  WC_VERIFY_FILE_PATH,
   walletIdentityFacts,
   walletIdentityUrl,
   wcMetadata

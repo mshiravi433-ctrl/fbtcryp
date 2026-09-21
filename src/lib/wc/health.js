@@ -32,7 +32,6 @@ import {
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
-  WC_VERIFY_FILE_PATH,
   wcMetadata,
   walletIdentityFacts
 } from './config.js';
@@ -200,35 +199,27 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
 }
 
 /**
- * Head-only probe of the verification file on a given origin.
+ * Head-only probe of the Verify Enclave.
  *
- * The Reown verifier reads the file at `/.well-known/walletconnect.txt` from
- * every origin in the allowlist, not just from the canonical one. A 404 on
- * any of them is what makes a "registered" dApp read as UNVERIFIED. The
- * check is HEAD so a misconfigured origin cannot pull the whole page into a
- * long block on a slow server, and the response is cached by the browser as
- * an empty body.
- *
- * Verifies with a plain GET only if HEAD is not implemented by the origin's
- * static-file server; some hosts return 405 for HEAD on text files even
- * though GET answers 200.
+ * WalletConnect's Verify API is attestation-based since August 2025: the
+ * Enclave at `verify.walletconnect.org` reads `event.origin` from the
+ * `window.message` the Verify Client posts and writes that origin to the
+ * Verify Server. There is no `/.well-known/walletconnect.txt` to fetch from
+ * the dApp — that file was part of the deprecated DNS-TXT era. The probe
+ * here is a connectivity check on the Enclave host itself, so the report
+ * can name "Verify Enclave unreachable" when the report's identity row
+ * claims an origin that the Enclave would never attest.
  */
-async function probeVerifyFile(origin, { fetchImpl, timeoutMs } = {}) {
-  if (!origin) return { ok: false, error: 'NO_ORIGIN' };
+async function probeVerifyEnclave({ fetchImpl, timeoutMs } = {}) {
   const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
   if (!call) return { ok: false, error: 'NO_FETCH' };
-  const url = `${String(origin).replace(/\/+$/, '')}${WC_VERIFY_FILE_PATH}`;
+  const url = 'https://verify.walletconnect.org/';
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => {
     try { controller?.abort(); } catch { /* best effort */ }
   }, timeoutMs ?? TIMEOUT.healthProbe);
   try {
     const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
-    if (res.status === 405 || res.status === 501) {
-      /* Some static hosts reject HEAD; the file itself may still be there. */
-      const res2 = await call(url, { method: 'GET', signal: controller?.signal, cache: 'no-store' });
-      return { ok: res2.ok, status: res2.status, url };
-    }
     return { ok: res.ok, status: res.status, url };
   } catch (error) {
     return {
@@ -322,8 +313,7 @@ export async function collectWalletHealth({
       metadata: {
         url: wcMetadata().url,
         verifyUrl: wcMetadata().verifyUrl || null,
-        iconUrl: wcMetadata().icons?.[0] || null,
-        verifyFilePath: WC_VERIFY_FILE_PATH
+        iconUrl: wcMetadata().icons?.[0] || null
       },
       /* The expected allowlist, read from the same source `walletIdentityUrl`
          reads from. Surfaced here so the support thread can paste it next to
@@ -332,11 +322,13 @@ export async function collectWalletHealth({
         origins: WC_ALLOWED_ORIGINS,
         appIds: [WC_ANDROID_APP_ID]
       },
-      /* Whether the verification file is served on the page's own origin.
-         A 404 here is the single most common reason a "verified" dApp still
-         reads as UNVERIFIED — the dashboard is registered but the file the
-         verifier fetches returns 404. */
-      verifyFile: await probeVerifyFile(currentOrigin, { fetchImpl, timeoutMs }),
+      /* Reachability of the Verify Enclave. The Enclave is the actor that
+         decides whether a session proposal's origin attests VALID; if it is
+         unreachable the report should say so rather than blame the dashboard.
+         There is intentionally NO file fetch here: the `walletconnect.txt`
+         path is part of the deprecated DNS-TXT verification flow, and a
+         404 there would be a false negative for the active attestation flow. */
+      verifyEnclave: await probeVerifyEnclave({ fetchImpl, timeoutMs }),
       relay: reachable ? reachable.socket : (relay.hosts[0]?.socket ?? { ok: false, error: 'NO_RELAY_URLS' }),
       relays: relay.hosts,
       relayVerdict: relay.verdict,

@@ -160,70 +160,26 @@ export const SPECULATIVE_VOCABULARY_PRESENT = false;
  * — both write the file and both no-op on a missing env var, so neither
  * one can shadow the other.
  */
-function walletconnectVerifyFile() {
-  return {
-    name: 'walletconnect-verify-file',
-    apply: 'build',
-    enforce: 'pre',
-    async generateBundle() {
-      const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import('node:fs');
-      const { dirname, resolve } = await import('node:path');
-
-      const validate = process.env.WALLETCONNECT_VERIFY_VALIDATE !== 'false';
-      /* The shape Reown's codes take: a long base64ish string with `=` padding
-         and possibly `=` separating two parts (older codes). The same regex
-         `scripts/walletconnect-domain-verify.mjs` uses, so the runtime check
-         and the build-time check never disagree. */
-      const LOOKS_LIKE_CODE = /^[A-Za-z0-9._~-]{16,512}$/;
-
-      /* Prefer the raw code env var; fall back to the file form so secrets
-         managers that only support file mounts (Vault, SOPS) still work. */
-      let raw = (process.env.WALLETCONNECT_VERIFY_CODE || '').trim();
-      if (!raw) {
-        const file = (process.env.WALLETCONNECT_VERIFY_FILE || '').trim();
-        if (file && existsSync(file)) {
-          raw = readFileSync(file, 'utf8').replace(/^\uFEFF/, '').trim();
-        }
-      }
-
-      if (!raw) {
-        /* No code provided. Ship the placeholder. The build still succeeds
-           so local development and preview deploys work without a secret —
-           a wallet prompt from such a build reads UNVERIFIED but the rest
-           of the app functions. The warning is loud so it cannot be missed. */
-        console.warn(
-          '[walletconnect-verify-file] no WALLETCONNECT_VERIFY_CODE set; shipping placeholder.\n'
-          + '  Set the env var (or WALLETCONNECT_VERIFY_FILE) on the build host,\n'
-          + '  then redeploy, to make WalletConnect Verify API mark this dApp as verified.'
-        );
-        return;
-      }
-
-      /* Strip a `wc-verify: ` prefix that some docs copy-paste, and a
-         "verify code: " label that the dashboard sometimes appends. */
-      raw = raw.split(/\r?\n/)[0].trim();
-      raw = raw.replace(/^verify\s*code\s*[:：]\s*/i, '').replace(/^wc-verify:\s*/i, '').trim();
-
-      if (validate && !LOOKS_LIKE_CODE.test(raw)) {
-        throw new Error(
-          `WALLETCONNECT_VERIFY_CODE does not look like a Reown verification code (length=${raw.length}).\n`
-          + `  Copy the whole value from dashboard.reown.com → Domains → verify, not the row's label.`
-        );
-      }
-
-      const target = resolve(process.cwd(), 'public', '.well-known', 'walletconnect.txt');
-      mkdirSync(dirname(target), { recursive: true });
-      /* Exactly the code and one newline: the verifier compares the file's
-         bytes, and an editor that "helpfully" adds a second newline or a
-         UTF-8 BOM makes the comparison fail with no useful error. */
-      writeFileSync(target, `${raw}\n`, 'utf8');
-      console.log(`[walletconnect-verify-file] wrote ${target} (${raw.length} chars)`);
-    }
-  };
-}
+/**
+ * NOTE: The previous `walletconnectVerifyFile()` plugin and its companion
+ * `scripts/walletconnect-write-verify-file.mjs` were removed in this commit.
+ *
+ * Background: WalletConnect's Verify API has not required manual domain
+ * listing in the Reown Cloud dashboard since August 2025. The
+ * `/.well-known/walletconnect.txt` mechanism that the plugin synthesised
+ * is from the deprecated DNS-TXT era — it never affected Trust Wallet's
+ * "unverified domain" verdict, which is now produced by the Verify
+ * Enclave inside `verify.walletconnect.org` reading `event.origin` from a
+ * `postMessage`. See WALLET-VERIFY-REALITY-2026-09-21.md for the full
+ * trail.
+ *
+ * What the dApp actually has to do is set `metadata.url` correctly (which
+ * is done in `src/lib/wc/config.js`) and run in a real browser so the
+ * enclave can read `window.message`. No file, no env var, no code.
+ */
 
 export default defineConfig({
-  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary(), walletconnectVerifyFile()],
+  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary()],
 
   /*
    * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the

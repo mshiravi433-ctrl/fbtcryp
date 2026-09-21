@@ -173,8 +173,15 @@ async function checkSafeBrowsing() {
 async function checkWalletFetchedUrls() {
   for (const [name, path, why] of [
     ['dApp icon (wallet prompt)', '/icon-512.png', 'a wallet that cannot fetch it shows a blank entry'],
-    ['Reown verification file', '/.well-known/walletconnect.txt', 'without it the domain stays UNVERIFIED in every wallet prompt'],
     /*
+     * The Verify API is attestation-based since August 2025 (the
+     * `/.well-known/walletconnect.txt` file is from the deprecated DNS-TXT
+     * era). The Enclave at `verify.walletconnect.org` reads `event.origin`
+     * from a `postMessage` instead, so there is no file to fetch for it.
+     * Reachability of the Enclave host itself is the relevant signal here:
+     * a `404` on `verify.walletconnect.org/` would mean attestation cannot
+     * run, not that the domain is unverified.
+     *
      * The two Phantom fetches that decide what its dialogs say.
      *
      * `redirect_link` is not only where the answer goes: Phantom reads the ORIGIN

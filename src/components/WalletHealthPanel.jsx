@@ -173,29 +173,19 @@ export default function WalletHealthPanel({ projectId }) {
                   <strong>{t('wallet.healthMetadata')}:</strong>{' '}
                   {t('wallet.healthMetadataUrl')}={report.metadata.url || '—'}{' '}
                   · {t('wallet.healthMetadataVerifyUrl')}={report.metadata.verifyUrl || '—'}{' '}
-                  · {t('wallet.healthMetadataIcon')}={report.metadata.iconUrl || '—'}{' '}
-                  · {t('wallet.healthMetadataVerifyFile')}={report.metadata.verifyFilePath || '—'}
+                  · {t('wallet.healthMetadataIcon')}={report.metadata.iconUrl || '—'}
                 </p>
               )}
               {/*
-                * Whether the verification file is reachable on THIS page's
-                * origin. The Reown verifier fetches it from every origin in
-                * the allowlist; a 404 on any of them makes the whole domain
-                * read as UNVERIFIED.
+                * Reachability of the Verify Enclave. The Enclave is the actor
+                * that turns `window.message` into a VALID/INVALID verdict; if
+                * it cannot be reached from this device the report should say
+                * so instead of letting a downstream label blame the dashboard.
                 */}
-              {report.metadata?.verifyFilePath && (
-                <p
-                  className={
-                    report.verifyFile?.ok
-                      ? 'notice'
-                      : 'notice notice-danger'
-                  }
-                  style={{ fontSize: 11.5, margin: '4px 0' }}
-                >
-                  {report.verifyFile?.ok
-                    ? t('wallet.healthVerifyFileOk', { path: report.metadata.verifyFilePath })
-                    : t('wallet.healthVerifyFileMissing', { path: report.metadata.verifyFilePath })}
-                </p>
+              {row(
+                t('wallet.healthVerifyEnclave'),
+                report.verifyEnclave || { ok: false, error: 'NOT_MEASURED' },
+                report.verifyEnclave?.url
               )}
               {/*
                 * The identity the wallet is handed, against the origin the

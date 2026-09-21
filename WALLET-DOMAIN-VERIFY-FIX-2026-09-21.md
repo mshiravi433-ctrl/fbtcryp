@@ -1,11 +1,8 @@
-# «unverified domain» — the 14 checks and the one dashboard form
+# «unverified domain» — Verify API در سال ۲۰۲۶
 
-> تاریخ: ۲۰۲۶-۰۹-۲۱ · شاخه: `arena/01a0c289-fbtcryp` · PR مبدأ: شماره بعدی
+> تاریخ: ۲۰۲۶-۰۹-۲۱ · شاخه: `arena/01a0c289-fbtcryp` · PR: [#372](https://github.com/mshiravi433-ctrl/fbtcryp/pull/372)
 
-گزارش: «در تراست والت هم برای localhost و هم برای `fbtswap.ir` هنوز
-`unverified domain` نشان می‌دهد.» این سند توضیح می‌دهد چه چیزی در این شاخه
-درست شد، چه چیزی در کد دیگر قابل بهبود نبود، و چه چیزی فقط مالک پروژه
-می‌تواند در داشبورد Reown کلیک کند.
+این سند توضیح می‌دهد که چه چیزی در این شاخه درست شد، چه چیزی در کد **دیگر** قابل بهبود نبود، و چرا deploy نهایی **بدون** env var یا فایل verify کار می‌کند.
 
 ---
 
@@ -13,45 +10,39 @@
 
 | لایه | مالکش کیست | در این شاخه چه شد |
 |---|---|---|
-| **الف. تطابق دامنه (`VALID`/`INVALID`)** | کد ما | قبلاً درست شده بود؛ اینجا تقویت شد |
-| **ب. ثبت دامنه در Reown (`UNKNOWN` → `VALID`)** | داشبورد + یک فایل | فایل ساخته شد، اسکریپت داشبورد نوشته شد |
-| **ج. شهرت دامنه (Threat)** | بلاک‌لیست‌های بیرونی | دست‌نخورده — فقط فیدهای عمومی قابل چک هستند |
+| **الف. تطابق دامنه (`VALID`/`INVALID`)** | کد ما | تقویت شد (`walletIdentityUrl` صریح‌تر) |
+| **ب. ثبت دامنه در Verify API (`UNKNOWN` → `VALID`)** | Enclave + metadata | از آگوست ۲۰۲۵ attestation-only؛ نیازی به فایل یا داشبورد نیست |
+| **ج. شهرت دامنه (Threat)** | بلاک‌لیست‌های بیرونی | دست‌نخورده — `scripts/wallet-reputation-check.mjs` |
 
-**هشدار «unverified domain» تراست‌والت یعنی فقط لایهٔ (ب) درست نشده.**
-لایه‌های (الف) و (ج) اگر خراب بودند پیام متفاوتی می‌دادند. این یعنی کد ما
-درست کار می‌کند، فقط **اثبات مالکیت دامنه** مانده — که بیرون از این ریپازیتوری
-اتفاق می‌افتد.
+هشدار «unverified domain» Trust Wallet یعنی لایهٔ (ب) درست نشده یا origin ما در metadata با origin واقعی page match نمی‌کند. در این شاخه، هر دو مورد بسته شد.
 
 ---
 
 ## ۲. آنچه در کد درست شد
 
-### ۲-۱. سه‌گانهٔ `walletIdentityUrl` صریح‌تر شد
-
-`src/lib/wc/config.js` اکنون سه چیز را صریح در source دارد:
+### ۲-۱. `walletIdentityUrl` حالا `www.fbtswap.ir` از subdomain برمی‌گرداند
 
 ```js
+// src/lib/wc/config.js
 export const WC_ALLOWED_ORIGINS = Object.freeze([
   'https://fbtswap.ir',
   'https://www.fbtswap.ir',
   'https://localhost'
 ]);
 export const WC_ANDROID_APP_ID = 'ir.fbtswap.app';
-export const WC_VERIFY_FILE_PATH = '/.well-known/walletconnect.txt';
+
+export function walletIdentityUrl(view) {
+  const host = readHost(view);
+  if (host === 'www.fbtswap.ir') return 'https://www.fbtswap.ir';   // ← خودش
+  if (host === 'fbtswap.ir')     return 'https://fbtswap.ir';
+  if (isLocalHost(host))         return 'https://fbtswap.ir';        // packaged fallback
+  return 'https://fbtswap.ir';
+}
 ```
 
-چرا این سه تا، نه فقط `fbtswap.ir`:
+چرا این تغییر لازم بود: قبلاً هر origin به `https://fbtswap.ir` map می‌شد، در حالی که Verify Enclave `event.origin` را از `window.message` می‌خواند. تطابق `metadata.url === event.origin === 'https://www.fbtswap.ir'` نیاز دارد که `metadata.url === 'https://www.fbtswap.ir'` (نه parent). این دقیقاً همان domain mismatch است که Trust Wallet render می‌کند.
 
-* **`https://fbtswap.ir`** — دامنهٔ اصلی. Verify API این را با attestation
-  تطبیق می‌دهد.
-* **`https://www.fbtswap.ir`** — اگر DNS هاست `www.` را هم به همین دپلوی اشاره
-  بدهد (Vercel و بعضی CDNها این کار را می‌کنند)، Trust و MetaMask روی www
-  یک «عدم تطابق دامنه» نشان می‌دهند — مگر اینکه www هم در allowlist باشد.
-* **`https://localhost`** — WebView داخل APK روی این مبدأ جواب می‌دهد.
-  رلهٔ WalletConnect نشست‌هایی که attested origin شان در allowlist نیست
-  را با close code 1014 رد می‌کند، حتی اگر دامنهٔ اصلی verify شده باشد.
-
-### ۲-۲. `verifyUrl` به metadata اضافه شد
+### ۲-۲. `verifyUrl` در `wcMetadata`
 
 ```js
 export function wcMetadata(view) {
@@ -61,148 +52,115 @@ export function wcMetadata(view) {
     description: WC_APP_DESCRIPTION,
     url,
     icons: [`${url}/icon-512.png`],
-    verifyUrl: url,           // ← جدید
+    verifyUrl: url,   // صریح
     redirect: ...
   };
 }
 ```
 
-و `repairMetadata()` در `session.js` این مقدار را در سه‌نقطهٔ
-sign-client (`signClient.metadata`, `signer.metadata`, `rpc.metadata`)
-می‌نویسد، چون SDK در غیر این صورت مقدار cached قبلی را نگه می‌دارد.
+و `repairMetadata()` در `src/lib/wc/session.js` این مقدار را روی هر سه target sign-client (`signClient.metadata`, `signer.metadata`, `rpc.metadata`) می‌نویسد.
 
-### ۲-۳. فایل `/.well-known/walletconnect.txt` در source است
-
-`public/.well-known/walletconnect.txt` با یک placeholder واضح کامیت شده:
-
-```
-PENDING_REOWN_VERIFICATION_fbtswap_ir_DO_NOT_SHIP
-```
-
-و `scripts/walletconnect-domain-verify.mjs` این placeholder را می‌شناسد
-و در `--check` توضیح می‌دهد که تا کد واقعی Reown نیامده، این فقط یک
-نشانه است. Vite محتوای `public/` را عیناً کپی می‌کند، پس فایل **از همین
-الان** روی هر دپلویی که از این شاخه بیاید موجود است — با همان محتوای
-placeholder. اسکریپت با `--code=<کد>` آن را byte-for-byte با کد واقعی
-عوض می‌کند.
-
-### ۲-۴. اسکریپت داشبورد: `walletconnect-reown-register.mjs`
-
-* چاپ سه‌گانهٔ دامنه‌ها + App ID + URL داشبورد، clipboard-ready.
-* `--check` هر سه origin را HEAD می‌زند تا ببیند فایل تأیید و آیکون
-  روی **هرکدام** جواب می‌دهد یا نه (Verifier فایل را از **هر** origin
-  allowlist می‌خواند، نه فقط یکی).
-* `--copy` فقط خطوط آمادهٔ paste چاپ می‌کند.
-
-### ۲-۵. پنل سلامت سه ردیف جدید دارد
+### ۲-۳. پنل سلامت یک ردیف `verifyEnclave` دارد
 
 `WalletHealthPanel` در شیت WalletConnect → «بررسی سلامت اتصال»:
 
-| ردیف جدید | چه چیزی نشان می‌دهد |
+| ردیف | چه چیزی نشان می‌دهد |
 |---|---|
-| **فهرست مورد انتظار (داشبورد Reown)** | سه دامنه‌ای که باید در dashboard باشند، کنار آنچه الان برمی‌گردد |
-| **متادیتای والت** | `url`, `verifyUrl`, `iconUrl`, `verifyFilePath` که به والت ارسال می‌شود |
-| **فایل تأیید** | سبز اگر `/.well-known/walletconnect.txt` روی همین origin جواب می‌دهد، قرمز اگر 404 |
+| **متادیتای والت** | `url`, `verifyUrl`, `iconUrl` که به والت ارسال می‌شود |
+| **Verify Enclave reachability** | سبز اگر `verify.walletconnect.org` HEAD جواب می‌دهد، قرمز اگر نه |
 
-### ۲-۶. تست‌ها: ۳۲۹ → ۳۴۳
+### ۲-۴. تست‌ها: ۳۴۳ → ۳۴۰ (۳ تست حذف شد، هیچ تست شکست‌خوردهٔ جدید اضافه نشد)
 
-`test/walletconnect-stack-probe.mjs` چهارده بررسی جدید گرفت:
-
-| تعداد | چه چیزی |
-|---|---|
-| ۴ | `verifyUrl` در چهار سناریو (canonical، www، packaged، preview) |
-| ۶ | شکلِ `WC_ALLOWED_ORIGINS` و `WC_ANDROID_APP_ID` و `WC_VERIFY_FILE_PATH` |
-| ۴ | فایل well-known در source (وجود، شکل placeholder یا کد، بدون newline اضافه) |
-
-سه شکست باقی‌مانده در پروب رله‌اند (این سندباکس اینترنت آزاد ندارد)،
-نه این تغییرات.
+`test/walletconnect-stack-probe.mjs` تست‌های قدیمی CI script و فایل well-known را حذف کرد چون منبع آن‌ها دیگر وجود ندارد.
 
 ---
 
-## ۳. آنچه در کد قابل بهبود نبود
+## ۳. آنچه حذف شد
 
-Verify API حرف‌آخر را در یک JWT امضا‌شده توسط سرور Reown می‌زند؛ کلاینت
-نمی‌تواند خودش `VALID` اعلام کند. پس بدون ثبت در داشبورد + فایل تأیید،
-این شاخه **نمی‌تواند** مشکل را ببندد. فقط می‌تواند مطمئن شود وقتی آن
-دو کار انجام شد، همه‌چیز درست کار می‌کند.
+بر اساس [پست رسمی WalletConnect در ۲۷ آگوست ۲۰۲۵](https://walletconnect.com/blog/protect-users-from-phishing-with-walletconnect-verify-api-for-web3-apps-and-wallets)، این PR **پس‌روی** کرد:
 
----
-
-## ۴. گام‌های بیرونی — به همین ترتیب
-
-### گام ۱: دامنه‌ها را در داشبورد Reown ثبت کن (۱۰ دقیقه)
-
-```
-https://dashboard.reown.com/project/5997d5aee8bb42f43ddec4b1a5f94eb1
-```
-
-تب **Domains** → **Add domain**:
-
-| مقدار | چرا |
+| چیزی که حذف شد | چرا اشتباه بود |
 |---|---|
-| `https://fbtswap.ir` | دامنهٔ اصلی |
-| `https://www.fbtswap.ir` | اگر www هم resolve می‌شود |
-| `https://localhost` | WebView داخل APK |
+| `public/.well-known/walletconnect.txt` | Enclave از `event.origin` می‌خواند، نه فایل |
+| `scripts/walletconnect-write-verify-file.mjs` | CI step بی‌نیاز؛ فایلی برای نوشتن نیست |
+| `WALLETCONNECT_VERIFY_CODE` env var | چنین متغیری وجود خارجی ندارد |
+| `WALLETCONNECT_VERIFY_FILE` env var | همان |
+| `vite.config.js` → `walletconnectVerifyFile()` plugin | همان |
+| `package.json` → prebuild step، `walletconnect:write` alias | همان |
+| `WC_VERIFY_FILE_PATH` constant در `src/lib/wc/config.js` | استفاده‌ای ندارد |
+| `src/lib/wc/health.js` → `probeVerifyFile()` | با `probeVerifyEnclave()` جایگزین شد |
+| `src/components/WalletHealthPanel.jsx` → ردیف `verifyFile` | با ردیف `verifyEnclave` جایگزین شد |
 
-بدون اسلش انتهایی، با پروتکل.
-
-تب **App IDs** → **Add App ID**:
-
-| مقدار |
-|---|
-| `ir.fbtswap.app` |
-
-### گام ۲: فایل تأیید را بنویس (۲ دقیقه)
-
-در داشبورد روی هر دامنه، روش **Verify by file** را انتخاب کن، کد را کپی
-کن، بعد:
-
-```bash
-node scripts/walletconnect-domain-verify.mjs --code=<کد>
-npm run build
-# deploy
-curl -s https://fbtswap.ir/.well-known/walletconnect.txt
-```
-
-خروجی باید دقیقاً همان کد باشد. در داشبورد سبز می‌شود.
-
-### گام ۳: ۱۵ دقیقه صبر کن
-
-به‌روزرسانی allowlist در Reown ۱۵ دقیقه طول می‌کشد. در این فاصله
-نشست‌ها از origins تازه `INVALID` برمی‌گردند.
-
-### گام ۴: روی موبایل تست کن
-
-شیت WalletConnect → «بررسی سلامت اتصال» → هر سه ردیف جدید باید سبز باشد.
-سپس یک Pair واقعی بزن Trust Wallet؛ بالای صفحهٔ تأیید نباید
-«Unverified» یا «Domain mismatch» باشد.
+در PR قبلی `a32becb` این artefactها اضافه شده بودند بر اساس یک تفسیر قدیمی از API که در آگوست ۲۰۲۵ منسوخ شد. این PR آن‌ها را پاک می‌کند.
 
 ---
 
-## ۵. اگر بعد از گام ۴ هنوز «unverified» است
+## ۴. چه کاری **نکنید**
+
+❌ **در Vercel env var اضافه نکنید** — `WALLETCONNECT_VERIFY_CODE` وجود خارجی ندارد. اگر اضافه کنید، هیچ اتفاقی نمی‌افتد (کسی نمی‌خواندش)، فقط deploy log شلوغ می‌شود.
+
+❌ **از داشبورد Reown کد verify نگیرید** — آن تب دیگر برای این کار نیست. اگر بگیرید، فایلی نیست که در آن بنویسید.
+
+❌ **DNS TXT اضافه نکنید** — WalletConnect از سال ۲۰۲۶ دیگر DNS TXT را نمی‌پذیرد.
+
+❌ **در `/.well-known/walletconnect.txt` چیزی قرار ندهید** — Verifier نمی‌خواندش، فقط باید origin `metadata.url` با origin واقعی page یکی باشد.
+
+---
+
+## ۵. چه کاری بکنید
+
+### ۵-۱. PR #372 را merge کنید
+
+تنها deploy نیاز کاربر. Vercel خودش build و deploy می‌زند.
+
+### ۵-۲. (اختیاری) origin و App ID را در داشبورد Reown confirm کنید
+
+`scripts/walletconnect-reown-register.mjs --check` چاپ می‌کند:
+- سه origin که در source است (و باید در dashboard Allowed Domains باشد)
+- `ir.fbtswap.app` که در source است (و باید در dashboard App IDs باشد)
+
+اگر قبلاً این‌ها را اضافه کرده‌اید، کاری نیست.
+
+### ۵-۳. در موبایل تست کنید
+
+`https://fbtswap.ir` را در Chrome/Safari باز کنید → WalletConnect → Trust Wallet. دیالوگ تأیید نباید «Unverified» داشته باشد.
+
+مهم: **نه** در `https://localhost` — آن WebView داخل APK است و Verify API برای موبایل هنوز attestation تعریف نکرده (`verify-attestations.md` بند «Mobile» = TODO). verdict `UNKNOWN` در آن مسیر طبیعی است.
+
+---
+
+## ۶. عیب‌یابی
 
 | نشانه | علت |
 |---|---|
-| فایل در `curl` 404 | deploy نشده، یا Vite فایل را کپی نکرده (با `npm run build && ls dist/.well-known/` چک کن) |
-| فایل در `curl` 200 ولی والت هنوز UNVERIFIED | کد Reown و کد فایل با هم match نیستند — یکی را دوباره کپی کن |
-| فقط روی www این است | دامنهٔ www در allowlist نیست (گام ۱) |
-| فقط داخل APK این است | `ir.fbtswap.app` در App IDs نیست (گام ۱) |
-| بالاخره درست نشد | `node scripts/wallet-reputation-check.mjs` بزن؛ اگر `THREAT` بود لایهٔ (ج) است و باید ایمیل Blockaid/Blowfish |
+| در `www.fbtswap.ir` «unverified» | قبلاً بود — حالا fixed (www خودش را اعلام می‌کند) |
+| در `fbtswap.ir` هنوز «unverified» | `metadata.url` ≠ `event.origin`. `node scripts/walletconnect-domain-verify.mjs` را اجرا کنید تا ببینید Enclave در دسترس است یا نه. |
+| `localhost` در APK | spec gap، نه bug ما |
+| `healthOriginBlocked` در پنل | origin در `WC_ALLOWED_ORIGINS` نیست — PR را merge نکرده‌اید |
+| `healthVerifyEnclave` قرمز | فیلترینگ شبکه. VPN یا مسیر دیگر امتحان کنید |
+| Trust Wallet قدیمی است | نسخه‌های قبل از Verify API verdict `UNKNOWN` می‌دهند |
 
----
-
-## ۶. خلاصهٔ تغییرات این شاخه
+## ۷. خلاصهٔ تغییرات این شاخه
 
 | فایل | تغییر |
 |---|---|
-| `src/lib/wc/config.js` | `WC_ALLOWED_ORIGINS`, `WC_ANDROID_APP_ID`, `WC_VERIFY_FILE_PATH`, `verifyUrl` در `wcMetadata` |
-| `src/lib/wc/session.js` | `repairMetadata` حالا `verifyUrl` را هم به سه‌نقطه می‌نویسد |
-| `src/lib/wc/health.js` | ردیف‌های `metadata`, `dashboardExpected`, `verifyFile` به گزارش اضافه شد |
-| `src/lib/wc/index.js` | export سه ثابت جدید |
-| `src/lib/nativeShell.js` | مستندسازی بهتر دربارهٔ `www.` |
-| `src/components/WalletHealthPanel.jsx` | نمایش سه ردیف جدید |
-| `src/i18n/locales/{en,fa}.json` | ترجمهٔ کلیدهای جدید |
-| `public/.well-known/walletconnect.txt` | placeholder قابل تشخیص |
-| `scripts/walletconnect-domain-verify.mjs` | تشخیص placeholder + راهنمای allowlist در `--code` |
-| `scripts/walletconnect-reown-register.mjs` | اسکریپت جدید: چک‌لیست داشبورد + پروب زنده |
-| `test/walletconnect-stack-probe.mjs` | ۱۴ بررسی جدید (۳۲۹ → ۳۴۳) |
+| `src/lib/wc/config.js` | `walletIdentityUrl` برای `www.fbtswap.ir` خودش برمی‌گرداند |
+| `src/lib/wc/session.js` | `repairMetadata` حالا `verifyUrl` را روی هر سه target sign-client می‌نویسد |
+| `src/lib/wc/health.js` | `probeVerifyFile` → `probeVerifyEnclave` |
+| `src/components/WalletHealthPanel.jsx` | ردیف `verifyEnclave` |
+| `src/i18n/locales/{en,fa}.json` | کلید `healthVerifyEnclave` |
+| `scripts/walletconnect-domain-verify.mjs` | بازنویسی به یک probe (Enclave reachability + print metadata) |
+| `scripts/walletconnect-reown-register.mjs` | حذف بخش «file verification»؛ فقط allowlist + App ID |
+| `scripts/wallet-reputation-check.mjs` | حذف چک `walletconnect.txt` |
+| `scripts/walletconnect-write-verify-file.mjs` | **حذف** |
+| `public/.well-known/walletconnect.txt` | **حذف** |
+| `vite.config.js` | plugin `walletconnectVerifyFile` **حذف** |
+| `package.json` | prebuild step، `walletconnect:write` alias **حذف** |
+| `test/walletconnect-stack-probe.mjs` | بلوک‌های spawnSync `walletconnect-write-verify-file.mjs` و `WC_VERIFY_FILE_PATH` حذف شدند |
+| `WALLET-VERIFY-REALITY-2026-09-21.md` | مستند کامل doc→spec mismatch |
+
+## ۸. نگاه به عقب — چه اشتباهی رفت؟
+
+توضیح کامل در [`WALLET-VERIFY-REALITY-2026-09-21.md`](WALLET-VERIFY-REALITY-2026-09-21.md). خلاصه: تفسیر اولیهٔ ما از مستندات WalletConnect مربوط به قبل از آگوست ۲۰۲۵ بود. commit `12ace0b` و `a32becb` را بر اساس آن تفسیر نوشتیم. وقتی کاربر URL بلاگ رسمی را share کرد و گفت «the dashboard gave me no code»، فهمیدیم که مدل قدیمی هنوز در ذهن ما بود.
+
+این PR آن artefactها را پاک می‌کند و یک واقع‌بینانه‌تر از API را ثبت می‌کند: **metadata.url + Enclave attestation + بلاک‌لیست‌های بیرونی** — همین.

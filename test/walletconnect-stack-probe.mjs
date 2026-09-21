@@ -64,7 +64,6 @@ import {
   wcMetadata,
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
-  WC_VERIFY_FILE_PATH,
   withTimeout
 } from '../src/lib/wc/index.js';
 import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
@@ -942,80 +941,28 @@ export default async function run() {
       WC_ALLOWED_ORIGINS.every((o) => /^https:\/\//i.test(o)));
     t('the Android app id matches the package the APK ships with',
       WC_ANDROID_APP_ID === 'ir.fbtswap.app');
-    t('the verify file path is what Reown fetches, with a leading slash',
-      WC_VERIFY_FILE_PATH === '/.well-known/walletconnect.txt'
-        && WC_VERIFY_FILE_PATH.startsWith('/'));
   }
 
-  /* ══════════════════ the well-known file ships in source ═════════════════
-   * The placeholder mechanism lets the file exist before the dashboard
-   * code is obtained: Vite copies public/ verbatim, so the file goes
-   * live with the next build, the dashboard work happens later, and the
-   * `walletconnect-domain-verify.mjs` script overwrites the placeholder
-   * the moment the code is in hand. The test asserts the placeholder is
-   * in source and looks like a placeholder — the dashboard will replace
-   * it byte-for-byte.
+  /* ══════════════════ the Verify API has no file to ship ═════════════════
+   * The Verify API is attestation-based since August 2025: the Enclave at
+   * `verify.walletconnect.org` reads origin from `window.message`, not from
+   * a `/.well-known/walletconnect.txt` lookup. The old file artefacts are
+   * removed; if any build ever reintroduces one it would not affect the
+   * verdict (the Enclave does not fetch it), but it would still be honest
+   * to keep them out of source so the deploy log does not mislead the next
+   * reader.
    */
   {
-    const { existsSync, readFileSync } = await import('node:fs');
+    const { existsSync } = await import('node:fs');
     const { resolve, dirname } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
     const here = dirname(fileURLToPath(import.meta.url));
     const file = resolve(here, '..', 'public', '.well-known', 'walletconnect.txt');
-    t('the well-known verification file is committed', existsSync(file));
-    if (existsSync(file)) {
-      const content = readFileSync(file, 'utf8').trim();
-      t('the verification file is either the placeholder or a real code',
-        content.startsWith('PENDING_REOWN_VERIFICATION_')
-        || /^[A-Za-z0-9._~-]{16,512}$/.test(content));
-      t('the verification file does not contain a trailing extra newline',
-        !readFileSync(file, 'utf8').match(/\n\n/));
-    }
-  }
-
-  /* ══════════════════ the CI write script works offline ═════════════════
-   * The CI build step (`scripts/walletconnect-write-verify-file.mjs`) reads
-   * `WALLETCONNECT_VERIFY_CODE` (or `WALLETCONNECT_VERIFY_FILE`) and writes
-   * the public file. With no var it must exit 0 and ship the placeholder —
-   * local dev must still build. With a malformed var it must exit non-zero
-   * so a mis-pasted secret is caught at deploy time, not on a phone.
-   */
-  {
-    const { spawnSync } = await import('node:child_process');
-    const { resolve, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const here = dirname(fileURLToPath(import.meta.url));
-    const script = resolve(here, '..', 'scripts', 'walletconnect-write-verify-file.mjs');
-    const proc = spawnSync('node', [script], {
-      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: '', WALLETCONNECT_VERIFY_FILE: '' },
-      encoding: 'utf8'
-    });
-    t('the CI write script exits 0 when no code is set', proc.status === 0);
-    t('the CI write script prints the placeholder notice', /placeholder/.test(proc.stdout || proc.stderr));
-
-    const bad = spawnSync('node', [script], {
-      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: 'this-is-not-a-valid-code-!!' },
-      encoding: 'utf8'
-    });
-    t('the CI write script rejects a malformed code', bad.status === 1);
-
-    /* Use a long enough hex string that LOOKS_LIKE_CODE accepts, so the
-     * valid-path branch runs and the assertion checks the write happened. */
-    const good = spawnSync('node', [script], {
-      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: 'a'.repeat(64) },
-      encoding: 'utf8'
-    });
-    t('the CI write script writes the file when a valid code is set', good.status === 0);
-    if (good.status === 0) {
-      const { readFileSync, existsSync } = await import('node:fs');
-      const file = resolve(here, '..', 'public', '.well-known', 'walletconnect.txt');
-      t('the file actually contains the supplied code',
-        existsSync(file) && readFileSync(file, 'utf8').trim() === 'a'.repeat(64));
-    }
-    /* Restore the placeholder so the source tree is unchanged. */
-    const { writeFileSync } = await import('node:fs');
-    writeFileSync(resolve(here, '..', 'public', '.well-known', 'walletconnect.txt'),
-      'PENDING_REOWN_VERIFICATION_fbtswap_ir_DO_NOT_SHIP\n', 'utf8');
+    t('no `.well-known/walletconnect.txt` artefact is committed',
+      !existsSync(file));
+    const writeScript = resolve(here, '..', 'scripts', 'walletconnect-write-verify-file.mjs');
+    t('no CI write script is committed alongside it',
+      !existsSync(writeScript));
   }
 
   /* ══════════════════ 11. the health report ═══════════════════════════════ */

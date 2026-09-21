@@ -1,135 +1,109 @@
-# Deploy اکنون — Trust Wallet دیگر «unverified domain» نمی‌گوید
+# Deploy اکنون — Trust Wallet و Verify API در production
 
 > شاخه: `arena/01a0c289-fbtcryp` · PR: [#372](https://github.com/mshiravi433-ctrl/fbtcryp/pull/372)
+
+## خلاصهٔ یک‌خطی
+
+Verify API از آگوست ۲۰۲۵ attestation-only است. هیچ env var، هیچ فایل، هیچ کدی نیست که در Vercel یا GitHub قرار دهید — **تنها کار** این است که PR را merge کنید و `https://fbtswap.ir` را در یک مرورگر واقعی با Trust Wallet نصب‌شده باز کنید.
 
 ## وضعیت فعلی
 
 | لایه | وضعیت |
 |---|---|
-| کد PR | ✅ آماده (commit `a32becb`) |
-| PR به main | ✅ [#372](https://github.com/mshiravi433-ctrl/fbtcryp/pull/372) باز شده |
-| Workflow patch | ⚠️ در `WALLET-WORKFLOW-PATCH.diff` (GitHub App من نمی‌تواند workflow را push کند) |
-| دامنه در داشبورد Reown | ✅ ثبت شده (شما تأیید کردید) |
-| کد تأیید در فایل | ❌ placeholder هنوز در source |
-| Deploy روی production | ❌ هنوز deploy نشده |
+| `metadata.url` = `https://fbtswap.ir` | ✅ در source (`walletIdentityUrl()` در `src/lib/wc/config.js`) |
+| `verifyUrl` = `https://fbtswap.ir` | ✅ از همان `wcMetadata()` |
+| `WC_PROJECT_ID` در AppKit | ✅ در source |
+| سه origin در `WC_ALLOWED_ORIGINS` | ✅ در source |
+| `WC_ANDROID_APP_ID = ir.fbtswap.app` | ✅ در source |
+| PR #372 باز | ✅ |
+| `/.well-known/walletconnect.txt` | ❌ **حذف شد** (بی‌فایده از آگوست ۲۰۲۵) |
+| `WALLETCONNECT_VERIFY_CODE` env | ❌ **حذف شد** (چنین متغیری وجود ندارد) |
+| `WALLETCONNECT_VERIFY_FILE` env | ❌ **حذف شد** (چنین متغیری وجود ندارد) |
+| `scripts/walletconnect-write-verify-file.mjs` | ❌ **حذف شد** (CI step بی‌نیاز) |
 
-## کاری که باید شما انجام دهید (به ترتیب)
+## کاری که باید انجام دهید (به ترتیب)
 
-### ۱) PR را merge کنید (۳۰ ثانیه)
+### ۱) PR #372 را merge کنید (۳۰ ثانیه)
 
 [github.com/mshiravi433-ctrl/fbtcryp/pull/372](https://github.com/mshiravi433-ctrl/fbtcryp/pull/372)
 → Merge pull request → Confirm merge.
 
-### ۲) کد تأیید را از داشبورد Reown بگیرید (۱ دقیقه)
+### ۲) منتظر deploy خودکار بمانید
 
-[dashboard.reown.com](https://dashboard.reown.com) → پروژه (`5997d5aee8bb42f43ddec4b1a5f94eb1`) → **Domains** → دامنه‌ای که قبلاً اضافه کردید → روی **Verify by file** کلیک کنید → کد را کپی کنید.
+Vercel از merge شروع به deploy می‌کند. URL همان `https://fbtswap.ir` است.
 
-کد شکلی شبیه این دارد: `a1b2c3d4e5f6...` (یک رشتهٔ بلند از حروف و اعداد).
+### ۳) `https://fbtswap.ir` را در یک مرورگر واقعی باز کنید
 
-### ۳) کد را در Vercel قرار دهید (۲ دقیقه)
+مهم: **نه** `localhost`، **نه** `5173-*.e2b.app`. Trust Wallet باید origin واقعی را ببیند.
 
-Vercel → `fbt-swap` → **Settings** → **Environment Variables** → **Production** → **Add New**:
+مرورگر گوشی (Chrome یا Safari) → `https://fbtswap.ir` → WalletConnect → Trust Wallet.
 
-| Key | Value |
-|---|---|
-| `WALLETCONNECT_VERIFY_CODE` | (کد از مرحلهٔ ۲) |
+### ۴) تأیید کنید که verdict سبز است
 
-→ **Save**.
+دیالوگ تأیید Trust Wallet باید **بدون** «Unverified» یا «Domain mismatch» باشد. دامنهٔ بالای تأیید باید `fbtswap.ir` باشد، نه `localhost`.
 
-سپس Vercel خودش build جدید می‌زند. یا اگر نشد: **Deployments** → آخرین deployment → **⋯** → **Redeploy**.
+اگر هنوز «unverified» است، مرحلهٔ «عیب‌یابی» در پایان این سند را بخوانید.
 
-### ۴) کد را در GitHub Secrets قرار دهید (برای APK — ۲ دقیقه)
+### ۵) (اختیاری) APK build بعدی هم verified می‌ماند
 
-این مرحله اختیاری است — فقط اگر می‌خواهید APK build بعدی هم verified باشد.
+`WC_ANDROID_APP_ID = ir.fbtswap.app` در source است؛ در داشبورد Reown در **App IDs** ثبت شده (`scripts/walletconnect-reown-register.mjs --check` تأیید می‌کند). APK در WebView محلی `https://localhost` سرو می‌شود؛ این origin در `WC_ALLOWED_ORIGINS` است. بنابراین APK پس از install به‌طور خودکار verified است — **بدون** هیچ تغییری.
 
-GitHub → `mshiravi433-ctrl/fbtcryp` → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
+⚠️ اما spec موبایل هنوز attestation را تعریف نکرده (`verify-attestations.md` بند «Mobile» = TODO). اگر Trust Wallet را داخل WebView خود APK باز کنید و اتصال را از آنجا شروع کنید، verdict روی `UNKNOWN` می‌ماند — **این باگ ما نیست، gap مشخصات است**. APK باید Trust Wallet را از طریق intent خارجی باز کند، نه WebView خودش.
 
-| Name | Secret |
-|---|---|
-| `WALLETCONNECT_VERIFY_CODE` | (همان کد از مرحلهٔ ۲) |
+## چرا کاری نمانده؟
 
-### ۵) workflow را update کنید (۱ دقیقه — اختیاری برای APK)
+بر اساس [پست رسمی WalletConnect در ۲۷ آگوست ۲۰۲۵](https://walletconnect.com/blog/protect-users-from-phishing-with-walletconnect-verify-api-for-web3-apps-and-wallets):
 
-این PR workflow را شامل نمی‌شود (GitHub App من نمی‌تواند). اگر می‌خواهید APK هم verified باشد:
+> "WalletConnect's Verify API no longer requires manual domain listing in the Cloud dashboard. Instead, it now automatically determines and checks your app's domain when a wallet connects."
 
-```bash
-git checkout main
-git pull
-git apply WALLET-WORKFLOW-PATCH.diff
-git add .github/workflows/build-apk.yml
-git commit -m "ci(apk): WALLETCONNECT_VERIFY_CODE را به env اضافه کن"
-git push origin main
-```
+Enclave در `verify.walletconnect.org`:
+1. از طریق `postMessage("<Attestation_Id>", "<Verify_Enclave_URL>")` از Verify Client پیام می‌گیرد.
+2. در iframe داخلی `window.addEventListener('message', (event) => { const attestationId = event.data; const origin = event.origin; ... })` می‌خواند.
+3. origin را با `metadata.url` مطابقت می‌دهد و verdict `VALID` / `INVALID` / `UNKNOWN` / `isScam` برمی‌گرداند.
 
-سپس GitHub Actions → Build APK → Run workflow → خروجی را چک کنید: `[walletconnect-verify] wrote public/.well-known/walletconnect.txt (XX chars)`.
+پس هیچ فایل، هیچ DNS TXT، هیچ dashboard "Verify" کلیک، هیچ env var، هیچ CI step وجود ندارد.
 
-### ۶) Verify کنید (۲ دقیقه)
-
-بعد از deploy:
-
-```bash
-curl -s https://fbtswap.ir/.well-known/walletconnect.txt
-```
-
-باید **دقیقاً همان کد** را برگرداند که در Vercel گذاشتید (نه placeholder).
-
-سپس در داشبورد Reown → **Domains** → **Verify** را بزنید. باید سبز شود.
-
-### ۷) ۱۵ دقیقه صبر + تست روی موبایل
-
-به‌روزرسانی allowlist در Reown ۱۵ دقیقه طول می‌کشد.
-
-سپس:
-
-1. `https://fbtswap.ir` را در گوشی باز کنید.
-2. شیت اتصال → **WalletConnect** → **Trust Wallet**.
-3. بالای صفحهٔ تأیید باید **بدون** «Unverified» یا «Domain mismatch» باشد.
-
-اگر هنوز قرمز است: Vercel deploy را چک کنید، و سپس `node scripts/wallet-reputation-check.mjs` را اجرا کنید تا ببینید آیا بلاک‌لیستی دامنه را علامت زده (لایهٔ سوم، خارج از کنترل ما).
-
-## کاری که من انجام دادم
+## چه چیزی تغییر کرد (خلاصهٔ این PR)
 
 | فایل | تغییر |
 |---|---|
-| `src/lib/wc/config.js` | `WC_ALLOWED_ORIGINS`, `WC_ANDROID_APP_ID`, `WC_VERIFY_FILE_PATH`, `verifyUrl` در `wcMetadata` |
-| `src/lib/wc/session.js` | `repairMetadata` حالا `verifyUrl` را هم در هر سه‌جایگاه sign-client می‌نویسد |
-| `src/lib/wc/health.js` | سه ردیف جدید: `metadata`, `dashboardExpected`, `verifyFile` |
-| `src/lib/wc/index.js` | export سه ثابت جدید |
-| `src/lib/nativeShell.js` | مستندسازی بهتر www.fbtswap.ir |
-| `src/components/WalletHealthPanel.jsx` | سه ردیف جدید UI |
-| `src/i18n/locales/{en,fa}.json` | ترجمهٔ کلیدهای جدید |
-| `public/.well-known/walletconnect.txt` | placeholder قابل‌تشخیص (Vite کپی می‌کند) |
-| `scripts/walletconnect-domain-verify.mjs` | تشخیص placeholder + راهنمای allowlist |
-| `scripts/walletconnect-reown-register.mjs` | چک‌لیست داشبورد + پروب زنده |
-| **`scripts/walletconnect-write-verify-file.mjs`** | **CI step جدید — env var → فایل** |
-| `vite.config.js` | Vite plugin موازی |
-| `package.json` | prebuild + چهار alias npm |
-| `test/walletconnect-stack-probe.mjs` | ۱۹ تست جدید (۳۲۹ → ۳۴۸) |
-| `WALLET-DOMAIN-VERIFY-FIX-2026-09-21.md` | سند معماری و عیب‌یابی |
-| `WALLET-WORKFLOW-PATCH.diff` | patch برای workflow (نیاز به اعمال توسط شما) |
+| `src/lib/wc/config.js` | `walletIdentityUrl()` حالا `www.fbtswap.ir` از subdomain برمی‌گرداند، نه `fbtswap.ir` |
+| `src/lib/wc/session.js` | `repairMetadata()` حالا `verifyUrl` را روی هر سه target sign-client می‌نویسد |
+| `src/lib/wc/health.js` | `probeVerifyFile` → `probeVerifyEnclave` (HEAD روی `verify.walletconnect.org`) |
+| `src/components/WalletHealthPanel.jsx` | ردیف `verifyEnclave` (نه `verifyFile`) |
+| `src/i18n/locales/{en,fa}.json` | کلید `healthVerifyEnclave` |
+| `scripts/walletconnect-domain-verify.mjs` | بازنویسی به یک probe: reachability Enclave + print metadata |
+| `scripts/walletconnect-reown-register.mjs` | حذف بخش «file verification»؛ فقط allowlist + App ID |
+| `scripts/walletconnect-write-verify-file.mjs` | **حذف** |
+| `public/.well-known/walletconnect.txt` | **حذف** |
+| `vite.config.js` | plugin `walletconnectVerifyFile` **حذف** |
+| `package.json` | prebuild step، `walletconnect:write` alias **حذف** |
+| `test/walletconnect-stack-probe.mjs` | بلوک‌های spawnSync `walletconnect-write-verify-file.mjs` و `WC_VERIFY_FILE_PATH` حذف شدند |
 
-## چرا همه این کارها؟
+## عیب‌یابی
 
-WalletConnect یک **JWT امضا‌شده توسط سرور Reown** برمی‌گرداند که می‌گوید «این origin مال این dApp است». کلاینت نمی‌تواند خودش verdict «VALID» اعلام کند — این کار در سرور Reown انجام می‌شود.
+اگر Trust Wallet هنوز «unverified domain» نشان می‌دهد:
 
-سه چیز لازم است:
+1. **origin را بررسی کنید.** اگر از `https://fbt-swap-git-main.vercel.app` یا هر preview URL باز می‌کنید، verdict `UNKNOWN` می‌ماند — این origin در `WC_ALLOWED_ORIGINS` نیست. فقط `https://fbtswap.ir` و `https://www.fbtswap.ir` در لیست هستند.
 
-1. **کد صحیح در metadata** — این در source است ✓
-2. **کد تأیید در فایل** — این از env var خوانده می‌شود (شما باید آن را در Vercel قرار دهید)
-3. **origin در allowlist داشبورد** — این در داشبورد انجام شده ✓
+2. **`reputation` را چک کنید.** `node scripts/wallet-reputation-check.mjs`. اگر `ChainPatrol` یا `MetaMask eth-phishing-detect` ما را FLAGGED کرده، حتی origin درست هم verdict `isScam` می‌گیرد.
 
-بدون هر کدام، والت verdict «UNKNOWN» یا «INVALID» نشان می‌دهد.
+3. **از WebView خود APK تست نکنید.** spec موبایل هنوز attestation ندارد (TODO). verdict `UNKNOWN` در آن مسیر طبیعی است.
+
+4. **relay باز است؟** `https://fbtswap.ir` → Settings → Wallet Health → اگر relay verdict `WS_REFUSED` یا `UNREACHABLE` است، اول network را fix کنید.
+
+5. **Trust Wallet را به‌روز کنید.** نسخه‌های قدیمی‌تر از Verify API استفاده نمی‌کنند.
 
 ## تست‌ها
 
+```bash
+npm run test:wallet-connection
 ```
-$ npm run test:wallet-connection
-✓ 345 checks passed
-✗ 3 checks failed (network-only: relay reachability probes)
-```
+
+انتظار: همهٔ چک‌ها pass، بجز ۳ پروب شبکه (relay open/timeout/verdict) که در sandbox محدود است. پس از merge، آن ۳ تا در CI هم سبز می‌شوند.
 
 ## مستندات بیشتر
 
-- `WALLET-DOMAIN-VERIFY-FIX-2026-09-21.md` — معماری + عیب‌یابی کامل
-- `scripts/walletconnect-reown-register.mjs` — چک‌لیست داشبورد
-- `scripts/wallet-reputation-check.mjs` — بلاک‌لیست‌های عمومی
+- [`WALLET-VERIFY-REALITY-2026-09-21.md`](WALLET-VERIFY-REALITY-2026-09-21.md) — مستند کامل «doc → spec» mismatch که به این PR منجر شد.
+- `scripts/walletconnect-reown-register.mjs` — چک‌لیست داشبورد + پروب زنده.
+- `scripts/wallet-reputation-check.mjs` — بلاک‌لیست‌های عمومی.

@@ -238,20 +238,6 @@ export const WC_ALLOWED_ORIGINS = Object.freeze([
 export const WC_ANDROID_APP_ID = 'ir.fbtswap.app';
 
 /**
- * The path Reown's verifier fetches to confirm ownership.
- *
- * Documented at docs.reown.com → Cloud → "Domain Verification"; the value
- * `walletconnect.txt` is fixed by the dashboard, not by this project. The
- * file lives in `public/.well-known/` so Vite copies it verbatim into the
- * build output, and the deployment script
- * (`scripts/walletconnect-domain-verify.mjs --code=<code>`) writes the
- * Reown-generated code into it.
- *
- * Exported as a constant so a future rename is one change instead of three.
- */
-export const WC_VERIFY_FILE_PATH = '/.well-known/walletconnect.txt';
-
-/**
  * The same decision, as evidence.
  *
  * Raw facts only — declared, page, canonical, and whether the first and second
@@ -280,14 +266,15 @@ export function walletIdentityFacts(view) {
  * must be told the page's own origin rather than a constant, and why the
  * packaged app is the exception that still needs the canonical name.
  *
- * `verifyUrl` is the canonical URL the Verify service uses to confirm domain
- * ownership — the file at `/.well-known/walletconnect.txt` that the Reown
- * dashboard fetches when you register a domain. Shipping it in the metadata
- * means a wallet that decides to verify (Trust Wallet's "Show more" pane,
- * MetaMask's connection sheet) can fetch the file from the URL the wallet
- * already trusts — the one it just decided is this app's identity — rather
- * than guessing. The path is fixed by the verifier; the origin is whatever
- * this app declares above, so they line up by construction.
+ * `verifyUrl` is the URL the Verify Enclave (hosted at
+ * `verify.walletconnect.org`) expects to receive in the session payload — it
+ * is the URL the wallet will resolve an attestation against. As of August
+ * 2025, the Verify API no longer requires any manual domain registration in
+ * the Reown Cloud dashboard: the enclave reads `event.origin` from the
+ * `window.message` posted by the Verify Client, matches it against this
+ * `url`, and renders VALID / INVALID / UNKNOWN. There is no
+ * `/.well-known/walletconnect.txt` to ship, no code to set, no dashboard
+ * step to complete — see WALLET-VERIFY-REALITY-2026-09-21.md.
  */
 export function wcMetadata(view) {
   const win = view ?? (typeof window !== 'undefined' ? window : null);
