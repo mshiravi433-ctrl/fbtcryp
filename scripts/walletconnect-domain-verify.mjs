@@ -80,6 +80,18 @@ function writeCode(code) {
   writeFileSync(FILE, `${code}\n`, 'utf8');
   console.log(`✓ wrote ${FILE} (${code.length} chars)`);
   console.log('  Next: deploy, then run --check, then press Verify in the dashboard.');
+  // Tell the user, explicitly, which origins should be registered alongside
+  // — every origin the dApp might run on must be on the allowlist, otherwise
+  // a page served from one of them is reported as INVALID even though the
+  // canonical host is verified.
+  console.log('');
+  console.log('  Reminder: the Reown dashboard must also contain these allowlist entries');
+  console.log('  (otherwise the corresponding page reads as INVALID even after this file lands):');
+  console.log('    https://fbtswap.ir');
+  console.log('    https://www.fbtswap.ir');
+  console.log('    https://localhost');
+  console.log('    App IDs → ir.fbtswap.app');
+  console.log('  See scripts/walletconnect-reown-register.mjs for the full checklist.');
 }
 
 function check() {
@@ -92,6 +104,15 @@ function check() {
   }
   const raw = readFileSync(FILE, 'utf8');
   const text = raw.replace(/^\uFEFF/, '').trim();
+  if (text.startsWith('PENDING_REOWN_VERIFICATION_')) {
+    console.log(`✗ ${FILE} is the placeholder shipped by source.`);
+    console.log('  Until the Reown-generated code is written here, wallets show');
+    console.log('  this dApp as UNVERIFIED — which several render as a security caution.');
+    console.log('  Run: node scripts/walletconnect-domain-verify.mjs --code=<code>');
+    console.log('  (or set a DNS TXT record — same code, same dashboard check).');
+    console.log(`  served at: ${PUBLIC_URL}`);
+    return false;
+  }
   const ok = LOOKS_LIKE_CODE(text);
   console.log(`${ok ? '✓' : '✗'} ${FILE}`);
   console.log(`  length: ${text.length}  trailing newlines: ${(raw.match(/\n+$/) || [''])[0].length || 0}`);

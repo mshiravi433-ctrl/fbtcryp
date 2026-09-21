@@ -29,7 +29,11 @@ import {
   HEALTH_SDK_VERSION,
   TIMEOUT,
   W3M_API_URL,
+  WC_ALLOWED_ORIGINS,
+  WC_ANDROID_APP_ID,
   WC_PROJECT_ID,
+  WC_VERIFY_FILE_PATH,
+  wcMetadata,
   walletIdentityFacts
 } from './config.js';
 import { handoffFacts } from './handoff.js';
@@ -196,6 +200,48 @@ async function probeJson(url, { fetchImpl, timeoutMs }) {
 }
 
 /**
+ * Head-only probe of the verification file on a given origin.
+ *
+ * The Reown verifier reads the file at `/.well-known/walletconnect.txt` from
+ * every origin in the allowlist, not just from the canonical one. A 404 on
+ * any of them is what makes a "registered" dApp read as UNVERIFIED. The
+ * check is HEAD so a misconfigured origin cannot pull the whole page into a
+ * long block on a slow server, and the response is cached by the browser as
+ * an empty body.
+ *
+ * Verifies with a plain GET only if HEAD is not implemented by the origin's
+ * static-file server; some hosts return 405 for HEAD on text files even
+ * though GET answers 200.
+ */
+async function probeVerifyFile(origin, { fetchImpl, timeoutMs } = {}) {
+  if (!origin) return { ok: false, error: 'NO_ORIGIN' };
+  const call = fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : null);
+  if (!call) return { ok: false, error: 'NO_FETCH' };
+  const url = `${String(origin).replace(/\/+$/, '')}${WC_VERIFY_FILE_PATH}`;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => {
+    try { controller?.abort(); } catch { /* best effort */ }
+  }, timeoutMs ?? TIMEOUT.healthProbe);
+  try {
+    const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
+    if (res.status === 405 || res.status === 501) {
+      /* Some static hosts reject HEAD; the file itself may still be there. */
+      const res2 = await call(url, { method: 'GET', signal: controller?.signal, cache: 'no-store' });
+      return { ok: res2.ok, status: res2.status, url };
+    }
+    return { ok: res.ok, status: res.status, url };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error),
+      url
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * `readSharedConnectionFacts()` without the ability to fail the report.
  * The facts themselves carry `available: false` when the controllers chunk is
  * unreachable, which is the honest answer — an exception here would replace
@@ -269,6 +315,28 @@ export async function collectWalletHealth({
          the device that is actually connected: `declared` is what we will say,
          `pageOrigin` is what the attestation will say. */
       identity: walletIdentityFacts(),
+      /* What the wallet will be told about us, including the verifyUrl the
+         SDK ships in the session proposal. The dashboard registration row
+         below names the entries the allowlist MUST contain — and is the
+         support copy when it does not. */
+      metadata: {
+        url: wcMetadata().url,
+        verifyUrl: wcMetadata().verifyUrl || null,
+        iconUrl: wcMetadata().icons?.[0] || null,
+        verifyFilePath: WC_VERIFY_FILE_PATH
+      },
+      /* The expected allowlist, read from the same source `walletIdentityUrl`
+         reads from. Surfaced here so the support thread can paste it next to
+         whatever the dashboard actually returns and read the difference. */
+      dashboardExpected: {
+        origins: WC_ALLOWED_ORIGINS,
+        appIds: [WC_ANDROID_APP_ID]
+      },
+      /* Whether the verification file is served on the page's own origin.
+         A 404 here is the single most common reason a "verified" dApp still
+         reads as UNVERIFIED — the dashboard is registered but the file the
+         verifier fetches returns 404. */
+      verifyFile: await probeVerifyFile(currentOrigin, { fetchImpl, timeoutMs }),
       relay: reachable ? reachable.socket : (relay.hosts[0]?.socket ?? { ok: false, error: 'NO_RELAY_URLS' }),
       relays: relay.hosts,
       relayVerdict: relay.verdict,

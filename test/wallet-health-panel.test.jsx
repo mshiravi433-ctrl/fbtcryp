@@ -78,6 +78,24 @@ vi.mock('../src/lib/wc', async (importOriginal) => {
         channel: 'browser', android: false, ios: false, webview: false,
         telegram: false, intentCapable: false, javaBridge: false
       },
+      identity: {
+        declared: 'https://fbtswap.ir',
+        pageOrigin: 'https://fbtswap.ir',
+        canonical: 'https://fbtswap.ir',
+        packaged: false,
+        matchesPage: true
+      },
+      metadata: {
+        url: 'https://fbtswap.ir',
+        verifyUrl: 'https://fbtswap.ir',
+        iconUrl: 'https://fbtswap.ir/icon-512.png',
+        verifyFilePath: '/.well-known/walletconnect.txt'
+      },
+      dashboardExpected: {
+        origins: ['https://fbtswap.ir', 'https://www.fbtswap.ir', 'https://localhost'],
+        appIds: ['ir.fbtswap.app']
+      },
+      verifyFile: { ok: true, status: 200, url: 'https://fbtswap.ir/.well-known/walletconnect.txt' },
       storage: FIXTURE.storage,
       shared: FIXTURE.shared,
       trace: []
@@ -151,5 +169,29 @@ describe('the health panel after the email/social removal', () => {
     const text = await panelText();
     expect(text).toContain('wc-sessions=1 · appkit-keys=2');
     expect(text).not.toContain('⚠️ orphan');
+  });
+
+  it('prints the metadata the wallet will receive, including verifyUrl', async () => {
+    const text = await panelText();
+    expect(text).toContain(t('wallet.healthMetadata'));
+    /* The verify URL must be on the same origin as the identity, otherwise
+       the wallet fetches the file from the wrong host and reads "UNKNOWN". */
+    expect(text).toContain('verify URL=https://fbtswap.ir');
+    expect(text).toContain('icon URL=https://fbtswap.ir/icon-512.png');
+    expect(text).toContain('verification file=/.well-known/walletconnect.txt');
+  });
+
+  it('prints the allowlist the dashboard must contain', async () => {
+    const text = await panelText();
+    expect(text).toContain(t('wallet.healthDashboardExpected'));
+    expect(text).toContain('https://fbtswap.ir');
+    expect(text).toContain('https://www.fbtswap.ir');
+    expect(text).toContain('https://localhost');
+    expect(text).toContain('App IDs: ir.fbtswap.app');
+  });
+
+  it('prints whether the verification file is reachable on this origin', async () => {
+    const text = await panelText();
+    expect(text).toContain(t('wallet.healthVerifyFileOk', { path: '/.well-known/walletconnect.txt' }));
   });
 });

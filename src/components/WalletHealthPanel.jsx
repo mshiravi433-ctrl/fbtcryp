@@ -150,6 +150,54 @@ export default function WalletHealthPanel({ projectId }) {
                 </p>
               )}
               {/*
+                * The allowlist this app DECLARES as the right one. The row above
+                * shows what the dashboard actually returned; the gap between the
+                * two is the source of every "unverified domain" we have shipped.
+                */}
+              {Array.isArray(report.dashboardExpected?.origins) && (
+                <p className="muted" style={{ fontSize: 11, margin: '2px 0 2px', marginInlineStart: 14 }}>
+                  <strong>{t('wallet.healthDashboardExpected')}:</strong>{' '}
+                  {report.dashboardExpected.origins.join(', ')}
+                  {Array.isArray(report.dashboardExpected?.appIds) && report.dashboardExpected.appIds.length > 0
+                    ? ` · App IDs: ${report.dashboardExpected.appIds.join(', ')}`
+                    : ''}
+                </p>
+              )}
+              {/*
+                * The metadata the SDK ships to the wallet, including the
+                * verifyUrl the wallet reads to confirm the verification file
+                * lives at the URL it expects.
+                */}
+              {report.metadata && (
+                <p className="muted" style={{ fontSize: 11, margin: '6px 0 2px' }}>
+                  <strong>{t('wallet.healthMetadata')}:</strong>{' '}
+                  {t('wallet.healthMetadataUrl')}={report.metadata.url || '—'}{' '}
+                  · {t('wallet.healthMetadataVerifyUrl')}={report.metadata.verifyUrl || '—'}{' '}
+                  · {t('wallet.healthMetadataIcon')}={report.metadata.iconUrl || '—'}{' '}
+                  · {t('wallet.healthMetadataVerifyFile')}={report.metadata.verifyFilePath || '—'}
+                </p>
+              )}
+              {/*
+                * Whether the verification file is reachable on THIS page's
+                * origin. The Reown verifier fetches it from every origin in
+                * the allowlist; a 404 on any of them makes the whole domain
+                * read as UNVERIFIED.
+                */}
+              {report.metadata?.verifyFilePath && (
+                <p
+                  className={
+                    report.verifyFile?.ok
+                      ? 'notice'
+                      : 'notice notice-danger'
+                  }
+                  style={{ fontSize: 11.5, margin: '4px 0' }}
+                >
+                  {report.verifyFile?.ok
+                    ? t('wallet.healthVerifyFileOk', { path: report.metadata.verifyFilePath })
+                    : t('wallet.healthVerifyFileMissing', { path: report.metadata.verifyFilePath })}
+                </p>
+              )}
+              {/*
                 * The identity the wallet is handed, against the origin the
                 * wallet can already see in its own prompt. A mismatch is what
                 * wallets render as «domain mismatch / this dApp may be a scam»,

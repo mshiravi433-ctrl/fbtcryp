@@ -134,7 +134,7 @@ export const TIMEOUT = Object.freeze({
 export const PAIRING_TTL_MS = 300_000;
 
 /**
- * THE ORIGIN THIS APP MUST INTRODUCE ITSELF AS.
+ * THE ORIGINS THIS APP MUST INTRODUCE ITSELF AS.
  * ---------------------------------------------------------------------------
  * One function, because there are exactly two honest answers and picking the
  * wrong one is what puts «این dApp به نظر می‌رسد کلاهبرداری باشد» on the
@@ -201,6 +201,57 @@ export function walletIdentityUrl(view) {
 }
 
 /**
+ * Every origin the Reown dashboard MUST have on its allowlist for the
+ * WalletConnect Verify API to return VALID.
+ *
+ * The list is data, not a hard-coded if-tree, so adding a domain is one line
+ * and a test asserts it instead of a reviewer. The three origins are:
+ *
+ *   1. https://fbtswap.ir     — the bare domain, the one we link to.
+ *   2. https://www.fbtswap.ir — the www variant. Many hosting providers
+ *      (Vercel included) keep serving on `www.<domain>` if the DNS points
+ *      there too, and Trust Wallet's scanner renders a "domain mismatch"
+ *      screen if the address bar says www but our metadata says the bare
+ *      host. Both must be on the dashboard, AND both must respond with the
+ *      same /icon-512.png and /walletconnect.txt for Verify to mark them
+ *      as the same application.
+ *   3. https://localhost       — the WebView origin inside the Android APK.
+ *      The Capacitor WebView opens at https://localhost, and even though the
+ *      metadata we send from there is the canonical public URL (so a wallet
+ *      sees a domain it can fetch and verify), the attestation that gets
+ *      sent in the Verify API request carries `localhost` as the source
+ *      origin. Without it on the allowlist the relay refuses the connection
+ *      (close code 1014 / 4001) before the user sees a prompt.
+ *
+ * Plus the Android application id `ir.fbtswap.app` on the App IDs list.
+ *
+ * Kept in source rather than the dashboard so a change is reviewable and
+ * ships atomically with the code that names these origins to the wallet.
+ */
+export const WC_ALLOWED_ORIGINS = Object.freeze([
+  'https://fbtswap.ir',
+  'https://www.fbtswap.ir',
+  'https://localhost'
+]);
+
+/** The Android application id the dashboard must register. */
+export const WC_ANDROID_APP_ID = 'ir.fbtswap.app';
+
+/**
+ * The path Reown's verifier fetches to confirm ownership.
+ *
+ * Documented at docs.reown.com → Cloud → "Domain Verification"; the value
+ * `walletconnect.txt` is fixed by the dashboard, not by this project. The
+ * file lives in `public/.well-known/` so Vite copies it verbatim into the
+ * build output, and the deployment script
+ * (`scripts/walletconnect-domain-verify.mjs --code=<code>`) writes the
+ * Reown-generated code into it.
+ *
+ * Exported as a constant so a future rename is one change instead of three.
+ */
+export const WC_VERIFY_FILE_PATH = '/.well-known/walletconnect.txt';
+
+/**
  * The same decision, as evidence.
  *
  * Raw facts only — declared, page, canonical, and whether the first and second
@@ -228,6 +279,15 @@ export function walletIdentityFacts(view) {
  * Built through `walletIdentityUrl()` — see the block above for why a wallet
  * must be told the page's own origin rather than a constant, and why the
  * packaged app is the exception that still needs the canonical name.
+ *
+ * `verifyUrl` is the canonical URL the Verify service uses to confirm domain
+ * ownership — the file at `/.well-known/walletconnect.txt` that the Reown
+ * dashboard fetches when you register a domain. Shipping it in the metadata
+ * means a wallet that decides to verify (Trust Wallet's "Show more" pane,
+ * MetaMask's connection sheet) can fetch the file from the URL the wallet
+ * already trusts — the one it just decided is this app's identity — rather
+ * than guessing. The path is fixed by the verifier; the origin is whatever
+ * this app declares above, so they line up by construction.
  */
 export function wcMetadata(view) {
   const win = view ?? (typeof window !== 'undefined' ? window : null);
@@ -237,6 +297,14 @@ export function wcMetadata(view) {
     description: WC_APP_DESCRIPTION,
     url,
     icons: [`${url}/icon-512.png`],
+    /*
+     * The URL the Verify service fetches to confirm we own this domain.
+     * Wallets read this from `metadata.verifyUrl` and use it as the source of
+     * truth for the verification file — naming the canonical host here means
+     * a wallet served from `www.fbtswap.ir` and one served from `fbtswap.ir`
+     * both see the SAME file path, on the SAME origin the dashboard registered.
+     */
+    verifyUrl: url,
     /*
      * A redirect is an APP return address, not the dApp's identity URL.
      *

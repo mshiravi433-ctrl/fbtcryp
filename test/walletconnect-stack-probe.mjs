@@ -62,6 +62,9 @@ import {
   walletLinks,
   walletLogo,
   wcMetadata,
+  WC_ALLOWED_ORIGINS,
+  WC_ANDROID_APP_ID,
+  WC_VERIFY_FILE_PATH,
   withTimeout
 } from '../src/lib/wc/index.js';
 import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
@@ -892,6 +895,22 @@ export default async function run() {
           && m.url === canonical;
       })());
 
+    /* ─── the verifyUrl the wallet reads ──────────────────────────────────
+     * Reown's Verify API uses metadata.verifyUrl to find the verification
+     * file: a wallet fetching /walletconnect.txt expects it on the URL the
+     * app told it about. The value must match the declared identity URL,
+     * because the same dashboard entry covers both — and a mismatch here
+     * silently flips the verdict to UNKNOWN.
+     */
+    t('the canonical site publishes the canonical verifyUrl',
+      wcMetadata(page('https://fbtswap.ir')).verifyUrl === canonical);
+    t('the www variant publishes its own verifyUrl, not the bare one',
+      wcMetadata(page('https://www.fbtswap.ir')).verifyUrl === 'https://www.fbtswap.ir');
+    t('the packaged app publishes the canonical verifyUrl, never localhost',
+      wcMetadata(page('https://localhost', { Capacitor: { isNativePlatform: () => true } })).verifyUrl === canonical);
+    t('a preview publishes its own verifyUrl',
+      wcMetadata(page('https://5173-abc123.e2b.app')).verifyUrl === 'https://5173-abc123.e2b.app');
+
     /* ─── the report's own evidence ───────────────────────────────────────── */
     const aligned = walletIdentityFacts(page('https://fbtswap.ir'));
     t('aligned facts name the same origin twice',
@@ -903,6 +922,55 @@ export default async function run() {
     const packaged = walletIdentityFacts(page('https://localhost', { Capacitor: { isNativePlatform: () => true } }));
     t('packaged facts carry the flag the report renders',
       packaged.packaged === true && packaged.declared === canonical);
+
+    /* ─── the allowlist that ships in source ─────────────────────────────
+     * The Reown dashboard allowlist MUST contain every origin a page might
+     * be served from, otherwise the corresponding WalletConnect session
+     * verdict flips to INVALID. The list is data, not an if-tree, so a new
+     * domain is one line and the test asserts the shape instead of
+     * trusting the constant.
+     */
+    t('the canonical bare domain is on the allowlist',
+      WC_ALLOWED_ORIGINS.includes('https://fbtswap.ir'));
+    t('the www variant is on the allowlist — Trust Wallet warns otherwise',
+      WC_ALLOWED_ORIGINS.includes('https://www.fbtswap.ir'));
+    t('the packaged APK WebView origin is on the allowlist',
+      WC_ALLOWED_ORIGINS.includes('https://localhost'));
+    t('no allowlist entry names a retired domain',
+      WC_ALLOWED_ORIGINS.every((o) => !/lawpoetics\.ir/i.test(o)));
+    t('the allowlist contains only https origins (no http, no scheme-less)',
+      WC_ALLOWED_ORIGINS.every((o) => /^https:\/\//i.test(o)));
+    t('the Android app id matches the package the APK ships with',
+      WC_ANDROID_APP_ID === 'ir.fbtswap.app');
+    t('the verify file path is what Reown fetches, with a leading slash',
+      WC_VERIFY_FILE_PATH === '/.well-known/walletconnect.txt'
+        && WC_VERIFY_FILE_PATH.startsWith('/'));
+  }
+
+  /* ══════════════════ the well-known file ships in source ═════════════════
+   * The placeholder mechanism lets the file exist before the dashboard
+   * code is obtained: Vite copies public/ verbatim, so the file goes
+   * live with the next build, the dashboard work happens later, and the
+   * `walletconnect-domain-verify.mjs` script overwrites the placeholder
+   * the moment the code is in hand. The test asserts the placeholder is
+   * in source and looks like a placeholder — the dashboard will replace
+   * it byte-for-byte.
+   */
+  {
+    const { existsSync, readFileSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const file = resolve(here, '..', 'public', '.well-known', 'walletconnect.txt');
+    t('the well-known verification file is committed', existsSync(file));
+    if (existsSync(file)) {
+      const content = readFileSync(file, 'utf8').trim();
+      t('the verification file is either the placeholder or a real code',
+        content.startsWith('PENDING_REOWN_VERIFICATION_')
+        || /^[A-Za-z0-9._~-]{16,512}$/.test(content));
+      t('the verification file does not contain a trailing extra newline',
+        !readFileSync(file, 'utf8').match(/\n\n/));
+    }
   }
 
   /* ══════════════════ 11. the health report ═══════════════════════════════ */
