@@ -143,6 +143,22 @@ export const isStableSymbol = (s) => STABLES.has(String(s ?? '').toUpperCase());
  */
 const FEE_CONFIGURATION_CODES = new Set(['FEE_NOT_APPLIED', 'FEE_RECIPIENT_MISMATCH']);
 
+/**
+ * Failures that mean OUR gate refused the chain — not that the pair has no
+ * route.
+ *
+ * `CHAIN_UNSUPPORTED` is the LI.FI server proxy's allowlist (server/lifi.js
+ * `SWAP_CHAIN_IDS`) saying "we do not forward this chain". When that set
+ * drifts from the client's `LIFI_SWAP_CHAINS` — a network id missing from the
+ * SERVER list while the client still asks — every LI.FI quote on that chain
+ * dies at the door with HTTP 400 `CHAIN_UNSUPPORTED`. The liquidity is there
+ * and the route exists on the other aggregators; reporting «مسیری بین این دو
+ * توکن وجود ندارد» sends the user to change tokens or lower the amount, none
+ * of which can help. Same failure family as the fee gate: OUR configuration,
+ * not the pair. `QUOTE_FAILED` is retriable and honest.
+ */
+const CONFIGURATION_CODES = new Set(['CHAIN_UNSUPPORTED']);
+
 export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
   /*
    * A fee-gate rejection must never be reported as «مسیری بین این دو توکن
@@ -169,6 +185,16 @@ export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
    * the LI.FI client marks `network` — the code, not the status line, is the
    * honest verdict for it.
    */
+  /* `CHAIN_UNSUPPORTED` first, with the same `.some` reasoning as the fee
+     gate: a single chain-level refusal means the chain is misconfigured no
+     matter what the other sources did. The LI.FI adapter rethrows its
+     proxy's 400 as `CHAIN_UNSUPPORTED` (see the fetch guard in lib/lifi.js),
+     and on Monad/Mantle/Scroll/zkSync/Robinhood — where LI.FI is the reachable
+     source — a dropped server-side id would otherwise surface as «مسیری بین
+     این دو توکن وجود ندارد» on a pair every aggregator routes. */
+  if (failures.some((f) => CONFIGURATION_CODES.has(String(f?.message ?? '')))) {
+    return 'QUOTE_FAILED';
+  }
   if (failures.some((f) => FEE_CONFIGURATION_CODES.has(String(f?.message ?? '')))) {
     return 'QUOTE_FAILED';
   }
