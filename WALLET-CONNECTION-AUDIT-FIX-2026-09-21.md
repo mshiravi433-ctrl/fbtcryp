@@ -227,7 +227,7 @@ The identity URI written is the bare `https://fbtswap.ir/` — never a path.
 | `npx vitest run test/wallet-health-panel.test.jsx test/wallet-session-lease.test.jsx test/network-select.test.jsx test/solana-connect-sheet.test.jsx` | **41 / 41** |
 | `node test/intent-ai/autonomy-drivers-probe.mjs` | **37 / 37** |
 | `node test/futures-onchain-run.mjs` | **61 / 61** (58/59 at `041ae23`) |
-| `NODE_OPTIONS=--max-old-space-size=3072 npm run build` | **exit 0** — `✓ built in 39.07s`, 7 landing pages + sitemap |
+| `NODE_OPTIONS=--max-old-space-size=3072 npm run build` (on the final tree, `prebuild` → `assetlinks --ensure` included) | **exit 0** — `✓ built in 36.98s`, 7 landing pages + sitemap |
 | `npm run walletconnect:check` | exit 1 — `VERIFY_SERVICE_UNREACHABLE` / `RELAY_UNREACHABLE` (no network here), `CODE STATUS: PASS` |
 | `npm run walletconnect:register:check` | exit 0 — checklist + honest «registry could not be read from this host» |
 | `npm run assetlinks:check` | exit 1 — the file is generated from the real keystore, and there is none in this checkout |
