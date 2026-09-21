@@ -19,6 +19,7 @@
  *   lease.js     «this device has a wallet until <time>» — what a refresh reads
  *   signing.js   the signing boundary: preflight, bound, honest classification
  *   health.js    the diagnostic report
+ *   diagnostics.js  the one verdict: eight named causes, one of them OK
  *
  * `embedded.js` — the email/social "embedded wallet" — is gone: that surface
  * was retired on 2026-09-18 because it needed a SECOND AppKit instance sharing
@@ -166,6 +167,25 @@ export {
 } from './health.js';
 
 export {
+  WC_FLOW_STATES,
+  WC_FLOW_TERMINAL,
+  WC_FLOW_TRANSITIONS,
+  wcFlowState,
+  wcFlowTransitionAllowed
+} from './flowState.js';
+
+export {
+  WC_DIAGNOSIS,
+  WC_DIAGNOSIS_OWNER,
+  WC_DIAGNOSIS_SENTENCE,
+  classifyWalletConnectDiagnosis,
+  collectWalletConnectDiagnosis,
+  diagnosisLines,
+  diagnosisStatuses,
+  sdkConfigFacts
+} from './diagnostics.js';
+
+export {
   VERIFY_ATTESTATION_TIMEOUT_MS,
   VERIFY_SERVER,
   VERIFY_SERVER_V3,
@@ -173,6 +193,7 @@ export {
   decodeAttestation,
   predictVerifyVerdict,
   probeVerifyAttestation,
+  probeVerifyReachability,
   randomAttestationId,
   reownDashboardUrl,
   warmVerifyEnclave

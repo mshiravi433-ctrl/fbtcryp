@@ -44,6 +44,14 @@ const loadPerpMarkets = async () => (perpMarketsMod ||= await import('../../velo
 const loadSolana = async () => (solanaMod ||= await import('../../solana.js'));
 const loadSolanaWallet = async () => (solanaWalletMod ||= await import('../../solanaWallet.js'));
 const loadSolanaAssets = async () => (solanaAssetsMod ||= await import('../../solanaAssetsClient.js'));
+
+/*
+ * The unified wallet state (lib/walletState.js) — statically imported, and that
+ * is deliberate: it is small, it has no SDK dependency of its own, and the
+ * driver set reports «which wallets can sign» on construction. Making it dynamic
+ * would mean the report could silently be about nothing.
+ */
+import { NETWORK_CAIP2, walletStateForIntent } from '../../walletState.js';
 async function loadPerpRisk() {
   if (!perpRiskMod) {
     try { perpRiskMod = await import('../../futures-engine/risk.js'); } catch { perpRiskMod = {}; }
@@ -119,6 +127,66 @@ export function buildAutonomyDrivers({
       ? wallet.getReadProvider(chainId || wallet.chainId)
       : null)
   };
+
+  /*
+   * THE WALLET STATE THIS DRIVER SET REPORTS AGAINST.
+   *
+   * Read once here, from the one source that knows (lib/walletState.js), and
+   * re-readable on demand through `drivers.walletState()` — because a plan is
+   * usually built LATER than the driver set, after the user may have connected a
+   * Solana wallet.
+   */
+  const state = walletStateForIntent();
+
+  /*
+   * ── THE CALLER'S CONTEXT WINS, PER CHANNEL ────────────────────────────────
+   *
+   * `walletStateForIntent()` reads the LIVE window. That is right in the app and
+   * empty everywhere else (Node, a test, a worker) — while this function is
+   * called with a wallet context the caller already holds. So each channel is
+   * resolved separately: an explicitly injected channel DEFINES that channel,
+   * an absent one falls back to the live read, and neither can overwrite the
+   * other. That is the whole requirement — EVM and Solana state must not
+   * overwrite each other — applied at the boundary where the two are merged.
+   */
+  const injectedEvm = wallet
+    ? {
+      connected: Boolean(wallet.connected),
+      address: wallet.address ?? null,
+      chainId: wallet.chainId ?? null,
+      caip2: Number.isFinite(Number(wallet.chainId)) ? `eip155:${Number(wallet.chainId)}` : null,
+      kind: wallet.kind ?? 'injected',
+      locked: Boolean(wallet.locked),
+      /* A signer function IS the capability: without it nothing can be signed,
+         whatever the caller calls the connection. */
+      canSign: typeof wallet.getSigner === 'function' && !wallet.locked
+    }
+    : null;
+  const injectedSolana = solana
+    ? {
+      connected: Boolean(solana.connected),
+      address: solana.address ?? null,
+      wallet: solana.walletName ?? solana.wallet ?? null,
+      transport: solana.transport ?? (solana.connected ? 'injected' : null),
+      caip2: solana.address ? NETWORK_CAIP2.solana : null,
+      canSign: Boolean(solana.connected && solana.address),
+      methods: solana.methods ?? {}
+    }
+    : null;
+
+  const wallets = {
+    evm: injectedEvm ?? state.wallets.evm,
+    solana: injectedSolana ?? state.wallets.solana,
+    bitcoin: state.wallets.bitcoin
+  };
+  const networks = [...new Set(
+    [wallets.evm, wallets.solana, wallets.bitcoin]
+      .filter((channel) => channel?.connected && channel.caip2)
+      .map((channel) => channel.caip2)
+  )];
+  const signable = Object.entries(wallets)
+    .filter(([, channel]) => channel?.canSign)
+    .map(([name]) => name);
 
   const drivers = {
     wallet: walletApi,
@@ -233,11 +301,26 @@ export function buildAutonomyDrivers({
     warm: warmAutonomyDrivers,
     readiness: autonomyDriverReadiness,
 
-    /** Which wallets this driver set can actually sign with. */
+    /**
+     * Which wallets this driver set can actually sign with.
+     *
+     * Read from `lib/walletState.js` — the ONE place that knows — rather than
+     * inferred from whichever stack this module happens to hold a reference to.
+     * The two booleans are kept for every existing caller; `state` carries the
+     * rest (addresses, CAIP-2 networks, per-chain signing capability), so an
+     * executor can refuse a Solana venue when only an EVM wallet is connected
+     * instead of discovering it inside a signer.
+     */
     wallets: {
-      evm: Boolean(wallet?.connected),
-      solana: Boolean(solana?.connected)
-    }
+      evm: Boolean(wallets.evm.connected),
+      solana: Boolean(wallets.solana.connected),
+      bitcoin: Boolean(wallets.bitcoin.connected),
+      networks: networks.length ? networks : state.networks,
+      signable: signable.length ? signable : state.signableChains,
+      state
+    },
+    /** The same query, on demand (a plan is built later than the driver set). */
+    walletState: () => walletStateForIntent()
   };
 
   /*

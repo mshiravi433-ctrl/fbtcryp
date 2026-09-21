@@ -133,7 +133,13 @@ export function backpackBrowseLink(url) {
 
 // publicAppUrl moved to lib/nativeShell.js — it is needed by the referral
 // invite too, and importing this module for it would pull in the Solana stack.
-export { publicAppUrl } from './nativeShell';
+//
+// The extension is explicit ('.js'), unlike the rest of the tree where Vite
+// resolves extensionless specifiers: a bare './nativeShell' makes THIS module
+// unloadable by plain Node, and every Node probe that imports the Solana stack
+// (test/solana-*.mjs, and the wallet diagnostics probe) then fails on a
+// resolution error rather than on anything it was written to check.
+export { publicAppUrl } from './nativeShell.js';
 
 /*
  * THE THIRD WAY A SOLANA WALLET CAN BE CONNECTED HERE.
@@ -334,6 +340,25 @@ function emitSolanaWalletChange(address) {
     window.dispatchEvent(new CustomEvent('solana:wallet-change', { detail: { address: address || null } }));
   } catch {
     /* An event bus must never break the wallet operation it is reporting. */
+  }
+  /*
+   * ── AND THE UNIFIED STATE, ON THE SAME EDGE ────────────────────────────────
+   *
+   * `lib/walletState.js` is what Intent OS reads before it plans anything that
+   * needs a signature, and it answers per channel. EVM had a notifier
+   * (`WalletContext`), Solana had none — so a wallet connected from this module
+   * changed nothing in the snapshot until something else happened to re-read it.
+   * The dispatch above is the one point every Solana connection already passes
+   * through (injected AND deeplink, which emits its own copy of this event), so
+   * one import here covers both transports.
+   *
+   * Imported lazily on purpose: `walletState.js` reads this module back for the
+   * Solana channel, and a static import would close that cycle at module load.
+   */
+  try {
+    import('./walletState.js').then((mod) => mod.notifyWalletState('solana')).catch(() => {});
+  } catch {
+    /* Same rule as above: reporting a connection must never break it. */
   }
 }
 

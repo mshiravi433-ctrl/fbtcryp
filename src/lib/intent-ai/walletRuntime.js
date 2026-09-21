@@ -25,8 +25,27 @@
  */
 
 import { classifyFailure } from './failureModes.js';
+import { walletStateForIntent } from '../walletState.js';
 
 export const WALLET_RUNTIME_SCHEMA = 'fbt.wallet-runtime.v1';
+
+/**
+ * WHAT THE INTENT OS CAN ACTUALLY SIGN WITH, RIGHT NOW.
+ *
+ * The execution pipeline plans first and asks for a signature later, so it needs
+ * a query — not a React prop — for «connected EVM wallet, connected Solana
+ * wallet, connected networks, available signing capabilities». That query lives
+ * in `lib/walletState.js`, where the EVM account (registered by WalletContext),
+ * the Solana transports (injected / Wallet Standard / deeplink) and Bitcoin are
+ * read as three INDEPENDENT channels.
+ *
+ * Re-exported here because this is the module the intent pipeline already
+ * imports for wallet work, and a planner should not have to learn a second
+ * import path to ask a question about the same subject.
+ */
+export function intentWalletState(options = {}) {
+  return walletStateForIntent(options);
+}
 
 /** EIP-712 domain/type used for the intent authorization signature. */
 export const INTENT_ORDER_TYPES = Object.freeze({

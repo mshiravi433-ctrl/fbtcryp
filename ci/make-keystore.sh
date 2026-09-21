@@ -124,8 +124,16 @@ fi
 say "${GRN}✓${OFF} base64 written to: $B64_FILE"
 
 # --- fingerprint ---------------------------------------------------------
+#
+# BOTH digests, on purpose. SHA-1 is the one humans compare in the Play
+# Console; SHA-256 is the one `/.well-known/assetlinks.json` requires — and a
+# SHA-1 pasted into that file is not a weaker file, it is an INVALID one:
+# Android rejects the whole document and Phantom answers «this app's identity
+# could not be verified». Printing only SHA-1 is how that happens.
 SHA1=$(keytool -list -v -keystore "$KS_PATH" -storepass "$PASS" 2>/dev/null \
        | grep -i 'SHA1:' | head -1 | sed 's/.*SHA1: *//')
+SHA256=$(keytool -list -v -keystore "$KS_PATH" -storepass "$PASS" 2>/dev/null \
+       | grep -i 'SHA256:' | head -1 | sed 's/.*SHA256: *//')
 
 # --- report --------------------------------------------------------------
 say ""
@@ -155,6 +163,23 @@ say "  ${CYN}${SHA1}${OFF}"
 say ""
 say "Save it. Play Console shows this same fingerprint after your first"
 say "upload — if they ever disagree, you signed with the wrong keystore."
+hr
+say "${BLD}Digital Asset Links fingerprint (SHA-256)${OFF}"
+say "  ${CYN}${SHA256}${OFF}"
+say ""
+say "This is the value ${BLD}assetlinks.json${OFF} needs — the SHA-1 above is"
+say "for comparing with the Play Console, NOT for that file. Generate it"
+say "from this same keystore, so nothing is ever invented:"
+say ""
+say "  ${BLD}npm run assetlinks -- --keystore=${KS_PATH} \\"
+say "      --storepass=… --alias=${ALIAS}${OFF}"
+say ""
+say "If the app is published with ${BLD}Play App Signing${OFF}, the certificate"
+say "that signs the APK is Google's, not this one. Copy the SHA-256 from"
+say "Play Console → Release → Setup → App signing → «App signing key"
+say "certificate» and add it as a SECOND entry: FBT_ANDROID_SHA256_PLAY."
+say "Shipping only this upload certificate produces the same «identity could"
+say "not be verified» warning, because the INSTALLED app was signed by Google."
 hr
 say ""
 say "${YLW}${BLD}BACK UP THE KEYSTORE NOW.${OFF}"

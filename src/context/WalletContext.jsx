@@ -7,6 +7,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { isIOS as isIOSDevice } from '../lib/platform';
 import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
+import { notifyWalletState, registerEvmWalletSource } from '../lib/walletState';
 import {
   WC_PROJECT_ID,
   bringWalletToFront,
@@ -1490,6 +1491,40 @@ export function WalletProvider({ children }) {
     if (!address && loadVault()) attachLocal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * THE EVM HALF OF THE UNIFIED WALLET STATE.
+   *
+   * `lib/walletState.js` answers one question for the whole app — «what can this
+   * user sign with, right now» — across EVM, Solana and Bitcoin. The Solana and
+   * Bitcoin channels read themselves; the EVM account lives in THIS component's
+   * state, so it is registered here instead of being duplicated there. One
+   * reader, one source, so the two can never disagree about the account.
+   *
+   * The reader is deliberately a function of refs and state at call time (not a
+   * snapshot captured when it was registered), and it returns PUBLIC FACTS ONLY:
+   * an address, a chain id, a mode. No key material exists in this component to
+   * leak into it.
+   */
+  useEffect(() => {
+    const unsubscribe = registerEvmWalletSource(() => ({
+      address: addressRef.current ?? address ?? null,
+      chainId: chainIdRef.current ?? chainId ?? null,
+      mode,
+      locked,
+      connected: Boolean(addressRef.current ?? address),
+      /* The provider object is the signer. Its absence is why a connected-but
+         -locked wallet is reported as unable to sign rather than as ready. */
+      hasProvider: Boolean(eip1193Ref.current)
+    }));
+    return unsubscribe;
+  }, [address, chainId, mode, locked]);
+
+  /* Anything that changes the EVM account tells every subscriber — the Intent
+     OS execution path reads this snapshot before it plans a signature. */
+  useEffect(() => {
+    notifyWalletState('evm');
+  }, [address, chainId, mode, locked]);
 
   /*
    * A vault that is present but whose lease is missing gets one written now.

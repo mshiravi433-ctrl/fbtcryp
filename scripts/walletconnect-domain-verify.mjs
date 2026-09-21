@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WALLETCONNECT VERIFY READINESS — the registry, measured.
+ * WALLETCONNECT VERIFY READINESS — the registry, measured, and ONE verdict.
  * ---------------------------------------------------------------------------
  * History, because this script is the record of a wrong conclusion:
  *
@@ -13,105 +13,132 @@
  *    the reason «unverified domain» survived three pull requests: the SDK
  *    still reads `isVerified` from the server, and the server keys it off the
  *    project's domain registry. See WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md.
+ *  · Then it printed facts and a prediction, which was better — but it ignored
+ *    the `--check` flag `npm run walletconnect:check` passes it, so the gate
+ *    this repository documents always exited 0. A diagnostic that cannot fail
+ *    is a diagnostic that says «healthy» about a broken deployment.
  *
- * What this script measures now, with nothing but the public API:
+ * What it does now: measures, then hands every measurement to the one engine
+ * the app itself uses (`src/lib/wc/diagnostics.js`) and prints ITS verdict —
+ * one of OK, ORIGIN_MISMATCH, DOMAIN_NOT_REGISTERED, VERIFY_SERVICE_UNREACHABLE,
+ * PROJECT_ID_MISMATCH, METADATA_MISMATCH, RELAY_UNREACHABLE,
+ * SDK_CONFIGURATION_ERROR — together with CODE STATUS and DASHBOARD STATUS, so
+ * «the code is right and the dashboard is not» can never be read as «the code
+ * is wrong».
  *
- *   1. Is the project known at all?        (403 = unknown/retired project id)
- *   2. Which origins are in its registry?  (GET /projects/v1/origins)
- *   3. What verdict do those facts imply?  (predictVerifyVerdict, from src)
+ * ─── FLAGS ──────────────────────────────────────────────────────────────────
+ *   --check              exit non-zero unless the verdict is OK (this is what
+ *                        `npm run walletconnect:check` runs)
+ *   --strict             alias of --check
+ *   --origin=<url>       the origin under test (default https://fbtswap.ir)
+ *   --packaged           treat the origin as the Capacitor WebView
+ *                        (https://localhost), which declares the canonical
+ *                        public origin instead of its own
+ *   --json               print the raw report instead of the lines
+ *   --timeout=<ms>       per-probe bound (default 8000)
  *
- * That third answer is the one a wallet renders, and it is exactly what was
- * never measured: on 2026-09-21 the code's project returned an EMPTY registry
- * while the retired project still carried `fbtswap.ir`.
- *
- * `--strict` fails the run when the verdict is not VALID, so CI can gate on it
- * once the allowlist is done. The script never registers anything: the
- * dashboard step is a human click, and this script's job is to print the exact
- * value to click with.
+ * A browser is not required and is not simulated: the attestation probe needs a
+ * document to hang the SDK's iframe on, so outside a browser the report says
+ * `attestation not measured` and the verdict is derived from the registry, the
+ * relay and the enclave — which is exactly what CI can measure.
  */
 
-import { WC_ALLOWED_ORIGINS, WC_PROJECT_ID, wcMetadata } from '../src/lib/wc/config.js';
-import { originsProbeUrl, isOriginAllowed } from '../src/lib/wc/health.js';
-import { predictVerifyVerdict as predict, reownDashboardUrl, VERIFY_SERVER, VERIFY_SERVER_V3 } from '../src/lib/wc/verify.js';
+import { WC_PROJECT_ID, WC_ALLOWED_ORIGINS } from '../src/lib/wc/config.js';
+import { reownDashboardUrl, VERIFY_SERVER, VERIFY_SERVER_V3 } from '../src/lib/wc/verify.js';
+import { collectWalletConnectDiagnosis, diagnosisLines } from '../src/lib/wc/diagnostics.js';
 
 const args = process.argv.slice(2);
-const isStrict = args.includes('--strict');
-const originArg = args.find((a) => a.startsWith('--origin='));
-const ORIGIN = originArg ? originArg.slice('--origin='.length) : 'https://fbtswap.ir';
-
-const REASONS = {
-  NO_DOMAIN_REGISTERED: '❌ this project has NO domain in its registry — every wallet shows «Cannot verify»',
-  ORIGIN_NOT_REGISTERED: '❌ this origin is not in the project registry',
-  METADATA_MISMATCH: '❌ metadata.url is not the origin this page runs on (wallets show «Domain mismatch»)',
-  NO_LIST: '⚠️  the registry could not be read (network or project id)',
-  OK: '✅ Domain match'
+const has = (name) => args.includes(`--${name}`);
+const value = (name) => {
+  const hit = args.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : null;
 };
 
-async function readRegistry(projectId) {
-  const url = originsProbeUrl(projectId);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8_000);
-  try {
-    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
-    if (!res.ok) return { ok: false, status: res.status, list: null, url };
-    const body = await res.json();
-    return { ok: true, status: res.status, list: Array.isArray(body?.allowedOrigins) ? body.allowedOrigins : null, url };
-  } catch (error) {
-    return { ok: false, status: null, error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error), list: null, url };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const isGate = has('check') || has('strict');
+const asJson = has('json');
+const ORIGIN = value('origin') || 'https://fbtswap.ir';
+const TIMEOUT = Number(value('timeout')) || 8_000;
 
-const metadata = wcMetadata();
-const registry = await readRegistry(WC_PROJECT_ID);
-const verdict = predict({
-  allowedOrigins: registry.list,
-  declaredUrl: metadata.url,
-  pageOrigin: ORIGIN
+/*
+ * THE VIEW THE ORIGIN WOULD HAVE IN A BROWSER.
+ *
+ * `metadata.url` is derived from `window.location.origin`, so a run that passes
+ * only an origin would compare the browser's answer against the canonical
+ * constant — and then report ORIGIN_MISMATCH for a page that is behaving
+ * perfectly. `--origin=https://www.fbtswap.ir` means «as if the page were served
+ * there», so the view is built to match. `--packaged` is the one case where the
+ * page origin is deliberately NOT the declared identity.
+ */
+const view = {
+  location: { origin: ORIGIN },
+  Capacitor: { isNativePlatform: () => has('packaged') }
+};
+
+const report = await collectWalletConnectDiagnosis({
+  origin: ORIGIN,
+  projectId: WC_PROJECT_ID,
+  timeoutMs: TIMEOUT,
+  win: view,
+  /* No document exists here (this is Node), so the attestation half is reported
+     as not measured rather than as a failure. */
+  includeAttestation: false
 });
 
-console.log('WalletConnect Verify readiness');
-console.log('------------------------------');
-console.log(`Project id        : ${WC_PROJECT_ID}`);
-console.log(`Dashboard         : ${reownDashboardUrl(WC_PROJECT_ID)}`);
-console.log(`Origin under test : ${ORIGIN}`);
-console.log(`Enclave           : ${VERIFY_SERVER_V3} (SDK host: ${VERIFY_SERVER})`);
-console.log('');
-console.log(`Registry (${registry.url})`);
-if (!registry.ok) {
-  console.log(`  ⚠️  unreadable${registry.status ? ` — HTTP ${registry.status}` : ''}${registry.error ? ` — ${registry.error}` : ''}`);
-} else if (!registry.list?.length) {
-  console.log('  ❌ EMPTY — no domain is allowlisted on this project.');
+const verdict = report.diagnosis ?? { code: 'NOT_MEASURED', owner: 'UNKNOWN' };
+
+if (asJson) {
+  console.log(JSON.stringify(report, null, 2));
 } else {
-  for (const entry of registry.list) {
-    console.log(`  · ${entry}${isOriginAllowed(ORIGIN, registry.list) && (entry === ORIGIN || ORIGIN.endsWith(entry)) ? '   ← covers this origin' : ''}`);
+  console.log('WalletConnect Verify readiness');
+  console.log('------------------------------');
+  console.log(`Dashboard         : ${reownDashboardUrl(WC_PROJECT_ID)}`);
+  console.log(`Origin under test : ${ORIGIN}`);
+  console.log(`Enclave           : ${VERIFY_SERVER_V3} (SDK host: ${VERIFY_SERVER})`);
+  console.log(`Relay hosts       : ${(report.relay?.urls ?? []).join(', ')}`);
+  console.log('');
+  console.log('Registry (project domain allowlist)');
+  if (!report.registry?.readable) {
+    console.log(`  ⚠️  unreadable${report.registry?.status ? ` — HTTP ${report.registry.status}` : ''}${report.registry?.error ? ` — ${report.registry.error}` : ''}`);
+  } else if (!report.registry.list?.length) {
+    console.log('  ❌ EMPTY — no domain is allowlisted on this project.');
+  } else {
+    for (const entry of report.registry.list) {
+      console.log(`  · ${entry}${report.allowedOrigins?.originAllowed ? '   ← covers the origin under test' : ''}`);
+    }
+  }
+  console.log('');
+  console.log('Metadata the wallet receives');
+  console.log(`  url       = ${report.metadata?.url ?? '—'}`);
+  console.log(`  verifyUrl = ${report.metadata?.verifyUrl || '—'}`);
+  console.log(`  icons[0]  = ${report.metadata?.icons?.[0] || '—'}`);
+  console.log('');
+  console.log('Measured facts');
+  for (const line of diagnosisLines(report)) console.log(`  ${line}`);
+  console.log('');
+  console.log(`Verdict: ${verdict.code}`);
+  console.log(`  owner: ${verdict.owner}`);
+  console.log(`  ${verdict.sentence ?? ''}`);
+  if (verdict.problems?.length) console.log(`  problems: ${verdict.problems.join(', ')}`);
+  console.log('');
+  console.log('Expected on this project (from src/lib/wc/config.js):');
+  for (const origin of WC_ALLOWED_ORIGINS) console.log(`  · ${origin}`);
+  console.log('');
+
+  if (verdict.code !== 'OK' && verdict.owner === 'DASHBOARD') {
+    console.log('Fix (a human click — no code can do it):');
+    console.log(`  1. ${reownDashboardUrl(WC_PROJECT_ID)}`);
+    console.log('  2. Configuration → Domain → “+ Domain”');
+    console.log(`  3. ${ORIGIN}  (with the scheme, no trailing slash) → Allowlist`);
+    console.log('  4. Wait up to 5 minutes, clear the old session in the wallet, reconnect.');
+    console.log('');
+  }
+  if (verdict.owner === 'CODE' || verdict.owner === 'CODE_OR_CONFIG') {
+    console.log('Fix (this one IS in the repository — see src/lib/wc/config.js):');
+    console.log('  · metadata.url must equal the origin the page is served from');
+    console.log('  · the project id must be the project the Reown API knows');
+    console.log('  · run this script in a browser page context for the attestation half');
+    console.log('');
   }
 }
-console.log('');
-console.log('Metadata the wallet receives');
-console.log(`  url       = ${metadata.url}`);
-console.log(`  verifyUrl = ${metadata.verifyUrl || '—'}`);
-console.log(`  icons[0]  = ${metadata.icons?.[0] || '—'}`);
-console.log('');
-console.log(`Verdict: ${verdict.verdict}${verdict.verdict === 'VALID' ? '' : ` (${verdict.reason})`}`);
-console.log(`  ${REASONS[verdict.reason] ?? '—'}`);
-console.log('');
-console.log('Expected on this project (from src/lib/wc/config.js):');
-for (const origin of WC_ALLOWED_ORIGINS) console.log(`  · ${origin}`);
-console.log('');
 
-if (verdict.verdict !== 'VALID') {
-  console.log('Fix (a human click — no code can do it):');
-  console.log(`  1. ${reownDashboardUrl(WC_PROJECT_ID)}`);
-  console.log('  2. Configuration → Domain → “+ Domain”');
-  console.log(`  3. ${ORIGIN}  (with the scheme, no trailing slash) → Allowlist`);
-  console.log('  4. Wait up to 5 minutes, clear the old session in the wallet, reconnect.');
-  console.log('');
-}
-
-if (isStrict && verdict.verdict !== 'VALID') {
-  console.error('--strict set and the verdict is not VALID. Failing.');
-  process.exit(1);
-}
-process.exit(0);
+process.exitCode = isGate ? (verdict.code === 'OK' ? 0 : 1) : 0;
