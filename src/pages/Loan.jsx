@@ -54,16 +54,23 @@ import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
 import {
   lendingVenue, lendingSupported, lendingAssetsFor,
-  readReserves, readUserAccount, readAssetPosition, readAllowance,
-  buildLendingPlan, runLendingPlan, projectHealthFactor, healthBand,
-  fromUnits, toUnits
+  readAllowance,
+  buildLendingPlan,
+  fromUnits, toUnits, isMaxAmount, assertCollateralChangeSafe
 } from '../lib/lending';
 import {
-  mapRawError,
+  readMarketState, getMaxBorrow, projectActionRisk, evaluateAction,
+  simulateLendingPlan, estimateNetworkFee, executeLendingPlan,
+  createMarketCache, createTransactionHistory,
+  DATA_STATUS, TX_STATUS, MARKET_POLL_MS, MARKET_STALE_AFTER_MS,
+  MIN_HEALTH_FACTOR_AFTER_BORROW, chainNativeSymbol
+} from '../lib/lending-service';
+import {
+  mapRawError, LENDING_ERRORS,
   createTransactionMachine, TX_STATE,
   createInFlightGuard, makeIdempotencyKey, makeRequestId,
-  evaluateAlerts, assessPosition,
-  enabledNetworks
+  evaluateAlerts, assessPosition, riskLevel,
+  enabledNetworks, LENDING_NETWORKS, isNetworkEnabled
 } from '../lib/lending-engine';
 import {
   IconChevronLeft,
@@ -84,6 +91,13 @@ const CHAIN_DOT = {
   8453: '#0052ff', 10: '#ff0420', 43114: '#e84142'
 };
 const chainLabel = (id) => EVM_CHAINS[id]?.name || `#${id}`;
+
+/**
+ * Codes the engine already defines. A failure whose code is one of these is
+ * passed through untouched; anything else goes through `mapRawError` so a raw
+ * wallet/RPC/protocol message never becomes the explanation a user reads (§28).
+ */
+const LENDING_CODES = new Set(Object.keys(LENDING_ERRORS));
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SMALL HELPERS
@@ -135,18 +149,40 @@ function ChainPill({ chainId }) {
   );
 }
 
-function RiskPill({ risk, t }) {
-  const map = {
-    low:    { label: t('invest.risk.low'),    bg: 'rgba(34,197,94,0.12)',  fg: '#4ade80' },
-    medium: { label: t('invest.risk.medium'), bg: 'rgba(251,191,36,0.12)', fg: '#fbbf24' },
-    high:   { label: t('invest.risk.high'),   bg: 'rgba(239,68,68,0.12)',  fg: '#f87171' },
-  };
-  const { label, bg, fg } = map[risk] ?? map.medium;
+/**
+ * The reserve's OWN state, from the protocol.
+ *
+ * This slot used to render a per-symbol "low / medium / high risk" pill from a
+ * hardcoded table in lending.js, keyed by ticker and defaulting to "medium" for
+ * anything the table had not heard of. It sat directly under a live APY number,
+ * so it read as a live risk assessment of the market while being an editorial
+ * guess that could not change, could not be wrong loudly, and was borrowed from
+ * the Invest page's vocabulary (§37).
+ *
+ * What actually varies per reserve on Aave — and what a supplier needs — is the
+ * protocol's own state: whether the reserve is paused or frozen, and the max LTV
+ * it will accept this asset as collateral for. Both are read from the reserve
+ * configuration bitmap. When that bitmap could not be read, this renders
+ * NOTHING: an absent pill is honest, an invented one is not.
+ */
+function ReserveStatePill({ reserve, t }) {
+  if (!reserve || reserve.listed === false) return null;
+  const halted = reserve.status === 'paused' || reserve.status === 'frozen';
+  const label = halted
+    ? t(`loan.reserveStatus.${reserve.status}`)
+    : (reserve.ltvPct != null ? `${t('loan.maxLtv')} ${Number(reserve.ltvPct).toFixed(0)}%` : null);
+  if (!label) return null;
+  const fg = reserve.status === 'paused' ? '#f87171' : reserve.status === 'frozen' ? '#fbbf24' : '#93c5fd';
   return (
-    <span style={{
-      fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-      background: bg, color: fg, border: `1px solid ${fg}33`,
-    }}>
+    <span
+      data-testid="loan-reserve-state"
+      data-status={reserve.status}
+      title={halted ? t('loan.reserveStateHalted') : t('loan.reserveStateLtv')}
+      style={{
+        fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+        background: `${fg}1f`, color: fg, border: `1px solid ${fg}33`,
+      }}
+    >
       {label}
     </span>
   );
@@ -171,22 +207,332 @@ function AprBadge({ reserve, side, loading }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   §3 — WHERE A NUMBER CAME FROM
+   Four states, always visible: live / cached (with its age) / partial /
+   unavailable. The point is that the user can tell a read from a memory of a
+   read, and can tell "we could not read this" from "this is zero".
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const STATUS_TONE = {
+  live: { fg: '#4ade80', bg: 'rgba(74,222,128,0.12)', label: 'loan.status.live' },
+  estimated: { fg: '#60a5fa', bg: 'rgba(96,165,250,0.12)', label: 'loan.status.estimated' },
+  cached: { fg: '#fbbf24', bg: 'rgba(251,191,36,0.12)', label: 'loan.status.cached' },
+  partial: { fg: '#fbbf24', bg: 'rgba(251,191,36,0.12)', label: 'loan.status.partial' },
+  unavailable: { fg: '#f87171', bg: 'rgba(248,113,113,0.12)', label: 'loan.status.unavailable' }
+};
+
+function DataStatusPill({ status, ageMs, t, testId = 'loan-data-status' }) {
+  const tone = STATUS_TONE[status] ?? STATUS_TONE.unavailable;
+  const stale = status === DATA_STATUS.CACHED && Number(ageMs) > MARKET_STALE_AFTER_MS;
+  return (
+    <span
+      data-testid={testId}
+      data-status={status}
+      title={status === DATA_STATUS.CACHED && ageMs != null ? t('loan.statusAge', { s: Math.round(ageMs / 1000) }) : undefined}
+      style={{
+        fontSize: 9.5, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
+        padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap',
+        color: stale ? '#f87171' : tone.fg,
+        background: stale ? 'rgba(248,113,113,0.12)' : tone.bg,
+        border: `1px solid ${stale ? '#f8717133' : tone.fg + '33'}`,
+      }}
+    >
+      {t(stale ? 'loan.status.stale' : tone.label)}
+    </span>
+  );
+}
+
+/**
+ * §19 — "Updated X seconds ago", ticking. A market number with no timestamp is
+ * a number the user cannot judge, and on a lending screen that is a risk
+ * decision made on data of unknown age.
+ */
+function useSecondsSince(timestamp) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!timestamp) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timestamp]);
+  if (!timestamp) return null;
+  return Math.max(0, Math.round((now - timestamp) / 1000));
+}
+
+function UpdatedAgo({ at, t }) {
+  const seconds = useSecondsSince(at);
+  if (seconds == null) return <span className="faint">—</span>;
+  const label = seconds < 60 ? t('loan.updatedSeconds', { n: seconds })
+    : seconds < 3600 ? t('loan.updatedMinutes', { n: Math.floor(seconds / 60) })
+      : t('loan.updatedHours', { n: Math.floor(seconds / 3600) });
+  return (
+    <span data-testid="loan-updated-ago" className="faint" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+      {label}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §20 — PROTOCOL LIQUIDITY
+   Supplied / available / utilization / caps, read from the protocol's own
+   aToken and debt token. A dash means the read failed, never "zero".
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function MarketDepth({ reserve, asset, t }) {
+  if (!reserve?.listed) return null;
+  const dec = Number(reserve.decimals ?? asset.decimals ?? 18);
+  const total = reserve.totalSupplyWei != null ? fromUnits(reserve.totalSupplyWei, dec, 2) : null;
+  const available = reserve.availableLiquidityWei != null ? fromUnits(reserve.availableLiquidityWei, dec, 2) : null;
+  const borrowed = reserve.totalDebtWei != null ? fromUnits(reserve.totalDebtWei, dec, 2) : null;
+  const util = reserve.utilizationPct;
+  const supplyCap = reserve.supplyCapWhole != null ? Number(reserve.supplyCapWhole) : null;
+  const borrowCap = reserve.borrowCapWhole != null ? Number(reserve.borrowCapWhole) : null;
+  /* Nothing could be read: say so instead of rendering a grid of dashes. */
+  if (total == null && available == null && util == null && reserve.ltvPct == null) {
+    return (
+      <p data-testid="loan-depth-unavailable" className="faint" style={{ fontSize: 10.5, margin: '6px 0 0', lineHeight: 1.6 }}>
+        {t('loan.depthUnavailable')}
+      </p>
+    );
+  }
+  const cells = [
+    ['loan.totalSupplied', total != null ? `${total} ${asset.symbol}` : '—'],
+    ['loan.availableLiquidity', available != null ? `${available} ${asset.symbol}` : '—'],
+    ['loan.totalBorrowed', borrowed != null ? `${borrowed} ${asset.symbol}` : '—'],
+    ['loan.utilization', util != null ? `${util.toFixed(1)}%` : '—']
+  ];
+  return (
+    <div data-testid="loan-market-depth" style={{ marginTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
+        {cells.map(([key, value]) => (
+          <div key={key} className="row-between" style={{ gap: 6 }}>
+            <span className="faint" style={{ fontSize: 10 }}>{t(key)}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      {/* §13 — the reserve's own risk parameters, from its configuration bitmap. */}
+      <div className="row-between" style={{ gap: 6, marginTop: 5, paddingTop: 5, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <span className="faint" style={{ fontSize: 10 }}>{t('loan.maxLtv')}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+          {reserve.ltvPct != null ? `${reserve.ltvPct.toFixed(1)}%` : '—'}
+          <span className="faint" style={{ fontWeight: 500 }}> · {t('loan.liqThreshold')} </span>
+          {reserve.liquidationThresholdPct != null ? `${reserve.liquidationThresholdPct.toFixed(1)}%` : '—'}
+        </span>
+      </div>
+      {(supplyCap > 0 || borrowCap > 0) && (
+        <div className="row-between" style={{ gap: 6, marginTop: 3 }}>
+          <span className="faint" style={{ fontSize: 10 }}>{t('loan.caps')}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+            {t('loan.capsValue', {
+              supply: supplyCap > 0 ? supplyCap.toLocaleString() : t('loan.noCap'),
+              borrow: borrowCap > 0 ? borrowCap.toLocaleString() : t('loan.noCap')
+            })}
+          </span>
+        </div>
+      )}
+      {/* §29 — a paused or frozen reserve must say so before the user signs. */}
+      {(reserve.status === 'paused' || reserve.status === 'frozen') && (
+        <p data-testid="loan-reserve-halted" style={{ fontSize: 10.5, fontWeight: 700, color: '#f87171', margin: '6px 0 0' }}>
+          {t(`loan.reserveStatus.${reserve.status}`)}
+        </p>
+      )}
+      {reserve.decimalsMatch === false && (
+        <p data-testid="loan-decimals-mismatch" style={{ fontSize: 10.5, color: '#fbbf24', margin: '6px 0 0', lineHeight: 1.6 }}>
+          {t('loan.decimalsMismatch', { decimals: dec })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §13/§14 — RISK, WITH THE ACTUAL NUMBERS
+   Bands come from the engine (lending-engine/health.js) — the same table the
+   alert rules and the server BFF use. The page previously had its own second
+   ladder (1.05/1.35/2.0) so one position could read "watch" in the summary and
+   raise a "critical" alert from the bell.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function RiskMeter({ projection, account, t }) {
+  const before = projection?.healthFactorBefore ?? account?.healthFactor ?? null;
+  const after = projection?.healthFactorAfter ?? null;
+  const bandBefore = riskLevel(before);
+  const bandAfter = after == null ? null : riskLevel(after);
+  const threshold = projection?.liquidationThresholdPct ?? account?.liquidationThresholdPct ?? null;
+  const risk = account?.ok ? assessPosition({
+    healthFactor: account.healthFactor,
+    totalDebtUsd: account.totalDebtUsd,
+    totalCollateralUsd: account.totalCollateralUsd,
+    liquidationThresholdPct: account.liquidationThresholdPct
+  }) : null;
+
+  const rows = [
+    ['loan.healthFactorNow', before == null ? t('loan.healthNone') : before.toFixed(2), bandBefore?.color],
+    after != null
+      ? ['loan.healthFactorAfter', after.toFixed(2), bandAfter?.color]
+      : null,
+    ['loan.liquidationThreshold', threshold != null ? `${Number(threshold).toFixed(1)}%` : '—', null],
+    ['loan.currentLtv', risk?.ltvPct != null ? `${risk.ltvPct.toFixed(1)}%` : '—', null],
+    ['loan.maxLtv', account?.ltvPct != null ? `${Number(account.ltvPct).toFixed(1)}%` : '—', null],
+    ['loan.liqDistance', risk?.liquidationDistancePct != null ? `${risk.liquidationDistancePct.toFixed(1)}%` : '—', null]
+  ].filter(Boolean);
+
+  return (
+    <div
+      data-testid="loan-risk-meter"
+      data-band={bandAfter?.level ?? bandBefore?.level ?? 'none'}
+      style={{
+        borderRadius: 12, padding: '10px 12px', marginBottom: 12,
+        background: `${bandAfter?.color ?? bandBefore?.color ?? '#60a5fa'}0f`,
+        border: `1px solid ${bandAfter?.color ?? bandBefore?.color ?? '#60a5fa'}33`,
+      }}
+    >
+      <div className="row-between" style={{ gap: 8, marginBottom: 7 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-2)' }}>
+          {t('loan.riskTitle2')}
+        </span>
+        <span data-testid="loan-risk-level" style={{ fontSize: 10.5, fontWeight: 800, color: bandAfter?.color ?? bandBefore?.color }}>
+          {t(`loan.riskLevel.${bandAfter?.level ?? bandBefore?.level ?? 'none'}`)}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
+        {rows.map(([key, value, color]) => (
+          <div key={key} className="row-between" style={{ gap: 6 }}>
+            <span className="faint" style={{ fontSize: 10 }}>{t(key)}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--font-mono)', color: color || 'var(--text-1)' }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      {after != null && before != null && (
+        <p data-testid="loan-risk-delta" style={{ fontSize: 10.5, lineHeight: 1.6, color: 'var(--text-2)', margin: '7px 0 0' }}>
+          {t('loan.riskDelta', { before: before.toFixed(2), after: after.toFixed(2), liq: '1.00' })}
+        </p>
+      )}
+      {projection && !projection.ok && (
+        <p data-testid="loan-risk-unavailable" style={{ fontSize: 10.5, lineHeight: 1.6, color: '#fbbf24', margin: '7px 0 0' }}>
+          {t('loan.riskUnavailable', { reason: t(`loan.error.${projection.reason}`, { defaultValue: projection.reason }) })}
+        </p>
+      )}
+      {/* §41 — never a guarantee. */}
+      <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '7px 0 0' }}>
+        {t('loan.riskNoGuarantee')}
+      </p>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §9/§28 — WHY AN ACTION IS BLOCKED, AND WHAT WE COULD NOT CHECK
+   `blocked` disables the button; `warnings` state the risk and let the user
+   decide. A check whose inputs were unreadable is a WARNING that names the
+   gap — never a silent pass, never a fabricated block.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function ReasonList({ items, tone, t, testId }) {
+  if (!items?.length) return null;
+  const color = tone === 'danger' ? '#f87171' : '#fbbf24';
+  return (
+    <div
+      data-testid={testId}
+      style={{
+        borderRadius: 11, padding: '9px 11px', marginBottom: 10,
+        background: `${color}12`, border: `1px solid ${color}33`,
+        display: 'flex', flexDirection: 'column', gap: 5,
+      }}
+    >
+      {items.map((item, index) => (
+        <p key={`${item.code}-${index}`} data-code={item.code} style={{ fontSize: 11, lineHeight: 1.6, color, margin: 0 }}>
+          <span style={{ fontWeight: 800 }}>{tone === 'danger' ? '✕ ' : '⚠ '}</span>
+          {t(`loan.error.${item.code}`, { defaultValue: item.code })}
+          {item.detail ? <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span> : null}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §21 — ORACLE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function OracleNote({ oracle, oracleStatus, t }) {
+  if (oracleStatus === 'ok') return null;
+  const tone = oracleStatus === 'unavailable' ? '#f87171' : '#fbbf24';
+  return (
+    <p
+      data-testid="loan-oracle-note"
+      data-status={oracleStatus}
+      style={{
+        fontSize: 10.5, lineHeight: 1.65, color: tone, margin: '0 0 10px',
+        padding: '8px 11px', borderRadius: 11,
+        background: `${tone}10`, border: `1px solid ${tone}30`,
+      }}
+    >
+      {t(`loan.oracle.${oracleStatus}`, { defaultValue: t('loan.oracle.unavailable') })}
+      {oracle?.oracleAddress ? (
+        <span className="faint" style={{ display: 'block', fontSize: 9.5, fontFamily: 'var(--font-mono)', marginTop: 3 }}>
+          {t('loan.oracleSource')}: {oracle.oracleAddress.slice(0, 10)}…
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §37 — LIVE DATA UNAVAILABLE
+   Not a spinner, not a zero, not a cached number presented as fresh.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function UnavailableBanner({ failures, onRetry, t }) {
+  return (
+    <div
+      data-testid="loan-unavailable"
+      style={{
+        borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+        background: 'rgba(248,113,113,0.09)', border: '1px solid rgba(248,113,113,0.30)',
+      }}
+    >
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 3, color: '#fca5a5' }}>
+        {t('loan.unavailableTitle')}
+      </div>
+      <p style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: '0 0 9px' }}>
+        {t('loan.unavailableBody')}
+      </p>
+      {/* §28 — the technical reason stays available for diagnostics. */}
+      {failures?.length > 0 && (
+        <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '0 0 9px', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
+          {failures.slice(0, 3).map((f) => `${f.step}: ${String(f.reason).slice(0, 80)}`).join(' · ')}
+        </p>
+      )}
+      <button type="button" className="btn btn-ghost btn-sm" data-testid="loan-unavailable-retry" onClick={onRetry} style={{ width: '100%' }}>
+        {t('loan.retry')}
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    ASSET CARD
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function AssetCard({ asset, selected, onClick, reserve, loading, side, t }) {
+function AssetCard({ asset, selected, onClick, reserve, loading, side, t, price = null }) {
   const isSelected = selected?.id === asset.id;
   /* Only the pool's own answer can take an asset away. A read that failed
      leaves `listed` null — unknown rates, but the asset stays usable. */
   const unavailable = reserve?.listed === false;
   const rateUnknown = reserve != null && reserve.listed == null;
+  /* §29 — a reserve the protocol has paused or frozen is shown but cannot be
+     acted on. Offering it as live ends in a revert the user pays gas for. */
+  const halted = reserve?.status === 'paused' || reserve?.status === 'frozen';
+  const blocked = unavailable || halted;
   return (
     <motion.button
       type="button"
       variants={riseIn}
       onClick={onClick}
-      disabled={unavailable}
+      disabled={blocked}
       data-testid={`loan-asset-${asset.symbol.toLowerCase()}`}
+      data-halted={halted ? 'true' : 'false'}
       whileTap={{ scale: 0.985 }}
       style={{
         width: '100%', textAlign: 'start',
@@ -197,8 +543,8 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t }) {
         border: isSelected
           ? `1.5px solid ${asset.color}66`
           : '1.5px solid rgba(255,255,255,0.07)',
-        cursor: unavailable ? 'not-allowed' : 'pointer',
-        opacity: unavailable ? 0.5 : 1,
+        cursor: blocked ? 'not-allowed' : 'pointer',
+        opacity: blocked ? 0.5 : 1,
         transition: 'border 0.16s, background 0.16s, box-shadow 0.16s',
         display: 'flex', alignItems: 'center', gap: 12,
         boxShadow: isSelected ? `0 8px 24px ${asset.color}1f` : 'none',
@@ -209,7 +555,14 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>{asset.symbol}</div>
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
-          {unavailable ? t('loan.reserveUnavailable') : rateUnknown ? t('loan.rateUnknown') : asset.name}
+          {unavailable ? t('loan.reserveUnavailable')
+            : halted ? t(`loan.reserveStatus.${reserve.status}`)
+              : rateUnknown ? t('loan.rateUnknown')
+                /* §21 — the price shown next to a market is the PROTOCOL's
+                   oracle price, and it is labelled unavailable rather than
+                   backfilled from an exchange ticker. */
+                : price != null ? t('loan.oraclePrice', { price: `$${Number(price).toLocaleString(undefined, { maximumFractionDigits: price < 1 ? 6 : 2 })}` })
+                  : asset.name}
         </div>
       </div>
 
@@ -219,7 +572,7 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t }) {
           <span className="faint" style={{ fontSize: 9 }}>APY</span>
         </div>
         {side === 'supply'
-          ? <RiskPill risk={asset.risk} t={t} />
+          ? <ReserveStatePill reserve={reserve} t={t} />
           : <ChainPill chainId={asset.chain} />}
       </div>
 
@@ -242,6 +595,12 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t }) {
       </AnimatePresence>
     </motion.button>
   );
+}
+
+/** The selected market's depth + risk parameters, under its card. */
+function SelectedMarketDetail({ asset, reserve, t }) {
+  if (!asset) return null;
+  return <MarketDepth reserve={reserve} asset={asset} t={t} />;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -507,6 +866,105 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
               ))}
             </div>
 
+            {/* §13/§14 — the risk this specific action creates, with the real
+                numbers: current health factor, the health factor after, the
+                liquidation threshold and the distance to it. */}
+            {exec?.risk?.ok && (exec.risk.healthFactorAfter != null || exec.risk.healthFactorBefore != null) && (
+              <RiskMeter projection={exec.risk} account={exec.account ?? null} t={t} />
+            )}
+            {exec?.risk && !exec.risk.ok && (
+              <p data-testid="loan-exec-risk-unavailable" style={{
+                fontSize: 11, lineHeight: 1.65, color: '#fbbf24', margin: '0 0 12px',
+                padding: '9px 11px', borderRadius: 11,
+                background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)',
+              }}>
+                {t('loan.riskUnavailable', { reason: t(`loan.error.${exec.risk.reason}`, { defaultValue: exec.risk.reason }) })}
+              </p>
+            )}
+
+            {/* §23 — the NETWORK fee, from the current provider. Not an "FBT
+                fee": FBT charges nothing on a lending action (§24). */}
+            <div
+              data-testid="loan-exec-fee"
+              data-status={exec?.fee?.ok ? 'live' : 'unavailable'}
+              style={{
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 13, padding: '10px 12px', marginBottom: 10,
+              }}
+            >
+              <div className="row-between" style={{ gap: 8 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('loan.networkFee')}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                  {exec?.fee?.ok
+                    ? (exec.fee.maxFeeNativeFormatted ?? t('loan.feeCalculating'))
+                    : t('loan.feeUnavailable')}
+                </span>
+              </div>
+              {exec?.fee?.ok && exec.fee.maxFeeUsd != null && (
+                <div className="row-between" style={{ gap: 8, marginTop: 3 }}>
+                  <span className="faint" style={{ fontSize: 10 }}>{t('loan.networkFeeUsd')}</span>
+                  <span className="faint" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                    ≈ {fmtUsd(exec.fee.maxFeeUsd)} {t('loan.feeUsdIsEstimate')}
+                  </span>
+                </div>
+              )}
+              <div className="row-between" style={{ gap: 8, marginTop: 3 }}>
+                <span className="faint" style={{ fontSize: 10 }}>{t('loan.fbtFeeLine')}</span>
+                <span data-testid="loan-fbt-fee" className="faint" style={{ fontSize: 10, fontWeight: 700, color: '#4ade80' }}>
+                  {t('loan.fbtFeeNone')}
+                </span>
+              </div>
+            </div>
+
+            {/* §22 — the simulation verdict. A clean eth_call is reported as
+                what it is (would not revert at this block); a revert blocks;
+                and "we could not simulate" is reported as NOT proven, never as
+                a pass. */}
+            {exec?.simulation && (
+              <div
+                data-testid="loan-exec-simulation"
+                data-status={exec.simulation.status}
+                style={{
+                  borderRadius: 13, padding: '10px 12px', marginBottom: 10,
+                  background: exec.simulation.status === 'revert-detected' ? 'rgba(248,113,113,0.09)'
+                    : exec.simulation.status === 'simulated-clean' ? 'rgba(74,222,128,0.08)'
+                      : 'rgba(251,191,36,0.08)',
+                  border: `1px solid ${exec.simulation.status === 'revert-detected' ? 'rgba(248,113,113,0.28)'
+                    : exec.simulation.status === 'simulated-clean' ? 'rgba(74,222,128,0.26)'
+                      : 'rgba(251,191,36,0.26)'}`,
+                }}
+              >
+                <div className="row-between" style={{ gap: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 800 }}>
+                    {t(`loan.simulation.${exec.simulation.status}`, { defaultValue: exec.simulation.status })}
+                  </span>
+                  {exec.simulation.totalGasLimit && (
+                    <span className="faint" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                      {t('loan.simGas', { gas: Number(exec.simulation.totalGasLimit).toLocaleString() })}
+                    </span>
+                  )}
+                </div>
+                {exec.simulation.revertReason && (
+                  <p style={{ fontSize: 10.5, lineHeight: 1.6, color: '#f8a8a8', margin: '5px 0 0', wordBreak: 'break-word' }}>
+                    {t('loan.simRevertReason')}: {String(exec.simulation.revertReason).slice(0, 140)}
+                  </p>
+                )}
+                {exec.simulation.status === 'simulated-clean' && (
+                  <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '5px 0 0' }}>
+                    {t('loan.simNotAGuarantee')}
+                  </p>
+                )}
+                {exec.simulation.status === 'provider-busy' && (
+                  <p style={{ fontSize: 10, lineHeight: 1.6, color: '#fbbf24', margin: '5px 0 0' }}>
+                    {t('loan.simBusy')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* §9 — checks we could not run are named, not silently skipped. */}
+            <ReasonList items={exec?.warnings} tone="warn" t={t} testId="loan-exec-warnings" />
+
             {/* The steps, before and while they run. */}
             <div style={{
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
@@ -562,16 +1020,22 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
               <motion.button
                 className="btn btn-primary"
                 data-testid="loan-exec-confirm"
+                /* §22 — a simulation that reverted is a hard stop. The button
+                   is disabled and the reason is on screen above; the user is
+                   never asked to sign a transaction we already watched fail. */
+                disabled={exec?.simulation?.status === 'revert-detected'}
                 style={{
                   marginBottom: 10, width: '100%',
                   background: asset ? `linear-gradient(135deg, ${asset.color}, ${asset.color}bb)` : undefined,
                   boxShadow: asset ? `0 10px 26px ${asset.color}44` : undefined,
+                  opacity: exec?.simulation?.status === 'revert-detected' ? 0.5 : 1,
+                  cursor: exec?.simulation?.status === 'revert-detected' ? 'not-allowed' : 'pointer',
                 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={onConfirm}
               >
                 <IconCheck width={14} height={14} style={{ marginInlineEnd: 7 }} />
-                {t('common.confirm')}
+                {exec?.simulation?.status === 'revert-detected' ? t('loan.confirmBlocked') : t('common.confirm')}
               </motion.button>
             )}
 
@@ -739,8 +1203,14 @@ function ChainRail({ chain, onPick, t }) {
    * §5: the rail renders the NETWORK CONFIG's feature-flagged list — never a
    * hardcoded array. A chain whose flag is off (or whose pool is not wired)
    * simply does not appear, and the rest of Lending keeps working.
+   *
+   * Registered-but-unwired networks are shown as an inert "coming soon" chip
+   * rather than being hidden: §5 asks for exactly that, and a network the app
+   * knows about but cannot execute on must never be rendered as a market with
+   * liquidity in it. They are not clickable and carry no numbers.
    */
   const networks = enabledNetworks().filter((n) => lendingSupported(n.chainId));
+  const pending = LENDING_NETWORKS.filter((n) => !n.enabled || !lendingSupported(n.chainId));
   return (
     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 10 }}>
       <span className="faint" style={{ fontSize: 10, alignSelf: 'center', flexShrink: 0, marginInlineEnd: 2 }}>
@@ -770,6 +1240,28 @@ function ChainRail({ chain, onPick, t }) {
           </button>
         );
       })}
+      {pending.map((network) => (
+        <span
+          key={`pending-${network.chainId}`}
+          data-testid={`loan-chain-soon-${network.chainId}`}
+          data-enabled={isNetworkEnabled(network.chainId) ? 'true' : 'false'}
+          title={network.disabledReason ? t('loan.comingSoonReason', { reason: network.disabledReason }) : t('loan.comingSoon')}
+          style={{
+            flexShrink: 0, padding: '6px 11px', borderRadius: 999,
+            fontSize: 11, fontWeight: 700, cursor: 'not-allowed', opacity: 0.45,
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px dashed rgba(255,255,255,0.14)',
+            color: 'var(--text-3)',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <span style={{ width: 7, height: 7, borderRadius: 99, background: network.color || '#888' }} />
+          {network.name}
+          <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+            {t('loan.comingSoonShort')}
+          </span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -780,16 +1272,33 @@ function ChainRail({ chain, onPick, t }) {
 
 function AccountSummary({ account, t }) {
   if (!account?.ok) return null;
-  const band = healthBand(account.healthFactor);
-  const tone = { safe: '#4ade80', watch: '#facc15', risky: '#fb923c', critical: '#f87171', none: 'var(--text-3)' }[band];
+  /* §12/§13 — the engine's bands, the same table the alert rules and the
+     server BFF use. The page used to have its own second ladder here, so one
+     position could read "watch" in this card and raise a "critical" alert. */
+  const band = riskLevel(account.healthFactor);
+  const tone = band.color;
+  const risk = assessPosition({
+    healthFactor: account.healthFactor,
+    totalDebtUsd: account.totalDebtUsd,
+    totalCollateralUsd: account.totalCollateralUsd,
+    liquidationThresholdPct: account.liquidationThresholdPct
+  });
   const cells = [
     [t('loan.collateral'), fmtUsd(account.totalCollateralUsd)],
     [t('loan.debt'), fmtUsd(account.totalDebtUsd)],
-    [t('loan.borrowPower'), fmtUsd(account.availableBorrowsUsd)],
+    [t('loan.borrowPower'), fmtUsd(account.availableBorrowsUsd)]
+  ];
+  /* §13 — the four risk numbers the spec asks for, all from the pool. */
+  const riskCells = [
+    [t('loan.currentLtv'), risk.ltvPct != null ? `${risk.ltvPct.toFixed(1)}%` : '—'],
+    [t('loan.maxLtv'), account.ltvPct != null ? `${Number(account.ltvPct).toFixed(1)}%` : '—'],
+    [t('loan.liquidationThreshold'), account.liquidationThresholdPct != null ? `${Number(account.liquidationThresholdPct).toFixed(1)}%` : '—'],
+    [t('loan.liqDistance'), risk.liquidationDistancePct != null ? `${risk.liquidationDistancePct.toFixed(1)}%` : '—']
   ];
   return (
     <div
       data-testid="loan-account-summary"
+      data-risk={band.level}
       style={{
         borderRadius: 16, padding: '13px 14px', marginBottom: 12,
         background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)',
@@ -806,9 +1315,22 @@ function AccountSummary({ account, t }) {
       <div className="row-between" style={{ gap: 8 }}>
         <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{t('loan.healthFactor')}</span>
         <span data-testid="loan-health" style={{ fontSize: 12, fontWeight: 800, color: tone, fontFamily: 'var(--font-mono)' }}>
-          {account.healthFactor == null ? t('loan.healthNone') : `${account.healthFactor.toFixed(2)} · ${t(`loan.health.${band}`)}`}
+          {account.healthFactor == null ? t('loan.healthNone') : `${account.healthFactor.toFixed(2)} · ${t(`loan.riskLevel.${band.level}`)}`}
         </span>
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px 10px', marginTop: 9, paddingTop: 9, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        {riskCells.map(([label, value]) => (
+          <div key={label} className="row-between" style={{ gap: 6 }}>
+            <span className="faint" style={{ fontSize: 9.5 }}>{label}</span>
+            <span data-testid={`loan-risk-${label === riskCells[0][0] ? 'ltv' : label === riskCells[1][0] ? 'maxltv' : label === riskCells[2][0] ? 'threshold' : 'distance'}`}
+              style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      {/* §41 — the liquidation point is stated, and nothing here is promised. */}
+      <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '8px 0 0' }}>
+        {t('loan.riskNoGuarantee')}
+      </p>
     </div>
   );
 }
@@ -818,7 +1340,7 @@ function AccountSummary({ account, t }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
-  const { assets, reserves, positions, loading, chain, walletState } = market;
+  const { assets, reserves, positions, loading, chain, walletState, prices, oracle, oracleStatus, dataStatus } = market;
   const [selected, setSelected] = useState(null);
   const [amount, setAmount] = useState('');
 
@@ -834,16 +1356,31 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
   }, [preset?.symbol, preset?.amount, assets]);
 
   const position = selected ? positions[selected.id] : null;
-  const walletMax = position?.wallet && Number(position.wallet) > 0 ? position.wallet : null;
   const reserve = selected ? reserves[selected.id] : null;
+  /* §18 — the amount is converted with the decimals the protocol/contract
+     reported, not the registry's assumption, whenever it could be read. */
+  const decimals = Number(reserve?.decimals ?? selected?.decimals ?? 18);
+  const walletWei = position?.walletWei ?? null;
+  const walletMax = walletWei != null && BigInt(walletWei) > 0n ? fromUnits(walletWei, decimals) : null;
 
-  const overWallet = Boolean(walletMax && Number(amount) > Number(walletMax));
-  const invalid = !selected || !amount || Number(amount) <= 0 || overWallet;
+  const amountWei = selected ? toUnits(amount, decimals) : null;
+  const overWallet = Boolean(walletWei != null && amountWei != null && amountWei > BigInt(walletWei));
+
+  /* §9 — the full pre-flight, recomputed on every keystroke. It reads the
+     supply cap, the wallet balance, the reserve's paused/frozen state and the
+     contract allowlist; `blocked` disables the button and says why. */
+  const decision = useMemo(() => evaluateAction({
+    market, action: 'supply', asset: selected, amount, amountWei: amountWei?.toString() ?? null,
+    walletBalanceWei: walletWei
+  }), [market, selected, amount, amountWei?.toString(), walletWei]);
+
+  const invalid = !selected || !amount || !(amountWei != null && amountWei > 0n) || overWallet || !decision.ok;
 
   const run = () => {
     if (!selected) { notify('loan.chooseAssetFirst', 'error'); return; }
-    if (!amount || Number(amount) <= 0) { notify('loan.enterAmount', 'error'); return; }
+    if (!amount || !(amountWei != null && amountWei > 0n)) { notify('loan.enterAmount', 'error'); return; }
     if (overWallet) { notify('loan.amountOverWallet', 'error'); return; }
+    if (!decision.ok) { notify(`loan.error.${decision.blocked[0].code}`, 'error'); return; }
     haptic?.('medium');
     onExecute({ action: 'supply', asset: selected, amount });
   };
@@ -855,14 +1392,20 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
         {t('loan.supplyDesc')}
       </motion.p>
 
+      <OracleNote oracle={oracle} oracleStatus={oracleStatus} t={t} />
+
       <motion.div variants={riseIn}>
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('loan.chooseAsset')}</p>
+        <div className="row-between" style={{ marginBottom: 8, gap: 8 }}>
+          <p className="section-label" style={{ margin: 0 }}>{t('loan.chooseAsset')}</p>
+          <DataStatusPill status={dataStatus} ageMs={market.ageMs} t={t} />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {assets.map(a => (
             <AssetCard
               key={a.id}
               asset={a} selected={selected} side="supply"
               reserve={reserves[a.id]} loading={loading} t={t}
+              price={prices?.[a.id]?.usd ?? null}
               onClick={() => { haptic?.('select'); setSelected(a); setAmount(''); }}
             />
           ))}
@@ -886,6 +1429,11 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
               border: `1.5px solid ${selected.color}3a`,
               borderRadius: 16, padding: '16px',
             }}>
+              {/* §20 — what the pool actually holds, and its caps. */}
+              <SelectedMarketDetail asset={selected} reserve={reserve} t={t} />
+
+              <div style={{ height: 12 }} />
+
               <AmountInput
                 testId="loan-amount-supply"
                 label={t('loan.supplyAmount', { symbol: selected.symbol })}
@@ -896,11 +1444,13 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
                   ? t('loan.alreadySupplied', { amount: position.supplied, symbol: selected.symbol })
                   : reserve?.supplyApyPct != null
                     ? t('loan.earnHint', { apy: reserve.supplyApyPct.toFixed(2) })
-                    : undefined}
+                    : t('loan.rateUnknown')}
               />
               {overWallet && (
                 <p style={{ fontSize: 11.5, color: '#f87171', margin: '0 0 10px' }}>{t('loan.amountOverWallet')}</p>
               )}
+              <ReasonList items={decision.blocked} tone="danger" t={t} testId="loan-supply-blocked" />
+              <ReasonList items={decision.warnings} tone="warn" t={t} testId="loan-supply-warnings" />
               <ActionButton
                 state={walletState}
                 onConnect={market.connect}
@@ -937,10 +1487,18 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
-  const { assets, reserves, positions, loading, chain, account, walletState } = market;
+  const { assets, reserves, positions, loading, chain, account, walletState, prices, oracle, oracleStatus, dataStatus } = market;
   const [selected, setSelected] = useState(null);
+  /* §11 — "select collateral ↓ select borrow asset" are TWO choices. The form
+     used to have one asset picker and treated the borrow asset as its own
+     collateral: choosing USDC and typing a collateral figure supplied USDC to
+     borrow USDC, scaled by the borrow asset's decimals and maxed against the
+     borrow asset's wallet balance. Posting WETH against a USDC borrow was
+     impossible, and the number that came out was meaningless. */
+  const [collateralId, setCollateralId] = useState(null);
   const [collateral, setCollateral] = useState('');
   const [amount, setAmount] = useState('');
+  const [collateralOpen, setCollateralOpen] = useState(false);
 
   useEffect(() => {
     if (!preset?.symbol || !assets.length) return;
@@ -948,37 +1506,80 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
     if (match) {
       setSelected(match);
       if (preset.amount) setAmount(String(preset.amount));
+      const collMatch = preset.collateralAsset
+        ? assets.find((a) => a.symbol.toUpperCase() === String(preset.collateralAsset).toUpperCase())
+        : null;
+      if (collMatch) setCollateralId(collMatch.id);
       if (preset.collateral) setCollateral(String(preset.collateral));
     }
-  }, [preset?.symbol, preset?.amount, preset?.collateral, assets]);
+  }, [preset?.symbol, preset?.amount, preset?.collateral, preset?.collateralAsset, assets]);
 
   const position = selected ? positions[selected.id] : null;
-  const walletMax = position?.wallet && Number(position.wallet) > 0 ? position.wallet : null;
+  const reserve = selected ? reserves[selected.id] : null;
+  const collateralAsset = collateralId ? assets.find((a) => a.id === collateralId) ?? null : null;
+  const collateralPosition = collateralAsset ? positions[collateralAsset.id] : null;
+  const collateralReserve = collateralAsset ? reserves[collateralAsset.id] : null;
 
-  /* Borrowing power the POOL reports, plus what the collateral in this form
-     would add. Both are shown; neither is a recommendation. */
+  const decimals = Number(reserve?.decimals ?? selected?.decimals ?? 18);
+  const collateralDecimals = Number(collateralReserve?.decimals ?? collateralAsset?.decimals ?? 18);
+
+  const amountWei = selected ? toUnits(amount, decimals) : null;
+  const collateralWei = collateralAsset ? toUnits(collateral, collateralDecimals) : null;
+  const collateralWalletWei = collateralPosition?.walletWei ?? null;
+  const overCollateralWallet = Boolean(collateralWei != null && collateralWalletWei != null && collateralWei > BigInt(collateralWalletWei));
+
+  /* Borrowing power the POOL reports — its own oracle-backed, LTV-aware,
+     debt-aware number, not a frontend re-derivation. */
   const powerUsd = account?.ok ? account.availableBorrowsUsd : null;
-  const projected = account?.ok && amount
-    ? projectHealthFactor({
-      totalCollateralUsd: account.totalCollateralUsd,
-      totalDebtUsd: account.totalDebtUsd,
-      liquidationThresholdPct: account.liquidationThresholdPct,
-      addDebtUsd: Number(amount) || 0,
-      addCollateralUsd: Number(collateral) || 0
+
+  /* §12 — the maximum for THIS asset, in its own units, capped by the pool's
+     available liquidity and the reserve's borrow cap. Null when the protocol
+     price could not be read: an unpriced maximum is never guessed (§21). */
+  const maxBorrow = useMemo(
+    () => (selected ? getMaxBorrow({ market, asset: selected }) : null),
+    [market, selected]
+  );
+  const maxAmount = maxBorrow?.ok ? maxBorrow.maxAmount : null;
+
+  /* §13 — the health factor after this borrow, with every amount priced by the
+     protocol's oracle and converted with integer arithmetic first. */
+  const projected = useMemo(() => (selected && amountWei != null && amountWei > 0n
+    ? projectActionRisk({
+      market, action: 'borrow', amountWei: amountWei.toString(), asset: selected,
+      collateralAmountWei: collateralWei != null && collateralWei > 0n ? collateralWei.toString() : null,
+      collateralAsset: collateralAsset ?? selected
     })
-    : null;
+    : null), [market, selected, amountWei?.toString(), collateralWei?.toString(), collateralAsset]);
+
+  /* §9/§11/§20 — the whole pre-flight. Blocks on: paused/frozen reserve,
+     borrowing disabled, amount above the pool's liquidity, above the borrow
+     cap, above the user's capacity, a resulting health factor below the floor,
+     no collateral at all, no gas. */
+  const decision = useMemo(() => evaluateAction({
+    market, action: 'borrow', asset: selected, amount,
+    amountWei: amountWei?.toString() ?? null,
+    collateralAmountWei: collateralWei?.toString() ?? null,
+    collateralAsset: collateralAsset ?? selected,
+    walletBalanceWei: collateralWei != null && collateralWei > 0n ? collateralWalletWei : null,
+    minHealthFactor: MIN_HEALTH_FACTOR_AFTER_BORROW
+  }), [market, selected, amount, amountWei?.toString(), collateralWei?.toString(), collateralAsset, collateralWalletWei]);
 
   const noCollateral = Boolean(account?.ok
     && (account.totalCollateralUsd || 0) <= 0
-    && (!collateral || Number(collateral) <= 0));
-  const invalid = !selected || !amount || Number(amount) <= 0 || noCollateral;
+    && (collateralWei == null || collateralWei <= 0n));
+  const invalid = !selected || !(amountWei != null && amountWei > 0n) || noCollateral
+    || overCollateralWallet || !decision.ok;
 
   const run = () => {
     if (!selected) { notify('loan.chooseAssetFirst', 'error'); return; }
-    if (!amount || Number(amount) <= 0) { notify('loan.enterAmount', 'error'); return; }
+    if (!(amountWei != null && amountWei > 0n)) { notify('loan.enterAmount', 'error'); return; }
     if (noCollateral) { notify('loan.needCollateralFirst', 'error'); return; }
+    if (!decision.ok) { notify(`loan.error.${decision.blocked[0].code}`, 'error'); return; }
     haptic?.('medium');
-    onExecute({ action: 'borrow', asset: selected, amount, collateral });
+    onExecute({
+      action: 'borrow', asset: selected, amount, collateral,
+      collateralAsset, projected, maxBorrow
+    });
   };
 
   return (
@@ -988,14 +1589,20 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
         {t('loan.borrowDesc')}
       </motion.p>
 
+      <OracleNote oracle={oracle} oracleStatus={oracleStatus} t={t} />
+
       <motion.div variants={riseIn}>
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('loan.chooseBorrowAsset')}</p>
+        <div className="row-between" style={{ marginBottom: 8, gap: 8 }}>
+          <p className="section-label" style={{ margin: 0 }}>{t('loan.chooseBorrowAsset')}</p>
+          <DataStatusPill status={dataStatus} ageMs={market.ageMs} t={t} />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {assets.map(a => (
             <AssetCard
               key={a.id}
               asset={a} selected={selected} side="borrow"
               reserve={reserves[a.id]} loading={loading} t={t}
+              price={prices?.[a.id]?.usd ?? null}
               onClick={() => { haptic?.('select'); setSelected(a); setCollateral(''); setAmount(''); }}
             />
           ))}
@@ -1019,37 +1626,138 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
               border: `1.5px solid ${selected.color}3a`,
               borderRadius: 16, padding: '16px',
             }}>
+              <SelectedMarketDetail asset={selected} reserve={reserve} t={t} />
+              <div style={{ height: 12 }} />
+
               <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
+                display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                 background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 9, padding: '5px 10px', marginBottom: 14,
+                borderRadius: 9, padding: '6px 10px', marginBottom: 12,
               }}>
                 <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{t('loan.borrowPower')}:</span>
                 <span data-testid="loan-borrow-power" style={{ fontSize: 12, fontWeight: 800, color: selected.color }}>
                   {powerUsd == null ? '—' : fmtUsd(powerUsd)}
                 </span>
+                {/* §12 — the same capacity expressed in the asset being borrowed,
+                    with the constraint that binds it named. */}
+                {maxBorrow?.ok && (
+                  <span data-testid="loan-max-borrow" style={{ fontSize: 10.5, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
+                    · {t('loan.maxBorrowIs', { amount: maxAmount, symbol: selected.symbol, by: t(`loan.limitedBy.${maxBorrow.limitedBy}`) })}
+                  </span>
+                )}
+                {maxBorrow && !maxBorrow.ok && (
+                  <span data-testid="loan-max-borrow-unavailable" className="faint" style={{ fontSize: 10.5 }}>
+                    · {t('loan.maxBorrowUnavailable', { reason: t(`loan.error.${maxBorrow.reason}`, { defaultValue: maxBorrow.reason }) })}
+                  </span>
+                )}
               </div>
 
-              <AmountInput
-                testId="loan-amount-collateral"
-                label={t('loan.collateralOptional', { symbol: selected.symbol })}
-                value={collateral} onChange={setCollateral}
-                asset={selected}
-                max={walletMax} maxLabel={t('loan.maxOf', { amount: walletMax, symbol: selected.symbol })}
-                hint={t('loan.collateralHint')}
-              />
+              {/* ── §11 step 1: the collateral asset, chosen separately ────── */}
+              <div style={{ marginBottom: 12 }}>
+                <div className="row-between" style={{ marginBottom: 6, gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>
+                    {t('loan.collateralAssetLabel')}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="loan-collateral-picker"
+                    onClick={() => setCollateralOpen((v) => !v)}
+                    style={{
+                      fontSize: 10.5, fontWeight: 700, color: 'var(--text-2)',
+                      background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 8, padding: '3px 8px', cursor: 'pointer',
+                    }}
+                  >
+                    {collateralAsset ? collateralAsset.symbol : t('loan.useExistingCollateral')}
+                  </button>
+                </div>
+                {collateralOpen && (
+                  <div data-testid="loan-collateral-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button
+                      type="button"
+                      data-testid="loan-collateral-none"
+                      onClick={() => { haptic?.('select'); setCollateralId(null); setCollateral(''); setCollateralOpen(false); }}
+                      style={{
+                        textAlign: 'start', fontSize: 11.5, padding: '9px 11px', borderRadius: 11, cursor: 'pointer',
+                        background: collateralId == null ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${collateralId == null ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.08)'}`,
+                        color: 'var(--text-2)',
+                      }}
+                    >
+                      {t('loan.useExistingCollateral')}
+                      <span className="faint" style={{ display: 'block', fontSize: 10, marginTop: 2 }}>{t('loan.collateralHint')}</span>
+                    </button>
+                    {assets.filter((a) => a.id !== selected.id).map((a) => {
+                      const on = collateralId === a.id;
+                      const bal = positions[a.id]?.walletWei != null ? fromUnits(positions[a.id].walletWei, Number(reserves[a.id]?.decimals ?? a.decimals)) : null;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          data-testid={`loan-collateral-${a.symbol.toLowerCase()}`}
+                          onClick={() => { haptic?.('select'); setCollateralId(a.id); setCollateral(''); setCollateralOpen(false); }}
+                          style={{
+                            textAlign: 'start', fontSize: 11.5, padding: '9px 11px', borderRadius: 11, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 9,
+                            background: on ? `${a.color}1c` : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${on ? `${a.color}66` : 'rgba(255,255,255,0.08)'}`,
+                            color: 'var(--text-1)',
+                          }}
+                        >
+                          <AssetAvatar asset={a} size={24} />
+                          <span style={{ fontWeight: 700 }}>{a.symbol}</span>
+                          <span className="faint" style={{ marginInlineStart: 'auto', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                            {bal != null ? `${bal}` : '—'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {collateralAsset && (
+                <AmountInput
+                  testId="loan-amount-collateral"
+                  label={t('loan.collateralToAdd', { symbol: collateralAsset.symbol })}
+                  value={collateral} onChange={setCollateral}
+                  asset={collateralAsset}
+                  max={collateralWalletWei != null && BigInt(collateralWalletWei) > 0n ? fromUnits(collateralWalletWei, collateralDecimals) : null}
+                  maxLabel={t('loan.maxOf', {
+                    amount: collateralWalletWei != null ? fromUnits(collateralWalletWei, collateralDecimals) : '0',
+                    symbol: collateralAsset.symbol
+                  })}
+                  hint={t('loan.collateralAssetHint', { symbol: collateralAsset.symbol, borrow: selected.symbol })}
+                />
+              )}
+              {overCollateralWallet && (
+                <p style={{ fontSize: 11.5, color: '#f87171', margin: '0 0 10px' }}>{t('loan.collateralOverWallet')}</p>
+              )}
 
               <AmountInput
                 testId="loan-amount-borrow"
                 label={t('loan.borrowAmountLabel', { symbol: selected.symbol })}
                 value={amount} onChange={setAmount}
                 asset={selected}
-                hint={projected != null ? t('loan.projectedHealth', { hf: projected.toFixed(2) }) : undefined}
+                max={maxAmount} maxLabel={t('loan.maxBorrowBtn')}
+                hint={projected?.ok && projected.healthFactorAfter != null
+                  ? t('loan.projectedHealth', { hf: projected.healthFactorAfter.toFixed(2) })
+                  : projected && !projected.ok
+                    ? t('loan.projectedHealthUnavailable')
+                    : undefined}
               />
 
               {noCollateral && (
                 <p style={{ fontSize: 11.5, color: '#fbbf24', margin: '0 0 10px' }}>{t('loan.needCollateralFirst')}</p>
               )}
+
+              {/* §13/§14 — the numbers behind the warning, before the signature. */}
+              {account?.ok && (
+                <RiskMeter projection={projected} account={account} t={t} />
+              )}
+
+              <ReasonList items={decision.blocked} tone="danger" t={t} testId="loan-borrow-blocked" />
+              <ReasonList items={decision.warnings} tone="warn" t={t} testId="loan-borrow-warnings" />
 
               <ActionButton
                 state={walletState}
@@ -1086,8 +1794,8 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
    POSITIONS TAB — the real position, managed here
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function PositionsTab({ market, t, haptic, onExecute }) {
-  const { assets, positions, account, loading, walletState, refresh } = market;
+function PositionsTab({ market, t, haptic, notify, onExecute, onCollateral, history }) {
+  const { assets, positions, account, loading, walletState, refresh, userConfiguration, reserves } = market;
   const [draft, setDraft] = useState({});
 
   const rows = assets
@@ -1122,6 +1830,30 @@ function PositionsTab({ market, t, haptic, onExecute }) {
         const value = draft[asset.id] || '';
         const supplied = Number(position.supplied) > 0;
         const owes = Number(position.debt) > 0;
+        const reserve = reserves?.[asset.id];
+        const decimals = Number(reserve?.decimals ?? asset.decimals ?? 18);
+        /* §15 — collateral usage comes from the pool's per-user bitmap, not
+           from "the aToken balance is non-zero". Those disagree whenever a
+           user has supplied with the collateral flag switched off. */
+        const usage = userConfiguration?.entries?.[asset.id];
+        const isCollateral = usage?.usingAsCollateral ?? null;
+        const priceUsd = market.prices?.[asset.id]?.usd ?? null;
+        const suppliedUsd = (priceUsd != null && position.suppliedWei != null)
+          ? Number(fromUnits(position.suppliedWei, decimals)) * priceUsd : null;
+        const debtUsd = (priceUsd != null && position.debtWei != null)
+          ? Number(fromUnits(position.debtWei, decimals)) * priceUsd : null;
+        const draftWei = toUnits(value, decimals);
+
+        /* §17 — what this withdrawal would do to the health factor, priced by
+           the protocol oracle. Shown before the signature, and it gates the
+           button when the result would be liquidatable. */
+        const withdrawProjection = supplied && draftWei != null && draftWei > 0n
+          ? projectActionRisk({ market, action: 'withdraw', amountWei: draftWei.toString(), asset })
+          : null;
+        const withdrawBlocked = withdrawProjection?.ok
+          && withdrawProjection.healthFactorAfter != null
+          && withdrawProjection.healthFactorAfter < MIN_HEALTH_FACTOR_AFTER_BORROW;
+
         return (
           <motion.div
             key={asset.id}
@@ -1142,15 +1874,65 @@ function PositionsTab({ market, t, haptic, onExecute }) {
                 {supplied && (
                   <div style={{ fontSize: 11.5, color: '#4ade80', fontFamily: 'var(--font-mono)' }}>
                     {t('loan.supplied')}: {position.supplied}
+                    {suppliedUsd != null && <span className="faint"> · {fmtUsd(suppliedUsd)}</span>}
                   </div>
                 )}
                 {owes && (
                   <div style={{ fontSize: 11.5, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
                     {t('loan.borrowed')}: {position.debt}
+                    {debtUsd != null && <span className="faint"> · {fmtUsd(debtUsd)}</span>}
                   </div>
                 )}
               </div>
             </div>
+
+            {/* §15 — collateral switch, with the dependency check that stops a
+                user turning off the collateral their debt is resting on. */}
+            {supplied && isCollateral != null && (
+              <div
+                className="row-between"
+                data-testid={`loan-collateral-state-${asset.symbol.toLowerCase()}`}
+                data-on={isCollateral ? 'true' : 'false'}
+                style={{
+                  gap: 8, padding: '8px 10px', borderRadius: 11, marginBottom: 10,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{t('loan.useAsCollateral')}</span>
+                  <span className="faint" style={{ display: 'block', fontSize: 9.5, lineHeight: 1.5 }}>
+                    {isCollateral ? t('loan.collateralOnHint') : t('loan.collateralOffHint')}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isCollateral}
+                  data-testid={`loan-collateral-toggle-${asset.symbol.toLowerCase()}`}
+                  onClick={() => {
+                    haptic?.('select');
+                    onCollateral({ asset, useAsCollateral: !isCollateral, position, suppliedUsd });
+                  }}
+                  style={{
+                    flexShrink: 0, width: 42, height: 24, borderRadius: 99, cursor: 'pointer',
+                    border: '1px solid rgba(255,255,255,0.14)', position: 'relative',
+                    background: isCollateral ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.10)',
+                    transition: 'background 0.16s',
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: 2, insetInlineStart: isCollateral ? 20 : 2,
+                    width: 18, height: 18, borderRadius: 99, background: '#fff',
+                    transition: 'inset-inline-start 0.16s',
+                  }} />
+                </button>
+              </div>
+            )}
+            {supplied && isCollateral == null && (
+              <p className="faint" data-testid={`loan-collateral-unknown-${asset.symbol.toLowerCase()}`} style={{ fontSize: 10, margin: '0 0 8px', lineHeight: 1.6 }}>
+                {t('loan.collateralStateUnknown')}
+              </p>
+            )}
 
             <AmountInput
               testId={`loan-amount-${asset.symbol.toLowerCase()}`}
@@ -1158,7 +1940,25 @@ function PositionsTab({ market, t, haptic, onExecute }) {
               value={value}
               onChange={(next) => setDraft((prev) => ({ ...prev, [asset.id]: next }))}
               asset={asset}
+              /* §16/§17 — MAX. It sends the protocol's own "all of it" sentinel
+                 and settles exactly what is owed / supplied, including the
+                 interest accrued since the last read. */
+              max="max"
+              maxLabel={owes ? t('loan.repayMaxBtn') : t('loan.withdrawMaxBtn')}
             />
+
+            {withdrawProjection?.ok && withdrawProjection.healthFactorAfter != null && (
+              <p
+                data-testid={`loan-withdraw-risk-${asset.symbol.toLowerCase()}`}
+                style={{
+                  fontSize: 10.5, lineHeight: 1.6, margin: '0 0 8px',
+                  color: withdrawBlocked ? '#f87171' : '#fbbf24',
+                }}
+              >
+                {t('loan.withdrawHealthAfter', { hf: withdrawProjection.healthFactorAfter.toFixed(2) })}
+                {withdrawBlocked ? ` — ${t('loan.error.HEALTH_FACTOR_TOO_LOW')}` : ''}
+              </p>
+            )}
 
             <div style={{ display: 'flex', gap: 8 }}>
               {supplied && (
@@ -1166,8 +1966,12 @@ function PositionsTab({ market, t, haptic, onExecute }) {
                   type="button" className="btn btn-ghost btn-sm"
                   data-testid={`loan-withdraw-${asset.symbol.toLowerCase()}`}
                   style={{ flex: 1 }}
-                  disabled={!value || Number(value) <= 0}
-                  onClick={() => { haptic?.('medium'); onExecute({ action: 'withdraw', asset, amount: value }); }}
+                  disabled={(!value && !isMaxAmount(value)) || (!isMaxAmount(value) && !(draftWei != null && draftWei > 0n)) || withdrawBlocked}
+                  onClick={() => {
+                    if (withdrawBlocked) { notify('loan.error.HEALTH_FACTOR_TOO_LOW', 'error'); return; }
+                    haptic?.('medium');
+                    onExecute({ action: 'withdraw', asset, amount: value, maxWei: position.suppliedWei });
+                  }}
                 >
                   {t('loan.withdraw')}
                 </button>
@@ -1177,8 +1981,11 @@ function PositionsTab({ market, t, haptic, onExecute }) {
                   type="button" className="btn btn-ghost btn-sm"
                   data-testid={`loan-repay-${asset.symbol.toLowerCase()}`}
                   style={{ flex: 1 }}
-                  disabled={!value || Number(value) <= 0}
-                  onClick={() => { haptic?.('medium'); onExecute({ action: 'repay', asset, amount: value }); }}
+                  disabled={(!value && !isMaxAmount(value)) || (!isMaxAmount(value) && !(draftWei != null && draftWei > 0n))}
+                  onClick={() => {
+                    haptic?.('medium');
+                    onExecute({ action: 'repay', asset, amount: value, maxWei: position.debtWei });
+                  }}
                 >
                   {t('loan.repay')}
                 </button>
@@ -1195,11 +2002,128 @@ function PositionsTab({ market, t, haptic, onExecute }) {
         {t('common.refresh', { defaultValue: 'Refresh' })}
       </motion.button>
 
+      {/* §27 — the ledger of what this wallet actually did on this page. */}
+      <HistoryList history={history} market={market} t={t} />
+
       <motion.div variants={riseIn} style={{ marginTop: 4 }}>
         <InfoBox title={t('loan.archTitle')} tone="info" id="pos-arch">
           <p>{t('loan.archBody')}</p>
         </InfoBox>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §27 — TRANSACTION HISTORY
+   Real hashes only. An entry with no hash is a rejected or failed attempt and
+   is labelled as such; nothing here is ever generated to look like a hash, and
+   every link points at the explorer of the chain it actually happened on.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const HISTORY_TONE = {
+  CONFIRMED: '#4ade80', PENDING: '#60a5fa', FAILED: '#f87171',
+  REPLACED: '#fbbf24', UNKNOWN: '#9ca3af'
+};
+
+function HistoryList({ history, market, t }) {
+  const [open, setOpen] = useState(false);
+  const entries = history?.list?.({ wallet: market.address, chainId: market.chain }) ?? [];
+  return (
+    <motion.div
+      variants={riseIn}
+      data-testid="loan-history"
+      style={{
+        borderRadius: 16, overflow: 'hidden',
+        background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      <button
+        type="button"
+        data-testid="loan-history-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '11px 13px', background: 'transparent', border: 'none',
+          cursor: 'pointer', color: 'var(--text-1)',
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 800 }}>{t('loan.historyTitle')}</span>
+        <span className="faint" style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>{entries.length}</span>
+        <motion.span
+          animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }}
+          style={{ marginInlineStart: 'auto', display: 'inline-flex', color: 'var(--text-3)' }}
+        >
+          <IconChevronRight width={14} height={14} />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ padding: '0 13px 12px' }}>
+              {entries.length === 0 && (
+                <p className="faint" data-testid="loan-history-empty" style={{ fontSize: 11.5, lineHeight: 1.7, margin: 0 }}>
+                  {t('loan.historyEmpty')}
+                </p>
+              )}
+              {entries.map((entry) => {
+                const tone = HISTORY_TONE[entry.status] ?? HISTORY_TONE.UNKNOWN;
+                return (
+                  <div
+                    key={entry.id}
+                    data-testid={`loan-history-${entry.status.toLowerCase()}`}
+                    data-action={entry.action}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: 99, background: tone, flexShrink: 0 }} />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+                        {t(`loan.sheetTitle.${entry.action}`, { defaultValue: entry.action })}
+                        {entry.asset ? ` · ${entry.asset}` : ''}
+                      </span>
+                      <span className="faint" style={{ display: 'block', fontSize: 9.5, fontFamily: 'var(--font-mono)' }}>
+                        {entry.amount != null ? `${entry.amount} ` : ''}
+                        {chainLabel(entry.chainId)} · {new Date(entry.at).toLocaleString()}
+                      </span>
+                      {entry.code && (
+                        <span style={{ display: 'block', fontSize: 9.5, color: tone }}>
+                          {t(`loan.error.${entry.code}`, { defaultValue: entry.code })}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ textAlign: 'end', flexShrink: 0 }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: tone, letterSpacing: '.04em' }}>
+                        {t(`loan.txStatus.${entry.status}`)}
+                      </span>
+                      {entry.hash ? (
+                        <a
+                          href={explorerTx(entry.chainId, entry.hash)}
+                          target="_blank" rel="noreferrer noopener"
+                          data-testid="loan-history-link"
+                          style={{ display: 'block', fontSize: 9.5, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                        >
+                          {entry.hash.slice(0, 8)}…
+                        </a>
+                      ) : (
+                        <span className="faint" style={{ display: 'block', fontSize: 9 }}>{t('loan.noHash')}</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1330,9 +2254,23 @@ function HowItWorks({ t }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function HeroStats({ t }) {
+  /*
+   * §24 — THIS CARD USED TO ADVERTISE A FEE THAT DOES NOT EXIST.
+   * It read «FBT Fee / % of your yield». Nothing in the lending path takes a
+   * fee: `runLendingPlan` calls Pool.supply / borrow / repay / withdraw with
+   * referral code 0 and approves the pool directly — no fee router, no split,
+   * no basis points, nowhere. On a page where the user is deciding what to do
+   * with their collateral, a fee that is announced but never charged is not a
+   * cosmetic problem: it implies a yield haircut that is not happening and it
+   * hides the two costs that ARE (protocol interest and the network fee).
+   *
+   * The rule is "if no FBT fee exists, do not create one" — so the card now
+   * states the truth, and the review sheet shows the real network fee (§23)
+   * separately from anything FBT might ever charge.
+   */
   const stats = [
     { label: t('loan.nonCustodial'), sub: t('loan.nonCustodialSub'), color: '#4ade80', Icon: IconLock },
-    { label: t('loan.fbtFee'),       sub: t('loan.fbtFeeSub'),       color: '#60a5fa', Icon: IconCoins },
+    { label: t('loan.noFbtFee'),     sub: t('loan.noFbtFeeSub'),     color: '#60a5fa', Icon: IconCoins },
     { label: t('loan.noKyc'),        sub: t('loan.noKycSub'),        color: '#a78bfa', Icon: IconUser },
   ];
   return (
@@ -1413,7 +2351,10 @@ export default function Loan() {
   const preset = useMemo(() => ({
     symbol: searchParams.get('asset') || searchParams.get('from') || null,
     amount: searchParams.get('amount') || null,
-    collateral: searchParams.get('collateral') || null
+    collateral: searchParams.get('collateral') || null,
+    /* §33 — an Intent OS hand-off can now name the collateral asset as well as
+       the borrow asset, because the borrow form takes them separately (§11). */
+    collateralAsset: searchParams.get('collateralAsset') || null
   }), [searchParams]);
 
   /*
@@ -1442,10 +2383,29 @@ export default function Loan() {
   const [alerts, setAlerts] = useState([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
+  /* §3/§19/§20/§21/§25 — everything the market pass now reads, kept separate
+     so each can be labelled with where it came from. */
+  const [oracle, setOracle] = useState(null);
+  const [oracleStatus, setOracleStatus] = useState('unavailable');
+  const [prices, setPrices] = useState({});
+  const [userConfiguration, setUserConfiguration] = useState(null);
+  const [dataStatus, setDataStatus] = useState(DATA_STATUS.UNAVAILABLE);
+  const [snapshotAgeMs, setSnapshotAgeMs] = useState(null);
+  const [failures, setFailures] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [nativePriceUsd, setNativePriceUsd] = useState(null);
+  /* §15 — why a collateral toggle was refused, kept so the page can explain it
+     instead of only firing a toast that disappears. */
+  const [collateralRefusal, setCollateralRefusal] = useState(null);
+
   const machineRef = useRef(null);
   const guardRef = useRef(createInFlightGuard());
   const prevSnapRef = useRef(null);
   const lastTxFailureRef = useRef(null);
+  /* One cache and one ledger for the life of the page. The cache is short-TTL
+     and only ever holds a snapshot that actually read something (§26). */
+  const cacheRef = useRef(createMarketCache());
+  const historyRef = useRef(createTransactionHistory());
 
   const walletState = !isConnected || !address
     ? 'disconnected'
@@ -1457,80 +2417,154 @@ export default function Loan() {
    * §27/§28 — the circuit breaker lives on the BFF. The banner only renders
    * what the server reports; if the status call fails (or is stubbed in
    * tests), the page simply stays interactive — no crash, no invented state.
+   *
+   * `canTransact` is kept alongside `readOnly` because the banner was
+   * previously the ONLY thing read-only mode did: the server said "refuse new
+   * transactions", the page agreed in writing, and then let the user sign
+   * anyway. It is enforced in `openExecution` now.
    */
+  const [canTransact, setCanTransact] = useState(true);
   useEffect(() => {
     let alive = true;
     fetch(`${apiBase()}/lending/status`)
       .then((res) => res.json())
-      .then((json) => { if (alive) setReadOnly(Boolean(json?.data?.readOnly)); })
-      .catch(() => { if (alive) setReadOnly(false); });
+      .then((json) => {
+        if (!alive) return;
+        const isReadOnly = Boolean(json?.data?.readOnly);
+        setReadOnly(isReadOnly);
+        /* Trust the server's own verdict when it gives one; otherwise derive it
+           from readOnly so a partial payload cannot re-enable transactions. */
+        setCanTransact(json?.data?.canTransact === undefined ? !isReadOnly : Boolean(json.data.canTransact) && !isReadOnly);
+      })
+      .catch(() => { if (alive) { setReadOnly(false); setCanTransact(true); } });
+    return () => { alive = false; };
+  }, [chain]);
+
+  /* §27 — reconcile abandoned pendings so nothing stays PENDING forever. */
+  useEffect(() => {
+    historyRef.current.reconcile();
+    setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
+  }, [address, chain]);
+
+  /*
+   * §23 — the native price is used ONLY to show the network fee in USD as a
+   * labelled estimate. It is never a risk input: collateral value, borrowing
+   * power and the health factor all come from the protocol's own oracle (§32).
+   * If it cannot be fetched the fee is simply shown in the native token.
+   */
+  useEffect(() => {
+    let alive = true;
+    const nativeId = chain === 56 ? 'binancecoin' : chain === 137 ? 'matic-network' : chain === 43114 ? 'avalanche-2' : 'ethereum';
+    import('../lib/api')
+      .then((api) => api.getSimplePrices([nativeId]))
+      .then((res) => {
+        if (!alive) return;
+        const value = res?.[nativeId]?.usd;
+        setNativePriceUsd(Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null);
+      })
+      .catch(() => { if (alive) setNativePriceUsd(null); });
     return () => { alive = false; };
   }, [chain]);
 
   /**
-   * One read pass: live reserve rates for every asset (no wallet needed) and,
-   * when a wallet is connected, that wallet's position in each of them.
+   * One read pass through the LENDING SERVICE (§4): live reserve rates, the
+   * protocol's own oracle prices, liquidity and caps, the wallet's account and
+   * per-asset positions, and its collateral-usage bitmap.
+   *
    * The same pass feeds the alert engine (§22) with the previous snapshot.
+   * `force` bypasses the cache — used after a transaction so the position the
+   * user sees is the one the chain has, not the one from before they signed.
    */
-  const refresh = useCallback(async () => {
-    if (!venue || typeof getReadProvider !== 'function') { setLoading(false); return; }
+  const refresh = useCallback(async ({ force = true } = {}) => {
+    if (!venue || typeof getReadProvider !== 'function') {
+      setLoading(false);
+      setDataStatus(DATA_STATUS.UNAVAILABLE);
+      setFailures([{ step: 'provider', reason: 'NO_PROVIDER' }]);
+      return;
+    }
     setLoading(true);
     try {
       const provider = await getReadProvider(chain);
-      const nextReserves = await readReserves({ provider, chainId: chain, assets });
-      setReserves(nextReserves);
-      let acct = null;
-      if (address) {
-        const [accountRead, entries] = await Promise.all([
-          readUserAccount({ provider, chainId: chain, user: address }),
-          Promise.all(assets.map(async (asset) => [
-            asset.id,
-            await readAssetPosition({ provider, chainId: chain, asset, user: address, reserve: nextReserves[asset.id] })
-          ]))
-        ]);
-        acct = accountRead;
-        setAccount(acct);
-        setPositions(Object.fromEntries(entries));
-      } else {
-        setAccount(null);
-        setPositions({});
-      }
+      const snapshot = await readMarketState({
+        provider, chainId: chain, assets, wallet: address || null,
+        cache: cacheRef.current, force
+      });
+
+      setReserves(snapshot.reserves || {});
+      setPositions(snapshot.positions || {});
+      setAccount(snapshot.account ?? null);
+      setOracle(snapshot.oracle ?? null);
+      setOracleStatus(snapshot.oracleStatus ?? 'unavailable');
+      setPrices(snapshot.prices || {});
+      setUserConfiguration(snapshot.userConfiguration ?? null);
+      setDataStatus(snapshot.dataStatus);
+      setSnapshotAgeMs(snapshot.ageMs ?? null);
+      setFailures(snapshot.failures || []);
+      setReadAt(snapshot.readAt ?? null);
 
       /* Alert engine: pure rules over (current, previous) snapshots. */
       try {
         const prev = prevSnapRef.current;
         const marketNow = Object.fromEntries(assets.map((a) => [a.id, {
-          supplyApyPct: nextReserves[a.id]?.supplyApyPct,
-          borrowApyPct: nextReserves[a.id]?.borrowApyPct
+          supplyApyPct: snapshot.reserves?.[a.id]?.supplyApyPct,
+          borrowApyPct: snapshot.reserves?.[a.id]?.borrowApyPct
         }]));
-        const riskNow = acct?.ok ? assessPosition({
-          healthFactor: acct.healthFactor,
-          totalDebtUsd: acct.totalDebtUsd,
-          totalCollateralUsd: acct.totalCollateralUsd,
-          liquidationThresholdPct: acct.liquidationThresholdPct
-        }) : null;
+        const riskNow = snapshot.risk ?? null;
         setAlerts(evaluateAlerts({
           position: riskNow,
           previous: prev?.risk ?? null,
           market: marketNow,
           previousMarket: prev?.market ?? null,
-          txFailed: lastTxFailureRef.current
+          txFailed: lastTxFailureRef.current,
+          /* §21 — an oracle the protocol itself could not answer is a critical
+             condition, not a cosmetic one. */
+          oracle: snapshot.oracleStatus === 'ok' ? { status: 'ok' }
+            : snapshot.oracleStatus === 'stale' ? { status: 'stale' }
+              : snapshot.oracleStatus === 'anomaly' ? { status: 'anomaly' } : null
         }));
         prevSnapRef.current = { risk: riskNow, market: marketNow };
       } catch {
         /* Alerts must never take the page down. */
       }
-
-      setReadAt(Date.now());
-    } catch {
-      /* A dead RPC leaves the last honest numbers on screen and the dash
-         where a rate could not be read — it never invents one. */
+    } catch (error) {
+      /* A dead RPC leaves the last honest numbers on screen — labelled with
+         their age — and never invents a replacement (§26/§37). */
+      setFailures((prev) => [...prev, { step: 'refresh', reason: String(error?.message || error).slice(0, 160) }]);
+      setDataStatus(DATA_STATUS.UNAVAILABLE);
     } finally {
       setLoading(false);
     }
   }, [venue, chain, assets, address, getReadProvider]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh({ force: true }); }, [refresh]);
+
+  /*
+   * §25/§26/§35 — REFRESH TRIGGERS.
+   * A position must be re-read on connect, disconnect, chain switch (all of
+   * which re-create `refresh` above), and on APP RESUME. The resume case is the
+   * one mobile depends on: signing in an external wallet suspends the page, and
+   * when the user comes back the numbers on screen are from before the
+   * transaction. `visibilitychange` covers the tab and the phone both.
+   *
+   * While the page is visible it also polls, so a health factor drifting
+   * towards liquidation does not sit unnoticed until the user taps refresh.
+   */
+  useEffect(() => {
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') refresh({ force: true });
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    if (typeof window !== 'undefined') window.addEventListener('focus', onVisible);
+    const id = setInterval(() => {
+      const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
+      if (visible) refresh({ force: false });
+    }, MARKET_POLL_MS);
+    return () => {
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onVisible);
+      clearInterval(id);
+    };
+  }, [refresh]);
 
   /*
    * ─── THE CONNECT BUTTON USED TO DO NOTHING ─────────────────────────────
@@ -1566,33 +2600,141 @@ export default function Loan() {
   }, [switchChain, chain, haptic]);
 
   /**
-   * Review first: the allowance is read BEFORE the sheet opens, so the steps
-   * the user is shown are exactly the transactions their wallet will be asked
-   * to sign — an approval appears only when the current allowance is short.
+   * Review first. Everything the wallet will be asked to sign is computed
+   * BEFORE the sheet opens:
+   *
+   *   1. the current allowance — so an approval step appears only when the
+   *      allowance is genuinely short, and for exactly the amount needed (§29)
+   *   2. the pre-flight decision — caps, liquidity, borrowing power, the
+   *      resulting health factor, gas availability (§9/§11/§17/§20)
+   *   3. the resulting risk, priced by the protocol's oracle (§13)
+   *
+   * The sheet then opens and, while it is open, the SIMULATION and the GAS
+   * ESTIMATE run (§22/§23). They are async on purpose: the review numbers
+   * should not wait on two RPC round-trips, and a simulation that comes back
+   * reverted disables Confirm where the user can see it.
+   *
+   * Read-only mode is enforced HERE, not just in the banner (§27/§28).
    */
-  const openExecution = useCallback(async ({ action, asset, amount, collateral = null }) => {
+  const openExecution = useCallback(async ({ action, asset, amount, collateral = null, collateralAsset = null, maxWei = null, useAsCollateral = null, suppliedUsd = null }) => {
+    /* §27/§28 — the banner said transactions were refused; now they are. */
+    if (readOnly || !canTransact) {
+      notify('loan.error.READ_ONLY_MODE', 'error');
+      return;
+    }
+
+    let provider = null;
     let allowanceWei = null;
+    let collateralAllowanceWei = null;
+    let nativeBalanceWei = null;
     try {
       if (typeof getReadProvider === 'function' && address) {
-        const provider = await getReadProvider(chain);
+        provider = await getReadProvider(chain);
         allowanceWei = await readAllowance({ provider, chainId: chain, asset, owner: address });
+        if (collateralAsset?.address && collateralAsset.address !== asset.address) {
+          collateralAllowanceWei = await readAllowance({ provider, chainId: chain, asset: collateralAsset, owner: address });
+        }
+        try { nativeBalanceWei = (await provider.getBalance(address)).toString(); } catch { nativeBalanceWei = null; }
       }
-    } catch { allowanceWei = null; }
+    } catch { provider = null; allowanceWei = null; }
 
-    const plan = buildLendingPlan({ action, asset, amount, collateral, allowanceWei, decimals: asset.decimals });
-    if (!plan.ok) { notify('loan.enterAmount', 'error'); return; }
+    const reserve = reserves[asset.id];
+    /* §18 — decimals from the protocol/contract when they could be read. */
+    const decimals = Number(reserve?.decimals ?? asset.decimals ?? 18);
+    const collateralDecimals = collateralAsset
+      ? Number(reserves[collateralAsset.id]?.decimals ?? collateralAsset.decimals ?? 18)
+      : decimals;
+
+    const isMax = isMaxAmount(amount);
+    const isCollateralToggle = action === 'collateral';
+    const amountWei = isCollateralToggle ? null : (isMax ? maxWei : toUnits(amount, decimals)?.toString() ?? null);
+    const collateralWei = collateralAsset ? toUnits(collateral, collateralDecimals)?.toString() ?? null : null;
+
+    /* §9 — the full pre-flight. A blocked action never reaches the sheet. */
+    const decision = evaluateAction({
+      market: { chainId: chain, reserves, positions, account, prices, oracleStatus, userConfiguration },
+      action, asset, amount, amountWei,
+      collateralAmountWei: collateralWei,
+      collateralAsset: collateralAsset ?? asset,
+      walletBalanceWei: action === 'supply' ? positions[asset.id]?.walletWei ?? null : null,
+      suppliedWei: action === 'withdraw' ? positions[asset.id]?.suppliedWei ?? null : null,
+      debtWei: action === 'repay' ? positions[asset.id]?.debtWei ?? null : null,
+      nativeBalanceWei
+    });
+    if (!decision.ok) {
+      notify(`loan.error.${decision.blocked[0].code}`, 'error');
+      return;
+    }
+
+    const plan = buildLendingPlan({
+      action, asset, amount, collateral, collateralAsset,
+      allowanceWei, collateralAllowanceWei,
+      decimals, maxWei, useAsCollateral
+    });
+    if (!plan.ok) {
+      notify(`loan.error.${plan.error}`, 'error');
+      return;
+    }
+
+    /* §13 — the risk this action creates, with every amount priced first.
+       A collateral toggle moves no tokens, so its risk is the one
+       `assertCollateralChangeSafe` already computed — shown, not recomputed
+       with a different formula. */
+    const risk = isCollateralToggle
+      ? (() => {
+        const check = assertCollateralChangeSafe({
+          account,
+          /* The USD value of the collateral being switched off, priced by the
+             protocol oracle in PositionsTab. Unknown means the check refuses. */
+          removeCollateralUsd: useAsCollateral ? 0 : (suppliedUsd ?? 0),
+          minSafeHealthFactor: MIN_HEALTH_FACTOR_AFTER_BORROW
+        });
+        return check.ok
+          ? { ok: true, healthFactorBefore: account?.healthFactor ?? null, healthFactorAfter: check.healthFactorAfter, liquidationThresholdPct: account?.liquidationThresholdPct ?? null }
+          : { ok: false, reason: check.code, detail: check.reason };
+      })()
+      : projectActionRisk({
+        market: { chainId: chain, reserves, prices, account, userConfiguration, oracleStatus },
+        action, amountWei, asset,
+        collateralAmountWei: collateralWei,
+        collateralAsset: collateralAsset ?? asset
+      });
 
     const review = [
       [t('loan.asset'), asset.symbol],
-      [t('loan.action'), t(`loan.sheetTitle.${action}`)],
-      [t('loan.amount'), `${amount} ${asset.symbol}`]
+      [t('loan.action'), t(`loan.sheetTitle.${action}`, { defaultValue: action })],
+      /* A collateral toggle moves no tokens, so it has no amount row at all —
+         showing "0 USDT" would imply a transfer that is not happening. */
+      ...(isCollateralToggle ? [] : [[t('loan.amount'), isMax
+        /* A MAX action shows what it will actually settle, not the 2^256-1
+           sentinel the protocol receives (§16/§17). */
+        ? `${fromUnits(maxWei, decimals)} ${asset.symbol} (${t('loan.maxLabel')})`
+        : `${amount} ${asset.symbol}`]])
     ];
-    if (collateral && Number(collateral) > 0) review.push([t('loan.collateral'), `${collateral} ${asset.symbol}`]);
+    if (collateralAsset && collateralWei && BigInt(collateralWei) > 0n) {
+      review.push([t('loan.collateralAsset'), `${fromUnits(collateralWei, collateralDecimals)} ${collateralAsset.symbol}`]);
+    } else if (collateral && Number(collateral) > 0) {
+      review.push([t('loan.collateral'), `${collateral} ${asset.symbol}`]);
+    }
     review.push([t('loan.market'), chainLabel(chain)]);
+    if (reserve?.supplyApyPct != null && (action === 'supply' || action === 'withdraw')) {
+      review.push([t('loan.supplyApyLine'), `${reserve.supplyApyPct.toFixed(2)}% APY`]);
+    }
+    if (reserve?.borrowApyPct != null && (action === 'borrow' || action === 'repay')) {
+      review.push([t('loan.borrowApyLine'), `${reserve.borrowApyPct.toFixed(2)}% APY (variable)`]);
+    }
+    if (risk?.ok && risk.healthFactorAfter != null) {
+      review.push([t('loan.healthFactorAfter'), risk.healthFactorAfter.toFixed(2)]);
+    }
+    if (useAsCollateral != null) {
+      review.push([t('loan.useAsCollateral'), useAsCollateral ? t('common.on', { defaultValue: 'On' }) : t('common.off', { defaultValue: 'Off' })]);
+    }
+    /* §19 — where these numbers came from and how old they are. */
+    review.push([t('loan.dataSourceLine'), t(`loan.status.${dataStatus}`)]);
 
-    /* §15 — the machine starts here: validation is the allowance read above;
-       the review sheet is the READY state. Each attempt carries its own
-       requestId and a deterministic idempotency key (§17). */
+    /* §15 — the machine starts here: validation is the reads above; the review
+       sheet is the READY state. Each attempt carries its own requestId and a
+       deterministic idempotency key (§17). */
     const machine = createTransactionMachine({
       action,
       meta: {
@@ -1612,25 +2754,93 @@ export default function Loan() {
       asset,
       amount,
       collateral,
+      collateralAsset,
+      maxWei,
+      useAsCollateral,
+      amountWei,
+      collateralWei,
+      decimals,
       chainId: chain,
       requestId: machine.meta.requestId,
       idempotencyKey: machine.meta.idempotencyKey,
       review,
+      plan,
+      risk,
+      account,
+      warnings: decision.warnings,
+      simulation: null,
+      fee: null,
       steps: plan.steps.map((step) => ({ ...step, state: 'pending', hash: null })),
       phase: 'review'
     });
-  }, [address, chain, getReadProvider, notify, t]);
+
+    /* §22/§23 — simulate the exact calldata the adapter builds, then read the
+       network's current fee using the gas limit that simulation returned. ONE
+       simulation, not two: each step is a real eth_call + estimateGas against
+       a public RPC, and doubling it doubles the chance of a rate-limit that
+       would report "could not simulate" for no reason. Neither signs anything,
+       and a failure to simulate is reported as NOT proven rather than as a
+       pass. */
+    if (provider && address) {
+      const requestId = machine.meta.requestId;
+      Promise.resolve().then(async () => {
+        let simulation = null;
+        try {
+          simulation = await simulateLendingPlan({
+            provider, chainId: chain, plan, wallet: address, asset,
+            realAmountWei: isMax ? maxWei : null
+          });
+        } catch {
+          simulation = { ok: false, status: 'unknown', reason: 'SIMULATION_FAILED', steps: [] };
+        }
+        let fee = { ok: false, reason: 'GAS_LIMIT_UNAVAILABLE' };
+        try {
+          fee = await estimateNetworkFee({
+            provider,
+            gasLimit: simulation?.totalGasLimit ?? null,
+            nativePriceUsd,
+            chainId: chain
+          });
+        } catch { fee = { ok: false, reason: 'FEE_DATA_UNREADABLE' }; }
+        /* Only apply to the sheet this pass opened — a second action opened
+           while these reads were in flight must not be overwritten by them. */
+        setExec((prev) => (prev && prev.requestId === requestId ? { ...prev, simulation, fee } : prev));
+      });
+    }
+  }, [address, chain, getReadProvider, notify, t, readOnly, canTransact, reserves, positions, account, prices, oracleStatus, userConfiguration, dataStatus, nativePriceUsd]);
 
   const updateMachine = useCallback(() => {
     const machine = machineRef.current;
     if (machine) setMachineView(machine.snapshot());
   }, []);
 
-  /** Run the reviewed plan. Every step is the user's own wallet signature. */
+  /**
+   * Run the reviewed plan. Every step is the user's own wallet signature — FBT
+   * never signs and never broadcasts (§30).
+   *
+   * Two things this did not do before:
+   *   · the SIMULATING state was a label with nothing behind it. The real
+   *     eth_call + estimateGas now runs while the review sheet is open, and a
+   *     detected revert disables Confirm. The state is not asserted here unless
+   *     a simulation actually happened.
+   *   · nothing re-checked the wallet immediately before signing. Between the
+   *     sheet opening and Confirm being pressed the account or chain can change
+   *     — routinely, on mobile, because opening the external wallet suspends the
+   *     page (§35). `executeLendingPlan` re-asserts both (§9).
+   */
   const confirmExecution = useCallback(async () => {
     if (!exec) return;
     const machine = machineRef.current;
     if (!machine) return;
+
+    /* §27/§28 — enforced at the signature, not only when the sheet opens: the
+       breaker can trip while a review sheet is sitting open. */
+    if (readOnly || !canTransact) {
+      machine.transition(TX_STATE.ERROR, { code: 'READ_ONLY_MODE' });
+      updateMachine();
+      setExec((prev) => (prev ? { ...prev, phase: 'failed', code: 'READ_ONLY_MODE' } : prev));
+      return;
+    }
 
     /* §17 layer 1: the in-flight guard. A double-tap on Confirm (or a retry
        racing itself) is refused with the SAME deterministic key the backend
@@ -1639,28 +2849,68 @@ export default function Loan() {
     const acquired = guardRef.current.tryAcquire(idemKey);
     if (!acquired.ok) return;
 
-    try {
-      machine.transition(TX_STATE.SIMULATING);
-      updateMachine();
+    /* §27 — the ledger entry exists from the moment the attempt starts, so a
+       rejection or a dropped transaction is still a record the user can see.
+       It carries no hash yet, and one is never invented for it. */
+    const historyId = `${exec.requestId}`;
+    historyRef.current.record({
+      id: historyId,
+      action: exec.action,
+      asset: exec.asset?.symbol ?? null,
+      amount: isMaxAmount(exec.amount) ? t('loan.maxLabel') : exec.amount,
+      amountWei: exec.amountWei ?? null,
+      chainId: exec.chainId,
+      protocol: venue?.protocol ?? 'aave-v3',
+      wallet: address,
+      hash: null,
+      status: TX_STATUS.PENDING
+    });
+    setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
 
+    try {
       const signer = typeof getSigner === 'function' ? getSigner() : null;
       if (!signer) {
         machine.transition(TX_STATE.ERROR, { code: 'WALLET_NOT_CONNECTED' });
         updateMachine();
         setExec((prev) => (prev ? { ...prev, phase: 'failed', code: 'WALLET_NOT_CONNECTED' } : prev));
+        historyRef.current.settle(historyId, { status: TX_STATUS.FAILED, code: 'WALLET_NOT_CONNECTED' });
+        setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
         return;
+      }
+
+      /* The simulation already ran while the sheet was open. The machine only
+         enters SIMULATING when there is a verdict to show; otherwise it is
+         reported honestly as not simulated. */
+      if (exec.simulation) {
+        machine.transition(TX_STATE.SIMULATING);
+        updateMachine();
+        if (exec.simulation.status === 'revert-detected') {
+          machine.transition(TX_STATE.ERROR, { code: 'SIMULATION_FAILED' });
+          updateMachine();
+          setExec((prev) => (prev ? { ...prev, phase: 'failed', code: 'SIMULATION_FAILED', message: exec.simulation.revertReason } : prev));
+          historyRef.current.settle(historyId, { status: TX_STATUS.FAILED, code: 'SIMULATION_FAILED', message: exec.simulation.revertReason });
+          setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
+          return;
+        }
+      } else {
+        machine.transition(TX_STATE.SIMULATING);
+        updateMachine();
       }
 
       machine.transition(TX_STATE.AWAITING_SIGNATURE);
       updateMachine();
       setExec((prev) => (prev ? { ...prev, phase: 'running' } : prev));
 
-      const result = await runLendingPlan({
-        steps: exec.steps,
+      let provider = null;
+      try { provider = typeof getReadProvider === 'function' ? await getReadProvider(exec.chainId) : null; } catch { provider = null; }
+
+      const result = await executeLendingPlan({
         signer,
+        provider,
         chainId: exec.chainId,
+        plan: exec.plan ?? { steps: exec.steps },
         asset: exec.asset,
-        account: address,
+        wallet: address,
         onStep: (update) => {
           setExec((prev) => {
             if (!prev) return prev;
@@ -1671,6 +2921,10 @@ export default function Loan() {
                 : step))
             };
           });
+          /* The first real hash is the attempt's transaction (§27). */
+          if (update.hash) {
+            historyRef.current.record({ id: historyId, hash: update.hash });
+          }
         }
       });
 
@@ -1684,48 +2938,60 @@ export default function Loan() {
         machine.transition(TX_STATE.VERIFYING);
         updateMachine();
         lastTxFailureRef.current = null;
-        await refresh();
+        /* §26 — force-refresh: the position shown after a confirmation must be
+           the chain's, not the cache's. */
+        cacheRef.current.invalidate(`market:${exec.chainId}:`);
+        await refresh({ force: true });
         machine.transition(TX_STATE.COMPLETED);
         updateMachine();
         setExec((prev) => (prev ? { ...prev, phase: 'done', code: null, message: null } : prev));
         haptic?.('success');
 
-        /*
-         * A confirmed, on-chain lending action is real rewarded activity.
-         * The final step's hash is the action's own transaction (approval
-         * steps precede it; the last step is the action itself).
-         */
+        /* The last step's hash is the action's own transaction (approval steps
+           precede it). §27: a real hash from the wallet, or no entry at all. */
+        const mainHash = [...(result.completed || [])].reverse().find((step) => step.hash)?.hash ?? null;
+        historyRef.current.settle(historyId, { status: TX_STATUS.CONFIRMED, hash: mainHash });
+        setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
+
+        /* A confirmed, on-chain lending action is real rewarded activity. */
         const actionKey =
           exec.action === 'supply' ? 'lending'
             : exec.action === 'withdraw' ? 'withdraw'
               : exec.action === 'repay' ? 'repay'
                 : exec.action === 'borrow' ? 'borrow' : null;
-        if (actionKey && POINT_VALUES[actionKey] > 0) {
-          const mainHash = [...(exec.steps || [])].reverse().find((step) => step.hash)?.hash;
-          if (mainHash) {
-            const rewards = useAppStore.getState();
-            rewards.awardPoints(actionKey, POINT_VALUES[actionKey], {
-              network: 'evm', chainId: exec.chainId, txHash: mainHash
-            });
-          }
+        if (actionKey && POINT_VALUES[actionKey] > 0 && mainHash) {
+          const rewards = useAppStore.getState();
+          rewards.awardPoints(actionKey, POINT_VALUES[actionKey], {
+            network: 'evm', chainId: exec.chainId, txHash: mainHash
+          });
         }
       } else {
-        /* §14: a raw wallet/RPC error is mapped to a stable code + friendly
-           message. The raw text is never rendered. */
+        /* §14/§28: a raw wallet/RPC/protocol error is mapped to a stable code
+           plus a human sentence. The raw text is kept for diagnostics but is
+           never rendered as the explanation. */
         const mapped = mapRawError({ code: result.code, message: result.message }, { fallback: 'UNKNOWN' });
-        if (mapped.code === 'USER_REJECTED') machine.transition(TX_STATE.CANCELLED, { code: mapped.code });
-        else machine.transition(TX_STATE.ERROR, { code: mapped.code });
+        const code = LENDING_CODES.has(result.code) ? result.code : mapped.code;
+        if (code === 'USER_REJECTED') machine.transition(TX_STATE.CANCELLED, { code });
+        else machine.transition(TX_STATE.ERROR, { code });
         updateMachine();
         lastTxFailureRef.current = { action: exec.action, asset: exec.asset?.symbol ?? null };
         setExec((prev) => (prev
-          ? { ...prev, phase: 'failed', code: mapped.code, message: result.message || null }
+          ? { ...prev, phase: 'failed', code, message: result.message || null }
           : prev));
+        historyRef.current.settle(historyId, {
+          /* A dropped/replaced transaction is not the same as a failed one. */
+          status: code === 'TRANSACTION_DROPPED' ? TX_STATUS.REPLACED : TX_STATUS.FAILED,
+          hash: result.hash || null,
+          code,
+          message: result.message || null
+        });
+        setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
       }
     } finally {
       guardRef.current.release(idemKey);
       updateMachine();
     }
-  }, [exec, getSigner, address, refresh, haptic, updateMachine]);
+  }, [exec, getSigner, getReadProvider, address, chain, refresh, haptic, updateMachine, readOnly, canTransact, venue, t]);
 
   /** §15: ERROR → RETRY → VALIDATING. A fresh attempt with a fresh requestId. */
   const retryExecution = useCallback(() => {
@@ -1742,10 +3008,56 @@ export default function Loan() {
     confirmExecution();
   }, [exec, confirmExecution]);
 
+  /**
+   * §15 — enable / disable a supplied asset as collateral.
+   *
+   * Disabling collateral is the one action on this page that can turn a healthy
+   * position into a liquidatable one in a single signature, so it is checked
+   * BEFORE the sheet opens: if the user has debt resting on this collateral and
+   * turning it off would drop the health factor below the floor, the action is
+   * refused and the reason is shown. The protocol would revert anyway; the user
+   * should not have to pay gas to find that out.
+   */
+  const toggleCollateral = useCallback(({ asset, useAsCollateral, position, suppliedUsd }) => {
+    if (readOnly || !canTransact) { notify('loan.error.READ_ONLY_MODE', 'error'); return; }
+    if (useAsCollateral) {
+      /* Turning collateral ON never reduces safety. */
+      openExecution({ action: 'collateral', asset, amount: '0', useAsCollateral: true, suppliedUsd });
+      return;
+    }
+    const check = assertCollateralChangeSafe({
+      account,
+      removeCollateralUsd: suppliedUsd ?? 0,
+      minSafeHealthFactor: MIN_HEALTH_FACTOR_AFTER_BORROW
+    });
+    if (!check.ok) {
+      notify(`loan.error.${check.code}`, 'error');
+      setCollateralRefusal({ asset, code: check.code, reason: check.reason, healthFactorAfter: check.healthFactorAfter ?? null });
+      return;
+    }
+    setCollateralRefusal(null);
+    openExecution({ action: 'collateral', asset, amount: '0', useAsCollateral: false, suppliedUsd });
+  }, [account, canTransact, notify, openExecution, readOnly]);
+
+  /*
+   * The single object the three tabs render from. Everything on it came from
+   * one `readMarketState` pass, so the rates, the prices, the liquidity, the
+   * position and the risk assessment all describe the SAME block — which is the
+   * property that stops a health factor computed from one read being displayed
+   * next to a borrowing power from another.
+   */
   const market = {
     chain, assets, reserves, positions, account, loading, walletState,
-    connect, switchToChain, refresh
+    prices, oracle, oracleStatus, userConfiguration,
+    dataStatus, ageMs: snapshotAgeMs, readAt, failures,
+    address, readOnly, canTransact,
+    connect, switchToChain, refresh: () => refresh({ force: true })
   };
+  /* The service layer's market shape is keyed by `chainId`; this page and its
+     tabs have always called it `chain`. Both are present, because a missing
+     key here is not a cosmetic difference — it reads as UNSUPPORTED_CHAIN and
+     silently disables every button on the page. */
+  market.chainId = chain;
 
   const TABS = [
     { id: 'supply',    label: t('loan.tabSupply'),    icon: <IconTrend  width={14} height={14} /> },
@@ -1808,8 +3120,44 @@ export default function Loan() {
         </button>
       </motion.div>
 
-      {/* §27/§28 — read-only fallback, driven by the BFF's circuit breaker. */}
+      {/* §27/§28 — read-only fallback, driven by the BFF's circuit breaker.
+          Enforced in openExecution and confirmExecution, not only displayed. */}
       {readOnly && <ReadOnlyBanner t={t} />}
+
+      {/* §37 — nothing could be read. The page says so and offers a retry
+          instead of showing zeros, a spinner that never ends, or a cached
+          snapshot presented as if it were fresh. */}
+      {!loading && dataStatus === DATA_STATUS.UNAVAILABLE && venue && (
+        <UnavailableBanner failures={failures} onRetry={() => refresh({ force: true })} t={t} />
+      )}
+
+      {/* §15 — why a collateral toggle was refused, stated on the page. */}
+      {collateralRefusal && (
+        <motion.div
+          variants={riseIn} initial="hidden" animate="show"
+          data-testid="loan-collateral-refused"
+          data-code={collateralRefusal.code}
+          style={{
+            borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+            background: 'rgba(248,113,113,0.09)', border: '1px solid rgba(248,113,113,0.30)',
+          }}
+        >
+          <div className="row-between" style={{ gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: '#fca5a5' }}>
+              {t('loan.collateralRefusedTitle', { symbol: collateralRefusal.asset?.symbol })}
+            </span>
+            <button type="button" className="icon-btn" aria-label={t('common.close', { defaultValue: 'Close' })} onClick={() => setCollateralRefusal(null)}>✕</button>
+          </div>
+          <p style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: '4px 0 0' }}>
+            {t(`loan.error.${collateralRefusal.code}`, { defaultValue: collateralRefusal.reason })}
+            {collateralRefusal.healthFactorAfter != null && (
+              <span style={{ display: 'block', fontFamily: 'var(--font-mono)', marginTop: 3 }}>
+                {t('loan.healthFactorAfter')}: {collateralRefusal.healthFactorAfter.toFixed(2)} · {t('loan.liquidationPoint')}: 1.00
+              </span>
+            )}
+          </p>
+        </motion.div>
+      )}
 
       <AlertsPanel
         alerts={alerts}
@@ -1921,16 +3269,26 @@ export default function Loan() {
         })}
       </motion.div>
 
-      {/* Where the numbers come from — stated, not implied. */}
-      <motion.p
+      {/* Where the numbers come from — stated, not implied. §19 wants the age
+          of the data next to the data, so it ticks here rather than only
+          showing the clock time of the read. */}
+      <motion.div
         variants={riseIn} initial="hidden" animate="show"
-        className="faint" data-testid="loan-rate-source"
-        style={{ fontSize: 10.5, margin: '-6px 2px 10px', lineHeight: 1.7 }}
+        data-testid="loan-rate-source"
+        style={{ margin: '-6px 2px 10px' }}
       >
-        {venue
-          ? t('loan.rateSource', { chain: chainLabel(chain), at: readAt ? new Date(readAt).toLocaleTimeString() : '—' })
-          : t('loan.chainUnsupported', { chain: chainLabel(chain) })}
-      </motion.p>
+        <p className="faint" style={{ fontSize: 10.5, margin: 0, lineHeight: 1.7 }}>
+          {venue
+            ? t('loan.rateSource', { chain: chainLabel(chain), at: readAt ? new Date(readAt).toLocaleTimeString() : '—' })
+            : t('loan.chainUnsupported', { chain: chainLabel(chain) })}
+        </p>
+        {venue && (
+          <div className="row-between" style={{ gap: 8, marginTop: 4 }}>
+            <UpdatedAgo at={readAt} t={t} />
+            <DataStatusPill status={dataStatus} ageMs={snapshotAgeMs} t={t} testId="loan-rate-source-status" />
+          </div>
+        )}
+      </motion.div>
 
       {/* ── Tab body ───────────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
@@ -1946,7 +3304,10 @@ export default function Loan() {
         )}
         {tab === 'positions' && (
           <motion.div key="positions" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            <PositionsTab market={market} t={t} haptic={haptic} onExecute={openExecution} />
+            <PositionsTab
+              market={market} t={t} haptic={haptic} notify={notify}
+              onExecute={openExecution} onCollateral={toggleCollateral} history={historyRef.current}
+            />
           </motion.div>
         )}
       </AnimatePresence>

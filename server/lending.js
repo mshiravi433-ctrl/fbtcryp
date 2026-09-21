@@ -54,9 +54,18 @@ const RESERVE_SYMBOLS = Object.freeze({
   43114: ['USDT', 'USDC', 'WETH']
 });
 
-const POOL_ABI = [
+export const POOL_ABI = [
   'function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))',
-  'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)'
+  'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
+  'function getPriceOracle() view returns (address)'
+];
+/* The pool's OWN price oracle (§21). This is the price the protocol would use
+   to liquidate you, so it is the only price this BFF is allowed to call an
+   oracle price. Anything else is a reference and is labelled as one. */
+export const ORACLE_ABI = [
+  'function getAssetPrice(address asset) view returns (uint256)',
+  'function getAssetsPrices(address[] calldata assets) view returns (uint256[] calldata)',
+  'function BASE_CURRENCY_UNIT() view returns (uint256)'
 ];
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
@@ -70,6 +79,7 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 
 const poolIface = new Interface(POOL_ABI);
 const erc20Iface = new Interface(ERC20_ABI);
+const oracleIface = new Interface(ORACLE_ABI);
 const coder = AbiCoder.defaultAbiCoder();
 
 const isAddress = (v) => typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v);
@@ -190,21 +200,74 @@ const readHealthFactor = (raw) => {
   } catch { return null; }
 };
 
+/* Bit layout of the Aave V3 reserve configuration bitmap. This mirrors
+   RESERVE_CONFIG_BITS in src/lib/lending.js — the server cannot import that
+   file (it pulls the Vite chain registry into Node), so the two are kept in
+   step by `test/lending-bff-config-probe.test.js`, which decodes the same
+   bitmap through both and fails if they ever disagree. */
+export const RESERVE_CONFIG_BITS = Object.freeze({
+  ltvShift: 0n,
+  liquidationThresholdShift: 16n,
+  liquidationBonusShift: 32n,
+  decimalsShift: 48n,
+  activeShift: 56n,
+  frozenShift: 57n,
+  borrowingEnabledShift: 58n,
+  pausedShift: 60n,
+  borrowCapShift: 80n,
+  supplyCapShift: 116n,
+  capBits: 36n
+});
+
+const bitAt = (raw, shift) => ((raw >> shift) & 1n) === 1n;
+const fieldAt = (raw, shift, bits) => (raw >> shift) & ((1n << bits) - 1n);
+/** Aave's cap field: 0 means unlimited, so it is null here, never 0. */
+const capOrNull = (value) => (value > 0n ? Number(value) : null);
+
 /**
- * Decode an Aave reserve configuration bitmask: LTV / liquidation threshold /
- * liquidation bonus are bps stored in 16-bit slots (§6 wants exactly these).
+ * Decode the reserve configuration bitmap.
+ *
+ * A ZERO bitmap is not "0% LTV, active, no caps" — it is "this read produced
+ * nothing usable". Every derived value is then null and the status is
+ * `unknown`, so no caller can mistake a failed read for a reserve that is open
+ * and unlimited (§3/§37).
  */
-function decodeReserveConfig(configuration) {
-  const config = BigInt(configuration ?? 0);
-  const ltv = Number((config >> 0n) & 0xFFFFn) / 100;
-  const liquidationThreshold = Number((config >> 16n) & 0xFFFFn) / 100;
-  const liquidationBonus = Number((config >> 32n) & 0xFFFFn) / 100;
-  const frozen = ((config >> 57n) & 1n) === 1n;
-  const paused = ((config >> 60n) & 1n) === 1n;
+export function decodeReserveConfig(configuration) {
+  let raw;
+  try { raw = BigInt(configuration ?? 0); } catch { raw = 0n; }
+  const b = RESERVE_CONFIG_BITS;
+  const readable = raw !== 0n;
+  if (!readable) {
+    return {
+      readable: false, decimals: null, ltv: null, liquidationThreshold: null,
+      liquidationBonus: null, active: null, frozen: null, paused: null,
+      borrowingEnabled: null, supplyCapWhole: null, borrowCapWhole: null,
+      status: 'unknown'
+    };
+  }
+  const paused = bitAt(raw, b.pausedShift);
+  const frozen = bitAt(raw, b.frozenShift);
+  const ltvBps = Number(fieldAt(raw, b.ltvShift, 16n));
+  const thresholdBps = Number(fieldAt(raw, b.liquidationThresholdShift, 16n));
+  const bonusBps = Number(fieldAt(raw, b.liquidationBonusShift, 16n));
   return {
-    ltv: ltv > 0 ? ltv : null,
-    liquidationThreshold: liquidationThreshold > 0 ? liquidationThreshold : null,
-    liquidationBonus,
+    readable: true,
+    decimals: Number(fieldAt(raw, b.decimalsShift, 8n)),
+    /* bps → percent; a genuine 0 stays 0 rather than becoming null, because
+       "readable but zero" is a real (if unusual) protocol state. */
+    ltv: ltvBps / 100,
+    liquidationThreshold: thresholdBps / 100,
+    liquidationBonus: bonusBps / 100,
+    active: bitAt(raw, b.activeShift),
+    frozen,
+    paused,
+    borrowingEnabled: bitAt(raw, b.borrowingEnabledShift),
+    /* Whole tokens. Aave uses 0 to mean "no cap", so 0 is reported as null
+       (unlimited) rather than as a cap of zero tokens — which would read as
+       "nobody may supply this" and block a market that is in fact open. This
+       matches src/lib/lending.js exactly; the cross-check test pins it. */
+    supplyCapWhole: capOrNull(fieldAt(raw, b.supplyCapShift, b.capBits)),
+    borrowCapWhole: capOrNull(fieldAt(raw, b.borrowCapShift, b.capBits)),
     status: paused ? 'paused' : frozen ? 'frozen' : 'active'
   };
 }
@@ -212,12 +275,27 @@ function decodeReserveConfig(configuration) {
 export async function readReserve(chainId, token) {
   const pool = poolFor(chainId);
   if (!pool || !token) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
-  const res = await ethCall(chainId, pool, poolIface.encodeFunctionData('getReserveData', [token.address]));
+  const [res, decimalsCall] = await Promise.all([
+    ethCall(chainId, pool, poolIface.encodeFunctionData('getReserveData', [token.address])),
+    ethCall(chainId, token.address, erc20Iface.encodeFunctionData('decimals', []))
+  ]);
   if (!res.ok) return res;
   const decoded = poolIface.decodeFunctionResult('getReserveData', res.result);
   const data = decoded[0];
   const aToken = String(data.aTokenAddress || '');
   const listed = isAddress(aToken) && aToken !== ZERO;
+  const config = decodeReserveConfig(data.configuration);
+  /* §18 — the token contract is the authority on its own decimals. When the
+     reserve bitmap disagrees, that is reported rather than silently resolved:
+     a wrong decimal count turns a correct-looking amount into a 10^n error. */
+  let verifiedDecimals = null;
+  if (decimalsCall.ok) {
+    try {
+      verifiedDecimals = Number(erc20Iface.decodeFunctionResult('decimals', decimalsCall.result)[0]);
+      if (!Number.isInteger(verifiedDecimals) || verifiedDecimals < 0 || verifiedDecimals > 36) verifiedDecimals = null;
+    } catch { verifiedDecimals = null; }
+  }
+  const decimals = verifiedDecimals ?? config.decimals ?? (Number.isInteger(token.decimals) ? Number(token.decimals) : null);
   return {
     ok: true,
     listed,
@@ -228,7 +306,12 @@ export async function readReserve(chainId, token) {
     supplyApy: listed ? rayToApyPct(data.currentLiquidityRate) : null,
     borrowApy: listed ? rayToApyPct(data.currentVariableBorrowRate) : null,
     liquidityIndex: data.liquidityIndex.toString(),
-    ...decodeReserveConfig(data.configuration)
+    /* Spread first: `decimals` below is the RECONCILED value (token contract
+       wins over the bitmap, §18), and must not be clobbered by the raw one. */
+    ...config,
+    decimals,
+    decimalsSource: verifiedDecimals != null ? 'token-contract' : (config.decimals != null ? 'reserve-configuration' : 'registry'),
+    decimalsMatch: verifiedDecimals != null && config.decimals != null ? verifiedDecimals === config.decimals : null
   };
 }
 
@@ -266,29 +349,192 @@ async function readTokenBalances(chainId, wallet, token, reserve) {
   };
 }
 
-/* ── oracle (§21) — aggregated price with anomaly flagging ────────────────── */
+/* ── oracle (§21) — the PROTOCOL's own price feed, with a labelled reference ─ */
 
-export async function oraclePrices(chainId) {
+/**
+ * Read the price oracle the pool itself uses.
+ *
+ * This is the price that decides whether a position gets liquidated, so it is
+ * the only price this BFF reports as an oracle price. The chain of reads is:
+ * pool.getPriceOracle() → oracle.BASE_CURRENCY_UNIT() → oracle.getAssetPrice()
+ * per asset (batched through getAssetsPrices when the deployment supports it).
+ *
+ * A zero price is treated as MISSING, not as "$0": an asset the oracle has no
+ * feed for returns 0, and reporting that as a real price would value someone's
+ * collateral at nothing and tell them they are liquidatable (§21).
+ */
+export async function readProtocolOracle(chainId) {
+  const pool = poolFor(chainId);
   const tokens = chainTokens(chainId);
+  if (!pool) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
   if (!tokens.length) return { ok: false, code: 'NO_TOKENS' };
-  const ids = tokens.map((token) => token.coingeckoId).filter(Boolean);
-  if (!ids.length) return { ok: false, code: 'NO_PRICE_IDS' };
-  try {
-    const prices = await fetchSimplePrices(ids, 'usd');
-    const map = {};
-    let missing = 0;
-    for (const token of tokens) {
-      const price = prices?.[token.coingeckoId]?.usd;
-      if (Number.isFinite(price) && price > 0) map[token.symbol] = price;
-      else missing += 1;
-    }
-    breaker.report('oracle', true);
-    if (missing === tokens.length) return { ok: false, code: 'ORACLE_STALE' };
-    return { ok: true, prices: map, status: missing > 0 ? 'partial' : 'ok' };
-  } catch (error) {
-    breaker.report('oracle', false, String(error?.message || error).slice(0, 80));
-    return { ok: false, code: 'ORACLE_STALE' };
+
+  const oracleCall = await ethCall(chainId, pool, poolIface.encodeFunctionData('getPriceOracle', []));
+  if (!oracleCall.ok) {
+    breaker.report('oracle', false, oracleCall.code || 'ORACLE_READ_FAILED');
+    return { ok: false, code: oracleCall.code || 'ORACLE_READ_FAILED' };
   }
+  let oracleAddress = null;
+  try {
+    const decoded = poolIface.decodeFunctionResult('getPriceOracle', oracleCall.result);
+    oracleAddress = String(decoded[0] || '');
+  } catch { oracleAddress = ''; }
+  /* An RPC that answers every call with empty data (a captive portal, a
+     pruning node, a wrong endpoint) lands here. That is "no oracle", not
+     "oracle at 0x0". */
+  if (!isAddress(oracleAddress) || oracleAddress === ZERO) {
+    breaker.report('oracle', false, 'NO_ORACLE_ON_POOL');
+    return { ok: false, code: 'NO_ORACLE_ON_POOL' };
+  }
+
+  /* The base-currency scale is read, not assumed: 1e8 on the USD deployments,
+     but the oracle is the authority on its own unit. */
+  let baseUnit = 10n ** BigInt(BASE_DECIMALS);
+  let baseUnitRead = false;
+  const unitCall = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('BASE_CURRENCY_UNIT', []));
+  if (unitCall.ok) {
+    try {
+      const decoded = oracleIface.decodeFunctionResult('BASE_CURRENCY_UNIT', unitCall.result);
+      const value = BigInt(decoded[0] ?? 0);
+      if (value > 0n) { baseUnit = value; baseUnitRead = true; }
+    } catch { /* keep the documented default, flagged as unread below */ }
+  }
+
+  const addresses = tokens.map((token) => token.address);
+  /** symbol → base-currency integer, or null when the feed had nothing. */
+  const base = new Map(tokens.map((token) => [token.symbol, null]));
+
+  /* One batched call first; some deployments do not expose it, so fall back to
+     per-asset reads rather than reporting the whole oracle as down. */
+  let batched = false;
+  const batchCall = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('getAssetsPrices', [addresses]));
+  if (batchCall.ok) {
+    try {
+      const decoded = oracleIface.decodeFunctionResult('getAssetsPrices', batchCall.result);
+      const values = decoded[0];
+      if (Array.isArray(values) && values.length === addresses.length) {
+        tokens.forEach((token, i) => {
+          const value = BigInt(values[i] ?? 0);
+          if (value > 0n) base.set(token.symbol, value);
+        });
+        batched = true;
+      }
+    } catch { batched = false; }
+  }
+  if (!batched) {
+    const singles = await Promise.all(tokens.map(async (token) => {
+      const call = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('getAssetPrice', [token.address]));
+      if (!call.ok) return null;
+      try {
+        const decoded = oracleIface.decodeFunctionResult('getAssetPrice', call.result);
+        const value = BigInt(decoded[0] ?? 0);
+        return value > 0n ? value : null;
+      } catch { return null; }
+    }));
+    tokens.forEach((token, i) => { if (singles[i] != null) base.set(token.symbol, singles[i]); });
+  }
+
+  const priced = tokens.filter((token) => base.get(token.symbol) != null);
+  if (!priced.length) {
+    breaker.report('oracle', false, 'ORACLE_PRICE_UNAVAILABLE');
+    return { ok: false, code: 'ORACLE_PRICE_UNAVAILABLE', oracleAddress };
+  }
+  breaker.report('oracle', true);
+
+  const prices = {};
+  const pricesBase = {};
+  for (const token of priced) {
+    const value = base.get(token.symbol);
+    pricesBase[token.symbol] = value.toString();
+    prices[token.symbol] = Number(value) / Number(baseUnit);
+  }
+  return {
+    ok: true,
+    source: 'aave-oracle',
+    oracleAddress,
+    baseUnit: baseUnit.toString(),
+    baseUnitRead,
+    prices,
+    pricesBase,
+    missing: tokens.filter((token) => base.get(token.symbol) == null).map((token) => token.symbol),
+    status: priced.length === tokens.length ? 'ok' : 'partial',
+    readVia: batched ? 'getAssetsPrices' : 'getAssetPrice'
+  };
+}
+
+/** A third-party price used ONLY to flag a deviating protocol price (§21).
+    It is never returned as an oracle price, and its failure is not an oracle
+    failure — the on-chain read stands on its own without it (§32). */
+async function referencePrices(chainId) {
+  const tokens = chainTokens(chainId);
+  const ids = tokens.map((token) => token.coingeckoId).filter(Boolean);
+  if (!ids.length) return { ok: false, code: 'NO_PRICE_IDS', prices: {} };
+  try {
+    const raw = await fetchSimplePrices(ids, 'usd');
+    const prices = {};
+    for (const token of tokens) {
+      const value = raw?.[token.coingeckoId]?.usd;
+      if (Number.isFinite(value) && value > 0) prices[token.symbol] = value;
+    }
+    if (!Object.keys(prices).length) return { ok: false, code: 'REFERENCE_UNAVAILABLE', prices: {} };
+    return { ok: true, source: 'coingecko-reference', prices };
+  } catch (error) {
+    /* Deliberately NOT reported to the breaker as an oracle failure: this is a
+       convenience cross-check, and a CoinGecko outage must not flip lending
+       read-only when the protocol's own oracle is answering fine. */
+    return { ok: false, code: 'REFERENCE_UNAVAILABLE', detail: String(error?.message || error).slice(0, 80), prices: {} };
+  }
+}
+
+/** A protocol price that disagrees with the reference by this much is flagged
+    as an anomaly rather than silently used (§21). */
+const ORACLE_ANOMALY_RATIO = 0.1;
+
+/**
+ * The oracle view this BFF serves: the protocol's own prices, plus an
+ * explicitly-labelled third-party reference and any asset where the two
+ * disagree sharply.
+ *
+ * `prices` stays `{ SYMBOL: usdNumber }` because server/ci/sources.js already
+ * consumes that shape; the base-currency integers are alongside in
+ * `pricesBase` for any caller that must not round.
+ */
+export async function oraclePrices(chainId) {
+  const protocol = await readProtocolOracle(chainId);
+  const reference = await referencePrices(chainId);
+
+  if (!protocol.ok) {
+    return {
+      ok: false,
+      code: protocol.code,
+      source: 'aave-oracle',
+      /* The reference is still passed through — labelled as what it is — so a
+         caller can show "protocol oracle unavailable" next to an indicative
+         price instead of showing nothing at all. It is never promoted to being
+         the oracle price. */
+      reference: reference.ok ? reference : { ok: false, code: reference.code },
+      status: 'unavailable'
+    };
+  }
+
+  const anomalies = [];
+  if (reference.ok) {
+    for (const [symbol, usd] of Object.entries(protocol.prices)) {
+      const ref = reference.prices[symbol];
+      if (!Number.isFinite(ref) || ref <= 0) continue;
+      const deviation = Math.abs(usd - ref) / ref;
+      if (deviation > ORACLE_ANOMALY_RATIO) {
+        anomalies.push({ symbol, oracleUsd: usd, referenceUsd: ref, deviationPct: Math.round(deviation * 10000) / 100 });
+      }
+    }
+  }
+
+  return {
+    ...protocol,
+    reference: reference.ok ? reference : { ok: false, code: reference.code },
+    anomalies,
+    status: anomalies.length ? 'anomaly' : protocol.status
+  };
 }
 
 /* ── transaction builders — UNSIGNED by construction (§30) ────────────────── */
@@ -380,19 +626,35 @@ export function lendingRouter() {
           totalSupply: null,
           totalBorrow: null,
           availableLiquidity: null,
+          decimals: reserve.decimals,
           ltv: reserve.ltv,
           liquidationThreshold: reserve.liquidationThreshold,
           liquidationBonus: reserve.liquidationBonus,
+          borrowingEnabled: reserve.borrowingEnabled,
+          supplyCapWhole: reserve.supplyCapWhole,
+          borrowCapWhole: reserve.borrowCapWhole,
+          /* §21 — the protocol's own oracle price, and the integer base-currency
+             value behind it so a caller that must not round can use that. */
           oraclePrice: oracle.ok ? (oracle.prices[reserve.symbol] ?? null) : null,
+          oraclePriceBase: oracle.ok ? (oracle.pricesBase[reserve.symbol] ?? null) : null,
+          /* A third-party cross-check, labelled as one. Never the oracle price. */
+          referencePrice: oracle.reference?.ok ? (oracle.reference.prices[reserve.symbol] ?? null) : null,
+          anomaly: (oracle.anomalies || []).find((a) => a.symbol === reserve.symbol) ?? null,
           status: reserve.status
         }));
       return {
         data: { network: String(chainId), markets },
         meta: {
-          schema: 'fbt.lending-markets.v1',
+          schema: 'fbt.lending-markets.v2',
           dataStatus: reserves.some((r) => r.ok) ? 'live' : 'unavailable',
-          oracleStatus: oracle.ok ? oracle.status : oracle.code,
+          oracleStatus: oracle.ok ? oracle.status : 'unavailable',
+          oracleSource: oracle.ok ? oracle.source : null,
+          oracleAddress: oracle.ok ? oracle.oracleAddress : null,
+          oracleCode: oracle.ok ? null : oracle.code,
+          oracleMissing: oracle.ok ? oracle.missing : null,
+          referenceSource: oracle.reference?.ok ? oracle.reference.source : null,
           totals: 'unavailable-until-indexer',
+          readAt: Date.now(),
           circuit: breaker.state()
         }
       };
@@ -644,11 +906,23 @@ export function lendingRouter() {
       totalCollateralUsd: account.totalCollateralUsd,
       liquidationThresholdPct: account.liquidationThresholdPct
     });
-    const oracle = breaker.snapshot().failures.oracle ? { status: 'stale' } : { status: 'ok' };
-    const alerts = evaluateAlerts({ position: risk, oracle });
+    /* The oracle status is READ, not inferred from the circuit breaker: a
+       breaker with no oracle failures yet would otherwise report "ok" for an
+       oracle this process has never successfully reached (§3). */
+    const oracle = await oraclePrices(chainId);
+    const oracleView = oracle.ok
+      ? { status: oracle.status === 'anomaly' ? 'anomaly' : (oracle.missing?.length ? 'partial' : 'ok'), staleAssets: oracle.missing }
+      : { status: 'unavailable', code: oracle.code };
+    const alerts = evaluateAlerts({ position: risk, oracle: oracleView });
     return safeJson(res, {
       data: alerts,
-      meta: { schema: 'fbt.lending-alerts.v1', dataStatus: 'live', generatedAt: new Date().toISOString() }
+      meta: {
+        schema: 'fbt.lending-alerts.v2',
+        dataStatus: 'live',
+        oracleStatus: oracleView.status,
+        oracleCode: oracle.ok ? null : oracle.code,
+        generatedAt: new Date().toISOString()
+      }
     });
   });
 

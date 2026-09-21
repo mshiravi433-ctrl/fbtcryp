@@ -44,6 +44,7 @@ export class LendingProtocolAdapter {
   async buildBorrowTransaction() { throw NOT_IMPLEMENTED; }
   async buildRepayTransaction() { throw NOT_IMPLEMENTED; }
   async buildWithdrawTransaction() { throw NOT_IMPLEMENTED; }
+  async buildCollateralTransaction() { throw NOT_IMPLEMENTED; }
   async getHealthFactor() { throw NOT_IMPLEMENTED; }
   async getRewards() { throw NOT_IMPLEMENTED; }
 }
@@ -302,6 +303,19 @@ class AaveLendingAdapter extends LendingProtocolAdapter {
     const token = new Contract(asset.address, ERC20_MIN_ABI, null);
     const tx = await token.approve.populateTransaction(venue.pool, amountWei);
     return this._unsigned(token, tx, chainId);
+  }
+
+  /**
+   * §15 — the collateral-flag toggle, unsigned. It exists as a builder so the
+   * action can be SIMULATED like any other (§22) instead of being the one write
+   * on the Lending page that reaches the wallet un-proven — which matters most
+   * here, because turning collateral off is the only action that can make a
+   * healthy position liquidatable in a single signature.
+   */
+  async buildCollateralTransaction({ chainId, asset, useAsCollateral }) {
+    const pool = await this._poolContract(chainId, null);
+    const tx = await pool.setUserUseReserveAsCollateral.populateTransaction(asset.address, Boolean(useAsCollateral));
+    return this._unsigned(pool, tx, chainId);
   }
 
   _unsigned(contract, tx, chainId) {
@@ -893,6 +907,7 @@ class SolanaLendingAdapter extends LendingProtocolAdapter {
   async buildBorrowTransaction() { return this._noPool(); }
   async buildRepayTransaction() { return this._noPool(); }
   async buildWithdrawTransaction() { return this._noPool(); }
+  async buildCollateralTransaction() { return this._noPool(); }
   async getHealthFactor() { return this._noPool(); }
   async getRewards() { return this._noPool(); }
 }
