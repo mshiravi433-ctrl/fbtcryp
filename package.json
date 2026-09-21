@@ -41,6 +41,8 @@
     "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx test/farm-lido-panel.test.jsx test/defi-execution-guards.test.js test/morpho-defi.test.js test/lido-defi.test.js test/farm-rollout-gate.test.js test/farm-position-hub.test.jsx test/farm-public-mode.test.js test/farm-pool-execution.test.jsx test/farm-venue-rail.test.jsx test/farm-venue-pins.test.js",
     "test:farm:live": "node scripts/farm-defillama-smoke.mjs",
     "test:lab": "vitest run test/lab-screens.test.jsx test/lab-market-data.test.js",
+    "test:lending-service": "vitest run test/lending-service.test.js test/lending-bff-config-probe.test.js",
+    "test:lending": "npm run test:lending-service && node test/lending-engine-probe.mjs && node test/intent-ai/lending-adapters-probe.mjs && vite build -c test/vite.loan.mjs --logLevel error && node test/run-one-probe.mjs ./.out/loan/loan-execution-probe.js",
     "test:aave-base-fork": "node test/aave-base-fork-probe.mjs",
     "test:aave-arbitrum-fork": "node test/aave-arbitrum-fork-probe.mjs",
     "test:compound-base-fork": "node test/compound-base-fork-probe.mjs",
