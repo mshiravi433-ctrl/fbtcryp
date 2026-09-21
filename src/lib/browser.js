@@ -35,16 +35,40 @@ let BrowserPlugin = null;
 let pluginChecked = false;
 
 /** Lazy so the plugin is not pulled into the entry chunk. */
-async function getPlugin() {
-  if (pluginChecked) return BrowserPlugin;
+/*
+ * The plugin is kept in a MODULE VARIABLE and never returned.
+ *
+ * `registerPlugin` hands back a PROXY whose every property is a method —
+ * `then` included. A proxy that answers `then` is a thenable, so RETURNING it
+ * from an async function makes the promise machinery call `then` on it, which
+ * on a platform with no implementation throws «Browser.then() is not
+ * implemented on web» instead of resolving. Keeping the value out of every
+ * promise boundary is what makes a missing implementation a quiet `null`,
+ * which is what `openUrl` already knows how to handle.
+ */
+async function loadPlugin() {
+  if (pluginChecked) return;
   pluginChecked = true;
   try {
     const mod = await import('@capacitor/browser');
-    BrowserPlugin = mod.Browser ?? null;
+    BrowserPlugin = mod?.Browser ?? null;
   } catch {
     BrowserPlugin = null;
   }
-  return BrowserPlugin;
+}
+
+/**
+ * Load the plugin NOW, so a later `openUrl` does not have to.
+ *
+ * `@capacitor/browser` is a dynamic import (see above), which on a phone is a
+ * network round trip. Anything that opens a tab in response to a tap — the
+ * Solana wallet hand-off does — pays for that round trip before the tab
+ * appears unless the module is already in memory. Idempotent, and safe to call
+ * where there is no Capacitor at all: it resolves to null there.
+ */
+export async function preloadBrowserPlugin() {
+  await loadPlugin();
+  return BrowserPlugin !== null;
 }
 
 /**
@@ -94,7 +118,8 @@ export async function openUrl(url, { toolbarColor = '#0a0c12', allowSameTabFallb
     return true;
   }
 
-  const plugin = await getPlugin();
+  await loadPlugin();
+  const plugin = BrowserPlugin;
   if (plugin) {
     try {
       await plugin.open({ url, toolbarColor, presentationStyle: 'popover' });

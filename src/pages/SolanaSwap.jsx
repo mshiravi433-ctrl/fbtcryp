@@ -36,6 +36,7 @@ import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import SolanaConnectSheet from '../components/SolanaConnectSheet';
+import { warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 import { POINT_VALUES } from '../lib/ranks';
 
 /**
@@ -101,6 +102,12 @@ export default function SolanaSwap({ embedded = false }) {
   const [solSheetOpen, setSolSheetOpen] = useState(false);
   const [walletBalances, setWalletBalances] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+
+  /* Arm the connect request before anyone taps: the hand-off has to come out of
+     the tap to be allowed to open the wallet (see lib/solana/deeplink.js). */
+  useEffect(() => {
+    warmDeeplinkRequest();
+  }, []);
 
   const [fromToken, setFromToken] = useState(BASE_TOKENS[0]);
   const [toToken, setToToken] = useState(BASE_TOKENS[1]);

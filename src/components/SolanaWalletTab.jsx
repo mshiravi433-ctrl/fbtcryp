@@ -31,7 +31,7 @@ import {
   backpackBrowseLink,
   publicAppUrl
 } from '../lib/solanaWallet';
-import { consumeDeeplinkResult } from '../lib/solana/deeplink.js';
+import { consumeDeeplinkResult, warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 
 export default function SolanaWalletTab() {
   const { t } = useTranslation();
@@ -54,6 +54,20 @@ export default function SolanaWalletTab() {
       if (alive && ok) setMwaReady(true);
     });
     return () => { alive = false; };
+  }, []);
+
+  /*
+   * ARM THE CONNECT REQUEST WHILE THE USER IS STILL LOOKING AT THIS SCREEN.
+   *
+   * A wallet hand-off has to leave the finger that made it — Chrome only
+   * launches an app for an `intent://` produced by a user gesture, and iOS
+   * only hands a Universal Link over while the touch is fresh. Building a
+   * request needs a key pair, and building one needs the `tweetnacl` chunk,
+   * which is a network round trip on a phone. Doing that here, seconds before
+   * anyone taps «اتصال کیف پول», is what makes the tap itself instant.
+   */
+  useEffect(() => {
+    warmDeeplinkRequest();
   }, []);
 
   const refreshBalance = useCallback(async (addr = address) => {
