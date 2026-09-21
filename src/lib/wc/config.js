@@ -238,17 +238,23 @@ export function wcMetadata(view) {
     url,
     icons: [`${url}/icon-512.png`],
     /*
-     * `redirect.native` must ONLY be set inside the packaged app. Sent
-     * unconditionally, a wallet approving a WEB session on Android tries to
-     * bounce back to ir.fbtswap.app:// — an intent that either fails (no APK)
-     * or yanks the user out of the browser tab they were connecting from. On
-     * iOS there is no app scheme registered at all (no ios/ folder in this
-     * repo), so only the universal link applies there in every case.
+     * A redirect is an APP return address, not the dApp's identity URL.
+     *
+     * Giving a mobile-web session `redirect.universal = fbtswap.ir` makes
+     * Trust Wallet open that URL in Trust's own dApp browser after approval.
+     * The original Chrome/Safari tab (and its pending SignClient) remains in
+     * the background, while the user sees a second copy of FBT inside Trust
+     * asking them to connect again. That is the reported two-approval loop.
+     *
+     * The packaged Android app is different: its private scheme really does
+     * identify the initiating application, so advertise ONLY that route. Do
+     * not also advertise the website and leave the wallet two competing return
+     * targets. A web dApp has no app-to-app redirect; the user returns to the
+     * still-live browser tab and WalletConnect settles there through the relay.
      */
-    redirect: {
-      native: win?.Capacitor?.isNativePlatform?.() && !isIOS() ? 'ir.fbtswap.app://' : undefined,
-      universal: url
-    }
+    redirect: win?.Capacitor?.isNativePlatform?.() && !isIOS()
+      ? { native: 'ir.fbtswap.app://' }
+      : undefined
   };
 }
 

@@ -1468,18 +1468,22 @@ export default function run() {
     );
 
     /*
-     * WalletConnect: without metadata.redirect the wallet has no route back,
-     * so approval succeeds and the user is stranded in the wallet app.
+     * WalletConnect return routing: only the APK advertises its private
+     * scheme. A web universal redirect opens a second FBT copy inside Trust's
+     * browser and causes the two-approval loop.
      */
-    const wallet = read('src/context/WalletContext.jsx');
-    t('WalletConnect declares a redirect back to the app', /redirect:\s*\{/.test(wallet));
+    const walletConfig = read('src/lib/wc/config.js');
     const scheme = /<string name="custom_url_scheme">([^<]+)</.exec(
       read('android/app/src/main/res/values/strings.xml')
     )?.[1];
+    t('WalletConnect gates its native redirect on the packaged app',
+      /isNativePlatform/.test(walletConfig) && /redirect:/.test(walletConfig));
     t(
       `the WC redirect matches the manifest scheme (${scheme})`,
-      Boolean(scheme) && wallet.includes(`${scheme}://`)
+      Boolean(scheme) && walletConfig.includes(`${scheme}://`)
     );
+    t('mobile web does not advertise a universal return into the wallet browser',
+      !/\?\s*\{\s*native:[^}]+universal:/s.test(walletConfig));
 
     /*
      * The lock must never be able to strand its owner. A WalletConnect-only
