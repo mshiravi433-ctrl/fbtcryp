@@ -973,6 +973,51 @@ export default async function run() {
     }
   }
 
+  /* ══════════════════ the CI write script works offline ═════════════════
+   * The CI build step (`scripts/walletconnect-write-verify-file.mjs`) reads
+   * `WALLETCONNECT_VERIFY_CODE` (or `WALLETCONNECT_VERIFY_FILE`) and writes
+   * the public file. With no var it must exit 0 and ship the placeholder —
+   * local dev must still build. With a malformed var it must exit non-zero
+   * so a mis-pasted secret is caught at deploy time, not on a phone.
+   */
+  {
+    const { spawnSync } = await import('node:child_process');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const script = resolve(here, '..', 'scripts', 'walletconnect-write-verify-file.mjs');
+    const proc = spawnSync('node', [script], {
+      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: '', WALLETCONNECT_VERIFY_FILE: '' },
+      encoding: 'utf8'
+    });
+    t('the CI write script exits 0 when no code is set', proc.status === 0);
+    t('the CI write script prints the placeholder notice', /placeholder/.test(proc.stdout || proc.stderr));
+
+    const bad = spawnSync('node', [script], {
+      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: 'this-is-not-a-valid-code-!!' },
+      encoding: 'utf8'
+    });
+    t('the CI write script rejects a malformed code', bad.status === 1);
+
+    /* Use a long enough hex string that LOOKS_LIKE_CODE accepts, so the
+     * valid-path branch runs and the assertion checks the write happened. */
+    const good = spawnSync('node', [script], {
+      env: { ...process.env, WALLETCONNECT_VERIFY_CODE: 'a'.repeat(64) },
+      encoding: 'utf8'
+    });
+    t('the CI write script writes the file when a valid code is set', good.status === 0);
+    if (good.status === 0) {
+      const { readFileSync, existsSync } = await import('node:fs');
+      const file = resolve(here, '..', 'public', '.well-known', 'walletconnect.txt');
+      t('the file actually contains the supplied code',
+        existsSync(file) && readFileSync(file, 'utf8').trim() === 'a'.repeat(64));
+    }
+    /* Restore the placeholder so the source tree is unchanged. */
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(resolve(here, '..', 'public', '.well-known', 'walletconnect.txt'),
+      'PENDING_REOWN_VERIFICATION_fbtswap_ir_DO_NOT_SHIP\n', 'utf8');
+  }
+
   /* ══════════════════ 11. the health report ═══════════════════════════════ */
   {
     t('an empty allowlist allows every origin (the SDK rule)',

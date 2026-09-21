@@ -125,8 +125,105 @@ export const SPECULATIVE_VOCABULARY_PRESENT = false;
   };
 }
 
+/**
+ * SYNTHESISE THE WALLETCONNECT VERIFICATION FILE AT BUILD TIME.
+ * ---------------------------------------------------------------------------
+ * WalletConnect's Verify API reads `/.well-known/walletconnect.txt` on every
+ * origin in the allowlist and compares its bytes to the verification code
+ * the dashboard generated when the domain was added. Until the file is
+ * served with the right bytes, every wallet — Trust, MetaMask, Phantom,
+ * Coinbase — renders the connection request as UNVERIFIED.
+ *
+ * The Reown dashboard issues ONE code per project, and it only displays
+ * that code in the dashboard UI. Committing it to source is wrong (anyone
+ * who forks the repo gets the ability to claim the domain), and writing
+ * it via DNS TXT record is no longer supported by Reown as of 2026. So
+ * the file is synthesised from an env var at build time, and the
+ * placeholder ships in `public/.well-known/walletconnect.txt` so a build
+ * without the env var still produces a working artefact (just not a
+ * verified one).
+ *
+ * Two env vars are honoured, in order:
+ *   WALLETCONNECT_VERIFY_CODE   the verification code from dashboard.reown.com
+ *   WALLETCONNECT_VERIFY_FILE   the absolute path to a file containing it
+ * The file form is the GitHub-Actions-friendly variant: encode the code as
+ * a base64 single-line secret and let the workflow decode it on the runner.
+ *
+ * `validate=true` (the default) refuses the build if the value does not look
+ * like a Reown code. A guard here is the difference between "the next
+ * release ships a 200 KB blob because someone pasted the wrong secret" and
+ * a build that fails at the line that explains why.
+ *
+ * Belt-and-braces: the CI step `scripts/walletconnect-write-verify-file.mjs`
+ * does the same job before `vite build` runs (see `package.json#prebuild`).
+ * This plugin covers the case where a developer runs `vite build` directly
+ * — both write the file and both no-op on a missing env var, so neither
+ * one can shadow the other.
+ */
+function walletconnectVerifyFile() {
+  return {
+    name: 'walletconnect-verify-file',
+    apply: 'build',
+    enforce: 'pre',
+    async generateBundle() {
+      const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import('node:fs');
+      const { dirname, resolve } = await import('node:path');
+
+      const validate = process.env.WALLETCONNECT_VERIFY_VALIDATE !== 'false';
+      /* The shape Reown's codes take: a long base64ish string with `=` padding
+         and possibly `=` separating two parts (older codes). The same regex
+         `scripts/walletconnect-domain-verify.mjs` uses, so the runtime check
+         and the build-time check never disagree. */
+      const LOOKS_LIKE_CODE = /^[A-Za-z0-9._~-]{16,512}$/;
+
+      /* Prefer the raw code env var; fall back to the file form so secrets
+         managers that only support file mounts (Vault, SOPS) still work. */
+      let raw = (process.env.WALLETCONNECT_VERIFY_CODE || '').trim();
+      if (!raw) {
+        const file = (process.env.WALLETCONNECT_VERIFY_FILE || '').trim();
+        if (file && existsSync(file)) {
+          raw = readFileSync(file, 'utf8').replace(/^\uFEFF/, '').trim();
+        }
+      }
+
+      if (!raw) {
+        /* No code provided. Ship the placeholder. The build still succeeds
+           so local development and preview deploys work without a secret —
+           a wallet prompt from such a build reads UNVERIFIED but the rest
+           of the app functions. The warning is loud so it cannot be missed. */
+        console.warn(
+          '[walletconnect-verify-file] no WALLETCONNECT_VERIFY_CODE set; shipping placeholder.\n'
+          + '  Set the env var (or WALLETCONNECT_VERIFY_FILE) on the build host,\n'
+          + '  then redeploy, to make WalletConnect Verify API mark this dApp as verified.'
+        );
+        return;
+      }
+
+      /* Strip a `wc-verify: ` prefix that some docs copy-paste, and a
+         "verify code: " label that the dashboard sometimes appends. */
+      raw = raw.split(/\r?\n/)[0].trim();
+      raw = raw.replace(/^verify\s*code\s*[:：]\s*/i, '').replace(/^wc-verify:\s*/i, '').trim();
+
+      if (validate && !LOOKS_LIKE_CODE.test(raw)) {
+        throw new Error(
+          `WALLETCONNECT_VERIFY_CODE does not look like a Reown verification code (length=${raw.length}).\n`
+          + `  Copy the whole value from dashboard.reown.com → Domains → verify, not the row's label.`
+        );
+      }
+
+      const target = resolve(process.cwd(), 'public', '.well-known', 'walletconnect.txt');
+      mkdirSync(dirname(target), { recursive: true });
+      /* Exactly the code and one newline: the verifier compares the file's
+         bytes, and an editor that "helpfully" adds a second newline or a
+         UTF-8 BOM makes the comparison fail with no useful error. */
+      writeFileSync(target, `${raw}\n`, 'utf8');
+      console.log(`[walletconnect-verify-file] wrote ${target} (${raw.length} chars)`);
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary()],
+  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary(), walletconnectVerifyFile()],
 
   /*
    * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the

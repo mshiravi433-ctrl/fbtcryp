@@ -18,7 +18,7 @@
  * forever until somebody proves ownership, and several wallets turn it into a
  * caution screen the user reads as «این سایت ناشناس است» — the sentence in the
  * report. Registration happens in the Reown dashboard; the PROOF of ownership
- * is either a DNS TXT record or a file at a fixed path:
+ * is a file at a fixed path:
  *
  *     https://fbtswap.ir/.well-known/walletconnect.txt
  *
@@ -31,13 +31,17 @@
  *   1. dashboard.reown.com → your project → Domains → add `https://fbtswap.ir`
  *      (protocol included, NO trailing slash) → choose the file method.
  *   2. Copy the verification code the dashboard generates.
- *   3. node scripts/walletconnect-domain-verify.mjs --code=<code>
- *   4. Deploy, then node scripts/walletconnect-domain-verify.mjs --check
+ *   3a. LOCAL OR ONE-OFF: `node scripts/walletconnect-domain-verify.mjs --code=<code>`
+ *      then `npm run build` and deploy.
+ *   3b. CI / VERCEL: set `WALLETCONNECT_VERIFY_CODE=<code>` as an env var on
+ *       the build host. The prebuild hook
+ *       (`scripts/walletconnect-write-verify-file.mjs`) writes the file
+ *       automatically before Vite runs. Nothing else to do.
+ *   4. Deploy, then `node scripts/walletconnect-domain-verify.mjs --check`.
  *   5. Back in the dashboard, press Verify.
  *
- * The DNS alternative, if the file route is unavailable: a TXT record on the
- * root (`@`) whose value is the same code. Either proof is accepted; do not do
- * both with different codes.
+ * DNS TXT was removed from Reown's flow as of 2026. The file method is the
+ * ONLY supported proof.
  *
  * This script never fails a build unless it is asked to: `--strict` turns the
  * check into an exit code, and nothing else does.
