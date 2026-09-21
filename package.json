@@ -281,7 +281,9 @@
     "test:wallet-connection": "node test/walletconnect-stack-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/wallet-health-panel.test.jsx test/wallet-session-lease.test.jsx test/network-select.test.jsx",
     "test:solana-connect": "node test/solana-deeplink-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/solana-connect-sheet.test.jsx",
     "assetlinks:remote": "node scripts/assetlinks.mjs --remote",
-    "test:wallet-diagnostics": "node test/wallet-diagnostics-probe.mjs"
+    "test:wallet-diagnostics": "node test/wallet-diagnostics-probe.mjs",
+    "test:intent-protocol": "node test/protocol/run-all-protocol-tests.mjs",
+    "compile:intent-protocol": "node scripts/compile-intent-protocol.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

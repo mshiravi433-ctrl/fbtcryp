@@ -215,6 +215,7 @@ import { lendingRouter } from './lending.js';
 import { futuresRouter } from './futures/router.js';
 import { rewardsRouter } from './rewards/index.js';
 import { insuranceRouter } from './insurance/index.js';
+import { protocolRouter } from './protocolRoutes.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 /*
  * EXPLORE + SECURITY CENTER — the blockchain-intelligence and
@@ -5880,6 +5881,7 @@ app.use('/api/v1/rewards', rewardsRouter());
  * in v1 — real providers are wired after their docs/contracts are verified.
  */
 app.use('/api/insurance', insuranceRouter());
+app.use('/api', protocolRouter);
 
 /* ------------------------------ order watch -------------------------------- */
 /*
