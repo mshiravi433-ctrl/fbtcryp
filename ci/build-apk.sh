@@ -49,6 +49,38 @@ fail() {
 note() { printf '::notice title=%s::%s\n' "$1" "$2"; }
 
 # ---------------------------------------------------------------------------
+# gradle_why <logfile> — Gradle's own explanation, in one line.
+#
+# WHY THIS EXISTS. A `./gradlew` failure used to reach the annotation as
+# «Gradle failed while building the signed release APK» and nothing else, with
+# a pointer to «the run log» — which is a download link that a phone, or an
+# agent that only has the API, may not be able to open. So the one sentence
+# that names the cause stayed invisible, and a compile error as ordinary as a
+# narrowed access modifier read as a mystery for a whole round while the
+# website kept deploying and the phones got nothing.
+#
+# Gradle always prints «* What went wrong:» for a failed build; javac's own
+# message follows it. That block, plus the first javac/lint error line as a
+# fallback, is what belongs in the annotation.
+# ---------------------------------------------------------------------------
+gradle_why() {
+  local log="$1" went="" err=""
+  went="$(grep -A 8 'What went wrong' "$log" 2>/dev/null | head -10 | tr '\n' ' ' | tr -s ' ')"
+  # The compiler's OWN line, which is the sentence a person can act on. Gradle's
+  # «What went wrong» block often stops at «Compilation failed; see the compiler
+  # error output for details.» — it names the task and not the mistake, which is
+  # precisely how a one-word Java error stayed invisible here.
+  err="$(grep -m 6 -E '(^|[[:space:]])(e: |error:)|[A-Za-z0-9_/.-]+\.(java|kt|xml):[0-9]+: (error|warning):|Execution failed for task' "$log" 2>/dev/null \
+    | head -6 | tr '\n' ' ' | tr -s ' ')"
+  if [ -z "$went" ]; then
+    went="$err"
+  elif [ -n "$err" ] && [ "$err" != "$went" ]; then
+    went="$went → $err"
+  fi
+  printf '%s' "$went" | cut -c1-1200
+}
+
+# ---------------------------------------------------------------------------
 # Toolchain preflight.
 #
 # AGP 8.7 requires JDK 17 or newer and Gradle 8.9+. The checked-in workflow
@@ -514,12 +546,19 @@ MSG
   export ANDROID_KEYSTORE_PATH=/tmp/release.keystore
 
   echo "▸ building SIGNED release APK"
-  ./gradlew assembleRelease --no-daemon --stacktrace || fail <<MSG
+  # Capture the output so Gradle can be quoted VERBATIM in the annotation — the
+  # same treatment the debug branch below already had, and the branch CI
+  # actually takes (the keystore secrets are set).
+  if ! ./gradlew assembleRelease --no-daemon --stacktrace > /tmp/gradle-release.log 2>&1; then
+    tail -45 /tmp/gradle-release.log || true
+    WENT="$(gradle_why /tmp/gradle-release.log)"
+    fail <<MSG
 Gradle failed while building the signed release APK.
 The keystore itself was already verified as valid, so this is a build
-error rather than a signing/secret problem. Open the run log and look
-for the first line starting with "* What went wrong:".
+error rather than a signing/secret problem. Gradle's own words:
+${WENT:-not found in the tail above — read the log}
 MSG
+  fi
   BUILT="app/build/outputs/apk/release/app-release.apk"
   OUT="app-release.apk"
 
@@ -528,11 +567,15 @@ MSG
   # testing and what Iranian stores (Bazaar, Myket) accept, so we produce both
   # from the same signed configuration rather than making you choose.
   echo "▸ building SIGNED release AAB (this is what Google Play needs)"
-  ./gradlew bundleRelease --no-daemon --stacktrace || fail <<MSG
+  if ! ./gradlew bundleRelease --no-daemon --stacktrace > /tmp/gradle-bundle.log 2>&1; then
+    tail -45 /tmp/gradle-bundle.log || true
+    WENT="$(gradle_why /tmp/gradle-bundle.log)"
+    fail <<MSG
 Gradle failed while building the signed AAB, even though the release
-APK built successfully. Open the run log and look for the first line
-starting with "* What went wrong:".
+APK built successfully. Gradle's own words:
+${WENT:-not found in the tail above — read the log}
 MSG
+  fi
   BUNDLE="app/build/outputs/bundle/release/app-release.aab"
 else
   echo "▸ no keystore supplied — building debug APK"
@@ -543,7 +586,7 @@ else
   # annotation, in the summary a person actually reads on a phone.
   if ! ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/gradle-debug.log 2>&1; then
     tail -45 /tmp/gradle-debug.log || true
-    WENT="$(grep -A 4 'What went wrong' /tmp/gradle-debug.log 2>/dev/null | head -6 | tr '\n' ' ' | tr -s ' ')"
+    WENT="$(gradle_why /tmp/gradle-debug.log)"
     fail <<MSG
 Gradle failed while building the DEBUG APK (no keystore secret is set, so this is
 the unsigned variant). Gradle's own words:

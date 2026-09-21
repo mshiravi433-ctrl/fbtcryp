@@ -391,6 +391,62 @@ export default async function run() {
     t('the APK emits a real lifecycle resume signal to the pending pairing',
       /onResume\(\)[\s\S]*fbt:app-resume/.test(mainActivity));
 
+    /*
+     * ─── THE ONE JAVA MISTAKE THAT COSTS THE ENTIRE APK ──────────────────────
+     *
+     * The resume signal above was written as `protected void onResume()`,
+     * while Capacitor's `BridgeActivity` declares it `public` — and Java
+     * forbids an override from NARROWING visibility:
+     *
+     *     onResume() in MainActivity cannot override onResume() in BridgeActivity;
+     *     attempting to assign weaker access privileges; was public
+     *
+     * That is a COMPILE ERROR, so `assembleRelease` never produced a file
+     * again: the website kept deploying while every phone build died in
+     * Gradle, and no JavaScript test could see it. (`onCreate` and
+     * `onNewIntent` are narrower on purpose — their supertype declares them
+     * `protected`, so `protected` is correct there.)
+     *
+     * The table holds the supertype's real visibility. Where the Capacitor
+     * source is installed it is read back and the table is checked against it,
+     * so it cannot quietly rot into a comment that lies.
+     */
+    const superVisibility = {
+      onCreate: 'protected',
+      onNewIntent: 'protected',
+      onResume: 'public',
+      onStart: 'public',
+      onPause: 'public',
+      onStop: 'public',
+      onDestroy: 'public',
+      onSaveInstanceState: 'public'
+    };
+    const rank = { '': 0, private: -1, protected: 1, public: 2 };
+    const declaredIn = (src, name) => {
+      const m = new RegExp(
+        `(?:^|\\n)\\s*(?:(\\w+)\\s+)?void\\s+${name}\\s*\\(`, 'm'
+      ).exec(src);
+      return m ? (m[1] ?? '') : null;
+    };
+    const capacitorActivity = 'node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/BridgeActivity.java';
+    if (existsSync(capacitorActivity)) {
+      const superSrc = readFileSync(capacitorActivity, 'utf8');
+      const mismatched = Object.entries(superVisibility)
+        .filter(([name, vis]) => {
+          const found = declaredIn(superSrc, name);
+          return found !== null && found !== vis;
+        });
+      t('the lifecycle visibility table still matches Capacitor\'s own source',
+        mismatched.length === 0);
+    }
+    const tooNarrow = Object.entries(superVisibility)
+      .map(([name, vis]) => [name, declaredIn(mainActivity, name), vis])
+      .filter(([, ours, theirs]) => ours !== null && rank[ours] < rank[theirs]);
+    t('every MainActivity override is at least as visible as Capacitor\'s '
+      + '(a narrower one does not compile, and takes the APK down with it)'
+      + (tooNarrow.length ? ` — ${tooNarrow.map(([n, o, s]) => `${n}: ${o || 'package-private'} < ${s}`).join(', ')}` : ''),
+      tooNarrow.length === 0);
+
     /* window.open blocked (an OEM popup blocker) must not leave the tap dead:
        a synthetic anchor is still a navigation the gesture initiated. */
     const anchorSeen = [];
