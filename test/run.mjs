@@ -1814,6 +1814,22 @@ console.log('\n▸ proving zkSync + Scroll swap quotes via LI.FI…');
 }
 
 /*
+ * The five 2026-09 networks — Monad/Mantle/Scroll/zkSync/Robinhood — that
+ * became «سواپ Mon Mint Scr Zk Hood خراب شده». Same replay approach as zkscroll
+ * above but widened to ALL five chains AND the server allowlist, because the
+ * regression class on those chains is a chain id missing from one of the three
+ * lockstep lists (client LI.FI set, derived execution plan, server allowlist).
+ * A dropped id means the LI.FI route dies with CHAIN_UNSUPPORTED and the screen
+ * answered «مسیر بین این دو توکن پیدا نکردم» on chains whose liquidity is
+ * fine.
+ */
+console.log('\n▸ proving the five-chain LI.FI swap path (client + server)…');
+{
+  const { default: runFive } = await import('./fivechain-swap-probe.mjs');
+  report('five-network LI.FI swap path', await runFive());
+}
+
+/*
  * The wallet panel. Its geometry broke twice from class-cascade conflicts, so
  * the structure is now asserted rather than assumed.
  */

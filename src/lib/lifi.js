@@ -210,7 +210,15 @@ export async function getLifiQuote({
 
   const body = await res.json().catch(() => null);
   if (!res.ok || !body) {
-    const err = new Error(body?.error || `LIFI_HTTP_${res.status}`);
+    /*
+     * The server's own refusals are NAMED in the body and only make sense as
+     * themselves: `CHAIN_UNSUPPORTED` means the proxy allowlist dropped this
+     * chain, and classifyQuoteFailure must see exactly that code (a generic
+     * `LIFI_HTTP_400` is not a configuration error and would be reported as
+     * «مسیری بین این دو توکن وجود ندارد» on a chain whose liquidity is fine).
+     */
+    const named = body?.error && body.error !== 'UPSTREAM_FAILED' ? body.error : null;
+    const err = new Error(named || `LIFI_HTTP_${res.status}`);
     /* 502/504 from our proxy are transport problems, not "no route". */
     if (res.status >= 500 || res.status === 403 || res.status === 429) err.network = true;
     throw err;

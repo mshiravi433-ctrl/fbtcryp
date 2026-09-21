@@ -107,8 +107,15 @@
  * also hide the report that measures the remaining last mile.)
  */
 /* v15 held the pre-LI.FI fallback shell on returning web/PWA users. Keep the
- * deployment fix visible to both the website and the installed Android shell. */
-const SHELL = 'fbt-shell-v16';
+ * deployment fix visible to both the website and the installed Android shell.
+ *
+ * v16 -> v17: the five-network swap fix «سواپ Mon/Mnt/Scr/Zk/Hood خراب شده».
+ * The quote engine runs inside the shell bundle, so an install (or returning
+ * PWA) pinned to the v16 shell keeps running the old quote code — the exact
+ * mechanism behind "کار میکرد، دوباره خراب شد" on devices whose cache
+ * outlived earlier deploys: the new bundle was never named for them. Renaming
+ * evicts it on the site and on an in-place APK update alike. */
+const SHELL = 'fbt-shell-v17';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
