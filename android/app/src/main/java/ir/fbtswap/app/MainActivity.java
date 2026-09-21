@@ -116,6 +116,39 @@ public class MainActivity extends BridgeActivity {
     captureDeepLink(intent);
   }
 
+  /**
+   * Tell the live WalletConnect attempt that Android brought this Activity back
+   * to the foreground.
+   *
+   * `document.visibilitychange` is not reliable in every Android System
+   * WebView when another Activity (Trust Wallet, MetaMask, …) covers ours. The
+   * pending SignClient therefore used to keep the relay transport in its
+   * suspended state after approval and the popup waited forever. The web layer
+   * listens for this event and reopens the SAME Core relayer/subscriptions; it
+   * never creates another pairing.
+   */
+  @Override
+  protected void onResume() {
+    super.onResume();
+    Bridge bridge = getBridge();
+    WebView webView = bridge == null ? null : bridge.getWebView();
+    if (webView == null) return;
+    webView.post(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          webView.evaluateJavascript(
+            "window.dispatchEvent(new Event('fbt:app-resume'));",
+            null
+          );
+        } catch (Exception e) {
+          /* The first onResume can precede page boot; a pairing does not exist
+             then, and every later app return emits the event again. */
+        }
+      }
+    });
+  }
+
   /** The scheme the manifest registered for wallet returns. */
   private String deepLinkScheme() {
     try {
@@ -279,10 +312,14 @@ public class MainActivity extends BridgeActivity {
   /**
    * WalletConnect's native Android last metre.
    *
-   * Try the protocol URI first (`wc:topic@2?...`), as recommended for native
-   * Android dapps. Some wallets register only their branded scheme, so the
-   * second attempt builds `trust://wc?uri=...` / `metamask://wc?uri=...`
-   * directly with Uri.Builder. Neither path uses an HTTPS redirector.
+   * Open the selected wallet's branded URI first:
+   * `trust://wc?uri=...` / `metamask://wc?uri=...`. A raw `wc:` URI is a
+   * generic pairing intent; Trust can route it through its intermediate
+   * “continue connecting” surface and make the same proposal look like it
+   * needs a second approval. The branded route goes directly to that wallet's
+   * WalletConnect handler. Raw `wc:` remains a package-scoped fallback for
+   * wallet builds that only register the protocol URI. Neither path uses an
+   * HTTPS redirector.
    */
   private static final class WalletLink {
     private static final Pattern PAIRING_URI = Pattern.compile(
@@ -304,16 +341,16 @@ public class MainActivity extends BridgeActivity {
       final String walletScheme = schemeForPackage(packageName);
       if (walletScheme == null) return false;
 
-      Intent protocolIntent = walletIntent(Uri.parse(pairingUri), packageName);
-      if (canOpen(protocolIntent)) return launch(protocolIntent);
-
       Uri nativeUri = new Uri.Builder()
         .scheme(walletScheme)
         .authority("wc")
         .appendQueryParameter("uri", pairingUri)
         .build();
       Intent nativeIntent = walletIntent(nativeUri, packageName);
-      return canOpen(nativeIntent) && launch(nativeIntent);
+      if (canOpen(nativeIntent)) return launch(nativeIntent);
+
+      Intent protocolIntent = walletIntent(Uri.parse(pairingUri), packageName);
+      return canOpen(protocolIntent) && launch(protocolIntent);
     }
 
     private Intent walletIntent(Uri uri, String packageName) {

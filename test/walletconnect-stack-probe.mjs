@@ -64,7 +64,7 @@ import {
   wcMetadata,
   withTimeout
 } from '../src/lib/wc/index.js';
-import { createWcSession } from '../src/lib/wc/session.js';
+import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
 import {
   TRACE_STORAGE_KEY,
@@ -383,6 +383,13 @@ export default async function run() {
     });
     t('the APK hands the raw pairing URI to the Java bridge', okCap && bridgeCalls[0][0] === URI);
     t('the APK scopes the intent to one package', bridgeCalls[0][1] === 'com.wallet.crypto.trustapp');
+    const mainActivity = readFileSync('android/app/src/main/java/ir/fbtswap/app/MainActivity.java', 'utf8');
+    const nativeLaunch = mainActivity.indexOf('if (canOpen(nativeIntent)) return launch(nativeIntent);');
+    const protocolLaunch = mainActivity.indexOf('return canOpen(protocolIntent) && launch(protocolIntent);');
+    t('the APK tries the selected wallet branded URI before generic wc:',
+      nativeLaunch >= 0 && protocolLaunch > nativeLaunch);
+    t('the APK emits a real lifecycle resume signal to the pending pairing',
+      /onResume\(\)[\s\S]*fbt:app-resume/.test(mainActivity));
 
     /* window.open blocked (an OEM popup blocker) must not leave the tap dead:
        a synthetic anchor is still a navigation the gesture initiated. */
@@ -826,6 +833,15 @@ export default async function run() {
     })());
     t('redirect.native is only ever set inside the packaged app',
       meta?.redirect?.native === undefined || meta.redirect.native === 'ir.fbtswap.app://');
+
+    let transportOpens = 0;
+    const resumable = {
+      signer: { client: { core: { relayer: { transportOpen: async () => { transportOpens += 1; } } } } }
+    };
+    t('foreground recovery reopens the existing SignClient relayer',
+      (await wakeWcTransport(resumable)) === true && transportOpens === 1);
+    t('foreground recovery is a no-op for an unknown provider shape',
+      (await wakeWcTransport({})) === false);
   }
 
   /* ══════ 10b. the identity the wallet is handed (Verify API mismatch) ═════
@@ -864,14 +880,16 @@ export default async function run() {
     const previewMeta = wcMetadata(page('https://5173-abc123.e2b.app'));
     t('the declared icon is on the declared origin, so a wallet can fetch it',
       previewMeta.icons[0] === 'https://5173-abc123.e2b.app/icon-512.png');
-    t('the redirect target is the same origin that was declared',
-      previewMeta.redirect.universal === previewMeta.url);
+    t('a browser page advertises no app redirect (avoids opening FBT inside Trust)',
+      previewMeta.redirect === undefined);
     t('a browser page never advertises the APK scheme',
-      previewMeta.redirect.native === undefined);
-    t('the packaged app advertises its scheme and its public origin',
+      previewMeta.redirect?.native === undefined);
+    t('the packaged app advertises only its native return scheme',
       (() => {
         const m = wcMetadata(page('https://localhost', { Capacitor: { isNativePlatform: () => true } }));
-        return m.redirect.native === 'ir.fbtswap.app://' && m.url === canonical;
+        return m.redirect?.native === 'ir.fbtswap.app://'
+          && m.redirect?.universal === undefined
+          && m.url === canonical;
       })());
 
     /* ─── the report's own evidence ───────────────────────────────────────── */

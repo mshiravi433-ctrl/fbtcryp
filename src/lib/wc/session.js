@@ -58,24 +58,91 @@ const HANDOFF_EVENT = Object.freeze({
  *
  * @returns {() => void} the unsubscribe.
  */
-function pauseOnHidden(bound, view) {
+export async function wakeWcTransport(instance) {
+  /*
+   * Android freezes the WebView while a wallet is in front. The wallet can
+   * publish its approval during that freeze, after Chromium has suspended the
+   * relay socket. Merely resuming the timeout does not resubscribe SignClient,
+   * so the approval remains in relay history and `provider.connect()` waits
+   * forever.
+   *
+   * Every supported WalletConnect v2 provider reaches the same Core Relayer,
+   * although SDK patch releases expose it through slightly different object
+   * paths. `transportOpen()` is idempotent in Core: when already connected it
+   * is a no-op; after Android suspended it, it opens and restores subscriptions
+   * so the queued proposal response is delivered to the ORIGINAL connect
+   * promise. We deliberately never call connect() again — that would create a
+   * second proposal and a second approval screen.
+   */
+  const candidates = [
+    instance?.signer?.client?.core?.relayer,
+    instance?.signer?.core?.relayer,
+    instance?.client?.core?.relayer,
+    instance?.core?.relayer
+  ].filter(Boolean);
+  const relayer = candidates.find((item, index) => candidates.indexOf(item) === index);
+  if (!relayer || typeof relayer.transportOpen !== 'function') return false;
+  try {
+    await withTimeout(
+      Promise.resolve(relayer.transportOpen()),
+      TIMEOUT.initLast,
+      'WC_FOREGROUND_RELAY_TIMEOUT'
+    );
+    wcEvent('pairing_relay_woke');
+    return true;
+  } catch {
+    /* The SDK may report "already open" during a focus/visibility double-fire.
+       The live connect promise remains authoritative, so never tear it down. */
+    wcEvent('pairing_relay_wake_failed');
+    return false;
+  }
+}
+
+function pauseOnHidden(bound, view, onForeground) {
   const win = view ?? (typeof window !== 'undefined' ? window : null);
   const doc = win?.document;
   if (!doc || typeof doc.addEventListener !== 'function') return () => {};
+  let lastWake = 0;
+  const wake = () => {
+    const now = Date.now();
+    /* Android commonly emits onResume, visibilitychange and focus together. */
+    if (now - lastWake < 500) return;
+    lastWake = now;
+    try { void onForeground?.(); } catch { /* advisory recovery only */ }
+  };
   const onVisibility = () => {
     try {
       if (doc.visibilityState === 'hidden') {
         if (bound.pause()) wcEvent('connect_paused');
-      } else if (bound.resume()) {
-        wcEvent('connect_resumed');
+      } else {
+        if (bound.resume()) wcEvent('connect_resumed');
+        wake();
       }
     } catch {
       /* a clock that cannot be paused is still a clock */
     }
   };
+  const onFocus = () => {
+    if (doc.visibilityState !== 'hidden') wake();
+  };
+  const onNativeResume = () => {
+    /* Do not consult visibilityState here: this event exists precisely because
+       some System WebViews leave that value stale after Activity.onResume(). */
+    try { if (bound.resume()) wcEvent('connect_resumed'); } catch { /* noop */ }
+    wake();
+  };
   if (doc.visibilityState === 'hidden') onVisibility();
   doc.addEventListener('visibilitychange', onVisibility);
-  return () => doc.removeEventListener('visibilitychange', onVisibility);
+  win.addEventListener?.('focus', onFocus);
+  /* MainActivity emits this from the real Android lifecycle. WebView versions
+     do not all update document.visibilityState when an external Activity
+     covers them, so this signal is required rather than merely defensive. */
+  win.addEventListener?.('fbt:app-resume', onNativeResume);
+  return () => {
+    doc.removeEventListener('visibilitychange', onVisibility);
+    win.removeEventListener?.('focus', onFocus);
+    win.removeEventListener?.('fbt:app-resume', onNativeResume);
+  };
 }
 
 /**
@@ -408,7 +475,8 @@ export function createWcSession({
       settleConnect = (code = 'WC_USER_CANCELLED') => bound.cancel(code);
       const stopVisibilityPause = pauseOnHidden(
         bound,
-        typeof window !== 'undefined' ? window : null
+        typeof window !== 'undefined' ? window : null,
+        () => wakeWcTransport(instance)
       );
 
       /* A HAND-OFF IS NOT A NETWORK WAIT. From the moment the pairing leaves
