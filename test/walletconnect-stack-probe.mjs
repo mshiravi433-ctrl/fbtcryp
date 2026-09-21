@@ -43,6 +43,7 @@ import {
   parseChainId,
   purgeConnectionKeys,
   purgeEmbeddedWalletKeys,
+  purgeStaleProjectKeys,
   repairPairingInLink,
   repairPairingUri,
   storageFacts,
@@ -64,6 +65,7 @@ import {
   wcMetadata,
   WC_ALLOWED_ORIGINS,
   WC_ANDROID_APP_ID,
+  WC_PROJECT_ID,
   withTimeout,
   attestationUrl,
   decodeAttestation,
@@ -717,6 +719,47 @@ export default async function run() {
     t('the version-check key survives the purge', store.has('@appkit/latest_version'));
     t('an empty store has no session', !hasStoredSession({ length: 0, key: () => null, getItem: () => null }));
 
+    /* ── the 2026-09-21 migration: another project's sessions are wiped once ── */
+    {
+      const mk = (entries) => {
+        const s = new Map(entries);
+        return {
+          get length() { return s.size; },
+          key: (i) => Array.from(s.keys())[i] ?? null,
+          getItem: (k) => (s.has(k) ? s.get(k) : null),
+          removeItem: (k) => s.delete(k),
+          setItem: (k, v) => s.set(k, v),
+          _map: s
+        };
+      };
+      const OLD_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
+      const NEW_ID = '8e36eccabebf5a4567f4e974fafd6b20';
+
+      /* A session paired under the EMPTY-REGISTRY project: its auth key names
+         that project, and the migration must wipe the whole connection state,
+         because restoring it would keep serving an unverified attestation. */
+      const stale = mk([
+        [`wc@2:relay-auth:${OLD_ID}`, '{}'],
+        ['wc@2:client:0.3//session', JSON.stringify([{ topic: 'stale' }])],
+        ['WALLETCONNECT_DEEPLINK_CHOICE', 'trust'],
+        ['fbt:vault', 'keep-me']
+      ]);
+      t('another project on disk purges the connection state once',
+        purgeStaleProjectKeys(stale, NEW_ID) === 3);
+      t('…the stale session blob is gone', !stale._map.has('wc@2:client:0.3//session'));
+      t('…the deep-link choice goes with it', !stale._map.has('WALLETCONNECT_DEEPLINK_CHOICE'));
+      t('…and nothing the vault owns is touched', stale._map.has('fbt:vault'));
+      t('…a second run is a no-op', purgeStaleProjectKeys(stale, NEW_ID) === 0);
+
+      /* The project this build ships: its own auth key is NOT stale. */
+      const own = mk([
+        [`wc@2:relay-auth:${NEW_ID}`, '{}'],
+        ['wc@2:client:0.3//session', JSON.stringify([{ topic: 'own' }])]
+      ]);
+      t('this build\'s own project is left alone',
+        purgeStaleProjectKeys(own, NEW_ID) === 0 && own._map.has('wc@2:client:0.3//session'));
+    }
+
     const facts = storageFacts(fakeStorage(new Map([
       ['@appkit/recent_wallet', 'trust'],
       ['@appkit-wallet/EMAIL_LOGIN_USED_KEY', 'true']
@@ -996,8 +1039,11 @@ export default async function run() {
      */
     t('the canonical bare domain is on the allowlist',
       WC_ALLOWED_ORIGINS.includes('https://fbtswap.ir'));
-    t('the www variant is on the allowlist — Trust Wallet warns otherwise',
-      WC_ALLOWED_ORIGINS.includes('https://www.fbtswap.ir'));
+    /* www stays OUT: production 301s www.fbtswap.ir to the canonical host, so
+       an attestation can never carry www — and the project's registry does
+       not contain it. A page that ever served www would read unverified. */
+    t('www is not an origin the attestation can name, so it is not declared',
+      !WC_ALLOWED_ORIGINS.includes('https://www.fbtswap.ir'));
     t('the packaged APK WebView origin is on the allowlist',
       WC_ALLOWED_ORIGINS.includes('https://localhost'));
     t('no allowlist entry names a retired domain',
@@ -1777,7 +1823,7 @@ export default async function run() {
     t('the wallet-facing URL is never the runtime origin',
       !/url:\s*window\.location\.origin/.test(ctx));
     t('the project id is not duplicated into the components',
-      !/5997d5aee8bb42f43ddec4b1a5f94eb1/.test(sheet + panel));
+      !/5997d5aee8bb42f43ddec4b1a5f94eb1|8e36eccabebf5a4567f4e974fafd6b20/.test(sheet + panel));
     t('the sheet never opens a wallet with _self or _top',
       !/open\([^)]*'_(self|top)'/.test(sheet));
     t('the stack does not import React', (() => {
@@ -1993,8 +2039,8 @@ export default async function run() {
     t('AppKit still reads an empty list as allow-all',
       isOriginAllowed('https://fbtswap.ir', []) === true);
     t('the dashboard link is the project the code ships',
-      reownDashboardUrl('5997d5aee8bb42f43ddec4b1a5f94eb1')
-        === 'https://dashboard.reown.com/project/5997d5aee8bb42f43ddec4b1a5f94eb1');
+      reownDashboardUrl(WC_PROJECT_ID)
+        === 'https://dashboard.reown.com/project/8e36eccabebf5a4567f4e974fafd6b20');
 
     /* ── warm-up: the five-second budget is a network budget ─────────────── */
     {

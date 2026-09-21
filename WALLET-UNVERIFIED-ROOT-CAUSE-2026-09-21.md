@@ -163,3 +163,19 @@ npm run walletconnect:check
 ## ۸. درس
 
 یک بلاگِ ۲۰۲۵ را به‌جای کدِ SDK مبنا گرفتیم، و بعد مستنداتی نوشتیم که قدمِ لازم را صریحاً «نیاز نیست» اعلام کرد. کدِ SDK (که در بالا نقل شد) و مستنداتِ امروزِ Reown هر دو می‌گویند ثبت دامنه لازم است؛ اندازه‌گیریِ allowlist پروژه‌ها همین را نشان می‌دهد. از این به بعد، هر ادعایی دربارهٔ Verify باید یا به کد SDK ارجاع بدهد یا به یک اندازه‌گیری — مثل این سند.
+
+---
+
+## ۹. پاسخ نهایی (۲۰۲۶-۰۹-۲۱، بعد از این ویرایش)
+
+قدمِ دستیِ داشبورد دیگر لازم **نیست** — چون پروژهٔ قدیمی از قبل ثبت است و کد به همان برمی‌گردد:
+
+| اقدام | جایی که شد |
+|---|---|
+| `WC_PROJECT_ID` به **`8e36eccabebf5a4567f4e974fafd6b20`** برگشت — همان پروژه‌ای که رجیستری‌اش (از اندازه‌گیریِ بخش ۲) دقیقاً `fbtswap.ir` + `https://fbtswap.ir` + `https://localhost` است | `src/lib/wc/config.js` |
+| allowlist دقیقاً به همان دو origin منطبق شد که SDK می‌فرستد: `https://fbtswap.ir` (prod؛ `www.` با 301 به آن می‌افتد) و `https://localhost` (حالت local). `http://localhost` حذف شد — originِ واقعیِ مرورگر HTTPS است | `src/lib/wc/config.js` |
+| **نوسازی خودکارِ یک‌بار:** نشست‌هایی که زیر پروژهٔ خالی (`5997…`) جفت شده‌اند، attestation قابل‌تأییدی ندارند؛ در شروعِ بعدیِ اپ، کلید `wc@2:relay-auth:5997…` شناسایی و کل وضعیت اتصالِ قدیمی پاک می‌شود تا کاربر بدون هیچ قدمِ دستی، در بارِ بعد **جفت‌شدگیِ تازه و تأییدشده** ببیند (نه «وصل‌شدنِ قدیمیِ بی‌نام») | `src/lib/wc/storage.js` (`purgeStaleProjectKeys`) + `src/context/WalletContext.jsx` (رویداد `stale_project_purged`) |
+| تست‌ها | `node test/walletconnect-stack-probe.mjs` → **۳۸۷/۳۸۷**؛ `node test/wallet-diagnostics-probe.mjs` → **۱۵۴/۱۵۴**؛ vitest (wallet-health-panel + solana-connect-sheet + wallet-session-lease) → سبز؛ `npm run build` → موفق |
+| پروژۀ جدید `5997…` | می‌ماند و می‌تواند بعداً (اگر خواستید) از داشبورد رجیستری بگیرد؛ کدی به آن وابسته نیست. رجیستری هر لحظه: `npm run walletconnect:check` |
+
+**پاسخِ گشودنی‌ها:** (۱) هشدار unverified → برطرف؛ dApp حالا زیر projectId ای است که origin صفحه‌اش ثبت است و هر propose، JWT ای با `isVerified=true` می‌گیرد. (۲) «صفحهٔ تأیید اصلاً باز نمی‌شود» → همان نشستِ بی‌attestation قدیمی بود که بعضی والت‌ها promptِ امضای آن را می‌بلعند؛ با پاک‌شدن خودکار و جفت‌شدگیِ تازه، مسیر امضا به حالت عادی می‌رسد. (۳) Solana deep link → کد، رمزنگاری (seal `nacl.box.after` = tweetnacl 1.0.3) و زیرساختِ والت‌ها (app links/assetlinks Phantom, Solflare, Backpack — هر سه `handle_all_urls` روی پکیجی که کد می‌فرستد) همه سنجیده و درست هستند؛ ابزارِ اندازه‌گیریِ زندهٔ هاپ‌های سمت والت: `npm run wallet:deeplink:check` (خروجی `BROKEN/OK/UNMEASURED`).

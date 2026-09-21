@@ -115,13 +115,15 @@ export {
   DEEPLINK_CHOICE_KEY,
   EMBEDDED_WALLET_PREFIX,
   LEGACY_EMBEDDED_MARKER_KEY,
+  RELAY_AUTH_PREFIX,
   WC_PREFIX,
   hasStoredSession,
   isConnectionKey,
   listConnectionKeys,
   listEmbeddedWalletKeys,
   purgeConnectionKeys,
-  purgeEmbeddedWalletKeys
+  purgeEmbeddedWalletKeys,
+  purgeStaleProjectKeys
 } from './storage.js';
 
 export {

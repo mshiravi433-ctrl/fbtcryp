@@ -136,7 +136,11 @@ export async function run() {
         return !/export function wcMetadata/.test(src) || file === 'config.js';
       }));
     t('the project id is a source constant, not an env read',
-      WC_PROJECT_ID === '5997d5aee8bb42f43ddec4b1a5f94eb1'
+      /* 2026-09-21: the id moved BACK to the project whose domain registry is
+         complete — `5997d5aee8bb42f43ddec4b1a5f94eb1` answers
+         {"allowedOrigins":[]} on the public origins endpoint, which is the
+         server-side cause of «Cannot verify» in every wallet. */
+      WC_PROJECT_ID === '8e36eccabebf5a4567f4e974fafd6b20'
         && !/VITE_WALLETCONNECT_PROJECT_ID/.test(readFileSync('src/lib/wc/config.js', 'utf8').replace(/^\s*\*.*$/gm, '')));
     t('the browser origin is the identity on a public https page',
       walletIdentityUrl(fakeWindow({ origin: 'https://fbtswap.ir' })) === 'https://fbtswap.ir'
@@ -153,9 +157,12 @@ export async function run() {
     t('metadata carries a same-origin icon',
       wcMetadata(fakeWindow({ origin: 'https://fbtswap.ir' })).icons[0] === 'https://fbtswap.ir/icon-512.png');
     t('every declared origin is a scheme-qualified public origin',
-      WC_ALLOWED_ORIGINS.length === 3
+      /* Two entries, in step with the live registry of WC_PROJECT_ID:
+         fbtswap.ir (plus its scheme-less spelling) and https://localhost.
+         www is not an origin the attestation can name — it 301s to the
+         canonical host in production. */
+      WC_ALLOWED_ORIGINS.length === 2
         && WC_ALLOWED_ORIGINS.includes('https://fbtswap.ir')
-        && WC_ALLOWED_ORIGINS.includes('https://www.fbtswap.ir')
         && WC_ALLOWED_ORIGINS.includes('https://localhost'));
     const sdk = sdkConfigFacts({ projectId: WC_PROJECT_ID });
     t('the shipped configuration passes its own SDK check', sdk.ok === true);
@@ -233,7 +240,9 @@ export async function run() {
 
   /* ══════════════════ 3. the engine, measured end to end ══════════════════ */
   {
-    const registryBody = { allowedOrigins: ['https://fbtswap.ir', 'https://www.fbtswap.ir'] };
+    /* The registry of the project the code actually ships with, as measured
+       from the public origins endpoint on 2026-09-21. */
+    const registryBody = { allowedOrigins: ['fbtswap.ir', 'https://fbtswap.ir', 'https://localhost'] };
     const report = await collectWalletConnectDiagnosis({
       origin: 'https://fbtswap.ir',
       projectId: WC_PROJECT_ID,
@@ -261,8 +270,10 @@ export async function run() {
     }
     t('the diagnostic prints the verdict itself', lines.some((line) => line.includes('OK')));
 
-    /* The production state this repository was actually in on 2026-09-21: a
-       project with NO domain in its registry. */
+    /* The production state of 2026-09-17…21: the project the code had moved
+       to (`5997d5aee8bb42f43ddec4b1a5f94eb1`) answered with NO domain in its
+       registry — the server-side cause of «Cannot verify» that the project-id
+       move above fixes. */
     const empty = await collectWalletConnectDiagnosis({
       origin: 'https://fbtswap.ir',
       projectId: WC_PROJECT_ID,
@@ -295,13 +306,13 @@ export async function run() {
     t('the packaged app declares the canonical origin, not localhost',
       packaged.metadata.url === 'https://fbtswap.ir' && packaged.originMatch.matches === false);
     t('the packaged app is not reported as an origin mismatch', packaged.diagnosis.code === WC_DIAGNOSIS.OK);
-    t('www is measured against its own registry entry',
+    t('a page that ever ran on www would read unverified',
       (await collectWalletConnectDiagnosis({
         origin: 'https://www.fbtswap.ir',
         projectId: WC_PROJECT_ID,
-        /* A page served from www declares www — the registry entry for the bare
-           host does not cover it, which is the whole reason both must be on the
-           dashboard. */
+        /* A page served from www declares www — the registry entries for the
+           bare host do not cover it. That is why production 301s www to the
+           canonical host and why www stays out of WC_ALLOWED_ORIGINS. */
         win: { location: { origin: 'https://www.fbtswap.ir' }, Capacitor: { isNativePlatform: () => false } },
         fetchImpl: fakeFetch({
           'https://api.web3modal.org/appkit/v1/config': { body: {} },

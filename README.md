@@ -298,10 +298,25 @@ app's server in any of them:
 | **In-app wallet** | 12-word seed generated on-device, AES-GCM encrypted | Small amounts only — see the warning below. |
 
 The official FBT Reown/WalletConnect project ID is
-**`5997d5aee8bb42f43ddec4b1a5f94eb1`**. It is public by design and is pinned as
-the single `WC_PROJECT_ID` constant in `src/context/WalletContext.jsx`; the web,
-local and APK builds therefore cannot silently select different projects.
+**`8e36eccabebf5a4567f4e974fafd6b20`**. It is public by design and is pinned as
+the single `WC_PROJECT_ID` constant in `src/lib/wc/config.js`; the web, local
+and APK builds therefore cannot silently select different projects.
 `VITE_WALLETCONNECT_PROJECT_ID` is retired and is deliberately ignored.
+
+Why this project (not the newer `5997d5aee8bb42f43ddec4b1a5f94eb1` one): the
+newer project's Reown allowlist is **empty** (verified live against
+`api.web3modal.org/projects/v1/origins` on 2026-09-21), so sessions created
+under it fail Reown's `jwt.origin === allowlisted origin` gate and the wallet
+shows the domain **unverified** (and, for some wallets, the signing prompt is
+never accepted). This project has `fbtswap.ir` (+ `https://localhost` for the
+local dev origin; the `www.` host 301-redirects to it, so no entry is needed)
+allowlisted. The switch is recorded in
+`WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md`. Existing sessions paired under
+the old project are automatically wiped on next app load
+(`purgeStaleProjectKeys` in `src/lib/wc/storage.js`) so users re-pair as
+verified without any manual step. Run
+`npm run walletconnect:check` from any networked machine to re-verify the
+allowlist.
 
 The Reown **Dashboard API Secret is different**: it is private, is not required
 by the current app, and must never be placed in a `VITE_*` variable, source
