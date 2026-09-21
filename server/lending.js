@@ -40,7 +40,9 @@ const AAVE_V3_POOLS = Object.freeze({
   137: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
   8453: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
   42161: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-  43114: '0x794a61358D6845594F94dc1DB02A252b5b4814aD'
+  43114: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+  59144: '0xc47b8C00b0f69a36fa203Ffeac0334874574a8Ac',
+  146: '0x5362dBb1e601abF3a4c14c22ffEdA64042E5eAA3'
 });
 
 /** Reserve symbols per chain (mirror of src/lib/lending.js). A FILTER, not a promise. */
@@ -51,7 +53,9 @@ const RESERVE_SYMBOLS = Object.freeze({
   137: ['USDT', 'USDC', 'DAI', 'WETH'],
   8453: ['USDC', 'cbBTC'],
   42161: ['USDT', 'USDC', 'WBTC', 'ARB'],
-  43114: ['USDT', 'USDC', 'WETH']
+  43114: ['USDT', 'USDC', 'WETH'],
+  59144: ['USDC', 'USDT', 'WETH'],
+  146: ['USDC', 'wS', 'stS']
 });
 
 export const POOL_ABI = [
@@ -584,21 +588,32 @@ export function lendingRouter() {
 
   /** §5/§29: network registry with feature flags. */
   router.get('/networks', (req, res) => {
+    const evm = chainIds().map((chainId) => {
+      const chain = EVM_CHAINS[chainId] || {};
+      return {
+        chainId,
+        name: chain.name || `#${chainId}`,
+        nativeToken: chain.native?.symbol || null,
+        rpcCount: (chain.rpc || []).length,
+        explorer: chain.explorer || null,
+        protocols: ['aave-v3'],
+        oracle: 'aave-oracle',
+        enabled: Boolean(AAVE_V3_POOLS[chainId]),
+        pool: AAVE_V3_POOLS[chainId]
+      };
+    });
     safeJson(res, {
-      data: chainIds().map((chainId) => {
-        const chain = EVM_CHAINS[chainId] || {};
-        return {
-          chainId,
-          name: chain.name || `#${chainId}`,
-          nativeToken: chain.native?.symbol || null,
-          rpcCount: (chain.rpc || []).length,
-          explorer: chain.explorer || null,
-          protocols: ['aave-v3'],
-          oracle: 'aave-oracle',
-          enabled: Boolean(AAVE_V3_POOLS[chainId]),
-          pool: AAVE_V3_POOLS[chainId]
-        };
-      }),
+      data: [...evm, {
+        chainId: 900001,
+        name: 'Solana',
+        nativeToken: 'SOL',
+        rpcCount: 2,
+        explorer: 'https://solscan.io',
+        protocols: ['kamino-klend'],
+        oracle: 'kamino-oracle',
+        enabled: true,
+        pool: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF'
+      }],
       meta: { schema: 'fbt.lending-networks.v1', dataStatus: 'live' }
     });
   });

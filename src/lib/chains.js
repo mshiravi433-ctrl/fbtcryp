@@ -651,7 +651,8 @@ export const TOKENS = {
   146: [
     { symbol: 'S', name: 'Sonic', address: null, decimals: 18, native: true, coingeckoId: 'sonic-3' },
     { symbol: 'USDC', name: 'USD Coin', address: '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', decimals: 6, coingeckoId: 'usd-coin' },
-    { symbol: 'wS', name: 'Wrapped Sonic', address: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', decimals: 18, coingeckoId: 'sonic-3' }
+    { symbol: 'wS', name: 'Wrapped Sonic', address: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', decimals: 18, coingeckoId: 'sonic-3' },
+    { symbol: 'stS', name: 'Staked Sonic', address: '0xE5DA20F15420aD15DE0fa650600aFc998bbE3955', decimals: 18, coingeckoId: 'sonic-3' }
   ],
   /*
    * Curated defaults for the 2026-09 chains. «دو شبکه جدید یا توکن ندارد یا
