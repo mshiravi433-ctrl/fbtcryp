@@ -2264,5 +2264,28 @@ for (const [suite, file] of [
   }
 }
 
+/* ------------------------- Execution sources & outage fallback ------------------ */
+/* Layer-1 acceptance test of the revenue rail (docs/REVENUE-RAIL-COMPLETION-FA.md):
+   the per-chain executor table is true, and a KyberSwap outage still yields a
+   fee-carrying quote via OpenOcean — including the dynamic-promotion path for
+   a slow second opinion. Runs as a CHILD process for the same reason as the
+   FI OS probes: it replaces globalThis.fetch for the duration. */
+console.log('▸ Execution sources & Kyber-outage fallback…');
+try {
+  execFileSync(process.execPath, ['execution-sources-probe.mjs'], {
+    stdio: 'pipe',
+    cwd: new URL('.', import.meta.url).pathname
+  });
+  report('execution sources & outage fallback', [
+    ['per-chain executor table + outage fallback — all assertions passed', true]
+  ]);
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+  report('execution sources & outage fallback', [
+    ['execution sources & outage fallback FAILED (see output)', false]
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);
