@@ -1,3 +1,41 @@
+# ۲۰۲۶-۰۹-۲۱ — «Unverified domain» برطرف شد: کد به پروژهٔ ثبت‌شده برگشت + نوسازی خودکار
+
+ادامهٔ و پاسخ نهاییِ ثبتِ بالا: به‌جای صبر برای یک قدمِ دستیِ داشبورد روی
+پروژهٔ خالی، کد به پروژه‌ای برگشت که رجیستری‌اش از قبل کامل است — همان اندازه‌گیریِ
+بالا ثابت می‌کرد `8e36…` سه entry دارد و `5997…` خالی است.
+
+- `src/lib/wc/config.js` — `WC_PROJECT_ID` → **`8e36eccabebf5a4567f4e974fafd6b20`**
+  (با سندِ کاملِ «چرا این آی‌دی» در کامنت)؛ allowlist دقیقاً
+  `https://fbtswap.ir` + `https://localhost` (originهای واقعی؛ `www` با 301 به
+  bare-host می‌افتد و entry ندارد).
+- `src/lib/wc/storage.js` — **`purgeStaleProjectKeys()`**: اگر کلید
+  `wc@2:relay-auth:<پروژهٔ دیگر>` روی دیسک باشد (یعنی کاربری که بین
+  ۱۷–۲۱ سپتامبر زیر پروژهٔ خالی جفت شده)، کل وضعیت اتصالِ قدیمی یک‌بار پاک
+  می‌شود؛ جفت‌شدگیِ بعدی تازه و تأییدشده است — بدون هیچ قدمِ دستی.
+- `src/context/WalletContext.jsx` — فراخوانی در boot + رویداد
+  `stale_project_purged` برای پنل سلامت.
+- `scripts/solana-deeplink-check.mjs` — **جدید** (`npm run wallet:deeplink:check`):
+  هاپ‌های سمت والتِ deep link را زنده اندازه می‌گیرد (assetlinks Android با
+  تطبیق پکیجِ داخل کد، AASA iOS روی `/ul/*`، و اندپوینت connect) و حکم
+  `OK / BROKEN / UNMEASURED` می‌دهد؛ با `--check` برای CI.
+- مدرکِ زنده (۲۰۲۶-۰۹-۲۱): phantom.com، solflare.com و backpack.app هر سه
+  `handle_all_urls` را دقیقاً روی پکیجی که `deeplinkUri.js` می‌فرستد
+  (`app.phantom`، `com.solflare.mobile`، `app.backpack.mobile`) ثبت دارند و
+  AASAی phantom، `/ul/*` را می‌پوشاند → مسیر deep linkِ Solana از نظر
+  زیرساخت سالم است؛ اگر باز هم شکست، این اسکریپت می‌گوید هاپِ معیوب کدام است.
+
+**تست:** stack-probe **۳۸۷/۳۸۷** (۶ بررسیِ جدیدِ مهاجرت)، diagnostics-probe
+**۱۵۴/۱۵۴**، solana-deeplink-probe سبز (شبیه‌سازیِ کاملِ والت با tweetnacl واقعی)،
+vitest (wallet-health-panel، solana-connect-sheet، wallet-session-lease،
+bridge-solana-ui) سبز، `npm run build` موفق، و `8e36…` واحدِ شناخته‌شدهٔ
+`WC_PROJECT_ID` داخل باندل است.
+
+**بعد از merge به main و deploy:** `npm run walletconnect:check` روی یک
+ماشینِ متصل باید سه entry رجیستری + حکم VALID را نشان دهد؛ کاربرانِ قدیمی
+بدون هیچ کارِ دستی، در بارِ بعد، جفت‌شدگیِ تازه و «verified» می‌گیرند.
+
+---
+
 # ۲۰۲۶-۰۹-۲۱ — «Unverified domain»: ریشه پیدا شد و قابل اندازه‌گیری شد
 
 گزارش: با وجود سه PR پیاپی (#364، #369، #372) که هویت و متادیتای Verify را

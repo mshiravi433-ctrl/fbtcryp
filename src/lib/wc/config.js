@@ -28,8 +28,31 @@ import { isIOS } from '../platform.js';
  * Dashboard requirement: Allowed Domains must cover https://fbtswap.ir and
  * https://localhost (the WebView origin inside the APK), and App IDs must
  * include ir.fbtswap.app.
+ *
+ * ─── WHY THIS ID, NOT THE NEWER ONE (2026-09-21) ───────────────────────────
+ * The code moved to project `5997d5aee8bb42f43ddec4b1a5f94eb1` on 2026-09-17,
+ * and the domain allowlist did NOT move with it. Measured from the public
+ * registry that the Verify server reads (`isVerified` is keyed off it):
+ *
+ *   · `5997d5aee8bb42f43ddec4b1a5f94eb1` → { "allowedOrigins": [] }
+ *     an EMPTY registry, so the Verify API answers isVerified=false for every
+ *     origin, and every wallet renders «Cannot verify / Unverified» with a
+ *     warning sign on BOTH the connect and the sign prompt — no matter how
+ *     correct `metadata.url` is. Three PRs fixed the metadata; none of them
+ *     could fix a registry that was empty.
+ *   · `8e36eccabebf5a4567f4e974fafd6b20`  →
+ *     { "allowedOrigins": ["fbtswap.ir","https://fbtswap.ir","https://localhost"] }
+ *     the registry the app ran on until 2026-09-17, and the only one that
+ *     names the domains.
+ *
+ * The project id is public (it ships in the bundle), the code consumes no
+ * dashboard secret, and both projects answer the AppKit config API — so the
+ * code-side fix is to point at the project whose registry is complete. If the
+ * newer project is ever allowed `https://fbtswap.ir` and `https://localhost`
+ * on its dashboard (Configuration → Domain → Allowlist), this constant may
+ * move back; until then `npm run walletconnect:check` is the measurement.
  */
-export const WC_PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
+export const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
 
 export const WC_APP_NAME = 'FBT Swap';
 export const WC_APP_DESCRIPTION = 'Non-custodial decentralized exchange';
@@ -205,23 +228,30 @@ export function walletIdentityUrl(view) {
  * WalletConnect Verify API to return VALID.
  *
  * The list is data, not a hard-coded if-tree, so adding a domain is one line
- * and a test asserts it instead of a reviewer. The three origins are:
+ * and a test asserts it instead of a reviewer. It is kept in step with the
+ * LIVE registry of WC_PROJECT_ID (measured 2026-09-21 from the public
+ * origins endpoint — `fbtswap.ir`, `https://fbtswap.ir`, `https://localhost`
+ *), and each entry below is one of the two origins an attestation can name:
  *
- *   1. https://fbtswap.ir     — the bare domain, the one we link to.
- *   2. https://www.fbtswap.ir — the www variant. Many hosting providers
- *      (Vercel included) keep serving on `www.<domain>` if the DNS points
- *      there too, and Trust Wallet's scanner renders a "domain mismatch"
- *      screen if the address bar says www but our metadata says the bare
- *      host. Both must be on the dashboard, AND both must respond with the
- *      same /icon-512.png and /walletconnect.txt for Verify to mark them
- *      as the same application.
- *   3. https://localhost       — the WebView origin inside the Android APK.
+ *   1. https://fbtswap.ir — the canonical host, the one every visitor lands
+ *      on: `www.fbtswap.ir` 301-redirects to it in production (measured),
+ *      so the attestation — which names `window.location.origin` — can only
+ *      ever carry the bare host from a public page. The registry also holds
+ *      the scheme-less `fbtswap.ir` spelling, and `isOriginAllowed()` treats
+ *      a bare-domain entry as covering the host, so both forms agree.
+ *   2. https://localhost   — the WebView origin inside the Android APK.
  *      The Capacitor WebView opens at https://localhost, and even though the
  *      metadata we send from there is the canonical public URL (so a wallet
  *      sees a domain it can fetch and verify), the attestation that gets
  *      sent in the Verify API request carries `localhost` as the source
  *      origin. Without it on the allowlist the relay refuses the connection
  *      (close code 1014 / 4001) before the user sees a prompt.
+ *
+ * `https://www.fbtswap.ir` is deliberately NOT on this list: the project's
+ * registry does not contain it, and a page that ever ran on www would attest
+ * an origin the registry cannot verify. The redirect above is what keeps www
+ * from becoming a real second origin; if that redirect is ever removed, the
+ * dashboard entry must be added here and on the project the same change.
  *
  * Plus the Android application id `ir.fbtswap.app` on the App IDs list.
  *
@@ -230,7 +260,6 @@ export function walletIdentityUrl(view) {
  */
 export const WC_ALLOWED_ORIGINS = Object.freeze([
   'https://fbtswap.ir',
-  'https://www.fbtswap.ir',
   'https://localhost'
 ]);
 

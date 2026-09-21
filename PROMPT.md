@@ -14,7 +14,7 @@
 - **Backend / API:** Node.js Express server (`server/app.js`), modular routes for market data, gasless quotes, AI market briefs, and bridge aggregations.
 - **EVM Integration:** `ethers.js`, KyberSwap DEX Aggregator, 0x Gasless v2 API, Morpho Lending Vaults, deBridge DLN, LI.FI.
 - **Solana Integration:** `@solana/web3.js`, Jupiter Aggregator API.
-- **Wallet Connection:** Reown AppKit / WalletConnect v2 (`WC_PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1'`), Injected Web3 Provider (MetaMask, Trust Wallet, Rabby, OKX, Phantom), Local Seed Wallet (`src/lib/localWallet.js`), Biometric WebAuthn App Lock.
+- **Wallet Connection:** Reown AppKit / WalletConnect v2 (`WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20'` in `src/lib/wc/config.js`), Injected Web3 Provider (MetaMask, Trust Wallet, Rabby, OKX, Phantom), Local Seed Wallet (`src/lib/localWallet.js`), Biometric WebAuthn App Lock.
 
 ## 3. Core Modules & Revenue Engines
 

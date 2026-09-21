@@ -17,6 +17,7 @@ import {
   hasStoredSession,
   purgeConnectionKeys,
   purgeEmbeddedWalletKeys,
+  purgeStaleProjectKeys,
   readWalletLease,
   rememberedMobileWallet,
   storageFacts,
@@ -1366,6 +1367,23 @@ export function WalletProvider({ children }) {
       const legacy = purgeEmbeddedWalletKeys();
       if (legacy) wcEvent('embedded_legacy_purged', Number(legacy));
     } catch { /* storage unavailable — nothing to clean */ }
+
+    /*
+     * ANOTHER PROJECT'S SESSIONS ARE UNVERIFIED SESSIONS — WIPED ONCE.
+     *
+     * The relay-auth key is written per project (`wc@2:relay-auth:<id>`), so
+     * finding one that is not this build's id proves the stored sessions were
+     * paired under a different Reown project — for 2026-09-17…21, the one
+     * whose domain registry was EMPTY. Their stored attestation is signed
+     * against that project, and a wallet re-resolving it on a signing prompt
+     * still answers «unverified». Only a fresh pairing under THIS project
+     * carries a verified attestation, so the migration drops the recoverable
+     * connection state once and lets the next Connect start clean.
+     */
+    try {
+      const stale = purgeStaleProjectKeys(null, WC_PROJECT_ID);
+      if (stale) wcEvent('stale_project_purged', Number(stale));
+    } catch { /* storage unavailable — nothing to migrate */ }
 
     /*
      * ORPHANED STORAGE HYGIENE.

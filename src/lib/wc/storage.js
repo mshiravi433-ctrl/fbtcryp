@@ -20,8 +20,64 @@
 /** The SDK's own namespace (`wc@2:client:0.3//session`, pairings, …). */
 export const WC_PREFIX = 'wc@2:';
 
+/** The SDK's per-project relay auth key prefix (`wc@2:relay-auth:<projectId>`). */
+export const RELAY_AUTH_PREFIX = 'wc@2:relay-auth:';
+
 /** The SDK's stored "open this wallet" choice. */
 export const DEEPLINK_CHOICE_KEY = 'WALLETCONNECT_DEEPLINK_CHOICE';
+
+/**
+ * Connection state written under ANOTHER Reown project id than the one this
+ * build ships.
+ *
+ * Why this exists — the 2026-09-21 project-id move. The code ran on project
+ * `8e36eccabebf5a4567f4e974fafd6b20` (whose dashboard registry holds the
+ * domains), moved to `5997d5aee8bb42f43ddec4b1a5f94eb1` on 2026-09-17 (whose
+ * registry is EMPTY, so every session since then attests unverified), and
+ * moved back on 2026-09-21. A user who paired during the empty-registry
+ * window carries a session whose stored attestation was signed against the
+ * project that CANNOT verify its own domain — and wallets re-resolve that
+ * attestation on the signing prompt, which is exactly the «signed request
+ * never produces a confirm screen, the domain warns» report. Restoring such a
+ * session under the new project would keep serving an identity the wallet
+ * already marked unverified; only a FRESH pairing carries a verified
+ * attestation. So on boot, the mere presence of another project's relay-auth
+ * key is the signal: wipe the recoverable connection state once, and the next
+ * Connect is a clean, verified pairing.
+ *
+ * Key names only — the philosophy of this file. The session blobs themselves
+ * are never parsed: the per-project auth key is enough to prove which project
+ * wrote them, and `purgeConnectionKeys()` is the one definition of what
+ * «connection state» may be lost.
+ *
+ * @param {Storage} [storage]
+ * @param {string} currentProjectId the project id this build ships
+ * @returns {number} keys removed (0 when nothing else's project is on disk)
+ */
+export function purgeStaleProjectKeys(storage, currentProjectId = null) {
+  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  if (!target || !currentProjectId) return 0;
+  let stale = false;
+  try {
+    for (let i = 0; i < target.length; i += 1) {
+      const key = target.key(i) || '';
+      if (!key.startsWith(RELAY_AUTH_PREFIX)) continue;
+      const other = key.slice(RELAY_AUTH_PREFIX.length);
+      if (other && other !== String(currentProjectId).trim()) {
+        stale = true;
+        break;
+      }
+    }
+  } catch {
+    /* storage unavailable — nothing to migrate */
+  }
+  if (!stale) return 0;
+  try {
+    return purgeConnectionKeys(target);
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * AppKit's connection-state keys, as a static list — KEPT ONLY FOR THE DOC

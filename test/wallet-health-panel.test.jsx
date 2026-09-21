@@ -27,7 +27,7 @@ const t = (key, values = {}) => {
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t, i18n: { language: 'en' } }) }));
 
 /** The report shape `collectWalletHealth()` answers with now. */
-const WC_PROJECT_ID = '5997d5aee8bb42f43ddec4b1a5f94eb1';
+const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
 
 const FIXTURE = vi.hoisted(() => ({
   storage: {
@@ -112,7 +112,7 @@ vi.mock('../src/lib/wc', async (importOriginal) => {
         iconUrl: 'https://fbtswap.ir/icon-512.png'
       },
       dashboardExpected: {
-        origins: ['https://fbtswap.ir', 'https://www.fbtswap.ir', 'https://localhost'],
+        origins: ['https://fbtswap.ir', 'https://localhost'],
         appIds: ['ir.fbtswap.app']
       },
       /* The row the panel used to print is GONE on purpose: the
@@ -254,8 +254,10 @@ describe('the health panel after the email/social removal', () => {
     const text = await panelText();
     expect(text).toContain(t('wallet.healthDashboardExpected'));
     expect(text).toContain('https://fbtswap.ir');
-    expect(text).toContain('https://www.fbtswap.ir');
     expect(text).toContain('https://localhost');
+    /* www stays out of the expected list: production 301s it to the canonical
+       host, and the project's registry does not contain it. */
+    expect(text).not.toContain('www.fbtswap.ir');
     expect(text).toContain('App IDs: ir.fbtswap.app');
   });
 
