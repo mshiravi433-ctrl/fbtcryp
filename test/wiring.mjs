@@ -834,6 +834,13 @@ export default function run() {
       'VITE_ENABLE_SPECULATION',
       'VITE_GEMINI_API_KEY',
       'VITE_GEMINI_MODEL',
+      /*
+       * FeeRouter routing is per-chain (VITE_FEE_ROUTERS) and only turns on
+       * for a chain once its contract is deployed AND audited. It is a
+       * deliberate per-release act, not a build default — same reasoning as
+       * the legacy single-address var below it.
+       */
+      'VITE_FEE_ROUTERS',
       'VITE_FEE_ROUTER_ADDRESS'
     ]);
 
