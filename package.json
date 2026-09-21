@@ -14,6 +14,7 @@
     "assetlinks": "node scripts/assetlinks.mjs",
     "assetlinks:check": "node scripts/assetlinks.mjs --check",
     "wallet:reputation": "node scripts/wallet-reputation-check.mjs",
+    "fees:monitor": "node scripts/fee-monitor.mjs",
     "walletconnect:check": "node scripts/walletconnect-domain-verify.mjs --check",
     "walletconnect:register": "node scripts/walletconnect-reown-register.mjs",
     "walletconnect:register:check": "node scripts/walletconnect-reown-register.mjs --check",

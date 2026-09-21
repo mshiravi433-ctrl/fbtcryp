@@ -211,7 +211,12 @@ export const toOOAddress = (token) => (token.native ? OO_NATIVE : token.address)
  * OpenOcean's typical response and well below the point a user notices a
  * delay.
  */
-const OO_TIMEOUT_MS = 3000;
+/*
+ * Exported for lib/executionSources.js, which mirrors this budget as the
+ * second-opinion leash. It stays a module decision, not a magic number in a
+ * second file.
+ */
+export const OO_TIMEOUT_MS = 3000;
 
 /*
  * ─── THE SAME-ORIGIN PROXY FALLBACK ────────────────────────────────────────

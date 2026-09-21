@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Deploy FeeRouter to BNB Smart Chain.
+ * Deploy FeeRouter to BNB Smart Chain — or ANY EVM chain in generic mode.
  *
  *   node scripts/compile.mjs                 # produces the artifact
  *   DEPLOYER_PRIVATE_KEY=0x... \
@@ -8,6 +8,29 @@
  *   node scripts/deploy-feerouter.mjs
  *
  * Optional: NETWORK=testnet to deploy to BSC testnet first (strongly advised).
+ *
+ * ─── GENERIC MODE — any other chain ────────────────────────────────────────
+ *   DEPLOYER_PRIVATE_KEY=0x... \
+ *   RPC_URL=https://base-rpc.publicnode.com \
+ *   CHAIN_ID=8453 \
+ *   ROUTER_ADDRESS=0x<a V2-style router on that chain> \
+ *   EXPLORER_URL=https://basescan.org \
+ *   node scripts/deploy-feerouter.mjs
+ *
+ * The contract speaks the Uniswap/PancakeSwap V2 router interface
+ * (swapExact*For*SupportingFeeOnTransferTokens), so ROUTER_ADDRESS must be a
+ * V2-compatible router on the target chain — NOT an aggregator router, whose
+ * calldata this contract does not build. Verify the address against that
+ * chain's own docs before passing it: a typo here is gas wasted at best.
+ *
+ * ⚠ READ THIS BEFORE SETTING VITE_FEE_ROUTER_ADDRESS ⚠
+ * The client currently reads that env GLOBALLY, with no chain dimension:
+ * setting it switches FEE_MODE to 'contract' for EVERY chain, and swaps on
+ * chains where this contract is not deployed would target an address with no
+ * code. Until per-chain gating lands (see
+ * docs/REVENUE-RAIL-COMPLETION-FA.md §2.1), a FeeRouter deployment is for
+ * proving the rail on ONE chain in a controlled build — do not point the
+ * production web app at it blindly.
  *
  * SECURITY: DEPLOYER_PRIVATE_KEY is passed via env and never written to disk.
  * Use a throwaway deployer wallet holding only gas money. The deployer becomes
@@ -49,7 +72,14 @@ const DEFAULT_FEE_RECIPIENT = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
 const net = NETWORKS[process.env.NETWORK ?? 'mainnet'];
 const pk = process.env.DEPLOYER_PRIVATE_KEY;
 const recipient = process.env.FEE_RECIPIENT ?? DEFAULT_FEE_RECIPIENT;
-const feeBps = Number(process.env.FEE_BPS ?? 50);
+/*
+ * Default 70 bps = the 0.70% the app actually quotes, displays and charges
+ * (VITE_FEE_BPS default in lib/feeBps.js). The old default of 50 was a silent
+ * 29% revenue cut versus the fee shown on the review screen — and a mismatch
+ * between what the UI promises and what the contract takes. FEE_BPS=50 still
+ * works for anyone who really wants the README's historical 0.5% example.
+ */
+const feeBps = Number(process.env.FEE_BPS ?? 70);
 
 function fail(msg) {
   console.error(`\n✗ ${msg}\n`);
@@ -83,6 +113,26 @@ if (!isAddress(recipient)) {
 }
 if (feeBps > 100) fail('FEE_BPS cannot exceed 100 (1%) — the contract rejects it.');
 
+/* ─── Generic mode: any chain the operator names explicitly ──────────────── */
+const customRpc = process.env.RPC_URL;
+const customRouter = process.env.ROUTER_ADDRESS;
+const customChainId = Number(process.env.CHAIN_ID ?? 0);
+const customExplorer = process.env.EXPLORER_URL ?? 'https://explorer.example';
+
+if (customRpc || customRouter) {
+  if (!customRpc) fail('Generic mode needs RPC_URL (an HTTP JSON-RPC endpoint for the target chain).');
+  if (!customRouter) fail('Generic mode needs ROUTER_ADDRESS (a V2-style DEX router on the target chain).');
+  if (!isAddress(customRouter)) fail(`ROUTER_ADDRESS "${customRouter}" is not a valid EVM address.`);
+  if (!customChainId) fail('Generic mode needs CHAIN_ID (the target chain\'s numeric id, e.g. 8453 for Base).');
+  Object.assign(net, {
+    rpc: customRpc,
+    chainId: customChainId,
+    router: customRouter,
+    explorer: customExplorer,
+    generic: true
+  });
+}
+
 const artifactPath = path.join(root, 'src/lib/feeRouterArtifact.json');
 if (!fs.existsSync(artifactPath)) fail('Artifact missing. Run: node scripts/compile.mjs');
 const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
@@ -93,9 +143,13 @@ const wallet = new Wallet(pk, provider);
 console.log('\n──────────────────────────────────────────────');
 console.log(' FeeRouter deployment');
 console.log('──────────────────────────────────────────────');
-console.log(' network    :', process.env.NETWORK ?? 'mainnet', `(chainId ${net.chainId})`);
+console.log(' network    :', net.generic ? 'custom' : process.env.NETWORK ?? 'mainnet', `(chainId ${net.chainId})`);
 console.log(' deployer   :', wallet.address);
 console.log(' dex router :', net.router);
+if (net.generic) {
+  console.log('              ^ GENERIC MODE — operator-supplied. Verify it is a V2-style');
+  console.log('                router on chain ' + net.chainId + ' before routing real volume.');
+}
 console.log(' fee wallet :', recipient, process.env.FEE_RECIPIENT ? '(override)' : '(FBT default)');
 console.log(' fee        :', `${feeBps} bps = ${feeBps / 100}%`);
 console.log('──────────────────────────────────────────────\n');
@@ -110,8 +164,8 @@ try {
       '  public BSC nodes are sometimes rate-limited or geo-blocked.'
   );
 }
-console.log(' deployer balance:', (Number(balance) / 1e18).toFixed(5), 'BNB');
-if (balance === 0n) fail('Deployer has no BNB. Fund it with ~0.01 BNB for gas.');
+console.log(' deployer balance:', (Number(balance) / 1e18).toFixed(5), net.generic ? 'native coin' : 'BNB');
+if (balance === 0n) fail(`Deployer has no native coin for gas on chain ${net.chainId}. Fund it with a little ${net.generic ? 'of that chain\'s gas coin' : 'BNB'}.`);
 
 console.log(' deploying…');
 const factory = new ContractFactory(artifact.abi, artifact.bytecode, wallet);
@@ -124,9 +178,12 @@ const address = await contract.getAddress();
 console.log('\n✓ Deployed at', address);
 console.log('  explorer:', `${net.explorer}/address/${address}`);
 console.log('\nNext steps:');
-console.log('  1. Add to .env:      VITE_FEE_ROUTER_ADDRESS=' + address);
-console.log('  2. Rebuild:          npm run build');
-console.log('  3. Verify on BscScan so users can read the source.');
-console.log('  4. Transfer ownership to a hardware wallet / multi-sig:');
+console.log('  1. ⚠ VITE_FEE_ROUTER_ADDRESS is read GLOBALLY by the client today —');
+console.log('     setting it turns on contract mode for EVERY chain, not just this one.');
+console.log('     Read docs/REVENUE-RAIL-COMPLETION-FA.md §2.1 before setting it.');
+console.log('  2. Verify the source on the block explorer so users can read it.');
+console.log('  3. Transfer ownership to a hardware wallet / multi-sig:');
 console.log('     contract.transferOwnership(<safe address>)');
-console.log('  5. Test with a tiny swap before announcing it.\n');
+console.log('  4. Test with a tiny swap before routing real volume.');
+console.log('  5. Point scripts/fee-monitor.mjs at it (FEE_ROUTER_ADDRESS) so the');
+console.log('     live feeBps/feeRecipient are checked next to the fees it collects.\n');

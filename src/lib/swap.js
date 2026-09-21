@@ -29,14 +29,14 @@ import {
   buildPath
 } from './chains.js';
 import {
-  aggregatorSupports,
   executeAggregatorSwap,
   getAggregatorQuote
 } from './aggregator.js';
-import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean.js';
+import { getOpenOceanQuote, executeOpenOceanSwap } from './openocean.js';
 import { getVeloraQuote, veloraSupports } from './velora.js';
-import { getLifiQuote, executeLifiSwap, lifiSupports } from './lifi.js';
+import { getLifiQuote, executeLifiSwap } from './lifi.js';
 import { quoteAllSources } from './bestQuote.js';
+import { executionPlanFor, PRIMARY_LEASH_MS } from './executionSources.js';
 
 const loadEthers = () => import('ethers');
 
@@ -287,9 +287,16 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   // has been unreachable for our server — UPSTREAM_HTTP_403, live-probed
   // 2026-09-13) and a second opinion on Monad/Robinhood. It needs the user's
   // address for its fee-collection step, so callers pass `fromAddress`.
-  const kyberLive = aggregatorSupports(chainId);
-  const ooLive = openOceanSupports(chainId);
-  const lifiLive = lifiSupports(chainId) && Boolean(fromAddress);
+  //
+  // The whole picture — who quotes, who executes, who carries the fee, who
+  // runs on which leash — now lives in ONE table: lib/executionSources.js.
+  // getQuote derives its source set from that plan instead of re-deciding
+  // here, so the adapter predicates and the outage analysis can never drift
+  // apart. test/execution-sources-probe.mjs locks both halves down.
+  const plan = executionPlanFor(chainId, { fromAddress });
+  const kyberLive = plan.sources.kyberswap?.quotes || false;
+  const ooLive = plan.sources.openocean?.quotes || false;
+  const lifiLive = Boolean(plan.sources.lifi?.quotes);
   /*
    * Do not gate the source fan-out on Kyber/OpenOcean. LI.FI is an
    * independent, fee-enforced route for the two L2s the UI supports (and is
@@ -339,7 +346,18 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
       if (ooLive) {
         sources.push({
           id: 'openocean',
-          quote: () => getOpenOceanQuote(kyberLive ? common : { ...common, timeoutMs: 12000 })
+          /*
+           * The leash is the whole story: while Kyber is live, OpenOcean is a
+           * 3s second opinion (its own default); as the sole source it runs
+           * primary-grade. `shortLeash` marks the one condition under which a
+           * healthy-but-slow OpenOcean could be discarded — see the dynamic
+           * promotion below.
+           */
+          shortLeash: kyberLive,
+          quote: () => getOpenOceanQuote(kyberLive ? common : { ...common, timeoutMs: PRIMARY_LEASH_MS }),
+          /* Re-ask with a primary-grade leash — used ONLY when the first
+             round produced no winner at all (primary failed with it). */
+          quoteAsPrimary: () => getOpenOceanQuote({ ...common, timeoutMs: PRIMARY_LEASH_MS })
         });
       }
       /*
@@ -360,11 +378,55 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
         sources.push({ id: 'lifi', quote: () => getLifiQuote({ ...common, fromAddress }) });
       }
 
-      const { best, checked, beatenBy, failures, answered, trace } = await quoteAllSources(sources);
+      let { best, checked, beatenBy, failures, answered, trace } = await quoteAllSources(sources);
 
-      // Every source failed. Fall through to the same error handling the
-      // single-source path always used.
-      if (!best) throw new Error(classifyQuoteFailure({ failures, answered }));
+      /*
+       * ─── DYNAMIC PROMOTION — the outage fallback ─────────────────────────
+       * If the round produced a winner, nothing happens: this block costs
+       * nothing on the happy path and does not run.
+       *
+       * When it produced NO winner, the usual cause is the primary being down
+       * — and the second opinion just ran on its 3s leash, which is a death
+       * sentence for a source that would have answered in, say, 5s. That is
+       * the single-point-of-failure the old wiring created on every
+       * Kyber-live chain: Kyber down + OpenOcean merely slow = «مسیری بین
+       * این دو توکن وجود ندارد», with a fee-carrying executor sitting right
+       * there unused.
+       *
+       * So: re-ask every short-leashed fee executor ONCE, with a
+       * primary-grade leash. This is not routing around revenue — the
+       * promoted quote carries the same 70 bps fee and passes the same
+       * verification before signing. Worst case it fails again and the
+       * original error classification stands (failures from both rounds are
+       * merged, so the message is still honest).
+       */
+      let mergedTrace = trace;
+      let mergedChecked = checked;
+      let mergedAnswered = answered;
+      let mergedFailures = failures;
+      let promotedFrom = null;
+      if (!best) {
+        const promotable = sources.filter(
+          (s) => s.shortLeash && typeof s.quoteAsPrimary === 'function'
+        );
+        if (promotable.length) {
+          const round2 = await quoteAllSources(
+            promotable.map((s) => ({ id: `${s.id}:promoted`, quote: s.quoteAsPrimary }))
+          );
+          mergedTrace = [...trace, ...round2.trace];
+          mergedAnswered += round2.answered;
+          mergedFailures = [...failures, ...round2.failures];
+          if (round2.best) {
+            best = round2.best;
+            mergedChecked = checked + round2.checked;
+            promotedFrom = promotable.map((s) => s.id);
+          }
+        }
+      }
+
+      // Every source failed, in both rounds. Fall through to the same error
+      // handling the single-source path always used.
+      if (!best) throw new Error(classifyQuoteFailure({ failures: mergedFailures, answered: mergedAnswered }));
 
       /*
        * `routesChecked` drives the "compared N routes" line in the UI, and
@@ -375,20 +437,28 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        */
       return {
         ...best,
-        routesChecked: checked,
+        routesChecked: mergedChecked,
         beatenBy,
         /*
          * Compact evidence for Proof-of-Execution. It contains no calldata,
          * wallet address or routeSummary — only comparable outputs,
          * constraints, solver status and timings. The full aggregator body can
          * be huge and can disclose more routing detail than a receipt needs.
+         *
+         * When the winner came from a promoted second opinion, both the fact
+         * and the source are recorded — an outage-rescued quote must be
+         * visible as such in the receipt, not presented as a normal race win.
          */
+        promotedFrom,
         selectedSolver: best.source === 'aggregator' ? 'kyberswap' : (best.source || 'direct-router'),
         executionTrace: {
           schema: 'fbt.quote-trace.v1',
           observedAt: new Date().toISOString(),
           selectionPolicy: 'MAX_OUTPUT_EXECUTABLE_SAME_FEE_AND_SLIPPAGE',
-          coverage: { requested: sources.length, answered, usable: checked },
+          /* requested counts the first round's sources; a promotion re-asked
+             a subset and that is what `promotedFrom` records. */
+          coverage: { requested: sources.length, answered: mergedAnswered, usable: mergedChecked },
+          promotedFrom,
           constraints: {
             chainId: Number(chainId),
             from: fromToken.symbol,
@@ -398,7 +468,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
             slippagePct: Number(slippage)
           },
           selectedSolver: best.source === 'aggregator' ? 'kyberswap' : (best.source || 'direct-router'),
-          candidates: trace
+          candidates: mergedTrace
         }
       };
     } catch (err) {
