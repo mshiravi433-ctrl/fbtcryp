@@ -1762,13 +1762,21 @@ export default async function run() {
    */
   {
     /*
-     * Verified against the example in Phantom's published spec, character for
-     * character. Both params are required and both must be URL-encoded; a
-     * malformed link fails by silently opening the wallet on nothing, which
-     * is indistinguishable from the wallet being broken.
+     * Shape verified against the example in Phantom's published spec, character
+     * for character — both params are required and both must be URL-encoded; a
+     * malformed link fails by silently opening the wallet on nothing, which is
+     * indistinguishable from the wallet being broken.
+     *
+     * THE HOST is the one thing that changed, and it changed for a reason that
+     * cannot be seen in a URL: `phantom.com` is where the wallet app declares
+     * its links (`/.well-known/assetlinks.json` → `app.phantom`,
+     * `apple-app-site-association` → `/ul/*`). A browse link is only useful if
+     * the WALLET claims its host; phantom.app 404s that file and 301s to
+     * phantom.com, so a link addressed there renders as a web page instead of
+     * opening the app.
      */
     const officialExample =
-      'https://phantom.app/ul/browse/https%3A%2F%2Fmagiceden.io%2Fitem-details%2FED8Psf2Zk2HyVGAimSQpFHVDFRGDAkPjQhkfAqbN5h7d?ref=https%3A%2F%2Fmagiceden.io';
+      'https://phantom.com/ul/browse/https%3A%2F%2Fmagiceden.io%2Fitem-details%2FED8Psf2Zk2HyVGAimSQpFHVDFRGDAkPjQhkfAqbN5h7d?ref=https%3A%2F%2Fmagiceden.io';
     t(
       "the link matches Phantom's own documented example",
       phantomBrowseLink(
@@ -1778,7 +1786,7 @@ export default async function run() {
     );
 
     const link = phantomBrowseLink('https://www.lawpoetics.ir/#/solana');
-    t('the deeplink points at phantom.app', new URL(link).host === 'phantom.app');
+    t('the deeplink points at the host Phantom claims', new URL(link).host === 'phantom.com');
     t('it uses the universal-link path', link.includes('/ul/browse/'));
     t('it carries the required ref parameter', new URL(link).searchParams.has('ref'));
 
@@ -1791,7 +1799,7 @@ export default async function run() {
     t('the route survives encoding', decodeURIComponent(link).includes('#/solana'));
     t(
       'the hash is encoded rather than literal',
-      link.includes('%23') && !link.slice('https://phantom.app/ul/browse/'.length).includes('#')
+      link.includes('%23') && !link.slice('https://phantom.com/ul/browse/'.length).includes('#')
     );
 
     // Only https may be handed to a wallet.

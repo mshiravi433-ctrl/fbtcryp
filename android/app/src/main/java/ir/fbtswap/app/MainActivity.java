@@ -250,7 +250,7 @@ public class MainActivity extends BridgeActivity {
      * request never produced an approval screen inside this app.
      *
      * Phantom's request IS its query string —
-     * `https://phantom.app/ul/v1/connect?app_url=…&dapp_encryption_public_key=…`
+     * `https://phantom.com/ul/v1/connect?app_url=…&dapp_encryption_public_key=…`
      * — and a Chrome Custom Tab (what @capacitor/browser opens) renders
      * http/https itself instead of handing an App Link to another app. So the
      * page was loaded inside our own WebView-backed tab and the wallet, when
@@ -259,6 +259,15 @@ public class MainActivity extends BridgeActivity {
      * This bridge fires an EXPLICIT ACTION_VIEW at the wallet's own package,
      * which is the one route inside an APK that delivers the URL intact and
      * leaves the WebView — with its pending request — alive underneath.
+     *
+     * AND IT IS HOST-EXACT, which is the second half of the fix. The host and
+     * the package have to be the pair the WALLET declared, or Android finds
+     * nothing to start and the wallet — installed, unlocked, right there —
+     * simply does not open («اتفاقی نمی‌افتد»). Phantom's App Links live on
+     * `phantom.com` (its `/.well-known/assetlinks.json` lists `app.phantom`);
+     * `phantom.app` is an alias that only redirects and resolves to nothing.
+     * Both are accepted below so a link that already exists cannot dead-end,
+     * but the requests the web layer builds now use phantom.com.
      */
     webView.addJavascriptInterface(new SolanaLink(this), "FBTSolanaLink");
   }
@@ -444,11 +453,20 @@ public class MainActivity extends BridgeActivity {
       }
     }
 
-    /** Host and package are a pair, exactly like WalletLink's scheme table. */
+    /**
+     * Host and package are a pair, exactly like WalletLink's scheme table.
+     *
+     * `phantom.com` FIRST because that is the host Phantom's app declares
+     * (`/.well-known/assetlinks.json` → `app.phantom`) and therefore the only
+     * one an explicit ACTION_VIEW can actually resolve to; `phantom.app` stays
+     * as a tolerated alias for links that predate the correction or arrive from
+     * somewhere else. Both map to the same package, so neither can be used to
+     * launch an app the other does not name.
+     */
     private static String packageForHost(String host) {
       if (host == null) return null;
       String h = host.toLowerCase(java.util.Locale.ROOT);
-      if ("phantom.app".equals(h)) return "app.phantom";
+      if ("phantom.com".equals(h) || "phantom.app".equals(h)) return "app.phantom";
       if ("solflare.com".equals(h)) return "com.solflare.mobile";
       if ("backpack.app".equals(h)) return "app.backpack.mobile";
       return null;

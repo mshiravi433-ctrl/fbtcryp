@@ -82,33 +82,53 @@ export const canInjectSolana = () => {
   return true;
 };
 
+/* The pure URL layer, imported here so the browse link, the connect request
+   and the native bridge's host table all read the same wallet table — the
+   host correction in ./solana/deeplinkUri.js is worthless if a copy of it
+   stays behind in this file. */
+import { browseRequestUrl } from './solana/deeplinkUri.js';
+
 /**
  * Build a Phantom "browse" deeplink that reopens a page inside Phantom.
  *
- * Format is from Phantom's published spec; both parameters are required and
- * both must be URL-encoded:
+ *   https://phantom.com/ul/browse/<url>?ref=<url>
  *
- *   https://phantom.app/ul/browse/<url>?ref=<ref>
+ * Both parameters are required and both must be URL-encoded. Note these links
+ * cannot be pasted into a browser address bar — they must be tapped or opened
+ * by an app, which is why the UI renders it as a button.
  *
- * Note these links cannot be pasted into a browser address bar — they must be
- * tapped or opened by an app, which is why the UI renders it as a button.
+ * ─── phantom.com, NOT phantom.app (and why that one word matters) ───────────
+ * The link only opens the wallet if the WALLET claims the host. Phantom's
+ * Android App Links are declared on `phantom.com`
+ * (`/.well-known/assetlinks.json` → `app.phantom`, three signing certs), and
+ * its iOS Universal Links are too (`/.well-known/apple-app-site-association` →
+ * `/ul/*`). `phantom.app` 404s that file and 301s to `phantom.com`, so a link
+ * addressed there is redirected by a browser and, from an app or an
+ * `intent://`, resolves to nothing at all. The old host is still accepted
+ * wherever a link is validated, so nothing that already exists breaks.
+ *
+ * Implemented in ./solana/deeplinkUri.js so the browse link and the connect
+ * request can never disagree about the host.
  */
 export function phantomBrowseLink(url, ref = url) {
-  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
-  return `https://phantom.app/ul/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(ref)}`;
+  if (ref !== url) {
+    /* Kept for callers that pass a different referrer: the shape is the same,
+       only `ref` differs. */
+    if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
+    const encoded = encodeURIComponent(url);
+    return `https://phantom.com/ul/browse/${encoded}?ref=${encodeURIComponent(ref)}`;
+  }
+  return browseRequestUrl('phantom', url);
 }
 
 /** The same idea for Solflare, which uses its own host. */
 export function solflareBrowseLink(url) {
-  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
-  return `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`;
+  return browseRequestUrl('solflare', url);
 }
 
 /** Backpack's documented browse universal link. */
 export function backpackBrowseLink(url) {
-  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
-  const encoded = encodeURIComponent(url);
-  return `https://backpack.app/ul/v1/browse/?url=${encoded}&ref=${encoded}`;
+  return browseRequestUrl('backpack', url);
 }
 
 // publicAppUrl moved to lib/nativeShell.js — it is needed by the referral
@@ -129,7 +149,7 @@ export { publicAppUrl } from './nativeShell';
  *     open our page, and on many builds the wallet simply opens on its home
  *     screen. Nothing anywhere asks the user to approve a connection to us.
  *
- * The missing piece was the connect REQUEST (`phantom.app/ul/v1/connect`),
+ * The missing piece was the connect REQUEST (`phantom.com/ul/v1/connect`),
  * which is the only wallet approval that can reach this app on a phone: the
  * wallet shows its own confirmation screen and hands the answer back here.
  * `./solana/deeplink.js` owns that flow; this module only has to know that a
