@@ -126,9 +126,20 @@ public class MainActivity extends BridgeActivity {
    * suspended state after approval and the popup waited forever. The web layer
    * listens for this event and reopens the SAME Core relayer/subscriptions; it
    * never creates another pairing.
+   *
+   * ─── PUBLIC, NOT PROTECTED ─────────────────────────────────────────────────
+   * Capacitor's `BridgeActivity` widens this one to `public` (unlike
+   * `onCreate`/`onNewIntent`, which stay `protected`), and Java does not allow
+   * an override to NARROW visibility: «attempting to assign weaker access
+   * privileges; was public». That is a compile error, not a warning, and it
+   * took the whole APK job down for every build after it was written — the
+   * website kept updating while the phones got nothing. The other two
+   * overrides below are `protected` because their supertype declares them
+   * that way; `test/walletconnect-stack-probe.mjs` now checks this table
+   * against the real Capacitor source so the next such edit cannot ship.
    */
   @Override
-  protected void onResume() {
+  public void onResume() {
     super.onResume();
     Bridge bridge = getBridge();
     WebView webView = bridge == null ? null : bridge.getWebView();
