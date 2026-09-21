@@ -251,3 +251,114 @@ These cannot be closed from this environment and are **not** claimed as done:
 | Live read-only validation | **NOT MET — UNVERIFIED**, network blocked (§9.1) |
 | No "guaranteed safe / profit" language (§41) | **MET** — simulation states "would not revert at the current block… not a guarantee"; the risk panel states prices and rates move continuously |
 | i18n complete | **MET** — 339 `loan.*` keys, exact parity across all 12 locales |
+
+---
+
+## 11. Release record — merged to `main`
+
+This section was added after the change was merged, and records what was actually
+verified rather than what is assumed.
+
+### 11.1 Merge
+
+| Item | Value |
+|---|---|
+| Pull request | [#379](https://github.com/mshiravi433-ctrl/fbtcryp/pull/379) |
+| Merge commit on `main` | `3562e229b98b643fdfd3c509576ce99dd84f17dd` |
+| Work commit | `d97b2f45025783d35abefc40e496c8472adab1ff` |
+| Merge state at merge time | `MERGEABLE / CLEAN` |
+| Files changed | 21 (`+8033 / −245`) |
+| Deletions / renames of pages, routes or nav items | **none** |
+
+`main` had not moved since the branch point, so the merge carried no conflict risk.
+
+### 11.2 CI
+
+The repository's only push-triggered workflow is `build-apk.yml`.
+
+- On the pull request: `build` **pass** (6 m 50 s).
+- On `main` after the merge: run `35664542008` **success**.
+
+Note for the operator: **CI builds the APK; it does not run the test suite.** A
+regression in any screen would not be caught by the pipeline. The suite was run
+manually (below).
+
+### 11.3 Deploy path — verified, not assumed
+
+Web hosting is Vercel. Two things were checked rather than presumed:
+
+1. `vercel.json` sets `git.deploymentEnabled["arena/*"] = false`. Feature branches
+   never deploy, so nothing went live prematurely during this work; the merge to
+   `main` is what triggers the production deployment.
+2. Vercel runs `npm run build:full`, **not** `npm run build`. That exact command
+   was run locally: **exit 0**. Its only non-zero sub-step was IndexNow submission
+   (`could not reach IndexNow: fetch failed`), which the script itself treats as
+   non-fatal and which is an outbound-network restriction of this environment, not
+   a build defect. The sitemap is still emitted.
+
+`build:full` ends with `verify-api-load.mjs`, which mirrors Vercel's `@vercel/nft`
+trace. It reported `api/index.js loaded cleanly`. The BFF wiring was then traced
+explicitly, because a server-side fix that is not bundled would silently not ship:
+
+```
+api/index.js            → import app from '../server/app.js'
+server/app.js:214       → import { lendingRouter } from './lending.js'
+server/app.js:5846      → app.use('/api/lending', lendingRouter())
+```
+
+So the `server/lending.js` oracle and config-decoder fixes **are** inside the
+deployed serverless function, reachable at `/api/lending/*` via the `vercel.json`
+rewrite.
+
+### 11.4 Full test suite
+
+Run as `FBT_TEST_BUILD_HEAP="--max-old-space-size=2048" npm test`:
+
+- **8,028 assertions passed.**
+- **2 failed** — `wallet: the network picker maps the whole registry` and
+  `perp: the virtual-credit doorway has a real minimum height`. Both are in
+  `test/app-network-parity-probe.mjs`, both fail identically at the base commit,
+  and neither mentions lending. Out of scope (§1); deliberately not touched.
+- The run then aborted at its final step, `building shipped static bundle for boot
+  checks`. This is an environment ceiling, not a code defect: the production bundle
+  needs ≈3 GB of heap, this machine has 3.9 GB total, and the test runner already
+  holds ≈1 GB at that point. At a 3 GB child heap the kernel kills the process
+  (`status: 137`); at 2 GB V8 exhausts its heap. `test/run.mjs` documents this exact
+  scenario in its own comments, which is why `FBT_TEST_BUILD_HEAP` exists.
+  **The same build succeeds standalone** — `npm run build` exit 0 and
+  `npm run build:full` exit 0, both with the runner not resident in memory.
+
+### 11.5 Lending suite, post-merge
+
+| Suite | Result |
+|---|---|
+| `vitest` — `lending-service` (55) + `lending-bff-config-probe` (12) | **67/67** |
+| Loan execution UI probe | **37/37** |
+| Lending engine probe (48 checks) | pass |
+| Intent lending adapters probe | **30/30** |
+| BFF probe | 16 rows |
+| Production build (`npm run build`) | exit 0, all 12 locale chunks emitted |
+| Vercel build command (`npm run build:full`) | exit 0 |
+
+### 11.6 What is still **not** verified after the merge
+
+Merging does not change §9.1. Outbound RPC and `fbtswap.ir` are both unreachable
+from this environment (`SSL_ERROR_SYSCALL`), so:
+
+- **No live on-chain read has ever been exercised.** Every protocol read is covered
+  by stubbed-RPC tests only. §39 remains **UNVERIFIED**.
+- **No real transaction was ever sent**, by design.
+- Live deployment could not be confirmed from here.
+
+Before this is trusted with real funds, an operator must still:
+
+1. Confirm every per-chain contract address against a block explorer. Addresses are
+   configuration; they were never inferred, but they were also never read back from
+   chain in this environment.
+2. Run a read-only smoke test against real RPC on each supported network — the fork
+   probes already exist for this (`test:aave-base-fork`, `test:aave-arbitrum-fork`,
+   `test:compound-base-fork`, `test:lido-mainnet-fork`).
+3. Verify wallet behaviour on a real device (injected wallet, WalletConnect, Android).
+4. Confirm the Vercel production deployment for `3562e22` completed, and that
+   `/api/lending/markets` returns protocol-oracle prices with honest per-field
+   metadata rather than CoinGecko values labelled as oracle data.
