@@ -28,6 +28,11 @@
  */
 
 import { normalizeUpgrade4 } from './intentUnderstandingEngine.js';
+/* Upgrade 13 — the social read. One classifier now owns greetings,
+   pleasantries and «what's up» for all twelve UI languages; this router maps
+   its result onto the conversation kinds it already emits, so every existing
+   consumer (needsWeb, complexity, level, roles) keeps working unchanged. */
+import { classifySocialAct, socialCostOf, SOCIAL_ACTS } from './conversation/socialIntent.js';
 
 export const COLLABORATION_ROUTER_SCHEMA = 'fbt.collaboration-router.v5';
 export const COLLABORATION_ROUTER_VERSION = '5.0.0';
@@ -38,6 +43,10 @@ export const COLLABORATION_ROUTER_VERSION = '5.0.0';
 
 export const CONVERSATION_KINDS = Object.freeze({
   GREETING: 'GREETING',
+  /* «چخبر؟» / «what's up» / «que hay de nuevo» — a greeting that carries a real
+     request. Distinct from GREETING precisely because it must be ANSWERED: a
+     hello in reply to it is a refusal. Costs one cached data read, no model. */
+  WHATS_UP: 'WHATS_UP',
   THANKS: 'THANKS',
   CASUAL: 'CASUAL',
   EMOTIONAL: 'EMOTIONAL',
@@ -174,25 +183,55 @@ export function detectFomo(rawText) {
 /** Short follow-ups that must resolve against the previous turn (§41). */
 const FOLLOW_UP_RE = /^(?:چرا|چطور\s*شد|چگونه|خب\s*حالا(?:\s*چی)?|حالا\s*چی|پس\s*(?:چی|چطور|چه)|ادامه(?:\s*بده)?|بیشتر(?:\s*بگو)?|توضیح\s*بده|why|why\s+so|how\s+so|and\s+then|what\s+next|go\s+on|tell\s+me\s+more|more|continue|so|really)[\s?!؟.]*$/i;
 
-const ACTION_RE = /(بخر|بفروش|swap\s*(?:it|this|now)?|buy|sell|convert|تبدیل\s*کن|بریز\s*به|ارسال\s*کن|send|انتقال\s*بده|bridge\s*(?:it|this|now)?|استیک\s*کن|farm|lend|وام\s*بگیر|dca|سواپ\s*کن)/i;
+/*
+ * An imperative is an imperative in every language the product speaks. The old
+ * list only knew «سواپ کن»; a user who writes «سواپ رو انجام بده» — the way
+ * people actually say it — was being sent to the web-research path with a
+ * pending execution in their hands. First-person forms («انجام بدم») are NOT
+ * here on purpose: those are decision questions (§41).
+ */
+const ACTION_RE = /(بخر|بفروش|swap\s*(?:it|this|now)?|buy|sell|convert|تبدیل\s*کن|بریز\s*به|ارسال\s*کن|send|انتقال\s*بده|bridge\s*(?:it|this|now)?|استیک\s*کن|farm|lend|وام\s*بگیر|dca|سواپ\s*کن|(?:رو|را|را\s+هم)\s*انجام\s*بده|انجام\s*بده|بفرما\s*کن)|(?:сделай|выполни|проведи)\s*(?:свап|обмен|перевод|операцию)|(?:swap|işlem|transfer)\s*(?:yap|gerçekleştir)|نفذ\s*(?:السواب|العملية|التحويل)/i;
 
 /* «پس بفروشم؟» is a DECISION QUESTION about the previous analysis (§41), not
    an execution command. First-person subjunctive + question mark ⇒ question;
    the imperative forms («بفروش», «بخر») stay on the action path. */
 const DECISION_QUESTION_RE = /(بخرم|بفروشم|بخریم|بفروشیم|بریزم|انتقال\s*بدم|should\s+i\s+(?:buy|sell))[^a-zA-Z\u0600-\u06FF]*[؟?][\s]*$/i;
 
-export function classifyConversationKind(rawText, { priorIntent = null } = {}) {
+/**
+ * Conversation kind for one message.
+ *
+ * Upgrade 13 changed HOW this is decided (and left the vocabulary intact):
+ * the social read now runs first, so a Turkish «nasılsın», a Russian «как
+ * дела» or a Chinese «你好吗» is recognised as a pleasantry instead of falling
+ * through to the QUESTION default — which used to spend two model calls and a
+ * web search to answer "how are you", and answer it in English.
+ *
+ * The action guard still outranks politeness, so «سلام، ۵۰ تتر بخر» stays a
+ * BUY and never becomes small talk.
+ */
+export function classifyConversationKind(rawText, { priorIntent = null, locale = null } = {}) {
   const text = fold(rawText);
   if (!text) return CONVERSATION_KINDS.CASUAL;
+
+  /* ── Upgrade 13: multilingual social act, twelve locales ─────────────── */
+  const social = classifySocialAct(text, { locale, prior: priorIntent ? { intent: priorIntent } : null });
+  if (social.social) {
+    switch (social.act) {
+      case SOCIAL_ACTS.WHATS_UP: return CONVERSATION_KINDS.WHATS_UP;
+      case SOCIAL_ACTS.GREETING:
+      case SOCIAL_ACTS.HOW_ARE_YOU: return CONVERSATION_KINDS.GREETING;
+      case SOCIAL_ACTS.THANKS: return CONVERSATION_KINDS.THANKS;
+      default: return CONVERSATION_KINDS.CASUAL;
+    }
+  }
 
   const short = text.length <= 40;
   const thanks = THANKS_RE.test(text);
   const greeting = GREETING_RE.test(text);
 
-  /* "سلام، BTC بخر" is an action wearing a greeting — the greeting check only
-     wins on short messages with no action verb, so financial tools are never
-     triggered by politeness and never missed by it. «خوبی» alone is a greeting;
-     inside «خرید خوبی است» it is an adjective — hence the whole-message rule. */
+  /* Legacy path, kept as the net under the new classifier: the regexes still
+     catch a localised greeting the lexicon has not met yet. «پس بفروشم؟» and
+     friends are untouched below. */
   if (/^(?:سلام[\s,،]*)?خوبی[\s؟?!.]*$/.test(text)) return CONVERSATION_KINDS.GREETING;
   if (short && greeting && !ACTION_RE.test(text)) return CONVERSATION_KINDS.GREETING;
   if (thanks && !ACTION_RE.test(text)) return CONVERSATION_KINDS.THANKS;
@@ -248,6 +287,10 @@ export function classifyFreshness(rawText) {
  *  execution commands or static definitions — unless freshness is actually
  *  relevant. (§13/§14) */
 export function needsWebResearch({ freshness, conversationKind, intentType = null }) {
+  /* WHATS_UP is answered from the CACHED market read, not from the web: «چخبر»
+     must not become a search-engine round trip in a chat that already has the
+     prices. Data that is already in the turn is the fastest honest source. */
+  if (conversationKind === CONVERSATION_KINDS.WHATS_UP) return false;
   if (conversationKind === CONVERSATION_KINDS.GREETING || conversationKind === CONVERSATION_KINDS.THANKS) return false;
   if (conversationKind === CONVERSATION_KINDS.CASUAL) return false;
   /* Execution intents are grounded by tools and live quotes (§43), not by
@@ -274,6 +317,7 @@ export const TOOL_TRUTH_INTENTS = Object.freeze([
  *   stable knowledge → ANSWER | exact tool exists → TOOL | fresh facts → WEB | complex → MULTI_AI
  */
 export function decideAnswerPath({ conversationKind, freshness, intentType = null, entities = {}, complexity }) {
+  if (conversationKind === CONVERSATION_KINDS.WHATS_UP) return 'BRIEF';
   if (conversationKind === CONVERSATION_KINDS.GREETING || conversationKind === CONVERSATION_KINDS.THANKS || conversationKind === CONVERSATION_KINDS.CASUAL) {
     return 'CONVERSATION';
   }
@@ -296,6 +340,7 @@ const MEDIUM_RE = /(چرا\s*ریخت|چرا\s*افت|چرا\s*بالا|why\s+di
 
 export function classifyComplexity(rawText, { conversationKind, freshness, intentType = null } = {}) {
   const text = fold(rawText);
+  if (conversationKind === CONVERSATION_KINDS.WHATS_UP) return 'SIMPLE';
   if (conversationKind === CONVERSATION_KINDS.GREETING || conversationKind === CONVERSATION_KINDS.THANKS || conversationKind === CONVERSATION_KINDS.CASUAL) {
     return 'SIMPLE';
   }
@@ -319,6 +364,10 @@ export function classifyComplexity(rawText, { conversationKind, freshness, inten
  *   L5  high-stakes collaborative reasoning + verification + uncertainty engine
  */
 export function determineCollaborationLevel({ conversationKind, complexity, freshness, needsWeb }) {
+  /* Level 1 = "no model needed". WHATS_UP sits here on purpose: the brief is
+     computed from data the app already holds, so depth costs a memory read
+     rather than a billable completion. */
+  if (conversationKind === CONVERSATION_KINDS.WHATS_UP) return 1;
   if (conversationKind === CONVERSATION_KINDS.GREETING || conversationKind === CONVERSATION_KINDS.THANKS || conversationKind === CONVERSATION_KINDS.CASUAL) {
     return 1;
   }
@@ -339,6 +388,7 @@ export function determineCollaborationLevel({ conversationKind, complexity, fres
 
 export function selectTaskTypes({ conversationKind, complexity, freshness, intentType = null, entities = {} }) {
   const kind = conversationKind;
+  if (kind === CONVERSATION_KINDS.WHATS_UP) return ['market', 'summarization'];
   if (kind === CONVERSATION_KINDS.GREETING || kind === CONVERSATION_KINDS.THANKS || kind === CONVERSATION_KINDS.CASUAL) {
     return ['conversation'];
   }
@@ -378,6 +428,17 @@ export function selectRoles({ conversationKind, taskTypes = [], complexity }) {
   return [...roles];
 }
 
+/**
+ * The kinds that are answered from a phrase rather than from evidence. Level
+ * 1, no web, no financial tools. WHATS_UP is deliberately NOT one of them —
+ * it is a request for data wearing the grammar of a greeting.
+ */
+export function isPureSmallTalk(conversationKind) {
+  return conversationKind === CONVERSATION_KINDS.GREETING
+    || conversationKind === CONVERSATION_KINDS.THANKS
+    || conversationKind === CONVERSATION_KINDS.CASUAL;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  MAIN ENTRY — QUESTION ANALYSIS                                             */
 /* -------------------------------------------------------------------------- */
@@ -398,7 +459,8 @@ export function planCollaboration({ message = '', intentType = null, entities = 
   const text = String(message || '').trim();
   const normalized = normalizeUpgrade4(text);
 
-  const conversationKind = classifyConversationKind(text, { priorIntent });
+  const conversationKind = classifyConversationKind(text, { priorIntent, locale });
+  const social = classifySocialAct(text, { locale, prior: priorIntent ? { intent: priorIntent } : null });
   const emotion = detectEmotion(text);
   const fomo = detectFomo(text);
   const freshness = classifyFreshness(text);
@@ -425,6 +487,27 @@ export function planCollaboration({ message = '', intentType = null, entities = 
     schema: COLLABORATION_ROUTER_SCHEMA,
     normalized,
     conversationKind,
+    /* Upgrade 13 — the social read, kept beside conversationKind so nothing
+       that consumed the old field has to change. `social.lang` is the language
+       the USER WROTE IN, which is what the reply layer must use; `declared`
+       locale is only the app's display setting. */
+    social: {
+      act: social.act,
+      acts: social.acts || [],
+      also: social.acts?.length > 1 ? (social.acts || []).slice(1) : [],
+      lang: social.lang,
+      langSource: social.langSource,
+      locale: String(locale || 'fa').toLowerCase().split('-')[0] || null,
+      social: Boolean(social.social),
+      pure: Boolean(social.pure),
+      needsData: Boolean(social.needsData),
+      confidence: social.confidence || 0,
+      evidence: social.evidence || [],
+      guard: social.guard || { action: false, specific: false, blocks: false },
+      cost: socialCostOf(social.act),
+      executionAuthorized: false
+    },
+    briefRequested: conversationKind === CONVERSATION_KINDS.WHATS_UP,
     emotion,
     fomo,
     freshness,

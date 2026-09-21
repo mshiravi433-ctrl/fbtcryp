@@ -2251,7 +2251,12 @@ for (const [suite, file] of [
   ['FI OS Financial Intelligence Brain (phase 210)', 'intent-ai/phase210-financial-brain-probe.mjs'],
   ['FI OS Cross-Chain Route Intelligence (phase 214)', 'intent-ai/route-intelligence-probe.mjs'],
   ['FI OS Traditional Assets Decision (phase 215)', 'intent-ai/traditional-assets-probe.mjs'],
-  ['FI OS Lending Adapters (phase 216)', 'intent-ai/lending-adapters-probe.mjs']
+  ['FI OS Lending Adapters (phase 216)', 'intent-ai/lending-adapters-probe.mjs'],
+  /* UPGRADE 13 — conversational depth: the pleasantry/report split in twelve
+     languages, the economic brief built from real payloads only, the provider
+     ladder that replaces «I don't know», and dictation that never auto-sends.
+     A child process, like the suites above: it owns its exit code. */
+  ['FBT Intent OS conversation depth (Upgrade 13)', 'intent-ai/upgrade13-conversation-depth-probe.mjs']
 ]) {
   console.log(`▸ ${suite}…`);
   try {

@@ -46,6 +46,8 @@ import {
   CONVERSATION_KINDS,
   AI_ROLES
 } from '../src/lib/intent-ai/os/collaborationRouter.js';
+import { renderSocialReply } from '../src/lib/intent-ai/os/conversation/socialVoice.js';
+import { SOCIAL_ACTS } from '../src/lib/intent-ai/os/conversation/socialIntent.js';
 
 export const COLLABORATION_SCHEMA = 'fbt.ai-collaboration.v1';
 export const COLLABORATION_VERSION = '5.0.0';
@@ -119,6 +121,25 @@ function healthyProvidersForTask(taskType, { max = MAX_MODELS, exclude = [] } = 
 /* -------------------------------------------------------------------------- */
 /*  ROLE PROMPTS (§5) — FBT's own voice; no imitation of any AI brand (§50)    */
 /* -------------------------------------------------------------------------- */
+
+/* BCP-47 → the name a model understands for "write in this". */
+const LANGUAGE_NAMES = Object.freeze({
+  en: 'English', fa: 'Persian (فارسی)', ar: 'Arabic (العربية)', tr: 'Turkish (Türkçe)',
+  ru: 'Russian (русский)', zh: 'Simplified Chinese (简体中文)', hi: 'Hindi (हिन्दी)',
+  ur: 'Urdu (اردو)', id: 'Indonesian (Bahasa Indonesia)', es: 'Spanish (Español)',
+  pt: 'Portuguese (Português)', fr: 'French (Français)'
+});
+
+/**
+ * What language a model must write its text fields in. Falls back to English
+ * only for a language the product does not localise to, and says so in the
+ * prompt rather than quietly switching.
+ */
+export function languageInstruction(locale = 'en') {
+  const code = String(locale || 'en').toLowerCase().split('-')[0];
+  if (LANGUAGE_NAMES[code]) return `${LANGUAGE_NAMES[code]} — the user wrote in ${code}`;
+  return `English (the user's language "${code}" is not localised by FBT yet; say nothing about that in the answer)`;
+}
 
 const FBT_RULES = [
   'You are one specialist inside FBT\'s own intelligence layer — not a chatbot brand.',
@@ -207,11 +228,20 @@ const ROLE_TASK = {
 
 async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600 }) {
   const system = `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}`;
-  const isFa = String(locale || 'fa').startsWith('fa');
+  /*
+   * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
+   * This line used to be a ternary: Persian or English. Everything a Turkish,
+   * Arabic, Russian or Chinese user asked was therefore answered in English by
+   * the fleet — the one layer that was supposed to make the assistant
+   * multilingual was itself bilingual. `locale` here is already the detected
+   * language of the message when the chat route has one, so a single
+   * instruction covers typed and declared language alike.
+   */
+  const answerLang = languageInstruction(locale);
   const user = [
     `USER QUESTION: ${sanitizePrompt(message)}`,
     contextBlock,
-    isFa ? 'Write "answer"/"claims"/"uncertainty" text in Persian (فارسی); JSON keys stay English.' : 'Write text fields in English.'
+    `Write the "answer"/"claims"/"uncertainty" TEXT FIELDS IN ${answerLang}. JSON keys stay English.`
   ].filter(Boolean).join('\n\n');
 
   /* deps.selectProviders lets tests inject a fake fleet; production uses the
@@ -428,9 +458,21 @@ function buildDegradedAnswer({ message, analysis, context = {}, knowledge = [], 
       : `${sources.length} web source(s) found; top result: "${sources[0].title}".`);
   }
   if (!parts.length) {
-    parts.push(isFa
-      ? 'در حال حاضر به مدل هوش مصنوعی خارجی دسترسی ندارم و داده معتبری برای این سؤال پیدا نشد. نمی‌خواهم بدون شاهد پاسخ قطعی بدهم.'
-      : 'No external AI model is available right now and no trusted data was found for this question. I will not answer definitively without evidence.');
+    /*
+     * The old wording here asserted something the code had not checked: «no
+     * external AI model is available», even on a deployment with eight keys
+     * where the ladder had simply not been walked. It now says which of the two
+     * is true, because the fix differs completely — one is an operator task,
+     * the other is a user task.
+     */
+    const anyKey = getActiveProviderIds().some((id) => id !== 'internal');
+    parts.push(!anyKey
+      ? (isFa
+        ? 'هیچ مدل هوش مصنوعی خارجی روی این سرویس فعال نیست، و دادهٔ معتبری هم برای این سؤال پیدا نشد. مدیر سرویس باید یک کلید (مثلاً GROQ_API_KEY یا OPENROUTER_API_KEY) تنظیم کند تا پاسخ‌های عمیق‌تر ممکن شود.'
+        : 'No external AI provider is configured on this deployment, and no trusted data was found for this question. An operator must set a provider key (for example GROQ_API_KEY or OPENROUTER_API_KEY) before deeper answers are possible.')
+      : (isFa
+        ? 'همهٔ مدل‌های فعال را برای این سؤال صدا زدم و هیچ‌کدام جواب قابل استناد نداد؛ دادهٔ معتبری هم پیدا نشد. بدون شاهد پاسخ قطعی نمی‌دهم.'
+        : 'Every configured model was consulted for this question and none returned a citable answer, and no trusted data was found. I will not answer definitively without evidence.'));
   }
   return parts.join('\n\n');
 }
@@ -554,7 +596,8 @@ export async function runCollaborativeAnalysis({
   if (plan.level === 1 || !externalConfigured) {
     /* Conversation / simple, or no external provider configured at all. */
     if (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL) {
-      result.answer = naturalConversationReply(plan.conversationKind, isFa);
+      const socialLine = naturalConversationReply(plan.conversationKind, isFa, { locale, social: plan.social });
+      result.answer = socialLine || result.answer || '';
       result.degraded = !externalConfigured && plan.level > 1;
     } else if (!externalConfigured) {
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
@@ -714,16 +757,19 @@ export function formatEmotionalAcknowledgement({ emotion = {}, fomo = {}, locale
   return null;
 }
 
-function naturalConversationReply(kind, isFa) {
-  if (kind === CONVERSATION_KINDS.THANKS) {
-    return isFa ? 'خواهش می‌کنم! هر سؤال دیگری داشتی در خدمتم.' : 'You are welcome! I am here for any other question.';
-  }
-  if (kind === CONVERSATION_KINDS.CASUAL) {
-    return isFa ? 'در خدمتم — درباره بازار، کیف پول یا هر چیز دیگری بپرس.' : 'Happy to help — ask me about the market, your wallet, or anything else.';
-  }
-  return isFa
-    ? 'سلام! خوشحالم که اینجایی. درباره بازار، دارایی‌ها یا هر هدف مالی‌ات بپرس.'
-    : 'Hello! Good to see you. Ask me about the market, your assets, or any financial goal.';
+/**
+ * Reply for a level-1 social turn.
+ *
+ * This used to be a three-way ternary over `isFa`, which meant ten of the
+ * product's twelve languages were answered in English and «چخبر» was answered
+ * as a hello. It now defers to the twelve-locale voice table, and keeps the
+ * old bilingual strings only as the table's own English fallback.
+ */
+function naturalConversationReply(kind, isFa, { locale = null, social = null } = {}) {
+  const act = social?.act || (kind === CONVERSATION_KINDS.THANKS ? SOCIAL_ACTS.THANKS : kind === CONVERSATION_KINDS.CASUAL ? SOCIAL_ACTS.SMALL_TALK : SOCIAL_ACTS.GREETING);
+  const lang = social?.lang || (isFa ? 'fa' : String(locale || 'en').toLowerCase().split('-')[0]) || 'en';
+  const rendered = renderSocialReply({ act, lang, seed: `${act}:${lang}` });
+  return rendered.ok ? rendered.text : null;
 }
 
 function pickAnalysisRoles(plan, max) {

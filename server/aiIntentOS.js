@@ -114,6 +114,14 @@ import {
   getQualityDashboard
 } from './aiQuestionIntel.js';
 import { searchKnowledge, listKnowledge, knowledgeStats } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+/* Upgrade 13 — conversational depth. The social layer answers a pleasantry in
+   the language it was written in, turns «چخبر» into an economic brief, and the
+   escalation ladder spends the REST of the fleet when the deterministic reply
+   has nothing. Execution authority is untouched (§67). */
+import { composeSocialTurn } from './aiSocial.js';
+import { respondIn } from '../src/lib/intent-ai/os/conversation/languageSense.js';
+import { answerGap, escalateToProviders, ESCALATION_SCHEMA } from './aiEscalation.js';
+import { fetchNews } from './news.js';
 
 const router = Router();
 
@@ -373,11 +381,29 @@ async function buildAIContext(req, body = {}) {
     p,
     new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
   ]);
-  const [market, yields, solanaAssets, goals] = await Promise.all([
+  /*
+   * `news` joins the same racy deadline. It exists for ONE turn shape: the
+   * economic brief that answers «چخبر / what's up». A live RSS fan-out inside a
+   * chat turn is exactly the kind of thing that used to make the assistant
+   * feel slow, so it is cached with the same stale-while-revalidate discipline
+   * as prices and a cold caller simply gets no news rows — which the brief
+   * reports as a named gap rather than writing headlines itself.
+   */
+  const newsContext = async () => {
+    try {
+      const { value } = await withCache('ai-os:news', 5 * 60_000, fetchNews, { swr: true });
+      const items = Array.isArray(value?.items) ? value.items : [];
+      return { dataStatus: 'live', at: value?.at || null, items: items.slice(0, 6) };
+    } catch {
+      return { dataStatus: 'unavailable', at: null, items: [] };
+    }
+  };
+  const [market, yields, solanaAssets, goals, news] = await Promise.all([
     ctxDeadline(marketContext()).then((v) => v || { dataStatus: 'unavailable', change24hPct: null, priceMap: null }),
     ctxDeadline(yieldContext()).then((v) => v || null),
     ctxDeadline(solanaAssetsContext()).then((v) => v || null),
-    ctxDeadline(readGoals(userId)).then((v) => v || { ok: true, dataStatus: 'unavailable', goals: [] })
+    ctxDeadline(readGoals(userId)).then((v) => v || { ok: true, dataStatus: 'unavailable', goals: [] }),
+    ctxDeadline(newsContext(), 4000).then((v) => v || { dataStatus: 'unavailable', at: null, items: [] })
   ]);
 
   const wallet = sanitizeWallet(client.wallet || b.wallet);
@@ -454,12 +480,14 @@ async function buildAIContext(req, body = {}) {
     market,
     yields,
     solanaAssets,
+    news,
     now: nowMs(),
     dataStatus: {
       wallet: wallet.connected ? 'live' : 'unavailable',
       portfolio: portfolio.dataStatus,
       market: market.dataStatus,
       yield: Array.isArray(yields) ? 'live' : 'unavailable',
+      news: news?.dataStatus || 'unavailable',
       durable: storeDurable() ? 'live' : 'memory'
     }
   };
@@ -1051,12 +1079,23 @@ router.post('/chat', async (req, res) => {
   const goalDetected = /goal|هدف|دو برابر|double|triple|دوبل/i.test(message) && (context.portfolio?.totalValueUsd != null || /goal|هدف|دو برابر|double/i.test(message));
   const resumed = req.body?.resume === true;
   const suggestions = suggestionsFor({ message, intent: out.plan.intent, context });
+  /*
+   * The deterministic renderer (`humanResponse.js`) speaks two languages and
+   * treats anything that is not English as Persian — so a Portuguese, Turkish
+   * or Russian turn that reached it came back in Farsi. The conversation layer
+   * added in Upgrade 13 speaks twelve; this legacy path gets at least the right
+   * one of its two: Persian when the human actually wrote Persian, or said
+   * nothing that carries a language while the interface is Persian. Never
+   * Persian by default for somebody who cannot read it.
+   */
+  const replyLang = respondIn(message, { declared: locale || 'fa' }).lang;
+  const deterministicLocale = replyLang === 'fa' ? 'fa' : 'en';
   const human = formatHumanResponse({
     message,
     classification,
     orchestrateOut: out,
     context,
-    locale: locale || 'fa',
+    locale: deterministicLocale,
     resumed,
     suggestions,
     intentId,
@@ -1133,11 +1172,37 @@ router.post('/chat', async (req, res) => {
     priorIntent: prior?.intent || null,
     locale: locale || 'fa'
   });
+  /*
+   * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
+   * Two sentences that used to leave this route through the same door as a
+   * research request:
+   *
+   *   «حالت چطوره»   → was classified RESEARCH(0.98) and answered with a market
+   *                    pointer; now a pleasantry, answered as one, in the
+   *                    language it was written in, for zero provider calls.
+   *   «چخبر»          → was a greeting; now recognised as a request to be told
+   *                    what is going on and answered with a real economic brief
+   *                    built from the market, yield and portfolio reads this
+   *                    turn already has — and it names what it could not read.
+   *
+   * `handled` is false for every turn carrying an action card, a pending intent
+   * or a wallet request, so this block cannot intercept anything that moves
+   * money (§67).
+   */
+  const socialTurn = composeSocialTurn({
+    u5,
+    human,
+    context,
+    locale: locale || 'fa',
+    now: nowMs(),
+    transparency: req.body?.transparency === true
+  });
   const isCollaborativeIntent = COLLABORATION_INTENTS.includes(String(human.intent?.type || intent || 'GENERAL'));
   const collaborationWanted = isCollaborativeIntent
     && !human.pendingIntent
     && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
-    && u5.level >= 2;
+    && u5.level >= 2
+    && !socialTurn.handled;
 
   let collaboration = null;
   if (collaborationWanted) {
@@ -1186,8 +1251,11 @@ router.post('/chat', async (req, res) => {
     && String(collaboration.answer || '').trim().length > 20
     && (!collaboration.degraded || collaboration.evidence.knowledgeUsed || collaboration.evidence.toolDataUsed || collaboration.evidence.webUsed)
   );
-  let finalText = human.message;
-  if (collaborationUsable) {
+  let finalText = socialTurn.handled ? socialTurn.text : human.message;
+  if (socialTurn.handled) {
+    /* The social reply IS the answer: a card or a model pass cannot overwrite
+       a pleasantry, and it must not be "improved" into a pitch. */
+  } else if (collaborationUsable) {
     finalText = collaboration.answer;
   } else if (tokenCard) {
     /* No model pass (or a degraded one) — the card still carries REAL data,
@@ -1233,9 +1301,53 @@ router.post('/chat', async (req, res) => {
     }
   }
 
+  /*
+   * ─── UPGRADE 13 — "ASK THE OTHER ONES" IS NOW LITERAL ──────────────────
+   * If the reply this route is about to send is a non-answer — a shrug, a
+   * "data unavailable", a sub-0.45-confidence guess — the remaining providers
+   * are consulted inside one deadline, and the first real answer wins.
+   *
+   * What this cannot do, in order of how much it matters:
+   *   · it never runs for a wallet/portfolio/balance question: those numbers
+   *     are TOOL_TRUTH, and a model inventing a balance is the worst possible
+   *     output of this app
+   *   · it never runs on an execution turn, a card, or a pending intent
+   *   · it never grants authority: `answeredBy` is provenance for the honesty
+   *     ledger, not a signature path
+   *   · if every provider refuses, the deterministic reply STANDS — an
+   *     escalation can only improve an answer, never replace one with silence
+   */
+  let escalation = null;
+  const gap = answerGap({
+    message,
+    text: finalText,
+    intentType: human.intent?.type || intent || 'GENERAL',
+    confidence: out.plan.confidence,
+    dataStatus: context.portfolio?.dataStatus || null,
+    hasCard: Boolean(tokenCard) || ['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type),
+    hasPendingIntent: Boolean(pendingIntent),
+    socialHandled: Boolean(socialTurn.handled)
+  });
+  if (gap.escalate) {
+    escalation = await escalateToProviders({
+      message,
+      locale: socialTurn.social?.lang || u5.social?.lang || locale || 'fa',
+      context,
+      exclude: [...new Set([...(collaboration?.providersUsed || []), ...(llm?.provider ? [llm.provider] : [])])],
+      taskType: u5.taskTypes?.includes('market') ? 'market' : 'general'
+    }).catch(() => null);
+    if (escalation?.ok && String(escalation.answer || '').trim().length > 20) {
+      finalText = escalation.answer;
+    }
+  }
+
   const reply = {
     text: stripInternalLeaks(finalText),
     message: stripInternalLeaks(finalText),
+    /* Upgrade 13 — how the turn was understood. The UI may show the language
+       badge and the brief; nothing here changes what the buttons do. */
+    social: socialTurn.social || u5.social || null,
+    brief: socialTurn.brief || null,
     /* The governing behavior contract (execution-first spec v2.0) travels with
        the reply so the frontend renders state instead of guessing it (§49). */
     contract: {
@@ -1274,7 +1386,20 @@ router.post('/chat', async (req, res) => {
       quality: collaboration?.quality?.answerQualityScore ?? null,
       degraded: collaboration?.degraded ?? false,
       webUsed: collaboration?.evidence?.webUsed || false,
-      latencyMs: collaboration?.latencyMs || 0
+      latencyMs: collaboration?.latencyMs || 0,
+      /* Upgrade 13: the escalation trail. `gapReasons` says WHY the fleet was
+         consulted and `providersTried` says who was asked and what each of them
+         did — including the refusals, because "the model declined" is a fact
+         the operator is entitled to see and the user is not. */
+      escalation: escalation ? {
+        schema: ESCALATION_SCHEMA,
+        used: escalation.providerCalls || 0,
+        answeredBy: escalation.answeredBy || null,
+        reason: escalation.reason || null,
+        providersTried: (escalation.tried || []).map((t) => ({ provider: t.provider, status: t.status })),
+        gapReasons: gap.reasons || [],
+        executionAuthorized: false
+      } : (gap.reasons?.length ? { used: 0, gapReasons: gap.reasons, executionAuthorized: false } : null)
     },
     ui: human.ui,
     card: human.card || tokenCard,
