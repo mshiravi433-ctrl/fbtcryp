@@ -1,0 +1,23 @@
+{
+  "name": "@fbt/intent-sdk",
+  "version": "1.0.0",
+  "description": "Official TypeScript/JavaScript SDK for the FBT Intent Protocol",
+  "main": "index.js",
+  "module": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "intent",
+    "fbt",
+    "defi",
+    "solver",
+    "auction",
+    "settlement",
+    "evm",
+    "solana"
+  ],
+  "author": "FBT Crypto",
+  "license": "MIT"
+}
