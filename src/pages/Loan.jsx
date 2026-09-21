@@ -46,10 +46,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import WalletConnectSheet from '../components/WalletConnectSheet';
+import SolanaLendingPanel from '../components/SolanaLendingPanel';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { useTelegram } from '../context/TelegramContext';
+import { SOLANA_LENDING_CHAIN_ID } from '../lib/lending.js';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
 import {
@@ -88,9 +90,10 @@ import {
 
 const CHAIN_DOT = {
   1: '#627eea', 56: '#f3ba2f', 137: '#8247e5', 42161: '#28a0f0',
-  8453: '#0052ff', 10: '#ff0420', 43114: '#e84142'
+  8453: '#0052ff', 10: '#ff0420', 43114: '#e84142',
+  59144: '#61dfff', 146: '#fe9a4d', 900001: '#9945ff'
 };
-const chainLabel = (id) => EVM_CHAINS[id]?.name || `#${id}`;
+const chainLabel = (id) => id === SOLANA_LENDING_CHAIN_ID ? 'Solana' : EVM_CHAINS[id]?.name || `#${id}`;
 
 /**
  * Codes the engine already defines. A failure whose code is one of these is
@@ -2454,7 +2457,8 @@ export default function Loan() {
    */
   useEffect(() => {
     let alive = true;
-    const nativeId = chain === 56 ? 'binancecoin' : chain === 137 ? 'matic-network' : chain === 43114 ? 'avalanche-2' : 'ethereum';
+    if (chain === SOLANA_LENDING_CHAIN_ID) { setNativePriceUsd(null); return () => { alive = false; }; }
+    const nativeId = chain === 56 ? 'binancecoin' : chain === 137 ? 'matic-network' : chain === 43114 ? 'avalanche-2' : chain === 146 ? 'sonic-3' : 'ethereum';
     import('../lib/api')
       .then((api) => api.getSimplePrices([nativeId]))
       .then((res) => {
@@ -2476,6 +2480,14 @@ export default function Loan() {
    * user sees is the one the chain has, not the one from before they signed.
    */
   const refresh = useCallback(async ({ force = true } = {}) => {
+    /* Solana owns a separate RPC and wallet layer; do not route its chain id
+       through the EVM provider factory. */
+    if (chain === SOLANA_LENDING_CHAIN_ID) {
+      setLoading(false);
+      setDataStatus(DATA_STATUS.UNAVAILABLE);
+      setFailures([]);
+      return;
+    }
     if (!venue || typeof getReadProvider !== 'function') {
       setLoading(false);
       setDataStatus(DATA_STATUS.UNAVAILABLE);
@@ -3127,7 +3139,7 @@ export default function Loan() {
       {/* §37 — nothing could be read. The page says so and offers a retry
           instead of showing zeros, a spinner that never ends, or a cached
           snapshot presented as if it were fresh. */}
-      {!loading && dataStatus === DATA_STATUS.UNAVAILABLE && venue && (
+      {!loading && chain !== SOLANA_LENDING_CHAIN_ID && dataStatus === DATA_STATUS.UNAVAILABLE && venue && (
         <UnavailableBanner failures={failures} onRetry={() => refresh({ force: true })} t={t} />
       )}
 
@@ -3223,8 +3235,12 @@ export default function Loan() {
       {/* ── Market picker ──────────────────────────────────────────────── */}
       <ChainRail chain={chain} onPick={(id) => { haptic?.('select'); setChain(id); }} t={t} />
 
+      {chain === SOLANA_LENDING_CHAIN_ID && (
+        <SolanaLendingPanel t={t} tab={tab} setTab={setTab} preset={preset} />
+      )}
+
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
-      <motion.div
+      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div
         variants={riseIn} initial="hidden" animate="show"
         style={{
           display: 'flex', gap: 5, marginBottom: 14, position: 'relative',
@@ -3267,12 +3283,12 @@ export default function Loan() {
             </button>
           );
         })}
-      </motion.div>
+      </motion.div>}
 
       {/* Where the numbers come from — stated, not implied. §19 wants the age
           of the data next to the data, so it ticks here rather than only
           showing the clock time of the read. */}
-      <motion.div
+      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div
         variants={riseIn} initial="hidden" animate="show"
         data-testid="loan-rate-source"
         style={{ margin: '-6px 2px 10px' }}
@@ -3288,10 +3304,10 @@ export default function Loan() {
             <DataStatusPill status={dataStatus} ageMs={snapshotAgeMs} t={t} testId="loan-rate-source-status" />
           </div>
         )}
-      </motion.div>
+      </motion.div>}
 
       {/* ── Tab body ───────────────────────────────────────────────────── */}
-      <AnimatePresence mode="wait">
+      {chain !== SOLANA_LENDING_CHAIN_ID && <AnimatePresence mode="wait">
         {tab === 'supply' && (
           <motion.div key="supply" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
             <SupplyTab market={market} t={t} haptic={haptic} notify={notify} onExecute={openExecution} preset={preset} />
@@ -3310,18 +3326,18 @@ export default function Loan() {
             />
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>}
 
-      <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 6 }}>
+      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 6 }}>
         <HowItWorks t={t} />
-      </motion.div>
+      </motion.div>}
 
-      <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 2 }}>
+      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 2 }}>
         <InfoBox title={t('loan.riskTitle')} tone="danger" id="loan-risk-global">
           <p>{t('loan.riskBody')}</p>
           <p style={{ marginTop: 6 }}>{t('loan.riskBody2')}</p>
         </InfoBox>
-      </motion.div>
+      </motion.div>}
 
       <ExecutionSheet
         exec={exec}

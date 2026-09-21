@@ -51,3 +51,5 @@ farm-fork-evidence/*.json
 public/vendor/
 scripts/.vendor-velocity-entry.generated.mjs
 .shots/
+
+scripts/.vendor-kamino-entry.generated.mjs

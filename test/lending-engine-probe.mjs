@@ -160,8 +160,10 @@ t('a debt-free wallet has no liquidation risk and full headroom', (() => {
 t('every enabled network has rpcs, explorer, protocols and oracle config',
   enabledNetworks().every((n) => n.enabled === true && Array.isArray(n.rpcs) && n.rpcs.length >= 2 && n.explorer && Array.isArray(n.protocols) && n.protocols.length && n.oracle));
 
-t('Linea and Sonic stay declared but feature-flagged OFF (no adapter)',
-  !isNetworkEnabled(59144) && !isNetworkEnabled(146) && networkFor(59144)?.disabledReason === 'POOL_NOT_WIRED');
+t('Linea and Sonic are enabled with Aave V3 pool wiring',
+  isNetworkEnabled(59144) && isNetworkEnabled(146)
+    && (networkFor(59144)?.protocols || []).includes('aave-v3')
+    && (networkFor(146)?.protocols || []).includes('aave-v3'));
 
 /* Phase 216 — the pending adapters are implemented, so Solana is enabled
    and Base carries the two new protocols alongside Aave. A market that
@@ -174,7 +176,7 @@ t('Base lists aave-v3, compound-v3 and morpho (Phase 216)',
   (() => { const p = networkFor(8453)?.protocols || []; return p.includes('aave-v3') && p.includes('compound-v3') && p.includes('morpho'); })());
 
 t('the wired Aave chains are flagged ON',
-  [1, 56, 137, 42161, 8453, 10, 43114].every((id) => isNetworkEnabled(id)));
+  [1, 56, 137, 42161, 8453, 10, 43114, 59144, 146].every((id) => isNetworkEnabled(id)));
 
 t('failover endpoints are ordered per chain',
   Array.isArray(rpcFallbackOrder(1)) && rpcFallbackOrder(1).length >= 3);

@@ -78,25 +78,24 @@ export const LENDING_NETWORKS = Object.freeze([
     rpcs: ['https://rpc.linea.build', 'https://linea.drpc.org'],
     explorer: 'https://lineascan.build', explorerTx: (h) => `https://lineascan.build/tx/${h}`,
     protocols: ['aave-v3'], oracle: 'aave-oracle',
-    enabled: false, disabledReason: 'POOL_NOT_WIRED', testnet: false, color: '#61dfff'
+    enabled: true, testnet: false, color: '#61dfff'
   },
   {
     chainId: 146, key: 'sonic', name: 'Sonic', nativeToken: 'S',
     rpcs: ['https://rpc.soniclabs.com', 'https://sonic.drpc.org'],
     explorer: 'https://sonicscan.org', explorerTx: (h) => `https://sonicscan.org/tx/${h}`,
     protocols: ['aave-v3'], oracle: 'aave-oracle',
-    enabled: false, disabledReason: 'POOL_NOT_WIRED', testnet: false, color: '#7b5cff'
+    enabled: true, testnet: false, color: '#7b5cff'
   },
   {
     chainId: 900001, key: 'solana', name: 'Solana', nativeToken: 'SOL',
     rpcs: ['https://api.mainnet-beta.solana.com', 'https://solana-rpc.publicnode.com'],
     explorer: 'https://solscan.io', explorerTx: (h) => `https://solscan.io/tx/${h}`,
     protocols: ['solana-lending'], oracle: 'pyth',
-    /* Phase 216 — enabled: the solana-lending adapter exists and is
-       registered. Its pools come from the adapter's pool registry; with an
-       empty registry every quote answers NO_POOL_REGISTERED (a code, never a
-       fake success), so enabling the network advertises a real, refuse-
-       honestly capability — not a dead end. */
+    /* Kamino KLend is the pinned production market for /loan. The generic
+       external-pool adapter still refuses unverified registries, while the
+       screen reads reserves and builds wallet-signed actions through the
+       dedicated Solana client. */
     enabled: true, testnet: false, color: '#9945ff'
   }
 ]);

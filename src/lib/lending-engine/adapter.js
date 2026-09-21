@@ -83,13 +83,12 @@ export const PROTOCOL_ALLOWLIST = Object.freeze([
   { id: 'compound-v3', enabled: true, note: 'Comet Base/USDC — supply/withdraw via src/lib/defi/compoundV3Base.js, borrow/repay/health via src/lib/defi/compoundV3Lending.js' },
   { id: 'morpho', enabled: true, note: 'Morpho Blue Base USDC/cbBTC — supply/withdraw/borrow/repay via src/lib/defi/morphoBlueBase.js' },
   /*
-   * Phase 216: real, enabled adapter with an HONEST boundary — the pool
-   * registry. No audited Solana lending program is registered in this
-   * deployment, so every quote/build refuses with NO_POOL_REGISTERED instead
-   * of dialing an unverified program. Registering a pool (program id + vault
-   * + mint, with a source) is a deployment decision, not an adapter one.
+   * Phase 216: the generic Solana pool-registry adapter remains source-pinned
+   * for protocol-agnostic callers. The /loan screen's production Solana path
+   * is Kamino KLend in src/lib/solanaLending.js, with live market reads and
+   * wallet-only signing; this registry still refuses unverified external pools.
    */
-  { id: 'solana-lending', enabled: true, note: 'Solana lending — pool-registry adapter; refuses with NO_POOL_REGISTERED until a pool is registered' }
+  { id: 'solana-lending', enabled: true, note: 'Solana lending — Kamino KLend powers /loan; the generic pool-registry seam refuses with NO_POOL_REGISTERED until an external pool is registered' }
 ]);
 
 /**
@@ -133,7 +132,7 @@ export function createAaveAdapter({ tokenLookup = null } = {}) {
 
 class AaveLendingAdapter extends LendingProtocolAdapter {
   constructor({ tokenLookup = null }) {
-    super({ id: 'aave-v3', name: 'Aave V3', chainIds: [1, 10, 56, 137, 42161, 43114, 8453], enabled: true });
+    super({ id: 'aave-v3', name: 'Aave V3', chainIds: [1, 10, 56, 137, 42161, 43114, 8453, 59144, 146], enabled: true });
     this.tokenLookup = tokenLookup;
   }
 
@@ -822,12 +821,12 @@ class MorphoLendingAdapter extends LendingProtocolAdapter {
 /**
  * SolanaLendingAdapter — the SOLANA leg of the lending engine.
  *
- * The honest boundary of this deployment: the repo integrates NO audited
- * Solana lending program yet, and dialing a program address without a
- * registered, source-pinned pool would be exactly the failure the §31
- * allowlist exists to prevent. So the adapter is REAL in the parts that can
- * be real now — the interface, the registry, the network config, the failure
- * modes — and REFUSES in the parts that would need an unverified program:
+ * The generic engine's external-pool boundary remains source-pinned: dialing
+ * an arbitrary program would be exactly the failure the §31 allowlist exists
+ * to prevent. The /loan screen does not use this open-ended registry; it uses
+ * the separately pinned Kamino KLend market client in src/lib/solanaLending.js.
+ * This adapter stays intentionally strict for callers that have not selected
+ * that canonical Kamino market:
  *
  *   getMarkets            the registered pools (zero until a deployment
  *                         registers one) — a truthful registry read, ok:true
@@ -917,7 +916,7 @@ class SolanaLendingAdapter extends LendingProtocolAdapter {
 registerAdapter({
   id: 'aave-v3',
   name: 'Aave V3',
-  chainIds: [1, 10, 56, 137, 42161, 43114, 8453],
+  chainIds: [1, 10, 56, 137, 42161, 43114, 8453, 59144, 146],
   enabled: true,
   factory: ({ tokenLookup } = {}) => createAaveAdapter({ tokenLookup })
 });
