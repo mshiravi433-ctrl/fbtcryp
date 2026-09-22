@@ -123,8 +123,18 @@
  * cached index.html on a flaky connection — so an install pinned to v17 keeps
  * reproducing «ماژول Kamino در دسترس نیست» and «✕ TOKEN_NOT_ALLOWED» byte
  * for byte until its cached shell is evicted. Renaming the cache evicts it on
- * the site and on an in-place APK update alike. */
-const SHELL = 'fbt-shell-v18';
+ * the site and on an in-place APK update alike.
+ *
+ * v18 -> v19: the lending oracle + Kamino hardening deploy. The oracle is now
+ * resolved in two steps (Pool.getAddressesProvider → provider.getPriceOracle):
+ * the 2026-09-22 outage had it read off the Pool, which has no such function,
+ * so every real RPC reverted and the page kept saying «قیمت‌های اوراکل خوانده
+ * نشد»; and a Kamino market read no longer dies because ONE reserve threw.
+ * Both fixes live in the shell bundle, and an install pinned to v18 keeps
+ * running the old code byte for byte until its cached shell is evicted.
+ * Renaming the cache evicts it on the site and on an in-place APK update
+ * alike. */
+const SHELL = 'fbt-shell-v19';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
