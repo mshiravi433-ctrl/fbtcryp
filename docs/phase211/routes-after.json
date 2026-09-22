@@ -1,12 +1,16 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-09-11T00:10:07.632Z",
+  "generatedAt": "2026-09-22T01:32:29.526Z",
   "frontend": {
-    "routeCount": 66,
+    "routeCount": 68,
     "routes": [
       {
         "path": "*",
+        "component": "Market"
+      },
+      {
+        "path": "/",
         "component": "Market"
       },
       {
@@ -120,6 +124,10 @@
       {
         "path": "/lab",
         "component": "Lab"
+      },
+      {
+        "path": "/launch",
+        "component": "Launch"
       },
       {
         "path": "/leaderboard",
@@ -270,7 +278,7 @@
         "component": "InsuranceSettings"
       }
     ],
-    "lazyImportCount": 64,
+    "lazyImportCount": 65,
     "lazyImportsMissing": [],
     "lazyImports": [
       {
@@ -411,6 +419,10 @@
       },
       {
         "spec": "./pages/Lab",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Launch",
         "exists": true
       },
       {
@@ -569,6 +581,7 @@
     "/intent?tab=ops",
     "/invest",
     "/lab",
+    "/launch",
     "/leaderboard",
     "/learn",
     "/legal/:doc",
@@ -601,6 +614,7 @@
   ],
   "backend": {
     "mounts": [
+      "/api",
       "/api",
       "/api",
       "/api/ai",
@@ -668,6 +682,7 @@
         "POST /automations",
         "POST /automations/:id/pause",
         "POST /automations/:id/result",
+        "POST /automations/:id/resume",
         "POST /automations/:id/run",
         "POST /chat",
         "POST /collaborate",
@@ -813,6 +828,10 @@
         "GET /api/iran/buy/orders/:id",
         "GET /api/iran/buy/orders/:id/audit",
         "GET /api/iran/buy/rate",
+        "GET /api/launch/config",
+        "GET /api/launch/prepare",
+        "GET /api/launch/records/:chainId",
+        "GET /api/launch/verify",
         "GET /api/learning/params",
         "GET /api/markets",
         "GET /api/me",
@@ -856,14 +875,17 @@
         "GET /api/solana/status",
         "GET /api/solana/whales",
         "GET /api/swap/kyber/routes",
+        "GET /api/swap/lifi/quote",
         "GET /api/swap/oo/quote",
         "GET /api/swap/oo/swap",
         "GET /api/swap/velora/prices",
         "GET /api/telegram/diagnose",
+        "GET /api/telegram/webhook-status",
         "GET /api/telegram/whoami-bot",
         "GET /api/thor/pools",
         "GET /api/thor/quote",
         "GET /api/thor/status",
+        "GET /api/thor/tx/:hash",
         "GET /api/token-risk",
         "GET /api/trending",
         "GET /api/v1/buy-sell/assets",
@@ -969,6 +991,7 @@
         "POST /api/iran/buy/usdt/preview",
         "POST /api/iran/buy/wallet-challenge",
         "POST /api/iran/buy/wallet-verify",
+        "POST /api/launch/record",
         "POST /api/learning/event",
         "POST /api/orders/unwatch",
         "POST /api/orders/watch",
@@ -983,7 +1006,9 @@
         "POST /api/signals/why",
         "POST /api/solana/execute",
         "POST /api/swap/kyber/build",
+        "POST /api/swap/oo/decode",
         "POST /api/telegram/diagnose",
+        "POST /api/telegram/webhook",
         "POST /api/telemetry/resolve",
         "POST /api/telemetry/signal",
         "POST /api/v1/buy-sell/checkout",
@@ -1270,6 +1295,21 @@
         "GET /merchant/quote",
         "POST /card/issue",
         "POST /send"
+      ],
+      "server/protocolRoutes.js": [
+        "GET /intents/:id",
+        "GET /intents/:id/execution",
+        "GET /intents/:id/proof",
+        "GET /intents/:id/quotes",
+        "GET /protocol/health",
+        "GET /protocol/version",
+        "GET /solvers",
+        "GET /solvers/:id",
+        "POST /intents",
+        "POST /intents/:id/cancel",
+        "POST /quotes",
+        "POST /quotes/:id/commit",
+        "POST /solvers/register"
       ],
       "server/rewards/index.js": [
         "GET /eligibility",

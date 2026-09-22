@@ -23,7 +23,7 @@
  * that to doing nothing. See that file for why the ceiling is 75.
  */
 
-import { backtest, confidenceFrom } from './backtest';
+import { backtest, confidenceFrom } from './backtest.js';
 
 /* -------------------------------------------------------------------------- */
 /* Indicators                                                                 */

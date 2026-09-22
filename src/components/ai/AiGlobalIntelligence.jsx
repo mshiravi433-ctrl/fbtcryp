@@ -834,18 +834,28 @@ function AiGlobalIntelligenceInner() {
       if (refresh) setRefreshing(true);
       setConnectionError(null);
       const qs = refresh ? `?refresh=1&lang=${language}` : `?lang=${language}`;
-      const [intel, brief, crossAsset, providerState] = await Promise.all([
+      const results = await Promise.allSettled([
         readJson(`/ai/global/intelligence${qs}`),
         readJson(`/ai/global/briefing${qs}`),
         readJson(`/ai/global/cross-asset${qs}`),
         readJson('/ai/global/providers')
       ]);
       if (id !== requestId.current) return;
+      const [intelRes, briefRes, crossRes, providerRes] = results;
+      const intel = intelRes.status === 'fulfilled' ? intelRes.value : null;
+      const brief = briefRes.status === 'fulfilled' ? briefRes.value : null;
+      const crossAsset = crossRes.status === 'fulfilled' ? crossRes.value : null;
+      const providerState = providerRes.status === 'fulfilled' ? providerRes.value : null;
+
+      if (!intel && !brief && !crossAsset && !providerState) {
+        throw (intelRes.reason || briefRes.reason || crossRes.reason || providerRes.reason || new Error('NETWORK_ERROR'));
+      }
+
       setData({
-        intelligence: intel.globalIntelligence || null,
-        briefing: brief.briefing || null,
+        intelligence: intel?.globalIntelligence || null,
+        briefing: brief?.briefing || null,
         cross: crossAsset || null,
-        providers: providerState.providers || intel.globalIntelligence?.providers || null
+        providers: providerState?.providers || intel?.globalIntelligence?.providers || null
       });
     } catch (error) {
       if (id === requestId.current) setConnectionError(error?.message || 'NETWORK_ERROR');

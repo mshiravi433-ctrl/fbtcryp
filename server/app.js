@@ -32,7 +32,7 @@ import { fetchThorPools, fetchThorTxStatus, thorQuote, thorStatus } from './thor
 import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
-import { buildMarketPulse, buildSolanaRadar, explainSignal } from './signalEngine.js';
+import { buildMarketPulse, buildSolanaRadar, explainSignal, localExplanation, sanitizeEvidence } from './signalEngine.js';
 import { yieldsApi } from './yieldsApi.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
@@ -210,6 +210,8 @@ import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
 import intentOsUpgrade8Routes from './intentOsUpgrade8.js';
 import { createCentralIntelligence } from './ci/api.js';
+import { createFinancialIntelligence } from './fios/index.js';
+import { createBrainRouter } from './brain/index.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { futuresRouter } from './futures/router.js';
@@ -434,6 +436,7 @@ const BOT_TOKEN = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', true);
 
 /*
  * Provider settlement webhook. Registered before JSON parsing so the raw body
@@ -4270,12 +4273,14 @@ app.get('/api/signals/pulse', async (_req, res) => {
 
 app.post('/api/signals/why', async (req, res) => {
   const { symbol, name, lang, evidence, classification, confidence, riskLabel, timeframe } = req.body ?? {};
-  if (!symbol || !name) return res.status(400).json({ error: 'BAD_REQUEST' });
+  if (!symbol) return res.status(400).json({ error: 'BAD_REQUEST', detail: 'symbol is required' });
+  const assetName = name || symbol;
+  const normLang = ['en', 'fa', 'ar'].includes(String(lang || '').slice(0, 2)) ? String(lang).slice(0, 2) : 'en';
   try {
     const value = await explainSignal({
       symbol: String(symbol).slice(0, 20),
-      name: String(name).slice(0, 60),
-      lang: ['en', 'fa', 'ar'].includes(lang) ? lang : 'en',
+      name: String(assetName).slice(0, 60),
+      lang: normLang,
       evidence: evidence && typeof evidence === 'object' ? evidence : {},
       classification: String(classification || 'WATCH').slice(0, 24),
       confidence: Number.isFinite(Number(confidence)) ? Number(confidence) : null,
@@ -4284,7 +4289,20 @@ app.post('/api/signals/why', async (req, res) => {
     });
     return res.json(value);
   } catch (err) {
-    return res.status(502).json({ error: 'SIGNAL_WHY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+    try {
+      const fallback = localExplanation({
+        symbol: String(symbol).slice(0, 20),
+        name: String(assetName).slice(0, 60),
+        safe: sanitizeEvidence(evidence || {}),
+        classification: String(classification || 'WATCH').slice(0, 24),
+        confidence: Number.isFinite(Number(confidence)) ? Number(confidence) : 60,
+        riskLabel: String(riskLabel || '').slice(0, 12),
+        lang: normLang
+      });
+      return res.json(fallback);
+    } catch {
+      return res.status(502).json({ error: 'SIGNAL_WHY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+    }
   }
 });
 
@@ -5751,52 +5769,31 @@ app.use('/api/brain', centralIntelligence.router);
  * /learning{,/calibration}, /preferences{,/statement}.
  * /agents and /status belong to the command center — FI deliberately does
  * not touch them. */
-/* PHASE 211 FIX (additive): the FI mount point is registered SYNCHRONOUSLY
- * here — before server/index.js adds the SPA fallback that 404s unmatched
- * /api/* paths — and the real router is attached onto it when the dynamic
- * import resolves. Before this, the async `app.use` raced the fallback's
- * registration and every FI route (Phase 210's /health, /world-state… and
- * Phase 211's /global/*) 404ed on the local/self-hosted server even though
- * the same routes worked through the fios-api probe and on Vercel (whose
- * entry has no SPA fallback). No route changed; they just become reachable. */
-const fiMount = ExpressRouter();
-app.use('/api/ai', fiMount);
-import('./fios/index.js').then(({ createFinancialIntelligence }) => {
-  const fi = createFinancialIntelligence({
-    stateStore: centralIntelligence.stateStore,
-    events: centralIntelligence.events,
-    brain: centralIntelligence.brain,
-    ownerFor: centralIntelligence.ownerFor,
-    log: (line) => app.locals.ciLog?.push?.(line)
-  });
-  app.set('financialIntelligence', fi);
-  fiMount.use(fi.router);
-}).catch((err) => {
-  console.error('Failed to mount financial intelligence routes:', err?.message || err);
+/* PHASE 211 FIX: Synchronous registration for Financial Intelligence & Brain routes.
+ * Mounted directly so they are immediately available on cold-start and Vercel
+ * serverless execution without async race conditions. */
+const fi = createFinancialIntelligence({
+  stateStore: centralIntelligence.stateStore,
+  events: centralIntelligence.events,
+  brain: centralIntelligence.brain,
+  ownerFor: centralIntelligence.ownerFor,
+  log: (line) => app.locals.ciLog?.push?.(line)
 });
+app.set('financialIntelligence', fi);
+app.use('/api/ai', fi.router);
 
 /* ─── FBT FINANCIAL OS — Upgrade 11+12 Brain Routes ──────────────────────
  * Predictive Brain, Opportunity Engine, Financial Guardian, Daily Brief,
  * Knowledge Graph, Ecosystem Router, and Cross-Module Workflows.
  * Mounted on /api/brain alongside the existing central intelligence.
  * ─────────────────────────────────────────────────────────────────────────── */
-/* Same sync-mount-point pattern as the FI mount above: the placeholder router
- * is registered before the SPA fallback in server/index.js, so the async
- * brain-router attach cannot lose the race and 404 the whole AI surface on a
- * long-running server. */
-const brainMount = ExpressRouter();
-app.use('/api/brain', brainMount);
-import('./brain/index.js').then(({ createBrainRouter }) => {
-  const brainRouter = createBrainRouter({
-    kernel: centralIntelligence.kernel,
-    stateStore: centralIntelligence.stateStore,
-    events: centralIntelligence.events,
-    log: (line) => app.locals.ciLog?.push?.(line)
-  });
-  brainMount.use(brainRouter);
-}).catch((err) => {
-  console.error('Failed to mount brain routes:', err?.message || err);
+const brainRouter = createBrainRouter({
+  kernel: centralIntelligence.kernel,
+  stateStore: centralIntelligence.stateStore,
+  events: centralIntelligence.events,
+  log: (line) => app.locals.ciLog?.push?.(line)
 });
+app.use('/api/brain', brainRouter);
 
 setInterval(() => {
   const now = Date.now();

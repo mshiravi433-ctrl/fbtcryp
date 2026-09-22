@@ -7605,6 +7605,19 @@
       "walletOneActive": "One wallet is active — connect the other from the Wallet page",
       "walletManage": "Manage wallet",
       "notConnectedShort": "not connected"
+    },
+    "protocol": {
+      "protocolBadge": "FBT Intent Protocol v1",
+      "verified": "VERIFIED ✓",
+      "unverified": "PENDING",
+      "intentId": "Intent ID",
+      "status": "Status",
+      "solver": "Solver",
+      "quote": "Committed Output",
+      "tx": "Transaction",
+      "proofTier": "Evidence Tier",
+      "hideProof": "Hide Execution Proof",
+      "viewProof": "View Execution Proof"
     }
   },
   "whales": {
@@ -10216,7 +10229,7 @@
     "noFbtFee": "No FBT fee",
     "noFbtFeeSub": "Lending goes straight to the protocol",
     "fbtFeeLine": "FBT fee",
-    "fbtFeeNone": "None — FBT takes no fee on lending",
+    "fbtFeeNone": "None here — FBT takes no fee on lending (standard 0.70% fee applies on swap)",
     "networkFee": "Network fee (max)",
     "networkFeeUsd": "in USD",
     "feeUsdIsEstimate": "estimate",
@@ -10594,7 +10607,9 @@
     "executionReady": "Ready to execute. Taking you to the real execution screen for the wallet signature.",
     "executionBlocked": "It is queued in Wallet — your signature is still needed.",
     "executionFailed": "That did not go through. The transaction was not completed.",
-    "connectWallet": "Connect wallet"
+    "connectWallet": "Connect wallet",
+    "voiceInput": "Speak your request",
+    "listening": "Listening…"
   },
   "lab2": {
     "title": "Lab",

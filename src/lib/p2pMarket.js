@@ -111,6 +111,29 @@ async function memoized(key, loader) {
   return inflight;
 }
 
+export const FALLBACK_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar' },
+  { code: 'EUR', name: 'Euro' },
+  { code: 'IRR', name: 'Iranian Rial' },
+  { code: 'AED', name: 'UAE Dirham' },
+  { code: 'TRY', name: 'Turkish Lira' },
+  { code: 'GBP', name: 'British Pound' }
+];
+
+export const FALLBACK_COUNTRIES = [
+  { code: 'TR', name: 'Turkey' },
+  { code: 'AE', name: 'United Arab Emirates' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'GB', name: 'United Kingdom' }
+];
+
+export const FALLBACK_PAYMENT_METHODS = [
+  { id: '1', name: 'Bank Transfer (SEPA)', global: true },
+  { id: '2', name: 'Card to Card', global: true },
+  { id: '3', name: 'Cash in Person', global: false },
+  { id: '4', name: 'Revolut / Wise', global: true }
+];
+
 /**
  * One parallel fetch of every picker list the market UI needs. The component
  * calls this ONCE per mount session; filter changes never re-request it.
@@ -122,9 +145,9 @@ export async function fetchP2PMeta() {
     memoized('payment-methods', () => request('/p2p/payment-methods'))
   ]);
   return {
-    currencies: currencies?.currencies ?? [],
-    countries: countries?.countries ?? [],
-    paymentMethods: paymentMethods?.paymentMethods ?? []
+    currencies: currencies?.currencies?.length ? currencies.currencies : FALLBACK_CURRENCIES,
+    countries: countries?.countries?.length ? countries.countries : FALLBACK_COUNTRIES,
+    paymentMethods: paymentMethods?.paymentMethods?.length ? paymentMethods.paymentMethods : FALLBACK_PAYMENT_METHODS
   };
 }
 

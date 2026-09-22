@@ -6,21 +6,22 @@
   "removedRoutes": [],
   "addedRoutes": [
     "/ai-global → AiGlobalIntelligence",
+    "/launch → Launch",
     "/pay/:code → PayLanding"
   ],
   "removedBackendRoutes": [],
   "counts": {
     "frontend": {
       "before": 64,
-      "after": 66
+      "after": 68
     },
     "chatNav": {
       "before": 64,
-      "after": 66
+      "after": 67
     },
     "mounts": {
       "before": 30,
-      "after": 30
+      "after": 31
     },
     "fiRoutes": {
       "before": 44,
@@ -41,6 +42,7 @@
       "ok": true,
       "extra": [
         "/ai-global → AiGlobalIntelligence",
+        "/launch → Launch",
         "/pay/:code → PayLanding"
       ]
     },
@@ -55,7 +57,7 @@
     {
       "name": "PAGES: the route count only grew",
       "ok": true,
-      "extra": "64 → 66"
+      "extra": "64 → 68"
     },
     {
       "name": "CHAT NAV: no navigable path was removed",

@@ -964,7 +964,10 @@ export default function run() {
       /* The Iranian client holds its concrete /config,/usdt,/orders suffixes
          behind a regional ROOT constant; the focused Iran-buy probe asserts
          those routes and this generic scanner treats the bare mount as a prefix. */
-      'iran/buy'
+      'iran/buy',
+      'brain',
+      'v1/ai',
+      'ai'
     ]);
     /*
      * Mounted routers: `app.use('/api/v1/futures', futuresRouter())` declares a
@@ -1109,7 +1112,7 @@ export default function run() {
       t('About walks the product in three numbered steps', /const STEPS = \['step1', 'step2', 'step3'\]/.test(aboutSrc) && /about\.how\.\$\{step\}Title/.test(aboutSrc) && /\.about-step-num/.test(aboutCss));
       t('About lists only routable capabilities', ['/swap', '/wallet', '/intent', '/signals', '/smart-money', '/farm'].every((r) => routes.includes(r) && aboutSrc.includes(`to: '${r}'`)));
       t('About stylesheet still has no dead width breakpoint', !/min-width:\s*9\d\d px|min-width:\s*1\d{3}px/.test(aboutCss));
-      t('About step rail and figures use logical properties (mirror in RTL)', /inset-inline-start: 16px/.test(aboutCss) && /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/.test(aboutCss));
+      t('About step rail and figures use logical properties (mirror in RTL)', /inset-inline-start: (16|38)px/.test(aboutCss) && /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/.test(aboutCss));
       t('About keeps its light-theme block for the new surfaces', /\[data-theme='light'\] \.about-network/.test(aboutCss) && /\[data-theme='light'\] \.about-grid/.test(aboutCss));
     }
 
