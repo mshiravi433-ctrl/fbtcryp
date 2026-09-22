@@ -467,7 +467,7 @@ function parseWhyJson(text) {
 }
 
 /** Deterministic, language-agnostic explanation from the evidence itself. */
-function localExplanation({ symbol, name, safe, classification, confidence, riskLabel, lang, insufficient = false }) {
+export function localExplanation({ symbol, name, safe, classification, confidence, riskLabel, lang = 'en', insufficient = false }) {
   const sections = localSections(safe, lang);
   return {
     schema: 'fbt.signal-why.v1',
@@ -483,50 +483,103 @@ function localExplanation({ symbol, name, safe, classification, confidence, risk
       providers: ['deterministic'],
       generatedAt: Date.now(),
       note: insufficient
-        ? 'Not enough measured evidence for an AI explanation; the summary below is produced from the evidence that exists.'
-        : 'No external model configured or reachable; the summary is produced by the deterministic engine from the measured evidence.'
+        ? (lang === 'fa' ? 'شواهد اندازه‌گیری‌شده برای تحلیل تفصیلی کافی نبود؛ خلاصه زیر بر اساس معیارهای موجود ایجاد شده است.' : 'Not enough measured evidence for an AI explanation; the summary below is produced from the evidence that exists.')
+        : (lang === 'fa' ? 'خلاصه تحلیل به صورت قطعی و مستقیم از شواهد آماری و آنچین اندازه‌گیری‌شده استخراج شده است.' : 'No external model configured or reachable; the summary is produced by the deterministic engine from the measured evidence.')
     },
     sections,
     technical: sections.technical,
-    conclusion: localConclusion({ symbol, name, safe, classification, confidence, riskLabel }),
+    market: sections.market,
+    onchain: sections.onchain,
+    sentiment: sections.sentiment,
+    conclusion: localConclusion({ symbol, name, safe, classification, confidence, riskLabel, lang }),
     reason: localReasonFromEvidence(safe)
   };
 }
 
 function localSections(safe, lang) {
-  const fmt = (arr) => arr.join(lang === 'fa' ? '، ' : ', ');
+  const isFa = lang === 'fa';
+  const fmt = (arr) => arr.join(isFa ? '، ' : ', ');
   const technical = [];
-  if (safe.rsi != null) technical.push(`RSI ${safe.rsi}${safe.rsi > 70 ? ' (overbought zone)' : safe.rsi < 30 ? ' (oversold zone)' : ''}`);
-  if (safe.macd != null) technical.push(`MACD ${safe.macd > 0 ? 'positive' : 'negative'}`);
-  if (safe.ma20 != null && safe.ma50 != null) technical.push(`MA20 ${safe.ma20 >= safe.ma50 ? 'above' : 'below'} MA50`);
-  if (safe.support != null || safe.resistance != null) technical.push(`support ${safe.support ?? 'n/a'} / resistance ${safe.resistance ?? 'n/a'}`);
+  if (safe.rsi != null) {
+    technical.push(isFa
+      ? `شاخص RSI ${safe.rsi}${safe.rsi > 70 ? ' (محدوده اشباع خرید)' : safe.rsi < 30 ? ' (محدوده اشباع فروش)' : ''}`
+      : `RSI ${safe.rsi}${safe.rsi > 70 ? ' (overbought zone)' : safe.rsi < 30 ? ' (oversold zone)' : ''}`);
+  }
+  if (safe.macd != null) {
+    technical.push(isFa
+      ? `مکدی ${safe.macd > 0 ? 'مثبت و همگرا' : 'منفی یا واگرا'}`
+      : `MACD ${safe.macd > 0 ? 'positive' : 'negative'}`);
+  }
+  if (safe.ma20 != null && safe.ma50 != null) {
+    technical.push(isFa
+      ? `میانگین متحرک ۲۰ ${safe.ma20 >= safe.ma50 ? 'بالاتر از' : 'پایین‌تر از'} میانگین ۵۰`
+      : `MA20 ${safe.ma20 >= safe.ma50 ? 'above' : 'below'} MA50`);
+  }
+  if (safe.support != null || safe.resistance != null) {
+    technical.push(isFa
+      ? `حمایت ${safe.support ?? 'نامشخص'} / مقاومت ${safe.resistance ?? 'نامشخص'}`
+      : `support ${safe.support ?? 'n/a'} / resistance ${safe.resistance ?? 'n/a'}`);
+  }
   const market = [];
-  if (safe.change24h != null) market.push(`24h ${safe.change24h}%`);
-  if (safe.volumeTurnover != null) market.push(`turnover ${safe.volumeTurnover}%`);
-  if (safe.volatilityPct != null) market.push(`volatility ${safe.volatilityPct}%`);
+  if (safe.change24h != null) market.push(isFa ? `تغییر ۲۴ ساعته ${safe.change24h}%` : `24h ${safe.change24h}%`);
+  if (safe.volumeTurnover != null) market.push(isFa ? `گردش حجم ${safe.volumeTurnover}%` : `turnover ${safe.volumeTurnover}%`);
+  if (safe.volatilityPct != null) market.push(isFa ? `نوسان ${safe.volatilityPct}%` : `volatility ${safe.volatilityPct}%`);
   const onchain = [];
-  if (safe.whaleFlow) onchain.push(`whale flow ${safe.whaleFlow}`);
-  if (safe.holderTrend) onchain.push(`holders ${safe.holderTrend}`);
-  if (safe.dexPressure) onchain.push(`DEX ${safe.dexPressure}`);
-  if (safe.smartMoneyNetUsd != null) onchain.push(`smart-money net $${safe.smartMoneyNetUsd}`);
+  if (safe.whaleFlow) {
+    onchain.push(isFa
+      ? `جریان نهنگ‌ها ${safe.whaleFlow === 'inflow' ? 'ورودی' : safe.whaleFlow === 'outflow' ? 'خروجی' : safe.whaleFlow}`
+      : `whale flow ${safe.whaleFlow}`);
+  }
+  if (safe.holderTrend) {
+    onchain.push(isFa
+      ? `روند دارندگان ${safe.holderTrend === 'rising' ? 'افزایشی' : safe.holderTrend === 'falling' ? 'کاهشی' : safe.holderTrend}`
+      : `holders ${safe.holderTrend}`);
+  }
+  if (safe.dexPressure) {
+    onchain.push(isFa
+      ? `فشار معاملات دکس ${safe.dexPressure === 'buy' ? 'خرید' : safe.dexPressure === 'sell' ? 'فروش' : safe.dexPressure}`
+      : `DEX ${safe.dexPressure}`);
+  }
+  if (safe.smartMoneyNetUsd != null) {
+    onchain.push(isFa ? `خالص سرمایه هوشمند $${safe.smartMoneyNetUsd}` : `smart-money net $${safe.smartMoneyNetUsd}`);
+  }
   if (!onchain.length) {
-    onchain.push(lang === 'fa' ? 'داده آنچین در دسترس نبود — هیچ عددی حدس زده نمی‌شود.' : 'On-chain data unavailable — no numbers are guessed.');
+    onchain.push(isFa ? 'داده آنچین در دسترس نبود — هیچ عددی حدس زده نمی‌شود.' : 'On-chain data unavailable — no numbers are guessed.');
   }
   const sentiment = [];
-  if (safe.marketSentiment != null) sentiment.push(`market sentiment ${safe.marketSentiment}`);
-  if (safe.btcDominance != null) sentiment.push(`BTC dominance ${safe.btcDominance}%`);
+  if (safe.marketSentiment != null) {
+    sentiment.push(isFa ? `احساسات کلی بازار ${safe.marketSentiment}` : `market sentiment ${safe.marketSentiment}`);
+  }
+  if (safe.btcDominance != null) {
+    sentiment.push(isFa ? `دامیننس بیت‌کوین ${safe.btcDominance}%` : `BTC dominance ${safe.btcDominance}%`);
+  }
   if (safe.portfolioExposure != null || safe.portfolioConcentration != null) {
-    sentiment.push(`portfolio exposure ${safe.portfolioExposure ?? 'n/a'}% / concentration ${safe.portfolioConcentration ?? 'n/a'}% (aggregate only)`);
+    sentiment.push(isFa
+      ? `پوشش پرتفوی ${safe.portfolioExposure ?? 'نامشخص'}٪ / تمرکز ${safe.portfolioConcentration ?? 'نامشخص'}٪`
+      : `portfolio exposure ${safe.portfolioExposure ?? 'n/a'}% / concentration ${safe.portfolioConcentration ?? 'n/a'}% (aggregate only)`);
   }
   return {
-    technical: fmt(technical) || (lang === 'fa' ? 'داده تکنیکال کافی در دسترس نیست.' : 'Not enough technical data.'),
-    market: fmt(market) || (lang === 'fa' ? 'داده بازار کافی در دسترس نیست.' : 'Not enough market data.'),
+    technical: fmt(technical) || (isFa ? 'داده تکنیکال کافی در دسترس نیست.' : 'Not enough technical data.'),
+    market: fmt(market) || (isFa ? 'داده بازار کافی در دسترس نیست.' : 'Not enough market data.'),
     onchain: fmt(onchain),
-    sentiment: fmt(sentiment) || (lang === 'fa' ? 'داده احساسات بازار در دسترس نیست.' : 'No sentiment data available.')
+    sentiment: fmt(sentiment) || (isFa ? 'داده احساسات بازار در دسترس نیست.' : 'No sentiment data available.')
   };
 }
 
-function localConclusion({ symbol, name, safe, classification, confidence, riskLabel }) {
+function localConclusion({ symbol, name, safe, classification, confidence, riskLabel, lang = 'en' }) {
+  if (lang === 'fa') {
+    const dirFa = classification === 'STRONG_BUY' ? 'خرید قوی'
+      : classification === 'BUY' ? 'خرید'
+      : classification === 'SELL' ? 'فروش'
+      : classification === 'STRONG_SELL' ? 'فروش قوی'
+      : 'خنثی و نظاره‌گر';
+    const confFa = confidence != null ? `${confidence}٪` : 'اندازه‌گیری نشده';
+    const riskFa = riskLabel === 'low' ? 'کم' : riskLabel === 'high' ? 'بالا' : riskLabel === 'medium' ? 'متوسط' : (riskLabel || '');
+    if (dirFa === 'خنثی و نظاره‌گر') {
+      return `دارایی ${name} (${symbol}) بر اساس داده‌های اندازه‌گیری‌شده رفتاری متوازن و خنثی را نشان می‌دهد. اطمینان سیگنال ${confFa}${riskFa ? ` و ریسک ${riskFa}` : ''} برآورد شده است. شواهد کافی برای ورود جهت‌دار وجود ندارد و پایش ادامه دارد.`;
+    }
+    return `دارایی ${name} (${symbol}) با توجه به شواهد اندازه‌گیری‌شده در وضعیت «${dirFa}» ارزیابی می‌شود (میزان اطمینان ${confFa}${riskFa ? `، ریسک ${riskFa}` : ''}). این تحلیل صرفاً بیانگر داده‌های آماری موجود است و تضمینی بر عملکرد آتی دارایی نخواهد بود.`;
+  }
   const dir = classification === 'STRONG_BUY' || classification === 'BUY' ? 'up'
     : classification === 'SELL' ? 'down' : 'sideways';
   const conf = confidence != null ? `${confidence}%` : 'not measured';

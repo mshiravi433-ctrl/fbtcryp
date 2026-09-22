@@ -7605,6 +7605,19 @@
       "walletOneActive": "یک کیف پول فعال است — دیگری را از صفحه کیف پول متصل کنید",
       "walletManage": "مدیریت کیف پول",
       "notConnectedShort": "متصل نیست"
+    },
+    "protocol": {
+      "protocolBadge": "پروتکل FBT Intent نسخه ۱",
+      "verified": "تأییدشده ✓",
+      "unverified": "در انتظار",
+      "intentId": "شناسه قصد",
+      "status": "وضعیت",
+      "solver": "حل‌کننده",
+      "quote": "خروجی تعهدشده",
+      "tx": "تراکنش",
+      "proofTier": "سطح شواهد",
+      "hideProof": "بستن اثبات اجرا",
+      "viewProof": "مشاهده اثبات اجرا"
     }
   },
   "whales": {
@@ -10208,7 +10221,7 @@
     "noFbtFee": "بدون کارمزد FBT",
     "noFbtFeeSub": "وام مستقیم با پروتکل انجام می‌شود",
     "fbtFeeLine": "کارمزد FBT",
-    "fbtFeeNone": "هیچ — FBT روی وام کارمزدی برنمی‌دارد",
+    "fbtFeeNone": "اینجا هیچ — FBT روی وام کارمزدی برنمی‌دارد (کارمزد استاندارد ۰٫۷٪ روی سواپ اعمال می‌شود)",
     "networkFee": "کارمزد شبکه (حداکثر)",
     "networkFeeUsd": "به دلار",
     "feeUsdIsEstimate": "تخمینی",
@@ -10586,7 +10599,9 @@
     "executionReady": "عملیات آماده اجراست. به صفحه اجرای واقعی می‌رویم تا امضای کیف پول انجام شود.",
     "executionBlocked": "اجرا در صف کیف پول ماند؛ امضای شما لازم است.",
     "executionFailed": "اجرا انجام نشد. تراکنش تکمیل نشده است.",
-    "connectWallet": "اتصال کیف پول"
+    "connectWallet": "اتصال کیف پول",
+    "voiceInput": "ورودی صوتی",
+    "listening": "در حال گوش دادن…"
   },
   "lab2": {
     "title": "آزمایشگاه",
