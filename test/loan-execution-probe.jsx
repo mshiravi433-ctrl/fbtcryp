@@ -281,6 +281,10 @@ export async function run(container) {
       !!byId('loan-tab-supply') && !!byId('loan-tab-borrow') && !!byId('loan-tab-positions'));
     t('the live supply APY comes from the pool, not a table',
       qa('[data-testid="loan-apy"]').some((el) => /4\.6\d%/.test(el.textContent || '')));
+    /* «توکن‌ها عکس نداشت» — avatars are vendored artwork now, not a gradient
+       tile with three letters. The render must contain real SVG art. */
+    t('asset rows render the vendored token artwork, not a letter tile',
+      qa('[data-testid^="loan-asset-"] .asset-icon svg').length > 0);
     t('an asset the pool does not list is disabled, not faked',
       qa('[data-testid^="loan-asset-"]').some((b) => b.disabled));
     t('the page says where its numbers came from', !!byId('loan-rate-source'));

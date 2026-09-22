@@ -101,6 +101,135 @@ export function fromSolanaUnits(value, decimals) {
   } catch { return '0'; }
 }
 
+/** Uint8Array → base64, in chunks so a long transaction never blows the stack. */
+export function bytesToBase64(bytes) {
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes ?? []);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    binary += String.fromCharCode(...arr.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** The SPL Token program — the owner of every non-native Kamino reserve account. */
+const SPL_TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+/** Wrapped-SOL mint: the one reserve whose spendable balance is the native account. */
+export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
+/**
+ * The wallet's SPENDABLE balance per Kamino reserve, in base units.
+ *
+ * One getParsedTokenAccountsByOwner call answers every SPL mint at once
+ * (grouped by mint here); wSOL takes its real balance from the native account
+ * — that is the account a SOL deposit actually spends, so reading the ATA
+ * alone would report «BALANCE_UNKNOWN» for users who hold plain SOL.
+ *
+ * A failed read returns `{}` — handled downstream as BALANCE_UNKNOWN, never
+ * as zero (§37).
+ */
+export async function readSolanaLendingBalances({ wallet, assets = [], rpcUrl = null } = {}) {
+  if (!wallet) return {};
+  const url = await resolveLendingRpc(rpcUrl);
+  const connection = new Connection(url, { commitment: 'confirmed' });
+  const balances = {};
+  const byMint = new Map(assets.filter((a) => a?.address).map((a) => [String(a.address), a]));
+  let nativeLamports = null;
+  if (byMint.has(WSOL_MINT)) {
+    try { nativeLamports = BigInt(await connection.getBalance(new PublicKey(wallet))); } catch { nativeLamports = null; }
+  }
+  try {
+    const response = await connection.getParsedTokenAccountsByOwner(
+      new PublicKey(wallet),
+      { programId: new PublicKey(SPL_TOKEN_PROGRAM_ID) }
+    );
+    for (const entry of response?.value ?? []) {
+      const info = entry?.account?.data?.parsed?.info;
+      const mint = String(info?.mint || '');
+      const asset = byMint.get(mint);
+      if (!asset) continue;
+      const raw = info?.tokenAmount?.amount;
+      if (raw == null) continue;
+      const current = balances[asset.id] ? BigInt(balances[asset.id]) : 0n;
+      balances[asset.id] = (current + BigInt(raw)).toString();
+    }
+  } catch {
+    /* The fall-through state is `{}` — read failure, reported not faked. */
+  }
+  if (nativeLamports != null && byMint.has(WSOL_MINT)) {
+    const asset = byMint.get(WSOL_MINT);
+    const wrapped = balances[asset.id] ? BigInt(balances[asset.id]) : 0n;
+    /* Native + wrapped: both are spendable for a SOL deposit. Native wins the
+       MAX amount display either way because Kamino unwraps. */
+    balances[asset.id] = (wrapped + nativeLamports).toString();
+  }
+  return balances;
+}
+
+/**
+ * §7/§9 — PREFLIGHT before the wallet is ever shown a transaction.
+ *
+ * Pure over an already-read market snapshot: the answer decides whether the
+ * panel blocks the tap with a named reason instead of letting the wallet
+ * pop up for a transaction the chain would refuse anyway.
+ *
+ * @returns {{ok:boolean, code:string|null, reason:string|null, amountWei:string|null}}
+ */
+export function preflightSolanaAction({ action, asset, amount, snapshot } = {}) {
+  const finish = (ok, code = null, amountWei = null) => ({ ok, code, reason: code, amountWei });
+  if (!asset) return finish(false, 'SOLANA_ASSET_REQUIRED');
+  const decimals = Number(asset.decimals ?? 0);
+  const amountWei = toSolanaUnits(amount, decimals);
+  if (amountWei == null || amountWei <= 0n) return finish(false, 'AMOUNT_REQUIRED');
+  const amountWeiString = amountWei.toString();
+
+  const balances = snapshot?.balances || {};
+  const walletWei = balances[asset.id] != null ? BigInt(balances[asset.id]) : null;
+  const position = snapshot?.positions?.[asset.id] || null;
+  /** Display-unit strings of the CDC position, converted to base units. */
+  const suppliedWei = position?.supplied != null ? toSolanaUnits(position.supplied, decimals) : null;
+  const borrowedWei = position?.borrowed != null ? toSolanaUnits(position.borrowed, decimals) : null;
+
+  if (action === 'supply') {
+    if (walletWei == null) {
+      /* Unknown is not zero: block the popup rather than burn the user's
+         network fee on a transaction the chain will refuse. The retry button
+         re-reads the balance. */
+      return finish(false, 'BALANCE_UNKNOWN', amountWeiString);
+    }
+    if (amountWei > walletWei) return finish(false, 'INSUFFICIENT_BALANCE', amountWeiString);
+    return finish(true, null, amountWeiString);
+  }
+  if (action === 'withdraw') {
+    if (suppliedWei == null || suppliedWei <= 0n) return finish(false, 'SOLANA_POSITION_REQUIRED', amountWeiString);
+    if (amountWei > suppliedWei) return finish(false, 'INSUFFICIENT_BALANCE', amountWeiString);
+    return finish(true, null, amountWeiString);
+  }
+  if (action === 'repay') {
+    if (borrowedWei == null || borrowedWei <= 0n) return finish(false, 'SOLANA_POSITION_REQUIRED', amountWeiString);
+    if (amountWei > borrowedWei) return finish(false, 'EXCEEDS_DEBT', amountWeiString);
+    if (walletWei == null) return finish(false, 'BALANCE_UNKNOWN', amountWeiString);
+    if (amountWei > walletWei) return finish(false, 'INSUFFICIENT_BALANCE', amountWeiString);
+    return finish(true, null, amountWeiString);
+  }
+  if (action === 'borrow') {
+    /* Borrowing power is tracked server-side by Kamino's own obligation
+       refresh — when available, check the human-typed amount against it
+       before the popup; the SDK build remains the final arbiter. */
+    const availableUsd = Number(snapshot?.account?.availableBorrowsUsd);
+    const priceUsd = Number(asset.priceUsd);
+    if (Number.isFinite(availableUsd) && Number.isFinite(priceUsd) && priceUsd > 0) {
+      const amountUsd = Number(amount) * priceUsd;
+      if (Number.isFinite(amountUsd) && amountUsd > availableUsd && availableUsd >= 0) {
+        return finish(false, 'BORROW_LIMIT_EXCEEDED', amountWeiString);
+      }
+      if (availableUsd <= 0 && amountUsd > 0) return finish(false, 'BORROW_LIMIT_EXCEEDED', amountWeiString);
+    }
+    return finish(true, null, amountWeiString);
+  }
+  return finish(false, 'UNKNOWN_ACTION');
+}
+
 const reserveToView = (reserve, slot) => {
   const stats = reserve?.stats || {};
   const decimals = asNumber(stats.decimals, 0);
@@ -124,6 +253,11 @@ const reserveToView = (reserve, slot) => {
     borrowed: decimalToNumber(reserve.getBorrowedAmount?.(), decimals),
     supplyCap: decimalToNumber(stats.reserveDepositLimit, decimals),
     borrowCap: decimalToNumber(stats.reserveBorrowLimit, decimals),
+    /* Kamino's own oracle-derived price (USD), when the reserve summary
+       carries it. Used ONLY to compare a typed borrow amount against the
+       wallet's USD borrow limit before a wallet popup — never displayed as a
+       market price, never a risk input elsewhere. */
+    priceUsd: asNumber(stats.priceUSD),
     reserve
   };
 };
@@ -173,18 +307,29 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     try { obligation = await market.getUserVanillaObligation(new PublicKey(wallet)); } catch { obligation = null; }
   }
 
+  /* The wallet's spendable balance per reserve (§7 preflight input). A failed
+     read stays empty — the panel reports BALANCE_UNKNOWN and refuses to open
+     the wallet for a transaction it cannot pre-check. */
+  let balances = {};
+  if (wallet) {
+    try {
+      balances = await readSolanaLendingBalances({ wallet, assets: reserves, rpcUrl: url });
+    } catch { balances = {}; }
+  }
+
   const positions = {};
   for (const asset of reserves) {
     const reserve = asset.reserve;
     const deposit = obligation?.getDepositByReserve?.(reserve.address);
     const borrow = obligation?.getBorrowByReserve?.(reserve.address);
     const decimals = asset.decimals;
+    const walletWei = balances[asset.id];
     positions[asset.id] = {
       supplied: deposit ? String(decimalToNumber(deposit.amount, decimals)) : '0',
       borrowed: borrow ? String(decimalToNumber(borrow.amount, decimals)) : '0',
       suppliedUsd: deposit ? asNumber(deposit.marketValueRefreshed) : 0,
       borrowedUsd: borrow ? asNumber(borrow.marketValueRefreshed) : 0,
-      walletBalance: null
+      walletBalance: walletWei != null ? fromSolanaUnits(walletWei, decimals) : null
     };
   }
 
@@ -204,6 +349,7 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     assets: reserves.map(({ reserve: _reserve, ...view }) => view),
     reserves,
     positions,
+    balances,
     account: {
       ok: Boolean(obligation),
       totalCollateralUsd,
@@ -265,7 +411,11 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
   }
 
   const txs = await built.getTransactions();
-  const encode = (tx) => tx ? Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })).toString('base64') : null;
+  /* `Buffer.from(...)` was a Node-ism: the browser has no Buffer global (it is
+     only polyfilled lazily by the dYdX path, which a lending-only user never
+     opens), so every transaction build threw ReferenceError before a wallet
+     was ever asked — «Solana deposit does not work» in production. */
+  const encode = (tx) => tx ? bytesToBase64(tx.serialize({ requireAllSignatures: false, verifySignatures: false })) : null;
   return {
     ok: true,
     action,

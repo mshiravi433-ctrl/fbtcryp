@@ -148,7 +148,9 @@ export const EVM_CHAINS = {
     name: 'Avalanche',
     short: 'AVAX',
     native: { symbol: 'AVAX', decimals: 18, coingeckoId: 'avalanche-2' },
-    rpc: ['https://api.avax.network/ext/bc/C/rpc'],
+    /* One endpoint is one point of failure — the Lending page's "balance could
+       not be read" report traced to single-host chains. Mirrors server/chainsLite.js. */
+    rpc: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche-c-chain-rpc.publicnode.com', 'https://avalanche.drpc.org'],
     explorer: 'https://snowtrace.io',
     router: '0x60aE616a2155Ee3d9A68541Ba4544862310933d4', // TraderJoe
     wrapped: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
@@ -176,7 +178,10 @@ export const EVM_CHAINS = {
     name: 'Linea',
     short: 'LINEA',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://rpc.linea.build'],
+    /* Fallback mirrors added 2026-09-22: rpc.linea.build alone left the entire
+       chain unread from throttled/blocked networks (see server/chainsLite.js
+       which already carried two). */
+    rpc: ['https://rpc.linea.build', 'https://linea-rpc.publicnode.com', 'https://linea.drpc.org'],
     explorer: 'https://lineascan.build',
     /* SyncSwap's V2-compatible router. Same shape the fallback path expects. */
     router: '0x80e38291e06339d10AAB483C65695D004dBD5C69',
@@ -190,7 +195,9 @@ export const EVM_CHAINS = {
     name: 'Sonic',
     short: 'S',
     native: { symbol: 'S', decimals: 18, coingeckoId: 'sonic-3' },
-    rpc: ['https://rpc.soniclabs.com'],
+    /* Fallback mirrors added 2026-09-22: a single official host made every
+       Sonic lending read fail on networks where that host is throttled. */
+    rpc: ['https://rpc.soniclabs.com', 'https://sonic-rpc.publicnode.com', 'https://sonic.drpc.org'],
     explorer: 'https://sonicscan.org',
     router: '0x1D368773735ee1E678950B7A97bcA2CafB330CDc',
     wrapped: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', // wS

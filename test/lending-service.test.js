@@ -745,6 +745,168 @@ describe('§6/§25 — the BFF fallback answers only real gaps, and labels what 
   });
 });
 
+describe('§4/§25 — BFF positions fallback: real balances when the browser RPC path is dead', () => {
+  const WALLET = '0x1111111111111111111111111111111111111111';
+  const bffPositionsBody = (over = {}) => JSON.stringify({
+    wallet: WALLET,
+    network: 42161,
+    positions: [],
+    balances: {
+      USDT: { walletWei: '0x000000000000000000000000000000000000000000000000000000000bebc200', suppliedWei: '0x0', debtWei: '0x0' },
+      USDC: { walletWei: '200000000', suppliedWei: '0', debtWei: '40000000' }
+    },
+    healthFactor: 2.0,
+    totalCollateralUsd: 1000,
+    totalDebtUsd: 400,
+    availableBorrowsUsd: 350,
+    liquidationThresholdPct: 80,
+    ltvPct: 40,
+    meta: { schema: S.LENDING_BFF_POSITIONS_SCHEMA, dataStatus: 'live', source: 'on-chain' },
+    ...over
+  });
+  const bffMarketsBody = () => JSON.stringify({
+    data: { network: '42161', markets: [
+      { asset: 'USDT', address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', supplyApy: 3.84, borrowApy: 5.71, totalSupply: null, totalBorrow: null, availableLiquidity: null, decimals: 6, ltv: 75, liquidationThreshold: 78, liquidationBonus: 5, borrowingEnabled: true, supplyCapWhole: null, borrowCapWhole: null, oraclePrice: 0.9998, oraclePriceBase: '99980000', referencePrice: null, anomaly: null, status: 'active' },
+      { asset: 'USDC', address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', supplyApy: 3.1, borrowApy: 5.2, totalSupply: null, totalBorrow: null, availableLiquidity: null, decimals: 6, ltv: 80, liquidationThreshold: 82, liquidationBonus: 5, borrowingEnabled: true, supplyCapWhole: null, borrowCapWhole: null, oraclePrice: 1.0, oraclePriceBase: '100000000', referencePrice: null, anomaly: null, status: 'active' }
+    ] },
+    meta: {
+      schema: S.LENDING_BFF_MARKETS_SCHEMA, dataStatus: 'live', oracleStatus: 'ok',
+      oracleAddress: '0xb56c2F0B653B2e0b10C9b928C8580Ac5Df02C7C7', readAt: 1700000000000
+    }
+  });
+  const okResponse = (body) => ({ ok: true, status: 200, json: async () => JSON.parse(body) });
+  const router = (url) => okResponse(String(url).includes('/positions/') ? bffPositionsBody() : bffMarketsBody());
+
+  it('parses the pinned positions payload, normalising hex balances to decimal unit strings', async () => {
+    const r = await S.readLendingBffPositions({
+      chainId: CHAIN, wallet: WALLET,
+      fetchImpl: async (url) => {
+        expect(String(url)).toMatch(new RegExp(`/lending/positions/${WALLET}\\?network=42161`));
+        return okResponse(bffPositionsBody());
+      }
+    });
+    expect(r.ok).toBe(true);
+    expect(r.balancesBySymbol.USDT.walletWei).toBe('0x000000000000000000000000000000000000000000000000000000000bebc200');
+    expect(r.account.availableBorrowsUsd).toBe(350);
+  });
+
+  it('rejects a wrong-shaped payload — an answer is not data unless it proves the schema', async () => {
+    const r = await S.readLendingBffPositions({
+      chainId: CHAIN, wallet: WALLET,
+      fetchImpl: async () => okResponse(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' }))
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('BAD_PAYLOAD');
+    const bad = await S.readLendingBffPositions({ chainId: CHAIN, wallet: 'not-a-wallet', fetchImpl: async () => { throw new Error('never called'); } });
+    expect(bad.ok).toBe(false);
+    expect(bad.reason).toBe('BAD_WALLET');
+  });
+
+  it('fills wallet balances AND the account from the BFF when the browser has no RPC at all — the «balance could not be read» fix', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = router;
+    try {
+      const r = await S.readMarketState({ provider: null, chainId: CHAIN, assets: [USDT, USDC], wallet: WALLET });
+      expect(r.ok).toBe(true);
+      expect(r.dataStatus).toBe(S.DATA_STATUS.PARTIAL);
+      expect(r.sources.positions).toBe('server-bff');
+      expect(r.sources.account).toBe('server-bff');
+
+      /* Hex from eth_call came through as decimal unit strings — 200 USDC. */
+      const usdtPos = r.positions[USDT.id];
+      expect(usdtPos.ok).toBe(true);
+      expect(usdtPos.source).toBe('server-bff');
+      expect(usdtPos.walletWei).toBe('200000000');
+      expect(usdtPos.wallet).toBe('200');
+
+      const usdcPos = r.positions[USDC.id];
+      expect(usdcPos.debtWei).toBe('40000000');
+      expect(usdcPos.debt).toBe('40');
+
+      expect(r.account?.ok).toBe(true);
+      expect(r.account.totalCollateralUsd).toBe(1000);
+      expect(r.account.availableBorrowsUsd).toBe(350);
+      expect(r.risk?.healthFactor).toBe(2.0);
+
+      /* The preflight now works against the real balance: 250 > 200 blocks
+         BEFORE any wallet popup, with the same code the direct path would raise. */
+      const decision = S.evaluateAction({
+        market: { chainId: CHAIN, reserves: r.reserves, positions: r.positions, account: r.account, prices: r.prices, oracleStatus: r.oracleStatus },
+        action: 'supply', asset: USDT, amount: '250', amountWei: '250000000',
+        walletBalanceWei: r.positions[USDT.id]?.walletWei ?? null
+      });
+      expect(decision.ok).toBe(false);
+      expect(codes(decision.blocked)).toContain('INSUFFICIENT_BALANCE');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('keeps honest «balance unknown» when the BFF positions read also fails — never an invented zero', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => String(url).includes('/positions/')
+      ? ({ ok: false, status: 503, json: async () => ({}) })
+      : okResponse(bffMarketsBody());
+    try {
+      const r = await S.readMarketState({ provider: null, chainId: CHAIN, assets: [USDT, USDC], wallet: WALLET });
+      /* Reserves/oracle still healed; positions stay unread — and SAY so. */
+      expect(r.reserves[USDT.id].listed).toBe(true);
+      expect(r.account).toBe(null);
+      expect(r.positions[USDT.id]).toBeUndefined();
+      const steps = (r.failures || []).map((f) => f.step);
+      expect(steps).toContain('server-bff-positions');
+
+      const decision = S.evaluateAction({
+        market: { chainId: CHAIN, reserves: r.reserves, positions: r.positions, account: null, prices: r.prices, oracleStatus: r.oracleStatus },
+        action: 'supply', asset: USDT, amount: '250', amountWei: '250000000',
+        walletBalanceWei: r.positions[USDT.id]?.walletWei ?? null
+      });
+      /* Warning, not blocked-by-invention: BALANCE_UNKNOWN names the unreadable input. */
+      expect(codes(decision.warnings)).toContain('BALANCE_UNKNOWN');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('a direct stale oracle gets its unpriced assets filled from the SAME protocol oracle via the BFF (the Sonic case, §21)', async () => {
+    const directOracle = {
+      ok: false, status: 'stale', oracleAddress: '0xabc',
+      prices: {
+        [USDT.id]: { symbol: 'USDT', address: USDT.address, priceBase: null, priceUsd: null, valid: false, stale: true, reason: 'STALE_PRICE' },
+        [USDC.id]: { symbol: 'USDC', address: USDC.address, priceBase: '100000000', priceUsd: 1, valid: true, stale: false, reason: null }
+      },
+      staleAssets: ['USDT'], invalidAssets: [], checkedAt: 1
+    };
+    const bff = {
+      ok: true,
+      marketsBySymbol: {
+        USDT: { asset: 'USDT', oraclePrice: 0.9998, oraclePriceBase: '99980000' },
+        USDC: { asset: 'USDC', oraclePrice: 1.0, oraclePriceBase: '100000000' }
+      },
+      meta: { oracleStatus: 'ok', oracleAddress: '0xb56c2F0B653B2e0b10C9b928C8580Ac5Df02C7C7' }
+    };
+    const merged = S.mergeStaleOracleWithBff({ oracle: directOracle, bff, assets: [USDT, USDC] });
+    expect(merged).not.toBe(null);
+    expect(merged.oracle.status).toBe('ok');
+    /* The direct-valid price won for USDC — the server never overwrites a chain fact. */
+    expect(merged.oracle.prices[USDC.id].priceBase).toBe('100000000');
+    expect(merged.oracle.prices[USDC.id].source).toBeUndefined();
+    /* The stale-hole was filled, labelled. */
+    expect(merged.oracle.prices[USDT.id].valid).toBe(true);
+    expect(merged.oracle.prices[USDT.id].priceBase).toBe('99980000');
+    expect(merged.oracle.prices[USDT.id].source).toBe('server-bff');
+    expect(merged.oracle.staleAssets).toEqual([]);
+
+    /* And when the BFF cannot price the hole either, nothing is invented. */
+    const empty = S.mergeStaleOracleWithBff({
+      oracle: directOracle,
+      bff: { ...bff, marketsBySymbol: { USDT: { asset: 'USDT', oraclePrice: null, oraclePriceBase: null } } },
+      assets: [USDT, USDC]
+    });
+    expect(empty).toBe(null);
+  });
+});
+
 describe('§12 — a disconnected wallet and an unreadable account are different sentences', () => {
   it('getMaxBorrow says NOT_CONNECTED when no account was read at all', () => {
     const max = S.getMaxBorrow({ market: market({ account: null }), asset: USDT });

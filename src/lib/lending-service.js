@@ -327,6 +327,162 @@ const safeBigInt = (value) => {
   try { return value == null ? null : BigInt(value); } catch { return null; }
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   §4/§25 — BFF POSITIONS FALLBACK (the «موجودی کیف پول خوانده نمی‌شود» fix)
+   ═══════════════════════════════════════════════════════════════════════════
+   The wallet-balance preflight previously had exactly one source: the
+   browser's own RPC path. Where public L2 endpoints are throttled or blocked,
+   EVERY balance came back null and the page degraded to BALANCE_UNKNOWN on
+   every action — while the app's own BFF was reading the same contracts
+   through its ordered multi-RPC failover for other features.
+
+   `GET /api/lending/positions/:wallet?network=` answers the SAME three sets
+   of numbers (the pool's getUserAccountData, and per-reserve
+   wallet/aToken/debt balances). Same honesty contract as the markets
+   fallback: pinned schema, `source:'server-bff'` labels, `dataStatus`
+   downgraded to partial, an empty or wrong-shaped payload is NOT data, and a
+   failure is named — never a zero. */
+
+export const LENDING_BFF_POSITIONS_SCHEMA = 'fbt.lending-position.v1';
+
+const isEvmAddress = (value) => typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value);
+
+/** BigInt string from either a decimal or a 0x-prefixed integer; null when unreadable. */
+const toUnitString = (value) => {
+  try {
+    if (value == null || value === '' || value === '0x') return null;
+    return BigInt(value).toString();
+  } catch { return null; }
+};
+
+export async function readLendingBffPositions({ chainId, wallet, baseUrl = null, fetchImpl = null, timeoutMs = 6500 } = {}) {
+  const cid = Number(chainId);
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: 'UNSUPPORTED_CHAIN' };
+  if (!isEvmAddress(wallet)) return { ok: false, reason: 'BAD_WALLET' };
+  const doFetch = typeof fetchImpl === 'function' ? fetchImpl : (typeof fetch === 'function' ? fetch : null);
+  if (!doFetch) return { ok: false, reason: 'NO_FETCH' };
+  let base = '/api';
+  try { base = String(baseUrl || apiBase() || '/api'); } catch { base = '/api'; }
+  const url = `${base.replace(/\/+$/, '')}/lending/positions/${wallet}?network=${cid}`;
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6500)) : null;
+  try {
+    const res = await doFetch(url, {
+      headers: { accept: 'application/json' },
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    if (!res?.ok) return { ok: false, reason: `HTTP_${res?.status ?? 0}` };
+    const json = await res.json();
+    /* The route answers with its data at top level and meta as a sibling;
+       anything else (SPA fallback, captive portal, error envelope) is not a
+       position read. */
+    if (json?.meta?.schema !== LENDING_BFF_POSITIONS_SCHEMA) return { ok: false, reason: 'BAD_PAYLOAD' };
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+    return {
+      ok: true,
+      /* Raw { walletWei, suppliedWei, debtWei } per reserve symbol. The raw
+         strings are normalised to decimal unit strings here — ethers callers
+         treat null as "unknown", never "zero" (§37). */
+      balancesBySymbol: json.balances && typeof json.balances === 'object' ? json.balances : {},
+      account: {
+        ok: true,
+        totalCollateralUsd: num(json.totalCollateralUsd),
+        totalDebtUsd: num(json.totalDebtUsd),
+        availableBorrowsUsd: num(json.availableBorrowsUsd),
+        liquidationThresholdPct: num(json.liquidationThresholdPct),
+        ltvPct: num(json.ltvPct),
+        healthFactor: json.healthFactor == null ? null : num(json.healthFactor),
+        source: 'server-bff',
+        dataStatus: 'partial'
+      },
+      meta: {
+        dataStatus: json.meta.dataStatus ?? null,
+        source: json.meta.source ?? null
+      }
+    };
+  } catch (error) {
+    return { ok: false, reason: String(error?.name === 'AbortError' ? 'TIMEOUT' : 'BFF_UNAVAILABLE'), detail: String(error?.message || error).slice(0, 120) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Overlay BFF balances onto one asset's position — only when the direct read
+ * produced NO answer for it. A wallet balance the server read 20 seconds ago
+ * is served as exactly that (source + partial), never dressed up as a fresh
+ * chain read.
+ */
+function mergeBffPosition({ bffPosition, asset, current, reserve }) {
+  if (!bffPosition) return null;
+  if (current?.ok === true) return null; // a direct fact always wins
+  const decimals = Number(reserve?.decimals ?? asset.decimals ?? 18);
+  const walletWei = toUnitString(bffPosition.walletWei);
+  const suppliedWei = toUnitString(bffPosition.suppliedWei);
+  const debtWei = toUnitString(bffPosition.debtWei);
+  /* The route read NOTHING for this reserve — say so, don't guess zero. */
+  if (walletWei == null && suppliedWei == null && debtWei == null) return null;
+  return {
+    ok: true,
+    source: 'server-bff',
+    dataStatus: 'partial',
+    walletWei,
+    /* A reserve with no aToken read still has a meaningful wallet balance;
+       supplied/debt stay honest nulls rather than pretending the user holds
+       nothing. */
+    suppliedWei: suppliedWei ?? (current?.suppliedWei ?? null),
+    debtWei: debtWei ?? (current?.debtWei ?? null),
+    wallet: walletWei != null ? fromUnits(walletWei, decimals) : null,
+    supplied: suppliedWei != null ? fromUnits(suppliedWei, decimals) : (current?.supplied ?? null),
+    debt: debtWei != null ? fromUnits(debtWei, decimals) : (current?.debt ?? null)
+  };
+}
+
+/**
+ * §21 — a direct oracle answered 'stale' (the reserve's own last-accrual is
+ * older than the freshness window; on low-activity markets like Sonic this
+ * fires on a perfectly healthy price feed, because the timestamp tracks
+ * reserve ACTIVITY, not the Chainlink answer's age). Fill — per asset — from
+ * the server's fresh read of the SAME protocol oracle; assets the direct read
+ * priced stay verbatim, and the merge is labelled instead of silently
+ * becoming 'ok'.
+ */
+/* Exported for the unit tests: the stale-merge policy is exactly the decision
+   §21 pins — it must be provable without a live chain. */
+export function mergeStaleOracleWithBff({ oracle, bff, assets }) {
+  if (!oracle || oracle.status !== ORACLE_STATUS.STALE || !bff?.ok) return null;
+  const bffOracle = mergeBffOracle({ bff, assets });
+  if (!bffOracle) return null;
+  const prices = { ...(oracle.prices || {}) };
+  let filled = 0;
+  for (const asset of assets) {
+    const direct = prices[asset.id];
+    if (direct?.valid === true) continue;
+    const served = bffOracle.prices?.[asset.id];
+    if (served?.valid === true) {
+      prices[asset.id] = { ...served, stale: false };
+      filled += 1;
+    }
+  }
+  if (!filled) return null;
+  const remaining = assets.filter((a) => !prices[a.id]?.valid).map((a) => a.symbol);
+  return {
+    oracle: {
+      ...oracle,
+      ok: assets.some((a) => prices[a.id]?.valid),
+      status: remaining.length ? ORACLE_STATUS.STALE : ORACLE_STATUS.OK,
+      /* The still-unpriced assets stay named — a partially healed feed must
+         still show its hole. */
+      staleAssets: remaining,
+      prices,
+      freshnessNote: 'stale-direct-filled-via-server-bff',
+      source: 'chain+server-bff'
+    },
+    filled
+  };
+}
+
 /**
  * One read pass over everything the Lending page displays.
  *
@@ -425,9 +581,12 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
   const directListed = (map) => Object.values(map).filter((r) => r?.listed === true).length;
   let listedCount = directListed(reserves);
   /* §21 A 'stale' or 'anomaly' answer from the direct oracle is INFORMATION,
-     not a gap: only a flat 'unavailable' asks for the fallback read. */
+     not a gap — but 'stale' still asks the BFF to FILL the assets the direct
+     read could not price, because the staleness proxy (the reserve's
+     last-accrual timestamp) fires on quiet-but-healthy markets. */
   const oracleOkDirect = oracle?.status === ORACLE_STATUS.OK;
   const oracleNeedsFallback = !oracle || oracle.status === ORACLE_STATUS.UNAVAILABLE;
+  const oracleStaleDirect = oracle?.status === ORACLE_STATUS.STALE;
   const sources = {
     reserves: listedCount > 0 ? 'chain' : null,
     oracle: oracleOkDirect ? 'chain' : oracleNeedsFallback ? null : 'chain'
@@ -440,7 +599,7 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
      fresh browser-side chain read (§3). Only what is missing is filled — a
      direct fact (including "this asset is not a reserve") always wins. */
   const unknownReserves = Object.values(reserves).filter((r) => r?.listed == null).length;
-  if (listedCount === 0 || unknownReserves > 0 || oracleNeedsFallback) {
+  if (listedCount === 0 || unknownReserves > 0 || oracleNeedsFallback || oracleStaleDirect) {
     const bff = await readLendingBffMarkets({ chainId: cid });
     if (bff?.ok) {
       let mergedReserves = 0;
@@ -459,9 +618,56 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
       if (oracleNeedsFallback) {
         const bffOracle = mergeBffOracle({ bff, assets: list });
         if (bffOracle) { oracle = bffOracle; sources.oracle = 'server-bff'; }
+      } else if (oracleStaleDirect) {
+        const staleFill = mergeStaleOracleWithBff({ oracle, bff, assets: list });
+        if (staleFill) {
+          oracle = staleFill.oracle;
+          sources.oracle = 'server-bff';
+        }
       }
     } else {
       failures.push({ step: 'server-bff', reason: bff?.reason || 'BFF_UNAVAILABLE' });
+    }
+  }
+
+  /* ── (C2) the wallet's own numbers — the «balance could not be read» fix ──
+     Reserves and the oracle ALREADY had a server fallback; the account and the
+     per-asset balances did not, which is precisely why «BALANCE_UNKNOWN» was
+     the only thing this page could say on networks the browser cannot reach.
+     The BFF reads the same pool and the same token balances server-side; the
+     merge never overwrites a direct fact and labels what it served. */
+  if (isEvmAddress(wallet || '')) {
+    const missingPositions = list.filter((asset) => positions[asset.id]?.ok !== true).length;
+    const missingAccount = !account?.ok;
+    if (missingPositions > 0 || missingAccount) {
+      const bffPos = await readLendingBffPositions({ chainId: cid, wallet });
+      if (bffPos?.ok) {
+        let mergedPositions = 0;
+        for (const asset of list) {
+          const merged = mergeBffPosition({
+            bffPosition: bffPos.balancesBySymbol?.[asset.symbol],
+            asset,
+            current: positions[asset.id],
+            reserve: reserves[asset.id]
+          });
+          if (merged) {
+            positions = { ...positions, [asset.id]: merged };
+            mergedPositions += 1;
+          }
+        }
+        if (mergedPositions > 0) {
+          sources.positions = mergedPositions === list.length ? 'server-bff' : 'chain+server-bff';
+        }
+        if (missingAccount && bffPos.account?.ok) {
+          account = bffPos.account;
+          sources.account = 'server-bff';
+        }
+      } else {
+        failures.push({ step: 'server-bff-positions', reason: bffPos?.reason || 'BFF_UNAVAILABLE' });
+      }
+    } else {
+      sources.positions = 'chain';
+      sources.account = 'chain';
     }
   }
 
@@ -501,7 +707,8 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
   /* §3 — the aggregate label. A snapshot assembled through the server fallback
      is PARTIAL: good enough to show and name, never dressed up as a fresh
      direct chain read. */
-  const servedByServer = sources.reserves === 'server-bff' || sources.oracle === 'server-bff';
+  const servedByServer = [sources.reserves, sources.oracle, sources.account, sources.positions]
+    .some((source) => source === 'server-bff' || source === 'chain+server-bff');
   const partialCount = Object.values(reserves).filter((r) => r?.listed === true && r?.dataStatus === 'partial').length;
   const dataStatus = listedCount === 0 && !account?.ok
     ? DATA_STATUS.UNAVAILABLE

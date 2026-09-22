@@ -47,6 +47,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SolanaLendingPanel from '../components/SolanaLendingPanel';
+import AssetIcon from '../components/AssetIcon';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
@@ -110,29 +111,18 @@ const fmtUsd = (value) => (value == null || !Number.isFinite(Number(value))
   ? '—'
   : `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`);
 
-/** Modern gradient asset avatar. */
+/**
+ * Reserve artwork: the vendored token SVG plus the chain's own network badge,
+ * exactly the art the swap screen uses. Assets come from the app's audited
+ * registry (`lendingAssetsFor`), so symbol-keyed artwork is safe here — the
+ * address behind each symbol is ours, never user-imported. The old
+ * three-letter gradient tile is what «آیکن‌های واقعی نمایش داده نمی‌شوند»
+ * reported: keep the monogram only as AssetIcon's deliberate last resort.
+ */
 function AssetAvatar({ asset, size = 40 }) {
   return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: size, height: size, borderRadius: size * 0.32, flexShrink: 0,
-        display: 'grid', placeItems: 'center', position: 'relative',
-        background: asset.grad || `linear-gradient(135deg, ${asset.color}, ${asset.color}88)`,
-        boxShadow: `0 6px 16px ${asset.color}33, inset 0 1px 0 rgba(255,255,255,0.25)`,
-        fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: size * 0.3,
-        color: '#fff', letterSpacing: -0.5,
-      }}
-    >
-      {asset.symbol.slice(0, 4)}
-      <span
-        style={{
-          position: 'absolute', bottom: -2, right: -2,
-          width: size * 0.3, height: size * 0.3, borderRadius: 99,
-          background: CHAIN_DOT[asset.chain] ?? '#888', border: '2px solid var(--bg-card, #16161e)',
-        }}
-        title={chainLabel(asset.chain)}
-      />
+    <span style={{ width: size, height: size, flexShrink: 0, display: 'block' }} title={chainLabel(asset.chain)}>
+      <AssetIcon symbol={asset.symbol} chain={asset.chain} size={size} radius={Math.round(size * 0.32)} alt={asset.symbol} />
     </span>
   );
 }
@@ -761,15 +751,7 @@ function AmountInput({ label, value, onChange, asset, hint, autoFocus, max, maxL
             padding: '0 14px', display: 'flex', alignItems: 'center', gap: 7,
             fontSize: 12, fontWeight: 700, color: 'var(--text-2)', whiteSpace: 'nowrap',
           }}>
-            <span
-              style={{
-                width: 18, height: 18, borderRadius: 6, display: 'inline-grid', placeItems: 'center',
-                background: asset.grad || asset.color, color: '#fff',
-                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 800,
-              }}
-            >
-              {asset.symbol.slice(0, 3)}
-            </span>
+            <AssetIcon symbol={asset.symbol} size={18} radius={6} alt={asset.symbol} />
             {asset.symbol}
           </span>
         )}

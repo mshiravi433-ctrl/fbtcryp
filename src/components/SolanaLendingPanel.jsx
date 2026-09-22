@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSolanaWallet } from '../hooks/useSolanaWallet.js';
+import AssetIcon from './AssetIcon.jsx';
 import {
   buildSolanaLendingTransactions,
   readSolanaLendingMarket,
   waitForSolanaLendingTransaction,
+  preflightSolanaAction,
   SOLANA_LENDING_EXPLORER,
   toSolanaUnits
 } from '../lib/solanaLending.js';
@@ -64,8 +66,8 @@ function SolanaAssetCard({ asset, selected, onSelect, t }) {
         background: active ? 'linear-gradient(135deg, rgba(153,69,255,0.20), rgba(20,184,166,0.08))' : card.background,
       }}
     >
-      <span style={{ width: 39, height: 39, borderRadius: 14, display: 'grid', placeItems: 'center', flexShrink: 0, color: '#fff', fontSize: 12, fontWeight: 900, fontFamily: 'var(--font-mono)', background: 'linear-gradient(135deg, #9945ff, #14b8a6)' }}>
-        {asset.symbol.slice(0, 4)}
+      <span style={{ width: 39, height: 39, flexShrink: 0, display: 'block' }}>
+        <AssetIcon symbol={asset.symbol} chain="solana" size={39} radius={14} alt={asset.symbol} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800 }}>{asset.symbol}</span>
@@ -151,6 +153,12 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
     if (!wallet.address) { setActionError('SOLANA_WALLET_REQUIRED'); return; }
     if (!actionAsset) { setActionError('SOLANA_ASSET_REQUIRED'); return; }
     if (!actionAmount || !toSolanaUnits(actionAmount, Number(actionAsset.decimals || 0))) { setActionError('AMOUNT_REQUIRED'); return; }
+    /* §7 — preflight BEFORE the wallet is asked for anything: balances and
+       positions come from the latest market read; when they could not be
+       read, the honest answer is to refuse the popup, not to let it open for
+       a transaction the chain would refuse at the user's expense. */
+    const preflight = preflightSolanaAction({ action: nextAction, asset: actionAsset, amount: actionAmount, snapshot });
+    if (!preflight.ok) { setActionError(preflight.code); return; }
     setAction(nextAction);
     try {
       const built = await buildSolanaLendingTransactions({ action: nextAction, asset: actionAsset, amount: actionAmount, wallet: wallet.address });
@@ -158,7 +166,11 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       if (typeof wallet.signAndSendTransaction !== 'function') throw new Error('SOLANA_SIGN_UNAVAILABLE');
       let signature = null;
       for (const tx of built.transactions) {
-        const sent = await wallet.signAndSendTransaction(tx.transaction, { versioned: false });
+        /* Kamino builds v0 (versioned) transactions. Passing `versioned:false`
+           sent them through LEGACY deserialization — every signing attempt
+           through an injected wallet failed before the user could ever see an
+           approval. */
+        const sent = await wallet.signAndSendTransaction(tx.transaction, { versioned: true });
         if (!sent?.ok || !sent.signature) throw new Error(sent?.code || 'SOLANA_SEND_FAILED');
         const confirmed = await waitForSolanaLendingTransaction(sent.signature);
         if (!confirmed.ok) throw new Error(confirmed.code || 'SOLANA_SEND_FAILED');
@@ -184,7 +196,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
     <section data-testid="solana-lending-panel" dir="inherit">
       <div style={{ ...card, padding: '16px', marginBottom: 12, background: 'linear-gradient(140deg, rgba(153,69,255,0.20), rgba(20,184,166,0.10) 70%, rgba(255,255,255,0.03))' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 15, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 900, background: 'linear-gradient(135deg, #9945ff, #14b8a6)' }}>SOL</div>
+          <div style={{ width: 46, height: 46, flexShrink: 0 }}><AssetIcon symbol="SOL" chain="solana" size={46} radius={15} alt="SOL" /></div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 900, fontSize: 17 }}>{t('loan.solana.title')}</div>
             <div style={{ color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.65, marginTop: 3 }}>{t('loan.solana.subtitle')}</div>
@@ -279,11 +291,29 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
                 <Metric label={t('loan.borrowApyLine')} value={selected.borrowApyPct == null ? '—' : `${fmt(selected.borrowApyPct)}%`} />
                 <Metric label={t('loan.maxLtv')} value={selected.loanToValuePct == null ? '—' : `${fmt(selected.loanToValuePct)}%`} />
               </div>
-              <label style={{ display: 'block', fontSize: 11.5, color: 'var(--text-2)', marginBottom: 6 }}>{t('loan.amount')} · {selected.symbol}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+                <label style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('loan.amount')} · {selected.symbol}</label>
+                {/* MAX means the wallet's real spendable balance — the number
+                    the preflight checks the transaction against. Unreadable
+                    balance renders no MAX rather than zero. */}
+                {tab !== 'borrow' && currentPosition?.walletBalance != null && (
+                  <button
+                    type="button"
+                    data-testid="solana-loan-max"
+                    onClick={() => setAmount(String(currentPosition.walletBalance))}
+                    style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-2)', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '3px 8px', cursor: 'pointer' }}
+                  >
+                    {t('loan.maxOf', { amount: currentPosition.walletBalance, symbol: selected.symbol })}
+                  </button>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: 7 }}>
                 <input data-testid="solana-loan-amount" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '11px 12px', background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.10)', color: 'var(--text-1)', fontFamily: 'var(--font-mono)' }} />
                 <button type="button" className="btn btn-primary" data-testid="solana-loan-action" disabled={Boolean(action)} onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')} style={{ minWidth: 112 }}>{action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}</button>
               </div>
+              {tab !== 'borrow' && wallet.address && currentPosition?.walletBalance == null && (
+                <p data-testid="solana-loan-balance-unknown" style={{ color: '#fbbf24', fontSize: 10.5, margin: '8px 0 0' }}>{t('loan.error.BALANCE_UNKNOWN')}</p>
+              )}
               {snapshot?.account && tab === 'borrow' && <p style={{ color: 'var(--text-3)', fontSize: 10.5, margin: '8px 0 0' }}>{t('loan.maxBorrowHint', { max: `$${fmt(snapshot.account.availableBorrowsUsd)}` })}</p>}
               {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11, lineHeight: 1.6, margin: '9px 0 0' }}>{t(`loan.error.${actionError}`, { defaultValue: t('loan.error.UNKNOWN') })}</p>}
               {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ display: 'block', color: '#a78bfa', fontSize: 10.5, marginTop: 9, fontFamily: 'var(--font-mono)' }}>{t('loan.solana.viewTransaction')} · {lastSignature.slice(0, 10)}…</a>}
