@@ -81,6 +81,20 @@ censored.
 - [Financial OS — Financial Goals: goal → required return → allocation → Intent OS → monitoring](docs/FINANCIAL-GOALS.md) · [فارسی](docs/FINANCIAL-GOALS-FA.md)
 - [Financial Goal Engine — Outlook · Probability · What-If · Simulator · Health · Evidence](docs/FINANCIAL-GOAL-ENGINE-FA.md)
 
+### AI agents & MCP — `fbt-mcp`
+
+External AI agents (Cursor, Claude Code, Claude Desktop, Codex) can operate on
+FBT through a zero-dependency MCP bridge: market intelligence, signals, quotes
+and dry-run simulations, gated by the same developer-key scopes as the API
+(`request_quote`, `request_simulation`, `manage_listings`). **Read / quote /
+simulate only — nothing in the bridge signs, broadcasts, settles or
+withdraws; the user's wallet is the only signer.** Secrets are redacted before
+any payload reaches a model, and every advertised tool route is proven to
+exist by `test/mcp/mcp-probe.mjs`.
+
+- [mcp/README.md](mcp/README.md) (setup + tool surface) · [پل MCP به فارسی](docs/MCP-BRIDGE-FA.md)
+- Pattern modeled after QuantDinger Community's `quantdinger-mcp` — see [the QuantDinger assessment](docs/QUANTDINGER-ASSESSMENT-FA.md)
+
 ### Public guides
 
 - [صرافی غیرمتمرکز و سواپ ارز دیجیتال](https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2)

@@ -1,3 +1,41 @@
+# ۲۰۲۶-۰۹-۲۲ — پل MCP (`fbt-mcp`): ایجنت‌های هوش مصنوعی بیرونی با ابزار واقعیِ FBT وصل شدند — بدون هیچ ابزار امضایی
+
+اجرای «گزینهٔ B» از [ارزیابی QuantDinger](docs/QUANTDINGER-ASSESSMENT-FA.md) (ضلع «عرضه»):
+یک سرور **MCP بدون هیچ وابستگی npm** که Cursor / Claude Code / Claude Desktop / Codex
+را به دادهٔ واقعی FBT وصل می‌کند — هوش مصنوعی به‌جای حدسِ مدل، با قیمت، سیگنال و
+نقل‌قولِ واقعیِ سرور ما حرف می‌زند. الگوی سطح ابزار با ارجاع به `quantdinger-mcp`
+(Apache 2.0) طراحی شده؛ کد اصلی و زیر مجوز همین ریپو است.
+
+- `mcp/` (نام `fbt-mcp`) — **۲۶ ابزار** در چهار سطحِ دسترسیِ دقیقاً همان scopeهای
+  کلید توسعه‌دهنده (`server/developerKeys.js`): عمومی (بازار/قیمت/سیگنال/خبر/هوش پول
+  هوشمند/وضعیت Intent OS/کاتالوگ) · `request_quote` (نقل‌قول cross-chain، LI.FI،
+  deBridge DLN) · `request_simulation` (اسکن و برنامهٔ فلش‌لیکوئیدیتی + profit-plan)
+  · `manage_listings` (فهرست اکوسیستم، با کنترل دوبارهٔ سمت سرور). **هیچ ابزاری امضا،
+  broadcast، تسویه یا برداشت ندارد**؛ نام‌های اجراییِ مصنوعی (`sign_swap`, `execute`,
+  `swap_now`…) یک `POLICY_REFUSAL` ثابت می‌گیرند. ترنسپورت stdio + HTTP محافظت‌شده
+  (bind غیر-loopback بدون `FBT_MCP_AUTH_TOKEN` اصلاً استارت نمی‌خورد؛ توکن ورودی نباید
+  با `FBT_API_KEY` یکی باشد). هر payload پیش از رسیدن به مدل از `redactSecrets` می‌گذرد.
+- `server/app.js` — **`GET /api/developer/whoami`**: هویت و scope واقعیِ کلید از زبان
+  خود سرور (نه ادعای پیکربندی محلی)؛ کلید لغوشده بلافاصله fail-closed می‌شود.
+  پاسخ، `x-fbt-boundary` را هم تکرار می‌کند: `canSign/canExecute/canSettle/canWithdraw`
+  همگی false، `userSignatureRequired: true`.
+- `server/openapi.js` — قرارداد whoami + مرزِ هرگز-امضا-نکن در سند ماشین‌خوان (`/api/openapi.json`).
+- `test/mcp/mcp-probe.mjs` (`npm run test:mcp`) — ۴۰ بررسی از جمله انضباطِ «endpoint مرده
+  تبلیغ نکن» (هر مسیرِ هر ابزار با `app.get/app.post` واقعیِ `server/app.js` مچ می‌شود)،
+  رد شدنِ scope بدون حتی یک تماس شبکه، و تست زندهٔ هر دو ترنسپورت (قاب‌بندی stdio و
+  احراز هویت HTTP).
+- `docs/MCP-BRIDGE-FA.md` + `mcp/README.md` — راهنمای فارسی و انگلیسیِ نصب ۵ دقیقه‌ای
+  (بلوک کانفیگ آماده برای کلاینت‌های MCP)؛ README اصلی هم بخش «AI agents & MCP» گرفت.
+
+**تست:** mcp-probe **۴۰/۴۰**، wiring audit بدون هیچ خطای جدید (**۲۶۸۸/۲۶۹۸** — همان ۱۰
+خطای قبلی از قبل روی main موجود بودند و با stash تأیید شد)، `node --check` همهٔ فایل‌ها
+سبز، سند `openApiDocument()` سالم می‌سازد.
+
+**بعد از merge به main و deploy:** `whoami` روی fbtswap.ir زنده می‌شود؛ کانفیگ
+`mcp/README.md` را در Cursor/Claude بگذارید تا ابزارها فعال شوند (ابزارهای عمومی بدون
+کلید؛ برای quote/شبیه‌سازی یک کلید `fbt_sandbox_…` از صفحهٔ Developers اپ بسازید).
+
+---
 # ۲۰۲۶-۰۹-۲۲ (عصر) — لایو-بودن با یک نگاه + اوراکل وام برای بار دوم درست شد + پاسپورت بیلد + assetlinks خودکار
 
 پاسخ به چهار گزارش: «تغییرات لایو نمی‌شوند»، «خطای صفحهٔ وام هنوز هست»،
@@ -31,6 +69,8 @@
   `ci/assetlinks-publish-step.yml` آمده است.
 - **خدمتکاری کوچک:** روت `/etf` به chat route contract اضافه شد (تکمیل parity).
 - `public/sw.js`: `fbt-shell-v19 → v20` (دلایل کامل در خود فایل).
+
+---
 
 # ۲۰۲۶-۰۹-۲۱ — «Unverified domain» برطرف شد: کد به پروژهٔ ثبت‌شده برگشت + نوسازی خودکار
 

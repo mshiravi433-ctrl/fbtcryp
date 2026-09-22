@@ -1,0 +1,24 @@
+{
+  "name": "fbt-mcp",
+  "version": "0.1.0",
+  "description": "FBT MCP server — exposes FBT Swap read, quote and simulation capabilities to MCP agents (Cursor, Claude Code, Codex). Never signs, never executes, never holds keys.",
+  "type": "module",
+  "bin": {
+    "fbt-mcp": "src/cli.mjs"
+  },
+  "exports": {
+    ".": "./src/protocol.mjs",
+    "./tools": "./src/tools.mjs",
+    "./client": "./src/client.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "probe": "node ../test/mcp/mcp-probe.mjs"
+  },
+  "dependencies": {},
+  "private": true,
+  "license": "UNLICENSED — see the repository root LICENSE"
+}
