@@ -21,20 +21,6 @@ jobs:
       - name: Ensure Android SDK
         run: bash ci/ensure-android-sdk.sh
 
-      # /.well-known/assetlinks.json — the file Phantom fetches to verify the
-      # app's identity. It was 404 in production (measured 2026-09-22) because
-      # the fingerprint only existed as the keystore secret and no build ever
-      # derived the file. This step derives it here — Java + node are already
-      # set up above — and commits it back ONLY on change. See the script
-      # header for the two guarantees the step must keep.
-      - name: Publish /.well-known/assetlinks.json
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash ci/assetlinks-publish.sh
-
       # GitHub does NOT expose secrets to a script automatically — they only
       # reach the process through an explicit `env:` block. Without this the
       # build silently falls back to a debug APK even when all four secrets

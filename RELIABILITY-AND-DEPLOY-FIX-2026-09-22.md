@@ -116,7 +116,7 @@ GET https://fbtswap.ir/.well-known/assetlinks.json → 404 NOT_FOUND
 
 **ریشه:** فایل فقط با `FBT_ANDROID_SHA256` در محیط بیلد تولید می‌شود؛ این متغیر در **هیچ محیطی نیست** — ورک‌فلوی APK کِی‌استور را دارد (`ANDROID_KEYSTORE_BASE64`) و Vercel هیچ‌کدام را ندارد. برای همین فایل هرگز و هیچ‌جا نوشته نشده.
 
-**اصلاح — خود-شفابخشی در CI:** قدم/اسکریپت جدید `ci/assetlinks-publish.sh` (صدای بین) در ورک‌فلوی «Build APK»:
+**اصلاح — خود-شفابخشی در CI:** اسکریپت آماده‌به‌استفادهٔ `ci/assetlinks-publish.sh` در همین ریپوست. چون خطای GitHub «GitHub App without `workflows` permission» اجازهٔ پوشِ ویرایش `.github/workflows/*.yml` به اتومیشن نمی‌دهد، قدمِ ورک‌فلو آماده‌به-الصاق در `ci/assetlinks-publish-step.yml` است — **یک بار** از رابط وب گیت‌هاب (با توکن خودتان اجازهٔ workflows دارد) بالای خط `run: bash ci/build-both.sh` الصاق/ذخیره کنید. پس از آن اسکریپت در هر ران «Build APK»:
 
 ۱. کِی‌استوری که APK با آن امضا می‌شود را decode می‌کند،
 ۲. با `keytool` اثرانگشت SHA-256 را می‌خواند (درست همان ابزاری که راست می‌گوید)،
@@ -128,9 +128,9 @@ GET https://fbtswap.ir/.well-known/assetlinks.json → 404 NOT_FOUND
 - **هرگز** اثرانگشت debug یا حدسی منتشر نمی‌کند (بدون کِی‌استور: skip، نه نوشتن) — چون هاش غلط چیزی را verify نمی‌کند فقط شبیه انجام‌شده به نظر می‌رسد.
 - هیچ‌وقت جاب را به‌خاطر خطای انتشار قرمز نمی‌کند (APK خودش ارتی‌فکت اصلی است) — اما خطاهای خود ژنراتور (validation) اجازه دارند fail شوند چون آن‌ها باگ‌اند.
 
-**آنچه پس از مرج اتفاق می‌افتد:**
+**آنچه پس از الصاقِ قدم + مرج اتفاق می‌افتد:**
 
-۱. اولین ران «Build APK» کامیت `ci: publish /.well-known/assetlinks.json ...` روی شاخه اعمال می‌کند (برای merge بعدی: `git pull` کنید).
+۱. اولین ران «Build APK» کامیت `ci: publish /.well-known/assetlinks.json ...` روی همان شاخه می‌سازد و ری‌رِید می‌کند (برای merge بعدی: `git pull` کنید).
 ۲. بعد مرج به main، Vercel فایل `public/.well-known/assetlinks.json` را سرو می‌کند (Vite کپی dot-dir را انجام می‌دهد — از روی سورس Vite چک شد).
 ۳. تأیید زنده:
 
@@ -156,7 +156,7 @@ curl -s https://fbtswap.ir/.well-known/assetlinks.json | jq -e 'type == "array"'
 | `server/app.js` | `GET /api/version` |
 | `src/pages/Settings.jsx` | ردیف هش+تاریخ بیلد کنار نسخه |
 | `public/sw.js` | bump شِل `v19 → v20` (دلیل کامل در کامنت فایل) |
-| `.github/workflows/build-apk.yml` + `ci/assetlinks-publish.sh` | انتشار خودکار assetlinks.json از کِی‌استور، فقط روی تغییر |
+| `ci/assetlinks-publish.sh` + `ci/assetlinks-publish-step.yml` | انتشار خودکار assetlinks.json از کِی‌استور، فقط روی تغییر — قدم ورک‌فلو آماده‌به-الصاق است (توکن اتومیشن workflows-اجازه ندارد) |
 | `test/helpers/aaveMockProvider.mjs` | موک سلکتور-دقیق + حالت `legacyGetter` (ریشهٔ سبز-ماندنِ غلط تست‌ها) |
 | `test/lending-service.test.js`, `test/lending-bff-config-probe.test.js`, `test/walletconnect-stack-probe.mjs` | رگرسیون‌های دو outage + پین سلکتور خام + ۱۹ چک جدید برای پروب‌های verify |
 

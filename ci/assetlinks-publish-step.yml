@@ -1,0 +1,31 @@
+# Paste-ready step for .github/workflows/build-apk.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY A FILE AND NOT A COMMIT TO THE WORKFLOW: GitHub refuses pushes that edit
+# .github/workflows/*.yml from any token without the `workflows` permission —
+# the automation token used here cannot push the workflow edit itself. The
+# script it calls (ci/assetlinks-publish.sh) IS committed in the repository;
+# this file is the ONE step you paste above the `run: bash ci/build-both.sh`
+# step (GitHub web UI → edit → Save reaches workflows with your own token).
+#
+# What it achieves (measured problem, 2026-09-22):
+#     https://fbtswap.ir/.well-known/assetlinks.json  →  404 NOT_FOUND
+# The file Phantom fetches to verify app identity was never generated, because
+# the signing fingerprint only exists as the keystore secret in THIS workflow.
+# The step derives the file from that keystore with keytool, validates it, and
+# commits it back — only on real change, never a debug value. See the header
+# of ci/assetlinks-publish.sh for the two guarantees it must keep.
+# ─────────────────────────────────────────────────────────────────────────────
+
+      # /.well-known/assetlinks.json — the file Phantom fetches to verify the
+      # app's identity. It was 404 in production (measured 2026-09-22) because
+      # the fingerprint only existed as the keystore secret and no build ever
+      # derived the file. This step derives it here — Java + node are already
+      # set up above — and commits it back ONLY on change. See the script
+      # header of ci/assetlinks-publish.sh for the two guarantees it keeps.
+      - name: Publish /.well-known/assetlinks.json
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash ci/assetlinks-publish.sh
