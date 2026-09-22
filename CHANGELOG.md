@@ -1,3 +1,37 @@
+# ۲۰۲۶-۰۹-۲۲ (عصر) — لایو-بودن با یک نگاه + اوراکل وام برای بار دوم درست شد + پاسپورت بیلد + assetlinks خودکار
+
+پاسخ به چهار گزارش: «تغییرات لایو نمی‌شوند»، «خطای صفحهٔ وام هنوز هست»،
+«والت کانکت هنوز unverified» و «سولانا assetlinks». هر حکم از روی اندازه‌گیریِ
+زنده یا سورس ریلیز پروتکل است — سند کامل: `RELIABILITY-AND-DEPLOY-FIX-2026-09-22.md`.
+
+- **پاسپورت بیلد:** `window.__FBT_BUILD__` (define سایت → main.jsx)، ردیف
+  هش+تاریخ بیلد در Settings، و `GET /api/version`. پاسخ «آیا تغییرم رسید؟»
+  دیگر یک نگاه است: هش باید برابر HEADِ main باشد (وب فقط روی مرج main
+  دیپلوی می‌شود — arena/* preview ندارد).
+- **اوراکل Aave (سرور+کلاینت):** «اصلاحِ» صبحِ امروز سلکتور غلط دوم را زده
+  بود — Pool تابع `getAddressesProvider()` ندارد؛ گتر واقعی
+  `ADDRESSES_PROVIDER()` است (IPool.sol §576؛ سیلی‌کتور 0x0542975c، در تست
+  پین شد). ترتیب واقعی: کانونیکال → fork → رجیستری استاتیک تأییدشده، با
+  `providerVia`. بازخوانی زندهٔ ۴۲۱۶۱/۸۴۵۳ قبل از این کامیت: `RPC_ERROR` و
+  قیمت‌های null روی اولین ران بعد رفع می‌شود.
+- **موک Aave:** سلکتور-دقیق شد (این ریشهٔ سبز-ماندنِ دو outage بود) + حالت
+  `legacyGetter` برای fork؛ رگرسیون‌های هر دو outage در
+  `test/lending-service/test` و BFF-probe.
+- **WalletConnect Verify:** پروپ reachability با no-cors (پایان false
+  negativeِ «Failed to fetch» روی CORS)؛ سنجش واقعی enclave به‌صورت iframe
+  (`probeVerifyEnclaveFrame`/`measureVerifyEnclave`)؛ و
+  `installVerifyBudgetExtension` — بودجهٔ ۸ثانیه‌ای دوم، فقط وقتی سنجش گفت
+  enclave روی این شبکه LOADED می‌شود. در شبکهٔ فیلترشده صفر ثانیه اضافه
+  صرف می‌شود؛ در تلگرام/موبایلِ کند، «Cannot verify» به «Domain match»
+  برمی‌گردد.
+- **assetlinks.json (۴۰۴ زنده — اندازه‌گیری‌شده):** اسکریپت `ci/assetlinks-publish.sh`
+  فایل را از کِی‌استور امضا با keytool می‌سازد و فقط روی تغییر کامیت می‌کند —
+  هرگز debug/حدسی؛ اعتبارسنجی با `--check`. قدم ورک‌فلو (که نیاز به الصاقِ
+  دستی دارد چون توکن اتومیشن workflows-اجازه ندارد) آماده‌به-الصاق در
+  `ci/assetlinks-publish-step.yml` آمده است.
+- **خدمتکاری کوچک:** روت `/etf` به chat route contract اضافه شد (تکمیل parity).
+- `public/sw.js`: `fbt-shell-v19 → v20` (دلایل کامل در خود فایل).
+
 # ۲۰۲۶-۰۹-۲۱ — «Unverified domain» برطرف شد: کد به پروژهٔ ثبت‌شده برگشت + نوسازی خودکار
 
 ادامهٔ و پاسخ نهاییِ ثبتِ بالا: به‌جای صبر برای یک قدمِ دستیِ داشبورد روی

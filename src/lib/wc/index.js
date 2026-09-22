@@ -189,15 +189,21 @@ export {
 
 export {
   VERIFY_ATTESTATION_TIMEOUT_MS,
+  VERIFY_EXTENDED_BUDGET_MS,
   VERIFY_SERVER,
   VERIFY_SERVER_V3,
   attestationUrl,
   decodeAttestation,
+  getVerifyEnclaveState,
+  installVerifyBudgetExtension,
+  measureVerifyEnclave,
   predictVerifyVerdict,
   probeVerifyAttestation,
+  probeVerifyEnclaveFrame,
   probeVerifyReachability,
   randomAttestationId,
   reownDashboardUrl,
+  requestVerifyAttestation,
   warmVerifyEnclave
 } from './verify.js';
 

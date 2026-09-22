@@ -4,8 +4,47 @@ import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import { clearHardReloadFlag } from './lib/refresh.js';
 import { installDeeplinkReturnListeners } from './lib/solana/deeplink.js';
+import { measureVerifyEnclave, warmVerifyEnclave } from './lib/wc/verify.js';
 import './i18n';
 import './index.css';
+
+/*
+ * ─── THE BUILD STAMP, VISIBLE BEFORE REACT MOUNTS ──────────────────────────
+ * «تغییرات لایو نمی‌شوند» stays support-relevant until "which build is this
+ * really?" is a one-line answer instead of a dashboard argument. The define
+ * below is baked by vite from the build environment (VERCEL_GIT_COMMIT_* or
+ * GITHUB_SHA or the local checkout), and this publishes it at module level —
+ * before the first paint, in every harness — so DevTools, the logs a user
+ * pastes, and the Settings page all describe the SAME build.
+ *
+ * The `typeof` guard is the same pattern as __APP_VERSION__: test vite
+ * configs do not carry the define, and an unguarded reference is a boot
+ * crash there.
+ */
+if (typeof window !== 'undefined') {
+  try {
+    window.__FBT_BUILD__ = typeof __FBT_BUILD__ !== 'undefined' ? __FBT_BUILD__ : null;
+  } catch { /* a stamp is a convenience, never a boot blocker */ }
+}
+
+/*
+ * The WalletConnect verify enclave, warmed AND measured at boot.
+ *
+ * Attestation has a flat 5-second budget at pair time (the SDK's
+ * FIVE_SECONDS): DNS + TLS + the enclave's own JS alone can exceed that on a
+ * slow mobile network, and when it does the wallet renders «Cannot verify»
+ * for a domain that is perfectly registered. Warming opens the connection
+ * early; measuring records — once per page — whether the enclave page loads
+ * here at all. That measurement is the GATE for the extended-budget retry
+ * installed on connect (src/lib/wc/session.js): reachable-but-slow networks
+ * get a second, longer attestation attempt; filtered networks pay nothing.
+ * Both are advisory and never throw.
+ */
+try {
+  warmVerifyEnclave({});
+  measureVerifyEnclave({});
+} catch { /* an advisory warm-up must never gate boot */ }
+
 
 /*
  * ─── THE WALLET'S ANSWER, CAUGHT BEFORE REACT MOUNTS ────────────────────────
