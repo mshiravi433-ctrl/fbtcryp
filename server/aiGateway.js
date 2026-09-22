@@ -31,10 +31,8 @@
  *   - NEVER leaks private keys, mnemonics, seed phrases or API secrets to external models.
  *   - External AI is NEVER the source of truth for wallet balances or tx receipts.
  *   - External AI CANNOT directly sign or execute transactions.
- *   - All responses pass through schema verification and sanitization.
+ * - All responses pass through schema verification and sanitization.
  */
-
-import { createHash } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // Provider Configurations & Endpoints
