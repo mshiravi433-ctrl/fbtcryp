@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "इस ऐप बिल्ड में Kamino मॉड्यूल उपलब्ध नहीं है — कृपया अपडेट करें।",
       "RPC_RATE_LIMITED": "नेटवर्क नोड अभी रेट-लिमिटेड है — कुछ देर बाद फिर कोशिश करें।",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "यह टोकन इस मार्केट की ऑडिटेड सूची में नहीं है, इसलिए यहाँ इस्तेमाल नहीं हो सकता।",
+      "POOL_NOT_ALLOWED": "यह पूल पता इस नेटवर्क के ऑडिटेड मार्केट का नहीं है।",
+      "BAD_ADDRESS": "यह पता मान्य नहीं है।",
+      "NO_TOKEN_REGISTRY": "इस मार्केट की टोकन सूची लोड नहीं हो सकी।",
+      "KAMINO_SDK_MISSING": "इस बिल्ड में Kamino मॉड्यूल मौजूद नहीं है — ऐप अपडेट करें।",
+      "KAMINO_SDK_FAILED": "Kamino मॉड्यूल शुरू नहीं हो सका। ऐप अपडेट करके फिर कोशिश करें।"
     },
     "ratesUpdated": "दरें लेंडिंग कॉन्ट्रैक्ट (Morpho/Aave) से पढ़ी जाती हैं — अपने आप ताज़ा होती हैं।",
     "connectWallet": "वॉलेट जोड़ें",

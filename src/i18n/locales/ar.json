@@ -5991,7 +5991,13 @@
       "KAMINO_SDK_UNAVAILABLE": "وحدة Kamino غير متاحة في هذا الإصدار من التطبيق — حدّث التطبيق.",
       "RPC_RATE_LIMITED": "عقدة الشبكة مقيّدة المعدل حالياً — أعد المحاولة بعد قليل.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "هذا الرمز ليس في القائمة المدققة لهذه السوق، لذا لا يمكن استخدامه هنا.",
+      "POOL_NOT_ALLOWED": "عنوان هذا المجمّع ليس سوق الشبكة المدقق.",
+      "BAD_ADDRESS": "هذا العنوان غير صالح.",
+      "NO_TOKEN_REGISTRY": "تعذّر تحميل قائمة رموز هذه السوق.",
+      "KAMINO_SDK_MISSING": "وحدة Kamino مفقودة في هذا الإصدار — حدّث التطبيق.",
+      "KAMINO_SDK_FAILED": "تعذّر تشغيل وحدة Kamino. حدّث التطبيق وحاول مجددًا."
     },
     "rateUnknown": "السعر المباشر غير متاح الآن",
     "supplyApyLine": "العائد السنوي للإيداع",

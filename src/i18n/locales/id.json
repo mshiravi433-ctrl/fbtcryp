@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "Modul Kamino tidak tersedia di build aplikasi ini — perbarui aplikasi.",
       "RPC_RATE_LIMITED": "Node jaringan sedang dibatasi laju — coba lagi sebentar lagi.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "Token ini tidak ada dalam daftar teraudit pasar ini, jadi tidak dapat digunakan di sini.",
+      "POOL_NOT_ALLOWED": "Alamat pool ini bukan pasar teraudit jaringan ini.",
+      "BAD_ADDRESS": "Alamat ini tidak valid.",
+      "NO_TOKEN_REGISTRY": "Daftar token pasar ini tidak dapat dimuat.",
+      "KAMINO_SDK_MISSING": "Modul Kamino tidak ada di build ini — perbarui aplikasi.",
+      "KAMINO_SDK_FAILED": "Modul Kamino gagal dijalankan. Perbarui aplikasi dan coba lagi."
     },
     "ratesUpdated": "Suku bunga dibaca dari kontrak lending (Morpho/Aave) — diperbarui otomatis.",
     "connectWallet": "Hubungkan dompet",

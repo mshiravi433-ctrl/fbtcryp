@@ -1239,7 +1239,13 @@
       "KAMINO_SDK_UNAVAILABLE": "Kamino ماڈیول ایپ کے اس ورژن میں دستیاب نہیں — ایپ اپڈیٹ کریں۔",
       "RPC_RATE_LIMITED": "نیٹ ورک نوڈ فی الحال ریٹ لمیٹڈ ہے — تھوڑی دیر بعد دوبارہ کوشش کریں۔",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "یہ ٹوکن اس مارکیٹ کی آڈٹ شدہ فہرست میں نہیں، اس لیے یہاں استعمال نہیں ہو سکتا۔",
+      "POOL_NOT_ALLOWED": "یہ پول پتہ اس نیٹ ورک کی آڈٹ شدہ مارکیٹ کا نہیں ہے۔",
+      "BAD_ADDRESS": "یہ پتہ درست نہیں ہے۔",
+      "NO_TOKEN_REGISTRY": "اس مارکیٹ کی ٹوکن فہرست لوڈ نہیں ہو سکی۔",
+      "KAMINO_SDK_MISSING": "Kamino ماڈیول اس ورژن میں موجود نہیں — ایپ اپڈیٹ کریں۔",
+      "KAMINO_SDK_FAILED": "Kamino ماڈیول شروع نہیں ہو سکا۔ ایپ اپڈیٹ کر کے دوبارہ کوشش کریں۔"
     },
     "ratesUpdated": "شرحیں لینڈنگ کنٹریکٹس (Morpho/Aave) سے پڑھی جاتی ہیں — خودکار طور پر تازہ ہوتی ہیں۔",
     "connectWallet": "والٹ جوڑیں",

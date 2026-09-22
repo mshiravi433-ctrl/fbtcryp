@@ -513,6 +513,25 @@ function RiskMeter({ projection, account, t }) {
    gap — never a silent pass, never a fabricated block.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * 2026-09-22: when no wallet is connected, "could not read YOUR ..." warnings
+ * are noise — there is no "your" to read yet, and the Connect button below is
+ * already the call to action. Showing «موجودی خوانده نشد» to a user who never
+ * connected reads as a broken page rather than an unconnected one, so those
+ * wallet-dependent warnings are held back until a wallet exists. Protocol-wide
+ * warnings (paused markets, stale oracles) still render: they are true with or
+ * without a wallet.
+ */
+const WALLET_DEPENDENT_WARNINGS = new Set([
+  'BALANCE_UNKNOWN', 'BORROW_CAPACITY_UNVERIFIED', 'RISK_DATA_UNAVAILABLE',
+  'RISK_PROJECTION_UNAVAILABLE', 'ACCOUNT_UNAVAILABLE', 'LIQUIDITY_UNKNOWN'
+]);
+function visibleWarnings(decision, walletState) {
+  const list = decision?.warnings || [];
+  if (walletState !== 'disconnected') return list;
+  return list.filter((item) => !WALLET_DEPENDENT_WARNINGS.has(item?.code));
+}
+
 function ReasonList({ items, tone, t, testId, lang }) {
   if (!items?.length) return null;
   const color = tone === 'danger' ? '#f87171' : '#fbbf24';
@@ -1887,7 +1906,7 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
               )}
 
               <ReasonList items={decision.blocked} tone="danger" t={t} lang={lang} testId="loan-borrow-blocked" />
-              <ReasonList items={decision.warnings} tone="warn" t={t} lang={lang} testId="loan-borrow-warnings" />
+              <ReasonList items={visibleWarnings(decision, walletState)} tone="warn" t={t} lang={lang} testId="loan-borrow-warnings" />
 
               <ActionButton
                 state={walletState}
@@ -3442,21 +3461,28 @@ export default function Loan() {
         )}
       </motion.div>}
 
-      {/* ── Tab body ───────────────────────────────────────────────────── */}
+      {/* ── Tab body ─────────────────────────────────────────────────────
+          2026-09-22: every tab is keyed by the market it renders. The forms
+          used to keep their selected asset (and the borrow form its collateral
+          and amounts) across chain switches, so Arbitrum-USDT evaluated on
+          Base fell through to a bare «✕ TOKEN_NOT_ALLOWED» with no recovery.
+          A market change now remounts the form with a clean selection; the
+          evaluateAction chain guard stays as the second layer. */}
       {chain !== SOLANA_LENDING_CHAIN_ID && <AnimatePresence mode="wait">
         {tab === 'supply' && (
-          <motion.div key="supply" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            <SupplyTab market={market} t={t} haptic={haptic} notify={notify} onExecute={openExecution} preset={preset} />
+          <motion.div key={`supply-${chain}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+            <SupplyTab key={`supply-form-${chain}`} market={market} t={t} haptic={haptic} notify={notify} onExecute={openExecution} preset={preset} />
           </motion.div>
         )}
         {tab === 'borrow' && (
-          <motion.div key="borrow" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            <BorrowTab market={market} t={t} haptic={haptic} notify={notify} onExecute={openExecution} preset={preset} />
+          <motion.div key={`borrow-${chain}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+            <BorrowTab key={`borrow-form-${chain}`} market={market} t={t} haptic={haptic} notify={notify} onExecute={openExecution} preset={preset} />
           </motion.div>
         )}
         {tab === 'positions' && (
-          <motion.div key="positions" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+          <motion.div key={`positions-${chain}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
             <PositionsTab
+              key={`positions-form-${chain}`}
               market={market} t={t} haptic={haptic} notify={notify}
               onExecute={openExecution} onCollateral={toggleCollateral} history={historyRef.current}
             />

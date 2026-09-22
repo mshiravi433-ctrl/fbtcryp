@@ -114,8 +114,17 @@
  * PWA) pinned to the v16 shell keeps running the old quote code — the exact
  * mechanism behind "کار میکرد، دوباره خراب شد" on devices whose cache
  * outlived earlier deploys: the new bundle was never named for them. Renaming
- * evicts it on the site and on an in-place APK update alike. */
-const SHELL = 'fbt-shell-v17';
+ * evicts it on the site and on an in-place APK update alike.
+ *
+ * v17 -> v18: the loan-page repair («صفحه وام را کامل درست کن»: Kamino SDK
+ * load states, Solana RPC failover, the BFF markets 503, parallel positions
+ * balances, the cross-chain TOKEN_NOT_ALLOWED guard). Every one of those
+ * fixes lives in the shell bundle, and the fetch catch above still serves a
+ * cached index.html on a flaky connection — so an install pinned to v17 keeps
+ * reproducing «ماژول Kamino در دسترس نیست» and «✕ TOKEN_NOT_ALLOWED» byte
+ * for byte until its cached shell is evicted. Renaming the cache evicts it on
+ * the site and on an in-place APK update alike. */
+const SHELL = 'fbt-shell-v18';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

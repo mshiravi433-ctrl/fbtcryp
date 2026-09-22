@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "此版本的应用未包含 Kamino 模块——请更新应用。",
       "RPC_RATE_LIMITED": "网络节点当前被限流——请稍后再试。",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "该代币不在本市场的审计名单中，无法在此使用。",
+      "POOL_NOT_ALLOWED": "该资金池地址不是本网络的审计市场。",
+      "BAD_ADDRESS": "该地址无效。",
+      "NO_TOKEN_REGISTRY": "无法加载本市场的代币列表。",
+      "KAMINO_SDK_MISSING": "此版本缺少 Kamino 模块——请更新应用。",
+      "KAMINO_SDK_FAILED": "Kamino 模块启动失败。请更新应用后重试。"
     },
     "ratesUpdated": "利率从借贷合约（Morpho/Aave）读取 —— 自动刷新。",
     "connectWallet": "连接钱包",

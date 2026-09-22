@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "El módulo Kamino no está disponible en esta compilación; actualiza la app.",
       "RPC_RATE_LIMITED": "El nodo de la red tiene límite de velocidad ahora; inténtalo de nuevo en un momento.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "Este token no está en la lista auditada de este mercado, así que no puede usarse aquí.",
+      "POOL_NOT_ALLOWED": "Esta dirección de pool no es el mercado auditado de esta red.",
+      "BAD_ADDRESS": "Esta dirección no es válida.",
+      "NO_TOKEN_REGISTRY": "No se pudo cargar la lista de tokens de este mercado.",
+      "KAMINO_SDK_MISSING": "El módulo Kamino falta en esta versión — actualiza la app.",
+      "KAMINO_SDK_FAILED": "El módulo Kamino no pudo iniciarse. Actualiza la app e inténtalo de nuevo."
     },
     "ratesUpdated": "Las tasas se leen de los contratos de lending (Morpho/Aave) — se actualizan automáticamente.",
     "connectWallet": "Conectar cartera",

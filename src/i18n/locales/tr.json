@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "Kamino modülü uygulamanın bu sürümünde yok — lütfen güncelleyin.",
       "RPC_RATE_LIMITED": "Ağ düğümü şu anda hız sınırında — birazdan tekrar deneyin.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "Bu token, bu piyasanın denetlenmiş listesinde yok; burada kullanılamaz.",
+      "POOL_NOT_ALLOWED": "Bu havuz adresi, bu ağın denetlenmiş piyasası değil.",
+      "BAD_ADDRESS": "Bu adres geçerli değil.",
+      "NO_TOKEN_REGISTRY": "Bu piyasanın token listesi yüklenemedi.",
+      "KAMINO_SDK_MISSING": "Kamino modülü bu sürümde eksik — uygulamayı güncelleyin.",
+      "KAMINO_SDK_FAILED": "Kamino modülü başlatılamadı. Uygulamayı güncelleyip tekrar deneyin."
     },
     "ratesUpdated": "Oranlar lending sözleşmelerinden (Morpho/Aave) okunur — otomatik olarak yenilenir.",
     "connectWallet": "Cüzdanı bağla",
