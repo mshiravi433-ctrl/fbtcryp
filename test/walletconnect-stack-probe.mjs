@@ -69,9 +69,15 @@ import {
   withTimeout,
   attestationUrl,
   decodeAttestation,
+  getVerifyEnclaveState,
+  installVerifyBudgetExtension,
+  measureVerifyEnclave,
   predictVerifyVerdict,
   probeVerifyAttestation,
+  probeVerifyEnclaveFrame,
+  probeVerifyReachability,
   randomAttestationId,
+  requestVerifyAttestation,
   reownDashboardUrl,
   VERIFY_SERVER,
   VERIFY_SERVER_V3,
@@ -2053,6 +2059,134 @@ export default async function run() {
       t('the warm-up asks the host the SDK will ask', calls[0] === `${VERIFY_SERVER_V3}/public-key`);
       t('a warm-up with no window reports it instead of throwing',
         warmVerifyEnclave({}).warmed === false);
+    }
+
+    /* ── 2026-09-22: the probes that stop lying, and the evidence-gated retry ── */
+    {
+      /* The enclave reachability probe spent months calling a CORS refusal a
+         dead host: a plain fetch rejects on every host without ACAO. The fix
+         is mode:'no-cors' — the promise resolves once DNS+TLS complete. */
+      const seen = [];
+      const res = await probeVerifyReachability({
+        fetchImpl: async (u, opts) => { seen.push([String(u), opts]); return { ok: false, status: 0, type: 'opaque' }; },
+        timeoutMs: 100
+      });
+      t('the enclave reachability probe uses no-cors — reachability, not CORS',
+        seen[0]?.[1]?.mode === 'no-cors' && seen[0]?.[0] === `${VERIFY_SERVER}/`);
+      t('an opaque answer still means the host answered',
+        res.ok === true && res.transport === 'no-cors' && res.opaque === true);
+      const dead = await probeVerifyReachability({
+        fetchImpl: async () => { throw new TypeError('Failed to fetch'); },
+        timeoutMs: 100
+      });
+      t('a real network failure is still reported as unreachable',
+        dead.ok === false && /Failed to fetch/.test(dead.error));
+    }
+    {
+      /* The iframe measurement is the mechanism itself: can this page load
+         the enclave? A LOADED verdict is the gate the retry below opens for. */
+      const env = fakeVerifyWindow();
+      const pending = probeVerifyEnclaveFrame({ win: env.win, timeoutMs: 150 });
+      const el = env.body.children.find((c) => c.tagName === 'IFRAME');
+      t('the enclave frame probe loads the enclave host',
+        el && String(el.src) === `${VERIFY_SERVER}/`);
+      for (const fn of el?.handlers?.load ?? []) fn();
+      const res = await pending;
+      t('a loaded enclave frame is measured as reachable', res.ok === true && res.verdict === 'LOADED');
+      t('the enclave frame probe cleans up after itself', env.body.children.length === 0);
+    }
+    {
+      const env = fakeVerifyWindow();
+      const res = await probeVerifyEnclaveFrame({ win: env.win, timeoutMs: 40 });
+      t('an enclave frame that never loads is a TIMEOUT, not a crash',
+        res.ok === false && res.verdict === 'TIMEOUT');
+    }
+    {
+      /* measureVerifyEnclave caches per window: one iframe, every later
+         caller reads the remembered answer. */
+      const env = fakeVerifyWindow();
+      const first = measureVerifyEnclave({ win: env.win, timeoutMs: 150 });
+      const el = env.body.children.find((c) => c.tagName === 'IFRAME');
+      for (const fn of el?.handlers?.load ?? []) fn();
+      const res = await first;
+      const second = await measureVerifyEnclave({ win: env.win, timeoutMs: 150 });
+      t('the enclave measurement is one iframe per page, reused',
+        res.ok === true && second.ok === true
+          && env.body.children.filter((c) => c.tagName === 'IFRAME').length === 0);
+      t('the enclave state is readable for the retry gate',
+        getVerifyEnclaveState(env.win)?.verdict === 'LOADED');
+    }
+    {
+      /* requestVerifyAttestation: the raw-JWT participant. Same handshake as
+         the SDK, with a budget the caller chooses. */
+      const env = fakeVerifyWindow();
+      const id = '0x' + 'a'.repeat(64);
+      const pending = requestVerifyAttestation({ win: env.win, projectId: 'pid', id, timeoutMs: 150 });
+      setTimeout(() => env.post(JSON.stringify({
+        type: 'verify_attestation',
+        attestation: jwtFor({ id, origin: 'https://fbtswap.ir', isVerified: true })
+      })), 5);
+      const jwt = await pending;
+      t('the raw attestation request returns the JWT the enclave signed',
+        jwt.split('.')[1] === jwtFor({ id, origin: 'https://fbtswap.ir', isVerified: true }).split('.')[1]);
+      const silent = await requestVerifyAttestation({ win: fakeVerifyWindow().win, projectId: 'pid', id: '0x' + 'b'.repeat(64), timeoutMs: 30 });
+      t('a silent enclave returns the empty string the SDK expects',
+        silent === '');
+    }
+    {
+      /* installVerifyBudgetExtension — the gate, both directions. */
+      const events = [];
+      const onEvent = (name, extra) => events.push([name, extra]);
+      {
+        /* SDK's own budget answered → returned verbatim, zero overhead. */
+        const core = { projectId: 'pid', verify: { register: async () => 'sdk.jwt.token' } };
+        const env = fakeVerifyWindow();
+        const result = installVerifyBudgetExtension({ core, win: env.win, projectId: 'pid', onEvent });
+        t('the budget extension installs where verify is exposed', result.installed === true);
+        t('a second installation is a no-op, not a nested wait',
+          installVerifyBudgetExtension({ core, win: env.win, projectId: 'pid' }).reason === 'ALREADY_INSTALLED');
+        const jwt = await core.verify.register({ id: '0x1', decryptedId: '0x1' });
+        t('an answered attestation is returned untouched', jwt === 'sdk.jwt.token');
+      }
+      {
+        /* Empty JWT + enclave never measured reachable → identical to stock:
+           no retry, no extra seconds, because the network pays nothing for a
+           fix that cannot help it. */
+        const core = { projectId: 'pid', verify: { register: async () => '' } };
+        const env = fakeVerifyWindow();
+        installVerifyBudgetExtension({ core, win: env.win, projectId: 'pid', onEvent });
+        const jwt = await core.verify.register({ id: '0x2', decryptedId: '0x2' });
+        t('an unreachable enclave never pays the extended budget',
+          jwt === '' && !events.some(([name]) => name === 'verify_budget_extended')
+            && env.body.children.length === 0);
+      }
+      {
+        /* Empty JWT + enclave measured LOADED → the retry's handshake with
+           the SAME id fetches the JWT the SDK's five seconds missed. */
+        const core = { projectId: 'pid', verify: { register: async () => '' } };
+        const env = fakeVerifyWindow();
+        installVerifyBudgetExtension({ core, win: env.win, projectId: 'pid', onEvent });
+        const measuring = measureVerifyEnclave({ win: env.win, timeoutMs: 150 });
+        for (const fn of env.body.children.find((c) => c.tagName === 'IFRAME')?.handlers?.load ?? []) fn();
+        await measuring;
+        const reqId = '0x' + 'c'.repeat(64);
+        const pending = core.verify.register({ id: reqId, decryptedId: reqId });
+        setTimeout(() => env.post(JSON.stringify({
+          type: 'verify_attestation',
+          attestation: jwtFor({ id: reqId, origin: 'https://fbtswap.ir', isVerified: true })
+        })), 5);
+        const jwt = await pending;
+        t('a reachable-but-slow enclave gets its attestation on the long clock',
+          typeof jwt === 'string' && jwt.length > 3);
+        t('the extension reports both its opening and its success',
+          events.some(([name]) => name === 'verify_budget_extended')
+            && events.some(([name]) => name === 'verify_budget_extended_ok'));
+      }
+      {
+        /* No verify controller at all → reported, never thrown. */
+        t('a core without verify is named, not crashed on',
+          installVerifyBudgetExtension({ core: {}, win: fakeVerifyWindow().win }).reason === 'NO_VERIFY_CONTROLLER');
+      }
     }
 
     /* ── the report carries both halves ─────────────────────────────────── */

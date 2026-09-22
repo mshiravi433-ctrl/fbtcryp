@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -276,7 +277,37 @@ export default defineConfig({
      */
     __APP_VERSION__: JSON.stringify(
       JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
-    )
+    ),
+    /*
+     * THE BUILD STAMP — the one-tap answer to «تغییرات لایو نمی‌شوند».
+     *
+     * Production web deploys only on merge to main (vercel.json disables
+     * arena/* previews), so a change made in any session branch is invisible
+     * on fbtswap.ir until its PR is merged AND Vercel finishes building. The
+     * way to know where you are in that pipeline used to be prayer; now it
+     * is a literal: main.jsx publishes this on window.__FBT_BUILD__, and
+     * Settings renders it next to the version. Both numbers come from the
+     * build environment itself — Vercel injects VERCEL_GIT_COMMIT_SHA/REF
+     * into every build; GitHub Actions exposes GITHUB_SHA/REF_NAME; a local
+     * build falls back to `git rev-parse`, never to a lie.
+     */
+    __FBT_BUILD__: JSON.stringify((() => {
+      const commit = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '').trim()
+        || (() => {
+          try {
+            return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+          } catch { return ''; }
+        })();
+      const ref = (process.env.VERCEL_GIT_COMMIT_REF || process.env.GITHUB_REF_NAME || '').trim();
+      const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+      return {
+        version,
+        commit,
+        commitShort: commit ? commit.slice(0, 7) : '',
+        ref,
+        builtAt: new Date().toISOString()
+      };
+    })())
   },
   server: {
     host: true, // so a tunnel (ngrok/cloudflared) can reach the dev server

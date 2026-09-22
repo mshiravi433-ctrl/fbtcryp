@@ -33,6 +33,13 @@ const IFACES = {
   pool: new Interface([
     'function getConfiguration(address asset) view returns (uint256)',
     'function getUserAccountData(address user) view returns (uint256, uint256, uint256, uint256, uint256, uint256)',
+    /* The Pool's real getter (aave-v3-origin IPool.sol §576) — 0x0542975c.
+       The lower-case getAddressesProvider (0xfe65acfe) is what the
+       2026-09-22 "fix" called; a REAL pool reverts on it, so this mock
+       answers it only in legacyGetter mode. That asymmetry is the whole
+       lesson of the double outage: a mock that answers any selector hides
+       any name a coder types. */
+    'function ADDRESSES_PROVIDER() view returns (address)',
     'function getAddressesProvider() view returns (address)',
     'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
     'function withdraw(address asset, uint256 amount, address to) returns (uint256)'
@@ -158,11 +165,16 @@ export function makeAaveProvider({
   nativeBalanceWei = 10n ** 18n,
   oraclePriceUsd8 = 100000000n,
   chainId = 8453,
+  /* V2-style fork mode: the pool answers the lower-case getAddressesProvider
+     and would revert on the canonical upper-case getter. Default FALSE —
+     every released Aave V3 pool is canonical-only. */
+  legacyGetter = false,
   calls = []
 } = {}) {
   const sel = {
     getPool: IFACES.addressesProvider.getFunction('getPool').selector,
     getPriceOracle: IFACES.addressesProvider.getFunction('getPriceOracle').selector,
+    ADDRESSES_PROVIDER: IFACES.pool.getFunction('ADDRESSES_PROVIDER').selector,
     getAddressesProvider: IFACES.pool.getFunction('getAddressesProvider').selector,
     getConfiguration: IFACES.pool.getFunction('getConfiguration').selector,
     getUserAccountData: IFACES.pool.getFunction('getUserAccountData').selector,
@@ -195,9 +207,15 @@ export function makeAaveProvider({
             [aTokenBalanceWei, 0n, 0n, 0n, 0n, 2n ** 256n - 1n]
           );
         }
-        if (selector === sel.getAddressesProvider) {
+        if ((!legacyGetter && selector === sel.ADDRESSES_PROVIDER)
+          || (legacyGetter && selector === sel.getAddressesProvider)) {
           /* The pool KNOWS its addresses provider — but only if the fixture
-             configured one; otherwise this reverts like a real chain. */
+             configured one; otherwise this reverts like a real chain. A real
+             Aave V3 pool answers ONLY the upper-case getter; the lower-case
+             call reaches this branch ONLY when the fixture says the chain is
+             a V2-style fork (legacyGetter), and otherwise falls through to the
+             unhandled revert below — exactly like the production chain that
+             reverted on 2026-09-22's lower-case "fix". */
           if (!addressesProvider) throw new Error('mock provider: addressesProvider not configured');
           return enc(['address'], [addressesProvider]);
         }

@@ -133,8 +133,25 @@
  * Both fixes live in the shell bundle, and an install pinned to v18 keeps
  * running the old code byte for byte until its cached shell is evicted.
  * Renaming the cache evicts it on the site and on an in-place APK update
- * alike. */
-const SHELL = 'fbt-shell-v19';
+ * alike.
+ *
+ * v19 -> v20: the 2026-09-22/2 double-outage repair + build stamp.
+ *   1. The v19 oracle resolution called the WRONG name a second time —
+ *      `Pool.getAddressesProvider()` does not exist either (the real getter
+ *      is the upper-case `ADDRESSES_PROVIDER()`, IPool.sol §576), so every
+ *      live chain answered oracleCode=RPC_ERROR even after v19 shipped.
+ *      Canonical → fork-name → static-registry, with `providerVia` naming the
+ *      answer. Measured live on 42161 and 8453 before and after.
+ *   2. The WalletConnect verify enclave probes stop lying: the reachability
+ *      check no longer confuses a CORS block with a dead host, and a real
+ *      iframe-load measurement + a gated extended attestation budget back
+ *      the «Cannot verify» label with evidence instead of guesswork.
+ *   3. window.__FBT_BUILD__ names the exact commit building this shell, so
+ *      «تغییرات لایو نمی‌شوند» becomes answerable in one tap instead of a
+ *      guess about whether a merge made it to production.
+ * Every one of those lives in the shell bundle, so an install pinned to v19
+ * keeps the old code byte for byte until its cached shell is evicted. */
+const SHELL = 'fbt-shell-v20';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
