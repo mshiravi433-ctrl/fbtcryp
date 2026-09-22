@@ -5,7 +5,6 @@ import {
   readSolanaLendingMarket,
   waitForSolanaLendingTransaction,
   SOLANA_LENDING_EXPLORER,
-  SOLANA_LENDING_RPC,
   toSolanaUnits
 } from '../lib/solanaLending.js';
 
@@ -95,8 +94,15 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
     setLoading(true);
     setError(null);
     try {
-      const next = await readSolanaLendingMarket({ wallet: wallet.address, rpcUrl: SOLANA_LENDING_RPC });
-      if (!next.ok) throw new Error(next.code || 'PROTOCOL_UNAVAILABLE');
+      /* No rpcUrl here on purpose: the lending client resolves the app's
+         probed Solana RPC layer (custom endpoint first, then the community
+         nodes) instead of pinning the Foundation's most-throttled host. */
+      const next = await readSolanaLendingMarket({ wallet: wallet.address });
+      if (!next.ok) {
+        const failure = new Error(next.code || 'PROTOCOL_UNAVAILABLE');
+        failure.code = next.code || 'PROTOCOL_UNAVAILABLE';
+        throw failure;
+      }
       setSnapshot(next);
       setSelected((current) => {
         const list = next.assets || [];
@@ -106,7 +112,14 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
           || null;
       });
     } catch (cause) {
-      setError(String(cause?.message || cause));
+      /* The failure is a CODE (KAMINO_SDK_UNAVAILABLE / RPC_ERROR /
+         RPC_RATE_LIMITED / KAMINO_MARKET_UNAVAILABLE), kept separate from the
+         raw transport detail so the panel can show a localized sentence and
+         still keep diagnostics one tap away (§28). */
+      setError({
+        code: String(cause?.code || cause?.message || 'PROTOCOL_UNAVAILABLE'),
+        detail: String(cause?.detail || cause?.message || '').slice(0, 160)
+      });
       setSnapshot(null);
     } finally {
       setLoading(false);
@@ -198,10 +211,55 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
 
       {loading && <div style={{ ...card, padding: 18, textAlign: 'center', color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.loading')}</div>}
       {!loading && error && (
-        <div data-testid="solana-loan-error" style={{ ...card, padding: 15, borderColor: 'rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.08)' }}>
-          <div style={{ fontWeight: 800, color: '#fca5a5', fontSize: 12.5 }}>{t('loan.unavailableTitle')}</div>
-          <p style={{ margin: '5px 0 11px', color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.7 }}>{t('loan.solana.unavailable')}</p>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={refresh} style={{ width: '100%' }}>{t('loan.retry')}</button>
+        <div
+          data-testid="solana-loan-error"
+          data-code={error.code}
+          style={{
+            ...card, padding: 0, overflow: 'hidden',
+            borderColor: 'rgba(248,113,113,0.35)',
+            background: 'linear-gradient(155deg, rgba(248,113,113,0.12), rgba(153,69,255,0.06) 60%, rgba(0,0,0,0.10))',
+          }}
+        >
+          <div style={{ padding: '14px 14px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+              <span style={{
+                width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+                display: 'grid', placeItems: 'center',
+                background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.28)',
+                color: '#fca5a5', fontSize: 14,
+              }}>⚠</span>
+              <span style={{ fontWeight: 800, color: '#fca5a5', fontSize: 13, flex: 1 }}>{t('loan.unavailableTitle')}</span>
+              <span
+                dir="ltr"
+                style={{
+                  fontSize: 9, fontWeight: 800, letterSpacing: '.04em',
+                  fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate',
+                  color: 'var(--text-3)', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.10)', borderRadius: 99, padding: '3px 8px',
+                }}
+              >{error.code}</span>
+            </div>
+            {/* The localized reason comes first; the protocol sentence stays
+                as context beneath it, never the other way around. */}
+            <p data-testid="solana-loan-error-reason" style={{ margin: '0 0 6px', color: 'var(--text-1)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.75 }}>
+              {t(`loan.error.${error.code}`, { defaultValue: '' }) || t('loan.error.PROTOCOL_UNAVAILABLE')}
+            </p>
+            <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 11, lineHeight: 1.75 }}>{t('loan.solana.unavailable')}</p>
+            {error.detail && error.detail !== error.code ? (
+              <p dir="ltr" className="faint" style={{ margin: '8px 0 0', fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', wordBreak: 'break-word', opacity: 0.75 }}>
+                {error.detail}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            data-testid="solana-loan-error-retry"
+            onClick={refresh}
+            style={{ width: '100%', borderRadius: 0, borderTop: '1px solid rgba(255,255,255,0.07)', padding: '11px' }}
+          >
+            {t('loan.retry')}
+          </button>
         </div>
       )}
 

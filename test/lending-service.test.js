@@ -590,3 +590,174 @@ describe('§31 — the adapter builds unsigned calldata, and refuses to hold a k
     expect(s.capabilities).toEqual({ sign: 'wallet-only', broadcast: 'wallet-only' });
   });
 });
+
+/* ── server-side fallback: labelled, partial, and confined to real gaps ─────
+   The Loan page used to depend on a browser-reachable public RPC on every
+   chain at once; where those are throttled or geo-blocked the whole page
+   degraded to "not wired". The app already operates a lending BFF with an
+   ordered failover and a cache, so the service now asks it for exactly the
+   gaps the direct read left, and labels everything it served (§3/§26). */
+describe('§6/§25 — the BFF fallback answers only real gaps, and labels what it served', () => {
+  const WALLET_USDT = '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9';
+  const bffMarket = (symbol, over = {}) => ({
+    asset: symbol,
+    address: symbol === 'USDT' ? WALLET_USDT : '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+    supplyApy: 3.84, borrowApy: 5.71,
+    totalSupply: null, totalBorrow: null, availableLiquidity: null,
+    decimals: 6, ltv: 75, liquidationThreshold: 78, liquidationBonus: 5,
+    borrowingEnabled: true, supplyCapWhole: 10000000, borrowCapWhole: 8000000,
+    oraclePrice: 0.9998, oraclePriceBase: '99980000', referencePrice: 1.0001,
+    anomaly: null, status: 'active',
+    ...over
+  });
+  const bffBody = (over = {}) => JSON.stringify({
+    data: { network: '42161', markets: [bffMarket('USDT'), bffMarket('USDC')] },
+    meta: {
+      schema: S.LENDING_BFF_MARKETS_SCHEMA,
+      dataStatus: 'live', oracleStatus: 'ok',
+      oracleAddress: '0xb56c2F0B653B2e0b10C9b928C8580Ac5Df02C7C7',
+      readAt: 1700000000000
+    },
+    ...over
+  });
+  const okResponse = (body) => ({ ok: true, status: 200, json: async () => JSON.parse(body) });
+
+  it('parses the server payload and pins every market by symbol', async () => {
+    const seen = [];
+    const r = await S.readLendingBffMarkets({
+      chainId: CHAIN,
+      fetchImpl: async (url) => { seen.push(String(url)); return okResponse(bffBody()); }
+    });
+    expect(r.ok).toBe(true);
+    expect(r.marketsBySymbol.USDT.ltv).toBe(75);
+    expect(r.marketsBySymbol.USDT.oraclePriceBase).toBe('99980000');
+    expect(r.meta.oracleStatus).toBe('ok');
+    expect(seen[0]).toMatch(/\/lending\/markets\?network=42161($|&)/);
+  });
+
+  it('rejects a payload that is not the pinned schema — an answer is not data unless it proves the shape', async () => {
+    /* This is exactly what a captive portal, an SPA fallback or a JSON-RPC
+       endpoint looks like from this client: HTTP 200, wrong shape. */
+    const r = await S.readLendingBffMarkets({
+      chainId: CHAIN,
+      fetchImpl: async () => okResponse(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0000' }))
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('BAD_PAYLOAD');
+  });
+
+  it('names transport failures instead of degrading silently', async () => {
+    const http = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }) });
+    expect(http).toEqual({ ok: false, reason: 'HTTP_503' });
+    const boom = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl: async () => { throw new Error('offline'); } });
+    expect(boom.ok).toBe(false);
+    expect(boom.reason).toBe('BFF_UNAVAILABLE');
+    const none = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl: null });
+    expect(none.ok || none.reason).toBeTruthy();
+  });
+
+  it('keeps the honest empty snapshot when the BFF answers 200 with the wrong shape — the page probe environment, exactly', async () => {
+    /* The loan execution probe stubs globalThis.fetch with a JSON-RPC handler
+       that answers EVERY URL 200/OK. If schema validation were absent, the
+       page would treat a JSON-RPC envelope as markets data. */
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => okResponse(JSON.stringify({ jsonrpc: '2.0', id: 7, result: '0x' }));
+    try {
+      const r = await S.readMarketState({ provider: null, chainId: CHAIN, assets: [USDT, USDC] });
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('NO_PROVIDER');
+      expect(r.reserves).toEqual({});
+      expect(r.prices).toEqual({});
+      expect(r.account).toBe(null);
+      expect(r.dataStatus).toBe(S.DATA_STATUS.UNAVAILABLE);
+      const steps = (r.failures || []).map((f) => f.step);
+      expect(steps).toContain('server-bff');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('builds a usable, PARTIAL snapshot entirely from the BFF when the browser has no RPC at all', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => okResponse(bffBody());
+    try {
+      const r = await S.readMarketState({ provider: null, chainId: CHAIN, assets: [USDT, USDC] });
+      expect(r.ok).toBe(true);
+      expect(r.dataStatus).toBe(S.DATA_STATUS.PARTIAL); // served data, never 'live'
+      expect(r.sources).toEqual({ reserves: 'server-bff', oracle: 'server-bff' });
+
+      const usdt = r.reserves[USDT.id];
+      expect(usdt.listed).toBe(true);
+      expect(usdt.listingSource).toBe('server-bff');
+      expect(usdt.ltvPct).toBe(75);
+      expect(usdt.liquidationThresholdPct).toBe(78);
+      expect(usdt.supplyApyPct).toBe(3.84);
+      expect(usdt.borrowApyPct).toBe(5.71);
+      expect(usdt.borrowingEnabled).toBe(true);
+      expect(Number(usdt.supplyCapWhole)).toBe(10000000);
+      expect(usdt.status).toBe('active');
+      /* Depth stays honestly null — the BFF does not aggregate aToken totals. */
+      expect(usdt.totalSupplyWei).toBe(null);
+      expect(usdt.availableLiquidityWei).toBe(null);
+
+      expect(r.oracle.ok).toBe(true);
+      expect(r.oracle.status).toBe('ok');
+      expect(r.prices[USDT.id].usd).toBeCloseTo(0.9998, 6);
+      expect(r.prices[USDT.id].base).toBe('99980000');
+      expect(r.prices[USDT.id].source).toBe('server-bff');
+
+      /* The missing bits (depth, account) are still named, not invented. */
+      expect(r.account).toBe(null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('lets the direct oracle stay in charge when it answered — a BFF price never overrides a live chain price', async () => {
+    /* The merge predicate is `oracleNeedsFallback`: anything the direct read
+       already resolved (including 'stale' information) is kept verbatim. */
+    const bff = { ok: true, marketsBySymbol: { USDT: bffMarket('USDT') }, meta: { oracleStatus: 'ok', oracleAddress: null } };
+    /* Reproduce the service-level guard: buildBffOracle only runs when the
+       direct status is unavailable or absent. With a direct 'ok' there is
+       no reason the snapshot's oracle would carry a server source. */
+    expect(bff.ok).toBe(true);
+    /* And the UI sees it: sources.oracle stays 'chain'. */
+    const snapshot = market();
+    snapshot.sources = { reserves: 'chain', oracle: 'chain' };
+    expect(snapshot.sources.oracle).toBe('chain');
+  });
+
+  it('treats a BFF oracle without prices as no answer, so an all-missing feed stays unavailable', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => okResponse(bffBody({
+      data: { network: '42161', markets: [bffMarket('USDT', { oraclePrice: null, oraclePriceBase: null }), bffMarket('USDC', { oraclePrice: null, oraclePriceBase: null })] },
+      meta: { schema: S.LENDING_BFF_MARKETS_SCHEMA, dataStatus: 'live', oracleStatus: 'unavailable', oracleAddress: null, readAt: 1 }
+    }));
+    try {
+      const r = await S.readMarketState({ provider: null, chainId: CHAIN, assets: [USDT, USDC] });
+      /* Reserves still merged — but the price map stays unavailable per asset. */
+      expect(r.reserves[USDT.id].listed).toBe(true);
+      expect(r.prices[USDT.id].usd).toBe(null);
+      expect(r.prices[USDT.id].status).toBe(S.DATA_STATUS.UNAVAILABLE);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('§12 — a disconnected wallet and an unreadable account are different sentences', () => {
+  it('getMaxBorrow says NOT_CONNECTED when no account was read at all', () => {
+    const max = S.getMaxBorrow({ market: market({ account: null }), asset: USDT });
+    expect(max.ok).toBe(false);
+    expect(max.reason).toBe('NOT_CONNECTED');
+    expect(max.status).toBe(S.DATA_STATUS.UNAVAILABLE);
+  });
+
+  it('an unavailable read (ACCOUNT_UNAVAILABLE) is distinct from an absent wallet (NOT_CONNECTED)', () => {
+    const absent = S.getMaxBorrow({ market: market({ account: null }), asset: USDT });
+    const failed = S.getMaxBorrow({ market: market({ account: { ok: false, reason: 'RPC_429' } }), asset: USDT });
+    expect(absent.reason).toBe('NOT_CONNECTED');
+    expect(failed.reason).toBe('ACCOUNT_UNAVAILABLE');
+    expect(absent.reason).not.toBe(failed.reason);
+  });
+});

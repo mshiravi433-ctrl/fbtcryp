@@ -280,67 +280,159 @@ function UpdatedAgo({ at, t }) {
    aToken and debt token. A dash means the read failed, never "zero".
    ═══════════════════════════════════════════════════════════════════════════ */
 
+const tokenNumFormatter = new Map();
+function tokenNumOptions(key, options) {
+  let formatter = tokenNumFormatter.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-US', options);
+    tokenNumFormatter.set(key, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * A pool figure written for humans, not for the contract:
+ *
+ *   87,234,523.12  →  87.23M        (compact beyond a million)
+ *   42,301.55      →  42,301.55     (grouped, two decimals)
+ *   872.123231     →  872.1232      (four decimals)
+ *   0.3948213      →  0.394821      (six significant decimals)
+ *
+ * Western digits on purpose, isolated with dir=ltr: the value sits inside a
+ * mono-font chip in an RTL sentence, and bidi reordering across the grouping
+ * separators is exactly what used to make these figures unreadable. The LABELS
+ * around the number are localized; the number itself stays parseable by every
+ * user of every locale this app ships.
+ */
+function fmtPoolAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const abs = Math.abs(n);
+  try {
+    if (abs >= 1_000_000) return tokenNumOptions('compact', { notation: 'compact', maximumFractionDigits: 2 }).format(n);
+    if (abs >= 10_000) return tokenNumOptions('group2', { maximumFractionDigits: 2 }).format(n);
+    if (abs >= 1) return tokenNumOptions('frac4', { maximumFractionDigits: 4 }).format(n);
+    if (abs === 0) return '0';
+    return tokenNumOptions('sig6', { maximumSignificantDigits: 6 }).format(n);
+  } catch { return null; }
+}
+
+/** One metric in the depth grid. The value is an inline LTR isolate, so it
+    follows the page's alignment (right in fa, left in en) while its digits,
+    grouping separators and unit always read left-to-right. */
+function DepthCell({ label, value, symbol, accent = null, testId = null }) {
+  return (
+    <div
+      data-testid={testId || undefined}
+      style={{
+        minWidth: 0, borderRadius: 12, padding: '8px 10px',
+        background: 'rgba(255,255,255,0.040)',
+        border: '1px solid rgba(255,255,255,0.065)',
+      }}
+    >
+      <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--text-3)', marginBottom: 5, lineHeight: 1.4 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 12, fontWeight: 800, fontFamily: 'var(--font-mono)',
+          color: accent || 'var(--text-1)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+        title={value == null ? undefined : `${value}${symbol ? ` ${symbol}` : ''}`}
+      >
+        <span dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
+          {value == null ? '—' : value}
+          {value != null && symbol ? <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)' }}> {symbol}</span> : null}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function MarketDepth({ reserve, asset, t }) {
   if (!reserve?.listed) return null;
   const dec = Number(reserve.decimals ?? asset.decimals ?? 18);
-  const total = reserve.totalSupplyWei != null ? fromUnits(reserve.totalSupplyWei, dec, 2) : null;
-  const available = reserve.availableLiquidityWei != null ? fromUnits(reserve.availableLiquidityWei, dec, 2) : null;
-  const borrowed = reserve.totalDebtWei != null ? fromUnits(reserve.totalDebtWei, dec, 2) : null;
+  const total = reserve.totalSupplyWei != null ? fmtPoolAmount(fromUnits(reserve.totalSupplyWei, dec, 6)) : null;
+  const available = reserve.availableLiquidityWei != null ? fmtPoolAmount(fromUnits(reserve.availableLiquidityWei, dec, 6)) : null;
+  const borrowed = reserve.totalDebtWei != null ? fmtPoolAmount(fromUnits(reserve.totalDebtWei, dec, 6)) : null;
   const util = reserve.utilizationPct;
   const supplyCap = reserve.supplyCapWhole != null ? Number(reserve.supplyCapWhole) : null;
   const borrowCap = reserve.borrowCapWhole != null ? Number(reserve.borrowCapWhole) : null;
-  /* Nothing could be read: say so instead of rendering a grid of dashes. */
-  if (total == null && available == null && util == null && reserve.ltvPct == null) {
+
+  /* Nothing could be read: say so in one honest box, not a grid of dashes. */
+  if (total == null && available == null && borrowed == null && util == null && reserve.ltvPct == null) {
     return (
-      <p data-testid="loan-depth-unavailable" className="faint" style={{ fontSize: 10.5, margin: '6px 0 0', lineHeight: 1.6 }}>
-        {t('loan.depthUnavailable')}
-      </p>
+      <div
+        data-testid="loan-depth-unavailable"
+        style={{
+          marginTop: 8, borderRadius: 13, padding: '10px 12px',
+          background: 'rgba(251,191,36,0.07)', border: '1px dashed rgba(251,191,36,0.30)',
+        }}
+      >
+        <p style={{ fontSize: 11.5, margin: 0, lineHeight: 1.7, color: 'var(--text-2)' }}>
+          {t('loan.depthUnavailable')}
+        </p>
+      </div>
     );
   }
-  const cells = [
-    ['loan.totalSupplied', total != null ? `${total} ${asset.symbol}` : '—'],
-    ['loan.availableLiquidity', available != null ? `${available} ${asset.symbol}` : '—'],
-    ['loan.totalBorrowed', borrowed != null ? `${borrowed} ${asset.symbol}` : '—'],
-    ['loan.utilization', util != null ? `${util.toFixed(1)}%` : '—']
-  ];
+
   return (
     <div data-testid="loan-market-depth" style={{ marginTop: 8 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
-        {cells.map(([key, value]) => (
-          <div key={key} className="row-between" style={{ gap: 6 }}>
-            <span className="faint" style={{ fontSize: 10 }}>{t(key)}</span>
-            <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{value}</span>
-          </div>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+        <DepthCell label={t('loan.totalSupplied')} value={total} symbol={asset.symbol} testId="loan-depth-supplied" />
+        <DepthCell label={t('loan.totalBorrowed')} value={borrowed} symbol={asset.symbol} testId="loan-depth-borrowed" />
+        <DepthCell label={t('loan.availableLiquidity')} value={available} symbol={asset.symbol} accent="#4ade80" testId="loan-depth-liquidity" />
+        <DepthCell label={t('loan.utilization')} value={util != null ? `${util.toFixed(1)}%` : null} accent="#fbbf24" testId="loan-depth-utilization" />
       </div>
+
       {/* §13 — the reserve's own risk parameters, from its configuration bitmap. */}
-      <div className="row-between" style={{ gap: 6, marginTop: 5, paddingTop: 5, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <span className="faint" style={{ fontSize: 10 }}>{t('loan.maxLtv')}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-          {reserve.ltvPct != null ? `${reserve.ltvPct.toFixed(1)}%` : '—'}
-          <span className="faint" style={{ fontWeight: 500 }}> · {t('loan.liqThreshold')} </span>
-          {reserve.liquidationThresholdPct != null ? `${reserve.liquidationThresholdPct.toFixed(1)}%` : '—'}
+      <div style={{ display: 'flex', gap: 7, marginTop: 7, flexWrap: 'wrap' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          borderRadius: 99, padding: '5px 10px', fontSize: 10.5,
+          background: 'rgba(147,197,253,0.09)', border: '1px solid rgba(147,197,253,0.22)',
+        }}>
+          <span style={{ color: 'var(--text-3)' }}>{t('loan.maxLtv')}</span>
+          <strong dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'isolate', fontFamily: 'var(--font-mono)', color: '#93c5fd' }}>
+            {reserve.ltvPct != null ? `${reserve.ltvPct.toFixed(1)}%` : '—'}
+          </strong>
         </span>
-      </div>
-      {(supplyCap > 0 || borrowCap > 0) && (
-        <div className="row-between" style={{ gap: 6, marginTop: 3 }}>
-          <span className="faint" style={{ fontSize: 10 }}>{t('loan.caps')}</span>
-          <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-            {t('loan.capsValue', {
-              supply: supplyCap > 0 ? supplyCap.toLocaleString() : t('loan.noCap'),
-              borrow: borrowCap > 0 ? borrowCap.toLocaleString() : t('loan.noCap')
-            })}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          borderRadius: 99, padding: '5px 10px', fontSize: 10.5,
+          background: 'rgba(147,197,253,0.09)', border: '1px solid rgba(147,197,253,0.22)',
+        }}>
+          <span style={{ color: 'var(--text-3)' }}>{t('loan.liqThreshold')}</span>
+          <strong dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'isolate', fontFamily: 'var(--font-mono)', color: '#93c5fd' }}>
+            {reserve.liquidationThresholdPct != null ? `${reserve.liquidationThresholdPct.toFixed(1)}%` : '—'}
+          </strong>
+        </span>
+        {(supplyCap > 0 || borrowCap > 0) && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            borderRadius: 99, padding: '5px 10px', fontSize: 10.5,
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)',
+          }}>
+            <span style={{ color: 'var(--text-3)' }}>{t('loan.caps')}</span>
+            <strong dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'isolate', fontFamily: 'var(--font-mono)' }}>
+              {t('loan.capsValue', {
+                supply: supplyCap > 0 ? fmtPoolAmount(supplyCap) : t('loan.noCap'),
+                borrow: borrowCap > 0 ? fmtPoolAmount(borrowCap) : t('loan.noCap')
+              })}
+            </strong>
           </span>
-        </div>
-      )}
+        )}
+      </div>
+
       {/* §29 — a paused or frozen reserve must say so before the user signs. */}
       {(reserve.status === 'paused' || reserve.status === 'frozen') && (
-        <p data-testid="loan-reserve-halted" style={{ fontSize: 10.5, fontWeight: 700, color: '#f87171', margin: '6px 0 0' }}>
+        <p data-testid="loan-reserve-halted" style={{ fontSize: 10.5, fontWeight: 700, color: '#f87171', margin: '8px 0 0' }}>
           {t(`loan.reserveStatus.${reserve.status}`)}
         </p>
       )}
       {reserve.decimalsMatch === false && (
-        <p data-testid="loan-decimals-mismatch" style={{ fontSize: 10.5, color: '#fbbf24', margin: '6px 0 0', lineHeight: 1.6 }}>
+        <p data-testid="loan-decimals-mismatch" style={{ fontSize: 10.5, color: '#fbbf24', margin: '8px 0 0', lineHeight: 1.6 }}>
           {t('loan.decimalsMismatch', { decimals: dec })}
         </p>
       )}
@@ -431,9 +523,15 @@ function RiskMeter({ projection, account, t }) {
    gap — never a silent pass, never a fabricated block.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function ReasonList({ items, tone, t, testId }) {
+function ReasonList({ items, tone, t, testId, lang }) {
   if (!items?.length) return null;
   const color = tone === 'danger' ? '#f87171' : '#fbbf24';
+  /* `item.detail` is a DIAGNOSTIC written by the engine in English (§28):
+     it stays available (tooltip + data attribute) but is only rendered into
+     the sentence when the UI itself is English. Appending it verbatim used to
+     leave every other language reading two languages in one breath — e.g.
+     «توان وام‌گیری تأیید نشده… — no protocol price for this asset». */
+  const showDetailInline = /^en\b/i.test(String(lang || ''));
   return (
     <div
       data-testid={testId}
@@ -444,10 +542,16 @@ function ReasonList({ items, tone, t, testId }) {
       }}
     >
       {items.map((item, index) => (
-        <p key={`${item.code}-${index}`} data-code={item.code} style={{ fontSize: 11, lineHeight: 1.6, color, margin: 0 }}>
+        <p
+          key={`${item.code}-${index}`}
+          data-code={item.code}
+          data-detail={item.detail || undefined}
+          title={!showDetailInline && item.detail ? item.detail : undefined}
+          style={{ fontSize: 11, lineHeight: 1.6, color, margin: 0 }}
+        >
           <span style={{ fontWeight: 800 }}>{tone === 'danger' ? '✕ ' : '⚠ '}</span>
           {t(`loan.error.${item.code}`, { defaultValue: item.code })}
-          {item.detail ? <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span> : null}
+          {showDetailInline && item.detail ? <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span> : null}
         </p>
       ))}
     </div>
@@ -767,7 +871,7 @@ function StepRow({ step, asset, t }) {
   );
 }
 
-function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onRetry, t }) {
+function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onRetry, t, lang }) {
   const open = Boolean(exec);
   const phase = exec?.phase || 'review';
   return (
@@ -966,7 +1070,7 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
             )}
 
             {/* §9 — checks we could not run are named, not silently skipped. */}
-            <ReasonList items={exec?.warnings} tone="warn" t={t} testId="loan-exec-warnings" />
+            <ReasonList items={exec?.warnings} tone="warn" t={t} lang={lang} testId="loan-exec-warnings" />
 
             {/* The steps, before and while they run. */}
             <div style={{
@@ -1343,7 +1447,7 @@ function AccountSummary({ account, t }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
-  const { assets, reserves, positions, loading, chain, walletState, prices, oracle, oracleStatus, dataStatus } = market;
+  const { assets, reserves, positions, loading, chain, walletState, prices, oracle, oracleStatus, dataStatus, lang } = market;
   const [selected, setSelected] = useState(null);
   const [amount, setAmount] = useState('');
 
@@ -1452,8 +1556,8 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
               {overWallet && (
                 <p style={{ fontSize: 11.5, color: '#f87171', margin: '0 0 10px' }}>{t('loan.amountOverWallet')}</p>
               )}
-              <ReasonList items={decision.blocked} tone="danger" t={t} testId="loan-supply-blocked" />
-              <ReasonList items={decision.warnings} tone="warn" t={t} testId="loan-supply-warnings" />
+              <ReasonList items={decision.blocked} tone="danger" t={t} lang={lang} testId="loan-supply-blocked" />
+              <ReasonList items={decision.warnings} tone="warn" t={t} lang={lang} testId="loan-supply-warnings" />
               <ActionButton
                 state={walletState}
                 onConnect={market.connect}
@@ -1490,7 +1594,7 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
-  const { assets, reserves, positions, loading, chain, account, walletState, prices, oracle, oracleStatus, dataStatus } = market;
+  const { assets, reserves, positions, loading, chain, account, walletState, prices, oracle, oracleStatus, dataStatus, lang } = market;
   const [selected, setSelected] = useState(null);
   /* §11 — "select collateral ↓ select borrow asset" are TWO choices. The form
      used to have one asset picker and treated the borrow asset as its own
@@ -1632,26 +1736,67 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
               <SelectedMarketDetail asset={selected} reserve={reserve} t={t} />
               <div style={{ height: 12 }} />
 
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 9, padding: '6px 10px', marginBottom: 12,
-              }}>
-                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{t('loan.borrowPower')}:</span>
-                <span data-testid="loan-borrow-power" style={{ fontSize: 12, fontWeight: 800, color: selected.color }}>
-                  {powerUsd == null ? '—' : fmtUsd(powerUsd)}
-                </span>
-                {/* §12 — the same capacity expressed in the asset being borrowed,
-                    with the constraint that binds it named. */}
-                {maxBorrow?.ok && (
-                  <span data-testid="loan-max-borrow" style={{ fontSize: 10.5, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
-                    · {t('loan.maxBorrowIs', { amount: maxAmount, symbol: selected.symbol, by: t(`loan.limitedBy.${maxBorrow.limitedBy}`) })}
+              {/* §12 — borrowing power, stated like it matters.
+                  Three honest states, each a full sentence — never the old
+                  «وام‌گیری:— · …» fragment that glued an empty dash to half a
+                  reason:
+                    · wallet not connected → say what to do (connect), not what failed
+                    · power read          → the number, big, then the same
+                      capacity in the borrow asset with its binding constraint
+                    · read failed         → the localized reason, one line */}
+              <div
+                data-testid="loan-borrow-power-box"
+                style={{
+                  borderRadius: 13, padding: '10px 12px', marginBottom: 12,
+                  background: `linear-gradient(135deg, ${selected.color}10, rgba(255,255,255,0.035))`,
+                  border: `1px solid ${selected.color}2e`,
+                }}
+              >
+                <div className="row-between" style={{ gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                    {t('loan.borrowPower')}
                   </span>
-                )}
-                {maxBorrow && !maxBorrow.ok && (
-                  <span data-testid="loan-max-borrow-unavailable" className="faint" style={{ fontSize: 10.5 }}>
-                    · {t('loan.maxBorrowUnavailable', { reason: t(`loan.error.${maxBorrow.reason}`, { defaultValue: maxBorrow.reason }) })}
-                  </span>
+                  {account?.ok && <DataStatusPill status={dataStatus} ageMs={market.ageMs} t={t} />}
+                </div>
+                {walletState === 'disconnected' ? (
+                  <p style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: 0 }}>
+                    {t('loan.powerConnect')}
+                  </p>
+                ) : account?.ok && powerUsd != null ? (
+                  <>
+                    <span
+                      data-testid="loan-borrow-power"
+                      dir="ltr"
+                      style={{
+                        display: 'inline-block', direction: 'ltr', unicodeBidi: 'isolate',
+                        fontSize: 17, fontWeight: 900, fontFamily: 'var(--font-mono)',
+                        color: selected.color, letterSpacing: '-.01em',
+                      }}
+                    >
+                      {fmtUsd(powerUsd)}
+                    </span>
+                    {/* the same capacity in the asset being borrowed, with the
+                        constraint that binds it named (§12) */}
+                    {maxBorrow?.ok && (
+                      <span data-testid="loan-max-borrow" style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                        {t('loan.maxBorrowIs', {
+                          amount: fmtPoolAmount(maxAmount) ?? maxAmount,
+                          symbol: selected.symbol,
+                          by: t(`loan.limitedBy.${maxBorrow.limitedBy}`)
+                        })}
+                      </span>
+                    )}
+                    {maxBorrow && !maxBorrow.ok && (
+                      <span data-testid="loan-max-borrow-unavailable" style={{ display: 'block', marginTop: 4, fontSize: 11, lineHeight: 1.6, color: 'var(--text-3)' }}>
+                        {t('loan.maxBorrowUnavailable', { reason: t(`loan.error.${maxBorrow.reason}`, { defaultValue: maxBorrow.reason }) })}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <p data-testid="loan-borrow-unavailable" style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: 0 }}>
+                    {t('loan.powerUnavailable')}
+                    {maxBorrow?.reason ? ` ${t(`loan.error.${maxBorrow.reason}`, { defaultValue: '' })}`.trim() : ''}
+                  </p>
                 )}
               </div>
 
@@ -1759,8 +1904,8 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
                 <RiskMeter projection={projected} account={account} t={t} />
               )}
 
-              <ReasonList items={decision.blocked} tone="danger" t={t} testId="loan-borrow-blocked" />
-              <ReasonList items={decision.warnings} tone="warn" t={t} testId="loan-borrow-warnings" />
+              <ReasonList items={decision.blocked} tone="danger" t={t} lang={lang} testId="loan-borrow-blocked" />
+              <ReasonList items={decision.warnings} tone="warn" t={t} lang={lang} testId="loan-borrow-warnings" />
 
               <ActionButton
                 state={walletState}
@@ -2316,7 +2461,7 @@ function HeroStats({ t }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function Loan() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { haptic } = useTelegram();
@@ -2393,6 +2538,7 @@ export default function Loan() {
   const [prices, setPrices] = useState({});
   const [userConfiguration, setUserConfiguration] = useState(null);
   const [dataStatus, setDataStatus] = useState(DATA_STATUS.UNAVAILABLE);
+  const [sources, setSources] = useState(null);
   const [snapshotAgeMs, setSnapshotAgeMs] = useState(null);
   const [failures, setFailures] = useState([]);
   const [history, setHistory] = useState([]);
@@ -2485,12 +2631,14 @@ export default function Loan() {
     if (chain === SOLANA_LENDING_CHAIN_ID) {
       setLoading(false);
       setDataStatus(DATA_STATUS.UNAVAILABLE);
+      setSources(null);
       setFailures([]);
       return;
     }
     if (!venue || typeof getReadProvider !== 'function') {
       setLoading(false);
       setDataStatus(DATA_STATUS.UNAVAILABLE);
+      setSources(null);
       setFailures([{ step: 'provider', reason: 'NO_PROVIDER' }]);
       return;
     }
@@ -2510,6 +2658,7 @@ export default function Loan() {
       setPrices(snapshot.prices || {});
       setUserConfiguration(snapshot.userConfiguration ?? null);
       setDataStatus(snapshot.dataStatus);
+      setSources(snapshot.sources ?? null);
       setSnapshotAgeMs(snapshot.ageMs ?? null);
       setFailures(snapshot.failures || []);
       setReadAt(snapshot.readAt ?? null);
@@ -2543,6 +2692,7 @@ export default function Loan() {
          their age — and never invents a replacement (§26/§37). */
       setFailures((prev) => [...prev, { step: 'refresh', reason: String(error?.message || error).slice(0, 160) }]);
       setDataStatus(DATA_STATUS.UNAVAILABLE);
+      setSources(null);
     } finally {
       setLoading(false);
     }
@@ -3063,6 +3213,10 @@ export default function Loan() {
     prices, oracle, oracleStatus, userConfiguration,
     dataStatus, ageMs: snapshotAgeMs, readAt, failures,
     address, readOnly, canTransact,
+    /* The active UI language, so value boxes can decide which parts of a
+       diagnostic belong on screen (see ReasonList's detail policy). */
+    lang: i18n.language,
+    sources,
     connect, switchToChain, refresh: () => refresh({ force: true })
   };
   /* The service layer's market shape is keyed by `chainId`; this page and its
@@ -3348,6 +3502,7 @@ export default function Loan() {
         onDone={() => { machineRef.current = null; setMachineView(null); setExec(null); setTab('positions'); }}
         onRetry={retryExecution}
         t={t}
+        lang={i18n.language}
       />
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
