@@ -1242,7 +1242,10 @@
       "BAD_ADDRESS": "Alamat ini tidak valid.",
       "NO_TOKEN_REGISTRY": "Daftar token pasar ini tidak dapat dimuat.",
       "KAMINO_SDK_MISSING": "Modul Kamino tidak ada di build ini — perbarui aplikasi.",
-      "KAMINO_SDK_FAILED": "Modul Kamino gagal dijalankan. Perbarui aplikasi dan coba lagi."
+      "KAMINO_SDK_FAILED": "Modul Kamino gagal dijalankan. Perbarui aplikasi dan coba lagi.",
+      "KAMINO_SDK_TRUNCATED": "Modul Kamino hanya terunduh sebagian — koneksi terputus. Coba lagi dengan koneksi yang lebih stabil.",
+      "KAMINO_SDK_INIT_FAILED": "Modul Kamino terunduh tetapi gagal dijalankan. Perbarui aplikasi, dan jika berulang kirim pesan ini ke dukungan.",
+      "KAMINO_TX_BUILD_EMPTY": "Kamino tidak mengembalikan transaksi untuk tindakan ini — tidak ada yang dikirim dan tidak ada biaya."
     },
     "ratesUpdated": "Suku bunga dibaca dari kontrak lending (Morpho/Aave) — diperbarui otomatis.",
     "connectWallet": "Hubungkan dompet",

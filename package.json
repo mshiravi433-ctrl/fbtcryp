@@ -10,6 +10,8 @@
     "dev:api": "node --watch server/index.js",
     "vendor:velocity": "node scripts/vendor-velocity.mjs",
     "vendor:kamino": "node scripts/vendor-kamino.mjs",
+    "check:kamino": "node scripts/check-kamino-bundle.mjs",
+    "check:kamino-browser": "node scripts/check-kamino-browser.mjs",
     "prebuild": "node scripts/vendor-velocity.mjs && node scripts/vendor-kamino.mjs && node scripts/assetlinks.mjs --ensure",
     "velocity:referrer-setup": "node scripts/velocity-referrer-setup.mjs",
     "velocity:referral-sweep": "node scripts/velocity-referral-sweep.mjs",

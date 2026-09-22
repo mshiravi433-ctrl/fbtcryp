@@ -150,8 +150,25 @@
  *      «تغییرات لایو نمی‌شوند» becomes answerable in one tap instead of a
  *      guess about whether a merge made it to production.
  * Every one of those lives in the shell bundle, so an install pinned to v19
- * keeps the old code byte for byte until its cached shell is evicted. */
-const SHELL = 'fbt-shell-v20';
+ * keeps the old code byte for byte until its cached shell is evicted.
+ *
+ * v20 -> v21: the Solana loan actually works now («هنوز مشکل وام سولنا حل نشده
+ * … KAMINO_SDK_FAILED»). THREE things were wrong at once, and all three live in
+ * this shell:
+ *   1. the vendored Kamino bundle threw `ReferenceError: Buffer is not
+ *      defined` at module init in every real browser — the Node check script
+ *      could not see it because Node has a global Buffer;
+ *   2. every `KaminoAction.build*Txns` call used an older signature than the
+ *      installed klend-sdk v5 (and `getTransactions()` was read as an object
+ *      it no longer returns), so a built action produced an EMPTY list and the
+ *      panel reported success without ever opening the wallet;
+ *   3. the panel told the wallet every transaction was `versioned: true` while
+ *      v5 builds legacy ones — a deserialisation failure before any approval.
+ * An install still holding the v20 shell therefore keeps reproducing the old
+ * error byte for byte, whatever the server says. The vendor file carries its
+ * own cache-buster (?v=3), but the CODE that calls it, and the wallet
+ * hand-off, only change when this shell is renamed. */
+const SHELL = 'fbt-shell-v21';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

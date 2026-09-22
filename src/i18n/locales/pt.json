@@ -1242,7 +1242,10 @@
       "BAD_ADDRESS": "Este endereço não é válido.",
       "NO_TOKEN_REGISTRY": "A lista de tokens deste mercado não pôde ser carregada.",
       "KAMINO_SDK_MISSING": "O módulo Kamino está ausente nesta versão — atualize o app.",
-      "KAMINO_SDK_FAILED": "O módulo Kamino não pôde ser iniciado. Atualize o app e tente de novo."
+      "KAMINO_SDK_FAILED": "O módulo Kamino não pôde ser iniciado. Atualize o app e tente de novo.",
+      "KAMINO_SDK_TRUNCATED": "O módulo Kamino foi baixado só em parte — a conexão caiu. Tente de novo numa conexão mais estável.",
+      "KAMINO_SDK_INIT_FAILED": "O módulo Kamino foi baixado, mas falhou ao iniciar. Atualize o app e, se repetir, envie esta mensagem ao suporte.",
+      "KAMINO_TX_BUILD_EMPTY": "A Kamino não retornou nenhuma transação para esta ação — nada foi enviado e nenhuma taxa foi cobrada."
     },
     "ratesUpdated": "As taxas são lidas dos contratos de lending (Morpho/Aave) — atualizadas automaticamente.",
     "connectWallet": "Conectar carteira",
