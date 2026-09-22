@@ -8,6 +8,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import { readFileSync } from 'node:fs';
 const { Router: ExpressRouter } = express;
 import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
@@ -1631,6 +1632,44 @@ app.get('/api/network/overview', (req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   if (!window) return res.status(400).json(networkError('INVALID_WINDOW', 'window must be one of 1h, 24h, 7d or 30d', false));
   return res.json(networkOverview({ window }));
+});
+
+/* ------------------------------- build stamp ------------------------------ */
+/*
+ * «تغییرات لایو نمی‌شوند» — the honest answer to "is my change live?" is one
+ * HTTP call, not a guess. This endpoint names the exact build the API is
+ * running: package version, the git commit Vercel built (VERCEL_GIT_COMMIT_*
+ * are injected into every deployment, build AND runtime), and when THIS
+ * process started. Pair it with window.__FBT_BUILD__ in the browser (set by
+ * main.jsx from the vite define): commitShort must match main's HEAD for the
+ * change to be live, and the pair must match for web + API to be one build.
+ */
+let appVersionCache = null;
+function readAppVersion() {
+  if (appVersionCache) return appVersionCache;
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    appVersionCache = pkg?.version || null;
+  } catch {
+    appVersionCache = null;
+  }
+  return appVersionCache;
+}
+
+app.get('/api/version', (_req, res) => {
+  const commit = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '');
+  res.set('cache-control', 'no-store');
+  res.json({
+    ok: true,
+    name: 'fbt-swap',
+    version: readAppVersion(),
+    commit: commit || null,
+    commitShort: commit ? commit.slice(0, 7) : null,
+    ref: process.env.VERCEL_GIT_COMMIT_REF || process.env.GITHUB_REF_NAME || null,
+    env: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    node: process.version
+  });
 });
 
 app.get('/api/health', (_req, res) => {

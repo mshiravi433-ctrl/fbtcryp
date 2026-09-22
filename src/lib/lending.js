@@ -47,6 +47,19 @@ export const AAVE_V3_POOLS = Object.freeze({
   146: '0x5362dBb1e601abF3a4c14c22ffEdA64042E5eAA3'    // Sonic
 });
 
+/**
+ * The PoolAddressesProvider a chain's pool points at — only for chains where
+ * this repository already carries a VERIFIED value (the Farm adapters pin
+ * these against the live chain every fork-probe CI run,
+ * src/lib/defi/aaveV3{Base,Arbitrum}.js). Used ONLY as the last resort of
+ * the provider resolution, when the on-chain hop itself cannot be read:
+ * the pool remains the authority on its own provider.
+ */
+export const AAVE_ADDRESSES_PROVIDERS = Object.freeze({
+  8453: '0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D',
+  42161: '0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb'
+});
+
 /** Aave V3 uses a USD base currency with 8 decimals for account data. */
 export const BASE_CURRENCY_DECIMALS = 8;
 /** Aave's ray fixed-point (1e27) for the per-second interest rates. */
@@ -128,6 +141,15 @@ export const AAVE_POOL_ABI = [
   'function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
   'function getUserConfiguration(address user) view returns ((uint256 data))',
+  /* The canonical Aave V3 Pool getter (IPool.sol §576 of aave-v3-origin):
+     `function ADDRESSES_PROVIDER() external view returns (...)`, selector
+     0x0542975c. The lower-case `getAddressesProvider()` (0xfe65acfe) was the
+     2026-09-22 re-break: no Aave V3 Pool answers it, every real `eth_call`
+     reverted, and the browser's oracle read kept answering «قیمت‌های اوراکل
+     خوانده نشد» while the selector-tolerant mock kept the suite green.
+     Canonical first, fork name second — readOraclePrices() tries them in
+     order and records which one answered. */
+  'function ADDRESSES_PROVIDER() view returns (address)',
   'function getAddressesProvider() view returns (address)',
   'function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))'
 ];
@@ -900,8 +922,31 @@ export async function readOraclePrices({ provider, chainId, assets, referencePri
     const pool = new Contract(venue.pool, AAVE_POOL_ABI, provider);
     /* Two stages (§21, 2026-09-22): the Pool only knows its addresses
        provider; the provider owns getPriceOracle. Calling getPriceOracle on
-       the Pool reverts on every real RPC. */
-    const providerAddress = String(await pool.getAddressesProvider());
+       the Pool reverts on every real RPC — as does calling the WRONG NAME
+       for stage one: the Pool's getter is the upper-case ADDRESSES_PROVIDER
+       (IPool.sol §576). The 2026-09-22 "fix" used getAddressesProvider
+       (lower-case), every real RPC reverted with it, and the page answered
+       «قیمت‌های اوراکل خوانده نشد» for another day — the second outage
+       measured live after the first "fix" shipped. Canonical first, the
+       V2-style fork name second, a repository-verified static value last;
+       `providerVia` names which one answered. */
+    let providerAddress = null;
+    let providerVia = null;
+    for (const fn of ['ADDRESSES_PROVIDER', 'getAddressesProvider']) {
+      try {
+        const candidate = String(await pool[fn]());
+        if (isAddress(candidate) && candidate !== ZERO) {
+          providerAddress = candidate;
+          providerVia = fn;
+          break;
+        }
+      } catch { /* the other name, then the static registry, still may answer */ }
+    }
+    if ((!isAddress(providerAddress) || providerAddress === ZERO)
+      && AAVE_ADDRESSES_PROVIDERS[Number(chainId)]) {
+      providerAddress = AAVE_ADDRESSES_PROVIDERS[Number(chainId)];
+      providerVia = 'static-registry';
+    }
     if (!isAddress(providerAddress) || providerAddress === ZERO) {
       return { ...empty, reason: 'NO_ADDRESSES_PROVIDER' };
     }
@@ -997,6 +1042,8 @@ export async function readOraclePrices({ provider, chainId, assets, referencePri
       ok: anyValid,
       status,
       oracleAddress,
+      providerAddress,
+      providerVia,
       baseCurrencyUnit: unit.toString(),
       baseCurrencyDecimals: baseDecimals,
       prices,

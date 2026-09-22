@@ -61,6 +61,15 @@ const RESERVE_SYMBOLS = Object.freeze({
 export const POOL_ABI = [
   'function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
+  /* The canonical Aave V3 Pool getter — IPool.sol:
+     `function ADDRESSES_PROVIDER() external view returns (IPoolAddressesProvider)`
+     (aave-v3-origin/src/contracts/interfaces/IPool.sol#L576). There is NO
+     lower-case `getAddressesProvider()` on the Pool: the 2026-09-22 "fix"
+     introduced exactly that name, `eth_call` reverted with it on every real
+     node, and /api/lending/markets answered oracleCode=RPC_ERROR on every
+     chain — measured live. The second entry remains only as a fallback for
+     V2-style forks; the canonical selector is always tried FIRST. */
+  'function ADDRESSES_PROVIDER() view returns (address)',
   'function getAddressesProvider() view returns (address)'
 ];
 /* The registry contract that owns the deployment lookups (§21) — the price
@@ -70,6 +79,17 @@ export const POOL_ABI = [
 export const PROVIDER_ABI = [
   'function getPriceOracle() view returns (address)'
 ];
+
+/* The PoolAddressesProvider a chain's pool points at, for the chains where
+   this repository already carries a VERIFIED value (the Farm adapters read
+   the same registry through these, src/lib/defi/aaveV3{Base,Arbitrum}.js, and
+   their fork-probe CI pins them against the live chain). Used ONLY as a last
+   resort, when the on-chain hop itself cannot be read — never as the first
+   source of truth: the pool stays the authority on its own provider. */
+export const POOL_ADDRESSES_PROVIDERS = Object.freeze({
+  8453: '0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D',
+  42161: '0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb'
+});
 /* The pool's OWN price oracle (§21). This is the price the protocol would use
    to liquidate you, so it is the only price this BFF is allowed to call an
    oracle price. Anything else is a reference and is labelled as one. */
@@ -369,13 +389,25 @@ async function readTokenBalances(chainId, wallet, token, reserve) {
  * This is the price that decides whether a position gets liquidated, so it is
  * the only price this BFF reports as an oracle price. The chain of reads is
  * TWO steps to the oracle address, then the oracle itself:
- * pool.getAddressesProvider() → addressesProvider.getPriceOracle() →
+ * pool.ADDRESSES_PROVIDER() → addressesProvider.getPriceOracle() →
  * oracle.BASE_CURRENCY_UNIT() → oracle.getAssetsPrices() (per-asset
  * getAssetPrice() when the deployment does not support the batch).
  *
- * 2026-09-22: step one used to be `pool.getPriceOracle()` — a function the
- * Pool does not have — so every real RPC reverted and this endpoint answered
- * oracleCode=RPC_ERROR for every chain. The provider hop below is the fix.
+ * 2026-09-22, FIRST outage: step one was `pool.getPriceOracle()` — a function
+ * the Pool does not have — so every real RPC reverted and this endpoint
+ * answered oracleCode=RPC_ERROR for every chain.
+ *
+ * 2026-09-22, SECOND outage (same day, the "fix" that re-broke it): step one
+ * became `pool.getAddressesProvider()` — ALSO a function the Pool does not
+ * have. The Aave V3 Pool's getter is the upper-case `ADDRESSES_PROVIDER()`
+ * (IPool.sol §576, aave-v3-origin). `eth_call` with the lower-case selector
+ * reverts on every real node, so /api/lending/markets kept answering
+ * oracleCode=RPC_ERROR and the page kept showing «قیمت‌های اوراکل خوانده
+ * نشد» — measured live on 42161 and 8453 hours after the "fix" shipped.
+ * The order here is the protocol's actual wiring: canonical first, the
+ * V2-style fork name second, a repository-verified static value last. Each
+ * attempt is unambiguous about which one answered (`providerVia`), so the
+ * next regression is named, not stacked on top of the previous two.
  *
  * A zero price is treated as MISSING, not as "$0": an asset the oracle has no
  * feed for returns 0, and reporting that as a real price would value someone's
@@ -387,20 +419,45 @@ export async function readProtocolOracle(chainId) {
   if (!pool) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
   if (!tokens.length) return { ok: false, code: 'NO_TOKENS' };
 
-  /* Stage 1 — the pool names its addresses provider. */
-  const providerCall = await ethCall(chainId, pool, poolIface.encodeFunctionData('getAddressesProvider', []));
-  if (!providerCall.ok) {
-    breaker.report('oracle', false, providerCall.code || 'ORACLE_READ_FAILED');
-    return { ok: false, code: providerCall.code || 'ORACLE_READ_FAILED' };
-  }
+  /* Stage 1 — the pool names its addresses provider. Canonical Aave V3
+     selector FIRST; the V2-style lower-case name second (some forks kept it);
+     the repository-verified static address LAST, so a single RPC failure
+     cannot zero out the oracle while the chain itself is fine. */
+  const attempts = [
+    { via: 'ADDRESSES_PROVIDER', fn: 'ADDRESSES_PROVIDER' },
+    { via: 'getAddressesProvider(fork-fallback)', fn: 'getAddressesProvider' },
+    ...(POOL_ADDRESSES_PROVIDERS[Number(chainId)]
+      ? [{ via: 'static-registry', staticAddress: POOL_ADDRESSES_PROVIDERS[Number(chainId)] }]
+      : [])
+  ];
   let providerAddress = null;
-  try {
-    const decoded = poolIface.decodeFunctionResult('getAddressesProvider', providerCall.result);
-    providerAddress = String(decoded[0] || '');
-  } catch { providerAddress = ''; }
+  let providerVia = null;
+  let stageOneCode = null;
+  for (const attempt of attempts) {
+    if (attempt.staticAddress) {
+      providerAddress = attempt.staticAddress;
+      providerVia = attempt.via;
+      break;
+    }
+    const providerCall = await ethCall(chainId, pool, poolIface.encodeFunctionData(attempt.fn, []));
+    if (!providerCall.ok) {
+      stageOneCode = providerCall.code || 'ORACLE_READ_FAILED';
+      continue;
+    }
+    try {
+      const decoded = poolIface.decodeFunctionResult(attempt.fn, providerCall.result);
+      providerAddress = String(decoded[0] || '');
+    } catch { providerAddress = ''; }
+    if (isAddress(providerAddress) && providerAddress !== ZERO) {
+      providerVia = attempt.via;
+      break;
+    }
+    providerAddress = null;
+    stageOneCode = 'NO_ADDRESSES_PROVIDER';
+  }
   if (!isAddress(providerAddress) || providerAddress === ZERO) {
-    breaker.report('oracle', false, 'NO_ADDRESSES_PROVIDER');
-    return { ok: false, code: 'NO_ADDRESSES_PROVIDER' };
+    breaker.report('oracle', false, stageOneCode || 'NO_ADDRESSES_PROVIDER');
+    return { ok: false, code: stageOneCode || 'NO_ADDRESSES_PROVIDER' };
   }
 
   /* Stage 2 — the provider names the oracle. */
@@ -472,7 +529,7 @@ export async function readProtocolOracle(chainId) {
   const priced = tokens.filter((token) => base.get(token.symbol) != null);
   if (!priced.length) {
     breaker.report('oracle', false, 'ORACLE_PRICE_UNAVAILABLE');
-    return { ok: false, code: 'ORACLE_PRICE_UNAVAILABLE', oracleAddress };
+    return { ok: false, code: 'ORACLE_PRICE_UNAVAILABLE', oracleAddress, providerAddress, providerVia };
   }
   breaker.report('oracle', true);
 
@@ -487,6 +544,8 @@ export async function readProtocolOracle(chainId) {
     ok: true,
     source: 'aave-oracle',
     oracleAddress,
+    providerAddress,
+    providerVia,
     baseUnit: baseUnit.toString(),
     baseUnitRead,
     prices,

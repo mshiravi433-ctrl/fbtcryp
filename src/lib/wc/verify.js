@@ -414,17 +414,289 @@ export async function probeVerifyReachability({ fetchImpl, timeoutMs = 8_000 } =
     } catch { /* best effort */ }
   }, timeoutMs);
   try {
-    const res = await call(url, { method: 'HEAD', signal: controller?.signal, cache: 'no-store' });
-    return { ok: Boolean(res?.ok), status: res?.status ?? null, url };
+    /* mode:'no-cors' is the honest reachability signal. A plain cross-origin
+       fetch REJECTS with ""Failed to fetch"" whenever the host omits
+       Access-Control-Allow-Origin — and verify.walletconnect.org omits it —
+       so this probe spent its life reporting a CORS block as a dead host,
+       and the panel told the owner «the enclave is filtered» on networks
+       where it was fine. With no-cors the browser resolves after full
+       DNS+TLS (the response is opaque: status 0, body unreadable — nothing
+       to read is the point), and only an ACTUAL network failure (DNS,
+       reset, filtered) rejects. */
+    const res = await call(url, {
+      method: 'GET',
+      mode: 'no-cors',
+      credentials: 'omit',
+      signal: controller?.signal,
+      cache: 'no-store'
+    });
+    return {
+      ok: true,
+      /* Opaque responses have status 0 — record it, never as a failure. */
+      status: res?.status ?? 0,
+      opaque: typeof res !== 'undefined' ? res?.type === 'opaque' : null,
+      transport: 'no-cors',
+      url
+    };
   } catch (error) {
     return {
       ok: false,
       error: error?.name === 'AbortError' ? 'TIMEOUT' : String(error?.message || error),
+      transport: 'no-cors',
       url
     };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BEYOND THE SDK'S FIVE SECONDS — measured, gated, honest.
+   ─────────────────────────────────────────────────────────────────────────
+   «Cannot verify» on a slow-but-working network is a TIMING failure, not a
+   dashboard failure: the SDK's register() waits exactly FIVE_SECONDS for the
+   enclave iframe to answer, then returns an empty string — silently. On a
+   mobile network where DNS+TLS+the enclave's own JS take longer than that,
+   every pairing attests nothing and the wallet warns forever, no matter how
+   perfect the domain registry is.
+
+   The fix has three parts, each advisory:
+
+     1. `probeVerifyEnclaveFrame` measures the mechanism itself — can THIS
+        browser load the enclave page at all? — by loading it in a hidden
+        iframe. That is an honest { LOADED / TIMEOUT } answer, not the
+        CORS-flavoured false negative a plain fetch produced.
+     2. `measureVerifyEnclave` remembers that answer ONCE per page, so the
+        decision below costs nothing per pair attempt.
+     3. `installVerifyBudgetExtension` waits an ADDITIONAL budget (its own
+        identical handshake, same id → same JWT the SDK would have returned,
+        because the payload is bound to window.location.origin by the
+        enclave, not by the extra observer) — but ONLY when the enclave was
+        measured LOADED. On a filtered network the host never loads, the
+        measurement is a verdict, and spending 8 more seconds there is a tax
+        on people the fix cannot help: no extension is granted.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/** Brand-check so a double installation is a no-op rather than a nested wait. */
+const EXTENDED_BRAND = '__fbtVerifyBudgetExtended__';
+
+/** Retry budget. Slow-but-reachable enclaves finish well inside it; the
+    existing measurement is what decides whether it is ever spent. */
+export const VERIFY_EXTENDED_BUDGET_MS = 8_000;
+
+/**
+ * Load the enclave as an IFRAME — the exact mechanism register() depends on —
+ * and record whether the page arrived. No message handling, no JWT: this
+ * answers "reachable at all?" so the budget below is never spent on a host
+ * this network filters.
+ *
+ * @returns {Promise<{ok:boolean, verdict:'LOADED'|'TIMEOUT'|'LOAD_ERROR'|'NO_DOCUMENT', ms:number, url:string}>}
+ */
+export function probeVerifyEnclaveFrame({ win, timeoutMs = 4_000, now = () => Date.now() } = {}) {
+  const w = win ?? (typeof window !== 'undefined' ? window : null);
+  const doc = w?.document;
+  const url = `${VERIFY_SERVER}/`;
+  const startedAt = now();
+  if (!doc || typeof doc.createElement !== 'function' || !doc.body) {
+    return Promise.resolve({ ok: false, verdict: 'NO_DOCUMENT', ms: 0, url });
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    let timer = null;
+    let iframe = null;
+    const finish = (verdict) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      try {
+        if (iframe?.parentNode) iframe.parentNode.removeChild(iframe);
+      } catch { /* already detached */ }
+      resolve({ ok: verdict === 'LOADED', verdict, ms: Math.max(0, now() - startedAt), url });
+    };
+    iframe = doc.createElement('iframe');
+    iframe.src = url;
+    iframe.style.display = 'none';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.setAttribute('title', 'walletconnect-verify-enclave-probe');
+    try {
+      iframe.addEventListener('load', () => finish('LOADED'), { once: true });
+      iframe.addEventListener('error', () => finish('LOAD_ERROR'), { once: true });
+    } catch { /* a stub element in a test — the timeout still decides */ }
+    try {
+      doc.body.appendChild(iframe);
+    } catch {
+      finish('NO_DOCUMENT');
+      return;
+    }
+    timer = setTimeout(() => finish('TIMEOUT'), Math.max(500, timeoutMs));
+  });
+}
+
+/* The measurement, cached once per window. A promise first, then the result:
+   two callers racing the first measurement reuse it rather than opening a
+   second iframe. */
+const enclaveMeasurements = new WeakMap();
+
+/**
+ * Measure the enclave once per page. Returns the same result to every later
+ * caller. Advisory, never throws.
+ */
+export function measureVerifyEnclave({ win, timeoutMs = 4_000, now } = {}) {
+  const w = win ?? (typeof window !== 'undefined' ? window : null);
+  if (!w) return Promise.resolve({ ok: false, verdict: 'NO_WINDOW', ms: 0, url: `${VERIFY_SERVER}/` });
+  let entry = enclaveMeasurements.get(w);
+  if (!entry) {
+    entry = {
+      promise: probeVerifyEnclaveFrame({ win: w, timeoutMs, now })
+        .then((result) => {
+          enclaveMeasurements.set(w, { result });
+          return result;
+        })
+        .catch(() => ({ ok: false, verdict: 'ERROR', ms: 0, url: `${VERIFY_SERVER}/` }))
+    };
+    enclaveMeasurements.set(w, entry);
+  }
+  return entry.result ? Promise.resolve(entry.result) : entry.promise;
+}
+
+/** The measured state, or null when nobody has measured yet. */
+export function getVerifyEnclaveState(win) {
+  const w = win ?? (typeof window !== 'undefined' ? window : null);
+  if (!w) return null;
+  const entry = enclaveMeasurements.get(w);
+  return entry && typeof entry === 'object' && entry.result ? entry.result : null;
+}
+
+/**
+ * The same iframe handshake the SDK performs in register(), returning the raw
+ * JWT string ("" on failure) — with a budget the CALLER chooses. Implemented
+ * next to probeVerifyAttestation on purpose: that probe is a diagnostic that
+ * classifies answers; this one is a protocol participant. The message filter
+ * (type + id) matches the SDK's own listener exactly.
+ */
+export function requestVerifyAttestation({
+  win, projectId, origin, id, decryptedId, timeoutMs = VERIFY_EXTENDED_BUDGET_MS
+} = {}) {
+  const w = win ?? (typeof window !== 'undefined' ? window : null);
+  const doc = w?.document;
+  if (!doc || typeof doc.createElement !== 'function' || !doc.body || !id) {
+    return Promise.resolve('');
+  }
+  const pageOrigin = normalizeOrigin(origin || w?.location?.origin || '');
+  const url = attestationUrl({ projectId, origin: pageOrigin, id, decryptedId: decryptedId || id });
+  return new Promise((resolve) => {
+    let done = false;
+    let timer = null;
+    let iframe = null;
+    const finish = (jwt) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      try {
+        w.removeEventListener?.('message', listener);
+      } catch { /* nothing to remove */ }
+      try {
+        if (iframe?.parentNode) iframe.parentNode.removeChild(iframe);
+      } catch { /* already detached */ }
+      resolve(typeof jwt === 'string' ? jwt : '');
+    };
+    const listener = (event) => {
+      if (!event?.data || typeof event.data !== 'string') return;
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+      if (!data || data.type !== 'verify_attestation') return;
+      /* Only OUR id ends the wait — same rule as the SDK. */
+      if (decodeAttestation(data.attestation)?.id !== id) return;
+      finish(data.attestation === null ? '' : data.attestation);
+    };
+    try {
+      w.addEventListener?.('message', listener);
+    } catch { /* the timeout below still settles the promise */ }
+    iframe = doc.createElement('iframe');
+    iframe.src = url;
+    iframe.style.display = 'none';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.setAttribute('title', 'walletconnect-verify');
+    try {
+      iframe.addEventListener('error', () => finish(''), { once: true });
+    } catch { /* a stub element in a test */ }
+    try {
+      doc.body.appendChild(iframe);
+    } catch {
+      finish('');
+      return;
+    }
+    timer = setTimeout(() => finish(''), Math.max(1_000, timeoutMs));
+  });
+}
+
+/**
+ * Give attestation a second, longer chance — gated on evidence.
+ *
+ * Wraps `core.verify.register` where init() exposes the core. The wrap is:
+ *   1. the SDK's own 5s attempt runs FIRST, untouched (fast path identical);
+ *   2. only when it returns "" AND `measureVerifyEnclave` has observed the
+ *      enclave page LOAD on this network does a second handshake run with a
+ *      longer budget — the same payload, the same origin, the same JWT the
+ *      SDK was too impatient to wait for.
+ *
+ * The reachability GATE is the whole design. On a filtered network the frame
+ * never loads, the gate is CLOSED, and a pairing pays zero extra seconds:
+ * people the fix cannot help must not pay for people it can.
+ *
+ * @returns {{ installed:boolean, reason?:string }}
+ */
+export function installVerifyBudgetExtension({ core, win, projectId, extraBudgetMs = VERIFY_EXTENDED_BUDGET_MS, onEvent, now } = {}) {
+  const verify = core?.verify;
+  const w = win ?? (typeof window !== 'undefined' ? window : null);
+  if (!verify || typeof verify.register !== 'function') {
+    return { installed: false, reason: 'NO_VERIFY_CONTROLLER' };
+  }
+  if (verify[EXTENDED_BRAND]) return { installed: false, reason: 'ALREADY_INSTALLED' };
+
+  const original = verify.register.bind(verify);
+  const wrapped = async (params = {}) => {
+    const sdkJwt = await original(params);
+    if (sdkJwt) return sdkJwt;
+
+    const state = getVerifyEnclaveState(w);
+    /* Gate CLOSED (unmeasured or observed-unreachable): behave exactly like
+       the SDK — return "" at the same moment, no extension, no tax. */
+    if (!state || state.ok !== true) {
+      return sdkJwt;
+    }
+
+    const attestationId = params?.id ?? params?.attestationId ?? null;
+    const decryptedId = params?.decryptedId ?? attestationId;
+    if (!attestationId) {
+      return sdkJwt;
+    }
+    try {
+      onEvent?.('verify_budget_extended', { ms: extraBudgetMs });
+    } catch { /* telemetry is advisory */ }
+    let retryJwt = '';
+    try {
+      retryJwt = await requestVerifyAttestation({
+        win: w,
+        projectId: projectId ?? core?.projectId,
+        id: attestationId,
+        decryptedId,
+        timeoutMs: extraBudgetMs,
+        now
+      });
+    } catch { /* the extra wait failed the same way the first did */ }
+    if (retryJwt) {
+      try { onEvent?.('verify_budget_extended_ok'); } catch { /* advisory */ }
+      return retryJwt;
+    }
+    try { onEvent?.('verify_budget_extended_empty'); } catch { /* advisory */ }
+    return sdkJwt;
+  };
+  wrapped[EXTENDED_BRAND] = true;
+  wrapped.__fbtOriginalRegister__ = original;
+  verify.register = wrapped;
+  try { verify[EXTENDED_BRAND] = true; } catch { /* sealed object — the wrap alone still marks installation */ }
+  return { installed: true, extraBudgetMs };
 }
 
 /** One preconnect per window: warming twice warms nothing. */

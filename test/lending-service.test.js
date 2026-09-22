@@ -999,11 +999,18 @@ describe('2026-09-22 — the oracle resolves through the ADDRESSES PROVIDER, nev
      function the Pool does not have (it lives on PoolAddressesProvider), so
      every REAL RPC reverted. The unit mocks answered any selector on any
      contract, so the suite stayed green while production was down.
-     This regression test re-runs the outage against a REAL ethers transport:
-     the Pool reverts on getPriceOracle exactly like a live node, and the
-     two-stage path (pool.getAddressesProvider → provider.getPriceOracle →
-     oracle.BASE_CURRENCY_UNIT / getAssetsPrices) is served end to end. On the
-     pre-fix code this test is RED (the read dies on the Pool's revert). */
+     THE SAME DAY, the two-stage "fix" broke production a second time: stage
+     one called `pool.getAddressesProvider()` — ANOTHER function the Pool
+     does not have (the real getter is the upper-case `ADDRESSES_PROVIDER()`,
+     IPool.sol §576). Every real RPC reverted on it, and
+     /api/lending/markets answered oracleCode=RPC_ERROR on 42161 and 8453
+     hours after the "fix" shipped — measured live.
+     This regression test re-runs both outages against a REAL ethers
+     transport: the Pool reverts on getPriceOracle AND on the lower-case
+     getAddressesProvider exactly like a live node, and the canonical path
+     (pool.ADDRESSES_PROVIDER → provider.getPriceOracle →
+     oracle.BASE_CURRENCY_UNIT / getAssetsPrices) is served end to end. On
+     either pre-fix implementation this test is RED. */
   const coder = AbiCoder.defaultAbiCoder();
   const RAY = 10n ** 27n;
   /* Mirrors AAVE_V3_ARBITRUM.addressesProvider — the registry the Arbitrum
@@ -1033,12 +1040,16 @@ describe('2026-09-22 — the oracle resolves through the ADDRESSES PROVIDER, nev
       const data = String(tx?.data || '0x');
       const selector = data.slice(0, 10);
       reads.push({ to, selector });
-      if (to === POOL && selector === poolIface.getFunction('getAddressesProvider').selector) {
+      if (to === POOL && selector === poolIface.getFunction('ADDRESSES_PROVIDER').selector) {
         return coder.encode(['address'], [PROVIDER]);
       }
-      /* The negative control — the exact production outage: a real Pool has
-         NO getPriceOracle, so the node reverts. */
-      if (to === POOL && selector === providerIface.getFunction('getPriceOracle').selector) {
+      /* The two negative controls — the exact production outages of
+         2026-09-22 (twice): a real Pool has NEITHER getPriceOracle NOR the
+         lower-case getAddressesProvider, so the node reverts on both. The
+         fork name is not dead code here — the fallback it powers is exercised
+         in the next test, on a fixture that models the fork. */
+      if (to === POOL && (selector === providerIface.getFunction('getPriceOracle').selector
+        || selector === poolIface.getFunction('getAddressesProvider').selector)) {
         throw new Error('execution reverted');
       }
       if (to === POOL && selector === poolIface.getFunction('getReserveData').selector) {
@@ -1103,12 +1114,99 @@ describe('2026-09-22 — the oracle resolves through the ADDRESSES PROVIDER, nev
       expect(result.prices[USDT.id].priceUsd).toBe(1);
       expect(result.prices[USDC.id].priceUsd).toBe(1);
 
-      /* Stage 1 really went to the POOL, stage 2 really went to the PROVIDER… */
-      expect(reads.filter((r) => r.to === POOL && r.selector === poolIface.getFunction('getAddressesProvider').selector).length).toBe(1);
+      /* Stage 1 really went to the POOL with the CANONICAL getter, stage 2
+         really went to the PROVIDER… */
+      expect(reads.filter((r) => r.to === POOL && r.selector === poolIface.getFunction('ADDRESSES_PROVIDER').selector).length).toBe(1);
       expect(reads.filter((r) => r.to === PROVIDER && r.selector === providerIface.getFunction('getPriceOracle').selector).length).toBe(1);
-      /* …and getPriceOracle NEVER went to the Pool — the revert that took
-         production down would have surfaced here as ORACLE_READ_FAILED. */
+      /* …and neither wrong name ever went to the Pool — both reverts that
+         took production down would have surfaced here as a failed read. */
       expect(reads.filter((r) => r.to === POOL && r.selector === providerIface.getFunction('getPriceOracle').selector)).toEqual([]);
+      expect(reads.filter((r) => r.to === POOL && r.selector === poolIface.getFunction('getAddressesProvider').selector)).toEqual([]);
+    } finally {
+      rpc.destroy();
+    }
+  });
+
+  it('still answers on a V2-style fork that only knows the lower-case getter', async () => {
+    /* The fallback that now sits behind the canonical call is real code and
+       must be exercised: a fork pool reverts on ADDRESSES_PROVIDER and
+       answers getAddressesProvider. The read must succeed via the fallback,
+       and `providerVia` must say so — a silent fallback is how the first
+       outage went unnoticed for a day. */
+    const reads = [];
+    const recent = BigInt(Math.floor(Date.now() / 1000) - 60);
+    const ethCall = (tx) => {
+      const to = String(tx?.to || '').toLowerCase();
+      const data = String(tx?.data || '0x');
+      const selector = data.slice(0, 10);
+      reads.push({ to, selector });
+      /* Fork behaviour: the two canonical names BOTH revert. */
+      if (to === POOL && (selector === poolIface.getFunction('ADDRESSES_PROVIDER').selector
+        || selector === providerIface.getFunction('getPriceOracle').selector)) {
+        throw new Error('execution reverted');
+      }
+      if (to === POOL && selector === poolIface.getFunction('getAddressesProvider').selector) {
+        return coder.encode(['address'], [PROVIDER]);
+      }
+      if (to === POOL && selector === poolIface.getFunction('getReserveData').selector) {
+        return coder.encode([RESERVE_TUPLE], [[
+          0n, RAY, (RAY * 46n) / 1000n, RAY, (RAY * 52n) / 1000n, 0n, recent, 1,
+          ATOKEN, ZERO, VDEBT, ZERO, 0n, 0n, 0n
+        ]]);
+      }
+      if (to === PROVIDER && selector === providerIface.getFunction('getPriceOracle').selector) {
+        return coder.encode(['address'], [ORACLE]);
+      }
+      if (to === ORACLE && selector === oracleIface.getFunction('BASE_CURRENCY_UNIT').selector) {
+        return coder.encode(['uint256'], [10n ** 8n]);
+      }
+      if (to === ORACLE && selector === oracleIface.getFunction('getAssetsPrices').selector) {
+        const [assets] = oracleIface.decodeFunctionData('getAssetsPrices', data);
+        return coder.encode(['uint256[]'], [assets.map(() => 10n ** 8n)]);
+      }
+      if (selector === erc20Iface.getFunction('totalSupply').selector) {
+        return coder.encode(['uint256'], [1_000_000n * 10n ** 6n]);
+      }
+      if (selector === erc20Iface.getFunction('decimals').selector) {
+        return coder.encode(['uint8'], [6]);
+      }
+      throw new Error(`execution reverted: unhandled ${to} ${selector}`);
+    };
+    const serve = async (bodyText) => {
+      let body = null;
+      try { body = JSON.parse(bodyText || 'null'); } catch { body = null; }
+      if (!body) return JSON.stringify({ error: 'bad request' });
+      const one = async (call) => {
+        try {
+          const result = call.method === 'eth_call'
+            ? ethCall(call.params?.[0])
+            : call.method === 'eth_chainId' ? '0x' + CHAIN.toString(16)
+              : call.method === 'eth_blockNumber' ? '0x100'
+                : '0x';
+          return { jsonrpc: '2.0', id: call.id, result };
+        } catch (cause) {
+          return { jsonrpc: '2.0', id: call.id, error: { code: -32000, message: String(cause?.message || cause) } };
+        }
+      };
+      const payload = Array.isArray(body) ? await Promise.all(body.map(one)) : await one(body);
+      return JSON.stringify(payload);
+    };
+    FetchRequest.registerGetUrl(async (req) => {
+      const text = await serve(req.body ? new TextDecoder().decode(req.body) : null);
+      return new FetchResponse(200, 'OK', { 'content-type': 'application/json' }, new TextEncoder().encode(text), req);
+    });
+    const rpc = new JsonRpcProvider('http://lending-oracle-fork-regression.invalid/rpc', CHAIN, { staticNetwork: true });
+    try {
+      const result = await readOraclePrices({ provider: rpc, chainId: CHAIN, assets: [USDT, USDC] });
+      expect(result.reason, JSON.stringify(result)).toBeUndefined();
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe('ok');
+      expect(result.prices[USDT.id].priceUsd).toBe(1);
+      /* The fallback is VISIBLE: canonical tried once and reverted, the fork
+         name answered once, and the result names the route it took. */
+      expect(result.providerVia).toBe('getAddressesProvider');
+      expect(reads.filter((r) => r.to === POOL && r.selector === poolIface.getFunction('ADDRESSES_PROVIDER').selector).length).toBe(1);
+      expect(reads.filter((r) => r.to === POOL && r.selector === poolIface.getFunction('getAddressesProvider').selector).length).toBe(1);
     } finally {
       rpc.destroy();
     }

@@ -28,7 +28,7 @@ import { chainFromSession } from './chain.js';
 import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
 import { installWalletOpenBridge, onWalletHandoff, openWalletHandoff } from './handoff.js';
 import { measureRelay, clearRelayCache } from './relay.js';
-import { warmVerifyEnclave } from './verify.js';
+import { installVerifyBudgetExtension, measureVerifyEnclave, warmVerifyEnclave } from './verify.js';
 import { hasStoredSession, purgeConnectionKeys } from './storage.js';
 import {
   classifyConnectError,
@@ -279,6 +279,31 @@ export function createWcSession({
    * SDK upgrade that moves the metadata cannot silently resurrect a dApp that
    * introduces itself to every wallet as https://localhost.
    */
+  /**
+   * Give the attestation a second, longer chance — evidence-gated.
+   *
+   * The SDK's register() has a flat 5s budget and fails silently past it;
+   * on a slow-but-working network that IS the «Cannot verify» story. The
+   * wrap installs once per WC core (the brand makes re-entry a no-op), and
+   * installs NOTHING where verify is not exposed.
+   */
+  function extendVerifyBudget(instance) {
+    const core = [
+      instance?.signer?.client?.core,
+      instance?.signer?.core,
+      instance?.client?.core,
+      instance?.core
+    ].filter(Boolean).find((item, index, list) => list.indexOf(item) === index);
+    const result = installVerifyBudgetExtension({
+      core,
+      win: typeof window !== 'undefined' ? window : null,
+      projectId,
+      onEvent: (name, extra) => wcEvent(name, extra?.ms ?? 1)
+    });
+    if (result.installed) wcEvent('verify_budget_extension_installed', result.extraBudgetMs);
+    return Boolean(result.installed);
+  }
+
   function repairMetadata(instance) {
     const { url, icons, verifyUrl } = metadata;
     try {
@@ -439,6 +464,19 @@ export function createWcSession({
         if (warmed?.warmed) wcEvent('verify_warmed', warmed.reason);
       } catch { /* a warm-up is an optimisation, never a gate */ }
 
+      /* MEASURE THE ENCLAVE BEFORE THE PAIRING NEEDS IT. The extended-budget
+         wrap installed below opens only for a network where the enclave page
+         actually loads: this measurement (bounded, fire-and-forget) is the
+         evidence that decides it. Measured here — seconds before register()
+         runs — and also at boot in main.jsx, so most pairings read a ready
+         answer and none pays twice. */
+      try {
+        measureVerifyEnclave({}).then(
+          (state) => { if (state?.verdict) wcEvent(state.verdict === 'LOADED' ? 'verify_enclave_loaded' : 'verify_enclave_unloaded', state.ms ?? 0); },
+          () => {}
+        );
+      } catch { /* advisory */ }
+
       /* ADVISORY: a browser diagnostic must never prevent the real attempt. */
       let relay = null;
       try {
@@ -481,6 +519,7 @@ export function createWcSession({
       provider = instance;
       emit('modal', { active: Boolean(instance?.modal) });
       wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+      try { extendVerifyBudget(instance); } catch { /* the wrap is advisory */ }
       if (instance?.modal) {
         const applied = await applyWalletSurface({ modal: instance.modal, projectId, metadata });
         wcEvent(applied ? 'appkit_links_applied' : 'appkit_links_failed');
@@ -667,6 +706,7 @@ export function createWcSession({
       instance = await initProvider({ modal: false, relayOrder: null });
       provider = instance;
       wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+      try { extendVerifyBudget(instance); } catch { /* the wrap is advisory */ }
 
       if (!instance.session) {
         wcEvent('restore_none');

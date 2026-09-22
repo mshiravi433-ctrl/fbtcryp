@@ -13,6 +13,7 @@
  * that must fail closed on an unsupported chain.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { Interface } from 'ethers';
 
 import * as BFF from '../server/lending.js';
@@ -114,7 +115,24 @@ describe('the two oracle ABIs encode the same wire calls', () => {
   const clientProvider = new Interface(AAVE_PROVIDER_ABI);
   const ASSET = '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9';
 
-  it('asks the pool for its addresses provider with identical calldata', () => {
+  it('asks the pool for its addresses provider with identical calldata — the CANONICAL selector', () => {
+    expect(serverPool.encodeFunctionData('ADDRESSES_PROVIDER', []))
+      .toBe(clientPool.encodeFunctionData('ADDRESSES_PROVIDER', []));
+    /* And identical to Aave's RELEASED interface, not just to each other:
+       IPool.sol §576 (aave-v3-origin) defines exactly this getter, whose
+       selector is 0x0542975c. The 2026-09-22 lower-case "fix" (0xfe65acfe)
+       reverts on every real pool; pinning the hash pins the interface. */
+    expect(serverPool.encodeFunctionData('ADDRESSES_PROVIDER', [])).toBe('0x0542975c');
+  });
+
+  it('keeps the V2-style fork name as a FALLBACK, not the primary', () => {
+    /* getAddressesProvider stays in the ABI for forks — but production reads
+       must try the canonical getter first. Asserted at the source level:
+       the first name in each on-chain attempt order is ADDRESSES_PROVIDER. */
+    const serverSrc = readFileSync(new URL('../server/lending.js', import.meta.url), 'utf8');
+    const clientSrc = readFileSync(new URL('../src/lib/lending.js', import.meta.url), 'utf8');
+    expect(/\{ via: 'ADDRESSES_PROVIDER', fn: 'ADDRESSES_PROVIDER' \}/.test(serverSrc)).toBe(true);
+    expect(/for \(const fn of \['ADDRESSES_PROVIDER', 'getAddressesProvider'\]\)/.test(clientSrc)).toBe(true);
     expect(serverPool.encodeFunctionData('getAddressesProvider', []))
       .toBe(clientPool.encodeFunctionData('getAddressesProvider', []));
   });

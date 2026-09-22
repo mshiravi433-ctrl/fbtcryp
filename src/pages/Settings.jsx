@@ -13,6 +13,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * exactly this reason - I should have followed that pattern first time.
  */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
+/*
+ * The build stamp (main.jsx publishes the same object on window.__FBT_BUILD__).
+ * Rendered next to the version so a bug report names the exact deploy — and
+ * «تغییرات لایو نمی‌شوند» of 2026-09-22 becomes checkable in one glance:
+ * the short hash must equal the HEAD of main, not just "some recent commit".
+ * The `typeof` guard matches APP_VERSION: harness bundles without the define
+ * must not crash on the reference.
+ */
+const FBT_BUILD = typeof __FBT_BUILD__ !== 'undefined' && __FBT_BUILD__ ? __FBT_BUILD__ : null;
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -1974,7 +1983,11 @@ export default function Settings() {
         <Row icon={IconShield} label={t('settings.privacy')} onClick={() => { closeSection(); navigate('/legal/privacy'); }} />
         <Row icon={IconDoc} label={t('disclaimer.title')} onClick={() => { closeSection(); navigate('/legal/disclaimer'); }} />
       </div>
-      <p className="faint" style={{ textAlign: 'center', marginTop: 14 }}>{t('about.companyFull')} · v{APP_VERSION}</p>
+      <p className="faint" style={{ textAlign: 'center', marginTop: 14 }}>
+        {t('about.companyFull')} · v{APP_VERSION}
+        {FBT_BUILD?.commitShort ? ` · ${FBT_BUILD.commitShort}` : ''}
+        {FBT_BUILD?.builtAt ? ` · ${FBT_BUILD.builtAt.slice(0, 10)}` : ''}
+      </p>
     </>
   );
 
