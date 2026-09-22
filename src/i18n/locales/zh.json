@@ -1242,7 +1242,10 @@
       "BAD_ADDRESS": "该地址无效。",
       "NO_TOKEN_REGISTRY": "无法加载本市场的代币列表。",
       "KAMINO_SDK_MISSING": "此版本缺少 Kamino 模块——请更新应用。",
-      "KAMINO_SDK_FAILED": "Kamino 模块启动失败。请更新应用后重试。"
+      "KAMINO_SDK_FAILED": "Kamino 模块启动失败。请更新应用后重试。",
+      "KAMINO_SDK_TRUNCATED": "Kamino 模块只下载了一部分——连接被中断。请在更稳定的网络下重试。",
+      "KAMINO_SDK_INIT_FAILED": "Kamino 模块已下载但启动失败。请更新应用；若反复出现，请把这条消息发给客服。",
+      "KAMINO_TX_BUILD_EMPTY": "Kamino 未返回该操作的交易——没有发送任何内容，也没有扣除手续费。"
     },
     "ratesUpdated": "利率从借贷合约（Morpho/Aave）读取 —— 自动刷新。",
     "connectWallet": "连接钱包",

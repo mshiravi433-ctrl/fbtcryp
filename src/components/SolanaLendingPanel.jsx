@@ -166,11 +166,14 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       if (typeof wallet.signAndSendTransaction !== 'function') throw new Error('SOLANA_SIGN_UNAVAILABLE');
       let signature = null;
       for (const tx of built.transactions) {
-        /* Kamino builds v0 (versioned) transactions. Passing `versioned:false`
-           sent them through LEGACY deserialization — every signing attempt
-           through an injected wallet failed before the user could ever see an
-           approval. */
-        const sent = await wallet.signAndSendTransaction(tx.transaction, { versioned: true });
+        /* The transaction's OWN version, from the builder — never assumed.
+           klend-sdk v5 returns LEGACY transactions; the older API returned v0.
+           The wallet layer deserializes with `VersionedTransaction` when
+           `versioned` is true and with the legacy `Transaction` when it is
+           false, so a hardcoded flag throws on the bytes of the other kind
+           before the user ever sees an approval — which is exactly what both
+           directions of this bug looked like from the panel. */
+        const sent = await wallet.signAndSendTransaction(tx.transaction, { versioned: tx.versioned !== false });
         if (!sent?.ok || !sent.signature) throw new Error(sent?.code || 'SOLANA_SEND_FAILED');
         const confirmed = await waitForSolanaLendingTransaction(sent.signature);
         if (!confirmed.ok) throw new Error(confirmed.code || 'SOLANA_SEND_FAILED');

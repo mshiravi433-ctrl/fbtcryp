@@ -53,3 +53,5 @@ scripts/.vendor-velocity-entry.generated.mjs
 .shots/
 
 scripts/.vendor-kamino-entry.generated.mjs
+# the browser-Buffer shim esbuild emits into the vendor bundle
+scripts/.vendor-kamino-buffer-shim.generated.mjs

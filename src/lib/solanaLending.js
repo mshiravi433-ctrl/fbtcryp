@@ -108,10 +108,18 @@ function solanaReadError(cause, code = 'RPC_ERROR') {
 }
 
 const KAMINO_VENDOR_PATH = 'vendor/kamino-klend-sdk.js';
-/* Bumped 2026-09-22: the query is the only cache-buster on this file, and a
-   stuck (stale 404 or half-cached) copy is indistinguishable from a broken
-   build at runtime. Any vendor-bundle change bumps this again. */
-const KAMINO_VENDOR_REV = '2';
+const KAMINO_VENDOR_MANIFEST = 'vendor/kamino-klend-sdk.manifest.json';
+/* Bumped 2026-09-22 (2 -> 3): the rev-2 bundle threw `ReferenceError: Buffer
+   is not defined` at module init in EVERY real browser — the Node-only check
+   script passed it because Node has a global Buffer — so the panel could only
+   answer «ماژول Kamino اجرا نشد» (KAMINO_SDK_FAILED) and no Solana loan could
+   ever be built. scripts/vendor-kamino.mjs now prepends a Buffer shim to the
+   emitted file and scripts/check-kamino-bundle.mjs hides the Node globals, so
+   a bundle that cannot start in a browser fails the BUILD instead of the user.
+   The query string is the only cache-buster on this file: any vendor-bundle
+   change bumps this again, and it must match VENDOR_REV in the vendor script
+   (asserted by test/solana-lending-precision.test.js). */
+const KAMINO_VENDOR_REV = '3';
 
 /**
  * Where the vendored Kamino bundle may live, in order. The build always emits
@@ -119,33 +127,32 @@ const KAMINO_VENDOR_REV = '2';
  * base than the build assumed (CDN rewrites, the native shell, a cached
  * index.html from a previous deploy) — a single hardcoded URL turns any of
  * those into KAMINO_SDK_UNAVAILABLE. Each candidate is tried in turn.
+ *
+ * Each path is offered BOTH with the `?v=` cache-buster and bare: an edge
+ * cache or a proxy that ignores/rewrites query strings is a real deployment
+ * shape, and the bare URL is the one a stuck CDN would keep serving correctly.
  */
 function kaminoVendorCandidates() {
   const rawBase = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
   const base = String(rawBase || '/');
   const withSlash = base.endsWith('/') ? base : `${base}/`;
-  const urls = [`${withSlash}${KAMINO_VENDOR_PATH}?v=${KAMINO_VENDOR_REV}`];
-  if (withSlash !== '/') urls.push(`/${KAMINO_VENDOR_PATH}?v=${KAMINO_VENDOR_REV}`);
+  const paths = [`${withSlash}${KAMINO_VENDOR_PATH}`];
+  if (withSlash !== '/') paths.push(`/${KAMINO_VENDOR_PATH}`);
+  const urls = [];
+  for (const path of paths) {
+    urls.push(`${path}?v=${KAMINO_VENDOR_REV}`, path);
+  }
   return [...new Set(urls)];
 }
 
-/**
- * Is the bundle file itself reachable? A dynamic `import()` failure does not
- * say whether the file 404ed (the build never vendored it) or downloaded and
- * crashed during init (a broken bundle) — and the two have different fixes.
- * A plain fetch answers that: 404/empty → MISSING, reachable-but-unimportable
- * → FAILED with the original message kept as detail.
- */
-async function probeKaminoVendor(url) {
-  try {
-    if (typeof fetch !== 'function') return null;
-    const res = await fetch(url.split('?')[0], { method: 'GET', headers: { accept: '*/*' } });
-    if (!res?.ok) return { reachable: false, status: Number(res?.status ?? 0) };
-    const text = await res.text();
-    return { reachable: (text?.length || 0) > 1024, status: 200, bytes: text?.length || 0 };
-  } catch {
-    return null;
-  }
+/** Same base resolution as the bundle itself, for its integrity manifest. */
+function kaminoManifestCandidates() {
+  const rawBase = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const base = String(rawBase || '/');
+  const withSlash = base.endsWith('/') ? base : `${base}/`;
+  const paths = [`${withSlash}${KAMINO_VENDOR_MANIFEST}`];
+  if (withSlash !== '/') paths.push(`/${KAMINO_VENDOR_MANIFEST}`);
+  return [...new Set(paths)];
 }
 
 function kaminoLoadError(code, cause, detail) {
@@ -157,43 +164,258 @@ function kaminoLoadError(code, cause, detail) {
   return error;
 }
 
+/* One warn line per failure, so a user's console (or a screenshot of it) names
+   the exact reason the panel is about to show a sentence for. */
+function kaminoDiagnostic(code, info) {
+  try {
+    if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
+    console.warn(`[kamino] ${code}`, JSON.stringify(info || {}));
+  } catch { /* diagnostics must never be the thing that throws */ }
+}
+
+/** HTTP status/headers/body of the bundle URL — the evidence fetch. */
+async function fetchKaminoVendor(url, { reload = false } = {}) {
+  if (typeof fetch !== 'function') return null;
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { accept: '*/*' },
+      /* `default` lets a healthy HTTP cache answer instantly; `reload` is the
+         second attempt after a short/HTML body, which is what a half-cached
+         or truncated response needs. */
+      cache: reload ? 'reload' : 'default'
+    });
+    const type = String(res?.headers?.get?.('content-type') || '');
+    if (!res?.ok) return { ok: false, status: Number(res?.status ?? 0), contentType: type, url };
+    const text = await res.text();
+    return { ok: true, status: Number(res.status), contentType: type, text, bytes: text.length, url };
+  } catch (cause) {
+    return { ok: false, status: 0, error: String(cause?.message || cause).slice(0, 120), url };
+  }
+}
+
+/** A server that answers a missing module with its SPA shell (or a captive
+    portal) returns HTML — importing that is a MIME error, not a broken SDK. */
+const looksLikeHtml = (text) => /^\s*(<!doctype|<html|<head|<body|<\?xml)/i.test(String(text || '').slice(0, 240));
+
+let manifestPromise = null;
+/**
+ * The build writes `kamino-klend-sdk.manifest.json` next to the bundle (byte
+ * length + sha256 + rev). It is what turns "KAMINO_SDK_FAILED" into an honest
+ * «the download was 1.2 MB of 5.6 MB» on a flaky mobile link, and it catches a
+ * stale edge copy from a previous deploy (rev mismatch) too.
+ */
+async function kaminoVendorManifest() {
+  if (!manifestPromise) {
+    manifestPromise = (async () => {
+      for (const url of kaminoManifestCandidates()) {
+        try {
+          const res = await fetch(url, { headers: { accept: 'application/json' } });
+          if (!res?.ok) continue;
+          const json = await res.json();
+          if (json && Number(json.bytes) > 0) return json;
+        } catch { /* older deploys have no manifest — that is not an error */ }
+      }
+      return null;
+    })();
+  }
+  return manifestPromise;
+}
+
+/** Evaluate bundle TEXT as a module. Used when the direct import failed for a
+    transport reason (HTML body, wrong MIME) rather than a code reason. */
+async function importKaminoFromText(text) {
+  if (typeof Blob !== 'function' || typeof URL?.createObjectURL !== 'function') return null;
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+  try {
+    const mod = await import(/* @vite-ignore */ url);
+    return mod;
+  } finally {
+    /* Revoking immediately is safe (the module is already evaluated) but a
+       timer keeps a debugger's Sources panel readable. */
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* ignore */ } }, 10_000);
+  }
+}
+
+/** The exports this app actually calls — missing ones fail HERE, by name. */
+function kaminoModuleFailures(mod) {
+  const missing = ['KaminoMarket', 'KaminoAction', 'VanillaObligation']
+    .filter((name) => typeof mod?.[name] !== 'function');
+  if (typeof mod?.KaminoMarket?.load !== 'function') missing.push('KaminoMarket.load');
+  for (const builder of ['buildDepositTxns', 'buildBorrowTxns', 'buildWithdrawTxns', 'buildRepayTxns']) {
+    if (typeof mod?.KaminoAction?.[builder] !== 'function') missing.push(`KaminoAction.${builder}`);
+  }
+  if (String(mod?.PROGRAM_ID || '').length < 32) missing.push('PROGRAM_ID');
+  return missing;
+}
+
+/**
+ * Name the failure from the EVIDENCE (pure, so the branches are testable).
+ *
+ * `evidence` is what a plain fetch of the bundle URL saw, `manifest` what the
+ * build published for it, `initCause` the error the module threw while
+ * starting (when it got that far), `lastCause` the direct-import error.
+ *
+ * The four outcomes have four different fixes, which is the whole point of not
+ * collapsing them into one sentence:
+ *   MISSING       → the file is not in this build (404, or an HTML page: an
+ *                   SPA fallback answering for a missing file, a captive
+ *                   portal, a stale edge copy). Update/redeploy.
+ *   TRUNCATED     → fewer bytes than the manifest says: a cut-off transfer.
+ *                   Retry.
+ *   INIT_FAILED   → the real module, and it threw on start (the 2026-09-22
+ *                   `Buffer is not defined` class). Ship a fixed bundle.
+ *   FAILED        → downloaded and plausible, with no better explanation.
+ *   UNAVAILABLE   → nothing was reachable at all.
+ */
+export function classifyKaminoFailure({ evidence, manifest = null, initCause = null, lastCause = null, expectedRev = KAMINO_VENDOR_REV } = {}) {
+  const expectedBytes = Number(manifest?.bytes) || 0;
+  const staleRev = Boolean(manifest && String(manifest.rev || '') && String(manifest.rev) !== String(expectedRev));
+  const where = evidence?.url || 'the vendor bundle';
+  const cause = String(lastCause?.message || lastCause || '').slice(0, 140);
+  if (!evidence) return { code: 'KAMINO_SDK_UNAVAILABLE', detail: 'the vendor bundle URL could not be requested' };
+  if (!evidence.ok && !evidence.status) {
+    return { code: 'KAMINO_SDK_UNAVAILABLE', detail: String(evidence.error || cause || 'the vendor bundle could not be fetched').slice(0, 160) };
+  }
+  if (evidence.ok && looksLikeHtml(evidence.text)) {
+    return {
+      code: 'KAMINO_SDK_MISSING',
+      detail: `${where} answered with an HTML page (${evidence.bytes} bytes, ${evidence.contentType || 'no content-type'}) instead of the module${staleRev ? ` — the server still serves rev ${manifest.rev}` : ''}`
+    };
+  }
+  if (!evidence.ok) {
+    return { code: 'KAMINO_SDK_MISSING', detail: `HTTP ${evidence.status || 'fetch-failed'} for ${where} — the vendor bundle is not in this build` };
+  }
+  if (expectedBytes && evidence.bytes < expectedBytes) {
+    return { code: 'KAMINO_SDK_TRUNCATED', detail: `downloaded ${evidence.bytes} of ${expectedBytes} bytes from ${where} — the transfer was cut off` };
+  }
+  const initMessage = String(initCause?.message || initCause || '').slice(0, 160);
+  /* A "failed to fetch/import the module" message is transport noise, not an
+     init failure — it must not be reported as one. */
+  if (initMessage && !/dynamically imported module|importing a module|failed to fetch/i.test(initMessage)) {
+    return { code: 'KAMINO_SDK_INIT_FAILED', detail: initMessage };
+  }
+  if (staleRev) {
+    return { code: 'KAMINO_SDK_MISSING', detail: `the server serves vendor rev ${manifest.rev}, this app expects rev ${expectedRev} — a stale deploy is behind the page` };
+  }
+  return { code: 'KAMINO_SDK_FAILED', detail: initMessage || cause };
+}
+
 let sdkModulePromise = null;
 
+/**
+ * Load the vendored Kamino bundle, and when it cannot be loaded, say WHICH of
+ * the four distinct failures happened (they have four different fixes):
+ *
+ *   KAMINO_SDK_MISSING    the module is not in this build — the URL 404s, or
+ *                         the server answered with its index.html (a missing
+ *                         file behind an SPA fallback, a captive portal, a
+ *                         stale deploy). Updating/redeploying fixes it.
+ *   KAMINO_SDK_TRUNCATED  the file downloaded but is SHORTER than the
+ *                         manifest says — a cut-off transfer on a filtered or
+ *                         flaky link. Retrying fixes it.
+ *   KAMINO_SDK_INIT_FAILED the bytes are the real module and they THREW while
+ *                         initializing (this is exactly the 2026-09-22
+ *                         `Buffer is not defined` class of bug). The message
+ *                         is carried in `detail`. Shipping a fixed bundle
+ *                         fixes it — until then the panel must not pretend.
+ *   KAMINO_SDK_FAILED      downloaded, looked like the module, and no
+ *                         transport/init explanation was available.
+ *   KAMINO_SDK_UNAVAILABLE nothing was reachable at all (offline).
+ */
 async function sdkPromise() {
   if (!sdkModulePromise) {
     sdkModulePromise = (async () => {
       const candidates = kaminoVendorCandidates();
       let lastCause = null;
+      /* 1 — the normal path: import the module the way the app always has. */
       for (const url of candidates) {
         try {
           const mod = await import(/* @vite-ignore */ url);
-          /* A stale or truncated bundle can import "successfully" with the
-             panel's exports missing — that must fail here with a name, not
-             pages later as `KaminoMarket.load is not a function`. */
-          const missing = ['KaminoMarket', 'KaminoAction', 'VanillaObligation']
-            .filter((name) => typeof mod?.[name] !== 'function');
-          if (missing.length || String(mod?.PROGRAM_ID || '').length < 32) {
-            throw new Error(`incomplete bundle (missing: ${[...missing, ...(String(mod?.PROGRAM_ID || '').length < 32 ? ['PROGRAM_ID'] : [])].join(', ')})`);
-          }
-          return mod;
+          const missing = kaminoModuleFailures(mod);
+          if (!missing.length) return mod;
+          /* A half-cached or truncated bundle can import "successfully" with
+             exports missing — that must fail here with a name, not pages
+             later as `KaminoMarket.load is not a function`. */
+          throw new Error(`incomplete bundle (missing: ${missing.join(', ')})`);
         } catch (cause) {
           lastCause = cause;
         }
       }
-      /* Every candidate failed. Probe the primary URL once so the panel can
-         tell "the file is not in this build" from "the file is broken". */
-      const primary = candidates[0];
-      const probe = await probeKaminoVendor(primary);
-      if (probe && probe.reachable === false) {
-        throw kaminoLoadError(
-          'KAMINO_SDK_MISSING', lastCause,
-          `HTTP ${probe.status || 'fetch-failed'} for ${primary.split('?')[0]} — the vendor bundle is not in this build`
-        );
+
+      /* 2 — every direct import failed. Fetch the bytes and name the reason. */
+      let evidence = null;
+      for (const url of candidates) {
+        const attempt = await fetchKaminoVendor(url);
+        if (attempt?.ok) { evidence = attempt; break; }
+        if (attempt && !evidence) evidence = attempt;
       }
-      if (probe && probe.reachable === true) {
-        throw kaminoLoadError('KAMINO_SDK_FAILED', lastCause);
+      const manifest = await kaminoVendorManifest();
+      const expectedBytes = Number(manifest?.bytes) || 0;
+      const diagnose = ({ initCause = null } = {}) => {
+        const verdict = classifyKaminoFailure({ evidence, manifest, initCause, lastCause });
+        kaminoDiagnostic(verdict.code, {
+          url: evidence?.url || candidates[0],
+          status: evidence?.status ?? null,
+          contentType: evidence?.contentType || '',
+          bytes: evidence?.bytes ?? null,
+          expectedBytes: expectedBytes || null,
+          manifestRev: manifest?.rev || null,
+          wantsRev: KAMINO_VENDOR_REV,
+          detail: verdict.detail,
+          cause: String(lastCause?.message || lastCause || '').slice(0, 120)
+        });
+        return kaminoLoadError(verdict.code, lastCause, verdict.detail);
+      };
+
+      /* Nothing fetched at all — offline, or the host is unreachable. */
+      if (!evidence || (!evidence.ok && !evidence.status)) throw diagnose();
+      if (evidence.ok && looksLikeHtml(evidence.text)) throw diagnose();
+      if (!evidence.ok) throw diagnose();
+      if (expectedBytes && evidence.bytes < expectedBytes) {
+        /* A short body is a cut-off transfer, not a broken SDK: retry once
+           past the HTTP cache before deciding (this is the flaky-mobile-link
+           case, and a retry is the whole fix). */
+        const retry = await fetchKaminoVendor(evidence.url, { reload: true });
+        if (retry?.ok && retry.bytes >= expectedBytes) evidence = retry;
+        else throw diagnose();
       }
-      throw kaminoLoadError('KAMINO_SDK_UNAVAILABLE', lastCause);
+
+      /* 3 — the bytes look like a module. Evaluate them directly (a Blob URL
+         sidesteps a WRONG content-type, which browsers refuse to import) so a
+         transport-level MIME problem is not reported as a broken SDK. */
+      let blobCause = null;
+      if (!/javascript|ecmascript|text\/plain|octet-stream|^$/i.test(evidence.contentType)) {
+        kaminoDiagnostic('KAMINO_SDK_MIME', { url: evidence.url, contentType: evidence.contentType });
+      }
+      try {
+        const mod = await importKaminoFromText(evidence.text);
+        if (mod) {
+          const missing = kaminoModuleFailures(mod);
+          if (!missing.length) {
+            kaminoDiagnostic('KAMINO_SDK_RECOVERED', {
+              url: evidence.url,
+              bytes: evidence.bytes,
+              via: 'blob',
+              /* WHY the direct import failed — the difference matters: a MIME
+                 refusal is transport, a throw here is the same init error the
+                 blob path would have hit. */
+              directCause: String(lastCause?.message || lastCause || '').slice(0, 140)
+            });
+            return mod;
+          }
+          throw new Error(`incomplete bundle (missing: ${missing.join(', ')})`);
+        }
+      } catch (cause) {
+        blobCause = cause;
+      }
+
+      /* The module parsed but threw while starting — the honest, actionable
+         case, and the one the panel used to report as a generic "update the
+         app". `detail` carries the engine's own message. */
+      const blobMessage = String(blobCause?.message || '');
+      const transportNoise = /dynamically imported module|importing a module|failed to fetch/i.test(blobMessage);
+      throw diagnose({ initCause: transportNoise ? null : blobCause });
     })().catch((error) => {
       /* A failed load must never poison later retries: the panel's retry
          button (and the next mount) re-runs the whole candidate list. */
@@ -406,8 +628,13 @@ const reserveToView = (reserve, slot) => {
   const decimals = asNumber(stats.decimals, 0);
   const address58 = safeCall(() => reserve.address?.toBase58?.());
   const mint = safeCall(() => reserve?.getLiquidityMint?.())?.toBase58?.() || stats.mintAddress?.toBase58?.() || null;
-  const supplyApy = asNumber(safeCall(() => reserve.totalSupplyAPY?.(slot)));
-  const borrowApy = asNumber(safeCall(() => reserve.totalBorrowAPY?.(slot)));
+  /* The APY getters take the CURRENT SLOT. Feeding them `null` (the market
+     read's slot can be unavailable when that one call is throttled) computes
+     NaN and the panel loses both APY figures; with no slot known, the honest
+     answer is '—', not a number derived from a slot of zero. */
+  const apySlot = Number.isFinite(Number(slot)) ? Number(slot) : null;
+  const supplyApy = apySlot == null ? null : asNumber(safeCall(() => reserve.totalSupplyAPY?.(apySlot)));
+  const borrowApy = apySlot == null ? null : asNumber(safeCall(() => reserve.totalBorrowAPY?.(apySlot)));
   return {
     id: address58 || mint || reserve.symbol,
     symbol: reserve.symbol || stats.symbol || 'TOKEN',
@@ -425,11 +652,18 @@ const reserveToView = (reserve, slot) => {
     borrowed: decimalToNumber(safeCall(() => reserve.getBorrowedAmount?.()), decimals),
     supplyCap: decimalToNumber(stats.reserveDepositLimit, decimals),
     borrowCap: decimalToNumber(stats.reserveBorrowLimit, decimals),
-    /* Kamino's own oracle-derived price (USD), when the reserve summary
-       carries it. Used ONLY to compare a typed borrow amount against the
-       wallet's USD borrow limit before a wallet popup — never displayed as a
-       market price, never a risk input elsewhere. */
-    priceUsd: asNumber(stats.priceUSD),
+    /* Kamino's own oracle-derived price (USD). Used ONLY to compare a typed
+       borrow amount against the wallet's USD borrow limit before a wallet
+       popup — never displayed as a market price, never a risk input
+       elsewhere.
+       2026-09-22: this read `stats.priceUSD`, which does not exist on the
+       klend-sdk v5 reserve stats (ReserveDataType has no price field), so the
+       value was ALWAYS null and the borrow preflight silently let any amount
+       through. `getOracleMarketPrice()` is the v5 accessor. */
+    priceUsd: (() => {
+      const price = asNumber(safeCall(() => reserve.getOracleMarketPrice?.()));
+      return Number.isFinite(price) && price > 0 ? price : null;
+    })(),
     reserve
   };
 };
@@ -598,6 +832,143 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
 }
 
 /** Build one or more unsigned Kamino transactions for the connected wallet. */
+/**
+ * ─── THE klend-sdk v5 CALL MAP (verified, 2026-09-22) ───────────────────────
+ *
+ * The panel's Solana loan was written against an OLDER klend build, so its
+ * calls did not match the ^5.0.0 dependency this app installs. Read from
+ * node_modules/@kamino-finance/klend-sdk@5.15.4/dist/classes/action.d.ts —
+ * where `.d.ts` is the contract — the signatures are:
+ *
+ *   buildDepositTxns(market, amount, mint, owner, obligation, useV2Ixs,
+ *                    scopeRefreshConfig, extraComputeBudget?, includeAtaIxs?,
+ *                    requestElevationGroup?, initUserMetadata?, referrer?,
+ *                    currentSlot?, overrideElevationGroupRequest?)
+ *   buildBorrowTxns(… same …)      buildWithdrawTxns(… same …)
+ *   buildRepayTxns(market, amount, mint, owner, obligation, useV2Ixs,
+ *                  scopeRefreshConfig, currentSlot, payer?,
+ *                  extraComputeBudget?, includeAtaIxs?, …)
+ *
+ * and `getTransactions()` resolves to ONE `Transaction` — NOT the
+ * `{ preLendingTxn, lendingTxn, postLendingTxn }` object of the older API.
+ *
+ * What the old call sites actually passed, per action, and why each was wrong:
+ *
+ *   supply   (…, 0, true, false, false) → useV2Ixs=0, scopeRefreshConfig=TRUE
+ *            (an object is expected — `scopeRefreshConfig.scope` would be
+ *            undefined), includeAtaIxs=FALSE (no wSOL ATA is created or
+ *            closed, so a SOL deposit cannot work).
+ *   borrow   same, plus no compute-budget ix (extraComputeBudget=0).
+ *   withdraw same, includeAtaIxs=FALSE.
+ *   repay    (…, slot, undefined, 0, true, false, false) → useV2Ixs=SLOT (a
+ *            truthy number!), currentSlot=0, payer=true (a boolean where a
+ *            PublicKey goes).
+ *
+ * `scopeRefreshConfig: undefined` is deliberate: pushing Scope prices inside
+ * the transaction needs the Scope SDK's price feeds, which this app does not
+ * load — Kamino's own on-chain refresh instructions are enough.
+ *
+ * Kept as a separate, SDK-parameterised function so a test can pin the exact
+ * argument list against a stub, and so a future SDK bump fails in the test
+ * suite (test/solana-lending-precision.test.js reads the installed `.d.ts`).
+ */
+export const KAMINO_ACTION_CALL = {
+  /* The classic instruction set. `useV2Ixs` swaps in the newer
+     `addDepositIxV2`/`addBorrowIxV2` variants; both exist on-chain and the
+     classic path is the conservative choice — nothing here needs V2, and
+     opting in should be a deliberate, tested step, not a default. */
+  useV2Ixs: false,
+  /* No in-transaction Scope price push: that needs the Scope SDK's price
+     feeds, which this app does not load. Kamino's own refresh instructions
+     are what the transaction relies on. */
+  scopeRefreshConfig: undefined,
+  /* > 0 adds the compute-budget instruction (the SDK's own default). */
+  extraComputeBudget: 1_000_000,
+  /* Create/close the wSOL and token ATAs. Without this a SOL deposit or
+     withdrawal builds a transaction that cannot run. */
+  includeAtaIxs: true
+};
+
+export async function buildKaminoActionTransactions({ sdk, action, market, mint, owner, obligationOrPda, amountWei, slot, BN } = {}) {
+  const { KaminoAction } = sdk || {};
+  if (typeof KaminoAction !== 'object' && typeof KaminoAction !== 'function') return { ok: false, code: 'KAMINO_SDK_FAILED' };
+  const amount = new BN(amountWei.toString());
+  const { useV2Ixs, scopeRefreshConfig, extraComputeBudget, includeAtaIxs } = KAMINO_ACTION_CALL;
+  const common = [market, amount, mint, owner, obligationOrPda, useV2Ixs, scopeRefreshConfig, extraComputeBudget, includeAtaIxs];
+  try {
+    if (action === 'supply') return { ok: true, built: await KaminoAction.buildDepositTxns(...common) };
+    if (action === 'borrow') return { ok: true, built: await KaminoAction.buildBorrowTxns(...common) };
+    if (action === 'withdraw') return { ok: true, built: await KaminoAction.buildWithdrawTxns(...common) };
+    if (action === 'repay') {
+      /* buildRepayTxns takes the CURRENT SLOT as its 8th argument (the older
+         API took it after `obligation`; the new one takes useV2Ixs and the
+         scope config first). `payer`/`referrer` are left to their defaults. */
+      return {
+        ok: true,
+        built: await KaminoAction.buildRepayTxns(market, amount, mint, owner, obligationOrPda, useV2Ixs, scopeRefreshConfig, Number.isFinite(slot) ? slot : 0, undefined, extraComputeBudget, includeAtaIxs)
+      };
+    }
+  } catch (cause) {
+    const code = String(cause?.code || cause?.message || '').trim();
+    return { ok: false, code: /KAMINO|RPC|429/.test(code) ? code : 'KAMINO_TX_BUILD_FAILED', detail: String(cause?.message || cause || '').slice(0, 160) };
+  }
+  return { ok: false, code: 'UNKNOWN_ACTION' };
+}
+
+/**
+ * A built Kamino action → the ordered list of unsigned transactions, in the
+ * shape the panel signs.
+ *
+ * klend-sdk v5 returns ONE legacy `Transaction` from `getTransactions()`. The
+ * older API (and the panel's own header comment) returned
+ * `{ preLendingTxn, lendingTxn, postLendingTxn }`. Both are accepted, because
+ * the failure mode of guessing wrong is the worst one available: every entry
+ * is `undefined`, the list filters down to empty, and the panel reports
+ * SUCCESS having never asked the wallet for anything. An empty result is
+ * therefore an explicit, named failure.
+ *
+ * `versioned` travels WITH each transaction: v5 builds legacy transactions and
+ * the panel used to hand every one of them to the wallet as
+ * `{ versioned: true }`, i.e. `VersionedTransaction.deserialize()` on legacy
+ * bytes — which throws before the user ever sees a signature request.
+ */
+export async function collectKaminoTransactions(built, action) {
+  const produced = typeof built?.getTransactions === 'function' ? await built.getTransactions() : null;
+  const entries = [];
+  const push = (id, tx) => { if (tx) entries.push({ id, tx }); };
+  if (produced && typeof produced.serialize === 'function') {
+    /* v5: a single transaction (all instructions, including the ATA setup and
+       cleanup, already inside it). */
+    push(action, produced);
+  } else if (Array.isArray(produced)) {
+    produced.forEach((tx, index) => push(index === 0 ? action : `${action}-${index + 1}`, tx));
+  } else if (produced && typeof produced === 'object') {
+    push('preparing', produced.preLendingTxn);
+    push(action, produced.lendingTxn);
+    push('cleanup', produced.postLendingTxn);
+  }
+  if (!entries.length && typeof built?.getVersionedTransactions === 'function') {
+    const versioned = await built.getVersionedTransactions();
+    if (versioned && typeof versioned.serialize === 'function') push(action, versioned);
+    else if (versioned && typeof versioned === 'object') {
+      push('preparing', versioned.preLendingTxn);
+      push(action, versioned.lendingTxn);
+      push('cleanup', versioned.postLendingTxn);
+    }
+  }
+  return entries;
+}
+
+/** Legacy `Transaction` vs `VersionedTransaction`, without importing either. */
+export function isVersionedTransaction(tx) {
+  try {
+    if (!tx) return false;
+    if (typeof tx.version === 'number') return true;
+    return typeof tx?.message?.version === 'number';
+  } catch { return false; }
+}
+
+/** Build one or more unsigned Kamino transactions for the connected wallet. */
 export async function buildSolanaLendingTransactions({ action, asset, amount, wallet, rpcUrl = null } = {}) {
   if (!wallet) return { ok: false, code: 'SOLANA_WALLET_REQUIRED' };
   if (!asset?.address) return { ok: false, code: 'SOLANA_ASSET_REQUIRED' };
@@ -605,10 +976,8 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
   if (amountWei == null || amountWei <= 0n) return { ok: false, code: 'AMOUNT_REQUIRED' };
 
   const candidates = await lendingRpcCandidates(rpcUrl);
-  const [{ KaminoAction, KaminoMarket, VanillaObligation, PROGRAM_ID, DEFAULT_RECENT_SLOT_DURATION_MS }, { default: BN }] = await Promise.all([
-    sdkPromise(),
-    import('bn.js')
-  ]);
+  const [sdk, { default: BN }] = await Promise.all([sdkPromise(), import('bn.js')]);
+  const { KaminoMarket, VanillaObligation, PROGRAM_ID, DEFAULT_RECENT_SLOT_DURATION_MS } = sdk;
   const owner = new PublicKey(wallet);
   const mint = new PublicKey(asset.address);
 
@@ -616,7 +985,7 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
      signature exists yet to duplicate. A node that 429s mid-build must not be
      the reason a valid action dies. */
   const attempts = [];
-  let txs = null;
+  let entries = null;
   let builtUrl = null;
   for (const url of candidates) {
     const connection = new Connection(url, { commitment: 'confirmed' });
@@ -645,30 +1014,37 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
       }
       const obligationOrPda = obligation || new VanillaObligation(PROGRAM_ID);
       const slot = action === 'repay' ? await connection.getSlot('processed') : undefined;
-      let built;
-      if (action === 'supply') {
-        built = await KaminoAction.buildDepositTxns(market, new BN(amountWei.toString()), mint, owner, obligationOrPda, 0, true, false, false);
-      } else if (action === 'borrow') {
-        if (!obligation) return { ok: false, code: 'SOLANA_COLLATERAL_REQUIRED' };
-        built = await KaminoAction.buildBorrowTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
-      } else if (action === 'withdraw') {
-        if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
-        built = await KaminoAction.buildWithdrawTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
-      } else if (action === 'repay') {
-        if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
-        built = await KaminoAction.buildRepayTxns(market, new BN(amountWei.toString()), mint, owner, obligation, slot, undefined, 0, true, false, false);
-      } else {
-        return { ok: false, code: 'UNKNOWN_ACTION' };
+
+      if (action === 'borrow' && !obligation) return { ok: false, code: 'SOLANA_COLLATERAL_REQUIRED' };
+      if ((action === 'withdraw' || action === 'repay') && !obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
+
+      const result = await buildKaminoActionTransactions({
+        sdk, action, market, mint, owner,
+        obligationOrPda: action === 'supply' ? obligationOrPda : obligation,
+        amountWei, slot, BN
+      });
+      if (!result.ok) {
+        /* An SDK-side refusal (bad amount, no collateral, …) is final for this
+           action; only transport failures are worth retrying on another node. */
+        if (result.code !== 'KAMINO_TX_BUILD_FAILED') return result;
+        throw new Error(result.detail || result.code);
       }
 
-      txs = await built.getTransactions();
+      entries = await collectKaminoTransactions(result.built, action);
+      if (!entries.length) {
+        return {
+          ok: false,
+          code: 'KAMINO_TX_BUILD_EMPTY',
+          detail: 'the SDK returned no transaction for this action — the klend-sdk API changed shape'
+        };
+      }
       builtUrl = url;
       break;
     } catch (cause) {
       attempts.push({ url, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
     }
   }
-  if (!txs) {
+  if (!entries) {
     await resetRememberedSolanaRpc();
     const failure = lendingRpcFailure(attempts);
     return { ok: false, code: failure.code === 'KAMINO_MARKET_UNAVAILABLE' ? 'KAMINO_MARKET_UNAVAILABLE' : failure.code, detail: failure.detail };
@@ -679,16 +1055,25 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
      opens), so every transaction build threw ReferenceError before a wallet
      was ever asked — «Solana deposit does not work» in production. */
   const encode = (tx) => tx ? bytesToBase64(tx.serialize({ requireAllSignatures: false, verifySignatures: false })) : null;
+  const transactions = entries
+    .map(({ id, tx }) => ({
+      id,
+      transaction: encode(tx),
+      /* Per-transaction, not per-panel: the wallet layer maps `versioned: true`
+         to transaction VERSION 0 and `false` to 'legacy' — deserialising one
+         as the other throws. */
+      versioned: isVersionedTransaction(tx)
+    }))
+    .filter((entry) => entry.transaction);
+  if (!transactions.length) {
+    return { ok: false, code: 'KAMINO_TX_BUILD_EMPTY', detail: 'the built transactions could not be serialized' };
+  }
   return {
     ok: true,
     action,
     amount: String(amount),
     amountWei: amountWei.toString(),
-    transactions: [
-      { id: 'preparing', transaction: encode(txs.preLendingTxn) },
-      { id: action, transaction: encode(txs.lendingTxn) },
-      { id: 'cleanup', transaction: encode(txs.postLendingTxn) }
-    ].filter((entry) => entry.transaction),
+    transactions,
     protocol: 'kamino-klend',
     chainId: SOLANA_LENDING_CHAIN_ID
   };

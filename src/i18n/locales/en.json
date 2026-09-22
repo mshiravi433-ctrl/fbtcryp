@@ -10130,7 +10130,10 @@
       "BAD_ADDRESS": "This address is not valid.",
       "NO_TOKEN_REGISTRY": "The token list for this market could not be loaded.",
       "KAMINO_SDK_MISSING": "The Kamino module is missing from this build — please update the app.",
-      "KAMINO_SDK_FAILED": "The Kamino module failed to start. Please update the app and try again."
+      "KAMINO_SDK_FAILED": "The Kamino module failed to start. Please update the app and try again.",
+      "KAMINO_SDK_TRUNCATED": "The Kamino module downloaded only part of the way — the connection was cut off. Try again on a steadier link.",
+      "KAMINO_SDK_INIT_FAILED": "The Kamino module was downloaded but failed to start. Please update the app, and if it repeats, send this message to support.",
+      "KAMINO_TX_BUILD_EMPTY": "Kamino did not return a transaction for this action — nothing was sent and no fee was charged."
     },
     "rateUnknown": "live rate unavailable right now",
     "alerts": {

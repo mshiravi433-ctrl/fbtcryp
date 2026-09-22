@@ -1242,7 +1242,10 @@
       "BAD_ADDRESS": "Bu adres geçerli değil.",
       "NO_TOKEN_REGISTRY": "Bu piyasanın token listesi yüklenemedi.",
       "KAMINO_SDK_MISSING": "Kamino modülü bu sürümde eksik — uygulamayı güncelleyin.",
-      "KAMINO_SDK_FAILED": "Kamino modülü başlatılamadı. Uygulamayı güncelleyip tekrar deneyin."
+      "KAMINO_SDK_FAILED": "Kamino modülü başlatılamadı. Uygulamayı güncelleyip tekrar deneyin.",
+      "KAMINO_SDK_TRUNCATED": "Kamino modülü yalnızca kısmen indirildi — bağlantı kesildi. Daha stabil bir bağlantıyla tekrar deneyin.",
+      "KAMINO_SDK_INIT_FAILED": "Kamino modülü indirildi ancak başlatılamadı. Uygulamayı güncelleyin; tekrarlarsa bu mesajı desteğe gönderin.",
+      "KAMINO_TX_BUILD_EMPTY": "Kamino bu işlem için işlem döndürmedi — hiçbir şey gönderilmedi ve ücret alınmadı."
     },
     "ratesUpdated": "Oranlar lending sözleşmelerinden (Morpho/Aave) okunur — otomatik olarak yenilenir.",
     "connectWallet": "Cüzdanı bağla",
