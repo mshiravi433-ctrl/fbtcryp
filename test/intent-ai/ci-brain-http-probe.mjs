@@ -64,7 +64,11 @@ async function req(path, { method = 'GET', body = null, device = DEVICE } = {}) 
 /* ── the mount exists and answers in JSON ─────────────────────────────────── */
 const caps = await req('/system/capabilities');
 t('the gateway is mounted and answers the capability matrix', caps.status === 200 && Object.keys(caps.body?.capabilities || {}).length === 30, JSON.stringify({ status: caps.status, modules: Object.keys(caps.body?.capabilities || {}).length }));
-t('a capability that does not exist is reported as unavailable over HTTP', caps.body?.capabilities?.etf === 'UNAVAILABLE' && caps.body?.capabilities?.funds === 'UNAVAILABLE', JSON.stringify(caps.body?.capabilities || null).slice(0, 120));
+/* ETF is READ_ONLY only when ALPHA_VANTAGE_API_KEY is set; funds/prediction
+   stay hard-UNAVAILABLE in this phase regardless. */
+t('funds stay unavailable over HTTP (no fake activation)', caps.body?.capabilities?.funds === 'UNAVAILABLE', JSON.stringify(caps.body?.capabilities || null).slice(0, 120));
+t('prediction stays unavailable over HTTP', caps.body?.capabilities?.prediction === 'UNAVAILABLE', JSON.stringify({ prediction: caps.body?.capabilities?.prediction }).slice(0, 80));
+t('etf is UNAVAILABLE without key or READ_ONLY/DEGRADED with key', ['UNAVAILABLE', 'READ_ONLY', 'DEGRADED'].includes(caps.body?.capabilities?.etf), JSON.stringify({ etf: caps.body?.capabilities?.etf }).slice(0, 80));
 t('the §40 audit travels with the matrix', caps.body?.definitionOfDone?.verdict === 'COMPLETE' && caps.body?.definitionOfDone?.modules === 30, JSON.stringify(caps.body?.definitionOfDone || null).slice(0, 140));
 t('the capability contract is published for module owners to diff against', Array.isArray(caps.body?.contract) ? caps.body.contract.length > 0 : Boolean(caps.body?.contract), JSON.stringify(Object.keys(caps.body || {})));
 

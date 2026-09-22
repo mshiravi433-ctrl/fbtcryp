@@ -508,15 +508,199 @@ export function createModules(ctx = {}) {
     execute: NA('the brain cannot open a position on this venue'), verify: NA('nothing is executed'),
     recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'SAFE_ANSWER: report the market read only' } })
   });
-  const commodities = rwaSource('commodities', 'Commodities (Ostium)', 'commodities');
+  const commodities = defineModule({
+    ...rwaSource('commodities', 'Commodities (Ostium + gold spot)', 'commodities').definition,
+    id: 'commodities',
+    name: 'Commodities',
+    /* Prefer Ostium RWA rows; when Alpha Vantage gold spot is available, merge
+       XAU as an additional honest instrument. Never invent a row. */
+    read: async (input = {}) => {
+      const ostium = await io('rwaMarkets')({});
+      const gold = await safeGold();
+      const ostiumRows = (ostium?.ok && Array.isArray(ostium.rows))
+        ? ostium.rows.filter((r) => r.category === 'commodities')
+        : [];
+      const goldRows = (gold?.ok && Array.isArray(gold.instruments))
+        ? gold.instruments
+        : (gold?.ok && gold.instrument ? [gold.instrument] : []);
+      /* Deduplicate by symbol so XAU from both feeds does not double-count. */
+      const seen = new Set();
+      const rows = [];
+      for (const r of [...goldRows, ...ostiumRows]) {
+        const sym = String(r?.symbol || '').toUpperCase();
+        if (!sym || seen.has(sym)) continue;
+        seen.add(sym);
+        rows.push(r);
+      }
+      if (!rows.length) {
+        if (ostium && ostium.ok === false && gold && gold.ok === false) {
+          return unavailable(ostium.code || gold.code || 'COMMODITIES_UNAVAILABLE');
+        }
+        return unavailable('NO_INSTRUMENTS_IN_CATEGORY');
+      }
+      const stale = ostium?.stale === true || gold?.stale === true;
+      return ok(stale ? 'PARTIAL' : 'OK', {
+        rows,
+        instruments: rows.length,
+        filteredTo: 'commodities',
+        goldSpot: goldRows[0] || null,
+        ostiumCount: ostiumRows.length,
+        venue: goldRows.length && ostiumRows.length ? 'ostium+alpha-vantage' : (goldRows.length ? 'alpha-vantage' : 'ostium'),
+        readOnly: true,
+        executes: false,
+        source: goldRows.length ? 'rwa-feed:ostium + gold-feed:alpha-vantage' : 'rwa-feed:ostium',
+        stale
+      }, { stale, reason: stale ? 'SOURCE_STALE' : null });
+    },
+    healthCheck: healthFrom(['rwa-feed', 'gold-feed']),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'read-only market access; gold spot is Alpha Vantage when configured, other commodities are Ostium; no tradable route is wired'
+    })
+  });
+  async function safeGold() {
+    try {
+      return await io('goldSpot')({});
+    } catch {
+      return { ok: false, code: 'GOLD_FEED_UNAVAILABLE' };
+    }
+  }
   const forex = rwaSource('forex', 'Forex (Ostium)', 'forex');
-  const etf = defineModule({ ...commodities.definition, id: 'etf', name: 'ETF', capability: CAPABILITY.UNAVAILABLE, tools: ['etf.read'], state: ['markets'], permissions: { max: PERMISSION.READ }, errors: ['NO_DATA_SOURCE'], fallback: [], events: [], getState: async () => ok('UNAVAILABLE', null, { reason: 'NO_DATA_SOURCE' }), read: async () => unavailable('NO_DATA_SOURCE', { detail: 'no ETF data source is wired in this deployment; the spread must not inherit the commodities read' }), quote: NA('no ETF data source exists in this build, so there is nothing to quote'), prepare: NA('no route to prepare; declaring one would let the brain promise an ETF order'), simulate: NA('no ETF instrument to simulate against'), execute: NA('no trading route for ETFs exists server-side'), verify: NA('nothing is executed, so there is nothing to verify'), recover: NA('an absent source has no recovery path; the module reports UNAVAILABLE instead'), healthCheck: async () => ({ status: 'DOWN', detail: 'no ETF data source is wired in this deployment' }), capabilities: async () => ({ operations: [], executes: false, reason: 'no ETF feed exists in this build; the brain must say so rather than approximate from crypto data' }) });
+
+  /* ── ETF: Alpha Vantage when ALPHA_VANTAGE_API_KEY is set ─────────────── */
+  /* Capability starts as UNAVAILABLE only when the key is missing. With the
+     key present the module is READ_ONLY and health reflects real probes
+     (UNOBSERVED → HEALTHY / DEGRADED / DOWN). Funds stay hard-UNAVAILABLE. */
+  const etfKeyConfigured = () => {
+    const k = process.env.ALPHA_VANTAGE_API_KEY;
+    return typeof k === 'string' && k.trim().length >= 8;
+  };
+  const etf = defineModule({
+    id: 'etf',
+    name: 'ETF',
+    capability: etfKeyConfigured() ? CAPABILITY.READ_ONLY : CAPABILITY.UNAVAILABLE,
+    tools: ['etf.read'],
+    state: ['markets'],
+    permissions: { max: PERMISSION.READ },
+    errors: ['NO_DATA_SOURCE', 'PROVIDER_NOT_CONFIGURED', 'PROVIDER_DOWN', 'RATE_LIMITED', 'STALE_DATA'],
+    fallback: ['stale ETF snapshot flagged as such'],
+    events: ['PRICE_CHANGED'],
+    getState: async () => {
+      if (!etfKeyConfigured()) return ok('UNAVAILABLE', null, { reason: 'PROVIDER_NOT_CONFIGURED' });
+      return ok('OK', readState('markets')?.etf ?? null);
+    },
+    read: async (input = {}) => {
+      if (!etfKeyConfigured()) {
+        return unavailable('PROVIDER_NOT_CONFIGURED', {
+          detail: 'ALPHA_VANTAGE_API_KEY is not set; no ETF data source is wired in this deployment'
+        });
+      }
+      const out = await io('etfMarkets')({ symbols: input.symbols || input.assets || null, category: input.category || null });
+      if (!out || out.ok !== true) {
+        return unavailable(out?.code || 'ETF_FEED_UNAVAILABLE', {
+          detail: String(out?.detail || '').slice(0, 160),
+          source: 'etf-feed'
+        });
+      }
+      const instruments = Array.isArray(out.instruments) ? out.instruments : (Array.isArray(out.rows) ? out.rows : []);
+      if (!instruments.length) {
+        return unavailable('NO_ETF_QUOTES', { detail: 'provider answered but no allowlisted symbols survived' });
+      }
+      return ok(out.stale ? 'PARTIAL' : 'OK', {
+        ...out,
+        instruments,
+        rows: instruments,
+        count: instruments.length,
+        readOnly: true,
+        executes: false,
+        provider: out.provider || 'alpha-vantage',
+        source: out.source || 'etf-feed:alpha-vantage'
+      }, {
+        stale: out.stale === true,
+        reason: out.stale ? (out.staleReason || 'SOURCE_STALE') : (out.partial ? 'PARTIAL_SOURCE' : null)
+      });
+    },
+    quote: NA('ETF quotes are market reads only; no order route exists server-side for ETFs'),
+    prepare: NA('no ETF trading route to prepare; declaring one would let the brain promise an order it cannot place'),
+    simulate: NA('no ETF execution path to simulate against'),
+    execute: NA('no trading route for ETFs exists server-side; this module is read-only'),
+    verify: NA('nothing is executed, so there is nothing to verify'),
+    recover: async () => ({
+      status: 'RECOVERED',
+      data: { strategy: 'SERVE_STALE_WITH_FLAG then REFRESH', note: 'a rate-limited or down probe serves the last valid cache with stale=true' }
+    }),
+    healthCheck: async () => {
+      if (!etfKeyConfigured()) {
+        return {
+          status: 'UNAVAILABLE',
+          detail: 'ALPHA_VANTAGE_API_KEY is not configured; ETF module stays dark rather than inventing prices'
+        };
+      }
+      /* Prefer the process probe ledger; fall back to source health samples. */
+      try {
+        const { alphaVantageHealth, getAlphaVantageProbeState } = await import('../providers/alphaVantage.js');
+        const probe = getAlphaVantageProbeState();
+        const h = alphaVantageHealth({
+          hasValidCache: probe.lastOkAt > 0,
+          servingStale: false
+        });
+        /* Map provider health onto the brain's vocabulary. UNOBSERVED is not a
+           failure — cold start with a key is not an outage. */
+        if (h.status === 'UNOBSERVED') {
+          return { status: 'UNKNOWN', detail: h.detail, configured: true, executes: false };
+        }
+        if (h.status === 'HEALTHY') return { status: 'HEALTHY', detail: h.detail, configured: true, lastOkAt: h.lastOkAt, executes: false };
+        if (h.status === 'DEGRADED') return { status: 'DEGRADED', detail: h.detail, configured: true, lastOkAt: h.lastOkAt, executes: false };
+        if (h.status === 'DOWN') return { status: 'DOWN', detail: h.detail, configured: true, executes: false };
+        return { status: 'UNAVAILABLE', detail: h.detail, configured: false, executes: false };
+      } catch {
+        const rows = healthSnapshot(['etf-feed']);
+        if (!rows.length) return { status: 'UNKNOWN', detail: 'provider configured; no health samples yet', configured: true };
+        const down = rows.filter((r) => r.status === 'DOWN');
+        const degraded = rows.filter((r) => r.status === 'DEGRADED');
+        return {
+          status: down.length === rows.length ? 'DOWN' : down.length || degraded.length ? 'DEGRADED' : 'HEALTHY',
+          detail: down.length ? down.map((d) => d.lastError || 'down').join(' ') : 'etf-feed answering',
+          sources: rows,
+          executes: false
+        };
+      }
+    },
+    capabilities: async () => (etfKeyConfigured()
+      ? {
+        operations: ['read'],
+        executes: false,
+        provider: 'alpha-vantage',
+        reason: 'read-only ETF quotes and profiles via Alpha Vantage; no buy/sell/order path exists in this phase'
+      }
+      : {
+        operations: [],
+        executes: false,
+        reason: 'ALPHA_VANTAGE_API_KEY is not set; the brain must say so rather than approximate from crypto data'
+      })
+  });
   const funds = defineModule({
-    ...etf.definition,
-    id: 'funds', name: 'Funds', capability: CAPABILITY.UNAVAILABLE,
-    tools: ['funds.read'], state: ['markets'], errors: ['NO_DATA_SOURCE'],
-    events: [], fallback: [], permissions: { max: PERMISSION.READ },
-    healthCheck: async () => ({ status: 'DOWN', detail: 'no fund data source is wired in this deployment' }),
+    id: 'funds',
+    name: 'Funds',
+    capability: CAPABILITY.UNAVAILABLE,
+    tools: ['funds.read'],
+    state: ['markets'],
+    errors: ['NO_DATA_SOURCE'],
+    events: [],
+    fallback: [],
+    permissions: { max: PERMISSION.READ },
+    getState: async () => ok('UNAVAILABLE', null, { reason: 'NO_DATA_SOURCE' }),
+    read: async () => unavailable('NO_DATA_SOURCE', {
+      detail: 'no fund data source is wired in this deployment; funds stay unavailable in this phase'
+    }),
+    quote: NA('no fund data source exists in this build'),
+    prepare: NA('no fund route to prepare'),
+    simulate: NA('no fund instrument to simulate'),
+    execute: NA('no trading route for funds exists server-side'),
+    verify: NA('nothing is executed'),
+    recover: NA('an absent source has no recovery path'),
+    healthCheck: async () => ({ status: 'UNAVAILABLE', detail: 'no fund data source is wired in this deployment' }),
     capabilities: async () => ({ operations: [], executes: false, reason: 'no fund feed exists in this build' })
   });
   /* `rwa` reads the WHOLE venue (label 'all'): spreading commodities.definition

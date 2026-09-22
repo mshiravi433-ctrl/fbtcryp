@@ -30,6 +30,14 @@ import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, fetchThorTxStatus, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
+import {
+  getEtfList,
+  getEtfQuote,
+  getEtfProfile,
+  getGoldSpot,
+  getGoldHistory,
+  getEtfGoldStatus
+} from './etfGold.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
 import { buildMarketPulse, buildSolanaRadar, explainSignal, localExplanation, sanitizeEvidence } from './signalEngine.js';
@@ -3720,6 +3728,126 @@ app.get('/api/search', (req, res) => {
  * decides how long to keep it, the server only decides how often to refetch.
  */
 app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
+
+/*
+ * ETF + Gold (Alpha Vantage) — read-only market data.
+ * ---------------------------------------------------------------------------
+ * Keys stay server-side (ALPHA_VANTAGE_API_KEY). No buy/sell/order routes.
+ * Cache TTLs live in the provider (15m quotes, 24h profiles, 12m gold spot,
+ * 12h gold history). The client fetches the list once; it must not poll per
+ * symbol and must pause while the tab is hidden.
+ *
+ * When the key is missing every endpoint returns a clear PROVIDER_NOT_CONFIGURED
+ * payload rather than zeros or a fabricated chart.
+ */
+function sendEtfGold(res, payload, ttlMs = 900_000) {
+  const secs = Math.max(30, Math.floor(ttlMs / 1000));
+  res.set('cache-control', `public, max-age=${secs}, s-maxage=${secs}, stale-while-revalidate=${secs * 4}`);
+  if (payload?.meta?.stale) res.set('x-data-stale', '1');
+  if (payload?.meta?.cached) res.set('x-cache', 'HIT');
+  const status = payload?.ok === false ? (payload.status || 502) : 200;
+  /* Never leak status as a body field the client confuses with HTTP. */
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'status') && payload.ok === false) {
+    const { status: _httpStatus, ...body } = payload;
+    return res.status(status).json(body);
+  }
+  return res.status(status).json(payload);
+}
+
+app.get('/api/etf', async (req, res) => {
+  const category = String(req.query.category || '').toLowerCase();
+  const cat = ['bitcoin', 'ethereum', 'gold'].includes(category) ? category : null;
+  try {
+    const payload = await getEtfList({ category: cat });
+    return sendEtfGold(res, payload, 900_000);
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: 'ETF_LIST_FAILED',
+      detail: String(err?.message || err).slice(0, 160),
+      provider: 'alpha-vantage',
+      readOnly: true,
+      executes: false
+    });
+  }
+});
+
+app.get('/api/etf/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=30, s-maxage=30, stale-while-revalidate=120');
+  return res.json(getEtfGoldStatus());
+});
+
+app.get('/api/etf/:symbol/profile', async (req, res) => {
+  const symbol = String(req.params.symbol || '').toUpperCase();
+  try {
+    const payload = await getEtfProfile(symbol);
+    return sendEtfGold(res, payload, 86_400_000);
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: 'ETF_PROFILE_FAILED',
+      detail: String(err?.message || err).slice(0, 160),
+      provider: 'alpha-vantage',
+      readOnly: true,
+      executes: false
+    });
+  }
+});
+
+app.get('/api/etf/:symbol', async (req, res) => {
+  const symbol = String(req.params.symbol || '').toUpperCase();
+  try {
+    const payload = await getEtfQuote(symbol);
+    return sendEtfGold(res, payload, 900_000);
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: 'ETF_QUOTE_FAILED',
+      detail: String(err?.message || err).slice(0, 160),
+      provider: 'alpha-vantage',
+      readOnly: true,
+      executes: false
+    });
+  }
+});
+
+app.get('/api/gold/spot', async (_req, res) => {
+  try {
+    const payload = await getGoldSpot();
+    return sendEtfGold(res, payload, 720_000);
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: 'GOLD_SPOT_FAILED',
+      detail: String(err?.message || err).slice(0, 160),
+      provider: 'alpha-vantage',
+      readOnly: true,
+      executes: false
+    });
+  }
+});
+
+app.get('/api/gold/history', async (req, res) => {
+  const interval = String(req.query.interval || 'daily').toLowerCase();
+  try {
+    const payload = await getGoldHistory({ interval });
+    return sendEtfGold(res, payload, 43_200_000);
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: 'GOLD_HISTORY_FAILED',
+      detail: String(err?.message || err).slice(0, 160),
+      provider: 'alpha-vantage',
+      readOnly: true,
+      executes: false
+    });
+  }
+});
+
+app.get('/api/gold/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=30, s-maxage=30, stale-while-revalidate=120');
+  return res.json(getEtfGoldStatus());
+});
 
 /*
  * WHALE TRACKING — recent large transfers across our supported chains.

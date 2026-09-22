@@ -94,6 +94,7 @@ const GROUPS = [
           ]
         : []),
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
+      { to: '/etf', key: 'nav.etf', Icon: IconBriefcase, hue: 'var(--rgb-8)' },
       /*
        * Spend crypto on real things. Sits in `markets` rather than `more`
        * because it is a destination people arrive wanting, not a setting they

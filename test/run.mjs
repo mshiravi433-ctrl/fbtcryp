@@ -53,6 +53,10 @@ import './futures-engine-probe.mjs';
    product failure, not a subsystem detail. The HTTP half is its own script
    (`npm run test:central-brain-http`) since it boots the whole 286-route server. */
 import './intent-ai/ci-brain-turns-probe.mjs';
+/* ETF + Gold (Alpha Vantage) — real provider with mocked fetch: normalise,
+   rate-limit, stale-if-error, single-flight, secret non-leak, and the Central
+   Brain module health matrix. HTTP contract lives in test:etf-gold-api. */
+import './etf-gold-provider-probe.mjs';
 /* Operations Center restoration: real monitor engine, conditional orders,
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';

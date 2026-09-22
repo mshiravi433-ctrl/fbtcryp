@@ -157,11 +157,22 @@ export function discoverOpportunities({ globalSnapshot = null, now = Date.now() 
   const rows = [];
   const coverage = {};
   for (const cls of TRADITIONAL_CLASSES) {
-    if (cls === 'etf' || cls === 'funds') {
-      coverage[cls] = { status: 'NO_FEED', detail: 'no live feed for this class in this deployment; opportunities arrive only when the caller names them' };
+    if (cls === 'funds') {
+      coverage[cls] = { status: 'NO_FEED', detail: 'no live feed for funds in this deployment; opportunities arrive only when the caller names them' };
       continue;
     }
+    /* ETF arrives only when the global-intel snapshot actually carries an etf
+       domain (Alpha Vantage-backed). An absent domain is NO_FEED — not a
+       transient UNREADABLE — so discovery stays honest about what is wired. */
     const domain = domains[cls];
+    if (cls === 'etf' && (!domain || domain.status !== 'OK')) {
+      coverage[cls] = {
+        status: domain?.status === 'UNAVAILABLE' || domain?.status === 'UNREADABLE' ? 'UNREADABLE' : 'NO_FEED',
+        reason: domain?.reason || null,
+        detail: domain ? (domain.reason || 'etf domain present but not OK') : 'no etf domain in the global snapshot; opportunities arrive when Alpha Vantage is configured and the domain is seeded'
+      };
+      continue;
+    }
     if (!domain || domain.status !== 'OK') {
       coverage[cls] = { status: 'UNREADABLE', reason: domain?.reason || 'UNREAD' };
       continue;
