@@ -35,6 +35,7 @@ const POOL_ROW = { project: 'aave-v3', chain: 'Base', symbol: 'USDC', exposure: 
 
 const providerWith = (over = {}) => makeAaveProvider({
   pool: AAVE_V3_BASE.pool,
+  addressesProvider: AAVE_V3_BASE.addressesProvider,
   aToken: AAVE_V3_BASE.aUsdc,
   usdc: AAVE_V3_BASE.usdc,
   pinnedPool: AAVE_V3_BASE.pool,

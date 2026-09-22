@@ -391,14 +391,25 @@ export function preflightSolanaAction({ action, asset, amount, snapshot } = {}) 
   return finish(false, 'UNKNOWN_ACTION');
 }
 
+/**
+ * Call one SDK/reserve accessor and swallow its throw: a single method that
+ * reverts or throws reads as `null` — the same shape an absent field already
+ * produces — instead of taking the whole market read down with it. (§28: a
+ * partial read is labelled, it never becomes a fatal one.)
+ */
+const safeCall = (fn) => {
+  try { return typeof fn === 'function' ? fn() : null; } catch { return null; }
+};
+
 const reserveToView = (reserve, slot) => {
   const stats = reserve?.stats || {};
   const decimals = asNumber(stats.decimals, 0);
-  const mint = reserve?.getLiquidityMint?.()?.toBase58?.() || stats.mintAddress?.toBase58?.() || null;
-  const supplyApy = asNumber(reserve.totalSupplyAPY?.(slot));
-  const borrowApy = asNumber(reserve.totalBorrowAPY?.(slot));
+  const address58 = safeCall(() => reserve.address?.toBase58?.());
+  const mint = safeCall(() => reserve?.getLiquidityMint?.())?.toBase58?.() || stats.mintAddress?.toBase58?.() || null;
+  const supplyApy = asNumber(safeCall(() => reserve.totalSupplyAPY?.(slot)));
+  const borrowApy = asNumber(safeCall(() => reserve.totalBorrowAPY?.(slot)));
   return {
-    id: reserve.address?.toBase58?.() || mint || reserve.symbol,
+    id: address58 || mint || reserve.symbol,
     symbol: reserve.symbol || stats.symbol || 'TOKEN',
     name: reserve.symbol || stats.symbol || 'Solana asset',
     address: mint,
@@ -410,8 +421,8 @@ const reserveToView = (reserve, slot) => {
     borrowApyPct: borrowApy,
     loanToValuePct: asNumber(stats.loanToValue) == null ? null : asNumber(stats.loanToValue) * 100,
     liquidationThresholdPct: asNumber(stats.liquidationThreshold) == null ? null : asNumber(stats.liquidationThreshold) * 100,
-    availableLiquidity: decimalToNumber(reserve.getLiquidityAvailableAmount?.(), decimals),
-    borrowed: decimalToNumber(reserve.getBorrowedAmount?.(), decimals),
+    availableLiquidity: decimalToNumber(safeCall(() => reserve.getLiquidityAvailableAmount?.()), decimals),
+    borrowed: decimalToNumber(safeCall(() => reserve.getBorrowedAmount?.()), decimals),
     supplyCap: decimalToNumber(stats.reserveDepositLimit, decimals),
     borrowCap: decimalToNumber(stats.reserveBorrowLimit, decimals),
     /* Kamino's own oracle-derived price (USD), when the reserve summary
@@ -471,9 +482,33 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     throw lendingRpcFailure(attempts);
   }
 
-  const reserves = market.getReserves()
-    .map((reserve) => reserveToView(reserve, slot))
-    .filter((reserve) => reserve.status !== 'hidden' && reserve.status !== 'obsolete');
+  /* The reserve LIST itself failing is a market failure — the SDK decoded
+     the market but its reserve accessor threw — so it is thrown as a coded
+     error, never as an empty market pretending to be healthy. */
+  let rawReserves = [];
+  try {
+    rawReserves = market.getReserves();
+  } catch (cause) {
+    throw solanaReadError(cause, 'KAMINO_MARKET_UNAVAILABLE');
+  }
+
+  /* ONE corrupted/throwing reserve must not kill the whole market (the
+     EVM engine already works this way): each reserve is converted inside its
+     own try/catch — a failure is SKIPPED and named in `failures` so the panel
+     can say a market is PARTIALLY read rather than down. */
+  const reserves = [];
+  const reserveFailures = [];
+  for (const reserve of Array.isArray(rawReserves) ? rawReserves : []) {
+    try {
+      const view = reserveToView(reserve, slot);
+      if (view.status !== 'hidden' && view.status !== 'obsolete') reserves.push(view);
+    } catch (cause) {
+      reserveFailures.push({
+        reserve: safeCall(() => reserve?.address?.toBase58?.()) || reserve?.symbol || 'unknown',
+        error: String(cause?.message || cause || '').slice(0, 120)
+      });
+    }
+  }
 
   /* A failed obligation read is NOT "no position": it is unknown, and the
      panel must say so instead of showing an empty position with $0s. */
@@ -506,8 +541,11 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
   const positions = {};
   for (const asset of reserves) {
     const reserve = asset.reserve;
-    const deposit = obligation?.getDepositByReserve?.(reserve.address);
-    const borrow = obligation?.getBorrowByReserve?.(reserve.address);
+    /* A throwing obligation accessor reads as "no position here", not as a
+       failed market read — the obligation read itself already reports
+       `unknown` separately when it fails wholesale. */
+    const deposit = safeCall(() => obligation?.getDepositByReserve?.(reserve.address));
+    const borrow = safeCall(() => obligation?.getBorrowByReserve?.(reserve.address));
     const decimals = asset.decimals;
     const walletWei = balances[asset.id];
     positions[asset.id] = {
@@ -553,7 +591,9 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
         ? (asNumber(stats.borrowLiquidationLimit) / totalCollateralUsd) * 100
         : null
     },
-    failures: []
+    /* Reserves that could not be read at all — named, so a PARTIAL market
+       read is visible as one (§28) instead of silently shrinking the list. */
+    failures: reserveFailures
   };
 }
 

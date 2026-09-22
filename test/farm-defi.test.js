@@ -123,6 +123,7 @@ const goodConfig = () => encodeReserveConfig({
 });
 const healthy = (over = {}) => makeAaveProvider({
   pool: AAVE_V3_BASE.pool,
+  addressesProvider: AAVE_V3_BASE.addressesProvider,
   aToken: AAVE_V3_BASE.aUsdc,
   usdc: AAVE_V3_BASE.usdc,
   pinnedPool: AAVE_V3_BASE.pool,

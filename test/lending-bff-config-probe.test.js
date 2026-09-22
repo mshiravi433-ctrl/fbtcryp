@@ -19,7 +19,7 @@ import * as BFF from '../server/lending.js';
 import {
   RESERVE_CONFIG_BITS as CLIENT_BITS,
   decodeReserveConfiguration as clientDecode,
-  AAVE_ORACLE_ABI, AAVE_POOL_ABI
+  AAVE_ORACLE_ABI, AAVE_POOL_ABI, AAVE_PROVIDER_ABI
 } from '../src/lib/lending.js';
 
 /** Build a configuration bitmap from named fields, the way Aave lays it out. */
@@ -106,11 +106,27 @@ describe('the two oracle ABIs encode the same wire calls', () => {
   const clientOracle = new Interface(AAVE_ORACLE_ABI);
   const serverPool = new Interface(BFF.POOL_ABI);
   const clientPool = new Interface(AAVE_POOL_ABI);
+  /* §21 two-stage resolution: BOTH sides ask the POOL for its addresses
+     provider, then ask the PROVIDER for the oracle (2026-09-22: the call used
+     to go straight to the pool, whose ABI had no such function — the parity
+     suite passed a selector the real chain reverts on). */
+  const serverProvider = new Interface(BFF.PROVIDER_ABI);
+  const clientProvider = new Interface(AAVE_PROVIDER_ABI);
   const ASSET = '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9';
 
-  it('asks the pool for its oracle with identical calldata', () => {
-    expect(serverPool.encodeFunctionData('getPriceOracle', []))
-      .toBe(clientPool.encodeFunctionData('getPriceOracle', []));
+  it('asks the pool for its addresses provider with identical calldata', () => {
+    expect(serverPool.encodeFunctionData('getAddressesProvider', []))
+      .toBe(clientPool.encodeFunctionData('getAddressesProvider', []));
+  });
+
+  it('asks the ADDRESSES PROVIDER for its oracle, and no pool ABI even has getPriceOracle', () => {
+    expect(serverProvider.encodeFunctionData('getPriceOracle', []))
+      .toBe(clientProvider.encodeFunctionData('getPriceOracle', []));
+    /* The regression this pins: getPriceOracle is NOT a Pool function. If it
+       ever reappears on a POOL_ABI, the exact outage of 2026-09-22 (every real
+       RPC reverting on it) is back. */
+    expect(() => serverPool.encodeFunctionData('getPriceOracle', [])).toThrow();
+    expect(() => clientPool.encodeFunctionData('getPriceOracle', [])).toThrow();
   });
 
   it('asks the oracle for a price, a price batch and its base unit, identically', () => {

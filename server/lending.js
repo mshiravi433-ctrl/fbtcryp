@@ -61,6 +61,13 @@ const RESERVE_SYMBOLS = Object.freeze({
 export const POOL_ABI = [
   'function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
+  'function getAddressesProvider() view returns (address)'
+];
+/* The registry contract that owns the deployment lookups (§21) — the price
+   oracle included. getPriceOracle lives HERE, not on the Pool: 2026-09-22 saw
+   the whole BFF answer oracle reads with RPC_ERROR because the call went to
+   the Pool, which has no such function, and every real RPC reverted. */
+export const PROVIDER_ABI = [
   'function getPriceOracle() view returns (address)'
 ];
 /* The pool's OWN price oracle (§21). This is the price the protocol would use
@@ -82,6 +89,7 @@ const BASE_DECIMALS = 8;
 const ZERO = '0x0000000000000000000000000000000000000000';
 
 const poolIface = new Interface(POOL_ABI);
+const providerIface = new Interface(PROVIDER_ABI);
 const erc20Iface = new Interface(ERC20_ABI);
 const oracleIface = new Interface(ORACLE_ABI);
 const coder = AbiCoder.defaultAbiCoder();
@@ -359,9 +367,15 @@ async function readTokenBalances(chainId, wallet, token, reserve) {
  * Read the price oracle the pool itself uses.
  *
  * This is the price that decides whether a position gets liquidated, so it is
- * the only price this BFF reports as an oracle price. The chain of reads is:
- * pool.getPriceOracle() → oracle.BASE_CURRENCY_UNIT() → oracle.getAssetPrice()
- * per asset (batched through getAssetsPrices when the deployment supports it).
+ * the only price this BFF reports as an oracle price. The chain of reads is
+ * TWO steps to the oracle address, then the oracle itself:
+ * pool.getAddressesProvider() → addressesProvider.getPriceOracle() →
+ * oracle.BASE_CURRENCY_UNIT() → oracle.getAssetsPrices() (per-asset
+ * getAssetPrice() when the deployment does not support the batch).
+ *
+ * 2026-09-22: step one used to be `pool.getPriceOracle()` — a function the
+ * Pool does not have — so every real RPC reverted and this endpoint answered
+ * oracleCode=RPC_ERROR for every chain. The provider hop below is the fix.
  *
  * A zero price is treated as MISSING, not as "$0": an asset the oracle has no
  * feed for returns 0, and reporting that as a real price would value someone's
@@ -373,14 +387,31 @@ export async function readProtocolOracle(chainId) {
   if (!pool) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
   if (!tokens.length) return { ok: false, code: 'NO_TOKENS' };
 
-  const oracleCall = await ethCall(chainId, pool, poolIface.encodeFunctionData('getPriceOracle', []));
+  /* Stage 1 — the pool names its addresses provider. */
+  const providerCall = await ethCall(chainId, pool, poolIface.encodeFunctionData('getAddressesProvider', []));
+  if (!providerCall.ok) {
+    breaker.report('oracle', false, providerCall.code || 'ORACLE_READ_FAILED');
+    return { ok: false, code: providerCall.code || 'ORACLE_READ_FAILED' };
+  }
+  let providerAddress = null;
+  try {
+    const decoded = poolIface.decodeFunctionResult('getAddressesProvider', providerCall.result);
+    providerAddress = String(decoded[0] || '');
+  } catch { providerAddress = ''; }
+  if (!isAddress(providerAddress) || providerAddress === ZERO) {
+    breaker.report('oracle', false, 'NO_ADDRESSES_PROVIDER');
+    return { ok: false, code: 'NO_ADDRESSES_PROVIDER' };
+  }
+
+  /* Stage 2 — the provider names the oracle. */
+  const oracleCall = await ethCall(chainId, providerAddress, providerIface.encodeFunctionData('getPriceOracle', []));
   if (!oracleCall.ok) {
     breaker.report('oracle', false, oracleCall.code || 'ORACLE_READ_FAILED');
     return { ok: false, code: oracleCall.code || 'ORACLE_READ_FAILED' };
   }
   let oracleAddress = null;
   try {
-    const decoded = poolIface.decodeFunctionResult('getPriceOracle', oracleCall.result);
+    const decoded = providerIface.decodeFunctionResult('getPriceOracle', oracleCall.result);
     oracleAddress = String(decoded[0] || '');
   } catch { oracleAddress = ''; }
   /* An RPC that answers every call with empty data (a captive portal, a
