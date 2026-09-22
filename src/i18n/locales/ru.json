@@ -1236,7 +1236,13 @@
       "KAMINO_SDK_UNAVAILABLE": "Модуль Kamino недоступен в этой сборке приложения — обновите приложение.",
       "RPC_RATE_LIMITED": "Узел сети сейчас ограничен по частоте запросов — повторите через мгновение.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "TOKEN_NOT_ALLOWED": "Этого токена нет в проверенном списке этого рынка, поэтому его нельзя здесь использовать.",
+      "POOL_NOT_ALLOWED": "Этот адрес пула — не проверенный рынок этой сети.",
+      "BAD_ADDRESS": "Этот адрес недействителен.",
+      "NO_TOKEN_REGISTRY": "Не удалось загрузить список токенов этого рынка.",
+      "KAMINO_SDK_MISSING": "Модуль Kamino отсутствует в этой сборке — обновите приложение.",
+      "KAMINO_SDK_FAILED": "Не удалось запустить модуль Kamino. Обновите приложение и попробуйте снова."
     },
     "ratesUpdated": "Ставки читаются из контрактов кредитования (Morpho/Aave) — обновляются автоматически.",
     "connectWallet": "Подключить кошелёк",

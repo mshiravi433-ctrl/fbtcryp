@@ -625,7 +625,13 @@ export function lendingRouter() {
     if (!pool) return safeJson(res, { error: { code: 'UNSUPPORTED_CHAIN', message: 'Lending is not wired on this network' } }, 404);
 
     const cacheKey = `lending:markets:${chainId}`;
-    const payload = await withCache(cacheKey, 20_000, async () => {
+    /* `withCache` returns a `{ value, cached, stale }` envelope — every other
+       caller in this repo destructures `value`. This route used to treat the
+       envelope itself as the payload, so `payload.data` was always undefined
+       and the endpoint answered 503 on EVERY call — which is exactly why the
+       /loan page's server fallback for oracle prices never fired and users
+       only ever saw «قیمت‌های اوراکل خوانده نشد». (2026-09-22) */
+    const { value: payload } = await withCache(cacheKey, 20_000, async () => {
       const [reserves, oracle] = await Promise.all([
         Promise.all(chainTokens(chainId).map((token) => readReserve(chainId, token))),
         oraclePrices(chainId)
@@ -720,23 +726,44 @@ export function lendingRouter() {
        dead (supply needs the balance of an asset the user never deposited,
        which the filtered `positions` array deliberately omits). */
     const balancesBySymbol = {};
-    for (const reserve of reserves) {
-      if (!reserve.ok || !reserve.listed) continue;
+    /* 2026-09-22: these reads used to run SEQUENTIALLY (one `await` per
+       reserve inside the loop) — 3 eth_calls × N reserves back-to-back, which
+       pushed a cold Vercel invocation past the client's 6.5s BFF timeout and
+       left the page on BALANCE_UNKNOWN exactly when the fallback was needed.
+       They are independent reads; they now run concurrently. */
+    const listed = reserves.filter((reserve) => reserve?.ok && reserve.listed);
+    const balanceRows = await Promise.all(listed.map(async (reserve) => {
       const token = findToken(chainId, reserve.address);
+      if (!token) return null;
       const balances = await readTokenBalances(chainId, wallet, token, reserve);
+      return { reserve, token, balances };
+    }));
+    const isZeroWei = (value) => {
+      /* Balances arrive as 0x-hex (or null when the call failed). The old
+         `=== '0'` comparison never matched a hex zero, so empty positions
+         were never skipped. A failed read is NOT zero — it stays listed so
+         the caller can see the position exists but its size is unknown. */
+      if (value == null) return false;
+      try { return BigInt(value) === 0n; } catch { return false; }
+    };
+    for (const row of balanceRows) {
+      if (!row) continue;
+      const { reserve, token, balances } = row;
       balancesBySymbol[reserve.symbol] = {
         walletWei: balances.walletWei,
         suppliedWei: balances.suppliedWei,
         debtWei: balances.debtWei
       };
-      if (balances.suppliedWei === '0' && balances.debtWei === '0') continue;
+      if (isZeroWei(balances.suppliedWei) && isZeroWei(balances.debtWei)) continue;
+      let hasCollateral = false;
+      try { hasCollateral = BigInt(balances.suppliedWei ?? 0) > 0n; } catch { hasCollateral = false; }
       positions.push({
         asset: reserve.symbol,
         address: token.address,
         supplied: balances.suppliedWei,
         borrowed: balances.debtWei,
         walletBalance: balances.walletWei,
-        collateral: BigInt(balances.suppliedWei) > 0n,
+        collateral: hasCollateral,
         supplyApy: reserve.supplyApy,
         borrowApy: reserve.borrowApy
       });

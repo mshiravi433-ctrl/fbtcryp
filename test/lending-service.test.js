@@ -923,3 +923,69 @@ describe('§12 — a disconnected wallet and an unreadable account are different
     expect(absent.reason).not.toBe(failed.reason);
   });
 });
+
+describe('2026-09-22 — a stale cross-chain selection is named, not a bare ✕ TOKEN_NOT_ALLOWED', () => {
+  /* The page used to keep the selected asset across chain-rail switches: a
+     token picked on Sonic evaluated against an Arbitrum market fell through
+     the allowlist to a message-less TOKEN_NOT_ALLOWED. The guard below the
+     allowlist names the mismatch and says what to do about it. */
+  const SONIC = lendingAssetsFor(146);
+  const sonicAsset = SONIC.find((a) => a.address) ?? SONIC[0];
+
+  it('blocks an asset from another market with a recovery sentence', () => {
+    const d = S.evaluateAction({ market: market(), action: 'supply', asset: sonicAsset, amount: '1', amountWei: units(1) });
+    expect(d.ok).toBe(false);
+    expect(codes(d.blocked)).toEqual(['TOKEN_NOT_ALLOWED']);
+    expect(d.blocked[0].detail).toMatch(/another market/);
+  });
+
+  it('blocks cross-chain collateral the same way', () => {
+    const d = S.evaluateAction({
+      market: market(), action: 'borrow', asset: USDT, amount: '1', amountWei: units(1),
+      collateralAsset: sonicAsset, collateralAmountWei: units(1)
+    });
+    expect(d.ok).toBe(false);
+    expect(codes(d.blocked)).toContain('TOKEN_NOT_ALLOWED');
+  });
+
+  it('lets the same-chain asset through the gate', () => {
+    const d = S.evaluateAction({ market: market(), action: 'supply', asset: USDT, amount: '1', amountWei: units(1), walletBalanceWei: units(10) });
+    expect(codes(d.blocked)).not.toContain('TOKEN_NOT_ALLOWED');
+  });
+});
+
+describe('2026-09-22 — the BFF reader retries a cold server, never a real answer', () => {
+  const okPayload = { meta: { schema: S.LENDING_BFF_MARKETS_SCHEMA }, data: { markets: [{ asset: 'USDT' }] } };
+  const okRes = (json) => ({ ok: true, status: 200, json: async () => json });
+
+  it('retries a 5xx once and takes the recovery', async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return calls === 1 ? { ok: false, status: 503 } : okRes(okPayload);
+    };
+    const r = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl, timeoutMs: 5000 });
+    expect(calls).toBe(2);
+    expect(r.ok).toBe(true);
+    expect(r.marketsBySymbol.USDT).toBeTruthy();
+  });
+
+  it('does not retry a 4xx — that is an answer, not an outage', async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return { ok: false, status: 400 };
+    };
+    const r = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl, timeoutMs: 5000 });
+    expect(calls).toBe(1);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('HTTP_400');
+  });
+
+  it('rejects a 200 with the wrong shape — a captive portal is not market data', async () => {
+    const fetchImpl = async () => okRes({ html: '<!doctype html>' });
+    const r = await S.readLendingBffMarkets({ chainId: CHAIN, fetchImpl, timeoutMs: 5000 });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('BAD_PAYLOAD');
+  });
+});

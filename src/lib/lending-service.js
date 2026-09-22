@@ -196,50 +196,100 @@ export const LENDING_BFF_MARKETS_SCHEMA = 'fbt.lending-markets.v2';
  *   · any failure returns `{ ok:false }` and the caller degrades exactly as it
  *     did before this path existed.
  */
-export async function readLendingBffMarkets({ chainId, baseUrl = null, fetchImpl = null, timeoutMs = 6500 } = {}) {
-  const cid = Number(chainId);
-  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: 'UNSUPPORTED_CHAIN' };
+/**
+ * One BFF GET with a hard timeout and a single retry.
+ *
+ * 2026-09-22: the fallback used to allow 6.5s and a single attempt. A cold
+ * serverless instance (module import + the chain reads behind the route) can
+ * take longer than that on the FIRST call — exactly the call that matters,
+ * because the fallback only runs when the browser's own RPC path is already
+ * dead. The retry fires only for a timeout or a 5xx (a cold start warming up),
+ * never for a 4xx or a wrong-shaped payload, and the two attempts share one
+ * ceiling so a hung backend cannot hold the page hostage.
+ */
+export const LENDING_BFF_MARKETS_TIMEOUT_MS = 20_000;
+export const LENDING_BFF_POSITIONS_TIMEOUT_MS = 25_000;
+
+async function fetchBffJson({ url, doFetch, timeoutMs, retries = 1 }) {
+  const ceiling = Math.max(1000, Number(timeoutMs) || 20_000);
+  let last = { ok: false, reason: 'BFF_UNAVAILABLE' };
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), ceiling) : null;
+    try {
+      const res = await doFetch(url, {
+        headers: { accept: 'application/json' },
+        ...(controller ? { signal: controller.signal } : {})
+      });
+      if (!res?.ok) {
+        const status = Number(res?.status ?? 0);
+        last = { ok: false, reason: `HTTP_${status}` };
+        /* A 5xx on the first attempt is usually the cold instance still
+           warming up (or an upstream RPC hiccup the server failover already
+           survived for the NEXT call) — worth one more try. A 4xx is an
+           answer, not an outage: do not retry it. */
+        if (attempt < retries && status >= 500) continue;
+        return last;
+      }
+      const json = await res.json();
+      return { ok: true, json };
+    } catch (error) {
+      const timedOut = error?.name === 'AbortError';
+      last = {
+        ok: false,
+        reason: timedOut ? 'TIMEOUT' : 'BFF_UNAVAILABLE',
+        detail: String(error?.message || error).slice(0, 120)
+      };
+      /* Only a timeout is retried: a refused connection will refuse again
+         200ms later, and doubling the wait doubles the time the page sits on
+         its fallback instead of degrading honestly. */
+      if (attempt < retries && timedOut) continue;
+      return last;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
+function resolveBffFetch({ baseUrl, fetchImpl }) {
   const doFetch = typeof fetchImpl === 'function' ? fetchImpl : (typeof fetch === 'function' ? fetch : null);
-  if (!doFetch) return { ok: false, reason: 'NO_FETCH' };
   let base = '/api';
   try { base = String(baseUrl || apiBase() || '/api'); } catch { base = '/api'; }
-  const url = `${base.replace(/\/+$/, '')}/lending/markets?network=${cid}`;
+  return { doFetch, base: base.replace(/\/+$/, '') };
+}
 
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6500)) : null;
-  try {
-    const res = await doFetch(url, {
-      headers: { accept: 'application/json' },
-      ...(controller ? { signal: controller.signal } : {})
-    });
-    if (!res?.ok) return { ok: false, reason: `HTTP_${res?.status ?? 0}` };
-    const json = await res.json();
-    /* Shape validation is mandatory: an endpoint that answered 200 with
-       anything else (a captive portal, the SPA fallback, an error envelope)
-       is not market data. */
-    if (json?.meta?.schema !== LENDING_BFF_MARKETS_SCHEMA || !Array.isArray(json?.data?.markets)) {
-      return { ok: false, reason: 'BAD_PAYLOAD' };
-    }
-    const marketsBySymbol = {};
-    for (const market of json.data.markets) {
-      if (market && typeof market.asset === 'string') marketsBySymbol[market.asset] = market;
-    }
-    return {
-      ok: true,
-      marketsBySymbol,
-      meta: {
-        dataStatus: json.meta.dataStatus ?? null,
-        oracleStatus: json.meta.oracleStatus ?? null,
-        oracleAddress: json.meta.oracleAddress ?? null,
-        oracleCode: json.meta.oracleCode ?? null,
-        readAt: json.meta.readAt ?? null
-      }
-    };
-  } catch (error) {
-    return { ok: false, reason: String(error?.name === 'AbortError' ? 'TIMEOUT' : 'BFF_UNAVAILABLE'), detail: String(error?.message || error).slice(0, 120) };
-  } finally {
-    if (timer) clearTimeout(timer);
+export async function readLendingBffMarkets({ chainId, baseUrl = null, fetchImpl = null, timeoutMs = LENDING_BFF_MARKETS_TIMEOUT_MS } = {}) {
+  const cid = Number(chainId);
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: 'UNSUPPORTED_CHAIN' };
+  const { doFetch, base } = resolveBffFetch({ baseUrl, fetchImpl });
+  if (!doFetch) return { ok: false, reason: 'NO_FETCH' };
+  const url = `${base}/lending/markets?network=${cid}`;
+
+  const fetched = await fetchBffJson({ url, doFetch, timeoutMs });
+  if (!fetched.ok) return fetched;
+  const json = fetched.json;
+  /* Shape validation is mandatory: an endpoint that answered 200 with
+     anything else (a captive portal, the SPA fallback, an error envelope)
+     is not market data. */
+  if (json?.meta?.schema !== LENDING_BFF_MARKETS_SCHEMA || !Array.isArray(json?.data?.markets)) {
+    return { ok: false, reason: 'BAD_PAYLOAD' };
   }
+  const marketsBySymbol = {};
+  for (const market of json.data.markets) {
+    if (market && typeof market.asset === 'string') marketsBySymbol[market.asset] = market;
+  }
+  return {
+    ok: true,
+    marketsBySymbol,
+    meta: {
+      dataStatus: json.meta.dataStatus ?? null,
+      oracleStatus: json.meta.oracleStatus ?? null,
+      oracleAddress: json.meta.oracleAddress ?? null,
+      oracleCode: json.meta.oracleCode ?? null,
+      readAt: json.meta.readAt ?? null
+    }
+  };
 }
 
 /**
@@ -355,57 +405,46 @@ const toUnitString = (value) => {
   } catch { return null; }
 };
 
-export async function readLendingBffPositions({ chainId, wallet, baseUrl = null, fetchImpl = null, timeoutMs = 6500 } = {}) {
+export async function readLendingBffPositions({ chainId, wallet, baseUrl = null, fetchImpl = null, timeoutMs = LENDING_BFF_POSITIONS_TIMEOUT_MS } = {}) {
   const cid = Number(chainId);
   if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: 'UNSUPPORTED_CHAIN' };
   if (!isEvmAddress(wallet)) return { ok: false, reason: 'BAD_WALLET' };
-  const doFetch = typeof fetchImpl === 'function' ? fetchImpl : (typeof fetch === 'function' ? fetch : null);
+  const { doFetch, base } = resolveBffFetch({ baseUrl, fetchImpl });
   if (!doFetch) return { ok: false, reason: 'NO_FETCH' };
-  let base = '/api';
-  try { base = String(baseUrl || apiBase() || '/api'); } catch { base = '/api'; }
-  const url = `${base.replace(/\/+$/, '')}/lending/positions/${wallet}?network=${cid}`;
+  const url = `${base}/lending/positions/${wallet}?network=${cid}`;
 
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6500)) : null;
-  try {
-    const res = await doFetch(url, {
-      headers: { accept: 'application/json' },
-      ...(controller ? { signal: controller.signal } : {})
-    });
-    if (!res?.ok) return { ok: false, reason: `HTTP_${res?.status ?? 0}` };
-    const json = await res.json();
-    /* The route answers with its data at top level and meta as a sibling;
-       anything else (SPA fallback, captive portal, error envelope) is not a
-       position read. */
-    if (json?.meta?.schema !== LENDING_BFF_POSITIONS_SCHEMA) return { ok: false, reason: 'BAD_PAYLOAD' };
-    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
-    return {
+  /* Positions are re-verified on-chain per call (never cached server-side),
+     so this route is the slowest BFF read — it gets the longest ceiling. */
+  const fetched = await fetchBffJson({ url, doFetch, timeoutMs });
+  if (!fetched.ok) return fetched;
+  const json = fetched.json;
+  /* The route answers with its data at top level and meta as a sibling;
+     anything else (SPA fallback, captive portal, error envelope) is not a
+     position read. */
+  if (json?.meta?.schema !== LENDING_BFF_POSITIONS_SCHEMA) return { ok: false, reason: 'BAD_PAYLOAD' };
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  return {
+    ok: true,
+    /* Raw { walletWei, suppliedWei, debtWei } per reserve symbol. The raw
+       strings are normalised to decimal unit strings here — ethers callers
+       treat null as "unknown", never "zero" (§37). */
+    balancesBySymbol: json.balances && typeof json.balances === 'object' ? json.balances : {},
+    account: {
       ok: true,
-      /* Raw { walletWei, suppliedWei, debtWei } per reserve symbol. The raw
-         strings are normalised to decimal unit strings here — ethers callers
-         treat null as "unknown", never "zero" (§37). */
-      balancesBySymbol: json.balances && typeof json.balances === 'object' ? json.balances : {},
-      account: {
-        ok: true,
-        totalCollateralUsd: num(json.totalCollateralUsd),
-        totalDebtUsd: num(json.totalDebtUsd),
-        availableBorrowsUsd: num(json.availableBorrowsUsd),
-        liquidationThresholdPct: num(json.liquidationThresholdPct),
-        ltvPct: num(json.ltvPct),
-        healthFactor: json.healthFactor == null ? null : num(json.healthFactor),
-        source: 'server-bff',
-        dataStatus: 'partial'
-      },
-      meta: {
-        dataStatus: json.meta.dataStatus ?? null,
-        source: json.meta.source ?? null
-      }
-    };
-  } catch (error) {
-    return { ok: false, reason: String(error?.name === 'AbortError' ? 'TIMEOUT' : 'BFF_UNAVAILABLE'), detail: String(error?.message || error).slice(0, 120) };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+      totalCollateralUsd: num(json.totalCollateralUsd),
+      totalDebtUsd: num(json.totalDebtUsd),
+      availableBorrowsUsd: num(json.availableBorrowsUsd),
+      liquidationThresholdPct: num(json.liquidationThresholdPct),
+      ltvPct: num(json.ltvPct),
+      healthFactor: json.healthFactor == null ? null : num(json.healthFactor),
+      source: 'server-bff',
+      dataStatus: 'partial'
+    },
+    meta: {
+      dataStatus: json.meta.dataStatus ?? null,
+      source: json.meta.source ?? null
+    }
+  };
 }
 
 /**
@@ -990,6 +1029,22 @@ export function evaluateAction({ market, action, asset, amountWei, amount, colla
 
   if (!lendingSupported(market?.chainId)) { block('UNSUPPORTED_CHAIN'); return { ok: false, blocked, warnings }; }
   if (!asset?.address) { block('NOT_A_RESERVE'); return { ok: false, blocked, warnings }; }
+
+  /* 2026-09-22: an asset picked on ANOTHER market must never be evaluated
+     against this one. The page used to keep the selected asset across chain
+     switches, so Arbitrum-USDT evaluated on Base fell through to a bare
+     TOKEN_NOT_ALLOWED with no recovery — the «✕ TOKEN_NOT_ALLOWED» report.
+     The page now resets its selection on a market change; this guard stays as
+     the second layer so a stale object (a preset URL, a cached draft) can
+     never be priced, approved or signed against the wrong chain. */
+  if (asset.chain != null && Number(asset.chain) !== Number(market.chainId)) {
+    block('TOKEN_NOT_ALLOWED', `this ${asset.symbol || 'asset'} belongs to another market — pick it again on this one`);
+    return { ok: false, blocked, warnings };
+  }
+  if (collateralAsset?.address && collateralAsset.chain != null && Number(collateralAsset.chain) !== Number(market.chainId)) {
+    block('TOKEN_NOT_ALLOWED', 'collateral asset belongs to another market');
+    return { ok: false, blocked, warnings };
+  }
 
   /* §31 — the addresses must be the audited ones before anything else. */
   const contracts = assertLendingContracts({ chainId: market.chainId, asset });

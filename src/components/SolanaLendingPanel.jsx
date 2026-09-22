@@ -204,10 +204,27 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
           <DataBadge t={t} status={snapshot?.dataStatus || 'unavailable'} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginTop: 14 }}>
-          <Metric label={t('loan.collateral')} value={snapshot?.account ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
-          <Metric label={t('loan.debt')} value={snapshot?.account ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
-          <Metric label={t('loan.borrowPower')} value={snapshot?.account ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
+          {/* When the obligation could not be READ, its figures are placeholder
+              zeros — they render as '—' with a retry, never as $0.00 that reads
+              as "you have no position". */}
+          <Metric label={t('loan.collateral')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
+          <Metric label={t('loan.debt')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
+          <Metric label={t('loan.borrowPower')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
         </div>
+        {snapshot?.account?.unknown && (
+          <button
+            type="button"
+            data-testid="solana-loan-position-retry"
+            onClick={refresh}
+            style={{
+              width: '100%', marginTop: 9, padding: '9px 10px', borderRadius: 11, cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, color: '#fbbf24',
+              background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.28)',
+            }}
+          >
+            {t('loan.error.RPC_ERROR')} · {t('loan.retry')}
+          </button>
+        )}
         {!wallet.address ? (
           <button type="button" className="btn btn-primary" data-testid="solana-loan-connect" onClick={connect} style={{ width: '100%', marginTop: 13 }}>{t('loan.connectWallet')}</button>
         ) : (
@@ -324,7 +341,14 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
 
       {!loading && !error && tab === 'positions' && (
         <div style={{ display: 'grid', gap: 9 }}>
-          {!wallet.address || !snapshot?.account?.ok ? <div style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.noPosition')}</div> : null}
+          {snapshot?.account?.unknown ? (
+            <div style={{ ...card, padding: 15, borderColor: 'rgba(251,191,36,0.30)' }}>
+              <div style={{ color: '#fbbf24', fontSize: 12, fontWeight: 700, lineHeight: 1.7 }}>{t('loan.error.RPC_ERROR')}</div>
+              <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-positions-retry" onClick={refresh} style={{ width: '100%', marginTop: 10 }}>
+                {t('loan.retry')}
+              </button>
+            </div>
+          ) : (!wallet.address || !snapshot?.account?.ok ? <div style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.noPosition')}</div> : null)}
           {assets.map((asset) => {
             const position = snapshot.positions?.[asset.id];
             const supplied = Number(position?.supplied || 0);

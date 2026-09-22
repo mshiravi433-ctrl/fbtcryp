@@ -10124,7 +10124,13 @@
       "RPC_RATE_LIMITED": "The network node is rate-limited right now — try again in a moment.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
       "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
-      "SOLANA_TX_FAILED": "The Solana transaction failed on-chain — nothing was spent."
+      "SOLANA_TX_FAILED": "The Solana transaction failed on-chain — nothing was spent.",
+      "TOKEN_NOT_ALLOWED": "This token is not in the audited list for this market, so it cannot be used here.",
+      "POOL_NOT_ALLOWED": "This pool address is not the audited market for this network.",
+      "BAD_ADDRESS": "This address is not valid.",
+      "NO_TOKEN_REGISTRY": "The token list for this market could not be loaded.",
+      "KAMINO_SDK_MISSING": "The Kamino module is missing from this build — please update the app.",
+      "KAMINO_SDK_FAILED": "The Kamino module failed to start. Please update the app and try again."
     },
     "rateUnknown": "live rate unavailable right now",
     "alerts": {

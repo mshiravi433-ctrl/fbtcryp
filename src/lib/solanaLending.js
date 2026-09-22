@@ -38,6 +38,64 @@ async function resolveLendingRpc(rpcUrl) {
   }
 }
 
+/**
+ * Every node a lending read may try, in order: the caller's pinned URL wins,
+ * otherwise the user's own RPC first and then the public list — the SAME
+ * order the swap screen probes, so the two can never disagree about which
+ * node is usable.
+ *
+ * 2026-09-22: reads used to take ONE URL (`getSolanaRpcUrl()`, which returns
+ * the Foundation endpoint even when its own probe just proved every candidate
+ * dead) and a single 429 / blocked host turned the whole Solana panel into
+ * «market unavailable» + BALANCE_UNKNOWN. Every read below now walks this
+ * list until one node answers.
+ */
+async function lendingRpcCandidates(rpcUrl) {
+  if (rpcUrl) return [rpcUrl];
+  try {
+    const { solanaRpcCandidates, readSolanaNetworkSettings } = await import('./solanaRpc.js');
+    const settings = await readSolanaNetworkSettings();
+    const list = solanaRpcCandidates(settings).filter(Boolean);
+    return list.length ? [...new Set(list)] : [SOLANA_LENDING_RPC];
+  } catch {
+    return [SOLANA_LENDING_RPC];
+  }
+}
+
+const shortHost = (url) => {
+  try { return new URL(url).hostname; } catch { return String(url || '?').slice(0, 40); }
+};
+
+/**
+ * Name a total failover failure. A 429 anywhere means throttling (retryable);
+ * all-unreachable means the network path is down (retryable); anything else —
+ * e.g. every node answered but the market account would not decode — stays
+ * KAMINO_MARKET_UNAVAILABLE. The per-host summary is kept as detail (§28).
+ */
+function lendingRpcFailure(attempts) {
+  const summary = (attempts || [])
+    .map((a) => `${shortHost(a.url)}:${a.code || a.error || 'failed'}`)
+    .join(' | ')
+    .slice(0, 180);
+  const haystack = (attempts || []).map((a) => `${a.code || ''} ${a.error || ''}`).join(' ');
+  const anyRateLimited = /429|rate.?limit/i.test(haystack);
+  const allUnreachable = (attempts || []).length > 0
+    && (attempts || []).every((a) => /fetch|network|failed to fetch|econn|timeout|timed out|unreachable|abort/i.test(`${a.code || ''} ${a.error || ''}`));
+  const code = anyRateLimited ? 'RPC_RATE_LIMITED' : allUnreachable ? 'RPC_ERROR' : 'KAMINO_MARKET_UNAVAILABLE';
+  const error = new Error(code);
+  error.code = code;
+  error.detail = summary || 'all Solana RPC candidates failed';
+  error.attempts = attempts || [];
+  return error;
+}
+
+async function resetRememberedSolanaRpc() {
+  try {
+    const { resetSolanaRpcChoice } = await import('./solanaRpc.js');
+    resetSolanaRpcChoice();
+  } catch { /* the reset is hygiene, never load-bearing */ }
+}
+
 /** Wrap a raw connection failure in the engine's named codes (§28). */
 function solanaReadError(cause, code = 'RPC_ERROR') {
   const raw = String(cause?.message || cause || '');
@@ -49,20 +107,99 @@ function solanaReadError(cause, code = 'RPC_ERROR') {
   return error;
 }
 
-const KAMINO_VENDOR_URL = `${import.meta.env?.BASE_URL || '/'}vendor/kamino-klend-sdk.js`;
-const KAMINO_VENDOR_REV = '1';
+const KAMINO_VENDOR_PATH = 'vendor/kamino-klend-sdk.js';
+/* Bumped 2026-09-22: the query is the only cache-buster on this file, and a
+   stuck (stale 404 or half-cached) copy is indistinguishable from a broken
+   build at runtime. Any vendor-bundle change bumps this again. */
+const KAMINO_VENDOR_REV = '2';
+
+/**
+ * Where the vendored Kamino bundle may live, in order. The build always emits
+ * it to `<BASE_URL>/vendor/…`, but the page can be served under a different
+ * base than the build assumed (CDN rewrites, the native shell, a cached
+ * index.html from a previous deploy) — a single hardcoded URL turns any of
+ * those into KAMINO_SDK_UNAVAILABLE. Each candidate is tried in turn.
+ */
+function kaminoVendorCandidates() {
+  const rawBase = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const base = String(rawBase || '/');
+  const withSlash = base.endsWith('/') ? base : `${base}/`;
+  const urls = [`${withSlash}${KAMINO_VENDOR_PATH}?v=${KAMINO_VENDOR_REV}`];
+  if (withSlash !== '/') urls.push(`/${KAMINO_VENDOR_PATH}?v=${KAMINO_VENDOR_REV}`);
+  return [...new Set(urls)];
+}
+
+/**
+ * Is the bundle file itself reachable? A dynamic `import()` failure does not
+ * say whether the file 404ed (the build never vendored it) or downloaded and
+ * crashed during init (a broken bundle) — and the two have different fixes.
+ * A plain fetch answers that: 404/empty → MISSING, reachable-but-unimportable
+ * → FAILED with the original message kept as detail.
+ */
+async function probeKaminoVendor(url) {
+  try {
+    if (typeof fetch !== 'function') return null;
+    const res = await fetch(url.split('?')[0], { method: 'GET', headers: { accept: '*/*' } });
+    if (!res?.ok) return { reachable: false, status: Number(res?.status ?? 0) };
+    const text = await res.text();
+    return { reachable: (text?.length || 0) > 1024, status: 200, bytes: text?.length || 0 };
+  } catch {
+    return null;
+  }
+}
+
+function kaminoLoadError(code, cause, detail) {
+  const error = new Error(code);
+  error.code = code;
+  error.cause = cause || null;
+  if (detail) error.detail = String(detail).slice(0, 200);
+  else if (cause) error.detail = String(cause?.message || cause).slice(0, 200);
+  return error;
+}
+
 let sdkModulePromise = null;
 
 async function sdkPromise() {
   if (!sdkModulePromise) {
-    sdkModulePromise = import(/* @vite-ignore */ `${KAMINO_VENDOR_URL}?v=${KAMINO_VENDOR_REV}`)
-      .catch((cause) => {
-        sdkModulePromise = null;
-        const error = new Error('KAMINO_SDK_UNAVAILABLE');
-        error.code = 'KAMINO_SDK_UNAVAILABLE';
-        error.cause = cause;
-        throw error;
-      });
+    sdkModulePromise = (async () => {
+      const candidates = kaminoVendorCandidates();
+      let lastCause = null;
+      for (const url of candidates) {
+        try {
+          const mod = await import(/* @vite-ignore */ url);
+          /* A stale or truncated bundle can import "successfully" with the
+             panel's exports missing — that must fail here with a name, not
+             pages later as `KaminoMarket.load is not a function`. */
+          const missing = ['KaminoMarket', 'KaminoAction', 'VanillaObligation']
+            .filter((name) => typeof mod?.[name] !== 'function');
+          if (missing.length || String(mod?.PROGRAM_ID || '').length < 32) {
+            throw new Error(`incomplete bundle (missing: ${[...missing, ...(String(mod?.PROGRAM_ID || '').length < 32 ? ['PROGRAM_ID'] : [])].join(', ')})`);
+          }
+          return mod;
+        } catch (cause) {
+          lastCause = cause;
+        }
+      }
+      /* Every candidate failed. Probe the primary URL once so the panel can
+         tell "the file is not in this build" from "the file is broken". */
+      const primary = candidates[0];
+      const probe = await probeKaminoVendor(primary);
+      if (probe && probe.reachable === false) {
+        throw kaminoLoadError(
+          'KAMINO_SDK_MISSING', lastCause,
+          `HTTP ${probe.status || 'fetch-failed'} for ${primary.split('?')[0]} — the vendor bundle is not in this build`
+        );
+      }
+      if (probe && probe.reachable === true) {
+        throw kaminoLoadError('KAMINO_SDK_FAILED', lastCause);
+      }
+      throw kaminoLoadError('KAMINO_SDK_UNAVAILABLE', lastCause);
+    })().catch((error) => {
+      /* A failed load must never poison later retries: the panel's retry
+         button (and the next mount) re-runs the whole candidate list. */
+      sdkModulePromise = null;
+      throw error;
+    });
   }
   return sdkModulePromise;
 }
@@ -127,22 +264,23 @@ export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
  *
  * A failed read returns `{}` — handled downstream as BALANCE_UNKNOWN, never
  * as zero (§37).
+ *
+ * 2026-09-22: the two reads (native balance, parsed token accounts) each walk
+ * the RPC candidate list until one node answers. A success — even an EMPTY
+ * token-account list, which is a real answer for a fresh wallet — stops its
+ * own walk; only a THROWN call moves to the next node.
  */
 export async function readSolanaLendingBalances({ wallet, assets = [], rpcUrl = null } = {}) {
   if (!wallet) return {};
-  const url = await resolveLendingRpc(rpcUrl);
-  const connection = new Connection(url, { commitment: 'confirmed' });
+  const candidates = await lendingRpcCandidates(rpcUrl);
   const balances = {};
   const byMint = new Map(assets.filter((a) => a?.address).map((a) => [String(a.address), a]));
+  const wantNative = byMint.has(WSOL_MINT);
   let nativeLamports = null;
-  if (byMint.has(WSOL_MINT)) {
-    try { nativeLamports = BigInt(await connection.getBalance(new PublicKey(wallet))); } catch { nativeLamports = null; }
-  }
-  try {
-    const response = await connection.getParsedTokenAccountsByOwner(
-      new PublicKey(wallet),
-      { programId: new PublicKey(SPL_TOKEN_PROGRAM_ID) }
-    );
+  let nativeDone = !wantNative;
+  let tokenDone = false;
+
+  const fillTokenAccounts = (response) => {
     for (const entry of response?.value ?? []) {
       const info = entry?.account?.data?.parsed?.info;
       const mint = String(info?.mint || '');
@@ -153,9 +291,32 @@ export async function readSolanaLendingBalances({ wallet, assets = [], rpcUrl = 
       const current = balances[asset.id] ? BigInt(balances[asset.id]) : 0n;
       balances[asset.id] = (current + BigInt(raw)).toString();
     }
-  } catch {
-    /* The fall-through state is `{}` — read failure, reported not faked. */
+  };
+
+  for (const url of candidates) {
+    if (nativeDone && tokenDone) break;
+    const connection = new Connection(url, { commitment: 'confirmed' });
+    if (!nativeDone) {
+      try {
+        nativeLamports = BigInt(await connection.getBalance(new PublicKey(wallet)));
+        nativeDone = true;
+      } catch { nativeLamports = null; }
+    }
+    if (!tokenDone) {
+      try {
+        const response = await connection.getParsedTokenAccountsByOwner(
+          new PublicKey(wallet),
+          { programId: new PublicKey(SPL_TOKEN_PROGRAM_ID) }
+        );
+        fillTokenAccounts(response);
+        tokenDone = true;
+      } catch {
+        /* Next candidate; the fall-through state stays `{}` — failure is
+           reported downstream as BALANCE_UNKNOWN, never faked as zero. */
+      }
+    }
   }
+  if (!nativeDone || !tokenDone) await resetRememberedSolanaRpc();
   if (nativeLamports != null && byMint.has(WSOL_MINT)) {
     const asset = byMint.get(WSOL_MINT);
     const wrapped = balances[asset.id] ? BigInt(balances[asset.id]) : 0n;
@@ -275,46 +436,71 @@ const reserveToView = (reserve, slot) => {
  *   collapsing every cause into one sentence (§28).
  */
 export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } = {}) {
-  const url = await resolveLendingRpc(rpcUrl);
+  const candidates = await lendingRpcCandidates(rpcUrl);
   const { KaminoMarket, DEFAULT_RECENT_SLOT_DURATION_MS } = await sdkPromise();
-  const connection = new Connection(url, { commitment: 'confirmed' });
+  const attempts = [];
   let market = null;
-  try {
-    market = await KaminoMarket.load(
-      connection,
-      new PublicKey(KAMINO_MAIN_MARKET),
-      DEFAULT_RECENT_SLOT_DURATION_MS || 450,
-      new PublicKey(KAMINO_LENDING_PROGRAM)
-    );
-  } catch (cause) {
-    throw solanaReadError(cause, 'KAMINO_MARKET_UNAVAILABLE');
+  let url = candidates[0];
+  let slot = null;
+  /* The market load is the expensive call (dozens of accounts), so the walk
+     stops at the first node that answers it — later reads reuse the winner. */
+  for (const candidate of candidates) {
+    const connection = new Connection(candidate, { commitment: 'confirmed' });
+    try {
+      market = await KaminoMarket.load(
+        connection,
+        new PublicKey(KAMINO_MAIN_MARKET),
+        DEFAULT_RECENT_SLOT_DURATION_MS || 450,
+        new PublicKey(KAMINO_LENDING_PROGRAM)
+      );
+    } catch (cause) {
+      attempts.push({ url: candidate, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
+      market = null;
+      continue;
+    }
+    if (!market) {
+      attempts.push({ url: candidate, error: 'empty market' });
+      continue;
+    }
+    url = candidate;
+    try { slot = await connection.getSlot('processed'); } catch { slot = null; }
+    break;
   }
   if (!market) {
-    const error = new Error('KAMINO_MARKET_UNAVAILABLE');
-    error.code = 'KAMINO_MARKET_UNAVAILABLE';
-    error.rpcUrl = url;
-    throw error;
+    await resetRememberedSolanaRpc();
+    throw lendingRpcFailure(attempts);
   }
 
-  let slot = null;
-  try { slot = await connection.getSlot('processed'); } catch { slot = null; }
   const reserves = market.getReserves()
     .map((reserve) => reserveToView(reserve, slot))
     .filter((reserve) => reserve.status !== 'hidden' && reserve.status !== 'obsolete');
 
+  /* A failed obligation read is NOT "no position": it is unknown, and the
+     panel must say so instead of showing an empty position with $0s. */
   let obligation = null;
-  if (wallet) {
-    try { obligation = await market.getUserVanillaObligation(new PublicKey(wallet)); } catch { obligation = null; }
-  }
-
-  /* The wallet's spendable balance per reserve (§7 preflight input). A failed
-     read stays empty — the panel reports BALANCE_UNKNOWN and refuses to open
-     the wallet for a transaction it cannot pre-check. */
-  let balances = {};
+  let obligationUnknown = false;
   if (wallet) {
     try {
-      balances = await readSolanaLendingBalances({ wallet, assets: reserves, rpcUrl: url });
-    } catch { balances = {}; }
+      obligation = await market.getUserVanillaObligation(new PublicKey(wallet));
+    } catch {
+      obligation = null;
+      obligationUnknown = true;
+    }
+  }
+
+  /* The wallet's spendable balance per reserve (§7 preflight input), with its
+     own failover across every candidate — NOT pinned to the market winner, so
+     a node that serves the market but throttles parsed-account reads cannot
+     single-handedly force BALANCE_UNKNOWN. A failed read stays empty — the
+     panel reports BALANCE_UNKNOWN and refuses to open the wallet for a
+     transaction it cannot pre-check. */
+  let balances = {};
+  let balancesUnknown = false;
+  if (wallet) {
+    try {
+      balances = await readSolanaLendingBalances({ wallet, assets: reserves });
+      balancesUnknown = Object.keys(balances || {}).length === 0;
+    } catch { balances = {}; balancesUnknown = true; }
   }
 
   const positions = {};
@@ -352,9 +538,13 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     balances,
     account: {
       ok: Boolean(obligation),
+      /* When the obligation could not be read, every figure below is a
+         placeholder zero — the panel renders '—' and a retry, not $0.00. */
+      unknown: obligationUnknown,
+      balancesUnknown,
       totalCollateralUsd,
       totalDebtUsd,
-      availableBorrowsUsd: Math.max(0, borrowLimitUsd - totalDebtUsd),
+      availableBorrowsUsd: obligationUnknown ? null : Math.max(0, borrowLimitUsd - totalDebtUsd),
       healthFactor: totalDebtUsd > 0 && asNumber(stats?.borrowLiquidationLimit) != null
         ? asNumber(stats.borrowLiquidationLimit) / totalDebtUsd
         : null,
@@ -374,43 +564,76 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
   const amountWei = toSolanaUnits(amount, Number(asset.decimals));
   if (amountWei == null || amountWei <= 0n) return { ok: false, code: 'AMOUNT_REQUIRED' };
 
-  const url = await resolveLendingRpc(rpcUrl);
+  const candidates = await lendingRpcCandidates(rpcUrl);
   const [{ KaminoAction, KaminoMarket, VanillaObligation, PROGRAM_ID, DEFAULT_RECENT_SLOT_DURATION_MS }, { default: BN }] = await Promise.all([
     sdkPromise(),
     import('bn.js')
   ]);
-  const connection = new Connection(url, { commitment: 'confirmed' });
-  const market = await KaminoMarket.load(
-    connection,
-    new PublicKey(KAMINO_MAIN_MARKET),
-    DEFAULT_RECENT_SLOT_DURATION_MS || 450,
-    PROGRAM_ID
-  );
-  if (!market) return { ok: false, code: 'KAMINO_MARKET_UNAVAILABLE' };
-
   const owner = new PublicKey(wallet);
   const mint = new PublicKey(asset.address);
-  let obligation = null;
-  try { obligation = await market.getUserVanillaObligation(owner); } catch { obligation = null; }
-  const obligationOrPda = obligation || new VanillaObligation(PROGRAM_ID);
-  const slot = action === 'repay' ? await connection.getSlot('processed') : undefined;
-  let built;
-  if (action === 'supply') {
-    built = await KaminoAction.buildDepositTxns(market, new BN(amountWei.toString()), mint, owner, obligationOrPda, 0, true, false, false);
-  } else if (action === 'borrow') {
-    if (!obligation) return { ok: false, code: 'SOLANA_COLLATERAL_REQUIRED' };
-    built = await KaminoAction.buildBorrowTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
-  } else if (action === 'withdraw') {
-    if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
-    built = await KaminoAction.buildWithdrawTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
-  } else if (action === 'repay') {
-    if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
-    built = await KaminoAction.buildRepayTxns(market, new BN(amountWei.toString()), mint, owner, obligation, slot, undefined, 0, true, false, false);
-  } else {
-    return { ok: false, code: 'UNKNOWN_ACTION' };
-  }
 
-  const txs = await built.getTransactions();
+  /* The whole build is unsigned, so retrying it on the next node is safe: no
+     signature exists yet to duplicate. A node that 429s mid-build must not be
+     the reason a valid action dies. */
+  const attempts = [];
+  let txs = null;
+  let builtUrl = null;
+  for (const url of candidates) {
+    const connection = new Connection(url, { commitment: 'confirmed' });
+    try {
+      const market = await KaminoMarket.load(
+        connection,
+        new PublicKey(KAMINO_MAIN_MARKET),
+        DEFAULT_RECENT_SLOT_DURATION_MS || 450,
+        PROGRAM_ID
+      );
+      if (!market) throw new Error('KAMINO_MARKET_UNAVAILABLE');
+
+      let obligation = null;
+      let obligationFailed = false;
+      try {
+        obligation = await market.getUserVanillaObligation(owner);
+      } catch {
+        obligation = null;
+        obligationFailed = true;
+      }
+      /* An obligation READ failure is a network failure, not "no position":
+         answering borrow with SOLANA_COLLATERAL_REQUIRED here would send a
+         user with real collateral to deposit more of it. */
+      if (!obligation && obligationFailed && action !== 'supply') {
+        throw new Error('RPC_ERROR');
+      }
+      const obligationOrPda = obligation || new VanillaObligation(PROGRAM_ID);
+      const slot = action === 'repay' ? await connection.getSlot('processed') : undefined;
+      let built;
+      if (action === 'supply') {
+        built = await KaminoAction.buildDepositTxns(market, new BN(amountWei.toString()), mint, owner, obligationOrPda, 0, true, false, false);
+      } else if (action === 'borrow') {
+        if (!obligation) return { ok: false, code: 'SOLANA_COLLATERAL_REQUIRED' };
+        built = await KaminoAction.buildBorrowTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
+      } else if (action === 'withdraw') {
+        if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
+        built = await KaminoAction.buildWithdrawTxns(market, new BN(amountWei.toString()), mint, owner, obligation, 0, true, false, false);
+      } else if (action === 'repay') {
+        if (!obligation) return { ok: false, code: 'SOLANA_POSITION_REQUIRED' };
+        built = await KaminoAction.buildRepayTxns(market, new BN(amountWei.toString()), mint, owner, obligation, slot, undefined, 0, true, false, false);
+      } else {
+        return { ok: false, code: 'UNKNOWN_ACTION' };
+      }
+
+      txs = await built.getTransactions();
+      builtUrl = url;
+      break;
+    } catch (cause) {
+      attempts.push({ url, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
+    }
+  }
+  if (!txs) {
+    await resetRememberedSolanaRpc();
+    const failure = lendingRpcFailure(attempts);
+    return { ok: false, code: failure.code === 'KAMINO_MARKET_UNAVAILABLE' ? 'KAMINO_MARKET_UNAVAILABLE' : failure.code, detail: failure.detail };
+  }
+  void builtUrl;
   /* `Buffer.from(...)` was a Node-ism: the browser has no Buffer global (it is
      only polyfilled lazily by the dYdX path, which a lending-only user never
      opens), so every transaction build threw ReferenceError before a wallet
@@ -432,22 +655,51 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
 }
 
 export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = null } = {}) {
-  const url = await resolveLendingRpc(rpcUrl);
-  const connection = new Connection(url, { commitment: 'confirmed' });
-  const result = await connection.getSignatureStatuses([signature]);
-  const status = result?.value?.[0];
-  if (!status) return { ok: false, code: 'TRANSACTION_NOT_FOUND' };
-  if (status.err) return { ok: false, code: 'TRANSACTION_FAILED', error: status.err };
-  return { ok: true, confirmed: Boolean(status.confirmationStatus), slot: status.slot };
+  const candidates = await lendingRpcCandidates(rpcUrl);
+  const attempts = [];
+  for (const url of candidates) {
+    try {
+      const connection = new Connection(url, { commitment: 'confirmed' });
+      const result = await connection.getSignatureStatuses([signature]);
+      const status = result?.value?.[0];
+      if (!status) return { ok: false, code: 'TRANSACTION_NOT_FOUND' };
+      if (status.err) return { ok: false, code: 'TRANSACTION_FAILED', error: status.err };
+      return { ok: true, confirmed: Boolean(status.confirmationStatus), slot: status.slot };
+    } catch (cause) {
+      attempts.push({ url, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
+    }
+  }
+  /* Every node refused the question — that is a network failure, NOT "this
+     transaction does not exist". */
+  const failure = lendingRpcFailure(attempts);
+  return { ok: false, code: failure.code === 'KAMINO_MARKET_UNAVAILABLE' ? 'RPC_ERROR' : failure.code, detail: failure.detail };
 }
 
-/** Do not show a successful loan until the Solana cluster has acknowledged it. */
+/**
+ * Do not show a successful loan until the Solana cluster has acknowledged it.
+ *
+ * 2026-09-22: a poll that THROWS (a node going down mid-confirmation) used to
+ * reject the whole wait — the user's transaction was fine, but the panel
+ * reported a failure. Poll errors now rotate to the next candidate and keep
+ * waiting until the deadline; only the deadline itself is a timeout.
+ */
 export async function waitForSolanaLendingTransaction(signature, { rpcUrl = null, timeoutMs = 20_000 } = {}) {
-  const url = await resolveLendingRpc(rpcUrl);
-  const connection = new Connection(url, { commitment: 'confirmed' });
+  const candidates = await lendingRpcCandidates(rpcUrl);
+  let index = 0;
+  let connection = new Connection(candidates[index], { commitment: 'confirmed' });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const result = await connection.getSignatureStatuses([signature]);
+    let result = null;
+    try {
+      result = await connection.getSignatureStatuses([signature]);
+    } catch {
+      /* Rotate to the next node and keep waiting — the transaction may be
+         confirming fine while this one node is down. */
+      index = (index + 1) % candidates.length;
+      connection = new Connection(candidates[index], { commitment: 'confirmed' });
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      continue;
+    }
     const status = result?.value?.[0];
     if (status?.err) return { ok: false, code: 'TRANSACTION_FAILED', error: status.err };
     if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
