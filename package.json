@@ -295,6 +295,8 @@
     "@kamino-finance/klend-sdk": "^5.0.0",
     "@noble/ed25519": "^3.2.0",
     "@noble/hashes": "^2.4.0",
+    "@reown/appkit": "1.8.19",
+    "@reown/appkit-adapter-ethers": "1.8.19",
     "@solana-mobile/wallet-standard-mobile": "^0.5.3",
     "@solana/web3.js": "^1.98.4",
     "@tonconnect/ui-react": "^2.4.4",
@@ -302,8 +304,7 @@
     "@vercel/blob": "^2.6.1",
     "@wallet-standard/app": "^1.1.1",
     "@walletconnect/ethereum-provider": "2.25.0",
-    "@reown/appkit": "1.8.19",
-    "@reown/appkit-adapter-ethers": "1.8.19",
+    "@walletconnect/relay-auth": "1.1.0",
     "buffer": "^6.0.3",
     "capacitor-native-biometric": "^4.2.2",
     "cors": "^2.8.6",
@@ -324,10 +325,9 @@
     "react-router-dom": "^6.26.0",
     "recharts": "^3.10.1",
     "telegraf": "^4.16.3",
+    "tweetnacl": "^1.0.3",
     "web-push": "^3.6.7",
-    "zustand": "^5.0.14",
-    "@walletconnect/relay-auth": "1.1.0",
-    "tweetnacl": "^1.0.3"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@capacitor/android": "^6.2.1",
@@ -345,5 +345,10 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "rpc-websockets": {
+      "uuid": "11.1.0"
+    }
   }
 }
