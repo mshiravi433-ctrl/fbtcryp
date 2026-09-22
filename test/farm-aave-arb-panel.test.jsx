@@ -37,6 +37,7 @@ const POOL_ROW = { project: 'aave-v3', chain: 'Arbitrum', symbol: 'USDC', exposu
 const providerWith = (over = {}) => makeAaveProvider({
   chainId: 42161,
   pool: AAVE_V3_ARBITRUM.pool,
+  addressesProvider: AAVE_V3_ARBITRUM.addressesProvider,
   aToken: AAVE_V3_ARBITRUM.aUsdc,
   usdc: AAVE_V3_ARBITRUM.usdc,
   pinnedPool: AAVE_V3_ARBITRUM.pool,

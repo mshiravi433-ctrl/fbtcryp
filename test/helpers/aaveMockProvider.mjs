@@ -33,6 +33,7 @@ const IFACES = {
   pool: new Interface([
     'function getConfiguration(address asset) view returns (uint256)',
     'function getUserAccountData(address user) view returns (uint256, uint256, uint256, uint256, uint256, uint256)',
+    'function getAddressesProvider() view returns (address)',
     'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
     'function withdraw(address asset, uint256 amount, address to) returns (uint256)'
   ]),
@@ -119,6 +120,11 @@ export function encodeReserveData({ shape = SHAPE_CORE_V30X, config, liquidityRa
 /**
  * @param {object} cfg
  * @param {string} [cfg.pool]            what PoolAddressesProvider.getPool() returns
+ * @param {string} [cfg.addressesProvider] the PoolAddressesProvider address: the ONLY
+ *                                        contract getPool()/getPriceOracle() answer on
+ *                                        (the pool itself reverts on getPriceOracle —
+ *                                        that was the 2026-09-22 production outage).
+ *                                        Unset → getAddressesProvider() reverts too.
  * @param {string} [cfg.aToken]          what getReserveData says the aToken is
  * @param {string} cfg.usdc              the underlying USDC address (chains.js value)
  * @param {string} cfg.pinnedPool        what the adapter pinned as the Pool
@@ -137,6 +143,7 @@ export function encodeReserveData({ shape = SHAPE_CORE_V30X, config, liquidityRa
  */
 export function makeAaveProvider({
   pool,
+  addressesProvider = null,
   aToken,
   usdc,
   pinnedPool,
@@ -156,6 +163,7 @@ export function makeAaveProvider({
   const sel = {
     getPool: IFACES.addressesProvider.getFunction('getPool').selector,
     getPriceOracle: IFACES.addressesProvider.getFunction('getPriceOracle').selector,
+    getAddressesProvider: IFACES.pool.getFunction('getAddressesProvider').selector,
     getConfiguration: IFACES.pool.getFunction('getConfiguration').selector,
     getUserAccountData: IFACES.pool.getFunction('getUserAccountData').selector,
     getReserveData: IFACES.reserveData.getFunction('getReserveData').selector,
@@ -187,6 +195,12 @@ export function makeAaveProvider({
             [aTokenBalanceWei, 0n, 0n, 0n, 0n, 2n ** 256n - 1n]
           );
         }
+        if (selector === sel.getAddressesProvider) {
+          /* The pool KNOWS its addresses provider — but only if the fixture
+             configured one; otherwise this reverts like a real chain. */
+          if (!addressesProvider) throw new Error('mock provider: addressesProvider not configured');
+          return enc(['address'], [addressesProvider]);
+        }
         if (selector === sel.getReserveData) {
           if (reserveDataShape === 'garbage') return enc(['uint256'], [0n]);
           return encodeReserveData({
@@ -198,9 +212,16 @@ export function makeAaveProvider({
         }
       }
       // The addresses provider is a different contract; getPool()/getPriceOracle()
-      if (selector === sel.getPool) return enc(['address'], [pool ?? pinnedPool]);
-      if (selector === sel.getPriceOracle) {
-        return enc(['address'], [oraclePriceUsd8 > 0n ? '0x2Cc0Fc26eD4563A5ce5e8bdcfe1A2878676Ae156' : ZERO_ADDRESS]);
+      // live THERE, so they answer only calls addressed to it — the same call
+      // to any other contract (the pool included) falls through to the revert
+      // below, exactly like a real deployment. (2026-09-22: this mock used to
+      // answer getPriceOracle on ANY contract, which let the loan page call it
+      // on the Pool and every real RPC revert — the suite stayed green.)
+      if (addressesProvider != null && to === String(addressesProvider).toLowerCase()) {
+        if (selector === sel.getPool) return enc(['address'], [pool ?? pinnedPool]);
+        if (selector === sel.getPriceOracle) {
+          return enc(['address'], [oraclePriceUsd8 > 0n ? '0x2Cc0Fc26eD4563A5ce5e8bdcfe1A2878676Ae156' : ZERO_ADDRESS]);
+        }
       }
       if (selector === sel.getAssetPrice) {
         if (!(oraclePriceUsd8 > 0n)) throw new Error('execution reverted');

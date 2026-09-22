@@ -128,8 +128,18 @@ export const AAVE_POOL_ABI = [
   'function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
   'function getUserConfiguration(address user) view returns ((uint256 data))',
-  'function getPriceOracle() view returns (address)',
+  'function getAddressesProvider() view returns (address)',
   'function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))'
+];
+
+/**
+ * The registry contract that OWNS the deployment lookups — the price oracle
+ * included (§21). `getPriceOracle` lives HERE, not on the Pool: the pool only
+ * knows its provider's address. Calling it on the Pool reverts on every real
+ * RPC, which is exactly what took the loan page's oracle down on 2026-09-22.
+ */
+export const AAVE_PROVIDER_ABI = [
+  'function getPriceOracle() view returns (address)'
 ];
 
 /**
@@ -809,14 +819,23 @@ export async function readAllowance({ provider, chainId, asset, owner }) {
    ───────────────────────────────────────────────────────────────────────────
    The prices behind collateral value, borrowing power, health factor and
    liquidation risk are read from the POOL'S OWN oracle, resolved at runtime
-   through `Pool.getPriceOracle()`. That matters for two reasons:
+   in TWO steps: `Pool.getAddressesProvider()` →
+   `PoolAddressesProvider.getPriceOracle()`. That matters for two reasons:
 
      1. §32 — a CEX/aggregator ticker is not the protocol's risk input. Aave
         liquidates against ITS oracle, so showing a CoinGecko-derived number
         next to a health factor would let the user compute safety against a
         price the protocol will never use.
      2. The address is never hardcoded here. It is asked for, per chain, from
-        the pool this file already proved answers `getReserveData`.
+        the deployment the pool itself points at.
+
+   2026-09-22 production outage: the resolution used to be ONE step —
+   `getPriceOracle()` called directly on the Pool. That function does not
+   exist on Pool (it lives on PoolAddressesProvider), so every real RPC
+   reverted and every oracle read answered «قیمت‌های اوراکل خوانده نشد» —
+   while the unit mocks, which answer any selector on any contract, stayed
+   green and hid it. The two-stage read below is the protocol's actual
+   wiring; the mock provider is contract-aware so this cannot regress.
 
    What counts as INVALID, and what happens then:
      · zero price for an asset           → that asset is flagged, not guessed
@@ -879,7 +898,15 @@ export async function readOraclePrices({ provider, chainId, assets, referencePri
   try {
     const { Contract } = await loadEthers();
     const pool = new Contract(venue.pool, AAVE_POOL_ABI, provider);
-    const oracleAddress = String(await pool.getPriceOracle());
+    /* Two stages (§21, 2026-09-22): the Pool only knows its addresses
+       provider; the provider owns getPriceOracle. Calling getPriceOracle on
+       the Pool reverts on every real RPC. */
+    const providerAddress = String(await pool.getAddressesProvider());
+    if (!isAddress(providerAddress) || providerAddress === ZERO) {
+      return { ...empty, reason: 'NO_ADDRESSES_PROVIDER' };
+    }
+    const addressesProvider = new Contract(providerAddress, AAVE_PROVIDER_ABI, provider);
+    const oracleAddress = String(await addressesProvider.getPriceOracle());
     if (!isAddress(oracleAddress) || oracleAddress === ZERO) {
       return { ...empty, reason: 'NO_ORACLE_ON_POOL' };
     }
