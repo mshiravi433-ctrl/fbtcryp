@@ -12,6 +12,7 @@
     "predict": "Predict",
     "signals": "Signals",
     "stocks": "Stocks",
+    "etf": "ETFs & Gold",
     "more": "More",
     "help": "Help",
     "docs": "Docs",
@@ -13004,5 +13005,22 @@
     },
     "gasNote": "Network fee is paid in {{gas}} — the merchant never holds it.",
     "gasIn": "Gas in {{gas}}"
+  },
+  "etf": {
+    "title": "ETFs & Gold",
+    "subtitle": "Live read-only quotes for Bitcoin, Ethereum and Gold ETFs. No trading on this screen.",
+    "tabBitcoin": "Bitcoin ETFs",
+    "tabEthereum": "Ethereum ETFs",
+    "tabGoldEtf": "Gold ETFs",
+    "tabGoldSpot": "Gold Spot",
+    "unconfigured": "ETF data source is not configured",
+    "unconfiguredBody": "ALPHA_VANTAGE_API_KEY is not set on the server. No synthetic prices are shown.",
+    "loading": "Loading…",
+    "failed": "ETF data unavailable",
+    "noRows": "No rows arrived from the data source. No fake chart or zero is shown.",
+    "staleNote": "Upstream is temporarily unavailable — showing last valid data labelled stale.",
+    "goldUnit": "USD per troy ounce",
+    "goldFailed": "Gold spot unavailable",
+    "disclaimer": "Read-only. FBT does not place ETF or gold orders. Funds and Prediction markets stay unavailable in this phase."
   }
 }

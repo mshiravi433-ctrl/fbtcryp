@@ -44,6 +44,7 @@ import {
 } from '../lending.js';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../chainsLite.js';
 import { classifyError, nextRecovery } from '../../src/lib/central/errors.js';
+import { etfMarketsSource, goldSpotSource } from '../etfGold.js';
 
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12_000);
 const MAX_RPC_CHAINS = 4;
@@ -164,6 +165,8 @@ const DEFAULT_SOURCES = {
   bridgeQuoteSource,
   equitiesMarkets,
   rwaMarkets,
+  etfMarkets,
+  goldSpot,
   transactionReceipt,
   tokenRisk: tokenRiskReal,
   swapTokenSafety
@@ -805,6 +808,46 @@ function classifyOstiumRow(row) {
      and anything else the venue lists would pollute the forex domain. */
   if (/^[A-Z]{6}$/.test(flat) && OSTIUM_FIAT.has(flat.slice(0, 3)) && OSTIUM_FIAT.has(flat.slice(3))) return 'forex';
   return 'other';
+}
+
+/**
+ * Real ETF quotes (Bitcoin/Ethereum/Gold spot ETFs) via Alpha Vantage.
+ * Read-only: no trading route is declared. Missing key → honest UNAVAILABLE.
+ */
+async function etfMarkets() {
+  const res = await guarded('etf-feed', () => etfMarketsSource(), { staleKey: 'ci:etf:universe', maxAttempts: 2 });
+  if (!res.ok) return { ok: false, code: res.code || 'ETF_FEED_UNAVAILABLE' };
+  const value = res.value || {};
+  if (value.ok === false) return { ok: false, code: value.code || 'ETF_FEED_UNAVAILABLE', detail: value.detail || null };
+  return {
+    ok: true,
+    ...value,
+    stale: res.stale === true || value.stale === true,
+    staleReason: res.staleReason || value.staleReason || null,
+    source: value.source || 'etf-feed:alpha-vantage',
+    at: Date.now()
+  };
+}
+
+/**
+ * Gold spot (XAU/USD) via Alpha Vantage GOLD_SILVER_SPOT.
+ * Kept separate from Ostium commodities so ETF/gold data is never mixed with
+ * synthetic perp rows — the commodities module may still read Ostium; gold
+ * spot is an additional honest instrument when the key is configured.
+ */
+async function goldSpot() {
+  const res = await guarded('gold-feed', () => goldSpotSource(), { staleKey: 'ci:gold:spot', maxAttempts: 2 });
+  if (!res.ok) return { ok: false, code: res.code || 'GOLD_FEED_UNAVAILABLE' };
+  const value = res.value || {};
+  if (value.ok === false) return { ok: false, code: value.code || 'GOLD_FEED_UNAVAILABLE', detail: value.detail || null };
+  return {
+    ok: true,
+    ...value,
+    stale: res.stale === true || value.stale === true,
+    staleReason: res.staleReason || value.staleReason || null,
+    source: value.source || 'gold-feed:alpha-vantage',
+    at: Date.now()
+  };
 }
 
 async function rwaMarkets() {

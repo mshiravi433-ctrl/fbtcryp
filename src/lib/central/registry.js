@@ -228,8 +228,14 @@ export function buildCapabilityMatrix(modules = [], health = {}) {
     /* 'UNKNOWN' means "we have not probed this yet", which is not evidence of a
        problem — downgrading on it would make a cold server look broken and would
        block plans for modules that are fine. Only a real failed probe demotes. */
-    if (cap === CAPABILITY.AVAILABLE && h && ['DEGRADED', 'DOWN'].includes(String(h.status).toUpperCase())) {
-      cap = h.status === 'DOWN' ? CAPABILITY.UNAVAILABLE : CAPABILITY.DEGRADED;
+    if ((cap === CAPABILITY.AVAILABLE || cap === CAPABILITY.READ_ONLY) && h && ['DEGRADED', 'DOWN'].includes(String(h.status).toUpperCase())) {
+      /* READ_ONLY modules (ETF) demote to DEGRADED on a soft failure and to
+         UNAVAILABLE only on a hard DOWN with no cache — never invent AVAILABLE. */
+      if (h.status === 'DOWN') {
+        cap = CAPABILITY.UNAVAILABLE;
+      } else {
+        cap = CAPABILITY.DEGRADED;
+      }
     }
     if (cap === CAPABILITY.INCOMPLETE && !m.audit?.complete) cap = CAPABILITY.INCOMPLETE;
     capabilities[m.id] = cap;
@@ -241,6 +247,7 @@ export function buildCapabilityMatrix(modules = [], health = {}) {
       permissions: m.permissions.max,
       tools: m.tools.length,
       health: h?.status || 'UNKNOWN',
+      executes: m.definition?.meta?.executes === true ? true : false,
       note: cap === CAPABILITY.INCOMPLETE ? 'this feature is not wired into the brain end to end (§40)' : null
     };
   }
