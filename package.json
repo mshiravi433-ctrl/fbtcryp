@@ -287,6 +287,8 @@
     "assetlinks:remote": "node scripts/assetlinks.mjs --remote",
     "test:wallet-diagnostics": "node test/wallet-diagnostics-probe.mjs",
     "test:intent-protocol": "node test/protocol/run-all-protocol-tests.mjs",
+    "test:mcp": "node test/mcp/mcp-probe.mjs",
+    "mcp": "node mcp/src/cli.mjs",
     "compile:intent-protocol": "node scripts/compile-intent-protocol.mjs"
   },
   "dependencies": {

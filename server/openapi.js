@@ -376,6 +376,55 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
         get: { summary: 'Read your portfolio agent', description: 'Approval-only allocation target. No scheduler or signer reads it.', security: [{ telegramInitData: [] }], responses: { 200: { description: 'Portfolio agent or null', content: json(ref('PortfolioAgent')) }, ...ERROR_RESPONSE } },
         post: writeOp('Save your portfolio agent', 'Rebalance mode is forced to approval_required; withdrawal and act-alone permissions are refused.', { body: 'PortfolioAgent' })
       },
+      '/developer/whoami': {
+        get: {
+          summary: 'Resolve a developer API key to its identity',
+          description: 'Server-truth answer to "is this key valid and what may it do". The presented secret is verified by hash; the response carries the identity, the scopes the key actually holds and the hard boundary. No secret, hash or seed material is ever returned. Consumed by the fbt-mcp bridge and any other agent runtime.',
+          security: [{ developerApiKey: [] }],
+          responses: {
+            200: {
+              description: 'The identity this key resolves to, plus the never-sign boundary',
+              content: json({
+                type: 'object',
+                required: ['data', 'meta'],
+                properties: {
+                  data: {
+                    type: 'object',
+                    properties: {
+                      owner: { type: 'string' },
+                      projectId: { type: 'string' },
+                      keyId: { type: 'string' },
+                      environment: { type: 'string', const: 'sandbox' },
+                      scopes: { type: 'array', items: { type: 'string' } },
+                      keyScopes: { type: 'array', items: { type: 'string' } }
+                    }
+                  },
+                  meta: {
+                    type: 'object',
+                    properties: {
+                      schema: { type: 'string', const: 'fbt.developer-whoami.v1' },
+                      dataStatus: { type: 'string', const: 'live' },
+                      boundary: {
+                        type: 'object',
+                        description: 'Always the same answer: this API cannot sign, execute, settle or withdraw.',
+                        properties: {
+                          canSign: { type: 'boolean', const: false },
+                          canExecute: { type: 'boolean', const: false },
+                          canSettle: { type: 'boolean', const: false },
+                          canWithdraw: { type: 'boolean', const: false },
+                          custody: { type: 'boolean', const: false },
+                          userSignatureRequired: { type: 'boolean', const: true }
+                        }
+                      }
+                    }
+                  }
+                }
+              })
+            },
+            ...ERROR_RESPONSE
+          }
+        }
+      },
       '/developer/projects': {
         get: { summary: 'Your sandbox projects', security: [{ telegramInitData: [] }], responses: listResponse('Projects owned by the caller') },
         post: writeOp('Create a sandbox project', 'Sandbox only. Scopes are filtered to the allowed set.', { body: null })

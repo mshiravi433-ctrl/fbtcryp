@@ -1189,6 +1189,56 @@ app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
 });
 
 /*
+ * WHO AM I — the identity check an agent runtime needs before it trusts its
+ * own configuration.
+ *
+ * The MCP bridge (mcp/) and any other machine client must answer "is this key
+ * actually valid, and what may it do" from SERVER truth, not from what the
+ * caller believes its scopes are: a client-side guess at scopes would be the
+ * same "security control that does not exist" the key store itself once was.
+ * The response resolves the presented secret to its identity and repeats the
+ * hard boundary (`x-fbt-boundary`) so the question "can this move my funds" is
+ * answerable from the identity endpoint itself. No secret, no hash, and no
+ * metadata beyond the identity the caller already holds is returned.
+ */
+app.get('/api/developer/whoami', async (req, res) => {
+  const bearer = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!looksLikeApiKey(bearer)) return projectError(res, 'API_KEY_INVALID', 'An Authorization: Bearer <fbt_sandbox_…> developer key is required', 401);
+  const auth = await authenticateApiKey(bearer);
+  if (!auth.ok) {
+    return projectError(
+      res,
+      auth.code === 'PROJECT_STORE_UNAVAILABLE' ? 'PROJECT_STORE_UNAVAILABLE' : auth.code,
+      auth.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'The API key is unknown or revoked',
+      auth.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 401
+    );
+  }
+  res.set('cache-control', 'no-store');
+  return res.json({
+    data: {
+      owner: auth.identity.owner,
+      projectId: auth.identity.projectId,
+      keyId: auth.identity.keyId,
+      environment: auth.identity.environment,
+      scopes: auth.identity.scopes,
+      keyScopes: apiKeyScopes()
+    },
+    meta: {
+      schema: 'fbt.developer-whoami.v1',
+      dataStatus: 'live',
+      boundary: {
+        canSign: false,
+        canExecute: false,
+        canSettle: false,
+        canWithdraw: false,
+        custody: false,
+        userSignatureRequired: true
+      }
+    }
+  });
+});
+
+/*
  * OBSERVED REPUTATION. Derived from the opt-in, bucketed execution
  * observations this API already collects — there is no endpoint that accepts a
  * reputation, because a reputation you can POST is an advertisement. Under
