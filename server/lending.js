@@ -714,10 +714,21 @@ export function lendingRouter() {
     breaker.report('protocol', true);
 
     const positions = [];
+    /* Every listed reserve's RAW balances, by symbol — including the zero
+       positions that are skipped below. The /loan page falls back to this map
+       for its wallet-balance pre-flight when the browser's own RPC path is
+       dead (supply needs the balance of an asset the user never deposited,
+       which the filtered `positions` array deliberately omits). */
+    const balancesBySymbol = {};
     for (const reserve of reserves) {
       if (!reserve.ok || !reserve.listed) continue;
       const token = findToken(chainId, reserve.address);
       const balances = await readTokenBalances(chainId, wallet, token, reserve);
+      balancesBySymbol[reserve.symbol] = {
+        walletWei: balances.walletWei,
+        suppliedWei: balances.suppliedWei,
+        debtWei: balances.debtWei
+      };
       if (balances.suppliedWei === '0' && balances.debtWei === '0') continue;
       positions.push({
         asset: reserve.symbol,
@@ -742,6 +753,7 @@ export function lendingRouter() {
       wallet,
       network: chainId,
       positions,
+      balances: balancesBySymbol,
       healthFactor: account.healthFactor,
       totalCollateralUsd: account.totalCollateralUsd,
       totalDebtUsd: account.totalDebtUsd,

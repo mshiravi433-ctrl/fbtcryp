@@ -10123,7 +10123,8 @@
       "KAMINO_SDK_UNAVAILABLE": "The Kamino module is not available in this build of the app — please update.",
       "RPC_RATE_LIMITED": "The network node is rate-limited right now — try again in a moment.",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
-      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status."
+      "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
+      "SOLANA_TX_FAILED": "The Solana transaction failed on-chain — nothing was spent."
     },
     "rateUnknown": "live rate unavailable right now",
     "alerts": {

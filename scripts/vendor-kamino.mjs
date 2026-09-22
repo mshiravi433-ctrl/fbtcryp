@@ -5,11 +5,13 @@
  * imports this generated file at runtime, while this script runs in prebuild.
  */
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const outdir = resolve(root, 'public/vendor');
 const outfile = resolve(root, 'public/vendor/kamino-klend-sdk.js');
 const stub = resolve(root, 'node_modules/.cache-kamino-stub.mjs');
 writeFileSync(stub, `
@@ -42,17 +44,51 @@ const aliasPlugin = {
 };
 const entry = resolve(root, 'scripts/.vendor-kamino-entry.generated.mjs');
 writeFileSync(entry, [
+  /* 2026-09-22: pre-warm via the package index FIRST. The klend dist graph is
+     CJS with circular requires (fraction.js <-> utils/obligationOrder chain);
+     esbuild's deep-entry first-touch order left `Fraction.MAX_F_BN` undefined
+     at module init, crashing the bundle in every browser. Importing the index
+     replays Node's own require() order, which is proven to initialize cleanly,
+     then the deep re-exports hit the warm cache. */
+  "import '@kamino-finance/klend-sdk';",
   "export { KaminoMarket } from '@kamino-finance/klend-sdk/dist/classes/market.js';",
   "export { KaminoAction } from '@kamino-finance/klend-sdk/dist/classes/action.js';",
   "export { VanillaObligation } from '@kamino-finance/klend-sdk/dist/utils/ObligationType.js';",
   "export { PROGRAM_ID } from '@kamino-finance/klend-sdk/dist/idl_codegen/programId.js';",
+  "export { DEFAULT_RECENT_SLOT_DURATION_MS } from '@kamino-finance/klend-sdk/dist/classes/reserve.js';",
 ].join('\n'));
-mkdirSync(dirname(outfile), { recursive: true });
-await build({
-  entryPoints: [entry], outfile, bundle: true, format: 'esm', platform: 'browser',
-  target: ['es2020'], minify: true, legalComments: 'none', sourcemap: false,
-  plugins: [aliasPlugin], logLevel: 'info',
-  define: { 'process.env.NODE_ENV': '"production"', global: 'globalThis' },
-  banner: { js: 'if (!globalThis.process) globalThis.process = { env: { NODE_ENV: "production" }, browser: true, nextTick: f => Promise.resolve().then(f) };' }
-});
+mkdirSync(outdir, { recursive: true });
+try {
+  /* 2026-09-22: single-file CJS-interop output crashed at module init in
+     browsers (circular `Fraction.MAX_F_BN` access inside the klend dist
+     graph). Fixed by pre-warming the package index in the entry above (see
+     scripts/check-kamino-bundle.mjs), which replays Node's require() order.
+     splitting is enabled so any dynamic-import islands emitted in future SDK
+     upgrades become sibling chunks instead of breaking the single-file
+     entry; today esbuild typically emits just kamino-klend-sdk.js. */
+  await build({
+    entryPoints: [entry], outdir, bundle: true, splitting: true, format: 'esm', platform: 'browser',
+    entryNames: 'kamino-klend-sdk', chunkNames: 'kamino-chunks/[name]-[hash]',
+    target: ['es2020'], minify: true, legalComments: 'none', sourcemap: false,
+    plugins: [aliasPlugin], logLevel: 'info',
+    define: { 'process.env.NODE_ENV': '"production"', global: 'globalThis' },
+    banner: { js: 'if (!globalThis.process) globalThis.process = { env: { NODE_ENV: "production" }, browser: true, nextTick: f => Promise.resolve().then(f) };' }
+  });
+  /* A bundle that builds but crashes at import time in a real browser is
+     worse than no bundle: verify init works under browser-sim conditions. */
+  execFileSync(process.execPath, [resolve(root, 'scripts/check-kamino-bundle.mjs'), outfile], { stdio: 'inherit' });
+} catch (error) {
+  /* `--soft` (predev): a dev machine without the klend-sdk installed (fresh
+     clone before a full `npm ci`, offline) must still be able to start the
+     dev server — the Solana panel then shows its honest KAMINO_SDK_UNAVAILABLE
+     state instead of appearing "active". A production build (no flag) still
+     fails hard: a build that cannot vendor the SDK must not ship. */
+  if (process.argv.includes('--soft')) {
+    console.warn(`⚠ Kamino KLend vendor bundle NOT generated (${String(error?.message || error).slice(0, 120)}). Solana lending will report KAMINO_SDK_UNAVAILABLE in this dev session.`);
+    process.exitCode = 0;
+  } else {
+    throw error;
+  }
+  process.exit(process.exitCode);
+}
 console.log('✓ Kamino KLend vendor bundle written to public/vendor/kamino-klend-sdk.js');

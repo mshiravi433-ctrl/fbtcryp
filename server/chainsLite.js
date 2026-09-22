@@ -104,7 +104,7 @@ export const EVM_CHAINS = {
   59144: {
     id: 59144, short: 'LINEA', name: 'Linea',
     native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
-    rpc: ['https://rpc.linea.build', 'https://linea.drpc.org'],
+    rpc: ['https://rpc.linea.build', 'https://linea-rpc.publicnode.com', 'https://linea.drpc.org'],
     explorer: 'https://lineascan.build',
     color: '#61dfff',
     router: '0x80e38291e06339d10AAB483C65695D004dBD5C69', // SyncSwap V2-compatible
@@ -114,7 +114,7 @@ export const EVM_CHAINS = {
   146: {
     id: 146, short: 'S', name: 'Sonic',
     native: { symbol: 'S', decimals: 18, coingeckoId: 'sonic-3' },
-    rpc: ['https://rpc.soniclabs.com', 'https://sonic.drpc.org'],
+    rpc: ['https://rpc.soniclabs.com', 'https://sonic-rpc.publicnode.com', 'https://sonic.drpc.org'],
     explorer: 'https://sonicscan.org',
     color: '#fe9a4d',
     router: '0x1D368773735ee1E678950B7A97bcA2CafB330CDc',

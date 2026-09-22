@@ -77,13 +77,36 @@ function stockSvg(sym) {
 
 /** Resolve one symbol to an SVG string, or null when only the monogram fits. */
 export function symbolSvg(rawSymbol) {
-  const sym = String(rawSymbol || '').toUpperCase().replace(/[^A-Z0-9&]/g, '');
+  const sym = String(rawSymbol || '').toUpperCase().replace(/[^A-Z0-9&.]/g, '');
   if (!sym) return null;
   if (TOKEN_SVG[sym]) return TOKEN_SVG[sym];
   if (sym === 'WETH') return TOKEN_SVG.ETH || null;
   if (sym === 'WBNB') return TOKEN_SVG.BNB || null;
   if (sym === 'BTCB' || sym === 'CBBTC' || sym === 'TBTC') return TOKEN_SVG.BTC || null;
   if (sym === 'USDCE' || sym === 'USDBC') return TOKEN_SVG.USDC || null;
+  /* ── Lending-page coverage (2026-09-22) ──────────────────────────────────
+     The /loan markets are exactly these: Aave majors (covered above) and the
+     Kamino Solana reserves + Sonic's own pair. Wrappers take their base
+     artwork — a wrapped SOL tile reads as SOL, never as an unknown coin. */
+  if (sym === 'WSOL') return TOKEN_SVG.SOL || null;
+  /* Sonic's S (and its wrapped form) IS the chain's own coin — the network
+     mark is the honest artwork. stS is a third-party liquid-staking token on
+     that chain, so it gets its own labelled tile rather than pretending to
+     be S. */
+  if (sym === 'S') return NETWORK_SVG['146'] || null;
+  if (sym === 'WS') return NETWORK_SVG['146'] || null;
+  if (sym === 'STS') return tileSvg('stS', '#fe9a4d', '#b3551e', { size: 7 });
+  /* Kamino main-market collateral. Liquid-staking SOL wrappers keep their
+     protocol's identity colour; plain USD stables keep the dollar hue. */
+  if (sym === 'JITOSOL') return tileSvg('jSOL', '#31d07b', '#0f7c43', { size: 7 });
+  if (sym === 'JUPSOL') return tileSvg('jupSOL', '#8bd04a', '#3c7f1f', { size: 6 });
+  if (sym === 'BNSOL') return tileSvg('bnSOL', '#bb9f33', '#7c6416', { size: 6 });
+  if (sym === 'JTO') return tileSvg('JTO', '#31d07b', '#0f7c43', { size: 8 });
+  if (sym === 'USDE') return tileSvg('USDe', '#3b8fe8', '#1d4f91', { size: 7 });
+  if (sym === 'SUSDE') return tileSvg('sUSDe', '#3b8fe8', '#123a6c', { size: 6 });
+  if (sym === 'USDG') return tileSvg('USDG', '#3fa96c', '#176b3d', { size: 7 });
+  if (sym === 'USDS') return tileSvg('USDS', '#c9a13b', '#7c6416', { size: 7 });
+  if (sym === 'EURC') return FLAG_SVG.EUR || null;
   if (FLAG_SVG[sym]) return FLAG_SVG[sym];
   if (FX_ALIAS[sym] && FLAG_SVG[FX_ALIAS[sym]]) return FLAG_SVG[FX_ALIAS[sym]];
   const stock = stockSvg(sym);
