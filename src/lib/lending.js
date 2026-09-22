@@ -851,6 +851,13 @@ export const ORACLE_STATUS = Object.freeze({
  * never substituted for the protocol price, and never feeds a risk number.
  * `nowSeconds` is injectable so the staleness rule is unit-testable.
  *
+ * `reserves` is optional: the snapshot `readReserves` already produced for the
+ * SAME pass. Each reserve carries the `lastUpdateTimestamp` the staleness rule
+ * needs, so passing it saves one full pool read per asset — on a rate-limited
+ * public RPC those re-reads were often the difference between the oracle
+ * answering and the whole read 429ing. A reserve missing from the map falls
+ * back to a single fresh read, exactly as before.
+ *
  * @returns {Promise<{
  *   ok: boolean, status: string, oracleAddress: string|null,
  *   baseCurrencyUnit: string|null, baseCurrencyDecimals: number|null,
@@ -858,7 +865,7 @@ export const ORACLE_STATUS = Object.freeze({
  *   staleAssets: string[], invalidAssets: string[], checkedAt: number, reason?: string
  * }>}
  */
-export async function readOraclePrices({ provider, chainId, assets, referencePrices = null, nowSeconds = null, staleAfterSeconds = ORACLE_STALE_AFTER_SECONDS }) {
+export async function readOraclePrices({ provider, chainId, assets, referencePrices = null, nowSeconds = null, staleAfterSeconds = ORACLE_STALE_AFTER_SECONDS, reserves = null }) {
   const list = Array.isArray(assets) ? assets.filter((a) => isAddress(a?.address)) : [];
   const empty = {
     ok: false, status: ORACLE_STATUS.UNAVAILABLE, oracleAddress: null,
@@ -913,12 +920,17 @@ export async function readOraclePrices({ provider, chainId, assets, referencePri
       const reference = referencePrices ? Number(referencePrices[asset.symbol] ?? referencePrices[asset.id] ?? NaN) : NaN;
 
       /* Staleness is the reserve's own last-accrual timestamp: it is the
-         protocol's signal that this reserve's state has stopped moving. */
-      let lastUpdate = null;
-      try {
-        const reserve = await readReserve({ provider, chainId, asset });
-        lastUpdate = reserve?.lastUpdateTimestamp ?? null;
-      } catch { lastUpdate = null; }
+         protocol's signal that this reserve's state has stopped moving.
+         The snapshot from the same pass already carries it; only when it is
+         absent (a direct caller, or a reserve outside the snapshot) is a
+         fresh per-asset read made. */
+      let lastUpdate = reserves?.[asset.id]?.lastUpdateTimestamp ?? null;
+      if (lastUpdate == null) {
+        try {
+          const reserve = await readReserve({ provider, chainId, asset });
+          lastUpdate = reserve?.lastUpdateTimestamp ?? null;
+        } catch { lastUpdate = null; }
+      }
       const stale = lastUpdate != null && Number(lastUpdate) > 0 && (now - Number(lastUpdate)) > Number(staleAfterSeconds);
 
       const valid = priceBase != null && priceBase > 0n && !stale;

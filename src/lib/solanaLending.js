@@ -16,6 +16,39 @@ export const KAMINO_LENDING_PROGRAM = 'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgm
 export const SOLANA_LENDING_RPC = 'https://api.mainnet-beta.solana.com';
 export const SOLANA_LENDING_EXPLORER = 'https://solscan.io';
 
+/**
+ * Which node the lending reads go through.
+ *
+ * This used to be the hardcoded Foundation endpoint — `api.mainnet-beta.solana.com`
+ * answers a busy browser with HTTP 429 and is frequently unreachable on
+ * Iranian mobile networks, which is why the loan page's Solana panel sat on
+ * «RPC سولانا یا بازار Kamino خوانده نشد» while the Solana swap screen on the
+ * same phone worked. The app already owns a probed, multi-endpoint RPC layer
+ * (src/lib/solanaRpc.js): the user's own RPC first, then the community nodes,
+ * with the winner cached for the session. The lending path now uses it too.
+ * An explicit `rpcUrl` still wins — tests and the panel may pin one.
+ */
+async function resolveLendingRpc(rpcUrl) {
+  if (rpcUrl) return rpcUrl;
+  try {
+    const { getSolanaRpcUrl } = await import('./solanaRpc.js');
+    return await getSolanaRpcUrl();
+  } catch {
+    return SOLANA_LENDING_RPC;
+  }
+}
+
+/** Wrap a raw connection failure in the engine's named codes (§28). */
+function solanaReadError(cause, code = 'RPC_ERROR') {
+  const raw = String(cause?.message || cause || '');
+  const finalCode = cause?.code || (/429|rate.?limit/i.test(raw) ? 'RPC_RATE_LIMITED'
+    : (/fetch|network|failed to fetch|econn|timeout|timed out/i.test(raw) ? 'RPC_ERROR' : code));
+  const error = new Error(finalCode);
+  error.code = finalCode;
+  error.detail = raw.slice(0, 160);
+  return error;
+}
+
 const KAMINO_VENDOR_URL = `${import.meta.env?.BASE_URL || '/'}vendor/kamino-klend-sdk.js`;
 const KAMINO_VENDOR_REV = '1';
 let sdkModulePromise = null;
@@ -99,19 +132,38 @@ const reserveToView = (reserve, slot) => {
 /**
  * Read Kamino reserves and the wallet's vanilla obligation. The SDK does the
  * protocol/account decoding; this function only serializes values for React.
+ * The node it reads from is the app's probed RPC layer by default — not the
+ * Foundation's most-throttled endpoint (see `resolveLendingRpc`).
+ *
+ * @returns the market snapshot. A failure is THROWN as a coded error
+ *   (KAMINO_SDK_UNAVAILABLE / KAMINO_MARKET_UNAVAILABLE / RPC_ERROR /
+ *   RPC_RATE_LIMITED) so the panel can explain WHICH thing is down instead of
+ *   collapsing every cause into one sentence (§28).
  */
-export async function readSolanaLendingMarket({ wallet = null, rpcUrl = SOLANA_LENDING_RPC } = {}) {
+export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } = {}) {
+  const url = await resolveLendingRpc(rpcUrl);
   const { KaminoMarket, DEFAULT_RECENT_SLOT_DURATION_MS } = await sdkPromise();
-  const connection = new Connection(rpcUrl, { commitment: 'confirmed' });
-  const market = await KaminoMarket.load(
-    connection,
-    new PublicKey(KAMINO_MAIN_MARKET),
-    DEFAULT_RECENT_SLOT_DURATION_MS || 450,
-    new PublicKey(KAMINO_LENDING_PROGRAM)
-  );
-  if (!market) return { ok: false, code: 'KAMINO_MARKET_UNAVAILABLE', dataStatus: 'unavailable' };
+  const connection = new Connection(url, { commitment: 'confirmed' });
+  let market = null;
+  try {
+    market = await KaminoMarket.load(
+      connection,
+      new PublicKey(KAMINO_MAIN_MARKET),
+      DEFAULT_RECENT_SLOT_DURATION_MS || 450,
+      new PublicKey(KAMINO_LENDING_PROGRAM)
+    );
+  } catch (cause) {
+    throw solanaReadError(cause, 'KAMINO_MARKET_UNAVAILABLE');
+  }
+  if (!market) {
+    const error = new Error('KAMINO_MARKET_UNAVAILABLE');
+    error.code = 'KAMINO_MARKET_UNAVAILABLE';
+    error.rpcUrl = url;
+    throw error;
+  }
 
-  const slot = await connection.getSlot('processed');
+  let slot = null;
+  try { slot = await connection.getSlot('processed'); } catch { slot = null; }
   const reserves = market.getReserves()
     .map((reserve) => reserveToView(reserve, slot))
     .filter((reserve) => reserve.status !== 'hidden' && reserve.status !== 'obsolete');
@@ -145,6 +197,7 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = SOLANA_L
     chainId: SOLANA_LENDING_CHAIN_ID,
     protocol: 'kamino-klend',
     marketAddress: KAMINO_MAIN_MARKET,
+    rpcUrl: url,
     slot,
     readAt: new Date().toISOString(),
     dataStatus: 'live',
@@ -169,17 +222,18 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = SOLANA_L
 }
 
 /** Build one or more unsigned Kamino transactions for the connected wallet. */
-export async function buildSolanaLendingTransactions({ action, asset, amount, wallet, rpcUrl = SOLANA_LENDING_RPC } = {}) {
+export async function buildSolanaLendingTransactions({ action, asset, amount, wallet, rpcUrl = null } = {}) {
   if (!wallet) return { ok: false, code: 'SOLANA_WALLET_REQUIRED' };
   if (!asset?.address) return { ok: false, code: 'SOLANA_ASSET_REQUIRED' };
   const amountWei = toSolanaUnits(amount, Number(asset.decimals));
   if (amountWei == null || amountWei <= 0n) return { ok: false, code: 'AMOUNT_REQUIRED' };
 
+  const url = await resolveLendingRpc(rpcUrl);
   const [{ KaminoAction, KaminoMarket, VanillaObligation, PROGRAM_ID, DEFAULT_RECENT_SLOT_DURATION_MS }, { default: BN }] = await Promise.all([
     sdkPromise(),
     import('bn.js')
   ]);
-  const connection = new Connection(rpcUrl, { commitment: 'confirmed' });
+  const connection = new Connection(url, { commitment: 'confirmed' });
   const market = await KaminoMarket.load(
     connection,
     new PublicKey(KAMINO_MAIN_MARKET),
@@ -227,8 +281,9 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
   };
 }
 
-export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = SOLANA_LENDING_RPC } = {}) {
-  const connection = new Connection(rpcUrl, { commitment: 'confirmed' });
+export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = null } = {}) {
+  const url = await resolveLendingRpc(rpcUrl);
+  const connection = new Connection(url, { commitment: 'confirmed' });
   const result = await connection.getSignatureStatuses([signature]);
   const status = result?.value?.[0];
   if (!status) return { ok: false, code: 'TRANSACTION_NOT_FOUND' };
@@ -237,8 +292,9 @@ export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = SO
 }
 
 /** Do not show a successful loan until the Solana cluster has acknowledged it. */
-export async function waitForSolanaLendingTransaction(signature, { rpcUrl = SOLANA_LENDING_RPC, timeoutMs = 20_000 } = {}) {
-  const connection = new Connection(rpcUrl, { commitment: 'confirmed' });
+export async function waitForSolanaLendingTransaction(signature, { rpcUrl = null, timeoutMs = 20_000 } = {}) {
+  const url = await resolveLendingRpc(rpcUrl);
+  const connection = new Connection(url, { commitment: 'confirmed' });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const result = await connection.getSignatureStatuses([signature]);

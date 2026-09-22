@@ -58,6 +58,7 @@ import { assessPosition, riskLevel } from './lending-engine/health';
 import { mapRawError, LENDING_ERRORS } from './lending-engine/errors';
 import { buildUnsignedTransaction, simulateUnsignedTransaction } from './preSignSimulation';
 import { assertProviderChain, assertSignerContext } from './defi/executionGuards';
+import { apiBase } from './apiBase';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    §3 — DATA STATUS
@@ -168,6 +169,164 @@ export function assertLendingContracts({ chainId, asset }) {
    MARKET STATE (§5/§6/§19/§20/§21/§25)
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/** The markets endpoint this service falls back to; pinned by the schema id. */
+export const LENDING_BFF_MARKETS_SCHEMA = 'fbt.lending-markets.v2';
+
+/**
+ * The app's own lending BFF (`GET /api/lending/markets?network=`) as a READ
+ * FALLBACK for the browser's direct RPC path.
+ *
+ * ─── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * The page used to read Aave ONLY through whichever public RPC the wallet
+ * context could reach from the browser. In much of this app's user base the
+ * free public endpoints are throttled (HTTP 429), TLS-blocked or simply slow
+ * enough to trip the stall timer — on every network at once. The symptom this
+ * produced: «قیمت‌های اوراکل خوانده نشد» and empty markets for EVERY chain,
+ * while the app's own backend — which has ordered multi-RPC failover, a
+ * short cache and the same allowlists — was serving the same numbers to
+ * other features without ever being consulted by this page.
+ *
+ * Honesty contract, unchanged from the direct path:
+ *   · the BFF reads the SAME pool and the SAME protocol oracle — nothing here
+ *     is an exchange ticker, and nothing is invented;
+ *   · a payload that does not match the pinned schema is NOT data;
+ *   · anything served through this path is labelled (`source: 'server-bff'`)
+ *     so the UI can never present a server-cached number as a fresh chain read
+ *     (§3/§26);
+ *   · any failure returns `{ ok:false }` and the caller degrades exactly as it
+ *     did before this path existed.
+ */
+export async function readLendingBffMarkets({ chainId, baseUrl = null, fetchImpl = null, timeoutMs = 6500 } = {}) {
+  const cid = Number(chainId);
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, reason: 'UNSUPPORTED_CHAIN' };
+  const doFetch = typeof fetchImpl === 'function' ? fetchImpl : (typeof fetch === 'function' ? fetch : null);
+  if (!doFetch) return { ok: false, reason: 'NO_FETCH' };
+  let base = '/api';
+  try { base = String(baseUrl || apiBase() || '/api'); } catch { base = '/api'; }
+  const url = `${base.replace(/\/+$/, '')}/lending/markets?network=${cid}`;
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 6500)) : null;
+  try {
+    const res = await doFetch(url, {
+      headers: { accept: 'application/json' },
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    if (!res?.ok) return { ok: false, reason: `HTTP_${res?.status ?? 0}` };
+    const json = await res.json();
+    /* Shape validation is mandatory: an endpoint that answered 200 with
+       anything else (a captive portal, the SPA fallback, an error envelope)
+       is not market data. */
+    if (json?.meta?.schema !== LENDING_BFF_MARKETS_SCHEMA || !Array.isArray(json?.data?.markets)) {
+      return { ok: false, reason: 'BAD_PAYLOAD' };
+    }
+    const marketsBySymbol = {};
+    for (const market of json.data.markets) {
+      if (market && typeof market.asset === 'string') marketsBySymbol[market.asset] = market;
+    }
+    return {
+      ok: true,
+      marketsBySymbol,
+      meta: {
+        dataStatus: json.meta.dataStatus ?? null,
+        oracleStatus: json.meta.oracleStatus ?? null,
+        oracleAddress: json.meta.oracleAddress ?? null,
+        oracleCode: json.meta.oracleCode ?? null,
+        readAt: json.meta.readAt ?? null
+      }
+    };
+  } catch (error) {
+    return { ok: false, reason: String(error?.name === 'AbortError' ? 'TIMEOUT' : 'BFF_UNAVAILABLE'), detail: String(error?.message || error).slice(0, 120) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Overlay one BFF market onto a reserve object that the direct read could not
+ * produce. Rates, LTV and status may come from the server (labelled); the
+ * depth fields stay null rather than becoming invented numbers — the BFF
+ * markets endpoint does not serve aToken/debt totals (honest nulls there too),
+ * so the depth grid degrades to its "could not be read" state instead of
+ * filling with nothing.
+ */
+function mergeBffReserve({ current, bffMarket, asset }) {
+  const capToString = (value) => (value != null && Number(value) > 0 ? String(value) : null);
+  return {
+    ok: true,
+    listed: true,
+    listingSource: 'server-bff',
+    decimals: Number(current?.decimals ?? bffMarket.decimals ?? asset.decimals ?? 18),
+    decimalsMatch: current?.decimalsMatch ?? null,
+    supplyApyPct: current?.supplyApyPct ?? (Number.isFinite(bffMarket.supplyApy) ? bffMarket.supplyApy : null),
+    borrowApyPct: current?.borrowApyPct ?? (Number.isFinite(bffMarket.borrowApy) ? bffMarket.borrowApy : null),
+    ltvPct: current?.ltvPct ?? (Number.isFinite(bffMarket.ltv) ? bffMarket.ltv : null),
+    liquidationThresholdPct: current?.liquidationThresholdPct ?? (Number.isFinite(bffMarket.liquidationThreshold) ? bffMarket.liquidationThreshold : null),
+    liquidationBonusPct: current?.liquidationBonusPct ?? (Number.isFinite(bffMarket.liquidationBonus) ? bffMarket.liquidationBonus : null),
+    borrowingEnabled: current?.borrowingEnabled ?? (typeof bffMarket.borrowingEnabled === 'boolean' ? bffMarket.borrowingEnabled : null),
+    status: current?.status && current.status !== 'unknown' ? current.status
+      : (['active', 'paused', 'frozen'].includes(bffMarket.status) ? bffMarket.status : 'unknown'),
+    totalSupplyWei: current?.totalSupplyWei ?? null,
+    totalDebtWei: current?.totalDebtWei ?? null,
+    availableLiquidityWei: current?.availableLiquidityWei ?? null,
+    utilizationPct: current?.utilizationPct ?? null,
+    supplyCapWhole: current?.supplyCapWhole ?? capToString(bffMarket.supplyCapWhole),
+    borrowCapWhole: current?.borrowCapWhole ?? capToString(bffMarket.borrowCapWhole),
+    borrowCapWei: current?.borrowCapWei ?? null,
+    supplyCapWei: current?.supplyCapWei ?? null,
+    dataStatus: 'partial'
+  };
+}
+
+/**
+ * Build the protocol-oracle view from BFF oracle prices, for the assets the
+ * page works with. Only a positive base price counts — a missing feed stays
+ * unavailable per asset, never zero (§21).
+ */
+function mergeBffOracle({ bff, assets }) {
+  const prices = {};
+  let anyValid = false;
+  for (const asset of assets) {
+    const market = bff?.marketsBySymbol?.[asset.symbol];
+    const base = safeBigInt(market?.oraclePriceBase);
+    const usd = Number(market?.oraclePrice);
+    if (base != null && base > 0n) {
+      anyValid = true;
+      prices[asset.id] = {
+        symbol: asset.symbol,
+        address: asset.address,
+        priceBase: base.toString(),
+        priceUsd: Number.isFinite(usd) && usd > 0 ? usd : baseToUsdNumber(base),
+        valid: true, stale: false, reason: null, source: 'server-bff'
+      };
+    } else {
+      prices[asset.id] = {
+        symbol: asset.symbol, address: asset.address,
+        priceBase: null, priceUsd: null, valid: false, stale: false,
+        reason: 'ORACLE_PRICE_UNAVAILABLE', source: 'server-bff'
+      };
+    }
+  }
+  if (!anyValid) return null;
+  const metaStatus = String(bff?.meta?.oracleStatus || '');
+  return {
+    ok: true,
+    /* A BFF 'partial' means some prices, which here is simply 'ok': the
+       per-asset entries already say which one is missing. */
+    status: metaStatus === 'anomaly' ? ORACLE_STATUS.ANOMALY : ORACLE_STATUS.OK,
+    oracleAddress: bff?.meta?.oracleAddress ?? null,
+    prices,
+    staleAssets: [],
+    invalidAssets: assets.filter((a) => !prices[a.id]?.valid).map((a) => a.symbol),
+    checkedAt: Date.now(),
+    source: 'server-bff'
+  };
+}
+
+const safeBigInt = (value) => {
+  try { return value == null ? null : BigInt(value); } catch { return null; }
+};
+
 /**
  * One read pass over everything the Lending page displays.
  *
@@ -207,71 +366,125 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
     const hit = cache.get(cacheKey);
     if (hit) return { ...hit, dataStatus: DATA_STATUS.CACHED, status: DATA_STATUS.CACHED };
   }
-  if (!provider) {
+  const failures = [];
+
+  /* ── (A) the direct reads, exactly as before — only when a provider exists ─ */
+  let reserves = {};
+  let oracle = null;
+  let account = null;
+  let positions = {};
+  let userConfiguration = null;
+
+  if (provider) {
+    /* Reserves first: the oracle's staleness rule consumes each reserve's
+       `lastUpdateTimestamp` from this same pass (see readOraclePrices'
+       `reserves` parameter), so the oracle pass no longer re-reads every
+       reserve behind the rate limiter's back. */
+    try {
+      reserves = await readReserves({ provider, chainId: cid, assets: list });
+    } catch (error) {
+      failures.push({ step: 'reserves', reason: String(error?.message || error).slice(0, 160) });
+    }
+
+    /* §21 — the protocol's own oracle. Never a CEX ticker for a risk number. */
+    try {
+      oracle = await readOraclePrices({ provider, chainId: cid, assets: list, referencePrices, reserves });
+    } catch (error) {
+      failures.push({ step: 'oracle', reason: String(error?.message || error).slice(0, 160) });
+    }
+
+    if (wallet) {
+      try {
+        account = await readUserAccount({ provider, chainId: cid, user: wallet });
+        if (!account?.ok) failures.push({ step: 'account', reason: account?.reason ?? 'ACCOUNT_READ_FAILED' });
+      } catch (error) {
+        failures.push({ step: 'account', reason: String(error?.message || error).slice(0, 160) });
+      }
+      try {
+        const entries = await Promise.all(list.map(async (asset) => [
+          asset.id,
+          await readAssetPosition({ provider, chainId: cid, asset, user: wallet, reserve: reserves[asset.id] })
+        ]));
+        positions = Object.fromEntries(entries);
+      } catch (error) {
+        failures.push({ step: 'positions', reason: String(error?.message || error).slice(0, 160) });
+      }
+      /* §15 — collateral usage, from the pool's per-user bitmap. */
+      try {
+        userConfiguration = await readUserConfiguration({ provider, chainId: cid, user: wallet, reserves });
+        if (!userConfiguration?.ok) failures.push({ step: 'userConfiguration', reason: userConfiguration?.reason ?? 'READ_FAILED' });
+      } catch (error) {
+        failures.push({ step: 'userConfiguration', reason: String(error?.message || error).slice(0, 160) });
+      }
+    }
+  } else {
+    failures.push({ step: 'provider', reason: 'NO_PROVIDER' });
+  }
+
+  /* ── (B) what the direct path actually produced ─────────────────────────── */
+  const directListed = (map) => Object.values(map).filter((r) => r?.listed === true).length;
+  let listedCount = directListed(reserves);
+  /* §21 A 'stale' or 'anomaly' answer from the direct oracle is INFORMATION,
+     not a gap: only a flat 'unavailable' asks for the fallback read. */
+  const oracleOkDirect = oracle?.status === ORACLE_STATUS.OK;
+  const oracleNeedsFallback = !oracle || oracle.status === ORACLE_STATUS.UNAVAILABLE;
+  const sources = {
+    reserves: listedCount > 0 ? 'chain' : null,
+    oracle: oracleOkDirect ? 'chain' : oracleNeedsFallback ? null : 'chain'
+  };
+
+  /* ── (C) the app's own BFF as fallback for whatever the chain read missed ──
+     The numbers it returns are the SAME pool and the SAME protocol oracle,
+     read server-side over its ordered RPC failover; they are labelled
+     `server-bff` everywhere downstream so they can never be mistaken for a
+     fresh browser-side chain read (§3). Only what is missing is filled — a
+     direct fact (including "this asset is not a reserve") always wins. */
+  const unknownReserves = Object.values(reserves).filter((r) => r?.listed == null).length;
+  if (listedCount === 0 || unknownReserves > 0 || oracleNeedsFallback) {
+    const bff = await readLendingBffMarkets({ chainId: cid });
+    if (bff?.ok) {
+      let mergedReserves = 0;
+      for (const asset of list) {
+        const current = reserves[asset.id];
+        if (current?.listed != null) continue; // a direct fact always wins
+        const bffMarket = bff.marketsBySymbol?.[asset.symbol];
+        if (!bffMarket) continue;
+        reserves = { ...reserves, [asset.id]: mergeBffReserve({ current, bffMarket, asset }) };
+        mergedReserves += 1;
+      }
+      if (mergedReserves > 0) {
+        listedCount = directListed(reserves);
+        sources.reserves = sources.reserves ?? 'server-bff';
+      }
+      if (oracleNeedsFallback) {
+        const bffOracle = mergeBffOracle({ bff, assets: list });
+        if (bffOracle) { oracle = bffOracle; sources.oracle = 'server-bff'; }
+      }
+    } else {
+      failures.push({ step: 'server-bff', reason: bff?.reason || 'BFF_UNAVAILABLE' });
+    }
+  }
+
+  /* Nothing answered at all: the honest empty snapshot of before, with its
+     reason intact — never a grid of dashes pretending to be data (§37). */
+  if (listedCount === 0 && !account?.ok && !oracle?.ok) {
     const stale = cache?.getStale(cacheKey) ?? null;
     return {
       ok: false, chainId: cid, venue, assets: list, reserves: {}, oracle: null,
       account: null, positions: {}, userConfiguration: null, prices: {},
       dataStatus: stale ? DATA_STATUS.CACHED : DATA_STATUS.UNAVAILABLE,
-      reason: 'NO_PROVIDER', readAt: stale?.readAt ?? null, failures: [{ step: 'provider', reason: 'NO_PROVIDER' }],
+      reason: provider ? 'PROTOCOL_UNAVAILABLE' : 'NO_PROVIDER',
+      readAt: stale?.readAt ?? null, failures, sources,
       ...(stale ? { stale: true, ageMs: stale.ageMs } : {})
     };
   }
 
-  const failures = [];
-  /* Reserves first: the oracle read needs each reserve's `lastUpdateTimestamp`
-     for the staleness rule, and readOraclePrices re-reads per asset anyway. */
-  let reserves = {};
-  try {
-    reserves = await readReserves({ provider, chainId: cid, assets: list });
-  } catch (error) {
-    failures.push({ step: 'reserves', reason: String(error?.message || error).slice(0, 160) });
-  }
-
-  const listedCount = Object.values(reserves).filter((r) => r?.listed === true).length;
-  const partialCount = Object.values(reserves).filter((r) => r?.listed === true && r?.dataStatus === 'partial').length;
-
-  /* §21 — the protocol's own oracle. Never a CEX ticker for a risk number. */
-  let oracle = null;
-  try {
-    oracle = await readOraclePrices({ provider, chainId: cid, assets: list, referencePrices });
-  } catch (error) {
-    failures.push({ step: 'oracle', reason: String(error?.message || error).slice(0, 160) });
-  }
-
+  /* ── (D) the price view, AFTER the oracle merge ─────────────────────────── */
   const prices = {};
   for (const asset of list) {
     const p = oracle?.prices?.[asset.id];
-    prices[asset.id] = p?.valid ? { usd: p.priceUsd, base: p.priceBase, status: DATA_STATUS.LIVE, source: 'protocol-oracle' }
+    prices[asset.id] = p?.valid ? { usd: p.priceUsd, base: p.priceBase, status: DATA_STATUS.LIVE, source: p.source ?? 'protocol-oracle' }
       : { usd: null, base: null, status: DATA_STATUS.UNAVAILABLE, reason: p?.reason ?? 'ORACLE_UNAVAILABLE', source: null };
-  }
-
-  let account = null;
-  let positions = {};
-  let userConfiguration = null;
-  if (wallet) {
-    try {
-      account = await readUserAccount({ provider, chainId: cid, user: wallet });
-      if (!account?.ok) failures.push({ step: 'account', reason: account?.reason ?? 'ACCOUNT_READ_FAILED' });
-    } catch (error) {
-      failures.push({ step: 'account', reason: String(error?.message || error).slice(0, 160) });
-    }
-    try {
-      const entries = await Promise.all(list.map(async (asset) => [
-        asset.id,
-        await readAssetPosition({ provider, chainId: cid, asset, user: wallet, reserve: reserves[asset.id] })
-      ]));
-      positions = Object.fromEntries(entries);
-    } catch (error) {
-      failures.push({ step: 'positions', reason: String(error?.message || error).slice(0, 160) });
-    }
-    /* §15 — collateral usage, from the pool's per-user bitmap. */
-    try {
-      userConfiguration = await readUserConfiguration({ provider, chainId: cid, user: wallet, reserves });
-      if (!userConfiguration?.ok) failures.push({ step: 'userConfiguration', reason: userConfiguration?.reason ?? 'READ_FAILED' });
-    } catch (error) {
-      failures.push({ step: 'userConfiguration', reason: String(error?.message || error).slice(0, 160) });
-    }
   }
 
   /* §12/§13 — one risk assessment, from the engine, shared with the alerts and
@@ -285,11 +498,14 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
     })
     : null;
 
-  /* §3 — the aggregate label. Every reserve read but some fields missing is
-     PARTIAL; nothing read is UNAVAILABLE; all of it is LIVE. */
+  /* §3 — the aggregate label. A snapshot assembled through the server fallback
+     is PARTIAL: good enough to show and name, never dressed up as a fresh
+     direct chain read. */
+  const servedByServer = sources.reserves === 'server-bff' || sources.oracle === 'server-bff';
+  const partialCount = Object.values(reserves).filter((r) => r?.listed === true && r?.dataStatus === 'partial').length;
   const dataStatus = listedCount === 0 && !account?.ok
     ? DATA_STATUS.UNAVAILABLE
-    : (partialCount > 0 || failures.length > 0 || oracle?.status !== ORACLE_STATUS.OK)
+    : (partialCount > 0 || failures.length > 0 || oracle?.status !== ORACLE_STATUS.OK || servedByServer)
       ? DATA_STATUS.PARTIAL
       : DATA_STATUS.LIVE;
 
@@ -309,6 +525,7 @@ export async function readMarketState({ provider, chainId, assets = null, wallet
     readAt: Date.now(),
     dataStatus,
     status: dataStatus,
+    sources,
     failures
   };
   /* Only a snapshot that actually read something is worth caching (§26: a
@@ -341,7 +558,13 @@ export function getMaxBorrow({ market, asset, headroomBps = 10 } = {}) {
   const reserve = market.reserves?.[asset.id];
   const price = market.prices?.[asset.id];
 
-  if (!account?.ok) {
+  if (account == null) {
+    /* No account was ever read — the wallet is not connected. That is a
+       different sentence from "the pool failed to answer", and the UI ties
+       each to its own action: connect, versus retry. */
+    return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'NOT_CONNECTED' };
+  }
+  if (!account.ok) {
     return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'ACCOUNT_UNAVAILABLE', detail: 'the pool could not be read for this wallet' };
   }
   if (reserve && reserve.listed === false) {
