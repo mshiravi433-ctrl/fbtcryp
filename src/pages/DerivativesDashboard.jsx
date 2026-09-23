@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import AssetIcon from '../components/AssetIcon';
 import FundingPanel from '../components/FundingPanel';
@@ -121,6 +122,7 @@ function Tile({ icon: Icon, label, value, note, tone = 'flat', ltr = true }) {
 
 export default function DerivativesDashboard({ embedded = false }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data: spot } = useMarkets(100);
 
   const [markets, setMarkets] = useState([]);
@@ -328,6 +330,18 @@ export default function DerivativesDashboard({ embedded = false }) {
             cost and the calculator are already built and tested there. */}
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <FundingPanel />
+        </motion.div>
+
+        {/* Buy & earn relay — internal, no external link. The hall is venue data;
+            trading lives on the app's own futures (Ostium / on-chain) and earning
+            on the Earn pools. Both are internal routes, so the hall can relay
+            without ever opening an outside domain. */}
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <div className="deriv-relay" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <button type="button" className="btn btn-primary" style={{ minHeight: 42, borderRadius: 12, fontWeight: 700 }} onClick={() => navigate('/trade')}>{t('derivatives.tradeCta', { defaultValue: 'خرید / معامله' })}</button>
+            <button type="button" className="btn btn-ghost" style={{ minHeight: 42, borderRadius: 12, fontWeight: 700 }} onClick={() => navigate('/earn')}>{t('derivatives.earnCta', { defaultValue: 'کسب درآمد' })}</button>
+          </div>
+          <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>{t('derivatives.relayNote', { defaultValue: 'معامله و کسب درآمد در همین برنامه — بدون لینک بیرونی' })}</p>
         </motion.div>
 
         {/* ─── the board ─────────────────────────────────────────────────── */}

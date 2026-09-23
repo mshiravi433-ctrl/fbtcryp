@@ -79,6 +79,8 @@ export const SOLANA_CLUSTER_RPCS = Object.freeze({
   'mainnet-beta': Object.freeze([
     'https://solana-rpc.publicnode.com',
     'https://rpc.solanatracker.io/public',
+    'https://rpc.ankr.com/solana',
+    'https://solana.public-rpc.com',
     'https://rpc.magicblock.app/mainnet',
     'https://solana.drpc.org',
     'https://solana.api.onfinality.io/public',

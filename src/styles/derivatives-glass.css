@@ -6,11 +6,26 @@
 .derivatives-hall {
   position: relative;
   isolation: isolate;
-  width: 100%;
-  max-width: 100%;
+  width: calc(100% + 32px);
+  max-width: calc(100% + 32px);
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  box-sizing: border-box;
   display: block;
   /* no overflow:hidden here — it was clipping the board’s glow and making boxes feel boxed-in */
   overflow: visible;
+}
+@media (min-width: 640px) {
+  .derivatives-hall {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
 }
 
 /* aurora behind the board — two soft orbs drifting */

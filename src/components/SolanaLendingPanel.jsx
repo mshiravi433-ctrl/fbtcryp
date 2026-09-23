@@ -89,17 +89,14 @@ function WalletIncident({ code, t }) {
  */
 function RpcIncident({ hosts, t }) {
   if (!Array.isArray(hosts) || !hosts.length) return null;
+  const shown = hosts.slice(0, 3);
+  const extra = hosts.length - shown.length;
   return (
     <div data-testid="solana-loan-rpc-incident" style={{ marginTop: 2 }}>
       <p style={{ margin: '0 0 5px', color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.7 }}>{t('loan.rpc.body')}</p>
       <ul style={{ margin: '0 0 7px', paddingInlineStart: 16, display: 'grid', gap: 3 }}>
-        {hosts.map((row) => (
+        {shown.map((row) => (
           <li key={`${row.host}-${row.reason}`} style={{ fontSize: 11, lineHeight: 1.65, color: 'var(--text-2)' }}>
-            {/* A hostname is evidence about a PUBLIC node. The relay row is the
-                same fact reached through our own server, and printing our domain
-                in a monospace LTR witness slot would read as «the app refused
-                you» — so it gets a translated label instead, in the page's own
-                direction and type. */}
             {row.relay
               ? <span>{t('loan.rpc.relayHost')}</span>
               : <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', direction: 'ltr', unicodeBidi: 'isolate' }}>{row.host}</span>}
@@ -108,6 +105,19 @@ function RpcIncident({ hosts, t }) {
           </li>
         ))}
       </ul>
+      {extra > 0 ? (
+        <details style={{ margin: '0 0 7px', fontSize: 11, color: 'var(--text-3)' }}>
+          <summary style={{ cursor: 'pointer', color: 'var(--text-2)', fontWeight: 600 }}>{t('loan.rpc.showMore', { n: extra, defaultValue: `نمایش ${extra} مورد دیگر` })}</summary>
+          <ul style={{ margin: '6px 0 0', paddingInlineStart: 16, display: 'grid', gap: 3 }}>
+            {hosts.slice(3).map((row) => (
+              <li key={`${row.host}-${row.reason}`} style={{ fontSize: 11, lineHeight: 1.65, color: 'var(--text-2)' }}>
+                {row.relay ? <span>{t('loan.rpc.relayHost')}</span> : <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate' }}>{row.host}</span>}
+                {' — '}<span style={{ color: '#fbbf24' }}>{loanErrorText(t, row.reason)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 10.5, lineHeight: 1.7 }}>{t('loan.rpc.useOwn')}</p>
     </div>
   );
