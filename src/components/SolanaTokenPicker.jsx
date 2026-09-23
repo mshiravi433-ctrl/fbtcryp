@@ -8,6 +8,7 @@ import {
   fetchSolanaTokenSentiment,
   fetchSolanaTokensMeta
 } from '../lib/solanaTokenMeta';
+import { useSettingsStore } from '../store/useSettingsStore';
 import '../styles/solana-token-picker.css';
 
 /**
@@ -172,6 +173,9 @@ function SentimentStrip({ mint }) {
  */
 export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImport, side = 'to', selectedMints = [] }) {
   const { t } = useTranslation();
+  const cluster = useSettingsStore((s) => s.solanaCluster);
+  const devnet = cluster === 'devnet';
+  const [onlyVerified, setOnlyVerified] = useState(false);
   const [query, setQuery] = useState('');
   const [deferred, setDeferred] = useState('');
   const [remoteRows, setRemoteRows] = useState([]);
@@ -232,8 +236,10 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
   const remoteMatches = useMemo(() => {
     if (!q) return [];
     const localMints = new Set(tokens.map((tk) => tk.mint));
-    return remoteRows.filter((r) => !localMints.has(r.mint));
-  }, [remoteRows, tokens, q]);
+    let out = remoteRows.filter((r) => !localMints.has(r.mint));
+    if (onlyVerified) out = out.filter((r) => r.verified === true);
+    return out;
+  }, [remoteRows, tokens, q, onlyVerified]);
 
   const curatedIdle = useMemo(() => {
     if (q) return [];
@@ -323,6 +329,23 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
         {query ? (
           <button type="button" className="stp-clear" onClick={() => setQuery('')} aria-label={t('common.clear')}>×</button>
         ) : null}
+      </div>
+
+      <div className="stp-meta-row" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span className={`sol-net-chip${devnet ? ' is-devnet' : ''}`} style={{ fontSize: 10 }}>
+          <span className="sol-net-dot" aria-hidden="true" />
+          {devnet ? 'Devnet' : 'Mainnet'}
+        </span>
+        <span className="faint" style={{ fontSize: 11 }}>{t('solana.picker.tokenOnlyNote', { defaultValue: 'فقط توکن — مین‌نت' })}</span>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm ${onlyVerified ? 'is-verified-on' : ''}`}
+          style={{ marginInlineStart: 'auto', minHeight: 32, paddingInline: 10, fontSize: 11, borderColor: onlyVerified ? 'rgba(0,230,158,0.45)' : undefined, background: onlyVerified ? 'rgba(0,230,158,0.12)' : undefined }}
+          onClick={() => setOnlyVerified((v) => !v)}
+          aria-pressed={onlyVerified}
+        >
+          {onlyVerified ? `✓ ${t('solana.picker.verified')}` : t('solana.picker.verified')}
+        </button>
       </div>
 
       {!deferred && curatedIdle.length > 0 && (

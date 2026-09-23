@@ -107,7 +107,7 @@
 }
 
 .wal-total {
-  font-size: 36px;
+  font-size: clamp(26px, 7vw, 36px);
   font-weight: 900;
   letter-spacing: -1px;
   line-height: 1;
@@ -115,7 +115,9 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  overflow-wrap: anywhere;
 }
+:lang(fa) .wal-total, [dir="rtl"] .wal-total { font-size: clamp(24px, 6.5vw, 32px); letter-spacing: -0.5px; }
 :root[data-theme='light'] .wal-total {
   background: linear-gradient(90deg, #0d1020, #4a5a8a);
   -webkit-background-clip: text;

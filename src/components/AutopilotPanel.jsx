@@ -5,6 +5,7 @@ import { riseIn } from './PageTransition';
 import { fmtQty } from '../lib/format';
 import { GOALS, buildAutopilot } from '../lib/autopilot';
 import { ladderRungs } from '../lib/orders';
+import { IconShield, IconTrend, IconWallet, IconActivity } from './Icons';
 import { loadLearningParams, orderTune } from '../lib/learning';
 
 /**
@@ -68,20 +69,45 @@ export default function AutopilotPanel({ series, fromToken, toToken, amountIn, c
         {t('autopilot.intro')}
       </p>
 
-      {/* One question. Three answers. */}
+      {/* One question. Three answers — modern icon tiles */}
       <div className="stack" style={{ gap: 7 }}>
-        {GOALS.map((g) => (
-          <button
-            key={g}
-            type="button"
-            className={`ap-goal ${goal === g ? 'ap-goal-on' : ''}`}
-            onClick={() => setGoal(g)}
-            aria-pressed={goal === g}
-          >
-            <span className="ap-goal-title">{t(`autopilot.goal.${g}.title`)}</span>
-            <span className="ap-goal-sub">{t(`autopilot.goal.${g}.sub`)}</span>
-          </button>
-        ))}
+        {GOALS.map((g) => {
+          const meta =
+            g === 'protect'
+              ? { Icon: IconShield, tone: '#ff8a00' }
+              : g === 'takeProfit'
+                ? { Icon: IconTrend, tone: '#a78bfa' }
+                : { Icon: IconWallet, tone: '#4ade80' };
+          const Ico = meta.Icon;
+          return (
+            <button
+              key={g}
+              type="button"
+              className={`ap-goal ${goal === g ? 'ap-goal-on' : ''} ap-goal-modern`}
+              onClick={() => setGoal(g)}
+              aria-pressed={goal === g}
+              style={{ display: 'flex', alignItems: 'center', gap: 11, textAlign: 'start' }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                  display: 'grid', placeItems: 'center',
+                  background: `linear-gradient(135deg, ${meta.tone}22, ${meta.tone}09)`,
+                  border: `1px solid ${meta.tone}38`,
+                  color: meta.tone,
+                }}
+              >
+                <Ico style={{ width: 18, height: 18 }} />
+              </span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span className="ap-goal-title">{t(`autopilot.goal.${g}.title`)}</span>
+                <span className="ap-goal-sub" style={{ display: 'block', marginTop: 1 }}>{t(`autopilot.goal.${g}.sub`)}</span>
+              </span>
+              {goal === g && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: meta.tone, boxShadow: `0 0 0 5px ${meta.tone}22`, flexShrink: 0 }} />}
+            </button>
+          );
+        })}
       </div>
 
       {result?.refused ? (
