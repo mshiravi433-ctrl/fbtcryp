@@ -1277,7 +1277,8 @@
       "KAMINO_SDK_MIME": "Le module Kamino a été servi avec un mauvais type de contenu (le serveur a renvoyé une page au lieu du module) — rechargez l’app.",
       "KAMINO_SDK_RECOVERED": "Le module Kamino s’est chargé après une nouvelle tentative. En cas d’échec, rechargez l’app.",
       "WALLET_NOT_FOUND": "Aucune application de portefeuille Solana n'a été trouvée sur cet appareil pour ouvrir cette demande — installez-la ou ouvrez-la, puis réessayez.",
-      "RPC_UNAVAILABLE": "Ce nœud a répondu quelque chose que nous n’avons pas pu utiliser."
+      "RPC_UNAVAILABLE": "Ce nœud a répondu quelque chose que nous n’avons pas pu utiliser.",
+      "RELAY_METHOD_UNAVAILABLE": "Le relais intégré de l’app ne transmet pas cette requête : c’est une lacune de cette version, pas une panne de nœud ni de réseau. Rien n’a été envoyé ; mets l’app à jour et réessaie."
     },
     "ratesUpdated": "Les taux sont lus depuis les contrats de lending (Morpho/Aave) — rafraîchis automatiquement.",
     "connectWallet": "Connecter le portefeuille",

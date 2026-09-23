@@ -193,14 +193,30 @@ export const RELAY_METHODS = Object.freeze({
   /* account reads — the Kamino market load lives here */
   getBalance: { weight: 1, cacheMs: 1_500 },
   getAccountInfo: { weight: 2, cacheMs: 2_500 },
-  getMultipleAccountsInfo: { weight: 3, cacheMs: 2_500 },
+  /* THE RESERVE AND OBLIGATION BATCH — and the method this relay used to be
+     missing (2026-09-23, second report: «رلهٔ خود برنامه — آن گره پاسخ داد، ولی
+     پاسخی که نتوانستیم استفاده کنیم»).
+     `KaminoMarket.load()` reads the market account first (getAccountInfo, which
+     this relay served) and then loads the reserves with
+     `connection.getMultipleAccountsInfo(...)` — klend-sdk
+     dist/classes/market.js:239, and `getObligationsByReserve` at :468. That
+     web3.js call puts `getMultipleAccounts` on the wire. The allowlist below
+     used to carry `getMultipleAccountsInfo` — the JS name of the same call, a
+     method no Solana node has ever served — so the relay answered the SDK with
+     `-32601 … is not relayed`, the market stayed unread, and the page — rightly
+     — refused to send any transaction. A relay that serves the first call of a
+     read path and refuses the second is worse than no relay: it looks like a
+     node failure, so the client reports «the node answered, but we could not use
+     the response» and the user is told to go configure an RPC.
+     The wire name is what is relayed; the JS name is resolved by
+     RELAY_METHOD_ALIASES below, so a caller using either one is served. */
+  getMultipleAccounts: { weight: 3, cacheMs: 2_500 },
   getMinimumBalanceForRentExemption: { weight: 1, cacheMs: 300_000 },
   getProgramAccounts: { weight: 8, cacheMs: 2_500, heavy: true },
 
   /* token reads */
   getTokenAccountBalance: { weight: 2, cacheMs: 1_500 },
   getTokenAccountsByOwner: { weight: 5, cacheMs: 2_000, heavy: true },
-  getParsedTokenAccountsByOwner: { weight: 5, cacheMs: 2_000, heavy: true },
   getTokenAccountsByDelegate: { weight: 5, cacheMs: 2_000, heavy: true },
   getTokenSupply: { weight: 2, cacheMs: 5_000 },
   getTokenLargestAccounts: { weight: 4, cacheMs: 10_000, heavy: true },
@@ -215,8 +231,48 @@ export const RELAY_METHODS = Object.freeze({
 
 export const relayMethodNames = () => Object.keys(RELAY_METHODS);
 
-const isAllowedMethod = (method) =>
-  typeof method === 'string' && Object.prototype.hasOwnProperty.call(RELAY_METHODS, method);
+/**
+ * JS-level names that are NOT JSON-RPC methods, mapped onto the ones that are.
+ *
+ * WHY THIS TABLE EXISTS
+ * --------------------
+ * `@solana/web3.js` has methods whose names differ from the request they send:
+ *
+ *   connection.getMultipleAccountsInfo(pks)  → {"method":"getMultipleAccounts"}
+ *   connection.getParsedTokenAccountsByOwner → {"method":"getTokenAccountsByOwner"}
+ *
+ * An allowlist written from the JS side therefore contains entries no node can
+ * serve — which is exactly what happened here: the first version of this file
+ * allowed `getMultipleAccountsInfo` and NOT `getMultipleAccounts`, the one call
+ * the Kamino reserve load actually makes (klend-sdk market.js:239). The relay
+ * answered the SDK `-32601 is not relayed`, so the loan page could not read the
+ * market through its own server and reported a node-shaped failure for an
+ * app-shaped bug.
+ *
+ * Resolving an alias SERVES the call instead of refusing it — a superset of the
+ * honest fix, and it means a client written against the JS names (or an older
+ * build of this app) is answered too. Both spellings now reach the same wire
+ * method, the same cache key, the same per-method refusal memory and the same
+ * budget.
+ */
+export const RELAY_METHOD_ALIASES = Object.freeze({
+  getMultipleAccountsInfo: 'getMultipleAccounts',
+  getParsedTokenAccountsByOwner: 'getTokenAccountsByOwner'
+});
+
+/**
+ * The wire method for whatever a caller asked for, or null when nothing in this
+ * relay serves it.
+ *
+ * @param {string} method
+ * @returns {string|null}
+ */
+export function resolveRelayMethod(method) {
+  if (typeof method !== 'string' || !method) return null;
+  if (Object.prototype.hasOwnProperty.call(RELAY_METHODS, method)) return method;
+  const alias = RELAY_METHOD_ALIASES[method];
+  return alias && Object.prototype.hasOwnProperty.call(RELAY_METHODS, alias) ? alias : null;
+}
 
 /* ── per-host refusal memory ──────────────────────────────────────────────── */
 
@@ -458,24 +514,38 @@ export async function relaySolanaRpc({ body, cluster = 'mainnet-beta', ip = null
   if (params !== undefined && !Array.isArray(params) && typeof params !== 'object') {
     return { status: 400, body: rpcError(id, RPC_INVALID_PARAMS, '`params` must be an array or an object'), meta: { cluster: cl, method, stage: 'shape' } };
   }
-  if (!isAllowedMethod(method)) {
+  /* A JS-level name (`getMultipleAccountsInfo`) is resolved to the method that
+     goes on the wire (`getMultipleAccounts`) instead of being refused: see
+     RELAY_METHOD_ALIASES. Everything downstream — budget, cache, refusal
+     memory, upstream call — speaks the wire name. */
+  const wire = resolveRelayMethod(method);
+  if (!wire) {
     /* -32601 is what a node itself answers for a method it does not serve, so
        an SDK walking endpoints treats this relay the same way it treats a node
-       that lacks the method: it throws, and the client tries the next one. */
+       that lacks the method: it throws, and the client tries the next one.
+       The `data` block is MACHINE-readable on purpose: `relay: true` +
+       `stage: 'allowlist'` says «this refusal came from the app's own door, not
+       from a node» — the loan page must never again present an app-side gap as
+       «the node answered but we could not use the response». */
     return {
       status: 200,
-      body: rpcError(id, RPC_METHOD_NOT_FOUND, `method ${method} is not relayed: this endpoint is read-only and forwards an allowlist`),
+      body: rpcError(
+        id,
+        RPC_METHOD_NOT_FOUND,
+        `method ${method} is not relayed: this endpoint is read-only and forwards an allowlist`,
+        { relay: true, stage: 'allowlist', method }
+      ),
       meta: { cluster: cl, method, stage: 'allowlist' }
     };
   }
 
-  const rule = RELAY_METHODS[method];
+  const rule = RELAY_METHODS[wire];
   const budgetKey = String(ip || 'unknown');
 
   /* Budget BEFORE the cache lookup? No — after. A cached answer costs us
      nothing upstream, and charging a user for it would push a busy page over
      the limit while our own bill stayed flat. */
-  const key = cacheKey(cl, method, params);
+  const key = cacheKey(cl, wire, params);
   const cached = readCache(key, now);
   if (cached) {
     return { status: 200, body: { ...cached, id }, meta: { cluster: cl, method, cache: 'hit' } };
@@ -511,7 +581,7 @@ export async function relaySolanaRpc({ body, cluster = 'mainnet-beta', ip = null
   prune(hostRefusals, now);
   prune(methodRefusals, now);
   const all = relayUpstreams(cl);
-  const isWarm = (url) => !hostRefusals.has(hostOf(url)) && !methodRefusals.has(`${hostOf(url)}|${method}`);
+  const isWarm = (url) => !hostRefusals.has(hostOf(url)) && !methodRefusals.has(`${hostOf(url)}|${wire}`);
   const candidates = [...all.filter(isWarm), ...all.filter((url) => !isWarm(url))];
 
   const attempts = [];
@@ -523,7 +593,7 @@ export async function relaySolanaRpc({ body, cluster = 'mainnet-beta', ip = null
     const host = hostOf(url);
     const timeoutMs = rule.heavy ? heavyTimeoutMs() : upstreamTimeoutMs();
     stats.upstreamCalls += 1;
-    const call = await upstreamCall(url, { jsonrpc: '2.0', id: 1, method, params: params ?? [] }, timeoutMs);
+    const call = await upstreamCall(url, { jsonrpc: '2.0', id: 1, method: wire, params: params ?? [] }, timeoutMs);
     attempts.push({ host, ok: call.ok, ms: call.ms, status: call.status || null, reason: call.ok ? null : call.reason });
 
     if (!call.ok) {
@@ -554,7 +624,7 @@ export async function relaySolanaRpc({ body, cluster = 'mainnet-beta', ip = null
         /* The node ANSWERED and said it does not serve this method. Remember it
            per method and keep walking — this host is still useful for reads it
            does serve. */
-        noteMethodRefusal(url, method, code, now);
+        noteMethodRefusal(url, wire, code, now);
         continue;
       }
       /* Any other JSON-RPC error is the protocol's own answer to THIS request
@@ -584,7 +654,7 @@ export async function relaySolanaRpc({ body, cluster = 'mainnet-beta', ip = null
     ? `${status}: every Solana node this relay tried refused the request (blocked by the provider, not a rate limit)`
     : sawThrottle
       ? '429: every Solana node this relay tried is rate limiting it — retry in a moment'
-      : `no Solana node answered this relay for ${method}`;
+      : `no Solana node answered this relay for ${wire}`;
   return {
     status,
     body: rpcError(id, RPC_UPSTREAM_UNAVAILABLE, message, { attempts }),

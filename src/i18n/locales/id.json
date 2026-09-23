@@ -1277,7 +1277,8 @@
       "KAMINO_SDK_MIME": "Modul Kamino disajikan dengan content-type yang salah (server mengirim halaman, bukan modul) — muat ulang aplikasi.",
       "KAMINO_SDK_RECOVERED": "Modul Kamino termuat setelah diulang. Kalau ada yang gagal, muat ulang aplikasi.",
       "WALLET_NOT_FOUND": "Tidak ada aplikasi dompet Solana di perangkat ini untuk membuka permintaan ini — pasang atau buka aplikasinya lalu coba lagi.",
-      "RPC_UNAVAILABLE": "Node itu menjawab dengan sesuatu yang tidak dapat kami gunakan."
+      "RPC_UNAVAILABLE": "Node itu menjawab dengan sesuatu yang tidak dapat kami gunakan.",
+      "RELAY_METHOD_UNAVAILABLE": "Relay milik aplikasi tidak meneruskan permintaan ini — ini kekurangan pada versi aplikasi ini, bukan kegagalan node atau jaringan. Tidak ada yang dikirim; perbarui aplikasi lalu coba lagi."
     },
     "ratesUpdated": "Suku bunga dibaca dari kontrak lending (Morpho/Aave) — diperbarui otomatis.",
     "connectWallet": "Hubungkan dompet",

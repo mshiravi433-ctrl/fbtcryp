@@ -22,6 +22,11 @@
  *   5. CHEAP FOR US — the global market read is shared for a couple of seconds;
  *      the inputs to a signature never are.
  *   6. NO SECRET EVER LEAVES — a keyed upstream is redacted in every response.
+ *   7. IT SPEAKS THE SDK'S LANGUAGE — the methods it forwards are the ones that
+ *      go on the wire, and the JS-level names web3.js exposes are resolved onto
+ *      them. Report 2026-09-23 (second): `getMultipleAccountsInfo` was allowed
+ *      and `getMultipleAccounts` was not, so the relay refused the second call
+ *      of every Kamino market load and the page blamed the network.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
@@ -86,9 +91,16 @@ describe('the relay forwards reads and nothing that can move money', () => {
     }
     /* The reads the Kamino market load and the wallet balance read actually
        make — a relay missing one of these would send the page back to the
-       public nodes it exists to replace. */
-    for (const needed of ['getHealth', 'getAccountInfo', 'getMultipleAccountsInfo', 'getProgramAccounts',
-      'getParsedTokenAccountsByOwner', 'getBalance', 'getLatestBlockhash', 'getSlot',
+       public nodes it exists to replace.
+       THE NAMES HERE ARE THE ONES THAT GO ON THE WIRE, not the JS method names
+       (2026-09-23, second report). This list used to say
+       `getMultipleAccountsInfo` — the name of the web3.js METHOD — while the
+       request web3.js sends is `getMultipleAccounts`, so the allowlist held a
+       method no node serves and refused the real one. The Kamino market load
+       makes exactly that call second (klend-sdk market.js:239), which is why
+       the page could read the market account and nothing else. */
+    for (const needed of ['getHealth', 'getAccountInfo', 'getMultipleAccounts', 'getProgramAccounts',
+      'getTokenAccountsByOwner', 'getBalance', 'getLatestBlockhash', 'getSlot',
       'getSignatureStatuses', 'getMinimumBalanceForRentExemption']) {
       expect(names, `${needed} is needed by the loan page`).toContain(needed);
     }
@@ -133,6 +145,79 @@ describe('the relay forwards reads and nothing that can move money', () => {
     expect(out.body.error.code).toBe(-32001);
     expect(calls.length).toBe(0);
     expect(relayStatus().enabled).toBe(false);
+  });
+});
+
+/* ══════════ the wire method behind the SDK call, not the JS name ══════════
+ *
+ * THE DEFECT THIS PINS (2026-09-23, second report: the app's own relay listed
+ * among the nodes that «answered, but with something we could not use»).
+ *
+ * `connection.getMultipleAccountsInfo(pks)` does NOT send a method called
+ * `getMultipleAccountsInfo`: web3.js puts `getMultipleAccounts` on the wire
+ * (dist/index.cjs.js, `_rpcRequest('getMultipleAccounts', args)`). The relay's
+ * allowlist was written from the JS side, so it allowed the name no node has
+ * and refused the one the Kamino reserve load actually sends — and because
+ * that call is the SECOND one `KaminoMarket.load()` makes (market.js:239,
+ * `loadReserves`), the page read the market account and then died on the
+ * reserves, reporting a node-shaped failure for an app-shaped bug.
+ *
+ * A list of names cannot catch that, so this drives the REAL web3.js
+ * `Connection` into the REAL relay with no network at all: what the SDK sends
+ * is what the relay must serve.
+ */
+describe('the SDK’s own calls reach an upstream through this relay', () => {
+  const RELAY = 'https://app.example.com/api/solana/rpc?cluster=mainnet-beta';
+  const MARKET = '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF';
+
+  /**
+   * web3.js → our relay → the stub upstreams the outer harness controls.
+   *
+   * Handed to the `Connection` as its `fetch` option rather than patched onto
+   * `globalThis`: web3.js resolves its transport's fetch when the module is
+   * first evaluated, so a global patch applied later silently does nothing and
+   * the test would pass against the harness's own stub — a false green in
+   * exactly the file that exists because a name was assumed instead of
+   * measured.
+   */
+  const relayFetch = (ip) => async (url, init = {}) => {
+    const body = JSON.parse(init.body || '{}');
+    const out = await relaySolanaRpc({ body, cluster: 'mainnet-beta', ip });
+    return new Response(JSON.stringify(out.body), { status: out.status, headers: { 'content-type': 'application/json' } });
+  };
+
+  it('serves getMultipleAccounts — the call behind connection.getMultipleAccountsInfo', async () => {
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    /* A missing account is a legitimate answer, and it keeps this test about the
+       METHOD rather than about decoding real Kamino bytes. */
+    behaviour = () => ({ status: 200, result: { context: { slot: 1 }, value: [null] } });
+    const connection = new Connection(RELAY, { commitment: 'confirmed', fetch: relayFetch('5.5.5.5') });
+    const infos = await connection.getMultipleAccountsInfo([new PublicKey(MARKET)]);
+    expect(infos).toEqual([null]);
+    /* Served — so it was dialled, under the wire name the SDK actually used. */
+    expect(calls.map((c) => c.method)).toEqual(['getMultipleAccounts']);
+  });
+
+  it('still serves a caller that asks using the JS-level name', async () => {
+    /* A name no node has is NOT refused: see RELAY_METHOD_ALIASES. Serving it is
+       the difference between an app-side gap and a working read. */
+    const out = await relaySolanaRpc({
+      body: rpc('getMultipleAccountsInfo', [[MARKET]]),
+      ip: '5.5.5.6'
+    });
+    expect(out.body.error, 'a JS-level name must not be refused').toBeUndefined();
+    expect(calls.map((c) => c.method)).toEqual(['getMultipleAccounts']);
+  });
+
+  it('names the refusal as ours when it really is ours', async () => {
+    /* The other half of the honesty rule: when the relay DOES refuse a method,
+       the caller must be able to tell «this endpoint does not forward it» from
+       «a node failed» without reading English prose. */
+    const out = await relaySolanaRpc({ body: rpc('getLeaderSchedule', []), ip: '5.5.5.7' });
+    expect(out.status).toBe(200);
+    expect(out.body.error.code).toBe(-32601);
+    expect(out.body.error.data).toMatchObject({ relay: true, stage: 'allowlist', method: 'getLeaderSchedule' });
+    expect(calls.length).toBe(0);
   });
 });
 

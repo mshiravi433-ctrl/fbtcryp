@@ -1277,7 +1277,8 @@
       "KAMINO_SDK_MIME": "El módulo de Kamino se sirvió con un tipo de contenido incorrecto (el servidor devolvió una página en vez del módulo): recarga la app.",
       "KAMINO_SDK_RECOVERED": "El módulo de Kamino cargó tras reintentar. Si algo falla, recarga la app.",
       "WALLET_NOT_FOUND": "No se encontró ninguna cartera de Solana en este dispositivo para abrir esta solicitud; instálala o ábrela y vuelve a intentarlo.",
-      "RPC_UNAVAILABLE": "Ese nodo respondió con algo que no pudimos usar."
+      "RPC_UNAVAILABLE": "Ese nodo respondió con algo que no pudimos usar.",
+      "RELAY_METHOD_UNAVAILABLE": "El propio relé de la app no reenvía esta solicitud: es una carencia de esta versión, no un fallo del nodo ni de la red. No se envió nada; actualiza la app e inténtalo de nuevo."
     },
     "ratesUpdated": "Las tasas se leen de los contratos de lending (Morpho/Aave) — se actualizan automáticamente.",
     "connectWallet": "Conectar cartera",

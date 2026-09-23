@@ -190,8 +190,30 @@
  *      instead of putting the machine string on the screen.
  * An install pinned to v21 keeps running the old code byte for byte until its
  * shell is evicted, so the rename is not cosmetic — without it the fixes never
- * appear on a device that already opened the app. */
-const SHELL = 'fbt-shell-v23';
+ * appear on a device that already opened the app.
+ *
+ * v23 -> v24: the loan tab's Solana panel could not read the Kamino market
+ * («رلهٔ خود برنامه — آن گره پاسخ داد، ولی پاسخی که نتوانستیم استفاده کنیم»). The
+ * cause was ours, not a node's: the app's own READ-ONLY RPC relay allowed the
+ * web3.js name `getMultipleAccountsInfo` while web3.js puts
+ * `getMultipleAccounts` on the wire (server/solanaRpcRelay.js), so the second
+ * call of every market load — the reserve batch — was refused with `-32601`
+ * and the page reported a node-shaped failure. Three things changed and all
+ * three live in this shell:
+ *   1. the relay forwards the wire method (`getMultipleAccounts`), keeps the
+ *      JS-level names working through an alias table, and marks its own
+ *      refusals machine-readably (`error.data.relay = true`);
+ *   2. a node that ANSWERS with something unusable (a 200 that is not
+ *      JSON-RPC) is now remembered for a while instead of being asked first on
+ *      every refresh, and a public list that is entirely refusals-or-unusable
+ *      moves the relay ahead of it — the reported network path produced a MIX
+ *      (403s, a 429, one connection error, two unusable bodies) and the old
+ *      rule («every host blocked») learned nothing from it;
+ *   3. the loan surface has a sentence for «our own relay does not forward this
+ *      request» (`loan.error.RELAY_METHOD_UNAVAILABLE`, all locales) so an
+ *      app-side gap can never again be shown as «the node answered, but…» with
+ *      advice to configure another RPC. */
+const SHELL = 'fbt-shell-v24';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
