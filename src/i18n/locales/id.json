@@ -1402,7 +1402,8 @@
     "rpc": {
       "title": "Data pasar tidak dapat dibaca",
       "body": "Kami mencoba node Solana berikut; jawaban masing-masing ada di bawah.",
-      "useOwn": "Tambahkan RPC Anda sendiri di Pengaturan → Jaringan agar aplikasi tidak lagi bergantung pada node publik."
+      "useOwn": "Tambahkan RPC Anda sendiri di Pengaturan → Jaringan agar aplikasi tidak lagi bergantung pada node publik.",
+      "relayHost": "relay aplikasi sendiri"
     },
     "wallet": {
       "title": "Dompet tidak terbuka",

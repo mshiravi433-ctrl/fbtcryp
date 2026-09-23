@@ -1402,7 +1402,8 @@
     "rpc": {
       "title": "Les données du marché n'ont pas pu être lues",
       "body": "Nous avons essayé ces nœuds Solana ; la réponse de chacun est ci-dessous.",
-      "useOwn": "Ajoutez votre propre RPC dans Réglages → Réseaux pour que l'application ne dépende plus des nœuds publics."
+      "useOwn": "Ajoutez votre propre RPC dans Réglages → Réseaux pour que l'application ne dépende plus des nœuds publics.",
+      "relayHost": "le relais de l'application"
     },
     "wallet": {
       "title": "Le portefeuille ne s'est pas ouvert",

@@ -55,7 +55,17 @@ async function lendingRpcCandidates(rpcUrl) {
   try {
     const { solanaRpcCandidates, readSolanaNetworkSettings } = await import('./solanaRpc.js');
     const settings = await readSolanaNetworkSettings();
-    const list = solanaRpcCandidates(settings).filter(Boolean);
+    /* `relay: true` — the lending READS are the one path that opts into the
+       app's own relay (server/solanaRpcRelay.js), and the reason is measured,
+       not theoretical: on 2026-09-23 a real user's network path was refused by
+       EVERY public candidate (two 403s, one 429, one 200 whose body the SDK
+       could not use), so the Kamino market could not be read at all and the page
+       correctly refused to send any transaction. A 403 is a decision about the
+       caller's IP/provider/region — no client-side ordering fixes it — while our
+       own origin is reachable by definition (the page loaded from it) and its
+       upstream calls come from a datacentre the public nodes do serve.
+       The relay stays OUT of every broadcast path: it forwards reads only. */
+    const list = solanaRpcCandidates({ ...settings, relay: true }).filter(Boolean);
     return list.length ? [...new Set(list)] : [SOLANA_LENDING_RPC];
   } catch {
     return [SOLANA_LENDING_RPC];
@@ -65,6 +75,18 @@ async function lendingRpcCandidates(rpcUrl) {
 const shortHost = (url) => {
   try { return new URL(url).hostname; } catch { return String(url || '?').slice(0, 40); }
 };
+
+/**
+ * Is this candidate the app's OWN relay rather than a public node?
+ *
+ * Mirrors SOLANA_RELAY_PATH in src/lib/solanaRpc.js (kept as a literal here
+ * because this module deliberately holds no static import of the RPC layer).
+ * The distinction is a labelling one, and it matters: without it the incident
+ * panel lists our own domain among «the public nodes that refused you», which
+ * reads as the app refusing the user. The row is the same fact — a Solana node
+ * said no — but it arrived through a different door, and the user is told which.
+ */
+const isRelayUrl = (url) => String(url || '').includes('/solana/rpc');
 
 /** A fetch-level failure: no HTTP status at all, the request never came back. */
 /* A failure that says «I could not reach the network» — no status code, no
@@ -183,7 +205,7 @@ export function lendingRpcFailure(attempts) {
   error.attempts = list;
   /* Per-host list for the panel: it renders «host → localized reason» from
      this, instead of the raw English transport text. */
-  error.hosts = parts.map((p) => ({ host: p.url, reason: p.reason }));
+  error.hosts = parts.map((p) => ({ host: p.url, reason: p.reason, relay: isRelayUrl(p.rawUrl) }));
   /* And teach the RPC layer, so the next read does not start with the host that
      just refused us (see noteSolanaRpcFailure in solanaRpc.js). */
   noteRefusedCandidates(parts);
@@ -201,8 +223,17 @@ export function lendingRpcFailure(attempts) {
 function noteRefusedCandidates(parts) {
   const refusals = (parts || []).filter((p) => p.rawUrl && (p.cls === 'RPC_BLOCKED' || p.cls === 'RPC_RATE_LIMITED'));
   if (!refusals.length) return;
-  import('./solanaRpc.js').then(({ noteSolanaRpcFailure }) => {
-    for (const p of refusals) noteSolanaRpcFailure(p.rawUrl, p.cls === 'RPC_BLOCKED' ? 'BLOCKED' : 'RATE_LIMITED');
+  import('./solanaRpc.js').then(({ noteSolanaRpcFailure, noteSolanaPublicsBlocked, isSolanaRelayUrl }) => {
+    for (const p of refusals) {
+      if (isSolanaRelayUrl(p.rawUrl)) continue;   // our own origin is never cooled
+      noteSolanaRpcFailure(p.rawUrl, p.cls === 'RPC_BLOCKED' ? 'BLOCKED' : 'RATE_LIMITED');
+    }
+    /* Every PUBLIC node refused (not throttled — refused). That is a property of
+       this network path, so it is remembered across sessions: the next start
+       begins with the relay instead of paying four known-dead round trips before
+       it. A single success anywhere clears it again (see solanaRpcCall). */
+    const publics = (parts || []).filter((p) => p.rawUrl && !isSolanaRelayUrl(p.rawUrl));
+    if (publics.length > 0 && publics.every((p) => p.cls === 'RPC_BLOCKED')) noteSolanaPublicsBlocked();
   }).catch(() => { /* the next read simply starts in the configured order */ });
 }
 

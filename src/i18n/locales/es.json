@@ -1402,7 +1402,8 @@
     "rpc": {
       "title": "No se pudieron leer los datos del mercado",
       "body": "Probamos estos nodos de Solana; la respuesta de cada uno está abajo.",
-      "useOwn": "Añade tu propio RPC en Ajustes → Redes para que la aplicación deje de depender de nodos públicos."
+      "useOwn": "Añade tu propio RPC en Ajustes → Redes para que la aplicación deje de depender de nodos públicos.",
+      "relayHost": "el relay propio de la app"
     },
     "wallet": {
       "title": "La cartera no se abrió",

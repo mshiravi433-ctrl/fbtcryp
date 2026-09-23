@@ -1402,7 +1402,8 @@
     "rpc": {
       "title": "Piyasa verileri okunamadı",
       "body": "Şu Solana düğümlerini denedik; her birinin yanıtı aşağıda.",
-      "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın."
+      "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın.",
+      "relayHost": "uygulamanın kendi aktarıcısı"
     },
     "wallet": {
       "title": "Cüzdan açılmadı",

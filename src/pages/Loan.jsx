@@ -647,11 +647,18 @@ function UnavailableBanner({ failures, onRetry, t }) {
  * Nothing here invents a state: it is rendered only when every listed reserve
  * really is frozen/paused, and it never bypasses the engine's own gating.
  */
-function MarketHaltedNotice({ kind, t }) {
+function MarketHaltedNotice({ kind, t, tab = null, onGoToPositions = null }) {
   const tone = kind === 'paused' ? '#f87171' : '#fbbf24';
   const title = kind === 'paused' ? t('loan.marketHalted.paused')
     : kind === 'mixed' ? t('loan.marketHalted.mixed')
       : t('loan.marketHalted.frozen');
+  /* A frozen market still has two doors open — repay and withdraw — and both
+     live on the Positions tab. Telling a user that and leaving them on a Supply
+     tab full of closed actions is how «در سونیک توکن‌ها فریز است» reads as a
+     dead end, so the notice carries the one tap that gets them to the door.
+     Not offered for `paused`: there every action really is closed, and a button
+     that leads nowhere is worse than no button. */
+  const canUnwind = kind !== 'paused' && typeof onGoToPositions === 'function';
   return (
     <div
       data-testid="loan-market-halted"
@@ -673,6 +680,17 @@ function MarketHaltedNotice({ kind, t }) {
       <p style={{ fontSize: 11, lineHeight: 1.7, color: 'var(--text-3)', margin: '6px 0 0' }}>
         {t('loan.marketHalted.otherMarkets')}
       </p>
+      {canUnwind && tab !== 'positions' && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          data-testid="loan-market-halted-positions"
+          onClick={onGoToPositions}
+          style={{ marginTop: 9, width: '100%', borderColor: `${tone}55`, color: tone }}
+        >
+          {t('loan.tabPositions')}
+        </button>
+      )}
     </div>
   );
 }
@@ -3479,7 +3497,12 @@ export default function Loan() {
       {/* §29 — the protocol has closed this market to new positions. Said once,
           with what still works, instead of leaving it to a wall of grey cards. */}
       {chain !== SOLANA_LENDING_CHAIN_ID && marketHaltedKind && !loading && (
-        <MarketHaltedNotice kind={marketHaltedKind} t={t} />
+        <MarketHaltedNotice
+          kind={marketHaltedKind}
+          t={t}
+          tab={tab}
+          onGoToPositions={() => { haptic?.('select'); setTab('positions'); }}
+        />
       )}
 
       {chain === SOLANA_LENDING_CHAIN_ID && (
