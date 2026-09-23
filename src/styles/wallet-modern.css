@@ -86,7 +86,7 @@
   color: var(--text-2);
 }
 .wallet-total-modern {
-  font-size: 32px;
+  font-size: clamp(24px, 7vw, 32px);
   font-weight: 900;
   letter-spacing: -0.8px;
   line-height: 1;
@@ -94,7 +94,17 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  overflow-wrap: anywhere;
 }
+:lang(fa) .wallet-total-modern, [dir="rtl"] .wallet-total-modern { font-size: clamp(22px, 6.5vw, 28px); letter-spacing: -0.4px; }
+.wal-hero-total {
+  font-size: clamp(26px, 7vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.9px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+:lang(fa) .wal-hero-total, [dir="rtl"] .wal-hero-total { font-size: clamp(22px, 6.2vw, 30px); }
 .wallet-actions-modern {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -318,46 +328,98 @@
 }
 .wal-wallet-accordion.segmented {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  background: transparent;
-  border: none;
-}
-.wal-wallet-accordion.segmented > button {
-  width: 100%;
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(127, 127, 157, 0.06);
-  padding-inline: 14px;
+  border-radius: 14px;
+  margin-top: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.wal-wallet-accordion.segmented::-webkit-scrollbar { display: none; }
+.wal-wallet-accordion.segmented > button {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 44px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  position: relative;
+  isolation: isolate;
+  text-align: center;
+  white-space: nowrap;
+}
+.wal-wallet-accordion.segmented > button.active { color: #000; }
 :root[data-theme='light'] .wal-wallet-accordion.segmented > button {
-  background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.1);
-  color: #0e1729;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
 }
-.wal-acc-caret { color: var(--text-3); font-size: 12px; }
+:root[data-theme='light'] .wal-wallet-accordion.segmented > button.active {
+  background: transparent;
+  color: #000;
+}
+.wal-acc-caret { color: var(--text-3); font-size: 11px; margin-inline-start: 2px; flex-shrink: 0; transition: transform 0.2s ease; }
+.wal-wallet-accordion.segmented > button.active .wal-acc-caret { color: rgba(0,0,0,0.5); }
+:root[data-theme='light'] .wal-acc-caret { color: var(--text-3); }
 
 .sol-wal-hero { position: relative; overflow: hidden; }
 .sol-wal-hero-body { position: relative; display: flex; flex-direction: column; gap: 14px; }
-.sol-wal-addr { font-weight: 800; font-size: 18px; margin-top: 3px; }
+.sol-wal-addr { font-weight: 800; font-size: clamp(14px, 4vw, 17px); margin-top: 3px; word-break: break-all; line-height: 1.35; }
+:lang(fa) .sol-wal-addr, [dir="rtl"] .sol-wal-addr { font-size: clamp(13px, 3.8vw, 15px); }
 .sol-wal-balance { display: flex; flex-direction: column; gap: 2px; }
-.sol-wal-balance strong { font-size: 28px; letter-spacing: -0.03em; }
+.sol-wal-balance strong { font-size: clamp(22px, 6vw, 28px); letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+:lang(fa) .sol-wal-balance strong, [dir="rtl"] .sol-wal-balance strong { font-size: clamp(20px, 5.5vw, 24px); }
 .sol-wal-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .sol-wal-action {
-  min-height: 44px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: rgba(127, 127, 157, 0.08);
+  min-height: 64px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   color: var(--text-1);
-  font-weight: 750;
-  font-size: 12.5px;
+  font-weight: 800;
+  font-size: 11.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: center;
+  line-height: 1.2;
 }
+.sol-wal-action:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.16); box-shadow: 0 8px 20px rgba(0,0,0,0.16); }
+.sol-wal-action:active { transform: scale(0.96); }
+.sol-wal-action-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.18);
+}
+.sol-wal-action[data-action="send"] .sol-wal-action-icon { background: linear-gradient(135deg, #ff2d95 0%, #7c4dff 100%); }
+.sol-wal-action[data-action="receive"] .sol-wal-action-icon { background: linear-gradient(135deg, #00ff9d 0%, #00e5ff 100%); }
+.sol-wal-action[data-action="bridge"] .sol-wal-action-icon { background: linear-gradient(135deg, #ffb300 0%, #ff2d95 100%); }
+.sol-wal-action[data-action="swap"] .sol-wal-action-icon { background: linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%); }
 .sol-wal-row { width: 100%; display: flex; align-items: center; gap: 10px; text-align: start; }
 .sol-wal-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sol-wal-row-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -380,11 +442,20 @@
 }
 .sol-wal-qr svg { width: 100%; height: auto; display: block; }
 .sol-wal-full-addr { font-size: 12px; word-break: break-all; line-height: 1.7; text-align: center; }
-:root[data-theme='light'] .sol-wal-action,
 :root[data-theme='light'] .sol-wal-holdings,
 :root[data-theme='light'] .sol-wal-both {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.1);
+}
+:root[data-theme='light'] .sol-wal-action {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+  color: var(--text-1);
+}
+:root[data-theme='light'] .sol-wal-action:hover {
+  border-color: rgba(15,23,42,0.12);
+  box-shadow: 0 8px 18px rgba(15,23,42,0.08);
 }
 .ord-token-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ord-token-pick {

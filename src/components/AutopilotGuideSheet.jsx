@@ -6,6 +6,15 @@ import { useStill } from './AnimatedIcon';
 import { fmtQty } from '../lib/format';
 import { GOALS, buildAutopilot } from '../lib/autopilot';
 import { loadLearningParams, orderTune } from '../lib/learning';
+import {
+  IconTrend,
+  IconActivity,
+  IconShield,
+  IconPools,
+  IconClock,
+  IconSwap,
+  IconWallet,
+} from './Icons';
 
 /**
  * AUTOPILOT GUIDE — a bottom sheet that explains the goals AND every order
@@ -65,13 +74,13 @@ const DEFAULT_TUNE = { trailMult: 1, stopBufferMult: 1, ladderStepDiv: 3 };
  * ladder rows reuse the measured numbers from the goals above them.
  */
 const ORDER_OPTIONS = [
-  { id: 'limit', emoji: '🎯', tone: '#00e5ff' },
-  { id: 'trailing', emoji: '🛰️', tone: '#ff8a00', measured: 'protect' },
-  { id: 'bracket', emoji: '🛡️', tone: '#ff3b6b' },
-  { id: 'ladder', emoji: '🪜', tone: '#a78bfa', measured: 'takeProfit' },
-  { id: 'dca', emoji: '⏰', tone: '#4ade80' },
-  { id: 'twap', emoji: '🧩', tone: '#fbbf24' },
-  { id: 'rebalance', emoji: '⚖️', tone: '#f472b6' }
+  { id: 'limit', Icon: IconTrend, tone: '#00e5ff' },
+  { id: 'trailing', Icon: IconActivity, tone: '#ff8a00', measured: 'protect' },
+  { id: 'bracket', Icon: IconShield, tone: '#ff3b6b' },
+  { id: 'ladder', Icon: IconPools, tone: '#a78bfa', measured: 'takeProfit' },
+  { id: 'dca', Icon: IconClock, tone: '#4ade80' },
+  { id: 'twap', Icon: IconSwap, tone: '#fbbf24' },
+  { id: 'rebalance', Icon: IconWallet, tone: '#f472b6' }
 ];
 
 export default function AutopilotGuideSheet({ open, onClose, series, fromToken, toToken, chainId }) {
@@ -166,6 +175,13 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
         {results.map(({ goal, result }) => {
           const isOpen = expanded === goal;
           const vals = valuesFor(result);
+          const gMeta =
+            goal === 'protect'
+              ? { Icon: IconShield, tone: '#ff8a00' }
+              : goal === 'takeProfit'
+                ? { Icon: IconTrend, tone: '#a78bfa' }
+                : { Icon: IconWallet, tone: '#4ade80' };
+          const GIcon = gMeta.Icon;
           return (
             <div key={goal} className={`ap-opt ${isOpen ? 'ap-opt-open' : ''}`}>
               <button
@@ -174,11 +190,24 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
                 aria-expanded={isOpen}
                 onClick={() => setExpanded(isOpen ? null : goal)}
               >
-                <span className="ap-opt-copy">
-                  <span className="ap-opt-title">{t(`autopilot.goal.${goal}.title`)}</span>
-                  <span className="ap-opt-sub">{t(`autopilot.goal.${goal}.sub`)}</span>
+                <span className="ap-opt-copy" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                      display: 'grid', placeItems: 'center',
+                      background: `linear-gradient(135deg, ${gMeta.tone}22, ${gMeta.tone}08)`,
+                      border: `1px solid ${gMeta.tone}40`,
+                      color: gMeta.tone,
+                    }}
+                  >
+                    <GIcon style={{ width: 16, height: 16 }} />
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span className="ap-opt-title">{t(`autopilot.goal.${goal}.title`)}</span>
+                    <span className="ap-opt-sub">{t(`autopilot.goal.${goal}.sub`)}</span>
+                  </span>
                 </span>
-                {/* +/− rather than a chevron: it says which way it will move. */}
                 <span className="ap-opt-mark" aria-hidden="true">{isOpen ? '−' : '+'}</span>
               </button>
 
@@ -258,12 +287,13 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
                     aria-hidden="true"
                     style={{
                       width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-                      display: 'grid', placeItems: 'center', fontSize: 14,
+                      display: 'grid', placeItems: 'center',
                       background: `linear-gradient(135deg, ${opt.tone}22, ${opt.tone}08)`,
                       border: `1px solid ${opt.tone}40`,
+                      color: opt.tone,
                     }}
                   >
-                    {opt.emoji}
+                    <opt.Icon style={{ width: 15, height: 15 }} />
                   </span>
                   <span style={{ minWidth: 0 }}>
                     <span className="ap-opt-title">{t(`orders.new.${opt.id}`)}</span>

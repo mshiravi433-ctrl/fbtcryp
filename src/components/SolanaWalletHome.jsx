@@ -7,6 +7,10 @@ import { shortAddress } from '../context/WalletContext';
 import { isSolanaAddress } from '../lib/solana';
 import { readSolanaPortfolio } from '../lib/solana/portfolio';
 import { sendNativeSol, solToLamports } from '../lib/solana/transfer';
+import QrScanner, { parseScanned, scannerSupported } from './QrScanner';
+import { IconQr } from './Icons';
+import { IconSend, IconReceive } from './WalletArt';
+import { IconSwap, IconGlobe } from './Icons';
 
 function qrPath(text) {
   if (!text) return null;
@@ -34,9 +38,10 @@ function openAppPath(path) {
   if (window.location.hash !== hash) window.location.hash = hash;
 }
 
-function Action({ label, onClick, testId }) {
+function Action({ label, onClick, testId, action, Icon }) {
   return (
-    <button type="button" className="sol-wal-action" onClick={onClick} data-testid={testId}>
+    <button type="button" className="sol-wal-action" data-action={action} onClick={onClick} data-testid={testId}>
+      <span className="sol-wal-action-icon" aria-hidden="true">{Icon ? <Icon width={18} height={18} /> : null}</span>
       <span>{label}</span>
     </button>
   );
@@ -65,6 +70,7 @@ export default function SolanaWalletHome({
   const [sendSig, setSendSig] = useState(null);
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!address) {
@@ -111,6 +117,29 @@ export default function SolanaWalletHome({
       setCopied(false);
     }
   };
+
+  const handleScanResult = useCallback((parsed, raw) => {
+    if (parsed?.address) {
+      if (isSolanaAddress(parsed.address)) {
+        setTo(parsed.address);
+        if (parsed.amount && !Number.isNaN(Number(parsed.amount))) {
+          // amount from QR may be in SOL; keep as string
+          const amt = String(parsed.amount).replace(/[^0-9.]/g, '');
+          if (amt) setAmount(amt);
+        }
+        setSendErr(null);
+        haptic?.('success');
+      } else {
+        // EVM address scanned while solana sheet open — show raw but mark error
+        setTo(raw || parsed.address);
+        setSendErr('BAD_ADDRESS');
+      }
+    } else if (raw && isSolanaAddress(String(raw).trim())) {
+      setTo(String(raw).trim());
+      setSendErr(null);
+      haptic?.('success');
+    }
+  }, [haptic]);
 
   const submitSend = async () => {
     setSendErr(null);
@@ -185,10 +214,10 @@ export default function SolanaWalletHome({
 
           {address && (
             <div className="sol-wal-actions" role="group" aria-label={t('solana.wallet.actions')}>
-              <Action label={t('solana.wallet.send')} testId="sol-wal-send" onClick={() => { haptic?.('select'); setSendOpen(true); }} />
-              <Action label={t('solana.wallet.receive')} testId="sol-wal-receive" onClick={() => { haptic?.('select'); setReceiveOpen(true); }} />
-              <Action label={t('solana.wallet.bridge')} testId="sol-wal-bridge" onClick={() => { haptic?.('select'); openAppPath('/bridge?mode=solana'); }} />
-              <Action label={t('solana.wallet.swap')} testId="sol-wal-swap" onClick={() => { haptic?.('select'); openAppPath('/swap?chain=solana'); }} />
+              <Action label={t('solana.wallet.send')} testId="sol-wal-send" action="send" Icon={IconSend} onClick={() => { haptic?.('select'); setSendOpen(true); }} />
+              <Action label={t('solana.wallet.receive')} testId="sol-wal-receive" action="receive" Icon={IconReceive} onClick={() => { haptic?.('select'); setReceiveOpen(true); }} />
+              <Action label={t('solana.wallet.bridge')} testId="sol-wal-bridge" action="bridge" Icon={IconGlobe} onClick={() => { haptic?.('select'); openAppPath('/bridge?mode=solana'); }} />
+              <Action label={t('solana.wallet.swap')} testId="sol-wal-swap" action="swap" Icon={IconSwap} onClick={() => { haptic?.('select'); openAppPath('/swap?chain=solana'); }} />
             </div>
           )}
         </div>
@@ -233,25 +262,39 @@ export default function SolanaWalletHome({
         </section>
       )}
 
-      <Sheet open={sendOpen} onClose={() => { setSendOpen(false); setSendErr(null); }} title={t('solana.wallet.sendTitle')}>
+      <Sheet open={sendOpen} onClose={() => { setSendOpen(false); setSendErr(null); setScanOpen(false); }} title={t('solana.wallet.sendTitle')}>
         <p className="notice" style={{ marginTop: 0 }}>{t('solana.wallet.sendOnly')}</p>
         <label className="field-label">{t('solana.wallet.recipient')}</label>
-        <input
-          type="text"
-          value={to}
-          dir="ltr"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          onChange={(e) => { setTo(e.target.value.trim()); setSendErr(null); }}
-          placeholder={t('solana.wallet.recipient')}
-        />
+        <div className="row" style={{ gap: 8 }}>
+          <input
+            type="text"
+            value={to}
+            dir="ltr"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(e) => { setTo(e.target.value.trim()); setSendErr(null); }}
+            placeholder={t('solana.wallet.recipient')}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          {scannerSupported() && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setScanOpen(true)}
+              aria-label={t('scan.title')}
+              style={{ flex: '0 0 auto', minWidth: 44, paddingInline: 10 }}
+            >
+              <IconQr width={18} height={18} />
+            </button>
+          )}
+        </div>
         <label className="field-label" style={{ marginTop: 10 }}>{t('solana.wallet.amount')}</label>
         <input
           type="text"
           inputMode="decimal"
           value={amount}
-          onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setSendErr(null); }}
+          onChange={(e) => { setAmount(e.target.value.replace(/[^\\d.]/g, '')); setSendErr(null); }}
           placeholder="0.0"
         />
         <p className="faint" style={{ marginTop: 8 }}>
@@ -273,6 +316,8 @@ export default function SolanaWalletHome({
           {sending ? t('common.loading') : t('solana.wallet.sendCta')}
         </button>
       </Sheet>
+
+      <QrScanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScanResult} parse={parseScanned} />
 
       <Sheet open={receiveOpen} onClose={() => setReceiveOpen(false)} title={t('solana.wallet.receiveTitle')}>
         {qr && (

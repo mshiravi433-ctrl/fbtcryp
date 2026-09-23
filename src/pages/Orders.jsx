@@ -9,10 +9,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { usePriceMap } from '../hooks/useMarket';
 import { EVM_CHAINS, FEE_BPS, TOKENS } from '../lib/chains';
-import { LST_ASSETS, EQUITY_ASSETS, COMMODITY_ASSETS } from '../lib/solanaAssets';
-import { SOL_MINT, USDC_MINT, USDT_MINT } from '../lib/solana';
-import { fetchSolanaTokensMeta } from '../lib/solanaTokenMeta';
-import { addSolanaHandoff, loadSolanaHandoffs, removeSolanaHandoff } from '../lib/solanaOrders';
+import ModernSelect from '../components/ModernSelect';
 import TokenIcon from '../lib/tokenIcon';
 import '../styles/wallet-modern.css';
 import { fmtQty } from '../lib/format';
@@ -713,8 +710,6 @@ export default function Orders() {
         {t('orders.manualNotice')}
       </motion.p>
 
-      <SolanaOrderDesk />
-
       {/*
         What is currently scheduled. Only shown once something exists, so an
         empty screen is not cluttered with a zero.
@@ -825,260 +820,6 @@ export default function Orders() {
 }
 
 /* -------------------------------------------------------------------------- */
-
-const SOL_ORDER_BASE = [
-  {
-    mint: SOL_MINT,
-    symbol: 'SOL',
-    name: 'Solana',
-    decimals: 9,
-    verified: true,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png'
-  },
-  {
-    mint: USDC_MINT,
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    verified: true,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png'
-  },
-  {
-    mint: USDT_MINT,
-    symbol: 'USDT',
-    name: 'Tether USD',
-    decimals: 6,
-    verified: true,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg'
-  }
-];
-
-function solanaOrderCatalog() {
-  const seen = new Set();
-  const out = [];
-  for (const row of [...SOL_ORDER_BASE, ...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS]) {
-    const mint = String(row?.mint || '').trim();
-    if (!mint || seen.has(mint)) continue;
-    seen.add(mint);
-    const logo = row.logoURI || row.icon || null;
-    out.push({
-      mint,
-      symbol: row.symbol || mint.slice(0, 4),
-      name: row.name || '',
-      decimals: Number.isInteger(row.decimals) ? row.decimals : 9,
-      logoURI: logo,
-      icon: row.icon || logo,
-      verified: row.verified === true || SOL_ORDER_BASE.some((base) => base.mint === mint) || LST_ASSETS.some((asset) => asset.mint === mint)
-    });
-  }
-  return out;
-}
-
-function solOrderErrorText(code, t) {
-  if (code === 'SAME_TOKEN') return t('orders.solana.err.SAME_TOKEN');
-  if (code === 'BAD_MINT') return t('orders.solana.err.BAD_MINT');
-  return t('orders.solana.err.BAD_AMOUNT');
-}
-
-function solanaSwapPath(row) {
-  const params = new URLSearchParams({
-    chain: 'solana',
-    fromMint: row.fromMint,
-    toMint: row.toMint,
-    amount: String(row.amountIn ?? ''),
-    side: 'sell'
-  });
-  return `/swap?${params.toString()}`;
-}
-
-/**
- * Solana automatic-order section.
- * A price watch cannot see a Solana balance, so this never calls createOrder.
- * It stores a handoff and opens the Solana swap already filled in.
- */
-function SolanaOrderDesk() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { haptic } = useTelegram();
-  const [network, setNetwork] = useState('solana');
-  const [catalog, setCatalog] = useState(solanaOrderCatalog);
-  const [fromTok, setFromTok] = useState(() => solanaOrderCatalog()[0]);
-  const [toTok, setToTok] = useState(() => solanaOrderCatalog()[1]);
-  const [amount, setAmount] = useState('');
-  const [pick, setPick] = useState(null);
-  const [query, setQuery] = useState('');
-  const [rows, setRows] = useState(() => loadSolanaHandoffs());
-  const [notice, setNotice] = useState('');
-  const [noticeBad, setNoticeBad] = useState(false);
-
-  useEffect(() => {
-    let gone = false;
-    fetchSolanaTokensMeta(catalog.map((row) => row.mint)).then((meta) => {
-      if (gone || !(meta instanceof Map) || meta.size === 0) return;
-      const paint = (row) => {
-        const hit = meta.get(row.mint);
-        if (!hit?.icon) return row;
-        return { ...row, icon: hit.icon, logoURI: hit.icon, verified: row.verified || hit.verified === true };
-      };
-      setCatalog((prev) => prev.map(paint));
-      setFromTok((prev) => (prev ? paint(prev) : prev));
-      setToTok((prev) => (prev ? paint(prev) : prev));
-    });
-    return () => { gone = true; };
-  }, [catalog.length]);
-
-  const filtered = catalog.filter((row) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return row.symbol.toLowerCase().includes(q)
-      || row.name.toLowerCase().includes(q)
-      || row.mint.toLowerCase().includes(q);
-  });
-
-  const choose = (row) => {
-    haptic?.('select');
-    if (pick === 'to') setToTok(row);
-    else setFromTok(row);
-    setPick(null);
-    setQuery('');
-  };
-
-  const openSwap = (row) => {
-    haptic?.('light');
-    navigate(solanaSwapPath(row));
-  };
-
-  const save = () => {
-    const res = addSolanaHandoff({
-      amountIn: amount,
-      fromMint: fromTok?.mint,
-      toMint: toTok?.mint,
-      fromSymbol: fromTok?.symbol,
-      toSymbol: toTok?.symbol,
-      fromIcon: fromTok?.logoURI || fromTok?.icon || null,
-      toIcon: toTok?.logoURI || toTok?.icon || null
-    });
-    if (res.error) {
-      setNoticeBad(true);
-      setNotice(solOrderErrorText(res.error, t));
-      haptic?.('error');
-      return;
-    }
-    setRows(res.orders);
-    setNoticeBad(false);
-    setNotice(t('orders.solana.notice'));
-    haptic?.('success');
-    openSwap({
-      fromMint: fromTok.mint,
-      toMint: toTok.mint,
-      amountIn: String(amount).trim()
-    });
-  };
-
-  const drop = (id) => {
-    setRows(removeSolanaHandoff(id));
-    haptic?.('light');
-  };
-
-  return (
-    <section className="card" style={{ marginTop: 12 }}>
-      <p className="section-label">{t('orders.solana.title')}</p>
-      <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.7, margin: '6px 0 12px' }}>{t('orders.solana.body')}</p>
-      <div className="ord-net-toggle" role="group" aria-label={t('orders.solana.network')}>
-        <button type="button" className={network === 'evm' ? 'is-on' : ''} onClick={() => setNetwork('evm')}>{t('orders.solana.evm')}</button>
-        <button type="button" className={network === 'solana' ? 'is-on' : ''} onClick={() => setNetwork('solana')}>{t('orders.solana.solana')}</button>
-      </div>
-
-      {network === 'evm' ? (
-        <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 12 }}>{t('orders.solana.evmHint')}</p>
-      ) : (
-        <>
-          <div className="ord-token-picks" style={{ marginTop: 12 }}>
-            <button type="button" className="ord-token-pick" onClick={() => { setQuery(''); setPick('from'); }}>
-              <TokenIcon token={fromTok} size={36} />
-              <span style={{ minWidth: 0 }}>
-                <strong>{fromTok?.symbol}</strong>
-                <small>{t('orders.solana.from')}</small>
-              </span>
-            </button>
-            <button type="button" className="ord-token-pick" onClick={() => { setQuery(''); setPick('to'); }}>
-              <TokenIcon token={toTok} size={36} />
-              <span style={{ minWidth: 0 }}>
-                <strong>{toTok?.symbol}</strong>
-                <small>{t('orders.solana.to')}</small>
-              </span>
-            </button>
-          </div>
-          <label className="field-label" style={{ marginTop: 12 }}>{t('orders.solana.amount')}</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            placeholder="0.0"
-            onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setNotice(''); }}
-          />
-          {notice && (
-            <p className={`notice${noticeBad ? ' notice-danger' : ''}`} style={{ marginTop: 10 }}>{notice}</p>
-          )}
-          <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} onClick={save}>
-            {t('orders.solana.create')}
-          </button>
-        </>
-      )}
-
-      <div style={{ marginTop: 14 }}>
-        <p className="field-label">{t('orders.solana.saved')}</p>
-        {rows.length === 0 ? (
-          <p className="faint" style={{ fontSize: 12.5 }}>{t('orders.solana.empty')}</p>
-        ) : rows.map((row) => (
-          <div key={row.id} className="row-between" style={{ gap: 8, marginTop: 8 }}>
-            <span className="row" style={{ gap: 8, minWidth: 0 }}>
-              <TokenIcon token={{ symbol: row.fromSymbol, logoURI: row.fromIcon, icon: row.fromIcon }} size={28} />
-              <span style={{ fontWeight: 750, fontSize: 12.5 }}>
-                {row.amountIn} {row.fromSymbol} → {row.toSymbol}
-              </span>
-            </span>
-            <span className="row" style={{ gap: 6, flexShrink: 0 }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSwap(row)}>{t('orders.solana.open')}</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => drop(row.id)}>{t('orders.solana.remove')}</button>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <Sheet
-        open={Boolean(pick)}
-        onClose={() => setPick(null)}
-        title={t('orders.solana.pick')}
-      >
-        <input
-          type="search"
-          value={query}
-          placeholder={t('orders.solana.search')}
-          onChange={(e) => setQuery(e.target.value)}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <div className="ord-token-list" style={{ marginTop: 10 }}>
-          {filtered.map((row) => (
-            <button key={row.mint} type="button" className="ord-token-pick" onClick={() => choose(row)}>
-              <TokenIcon token={row} size={36} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <strong>{row.symbol}</strong>
-                <small>{row.name}</small>
-              </span>
-              {row.verified && <span className="ord-verified">{t('solana.picker.verified')}</span>}
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="faint">{t('solana.picker.noResults')}</p>
-          )}
-        </div>
-      </Sheet>
-    </section>
-  );
-}
 
 function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, prices }) {
   const { t } = useTranslation();
@@ -1209,6 +950,15 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
     return priceOf === 'to' ? b / a : a / b;
   }, [prices, fromToken, toToken, priceOf]);
 
+  // Token options for the modern picker — offline SVG first, TrustWallet CDN second, monogram last.
+  // Native coins use AssetIcon (symbol+chain), everything else uses the address-keyed TokenIcon so a
+  // scam symbol can never borrow the real token's face.
+  const tokenOptions = useMemo(() => tokens.map((tk) => {
+    const isNative = tk.native || !tk.address;
+    if (isNative) return { value: tk.symbol, label: tk.symbol, sublabel: tk.name, symbol: tk.symbol, chain: chainId };
+    return { value: tk.symbol, label: tk.symbol, sublabel: tk.name, token: tk, chainId };
+  }), [tokens, chainId]);
+
   // Which symbol is being priced, and in what.
   const baseSym = priceOf === 'to' ? toSym : fromSym;
   const quoteSym = priceOf === 'to' ? fromSym : toSym;
@@ -1219,17 +969,27 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
     <Sheet open onClose={onClose} title={t(`orders.new.${kind}`)}>
       <div className="stack" style={{ gap: 11 }}>
         <div className="row" style={{ gap: 8 }}>
-          <label className="ord-field">
+          <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
             <span className="faint">{t('orders.from')}</span>
-            <select value={fromSym} onChange={(e) => setFromSym(e.target.value)}>
-              {tokens.map((x) => <option key={x.symbol} value={x.symbol}>{x.symbol}</option>)}
-            </select>
+            <ModernSelect
+              value={fromSym}
+              onChange={setFromSym}
+              options={tokenOptions}
+              title={t('orders.from')}
+              placeholder={t('orders.from')}
+              searchable
+            />
           </label>
-          <label className="ord-field">
+          <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
             <span className="faint">{t('orders.to')}</span>
-            <select value={toSym} onChange={(e) => setToSym(e.target.value)}>
-              {tokens.map((x) => <option key={x.symbol} value={x.symbol}>{x.symbol}</option>)}
-            </select>
+            <ModernSelect
+              value={toSym}
+              onChange={setToSym}
+              options={tokenOptions}
+              title={t('orders.to')}
+              placeholder={t('orders.to')}
+              searchable
+            />
           </label>
         </div>
 
