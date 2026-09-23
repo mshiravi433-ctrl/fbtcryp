@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
@@ -141,6 +141,15 @@ const STOCK_TABS = SPECULATION_ENABLED
   ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
 
+/** /stocks?tab=ostium — the On-Chain futures tab sends traditional markets here. */
+function initialStockTab() {
+  try {
+    const raw = String(window.location.hash || '').split('?')[1] || String(window.location.search || '').replace(/^\?/, '');
+    const wanted = new URLSearchParams(raw).get('tab');
+    return STOCK_TABS.includes(wanted) ? wanted : 'equity';
+  } catch { return 'equity'; }
+}
+
 /*
  * ─── EQUITY SECTOR TAGS — DISPLAY ONLY ─────────────────────────────────────
  * These group the ALREADY-VERIFIED xStock list for the filter chips; they
@@ -248,9 +257,14 @@ export default function Stocks() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'fa' || i18n.language === 'ar';
   const navigate = useNavigate();
+  const location = useLocation();
   const { haptic } = useTelegram();
   const { data: coins, loading } = useMarkets(250);
-  const [tab, setTab] = useState('equity');
+  const [tab, setTab] = useState(initialStockTab);
+  useEffect(() => {
+    const wanted = new URLSearchParams(location.search).get('tab');
+    if (STOCK_TABS.includes(wanted)) setTab(wanted);
+  }, [location.search]);
 
   const [assets, setAssets] = useState(null);
   const [assetsError, setAssetsError] = useState(null);

@@ -22,6 +22,7 @@ import {
   OSTIUM_CHAIN_ID,
   OSTIUM_COLLATERAL,
   OSTIUM_SPENDER,
+  OSTIUM_TRADING,
   buildApproveCollateral,
   buildOpenTrade,
   buildCloseTrade,
@@ -32,8 +33,11 @@ import {
   tradeCosts,
   validateTrade
 } from '../lib/ostium';
+import { prepareFutures, verifyFutures, manageFuturesPosition } from '../lib/futuresClient';
 
-const CATEGORY_ORDER = ['Commodities', 'Forex', 'Stocks', 'Indices', 'ETFs', 'Crypto'];
+/* Crypto perps belong on Futures → On-Chain. Listing them here made Global
+   Horizon and that tab the same set of options. */
+const CATEGORY_ORDER = ['Commodities', 'Forex', 'Stocks', 'Indices', 'ETFs'];
 const friendlyCategory = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v.includes('commod')) return 'Commodities';
@@ -52,8 +56,42 @@ const CATEGORY_HELP = [
   { id: 'Stocks', fa: 'سهام', icon: '⬡', desc: 'سهام شرکت‌های بزرگ آمریکا مثل اپل و تسلا — به شکل پرپچوال با تسویه USDC.' },
   { id: 'Indices', fa: 'شاخص', icon: '▭', desc: 'شاخص‌های بزرگ مثل S&P 500 و Nasdaq — یک نماد، یک سبد از صدها شرکت.' },
   { id: 'ETFs', fa: 'صندوق', icon: '⬣', desc: 'صندوق‌های قابل معامله (ETF) — مثل طلا یا اوراق، در یک نماد قابل معامله.' },
-  { id: 'Crypto', fa: 'کریپتو', icon: '⬢', desc: 'کریپتوهای اصلی — با تسویه آنچین روی آربیتروم.' },
 ];
+
+/* Trading + TradingStorage are the only protocol contracts this screen will
+   sign. USDC is included because an allowance approval is a token call, not a
+   trade — the server already allowlists that same token. Anything else is
+   refused, and calldata is not required to match byte-for-byte. */
+const OSTIUM_SIGN_TARGETS = new Set([
+  OSTIUM_TRADING.toLowerCase(),
+  OSTIUM_SPENDER.toLowerCase(),
+  OSTIUM_COLLATERAL.toLowerCase()
+]);
+
+/** Sign the server-built unsigned txs when they are allowlisted; otherwise the
+ *  local encoder. A bad target is refused — never signed. */
+async function signAllowlisted({ signer, prepared, localTx }) {
+  const serverTxs = Array.isArray(prepared?.transactions)
+    ? prepared.transactions.filter((tx) => tx?.to && tx?.data)
+    : [];
+  const safe = serverTxs.length > 0 && serverTxs.every((tx) => OSTIUM_SIGN_TARGETS.has(String(tx.to).toLowerCase()));
+  if (serverTxs.length && !safe) throw Object.assign(new Error('CONTRACT_MISMATCH'), { code: 'CONTRACT_MISMATCH' });
+  const queue = safe ? serverTxs : (localTx ? [localTx] : []);
+  let hash = null;
+  for (const tx of queue) {
+    const sent = await signer.sendTransaction({
+      to: tx.to,
+      data: tx.data,
+      value: tx.value && tx.value !== '0x0' ? tx.value : undefined
+    });
+    if (tx.kind === 'approve') { await sent.wait(); continue; }
+    hash = sent.hash;
+  }
+  if (safe && prepared?.executionId && hash) {
+    await verifyFutures({ executionId: prepared.executionId, txHash: hash }).catch(() => {});
+  }
+  return { hash, via: safe ? 'server' : 'local' };
+}
 
 const displayError = (e) => {
   const msg = String(e?.shortMessage || e?.reason || e?.message || e || 'TX_FAILED');
@@ -124,11 +162,14 @@ export default function Ostium() {
   const [catHelpOpen, setCatHelpOpen] = useState(false);
   const [pairHelpOpen, setPairHelpOpen] = useState(false);
   const [feedOffline, setFeedOffline] = useState(false);
+  const [routeNotice, setRouteNotice] = useState(null);
 
   const loadMarkets = useCallback(async () => {
     setLoading(true);
     const data = await getOstiumMarkets();
-    const rows = data.pairs.map((p) => ({ ...p, uiCategory: friendlyCategory(p.category) }));
+    const rows = data.pairs
+      .map((p) => ({ ...p, uiCategory: friendlyCategory(p.category) }))
+      .filter((p) => p.uiCategory !== 'Crypto');
     setMarkets(rows);
     setFeedLive(data.live);
     setFeedOffline(data.unavailable === true || !data.live);
@@ -238,13 +279,18 @@ export default function Ostium() {
     return true;
   };
 
+  const signerOrFail = async () => {
+    await ensureChain();
+    const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
+    if (!signer) throw new Error('NO_SIGNER');
+    return signer;
+  };
+
   const approve = async () => {
     setBusy(true);
     setError(null);
     try {
-      await ensureChain();
-      const signer = wallet.getSigner?.();
-      if (!signer) throw new Error('NO_SIGNER');
+      const signer = await signerOrFail();
       const tx = await buildApproveCollateral({ amountUsd: collateral });
       const sent = await signer.sendTransaction({ to: tx.to, data: tx.data });
       await sent.wait();
@@ -295,10 +341,8 @@ export default function Ostium() {
       const riskCode = riskPriceError(fresh.mid);
       if (riskCode) throw new Error(riskCode);
 
-      await ensureChain();
-      const signer = wallet.getSigner?.();
-      if (!signer) throw new Error('NO_SIGNER');
-      const tx = await buildOpenTrade({
+      const signer = await signerOrFail();
+      const localTx = await buildOpenTrade({
         trader: wallet.address,
         pairId: fresh.pairId,
         buy: side === 'long',
@@ -309,7 +353,26 @@ export default function Ostium() {
         stopLoss: stopLoss || '0',
         slippageBps: Math.round(Number(slippagePct) * 100)
       });
-      const sent = await signer.sendTransaction({ to: tx.to, data: tx.data });
+      /* Server records the intent and returns unsigned calldata. The wallet
+         still signs. If the server is down, the local encoder is the fallback
+         so a buy is not blocked by a proxy outage. */
+      let prepared = null;
+      try {
+        const res = await prepareFutures({
+          wallet: wallet.address,
+          provider: 'ostium',
+          market: String(fresh.pairId),
+          side,
+          collateralUsd: Number(collateral),
+          leverage: Number(leverage),
+          takeProfit: takeProfit === '' ? null : Number(takeProfit),
+          stopLoss: stopLoss === '' ? null : Number(stopLoss),
+          slippageBps: Math.round(Number(slippagePct) * 100)
+        });
+        prepared = res?.ok ? res.data : null;
+      } catch { prepared = null; }
+      const sent = await signAllowlisted({ signer, prepared, localTx });
+      setRouteNotice(sent.via === 'local' ? 'local' : null);
       setTxHash(sent.hash);
       setConfirming(false);
       haptic?.('success');
@@ -326,31 +389,47 @@ export default function Ostium() {
     setBusy(true);
     setError(null);
     try {
-      await ensureChain();
-      const signer = wallet.getSigner?.();
-      if (!signer) throw new Error('NO_SIGNER');
-      let tx;
+      const signer = await signerOrFail();
+      let localTx;
+      const action = manageAction === 'collateral'
+        ? (Number(manageValue) < 0 ? 'decrease' : 'increase')
+        : manageAction;
       if (manageAction === 'close') {
         const fresh = await getOstiumMarkets();
         const row = fresh.pairs.find((m) => String(m.pairId) === String(managing.pairId));
         if (!fresh.live || !row?.isMarketOpen) throw new Error('MARKET_CLOSED');
-        tx = await buildCloseTrade({
+        localTx = await buildCloseTrade({
           pairId: managing.pairId, index: managing.index, closePercent: manageValue,
           price: row.mid, slippageBps: Math.round(Number(slippagePct) * 100)
         });
       } else if (manageAction === 'tp') {
-        tx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, takeProfit: manageValue });
+        localTx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, takeProfit: manageValue });
       } else if (manageAction === 'sl') {
-        tx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, stopLoss: manageValue });
+        localTx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, stopLoss: manageValue });
       } else {
-        tx = await buildUpdateCollateral({ pairId: managing.pairId, index: managing.index, amountUsd: manageValue });
-        if (tx.needsApproval) {
+        localTx = await buildUpdateCollateral({ pairId: managing.pairId, index: managing.index, amountUsd: manageValue });
+        if (localTx.needsApproval) {
           const approval = await buildApproveCollateral({ amountUsd: Math.abs(Number(manageValue)) });
           const approved = await signer.sendTransaction({ to: approval.to, data: approval.data });
           await approved.wait();
         }
       }
-      const sent = await signer.sendTransaction({ to: tx.to, data: tx.data });
+      let prepared = null;
+      try {
+        const res = await manageFuturesPosition({
+          positionId: `ostium:${managing.pairId}:${managing.index}`,
+          action,
+          wallet: wallet.address,
+          provider: 'ostium',
+          closePercent: manageAction === 'close' ? Number(manageValue) : null,
+          amountUsd: manageAction === 'collateral' ? Math.abs(Number(manageValue)) : null,
+          value: manageAction === 'tp' || manageAction === 'sl' ? Number(manageValue) : null,
+          slippageBps: Math.round(Number(slippagePct) * 100)
+        });
+        prepared = res?.ok ? res.data : null;
+      } catch { prepared = null; }
+      const sent = await signAllowlisted({ signer, prepared, localTx });
+      setRouteNotice(sent.via === 'local' ? 'local' : null);
       setTxHash(sent.hash);
       setManaging(null);
       const refreshed = await getOstiumPositions({ trader: wallet.address, markets });
@@ -394,6 +473,18 @@ export default function Ostium() {
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('ostium.risk')}</div>
         </motion.div>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ width: '100%', marginTop: 12, boxSizing: 'border-box' }}
+          onClick={() => navigate('/perp?tab=onchain')}
+        >
+          {t('ostium.cryptoLink')}
+        </button>
+        {routeNotice === 'local' && (
+          <p className="notice" style={{ marginTop: 10 }} data-testid="ostium-server-fallback">{t('ostium.serverFallback')}</p>
+        )}
 
       <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
         <div className="sheen" />

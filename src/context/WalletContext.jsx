@@ -1673,6 +1673,23 @@ export function WalletProvider({ children }) {
       getReadProvider,
       getReadProviders,
       getSigner: () => signerRef.current,
+      /* A restored session can have an address before ethers has rebuilt the
+         signer. Trade screens must call this, not the raw ref, or Confirm
+         dies with NO_SIGNER on a wallet the user can see is connected. */
+      ensureSigner: async () => {
+        if (signerRef.current) return signerRef.current;
+        const eip = eip1193Ref.current;
+        if (!eip) return null;
+        try {
+          const { BrowserProvider } = await loadEthers();
+          const provider = new BrowserProvider(eip, 'any');
+          const signer = await provider.getSigner();
+          signerRef.current = signer;
+          return signer;
+        } catch {
+          return signerRef.current;
+        }
+      },
       /* Phase 51 — the Intent AI execution path needs the RAW EIP-1193 provider,
          not an ethers wrapper: it asks the connected wallet to sign the locked
          terms itself. Returning null (rather than a stand-in) is what keeps

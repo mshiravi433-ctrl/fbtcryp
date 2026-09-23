@@ -1598,7 +1598,7 @@
   "futures": {
     "onchain": {
       "title": "Futuros on-chain",
-      "subtitle": "Perpetuos con liquidación on-chain — cripto, forex, materias primas, índices, acciones y ETF en un solo motor. Precios, gráfico y comisiones en vivo; cada orden la firma tu propia cartera y las llaves siguen contigo."
+      "subtitle": "Perpetuos de cripto en Solana, liquidados en USDT. Funding, interés abierto y distancia a liquidación están en este escritorio. Oro, forex y acciones están en Global Horizon. Tu cartera firma cada orden."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Precio oráculo",

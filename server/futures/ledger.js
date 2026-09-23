@@ -29,7 +29,18 @@ const MAX_INDEX = 5000;
 
 const execKey = (id) => `futures:exec:v1:${id}`;
 const feeKey = (id) => `futures:fee:v1:${id}`;
-const walletKey = (w) => `futures:wallet:v1:${String(w || '').toLowerCase()}`;
+/*
+ * EVM addresses are case-insensitive; Solana addresses are not. Lowercasing a
+ * base58 pubkey corrupts the ledger row the wallet later looks up, so a trade
+ * that was signed can vanish from "my executions". Preserve Solana as signed.
+ */
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+export function canonWallet(w) {
+  const s = String(w || '').trim();
+  if (s.length >= 32 && s.length <= 44 && [...s].every((c) => B58.includes(c)) && !s.startsWith('0x')) return s;
+  return s.toLowerCase();
+}
+const walletKey = (w) => `futures:wallet:v1:${canonWallet(w)}`;
 const idemKey = (owner, k) => `futures:idem:v1:${createHash('sha256').update(`${String(owner || 'anon').toLowerCase()}|${k}`).digest('hex').slice(0, 40)}`;
 
 export const calldataHash = (data) => (data ? `0x${createHash('sha256').update(String(data)).digest('hex').slice(0, 32)}` : null);
@@ -77,7 +88,7 @@ export async function createExecution({ requestId, intentId = null, idempotencyK
     schema: 'fbt.futures-execution.v1',
     executionId, requestId: requestId || null, intentId, idempotencyKey,
     owner: owner ? createHash('sha256').update(String(owner)).digest('hex').slice(0, 24) : null,
-    wallet: String(wallet || '').toLowerCase(), providerId, marketId, symbol, action, side, positionId,
+    wallet: canonWallet(wallet), providerId, marketId, symbol, action, side, positionId,
     collateralUsd: collateralUsd ?? null, leverage: leverage ?? null, notionalUsd: notionalUsd ?? null,
     fee: fee || null, risk: risk ? { riskScore: risk.riskScore, riskLevel: risk.riskLevel, blocked: risk.blocked, warnings: risk.warnings } : null,
     route: route ? { providerId: route.providerId, reasons: route.reasons, rejected: route.rejected } : null,
@@ -130,7 +141,7 @@ export async function appendFeeRecord({ executionId, requestId = null, intentId 
   const record = Object.freeze({
     schema: 'fbt.futures-fee-record.v1',
     feeRecordId, executionId, requestId, intentId,
-    wallet: String(wallet || '').toLowerCase(), providerId, marketId, action,
+    wallet: canonWallet(wallet), providerId, marketId, action,
     status, // PREPARED | CONFIRMED | REVERTED | CANCELLED
     txHash, chainId,
     notionalUsd: fee.notionalUsd,
@@ -149,7 +160,7 @@ export async function listFeeRecords({ limit = 100, wallet = null, executionId =
   for (const id of (Array.isArray(ids) ? ids : []).slice().reverse()) {
     const r = await storeGet(feeKey(id), null);
     if (!r) continue;
-    if (wallet && r.wallet !== String(wallet).toLowerCase()) continue;
+    if (wallet && r.wallet !== canonWallet(wallet)) continue;
     if (executionId && r.executionId !== executionId) continue;
     rows.push(r);
     if (rows.length >= limit) break;
