@@ -610,6 +610,30 @@
       "ladder": "新建阶梯订单",
       "twap": "新建 TWAP",
       "rebalance": "新建再平衡"
+    },
+    "solana": {
+      "title": "Solana 订单",
+      "body": "这不是价格监控。它会保存交易对和数量，然后用这些值打开 Solana 兑换。在你签名之前，没有任何资产会移动。",
+      "network": "网络",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "EVM 订单使用上面的卡片。它们不能花费 Solana 余额。",
+      "from": "支付",
+      "to": "收到",
+      "amount": "数量",
+      "create": "打开 Solana 兑换",
+      "notice": "已保存。Solana 兑换会以这个交易对打开。在那里签名之前，没有任何资产会移动。",
+      "empty": "还没有保存的 Solana 交接。",
+      "open": "打开",
+      "remove": "移除",
+      "pick": "选择代币",
+      "search": "名称、符号或 mint",
+      "saved": "已保存的交接",
+      "err": {
+        "BAD_AMOUNT": "请输入大于零的数量。",
+        "SAME_TOKEN": "请选择两种不同的代币。",
+        "BAD_MINT": "这个地址不是 Solana mint。"
+      }
     }
   },
   "bridge": {
@@ -2342,5 +2366,28 @@
     "executionBlocked": "已在钱包中排队 — 仍需你的签名。",
     "executionFailed": "没有成功。交易未完成。",
     "connectWallet": "连接钱包"
+  },
+  "solana": {
+    "wallet": {
+      "send": "发送",
+      "receive": "接收",
+      "bridge": "跨链",
+      "swap": "兑换",
+      "actions": "操作",
+      "holdings": "资产",
+      "partial": "部分余额未能读取。这里只显示已成功返回的部分。",
+      "empty": "这个地址上没有找到代币余额。",
+      "splNote": "此页面的发送只转移原生 SOL。其他代币请从兑换页操作。",
+      "sendTitle": "发送 SOL",
+      "sendOnly": "这里只发送原生 SOL，不会转移 SPL 代币。",
+      "recipient": "收款地址",
+      "amount": "数量",
+      "sendCta": "发送 SOL",
+      "receiveTitle": "接收",
+      "receiveHint": "只向此地址发送 SOL 和 Solana 代币。以 0x 开头的以太坊地址不会到账。",
+      "copied": "已复制",
+      "copy": "复制地址",
+      "badAddress": "这不是 Solana 地址。"
+    }
   }
 }

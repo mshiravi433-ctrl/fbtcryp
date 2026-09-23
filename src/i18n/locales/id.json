@@ -610,6 +610,30 @@
       "ladder": "Order bertahap baru",
       "twap": "TWAP baru",
       "rebalance": "Penyeimbangan baru"
+    },
+    "solana": {
+      "title": "Order Solana",
+      "body": "Ini tidak memantau harga. Pasangan dan jumlah disimpan, lalu swap Solana dibuka dengan nilai itu. Tidak ada yang berpindah sampai Anda menandatangani.",
+      "network": "Jaringan",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "Order EVM memakai kartu di atas. Mereka tidak bisa membelanjakan saldo Solana.",
+      "from": "Bayar",
+      "to": "Terima",
+      "amount": "Jumlah",
+      "create": "Buka swap Solana",
+      "notice": "Tersimpan. Swap Solana terbuka dengan pasangan ini. Tidak ada yang berpindah sampai Anda menandatangani di sana.",
+      "empty": "Belum ada serahan Solana yang tersimpan.",
+      "open": "Buka",
+      "remove": "Hapus",
+      "pick": "Pilih token",
+      "search": "Nama, simbol, atau mint",
+      "saved": "Serahan tersimpan",
+      "err": {
+        "BAD_AMOUNT": "Masukkan jumlah yang lebih besar dari nol.",
+        "SAME_TOKEN": "Pilih dua token yang berbeda.",
+        "BAD_MINT": "Alamat itu bukan mint Solana."
+      }
     }
   },
   "bridge": {
@@ -2349,5 +2373,28 @@
     "executionBlocked": "Antre di Dompet — tanda tangan Anda masih diperlukan.",
     "executionFailed": "Tidak berhasil. Transaksi tidak selesai.",
     "connectWallet": "Hubungkan dompet"
+  },
+  "solana": {
+    "wallet": {
+      "send": "Kirim",
+      "receive": "Terima",
+      "bridge": "Jembatan",
+      "swap": "Tukar",
+      "actions": "Tindakan",
+      "holdings": "Aset",
+      "partial": "Sebagian saldo tidak terbaca. Yang ditampilkan hanya bagian yang menjawab.",
+      "empty": "Tidak ada saldo token di alamat ini.",
+      "splNote": "Kirim di layar ini hanya memindahkan SOL asli. Token lain lewat halaman tukar.",
+      "sendTitle": "Kirim SOL",
+      "sendOnly": "Ini hanya mengirim SOL asli. Token SPL tidak ikut pindah.",
+      "recipient": "Alamat penerima",
+      "amount": "Jumlah",
+      "sendCta": "Kirim SOL",
+      "receiveTitle": "Terima",
+      "receiveHint": "Kirim hanya SOL dan token Solana ke alamat ini. Alamat Ethereum yang diawali 0x tidak akan sampai ke sini.",
+      "copied": "Tersalin",
+      "copy": "Salin alamat",
+      "badAddress": "Ini bukan alamat Solana."
+    }
   }
 }

@@ -81,8 +81,8 @@ function TokenRow({ token, onPick, selected = false, testid }) {
     >
       <TokenIcon token={token} size={36} />
       <span className="coin-meta" style={{ minWidth: 0 }}>
-        <span className="coin-sym stp-sym" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span>{symbol}</span>
+        <span className="coin-sym stp-sym">{symbol}</span>
+        <span className="stp-badges">
           {token.verified ? (
             <span className="stp-badge stp-badge-verified">✓ {t('solana.picker.verified')}</span>
           ) : token.imported || token.known === false ? (

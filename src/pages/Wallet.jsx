@@ -925,7 +925,7 @@ export default function Wallet() {
       {/* Tab strip — two tabs: the on-chain EVM wallet and the Solana wallet.
           The old experimental/practice tab was removed on instruction; the
           Solana wallet connection moved here from the swap screen. */}
-      <div className="segmented wal-tab-strip" style={{ padding: 5, borderRadius: 18, gap: 4 }}>
+      <div className="segmented wal-tab-strip wal-wallet-accordion" style={{ padding: 5, borderRadius: 18, gap: 4 }}>
         {['real', 'solana'].map((k) => (
           <button
             key={k}
@@ -938,6 +938,7 @@ export default function Wallet() {
           >
             {tab === k && <SegIndicator id="wtab" />}
             {t(`wallet.tab.${k}`)}
+            <span className="wal-acc-caret" aria-hidden="true">{tab === k ? '▾' : '▸'}</span>
           </button>
         ))}
       </div>
