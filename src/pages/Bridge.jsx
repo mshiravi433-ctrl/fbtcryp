@@ -237,6 +237,35 @@ export default function Bridge() {
   };
   useEffect(() => () => { signingDecision.current?.(false); }, []);
 
+  /*
+   * ─── THE WAIT THE USER CAN LEAVE ────────────────────────────────────────
+   * Reported: «وقتی می‌زنی که امضا کنی و برمی‌گردی بدون انجام کار، هنوز منتظر
+   * می‌ماند بدون اینکه بفهمد لغو شده». Two things fix it:
+   *
+   *   1. The signing boundary (lib/wc/signing.js) now collapses the wait to a
+   *      short grace window the moment this document comes BACK from the
+   *      wallet, and ends it with WALLET_RETURNED_UNSIGNED — a sentence, not a
+   *      three-minute spinner.
+   *   2. This page never trusts the wallet alone. `runToken` names the attempt
+   *      in flight; a «لغو انتظار» button bumps it, so whatever the abandoned
+   *      promise eventually resolves to is ignored, and the button is the
+   *      user's own way out even if no event ever arrives.
+   */
+  const runToken = useRef(0);
+  const [awaitingWallet, setAwaitingWallet] = useState(false);
+  const cancelWaiting = () => {
+    runToken.current += 1;
+    signingDecision.current?.(false);
+    signingDecision.current = null;
+    setSigningReview(null);
+    setChangedQuote(null);
+    setBusy(false);
+    setExecStep(null);
+    setAwaitingWallet(false);
+    setTxErr(bridgeErrorText('CANCELLED', t));
+    haptic?.('light');
+  };
+
   const [tracked, setTracked] = useState(null);
   const [historyKey, setHistoryKey] = useState(0);
   const stopTrackRef = useRef(null);
@@ -504,8 +533,11 @@ export default function Bridge() {
    * the same protection the swap screen's re-quote gives.
    */
   const runDln = async () => {
+    const token = ++runToken.current;
+    const alive = () => runToken.current === token;
     setBusy(true);
     setTxErr(null);
+    setAwaitingWallet(true);
     haptic?.('medium');
 
     try {
@@ -583,6 +615,7 @@ export default function Bridge() {
         value: order.tx.value ?? undefined
       });
 
+      if (!alive()) return;
       setTxHash(sent.hash);
       haptic?.('success');
       /* A broadcast bridge move is real rewarded activity: wallet + chain +
@@ -600,10 +633,14 @@ export default function Bridge() {
        * bridgeErrorFromException a code stays a translated sentence and prose
        * becomes evidence on a second ltr line instead of the headline.
        */
+      if (!alive()) return;
       setTxErr(bridgeErrorFromException(e, t));
       haptic?.('error');
     } finally {
-      setBusy(false);
+      if (alive()) {
+        setBusy(false);
+        setAwaitingWallet(false);
+      }
     }
   };
 
@@ -617,8 +654,11 @@ export default function Bridge() {
 
     if (!quote) return;
 
+    const token = ++runToken.current;
+    const alive = () => runToken.current === token;
     setBusy(true);
     setTxErr(null);
+    setAwaitingWallet(true);
     haptic?.('medium');
 
     /*
@@ -640,7 +680,7 @@ export default function Bridge() {
       slippage: Number(slippage) / 100,
       source: 'bridge',
       confirmSigning,
-      onStep: (step) => setExecStep(step),
+      onStep: (step) => { if (alive()) setExecStep(step); },
       /* The rate moved between display and signature: stop, show the new
          number and require a second, explicit yes. */
       confirmQuoteChange: async (fresh) => new Promise((resolve) => {
@@ -648,8 +688,12 @@ export default function Bridge() {
       })
     });
 
+    /* The user already cancelled this attempt: whatever it became is not
+       this screen's business any more. */
+    if (!alive()) return;
     setBusy(false);
     setExecStep(null);
+    setAwaitingWallet(false);
 
     if (!result.ok) {
       if (result.code === 'QUOTE_CHANGED') {
@@ -1107,6 +1151,23 @@ export default function Bridge() {
               ? t(`crossChain.step.${execStep || 'confirm'}`, { defaultValue: t('bridge.sending') })
               : t('bridge.send')}
           </button>
+        )}
+
+        {/*
+          While the wallet has the request, the user must always have a way
+          out on THIS screen. A wallet dismissed with Back never sends a
+          rejection; the boundary catches most of those, and this button
+          catches the rest.
+        */}
+        {busy && awaitingWallet && (
+          <div className="bridge-waiting" style={{ marginTop: 8 }}>
+            <p className="faint" style={{ margin: '0 0 6px', fontSize: 11.5, lineHeight: 1.7, textAlign: 'center' }}>
+              {t('bridge.waitingHint')}
+            </p>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={cancelWaiting}>
+              {t('bridge.cancelWaiting')}
+            </button>
+          </div>
         )}
 
         {txErr && (

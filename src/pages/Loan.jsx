@@ -620,9 +620,22 @@ function UnavailableBanner({ failures, onRetry, t }) {
       </p>
       {/* §28 — the technical reason stays available for diagnostics. */}
       {failures?.length > 0 && (
-        <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '0 0 9px', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
-          {failures.slice(0, 3).map((f) => `${f.step}: ${String(f.reason).slice(0, 80)}`).join(' · ')}
-        </p>
+        <div style={{ margin: '0 0 9px', display: 'grid', gap: 3 }}>
+          {failures.slice(0, 3).map((f, i) => {
+            /* A machine code becomes the page's own sentence; only genuine
+               transport prose stays as a small `ltr` evidence line. */
+            const reason = String(f.reason ?? '').trim();
+            const isCode = /^[A-Z][A-Z0-9_]{2,40}$/.test(reason);
+            return (
+              <p key={`${f.step}-${i}`} className="faint" style={{ fontSize: 10, lineHeight: 1.6, margin: 0, wordBreak: 'break-word' }}>
+                <span style={{ fontWeight: 700 }}>{t(`loan.failStep.${f.step}`, { defaultValue: f.step })}: </span>
+                {isCode
+                  ? loanErrorText(t, reason)
+                  : <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', unicodeBidi: 'isolate', opacity: 0.8 }}>{reason.slice(0, 80)}</span>}
+              </p>
+            );
+          })}
+        </div>
       )}
       <button type="button" className="btn btn-ghost btn-sm" data-testid="loan-unavailable-retry" onClick={onRetry} style={{ width: '100%' }}>
         {t('loan.retry')}
@@ -1145,11 +1158,17 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
                     </span>
                   )}
                 </div>
-                {exec.simulation.revertReason && (
-                  <p style={{ fontSize: 10.5, lineHeight: 1.6, color: '#f8a8a8', margin: '5px 0 0', wordBreak: 'break-word' }}>
-                    {t('loan.simRevertReason')}: {String(exec.simulation.revertReason).slice(0, 140)}
-                  </p>
-                )}
+                {exec.simulation.revertReason && (() => {
+                  const reason = String(exec.simulation.revertReason).trim();
+                  const asCode = /^[A-Z][A-Z0-9_]{2,40}$/.test(reason);
+                  return (
+                    <p style={{ fontSize: 10.5, lineHeight: 1.6, color: '#f8a8a8', margin: '5px 0 0', wordBreak: 'break-word' }}>
+                      {t('loan.simRevertReason')}: {asCode
+                        ? loanErrorText(t, reason)
+                        : <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', unicodeBidi: 'isolate' }}>{reason.slice(0, 140)}</span>}
+                    </p>
+                  );
+                })()}
                 {exec.simulation.status === 'simulated-clean' && (
                   <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '5px 0 0' }}>
                     {t('loan.simNotAGuarantee')}
@@ -1315,6 +1334,36 @@ function ReadOnlyBanner({ t }) {
    component only displays; the engine decides. No white border anywhere.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/*
+ * The engine (lib/lending-engine/alerts.js) writes `alert.body` in ENGLISH —
+ * it has no translator. Rendering it verbatim put «Health factor is 1.12.
+ * Consider adding collateral» under a Persian heading («ارورها با توجه به
+ * زبان باشد و استرینگ نباشد»). The body is therefore rebuilt HERE from the
+ * alert's TYPE and VALUE, in the user's language; the engine's prose is
+ * only the fallback for a type this build has no sentence for.
+ */
+const fmtAlertNum = (n, digits = 2) => (Number.isFinite(Number(n)) ? Number(n).toFixed(digits) : String(n ?? ''));
+
+function alertBodyText(t, alert) {
+  const v = alert?.value;
+  const ranged = v && typeof v === 'object' && 'from' in v && 'to' in v;
+  const pctTypes = new Set(['LTV_HIGH', 'LIQUIDATION_DISTANCE', 'BORROW_APY_CHANGE', 'SUPPLY_APY_CHANGE']);
+  const digits = pctTypes.has(alert?.type) ? (alert.type === 'LTV_HIGH' || alert.type === 'LIQUIDATION_DISTANCE' ? 1 : 2) : 2;
+  let key = `loan.alertBody.${alert?.type}`;
+  let vars = {};
+  if (alert?.type === 'HEALTH_FACTOR_LOW' && ranged) key = 'loan.alertBody.HEALTH_FACTOR_DROP';
+  if (ranged) vars = { from: fmtAlertNum(v.from, digits), to: fmtAlertNum(v.to, digits) };
+  else if (typeof v === 'number') vars = { value: fmtAlertNum(v, digits) };
+  else if (alert?.type === 'TRANSACTION_FAILED') {
+    const action = v?.action ? t(`loan.sheetTitle.${v.action}`, { defaultValue: '' }) : '';
+    vars = { action: action || t('nav.loan', { defaultValue: '' }) };
+  }
+  const text = t(key, { ...vars, defaultValue: '' });
+  if (text) return text;
+  if (ranged) return t('loan.alertChange', { from: vars.from, to: vars.to });
+  return alert?.body || '';
+}
+
 const ALERT_DOT = { critical: '#f87171', warning: '#fbbf24', info: '#60a5fa' };
 const ALERT_ICON = { critical: '🔴', warning: '⚠️', info: '🟢' };
 
@@ -1369,9 +1418,7 @@ function AlertsPanel({ alerts, open, onClose, onManage, t }) {
                     {t(`loan.alertType.${alert.type}`, { defaultValue: alert.title })}
                   </div>
                   <div style={{ fontSize: 11, lineHeight: 1.65, color: 'var(--text-2)', marginTop: 1 }}>
-                    {alert.value && typeof alert.value === 'object' && 'from' in alert.value && 'to' in alert.value
-                      ? t('loan.alertChange', { from: alert.value.from, to: alert.value.to })
-                      : alert.body}
+                    {alertBodyText(t, alert)}
                   </div>
                 </div>
               </div>
@@ -2425,7 +2472,7 @@ function HowItWorks({ t }) {
           <span style={{ textAlign: 'start' }}>
             <span style={{ display: 'block', fontWeight: 800, fontSize: 14, color: 'var(--text-1)' }}>{t('loan.howTitle')}</span>
             <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-              {steps.length} {t('loan.stepsLabel', { defaultValue: 'قدم ساده' })}
+              {steps.length} {t('loan.stepsLabel')}
             </span>
           </span>
         </span>

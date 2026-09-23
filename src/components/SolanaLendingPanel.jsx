@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSolanaWallet } from '../hooks/useSolanaWallet.js';
 import AssetIcon from './AssetIcon.jsx';
 import { loanErrorText } from '../lib/loanErrors.js';
+import { mapRawError } from '../lib/lending-engine/errors.js';
 import {
   buildSolanaLendingTransactions,
   readSolanaLendingMarket,
@@ -192,6 +193,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [actionDetail, setActionDetail] = useState(null);
   const [lastSignature, setLastSignature] = useState(null);
   /* A request this panel handed to a wallet app (deep link) and has not seen
      the answer to yet. `waiting` is display state; the proof that it is still
@@ -318,6 +320,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
 
   const connect = async () => {
     setActionError(null);
+    setActionDetail(null);
     const result = await wallet.connect({ returnTo: window.location.href });
     if (result && typeof result === 'object' && result.ok === false) setActionError(result.code);
   };
@@ -326,6 +329,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
     const actionAsset = overrides.asset || selected;
     const actionAmount = overrides.value ?? amount;
     setActionError(null);
+    setActionDetail(null);
     setLastSignature(null);
     if (!wallet.address) { setActionError('SOLANA_WALLET_REQUIRED'); return; }
     if (!actionAsset) { setActionError('SOLANA_ASSET_REQUIRED'); return; }
@@ -361,6 +365,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
           const row = { id: sent.id || null, at: Date.now(), action: nextAction, symbol: actionAsset.symbol };
           if (row.id) { writePending(row); setWaiting(row); }
           setActionError(row.id ? null : 'IN_WALLET');
+          setActionDetail(null);
           return;
         }
         if (!sent?.ok || !sent.signature) throw new Error(sent?.code || 'SOLANA_SEND_FAILED');
@@ -372,7 +377,15 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       setAmount('');
       await refresh();
     } catch (cause) {
-      setActionError(String(cause?.message || cause));
+      /* A CODE renders as a sentence; wallet/RPC PROSE («Transaction
+         simulation failed: …») must not be pasted into the generic
+         «… (CODE)» sentence — it is not a code. Prose is mapped to the
+         nearest real code, and kept as an evidence line below. */
+      const raw = String(cause?.code || cause?.message || cause || '').trim();
+      const isCode = /^[A-Z][A-Z0-9_]{2,40}$/.test(raw);
+      const code = isCode ? raw : mapRawError({ code: cause?.code, message: raw }, { fallback: 'SEND_FAILED' }).code;
+      setActionError(code);
+      setActionDetail(isCode ? null : raw.slice(0, 160));
     } finally {
       setAction(null);
     }
@@ -547,6 +560,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
                 </div>
               )}
               {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11, lineHeight: 1.6, margin: '9px 0 0' }}>{loanErrorText(t, actionError)}</p>}
+              {actionError && actionDetail && <p dir="ltr" className="faint" style={{ fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', margin: '3px 0 0', opacity: 0.75, wordBreak: 'break-word' }}>{actionDetail}</p>}
               <WalletIncident code={actionError} t={t} />
               {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ display: 'block', color: '#a78bfa', fontSize: 10.5, marginTop: 9, fontFamily: 'var(--font-mono)' }}>{t('loan.solana.viewTransaction')} · {lastSignature.slice(0, 10)}…</a>}
             </div>
@@ -591,6 +605,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
             </div>
           )}
           {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11 }}>{loanErrorText(t, actionError)}</p>}
+          {actionError && actionDetail && <p dir="ltr" className="faint" style={{ fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', margin: '3px 0 0', opacity: 0.75, wordBreak: 'break-word' }}>{actionDetail}</p>}
           <WalletIncident code={actionError} t={t} />
           {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', fontSize: 10.5 }}>{t('loan.solana.viewTransaction')}</a>}
         </div>

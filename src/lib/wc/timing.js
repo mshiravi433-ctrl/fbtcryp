@@ -149,6 +149,7 @@ export function withTimeout(promise, ms = TIMEOUT.connect, code = 'TIMEOUT') {
  *   pause: () => void,
  *   resume: () => void,
  *   extend: (ms: number) => void,
+ *   shorten: (ms: number, code?: string) => void,
  *   cancel: (code?: string) => void,
  *   stop: () => void,
  *   remaining: () => number
@@ -160,6 +161,7 @@ export function pauseBound(
   { hardCapMs = Number.POSITIVE_INFINITY, hardCode = 'WC_PAIRING_EXPIRY_REACHED', now = () => Date.now() } = {}
 ) {
   let remaining = Math.max(0, Number(totalMs) || 0);
+  let softCode = code;
   let armedAt = now();
   let softTimer = null;
   let hardTimer = null;
@@ -191,10 +193,10 @@ export function pauseBound(
     const cap = Number.isFinite(hardCapMs) ? Math.max(0, hardCapMs - (now() - armedAt)) : Number.POSITIVE_INFINITY;
     const wait = Math.min(remaining, cap);
     if (wait <= 0) {
-      settle(cap <= 0 ? hardCode : code);
+      settle(cap <= 0 ? hardCode : softCode);
       return;
     }
-    softTimer = setTimeout(() => settle(code), wait);
+    softTimer = setTimeout(() => settle(softCode), wait);
   };
 
   if (Number.isFinite(hardCapMs)) {
@@ -217,6 +219,37 @@ export function pauseBound(
       paused = false;
       armedAt = now();
       armSoft();
+      return true;
+    },
+    /**
+     * SHORTEN the remaining budget — the mirror of `extend()`.
+     *
+     * Used when the document comes BACK from a wallet without an answer: the
+     * user pressed Back out of the wallet instead of approving or rejecting.
+     * Nothing will ever settle that request from the wallet side, so the wait
+     * must end soon, with a code the UI can name («you came back without
+     * signing»), instead of running out the full three-minute budget.
+     *
+     * Only ever shrinks — a `ms` larger than the current remainder is a no-op,
+     * so calling it from a visibility handler can never grant time.
+     */
+    shorten(ms, message = null) {
+      if (settled) return false;
+      const want = Math.max(0, Number(ms) || 0);
+      if (message) softCode = message;
+      if (paused) {
+        remaining = Math.min(remaining, want);
+        return true;
+      }
+      const spent = now() - armedAt;
+      const left = Math.max(0, remaining - spent);
+      if (want < left) {
+        remaining = want;
+        armedAt = now();
+        armSoft();
+      } else if (message) {
+        armSoft();
+      }
       return true;
     },
     /** Grant more budget — capped by the hard clock, which never moves. */

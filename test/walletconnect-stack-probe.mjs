@@ -1660,6 +1660,57 @@ export default async function run() {
     }
 
     {
+      /* THE RETURN WITHOUT AN ANSWER («وقتی می‌زنی که امضا کنی و برمی‌گردی
+         بدون انجام کار، هنوز منتظر می‌ماند»): the document hides (the wallet
+         came to the front), then shows again (the user pressed Back) and no
+         response ever arrives. The wait must collapse to the grace window and
+         end with a code that names the return — not run out the full budget. */
+      const provider = makeProvider();
+      provider.request = () => new Promise(() => {});
+      const listeners = new Set();
+      const doc = {
+        visibilityState: 'visible',
+        addEventListener: (name, fn) => { if (name === 'visibilitychange') listeners.add(fn); },
+        removeEventListener: (name, fn) => { listeners.delete(fn); }
+      };
+      const fire = (state) => { doc.visibilityState = state; for (const fn of listeners) fn(); };
+      const guarded = guardEip1193(provider, { timeoutMs: 5_000, hardCapMs: 10_000, returnGraceMs: 40, doc });
+      const started = Date.now();
+      const pending = guarded.request({ method: 'eth_sendTransaction', params: [] }).then(
+        () => null, (error) => error
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      fire('hidden');
+      await new Promise((r) => setTimeout(r, 10));
+      fire('visible');
+      const thrown = await pending;
+      const took = Date.now() - started;
+      t('coming back from the wallet without an answer ends the wait quickly', took < 1_000);
+      t('and the failure names the return, not a network guess',
+        thrown?.code === SIGN_ERRORS.RETURNED_UNSIGNED && thrown?.signError === true);
+      t('the visibility listener is removed once the request settles', listeners.size === 0);
+    }
+
+    {
+      /* A tab switch on a request that never left the page (desktop QR) must
+         NOT shorten anything: only the hide→show pair counts as a return. */
+      const provider = makeProvider();
+      provider.request = () => new Promise((resolve) => setTimeout(() => resolve('0xok'), 120));
+      const listeners = new Set();
+      const doc = {
+        visibilityState: 'visible',
+        addEventListener: (name, fn) => { if (name === 'visibilitychange') listeners.add(fn); },
+        removeEventListener: (name, fn) => { listeners.delete(fn); }
+      };
+      const guarded = guardEip1193(provider, { timeoutMs: 5_000, hardCapMs: 10_000, returnGraceMs: 20, doc });
+      const pending = guarded.request({ method: 'eth_sendTransaction', params: [] });
+      await new Promise((r) => setTimeout(r, 10));
+      for (const fn of listeners) fn(); /* a stray visible→visible event */
+      const hash = await pending;
+      t('a stray visibility event on a request that never left does not cut it short', hash === '0xok');
+    }
+
+    {
       /* The nudge: once the request is published, the wallet app is the thing
          the user has to be looking at. */
       const provider = makeProvider();

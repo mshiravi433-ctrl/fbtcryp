@@ -2941,3 +2941,160 @@
   padding: 0 8px 8px;
 }
 .lab2-more-panel .lab2-card { min-height: 116px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   APP GUIDE (Practice · «راهنمای برنامه») — 2026-09-23
+   A vertical, numbered rail of step cards, each with an inline-SVG scene
+   (GuideArt) painted from the area's accent. Same surfaces, radii and
+   accent utilities as every other Lab screen.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.lab2-guide-intro .lab2-chips { margin-top: 10px; }
+
+.lab2-guide-lead {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+.lab2-guide-section-sub {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.75;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid color-mix(in srgb, var(--acc) 55%, transparent);
+}
+
+.lab2-guide-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--acc-ink);
+  background: color-mix(in srgb, var(--acc) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 35%, transparent);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.lab2-guide-open:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--acc) 20%, transparent); }
+[dir='rtl'] .lab2-guide-open svg { transform: scaleX(-1); }
+
+.lab2-guide-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.lab2-guide-step {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.lab2-guide-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lab2-guide-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+  color: #04121a;
+  background: linear-gradient(135deg, var(--acc), var(--acc-2));
+  box-shadow: 0 8px 18px -10px var(--acc), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab2-guide-line {
+  flex: 1 1 auto;
+  width: 2px;
+  margin: 4px 0;
+  border-radius: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--acc) 60%, transparent), color-mix(in srgb, var(--acc) 12%, transparent));
+}
+
+.lab2-guide-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: var(--lab-r-md);
+  background: var(--lab-surface-soft);
+  border: 1px solid var(--lab-line);
+  box-shadow: var(--lab-inset);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+}
+.lab2-guide-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc) 40%, transparent); }
+
+.lab2-guide-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -30% -60% auto;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--acc) 22%, transparent), transparent 66%);
+  pointer-events: none;
+}
+
+.lab2-guide-art {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 72px;
+  border-radius: 14px;
+  color: var(--text-1);
+  background:
+    radial-gradient(90% 90% at 50% 100%, color-mix(in srgb, var(--acc) 18%, transparent), transparent 70%),
+    color-mix(in srgb, var(--lab-surface-soft) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 22%, transparent);
+}
+.lab2-guide-art svg { width: 92px; height: 66px; display: block; }
+
+.lab2-guide-text { min-width: 0; position: relative; }
+
+.lab2-guide-step-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.lab2-guide-step-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+@media (max-width: 380px) {
+  .lab2-guide-card { grid-template-columns: 1fr; }
+  .lab2-guide-art { width: 100%; height: 84px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab2-guide-card:hover, .lab2-guide-open:hover { transform: none; }
+}

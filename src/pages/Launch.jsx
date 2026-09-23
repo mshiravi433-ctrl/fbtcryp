@@ -24,6 +24,7 @@ import {
 } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
+import { chainSvg } from '../components/AssetIcon';
 import {
   LAUNCH_CHAINS,
   LAUNCH_MODES,
@@ -992,16 +993,24 @@ export default function Launch() {
         {/* HERO — glass box: the icon floats, its flame pulses, the copy sits
             inside the same surface as the badges. Motion is decorative only
             and switches off entirely under prefers-reduced-motion (launch.css). */}
-        <header className="launch-hero">
+        <header className="launch-hero launch-hero-v2">
           <span className="launch-hero-aurora" aria-hidden />
+          <span className="launch-hero-grid" aria-hidden />
+          <span className="launch-hero-stars" aria-hidden />
           <div className="launch-hero-row">
             <div className="launch-title">
               <span className="launch-rocket" aria-hidden>
+                <span className="launch-rocket-orbit" />
                 <span className="launch-rocket-glow" />
                 <IconRocket className="launch-rocket-icon" width={30} height={30} />
+                <span className="launch-rocket-trail" />
               </span>
               <div className="launch-title-text">
-                <h1>{t('launch.title')}</h1>
+                <span className="launch-eyebrow">
+                  <span className="launch-eyebrow-dot" aria-hidden />
+                  {t('launch.hero.eyebrow')}
+                </span>
+                <h1><span className="launch-h1-grad">{t('launch.title')}</span></h1>
                 <p>{t('launch.subtitle')}</p>
               </div>
             </div>
@@ -1013,6 +1022,37 @@ export default function Launch() {
               <span className={`launch-badge mode ${directDeploy ? 'direct' : 'factory'}`}>
                 {directDeploy ? t('launch.mode.direct') : t('launch.mode.factory')}
               </span>
+            </div>
+          </div>
+
+          {/* The three beats of the sentence above, as a walkable strip —
+              token → pool → live — with the networks this desk can launch
+              on shown by their real logos. Decorative; the wizard's stepper
+              below is the interactive one. */}
+          <div className="launch-hero-foot">
+            <ol className="launch-hero-flow" aria-label={t('launch.steps')}>
+              <li className="launch-hero-beat">
+                <span className="launch-hero-beat-ico"><IconCoins width={13} height={13} /></span>
+                <span>{t('launch.hero.beat1')}</span>
+              </li>
+              <li className="launch-hero-arrow" aria-hidden>›</li>
+              <li className="launch-hero-beat">
+                <span className="launch-hero-beat-ico"><IconShield width={13} height={13} /></span>
+                <span>{t('launch.hero.beat2')}</span>
+              </li>
+              <li className="launch-hero-arrow" aria-hidden>›</li>
+              <li className="launch-hero-beat">
+                <span className="launch-hero-beat-ico"><IconRocket width={13} height={13} /></span>
+                <span>{t('launch.hero.beat3')}</span>
+              </li>
+            </ol>
+            <div className="launch-hero-nets" aria-label={t('launch.network.title')}>
+              {[...chainMeta.slice(0, 6).map((c) => ({ id: c.chainId, color: c.color, short: c.short })),
+                ...(SOLANA.shipping ? [{ id: 'solana', color: '#14f195', short: 'SOL' }] : [])].map((c, i) => (
+                <span key={String(c.id)} className="launch-hero-net" style={{ zIndex: 20 - i }}>
+                  <ChainMark color={c.color} short={c.short} size={24} chain={c.id} />
+                </span>
+              ))}
             </div>
           </div>
         </header>
@@ -1066,7 +1106,7 @@ export default function Launch() {
                           style={{ '--chain-color': c.color }}
                         >
                           <span className="launch-chain-top">
-                            <ChainMark color={c.color} short={c.short} size={38} />
+                            <ChainMark color={c.color} short={c.short} size={38} chain={c.chainId} />
                             <span className="launch-chain-id">
                               <span className="launch-chain-name">{c.name}</span>
                               <span className="launch-chain-dex">{c.dex.name}</span>
@@ -1103,7 +1143,7 @@ export default function Launch() {
                         style={{ '--chain-color': '#14f195' }}
                       >
                         <span className="launch-chain-top">
-                          <ChainMark color="#14f195" short="SOL" size={38} />
+                          <ChainMark color="#14f195" short="SOL" size={38} chain="solana" />
                           <span className="launch-chain-id">
                             <span className="launch-chain-name">Solana</span>
                             <span className="launch-chain-dex">{t('launch.sol.cardDex')}</span>
@@ -1128,7 +1168,7 @@ export default function Launch() {
                         data-solana-pending={SOLANA.pending.join(',')}
                       >
                         <span className="launch-chain-top">
-                          <ChainMark color="#14f195" short="SOL" size={38} dim />
+                          <ChainMark color="#14f195" short="SOL" size={38} dim chain="solana" />
                           <span className="launch-chain-id">
                             <span className="launch-chain-name">Solana</span>
                             <span className="launch-chain-dex">SPL · {t('launch.network.solanaPending', { n: SOLANA.pending.length })}</span>
@@ -1469,7 +1509,7 @@ export default function Launch() {
                         <p className="launch-review-name">{name || '—'} <span className="launch-review-sym">{symbol}</span></p>
                         <p className="launch-review-sub">{chain?.name} · {dex?.name || ''}</p>
                       </div>
-                      <ChainMark color={meta?.color || '#00e5ff'} short={meta?.short || '?'} size={30} ghost />
+                      <ChainMark color={meta?.color || '#00e5ff'} short={meta?.short || '?'} size={30} ghost chain={meta?.chainId ?? chainId} />
                     </div>
                     <ReviewRow k={t('launch.review.supply')} v={spec ? `${spec.supplyHuman} ${symbol}` : '—'} mono />
                     <ReviewRow k={t('launch.review.price')} v={impliedPrice != null ? `1 ${symbol} = ${compactNum(impliedPrice, 6)} ${quoteSym}` : '—'} mono />
@@ -1644,7 +1684,7 @@ export default function Launch() {
               const isSol = h.network === 'solana';
               return (
                 <div key={h.launchId} className="launch-history-row">
-                  <ChainMark color={isSol ? '#14f195' : hm?.color || '#8892a8'} short={isSol ? 'SOL' : hm?.short || '?'} size={26} />
+                  <ChainMark color={isSol ? '#14f195' : hm?.color || '#8892a8'} short={isSol ? 'SOL' : hm?.short || '?'} size={26} chain={isSol ? 'solana' : hm?.chainId ?? null} />
                   <span className={`launch-state-chip ${String(h.status).toLowerCase()}`}>{h.status}</span>
                   <span className="launch-history-name">{h.tokenName || h.symbol || '—'}</span>
                   <span className="launch-history-net">{h.networkName}</span>
@@ -1723,11 +1763,21 @@ export default function Launch() {
  * A layered gradient built from the chain's own colour + its short code, so
  * it works offline, in both themes, with zero image requests.
  */
-function ChainMark({ color = '#00e5ff', short = '?', size = 40, dim = false, ghost = false }) {
+/*
+ * Reported: «در لانچ باید شبکه‌ها لوگو مناسب و مدرن داشته باشند». The letter
+ * tile («BAS», «ARB») was the whole mark. Now the REAL network logo — the
+ * vendored, inline SVG the rest of the app already uses (AssetIcon's
+ * `chainSvg`: Ethereum, BNB, Arbitrum, Polygon, Base, Optimism, Avalanche,
+ * Solana…) — sits inside the same glowing ring, so it is one image request
+ * short of zero and works in both themes. The letter tile remains ONLY for a
+ * chain no logo exists for, and for a user token with no uploaded logo.
+ */
+function ChainMark({ color = '#00e5ff', short = '?', size = 40, dim = false, ghost = false, chain = null }) {
   const label = String(short || '?').slice(0, 3).toUpperCase();
+  const logo = chain != null ? chainSvg(chain) : null;
   return (
     <span
-      className={`launch-mark${dim ? ' dim' : ''}${ghost ? ' ghost' : ''}`}
+      className={`launch-mark${dim ? ' dim' : ''}${ghost ? ' ghost' : ''}${logo ? ' has-logo' : ''}`}
       aria-hidden
       style={{
         width: size,
@@ -1737,7 +1787,9 @@ function ChainMark({ color = '#00e5ff', short = '?', size = 40, dim = false, gho
       }}
     >
       <span className="launch-mark-ring" />
-      <span className="launch-mark-letter">{label}</span>
+      {logo
+        ? <span className="launch-mark-logo" dangerouslySetInnerHTML={{ __html: logo }} />
+        : <span className="launch-mark-letter">{label}</span>}
     </span>
   );
 }
@@ -1890,7 +1942,7 @@ function ResultPanel({ launch, t, onRetry, onAddToSwap, onRestart, explorer, cha
           </p>
         </div>
         {chainMeta && (
-          <ChainMark color={chainMeta.color || '#00e5ff'} short={chainMeta.short || '?'} size={34} ghost />
+          <ChainMark color={chainMeta.color || '#00e5ff'} short={chainMeta.short || '?'} size={34} ghost chain={chainMeta.chainId ?? null} />
         )}
       </div>
 

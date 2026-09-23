@@ -65,6 +65,16 @@ export const LOAN_ERROR_ALIASES = Object.freeze({
   HTTP_401: 'RPC_BLOCKED',
   HTTP_451: 'RPC_BLOCKED',
   IN_WALLET_PENDING: 'IN_WALLET',
+  /* The signing boundary (lib/wc/signing.js): the user came back from the
+     wallet without answering, or the wallet never answered at all. */
+  WALLET_RETURNED_UNSIGNED: 'USER_REJECTED',
+  WALLET_NO_RESPONSE: 'TIMEOUT',
+  WALLET_SESSION_GONE: 'NO_SESSION',
+  WALLET_NO_ACCOUNT: 'NO_ACCOUNT',
+  WALLET_RELAY_DOWN: 'CONNECT_FAILED',
+  WALLET_METHOD_UNAPPROVED: 'UNSUPPORTED',
+  WALLET_CHAIN_UNAPPROVED: 'WRONG_NETWORK',
+  WALLET_CHAIN_NOT_APPROVED: 'WRONG_NETWORK',
   /* The EVM engine's revert names that the UI may receive verbatim. */
   REVERTED: 'TRANSACTION_REVERTED',
   UNKNOWN_STEP: 'UNKNOWN'

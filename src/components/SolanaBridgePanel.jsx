@@ -78,7 +78,9 @@ function panelErrorCode(err, fallback = 'SEND_FAILED') {
  */
 const PANEL_ERR_KEY = {
   SOL_UNDERFUNDED: 'bridge.solana.insufficientBalance',
-  SOL_GAS: 'bridge.solana.insufficientGas'
+  SOL_GAS: 'bridge.solana.insufficientGas',
+  /* The user left the wait themselves (see `cancelWaiting`). */
+  CANCELLED: 'bridge.err.CANCELLED'
 };
 
 export default function SolanaBridgePanel() {
@@ -110,6 +112,20 @@ export default function SolanaBridgePanel() {
   const [txErr, setTxErr] = useState(null);
   const [ready, setReady] = useState(false);
   const seq = useRef(0);
+
+  /*
+   * The same escape hatch the EVM tab has: a wallet dismissed with Back (a
+   * deeplink to Phantom, an MWA sheet swiped away) may never answer, so the
+   * user needs a way out ON THIS SCREEN. Bumping `runToken` makes whatever
+   * the abandoned promise later resolves to a no-op.
+   */
+  const runToken = useRef(0);
+  const cancelWaiting = () => {
+    runToken.current += 1;
+    setBusy(false);
+    setTxErr('CANCELLED');
+    haptic?.('light');
+  };
 
   const dstTokens = useMemo(() => tokensFor(dstChain), [dstChain]);
   const dstToken = useMemo(
@@ -200,6 +216,8 @@ export default function SolanaBridgePanel() {
 
   const execute = async () => {
     if (!address) return;
+    const token = ++runToken.current;
+    const alive = () => runToken.current === token;
     setBusy(true);
     setTxErr(null);
     haptic?.('medium');
@@ -252,6 +270,7 @@ export default function SolanaBridgePanel() {
       if (!base64) throw new Error('NO_ROUTE');
 
       const sig = await signAndSendSolana(base64, true);
+      if (!alive()) return;
       if (!sig) throw new Error('TX_FAILED');
       setTxHash(sig);
       haptic?.('success');
@@ -262,10 +281,11 @@ export default function SolanaBridgePanel() {
     } catch (e) {
       /* The ACTUAL reason (rejected, short on SOL, service down) — not the
          generic sentence that made every failure look like a lost connection. */
+      if (!alive()) return;
       setTxErr(panelErrorCode(e));
       haptic?.('error');
     } finally {
-      setBusy(false);
+      if (alive()) setBusy(false);
     }
   };
 
@@ -417,6 +437,17 @@ export default function SolanaBridgePanel() {
           >
             {busy ? t('bridge.sending') : t('bridge.send')}
           </button>
+        )}
+
+        {busy && (
+          <div style={{ marginTop: 8 }}>
+            <p className="faint" style={{ margin: '0 0 6px', fontSize: 11.5, lineHeight: 1.7, textAlign: 'center' }}>
+              {t('bridge.waitingHint')}
+            </p>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={cancelWaiting}>
+              {t('bridge.cancelWaiting')}
+            </button>
+          </div>
         )}
 
         {address && !toAddressValid && (

@@ -379,6 +379,12 @@ export async function execute(route, ctx = {}) {
     }
   } catch (err) {
     const message = String(err?.shortMessage || err?.message || err);
+    /* The signing boundary (lib/wc/signing.js) throws machine codes about the
+       WALLET SESSION — the user came back without signing, the wallet never
+       answered, the session is gone. They are passed through as codes so the
+       page can say the true sentence instead of «broadcast failed». */
+    if (err?.signError && typeof err?.code === 'string') return { ok: false, code: err.code };
+    if (/^WALLET_[A-Z_]+$/.test(message)) return { ok: false, code: message };
     if (['WRONG_NETWORK', 'BRIDGE_ACCOUNT_CHANGED', 'UNSAFE_BRIDGE_REQUEST'].includes(message)) return { ok: false, code: message };
     if (/user rejected|user denied|rejected the request/i.test(message)) {
       return { ok: false, code: 'USER_REJECTED' };
