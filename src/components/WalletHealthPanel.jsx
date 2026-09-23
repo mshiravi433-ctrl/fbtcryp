@@ -514,6 +514,27 @@ export default function WalletHealthPanel({ projectId }) {
                           + ` · session=${solana.deepLink?.session ? `${solana.deepLink.session.walletId} · ${solana.deepLink.session.address}` : 'none'}`
                           + ` · transport=${solana.transport ?? 'none'}`}
                       </p>
+                      {/*
+                        The read that gates every signature, measured rather than
+                        assumed. «Connected, but the swap says my balance is low
+                        or to check the RPC» is not diagnosable from the rows
+                        above: the wallet is fine and the CHAIN READ is not. This
+                        row says which door answered (a public node directly, or
+                        our own backend for a device that cannot reach one), what
+                        it cost, and the named reason when neither answered.
+                      */}
+                      {row(
+                        t('wallet.healthSolanaChainRead'),
+                        { ok: solana.chainRead?.ok, error: solana.chainRead?.ok ? undefined : solana.chainRead?.code },
+                        solana.chainRead?.ok
+                          ? `${t('wallet.healthSolanaChainVia')}: ${solana.chainRead.via === 'server' ? 'fbt backend' : (solana.chainRead.host || 'node')}`
+                            + ` · ${solana.chainRead.ms}ms · calls=${solana.chainRead.calls} · ${solana.chainRead.sol} SOL`
+                          : `${solana.chainRead?.code ?? 'NOT_MEASURED'}`
+                            + ` · server=${solana.chainRead?.serverTried ? (solana.chainRead?.serverCode || 'tried') : 'not tried'}`
+                            + (solana.chainRead?.hosts?.length
+                              ? ` · ${solana.chainRead.hosts.map((h) => `${h.host}:${h.reason}`).join(' · ')}`
+                              : '')
+                      )}
                       {row(
                         t('wallet.healthSolanaSigning'),
                         { ok: solana.signing?.ok },

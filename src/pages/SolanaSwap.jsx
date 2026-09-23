@@ -28,8 +28,10 @@ import {
   signAndSendSolana,
   signSolanaTransaction,
   getSolanaSwapBalances,
+  getSolanaTokenInfo,
   solanaAddress
 } from '../lib/solanaWallet';
+import { solanaSwapPreflight, lamportsToSol } from '../lib/solana/swapPreflight';
 import { shortAddress } from '../context/WalletContext';
 import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 import { useAppStore } from '../store/useAppStore';
@@ -76,7 +78,16 @@ const BASE_TOKENS = [
    */
   ...LST_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
   ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
-];
+  /*
+   * `decimalsVerified: true` — these scales were read from the chain (or from
+   * the issuer's own list) when the mint was added, so an amount converted with
+   * them may be compared against a balance. A token imported by pasted address
+   * starts FALSE and becomes true only when the chain answers; see
+   * resolveTokenScale below. The distinction is the whole fix for «موجودی برای
+   * این سواپ کافی نیست» on a funded wallet: a guessed scale must never decide
+   * that verdict.
+   */
+].map((tk) => ({ ...tk, decimalsVerified: true }));
 
 const DEBOUNCE_MS = 450;
 
@@ -102,6 +113,24 @@ export default function SolanaSwap({ embedded = false }) {
   const [solSheetOpen, setSolSheetOpen] = useState(false);
   const [walletBalances, setWalletBalances] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  /*
+   * WHY the balance could not be read, as a named code (RPC_BLOCKED,
+   * RPC_RATE_LIMITED, RPC_TIMEOUT, RPC_ERROR, RPC_UNAVAILABLE). Null when the
+   * read succeeded.
+   *
+   * The old screen threw every failure away (`catch { return null }`) and
+   * turned all of them into BALANCE_UNAVAILABLE — one sentence, «check the RPC
+   * later», for a network path that is BLOCKED and would never answer a retry.
+   * Each of these codes has its own translation and its own remedy.
+   */
+  const [balanceCode, setBalanceCode] = useState(null);
+  const [balanceHosts, setBalanceHosts] = useState(null);
+  /* Set when the swap was allowed to proceed WITHOUT a verified balance, so the
+     user is told that before they sign, not after. */
+  const [preflightNotice, setPreflightNotice] = useState(null);
+  /* The refused pre-flight, kept so the sentence can carry the exact shortfall
+     («you need 0.0021 SOL more») instead of only its name. */
+  const [preCheck, setPreCheck] = useState(null);
 
   /* Arm the connect request before anyone taps: the hand-off has to come out of
      the tap to be allowed to open the wallet (see lib/solana/deeplink.js). */
@@ -234,12 +263,13 @@ export default function SolanaSwap({ embedded = false }) {
    * as a truncated address with no name and no verified badge, and the user
    * sees exactly what they are trading.
    *
-   * Decimals are read as 9 here, matching the paste path, and that is safe
-   * for the same stated reason: the quote is computed by Jupiter from the
-   * mint's real on-chain decimals, so a wrong guess only changes what the
-   * user TYPES, never what they receive. It is visible in the quote before
-   * anything is signed.
-   */
+ * Decimals start as a flagged GUESS here (`decimalsVerified: false`) and are
+ * read from the chain immediately after — see resolveTokenScale. The old
+ * comment claimed the guess was safe because «the quote is computed by Jupiter
+ * from the mint's real on-chain decimals»; Jupiter does use the real scale, but
+ * WE convert the typed amount with the guess first, so a 6-decimal token became
+ * a 1000× amount and every verdict was «insufficient balance».
+ */
   useEffect(() => {
     const mint = searchParams.get('toMint');
     if (!mint) return;
@@ -273,7 +303,15 @@ export default function SolanaSwap({ embedded = false }) {
       mint,
       symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`,
       name: '',
+      /*
+       * A PLACEHOLDER, and it is now labelled as one. 9 is the most common
+       * Solana scale and it is wrong for most modern tokens (6 decimals), which
+       * is why `decimalsVerified: false` travels with it: an amount converted
+       * with an unconfirmed scale is never compared against a balance, and the
+       * scale is asked for from the chain the moment the token is added.
+       */
       decimals: 9,
+      decimalsVerified: false,
       imported: true
     };
     setExtraTokens((prev) => (prev.some((tk) => tk.mint === mint) ? prev : [...prev, token]));
@@ -304,6 +342,74 @@ export default function SolanaSwap({ embedded = false }) {
   const [customErr, setCustomErr] = useState(null);
   const [extraTokens, setExtraTokens] = useState([]);
 
+  /*
+   * ─── THE SCALE OF AN IMPORTED TOKEN IS READ, NOT GUESSED ──────────────────
+   * A pasted mint used to be stored with `decimals: 9` and a comment claiming
+   * that was safe because «the quote is computed by Jupiter from the mint's
+   * real on-chain decimals». Half true, and the wrong half: Jupiter does use
+   * the real scale, but WE convert the amount the user typed into base units
+   * first, with the guess. For a 6-decimal token — most pump.fun and modern
+   * SPL tokens — every amount became 1000× too large, so
+   *
+   *   · the balance line on screen showed a number 1000× smaller than the truth
+   *     («موجودی کیف پول کم» for a funded wallet);
+   *   · the pre-flight compared 1000× the amount against the real balance and
+   *     refused with INSUFFICIENT_BALANCE;
+   *   · Jupiter was asked for 1000× the holding and answered errorCode 1, which
+   *     maps to the same «موجودی برای این سواپ کافی نیست».
+   *
+   * So the scale is now asked for, from the chain through whichever door
+   * answers (lib/solana/balanceSource.js), and until it is known the token is
+   * marked `decimalsVerified: false` — which stops the pre-flight from
+   * comparing numbers whose units are a guess (lib/solana/swapPreflight.js).
+   *
+   * The SYMBOL stays the truncated address even when Jupiter offers a name.
+   * That is deliberate and not an oversight: an uncurated mint's symbol is
+   * supplied by whoever created it, and the six fake AAPLx tokens in
+   * lib/solanaAssets.js exist because a name in a dropdown is a phishing
+   * vector. The scale is a fact about the chain; the name is a claim.
+   */
+  const [scaleErr, setScaleErr] = useState(null);
+  const scaleInFlight = useRef(new Set());
+
+  const resolveTokenScale = useCallback(async (mint) => {
+    if (!mint || scaleInFlight.current.has(mint)) return;
+    scaleInFlight.current.add(mint);
+    try {
+      const info = await getSolanaTokenInfo(mint);
+      if (!info?.ok || !Number.isInteger(info.decimals)) {
+        setScaleErr(info?.code || 'DECIMALS_UNREADABLE');
+        return;
+      }
+      const patch = (tk) => (tk?.mint === mint && !tk.decimalsVerified
+        /* The scale is only worth writing when it is a real answer. */
+        ? { ...tk, decimals: info.decimals, decimalsVerified: true, decimalsSource: info.via || 'chain' }
+        : tk);
+      /*
+       * Patch the LIST and the two SELECTED tokens. `fromToken`/`toToken` hold
+       * references to the objects as they were when picked, so updating only
+       * the list would leave the screen quoting with the old scale — the exact
+       * bug this exists to remove. Changing them is also what re-runs the quote
+       * effect (it is keyed on the token objects), so a price already on screen
+       * is recomputed with the real scale instead of staying 1000× wrong.
+       */
+      setExtraTokens((prev) => prev.map(patch));
+      setFromToken((prev) => patch(prev));
+      setToToken((prev) => patch(prev));
+      setScaleErr(null);
+    } catch {
+      setScaleErr('DECIMALS_UNREADABLE');
+    } finally {
+      scaleInFlight.current.delete(mint);
+    }
+  }, []);
+
+  useEffect(() => {
+    for (const tk of extraTokens) {
+      if (!tk?.decimalsVerified) void resolveTokenScale(tk.mint);
+    }
+  }, [extraTokens, resolveTokenScale]);
+
   const tokens = useMemo(() => [...BASE_TOKENS, ...extraTokens], [extraTokens]);
 
   /*
@@ -328,19 +434,54 @@ export default function SolanaSwap({ embedded = false }) {
    */
   const reqSeq = useRef(0);
 
-  const loadWalletBalances = useCallback(async () => {
+  /* The last balance-read failure, for the code that runs in the same tick as
+     the read and therefore cannot see React state yet. */
+  const balanceFail = useRef(null);
+
+  /** The amount the user typed, in base units — or null when the scale is a
+      guess we must not compare against a real balance. */
+  const rawAmountFor = useCallback(() => {
+    const base = toBaseUnits(amount, fromToken.decimals);
+    if (!base || base === '0') return null;
+    try { return BigInt(base); } catch { return null; }
+  }, [amount, fromToken.decimals]);
+
+  const loadWalletBalances = useCallback(async ({ rawAmount = null } = {}) => {
     if (!address) return null;
     setBalanceLoading(true);
     try {
       const state = await getSolanaSwapBalances({
         owner: address,
         inputMint: fromToken.mint,
-        outputMint: toToken.mint
+        outputMint: toToken.mint,
+        /*
+         * Only used to decide whether the third read (does the OUTPUT token
+         * account exist?) can change the verdict. When the wallet's SOL already
+         * covers the input plus the creation rent, the answer cannot matter and
+         * the call is not made — two node requests instead of three, which on a
+         * rate-limited public node is the difference between an answer and a
+         * 429. See outputAccountCheckNeeded in lib/solana/chainReads.js.
+         */
+        rawAmount
       });
       setWalletBalances(state);
+      balanceFail.current = null;
+      setBalanceCode(null);
+      setBalanceHosts(null);
       return state;
-    } catch {
+    } catch (err) {
       setWalletBalances(null);
+      const code = err?.code || err?.message || 'RPC_UNAVAILABLE';
+      const hosts = Array.isArray(err?.hosts) && err.hosts.length ? err.hosts : null;
+      /*
+       * The ref is for swap(), which runs in the same tick and therefore cannot
+       * see the state this catch just set. The state is for the screen. Both are
+       * written because the two readers are different, not because one is a
+       * backup: a stale closure here would throw the generic code again.
+       */
+      balanceFail.current = { code, hosts, detail: err?.detail || null };
+      setBalanceCode(code);
+      setBalanceHosts(hosts);
       return null;
     } finally {
       setBalanceLoading(false);
@@ -564,24 +705,53 @@ export default function SolanaSwap({ embedded = false }) {
     if (!order || busy || !address) return;
     setBusy(true);
     setTxErr(null);
+    setPreCheck(null);
+    setPreflightNotice(null);
     haptic?.('medium');
     let solRecordId = null;
 
     try {
       /*
-       * Fail before opening a wallet prompt when the account is empty. Wallet
-       * simulation used to surface this as the vague "not signed" error even
-       * though signing was never the problem. Check exact base units and SOL
-       * for network fee / possible destination ATA rent.
+       * ─── PRE-FLIGHT: A KNOWN SHORTFALL BLOCKS, AN UNREADABLE ONE DOES NOT ──
+       * Fail before opening a wallet prompt when the account is PROVABLY short:
+       * wallet simulation used to surface that as the vague «not signed» error
+       * even though signing was never the problem. The decision itself lives in
+       * lib/solana/swapPreflight.js so it can be asserted without a browser, a
+       * wallet or a node.
+       *
+       * What changed, and why: an UNREADABLE balance used to throw
+       * BALANCE_UNAVAILABLE and the swap died there — that is the «RPC را چک
+       * کنید» half of the report, on the networks where the public nodes are
+       * blocked. Blocking was not the safety property it looked like. Every
+       * path below simulates before it lands (MWA signs with
+       * `skipPreflight: false`, the injected provider preflights, Jupiter's
+       * /execute refuses a transaction that would fail), so an underfunded swap
+       * is rejected by the chain with NOTHING SPENT — while a swap our own read
+       * refused never happened at all. Now the read is tried hard (four nodes,
+       * then our own backend), and if it still cannot be made, the user is told
+       * so on screen BEFORE they press and the chain gets the final word.
+       *
+       * And a GUESSED SCALE is never compared: `amountScaleVerified` is false
+       * for a pasted mint whose decimals the chain has not confirmed, so the
+       * amount check is left to the aggregator, which reads the mint's real
+       * decimals and answers errorCode 1 — INSUFFICIENT_BALANCE from the source
+       * of truth instead of from our arithmetic.
        */
-      const balancesNow = await loadWalletBalances();
-      if (!balancesNow) throw new Error('BALANCE_UNAVAILABLE');
-      const rawAmount = BigInt(toBaseUnits(amount, fromToken.decimals));
-      if (balancesNow.sourceRaw < rawAmount) throw new Error('INSUFFICIENT_BALANCE');
-      const isSolInput = fromToken.mint === SOL_MINT;
-      const gasLamports = balancesNow.outputAccountExists ? 20_000n : 2_100_000n;
-      if (balancesNow.solLamports < gasLamports + (isSolInput ? rawAmount : 0n)) {
-        throw new Error('INSUFFICIENT_GAS');
+      const rawAmount = rawAmountFor();
+      const balancesNow = await loadWalletBalances({ rawAmount });
+      const pre = solanaSwapPreflight({
+        balances: balancesNow,
+        balanceCode: balanceFail.current?.code || null,
+        rawAmount,
+        amountScaleVerified: fromToken.decimalsVerified !== false && balancesNow?.sourceDecimalsVerified !== false,
+        isSolInput: fromToken.mint === SOL_MINT
+      });
+      setPreCheck(pre.ok ? null : pre);
+      setPreflightNotice(pre.ok ? pre.notice : null);
+      if (!pre.ok) {
+        const err = new Error(pre.code);
+        err.preflight = pre;
+        throw err;
       }
 
       /*
@@ -737,20 +907,29 @@ export default function SolanaSwap({ embedded = false }) {
       return;
     }
     /*
-     * Decimals default to 9 and the symbol is the truncated mint.
+     * ─── DECIMALS: THE GUESS THAT WAS DOCUMENTED AS SAFE ────────────────────
+     * The comment here used to say a wrong `decimals` «only affects what the
+     * user TYPES». It does not. That number converts the typed amount into the
+     * base units Jupiter is asked for AND the balance line is rendered with, so
+     * for a 6-decimal token a 9-decimal guess made every amount 1000× too big:
+     * the screen showed a balance 1000× too small and refused the swap with
+     * «موجودی برای این سواپ کافی نیست» while the wallet held the funds.
      *
-     * Reading the real values needs an RPC call to the token's mint account.
-     * That is worth adding, but shipping without it is honest as long as the
-     * UI does not pretend to know: the row is labelled "imported" and the
-     * quote comes back from Jupiter in true base units either way, so a wrong
-     * `decimals` only affects what the user TYPES, and they see the resulting
-     * quote before signing anything.
+     * So 9 stays only as a placeholder, flagged `decimalsVerified: false`, and
+     * the real scale is read from the chain the moment the token is added
+     * (resolveTokenScale). Until then the pre-flight does not compare that
+     * amount against anything — the aggregator, which reads the mint's true
+     * scale, gives the verdict instead.
+     *
+     * The symbol stays the truncated mint: an uncurated token's name is a claim
+     * by its creator, not a fact, and a dropdown is a phishing surface.
      */
     const tk = {
       mint,
       symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`,
       name: t('solana.importedToken'),
       decimals: 9,
+      decimalsVerified: false,
       imported: true
     };
     setExtraTokens((prev) => [...prev, tk]);
@@ -770,7 +949,20 @@ export default function SolanaSwap({ embedded = false }) {
     ? fromBaseUnits(order.outAmount, toToken.decimals)
     : null;
   const sourceBalance = walletBalances
-    ? fromBaseUnits(walletBalances.sourceRaw.toString(), fromToken.decimals)
+    ? fromBaseUnits(
+      walletBalances.sourceRaw.toString(),
+      /*
+       * The scale the CHAIN reported for this token wins over the scale in our
+       * list. For a curated token they are the same number; for a pasted mint
+       * whose scale had not been read yet, the chain's is the only honest one —
+       * and displaying a balance with the wrong scale is how a funded wallet
+       * came to look empty (a 6-decimal token read at 9 decimals shows 1000×
+       * smaller than it is).
+       */
+      Number.isInteger(Number(walletBalances.sourceDecimals)) && walletBalances.sourceDecimalsVerified !== false
+        ? Number(walletBalances.sourceDecimals)
+        : fromToken.decimals
+    )
     : null;
   const solBalance = walletBalances
     ? fromBaseUnits(walletBalances.solLamports.toString(), 9)
@@ -839,15 +1031,72 @@ export default function SolanaSwap({ embedded = false }) {
         {address ? (
           <div className="row-between" style={{ marginTop: 9 }}>
             <span className="faint">
-              {balanceLoading ? t('common.loading') : `${sourceBalance ?? '—'} ${fromToken.symbol}`}
+              {/*
+                «—», never a number, when the read failed. Showing 0 for a
+                wallet that could not be read is the difference between «the
+                chain is unreachable from here» and «you are broke» — and the
+                second one is a lie that costs a support ticket.
+              */}
+              {balanceLoading
+                ? t('common.loading')
+                : walletBalances
+                  ? `${sourceBalance ?? '—'} ${fromToken.symbol}`
+                  : '—'}
             </span>
-            <span className="mono faint" style={{ fontSize: 11.5 }}>{solBalance ?? '—'} SOL</span>
+            <span className="mono faint" style={{ fontSize: 11.5 }}>
+              {walletBalances ? `${solBalance ?? '—'} SOL` : ''}
+            </span>
           </div>
         ) : (
           <p className="notice" style={{ marginTop: 11 }}>
             {t('solana.swapNeedsWallet')}
           </p>
         )}
+
+        {/*
+          ── A BALANCE THAT COULD NOT BE READ SAYS SO, NAMED ──────────────────
+          One sentence used to cover every failure («BALANCE_UNAVAILABLE»), so
+          a network path that is BLOCKED told the user to try again later —
+          advice that can never work. Each code has its own translation and its
+          own remedy, and the per-host line below is what support reads.
+        */}
+        {address && !balanceLoading && balanceCode ? (
+          <div className="notice" role="status" style={{ marginTop: 10 }}>
+            <p style={{ margin: 0 }}>
+              {t(`solana.err.${balanceCode}`, t('solana.err.BALANCE_UNAVAILABLE'))}
+            </p>
+            <span className="muted" style={{ display: 'block', marginTop: 6, fontSize: 12 }}>
+              {t('solana.balanceUnverifiedBody')}
+            </span>
+            {balanceHosts?.length ? (
+              <code
+                className="mono"
+                style={{ display: 'block', marginTop: 6, fontSize: 10.5, opacity: 0.7, wordBreak: 'break-all' }}
+              >
+                {balanceHosts.map((h) => `${h.host}: ${h.reason}`).join(' · ')}
+              </code>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 8 }}
+              onClick={() => { haptic?.('select'); void loadWalletBalances({ rawAmount: rawAmountFor() }); }}
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        ) : null}
+
+        {/* The scale of a pasted mint is being asked for, or could not be
+            answered — stated, because it decides whether an amount on this
+            screen can be compared against a balance at all. */}
+        {(fromToken?.decimalsVerified === false || toToken?.decimalsVerified === false) ? (
+          <p className="notice" style={{ marginTop: 9 }} role="status">
+            {scaleErr
+              ? t('solana.err.DECIMALS_UNREADABLE')
+              : t('solana.decimalsReading')}
+          </p>
+        ) : null}
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}
@@ -953,10 +1202,39 @@ export default function SolanaSwap({ embedded = false }) {
         </button>
 
         {txErr && (
-          <p className="notice notice-danger" style={{ marginTop: 11 }}>
-            {t(`solana.err.${txErr}`, t('solana.err.SIGN_FAILED'))}
-          </p>
+          <div className="notice notice-danger" style={{ marginTop: 11 }}>
+            <p style={{ margin: 0 }}>
+              {t(`solana.err.${txErr}`, t('solana.err.SIGN_FAILED'))}
+            </p>
+            {/*
+              The shortfall, exactly. «Not enough SOL for the network fee» is a
+              true sentence and an unusable one when the missing amount is
+              0.0021 SOL and the wallet holds 0.0019 — which is the common case,
+              because the fee that is short is usually the RENT for creating the
+              destination token account, not the transfer fee.
+            */}
+            {preCheck?.code === 'INSUFFICIENT_GAS' && preCheck.shortfallLamports != null ? (
+              <span className="muted" style={{ display: 'block', marginTop: 6, fontSize: 12 }}>
+                {t('solana.gasShortfall', {
+                  need: lamportsToSol(preCheck.needLamports),
+                  have: lamportsToSol(preCheck.haveLamports),
+                  missing: lamportsToSol(preCheck.shortfallLamports)
+                })}
+              </span>
+            ) : null}
+          </div>
         )}
+
+        {/*
+          Proceeding WITHOUT a verified balance is allowed — the wallet and the
+          chain simulate before anything lands, so an underfunded swap costs
+          nothing — but it is announced, before the signature rather than after.
+        */}
+        {preflightNotice ? (
+          <p className="notice" style={{ marginTop: 11 }} role="status">
+            {t('solana.swapUnverifiedNote')}
+          </p>
+        ) : null}
 
         {result?.signature && (
           <div className="notice" style={{ marginTop: 11 }}>
