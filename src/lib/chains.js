@@ -580,6 +580,8 @@ export const TOKENS = {
     { symbol: 'MKR', name: 'Maker', address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', decimals: 18, coingeckoId: 'maker', rwa: 'credit' },
     { symbol: 'PENDLE', name: 'Pendle Finance', address: '0x808507b2314050238865872ac79528349429907f', decimals: 18, coingeckoId: 'pendle', rwa: 'yield' },
     { symbol: 'CFG', name: 'Centrifuge', address: '0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94', decimals: 18, coingeckoId: 'centrifuge', rwa: 'credit' },
+    { symbol: 'MPL', name: 'Maple Finance', address: '0x333420442673A51c8809ca3443e0618ff7eD4d24', decimals: 18, coingeckoId: 'maple', rwa: 'credit' },
+    { symbol: 'CPOOL', name: 'Clearpool', address: '0x66761fa41377005662a03370c73b01a0e9657036', decimals: 18, coingeckoId: 'clearpool', rwa: 'credit' },
     /*
      * ─── LIQUID STAKING TOKENS EARN US THE ORDINARY SWAP FEE ───────────────
      * Asked to raise Farm's revenue. The Farm screen currently lists yields

@@ -231,6 +231,52 @@ export const RWA_CURATED_TOKENS = [
     descAr: 'بروتوكول تداول العوائد المرمزة للأصول الحقيقية والسندات',
     defaultPrice: 4.10,
     feeBps: FEE_BPS
+  },
+  {
+    id: 'maple',
+    symbol: 'MPL',
+    name: 'Maple Finance',
+    category: 'credit',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x333420442673A51c8809ca3443e0618ff7eD4d24',
+    decimals: 18,
+    coingeckoId: 'maple',
+    backingFa: 'تسهیلات و اعتبارات شرکتی نهادی با مدیریت هوشمند ریسک',
+    backingEn: 'Institutional Corporate Credit & Overcollateralized Loans',
+    backingAr: 'تسهيلات ائتمانية للشركات المؤسسية مع إدارة المخاطر',
+    backingType: 'protocol_token',
+    issuer: 'Maple Finance',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'پروتکل اعتبار و وام‌دهی غیرمتمرکز به شرکت‌های معتبر و صندوق‌های سرمایه‌گذاری',
+    descEn: 'Institutional credit marketplace for transparent on-chain lending',
+    descAr: 'بروتوكول ائتمان وإقراض لا مركزي للشركات وصناديق الاستثمار',
+    defaultPrice: 18.5,
+    feeBps: FEE_BPS
+  },
+  {
+    id: 'clearpool',
+    symbol: 'CPOOL',
+    name: 'Clearpool',
+    category: 'credit',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x66761fa41377005662a03370c73b01a0e9657036',
+    decimals: 18,
+    coingeckoId: 'clearpool',
+    backingFa: 'اعتبارات تک‌استخری بدون وثیقه با تضمین شفافیت آنچین',
+    backingEn: 'Single-borrower Uncollateralized Institutional Credit',
+    backingAr: 'ائتمان مؤسسي منوع وضمانات شفافة على البلوكتشين',
+    backingType: 'protocol_token',
+    issuer: 'Clearpool',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'بازار وام‌دهی نهادی بدون وثیقه به بازارسازان و مؤسسات دیجیتال',
+    descEn: 'Decentralized capital markets ecosystem for institutional borrowers',
+    descAr: 'نظام بيئي لأسواق رأس المال اللامركزية للمقترضين من المؤسسات',
+    defaultPrice: 0.16,
+    feeBps: FEE_BPS
   }
 ];
 
@@ -239,13 +285,16 @@ export const RWA_CURATED_TOKENS = [
  * Evaluates network context and ensures the 0.70% platform fee applies.
  *
  * @param {object} token
+ * @param {number|string|null} amount
  * @returns {string}
  */
-export function getRwaSwapUrl(token) {
+export function getRwaSwapUrl(token, amount = null) {
   if (!token) return '/swap';
 
+  const amtParam = amount && Number(amount) > 0 ? `&amount=${encodeURIComponent(amount)}` : '';
+
   if (token.chainId === 'solana') {
-    return `/solana?to=${encodeURIComponent(token.symbol || token.address || '')}`;
+    return `/solana?to=${encodeURIComponent(token.symbol || token.address || '')}${amtParam}`;
   }
 
   const chainId = token.chainId || 1;
@@ -253,12 +302,14 @@ export function getRwaSwapUrl(token) {
   if (chainId === 4663) {
     // Robinhood Chain: default counter-token is USDG, unless the target is USDG itself (then ETH)
     const counter = token.symbol === 'USDG' ? 'ETH' : 'USDG';
-    return `/swap?chain=4663&from=${counter}&to=${encodeURIComponent(token.symbol)}`;
+    const addrParam = token.address ? `&toAddress=${encodeURIComponent(token.address)}` : '';
+    return `/swap?chain=4663&from=${counter}&to=${encodeURIComponent(token.symbol)}${addrParam}${amtParam}`;
   }
 
   // Ethereum / Arbitrum / other EVMs: default counter-token is USDT
   const counter = token.symbol === 'USDT' ? 'ETH' : 'USDT';
-  return `/swap?chain=${chainId}&from=${counter}&to=${encodeURIComponent(token.symbol)}`;
+  const addrParam = token.address ? `&toAddress=${encodeURIComponent(token.address)}` : '';
+  return `/swap?chain=${chainId}&from=${counter}&to=${encodeURIComponent(token.symbol)}${addrParam}${amtParam}`;
 }
 
 /**

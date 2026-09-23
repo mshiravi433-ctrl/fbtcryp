@@ -201,6 +201,42 @@ const RWA_TOKENS = [
     standard: 'ERC-20',
     swappable: true,
     feeBps: 70
+  },
+  {
+    id: 'maple',
+    symbol: 'MPL',
+    name: 'Maple Finance',
+    category: 'credit',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x333420442673A51c8809ca3443e0618ff7eD4d24',
+    decimals: 18,
+    coingeckoId: 'maple',
+    backingFa: 'تسهیلات و اعتبارات شرکتی نهادی با مدیریت هوشمند ریسک',
+    backingEn: 'Institutional Corporate Credit & Overcollateralized Loans',
+    backingType: 'protocol_token',
+    issuer: 'Maple Finance',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
+  },
+  {
+    id: 'clearpool',
+    symbol: 'CPOOL',
+    name: 'Clearpool',
+    category: 'credit',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x66761fa41377005662a03370c73b01a0e9657036',
+    decimals: 18,
+    coingeckoId: 'clearpool',
+    backingFa: 'اعتبارات تک‌استخری بدون وثیقه با تضمین شفافیت آنچین',
+    backingEn: 'Single-borrower Uncollateralized Institutional Credit',
+    backingType: 'protocol_token',
+    issuer: 'Clearpool',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
   }
 ];
 

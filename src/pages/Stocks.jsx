@@ -17,6 +17,7 @@ import { IconSearch, IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import RwaRow from '../components/RwaRow';
+import RwaDetailSheet from '../components/RwaDetailSheet';
 import {
   RWA_CATEGORIES,
   RWA_CURATED_TOKENS,
@@ -199,6 +200,7 @@ export default function Stocks() {
   const [rwaCategory, setRwaCategory] = useState('all');
   const [rwaSearch, setRwaSearch] = useState('');
   const [rwaCuratedRaw, setRwaCuratedRaw] = useState(RWA_CURATED_TOKENS);
+  const [selectedRwaSheet, setSelectedRwaSheet] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -231,19 +233,16 @@ export default function Stocks() {
     });
   }, [rwaCuratedRaw, coins, i18n.language, rwaCategory, rwaSearch]);
 
-  const buyRwa = (token) => {
+  const buyRwa = (token, amt = null) => {
     haptic?.('select');
-    const url = getRwaSwapUrl(token);
+    const targetAmt = amt ?? amount;
+    const url = getRwaSwapUrl(token, targetAmt);
     navigate(url);
   };
 
   const selectRwa = (token) => {
     haptic?.('select');
-    if (token.coingeckoId) {
-      navigate(`/coin/${token.coingeckoId}`);
-    } else {
-      buyRwa(token);
-    }
+    setSelectedRwaSheet(token);
   };
 
   /*
@@ -984,6 +983,26 @@ export default function Stocks() {
               </span>
             </div>
 
+            {/* Amount quick selector for RWA calculations */}
+            <div className="farm-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
+              <span className="faint">{t('stocks.ifIBuy')}</span>
+              <div className="row" style={{ gap: 6 }}>
+                {AMOUNTS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    className={`tag ${amount === a ? 'active' : ''}`}
+                    onClick={() => {
+                      haptic?.('select');
+                      setAmount(a);
+                    }}
+                  >
+                    {fmtUsd(a)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {tradeableRwa.length > 0 ? (
               <motion.div
                 className="stack"
@@ -996,6 +1015,7 @@ export default function Stocks() {
                   <RwaRow
                     key={tok.id}
                     token={tok}
+                    amountUsd={amount}
                     onBuy={buyRwa}
                     onSelect={selectRwa}
                   />
@@ -1123,6 +1143,18 @@ export default function Stocks() {
       <InfoBox title={t('stocks.riskTitle')} tone="danger" id="stocks-risk">
         <p>{t('stocks.riskNotice')}</p>
       </InfoBox>
+
+      {/* Detailed RWA Breakdown Sheet */}
+      <RwaDetailSheet
+        open={Boolean(selectedRwaSheet)}
+        onClose={() => setSelectedRwaSheet(null)}
+        token={selectedRwaSheet}
+        onBuy={(tok, amt) => {
+          setSelectedRwaSheet(null);
+          buyRwa(tok, amt);
+        }}
+        amountUsd={amount}
+      />
     </PageTransition>
   );
 }
