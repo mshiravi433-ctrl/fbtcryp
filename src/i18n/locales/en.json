@@ -5125,7 +5125,31 @@
     "currentGoal": "Current goal",
     "editCadencePrompt": "New cadence: daily, weekly, or monthly",
     "editChainPrompt": "New EVM chain ID",
-    "editDeadlinePrompt": "New deadline (Unix milliseconds; leave empty for none)"
+    "editDeadlinePrompt": "New deadline (Unix milliseconds; leave empty for none)",
+    "solana": {
+      "title": "Solana order",
+      "body": "This does not watch a price. It saves the pair and amount, then opens the Solana swap with those values. Nothing moves until you sign.",
+      "network": "Network",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "EVM orders use the cards above. They cannot spend a Solana balance.",
+      "from": "Pay",
+      "to": "Receive",
+      "amount": "Amount",
+      "create": "Open Solana swap",
+      "notice": "Saved. The Solana swap opens with this pair. Nothing moves until you sign there.",
+      "empty": "No Solana handoff saved yet.",
+      "open": "Open",
+      "remove": "Remove",
+      "pick": "Choose a token",
+      "search": "Name, symbol, or mint",
+      "saved": "Saved handoffs",
+      "err": {
+        "BAD_AMOUNT": "Enter an amount greater than zero.",
+        "SAME_TOKEN": "Choose two different tokens.",
+        "BAD_MINT": "That token address is not a Solana mint."
+      }
+    }
   },
   "lock": {
     "title": "Locked",
@@ -5400,6 +5424,27 @@
         "sentVolatile": "Violent 24h move",
         "sentTrending": "Mild uptrend"
       }
+    },
+    "wallet": {
+      "send": "Send",
+      "receive": "Receive",
+      "bridge": "Bridge",
+      "swap": "Swap",
+      "actions": "Wallet actions",
+      "holdings": "Holdings",
+      "partial": "Some balances could not be read. Only the part that answered is shown.",
+      "empty": "No token balance was found on this address.",
+      "splNote": "Send on this screen moves native SOL only. Other tokens move from the swap.",
+      "sendTitle": "Send SOL",
+      "sendOnly": "This sends native SOL only. It does not move SPL tokens.",
+      "recipient": "Recipient address",
+      "amount": "Amount",
+      "sendCta": "Send SOL",
+      "receiveTitle": "Receive",
+      "receiveHint": "Send only SOL and Solana tokens to this address. An Ethereum address starting with 0x will not arrive here.",
+      "copied": "Copied",
+      "copy": "Copy address",
+      "badAddress": "That is not a Solana address."
     }
   },
   "install": {

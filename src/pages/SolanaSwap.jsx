@@ -347,6 +347,59 @@ export default function SolanaSwap({ embedded = false }) {
   const [customErr, setCustomErr] = useState(null);
   const [extraTokens, setExtraTokens] = useState([]);
 
+  // One consumer for an orders-page handoff. It has to run after the `?to` and
+  // `?toMint` effects: each of those captures the initial params and writes
+  // them back, and the last write is the one that sticks.
+  useEffect(() => {
+    const fromMint = searchParams.get('fromMint');
+    const toMint = searchParams.get('toMint');
+    const amt = searchParams.get('amount');
+    if (!fromMint && !toMint) return;
+    const resolve = (mint) => {
+      if (!mint || !isSolanaAddress(mint)) return null;
+      const curated = BASE_TOKENS.find((tk) => tk.mint === mint);
+      if (curated) return curated;
+      const asset = findAsset(mint);
+      const decimals = Number.isInteger(asset?.decimals) ? asset.decimals : 9;
+      return {
+        mint,
+        symbol: asset?.symbol || `${mint.slice(0, 4)}…${mint.slice(-4)}`,
+        name: asset?.name || '',
+        decimals,
+        decimalsVerified: Number.isInteger(asset?.decimals),
+        imported: !asset,
+        icon: asset?.icon || asset?.logoURI || null
+      };
+    };
+    const fromTk = resolve(fromMint);
+    const toTk = resolve(toMint);
+    const sellOnly = searchParams.get('side') === 'sell' && toTk && !fromTk;
+    if (fromTk?.imported) {
+      setExtraTokens((prev) => (prev.some((tk) => tk.mint === fromTk.mint) ? prev : [...prev, fromTk]));
+    }
+    if (toTk?.imported) {
+      setExtraTokens((prev) => (prev.some((tk) => tk.mint === toTk.mint) ? prev : [...prev, toTk]));
+    }
+    if (sellOnly) {
+      const usdc = BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0];
+      setFromToken(toTk);
+      setToToken(usdc);
+    } else {
+      if (fromTk) setFromToken(fromTk);
+      if (toTk) setToToken(toTk);
+    }
+    if (amt && Number(amt) > 0) setAmount(String(amt));
+    const next = new URLSearchParams(searchParams);
+    next.delete('fromMint');
+    next.delete('toMint');
+    next.delete('amount');
+    next.delete('side');
+    next.delete('chain');
+    if (fromMint || toMint) next.delete('to');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /*
    * ─── THE SCALE OF AN IMPORTED TOKEN IS READ, NOT GUESSED ──────────────────
    * A pasted mint used to be stored with `decimals: 9` and a comment claiming
@@ -1154,64 +1207,72 @@ export default function SolanaSwap({ embedded = false }) {
 
       {/* ----------------------------- ticket ---------------------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="field-label">{t('swap.from')}</div>
-        <div className="row" style={{ gap: 8 }}>
-          {/*
-            ─── A BUTTON, NOT A <select> ─────────────────────────────────────
-            The bare dropdown showed truncated symbols with no logo and no
-            search — on the screen whose whole job is tokens that live in
-            nobody's list. The button opens SolanaTokenPicker: logos, verified
-            badges, prices, AI sentiment, and paste-a-mint that resolves as
-            you type (see the component's header for the full rationale).
-          */}
-          <button
-            type="button"
-            className="sol-token-btn"
-            onClick={() => { haptic?.('select'); setPickerSide('from'); }}
-            data-testid="solana-token-from"
-          >
-            <TokenIcon token={fromToken} size={26} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromToken.symbol}</span>
-            {fromToken.imported ? (
-              <span className={`sol-token-imported-chip ${fromToken.verified ? 'verified' : 'unverified'}`}>
-                {fromToken.verified ? '✓' : '!'}
-              </span>
-            ) : null}
-            <span className="stp-caret" aria-hidden="true">▼</span>
-          </button>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-            placeholder="0.0"
-            style={{ flex: 1, textAlign: 'end' }}
-          />
+        <div className="sol-swap-box">
+          <div className="sol-swap-box-head">
+            <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.from')}</span>
+            <span className="faint" style={{ fontSize: 11.5 }}>
+              {t('swap.balance')}: {balanceLoading ? '…' : (sourceBalance ?? '—')} {fromToken.symbol}
+            </span>
+          </div>
+          <div className="sol-swap-box-body">
+            <button
+              type="button"
+              className="sol-token-btn"
+              onClick={() => { haptic?.('select'); setPickerSide('from'); }}
+              data-testid="solana-token-from"
+            >
+              <TokenIcon token={fromToken} size={26} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromToken.symbol}</span>
+              {fromToken.imported ? (
+                <span className={`sol-token-imported-chip ${fromToken.verified ? 'verified' : 'unverified'}`}>
+                  {fromToken.verified ? '✓' : '!'}
+                </span>
+              ) : null}
+              <span className="stp-caret" aria-hidden="true">▼</span>
+            </button>
+            <input
+              className="swap-amount-input mono"
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+              placeholder="0.0"
+            />
+          </div>
+          <div className="sol-swap-box-foot">
+            {sourceBalance != null && Number(sourceBalance) > 0 ? (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAmount(sourceBalance)}>{t('swap.max')}</button>
+            ) : <span />}
+          </div>
         </div>
 
         <div className="row" style={{ justifyContent: 'center', margin: '10px 0' }}>
           <button className="icon-btn" onClick={flip} aria-label={t('swap.flip')}>⇅</button>
         </div>
 
-        <div className="field-label">{t('swap.to')}</div>
-        <div className="row" style={{ gap: 8 }}>
-          <button
-            type="button"
-            className="sol-token-btn"
-            onClick={() => { haptic?.('select'); setPickerSide('to'); }}
-            data-testid="solana-token-to"
-          >
-            <TokenIcon token={toToken} size={26} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toToken.symbol}</span>
-            {toToken.imported ? (
-              <span className={`sol-token-imported-chip ${toToken.verified ? 'verified' : 'unverified'}`}>
-                {toToken.verified ? '✓' : '!'}
-              </span>
-            ) : null}
-            <span className="stp-caret" aria-hidden="true">▼</span>
-          </button>
-          <div className="mono" style={{ flex: 1, textAlign: 'end', fontSize: 16, padding: '9px 0' }}>
-            {quoting ? t('swap.quoting') : (outAmount ?? '—')}
+        <div className="sol-swap-box">
+          <div className="sol-swap-box-head">
+            <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.to')}</span>
+          </div>
+          <div className="sol-swap-box-body">
+            <button
+              type="button"
+              className="sol-token-btn"
+              onClick={() => { haptic?.('select'); setPickerSide('to'); }}
+              data-testid="solana-token-to"
+            >
+              <TokenIcon token={toToken} size={26} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toToken.symbol}</span>
+              {toToken.imported ? (
+                <span className={`sol-token-imported-chip ${toToken.verified ? 'verified' : 'unverified'}`}>
+                  {toToken.verified ? '✓' : '!'}
+                </span>
+              ) : null}
+              <span className="stp-caret" aria-hidden="true">▼</span>
+            </button>
+            <span className="mono sol-swap-out">
+              {quoting ? t('swap.quoting') : (outAmount ?? '—')}
+            </span>
           </div>
         </div>
 

@@ -94,7 +94,21 @@
   white-space: nowrap;
   max-width: 46vw;
 }
-.stp-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+.stp-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.stp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
 .stp-price { font-size: 12.5px; color: var(--text-1); }
 .stp-chg { font-size: 10.5px; }
 .stp-up { color: var(--up, #00c853); }
@@ -317,3 +331,73 @@
   color: #e8a13c;
 }
 :root[data-theme='light'] .sol-token-imported-chip.unverified { color: #9a6b12; }
+
+/* ── swap ticket: token and amount never share a shrinking row ──────────── */
+
+.sol-swap-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.06);
+  min-width: 0;
+}
+.sol-swap-box-head,
+.sol-swap-box-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.sol-swap-box-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.sol-swap-box .sol-token-btn {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 46%;
+  min-width: 0;
+}
+.sol-swap-box input,
+.sol-swap-box .sol-swap-out {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 2px;
+  font-size: 22px;
+  font-weight: 750;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.sol-swap-box .sol-swap-out {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+:root[data-theme='light'] .stp-row,
+:root[data-theme='light'] .sol-swap-box,
+:root[data-theme='light'] .sol-token-btn {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0e1729;
+}
+:root[data-theme='light'] .stp-badge-verified {
+  background: rgba(0, 140, 90, 0.1);
+  color: #067a4c;
+  border-color: rgba(0, 140, 90, 0.28);
+}
+:root[data-theme='light'] .stp-search,
+:root[data-theme='light'] .stp-ai {
+  background: #f7f8fc;
+}

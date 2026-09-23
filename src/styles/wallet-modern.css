@@ -316,6 +316,132 @@
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+.wal-wallet-accordion.segmented {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+.wal-wallet-accordion.segmented > button {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(127, 127, 157, 0.06);
+  padding-inline: 14px;
+}
+:root[data-theme='light'] .wal-wallet-accordion.segmented > button {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0e1729;
+}
+.wal-acc-caret { color: var(--text-3); font-size: 12px; }
+
+.sol-wal-hero { position: relative; overflow: hidden; }
+.sol-wal-hero-body { position: relative; display: flex; flex-direction: column; gap: 14px; }
+.sol-wal-addr { font-weight: 800; font-size: 18px; margin-top: 3px; }
+.sol-wal-balance { display: flex; flex-direction: column; gap: 2px; }
+.sol-wal-balance strong { font-size: 28px; letter-spacing: -0.03em; }
+.sol-wal-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sol-wal-action {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.08);
+  color: var(--text-1);
+  font-weight: 750;
+  font-size: 12.5px;
+}
+.sol-wal-row { width: 100%; display: flex; align-items: center; gap: 10px; text-align: start; }
+.sol-wal-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sol-wal-row-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sol-wal-row-amt { font-variant-numeric: tabular-nums; font-weight: 750; }
+.sol-wal-both-sum {
+  cursor: pointer;
+  font-weight: 800;
+  list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.sol-wal-both-sum::-webkit-details-marker { display: none; }
+.sol-wal-qr {
+  width: min(220px, 70%);
+  margin: 4px auto 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 16px;
+}
+.sol-wal-qr svg { width: 100%; height: auto; display: block; }
+.sol-wal-full-addr { font-size: 12px; word-break: break-all; line-height: 1.7; text-align: center; }
+:root[data-theme='light'] .sol-wal-action,
+:root[data-theme='light'] .sol-wal-holdings,
+:root[data-theme='light'] .sol-wal-both {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+.ord-token-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ord-token-pick {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.06);
+  color: var(--text-1);
+  text-align: start;
+  min-width: 0;
+}
+.ord-token-pick strong { display: block; font-size: 13px; }
+.ord-token-pick small { display: block; color: var(--text-3); font-size: 10.5px; }
+.ord-net-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ord-net-toggle button {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.08);
+  color: var(--text-1);
+  font-weight: 800;
+}
+.ord-net-toggle button.is-on {
+  border-color: rgba(153, 69, 255, 0.5);
+  background: linear-gradient(135deg, rgba(153, 69, 255, 0.28), rgba(20, 241, 149, 0.16));
+}
+.ord-token-list { max-height: min(52vh, 420px); overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.ord-verified {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #d7ffe8;
+  background: rgba(20, 241, 149, 0.16);
+  border: 1px solid rgba(20, 241, 149, 0.35);
+}
+:root[data-theme='light'] .ord-verified { color: #067647; background: rgba(20, 241, 149, 0.12); }
+.ord-token-list .ord-token-pick { width: 100%; }
+.sol-wal-both-sum::after {
+  content: '▸';
+  margin-inline-start: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.sol-wal-both[open] > .sol-wal-both-sum::after { content: '▾'; }
+:root[data-theme='light'] .ord-token-pick {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0e1729;
+}
+
 :root[data-native='true'] .wallet-hero-aurora::before,
 :root[data-native='true'] .wallet-hero-aurora::after {
   animation: none;

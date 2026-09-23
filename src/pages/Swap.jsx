@@ -244,12 +244,21 @@ export default function Swap() {
   useEffect(() => { effectiveSlippageRef.current = effectiveSlippage; }, [effectiveSlippage]);
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const [chainTab, setChainTab] = useState(() => (
+    typeof window !== 'undefined' && /(?:^|[?&#])chain=solana(?:&|$)/.test(`${window.location.search}${window.location.hash}`)
+      ? 'solana'
+      : 'evm'
+  ));
   const sourceIntentId = useRef(searchParams.get('intent'));
   const confidentialRequested = isConfidentialPrivacy(searchParams);
   const prefillDone = useRef(false);
 
   useEffect(() => {
     if (prefillDone.current) return;
+    /* `chain=solana` is not an EVM id. Number('solana') is NaN, so the switch
+       below is skipped and this effect used to delete `chain` whenever a
+       symbol or amount was also present — the Solana screen never mounted. */
+    if (searchParams.get('chain') === 'solana') return;
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const amt = searchParams.get('amount');
@@ -280,6 +289,11 @@ export default function Swap() {
     for (const key of ['from', 'to', 'amount', 'chain']) next.delete(key);
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, curated, chainId, wallet]);
+
+  useEffect(() => {
+    if (confidentialRequested) return;
+    if (searchParams.get('chain') === 'solana') setChainTab('solana');
+  }, [searchParams, confidentialRequested]);
 
   /*
    * ─── ?toAddress= / ?fromAddress= — address deep-links ────────────────────
@@ -1491,8 +1505,6 @@ export default function Swap() {
     && !insufficient
     && Number(amount) > 0
     && (useGasless ? gaslessQuoteReady : normalQuoteReady);
-
-  const [chainTab, setChainTab] = useState('evm');
 
   /*
    * ─── THE EXECUTION RISK GATE ──────────────────────────────────────────────

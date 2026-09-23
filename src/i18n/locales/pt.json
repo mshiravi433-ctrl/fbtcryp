@@ -610,6 +610,30 @@
       "ladder": "Nova ordem escalonada",
       "twap": "Novo TWAP",
       "rebalance": "Novo reequilíbrio"
+    },
+    "solana": {
+      "title": "Ordem Solana",
+      "body": "Isto não observa um preço. Guarda o par e a quantidade e abre a troca Solana com esses valores. Nada se move até você assinar.",
+      "network": "Rede",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "As ordens EVM usam os cartões acima. Elas não podem gastar um saldo Solana.",
+      "from": "Paga",
+      "to": "Recebe",
+      "amount": "Quantidade",
+      "create": "Abrir troca Solana",
+      "notice": "Salvo. A troca Solana abre com este par. Nada se move até você assinar lá.",
+      "empty": "Ainda não há uma passagem Solana salva.",
+      "open": "Abrir",
+      "remove": "Remover",
+      "pick": "Escolher token",
+      "search": "Nome, símbolo ou mint",
+      "saved": "Passagens salvas",
+      "err": {
+        "BAD_AMOUNT": "Informe uma quantidade maior que zero.",
+        "SAME_TOKEN": "Escolha dois tokens diferentes.",
+        "BAD_MINT": "Esse endereço não é um mint da Solana."
+      }
     }
   },
   "bridge": {
@@ -2349,5 +2373,28 @@
     "executionBlocked": "Está em fila na Carteira — a tua assinatura ainda é necessária.",
     "executionFailed": "Não passou. A transação não foi concluída.",
     "connectWallet": "Ligar carteira"
+  },
+  "solana": {
+    "wallet": {
+      "send": "Enviar",
+      "receive": "Receber",
+      "bridge": "Ponte",
+      "swap": "Trocar",
+      "actions": "Ações",
+      "holdings": "Ativos",
+      "partial": "Alguns saldos não puderam ser lidos. Só aparece a parte que respondeu.",
+      "empty": "Nenhum saldo de token foi encontrado neste endereço.",
+      "splNote": "Enviar nesta tela move apenas SOL nativo. Os outros tokens saem pela troca.",
+      "sendTitle": "Enviar SOL",
+      "sendOnly": "Isto envia apenas SOL nativo. Não move tokens SPL.",
+      "recipient": "Endereço do destinatário",
+      "amount": "Quantidade",
+      "sendCta": "Enviar SOL",
+      "receiveTitle": "Receber",
+      "receiveHint": "Envie apenas SOL e tokens da Solana para este endereço. Um endereço Ethereum que começa com 0x não chega aqui.",
+      "copied": "Copiado",
+      "copy": "Copiar endereço",
+      "badAddress": "Esse não é um endereço Solana."
+    }
   }
 }
