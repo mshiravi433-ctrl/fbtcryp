@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import { lockBodyScroll } from '../lib/scrollLock';
 import { useStill } from '../components/AnimatedIcon';
 import InfoBox from '../components/InfoBox';
 import CoinLogo from '../components/CoinLogo';
@@ -461,11 +463,34 @@ function EvidenceChips({ evidence, max = 5 }) {
 
 function WhyModal({ why, onClose }) {
   const { t } = useTranslation();
-  if (!why) return null;
+
+  useEffect(() => {
+    if (!why) return undefined;
+    const unlock = lockBodyScroll();
+    document.body.classList.add('sic-why-open');
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    window.addEventListener('keydown', onKey);
+    return () => {
+      unlock();
+      document.body.classList.remove('sic-why-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [why, onClose]);
+
+  if (!why || typeof document === 'undefined') return null;
   const { signal, loading, data, onchainRows = [] } = why;
-  return (
+  return createPortal(
     <div className="sic-modal-backdrop" role="presentation" onClick={onClose}>
-      <motion.div className="sic-modal" role="dialog" aria-modal="true" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
+      <motion.div
+        className="sic-modal"
+        role="dialog"
+        aria-modal="true"
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="row-between" style={{ alignItems: 'flex-start' }}>
           <div>
             <h3 className="sic-modal-title"><IconSparkle /> {t('signals.intel.why.title')}</h3>
@@ -546,7 +571,8 @@ function WhyModal({ why, onClose }) {
           </motion.div>
         )}
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -556,6 +582,20 @@ function AlertSheet({ symbol, onClose }) {
   const [condition, setCondition] = useState('above');
   const [value, setValue] = useState('');
   const [alerts, setAlerts] = useState([]);
+
+  useEffect(() => {
+    if (!symbol) return undefined;
+    const unlock = lockBodyScroll();
+    document.body.classList.add('sic-why-open');
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    window.addEventListener('keydown', onKey);
+    return () => {
+      unlock();
+      document.body.classList.remove('sic-why-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [symbol, onClose]);
+
   useEffect(() => {
     if (!symbol) return;
     /* Rows come from localStorage, so their shape is whatever an older build
@@ -564,7 +604,7 @@ function AlertSheet({ symbol, onClose }) {
     const wanted = String(symbol).toUpperCase();
     setAlerts(readAlerts().filter((a) => String(a?.symbol || '').toUpperCase() === wanted && a?.active));
   }, [symbol]);
-  if (!symbol) return null;
+  if (!symbol || typeof document === 'undefined') return null;
   const kinds = [
     ['price', t('signals.intel.alert.price')],
     ['confidence', t('signals.intel.alert.confidence')],
@@ -579,9 +619,18 @@ function AlertSheet({ symbol, onClose }) {
     showLocalNotification(`FBT · ${symbol}`, { body: t('signals.intel.alert.created') });
     setValue('');
   };
-  return (
+  return createPortal(
     <div className="sic-modal-backdrop" role="presentation" onClick={onClose}>
-      <motion.div className="sic-modal" role="dialog" aria-modal="true" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} onClick={(e) => e.stopPropagation()}>
+      <motion.div
+        className="sic-modal"
+        role="dialog"
+        aria-modal="true"
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="row-between">
           <h3 className="sic-modal-title"><IconBell /> {t('signals.intel.alert.title')} · {symbol}</h3>
           <button type="button" className="sic-icon-btn" onClick={onClose} aria-label={t('signals.intel.actions.close')}><IconX /></button>
@@ -638,7 +687,8 @@ function AlertSheet({ symbol, onClose }) {
           <p className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.alert.evaluate')}</p>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

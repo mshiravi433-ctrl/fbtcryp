@@ -68,7 +68,6 @@ const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () 
 const Farm = lazyRetry(() => import('./pages/Farm'));
 const Signals = lazyRetry(() => import('./pages/Signals'));
 const Stocks = lazyRetry(() => import('./pages/Stocks'));
-const Etf = lazyRetry(() => import('./pages/Etf'));
 /* Real-money Ostium order path. It is gated from store-safe builds with the
    other leveraged screens: unlike the virtual lab it is real, but the same
    store vocabulary rule applies. Full builds include the complete route. */
@@ -383,7 +382,6 @@ function AnimatedRoutes() {
             <Route path="/farm" element={<Farm />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/stocks" element={<Stocks />} />
-            <Route path="/etf" element={<Etf />} />
             {SPECULATION_ENABLED && <Route path="/ostium" element={<Ostium />} />}
             {SPECULATION_ENABLED && <Route path="/dydx" element={<Dydx />} />}
             {SPECULATION_ENABLED && <Route path="/derivatives" element={<DerivativesDashboard />} />}
