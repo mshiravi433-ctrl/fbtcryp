@@ -72,6 +72,8 @@ import {
   aiConfirm,
   aiFeedback
 } from '../lib/aiIntentClient';
+import { verifyPlanBinding } from '../lib/intent-ai/planDigest.js';
+import { checkConstitution, explainConstitution } from '../lib/intent-ai/constitution.js';
 import { centralIngest } from '../lib/centralClient.js';
 import WalletConnectSheet from './WalletConnectSheet';
 import {
@@ -3130,6 +3132,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
     setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, goalBusy: true } : m)));
     const fa = locale.startsWith('fa');
+    /* Goal plans walk real legs too: the same immutable constitution applies. */
+    const goalRules = checkConstitution({ actions: option.actions, balances: aiContext.balances || null, defaultChainId: wallet?.chainId || defaultChainId || null });
+    if (!goalRules.ok) {
+      setMessages((prev) => [
+        ...prev.map((m) => (m.id === message.id ? { ...m, goalBusy: false } : m)),
+        { id: makeId(), role: 'ai', content: explainConstitution(goalRules, locale), kind: 'error', ui: { type: 'TEXT' } }
+      ]);
+      return;
+    }
     try {
       const result = await runExecutionPlan({
         actions: option.actions,
@@ -3409,7 +3420,36 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         : (prepared?.actions?.length ? prepared.actions : actions)) || [action];
 
       setActivitySteps((prev) => prev.map((s) => s.id === 'quote_refresh' ? { ...s, status: 'completed' } : s.id === 'risk_check' ? { ...s, status: 'active' } : s));
-      await new Promise((r) => setTimeout(r, 300)); // Simulate risk check
+
+      /* Content-bound approval + constitution, right before the wallet is
+         asked to sign. The server issued `approval` over the exact legs it
+         prepared; if anything between that card and this tap changed a leg,
+         the digest no longer matches and nothing reaches the wallet. The
+         constitution is re-checked here too, against fresh balances. */
+      if (!isRebalanceKind(type)) {
+        const binding = verifyPlanBinding(prepared?.approval, plannedActions);
+        const rules = checkConstitution({ actions: plannedActions, balances: aiContext.balances || null, defaultChainId: walletSnap.chainId ?? null });
+        if (!binding.ok || !rules.ok) {
+          setActivitySteps((prev) => prev.map((s) => s.id === 'risk_check' ? { ...s, status: 'failed' } : s));
+          setMessages((prev) => [...prev, {
+            id: makeId(),
+            role: 'ai',
+            content: !rules.ok
+              ? explainConstitution(rules, locale)
+              : (locale.startsWith('fa')
+                ? (binding.code === 'APPROVAL_EXPIRED'
+                  ? 'تأیید این برنامه منقضی شده است. برای امنیت شما دوباره آن را می‌سازم؛ درخواست را یک بار دیگر بفرستید.'
+                  : 'برنامه‌ای که قرار بود امضا شود با برنامه‌ای که تأیید کردید یکی نیست. برای امنیت شما هیچ چیزی به کیف پول فرستاده نشد؛ درخواست را دوباره بفرستید.')
+                : (binding.code === 'APPROVAL_EXPIRED'
+                  ? 'The approval for this plan has expired. Send the request again and I will rebuild it.'
+                  : 'The plan about to be signed is not the plan you approved. Nothing was sent to your wallet; please send the request again.')),
+            kind: 'error',
+            ui: { type: 'TEXT' }
+          }]);
+          obsRef.current.log({ intentId, type: 'ERROR', payload: { error: !rules.ok ? 'CONSTITUTION_VIOLATION' : binding.code } });
+          return;
+        }
+      }
       setActivitySteps((prev) => prev.map((s) => s.id === 'risk_check' ? { ...s, status: 'completed' } : s.id === 'executing' ? { ...s, status: 'active' } : s));
 
       let result;

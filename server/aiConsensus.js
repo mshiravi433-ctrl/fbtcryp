@@ -351,3 +351,280 @@ export async function runMultiAiDebate({
     timestamp: Date.now()
   };
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * ADVERSARIAL DEBATE — Bull vs Bear, then a Judge
+ * ---------------------------------------------------------------------------
+ * Pattern from TradingAgents (TauricResearch, Apache-2.0): instead of three
+ * parallel opinions that are averaged, two researchers argue OPPOSITE sides
+ * over the same evidence for up to N rounds, each seeing the other's last
+ * argument, and a third model — the judge — rules on the transcript.
+ *
+ * Why this beats averaging for a trading question: averaged opinions converge
+ * on "neutral, medium risk" because every model hedges. Forcing one model to
+ * make the strongest honest bear case surfaces the risks a single optimistic
+ * answer hides; the judge must then say which case the EVIDENCE supports.
+ *
+ * Honesty laws (unchanged from the rest of this file):
+ *   · The judge's verdict is advice. It cannot sign, send or approve anything.
+ *   · When fewer than two external models answer, the debate is reported as
+ *     `degraded: true` with the internal engine's deterministic view — never
+ *     dressed up as a real debate.
+ *   · Confidence is capped at 85: a debate between language models is not
+ *     evidence of the future.
+ *   · Past losses (reflection memory) are shown to both sides so a pattern
+ *     that already cost money is argued about, not repeated.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export const ADVERSARIAL_DEBATE_SCHEMA = 'fbt.ai-debate.adversarial.v1';
+const MAX_CONFIDENCE = 85;
+
+const SIDE_PROMPT = (side) => `You are the ${side === 'bull' ? 'BULL' : 'BEAR'} researcher at FBT Smart Intent OS.
+Make the strongest HONEST ${side === 'bull' ? 'case FOR' : 'case AGAINST'} the user's intent, using ONLY the evidence given.
+Do not invent prices, news or numbers. If the evidence is thin, say so — a weak honest case beats a strong invented one.
+If an opposing argument is provided, rebut its strongest point directly.
+Respond in STRICT JSON:
+{
+  "thesis": "one sentence",
+  "arguments": ["argument 1", "argument 2", "argument 3"],
+  "rebuttal": "one sentence answering the other side, or empty on round 1",
+  "conviction": 0-100
+}`;
+
+const JUDGE_PROMPT = `You are the JUDGE at FBT Smart Intent OS. Two researchers argued opposite sides of a user's intent.
+Rule on which case the EVIDENCE better supports — not which was more eloquent. Unsupported claims count for nothing.
+You never promise returns and you never tell the user to act; you describe the balance of evidence and the main risk.
+Respond in STRICT JSON:
+{
+  "verdict": "bull" | "bear" | "balanced",
+  "stance": "proceed" | "reduce" | "wait" | "avoid",
+  "confidence": 0-100,
+  "riskLevel": "low" | "medium" | "high" | "extreme",
+  "decisiveArgument": "the single argument that decided it",
+  "mainRisk": "the biggest risk even if the verdict is bull",
+  "summary": "2 concise sentences for the user"
+}`;
+
+const clip = (s, n) => String(s || '').slice(0, n);
+const arr = (a, n = 3, len = 200) => (Array.isArray(a) ? a.slice(0, n).map((x) => clip(x, len)).filter(Boolean) : []);
+
+function pickDebateSeats(preferredProviders = []) {
+  const active = getActiveProviderIds().filter((p) => p !== 'internal');
+  const preferred = preferredProviders.filter((p) => isProviderConfigured(p) && p !== 'internal');
+  const priority = ['anthropic', 'openrouter', 'deepseek', 'gemini', 'groq', 'aimlapi', 'mistral', 'workersai'];
+  const pool = [...new Set([...preferred, ...priority.filter((p) => active.includes(p))])];
+  if (!pool.length) return null;
+  /* Distinct providers per seat when we have them: a model arguing with
+     itself is a weaker debate. With one provider on OpenRouter we still get
+     distinct MODELS behind it. */
+  if (pool.length === 1 && pool[0] === 'openrouter') {
+    return {
+      bull: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
+      bear: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+      judge: { provider: 'openrouter', model: process.env.AI_MODEL || 'openai/gpt-4o-mini' }
+    };
+  }
+  return {
+    bull: { provider: pool[0 % pool.length], model: null },
+    bear: { provider: pool[1 % pool.length], model: null },
+    judge: { provider: pool[2 % pool.length], model: null }
+  };
+}
+
+function evidenceBlock({ message, context, reflection, isPersian }) {
+  const m = context.market || {};
+  const p = context.portfolio || {};
+  return [
+    `User intent: "${clip(message, 400)}"`,
+    m.priceMap ? `Live prices: ${clip(JSON.stringify(m.priceMap), 400)}` : '',
+    m.regime ? `Market regime: ${clip(JSON.stringify(m.regime), 200)}` : '',
+    context.signals ? `Signals: ${clip(JSON.stringify(context.signals), 400)}` : '',
+    context.news ? `Recent news: ${clip(JSON.stringify(context.news), 500)}` : '',
+    p.totalValueUsd ? `Portfolio size: $${Math.round(Number(p.totalValueUsd))}` : '',
+    context.preferences ? `User risk preference: ${clip(JSON.stringify(context.preferences), 200)}` : '',
+    context.pointInTime?.historical ? `ANALYSIS DATE (no information after this exists): ${context.pointInTime.asOf}` : '',
+    reflection?.lines?.length ? `PAST OUTCOMES TO LEARN FROM (do not repeat a pattern that lost money):\n- ${reflection.lines.join('\n- ')}` : '',
+    isPersian ? 'Write every text value in clear Persian (فارسی). Keep JSON keys in English.' : 'Write text values in English.'
+  ].filter(Boolean).join('\n');
+}
+
+async function argue(seat, side, evidence, opponent, execute) {
+  const user = opponent
+    ? `${evidence}\n\nOPPOSING ARGUMENT TO REBUT:\n${clip(opponent, 900)}`
+    : evidence;
+  const started = Date.now();
+  try {
+    const res = await execute(seat.provider, {
+      system: SIDE_PROMPT(side),
+      user,
+      model: seat.model,
+      temperature: 0.4,
+      maxTokens: 500,
+      json: true
+    });
+    const j = parseJsonSafe(res.text);
+    if (!j || !j.thesis) throw new Error('UNPARSEABLE');
+    return {
+      ok: true,
+      side,
+      provider: seat.provider,
+      model: res.model,
+      thesis: clip(j.thesis, 240),
+      arguments: arr(j.arguments),
+      rebuttal: clip(j.rebuttal, 240),
+      conviction: Math.min(95, Math.max(0, Number(j.conviction) || 50)),
+      latencyMs: Date.now() - started
+    };
+  } catch (err) {
+    return { ok: false, side, provider: seat.provider, error: clip(err?.message, 120), latencyMs: Date.now() - started };
+  }
+}
+
+/**
+ * Run a Bull-vs-Bear debate with a judge.
+ *
+ * @param {object} p
+ * @param {string} p.message
+ * @param {object} [p.context]      live context (market, portfolio, signals, news)
+ * @param {string} [p.locale]
+ * @param {number} [p.rounds]       1–3, default 2
+ * @param {object} [p.reflection]   output of buildReflection() (aiLearning.js)
+ * @param {object} [p.deps]         { execute } — injectable for tests
+ */
+export async function runAdversarialDebate({
+  message = '',
+  context = {},
+  locale = 'fa',
+  rounds = 2,
+  reflection = null,
+  preferredProviders = [],
+  deps = {}
+} = {}) {
+  const execute = deps.execute || executeProviderChat;
+  const isPersian = String(locale || 'fa').startsWith('fa') || /[آ-ی]/.test(message);
+  const nRounds = Math.min(3, Math.max(1, Math.round(Number(rounds) || 2)));
+  const seats = deps.seats || pickDebateSeats(preferredProviders);
+  const base = {
+    schema: ADVERSARIAL_DEBATE_SCHEMA,
+    rounds: 0,
+    transcript: [],
+    reflectionUsed: Boolean(reflection?.lines?.length),
+    executionAuthorized: false,
+    at: Date.now()
+  };
+
+  if (!seats) {
+    return {
+      ...base,
+      ok: true,
+      degraded: true,
+      reason: 'NO_EXTERNAL_PROVIDER',
+      verdict: 'balanced',
+      stance: 'wait',
+      confidence: 30,
+      riskLevel: 'MEDIUM',
+      summary: isPersian
+        ? 'هیچ مدل خارجی فعال نیست، پس مناظرهٔ واقعی انجام نشد. بدون مناظره حکم قطعی نمی‌دهم.'
+        : 'No external model is configured, so no real debate ran. I will not give a firm verdict without one.'
+    };
+  }
+
+  const evidence = evidenceBlock({ message, context, reflection, isPersian });
+  let lastBull = null;
+  let lastBear = null;
+  for (let r = 1; r <= nRounds; r += 1) {
+    /* Bull speaks first; the Bear answers THIS round's bull argument. */
+    const bull = await argue(seats.bull, 'bull', evidence, lastBear ? `${lastBear.thesis}\n${lastBear.arguments.join('\n')}` : null, execute);
+    const bear = await argue(seats.bear, 'bear', evidence, bull.ok ? `${bull.thesis}\n${bull.arguments.join('\n')}` : null, execute);
+    base.transcript.push({ round: r, bull, bear });
+    base.rounds = r;
+    if (bull.ok) lastBull = bull;
+    if (bear.ok) lastBear = bear;
+    if (!bull.ok && !bear.ok) break;
+  }
+
+  if (!lastBull || !lastBear) {
+    const survivor = lastBull || lastBear;
+    return {
+      ...base,
+      ok: true,
+      degraded: true,
+      reason: 'ONE_SIDED',
+      verdict: 'balanced',
+      stance: 'wait',
+      confidence: 30,
+      riskLevel: 'MEDIUM',
+      summary: isPersian
+        ? `فقط یک طرف مناظره پاسخ داد${survivor ? ` («${survivor.thesis}»)` : ''}؛ یک‌طرفه حکم نمی‌دهم.`
+        : `Only one side of the debate answered${survivor ? ` ("${survivor.thesis}")` : ''}; I will not rule on a one-sided case.`
+    };
+  }
+
+  const transcriptText = base.transcript.map((t) => [
+    t.bull.ok ? `ROUND ${t.round} BULL: ${t.bull.thesis} | ${t.bull.arguments.join(' | ')}${t.bull.rebuttal ? ` | rebuttal: ${t.bull.rebuttal}` : ''}` : `ROUND ${t.round} BULL: (no answer)`,
+    t.bear.ok ? `ROUND ${t.round} BEAR: ${t.bear.thesis} | ${t.bear.arguments.join(' | ')}${t.bear.rebuttal ? ` | rebuttal: ${t.bear.rebuttal}` : ''}` : `ROUND ${t.round} BEAR: (no answer)`
+  ].join('\n')).join('\n');
+
+  let judge = null;
+  try {
+    const res = await execute(seats.judge.provider, {
+      system: JUDGE_PROMPT,
+      user: `${evidence}\n\nDEBATE TRANSCRIPT:\n${transcriptText}`,
+      model: seats.judge.model,
+      temperature: 0.1,
+      maxTokens: 500,
+      json: true
+    });
+    judge = parseJsonSafe(res.text);
+    if (judge) judge._provider = seats.judge.provider;
+  } catch {
+    judge = null;
+  }
+
+  if (!judge || !['bull', 'bear', 'balanced'].includes(judge.verdict)) {
+    /* Deterministic fallback: the side with higher final conviction, but
+       only if the gap is meaningful; otherwise balanced. */
+    const gap = lastBull.conviction - lastBear.conviction;
+    const verdict = Math.abs(gap) < 15 ? 'balanced' : (gap > 0 ? 'bull' : 'bear');
+    return {
+      ...base,
+      ok: true,
+      degraded: true,
+      reason: 'JUDGE_UNAVAILABLE',
+      verdict,
+      stance: verdict === 'bull' ? 'reduce' : 'wait',
+      confidence: Math.min(55, 35 + Math.abs(gap) / 2),
+      riskLevel: 'MEDIUM',
+      bull: { thesis: lastBull.thesis, arguments: lastBull.arguments },
+      bear: { thesis: lastBear.thesis, arguments: lastBear.arguments },
+      summary: isPersian
+        ? 'داور پاسخ نداد؛ حکم از مقایسهٔ ساده‌ی قطعیت دو طرف است و اعتبار کمتری دارد.'
+        : 'The judge did not answer; this verdict compares the two sides\' conviction only and is less reliable.'
+    };
+  }
+
+  const risk = String(judge.riskLevel || 'medium').toUpperCase();
+  const riskLevel = ['LOW', 'MEDIUM', 'HIGH', 'EXTREME'].includes(risk) ? risk : 'MEDIUM';
+  let confidence = Math.min(MAX_CONFIDENCE, Math.max(0, Number(judge.confidence) || 50));
+  /* A close debate cannot yield a confident verdict. */
+  if (Math.abs(lastBull.conviction - lastBear.conviction) < 10) confidence = Math.min(confidence, 60);
+  /* Past losses on this pattern lower confidence in a bullish verdict. */
+  if (judge.verdict === 'bull' && reflection?.lossCount > 0) confidence = Math.max(20, confidence - Math.min(20, reflection.lossCount * 5));
+  const stance = ['proceed', 'reduce', 'wait', 'avoid'].includes(judge.stance) ? judge.stance : 'wait';
+
+  return {
+    ...base,
+    ok: true,
+    degraded: false,
+    verdict: judge.verdict,
+    stance: riskLevel === 'EXTREME' && stance === 'proceed' ? 'reduce' : stance,
+    confidence: Math.round(confidence),
+    riskLevel,
+    decisiveArgument: clip(judge.decisiveArgument, 240),
+    mainRisk: clip(judge.mainRisk, 240),
+    summary: clip(judge.summary, 400),
+    bull: { thesis: lastBull.thesis, arguments: lastBull.arguments, conviction: lastBull.conviction },
+    bear: { thesis: lastBear.thesis, arguments: lastBear.arguments, conviction: lastBear.conviction },
+    seats: { bull: seats.bull.provider, bear: seats.bear.provider, judge: seats.judge.provider }
+  };
+}

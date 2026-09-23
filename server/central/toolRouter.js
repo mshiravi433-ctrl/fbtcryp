@@ -20,6 +20,52 @@ const OP_ORDER = ['read', 'quote', 'prepare', 'simulate', 'execute', 'verify'];
 
 const levelOf = (op) => (op === 'read' ? 'READ' : op === 'execute' ? 'EXECUTE' : 'PREPARE');
 
+/*
+ * TOOL-CALL LOOP DETECTOR (pattern from Gordon's harness, original code).
+ * A model or a planner bug that re-issues the SAME call over and over burns
+ * provider quota at best and repeats a side effect at worst. Two windows:
+ *   • per turn (`trace` array): the identical call a 3rd time in one turn;
+ *   • per owner (execute/prepare only): the identical call a 3rd time in 30 s.
+ * Identity = module + operation + a stable fingerprint of the input, so a
+ * legitimately different call (other amount, other asset) is never blocked.
+ */
+export const LOOP_LIMITS = Object.freeze({ perTurn: 3, perOwner: 3, ownerWindowMs: 30_000 });
+const loopTurns = new WeakMap();
+const loopOwners = new Map();
+
+function stableFingerprint(value, depth = 0) {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value ?? null);
+  if (depth > 6) return '"…"';
+  if (Array.isArray(value)) return `[${value.slice(0, 50).map((v) => stableFingerprint(v, depth + 1)).join(',')}]`;
+  return `{${Object.keys(value).sort().slice(0, 60).map((k) => `${JSON.stringify(k)}:${stableFingerprint(value[k], depth + 1)}`).join(',')}}`;
+}
+
+/** @returns {null | {scope:'turn'|'owner', count:number}} */
+export function noteToolCall({ module, operation, input, trace = null, owner = null, now = Date.now() }) {
+  const key = `${module}|${operation}|${stableFingerprint(input)}`;
+  if (trace && typeof trace === 'object') {
+    let seen = loopTurns.get(trace);
+    if (!seen) { seen = new Map(); loopTurns.set(trace, seen); }
+    const count = (seen.get(key) || 0) + 1;
+    seen.set(key, count);
+    if (count >= LOOP_LIMITS.perTurn) return { scope: 'turn', count };
+  }
+  if (owner && (operation === 'execute' || operation === 'prepare')) {
+    const ownerKey = `${owner}|${key}`;
+    const hits = (loopOwners.get(ownerKey) || []).filter((t) => now - t < LOOP_LIMITS.ownerWindowMs);
+    hits.push(now);
+    loopOwners.set(ownerKey, hits);
+    if (loopOwners.size > 5000) {
+      for (const [k, v] of loopOwners) if (!v.length || now - v[v.length - 1] >= LOOP_LIMITS.ownerWindowMs) loopOwners.delete(k);
+    }
+    if (hits.length >= LOOP_LIMITS.perOwner) return { scope: 'owner', count: hits.length };
+  }
+  return null;
+}
+
+/** Test hook. */
+export function _resetToolLoopGuard() { loopOwners.clear(); }
+
 /** Dependency check: every dependsOn module must not be UNAVAILABLE. */
 export async function checkDependencies(adapter, ctx) {
   const problems = [];
@@ -47,6 +93,14 @@ export async function runTool({ module, operation, input = {}, ctx = null, permi
     if (Array.isArray(trace)) trace.push({ stage: 'TOOL', at: Date.now(), module, operation: op, ok: Boolean(result.ok), status: result.status || null, durationMs: out.durationMs });
     return out;
   };
+
+  /* ── loop detector: the same call, again and again, is refused ─────── */
+  const loop = noteToolCall({ module, operation: op, input, trace, owner: ctx?.owner || null });
+  if (loop) {
+    gate.checks.loop = loop;
+    publish('TOOL_LOOP_DETECTED', { module, operation: op, scope: loop.scope, count: loop.count }, { source: 'tool-router' });
+    return finish({ ok: false, status: 'LOOP_DETECTED', error: `identical ${op} call #${loop.count} (${loop.scope})`, checks: gate.checks });
+  }
 
   /* ── capability check ─────────────────────────────────────────────────── */
   const adapter = getModule(module);

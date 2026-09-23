@@ -689,6 +689,12 @@ console.log('▸ probing FBT Intent OS — execution flow (context → resolve �
   if (Array.isArray(confirmRows)) report('intent-os confirm (http)', confirmRows);
 }
 
+console.log('▸ probing AI strengthening — constitution · bound approvals · bull/bear/judge · reflection · point-in-time · BM25 · loop guard…');
+{
+  const { default: strengthRows } = await import('./intent-ai/ai-strengthening-probe.mjs');
+  if (Array.isArray(strengthRows)) report('ai strengthening', strengthRows);
+}
+
 console.log('▸ probing FBT Intent OS — execution-first system prompt contract (v2.0)…');
 {
   const { default: contractRows } = await import('./intent-ai/execution-first-v2-probe.mjs');

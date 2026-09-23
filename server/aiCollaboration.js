@@ -41,6 +41,7 @@ import {
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import {
   planCollaboration,
   CONVERSATION_KINDS,
@@ -192,7 +193,7 @@ export function buildSafeContextBlock({ context = {}, knowledge = [], sources = 
   }
   if (knowledge.length) {
     lines.push('FBT INTERNAL KNOWLEDGE (verified product facts):');
-    for (const k of knowledge.slice(0, 3)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
+    for (const k of knowledge.slice(0, 4)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
   }
   if (sources.length) {
     lines.push('WEB SOURCES (cite by number; social=tier4 is a lead only):');
@@ -564,6 +565,18 @@ export async function runCollaborativeAnalysis({
   let knowledge = [];
   if (plan.level >= 2 && plan.freshness === 'STATIC') {
     knowledge = searchKnowledge(message, { locale, limit: 3 });
+    /* BM25 retrieval over knowledge + the hand-checked Help answers fills
+       the remaining slots (never displaces the knowledge-center hits the
+       degraded answer is built from). Passages carry citable ids. */
+    try {
+      const seen = new Set(knowledge.map((k) => k.id));
+      for (const p of retrieveBm25(message, { locale, limit: 3 })) {
+        if (knowledge.length >= 4) break;
+        if (seen.has(p.id)) continue;
+        knowledge.push({ ...p, version: 1, bodyEn: p.body });
+        seen.add(p.id);
+      }
+    } catch { /* retrieval is additive; its failure never blocks a turn */ }
     result.evidence.knowledgeUsed = knowledge.length > 0;
   }
   if (plan.level >= 2) {

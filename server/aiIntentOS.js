@@ -92,9 +92,24 @@ import {
   routedChat,
   gatewaySelfTest
 } from './aiGateway.js';
-import { runMultiAiDebate } from './aiConsensus.js';
+import { runMultiAiDebate, runAdversarialDebate } from './aiConsensus.js';
+/* AI strengthening (patterns from Gordon / TradingAgents / Zetryn / LlamaIndex,
+   original code): immutable constitution, content-bound approvals, the
+   Bull/Bear/Judge debate, decision log + reflection, BM25 retrieval and
+   point-in-time views. None of these can sign, send or approve anything. */
+import { checkConstitution, explainConstitution, CONSTITUTION } from '../src/lib/intent-ai/constitution.js';
+import { issueApproval, verifyApproval, APPROVAL_TTL_MS, approvalDurable } from './aiApproval.js';
+import { retrieve as retrieveBm25, retrievalStats } from '../src/lib/intent-ai/retrieval.js';
+import { pointInTimeView } from '../src/lib/intent-ai/pointInTime.js';
 import { evaluateConfidenceMetrics } from './aiConfidence.js';
-import { recordIntentOutcome, getLearningInsights } from './aiLearning.js';
+import {
+  recordIntentOutcome,
+  getLearningInsights,
+  recordDecision,
+  resolveDecisions,
+  buildReflection,
+  decisionStats
+} from './aiLearning.js';
 /* AI Upgrade 5 — Collaborative Multi-AI Intelligence + Web Research +
    Customer Question Intelligence. The deterministic question analyzer decides
    how much intelligence a turn needs; the collaboration engine coordinates
@@ -864,6 +879,131 @@ router.get('/learning/stats', async (_req, res) => {
   }
 });
 
+/* ─── AI STRENGTHENING ENDPOINTS ─────────────────────────────────────────
+   Advisory / verification only. None of these sign, send or approve. */
+
+/** The immutable ceilings, so any client can show the user the rules. */
+router.get('/constitution', (_req, res) => res.json({
+  ok: true,
+  schema: 'fbt.constitution.v1',
+  constitution: CONSTITUTION,
+  approval: { ttlMs: APPROVAL_TTL_MS, durable: approvalDurable() },
+  at: nowMs()
+}));
+
+/** Dry-run a plan against the constitution (no side effects). */
+router.post('/constitution/check', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const actions = Array.isArray(body.actions) ? body.actions.slice(0, 32) : (body.action ? [body.action] : []);
+  if (!actions.length) return res.status(400).json({ ok: false, error: 'NO_ACTIONS' });
+  const result = checkConstitution({
+    actions,
+    balances: Array.isArray(body.balances) ? body.balances.slice(0, 200) : null,
+    defaultChainId: Number(body.chainId) || null
+  });
+  return res.json({ ...result, message: explainConstitution(result, safe(body.locale, 5) || 'fa') });
+});
+
+/** Server-side second opinion on a content-bound approval. */
+router.post('/approval/verify', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const actions = Array.isArray(body.actions) ? body.actions.slice(0, 32) : [];
+  if (!actions.length) return res.status(400).json({ ok: false, code: 'NO_ACTIONS' });
+  const verdict = verifyApproval({ owner: ownerFor(req), approval: body.approval, actions });
+  return res.status(verdict.ok ? 200 : 409).json({ ...verdict, authorizesExecution: false });
+});
+
+/** Symbol → live USD price, via the same cached CoinGecko path as the app. */
+async function livePriceOf(symbol) {
+  const asset = resolveAsset({ symbol });
+  if (!asset?.coinId) return null;
+  try {
+    const detail = await fetchCoinDetail(asset.coinId);
+    const p = Number(detail?.price ?? detail?.current_price ?? detail?.market_data?.current_price?.usd);
+    return Number.isFinite(p) && p > 0 ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bull vs Bear, then a Judge. Reflection (this owner's past resolved calls on
+ * the asset) is shown to both sides; the verdict is logged so it can be
+ * scored later against a real price. `asOf` turns it into a point-in-time
+ * replay: every input stamped after that moment is removed first.
+ */
+router.post('/debate', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const message = String(body.message || '').slice(0, 800);
+  if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
+  const locale = safe(body.locale, 5) || 'fa';
+  const owner = ownerFor(req);
+  const asset = safe(body.asset, 16) ? String(body.asset).toUpperCase() : null;
+  try {
+    const pit = pointInTimeView(body.context && typeof body.context === 'object' ? body.context : {}, body.asOf || null);
+    const context = { ...pit.context, pointInTime: pit.historical ? { historical: true, asOf: pit.asOf } : null };
+    /* Score yesterday's calls before making today's (live mode only). */
+    if (!pit.historical && asset) await resolveDecisions({ owner, priceOf: livePriceOf }).catch(() => {});
+    const reflection = asset ? await buildReflection({ owner, asset, now: pit.historical ? Date.parse(pit.asOf) : Date.now() }) : null;
+    const debate = await runAdversarialDebate({
+      message,
+      context,
+      locale,
+      rounds: body.rounds,
+      reflection,
+      preferredProviders: Array.isArray(body.preferredProviders) ? body.preferredProviders.slice(0, 4) : []
+    });
+    let decision = null;
+    if (!pit.historical && asset && !debate.degraded) {
+      const price = await livePriceOf(asset);
+      const logged = await recordDecision({
+        owner,
+        asset,
+        verdict: debate.verdict,
+        confidence: debate.confidence,
+        thesis: debate.decisiveArgument || debate.summary,
+        priceAtDecision: price,
+        horizonMs: Number(body.horizonHours) > 0 ? Number(body.horizonHours) * 3600_000 : undefined,
+        source: 'debate'
+      });
+      decision = logged.ok ? { id: logged.decision.id, priceAtDecision: logged.decision.priceAtDecision, scorable: logged.decision.priceAtDecision != null } : null;
+    }
+    return res.json({
+      ...debate,
+      pointInTime: { historical: pit.historical, asOf: pit.asOf, stats: pit.stats },
+      reflection: reflection ? { sample: reflection.sample, lossCount: reflection.lossCount, winCount: reflection.winCount, hitRate: reflection.hitRate } : null,
+      decision
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 160) });
+  }
+});
+
+/** This owner's decision log: hit rate + recent calls (resolves due ones first). */
+router.get('/decisions', async (req, res) => {
+  const owner = ownerFor(req);
+  await resolveDecisions({ owner, priceOf: livePriceOf }).catch(() => {});
+  return res.json({ ok: true, ...(await decisionStats({ owner })) });
+});
+
+/** BM25 retrieval over verified knowledge + Help answers. */
+router.post('/retrieve', (req, res) => {
+  const query = String(req.body?.query || '').slice(0, 400);
+  if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
+  const locale = safe(req.body?.locale, 5) || 'fa';
+  const limit = Math.min(5, Math.max(1, Number(req.body?.limit) || 3));
+  return res.json({ ok: true, results: retrieveBm25(query, { locale, limit }), stats: retrievalStats() });
+});
+
+/** Strip everything an `asOf` analysis could not have known. */
+router.post('/point-in-time', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  if (!body.asOf) return res.status(400).json({ ok: false, error: 'AS_OF_REQUIRED' });
+  const view = pointInTimeView(body.context && typeof body.context === 'object' ? body.context : {}, body.asOf);
+  if (!view.historical) return res.status(400).json({ ok: false, error: 'AS_OF_INVALID' });
+  return res.json({ ok: true, ...view });
+});
+
 /* ─── AI UPGRADE 5 ENDPOINTS ─────────────────────────────────────────────
    Collaborative analysis, web research, news impact, feedback and the
    question-intelligence analytics. Analytics endpoints are admin-gated with
@@ -1583,6 +1723,23 @@ router.post('/execute', async (req, res) => {
     }
   }
 
+  /* Constitution (immutable ceilings) runs BEFORE every other gate: no
+     aiControl payload, chat wording or model output can lift it. */
+  const constitution = checkConstitution({ actions, balances: context.balances || null, enforceChain: false });
+  if (!constitution.ok) {
+    logInternal('execute', { status: 'CONSTITUTION_BLOCKED', article: constitution.violations[0]?.article, intent: kind });
+    return res.status(409).json({
+      ok: false,
+      schema: 'fbt.ai-execute.v1',
+      status: 'FAILED',
+      success: false,
+      message: explainConstitution(constitution, locale),
+      ui: { type: 'TEXT' },
+      constitution,
+      execution: { success: false, status: 'FAILED', error: { code: 'CONSTITUTION_VIOLATION', article: constitution.violations[0]?.article || null } }
+    });
+  }
+
   const validator = validateAction(actions[0], context);
   if (!validator.ok && validator.reason !== 'WALLET_REQUIRED') {
     const human = humanizeError(validator.reason, { locale });
@@ -1672,6 +1829,16 @@ router.post('/execute', async (req, res) => {
     execution: { ...unsigned, success: false, status: 'PENDING' },
     requiresConfirmation: true,
     requiresUserSignature: true,
+    /* Content-bound approval over the exact legs above. The client verifies
+       it right before the wallet is asked to sign; a changed leg dies there. */
+    /* Bound to the SAME legs the client will walk: it executes
+       actionPlan.actions when present, otherwise `actions`. */
+    approval: issueApproval({
+      owner: ownerFor(req),
+      actions: resolvedPlan?.actions?.length ? resolvedPlan.actions : synthesizedPlan.actions,
+      intentId: synthesizedPlan.id
+    }),
+    constitution: { ok: true, version: constitution.version, checked: constitution.checked },
     stages: stages.stages,
     at: nowMs()
   });
@@ -1745,6 +1912,21 @@ router.post('/confirm', async (req, res) => {
     });
   }
 
+  const constitution = checkConstitution({ actions: plan.actions, balances: context.balances || null, enforceChain: false });
+  if (!constitution.ok) {
+    logInternal('confirm', { status: 'CONSTITUTION_BLOCKED', article: constitution.violations[0]?.article, intent: kind });
+    return res.status(409).json({
+      ok: false,
+      schema: 'fbt.ai-confirm.v1',
+      status: 'CONSTITUTION_BLOCKED',
+      success: false,
+      message: explainConstitution(constitution, locale),
+      ui: { type: 'TEXT' },
+      constitution,
+      intentId: stored.id || intentId
+    });
+  }
+
   const moved = transitionPendingIntent(stored, stored.status === 'READY' ? 'EXECUTING' : 'READY');
   await writePending(owner, moved.ok ? { ...moved.intent, actionPlan: plan } : { ...stored, actionPlan: plan });
   const narrated = narrateReadyPlan(plan, { locale });
@@ -1763,7 +1945,9 @@ router.post('/confirm', async (req, res) => {
     actions: plan.actions,
     plan: execPlan,
     execution: { ...toExecutionResult(execPlan), success: false, status: 'PENDING' },
-    requiresUserSignature: true
+    requiresUserSignature: true,
+    approval: issueApproval({ owner, actions: plan.actions, intentId: stored.id || intentId }),
+    constitution: { ok: true, version: constitution.version, checked: constitution.checked }
   });
 });
 

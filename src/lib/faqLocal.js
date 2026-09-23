@@ -24,7 +24,7 @@
  * Each entry: id, keyword sets per language, and the answer per language.
  * `k` are match terms (lowercased, accent-free); `a` are the answers.
  */
-import { feePercentString, toEasternDigits } from './feeBps';
+import { feePercentString, toEasternDigits } from './feeBps.js';
 
 /**
  * Resolve the `{{fee}}` placeholder inside a canned answer.
@@ -631,3 +631,16 @@ export function faqList(lang = 'en') {
 
 /** Suggested questions for the empty state, in the KB's own words. */
 export const FAQ_TOPICS = KB.map((e) => e.id);
+
+/**
+ * Read-only corpus view for the retrieval index (src/lib/intent-ai/retrieval.js):
+ * id, every language's match keywords, and the fee-filled answer per language.
+ * Same hand-checked text the Help screen renders — nothing new is claimed.
+ */
+export function faqCorpus() {
+  return KB.map((e) => ({
+    id: e.id,
+    keywords: Object.values(e.k || {}).flat(),
+    answers: Object.fromEntries(Object.entries(e.a || {}).map(([lang, text]) => [lang, fillFee(text, lang)]))
+  }));
+}
