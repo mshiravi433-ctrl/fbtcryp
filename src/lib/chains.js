@@ -571,6 +571,16 @@ export const TOKENS = {
     { symbol: 'PAXG', name: 'PAX Gold', address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78', decimals: 18, coingeckoId: 'pax-gold', rwa: 'gold' },
     { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' },
     /*
+     * ─── REAL-WORLD ASSETS (RWA) & INSTITUTIONAL TREASURIES ─────────────────
+     * Curated, permissionless RWA tokens traded on-chain with our standard
+     * 70 bps platform fee.
+     */
+    { symbol: 'ONDO', name: 'Ondo Finance', address: '0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3', decimals: 18, coingeckoId: 'ondo-finance', rwa: 'yield' },
+    { symbol: 'USDY', name: 'Ondo US Dollar Yield', address: '0x9694EED19A1b509395374E693A6017b3C5c9c991', decimals: 18, coingeckoId: 'ondo-us-dollar-yield', rwa: 'yield' },
+    { symbol: 'MKR', name: 'Maker', address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', decimals: 18, coingeckoId: 'maker', rwa: 'credit' },
+    { symbol: 'PENDLE', name: 'Pendle Finance', address: '0x808507b2314050238865872ac79528349429907f', decimals: 18, coingeckoId: 'pendle', rwa: 'yield' },
+    { symbol: 'CFG', name: 'Centrifuge', address: '0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94', decimals: 18, coingeckoId: 'centrifuge', rwa: 'credit' },
+    /*
      * ─── LIQUID STAKING TOKENS EARN US THE ORDINARY SWAP FEE ───────────────
      * Asked to raise Farm's revenue. The Farm screen currently lists yields
      * from DefiLlama and links OUT to the protocol — we send the user away
@@ -788,10 +798,10 @@ export const TOKENS = {
   4663: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
     { symbol: 'WETH', name: 'Wrapped Ether', address: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', decimals: 18, coingeckoId: 'ethereum' },
-    { symbol: 'USDG', name: 'Global Dollar', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, coingeckoId: 'global-dollar' },
-    { symbol: 'RGTI', name: 'Rigetti Computing • Robinhood Token', address: '0x284358abc07f9359f19f4b5b4ac91901be2597ba', decimals: 18 },
-    { symbol: 'JOBY', name: 'Joby Aviation, Inc. • Robinhood Token', address: '0xb334c5ce741b80b5b671f47f5c269cb193fe8e24', decimals: 18 },
-    { symbol: 'SOFI', name: 'SoFi Technologies • Robinhood Token', address: '0x98e75885157c80992a8d41b696d8c9c6fb30a926', decimals: 18 }
+    { symbol: 'USDG', name: 'Global Dollar', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, coingeckoId: 'global-dollar', rwa: 'treasury' },
+    { symbol: 'RGTI', name: 'Rigetti Computing • Robinhood Token', address: '0x284358abc07f9359f19f4b5b4ac91901be2597ba', decimals: 18, rwa: 'robinhood' },
+    { symbol: 'JOBY', name: 'Joby Aviation, Inc. • Robinhood Token', address: '0xb334c5ce741b80b5b671f47f5c269cb193fe8e24', decimals: 18, rwa: 'robinhood' },
+    { symbol: 'SOFI', name: 'SoFi Technologies • Robinhood Token', address: '0x98e75885157c80992a8d41b696d8c9c6fb30a926', decimals: 18, rwa: 'robinhood' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

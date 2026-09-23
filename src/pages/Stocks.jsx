@@ -13,9 +13,18 @@ import { useChart, useMarkets } from '../hooks/useMarket';
 import { getCategory } from '../lib/api';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
-import { IconShield } from '../components/Icons';
+import { IconSearch, IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
+import RwaRow from '../components/RwaRow';
+import {
+  RWA_CATEGORIES,
+  RWA_CURATED_TOKENS,
+  getRwaSwapUrl,
+  enrichWithMarketPrices,
+  fetchRwaMarketplace
+} from '../lib/rwaTokens';
+import { feePercentString } from '../lib/feeBps';
 /*
  * No `venueReferral` import any more, and that absence is deliberate.
  *
@@ -139,9 +148,10 @@ const STOCK_TABS = SPECULATION_ENABLED
 const EQUITY_SECTORS = {
   ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax'],
   crypto: ['coinx', 'mstrx', 'crclx', 'hoodx'],
-  energy: ['xomx', 'cvxx']
+  energy: ['xomx', 'cvxx'],
+  rwa: ['paxg', 'xaut']
 };
-const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'other'];
+const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'rwa', 'other'];
 
 function sectorOf(a) {
   /* The server sends kind:'equity' + assetKind:'index'|'single' — an index is
@@ -173,7 +183,8 @@ function StatMini({ label, value, tone }) {
 }
 
 export default function Stocks() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'fa' || i18n.language === 'ar';
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const { data: coins, loading } = useMarkets(250);
@@ -183,6 +194,57 @@ export default function Stocks() {
   const [assetsError, setAssetsError] = useState(null);
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [amount, setAmount] = useState(AMOUNTS[1]);
+
+  /* ── Curated tradeable RWA tokens with platform fee ── */
+  const [rwaCategory, setRwaCategory] = useState('all');
+  const [rwaSearch, setRwaSearch] = useState('');
+  const [rwaCuratedRaw, setRwaCuratedRaw] = useState(RWA_CURATED_TOKENS);
+
+  useEffect(() => {
+    let alive = true;
+    fetchRwaMarketplace()
+      .then((tokens) => {
+        if (alive && Array.isArray(tokens) && tokens.length > 0) {
+          setRwaCuratedRaw(tokens);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const tradeableRwa = useMemo(() => {
+    const enriched = enrichWithMarketPrices(rwaCuratedRaw, coins, i18n.language);
+    return enriched.filter((item) => {
+      if (rwaCategory !== 'all' && item.category !== rwaCategory) {
+        return false;
+      }
+      if (rwaSearch.trim()) {
+        const q = rwaSearch.trim().toLowerCase();
+        const sym = (item.symbol || '').toLowerCase();
+        const name = (item.name || '').toLowerCase();
+        const backing = (item.backing || '').toLowerCase();
+        return sym.includes(q) || name.includes(q) || backing.includes(q);
+      }
+      return true;
+    });
+  }, [rwaCuratedRaw, coins, i18n.language, rwaCategory, rwaSearch]);
+
+  const buyRwa = (token) => {
+    haptic?.('select');
+    const url = getRwaSwapUrl(token);
+    navigate(url);
+  };
+
+  const selectRwa = (token) => {
+    haptic?.('select');
+    if (token.coingeckoId) {
+      navigate(`/coin/${token.coingeckoId}`);
+    } else {
+      buyRwa(token);
+    }
+  };
 
   /*
    * RWA is a CoinGecko sector, not a filter on the top-250 market page. The
@@ -479,6 +541,49 @@ export default function Stocks() {
             <InfoBox title={t('stocks.freezeTitle')} tone="danger" id="stocks-freeze">
               <p>{t('stocks.freezeBody')}</p>
             </InfoBox>
+          </motion.div>
+
+          {/* Quick doorway to tradeable RWA tokens */}
+          <motion.div
+            className="card card-rgb card-glow-cyan"
+            variants={riseIn}
+            initial="hidden"
+            animate="show"
+            style={{
+              padding: '11px 14px',
+              margin: '10px 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              cursor: 'pointer'
+            }}
+            onClick={() => {
+              haptic?.('select');
+              setTab('rwa');
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <IconShield width={15} height={15} style={{ color: 'var(--rgb-cyan)' }} />
+                <span>{t('stocks.goToRwaBanner')}</span>
+              </div>
+              <div className="muted" style={{ fontSize: 11.4, marginTop: 2 }}>
+                {t('stocks.rwaFeeNotice', { fee: feePercentString() })}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 11.8, padding: '6px 12px', flexShrink: 0 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                haptic?.('select');
+                setTab('rwa');
+              }}
+            >
+              {t('stocks.goToRwaCta')}
+            </button>
           </motion.div>
 
           {/*
@@ -798,11 +903,122 @@ export default function Stocks() {
             <div className="sheen" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.rwaTitle')}</div>
             <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.rwaBody')}</p>
+            <div
+              className="row-between"
+              style={{
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: '1px solid var(--line)',
+                flexWrap: 'wrap',
+                gap: 8
+              }}
+            >
+              <div className="faint" style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <IconShield width={14} height={14} style={{ color: 'var(--rgb-cyan)' }} />
+                <span>{t('stocks.rwaFeeNotice', { fee: feePercentString() })}</span>
+              </div>
+              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
+                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+              </span>
+            </div>
           </motion.section>
+
+          {/* ─── TRADEABLE RWA TOKENS (WITH 0.70% PLATFORM FEE) ─── */}
+          <section style={{ marginTop: 16 }}>
+            <div className="row-between" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              <div>
+                <p className="section-label" style={{ margin: 0 }}>{t('stocks.rwaTradeable')}</p>
+                <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>{t('stocks.rwaTradeableSub')}</p>
+              </div>
+              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
+                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+              </span>
+            </div>
+
+            {/* Category filter tags */}
+            <div className="tag-scroll" style={{ marginTop: 8, marginBottom: 10 }}>
+              {RWA_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`tag ${rwaCategory === cat.id ? 'active' : ''}`}
+                  onClick={() => {
+                    haptic?.('select');
+                    setRwaCategory(cat.id);
+                  }}
+                >
+                  {t(cat.key, cat.fallback)}
+                </button>
+              ))}
+            </div>
+
+            {/* Search input for RWA tokens */}
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <input
+                type="text"
+                className="input"
+                style={{
+                  width: '100%',
+                  paddingLeft: isRTL ? 12 : 36,
+                  paddingRight: isRTL ? 36 : 12,
+                  fontSize: 12.5,
+                  height: 38
+                }}
+                placeholder={t('stocks.rwaSearchPlaceholder')}
+                value={rwaSearch}
+                onChange={(e) => setRwaSearch(e.target.value)}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  [isRTL ? 'right' : 'left']: 12,
+                  pointerEvents: 'none',
+                  color: 'var(--muted)',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <IconSearch width={14} height={14} />
+              </span>
+            </div>
+
+            {tradeableRwa.length > 0 ? (
+              <motion.div
+                className="stack"
+                style={{ gap: 10 }}
+                variants={stagger}
+                initial="hidden"
+                animate="show"
+              >
+                {tradeableRwa.map((tok) => (
+                  <RwaRow
+                    key={tok.id}
+                    token={tok}
+                    onBuy={buyRwa}
+                    onSelect={selectRwa}
+                  />
+                ))}
+              </motion.div>
+            ) : (
+              <p className="notice" style={{ marginTop: 8 }}>
+                {t('stocks.rwaNoMatch', 'هیچ دارایی RWA با این مشخصات یافت نشد.')}
+              </p>
+            )}
+          </section>
+
+          {/* Educational InfoBox on RWA Backing & Non-Custodial Protocol */}
+          <div style={{ marginTop: 14 }}>
+            <InfoBox title={t('stocks.rwaHowItWorksTitle')} tone="info" id="stocks-rwa-how">
+              <p>{t('stocks.rwaHowItWorksP1')}</p>
+              <p>{t('stocks.rwaHowItWorksP2', { fee: feePercentString() })}</p>
+            </InfoBox>
+          </div>
 
           {/* The RWA highlight reel + stats — same treatment as the equities. */}
           {rwaCoins.length > 0 && (
-            <motion.div variants={riseIn} initial="hidden" animate="show">
+            <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
               <TopMovers
                 title={t('stocks.topGainers')}
                 subtitle={t('stocks.topGainersCoinsSub')}
@@ -823,7 +1039,7 @@ export default function Stocks() {
             </motion.div>
           )}
 
-          <section>
+          <section style={{ marginTop: 16 }}>
             <p className="section-label">{t('stocks.rwaTokens')}</p>
             {rwaCoins.length > 0 && (
               <div className="tag-scroll" style={{ marginBottom: 4 }}>
