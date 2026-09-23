@@ -106,6 +106,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
+import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
@@ -5710,6 +5711,63 @@ app.get('/api/solana/token-info', async (req, res) => {
       return res.status(status).json(out);
     }
     res.set('cache-control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
+/*
+ * ─── TOKEN SEARCH — the metadata behind the modern token picker ────────────
+ * A pasted memecoin mint used to render as a truncated address because the
+ * CHAIN cannot name a token. Jupiter's keyless index can, and it is the same
+ * router the swap prices through. Served from our origin: no key in the client,
+ * no CORS question, one shared cache instead of N identical upstream calls.
+ *
+ * This is BROWSING data (names, logos, liquidity shape) — never the price the
+ * user signs against; the quote still comes from the live order endpoints.
+ */
+app.get('/api/solana/token-search', async (req, res) => {
+  try {
+    /* `?mints=a,b,c` — batch enrichment of a KNOWN list (the curated picker
+       tokens need real logos, and one upstream call beats N). */
+    const out = req.query.mints
+      ? await searchSolanaTokensByMints({ mints: req.query.mints })
+      : await searchSolanaTokens({ query: req.query.query });
+    if (!out.ok) {
+      const status = out.code === 'BAD_QUERY' ? 400 : 502;
+      res.set('cache-control', 'no-store');
+      return res.status(status).json(out);
+    }
+    /* Short shared cache: picker searches are highly repeated and the data is
+       decorative; a stale minute costs nothing a user could see. */
+    res.set('cache-control', 'public, max-age=60, s-maxage=180, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
+/*
+ * ─── TOKEN SENTIMENT — «هوش مصنوعی برای توکن» ───────────────────────────────
+ * Two halves with an honesty contract (see server/solanaTokenMeta.js): a
+ * deterministic score computed from published facts, and — only when an AI key
+ * is configured — one labelled LLM sentence that can never move the score.
+ * Missing data answers `unknown`; it never invents a green badge.
+ */
+app.get('/api/solana/token-sentiment', async (req, res) => {
+  try {
+    const out = await solanaSentimentDetail({
+      mint: req.query.mint,
+      lang: req.query.lang || 'fa',
+      wantAi: req.query.ai !== '0'
+    });
+    if (!out.ok) {
+      const status = out.code === 'BAD_MINT' ? 400 : 502;
+      res.set('cache-control', 'no-store');
+      return res.status(status).json(out);
+    }
+    res.set('cache-control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });

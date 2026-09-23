@@ -1,0 +1,316 @@
+/**
+ * SOLANA TOKEN PICKER — the visual layer of SolanaTokenPicker.
+ *
+ * Built on the app's own tokens (--line, --text-1..3, --up/--down) so dark and
+ * light theme both come free, and on the existing .coin-row skeleton so the
+ * picker feels native to the swap screen rather than pasted onto it. The
+ * additions are deliberately small: badges, the sentiment chip, the AI strip,
+ * and skeletons. RTL-safe by construction — every rule is direction-agnostic
+ * (flex + logical alignment), because the app runs fa first.
+ */
+
+.stp-sheet .sheet-inner { display: flex; flex-direction: column; min-height: 0; }
+
+/* ── search ──────────────────────────────────────────────────────────────── */
+
+.stp-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.07);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.stp-search:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.13);
+}
+.stp-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13.5px;
+  outline: none;
+  padding: 0;
+}
+.stp-search input::placeholder { color: var(--text-3); }
+.stp-search-icon { color: var(--text-3); font-size: 16px; line-height: 1; }
+.stp-clear {
+  border: none;
+  background: rgba(127, 127, 157, 0.16);
+  color: var(--text-2);
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.stp-clear:hover { color: var(--text-1); }
+
+/* ── section headers ─────────────────────────────────────────────────────── */
+
+.stp-section {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 2px 8px;
+}
+.stp-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+.stp-section-count {
+  font-size: 10px;
+  color: var(--text-3);
+  background: rgba(127, 127, 157, 0.13);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+/* ── rows ────────────────────────────────────────────────────────────────── */
+
+.stp-list { display: flex; flex-direction: column; gap: 6px; max-height: 46dvh; overflow-y: auto; overscroll-behavior: contain; }
+.stp-row { border-radius: 14px; }
+.stp-sym { text-transform: none; font-size: 14px; }
+.stp-sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46vw;
+}
+.stp-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+.stp-price { font-size: 12.5px; color: var(--text-1); }
+.stp-chg { font-size: 10.5px; }
+.stp-up { color: var(--up, #00c853); }
+.stp-down { color: var(--down, #ff5252); }
+.stp-flat { color: var(--text-3); }
+
+/* ── badges ──────────────────────────────────────────────────────────────── */
+
+.stp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.stp-badge-verified {
+  background: rgba(0, 230, 158, 0.12);
+  color: var(--up, #00e69e);
+  border: 1px solid rgba(0, 230, 158, 0.28);
+}
+.stp-badge-unverified {
+  background: rgba(255, 176, 32, 0.1);
+  color: #e8a13c;
+  border: 1px solid rgba(255, 176, 32, 0.25);
+}
+.stp-badge-current {
+  background: rgba(124, 108, 255, 0.13);
+  color: #8f83ff;
+  border: 1px solid rgba(124, 108, 255, 0.3);
+}
+:root[data-theme='light'] .stp-badge-unverified { color: #9a6b12; }
+:root[data-theme='light'] .stp-badge-current { color: #5f4fd8; }
+
+/* ── the sentiment chip on each row ──────────────────────────────────────── */
+
+.stp-sent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  background: rgba(127, 127, 157, 0.07);
+  white-space: nowrap;
+}
+.stp-sent-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--text-3); }
+.stp-sent-positive { color: var(--up, #00e69e); border-color: rgba(0, 230, 158, 0.3); }
+.stp-sent-positive .stp-sent-dot { background: var(--up, #00e69e); box-shadow: 0 0 6px rgba(0, 230, 158, 0.7); }
+.stp-sent-neutral .stp-sent-dot { background: #e8b23c; box-shadow: 0 0 6px rgba(232, 178, 60, 0.6); }
+.stp-sent-risky { color: var(--down, #ff6b6b); border-color: rgba(255, 107, 107, 0.3); }
+.stp-sent-risky .stp-sent-dot { background: var(--down, #ff6b6b); box-shadow: 0 0 6px rgba(255, 107, 107, 0.7); }
+
+/* ── the AI strip ────────────────────────────────────────────────────────── */
+
+.stp-ai {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(124, 108, 255, 0.25);
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(124, 108, 255, 0.12), transparent 55%),
+    rgba(124, 108, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.stp-ai-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.stp-ai-spark {
+  color: #8f83ff;
+  font-size: 12px;
+  animation: stp-pulse 2.6s ease-in-out infinite;
+}
+@keyframes stp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.88); }
+}
+.stp-ai-score { font-size: 11px; color: var(--text-2); }
+.stp-ai-positive { color: var(--up, #00e69e); }
+.stp-ai-neutral { color: #e8b23c; }
+.stp-ai-risky { color: var(--down, #ff6b6b); }
+.stp-ai-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(127, 127, 157, 0.15);
+  overflow: hidden;
+}
+.stp-ai-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+.stp-ai-fill.stp-ai-positive { background: linear-gradient(90deg, rgba(0, 230, 158, 0.65), var(--up, #00e69e)); }
+.stp-ai-fill.stp-ai-neutral { background: linear-gradient(90deg, rgba(232, 178, 60, 0.6), #e8b23c); }
+.stp-ai-fill.stp-ai-risky { background: linear-gradient(90deg, rgba(255, 107, 107, 0.6), var(--down, #ff6b6b)); }
+.stp-ai-drivers { display: flex; flex-wrap: wrap; gap: 5px; }
+.stp-ai-driver {
+  font-size: 9.5px;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: rgba(127, 127, 157, 0.06);
+}
+.stp-ai-line { font-size: 11.5px; line-height: 1.75; color: var(--text-2); }
+.stp-ai-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #8f83ff;
+  border: 1px solid rgba(124, 108, 255, 0.35);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-inline-end: 6px;
+}
+
+/* ── loading / empty states ──────────────────────────────────────────────── */
+
+.stp-row-loading {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.stp-empty {
+  margin: 18px 4px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: center;
+  line-height: 1.8;
+}
+.stp-import-note {
+  margin: 8px 4px 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.stp-skeleton { pointer-events: none; }
+.stp-sk-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: linear-gradient(100deg, rgba(127, 127, 157, 0.12) 35%, rgba(127, 127, 157, 0.22) 50%, rgba(127, 127, 157, 0.12) 65%);
+  background-size: 220% 100%;
+  animation: stp-shimmer 1.3s linear infinite;
+}
+.stp-sk-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.stp-sk-line {
+  display: block;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(100deg, rgba(127, 127, 157, 0.12) 35%, rgba(127, 127, 157, 0.22) 50%, rgba(127, 127, 157, 0.12) 65%);
+  background-size: 220% 100%;
+  animation: stp-shimmer 1.3s linear infinite;
+}
+@keyframes stp-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -90% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stp-sk-circle, .stp-sk-line { animation: none; }
+  .stp-ai-spark { animation: none; }
+}
+
+/* ── the token button that opens the picker, on the swap card ───────────── */
+
+.sol-token-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.08);
+  color: var(--text-1);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.12s;
+  flex: 0 0 auto;
+  max-width: 62%;
+}
+.sol-token-btn:hover { border-color: var(--line-strong); background: rgba(127, 127, 157, 0.13); }
+.sol-token-btn:active { transform: scale(0.97); }
+.sol-token-btn .stp-caret { color: var(--text-3); font-size: 10px; margin-inline-start: 2px; }
+.sol-token-btn .tok-icon { flex: 0 0 auto; }
+
+/* A tiny status dot next to an imported (uncurated) token's symbol, so the
+   trust state stays visible on the swap card after the picker closes. */
+.sol-token-imported-chip {
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.sol-token-imported-chip.verified {
+  background: rgba(0, 230, 158, 0.12);
+  color: var(--up, #00e69e);
+}
+.sol-token-imported-chip.unverified {
+  background: rgba(255, 176, 32, 0.1);
+  color: #e8a13c;
+}
+:root[data-theme='light'] .sol-token-imported-chip.unverified { color: #9a6b12; }

@@ -38,6 +38,8 @@ import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import SolanaConnectSheet from '../components/SolanaConnectSheet';
+import SolanaTokenPicker from '../components/SolanaTokenPicker';
+import TokenIcon from '../lib/tokenIcon';
 import { warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 import { POINT_VALUES } from '../lib/ranks';
 
@@ -125,6 +127,9 @@ export default function SolanaSwap({ embedded = false }) {
    */
   const [balanceCode, setBalanceCode] = useState(null);
   const [balanceHosts, setBalanceHosts] = useState(null);
+  /* What OUR OWN backend answered when the direct RPC path failed (null when
+     the server door was never reached, or answered nothing diagnostic). */
+  const [balanceServerNote, setBalanceServerNote] = useState(null);
   /* Set when the swap was allowed to proceed WITHOUT a verified balance, so the
      user is told that before they sign, not after. */
   const [preflightNotice, setPreflightNotice] = useState(null);
@@ -370,6 +375,8 @@ export default function SolanaSwap({ embedded = false }) {
    * vector. The scale is a fact about the chain; the name is a claim.
    */
   const [scaleErr, setScaleErr] = useState(null);
+  /* The modern token picker: null = closed, 'from' | 'to' = which box opened it. */
+  const [pickerSide, setPickerSide] = useState(null);
   const scaleInFlight = useRef(new Set());
 
   const resolveTokenScale = useCallback(async (mint) => {
@@ -468,6 +475,7 @@ export default function SolanaSwap({ embedded = false }) {
       balanceFail.current = null;
       setBalanceCode(null);
       setBalanceHosts(null);
+      setBalanceServerNote(null);
       return state;
     } catch (err) {
       setWalletBalances(null);
@@ -482,11 +490,18 @@ export default function SolanaSwap({ embedded = false }) {
       balanceFail.current = { code, hosts, detail: err?.detail || null };
       setBalanceCode(code);
       setBalanceHosts(hosts);
+      setBalanceServerNote(
+        err?.serverTried === true
+          ? t('solana.serverDoor', {
+            code: err?.serverCode || `HTTP_${err?.serverStatus || 0}`
+          })
+          : null
+      );
       return null;
     } finally {
       setBalanceLoading(false);
     }
-  }, [address, fromToken.mint, toToken.mint]);
+  }, [address, fromToken.mint, toToken.mint, t]);
 
   useEffect(() => {
     loadWalletBalances();
@@ -895,8 +910,22 @@ export default function SolanaSwap({ embedded = false }) {
     }
   };
 
-  const importMint = () => {
-    const mint = customMint.trim();
+  /**
+   * Import a mint — from the import card (meta = null, the honest unknown) or
+   * from the token picker (meta = Jupiter's index row, when the token is one
+   * the index knows: name, logo, price, liquidity).
+   *
+   * The SCALE stays `decimalsVerified: false` in both cases: Jupiter's number
+   * is the router's own index and a far better first guess than 9, but the
+   * verified flag is only ever earned by the chain read (resolveTokenScale),
+   * and until it lands the pre-flight refuses to compare the amount against a
+   * balance — the one guard that keeps a wrong scale from inventing a verdict.
+   *
+   * The SYMBOL keeps its phishing discipline: when the mint is NOT in the
+   * index, the truncated address renders, never a name nobody verified.
+   */
+  const importMint = (meta = null) => {
+    const mint = String(typeof meta === 'object' && meta !== null ? meta.mint : customMint).trim();
     setCustomErr(null);
     if (!isSolanaAddress(mint)) {
       setCustomErr('BAD_MINT');
@@ -906,36 +935,43 @@ export default function SolanaSwap({ embedded = false }) {
       setCustomErr('ALREADY_ADDED');
       return;
     }
-    /*
-     * ─── DECIMALS: THE GUESS THAT WAS DOCUMENTED AS SAFE ────────────────────
-     * The comment here used to say a wrong `decimals` «only affects what the
-     * user TYPES». It does not. That number converts the typed amount into the
-     * base units Jupiter is asked for AND the balance line is rendered with, so
-     * for a 6-decimal token a 9-decimal guess made every amount 1000× too big:
-     * the screen showed a balance 1000× too small and refused the swap with
-     * «موجودی برای این سواپ کافی نیست» while the wallet held the funds.
-     *
-     * So 9 stays only as a placeholder, flagged `decimalsVerified: false`, and
-     * the real scale is read from the chain the moment the token is added
-     * (resolveTokenScale). Until then the pre-flight does not compare that
-     * amount against anything — the aggregator, which reads the mint's true
-     * scale, gives the verdict instead.
-     *
-     * The symbol stays the truncated mint: an uncurated token's name is a claim
-     * by its creator, not a fact, and a dropdown is a phishing surface.
-     */
+    const known = meta && typeof meta === 'object';
     const tk = {
       mint,
-      symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`,
-      name: t('solana.importedToken'),
-      decimals: 9,
+      symbol: (known && meta.symbol) || `${mint.slice(0, 4)}…${mint.slice(-4)}`,
+      name: (known && meta.name) || t('solana.importedToken'),
+      icon: (known && meta.icon) || null,
+      decimals: known && Number.isInteger(meta.decimals) ? meta.decimals : 9,
       decimalsVerified: false,
-      imported: true
+      verified: known && meta.verified === true,
+      imported: true,
+      usdPrice: known ? (meta.usdPrice ?? null) : null
     };
     setExtraTokens((prev) => [...prev, tk]);
     setToToken(tk);
     setCustomMint('');
     haptic?.('success');
+  };
+
+  /*
+   * ─── THE PICKER'S TWO DOORS ───────────────────────────────────────────────
+   * `onPick` selects an entry already in the list; `onImport` adds a fresh
+   * mint and selects it in one motion. Picking the token already sitting on
+   * the OTHER side flips the pair — the quote effect would only answer
+   * SAME_TOKEN, and a flip is what anyone tapping the opposite side's token
+   * almost always means.
+   */
+  const pickToken = (side, tk) => {
+    if (!tk?.mint) return;
+    if (side === 'from') {
+      if (tk.mint === toToken.mint) { flip(); return; }
+      setFromToken(tk);
+    } else if (tk.mint === fromToken.mint) {
+      flip();
+    } else {
+      setToToken(tk);
+    }
+    haptic?.('select');
   };
 
   const flip = () => {
@@ -1076,6 +1112,23 @@ export default function SolanaSwap({ embedded = false }) {
                 {balanceHosts.map((h) => `${h.host}: ${h.reason}`).join(' · ')}
               </code>
             ) : null}
+            {/*
+              ─── THE SECOND DOOR, MADE VISIBLE ──────────────────────────────
+              The balance read races the public nodes against our own backend
+              (lib/solana/balanceSource.js). When THIS line used to say only
+              the public hosts failed, nobody could tell whether the server
+              door had even been tried — the operator's first question, asked
+              and answered nowhere. Now: what the backend answered, or that it
+              was never reachable, sits right under the host list.
+            */}
+            {balanceServerNote ? (
+              <code
+                className="mono"
+                style={{ display: 'block', marginTop: 4, fontSize: 10.5, opacity: 0.7, wordBreak: 'break-all' }}
+              >
+                {balanceServerNote}
+              </code>
+            ) : null}
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -1103,15 +1156,29 @@ export default function SolanaSwap({ embedded = false }) {
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <div className="field-label">{t('swap.from')}</div>
         <div className="row" style={{ gap: 8 }}>
-          <select
-            value={fromToken.mint}
-            onChange={(e) => setFromToken(tokens.find((tk) => tk.mint === e.target.value))}
-            style={{ width: 'auto' }}
+          {/*
+            ─── A BUTTON, NOT A <select> ─────────────────────────────────────
+            The bare dropdown showed truncated symbols with no logo and no
+            search — on the screen whose whole job is tokens that live in
+            nobody's list. The button opens SolanaTokenPicker: logos, verified
+            badges, prices, AI sentiment, and paste-a-mint that resolves as
+            you type (see the component's header for the full rationale).
+          */}
+          <button
+            type="button"
+            className="sol-token-btn"
+            onClick={() => { haptic?.('select'); setPickerSide('from'); }}
+            data-testid="solana-token-from"
           >
-            {tokens.map((tk) => (
-              <option key={tk.mint} value={tk.mint}>{tk.symbol}</option>
-            ))}
-          </select>
+            <TokenIcon token={fromToken} size={26} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromToken.symbol}</span>
+            {fromToken.imported ? (
+              <span className={`sol-token-imported-chip ${fromToken.verified ? 'verified' : 'unverified'}`}>
+                {fromToken.verified ? '✓' : '!'}
+              </span>
+            ) : null}
+            <span className="stp-caret" aria-hidden="true">▼</span>
+          </button>
           <input
             type="text"
             inputMode="decimal"
@@ -1128,15 +1195,21 @@ export default function SolanaSwap({ embedded = false }) {
 
         <div className="field-label">{t('swap.to')}</div>
         <div className="row" style={{ gap: 8 }}>
-          <select
-            value={toToken.mint}
-            onChange={(e) => setToToken(tokens.find((tk) => tk.mint === e.target.value))}
-            style={{ width: 'auto' }}
+          <button
+            type="button"
+            className="sol-token-btn"
+            onClick={() => { haptic?.('select'); setPickerSide('to'); }}
+            data-testid="solana-token-to"
           >
-            {tokens.map((tk) => (
-              <option key={tk.mint} value={tk.mint}>{tk.symbol}</option>
-            ))}
-          </select>
+            <TokenIcon token={toToken} size={26} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toToken.symbol}</span>
+            {toToken.imported ? (
+              <span className={`sol-token-imported-chip ${toToken.verified ? 'verified' : 'unverified'}`}>
+                {toToken.verified ? '✓' : '!'}
+              </span>
+            ) : null}
+            <span className="stp-caret" aria-hidden="true">▼</span>
+          </button>
           <div className="mono" style={{ flex: 1, textAlign: 'end', fontSize: 16, padding: '9px 0' }}>
             {quoting ? t('swap.quoting') : (outAmount ?? '—')}
           </div>
@@ -1260,7 +1333,28 @@ export default function SolanaSwap({ embedded = false }) {
         onConnected={(addr) => setAddress(addr || solanaAddress())}
       />
 
-      {/* --------------------- import any mint (memecoins) --------------------- */}
+      {/*
+        ─── THE TOKEN PICKER ──────────────────────────────────────────────────
+        One sheet serves both boxes. `onImport` funnels into the same
+        importMint the paste card uses, so the background chain reads
+        (decimals, balance) start the moment a mint is chosen — picker or
+        card, one path, no second code path to drift.
+      */}
+      <SolanaTokenPicker
+        open={pickerSide !== null}
+        side={pickerSide || 'to'}
+        tokens={tokens}
+        selectedMints={[fromToken.mint, toToken.mint]}
+        onClose={() => setPickerSide(null)}
+        onPick={(tk) => { pickToken(pickerSide || 'to', tk); setPickerSide(null); }}
+        onImport={(tk) => { importMint(tk); setPickerSide(null); }}
+      />
+
+      {/* --------------------- import any mint (memecoins) ---------------------
+          The picker above is the front door (search, logos, sentiment, and
+          paste-a-mint that resolves as you type). This card stays for the one
+          flow it does better: pasting an address copied from somewhere else,
+          without opening a sheet first. Same importMint, same chain reads. */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.importTitle')}</p>
         <p className="muted" style={{ fontSize: 12.3, marginBottom: 10 }}>{t('solana.importBody')}</p>
@@ -1275,7 +1369,7 @@ export default function SolanaSwap({ embedded = false }) {
             placeholder={t('solana.mintPlaceholder')}
             style={{ flex: 1, fontSize: 12 }}
           />
-          <button className="btn btn-ghost btn-sm" onClick={importMint}>
+          <button className="btn btn-ghost btn-sm" onClick={() => importMint()}>
             {t('swap.importAction')}
           </button>
         </div>
