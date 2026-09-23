@@ -64,7 +64,8 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 4px 2px 8px;
+  margin: 10px 2px 8px;
+  padding-top: 2px;
 }
 .stp-section-title {
   font-size: 11px;
@@ -82,10 +83,10 @@
 
 /* ── rows ────────────────────────────────────────────────────────────────── */
 
-.stp-list { display: flex; flex-direction: column; gap: 8px; max-height: 46dvh; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
-.stp-row { border-radius: 14px; gap: 10px !important; padding: 10px 11px !important; align-items: flex-start !important; min-height: 62px; }
-.stp-row .coin-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.stp-sym { text-transform: none; font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.stp-list { display: flex; flex-direction: column; gap: 10px; max-height: 46dvh; overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 6px; }
+.stp-row { border-radius: 14px; gap: 14px !important; padding: 12px 12px !important; align-items: flex-start !important; min-height: 68px; justify-content: space-between; }
+.stp-row .coin-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; margin-inline-end: 4px; }
+.stp-sym { text-transform: none; font-size: 13.5px; font-weight: 700; line-height: 1.2; letter-spacing: 0.01em; }
 .stp-sub {
   color: var(--text-3);
   font-size: 11px;
@@ -95,22 +96,24 @@
   white-space: nowrap;
   max-width: none;
   width: 100%;
-  line-height: 1.4;
+  line-height: 1.45;
+  padding-inline-end: 2px;
 }
 .stp-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
+  justify-content: flex-start;
+  gap: 5px;
   flex: 0 0 auto;
-  min-width: 86px;
-  max-width: 118px;
+  min-width: 96px;
+  max-width: 128px;
   font-variant-numeric: tabular-nums;
   text-align: end;
   padding-top: 1px;
+  margin-inline-start: auto;
 }
-.stp-price-row { display: flex; align-items: center; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.stp-price-row { display: flex; align-items: center; gap: 7px; justify-content: flex-end; flex-wrap: nowrap; }
 .stp-badges {
   display: flex;
   flex-wrap: wrap;
