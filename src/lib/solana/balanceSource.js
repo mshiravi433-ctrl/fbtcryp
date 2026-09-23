@@ -40,7 +40,8 @@ import {
   solanaRpcCall,
   solanaRpcCandidates,
   readSolanaNetworkSettings,
-  resetSolanaRpcChoice
+  resetSolanaRpcChoice,
+  solanaPublicsBlocked
 } from '../solanaRpc.js';
 import {
   readSwapBalancesAcross,
@@ -52,7 +53,8 @@ import {
 /** Per-request ceiling for one node. Mirrors lib/solanaRpc.js's own default. */
 const RPC_TIMEOUT_MS = 9000;
 
-/** How long the public nodes get before our backend is asked as well. */
+/** How long the public nodes get before our backend is asked as well —
+    WHEN the public list has not already proved useless (see below). */
 const SERVER_DELAY_MS = 1200;
 
 /** Ceiling for the backend call. It is a proxy to the same nodes, not a cache. */
@@ -60,11 +62,22 @@ const SERVER_TIMEOUT_MS = 10000;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** The candidate nodes for the user's cluster, or an empty list. */
-async function rpcCandidates() {
+/**
+ * The candidate nodes for a READ, or an empty list.
+ *
+ * The app's own JSON-RPC relay (POST /api/solana/rpc — read-only, allowlisted
+ * methods, never a broadcaster) is opted IN here, deliberately. These are pure
+ * reads, which is the only thing the relay is for, and `solanaRpcCandidates`
+ * positions it on its own: behind the warm public nodes on a healthy network,
+ * FIRST when the persisted hint says this network path's publics all refuse —
+ * the 2026-09-23 report, where eight hosts produced eight refusals and the
+ * relay was the one door that could answer. Cooling never applies to it (see
+ * solanaRpcCall), so it can always be retried.
+ */
+async function rpcCandidates(settings = null) {
   try {
-    const settings = await readSolanaNetworkSettings();
-    const list = solanaRpcCandidates(settings).filter(Boolean);
+    const s = settings || await readSolanaNetworkSettings();
+    const list = solanaRpcCandidates({ ...s, relay: true }).filter(Boolean);
     return [...new Set(list)];
   } catch {
     return [];
@@ -199,8 +212,19 @@ export async function readSolanaSwapBalances({ owner, inputMint, outputMint, raw
   const signal = ctrl ? ctrl.signal : null;
   const cancel = () => { try { ctrl?.abort(); } catch { /* cancelling is hygiene */ } };
 
+  /*
+   * Settings read ONCE for both doors — and the answer decides the SHAPE of
+   * the race. When the persisted hint says every public node refused this
+   * network path recently, waiting 1.2 s before asking our own backend is
+   * 1.2 s of known-dead air: the doors start TOGETHER. A healthy network
+   * keeps the stagger, so the free nodes still win when they work.
+   */
+  const settings = await readSolanaNetworkSettings();
+  const publicsRefuse = solanaPublicsBlocked(settings.cluster);
+  const serverDelayMs = publicsRefuse ? 0 : SERVER_DELAY_MS;
+
   const direct = (async () => {
-    const candidates = await rpcCandidates();
+    const candidates = await rpcCandidates(settings);
     const r = await readSwapBalancesAcross({
       call: solanaRpcCall,
       candidates,
@@ -222,7 +246,7 @@ export async function readSolanaSwapBalances({ owner, inputMint, outputMint, raw
   })();
 
   const server = allowServer
-    ? delay(SERVER_DELAY_MS).then(async () => {
+    ? delay(serverDelayMs).then(async () => {
       if (signal?.aborted) return { ok: false, via: 'server', code: 'CANCELLED', attempts: [], hosts: [] };
       const params = new URLSearchParams({ owner, inputMint, outputMint });
       if (amountArg != null) params.set('rawAmount', amountArg.toString());
@@ -308,14 +332,19 @@ export async function readSolanaTokenInfo(mint) {
   if (key === SOL_MINT) return { ok: true, decimals: SOL_DECIMALS, token2022: false, program: null, via: 'cache', symbol: 'SOL', name: 'Solana' };
   if (mintCache.has(key)) return { ...mintCache.get(key), via: 'cache' };
 
-  const candidates = await rpcCandidates();
+  /* Same settings-once rule as the balances reader above: the shape of the
+     race (staggered vs simultaneous doors) follows the publics-blocked hint. */
+  const settings = await readSolanaNetworkSettings();
+  const serverDelayMs = solanaPublicsBlocked(settings.cluster) ? 0 : SERVER_DELAY_MS;
+
+  const candidates = await rpcCandidates(settings);
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const signal = ctrl ? ctrl.signal : null;
   const cancel = () => { try { ctrl?.abort(); } catch { /* hygiene */ } };
 
   const direct = readMintInfoAcross({ call: solanaRpcCall, candidates, mint: key, timeoutMs: RPC_TIMEOUT_MS, signal });
 
-  const server = delay(SERVER_DELAY_MS).then(async () => {
+  const server = delay(serverDelayMs).then(async () => {
     if (signal?.aborted) return { ok: false, via: 'server', code: 'CANCELLED' };
     const body = await serverJson(`/solana/token-info?mint=${encodeURIComponent(key)}`, { signal });
     if (!body || body.ok !== true) return { ok: false, via: 'server', code: body?.status === 404 ? 'SERVER_ENDPOINT_MISSING' : 'SERVER_UNAVAILABLE' };
