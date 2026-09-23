@@ -212,8 +212,32 @@
  *   3. the loan surface has a sentence for «our own relay does not forward this
  *      request» (`loan.error.RELAY_METHOD_UNAVAILABLE`, all locales) so an
  *      app-side gap can never again be shown as «the node answered, but…» with
- *      advice to configure another RPC. */
-const SHELL = 'fbt-shell-v24';
+ *      advice to configure another RPC.
+ *
+ * v24 -> v25: the SOLANA SWAP tab told users «موجودی کیف پول کم یا RPC را چک
+ * کنید» while their wallet was connected and funded. The connection was never
+ * the problem — the read that GATES signing was: one balance lookup from the
+ * phone to one public node, whose answer was trusted even when the token's
+ * scale was a guess (`decimals ?? 9`, which is 1000x wrong for a 6-decimal
+ * mint) or when the mint was Token-2022 (read through the classic spl-token
+ * filter, so a real balance came back as exactly 0). Four things changed and
+ * all four live in this shell:
+ *   1. the swap's balance/mint reads walk every candidate with a named reason
+ *      per host (src/lib/solana/chainReads.js) instead of one shot at one node,
+ *      and read SOL as an exact string rather than a JSON number;
+ *   2. our own backend is the second door for that read
+ *      (GET /api/solana/{balances,token-info}), one request for the whole read,
+ *      opened ~1.2s after the device and aborted the moment either door answers
+ *      — the same «the app's own origin is reachable whenever the app is»
+ *      reasoning the loan relay uses, applied to the read that gates a swap;
+ *   3. a balance nobody could read is now a NOTICE, not a dead button, and a
+ *      scale nobody verified can never decide that a wallet is short
+ *      (src/lib/solana/swapPreflight.js); gas includes the 2,100,000 lamport
+ *      rent of an output token account that does not exist yet;
+ *   4. the wallet health panel grew a «Chain read» row that says which door
+ *      answered, from which host, in how many ms — so the next report names the
+ *      failing path instead of guessing at it. */
+const SHELL = 'fbt-shell-v25';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

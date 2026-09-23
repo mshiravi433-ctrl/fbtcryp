@@ -286,6 +286,7 @@
     "test:farm:public": "vitest run --config test/vitest.public.config.mjs",
     "test:wallet-connection": "node test/walletconnect-stack-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/wallet-health-panel.test.jsx test/wallet-session-lease.test.jsx test/network-select.test.jsx",
     "test:solana-connect": "node test/solana-deeplink-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/solana-connect-sheet.test.jsx",
+    "test:solana-swap": "vitest run test/solana-swap-chain-reads.test.js",
     "assetlinks:remote": "node scripts/assetlinks.mjs --remote",
     "test:wallet-diagnostics": "node test/wallet-diagnostics-probe.mjs",
     "test:intent-protocol": "node test/protocol/run-all-protocol-tests.mjs",

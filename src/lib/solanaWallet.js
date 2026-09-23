@@ -523,57 +523,102 @@ export function solanaAddress() {
  * Read the exact source balance and whether the destination token account
  * already exists. A wallet simulation error after opening the signing prompt
  * is too late to tell somebody their empty wallet cannot make the swap.
+ *
+ * ─── REWRITTEN 2026-09-23, SAME CONTRACT ────────────────────────────────────
+ * Reported: «برای امضا و خرید با سولانا در بیشتر اوقات می‌زنه موجودی کیف پول کم
+ * یا RPC را چک کنید» — while the connection itself was provably fine.
+ *
+ * This function was the source of both halves of that sentence. It built ONE
+ * `Connection` from ONE remembered endpoint and made three web3.js calls with
+ * no deadline; a node that answered a health probe and then started returning
+ * 429 stayed the only node asked for five minutes, the transport failure was
+ * swallowed by the screen into a generic «balance could not be verified», and
+ * a token-2022 mint or a mint whose scale had been GUESSED as 9 decimals read
+ * as an empty wallet.
+ *
+ * The read now lives in lib/solana/chainReads.js (one implementation, shared
+ * with the server) and arrives through lib/solana/balanceSource.js, which asks
+ * the public nodes and our own backend and takes the first honest answer. The
+ * returned shape is unchanged — `sourceRaw`/`solLamports` are still BigInt, the
+ * screen still calls `.toString()` on them — with three additions the pre-flight
+ * needs to stop guessing:
+ *
+ *   · `sourceDecimals` / `sourceDecimalsVerified` — the scale the CHAIN reported
+ *     for the input token, and whether it was reported at all. An unverified
+ *     scale is never compared against a real balance (see swapPreflight.js).
+ *   · `via` — 'rpc' or 'server', so a diagnostics screen can say which door
+ *     answered instead of implying there was only one.
+ *   · `calls` — how many node requests the answer cost.
+ *
+ * A failed read THROWS with a named code (RPC_BLOCKED, RPC_RATE_LIMITED,
+ * RPC_TIMEOUT, RPC_ERROR, RPC_UNAVAILABLE) rather than returning null: the
+ * remedy for «these nodes refuse this network path, put your own RPC in
+ * Settings» is not the remedy for «wait a moment and retry», and collapsing
+ * both into BALANCE_UNAVAILABLE is what made the message useless.
+ *
+ * @returns {Promise<{sourceRaw:bigint, solLamports:bigint, outputAccountExists:boolean,
+ *   outputAssumed:boolean, sourceDecimals:number, sourceDecimalsVerified:boolean,
+ *   sourceProgram:string|null, via:'rpc'|'server', url:string|null, calls:number}>}
+ * @throws {Error} message = one of the named codes above, with `.code`,
+ *   `.detail` (host:REASON per node) and `.hosts` attached for the screen.
  */
-export async function getSolanaSwapBalances({ owner, inputMint, outputMint }) {
-  const { Connection, PublicKey } = await import('@solana/web3.js');
-  const connection = new Connection(await solanaRpcUrl(), 'confirmed');
-  const ownerKey = new PublicKey(owner);
-  const nativeMint = 'So11111111111111111111111111111111111111112';
-
-  const tokenState = async (mint) => {
-    if (mint === nativeMint) {
-      return { raw: BigInt(await connection.getBalance(ownerKey, 'confirmed')), exists: true };
-    }
-    const rows = await connection.getParsedTokenAccountsByOwner(
-      ownerKey,
-      { mint: new PublicKey(mint) },
-      'confirmed'
-    );
-    return {
-      raw: rows.value.reduce(
-        (sum, row) => sum + BigInt(row.account.data.parsed?.info?.tokenAmount?.amount || 0),
-        0n
-      ),
-      /* An empty but existing ATA still avoids account-creation rent. */
-      exists: rows.value.length > 0
-    };
-  };
-
-  const [source, solLamports, output] = await Promise.all([
-    tokenState(inputMint),
-    connection.getBalance(ownerKey, 'confirmed').then(BigInt),
-    tokenState(outputMint)
-  ]);
-  return {
-    sourceRaw: source.raw,
-    solLamports,
-    outputAccountExists: output.exists
-  };
+export async function getSolanaSwapBalances({ owner, inputMint, outputMint, rawAmount = null }) {
+  const { readSolanaSwapBalances } = await import('./solana/balanceSource.js');
+  const r = await readSolanaSwapBalances({ owner, inputMint, outputMint, rawAmount });
+  if (!r?.ok) {
+    const code = r?.code || 'RPC_UNAVAILABLE';
+    const err = new Error(code);
+    err.code = code;
+    err.detail = r?.detail || null;
+    err.hosts = r?.hosts || [];
+    err.attempts = r?.attempts || [];
+    err.serverTried = r?.serverTried === true;
+    err.serverCode = r?.serverCode || null;
+    throw err;
+  }
+  return r;
 }
+
+/**
+ * The scale of a mint, read from the chain (or from our backend when the chain
+ * is unreachable from this device).
+ *
+ * This replaces the guess. A token added by pasting its address used to be
+ * stored with `decimals: 9`, and that number is what turns the amount the user
+ * types into the base units Jupiter is asked for — so for a 6-decimal token the
+ * screen asked to sell 1000× the holding, showed a balance 1000× too small, and
+ * reported «موجودی برای این سواپ کافی نیست» for a wallet that had the funds.
+ *
+ * @returns {Promise<{ok:true, decimals:number, token2022:boolean, program:string|null,
+ *   symbol:string|null, name:string|null, via:string}|{ok:false, code:string, detail?:string|null}>}
+ */
+export async function getSolanaTokenInfo(mint) {
+  const { readSolanaTokenInfo } = await import('./solana/balanceSource.js');
+  return readSolanaTokenInfo(mint);
+}
+
 
 /**
  * Read the native SOL balance for a connected Solana wallet.
  *
  * This is the live balance source the unified Intent AI OS uses when the user
- * asks about Solana. It goes through the same RPC URL and commitment level as
- * the rest of the Solana path; on failure it throws so the UI can say
- * "unavailable" rather than showing a guessed zero.
+ * asks about Solana, and the number the wallet tab and the bridge panel show.
+ * It goes through the two-door reader (public nodes, then our own backend —
+ * lib/solana/balanceSource.js) rather than one remembered endpoint with no
+ * deadline, because a throttled node used to read as a wallet holding 0 SOL
+ * and nothing on screen could tell the two apart. On failure it throws, with
+ * the named code, so the UI can say "unavailable" rather than showing a
+ * guessed zero.
  */
 export async function getSolanaBalance(owner) {
-  const { Connection, PublicKey, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
-  const connection = new Connection(await solanaRpcUrl(), 'confirmed');
-  const lamports = await connection.getBalance(new PublicKey(owner), 'confirmed');
-  return Number(((lamports || 0) / LAMPORTS_PER_SOL).toFixed(6));
+  const { readSolanaNativeLamports } = await import('./solana/balanceSource.js');
+  const lamports = await readSolanaNativeLamports(owner);
+  /* BigInt division, not `Number(lamports) / 1e9`: a float conversion loses
+     integer precision above 2^53 lamports, and rounding a balance is the kind
+     of wrong that shows up in a support report as «the app lost my SOL». */
+  const whole = lamports / 1_000_000_000n;
+  const frac = (lamports % 1_000_000_000n).toString().padStart(9, '0').slice(0, 6);
+  return Number(`${whole}.${frac}`);
 }
 
 /**
