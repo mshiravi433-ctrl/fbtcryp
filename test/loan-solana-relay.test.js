@@ -79,6 +79,19 @@ afterEach(() => {
 const rpc = (method, params = [], id = 7, extra = {}) => ({ jsonrpc: '2.0', id, method, params, ...extra });
 const hostsAsked = () => calls.map((c) => c.host);
 
+/**
+ * The host the relay asks FIRST, derived at call time.
+ *
+ * Three tests below used to hardcode `rpc.solanatracker.io` as "the first
+ * upstream", and the server's order is deliberately re-measured from deployed
+ * workers now and then (see DEFAULT_UPSTREAMS in server/solanaRpcRelay.js) — so
+ * a reorder silently turned "the walk continued past a refusal" into "the first
+ * host answered at once", and the tests went red without anything being broken.
+ * What is under test is the WALK, not which vendor happens to be first, so the
+ * refusing host is read from the same function the relay uses.
+ */
+const firstUpstreamHost = () => new URL(relayUpstreams('mainnet-beta')[0]).host;
+
 /* ═══════════════════════════ 1. read-only by construction ═════════════════ */
 
 describe('the relay forwards reads and nothing that can move money', () => {
@@ -282,14 +295,15 @@ describe('the failure a user is told about is the failure that happened', () => 
   });
 
   it('does not let one 403 hide a node that would have answered', async () => {
-    /* solanatracker is FIRST in the server's order, so it is the one that has to
-       refuse for the walk to be the thing under test. */
-    behaviour = ({ host }) => (host.includes('solanatracker') ? { status: 403 } : { status: 200, result: 'served' });
+    /* The FIRST host in the server's own order has to be the one that refuses,
+       or the walk is not the thing under test. */
+    const refusing = firstUpstreamHost();
+    behaviour = ({ host }) => (host === refusing ? { status: 403 } : { status: 200, result: 'served' });
     const out = await relaySolanaRpc({ body: rpc('getHealth'), ip: '3.3.3.3' });
     expect(out.status).toBe(200);
     expect(out.body.result).toBe('served');
     expect(calls.length).toBe(2);
-    expect(out.meta.upstream).not.toContain('solanatracker');
+    expect(out.meta.upstream).not.toContain(refusing);
   });
 
   it('keeps the caller’s JSON-RPC id on every answer, so web3.js can match it', async () => {
@@ -321,7 +335,8 @@ describe('the failure a user is told about is the failure that happened', () => 
 
 describe('a 200 that says «I do not serve that» is remembered per method', () => {
   it('walks on from a method refusal, and skips that host for that method next time', async () => {
-    behaviour = ({ host }) => (host.includes('solanatracker')
+    const refusing = firstUpstreamHost();
+    behaviour = ({ host }) => (host === refusing
       ? { status: 200, error: { code: -32602, message: 'Request blocked: method not permitted' } }
       : { status: 200, result: 'served-elsewhere' });
 
@@ -332,7 +347,7 @@ describe('a 200 that says «I do not serve that» is remembered per method', () 
     calls = [];
     const second = await relaySolanaRpc({ body: rpc('getTokenAccountsByOwner', ['owner2', {}]), ip: '4.4.4.2' });
     expect(second.body.result).toBe('served-elsewhere');
-    expect(hostsAsked(), 'the host that refused this method is not asked for it again').not.toContain('rpc.solanatracker.io');
+    expect(hostsAsked(), 'the host that refused this method is not asked for it again').not.toContain(refusing);
 
     /* …but it still serves what it does serve. This is the whole reason the
        memory is per method and not per host. */
@@ -340,17 +355,18 @@ describe('a 200 that says «I do not serve that» is remembered per method', () 
     behaviour = () => ({ status: 200, result: 'health-ok' });
     const third = await relaySolanaRpc({ body: rpc('getHealth'), ip: '4.4.4.3' });
     expect(third.body.result).toBe('health-ok');
-    expect(hostsAsked()[0]).toBe('rpc.solanatracker.io');
+    expect(hostsAsked()[0]).toBe(refusing);
   });
 
   it('cools a host that refused the caller entirely, for every method', async () => {
-    behaviour = ({ host }) => (host.includes('solanatracker') ? { status: 403 } : { status: 200, result: 'ok' });
+    const refusing = firstUpstreamHost();
+    behaviour = ({ host }) => (host === refusing ? { status: 403 } : { status: 200, result: 'ok' });
     await relaySolanaRpc({ body: rpc('getHealth'), ip: '4.4.4.4' });
-    expect(relayStatus().cooling.hosts.some((row) => row.host.includes('solanatracker') && row.reason === 'BLOCKED')).toBe(true);
+    expect(relayStatus().cooling.hosts.some((row) => row.host === refusing && row.reason === 'BLOCKED')).toBe(true);
 
     calls = [];
     await relaySolanaRpc({ body: rpc('getSlot'), ip: '4.4.4.5' });
-    expect(hostsAsked(), 'a caller-level refusal is about the caller, so the host waits').not.toContain('rpc.solanatracker.io');
+    expect(hostsAsked(), 'a caller-level refusal is about the caller, so the host waits').not.toContain(refusing);
   });
 
   it('still tries a cooled host when nothing else answers — the last resort is never deleted', async () => {

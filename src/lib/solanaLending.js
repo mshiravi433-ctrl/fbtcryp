@@ -17,6 +17,21 @@ export const SOLANA_LENDING_RPC = 'https://api.mainnet-beta.solana.com';
 export const SOLANA_LENDING_EXPLORER = 'https://solscan.io';
 
 /**
+ * How long the BROWSER door gets before our own backend is asked as well.
+ *
+ * The same beat `lib/solana/balanceSource.js` uses on the swap screen, for the
+ * same reason: on a healthy network the public nodes answer inside it and our
+ * server is never loaded, while on a blocked one the user pays 1.2 s instead of
+ * a minute of dead round trips. Dropped to zero when the persisted hint says
+ * this network path's public nodes all refuse (see `serverDoorDelayMs`).
+ */
+export const SERVER_DOOR_DELAY_MS = 1200;
+
+/** Ceiling for one call to our own backend. A cold Kamino load server-side is
+    a dozen upstream calls; the answer is then shared by every user for a while. */
+export const SERVER_DOOR_TIMEOUT_MS = 30_000;
+
+/**
  * Which node the lending reads go through.
  *
  * This used to be the hardcoded Foundation endpoint — `api.mainnet-beta.solana.com`
@@ -109,6 +124,29 @@ const NETWORK_FAILURE_RE = /\bfetch\b|networkerror|network error|failed to fetch
  * checked — see lendingRpcFailure.
  */
 const RELAY_METHOD_REFUSAL_RE = /is not relayed|not relayed|forward(?:s|ed) an allowlist|read-only and forwards/i;
+
+/**
+ * Our own relay saying «I asked, and NO NODE ANSWERED ME EITHER».
+ *
+ * WHY THIS IS ITS OWN SENTENCE (report 2026-09-23, third round)
+ * -------------------------------------------------------------
+ * The relay is an HTTP endpoint that speaks JSON-RPC, so when every upstream
+ * behind it refuses it answers `-32004` (or a real HTTP 403/429/502 carrying
+ * that code), and @solana/web3.js turns a non-2xx into
+ * `Error: 502 Bad Gateway: {"…":{"code":-32004,"message":"no Solana node
+ * answered this relay for getProgramAccounts"}}`.
+ *
+ * No classifier in this file could name that text: it carries no 401/403/429
+ * and no network wording, so the row fell through to `RPC_UNAVAILABLE` —
+ * «آن گره پاسخ داد، ولی پاسخی که نتوانستیم استفاده کنیم», «the node answered but
+ * we could not use the response». That sentence sends the reader looking for a
+ * better RPC, and it is exactly the line in the report about our OWN relay. The
+ * honest description is different: our server tried too, and the nodes behind it
+ * did not serve this call either. Its remedy is not «pick another public node» —
+ * it is the server door that reads the market for you (server/solanaLending.js),
+ * and the panel says so.
+ */
+const RELAY_UPSTREAM_RE = /no solana node answered this relay|every solana node this relay tried|relay budget for this caller|is larger than this relay forwards|-3200[1234]/i;
 
 /**
  * Name ONE node's refusal from the node's own words.
@@ -208,16 +246,33 @@ export function lendingRpcFailure(attempts) {
        other row: nothing on the network can fix it, only a newer app. */
     const relayRefusedMethod = isRelayUrl(a.url)
       && (Number(a.code) === -32601 || RELAY_METHOD_REFUSAL_RE.test(text));
+    /* The relay's OWN upstream failure: it answered, and its answer was «every
+       node behind me refused this call». Distinct from a method it does not
+       forward (an app-version gap) and distinct from a public node's refusal
+       (a fact about the caller's network path). */
+    /* `!cls` is load-bearing: when the relay forwards an upstream's OWN status
+       («403: every Solana node this relay tried refused the request») the
+       status-first classifier already named it RPC_BLOCKED, and that is the more
+       useful truth — it tells the user their network path is blocked and that
+       entering their own RPC is the fix. This reason is only for the answer that
+       carries NO status at all: -32004 «no node answered this relay», the
+       oversized-response refusal, the relay's own budget. */
+    const relayUpstreamFailed = !relayRefusedMethod && !cls
+      && (isRelayUrl(a.url) || Number(a.code) === -32004)
+      && RELAY_UPSTREAM_RE.test(text);
     return {
       url: shortHost(a.url),
       rawUrl: a.url,
       text,
       cls,
       relayRefusedMethod,
+      relayUpstreamFailed,
       /* What the row MEANS, in the vocabulary the UI has sentences for. */
       reason: relayRefusedMethod
         ? 'RELAY_METHOD_UNAVAILABLE'
-        : cls || (NETWORK_FAILURE_RE.test(text) ? 'RPC_ERROR' : 'RPC_UNAVAILABLE')
+        : relayUpstreamFailed
+          ? 'RELAY_UPSTREAM_UNAVAILABLE'
+          : cls || (NETWORK_FAILURE_RE.test(text) ? 'RPC_ERROR' : 'RPC_UNAVAILABLE')
     };
   });
   const summary = parts
@@ -227,11 +282,18 @@ export function lendingRpcFailure(attempts) {
   const blocked = parts.some((p) => p.cls === 'RPC_BLOCKED');
   const rateLimited = parts.some((p) => p.cls === 'RPC_RATE_LIMITED');
   const allUnreachable = parts.length > 0 && parts.every((p) => p.reason === 'RPC_ERROR');
+  /* The relay's verdict is a fact about the nodes BEHIND it, not about the
+     caller's path, so it never wins over a public node's own 403/429 — those
+     tell the user something they can act on (enter your own RPC). It is
+     reported when it is the only thing that happened, or when every candidate
+     was the relay. */
+  const relayOnly = parts.length > 0 && parts.every((p) => p.relayUpstreamFailed || p.relayRefusedMethod);
   const code = blocked ? 'RPC_BLOCKED'
     : rateLimited ? 'RPC_RATE_LIMITED'
       : allUnreachable ? 'RPC_ERROR'
         : parts.length > 0 && parts.every((p) => p.relayRefusedMethod) ? 'RELAY_METHOD_UNAVAILABLE'
-          : 'KAMINO_MARKET_UNAVAILABLE';
+          : relayOnly ? 'RELAY_UPSTREAM_UNAVAILABLE'
+            : 'KAMINO_MARKET_UNAVAILABLE';
   const error = new Error(code);
   error.code = code;
   error.detail = summary || 'all Solana RPC candidates failed';
@@ -281,7 +343,8 @@ function noteRefusedCandidates(parts) {
        a verdict on a node). A single success anywhere clears the hint again —
        see solanaRpcCall. */
     const publics = (parts || []).filter((p) => p.rawUrl && !isSolanaRelayUrl(p.rawUrl));
-    const noHelp = (p) => p.cls === 'RPC_BLOCKED' || p.reason === 'RPC_UNAVAILABLE';
+    const noHelp = (p) => p.cls === 'RPC_BLOCKED' || p.reason === 'RPC_UNAVAILABLE'
+      || p.reason === 'RELAY_UPSTREAM_UNAVAILABLE';
     if (publics.length > 0 && publics.every(noHelp)) noteSolanaPublicsBlocked();
   }).catch(() => { /* the next read simply starts in the configured order */ });
 }
@@ -871,52 +934,55 @@ const reserveToView = (reserve, slot) => {
 
 
 /**
- * Read Kamino reserves and the wallet's vanilla obligation. The SDK does the
- * protocol/account decoding; this function only serializes values for React.
- * The node it reads from is the app's probed RPC layer by default — not the
- * Foundation's most-throttled endpoint (see `resolveLendingRpc`).
+ * THE MARKET SNAPSHOT SERIALIZER — one implementation, TWO doors.
+ * ============================================================================
  *
- * @returns the market snapshot. A failure is THROWN as a coded error
- *   (KAMINO_SDK_UNAVAILABLE / KAMINO_MARKET_UNAVAILABLE / RPC_ERROR /
- *   RPC_RATE_LIMITED) so the panel can explain WHICH thing is down instead of
- *   collapsing every cause into one sentence (§28).
+ * WHY THIS FUNCTION EXISTS SEPARATELY FROM THE READ
+ * --------------------------------------------------
+ * Until 2026-09-23 (third report: «در وام تب سولنا بهم خورده دوباره») the
+ * Kamino market could only be read from the BROWSER: the vendored SDK, a public
+ * Solana node, and the user's own network path between them. On the reported
+ * path every public node refused (403/429) and the app's own JSON-RPC relay
+ * answered with something the SDK could not use, so the panel showed nine dead
+ * hosts and refused — correctly — to send anything.
+ *
+ * The app's server can read the same market (server/solanaLending.js): it is a
+ * datacentre caller the public nodes do serve, it shares ONE load between every
+ * user, and it has a fallback for the one call free nodes refuse
+ * (`getProgramAccounts` over ~130 reserve accounts of 8 624 bytes each).
+ *
+ * Two doors that each owned their own serializer would drift — a reserve field
+ * renamed in one and not the other is a panel that shows «—» for a number the
+ * chain has. So the serializer lives here, in the module both doors already
+ * share, and the server imports it exactly as it imports `preflightSolanaAction`
+ * and `buildKaminoActionTransactions`. Whatever the browser door can render, the
+ * server door renders identically, because it is the same code.
+ *
+ * @param {object} p
+ * @param {object} p.market a loaded `KaminoMarket` (from either door)
+ * @param {string|null} [p.wallet] owner address; null reads no position
+ * @param {number|null} [p.slot] the slot the APY getters are computed at
+ * @param {string|null} [p.rpcUrl] which node served it — diagnostics, §28
+ * @param {Function|null} [p.readBalances] injected because the spendable-balance
+ *        read is the ONE part that is door-specific: the browser walks its own
+ *        RPC candidates, the server reads through the connection it already
+ *        holds. Same contract: `(‍{wallet, assets}) → { [assetId]: baseUnits }`.
+ * @param {boolean} [p.withReserveObjects] the browser keeps the live SDK reserve
+ *        objects on the snapshot; a JSON response cannot (they are circular and
+ *        megabytes), so the server sends `false`.
+ * @param {'live'} [p.dataStatus] never 'cached' here: both doors read the chain.
+ * @param {'browser'|'server'} [p.via] which door answered — shown on screen.
  */
-export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } = {}) {
-  const candidates = await lendingRpcCandidates(rpcUrl);
-  const { KaminoMarket, DEFAULT_RECENT_SLOT_DURATION_MS } = await sdkPromise();
-  const attempts = [];
-  let market = null;
-  let url = candidates[0];
-  let slot = null;
-  /* The market load is the expensive call (dozens of accounts), so the walk
-     stops at the first node that answers it — later reads reuse the winner. */
-  for (const candidate of candidates) {
-    const connection = new Connection(candidate, { commitment: 'confirmed' });
-    try {
-      market = await KaminoMarket.load(
-        connection,
-        new PublicKey(KAMINO_MAIN_MARKET),
-        DEFAULT_RECENT_SLOT_DURATION_MS || 450,
-        new PublicKey(KAMINO_LENDING_PROGRAM)
-      );
-    } catch (cause) {
-      attempts.push({ url: candidate, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
-      market = null;
-      continue;
-    }
-    if (!market) {
-      attempts.push({ url: candidate, error: 'empty market' });
-      continue;
-    }
-    url = candidate;
-    try { slot = await connection.getSlot('processed'); } catch { slot = null; }
-    break;
-  }
-  if (!market) {
-    await resetRememberedSolanaRpc();
-    throw lendingRpcFailure(attempts);
-  }
-
+export async function serializeKaminoMarket({
+  market,
+  wallet = null,
+  slot = null,
+  rpcUrl = null,
+  readBalances = null,
+  withReserveObjects = true,
+  dataStatus = 'live',
+  via = 'browser'
+} = {}) {
   /* The reserve LIST itself failing is a market failure — the SDK decoded
      the market but its reserve accessor threw — so it is thrown as a coded
      error, never as an empty market pretending to be healthy. */
@@ -958,17 +1024,17 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     }
   }
 
-  /* The wallet's spendable balance per reserve (§7 preflight input), with its
-     own failover across every candidate — NOT pinned to the market winner, so
-     a node that serves the market but throttles parsed-account reads cannot
-     single-handedly force BALANCE_UNKNOWN. A failed read stays empty — the
-     panel reports BALANCE_UNKNOWN and refuses to open the wallet for a
-     transaction it cannot pre-check. */
+  /* The wallet's spendable balance per reserve (§7 preflight input). The read
+     itself belongs to the door (see `readBalances` above); a failure stays
+     empty — the panel reports BALANCE_UNKNOWN and refuses to open the wallet
+     for a transaction it cannot pre-check. */
   let balances = {};
   let balancesUnknown = false;
   if (wallet) {
     try {
-      balances = await readSolanaLendingBalances({ wallet, assets: reserves });
+      balances = typeof readBalances === 'function'
+        ? (await readBalances({ wallet, assets: reserves })) || {}
+        : {};
       balancesUnknown = Object.keys(balances || {}).length === 0;
     } catch { balances = {}; balancesUnknown = true; }
   }
@@ -1001,12 +1067,18 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
     chainId: SOLANA_LENDING_CHAIN_ID,
     protocol: 'kamino-klend',
     marketAddress: KAMINO_MAIN_MARKET,
-    rpcUrl: url,
+    rpcUrl,
     slot,
     readAt: new Date().toISOString(),
-    dataStatus: 'live',
+    dataStatus,
+    /* Which door answered. The panel says it out loud («از سرورِ خودِ اپ») the
+       same way the swap screen names its second door — a user on a blocked
+       network path deserves to know the app routed around it, and support
+       learns which door is carrying the traffic. */
+    via,
+    source: via === 'server' ? 'server-kamino' : 'browser-sdk',
     assets: reserves.map(({ reserve: _reserve, ...view }) => view),
-    reserves,
+    ...(withReserveObjects ? { reserves } : { reserves: [] }),
     positions,
     balances,
     account: {
@@ -1030,6 +1102,166 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null } =
        read is visible as one (§28) instead of silently shrinking the list. */
     failures: reserveFailures
   };
+}
+
+/**
+ * DOOR ONE — the browser: the vendored SDK against the app's probed RPC list.
+ *
+ * Throws a coded error (see `lendingRpcFailure`) when no candidate could load
+ * the market; the caller decides whether a second door gets a turn.
+ */
+export async function readSolanaLendingMarketInBrowser({ wallet = null, rpcUrl = null } = {}) {
+  const candidates = await lendingRpcCandidates(rpcUrl);
+  const { KaminoMarket, DEFAULT_RECENT_SLOT_DURATION_MS } = await sdkPromise();
+  const attempts = [];
+  let market = null;
+  let url = candidates[0];
+  let slot = null;
+  /* The market load is the expensive call (dozens of accounts), so the walk
+     stops at the first node that answers it — later reads reuse the winner. */
+  for (const candidate of candidates) {
+    const connection = new Connection(candidate, { commitment: 'confirmed' });
+    try {
+      market = await KaminoMarket.load(
+        connection,
+        new PublicKey(KAMINO_MAIN_MARKET),
+        DEFAULT_RECENT_SLOT_DURATION_MS || 450,
+        new PublicKey(KAMINO_LENDING_PROGRAM)
+      );
+    } catch (cause) {
+      attempts.push({ url: candidate, code: cause?.code || null, error: String(cause?.message || cause || '').slice(0, 120) });
+      market = null;
+      continue;
+    }
+    if (!market) {
+      attempts.push({ url: candidate, error: 'empty market' });
+      continue;
+    }
+    url = candidate;
+    try { slot = await connection.getSlot('processed'); } catch { slot = null; }
+    break;
+  }
+  if (!market) {
+    await resetRememberedSolanaRpc();
+    throw lendingRpcFailure(attempts);
+  }
+  return serializeKaminoMarket({
+    market,
+    wallet,
+    slot,
+    rpcUrl: url,
+    via: 'browser',
+    readBalances: (args) => readSolanaLendingBalances(args)
+  });
+}
+
+/**
+ * Read Kamino reserves and the wallet's vanilla obligation — from WHICHEVER
+ * DOOR ANSWERS FIRST.
+ *
+ * ─── THE TWO DOORS (report 2026-09-23, «در وام تب سولنا بهم خورده دوباره») ──
+ *   1. THE BROWSER (above): the vendored SDK against the public nodes, with the
+ *      app's own JSON-RPC relay as one of the candidates. Fastest when it works
+ *      and costs our server nothing.
+ *   2. OUR BACKEND (`/api/lending/solana/market`): the same SDK, the same
+ *      serializer, run where the public nodes answer — one shared load for every
+ *      user, plus a fallback for the reserve enumeration that free nodes refuse.
+ *
+ * They are RACED, not chained, with the second door starting one beat later —
+ * the shape `lib/solana/balanceSource.js` already proved on the swap screen.
+ * Chaining (try the browser, and only then the server) is what made the
+ * reported screen unusable: nine candidates × up to 9 s each is a minute of
+ * known-dead round trips before the one door that could answer was even asked.
+ * When the persisted hint says this network path's public nodes all refuse, the
+ * beat is dropped and both start together.
+ *
+ * `rpcUrl` pins ONE node and therefore means "browser only" — tests and any
+ * caller that deliberately chose an endpoint get exactly that endpoint.
+ *
+ * @returns the market snapshot, with `via: 'browser' | 'server'`. A failure is
+ *   THROWN as the browser door's coded error (it carries the per-host verdicts)
+ *   with `serverCode`/`serverTried` attached, so the panel can say both what the
+ *   nodes did and whether our own server was even an option.
+ */
+export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, allowServer = null } = {}) {
+  if (rpcUrl || allowServer === false) return readSolanaLendingMarketInBrowser({ wallet, rpcUrl });
+
+  const { readSolanaLendingMarketViaServer } = await import('./solanaLendingServer.js');
+  const delayMs = await serverDoorDelayMs();
+
+  const browser = readSolanaLendingMarketInBrowser({ wallet }).then(
+    (snapshot) => ({ ok: true, snapshot, via: 'browser' }),
+    (cause) => ({ ok: false, via: 'browser', cause: cause instanceof Error ? cause : new Error(String(cause?.message || cause || 'PROTOCOL_UNAVAILABLE')) })
+  );
+  const server = delay(delayMs).then(() => readSolanaLendingMarketViaServer({ wallet })).then(
+    (answer) => (answer?.ok
+      ? { ok: true, snapshot: answer.snapshot, via: 'server' }
+      : { ok: false, via: 'server', code: answer?.code || 'SERVER_UNAVAILABLE', detail: answer?.detail || null, status: answer?.status ?? null }),
+    (cause) => ({ ok: false, via: 'server', code: 'SERVER_UNAVAILABLE', detail: String(cause?.message || cause || '').slice(0, 160) })
+  );
+
+  const winner = await firstDoorOk([browser, server]);
+  if (winner?.ok) return { ...winner.snapshot, via: winner.via };
+
+  /* Both doors shut. The BROWSER failure is the one reported — it is the one
+     carrying per-host verdicts (`hosts`) that tell a user whether to retry or
+     to enter their own RPC — with the server's own verdict attached so the
+     panel can say «our server was asked too, and it said …» instead of leaving
+     the second door invisible. */
+  const [browserResult, serverResult] = await Promise.all([browser, server]);
+  if (browserResult?.ok) return { ...browserResult.snapshot, via: 'browser' };
+  const failure = browserResult?.cause || new Error('PROTOCOL_UNAVAILABLE');
+  failure.serverTried = true;
+  failure.serverCode = serverResult?.code || null;
+  failure.serverDetail = serverResult?.detail || null;
+  throw failure;
+}
+
+/** A timer that never keeps the process alive, and never throws. */
+const delay = (ms) => new Promise((resolve) => { setTimeout(resolve, Math.max(0, Number(ms) || 0)); });
+
+/**
+ * How long the public nodes get before our own backend is asked as well.
+ *
+ * Zero when this network path has already proved it cannot reach them — the
+ * persisted hint `lib/solanaRpc.js` writes when a whole public list refused or
+ * answered unusably. Waiting 1.2 s for nodes that refused us last minute is
+ * 1.2 s of dead air on the exact screen the user opened.
+ */
+async function serverDoorDelayMs() {
+  try {
+    const { solanaPublicsBlocked, readSolanaNetworkSettings } = await import('./solanaRpc.js');
+    const settings = await readSolanaNetworkSettings();
+    return solanaPublicsBlocked(settings.cluster) ? 0 : SERVER_DOOR_DELAY_MS;
+  } catch {
+    return SERVER_DOOR_DELAY_MS;
+  }
+}
+
+/**
+ * Resolve with the FIRST door that answers `ok`, then let the loser finish in
+ * the background (its result is dropped). Both doors are always started, so
+ * there is nothing to cancel — and an abandoned server read is our bill, which
+ * is why the second door is delayed rather than fired unconditionally.
+ */
+function firstDoorOk(attempts) {
+  return new Promise((resolve) => {
+    if (!attempts.length) { resolve(null); return; }
+    const results = [];
+    let pending = attempts.length;
+    const finish = () => {
+      if (pending > 0) return;
+      resolve(results.find((r) => r?.ok) || null);
+    };
+    for (const attempt of attempts) {
+      Promise.resolve(attempt).then((r) => {
+        results.push(r);
+        pending -= 1;
+        if (r?.ok) { pending = 0; resolve(r); return; }
+        finish();
+      }).catch(() => { pending -= 1; finish(); });
+    }
+  });
 }
 
 /** Build one or more unsigned Kamino transactions for the connected wallet. */
@@ -1170,7 +1402,84 @@ export function isVersionedTransaction(tx) {
 }
 
 /** Build one or more unsigned Kamino transactions for the connected wallet. */
-export async function buildSolanaLendingTransactions({ action, asset, amount, wallet, rpcUrl = null } = {}) {
+/**
+ * Codes that mean «THIS DOOR could not reach the chain / the SDK», i.e. the
+ * other door may still answer. Anything else a build returns is a verdict about
+ * the ACTION — no collateral, no position, an amount the protocol refuses — and
+ * waiting 30 s for a second door to repeat it would be a worse answer than the
+ * first one gave.
+ */
+const BUILD_TRANSPORT_CODES = new Set([
+  'RPC_ERROR', 'RPC_BLOCKED', 'RPC_RATE_LIMITED', 'NO_RPC',
+  'KAMINO_MARKET_UNAVAILABLE', 'KAMINO_SDK_UNAVAILABLE', 'KAMINO_SDK_FAILED',
+  'KAMINO_SDK_MIME', 'KAMINO_SDK_RECOVERED', 'KAMINO_TX_BUILD_EMPTY',
+  'RELAY_METHOD_UNAVAILABLE', 'RELAY_UPSTREAM_UNAVAILABLE', 'SERVER_UNAVAILABLE'
+]);
+
+const buildNeedsSecondDoor = (result) => !result?.ok && BUILD_TRANSPORT_CODES.has(String(result?.code || ''));
+
+/**
+ * Build one or more UNSIGNED Kamino transactions — from whichever door answers.
+ *
+ * Same two doors, same race as `readSolanaLendingMarket` above, and the same
+ * reason: on the network path reported on 2026-09-23 the browser could not read
+ * the market at all, so it could not build anything either, and the panel's
+ * «تا زمان دریافت داده زنده هیچ تراکنشی ارسال نمی‌شود» was the whole Solana tab.
+ * The server door builds with the SAME code — `buildKaminoActionTransactions`
+ * and `collectKaminoTransactions` below are imported by server/solanaLending.js
+ * rather than reimplemented there — so the bytes the wallet is asked to sign are
+ * built by one implementation whichever door produced them.
+ *
+ * §30 is untouched: nothing here signs and nothing here broadcasts. The wallet
+ * receives base64 unsigned transactions, exactly as it did before.
+ */
+export async function buildSolanaLendingTransactions({ action, asset, amount, wallet, rpcUrl = null, allowServer = null } = {}) {
+  if (rpcUrl || allowServer === false) {
+    return buildSolanaLendingTransactionsInBrowser({ action, asset, amount, wallet, rpcUrl });
+  }
+  /* The three local refusals stay local: no wallet, no asset, no amount. A
+     second door is a way around a blocked network, not around a validation this
+     module can do for free — and asking our server to say «you typed nothing»
+     costs a round trip and upstream budget. */
+  if (!wallet) return { ok: false, code: 'SOLANA_WALLET_REQUIRED' };
+  if (!asset?.address) return { ok: false, code: 'SOLANA_ASSET_REQUIRED' };
+  const typedWei = toSolanaUnits(amount, Number(asset.decimals));
+  if (typedWei == null || typedWei <= 0n) return { ok: false, code: 'AMOUNT_REQUIRED' };
+
+  const { buildSolanaLendingTransactionsViaServer } = await import('./solanaLendingServer.js');
+  const delayMs = await serverDoorDelayMs();
+
+  const browser = buildSolanaLendingTransactionsInBrowser({ action, asset, amount, wallet }).then(
+    (result) => ({ ok: Boolean(result?.ok) || !buildNeedsSecondDoor(result), result: { ...result, via: 'browser' } }),
+    (cause) => ({
+      ok: true, /* final: an unexpected throw is this door's verdict, not a reason to hang */
+      result: { ok: false, via: 'browser', code: String(cause?.code || cause?.message || 'KAMINO_TX_BUILD_FAILED'), detail: String(cause?.message || cause || '').slice(0, 160) }
+    })
+  );
+  const server = delay(delayMs)
+    .then(() => buildSolanaLendingTransactionsViaServer({ action, asset, amount, wallet }))
+    .then(
+      (result) => ({ ok: Boolean(result?.ok), result: { ...result, via: 'server' } }),
+      (cause) => ({ ok: false, result: { ok: false, via: 'server', code: 'SERVER_UNAVAILABLE', detail: String(cause?.message || cause || '').slice(0, 160) } })
+    );
+
+  const winner = await firstDoorOk([browser, server]);
+  if (winner?.result) return winner.result;
+  const [browserAnswer, serverAnswer] = await Promise.all([browser, server]);
+  const base = browserAnswer?.result || { ok: false, code: 'KAMINO_TX_BUILD_FAILED' };
+  /* The browser door's verdict is reported (it is the one the panel already
+     has sentences for), with the second door's own code attached so support can
+     see whether our server was reachable at all. */
+  return { ...base, serverTried: true, serverCode: serverAnswer?.result?.code || null };
+}
+
+/**
+ * DOOR ONE — build in the browser: the vendored SDK, the probed RPC list, and
+ * the user's own network path. Unchanged by the second door above; a caller that
+ * pins `rpcUrl` (a test, or a screen that deliberately chose a node) gets
+ * exactly this and nothing else.
+ */
+export async function buildSolanaLendingTransactionsInBrowser({ action, asset, amount, wallet, rpcUrl = null } = {}) {
   if (!wallet) return { ok: false, code: 'SOLANA_WALLET_REQUIRED' };
   if (!asset?.address) return { ok: false, code: 'SOLANA_ASSET_REQUIRED' };
   const amountWei = toSolanaUnits(amount, Number(asset.decimals));
@@ -1280,7 +1589,39 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
   };
 }
 
-export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = null } = {}) {
+/**
+ * Did this transaction land? — asked of BOTH doors.
+ *
+ * The signature belongs to a transaction the wallet broadcast through ITS OWN
+ * node (§30), so the question "did it confirm" has an answer even on a network
+ * path where the browser cannot reach a single public node. Answering
+ * «TRANSACTION_NOT_FOUND» because nine hosts refused us would tell a user their
+ * money did not move when it did — the worst available lie on this screen.
+ *
+ * A node's real verdict (confirmed, failed, not visible yet) is FINAL and stops
+ * the race; only a transport-shaped refusal hands the question to our server.
+ */
+export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = null, allowServer = null } = {}) {
+  if (rpcUrl || allowServer === false) return getSolanaLendingTransactionStatusInBrowser(signature, { rpcUrl });
+  const { getSolanaLendingTransactionStatusViaServer } = await import('./solanaLendingServer.js');
+  const delayMs = await serverDoorDelayMs();
+  const isTransport = (r) => !r?.ok && ['RPC_ERROR', 'RPC_BLOCKED', 'RPC_RATE_LIMITED', 'NO_RPC', 'RELAY_UPSTREAM_UNAVAILABLE'].includes(String(r?.code || ''));
+  const browser = getSolanaLendingTransactionStatusInBrowser(signature, {}).then(
+    (result) => ({ ok: !isTransport(result), result: { ...result, via: 'browser' } }),
+    (cause) => ({ ok: true, result: { ok: false, via: 'browser', code: String(cause?.code || 'RPC_ERROR'), detail: String(cause?.message || cause || '').slice(0, 160) } })
+  );
+  const server = delay(delayMs).then(() => getSolanaLendingTransactionStatusViaServer(signature)).then(
+    (result) => ({ ok: Boolean(result?.ok) || !isTransport(result), result: { ...result, via: 'server' } }),
+    () => ({ ok: false, result: { ok: false, via: 'server', code: 'SERVER_UNAVAILABLE' } })
+  );
+  const winner = await firstDoorOk([browser, server]);
+  if (winner?.result) return winner.result;
+  const [browserAnswer, serverAnswer] = await Promise.all([browser, server]);
+  return { ...(browserAnswer?.result || { ok: false, code: 'RPC_ERROR' }), serverCode: serverAnswer?.result?.code || null };
+}
+
+/** DOOR ONE — ask the probed public nodes (and the app's read-only relay). */
+export async function getSolanaLendingTransactionStatusInBrowser(signature, { rpcUrl = null } = {}) {
   const candidates = await lendingRpcCandidates(rpcUrl);
   const attempts = [];
   for (const url of candidates) {
@@ -1309,8 +1650,20 @@ export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = nu
  * reported a failure. Poll errors now rotate to the next candidate and keep
  * waiting until the deadline; only the deadline itself is a timeout.
  */
-export async function waitForSolanaLendingTransaction(signature, { rpcUrl = null, timeoutMs = 20_000 } = {}) {
+export async function waitForSolanaLendingTransaction(signature, { rpcUrl = null, timeoutMs = 20_000, allowServer = null } = {}) {
   const candidates = await lendingRpcCandidates(rpcUrl);
+  const wantServer = !rpcUrl && allowServer !== false;
+  /* Loaded once, lazily, and only for a browser door that just refused us: the
+     confirmation poll runs while the user watches, and a wallet that broadcast
+     through its own node deserves an answer from somewhere. */
+  let serverStatus = null;
+  const askServer = async () => {
+    if (!wantServer) return null;
+    try {
+      if (!serverStatus) serverStatus = (await import('./solanaLendingServer.js')).getSolanaLendingTransactionStatusViaServer;
+      return await serverStatus(signature);
+    } catch { return null; }
+  };
   let index = 0;
   let connection = new Connection(candidates[index], { commitment: 'confirmed' });
   const deadline = Date.now() + timeoutMs;
@@ -1320,7 +1673,13 @@ export async function waitForSolanaLendingTransaction(signature, { rpcUrl = null
       result = await connection.getSignatureStatuses([signature]);
     } catch {
       /* Rotate to the next node and keep waiting — the transaction may be
-         confirming fine while this one node is down. */
+         confirming fine while this one node is down. And when the node did not
+         just time out but REFUSED us, ask our own backend the same question: on
+         a blocked network path every rotation lands on another refusal, and a
+         poll that can only rotate is a poll that always ends in TIMEOUT. */
+      const viaServer = await askServer();
+      if (viaServer?.ok) return { ...viaServer, via: 'server' };
+      if (viaServer && viaServer.code === 'TRANSACTION_FAILED') return { ...viaServer, via: 'server' };
       index = (index + 1) % candidates.length;
       connection = new Connection(candidates[index], { commitment: 'confirmed' });
       await new Promise((resolve) => setTimeout(resolve, 700));

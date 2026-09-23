@@ -249,7 +249,15 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
         /* The per-host verdicts, when the failure was an RPC one. They reach
            the screen as sentences («host — rate limited»), which is the whole
            difference between «server is broken» and «this node refused you». */
-        hosts: Array.isArray(cause?.hosts) ? cause.hosts : null
+        hosts: Array.isArray(cause?.hosts) ? cause.hosts : null,
+        /* The SECOND door's verdict. lib/solanaLending.js races the browser
+           against our own backend, and when both are shut it throws the
+           browser's failure with the server's answer attached — so the panel
+           can say «our server was asked too, and it said …» instead of leaving
+           the second door invisible on the exact screen where it matters. */
+        serverTried: Boolean(cause?.serverTried),
+        serverCode: cause?.serverCode ? String(cause.serverCode) : null,
+        serverDetail: cause?.serverDetail ? String(cause.serverDetail).slice(0, 160) : null
       });
       setSnapshot(null);
     } finally {
@@ -415,6 +423,15 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 900, fontSize: 17 }}>{t('loan.solana.title')}</div>
             <div style={{ color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.65, marginTop: 3 }}>{t('loan.solana.subtitle')}</div>
+            {/* Which door served these numbers. When the public nodes refused
+                this network path and our own backend answered instead, the user
+                is told so — a figure that arrived by another route should not
+                look like the route that failed a minute ago. */}
+            {snapshot?.via === 'server' ? (
+              <div data-testid="solana-loan-via-server" style={{ color: 'var(--text-3)', fontSize: 10, lineHeight: 1.6, marginTop: 5 }}>
+                {t('loan.solana.serverDoor')}
+              </div>
+            ) : null}
           </div>
           <DataBadge t={t} status={snapshot?.dataStatus || 'unavailable'} />
         </div>
@@ -494,6 +511,25 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
             </p>
             <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 11, lineHeight: 1.75 }}>{t('loan.solana.unavailable')}</p>
             <RpcIncident hosts={error.hosts} t={t} />
+            {/* The second door's own verdict, when it was tried. Nine public
+                refusals and one line saying nothing else was attempted reads as
+                «the app is broken»; the honest report is that our server was
+                asked too, and here is what it said. */}
+            {error.serverTried ? (
+              <div data-testid="solana-loan-server-door" style={{ marginTop: 8 }}>
+                <p style={{ margin: '0 0 4px', color: 'var(--text-2)', fontSize: 11, lineHeight: 1.7 }}>{t('loan.rpc.serverTried')}</p>
+                <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 11, lineHeight: 1.65 }}>
+                  {t('loan.rpc.serverHost')}
+                  {' — '}
+                  <span style={{ color: '#fbbf24' }}>{loanErrorText(t, error.serverCode || 'SERVER_UNAVAILABLE')}</span>
+                </p>
+                {error.serverDetail && error.serverDetail !== error.serverCode ? (
+                  <p dir="ltr" className="faint" style={{ margin: '4px 0 0', fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', wordBreak: 'break-word', opacity: 0.7 }}>
+                    {error.serverDetail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {error.detail && error.detail !== error.code && !error.hosts?.length ? (
               <p dir="ltr" className="faint" style={{ margin: '8px 0 0', fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', wordBreak: 'break-word', opacity: 0.75 }}>
                 {error.detail}
