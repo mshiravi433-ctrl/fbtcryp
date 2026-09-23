@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -170,6 +170,35 @@ function avgChange(rows, pick) {
   const vals = rows.map(pick).filter((v) => Number.isFinite(v));
   if (!vals.length) return null;
   return vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+
+/**
+ * Keep a sentence on one line at the largest size that fits the card.
+ * The preferred size is the type scale; it only shrinks when the language
+ * would otherwise wrap.
+ */
+function FitLine({ text, className, max = 13.5, min = 10.5 }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return undefined;
+    const fit = () => {
+      el.style.fontSize = `${max}px`;
+      const avail = parent.clientWidth;
+      const need = el.scrollWidth;
+      if (avail > 0 && need > avail) {
+        el.style.fontSize = `${Math.max(min, (max * avail) / need)}px`;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [text, max, min]);
+
+  return <span ref={ref} className={className}>{text}</span>;
 }
 
 function StatMini({ label, value, tone }) {
@@ -542,48 +571,32 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
-          {/* Quick doorway to tradeable RWA tokens */}
-          <motion.div
-            className="card card-rgb card-glow-cyan"
+          {/* Quick doorway to tradeable RWA tokens. Each sentence is its own
+              full-width line — a side button was what forced the wrap. */}
+          <motion.button
+            type="button"
+            className="rwa-door"
             variants={riseIn}
             initial="hidden"
             animate="show"
-            style={{
-              padding: '11px 14px',
-              margin: '10px 0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              cursor: 'pointer'
-            }}
             onClick={() => {
               haptic?.('select');
               setTab('rwa');
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconShield width={15} height={15} style={{ color: 'var(--rgb-cyan)' }} />
-                <span>{t('stocks.goToRwaBanner')}</span>
-              </div>
-              <div className="muted" style={{ fontSize: 11.4, marginTop: 2 }}>
-                {t('stocks.rwaFeeNotice', { fee: feePercentString() })}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 11.8, padding: '6px 12px', flexShrink: 0 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                haptic?.('select');
-                setTab('rwa');
-              }}
-            >
-              {t('stocks.goToRwaCta')}
-            </button>
-          </motion.div>
+            <span className="rwa-fit-slot">
+              <FitLine text={t('stocks.goToRwaBanner')} className="rwa-fit rwa-fit-title" max={13.5} min={11} />
+            </span>
+            <span className="rwa-fit-slot">
+              <FitLine
+                text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
+                className="rwa-fit rwa-fit-sub"
+                max={12.5}
+                min={11}
+              />
+            </span>
+            <span className="rwa-door-cta">{t('stocks.goToRwaCta')}</span>
+          </motion.button>
 
           {/*
             ─── TOP MOVERS + STATS, ABOVE THE LIST ────────────────────────────
@@ -902,22 +915,15 @@ export default function Stocks() {
             <div className="sheen" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.rwaTitle')}</div>
             <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.rwaBody')}</p>
-            <div
-              className="row-between"
-              style={{
-                marginTop: 10,
-                paddingTop: 10,
-                borderTop: '1px solid var(--line)',
-                flexWrap: 'wrap',
-                gap: 8
-              }}
-            >
-              <div className="faint" style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconShield width={14} height={14} style={{ color: 'var(--rgb-cyan)' }} />
-                <span>{t('stocks.rwaFeeNotice', { fee: feePercentString() })}</span>
-              </div>
-              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
-                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+            <div className="rwa-fee-line">
+              <IconShield width={14} height={14} style={{ color: 'var(--rgb-1)', flexShrink: 0 }} />
+              <span className="rwa-fit-slot">
+                <FitLine
+                  text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
+                  className="rwa-fit rwa-fit-sub"
+                  max={12.5}
+                  min={11}
+                />
               </span>
             </div>
           </motion.section>
@@ -929,8 +935,8 @@ export default function Stocks() {
                 <p className="section-label" style={{ margin: 0 }}>{t('stocks.rwaTradeable')}</p>
                 <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>{t('stocks.rwaTradeableSub')}</p>
               </div>
-              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
-                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+              <span className="pill pill-up mono" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {feePercentString()}% {t('stocks.rwaFeeChip')}
               </span>
             </div>
 
@@ -983,10 +989,10 @@ export default function Stocks() {
               </span>
             </div>
 
-            {/* Amount quick selector for RWA calculations */}
-            <div className="farm-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
-              <span className="faint">{t('stocks.ifIBuy')}</span>
-              <div className="row" style={{ gap: 6 }}>
+            {/* Amount quick selector — one line, equal chips, not a wrapped row. */}
+            <div className="rwa-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
+              <span className="rwa-amounts-label">{t('stocks.ifIBuy')}</span>
+              <div className="rwa-amounts-picks">
                 {AMOUNTS.map((a) => (
                   <button
                     key={a}
@@ -997,7 +1003,7 @@ export default function Stocks() {
                       setAmount(a);
                     }}
                   >
-                    {fmtUsd(a)}
+                    {a >= 1000 ? `$${a / 1000}k` : `$${a}`}
                   </button>
                 ))}
               </div>

@@ -7,6 +7,7 @@
  */
 
 import { apiBase } from './apiBase.js';
+import { tickerLogo } from './coinImage.js';
 import { FEE_BPS, feePercentString } from './feeBps.js';
 
 const API_BASE = apiBase();
@@ -27,7 +28,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'treasury',
     chainId: 1,
     chainName: 'Ethereum',
-    address: '0x9694EED19A1b509395374E693A6017b3C5c9c991',
+    address: '0x96F6eF951840721AdBF46Ac996b59E0235CB985C',
     decimals: 18,
     coingeckoId: 'ondo-us-dollar-yield',
     backingFa: 'اوراق خزانه کوتاه‌مدت آمریکا و سپرده‌های بانکی',
@@ -122,7 +123,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'robinhood',
     chainId: 4663,
     chainName: 'Robinhood Chain',
-    address: '0x284358abc07f9359f19f4b5b4ac91901be2597ba',
+    address: '0x284358abc07F9359f19f4b5b4aC91901Be2597Ba',
     decimals: 18,
     coingeckoId: null,
     referenceTicker: 'RGTI',
@@ -142,7 +143,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'robinhood',
     chainId: 4663,
     chainName: 'Robinhood Chain',
-    address: '0xb334c5ce741b80b5b671f47f5c269cb193fe8e24',
+    address: '0xb334C5cE741B80B5B671F47F5C269Cb193fe8E24',
     decimals: 18,
     coingeckoId: null,
     referenceTicker: 'JOBY',
@@ -162,7 +163,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'robinhood',
     chainId: 4663,
     chainName: 'Robinhood Chain',
-    address: '0x98e75885157c80992a8d41b696d8c9c6fb30a926',
+    address: '0x98E75885157C80992A8D41b696D8c9C6Fb30A926',
     decimals: 18,
     coingeckoId: null,
     referenceTicker: 'SOFI',
@@ -220,7 +221,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'treasury',
     chainId: 1,
     chainName: 'Ethereum',
-    address: '0x808507b2314050238865872ac79528349429907f',
+    address: '0x808507121B80c02388fAd14726482e061B8da827',
     decimals: 18,
     coingeckoId: 'pendle',
     backingFa: 'توکنیزه‌سازی سود اوراق و خزانه‌های RWA',
@@ -239,7 +240,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'credit',
     chainId: 1,
     chainName: 'Ethereum',
-    address: '0x333420442673A51c8809ca3443e0618ff7eD4d24',
+    address: '0x33349B282065b0284d756F0577FB39c158F935e6',
     decimals: 18,
     coingeckoId: 'maple',
     backingFa: 'تسهیلات و اعتبارات شرکتی نهادی با مدیریت هوشمند ریسک',
@@ -262,7 +263,7 @@ export const RWA_CURATED_TOKENS = [
     category: 'credit',
     chainId: 1,
     chainName: 'Ethereum',
-    address: '0x66761fa41377005662a03370c73b01a0e9657036',
+    address: '0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5',
     decimals: 18,
     coingeckoId: 'clearpool',
     backingFa: 'اعتبارات تک‌استخری بدون وثیقه با تضمین شفافیت آنچین',
@@ -280,6 +281,198 @@ export const RWA_CURATED_TOKENS = [
   }
 ];
 
+const twLogo = (address) =>
+  `https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/${address}/logo.png`;
+
+/**
+ * Issuer contracts, not lookalikes.
+ *
+ * Several pins in the first RWA pass were the wrong contract (bad checksum,
+ * or a different token that only shared a symbol prefix). Copy, the risk
+ * scan and the swap all key off this address, so a wrong one is not a
+ * cosmetic bug. Known ids are corrected here even when a stale marketplace
+ * payload still carries the old pin.
+ */
+const RWA_FACTS = {
+  'ondo-us-dollar-yield': {
+    address: '0x96F6eF951840721AdBF46Ac996b59E0235CB985C',
+    issuer: 'Ondo Finance / Ankura Trust',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    logoURI: twLogo('0x96F6eF951840721AdBF46Ac996b59E0235CB985C')
+  },
+  'global-dollar': {
+    address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168',
+    issuer: 'Paxos Trust / Global Dollar Network',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    /* Robinhood's copy of USDG has no TrustWallet directory yet. The Ethereum
+       issuance is the same asset and is the logo wallets actually ship. */
+    logoURI: twLogo('0xe343167631d89B6Ffc58B88d6b7fB0228795491D')
+  },
+  'pax-gold': {
+    address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78',
+    issuer: 'Paxos Trust Company (NYDFS)',
+    standard: 'ERC-20',
+    backingType: 'physical_vault',
+    logoURI: twLogo('0x45804880De22913dAFE09f4980848ECE6EcbAf78')
+  },
+  'tether-gold': {
+    address: '0x68749665FF8D2d112Fa859AA293F07A622782F38',
+    issuer: 'TG Commodities Limited',
+    standard: 'ERC-20',
+    backingType: 'physical_vault',
+    logoURI: twLogo('0x68749665FF8D2d112Fa859AA293F07A622782F38')
+  },
+  'ondo-finance': {
+    address: '0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3',
+    issuer: 'Ondo Finance',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3')
+  },
+  'rigetti-computing': {
+    address: '0x284358abc07F9359f19f4b5b4aC91901Be2597Ba',
+    issuer: 'Robinhood Markets',
+    standard: 'ERC-20',
+    backingType: 'stock_token',
+    referenceTicker: 'RGTI',
+    logoURI: tickerLogo('RGTI')
+  },
+  'joby-aviation': {
+    address: '0xb334C5cE741B80B5B671F47F5C269Cb193fe8E24',
+    issuer: 'Robinhood Markets',
+    standard: 'ERC-20',
+    backingType: 'stock_token',
+    referenceTicker: 'JOBY',
+    logoURI: tickerLogo('JOBY')
+  },
+  'sofi-technologies': {
+    address: '0x98E75885157C80992A8D41b696D8c9C6Fb30A926',
+    issuer: 'Robinhood Markets',
+    standard: 'ERC-20',
+    backingType: 'stock_token',
+    referenceTicker: 'SOFI',
+    logoURI: tickerLogo('SOFI')
+  },
+  maker: {
+    address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2',
+    issuer: 'MakerDAO / Sky',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2')
+  },
+  centrifuge: {
+    address: '0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94',
+    issuer: 'Centrifuge',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94')
+  },
+  pendle: {
+    address: '0x808507121B80c02388fAd14726482e061B8da827',
+    issuer: 'Pendle Finance',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0x808507121B80c02388fAd14726482e061B8da827')
+  },
+  maple: {
+    address: '0x33349B282065b0284d756F0577FB39c158F935e6',
+    issuer: 'Maple Finance',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0x33349B282065b0284d756F0577FB39c158F935e6')
+  },
+  clearpool: {
+    address: '0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5',
+    issuer: 'Clearpool',
+    standard: 'ERC-20',
+    backingType: 'protocol_token',
+    logoURI: twLogo('0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5')
+  }
+};
+
+function httpsUrl(value) {
+  const raw = String(value ?? '').trim();
+  return raw.startsWith('https://') ? raw : null;
+}
+
+/**
+ * One presentation record: corrected contract, issuer facts, and a logo that
+ * belongs to THAT contract (or the underlying equity ticker), never a
+ * symbol-keyed guess that a clone can borrow.
+ */
+export function canonicalizeRwa(token) {
+  if (!token || typeof token !== 'object') return token;
+  const facts = RWA_FACTS[token.id] || {};
+  const referenceTicker = facts.referenceTicker || token.referenceTicker || null;
+  const logoURI =
+    httpsUrl(token.image) ||
+    httpsUrl(token.logoURI) ||
+    facts.logoURI ||
+    (referenceTicker ? tickerLogo(referenceTicker) : null);
+  return {
+    ...token,
+    address: facts.address || token.address,
+    issuer: facts.issuer || token.issuer || null,
+    standard: facts.standard || token.standard || 'ERC-20',
+    backingType: facts.backingType || token.backingType || (
+      token.category === 'robinhood' ? 'stock_token'
+        : token.category === 'commodity' ? 'physical_vault'
+          : token.category === 'treasury' ? 'direct_custody'
+            : token.category === 'credit' ? 'protocol_token'
+              : null
+    ),
+    referenceTicker,
+    logoURI
+  };
+}
+
+/** Counter-asset the swap opens on. Same rule as getRwaSwapUrl. */
+export function rwaCounterSymbol(token) {
+  if (!token) return 'USDT';
+  if (token.chainId === 'solana') return 'USDC';
+  if (Number(token.chainId) === 4663) return token.symbol === 'USDG' ? 'ETH' : 'USDG';
+  return token.symbol === 'USDT' ? 'ETH' : 'USDT';
+}
+
+const RISK_RANK = { low: 1, caution: 2, medium: 3, high: 4, critical: 5 };
+
+/**
+ * Structural risk of an RWA — issuer, custody, freeze — not a price call and
+ * not a fake honeypot score. Used when the on-chain scanner has no coverage
+ * (Robinhood Chain) and shown beside a real scan when one exists, because a
+ * clean ERC-20 report does not cancel a freeze authority.
+ */
+export function assessRwaRisk(token) {
+  const item = canonicalizeRwa(token);
+  if (!item) return null;
+  const flags = [];
+  const push = (id, severity) => flags.push({ id, severity, values: {} });
+  const type = item.backingType;
+
+  if (type === 'stock_token') {
+    push('notAShare', 'high');
+    push('issuerFreeze', 'high');
+  } else if (type === 'physical_vault') {
+    push('issuerFreeze', 'high');
+    push('custodian', 'medium');
+  } else if (type === 'direct_custody') {
+    push('custodian', 'medium');
+    push('issuerFreeze', 'medium');
+  } else {
+    push('governanceNotAsset', 'medium');
+  }
+
+  /* Scanner coverage is stated by the panel, not as a second copy of the
+     same sentence. Permissionless transfer is a fact of the Ethereum pins. */
+  if (Number(item.chainId) !== 4663) push('permissionless', 'low');
+
+  const worst = flags.reduce((max, flag) => Math.max(max, RISK_RANK[flag.severity] || 1), 1);
+  const level = worst >= 4 ? 'high' : worst >= 3 ? 'medium' : 'low';
+  return { backingType: type, flags, level, structural: true };
+}
+
 /**
  * Build the exact swap URL for an RWA token with counter-token pre-filled.
  * Evaluates network context and ensures the 0.70% platform fee applies.
@@ -289,27 +482,20 @@ export const RWA_CURATED_TOKENS = [
  * @returns {string}
  */
 export function getRwaSwapUrl(token, amount = null) {
-  if (!token) return '/swap';
+  const item = canonicalizeRwa(token);
+  if (!item) return '/swap';
 
   const amtParam = amount && Number(amount) > 0 ? `&amount=${encodeURIComponent(amount)}` : '';
+  const chainId = item.chainId || 1;
+  const counter = rwaCounterSymbol(item);
+  const addrParam = item.address ? `&toAddress=${encodeURIComponent(item.address)}` : '';
+  const symbol = encodeURIComponent(item.symbol || '');
 
-  if (token.chainId === 'solana') {
-    return `/solana?to=${encodeURIComponent(token.symbol || token.address || '')}${amtParam}`;
+  if (chainId === 'solana') {
+    return `/solana?to=${symbol}${amtParam}`;
   }
 
-  const chainId = token.chainId || 1;
-
-  if (chainId === 4663) {
-    // Robinhood Chain: default counter-token is USDG, unless the target is USDG itself (then ETH)
-    const counter = token.symbol === 'USDG' ? 'ETH' : 'USDG';
-    const addrParam = token.address ? `&toAddress=${encodeURIComponent(token.address)}` : '';
-    return `/swap?chain=4663&from=${counter}&to=${encodeURIComponent(token.symbol)}${addrParam}${amtParam}`;
-  }
-
-  // Ethereum / Arbitrum / other EVMs: default counter-token is USDT
-  const counter = token.symbol === 'USDT' ? 'ETH' : 'USDT';
-  const addrParam = token.address ? `&toAddress=${encodeURIComponent(token.address)}` : '';
-  return `/swap?chain=${chainId}&from=${counter}&to=${encodeURIComponent(token.symbol)}${addrParam}${amtParam}`;
+  return `/swap?chain=${chainId}&from=${counter}&to=${symbol}${addrParam}${amtParam}`;
 }
 
 /**
@@ -329,25 +515,36 @@ export function enrichWithMarketPrices(curated = RWA_CURATED_TOKENS, marketCoins
     }
   }
 
-  return curated.map((token) => {
-    const live = token.coingeckoId ? coinMap.get(token.coingeckoId.toLowerCase()) : coinMap.get(token.symbol.toLowerCase());
+  return curated.map((raw) => {
+    const token = canonicalizeRwa(raw);
+    const live = token.coingeckoId
+      ? coinMap.get(String(token.coingeckoId).toLowerCase())
+      : coinMap.get(String(token.symbol || '').toLowerCase());
     const price = live?.price ?? live?.current_price ?? token.defaultPrice ?? null;
     const change24h = live?.change24h ?? live?.price_change_percentage_24h ?? null;
     const sparkline = live?.sparkline ?? live?.sparkline_in_7d?.price ?? [];
     const mcap = live?.mcap ?? live?.market_cap ?? null;
+    const liveLogo = httpsUrl(live?.image);
 
+    const langCode = String(lang || 'fa').slice(0, 2);
     let backing = token.backingFa;
     let description = token.descFa;
-    if (lang === 'en') {
+    if (langCode === 'ar') {
+      backing = token.backingAr || token.backingEn || token.backingFa;
+      description = token.descAr || token.descEn || token.descFa;
+    } else if (langCode !== 'fa') {
+      /* English copy for every other locale. Falling through to Persian
+         while the chrome is English was the mixed-language spec box. */
       backing = token.backingEn || token.backingFa;
       description = token.descEn || token.descFa;
-    } else if (lang === 'ar') {
-      backing = token.backingAr || token.backingFa;
-      description = token.descAr || token.descFa;
     }
 
     return {
       ...token,
+      /* A live CoinGecko image beats the static pin, but only when it is a
+         real https URL. A missing feed must not wipe the contract logo. */
+      logoURI: liveLogo || token.logoURI,
+      image: liveLogo || token.image || null,
       price,
       change24h,
       sparkline,

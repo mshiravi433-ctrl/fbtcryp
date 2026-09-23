@@ -568,20 +568,21 @@ export const TOKENS = {
      * `rwa: true` drives that disclosure. A token flagged here must render the
      * issuer-freeze warning.
      */
-    { symbol: 'PAXG', name: 'PAX Gold', address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78', decimals: 18, coingeckoId: 'pax-gold', rwa: 'gold' },
-    { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' },
+    { symbol: 'PAXG', name: 'PAX Gold', address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78', decimals: 18, coingeckoId: 'pax-gold', rwa: 'gold' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x45804880De22913dAFE09f4980848ECE6EcbAf78/logo.png' },
+    { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x68749665FF8D2d112Fa859AA293F07A622782F38/logo.png' },
     /*
      * ─── REAL-WORLD ASSETS (RWA) & INSTITUTIONAL TREASURIES ─────────────────
      * Curated, permissionless RWA tokens traded on-chain with our standard
-     * 70 bps platform fee.
+     * 70 bps platform fee. USDY / PENDLE / MPL / CPOOL are the issuer
+     * contracts (the first pins were lookalikes with a bad checksum).
      */
-    { symbol: 'ONDO', name: 'Ondo Finance', address: '0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3', decimals: 18, coingeckoId: 'ondo-finance', rwa: 'yield' },
-    { symbol: 'USDY', name: 'Ondo US Dollar Yield', address: '0x9694EED19A1b509395374E693A6017b3C5c9c991', decimals: 18, coingeckoId: 'ondo-us-dollar-yield', rwa: 'yield' },
-    { symbol: 'MKR', name: 'Maker', address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', decimals: 18, coingeckoId: 'maker', rwa: 'credit' },
-    { symbol: 'PENDLE', name: 'Pendle Finance', address: '0x808507b2314050238865872ac79528349429907f', decimals: 18, coingeckoId: 'pendle', rwa: 'yield' },
-    { symbol: 'CFG', name: 'Centrifuge', address: '0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94', decimals: 18, coingeckoId: 'centrifuge', rwa: 'credit' },
-    { symbol: 'MPL', name: 'Maple Finance', address: '0x333420442673A51c8809ca3443e0618ff7eD4d24', decimals: 18, coingeckoId: 'maple', rwa: 'credit' },
-    { symbol: 'CPOOL', name: 'Clearpool', address: '0x66761fa41377005662a03370c73b01a0e9657036', decimals: 18, coingeckoId: 'clearpool', rwa: 'credit' },
+    { symbol: 'ONDO', name: 'Ondo Finance', address: '0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3', decimals: 18, coingeckoId: 'ondo-finance', rwa: 'yield' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3/logo.png' },
+    { symbol: 'USDY', name: 'Ondo US Dollar Yield', address: '0x96F6eF951840721AdBF46Ac996b59E0235CB985C', decimals: 18, coingeckoId: 'ondo-us-dollar-yield', rwa: 'yield' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x96F6eF951840721AdBF46Ac996b59E0235CB985C/logo.png' },
+    { symbol: 'MKR', name: 'Maker', address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', decimals: 18, coingeckoId: 'maker', rwa: 'credit' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2/logo.png' },
+    { symbol: 'PENDLE', name: 'Pendle Finance', address: '0x808507121B80c02388fAd14726482e061B8da827', decimals: 18, coingeckoId: 'pendle', rwa: 'yield' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x808507121B80c02388fAd14726482e061B8da827/logo.png' },
+    { symbol: 'CFG', name: 'Centrifuge', address: '0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94', decimals: 18, coingeckoId: 'centrifuge', rwa: 'credit' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xcccCCCcCCC33D538DBC2EE4fEab0a7A1FF4e8A94/logo.png' },
+    { symbol: 'MPL', name: 'Maple Finance', address: '0x33349B282065b0284d756F0577FB39c158F935e6', decimals: 18, coingeckoId: 'maple', rwa: 'credit' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x33349B282065b0284d756F0577FB39c158F935e6/logo.png' },
+    { symbol: 'CPOOL', name: 'Clearpool', address: '0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5', decimals: 18, coingeckoId: 'clearpool', rwa: 'credit' , logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5/logo.png' },
     /*
      * ─── LIQUID STAKING TOKENS EARN US THE ORDINARY SWAP FEE ───────────────
      * Asked to raise Farm's revenue. The Farm screen currently lists yields
@@ -800,10 +801,10 @@ export const TOKENS = {
   4663: [
     { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
     { symbol: 'WETH', name: 'Wrapped Ether', address: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', decimals: 18, coingeckoId: 'ethereum' },
-    { symbol: 'USDG', name: 'Global Dollar', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, coingeckoId: 'global-dollar', rwa: 'treasury' },
-    { symbol: 'RGTI', name: 'Rigetti Computing • Robinhood Token', address: '0x284358abc07f9359f19f4b5b4ac91901be2597ba', decimals: 18, rwa: 'robinhood' },
-    { symbol: 'JOBY', name: 'Joby Aviation, Inc. • Robinhood Token', address: '0xb334c5ce741b80b5b671f47f5c269cb193fe8e24', decimals: 18, rwa: 'robinhood' },
-    { symbol: 'SOFI', name: 'SoFi Technologies • Robinhood Token', address: '0x98e75885157c80992a8d41b696d8c9c6fb30a926', decimals: 18, rwa: 'robinhood' }
+    { symbol: 'USDG', name: 'Global Dollar', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, coingeckoId: 'global-dollar', rwa: 'treasury', logoURI: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xe343167631d89B6Ffc58B88d6b7fB0228795491D/logo.png' },
+    { symbol: 'RGTI', name: 'Rigetti Computing • Robinhood Token', address: '0x284358abc07F9359f19f4b5b4aC91901Be2597Ba', decimals: 18, rwa: 'robinhood', logoURI: 'https://assets.parqet.com/logos/symbol/RGTI' },
+    { symbol: 'JOBY', name: 'Joby Aviation, Inc. • Robinhood Token', address: '0xb334C5cE741B80B5B671F47F5C269Cb193fe8E24', decimals: 18, rwa: 'robinhood', logoURI: 'https://assets.parqet.com/logos/symbol/JOBY' },
+    { symbol: 'SOFI', name: 'SoFi Technologies • Robinhood Token', address: '0x98E75885157C80992A8D41b696D8c9C6Fb30A926', decimals: 18, rwa: 'robinhood', logoURI: 'https://assets.parqet.com/logos/symbol/SOFI' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },
