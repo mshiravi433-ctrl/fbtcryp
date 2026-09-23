@@ -131,7 +131,7 @@ export async function run(container) {
   /* mutable scenario state */
   let providerStatus = 'UNAVAILABLE';
   let providerReason = 'FEED_UNAVAILABLE';
-  const bff = { quotes: 0, prepares: 0, verifies: 0, candles: 0 };
+  const bff = { quotes: 0, prepares: 0, verifies: 0, candles: 0, quoteProviders: [] };
 
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const envelope = (data, meta = {}) => ({ ok: true, data, meta: { generatedAt: new Date().toISOString(), ...meta } });
@@ -188,6 +188,7 @@ export async function run(container) {
     if (p.startsWith('/positions/')) return failure(503, 'PROVIDER_READ_ONLY');
     if (p === '/quote') {
       bff.quotes += 1;
+      bff.quoteProviders.push(String(reqBody.provider || 'drift'));
       if (providerStatus === 'UNAVAILABLE') return failure(503, 'PROVIDER_UNAVAILABLE');
       const body = reqBody;
       const q = buildQuote(body);
@@ -326,20 +327,19 @@ export async function run(container) {
     t('no /prepare and no /verify call ever happens on the read-only tab', bff.prepares === 0 && bff.verifies === 0);
     t('quotes DID run (the fee breakdown is live), they just never execute', bff.quotes >= 1);
 
-    /* ═══════ B2. NOT CRYPTO-ONLY — the RWA venue's classes in the same engine ═══════ */
+    /* ═══════ B2. CRYPTO ONLY — traditional markets leave for Global Horizon ═══════ */
     const chips = () => qa('.tag').map((b) => b.textContent.trim());
-    t('the engine is not crypto-only: Forex and Stocks category chips render from the live catalogue', chips().includes('Crypto') && chips().includes('Forex') && chips().includes('Stocks'));
-    await act(async () => { const fx = qa('.tag').find((b) => b.textContent.trim() === 'Forex'); if (fx) click(fx); });
-    await act(async () => { await sleep(800); });
-    t('the Forex category lists EUR/USD from the RWA venue', (await pickerLabels('futures-market-select')).includes('EUR/USD'));
-    t('no chart block appears for the forex market either', !byId('futures-chart') && !byId('futures-trend'));
-    t('the forex quote runs against its own venue (provider=ostium)', /\$250|\$500/.test(byId('futures-fee-breakdown')?.textContent || ''));
-    await act(async () => { const st = qa('.tag').find((b) => b.textContent.trim() === 'Stocks'); if (st) click(st); });
-    await act(async () => { await sleep(800); });
-    t('the Stocks category lists NVDA/USD', (await pickerLabels('futures-market-select')).includes('NVDA/USD'));
-    await act(async () => { const cr = qa('.tag').find((b) => b.textContent.trim() === 'Crypto'); if (cr) click(cr); });
-    await act(async () => { await sleep(600); });
-    t('back on Crypto the Solana perp is selected again', pickerValue('futures-market-select') === 'SOL/USDT');
+    t('Crypto is listed and Forex, Stocks and Commodities are not on this tab',
+      chips().includes('Crypto') && !chips().includes('Forex') && !chips().includes('Stocks') && !chips().includes('Commodities'));
+    t('traditional markets leave this tab via a Global Horizon link',
+      /Global Horizon/.test(byId('futures-traditional-link')?.textContent || ''));
+    t('the crypto desk shows funding, liquidation distance and open interest',
+      !!byId('futures-crypto-desk')
+      && /Funding/.test(byId('futures-crypto-desk')?.textContent || '')
+      && /Liquidation/.test(byId('futures-crypto-desk')?.textContent || '')
+      && /Open interest/.test(byId('futures-crypto-desk')?.textContent || ''));
+    t('this tab never quotes the traditional venue', !bff.quoteProviders.includes('ostium'));
+    t('the Solana perp stays selected', pickerValue('futures-market-select') === 'SOL/USDT');
 
     /* ═══════ C. quote input still re-computes fee/risk live ═══════ */
     await act(async () => { setInputValue(byId('futures-collateral'), '100'); });
@@ -432,6 +432,8 @@ export async function run(container) {
     t('a connected Phantom is detected with no tap: the short address is shown',
       !!byId('futures-wallet-row') && byId('futures-wallet-row')?.textContent.includes(FAKE_SOL.slice(0, 4)),
       byId('futures-wallet-row')?.textContent || '');
+    t('the wallet row shows USDT and SOL, not a blank balance',
+      /USDT/.test(byId('futures-wallet-row')?.textContent || '') && /SOL/.test(byId('futures-wallet-row')?.textContent || ''));
     t('the CTA flips to Review order and is ENABLED',
       byId('futures-review')?.textContent.trim() === 'Review order' && byId('futures-review')?.disabled === false,
       `${byId('futures-review')?.textContent}/${byId('futures-review')?.disabled}`);

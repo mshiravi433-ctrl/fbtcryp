@@ -222,6 +222,42 @@ const SOL_RPC = (
   || 'https://api.mainnet-beta.solana.com'
 );
 
+/**
+ * Wallet SOL + USDT, read directly (no Velocity SDK). Shown before the user
+ * is asked to sign so a buy is not a surprise. Nulls mean unreadable, not zero.
+ */
+export async function previewVelocityBalances(wallet) {
+  if (!wallet) return { sol: null, usdt: null };
+  try {
+    const { PublicKey } = await import('@solana/web3.js');
+    const owner = new PublicKey(wallet).toBase58();
+    const rpc = async (method, params) => {
+      const res = await fetch(SOL_RPC, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+      });
+      if (!res.ok) return null;
+      return res.json();
+    };
+    const [bal, tokens] = await Promise.all([
+      rpc('getBalance', [owner, { commitment: 'confirmed' }]).catch(() => null),
+      rpc('getTokenAccountsByOwner', [owner, { mint: VELOCITY_QUOTE_MINT }, { encoding: 'jsonParsed', commitment: 'confirmed' }]).catch(() => null)
+    ]);
+    const lamports = bal?.result?.value;
+    const rows = tokens?.result?.value;
+    const quoteRaw = Array.isArray(rows)
+      ? rows.reduce((sum, row) => sum + BigInt(row?.account?.data?.parsed?.info?.tokenAmount?.amount || 0), 0n)
+      : null;
+    return {
+      sol: lamports == null ? null : Number(lamports) / 1e9,
+      usdt: quoteRaw == null ? null : Number(quoteRaw) / 1e6
+    };
+  } catch {
+    return { sol: null, usdt: null };
+  }
+}
+
 /** FBT's Velocity referrer AUTHORITY (a Solana pubkey). Empty = no on-chain rebate. */
 const FBT_REFERRER = String(
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_VELOCITY_REFERRER || import.meta.env.VITE_DRIFT_REFERRER))
@@ -231,12 +267,26 @@ const FBT_REFERRER = String(
 
 /* ── signing wallet (injected extension or Mobile Wallet Adapter) ────────── */
 
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
 async function getSigningProvider() {
   const injected = getSolanaProvider();
   if (injected?.publicKey) return { kind: 'injected', provider: injected, address: injected.publicKey.toString() };
   const mwa = typeof getMwaWallet === 'function' ? getMwaWallet() : null;
   const acc = typeof mwaAccountInfo === 'function' ? mwaAccountInfo() : null;
-  if (mwa) return { kind: 'mwa', provider: mwa, address: acc?.address };
+  if (mwa && (acc?.address || mwa.accounts?.length)) return { kind: 'mwa', provider: mwa, address: acc?.address || mwa.accounts?.[0]?.address || null };
+  /* Phone / APK: no injected provider. The deeplink session is the signer the
+     swap screen already uses; without this branch a connected wallet can be
+     shown and still be unable to sign a perp. */
+  try {
+    const { deeplinkSessionAddress } = await import('./solana/deeplink.js');
+    const address = deeplinkSessionAddress();
+    if (address) return { kind: 'deeplink', address };
+  } catch { /* no session module — injected/MWA remain the only signers */ }
   return null;
 }
 
@@ -271,7 +321,20 @@ async function signWith(signing, tx) {
     }
     const signature = results?.[0]?.signature;
     if (!(signature instanceof Uint8Array)) throw Object.assign(new Error('NO_SIGNATURE'), { code: 'NO_SIGNATURE' });
-    return { tx, signature: base58(signature) };
+    /* MWA already broadcast. Returning the unsigned bytes as `tx` and then
+       sendRawTransaction-ing them fails the second send and looks like a
+       rejected trade. */
+    return { tx, signature: base58(signature), alreadySent: true };
+  }
+  if (signing.kind === 'deeplink') {
+    const { deeplinkSignAndSendTransaction } = await import('./solana/deeplink.js');
+    const res = await deeplinkSignAndSendTransaction(bytesToBase64(tx.serialize()));
+    if (!res?.ok || !res.signature) {
+      const raw = String(res?.code || res?.message || '');
+      const code = /reject|denied|cancel|4001/i.test(raw) ? 'USER_REJECTED' : (res?.code || 'CANNOT_SIGN');
+      throw Object.assign(new Error(code), { code });
+    }
+    return { tx, signature: String(res.signature), alreadySent: true };
   }
   const provider = signing.provider;
   if (typeof provider.signTransaction === 'function') {
@@ -306,6 +369,9 @@ async function createVelocityClient(sdk, walletAddress) {
   }
   const connection = new Connection(SOL_RPC, 'confirmed');
   const authority = new PublicKey(walletAddress);
+  if (signing.address && signing.address !== walletAddress) {
+    throw velocityError('WALLET_NOT_CONNECTED', 'The connected Solana wallet does not match the address this order was prepared for. Reconnect that wallet and try again.');
+  }
   let client;
   try {
     client = new VelocityClient({ connection, wallet: walletSigner(authority, signing), env: 'mainnet-beta', activeSubAccountId: 0 });
@@ -366,7 +432,18 @@ async function sendInstructions(sdk, ctx, instructions) {
   if (tx.serialize().length > 1232) {
     throw velocityError('TX_TOO_LARGE', `The Velocity transaction is ${tx.serialize().length} bytes (Solana's limit is 1232) — split the order.`);
   }
-  const { tx: signed, signature } = await signWith(ctx.signing, tx);
+  const { tx: signed, signature, alreadySent } = await signWith(ctx.signing, tx);
+  if (alreadySent) {
+    try {
+      await ctx.connection.confirmTransaction({ signature, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight }, 'confirmed');
+    } catch (confirmErr) {
+      const mapped = classifySolanaSimulation(confirmErr);
+      if (mapped) throw velocityError(mapped, `The Solana network rejected this transaction: ${String(confirmErr?.message || confirmErr).slice(0, 200)}`, confirmErr, { signature });
+      /* The wallet already broadcast. A slow confirm is not a failed trade —
+         the caller reports the signature to /verify. */
+    }
+    return signature;
+  }
   try {
     await ctx.connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
     await ctx.connection.confirmTransaction({ signature, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight }, 'confirmed');
@@ -544,7 +621,7 @@ export async function openVelocityPosition({ wallet, marketIndex, side, notional
 }
 
 /** Close an open perp position (reduce-only market order in the opposite direction). */
-export async function closeVelocityPosition({ wallet, marketIndex }) {
+export async function closeVelocityPosition({ wallet, marketIndex, closePercent = 100 }) {
   const sdk = await loadVelocitySdk();
   const { BN, OrderType, MarketType, PositionDirection, PostOnlyParams } = sdk;
   const ctx = await createVelocityClient(sdk, wallet);
@@ -558,14 +635,22 @@ export async function closeVelocityPosition({ wallet, marketIndex }) {
     if (!amount || amount.isZero()) throw Object.assign(new Error('NO_POSITION'), { code: 'NO_POSITION' });
     await ensureSolForFees(ctx);
     const isLong = !amount.isNeg();
-    /* cancel any resting TP/SL triggers so a closed position can't be
-       resurrected by a stale reduce-only order */
-    const cancelIx = await ctx.client.getCancelOrdersIx(MarketType.PERP, Number(marketIndex), null, 0);
-    if (cancelIx) await sendInstructions(sdk, ctx, [cancelIx]).catch(() => {});
+    const pct = Math.max(1, Math.min(100, Math.round(Number(closePercent) || 100)));
+    let size = amount.abs();
+    if (pct < 100) {
+      size = size.mul(new BN(pct)).div(new BN(100));
+      if (!size || size.isZero()) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT' });
+    }
+    /* A full close cancels resting TP/SL so a closed position can't be
+       resurrected. A partial reduce leaves those triggers in place. */
+    if (pct >= 100) {
+      const cancelIx = await ctx.client.getCancelOrdersIx(MarketType.PERP, Number(marketIndex), null, 0);
+      if (cancelIx) await sendInstructions(sdk, ctx, [cancelIx]).catch(() => {});
+    }
     const ix = await ctx.client.getPlacePerpOrderIx(
       { orderType: OrderType.MARKET, marketType: MarketType.PERP, marketIndex: Number(marketIndex),
         direction: isLong ? PositionDirection.SHORT : PositionDirection.LONG,
-        baseAssetAmount: amount.abs(), price: new BN(0), reduceOnly: true, postOnly: PostOnlyParams.NONE,
+        baseAssetAmount: size, price: new BN(0), reduceOnly: true, postOnly: PostOnlyParams.NONE,
         auctionStartPrice: null, auctionEndPrice: null, auctionDuration: null, userOrderId: 0 },
       0
     );

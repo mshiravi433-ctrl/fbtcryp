@@ -63,11 +63,10 @@ const cleanWallet = (w) => {
 const providerOf = (id) => PROVIDER_CATALOGUE[String(id || '').toLowerCase()] || null;
 const ownerFor = (req) => (req?.tgUser?.id ? `tg:${req.tgUser.id}` : String(req.get?.('x-fbt-device') || req.ip || 'anon').slice(0, 64));
 
-/* Ostium has a server-side EVM order path (Stocks). Velocity (Solana, the
-   Drift fork; provider id `drift`) has a live READ path — markets/prices/
-   funding/OI — but no order path yet, so its adapter answers data and the venue
-   stays READ_ONLY. The table makes adding Velocity execution a registration,
-   not a rewrite. */
+/* Ostium (Global Horizon) builds unsigned EVM calldata here. Velocity (Solana,
+   provider id `drift`) reads markets here and returns a client-sign descriptor:
+   the tab builds the transaction and the user's wallet signs it. Neither path
+   holds a key. */
 const ADAPTERS = { ostium, drift };
 
 /* Per-adapter fee + collateral constants. Kept out of the generic flow so each
@@ -381,6 +380,12 @@ export function futuresRouter() {
     if (!o.ok) return fail(res, o.status || 400, o.code, { requestId, detail: o.detail || null, provider: o.health || null });
     if (o.risk.blocked) return fail(res, 422, 'RISK_BLOCKED', { requestId, risk: o.risk });
     if (!o.route.ok) return fail(res, 409, 'PROVIDER_UNAVAILABLE', { requestId, route: o.route });
+    /* Velocity collateral is checked in the wallet before the first signature.
+       A failed server-side SOL RPC must not 503 a trade the wallet can still
+       fund and sign. Ostium still requires a verified allowance. */
+    if (!o.account && o.providerId === 'drift') {
+      o.account = { balanceUsd: null, allowanceUsd: null, needsApproval: false };
+    }
     if (!o.account) return fail(res, 503, 'PROVIDER_UNAVAILABLE', { requestId, detail: 'account read failed; balance and allowance could not be verified' });
     if (o.account.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd) return fail(res, 400, 'INSUFFICIENT_BALANCE', { requestId, balanceUsd: o.account.balanceUsd });
 
@@ -600,6 +605,74 @@ export function futuresRouter() {
     const claim = await claimFuturesIdempotency({ owner, key: idemKey, fingerprint });
     if (!claim.ok) return fail(res, 409, claim.code, { requestId });
     if (claim.replay) return res.status(200).json({ ...claim.result, meta: { ...(claim.result.meta || {}), replay: true } });
+
+    /* Velocity positions are decoded in the wallet, not on the server. Record
+       the management intent, hand the tab a client-sign descriptor, and let
+       /verify close the ledger once the signature lands. */
+    if (providerId === 'drift') {
+      if (!['close', 'decrease', 'tp', 'sl'].includes(action)) return fail(res, 409, 'PROVIDER_READ_ONLY', { requestId, detail: 'this management action is not available on the Solana venue' });
+      const found = await adapter.findMarket(pairId);
+      if (found.error) return fail(res, 503, 'PROVIDER_UNAVAILABLE', { requestId, detail: found.error });
+      const { market, live } = found;
+      if (!market || !live) return fail(res, 503, 'FEED_STALE', { requestId });
+      if ((action === 'close' || action === 'decrease') && market.isMarketOpen === false) return fail(res, 409, 'MARKET_CLOSED', { requestId });
+      const closePercent = action === 'close'
+        ? Math.max(1, Math.min(100, num(req.body?.closePercent) ?? 100))
+        : action === 'decrease'
+          ? Math.max(1, Math.min(99, num(req.body?.closePercent) ?? 50))
+          : null;
+      const value = action === 'tp' || action === 'sl' ? num(req.body?.value) : null;
+      if ((action === 'tp' || action === 'sl') && (value == null || value < 0)) return fail(res, 400, 'INVALID_INPUT', { requestId, detail: 'value' });
+      const clientTx = {
+        kind: 'client-builds',
+        program: drift.VELOCITY_PROGRAM_ID,
+        to: drift.VELOCITY_PROGRAM_ID,
+        data: null,
+        value: '0x0',
+        chainId: 'solana:mainnet',
+        marketIndex: Number(market.marketId),
+        action,
+        closePercent,
+        triggerPrice: value,
+        signed: false,
+        broadcast: false,
+        capabilities: { sign: 'wallet-only', broadcast: 'wallet-only', buildsInTab: true }
+      };
+      const netFee = await velocityNetworkFeeUsd(drift.VELOCITY_MANAGE_SIGNATURES_ESTIMATE);
+      const fee = computeFeeBreakdown({
+        collateralUsd: num(req.body?.collateralUsd) || 0,
+        leverage: 1,
+        protocolFeeBps: 0,
+        protocolFlatUsd: 0,
+        networkFeeUsd: netFee,
+        policyId: 'ZERO',
+        venueCapBps: 0,
+        recipient: fbtFeeRecipient(),
+        chargedOn: 'none'
+      });
+      const execution = await createExecution({
+        requestId, intentId, idempotencyKey: idemKey, owner, wallet, providerId, marketId: market.marketId, symbol: market.symbol,
+        action, side: null, collateralUsd: null, leverage: null, notionalUsd: null, fee, risk: null, route: null,
+        unsignedTx: clientTx, positionId: String(req.params.id)
+      });
+      publish('FUTURES_ORDER_PREPARED', { executionId: execution.executionId, requestId, providerId, action, positionId: req.params.id }, { source: 'futures-router' });
+      const response = {
+        ok: true,
+        data: {
+          requestId, intentId, executionId: execution.executionId, idempotencyKey: idemKey, provider: providerId, action,
+          positionId: String(req.params.id),
+          summary: { closePercent, value, marketIndex: clientTx.marketIndex },
+          fee,
+          simulation: { attempted: false, ok: null, gas: null, networkFeeUsd: netFee, code: 'CLIENT_BUILDS_TX' },
+          transactions: [],
+          clientSign: { family: 'solana', program: drift.VELOCITY_PROGRAM_ID, sdk: '@velocity-exchange/sdk', buildsInTab: true, tx: clientTx },
+          state: 'PREPARED', expiresAt: now() + 45_000
+        },
+        meta: { schema: SCHEMA(`position-${action}`), dataStatus: 'live', security: { privateKeys: 'never-held', signing: 'wallet-only', broadcasting: 'wallet-only' } }
+      };
+      await saveFuturesIdempotency(claim, response);
+      return res.status(200).json(response);
+    }
 
     /* The position must exist for THIS wallet — never build against a guessed index. */
     const pos = await adapter.readPositions(wallet);

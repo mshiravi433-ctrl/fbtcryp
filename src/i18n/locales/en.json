@@ -6418,7 +6418,9 @@
     "chartCollecting": "Collecting live prices…",
     "pairInfoTitle": "What is this pair?",
     "pairInfoOpen": "What is this pair?",
-    "pairInfoNote": "This pair trades with USDC and leverage on this screen; its price comes from the global Ostium feed."
+    "pairInfoNote": "This pair trades with USDC and leverage on this screen; its price comes from the global Ostium feed.",
+    "cryptoLink": "Crypto perps are on the On-chain futures tab",
+    "serverFallback": "The server could not prepare this order. Your wallet will sign the local transaction instead."
   },
   "dydx": {
     "title": "dYdX Orbit",
@@ -11900,7 +11902,12 @@
   "futures": {
     "onchain": {
       "title": "On-chain futures",
-      "subtitle": "Perpetual contracts settled on-chain — crypto, forex, commodities, indices, stocks and ETFs in one engine. Live prices, chart and fees; every order is signed by your own wallet, and the keys stay yours."
+      "subtitle": "Crypto perpetual contracts on Solana, settled in USDT. Funding, open interest and liquidation distance stay on this desk. Gold, forex and stocks are on Global Horizon. Your wallet signs every order.",
+      "deskTitle": "Crypto desk",
+      "deskBody": "Funding, liquidation distance and open interest for this perp — not a stock or forex ticket.",
+      "traditionalCta": "Gold, forex and stocks are on Global Horizon",
+      "traditionalHint": "This tab is crypto perps only. Traditional markets open on their own screen.",
+      "ledgerNotice": "The order was signed. The server record could not be updated — the position is still on-chain."
     },
     "risk": {
       "LOW": "Low",
@@ -11934,7 +11941,7 @@
       "etfs": "ETFs",
       "other": "Other"
     },
-    "searchPlaceholder": "Search a market (e.g. BTC, XAU, EURUSD) — {{count}} markets",
+    "searchPlaceholder": "Search a crypto perp (e.g. SOL, ETH) — {{count}} markets",
     "clearSearch": "Clear",
     "market": "Market",
     "marketsUnavailable": "The market feed is unavailable. Trading is disabled instead of showing a saved price.",

@@ -98,10 +98,9 @@ export const PROVIDER_CATALOGUE = Object.freeze({
       supportsLimitOrders: false,
       supportsReduceOnly: true
     }),
-    /* Ostium powers both the Stocks tab (src/pages/Ostium.jsx) and the
-       non-crypto categories of the On-Chain futures engine tab, which merges
-       its forex/commodities/indices/stocks/ETFs perps with the Solana venue's
-       crypto perps into one catalogue (the venue names stay internal). */
+    /* Ostium is Global Horizon (Stocks tab): forex, commodities, indices,
+       stocks and ETFs. It is not part of the On-Chain futures tab — that tab
+       is Solana crypto perps only, so the two catalogues do not repeat. */
     tab: null
   }),
   dydx: Object.freeze({

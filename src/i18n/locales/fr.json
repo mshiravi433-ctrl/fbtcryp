@@ -1598,7 +1598,7 @@
   "futures": {
     "onchain": {
       "title": "Futurs on-chain",
-      "subtitle": "Perpétuels réglés on-chain — crypto, forex, matières premières, indices, actions et ETF dans un seul moteur. Prix, graphique et frais en direct ; chaque ordre est signé par votre propre portefeuille, vos clés restent chez vous."
+      "subtitle": "Perpétuels crypto sur Solana, réglés en USDT. Funding, intérêt ouvert et distance de liquidation sont sur ce bureau. Or, forex et actions sont sur Global Horizon. Votre portefeuille signe chaque ordre."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Prix oracle",

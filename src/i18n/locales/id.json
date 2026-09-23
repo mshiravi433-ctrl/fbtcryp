@@ -1598,7 +1598,7 @@
   "futures": {
     "onchain": {
       "title": "Futures on-chain",
-      "subtitle": "Perpetual dengan penyelesaian on-chain — kripto, forex, komoditas, indeks, saham, dan ETF dalam satu mesin. Harga, grafik, dan biaya langsung; setiap order ditandatangani dompet Anda sendiri, kunci tetap milik Anda."
+      "subtitle": "Perpetual kripto di Solana, diselesaikan dalam USDT. Funding, open interest, dan jarak likuidasi ada di meja ini. Emas, forex, dan saham ada di Global Horizon. Dompet Anda menandatangani setiap order."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Harga oracle",

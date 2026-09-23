@@ -1598,7 +1598,7 @@
   "futures": {
     "onchain": {
       "title": "Zincir üstü vadeli işlemler",
-      "subtitle": "Zincir üstü telafi edilen sözleşmeler — kripto, forex, emtia, endeks, hisse ve ETF tek motorda. Canlı fiyatlar, grafik ve ücretler; her emri kendi cüzdanınız imzalar, anahtarlar sizde kalır."
+      "subtitle": "Solana üzerinde USDT ile takas edilen kripto perpetual sözleşmeler. Funding, açık faiz ve likidasyon mesafesi bu masada. Altın, forex ve hisseler Global Horizon'da. Her emri cüzdanınız imzalar."
     },
     "spreadBps": "Spread",
     "oraclePrice": "Oracle fiyatı",

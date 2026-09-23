@@ -4,14 +4,10 @@
  * The third tab of /perp, beside Perpetual and dYdX. It renders what the
  * Futures BFF (/api/v1/futures) says and nothing else:
  *
- *   · the tab lists every ON-CHAIN venue the registry can actually drive —
- *     the Solana perps venue AND the Arbitrum RWA venue — merged into one
- *     catalogue, so the engine is not crypto-only: forex, commodities,
- *     indices, stocks and ETFs list under their own category chips as soon
- *     as the venue serves them. The VENUES THEMSELVES stay invisible: no
- *     provider card, no venue name, no "what data we run on" — the customer
- *     sees markets and prices, not our supplier list (on instruction:
- *     «باکس اطلاعات velocity را پاک کن … برای رقبا هم خوب نیست»);
+ *   · this tab is crypto perps only (Solana, USDT). Forex, commodities,
+ *     indices, stocks and ETFs belong on Global Horizon (Stocks → افق جهانی),
+ *     not here — the two screens must not list the same markets. Venue names
+ *     stay invisible: no provider card, no supplier list.
  *   · markets, prices, funding, OI, balances and positions are live
  *     reads per market's own venue; quotes, fees, risk and route come from
  *     /quote and /prepare (backend truth); the confirmation sheet shows the
@@ -54,20 +50,13 @@ import ModernSelect from '../components/ModernSelect';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 
 /*
- * The on-chain engine drives EVERY venue whose order path this tab can build
- * and sign: the Solana perps venue (provider id `drift` — Velocity, the Drift
- * fork; the id is kept for ledger/UI continuity) and the Arbitrum RWA venue
- * (`ostium` — forex, commodities, indices, stocks, ETFs). dYdX executes via
- * its own client session in its own tab and is not listed here. The venue
- * NAMES are deliberately not shown anywhere in this tab — see the header
- * comment.
+ * Crypto perps only. The provider id stays `drift` for the ledger; the name
+ * is never rendered. Traditional markets are a link out to Global Horizon,
+ * not a second catalogue inside this tab. dYdX stays in its own tab.
  */
-const ONCHAIN_VENUES = ['drift', 'ostium'];
+const ONCHAIN_VENUES = ['drift'];
 const ONCHAIN_EXECUTION = ['CLIENT_BUILDS_TX', 'ONCHAIN_UNSIGNED_TX'];
-/* Crypto first (continuity: SOL/USDT stays the default market), then the
-   non-crypto classes the second venue serves. Chips only render for classes
-   the live feed actually returns. */
-const CATEGORY_ORDER = ['Crypto', 'Forex', 'Commodities', 'Indices', 'Stocks', 'ETFs'];
+const CATEGORY_ORDER = ['Crypto'];
 const friendlyCategory = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v.includes('crypto')) return 'Crypto';
@@ -154,6 +143,8 @@ export default function FuturesOnchain() {
   const [errorDetail, setErrorDetail] = useState(null);
   const [txState, setTxState] = useState(FUTURES_TX_STATE.IDLE);
   const [lastTx, setLastTx] = useState(null);
+  const [ledgerNotice, setLedgerNotice] = useState(false);
+  const [walletFunds, setWalletFunds] = useState({ usdt: null, sol: null });
   const [managing, setManaging] = useState(null);
   const [manageAction, setManageAction] = useState('close');
   const [manageValue, setManageValue] = useState('100');
@@ -359,8 +350,23 @@ export default function FuturesOnchain() {
   const setMachine = (next, meta) => { const r = machineRef.current.transition(next, meta); if (r.ok) setTxState(next); return r.ok; };
   const resetMachine = () => { machineRef.current = createFuturesTxMachine({ action: 'open' }); setTxState(FUTURES_TX_STATE.IDLE); };
 
-  /* The Solana venue (Velocity) signs with the Solana wallet, not the EVM one. */
+  /* The Solana venue signs with the Solana wallet, not the EVM one. */
   const isSolanaVenue = provider?.family === 'solana';
+
+  /* USDT is the collateral the order spends; SOL pays the network fee. The
+     quote's balanceUsd is null for this venue, so the row reads both directly. */
+  useEffect(() => {
+    if (!isSolanaVenue || !tradingAddress) {
+      setWalletFunds({ usdt: null, sol: null });
+      return undefined;
+    }
+    let alive = true;
+    import('../lib/velocityTrade.js')
+      .then((m) => m.previewVelocityBalances(tradingAddress))
+      .then((b) => { if (alive) setWalletFunds({ usdt: b?.usdt ?? null, sol: b?.sol ?? null }); })
+      .catch(() => { if (alive) setWalletFunds({ usdt: null, sol: null }); });
+    return () => { alive = false; };
+  }, [isSolanaVenue, tradingAddress, lastTx]);
 
   /* ── the wallet-page hand-off ──────────────────────────────────────────
      When no Solana wallet is connected, the button walks the user to the
@@ -495,7 +501,7 @@ export default function FuturesOnchain() {
 
       /* ── EVM (Ostium): sign the server-built calldata with the EVM wallet. ── */
       await ensureChain();
-      const signer = wallet.getSigner?.();
+      const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
       if (!signer) throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' });
       setMachine(FUTURES_TX_STATE.SIMULATING);
       setMachine(FUTURES_TX_STATE.AWAITING_SIGNATURE);
@@ -565,9 +571,27 @@ export default function FuturesOnchain() {
         if (!solWallet.isConnected) { goConnectSolana(); return; }
         const venue = await import('../lib/velocityTrade.js');
         const marketIndex = Number(String(managing.positionId).split(':')[1]);
+        const closePercent = Math.max(1, Math.min(100, Math.round(Number(manageValue) || 100)));
+        /* Record the sell/TP/SL on the server first. A dead ledger must not
+           block the signature — the position still has to be closable. */
+        let executionId = null;
+        let ledgerFailed = false;
+        try {
+          const recorded = await manageFuturesPosition({
+            positionId: managing.positionId,
+            action: manageAction,
+            wallet: tradingAddress,
+            provider: providerId,
+            closePercent: manageAction === 'close' ? closePercent : null,
+            value: manageAction === 'tp' || manageAction === 'sl' ? Number(manageValue) : null,
+            slippageBps: Math.round(Number(slippagePct) * 100)
+          });
+          if (recorded?.ok && recorded.data?.executionId) executionId = recorded.data.executionId;
+          else ledgerFailed = true;
+        } catch { ledgerFailed = true; }
         let result;
         if (manageAction === 'close') {
-          result = await venue.closeVelocityPosition({ wallet: tradingAddress, marketIndex });
+          result = await venue.closeVelocityPosition({ wallet: tradingAddress, marketIndex, closePercent });
         } else if (manageAction === 'tp' || manageAction === 'sl') {
           /* The sheet edits one trigger at a time; the existing value of the
              OTHER trigger is preserved (positions arrive with takeProfit /
@@ -585,17 +609,22 @@ export default function FuturesOnchain() {
           return;
         }
         const hash = result?.signature || result?.transactions?.filter((x) => x.signature).pop()?.signature;
+        if (hash && executionId) {
+          const verified = await verifyFutures({ executionId, txHash: hash });
+          if (!verified?.ok) ledgerFailed = true;
+        } else if (!executionId) ledgerFailed = true;
         if (hash) {
-          setLastTx({ hash, chainId: 'solana:mainnet', executionId: `drift:${manageAction}:${marketIndex}`, state: 'PENDING', action: manageAction });
+          setLastTx({ hash, chainId: 'solana:mainnet', executionId: executionId || `drift:${manageAction}:${marketIndex}`, state: 'PENDING', action: manageAction });
           emitFuturesEvent('FUTURES_ORDER_SUBMITTED', { txHash: hash, providerId, action: manageAction });
         }
+        setLedgerNotice(ledgerFailed);
         setManaging(null);
         haptic?.('success');
         refreshWallet();
         return;
       }
       await ensureChain();
-      const signer = wallet.getSigner?.();
+      const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
       if (!signer) throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' });
       const payload = { positionId: managing.positionId, action: manageAction, wallet: wallet.address, provider: providerId, slippageBps: Math.round(Number(slippagePct) * 100) };
       if (manageAction === 'close' || manageAction === 'decrease') payload.closePercent = Number(manageValue);
@@ -676,6 +705,17 @@ export default function FuturesOnchain() {
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
         </motion.div>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          data-testid="futures-traditional-link"
+          onClick={() => navigate('/stocks?tab=ostium')}
+          style={{ width: '100%', marginTop: 12, boxSizing: 'border-box' }}
+        >
+          {t('futures.onchain.traditionalCta')}
+        </button>
+        <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>{t('futures.onchain.traditionalHint')}</p>
 
         {/* ── NO venue card, on instruction: which venues feed the engine is
            not the customer's business and is not ours to hand to competitors.
@@ -772,6 +812,16 @@ export default function FuturesOnchain() {
                 </div>
               )}
 
+              {market && (
+                <div className="brg-quote" style={{ marginTop: 12 }} data-testid="futures-crypto-desk">
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{t('futures.onchain.deskTitle')}</div>
+                  <p className="faint" style={{ margin: '4px 0 8px' }}>{t('futures.onchain.deskBody')}</p>
+                  <div className="row-between"><span className="faint">{t('futures.funding')}</span><span className="mono">{market.fundingAprPct == null ? '—' : `${fmtPct(market.fundingAprPct)} ${t('futures.perYear')}`}</span></div>
+                  <div className="row-between"><span className="faint">{t('futures.liquidationDistance')}</span><span className="mono">{risk?.liquidationDistancePct == null ? '—' : `${fmtPct(-Math.abs(risk.liquidationDistancePct))} → $${fmtPrice(risk.liquidationPrice)}`}</span></div>
+                  <div className="row-between"><span className="faint">{t('futures.openInterest')}</span><span className="mono">{fmtUsd(market.openInterestUsd)}</span></div>
+                </div>
+              )}
+
               {/* ticket */}
               <div className="dir-switch" style={{ marginTop: 12 }}>
                 <button type="button" className={`dir-btn long ${side === 'long' ? 'active' : ''}`} onClick={() => setSide('long')}>
@@ -838,7 +888,11 @@ export default function FuturesOnchain() {
               {connected && tradingAddress && (
                 <div className="row-between" style={{ marginTop: 12 }} data-testid="futures-wallet-row">
                   <span className="faint">{shortAddress(tradingAddress)} · {provider?.chainName}</span>
-                  <span className="mono" style={{ fontSize: 12 }}>{quote?.account?.balanceUsd == null ? '—' : `${quote.account.balanceUsd.toFixed(2)} ${provider?.collateral || 'USDC'}`}</span>
+                  <span className="mono" style={{ fontSize: 12 }}>
+                    {walletFunds.usdt == null ? '—' : walletFunds.usdt.toFixed(2)} USDT
+                    {' · '}
+                    {walletFunds.sol == null ? '—' : walletFunds.sol.toFixed(4)} SOL
+                  </span>
                 </div>
               )}
               {insufficient && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t('futures.err.INSUFFICIENT_BALANCE')}</p>}
@@ -872,6 +926,9 @@ export default function FuturesOnchain() {
           <div className="notice" style={{ marginTop: 16 }} data-testid="futures-last-tx">
             <strong>{t(`futures.txState.${lastTx.state}`, { defaultValue: lastTx.state })}</strong>
           </div>
+        )}
+        {ledgerNotice && (
+          <p className="notice" style={{ marginTop: 10 }} data-testid="futures-ledger-notice">{t('futures.onchain.ledgerNotice')}</p>
         )}
 
         {/* ── my positions ──────────────────────────────────────────────── */}
