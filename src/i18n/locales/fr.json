@@ -1135,7 +1135,8 @@
       "supply": "Déposer",
       "borrow": "Emprunter",
       "repay": "Rembourser",
-      "withdraw": "Retirer"
+      "withdraw": "Retirer",
+      "approve": "Approbation"
     },
     "done": {
       "collateral": "Drapeau de garantie mis à jour",
@@ -1245,7 +1246,38 @@
       "KAMINO_SDK_FAILED": "Le module Kamino n’a pas pu démarrer. Mettez à jour l’app et réessayez.",
       "KAMINO_SDK_TRUNCATED": "Le module Kamino n’a été téléchargé qu’en partie : la connexion a été coupée. Réessayez sur un réseau plus stable.",
       "KAMINO_SDK_INIT_FAILED": "Le module Kamino a été téléchargé mais n’a pas démarré. Mettez à jour l’app et, si cela se répète, envoyez ce message au support.",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino n’a renvoyé aucune transaction pour cette action : rien n’a été envoyé et aucun frais n’a été prélevé."
+      "KAMINO_TX_BUILD_EMPTY": "Kamino n’a renvoyé aucune transaction pour cette action : rien n’a été envoyé et aucun frais n’a été prélevé.",
+      "RPC_BLOCKED": "Un ou plusieurs nœuds Solana ont refusé la requête (403 — un blocage du fournisseur ou du réseau, pas une limite de débit). Réessayez, ou renseignez votre propre RPC dans Réglages → Réseaux.",
+      "BAD_PAYLOAD": "Le fournisseur a répondu quelque chose d’inutilisable. Réessayez dans un instant.",
+      "BAD_RESPONSE": "Le nœud a répondu autre chose que des données. Réessayez dans un instant.",
+      "BAD_WALLET": "Ce portefeuille ne peut pas servir à cette action.",
+      "BFF_UNAVAILABLE": "Le serveur de l’app ne répond pas. Rien n’a été envoyé — réessayez dans un instant.",
+      "CONNECT_FAILED": "La connexion du portefeuille n’a pas abouti.",
+      "GAS_LIMIT_UNAVAILABLE": "Les frais de réseau n’ont pas pu être estimés ; aucune transaction n’a été envoyée.",
+      "IN_WALLET": "La demande a été transmise à votre app de portefeuille. Validez-la là-bas — le résultat sera ici à votre retour.",
+      "NO_ACCOUNT": "Aucun compte n’est disponible dans ce portefeuille.",
+      "NO_ADDRESSES_PROVIDER": "Le pool n’a pas révélé son fournisseur d’adresses ; son oracle n’a pas pu être lu.",
+      "NO_FETCH": "Ce navigateur ne peut pas envoyer la requête réseau.",
+      "NO_SESSION": "La session du portefeuille est terminée. Reconnectez-le.",
+      "NO_WALLET": "Aucun portefeuille Solana n’a été trouvé sur cet appareil.",
+      "REJECTED": "Vous avez refusé la demande dans votre portefeuille. Rien n’a été envoyé.",
+      "SIGN_FAILED": "Le portefeuille n’a pas signé. Rien n’a été envoyé.",
+      "SEND_FAILED": "Le portefeuille n’a pas envoyé la transaction. Rien n’a été dépensé.",
+      "BAD_TRANSACTION": "La transaction n’a pas pu être lue avant la signature ; rien n’a été envoyé.",
+      "UNSUPPORTED_TRANSACTION": "Ce portefeuille n’accepte pas ce format de transaction. L’app essaie l’autre format automatiquement — rien n’a été envoyé.",
+      "TRANSACTION_FAILED": "La chaîne a refusé la transaction — seuls les frais de réseau ont été dépensés.",
+      "TRANSACTION_NOT_FOUND": "La transaction n’est pas encore visible sur les nœuds essayés. Vérifiez l’explorateur avant de réessayer.",
+      "UNSUPPORTED": "Ce portefeuille ne peut pas effectuer cette action.",
+      "UNKNOWN_WITH_CODE": "L’action n’a pas abouti ({{code}}). Seuls les frais de réseau ont pu être dépensés ; si cela se répète, envoyez ce code au support.",
+      "SOLANA_TX_FAILED": "La transaction Solana n’a pas abouti sur la chaîne — rien n’a été dépensé.",
+      "MARKET_FROZEN": "Le protocole a gelé cette réserve : les nouveaux dépôts et emprunts sont fermés. Le remboursement et le retrait fonctionnent encore, et c’est la voie pour clôturer une position ouverte.",
+      "TIMEOUT": "Le portefeuille n’a pas répondu à temps, rien n’a été envoyé. Ouvrez l’app du portefeuille et réessayez.",
+      "KAMINO_TX_BUILD_FAILED": "Kamino n’a pas pu construire cette transaction : rien n’a été signé ni envoyé. Réessayez dans un instant.",
+      "NO_SIGNATURE": "Le portefeuille a répondu sans signature, donc rien n’a été envoyé.",
+      "KAMINO_SDK_MIME": "Le module Kamino a été servi avec un mauvais type de contenu (le serveur a renvoyé une page au lieu du module) — rechargez l’app.",
+      "KAMINO_SDK_RECOVERED": "Le module Kamino s’est chargé après une nouvelle tentative. En cas d’échec, rechargez l’app.",
+      "WALLET_NOT_FOUND": "Aucune application de portefeuille Solana n'a été trouvée sur cet appareil pour ouvrir cette demande — installez-la ou ouvrez-la, puis réessayez.",
+      "RPC_UNAVAILABLE": "Ce nœud a répondu quelque chose que nous n’avons pas pu utiliser."
     },
     "ratesUpdated": "Les taux sont lus depuis les contrats de lending (Morpho/Aave) — rafraîchis automatiquement.",
     "connectWallet": "Connecter le portefeuille",
@@ -1351,7 +1383,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "La demande est dans votre portefeuille",
+      "pendingBody": "Nous avons transmis la signature à votre app de portefeuille. Validez-la là-bas : à votre retour, nous récupérons la réponse, la confirmons sur la chaîne et mettons à jour votre position. Quitter cet écran ne perd rien.",
+      "pendingReopen": "Rouvrir le portefeuille",
+      "pendingCheck": "Vérifier le résultat"
+    },
+    "marketHalted": {
+      "title": "Ce marché est fermé par le protocole",
+      "body": "Toutes les réserves listées ici sont gelées par le protocole lui-même : les nouveaux dépôts et les nouveaux emprunts sont fermés, et ces actifs ne valent pas comme garantie nouvelle. Les remboursements et les retraits fonctionnent encore, et les positions ouvertes restent ouvertes.",
+      "frozen": "Gelé par le protocole",
+      "paused": "En pause par le protocole",
+      "mixed": "En partie gelé / en pause par le protocole",
+      "otherMarkets": "Pour déposer ou emprunter, choisissez un autre marché dans la barre ci-dessus.",
+      "repayHint": "Si vous avez une position ici : remboursez d’abord, puis retirez. Les deux restent autorisés."
+    },
+    "reserveFrozenHint": "Gelé — remboursement et retrait uniquement",
+    "rpc": {
+      "title": "Les données du marché n'ont pas pu être lues",
+      "body": "Nous avons essayé ces nœuds Solana ; la réponse de chacun est ci-dessous.",
+      "useOwn": "Ajoutez votre propre RPC dans Réglages → Réseaux pour que l'application ne dépende plus des nœuds publics."
+    },
+    "wallet": {
+      "title": "Le portefeuille ne s'est pas ouvert",
+      "switch": "Déverrouillez le portefeuille, vérifiez qu'il est sur Solana mainnet, puis réessayez. Rien n'a été envoyé et aucun frais n'a été prélevé."
     }
   },
   "intentAI": {

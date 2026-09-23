@@ -816,8 +816,14 @@ export function getMaxBorrow({ market, asset, headroomBps = 10 } = {}) {
   if (reserve && reserve.listed === false) {
     return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: reserve.reason ?? 'NOT_A_RESERVE' };
   }
-  if (reserve?.status === 'paused' || reserve?.status === 'frozen') {
-    return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'MARKET_PAUSED', detail: `reserve is ${reserve.status}` };
+  if (reserve?.status === 'paused') {
+    return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'MARKET_PAUSED', detail: 'the protocol has paused this reserve' };
+  }
+  /* A frozen reserve cannot be BORROWED against (that is the whole point of
+     the state), and the reason now says so instead of borrowing the paused
+     wording for it — two different protocol states, two different sentences. */
+  if (reserve?.status === 'frozen') {
+    return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'MARKET_FROZEN', detail: 'the protocol has frozen this reserve: no new borrow' };
   }
   if (reserve?.borrowingEnabled === false) {
     return { ok: false, status: DATA_STATUS.UNAVAILABLE, reason: 'BORROWING_DISABLED', detail: 'the protocol has not enabled borrowing on this reserve' };
@@ -1058,9 +1064,27 @@ export function evaluateAction({ market, action, asset, amountWei, amount, colla
   if (reserve?.listed === false) { block(reserve.reason ?? 'NOT_A_RESERVE'); return { ok: false, blocked, warnings }; }
   if (reserve?.listed == null) warn('RESERVE_STATE_UNKNOWN', 'the reserve could not be read; rates and caps are unknown');
 
-  /* §29 — never offer a market the protocol has stopped. */
+  /* §29 — never offer a market the protocol has stopped.
+     ── 2026-09-23: frozen and paused are NOT the same thing ────────────────
+     This branch used to block EVERY action with code MARKET_PAUSED for a
+     frozen reserve, while its own detail said «repay/withdraw only» — so the
+     page was unreachable in exactly the situation it was written for. Aave's
+     frozen state (bit 57) closes NEW supply and NEW borrow; repay and withdraw
+     stay open on-chain, and that is how a wind-down asks positions to unwind
+     (Sonic/Scroll/zkSync/Metis/Soneium/Aptos, ARFC 2026-07-30). The pause state
+     (bit 60) stops every action, so it keeps blocking all four. */
   if (reserve?.status === 'paused') { block('MARKET_PAUSED', 'the protocol has paused this reserve'); return { ok: false, blocked, warnings }; }
-  if (reserve?.status === 'frozen') { block('MARKET_PAUSED', 'the protocol has frozen this reserve: repay/withdraw only'); return { ok: false, blocked, warnings }; }
+  if (reserve?.status === 'frozen') {
+    const opening = action === 'supply' || action === 'borrow';
+    if (opening) {
+      block('MARKET_FROZEN', 'the protocol has frozen this reserve: new supply and new borrow are closed, repay and withdraw stay open');
+      return { ok: false, blocked, warnings };
+    }
+    /* repay / withdraw / collateral-toggle: allowed, and SAID so. The page
+       shows the frozen pill on the reserve; this warning makes the one
+       consequence that matters visible at the decision point as well. */
+    warn('MARKET_FROZEN', 'this reserve is frozen by the protocol: repay and withdraw stay open, new supply and borrow do not');
+  }
 
   const decimals = Number(reserve?.decimals ?? asset.decimals ?? 18);
   if (reserve?.decimalsMatch === false) warn('DECIMALS_MISMATCH', `the token contract reports different decimals than the registry; using the on-chain value (${decimals})`);

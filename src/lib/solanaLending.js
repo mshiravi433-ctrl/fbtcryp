@@ -66,27 +66,144 @@ const shortHost = (url) => {
   try { return new URL(url).hostname; } catch { return String(url || '?').slice(0, 40); }
 };
 
+/** A fetch-level failure: no HTTP status at all, the request never came back. */
+/* A failure that says «I could not reach the network» — no status code, no
+   node words, just the transport. Every spelling that reaches us is here:
+   fetch/XHR, the Chrome and Safari connection errors, DNS, sockets. It is
+   deliberately NOT a catch-all: `econnreset` is a dead network path, while
+   «the account did not decode» is a node that ANSWERED. */
+const NETWORK_FAILURE_RE = /\bfetch\b|networkerror|network error|failed to fetch|err_connection|err_name|err_internet|err_network|enotfound|econn|etimedout|socket|timeout|timed out|unreachable|connection (?:refused|reset|closed)|offline|abort/i;
+
 /**
- * Name a total failover failure. A 429 anywhere means throttling (retryable);
- * all-unreachable means the network path is down (retryable); anything else —
- * e.g. every node answered but the market account would not decode — stays
- * KAMINO_MARKET_UNAVAILABLE. The per-host summary is kept as detail (§28).
+ * Name ONE node's refusal from the node's own words.
+ *
+ * WHY THIS IS STATUS-FIRST (report 2026-09-23)
+ * -------------------------------------------
+ * The old rule was a single regex over every attempt glued together:
+ * `/429|rate.?limit/i.test(haystack)` → RPC_RATE_LIMITED. Two ways that lied:
+ *
+ *   · `7u3He…: Error: 403 : {"jsonrpc":"2.0","error":{` — the Foundation node
+ *     REFUSED the request with a 403 (region/provider block). The word
+ *     «rate limit» is not in that text, yet the user was shown
+ *     «گره شبکه موقتاً محدودیت نرخ دارد» — «the node is temporarily rate
+ *     limiting» — because a DIFFERENT candidate (a community node) answered
+ *     429 and the two were merged into one haystack.
+ *   · «rate limit» appears in more places than 429 does (a WAF body that says
+ *     "Rate limit exceeded" while returning 403), so the word alone cannot
+ *     decide.
+ *
+ * So: read the HTTP status when the text carries one and let it decide —
+ * 429 is throttling (retry later), 401/403/451 is a REFUSAL (retry will not
+ * help; another node will). Only when no status is present does the wording
+ * get a vote. Returns null when the text says nothing useful, so callers keep
+ * their own default instead of being handed a guess.
  */
-function lendingRpcFailure(attempts) {
-  const summary = (attempts || [])
-    .map((a) => `${shortHost(a.url)}:${a.code || a.error || 'failed'}`)
+/**
+ * What a node's refusal MEANS, from the node's own words.
+ *
+ * Status first, wording second — and the wording is only consulted when there
+ * is no status at all, because a block page frequently contains the words
+ * «rate limit» (the exact text that produced the reported
+ * «RPC_RATE_LIMITED» for a 403). A bare number in a message is not a status
+ * unless it is written like one (`Error: 403 :`, `HTTP 403`, `status: 403`),
+ * which keeps a slot or a block height from inventing a cause.
+ *
+ * Exported for the contract test.
+ *
+ * @param {string} text
+ * @returns {'RPC_BLOCKED'|'RPC_RATE_LIMITED'|null}
+ */
+export function classifyNodeFailure(text) {
+  const raw = String(text || '');
+  if (!raw) return null;
+  /* A status has to LOOK like a status: `Error: 403 : {…}` (what web3.js
+     throws), `HTTP 403`, `status 403`, `403 Forbidden`. A bare number is not
+     enough — `slot 403` and a signature containing 403 are not HTTP, and
+     guessing a cause from them is exactly the bug this function replaces. */
+  const m = raw.match(/(?:\b(?:http(?:\s+status)?|status(?:\s+code)?|error|code)\b\s*[:=]?\s*|\bHTTP\/1\.[01]\s+)(401|403|429|451)\b|\b(401|403|429|451)\s*:/i);
+  const status = (m && (m[1] || m[2])) || '';
+  if (status === '429') return 'RPC_RATE_LIMITED';
+  if (status) return 'RPC_BLOCKED';
+  if (/rate.?limit|too many requests|throttl/i.test(raw)) return 'RPC_RATE_LIMITED';
+  if (/forbidden|blocked|denied|unauthori[sz]ed|restricted|not allowed|access control|country|region|sanction/i.test(raw)) return 'RPC_BLOCKED';
+  return null;
+}
+
+/**
+ * Name a total failover failure.
+ *
+ * Precedence, in the order a user can act on it:
+ *   1. any node REFUSED us (401/403/451) → RPC_BLOCKED. Retrying hits the same
+ *      wall; the fix is another endpoint (Settings → Networks), and the summary
+ *      below names which host refused, so support sees it too.
+ *   2. otherwise any throttling (429 / "rate limit") → RPC_RATE_LIMITED, which
+ *      a retry genuinely fixes.
+ *   3. every attempt a fetch-level failure → RPC_ERROR (network path).
+ *   4. anything else — e.g. every node answered but the market account would not
+ *      decode — stays KAMINO_MARKET_UNAVAILABLE. Never guessed into a cause.
+ *
+ * The per-host summary is kept as detail (§28) and now carries the class, so a
+ * report reads `api.mainnet-beta.solana.com:RPC_BLOCKED |
+ * solana-rpc.publicnode.com:RPC_RATE_LIMITED` instead of one merged sentence.
+ */
+/**
+ * Exported for the contract test (test/loan-solana-rpc-sign.test.js): this
+ * function is the whole translation of «every node failed» into the ONE code
+ * the panel shows, so its precedence is behaviour, not an implementation
+ * detail.
+ */
+export function lendingRpcFailure(attempts) {
+  const list = attempts || [];
+  const parts = list.map((a) => {
+    const text = `${a.code || ''} ${a.error || ''}`.trim();
+    const cls = classifyNodeFailure(text);
+    return {
+      url: shortHost(a.url),
+      rawUrl: a.url,
+      text,
+      cls,
+      /* What the row MEANS, in the vocabulary the UI has sentences for. */
+      reason: cls || (NETWORK_FAILURE_RE.test(text) ? 'RPC_ERROR' : 'RPC_UNAVAILABLE')
+    };
+  });
+  const summary = parts
+    .map((p) => `${p.url}:${p.reason}`)
     .join(' | ')
     .slice(0, 180);
-  const haystack = (attempts || []).map((a) => `${a.code || ''} ${a.error || ''}`).join(' ');
-  const anyRateLimited = /429|rate.?limit/i.test(haystack);
-  const allUnreachable = (attempts || []).length > 0
-    && (attempts || []).every((a) => /fetch|network|failed to fetch|econn|timeout|timed out|unreachable|abort/i.test(`${a.code || ''} ${a.error || ''}`));
-  const code = anyRateLimited ? 'RPC_RATE_LIMITED' : allUnreachable ? 'RPC_ERROR' : 'KAMINO_MARKET_UNAVAILABLE';
+  const blocked = parts.some((p) => p.cls === 'RPC_BLOCKED');
+  const rateLimited = parts.some((p) => p.cls === 'RPC_RATE_LIMITED');
+  const allUnreachable = parts.length > 0 && parts.every((p) => p.reason === 'RPC_ERROR');
+  const code = blocked ? 'RPC_BLOCKED'
+    : rateLimited ? 'RPC_RATE_LIMITED'
+      : allUnreachable ? 'RPC_ERROR'
+        : 'KAMINO_MARKET_UNAVAILABLE';
   const error = new Error(code);
   error.code = code;
   error.detail = summary || 'all Solana RPC candidates failed';
-  error.attempts = attempts || [];
+  error.attempts = list;
+  /* Per-host list for the panel: it renders «host → localized reason» from
+     this, instead of the raw English transport text. */
+  error.hosts = parts.map((p) => ({ host: p.url, reason: p.reason }));
+  /* And teach the RPC layer, so the next read does not start with the host that
+     just refused us (see noteSolanaRpcFailure in solanaRpc.js). */
+  noteRefusedCandidates(parts);
   return error;
+}
+
+/**
+ * Push this failure back into the RPC layer's cooldown map.
+ *
+ * Fire-and-forget BY DESIGN: a cooldown is an optimisation for the next read,
+ * never a reason to delay or fail this one — and the module it lives in is
+ * imported dynamically so the lending client stays usable in tests that stub
+ * the RPC layer out entirely.
+ */
+function noteRefusedCandidates(parts) {
+  const refusals = (parts || []).filter((p) => p.rawUrl && (p.cls === 'RPC_BLOCKED' || p.cls === 'RPC_RATE_LIMITED'));
+  if (!refusals.length) return;
+  import('./solanaRpc.js').then(({ noteSolanaRpcFailure }) => {
+    for (const p of refusals) noteSolanaRpcFailure(p.rawUrl, p.cls === 'RPC_BLOCKED' ? 'BLOCKED' : 'RATE_LIMITED');
+  }).catch(() => { /* the next read simply starts in the configured order */ });
 }
 
 async function resetRememberedSolanaRpc() {
@@ -99,8 +216,12 @@ async function resetRememberedSolanaRpc() {
 /** Wrap a raw connection failure in the engine's named codes (§28). */
 function solanaReadError(cause, code = 'RPC_ERROR') {
   const raw = String(cause?.message || cause || '');
-  const finalCode = cause?.code || (/429|rate.?limit/i.test(raw) ? 'RPC_RATE_LIMITED'
-    : (/fetch|network|failed to fetch|econn|timeout|timed out/i.test(raw) ? 'RPC_ERROR' : code));
+  /* Same status-first rule as `lendingRpcFailure`: a refusal must never be
+     dressed up as throttling, and wording only decides when no status is in
+     the text. A code a lower layer already named always wins. */
+  const named = classifyNodeFailure(raw);
+  const finalCode = cause?.code || named
+    || (NETWORK_FAILURE_RE.test(raw) ? 'RPC_ERROR' : code);
   const error = new Error(finalCode);
   error.code = finalCode;
   error.detail = raw.slice(0, 160);
