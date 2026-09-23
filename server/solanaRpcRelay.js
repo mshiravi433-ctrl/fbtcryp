@@ -95,12 +95,15 @@ export const relayEnabled = () =>
  */
 const DEFAULT_UPSTREAMS = Object.freeze({
   'mainnet-beta': Object.freeze([
+    'https://rpc.ankr.com/solana',
+    'https://solana.public-rpc.com',
     'https://rpc.solanatracker.io/public',
     'https://solana-rpc.publicnode.com',
     'https://rpc.magicblock.app/mainnet',
     'https://solana.drpc.org',
     'https://solana.api.onfinality.io/public',
-    'https://api.mainnet-beta.solana.com'
+    'https://api.mainnet-beta.solana.com',
+    'https://api.mainnet.solana.com'
   ]),
   devnet: Object.freeze([
     'https://api.devnet.solana.com',

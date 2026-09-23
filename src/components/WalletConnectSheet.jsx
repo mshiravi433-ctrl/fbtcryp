@@ -682,8 +682,8 @@ export default function WalletConnectSheet({ open, onClose }) {
           </div>
           <p className="wc-foot wc-foot-risk">{t('wallet.localRisk')}</p>
 
-          {/* The evidence, one tap away, where the failure happened. */}
-          <WalletHealthPanel projectId={wallet.wcProjectId} />
+          {/* Health hidden on request — «قسمت سلامت اتصال را مخفی کن» */}
+          {null && <WalletHealthPanel projectId={wallet.wcProjectId} />}
         </>
       )}
 
