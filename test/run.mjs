@@ -902,6 +902,18 @@ console.log('\n▸ measuring the trade + token-sheet surface in light and dark�
   report('trade + token sheet theme', tradeThemeRows);
 }
 
+/* The stocks page → «سهام توکنیزه» (equity) flip banner in light and dark.
+   The reported bug: a fixed-height card clipped its wrapped Persian text at
+   the top edge, and the light-theme rules targeted a `.light` class the app
+   never applies — white text over a near-white glass in the light theme.
+   Same discipline as the trade probe: real stylesheets into jsdom, the glass
+   composited as seen, WCAG contrast measured. */
+console.log('\n▸ measuring the stocks flip banner (equity tab) in light and dark…');
+{
+  const { default: flipBannerRows } = await import('./stocks-flip-banner-probe.mjs');
+  report('stocks flip banner theme', flipBannerRows);
+}
+
 /* App ↔ site parity. The website and the packaged Android app are one bundle
    built by two pipelines, which is how a fix lands on one and not the other:
    the API origin, the LI.FI fee wallet, and the wording of a quote failure.
