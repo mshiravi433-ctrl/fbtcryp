@@ -204,17 +204,32 @@ export function isSolanaRelayUrl(url) {
 /* ── «the public nodes are blocked from here» ──────────────────────────────
  *
  * The cooldown map below already knows this within a session: when every public
- * host is cooling as BLOCKED, the relay should be tried FIRST, not last, because
- * walking four hosts that have each already said no costs the user seconds and
- * teaches us nothing new.
+ * host is cooling as BLOCKED — or as UNUSABLE, meaning it ANSWERED with something
+ * this app could not read (a WAF page served as a 200, a body that is not
+ * JSON-RPC) — the relay should be tried FIRST, not last, because walking four
+ * hosts that have each already said no costs the user seconds and teaches us
+ * nothing new.
+ *
+ * The 2026-09-23 report is why UNUSABLE counts: that network path answered with
+ * a MIX — three 403s, one 429, one connection error, two 200s whose bodies the
+ * SDK could not use — and the old rule (every host BLOCKED) therefore learned
+ * nothing, so all nine candidates were walked again on the next load. A host
+ * that answers with something unusable is not a host this path can use.
  *
  * Across sessions that knowledge was lost, so every app start repeated the same
- * four refusals before reaching the relay — a slow, guaranteed-failing preamble
- * on the exact page the user opened. One localStorage line, written only when a
- * whole public list has just been refused and cleared the moment any public node
- * answers, keeps the next start honest. Six hours, because a block is a property
- * of a network path and network paths change (the user switches from Wi-Fi to
- * mobile data, the provider unblocks the host).
+ * refusals before reaching the relay — a slow, guaranteed-failing preamble on
+ * the exact page the user opened. One localStorage line, written only when a
+ * whole public list has just proved useless and cleared the moment any public
+ * node answers, keeps the next start honest. Six hours, because a block is a
+ * property of a network path and network paths change (the user switches from
+ * Wi-Fi to mobile data, the provider unblocks the host).
+ *
+ * A THROTTLE still does not qualify (429): waiting genuinely fixes throttling,
+ * and routing a healthy network through our server for six hours because a free
+ * node was busy for a minute would be a worse trade than a retry — see the test
+ * that pins it. A network-level failure does not qualify either: an unreachable
+ * host may be a dead Wi-Fi, and the remedy there is a retry, not a hop through
+ * our server.
  */
 const PUBLIC_BLOCKED_KEY = 'fbt.solana.rpc.publicsBlocked.v1';
 const PUBLIC_BLOCKED_TTL_MS = 6 * 60 * 60 * 1000;
@@ -257,10 +272,15 @@ export function clearSolanaPublicsBlocked() {
 /**
  * Should the relay be tried before the public nodes right now?
  *
- * True when the persisted hint says this cluster's publics were refused
- * recently, OR when every public candidate is cooling as BLOCKED in this
- * session. A throttle (429) alone does NOT qualify: waiting genuinely fixes
+ * True when the persisted hint says this cluster's publics proved useless
+ * recently, OR when every public candidate is cooling as BLOCKED or UNUSABLE in
+ * this session. A throttle (429) alone does NOT qualify: waiting genuinely fixes
  * throttling, and a relay hop costs us upstream quota that a retry would not.
+ *
+ * The `UNUSABLE` half is what the second 2026-09-23 report added. Its network
+ * path produced a MIX of refusals and unusable answers, and the old rule —
+ * every host BLOCKED — was therefore false, so the relay sat at the BACK of a
+ * nine-candidate list on a path where only the relay could ever answer.
  */
 export function solanaPublicsBlocked(cluster = 'mainnet-beta') {
   const c = normalizeSolanaCluster(cluster);
@@ -269,7 +289,11 @@ export function solanaPublicsBlocked(cluster = 'mainnet-beta') {
   pruneCooling();
   const publics = SOLANA_CLUSTER_RPCS[c] || SOLANA_CLUSTER_RPCS['mainnet-beta'];
   if (!publics.length) return false;
-  return publics.every((url) => cooling.get(url)?.reason === 'BLOCKED');
+  const noHelp = (url) => {
+    const reason = cooling.get(url)?.reason;
+    return reason === 'BLOCKED' || reason === 'UNUSABLE';
+  };
+  return publics.every(noHelp);
 }
 
 /**
@@ -350,7 +374,18 @@ export async function solanaRpcCall(url, method, params = [], { timeoutMs = RPC_
       return { ok: false, ms, url, reason, detail: `HTTP ${res.status}` };
     }
     const body = await res.json().catch(() => null);
-    if (!body) return { ok: false, ms, url, reason: 'BAD_RESPONSE' };
+    if (!body) {
+      /* A 200 that is not JSON-RPC: a WAF or captive-portal page, a proxy that
+         rewrote the body, a node that served something else entirely. The host
+         answered and the answer cannot be used — the same class of fact the
+         2026-09-23 report called «آن گره پاسخ داد، ولی پاسخی که نتوانستیم
+         استفاده کنیم». It is remembered (short of a refusal, longer than a
+         throttle) so the next read does not pay for it again, and the relay —
+         our own origin, which the page already proved it can reach — moves
+         ahead of it. */
+      if (!isSolanaRelayUrl(url)) noteSolanaRpcFailure(url, 'UNUSABLE');
+      return { ok: false, ms, url, reason: 'BAD_RESPONSE' };
+    }
     if (body.error) return { ok: false, ms, url, reason: 'RPC_ERROR', detail: String(body.error?.message || '').slice(0, 160) };
     /* It answered — whatever it did before is history. */
     clearSolanaRpcCooldown(url);
@@ -399,6 +434,18 @@ const cooling = new Map();
 /** A throttle clears quickly; a refusal does not. */
 const COOLDOWN_RATE_LIMIT_MS = 3 * 60 * 1000;
 const COOLDOWN_REFUSAL_MS = 30 * 60 * 1000;
+/**
+ * «It answered, and the answer was not usable» — a WAF page served as a 200, a
+ * body that is not JSON-RPC, a 200 the SDK could not decode. This is its own
+ * duration on purpose: shorter than a REFUSAL (a refusal is a standing decision
+ * about this caller, an unusable answer may be one node's bad moment), longer
+ * than a throttle (re-asking in three minutes rarely changes a body).
+ *
+ * The 2026-09-23 report had two of these, and before this they were the hosts
+ * that stayed «warm»: every refresh asked them first, they wasted a full round
+ * trip each, and the app learned nothing between reads.
+ */
+const COOLDOWN_UNUSABLE_MS = 10 * 60 * 1000;
 
 const pruneCooling = (now = Date.now()) => {
   for (const [url, row] of cooling) if (row.until <= now) cooling.delete(url);
@@ -411,7 +458,7 @@ const pruneCooling = (now = Date.now()) => {
  * the lending reads, the balance reads — teaches the same map.
  *
  * @param {string} url
- * @param {string} reason RATE_LIMITED | BLOCKED | HTTP_xxx
+ * @param {string} reason RATE_LIMITED | BLOCKED | UNUSABLE | HTTP_xxx
  * @param {{status?:number|null}} [meta]
  * @returns {number|null} the moment the cooldown ends, or null when nothing was recorded
  */
@@ -420,10 +467,18 @@ export function noteSolanaRpcFailure(url, reason, { status = null } = {}) {
   if (!u) return null;
   const refused = reason === 'BLOCKED' || status === 401 || status === 403 || status === 451;
   const throttled = reason === 'RATE_LIMITED' || status === 429;
-  if (!refused && !throttled) return null;
-  const ms = refused ? COOLDOWN_REFUSAL_MS : COOLDOWN_RATE_LIMIT_MS;
+  /* A host that ANSWERED with something this app could not read is not warm
+     either — see COOLDOWN_UNUSABLE_MS. It is recorded as its own reason, never
+     as a refusal: the two have different remedies and different durations. */
+  const unusable = reason === 'UNUSABLE';
+  if (!refused && !throttled && !unusable) return null;
+  const ms = refused ? COOLDOWN_REFUSAL_MS : unusable ? COOLDOWN_UNUSABLE_MS : COOLDOWN_RATE_LIMIT_MS;
   const until = Date.now() + ms;
-  cooling.set(u, { until, reason: refused ? 'BLOCKED' : 'RATE_LIMITED', status: status ?? null });
+  cooling.set(u, {
+    until,
+    reason: refused ? 'BLOCKED' : unusable ? 'UNUSABLE' : 'RATE_LIMITED',
+    status: status ?? null
+  });
   return until;
 }
 
@@ -493,13 +548,16 @@ export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_
   const rateLimited = attempts.some((a) => a.reason === 'RATE_LIMITED');
   const unreachable = attempts.every(dead);
   const timedOut = !unreachable && attempts.every((a) => a.reason === 'TIMEOUT' || a.reason === 'RATE_LIMITED');
-  /* Every PUBLIC host refused (403/401/451): that is a fact about this network
-     path, not about one node, so the next start begins with the relay instead of
-     repeating four known refusals first. A list that merely timed out is NOT
-     written — an unreachable host may be a dead Wi-Fi, and the remedy there is a
-     retry, not a hop through our server. */
+  /* Every PUBLIC host either refused (403/401/451) or answered with something
+     unusable (BAD_RESPONSE): that is a fact about this network path, not about
+     one node, so the next start begins with the relay instead of repeating a
+     known-useless list first. A list that merely timed out is NOT written — an
+     unreachable host may be a dead Wi-Fi, and the remedy there is a retry, not a
+     hop through our server. A THROTTLE is not written either: see the note on
+     PUBLIC_BLOCKED_KEY. */
+  const noHelp = (a) => isBlocked(a) || a.reason === 'BAD_RESPONSE';
   const publicAttempts = attempts.filter((a) => !a.relay);
-  if (publicAttempts.length > 0 && publicAttempts.every(isBlocked)) noteSolanaPublicsBlocked(settings.cluster);
+  if (publicAttempts.length > 0 && publicAttempts.every(noHelp)) noteSolanaPublicsBlocked(settings.cluster);
   return {
     ok: false,
     url: null,

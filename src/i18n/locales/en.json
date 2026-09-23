@@ -10225,6 +10225,7 @@
       "KAMINO_SDK_MIME": "The Kamino module was served with the wrong content type (the server answered with a page, not the module) — reload the app.",
       "KAMINO_SDK_RECOVERED": "The Kamino module loaded after a retry. If something fails, reload the app.",
       "RPC_UNAVAILABLE": "That node answered with something we could not use.",
+      "RELAY_METHOD_UNAVAILABLE": "The app’s own relay does not forward this request — this is a gap in this app version, not a node or network failure. Nothing was sent; update the app and try again.",
       "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request."
     },
     "rateUnknown": "live rate unavailable right now",

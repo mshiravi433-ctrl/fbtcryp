@@ -1277,7 +1277,8 @@
       "KAMINO_SDK_MIME": "Kamino 模块的内容类型不正确（服务器返回的是页面而不是模块）——请重新加载应用。",
       "KAMINO_SDK_RECOVERED": "重试后 Kamino 模块已加载。若出现问题，请重新加载应用。",
       "WALLET_NOT_FOUND": "此设备上未找到可打开此请求的 Solana 钱包应用——请安装或打开钱包应用后重试。",
-      "RPC_UNAVAILABLE": "该节点返回了我们无法使用的内容。"
+      "RPC_UNAVAILABLE": "该节点返回了我们无法使用的内容。",
+      "RELAY_METHOD_UNAVAILABLE": "应用自身的转发节点不转发此请求——这是本应用版本的缺口，而不是节点或网络故障。没有发送任何内容；请更新应用后重试。"
     },
     "ratesUpdated": "利率从借贷合约（Morpho/Aave）读取 —— 自动刷新。",
     "connectWallet": "连接钱包",

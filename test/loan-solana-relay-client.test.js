@@ -24,7 +24,7 @@ import {
   SOLANA_CLUSTER_RPCS, SOLANA_RELAY_PATH,
   solanaRelayUrl, relayUrlFrom, isSolanaRelayUrl, solanaRpcCandidates, solanaPublicsBlocked,
   noteSolanaPublicsBlocked, clearSolanaPublicsBlocked,
-  noteSolanaRpcFailure, clearSolanaRpcCooldown, solanaRpcCooldowns,
+  noteSolanaRpcFailure, solanaRpcCall, solanaRpcCooling, clearSolanaRpcCooldown, solanaRpcCooldowns,
   resetSolanaRpcChoice, probeSolanaRpc, getSolanaRpcUrl
 } from '../src/lib/solanaRpc.js';
 import { lendingRpcFailure } from '../src/lib/solanaLending.js';
@@ -242,5 +242,73 @@ describe('our own domain is never listed among the public nodes that refused you
     ]);
     expect(error.code).toBe('RPC_RATE_LIMITED');
     expect(error.hosts[0].relay).toBe(true);
+  });
+
+  /*
+   * Report 2026-09-23 (second), the app's own relay row:
+   *
+   *   «رلهٔ خود برنامه — آن گره پاسخ داد، ولی پاسخی که نتوانستیم استفاده کنیم»
+   *
+   * The relay had answered the market account and then refused the RESERVE
+   * batch with `-32601 … is not relayed` — because the allowlist carried the
+   * JS-level name `getMultipleAccountsInfo` and web3.js sends
+   * `getMultipleAccounts`. Every sentence in the old vocabulary pointed the
+   * user at the network («try again», «enter your own RPC»), for a bug that
+   * lived in this repo. The row and the headline now say so.
+   */
+  it('names our own relay’s method refusal as OURS, not as a node failure', () => {
+    const error = lendingRpcFailure([
+      {
+        url: 'https://app.example.com/api/solana/rpc?cluster=mainnet-beta',
+        code: -32601,
+        error: 'failed to get info for accounts 7u3He…: method getMultipleAccounts is not relayed: this endpoint is read-only and forwards an allowlist'
+      }
+    ]);
+    expect(error.code).toBe('RELAY_METHOD_UNAVAILABLE');
+    expect(error.hosts[0]).toMatchObject({ relay: true, reason: 'RELAY_METHOD_UNAVAILABLE' });
+    expect(error.hosts[0].reason).not.toBe('RPC_UNAVAILABLE');
+  });
+
+  it('does not put OUR word in a public node’s mouth', () => {
+    /* Only the relay carries the app’s own refusal text. A public node that
+       happens to answer the same words is not «our relay» and gets no such
+       label — the row must keep meaning what it says. */
+    const error = lendingRpcFailure([
+      { url: 'https://solana-rpc.publicnode.com', code: -32601, error: 'method getMultipleAccounts is not relayed' }
+    ]);
+    expect(error.hosts[0].reason).not.toBe('RELAY_METHOD_UNAVAILABLE');
+    expect(error.code).not.toBe('RELAY_METHOD_UNAVAILABLE');
+  });
+});
+
+/* ═════════ a node that answered with something unusable is not warm ═══════ */
+
+describe('an unusable answer is remembered, so the next read is not a repeat', () => {
+  it('cools a host that answered 200 with something that is not JSON-RPC', async () => {
+    const host = PUBLICS[0];
+    globalThis.fetch = async () => new Response('<html>blocked by a middlebox</html>', {
+      status: 200, headers: { 'content-type': 'text/html' }
+    });
+    const out = await solanaRpcCall(host, 'getAccountInfo', ['7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF']);
+    expect(out.reason).toBe('BAD_RESPONSE');
+    /* Remembered as its own class: not a refusal (the host did not say no) and
+       not a throttle (waiting changes nothing about the body). */
+    expect(solanaRpcCooling(host)?.reason).toBe('UNUSABLE');
+    /* It is therefore not «warm» any more: the next read walks the list past the
+       relay before it reaches this host again. */
+    const list = solanaRpcCandidates({ cluster: 'mainnet-beta', relay: true });
+    expect(list.indexOf(host)).toBeGreaterThan(list.findIndex(isSolanaRelayUrl));
+  });
+
+  it('a whole list of unusable answers is the same verdict as a whole list of refusals', async () => {
+    /* Report 2026-09-23 (second): the path produced a MIX — 403s, a 429, a
+       connection error and two unusable 200s — so the old rule («every host
+       BLOCKED») never fired and all nine candidates were walked again on the
+       next load. Unusable answers now count towards the same verdict. */
+    globalThis.fetch = async () => new Response('<!doctype html><html>nope</html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    for (const url of PUBLICS) await solanaRpcCall(url, 'getHealth', []);
+    expect(PUBLICS.every((url) => solanaRpcCooling(url)?.reason === 'UNUSABLE')).toBe(true);
+    expect(solanaPublicsBlocked('mainnet-beta')).toBe(true);
+    expect(isSolanaRelayUrl(solanaRpcCandidates({ cluster: 'mainnet-beta', relay: true })[0])).toBe(true);
   });
 });
