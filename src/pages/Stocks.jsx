@@ -38,6 +38,8 @@ import { feePercentString } from '../lib/feeBps';
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
+import RwaHorizonFlipBanner from '../components/RwaHorizonFlipBanner';
+import '../styles/rwa-flip-banner.css';
 
 /*
  * These are tab routes, not imports. The Stocks page is already a lazy route,
@@ -628,32 +630,16 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
-          {/* Quick doorway to tradeable RWA tokens. Each sentence is its own
-              full-width line — a side button was what forced the wrap. */}
-          <motion.button
-            type="button"
-            className="rwa-door"
-            variants={riseIn}
-            initial="hidden"
-            animate="show"
-            onClick={() => {
-              haptic?.('select');
-              setTab('rwa');
-            }}
-          >
-            <span className="rwa-fit-slot">
-              <FitLine text={t('stocks.goToRwaBanner')} className="rwa-fit rwa-fit-title" max={13.5} min={11} />
-            </span>
-            <span className="rwa-fit-slot">
-              <FitLine
-                text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
-                className="rwa-fit rwa-fit-sub"
-                max={12.5}
-                min={11}
-              />
-            </span>
-            <span className="rwa-door-cta">{t('stocks.goToRwaCta')}</span>
-          </motion.button>
+          {/* Modern flip banner — RWA + Horizon (افق جهانی) — requested: مدرن و فلیپ وار */}
+          <motion.div variants={riseIn} initial="hidden" animate="show">
+            <RwaHorizonFlipBanner
+              t={t}
+              haptic={haptic}
+              isRTL={isRTL}
+              onGoRwa={() => setTab('rwa')}
+              onGoHorizon={() => setTab('ostium')}
+            />
+          </motion.div>
 
           {/*
             ─── TOP MOVERS + STATS, ABOVE THE LIST ────────────────────────────
