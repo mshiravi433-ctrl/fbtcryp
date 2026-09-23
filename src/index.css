@@ -8364,6 +8364,480 @@ button.farm-protocol-toggle {
   cursor: not-allowed;
 }
 
+/* ==========================================================================
+   RWA CARDS  —  .rwa-*
+   One-line banners, equal buy/share rows, contract + spec boxes that follow
+   the RGB theme in both colour modes. `.btn` is width 100%; these rows use
+   `.btn-row` so Share is not crushed beside Copy.
+   ========================================================================== */
+
+.rwa-door {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 38%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 58%),
+    var(--bg-panel);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rwa-fit-slot {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rwa-fit {
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1.35;
+  max-width: 100%;
+}
+
+.rwa-fit-title {
+  font-weight: 750;
+  color: var(--text-1);
+}
+
+.rwa-fit-sub {
+  font-weight: 550;
+  color: var(--text-2);
+}
+
+.rwa-door-cta,
+.rwa-fee-line {
+  white-space: nowrap;
+}
+
+.rwa-door-cta {
+  margin-top: 2px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 750;
+  color: #041018;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
+}
+
+.rwa-fee-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.rwa-fee-line .rwa-fit-slot { flex: 1; }
+
+.rwa-card {
+  position: relative;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 46%),
+    var(--bg-panel);
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.rwa-card::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--rgb-1), var(--rgb-2));
+}
+
+.rwa-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rwa-logo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 32%, var(--line));
+  background: color-mix(in srgb, var(--rgb-1) 10%, var(--bg-raised));
+}
+
+.rwa-logo .tok-icon {
+  border-radius: 12px;
+}
+
+.rwa-card-id {
+  min-width: 0;
+  flex: 1;
+}
+
+.rwa-card-name {
+  font-weight: 750;
+  font-size: 14px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rwa-name-full {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.rwa-card-sym {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rwa-card-px {
+  flex-shrink: 0;
+  text-align: end;
+  font-size: 12px;
+}
+
+.rwa-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+
+.rwa-chips .pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  max-width: none;
+  font-size: 11px;
+  min-height: 26px;
+}
+
+.rwa-card-backing {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rwa-calc {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+.rwa-calc-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.rwa-calc-num {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.rwa-actions {
+  margin-top: 12px;
+}
+
+.rwa-actions > .btn,
+.rwa-quick,
+.rwa-chart,
+.rwa-contract-actions > .btn,
+.rwa-explorer {
+  min-height: 44px;
+  font-size: 13px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rwa-actions > .btn span,
+.rwa-quick span,
+.rwa-contract-actions > .btn span,
+.rwa-explorer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rwa-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rwa-spark,
+.rwa-spec,
+.rwa-contract,
+.rwa-custody {
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg-panel-solid) 72%, transparent);
+  padding: 12px 14px;
+}
+
+.rwa-spark {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rwa-spec-title,
+.rwa-custody-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 750;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-1);
+  margin-bottom: 8px;
+}
+
+.rwa-spec-title svg { color: var(--rgb-1); flex-shrink: 0; }
+
+.rwa-spec-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 38%) minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: start;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.rwa-spec-k { color: var(--text-2); }
+
+.rwa-spec-v {
+  text-align: end;
+  font-weight: 650;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+}
+
+.rwa-spec-note,
+.rwa-custody p {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.rwa-addr {
+  min-height: 44px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.03em;
+  color: var(--text-1);
+  overflow-x: auto;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.rwa-contract-actions { margin-top: 8px; }
+
+.rwa-explorer {
+  margin-top: 8px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-1);
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.rwa-custody {
+  background: color-mix(in srgb, var(--rgb-4) 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--rgb-4) 28%, var(--line));
+}
+
+.rwa-custody-title { color: var(--up); margin-bottom: 4px; }
+
+.rwa-amounts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rwa-amounts-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.rwa-amounts-picks {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rwa-amounts-picks .tag {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rwa-quick,
+.rwa-chart { width: 100%; }
+
+.rwa-risk { margin-top: 0; }
+
+.rwa-risk-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.rwa-risk-title .pill {
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.rwa-risk-body { display: flex; flex-direction: column; gap: 8px; }
+
+.rwa-risk-kicker {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+.rwa-risk-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.rwa-risk-grid span:nth-child(odd) { color: var(--text-2); }
+.rwa-risk-grid span:nth-child(even) { text-align: end; font-weight: 650; }
+
+.rwa-risk-flag,
+.rwa-risk-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.rwa-risk-flag-high { color: var(--down); }
+.rwa-risk-flag-medium { color: var(--text-1); }
+
+.rwa-risk-retry {
+  align-self: flex-start;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .rwa-door,
+:root[data-theme='light'] .rwa-card,
+:root[data-theme='light'] .rwa-spec,
+:root[data-theme='light'] .rwa-contract,
+:root[data-theme='light'] .rwa-spark {
+  background: #ffffff;
+  box-shadow: 0 10px 28px -18px rgba(16, 20, 40, 0.28);
+}
+
+:root[data-theme='light'] .rwa-addr {
+  background: #f4f6fb;
+  color: #1a1a2e;
+}
+
+:root[data-theme='light'] .rwa-custody {
+  background: #f3fbf7;
+  border-color: rgba(0, 140, 90, 0.28);
+}
+
+:root[data-theme='light'] .rwa-door-cta { color: #041018; }
+
 
 /* ==========================================================================
    SWAP PERCENTAGE SHORTCUTS  —  .swap-portion*
