@@ -70,7 +70,26 @@ export const POOL_ABI = [
      chain — measured live. The second entry remains only as a fallback for
      V2-style forks; the canonical selector is always tried FIRST. */
   'function ADDRESSES_PROVIDER() view returns (address)',
-  'function getAddressesProvider() view returns (address)'
+  'function getAddressesProvider() view returns (address)',
+  /* ── THE WRITE SURFACE, which was missing ──────────────────────────────────
+     Until 2026-09-23 this ABI carried reads only, while `buildActionTx` below
+     encodes supply/withdraw/borrow/repay through the SAME Interface. Every
+     /api/lending/quote/* and /api/lending/transaction/* call therefore threw
+     «unknown function withdraw(address,uint256,address)» the moment it reached
+     the build step and answered HTTP 500 — the BFF could validate an action and
+     could not build one. Nothing caught it because the CI probe has no chain
+     egress, so it never reached a successful quote: the offline paths were all
+     green over an endpoint that had never built a transaction.
+
+     The signatures are byte-for-byte the ones in src/lib/lending.js's
+     AAVE_POOL_ABI, and test/lending-bff-frozen.test.js now pins the SELECTORS of
+     the two files against each other, because two copies of an ABI that are
+     allowed to drift silently is how a server builds calldata for a function
+     the pool does not have. */
+  'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+  'function withdraw(address asset, uint256 amount, address to) returns (uint256)',
+  'function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)',
+  'function repay(address asset, uint256 amount, uint256 interestRateMode, address onBehalfOf) returns (uint256)'
 ];
 /* The registry contract that owns the deployment lookups (§21) — the price
    oracle included. getPriceOracle lives HERE, not on the Pool: 2026-09-22 saw
@@ -101,7 +120,11 @@ export const ORACLE_ABI = [
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
-  'function decimals() view returns (uint8)'
+  'function decimals() view returns (uint8)',
+  /* The exact-amount approval §29 requires before a supply or a repay. It was
+     missing for the same reason the pool's write functions were, so any action
+     that needed an approval threw instead of building one. */
+  'function approve(address spender, uint256 amount) returns (bool)'
 ];
 const RAY = 10n ** 27n;
 const SECONDS_PER_YEAR = 31536000;
@@ -110,7 +133,10 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 
 const poolIface = new Interface(POOL_ABI);
 const providerIface = new Interface(PROVIDER_ABI);
-const erc20Iface = new Interface(ERC20_ABI);
+/* Exported for the same reason poolIface is: a probe must be able to compare the
+   server's ABI against the client's instead of trusting that two hand-copied
+   lists still agree. */
+export const erc20Iface = new Interface(ERC20_ABI);
 const oracleIface = new Interface(ORACLE_ABI);
 const coder = AbiCoder.defaultAbiCoder();
 
@@ -919,7 +945,42 @@ export function lendingRouter() {
     const reserve = await readReserve(chainId, token);
     if (!reserve.ok) return safeJson(res, { error: { code: 'PROTOCOL_UNAVAILABLE', message: 'The lending protocol is not answering right now' } }, 503);
     if (!reserve.listed) return safeJson(res, { error: { code: 'NOT_A_RESERVE', message: 'This asset is not a market on this network' } }, 400);
-    if (reserve.status !== 'active') return safeJson(res, { error: { code: 'MARKET_PAUSED', message: 'This market is currently paused by the protocol' } }, 423);
+    /* §29 — FROZEN IS NOT PAUSED, and this line was the last place in the
+       repository that still treated them as one thing.
+
+       It refused every action on any non-active reserve with code MARKET_PAUSED
+       and the message «this market is currently paused by the protocol». On
+       Sonic — where Aave's ARFC of 2026-07-30 froze all 25 reserves, cut the
+       caps to 1 and raised the reserve factor to 99% to wind the deployment
+       down — that answer was both wrong and expensive: a frozen reserve still
+       accepts repay and withdraw on-chain, and those two actions are the only
+       way a user gets their funds out of a market that is being retired. Telling
+       them the market is «paused» told them to walk away and leave the money
+       there.
+
+       So the gate is per ACTION now, exactly like evaluateAction() on the client
+       (src/lib/lending-service.js) and exactly like the chain itself:
+         paused → every action closed (bit 60 stops the reserve outright);
+         frozen → the two OPENING actions closed, repay/withdraw allowed and
+                  SAID so in `warnings`, so a caller cannot miss it;
+         unknown → allowed. A read that failed is not a protocol refusal, and
+                  inventing one is the failure mode §3/§37 forbid — the chain
+                  enforces its own state either way. */
+    const opening = action === 'supply' || action === 'borrow';
+    let reserveWarning = null;
+    if (reserve.status === 'paused') {
+      return safeJson(res, { error: { code: 'MARKET_PAUSED', message: 'The protocol has paused this reserve: every action is closed' } }, 423);
+    }
+    if (reserve.status === 'frozen' && opening) {
+      return safeJson(res, { error: { code: 'MARKET_FROZEN', message: 'The protocol has frozen this reserve: new supply and new borrow are closed, repay and withdraw stay open' } }, 423);
+    }
+    if (reserve.status === 'frozen') {
+      reserveWarning = {
+        code: 'MARKET_FROZEN',
+        message: 'This reserve is frozen by the protocol: repay and withdraw stay open, new supply and borrow do not',
+        action
+      };
+    }
 
     const [account, allowanceRes] = await Promise.all([
       readUserAccount(chainId, w),
@@ -1000,6 +1061,10 @@ export function lendingRouter() {
           broadcast: false,
           capabilities: { sign: 'wallet-only', broadcast: 'wallet-only' }
         })),
+        /* §41: a risk that does not block is still communicated. Empty unless
+           the reserve is frozen and this action is one of the two that stay
+           open on it — the caller is told what state it is signing into. */
+        warnings: reserveWarning ? [reserveWarning] : [],
         status: 'built'
       },
       meta: {

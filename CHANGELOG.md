@@ -1,3 +1,72 @@
+# ۲۰۲۶-۰۹-۲۳ — رلهٔ فقط-خواندنیِ RPC سولانا + بازارِ منجمدِ سونیک قابل استفاده شد (و BFF توانست تراکنش بسازد)
+
+گزارش‌های صفحهٔ وام: «مرج ۳۹۸ انگار لایو نشده» · چهار نودِ عمومی هم‌زمان رد کردند
+(۴۰۳ از `solana-rpc.publicnode.com` و `api.mainnet-beta.solana.com`، پاسخِ نامعتبر از
+`solana.drpc.org`، ۴۲۹ از `solana.api.onfinality.io`) و صفحه نوشت «تا زمان دریافت دادهٔ
+زنده هیچ تراکنشی ارسال نمی‌شود» · «در سونیک توکن‌ها فریز است درست کن». جزئیات کامل در
+[docs/LOAN-RELAY-AND-FROZEN-SONIC-2026-09-23-FA.md](docs/LOAN-RELAY-AND-FROZEN-SONIC-2026-09-23-FA.md).
+
+- `server/solanaRpcRelay.js` (**تازه**) + `POST /api/solana/rpc?cluster=…` و
+  `GET /api/solana/rpc/status` در `server/app.js` — یک **رلهٔ فقط-خواندنی** با
+  allowlist وزنیِ **۳۲ متد** (بدون `sendTransaction`، `requestAirdrop`، `getBlock`،
+  `getSupply`؛ بدون پارامترِ upstream، پس پروکسیِ باز نیست). دلیلِ وجودش: ۴۰۳ تصمیم
+  دربارهٔ IP مرورگرِ کاربر است و با هیچ هوشمندیِ سمت کلاینت درست نمی‌شود، ولی دامنهٔ
+  خودِ برنامه تنها origin‌ای است که مرورگر ثابت کرده به آن می‌رسد. **دو حافظهٔ رد**:
+  ۴۰۱/۴۰۳/۴۵۱ → کلِ host کنار می‌رود، ولی `-32601/-32602 «Request blocked»` → فقط جفتِ
+  `host|method` کنار می‌رود (یک گره می‌تواند `getHealth` را ۲۰۰ جواب دهد و
+  `getTokenAccountsByOwner` را نه — پس health معیارِ انتخاب نیست). ۴۲۹ رد نیست، فقط
+  ۶۰ ثانیه کنار. کش فقط روی خواندن‌های بازاری (حسابِ Kamino سراسری است → ۲.۵ ثانیه
+  اشتراک، N کاربر = یک فراخوانی) و **هرگز** روی آنچه به امضا یا تأییدیه ختم می‌شود
+  (`getLatestBlockhash`، `isBlockhashValid`، `getFeeForMessage`، `simulateTransaction`،
+  `getSignatureStatuses`، `getSignaturesForAddress`، `getTransaction`). بودجهٔ هر IP
+  ۶۰۰ وزن/دقیقه + ۴۰ سنگین/دقیقه؛ سقف پاسخ ۴ مگابایت (زیر سقفِ ۴.۵ مگابایتیِ Vercel،
+  با خطای `RESPONSE_TOO_LARGE` به‌جای JSONِ بریده). وقتی **همهٔ** بالادست‌ها رد کردند،
+  status خودشان جلو می‌رود — چون کلاینت status-first طبقه‌بندی می‌کند و لباس پوشاندنِ
+  ۴۰۳ با ۵۰۲، همان نقصی است که PR #398 حذف کرده بود. این دو مسیر **پیش از** limiter
+  سراسریِ `/api` mount شده‌اند: یک بار لود شدنِ بازار یک‌درجن فراخوانی است و زیرِ
+  ۱۲۰/دقیقه، خواندنِ صفحه باعث ۴۲۹ گرفتنِ **بقیهٔ** `/api` برای همان کاربر می‌شد.
+- `src/lib/solanaRpc.js` / `src/lib/solanaLending.js` — رله **opt-in** است
+  (`solanaRpcCandidates({ relay: true })`) و تنها وقتی اول صف می‌آید که در همین نشست همهٔ
+  نودهای عمومی مسدود شده باشند؛ `relayUrlFrom()` یک تابعِ خالصِ export شده است که base
+  نسبی و origin برابرِ `https://localhost` را رد می‌کند (داخل WebView «همان origin» یعنی
+  هیچ). **throttle با block یکی نیست**: ۴۲۹ ترتیب را در نشست عوض می‌کند ولی هرگز ذخیره
+  نمی‌شود. رله از cooldown معاف است و در عوض `probeSolanaRpc` برنده شدنش را به خاطر
+  نمی‌سپارد، وگرنه دائمی می‌شد. **مرز §30 ساختاری است:** `getSolanaRpcUrl()` هرگز رله
+  را برنمی‌گرداند و `sendRawSolana` فقط از همان می‌خواند، پس broadcast نمی‌تواند از رله
+  عبور کند. `loan.rpc.relayHost` در هر ۱۲ زبان تا پنل، دامنهٔ خودمان را به‌عنوان یک نودِ
+  عمومی چاپ نکند.
+- **سونیک:** طبق ARFC تاریخ ۲۰۲۶/۰۷/۳۰، Aave V3 روی Sonic در حال wind-down است و ۲۵ رزرو
+  فریز شده‌اند — یک تصمیمِ حاکمیتیِ پروتکل که این برنامه هیچ مسیری برای برگرداندنش ندارد؛
+  در همین حالت **بازپرداخت و برداشت باز می‌مانند**. نقصِ ما این بود که «فریز» (بیت ۵۷) را
+  دقیقاً مثل «توقف» (بیت ۶۰) رفتار می‌کردیم، پس کاربری که پوزیشنِ باز داشت حتی نمی‌توانست
+  دارایی را برای بازپرداخت انتخاب کند. حالا `server/lending.js` گیتِ تفکیکیِ action دارد
+  (توقف → ۴۲۳ برای همه؛ فریز → ۴۲۳ فقط برای supply/borrow و repay/withdraw مجاز با
+  `data.warnings`)، `MARKET_FROZEN` عضوِ درجه‌یکِ تاکسونومیِ خطاست (نه `UNKNOWN` و نه
+  `MARKET_PAUSED`) با جملهٔ en/fa، کدِ ۲۸ و سلکتور `0x6d305815` در `explainAaveRevert` به
+  `MARKET_FROZEN` نگاشت می‌شوند، و `MarketHaltedNotice` برای بازارِ منجمد دکمهٔ «رفتن به
+  پوزیشن‌ها» دارد (برای بازارِ متوقف ندارد — آن‌جا هیچ‌کدام کار نمی‌کند). یک خواندنِ
+  شکست‌خورده (`unknown`) امتناعِ پروتکل حساب نمی‌شود و راه را نمی‌بندد.
+- **باگی که سرِ همین راه پیدا شد:** هر `/api/lending/quote/*` و `/api/lending/transaction/*`
+  با HTTP 500 و `TypeError: unknown function withdraw(address,uint256,address)` برمی‌گشت —
+  `POOL_ABI` در `server/lending.js` فقط تابع‌های خواندنی داشت در حالی که `buildActionTx` از
+  همان Interface برای encode کردنِ supply/withdraw/borrow/repay استفاده می‌کند، و
+  `ERC20_ABI` هم `approve` نداشت. یعنی BFF می‌توانست یک action را اعتبارسنجی کند و
+  نمی‌توانست یکی بسازد. هیچ تستی نمی‌گرفت چون `lending-bff-probe` در CI دسترسیِ زنجیره ندارد
+  و هرگز به یک quote موفق نمی‌رسید. چهار تابعِ action + `approve` اضافه شد (بایت‌به‌بایت همان
+  `AAVE_POOL_ABI` سمت کلاینت) و تستِ جدید **سلکتورهای دو کپی را با هم مقایسه می‌کند**.
+- `public/sw.js` → `fbt-shell-v23` (بدون این، نصب‌های قدیمی همان کدِ قدیم را اجرا می‌کنند و
+  جملهٔ «لایو نشده» تکرار می‌شود) · بلوک `SOLANA_RELAY_*` در `.env.example` با مقدارهای
+  پیش‌فرض و اینکه کدام ماژول دیگر هم `SOLANA_RPC_URL` را می‌خواند.
+
+**تست:** سه فایلِ تازه — `loan-solana-relay` (**۲۳/۲۳**)، `loan-solana-relay-client`
+(**۱۵/۱۵**)، `lending-bff-frozen` (**۸/۸** — HTTP-سطحی روی روترِ واقعی با زنجیرهٔ ساختگیِ
+Sonic که `getReserveData` را ABI-encode شده جواب می‌دهد) · `loan-frozen-market` با ۵ تستِ
+تازهٔ تاکسونومی → **۳۸/۳۸** · مجموع loan/lending **۲۱۰ تست سبز** + `lending-engine-probe`
++ `lending-bff-probe` (exit 0) + `loan-execution-probe` **۳۸/۳۸** + بیلد پروداکشن سبز.
+۲۲ تستِ شکست‌خوردهٔ `npx vitest run` در ۶ فایل (`farm-*-public`، `insurance-marketplace-ui`،
+`intent-ai-greeting-language`، `lab-screens`) **روی `main` هم دقیقاً به همین شکل شکست‌خورده‌اند**
+(با stash و اجرای دوباره بررسی شد) و هیچ‌کدام از این تغییر نیستند.
+
 # ۲۰۲۶-۰۹-۲۲ — پل MCP (`fbt-mcp`): ایجنت‌های هوش مصنوعی بیرونی با ابزار واقعیِ FBT وصل شدند — بدون هیچ ابزار امضایی
 
 اجرای «گزینهٔ B» از [ارزیابی QuantDinger](docs/QUANTDINGER-ASSESSMENT-FA.md) (ضلع «عرضه»):

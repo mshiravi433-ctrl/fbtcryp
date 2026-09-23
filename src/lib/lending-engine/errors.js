@@ -34,6 +34,14 @@ export const LENDING_ERRORS = Object.freeze({
   SLIPPAGE:               { retryable: true,  kind: 'quote' },
 
   MARKET_PAUSED:          { retryable: false, kind: 'protocol' },
+  /* Aave's FROZEN reserve is NOT a paused one, and the taxonomy has to carry
+     both or the mapper below has nowhere honest to put a freeze. Frozen closes
+     NEW supply and NEW borrow; repay and withdraw stay open on-chain — which is
+     exactly how the 2026 wind-down of Sonic/Scroll/zkSync/Metis/Soneium/Aptos
+     asks positions to unwind. Telling a user with an open position on Sonic that
+     the market is «paused» sends them away from the two actions that still work
+     and leaves their funds where a 99% reserve factor is eating their yield. */
+  MARKET_FROZEN:          { retryable: false, kind: 'protocol' },
   PROTOCOL_UNAVAILABLE:   { retryable: true,  kind: 'protocol' },
 
   RPC_ERROR:              { retryable: true,  kind: 'infrastructure' },
@@ -73,6 +81,7 @@ export const describeError = (code, lang = 'en') => {
     ORACLE_ANOMALY: 'The price feed looks abnormal. New risky transactions are paused.',
     SLIPPAGE: 'The quote moved before confirmation. Try again.',
     MARKET_PAUSED: 'This market is currently paused by the protocol.',
+    MARKET_FROZEN: 'The protocol has frozen this reserve: new deposits and new borrows are closed, repayments and withdrawals still work.',
     PROTOCOL_UNAVAILABLE: 'The lending protocol is not answering right now. Try again.',
     RPC_ERROR: 'The network connection failed. Try again in a moment.',
     ORACLE_STALE: 'The price feed is stale. Try again in a moment.',
@@ -100,6 +109,7 @@ export const describeError = (code, lang = 'en') => {
     ORACLE_ANOMALY: 'فید قیمت غیرعادی است. تراکنش‌های پرریسک جدید متوقف شدند.',
     SLIPPAGE: 'قیمت قبل از تأیید تغییر کرد. دوباره تلاش کنید.',
     MARKET_PAUSED: 'این بازار فعلاً توسط پروتکل متوقف است.',
+    MARKET_FROZEN: 'پروتکل این رزرو را منجمد کرده: سپرده و وام جدید بسته است، اما بازپرداخت و برداشت هنوز کار می‌کند.',
     PROTOCOL_UNAVAILABLE: 'پروتکل وام‌دهی پاسخ نمی‌دهد. دوباره تلاش کنید.',
     RPC_ERROR: 'اتصال شبکه برقرار نشد. لحظاتی بعد دوباره تلاش کنید.',
     ORACLE_STALE: 'فید قیمت قدیمی است. لحظاتی بعد دوباره تلاش کنید.',
@@ -139,7 +149,16 @@ export function mapRawError(error, { fallback = 'UNKNOWN' } = {}) {
   if (/allowance|insufficient approval|erc20: transfer amount exceeds allowance/i.test(lowered)) {
     return { code: 'INSUFFICIENT_ALLOWANCE', retryable: true, rawSanitized: hex.slice(0, 160) };
   }
-  if (/paused|market.*paused|reserve.*paused|frozen/i.test(lowered)) {
+  /* frozen BEFORE paused, and as its own code (2026-09-23). This matcher used to
+     fold the word «frozen» into MARKET_PAUSED, so a wallet revert on a frozen
+     reserve — the whole Sonic market, since Aave's ARFC of 2026-07-30 — was
+     reported as «the protocol has paused this market»: a sentence that says
+     nothing works here. On a frozen reserve two of the four actions DO work, and
+     they are the ones that get the user's money out. */
+  if (/frozen|freeze/i.test(lowered)) {
+    return { code: 'MARKET_FROZEN', retryable: false, rawSanitized: hex.slice(0, 160) };
+  }
+  if (/paused|market.*paused|reserve.*paused/i.test(lowered)) {
     return { code: 'MARKET_PAUSED', retryable: false, rawSanitized: hex.slice(0, 160) };
   }
   if (/borrow.*(limit|cap)|not enough.*(liquidity|collateral|borrow)|insufficient.*liquidity|collateral.*(insufficient|needed)/i.test(lowered)) {

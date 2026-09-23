@@ -10388,7 +10388,8 @@
     "rpc": {
       "title": "We could not reach the network",
       "body": "Every public RPC node we tried failed. This is what each one answered:",
-      "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them."
+      "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them.",
+      "relayHost": "the app's own relay"
     },
     "wallet": {
       "title": "The wallet did not open for signing",

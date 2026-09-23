@@ -191,7 +191,7 @@
  * An install pinned to v21 keeps running the old code byte for byte until its
  * shell is evicted, so the rename is not cosmetic — without it the fixes never
  * appear on a device that already opened the app. */
-const SHELL = 'fbt-shell-v22';
+const SHELL = 'fbt-shell-v23';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

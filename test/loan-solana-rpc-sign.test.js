@@ -60,10 +60,14 @@ describe('the market read names the failure that actually happened', () => {
     ]);
     expect(error.code).toBe('RPC_BLOCKED');
     expect(error.detail).toContain('RPC_BLOCKED');
-    /* the per-host list the panel renders: host → reason, localized there */
+    /* The per-host list the panel renders: host → reason, localized there.
+       `relay` marks a row that arrived through the app's OWN relay rather than a
+       public node (server/solanaRpcRelay.js), so the panel can name it in the
+       user's language instead of printing this app's domain in a list of
+       «public nodes that refused you» — same fact, different door. */
     expect(error.hosts).toEqual([
-      { host: 'api.mainnet-beta.solana.com', reason: 'RPC_BLOCKED' },
-      { host: 'solana-rpc.publicnode.com', reason: 'RPC_RATE_LIMITED' }
+      { host: 'api.mainnet-beta.solana.com', reason: 'RPC_BLOCKED', relay: false },
+      { host: 'solana-rpc.publicnode.com', reason: 'RPC_RATE_LIMITED', relay: false }
     ]);
   });
 

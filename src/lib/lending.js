@@ -1120,7 +1120,7 @@ export const AAVE_REVERT_NUMERIC = Object.freeze({
   25: 'AMOUNT_REQUIRED',        // INVALID_BURN_AMOUNT
   26: 'AMOUNT_REQUIRED',        // INVALID_AMOUNT
   27: 'NOT_A_RESERVE',          // RESERVE_INACTIVE
-  28: 'MARKET_PAUSED',          // RESERVE_FROZEN
+  28: 'MARKET_FROZEN',          // RESERVE_FROZEN — not paused: repay/withdraw stay open
   29: 'MARKET_PAUSED',          // RESERVE_PAUSED
   32: 'INSUFFICIENT_BALANCE',   // NOT_ENOUGH_AVAILABLE_USER_BALANCE
   35: 'HEALTH_FACTOR_TOO_LOW',  // HEALTH_FACTOR_LOWER_THAN_LIQUIDATION_THRESHOLD
@@ -1135,7 +1135,7 @@ export const AAVE_REVERT_SELECTORS = Object.freeze({
   '0x2c5211c6': 'AMOUNT_REQUIRED',        // InvalidAmount()
   '0x2075cc10': 'AMOUNT_REQUIRED',        // InvalidBurnAmount()
   '0x90cd6f24': 'NOT_A_RESERVE',          // ReserveInactive()
-  '0x6d305815': 'MARKET_PAUSED',          // ReserveFrozen()
+  '0x6d305815': 'MARKET_FROZEN',          // ReserveFrozen() — repay/withdraw stay open
   '0xd37f5f1c': 'MARKET_PAUSED',          // ReservePaused()
   '0x47bc4b2c': 'INSUFFICIENT_BALANCE',   // NotEnoughAvailableUserBalance()
   '0x6679996d': 'HEALTH_FACTOR_TOO_LOW',  // HealthFactorLowerThanLiquidationThreshold()
