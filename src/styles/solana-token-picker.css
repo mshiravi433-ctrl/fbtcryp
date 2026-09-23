@@ -9,7 +9,10 @@
  * (flex + logical alignment), because the app runs fa first.
  */
 
-.stp-sheet .sheet-inner { display: flex; flex-direction: column; min-height: 0; }
+/* The Sheet's scrolling body is `.sheet-body` (min-height:0, overflow-y:auto
+   already) — the picker only needs it as a flex column so the search box and
+   section blocks stack cleanly inside it. */
+.stp-sheet .sheet-body { display: flex; flex-direction: column; }
 
 /* ── search ──────────────────────────────────────────────────────────────── */
 
