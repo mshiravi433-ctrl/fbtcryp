@@ -96,14 +96,16 @@ function TokenRow({ token, onPick, selected = false, testid }) {
         </span>
       </span>
       <span className="stp-right">
-        <span className="mono stp-price">{token.usdPrice != null ? compactUsd(token.usdPrice) : '—'}</span>
-        {ch != null ? (
-          <span className={`mono stp-chg ${ch >= 0 ? 'stp-up' : 'stp-down'}`}>
-            {ch >= 0 ? '+' : ''}{ch.toFixed(ch >= 100 ? 0 : 1)}%
-          </span>
-        ) : (
-          <span className="mono stp-chg stp-flat">24h —</span>
-        )}
+        <span className="stp-price-row">
+          <span className="mono stp-price">{token.usdPrice != null ? compactUsd(token.usdPrice) : '—'}</span>
+          {ch != null ? (
+            <span className={`mono stp-chg ${ch >= 0 ? 'stp-up' : 'stp-down'}`}>
+              {ch >= 0 ? '+' : ''}{ch.toFixed(ch >= 100 ? 0 : 1)}%
+            </span>
+          ) : (
+            <span className="mono stp-chg stp-flat">24h —</span>
+          )}
+        </span>
         <SentimentChip sentiment={token.sentiment} />
       </span>
     </button>
